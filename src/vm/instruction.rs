@@ -1,8 +1,15 @@
 use super::value::Value;
 
+#[derive(Debug)]
 pub enum Opcode {
     Constant,
-    Eof
+    Eof,
+
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Negate
 }
 
 pub enum Instruction {
