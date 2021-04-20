@@ -15,9 +15,20 @@ pub enum VMError {
 
 }
 
+macro_rules! binary_op {
+    ($self:ident, $op:tt) => {
+        let (b, a) = (
+            $self.read_number().unwrap(),
+            $self.read_number().unwrap()
+        );
+
+        $self.stack.push(Value::Number(a $op b));
+    }
+}
+
 pub struct VM {
-    buffer: Box<dyn Iterator<Item = Instruction>>,
-    stack: Stack<Value, 512>
+    pub(crate) buffer: Box<dyn Iterator<Item = Instruction>>,
+    pub(crate) stack: Stack<Value, 512>
 }
 
 impl VM {
@@ -28,7 +39,7 @@ impl VM {
         }
     }
     
-    pub fn interpret(mut self) -> Result<(), VMError> {
+    pub fn interpret(&mut self) -> Result<(), VMError> {
         while let Some(instruction) = self.buffer.next() {
             let instruction = instruction.into_op();
 
@@ -39,7 +50,18 @@ impl VM {
                         .unwrap();
 
                     self.stack.push(constant);
-                }
+                },
+                Opcode::Negate => {
+                    let maybe_number = self.read_number()
+                        .unwrap();
+                    
+                    self.stack.push(Value::Number(-maybe_number));
+                },
+                Opcode::Add => { binary_op!(self, +); },
+                Opcode::Sub => { binary_op!(self, -); },
+                Opcode::Mul => { binary_op!(self, *); },
+                Opcode::Div => { binary_op!(self, /); },
+                _ => unimplemented!()
             };
         }
 
@@ -49,6 +71,10 @@ impl VM {
     pub fn read_constant(&mut self) -> Option<Value> {
         self.buffer.next().map(|c| c.into_operand())
     }
+
+    pub fn read_number(&mut self) -> Option<f64> {
+        self.stack.pop().as_number()
+    }
 }
 
 #[cfg(test)]
@@ -57,14 +83,16 @@ mod tests {
 
     #[test]
     pub fn aaa() {
-        let vm = VM::new(vec![
+        let mut vm = VM::new(vec![
             Instruction::Op(Opcode::Constant),
-            Instruction::Operand(Value::Object(Box::new(JsString::new("aa".to_owned())))),
+            Instruction::Operand(Value::Number(5.0)),
+            Instruction::Op(Opcode::Constant),
+            Instruction::Operand(Value::Number(123.0)),
+            Instruction::Op(Opcode::Sub),
             Instruction::Op(Opcode::Eof)
         ]);
 
+        
         let result = vm.interpret();
-
-        dbg!(result);
     }
 }
