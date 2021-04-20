@@ -15,10 +15,19 @@ impl JsValue for Value {
             Self::Object(o) => o.print()
         }
     }
+
+    fn as_number(&self) -> Option<f64> {
+        match self {
+            Self::Number(n) => Some(*n),
+            _ => None
+        }
+    }
 }
 
 pub trait JsValue {
     fn print(&self);
+
+    fn as_number(&self) -> Option<f64>;
 }
 
 pub trait Object: JsValue + Debug {
@@ -46,5 +55,9 @@ impl Object for JsString {
 impl JsValue for JsString {
     fn print(&self) {
         println!("{}", self.0);
+    }
+
+    fn as_number(&self) -> Option<f64> {
+        None
     }
 }
