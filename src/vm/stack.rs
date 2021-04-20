@@ -10,7 +10,7 @@ impl<T, const N: usize> Stack<T, N> {
     pub fn push(&mut self, v: T) {
         assert!(N > self.1);
 
-        unsafe { *self.0[self.1].as_mut_ptr() = v };
+        unsafe { self.0[self.1].as_mut_ptr().write(v) };
         self.1 += 1;
     }
 
