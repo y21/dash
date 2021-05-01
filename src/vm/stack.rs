@@ -1,5 +1,6 @@
 use std::{fmt::Debug, mem::MaybeUninit};
 
+#[derive(Debug)]
 pub struct Stack<T, const N: usize>([MaybeUninit<T>; N], usize);
 
 impl<T, const N: usize> Stack<T, N> {
@@ -16,7 +17,7 @@ impl<T, const N: usize> Stack<T, N> {
 
     pub fn pop(&mut self) -> T {
         assert!(self.1 > 0);
-        
+
         self.1 -= 1;
         let old = &mut self.0[self.1];
         let val = std::mem::replace(old, MaybeUninit::uninit());
@@ -29,7 +30,7 @@ impl<T, const N: usize> Stack<T, N> {
 
     pub fn dump(&self)
     where
-        T: Debug
+        T: Debug,
     {
         println!("=== STACK DUMP [sp={}] ===", self.1);
         for (idx, val) in self.0.iter().take(self.1).enumerate() {

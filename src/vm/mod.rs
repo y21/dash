@@ -1,19 +1,17 @@
+pub mod environment;
 pub mod instruction;
 pub mod stack;
 pub mod value;
 
-use value::{JsValue, Value, Object, JsString};
-use instruction::{
-    Instruction,
-    Opcode
-};
+use std::{cell::RefCell, rc::Rc};
 
-use self::stack::Stack;
+use instruction::{Instruction, Opcode};
+use value::{JsString, JsValue, Object, Value};
+
+use self::{environment::Environment, stack::Stack};
 
 #[derive(Debug)]
-pub enum VMError {
-
-}
+pub enum VMError {}
 
 macro_rules! binary_op {
     ($self:ident, $op:tt) => {
@@ -22,23 +20,25 @@ macro_rules! binary_op {
             $self.read_number().unwrap()
         );
 
-        $self.stack.push(Value::Number(a $op b));
+        $self.stack.push(Rc::new(RefCell::new(Value::Number(a $op b))));
     }
 }
 
 pub struct VM {
     pub(crate) buffer: Box<dyn Iterator<Item = Instruction>>,
-    pub(crate) stack: Stack<Value, 512>
+    pub(crate) stack: Stack<Rc<RefCell<Value>>, 512>,
+    pub(crate) global: Environment,
 }
 
 impl VM {
     pub fn new(ins: Vec<Instruction>) -> Self {
         Self {
             buffer: Box::new(ins.into_iter()),
-            stack: Stack::new()
+            stack: Stack::new(),
+            global: Environment::new(),
         }
     }
-    
+
     pub fn interpret(&mut self) -> Result<(), VMError> {
         while let Some(instruction) = self.buffer.next() {
             let instruction = instruction.into_op();
@@ -46,26 +46,51 @@ impl VM {
             match instruction {
                 Opcode::Eof => return Ok(()),
                 Opcode::Constant => {
-                    let constant = self.read_constant()
-                        .unwrap();
+                    let constant = self.read_constant().unwrap();
 
-                    self.stack.push(constant);
-                },
+                    self.stack.push(Rc::new(RefCell::new(constant)));
+                }
                 Opcode::Negate => {
-                    let maybe_number = self.read_number()
-                        .unwrap();
-                    
-                    self.stack.push(Value::Number(-maybe_number));
-                },
-                Opcode::Add => { binary_op!(self, +); },
-                Opcode::Sub => { binary_op!(self, -); },
-                Opcode::Mul => { binary_op!(self, *); },
-                Opcode::Div => { binary_op!(self, /); },
-                _ => unimplemented!()
+                    let maybe_number = self.read_number().unwrap();
+
+                    self.stack
+                        .push(Rc::new(RefCell::new(Value::Number(-maybe_number))));
+                }
+                Opcode::Add => {
+                    binary_op!(self, +);
+                }
+                Opcode::Sub => {
+                    binary_op!(self, -);
+                }
+                Opcode::Mul => {
+                    binary_op!(self, *);
+                }
+                Opcode::Div => {
+                    binary_op!(self, /);
+                }
+                Opcode::Rem => {
+                    binary_op!(self, %);
+                }
+                Opcode::SetGlobal => {
+                    let name = self.pop_owned().unwrap().into_ident();
+                    let value = self.stack.pop();
+
+                    self.global.set_var(name, value);
+                }
+                Opcode::GetGlobal => {
+                    let name = self.pop_owned().unwrap().into_ident();
+
+                    // TODO: handle case where var is not defined
+                    let value = self.global.get_var(&name).unwrap();
+
+                    self.stack.push(value.clone());
+                }
+                _ => unimplemented!(),
             };
         }
 
-        unreachable!()
+        // unreachable!()
+        Ok(())
     }
 
     pub fn read_constant(&mut self) -> Option<Value> {
@@ -73,7 +98,11 @@ impl VM {
     }
 
     pub fn read_number(&mut self) -> Option<f64> {
-        self.stack.pop().as_number()
+        self.stack.pop().borrow().as_number()
+    }
+
+    pub fn pop_owned(&mut self) -> Option<Value> {
+        Value::try_into_inner(self.stack.pop())
     }
 }
 
@@ -89,10 +118,9 @@ mod tests {
             Instruction::Op(Opcode::Constant),
             Instruction::Operand(Value::Number(123.0)),
             Instruction::Op(Opcode::Sub),
-            Instruction::Op(Opcode::Eof)
+            Instruction::Op(Opcode::Eof),
         ]);
 
-        
         let result = vm.interpret();
     }
 }
