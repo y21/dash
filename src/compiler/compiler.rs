@@ -37,10 +37,16 @@ impl<'a> Compiler<'a> {
 
 impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
     fn visit_literal_expression(&self, e: &LiteralExpr<'a>) -> Vec<Instruction> {
-        vec![
+        let mut instructions = vec![
             Instruction::Op(Opcode::Constant),
             Instruction::Operand(e.to_value()),
-        ]
+        ];
+
+        if let LiteralExpr::Identifier(_) = e {
+            instructions.push(Instruction::Op(Opcode::GetGlobal));
+        }
+
+        instructions
     }
 
     fn visit_binary_expression(&self, e: &BinaryExpr<'a>) -> Vec<Instruction> {
