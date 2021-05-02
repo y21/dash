@@ -2,6 +2,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use super::value::Value;
 
+#[derive(Debug)]
 pub struct Environment(HashMap<String, Rc<RefCell<Value>>>);
 
 impl Environment {
