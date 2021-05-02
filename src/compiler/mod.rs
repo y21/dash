@@ -15,19 +15,13 @@ mod tests {
 
     #[test]
     pub fn compiler() {
-        let src = r#"let a=3; a"#;
+        let src = r#"let a=3+1; a+1"#;
 
         let tokens = Lexer::new(src).scan_all();
 
         let statements = Parser::new(tokens).parse_all();
 
-        let mut instructions = Compiler::new(statements).compile();
-
-        instructions.push(Instruction::Op(Opcode::Constant));
-        instructions.push(Instruction::Operand(Value::Ident(String::from("a"))));
-        instructions.push(Instruction::Op(Opcode::GetGlobal));
-
-        dbg!(&instructions);
+        let instructions = Compiler::new(statements).compile();
 
         let mut vm = VM::new(instructions);
         vm.interpret().unwrap();
