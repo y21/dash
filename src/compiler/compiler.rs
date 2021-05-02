@@ -1,7 +1,7 @@
 use crate::{
     parser::{
         expr::{BinaryExpr, GroupingExpr, LiteralExpr, UnaryExpr},
-        statement::{Statement, VariableDeclaration},
+        statement::{IfStatement, Statement, VariableDeclaration},
     },
     visitor::Visitor,
     vm::{
@@ -85,6 +85,22 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         } else {
             instructions.push(Instruction::Op(Opcode::SetGlobalNoValue));
         }
+
+        instructions
+    }
+
+    fn visit_if_statement(&self, i: &IfStatement) -> Vec<Instruction> {
+        let mut instructions = self.accept_expr(&i.condition);
+
+        instructions.push(Instruction::Op(Opcode::Constant));
+        let jmp_idx = instructions.len();
+        instructions.push(Instruction::Operand(Value::Number(0f64)));
+        instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
+
+        let then_instructions = self.accept(&i.then);
+        instructions[jmp_idx] = Instruction::Operand(Value::Number(then_instructions.len() as f64));
+
+        instructions.extend(then_instructions);
 
         instructions
     }
