@@ -18,6 +18,9 @@ pub enum Opcode {
     Div,
     Rem,
     Negate, // TODO: ~ ! -
+    ShortJmp,
+    ShortJmpIfFalse,
+    LongJmp,
 }
 
 impl From<TokenType> for Opcode {
