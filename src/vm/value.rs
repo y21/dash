@@ -31,6 +31,15 @@ impl JsValue for Value {
         }
     }
 
+    fn is_truthy(&self) -> bool {
+        match self {
+            Self::Bool(b) => *b,
+            Self::Number(n) => *n != 0f64,
+            Self::Object(o) => o.is_truthy(),
+            _ => unreachable!(),
+        }
+    }
+
     fn as_number(&self) -> Option<f64> {
         match self {
             Self::Number(n) => Some(*n),
@@ -51,6 +60,7 @@ pub trait JsValue {
 
     fn as_number(&self) -> Option<f64>;
     fn into_ident(self) -> String;
+    fn is_truthy(&self) -> bool;
 }
 
 pub trait Object: JsValue + Debug {
@@ -82,6 +92,10 @@ impl JsValue for JsString {
 
     fn as_number(&self) -> Option<f64> {
         None
+    }
+
+    fn is_truthy(&self) -> bool {
+        self.0.len() > 0
     }
 
     fn into_ident(self) -> String {
