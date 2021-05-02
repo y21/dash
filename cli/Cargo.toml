@@ -1,7 +1,9 @@
 [package]
-name = "dash"
+name = "cli"
 version = "0.1.0"
-authors = ["y21"]
 edition = "2018"
 
+
 [dependencies]
+dash = { path = "../core/" }
+clap = "2.33.3"
