@@ -24,6 +24,10 @@ impl<T, const N: usize> Stack<T, N> {
         unsafe { val.assume_init() }
     }
 
+    pub fn get(&self) -> &T {
+        unsafe { &self.0[self.1].assume_init_ref() }
+    }
+
     pub fn reset(&mut self) {
         self.1 = 0;
     }
