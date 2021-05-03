@@ -1,7 +1,7 @@
 use core::fmt::Debug;
 use std::{cell::RefCell, rc::Rc};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Value {
     Ident(String),
     Number(f64),
@@ -34,9 +34,19 @@ impl JsValue for Value {
     fn is_truthy(&self) -> bool {
         match self {
             Self::Bool(b) => *b,
-            Self::Number(n) => *n != 0f64,
+            Self::Number(n) => {
+                dbg!(*n);
+                *n != 0f64
+            }
             Self::Object(o) => o.is_truthy(),
             _ => unreachable!(),
+        }
+    }
+
+    fn is_assignment_target(&self) -> bool {
+        match self {
+            Self::Ident(_) => true,
+            _ => false,
         }
     }
 
@@ -79,9 +89,30 @@ impl JsValue for Value {
     fn into_string(self) -> Option<String> {
         todo!()
     }
+
+    fn add_assign(&mut self, other: &Value) {
+        match self {
+            Self::Number(n) => {
+                let o = other.as_number().unwrap();
+                *n += o;
+            }
+            _ => todo!(),
+        }
+    }
+
+    fn sub_assign(&mut self, other: &Value) {
+        match self {
+            Self::Number(n) => {
+                let o = other.as_number().unwrap();
+                dbg!(o);
+                *n -= o;
+            }
+            _ => todo!(),
+        }
+    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Object {
     String(String),
 }
@@ -97,6 +128,18 @@ impl JsValue for Object {
         match self {
             Self::String(s) => s.len() != 0,
         }
+    }
+
+    fn add_assign(&mut self, other: &Value) {
+        todo!()
+    }
+
+    fn sub_assign(&mut self, other: &Value) {
+        todo!()
+    }
+
+    fn is_assignment_target(&self) -> bool {
+        false
     }
 
     fn as_number(&self) -> Option<f64> {
@@ -142,8 +185,12 @@ pub trait JsValue {
     fn as_object(&self) -> Option<&Object>;
     fn as_string(&self) -> Option<&str>;
 
+    fn add_assign(&mut self, other: &Value);
+    fn sub_assign(&mut self, other: &Value);
+
     fn into_object(self) -> Option<Object>;
     fn into_string(self) -> Option<String>;
     fn into_ident(self) -> Option<String>;
     fn is_truthy(&self) -> bool;
+    fn is_assignment_target(&self) -> bool;
 }
