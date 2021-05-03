@@ -32,6 +32,17 @@ impl<T, const N: usize> Stack<T, N> {
         self.1 = 0;
     }
 
+    /// Discards all values on the stack except for the one at the top
+    pub fn into_last(&mut self) {
+        let last = self.pop();
+
+        for _ in 0..self.1 {
+            self.pop();
+        }
+
+        self.push(last);
+    }
+
     pub fn dump(&self)
     where
         T: Debug,
