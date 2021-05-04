@@ -1,4 +1,5 @@
 pub mod compiler;
+pub mod scope;
 
 #[cfg(test)]
 mod tests {
