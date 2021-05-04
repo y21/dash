@@ -1,8 +1,8 @@
-use crate::vm::value::Value;
+use crate::vm::value::{Object, Value};
 
 use super::token::TokenType;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expr<'a> {
     Binary(BinaryExpr<'a>),
     Grouping(GroupingExpr<'a>),
@@ -49,11 +49,11 @@ impl<'a> Expr<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AssignmentExpr<'a> {
-    left: Box<Expr<'a>>, // ??
-    right: Box<Expr<'a>>,
-    operator: TokenType,
+    pub left: Box<Expr<'a>>, // ??
+    pub right: Box<Expr<'a>>,
+    pub operator: TokenType,
 }
 
 impl<'a> AssignmentExpr<'a> {
@@ -66,7 +66,7 @@ impl<'a> AssignmentExpr<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BinaryExpr<'a> {
     pub left: Box<Expr<'a>>,
     pub right: Box<Expr<'a>>,
@@ -83,10 +83,10 @@ impl<'a> BinaryExpr<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GroupingExpr<'a>(pub Box<Expr<'a>>);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LiteralExpr<'a> {
     Boolean(bool),
     Identifier(&'a [u8]),
@@ -102,6 +102,9 @@ impl<'a> LiteralExpr<'a> {
             Self::Boolean(b) => Value::Bool(*b),
             Self::Number(n) => Value::Number(*n),
             Self::Identifier(i) => Value::Ident(std::str::from_utf8(i).unwrap().to_owned()),
+            Self::String(s) => Value::Object(Box::new(Object::String(
+                std::str::from_utf8(s).unwrap().to_owned(),
+            ))),
             _ => unimplemented!(),
         }
     }
@@ -119,7 +122,7 @@ impl<'a> LiteralExpr<'a> {
     }
 }*/
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UnaryExpr<'a> {
     pub operator: TokenType,
     pub expr: Box<Expr<'a>>,
