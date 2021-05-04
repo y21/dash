@@ -119,6 +119,7 @@ impl<'a> Lexer<'a> {
         while !self.is_eof() {
             let cur = self.current_real();
             if cur == b'"' {
+                self.advance();
                 break;
             }
 
