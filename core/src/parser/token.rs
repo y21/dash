@@ -39,6 +39,7 @@ pub enum TokenType {
     LogicalOrAssignment,
     LogicalOr,
     LogicalNullishAssignment,
+    NullishCoalescing,
     LogicalNot,
     Equality,
     StrictEquality,
@@ -66,6 +67,9 @@ pub enum TokenType {
     New,
     Conditional,
     OptionalChaining,
+    For,
+    While,
+    Print,
 }
 
 pub const ASSIGNMENT_TYPES: &[TokenType] = &[
@@ -103,6 +107,9 @@ impl From<&[u8]> for TokenType {
             b"undefined" => Self::UndefinedLit,
             b"yield" => Self::Yield,
             b"new" => Self::New,
+            b"for" => Self::For,
+            b"while" => Self::While,
+            b"print" => Self::Print,
             _ => Self::Identifier,
         }
     }
