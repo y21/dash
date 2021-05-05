@@ -9,9 +9,16 @@ pub enum Opcode {
     SetLocalNoValue,
     SetLocal,
     GetLocal,
+    GetLocalRef,
+    GetGlobalRef,
     SetGlobalNoValue,
     SetGlobal,
     GetGlobal,
+    BitwiseAnd,
+    BitwiseOr,
+    BitwiseXor,
+    AdditionAssignment,
+    SubtractionAssignment,
     Add,
     Sub,
     Mul,
@@ -20,7 +27,11 @@ pub enum Opcode {
     Negate, // TODO: ~ ! -
     ShortJmp,
     ShortJmpIfFalse,
+    ShortJmpIfTrue,
     LongJmp,
+    BackJmp,
+    Pop,
+    Print,
 }
 
 impl From<TokenType> for Opcode {
@@ -31,12 +42,21 @@ impl From<TokenType> for Opcode {
             TokenType::Star => Self::Mul,
             TokenType::Slash => Self::Div,
             TokenType::Remainder => Self::Rem,
-            _ => unimplemented!(),
+            TokenType::BitwiseAnd => Self::BitwiseAnd,
+            TokenType::BitwiseOr => Self::BitwiseOr,
+            TokenType::BitwiseXor => Self::BitwiseXor,
+            TokenType::AdditionAssignment => Self::AdditionAssignment,
+            TokenType::SubtractionAssignment => Self::SubtractionAssignment,
+            TokenType::Increment => Self::AdditionAssignment,
+            TokenType::Decrement => Self::SubtractionAssignment,
+            _ => {
+                unimplemented!()
+            }
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Instruction {
     Op(Opcode),
     Operand(Value),
@@ -46,6 +66,13 @@ impl Instruction {
     pub fn into_op(self) -> Opcode {
         match self {
             Self::Op(o) => o,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn as_op(&self) -> Opcode {
+        match self {
+            Self::Op(o) => *o,
             _ => unreachable!(),
         }
     }
