@@ -1,19 +1,39 @@
 use super::{expr::Expr, token::TokenType};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Statement<'a> {
     Expression(Expr<'a>),
     Variable(VariableDeclaration<'a>),
     If(IfStatement<'a>),
     Block(BlockStatement<'a>),
     Function(FunctionDeclaration<'a>),
+    While(WhileLoop<'a>),
+    Print(Print<'a>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+pub struct Print<'a>(pub Expr<'a>);
+
+#[derive(Debug, Clone)]
+pub struct WhileLoop<'a> {
+    pub condition: Box<Expr<'a>>,
+    pub body: Box<Statement<'a>>,
+}
+
+impl<'a> WhileLoop<'a> {
+    pub fn new(condition: Expr<'a>, body: Statement<'a>) -> Self {
+        Self {
+            condition: Box::new(condition),
+            body: Box::new(body),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct FunctionDeclaration<'a> {
     pub name: &'a [u8],
     pub arguments: Vec<&'a [u8]>,
-    pub statements: Vec<Statement<'a>>,
+    pub statements: Vec<Statement<'a>>, // TODO: single statement?
 }
 
 impl<'a> FunctionDeclaration<'a> {
@@ -26,10 +46,10 @@ impl<'a> FunctionDeclaration<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BlockStatement<'a>(pub Vec<Statement<'a>>);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct IfStatement<'a> {
     pub condition: Expr<'a>,
     pub then: Box<Statement<'a>>,
@@ -64,7 +84,7 @@ impl From<TokenType> for VariableDeclarationKind {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct VariableDeclaration<'a> {
     pub name: &'a [u8],
     pub kind: VariableDeclarationKind,
