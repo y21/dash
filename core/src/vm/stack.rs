@@ -8,6 +8,10 @@ impl<T, const N: usize> Stack<T, N> {
         Self(MaybeUninit::uninit_array(), 0)
     }
 
+    pub fn len(&self) -> usize {
+        self.1
+    }
+
     pub fn push(&mut self, v: T) {
         assert!(N > self.1);
 
@@ -28,6 +32,22 @@ impl<T, const N: usize> Stack<T, N> {
         unsafe { self.0[self.1 - 1].assume_init_ref() }
     }
 
+    pub fn set(&mut self, idx: usize, value: T) {
+        assert!(idx <= self.1);
+
+        if idx == self.1 {
+            self.1 += 1;
+        }
+
+        unsafe { self.0[idx].as_mut_ptr().write(value) }
+    }
+
+    pub fn peek(&self, idx: usize) -> &T {
+        assert!(idx <= self.1);
+
+        unsafe { self.0[idx].assume_init_ref() }
+    }
+
     pub fn reset(&mut self) {
         self.1 = 0;
     }
@@ -41,6 +61,20 @@ impl<T, const N: usize> Stack<T, N> {
         }
 
         self.push(last);
+    }
+
+    pub fn find<F>(&self, f: F) -> Option<(usize, &T)>
+    where
+        F: Fn(&T) -> bool,
+    {
+        for (idx, value) in self.0.iter().take(self.1).enumerate() {
+            let value = unsafe { value.assume_init_ref() };
+            if f(value) {
+                return Some((idx, value));
+            }
+        }
+
+        None
     }
 
     pub fn dump(&self)
