@@ -1,8 +1,8 @@
 use super::{
     expr::{Expr, UnaryExpr},
     statement::{
-        BlockStatement, FunctionDeclaration, IfStatement, Statement, VariableDeclaration,
-        VariableDeclarationKind,
+        BlockStatement, FunctionDeclaration, IfStatement, Print, Statement, VariableDeclaration,
+        VariableDeclarationKind, WhileLoop,
     },
     token::{Token, TokenType, ASSIGNMENT_TYPES},
 };
@@ -36,26 +36,43 @@ impl<'a> Parser<'a> {
 
     // Statement rules
     pub fn statement(&mut self) -> Option<Statement<'a>> {
-        if self.expect_and_skip(&[TokenType::Let, TokenType::Const, TokenType::Var]) {
-            // Parse variable declaration
-            let stmt = self.variable().map(Statement::Variable);
-            self.expect_and_skip(&[TokenType::Semicolon]);
-            return stmt;
-        } else if self.expect_and_skip(&[TokenType::If]) {
-            let stmt = self.if_statement().map(Statement::If);
-            self.expect_and_skip(&[TokenType::Semicolon]);
-            return stmt;
-        } else if self.expect_and_skip(&[TokenType::Function]) {
-            let stmt = self.function().map(Statement::Function);
-            self.expect_and_skip(&[TokenType::Semicolon]);
-            return stmt;
-        } else if self.expect_and_skip(&[TokenType::LeftBrace]) {
-            let stmt = self.block().map(Statement::Block);
-            self.expect_and_skip(&[TokenType::Semicolon]);
-            return stmt;
-        }
+        let stmt = match self.next()?.ty {
+            TokenType::Let | TokenType::Const | TokenType::Var => {
+                self.variable().map(Statement::Variable)
+            }
+            TokenType::If => self.if_statement().map(Statement::If),
+            TokenType::Function => self.function().map(Statement::Function),
+            TokenType::LeftBrace => self.block().map(Statement::Block),
+            TokenType::While => self.while_loop().map(Statement::While),
+            TokenType::Print => self.print_statement().map(Statement::Print),
+            _ => {
+                // We've skipped the current character because of the statement cases that skip the current token
+                // So we go back, as the skipped token belongs to this expression
+                self.advance_back();
+                Some(Statement::Expression(self.expression()?))
+            }
+        };
 
-        Some(Statement::Expression(self.expression()?))
+        self.expect_and_skip(&[TokenType::Semicolon]);
+
+        stmt
+    }
+
+    pub fn print_statement(&mut self) -> Option<Print<'a>> {
+        let expr = self.expression()?;
+        Some(Print(expr))
+    }
+
+    pub fn while_loop(&mut self) -> Option<WhileLoop<'a>> {
+        self.expect_and_skip(&[TokenType::LeftParen]);
+
+        let condition = self.expression()?;
+
+        self.expect_and_skip(&[TokenType::RightParen]);
+
+        let body = self.statement()?;
+
+        Some(WhileLoop::new(condition, body))
     }
 
     pub fn function(&mut self) -> Option<FunctionDeclaration<'a>> {
@@ -153,7 +170,31 @@ impl<'a> Parser<'a> {
     }
 
     pub fn assignment(&mut self) -> Option<Expr<'a>> {
-        self.read_infix_expression(|s| Self::equality(s), ASSIGNMENT_TYPES)
+        self.read_infix_expression(|s| Self::nullish_coalescing(s), ASSIGNMENT_TYPES)
+    }
+
+    pub fn nullish_coalescing(&mut self) -> Option<Expr<'a>> {
+        self.read_infix_expression(|s| Self::logical_or(s), &[TokenType::NullishCoalescing])
+    }
+
+    pub fn logical_or(&mut self) -> Option<Expr<'a>> {
+        self.read_infix_expression(|s| Self::logical_and(s), &[TokenType::LogicalOr])
+    }
+
+    pub fn logical_and(&mut self) -> Option<Expr<'a>> {
+        self.read_infix_expression(|s| Self::bitwise_or(s), &[TokenType::LogicalAnd])
+    }
+
+    pub fn bitwise_or(&mut self) -> Option<Expr<'a>> {
+        self.read_infix_expression(|s| Self::bitwise_xor(s), &[TokenType::BitwiseOr])
+    }
+
+    pub fn bitwise_xor(&mut self) -> Option<Expr<'a>> {
+        self.read_infix_expression(|s| Self::bitwise_and(s), &[TokenType::BitwiseXor])
+    }
+
+    pub fn bitwise_and(&mut self) -> Option<Expr<'a>> {
+        self.read_infix_expression(|s| Self::equality(s), &[TokenType::BitwiseAnd])
     }
 
     pub fn equality(&mut self) -> Option<Expr<'a>> {
@@ -194,8 +235,19 @@ impl<'a> Parser<'a> {
             let rval = self.unary()?;
             Some(Expr::Unary(UnaryExpr::new(operator, rval)))
         } else {
-            self.primary()
+            self.postfix()
         }
+    }
+
+    pub fn postfix(&mut self) -> Option<Expr<'a>> {
+        let expr = self.primary()?;
+        if self.expect_and_skip(&[TokenType::Increment, TokenType::Decrement]) {
+            let operator = self.previous()?.ty;
+            // TODO: this is not true
+            // `x++` is not the same as `x += 1`; it needs to return the old number
+            return Some(Expr::assignment(expr, Expr::number_literal(1f64), operator));
+        }
+        Some(expr)
     }
 
     pub fn primary(&mut self) -> Option<Expr<'a>> {
@@ -264,6 +316,10 @@ impl<'a> Parser<'a> {
 
     pub fn advance(&mut self) {
         self.idx += 1;
+    }
+
+    pub fn advance_back(&mut self) {
+        self.idx -= 1;
     }
 
     pub fn current(&self) -> Option<&Token<'a>> {
