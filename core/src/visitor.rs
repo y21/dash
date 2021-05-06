@@ -1,5 +1,5 @@
 use crate::parser::{
-    expr::{AssignmentExpr, BinaryExpr, Expr, GroupingExpr, LiteralExpr, UnaryExpr},
+    expr::{AssignmentExpr, BinaryExpr, Expr, FunctionCall, GroupingExpr, LiteralExpr, UnaryExpr},
     statement::{
         BlockStatement, FunctionDeclaration, IfStatement, Print, Statement, VariableDeclaration,
         WhileLoop,
@@ -26,6 +26,7 @@ pub trait Visitor<'a, V> {
             Expr::Grouping(e) => self.visit_grouping_expression(e),
             Expr::Literal(e) => self.visit_literal_expression(e),
             Expr::Unary(e) => self.visit_unary_expression(e),
+            Expr::Call(e) => self.visit_function_call(e),
         }
     }
 
@@ -41,4 +42,5 @@ pub trait Visitor<'a, V> {
     fn visit_while_loop(&mut self, l: &WhileLoop<'a>) -> V;
     fn visit_assignment_expression(&mut self, e: &AssignmentExpr<'a>) -> V;
     fn visit_print_statement(&mut self, p: &Print<'a>) -> V;
+    fn visit_function_call(&mut self, c: &FunctionCall<'a>) -> V;
 }
