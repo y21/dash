@@ -1,12 +1,29 @@
 use core::fmt::Debug;
 use std::{cell::RefCell, rc::Rc};
 
+use super::instruction::Instruction;
+
 #[derive(Debug, Clone)]
 pub enum Value {
     Ident(String),
     Number(f64),
     Bool(bool),
     Object(Box<Object>),
+}
+
+impl From<Object> for Value {
+    fn from(o: Object) -> Self {
+        Self::Object(Box::new(o))
+    }
+}
+
+impl From<UserFunction> for Value {
+    fn from(f: UserFunction) -> Self {
+        Self::Object(Box::new(Object::Function(
+            FunctionKind::User(f),
+            FunctionType::Function,
+        )))
+    }
 }
 
 impl Value {
@@ -16,28 +33,10 @@ impl Value {
 }
 
 impl JsValue for Value {
-    fn print(&self) {
-        match self {
-            Self::Number(n) => {
-                dbg!(n);
-            }
-            Self::Bool(b) => {
-                dbg!(b);
-            }
-            Self::Object(o) => o.print(),
-            Self::Ident(o) => {
-                dbg!(o);
-            }
-        }
-    }
-
     fn is_truthy(&self) -> bool {
         match self {
             Self::Bool(b) => *b,
-            Self::Number(n) => {
-                dbg!(*n);
-                *n != 0f64
-            }
+            Self::Number(n) => *n != 0f64,
             Self::Object(o) => o.is_truthy(),
             _ => unreachable!(),
         }
@@ -50,10 +49,10 @@ impl JsValue for Value {
         }
     }
 
-    fn as_number(&self) -> Option<f64> {
+    fn as_number(&self) -> f64 {
         match self {
-            Self::Number(n) => Some(*n),
-            _ => None,
+            Self::Number(n) => *n,
+            _ => f64::NAN,
         }
     }
 
@@ -93,7 +92,7 @@ impl JsValue for Value {
     fn add_assign(&mut self, other: &Value) {
         match self {
             Self::Number(n) => {
-                let o = other.as_number().unwrap();
+                let o = other.as_number();
                 *n += o;
             }
             _ => todo!(),
@@ -103,8 +102,7 @@ impl JsValue for Value {
     fn sub_assign(&mut self, other: &Value) {
         match self {
             Self::Number(n) => {
-                let o = other.as_number().unwrap();
-                dbg!(o);
+                let o = other.as_number();
                 *n -= o;
             }
             _ => todo!(),
@@ -113,20 +111,50 @@ impl JsValue for Value {
 }
 
 #[derive(Debug, Clone)]
+pub struct UserFunction {
+    pub params: u32,
+    // pub buffer: Vec<Instruction>,
+    pub buffer: Box<[Instruction]>,
+    pub name: Option<String>,
+}
+
+impl UserFunction {
+    pub fn new(buffer: Vec<Instruction>, params: u32) -> Self {
+        Self {
+            buffer: buffer.into_boxed_slice(),
+            params,
+            name: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NativeFunction {}
+
+#[derive(Debug, Clone)]
 pub enum Object {
     String(String),
+    Function(FunctionKind, FunctionType),
+}
+
+#[derive(Debug, Clone)]
+pub enum FunctionType {
+    Top,
+    Function,
+    Closure,
+}
+
+#[derive(Debug, Clone)]
+pub enum FunctionKind {
+    User(UserFunction),
+    Native(NativeFunction),
 }
 
 impl JsValue for Object {
-    fn print(&self) {
-        match self {
-            Self::String(s) => dbg!(s),
-        };
-    }
-
     fn is_truthy(&self) -> bool {
         match self {
             Self::String(s) => s.len() != 0,
+            Self::Function(..) => true,
         }
     }
 
@@ -142,7 +170,7 @@ impl JsValue for Object {
         false
     }
 
-    fn as_number(&self) -> Option<f64> {
+    fn as_number(&self) -> f64 {
         unreachable!()
     }
 
@@ -175,18 +203,26 @@ impl JsValue for Object {
     fn into_ident(self) -> Option<String> {
         unreachable!()
     }
+
+    fn logical_negate(&self) -> bool {
+        !self.is_truthy()
+    }
 }
 
 pub trait JsValue {
-    fn print(&self);
-
-    fn as_number(&self) -> Option<f64>;
+    fn as_number(&self) -> f64;
     fn as_bool(&self) -> Option<bool>;
     fn as_object(&self) -> Option<&Object>;
     fn as_string(&self) -> Option<&str>;
 
-    fn add_assign(&mut self, other: &Value);
     fn sub_assign(&mut self, other: &Value);
+    fn add_assign(&mut self, other: &Value);
+    fn unary_negate(&self) -> f64 {
+        -self.as_number()
+    }
+    fn logical_negate(&self) -> bool {
+        !self.is_truthy()
+    }
 
     fn into_object(self) -> Option<Object>;
     fn into_string(self) -> Option<String>;
