@@ -32,6 +32,7 @@ pub enum Opcode {
     BackJmp,
     Pop,
     Print,
+    FunctionCall,
 }
 
 impl From<TokenType> for Opcode {
