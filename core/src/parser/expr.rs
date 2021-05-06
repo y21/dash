@@ -9,6 +9,7 @@ pub enum Expr<'a> {
     Literal(LiteralExpr<'a>),
     Unary(UnaryExpr<'a>),
     Assignment(AssignmentExpr<'a>),
+    Call(FunctionCall<'a>),
 }
 
 impl<'a> Expr<'a> {
@@ -45,13 +46,26 @@ impl<'a> Expr<'a> {
     }
 
     pub fn undefined_literal() -> Self {
-        Self::Literal(LiteralExpr::Null)
+        Self::Literal(LiteralExpr::Undefined)
+    }
+
+    pub fn function_call(target: Expr<'a>, arguments: Vec<Expr<'a>>) -> Self {
+        Self::Call(FunctionCall {
+            target: Box::new(target),
+            arguments,
+        })
     }
 }
 
 #[derive(Debug, Clone)]
+pub struct FunctionCall<'a> {
+    pub target: Box<Expr<'a>>,
+    pub arguments: Vec<Expr<'a>>,
+}
+
+#[derive(Debug, Clone)]
 pub struct AssignmentExpr<'a> {
-    pub left: Box<Expr<'a>>, // ??
+    pub left: Box<Expr<'a>>,
     pub right: Box<Expr<'a>>,
     pub operator: TokenType,
 }
