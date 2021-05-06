@@ -32,8 +32,16 @@ impl<T, const N: usize> Stack<T, N> {
         unsafe { self.0[self.1 - 1].assume_init_ref() }
     }
 
+    pub fn get_mut(&mut self) -> &mut T {
+        unsafe { self.0[self.1 - 1].assume_init_mut() }
+    }
+
     pub fn set(&mut self, idx: usize, value: T) {
         assert!(idx <= self.1);
+
+        if idx == self.1 {
+            self.1 += 1;
+        }
 
         if idx == self.1 {
             self.1 += 1;
