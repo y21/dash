@@ -240,13 +240,32 @@ impl<'a> Parser<'a> {
     }
 
     pub fn postfix(&mut self) -> Option<Expr<'a>> {
-        let expr = self.primary()?;
+        let expr = self.field_access()?;
         if self.expect_and_skip(&[TokenType::Increment, TokenType::Decrement]) {
             let operator = self.previous()?.ty;
             // TODO: this is not true
             // `x++` is not the same as `x += 1`; it needs to return the old number
             return Some(Expr::assignment(expr, Expr::number_literal(1f64), operator));
         }
+        Some(expr)
+    }
+
+    pub fn field_access(&mut self) -> Option<Expr<'a>> {
+        // TODO: right now this just matches function calls
+        let mut expr = self.primary()?;
+
+        while self.expect_and_skip(&[TokenType::LeftParen]) {
+            // TODO: read parameter list
+            let mut arguments = Vec::new();
+            while !self.expect_and_skip(&[TokenType::Comma]) {
+                arguments.push(self.expression()?);
+            }
+
+            // TODO: errors
+            self.expect_and_skip(&[TokenType::RightParen]);
+            expr = Expr::function_call(expr, arguments);
+        }
+
         Some(expr)
     }
 
