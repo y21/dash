@@ -1,6 +1,8 @@
 use crate::{
     parser::{
-        expr::{AssignmentExpr, BinaryExpr, Expr, GroupingExpr, LiteralExpr, UnaryExpr},
+        expr::{
+            AssignmentExpr, BinaryExpr, Expr, FunctionCall, GroupingExpr, LiteralExpr, UnaryExpr,
+        },
         statement::{
             BlockStatement, FunctionDeclaration, IfStatement, Print, Statement,
             VariableDeclaration, WhileLoop,
@@ -10,8 +12,7 @@ use crate::{
     visitor::Visitor,
     vm::{
         instruction::{Instruction, Opcode},
-        stack::Stack,
-        value::Value,
+        value::{UserFunction, Value},
     },
 };
 use std::convert::TryFrom;
@@ -28,9 +29,10 @@ pub struct Compiler<'a> {
 
 impl<'a> Compiler<'a> {
     pub fn new(ast: Ast<'a>) -> Self {
+        let scope = ScopeGuard::new();
         Self {
             ast: Some(ast),
-            scope: ScopeGuard::new(),
+            scope,
         }
     }
 
@@ -207,7 +209,29 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
     }
 
     fn visit_function_declaration(&mut self, f: &FunctionDeclaration<'a>) -> Vec<Instruction> {
-        todo!()
+        let mut instructions = vec![Instruction::Op(Opcode::Constant)];
+
+        let params = f.arguments.len();
+        let statements = f.statements.clone(); // TODO: somehow avoid this clone
+
+        let func_instructions = Self::new(statements).compile();
+
+        let func = UserFunction::new(func_instructions, params as u32);
+        instructions.push(Instruction::Operand(func.into()));
+
+        instructions.push(Instruction::Op(Opcode::Constant));
+        instructions.push(Instruction::Operand(Value::Ident(
+            std::str::from_utf8(f.name).unwrap().to_owned(),
+        )));
+
+        if self.scope.is_global() {
+            instructions.push(Instruction::Op(Opcode::SetGlobal));
+        } else {
+            todo!()
+            // instructions.push(Instruction::Op(Opcode::SetLocal));
+        }
+
+        instructions
     }
 
     fn visit_assignment_expression(&mut self, e: &AssignmentExpr<'a>) -> Vec<Instruction> {
@@ -228,5 +252,22 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         let mut instructions = self.accept_expr(&p.0);
         instructions.push(Instruction::Op(Opcode::Print));
         instructions
+    }
+
+    fn visit_function_call(&mut self, c: &FunctionCall<'a>) -> Vec<Instruction> {
+        let mut instructions = self.accept_expr(&c.target);
+
+        let argument_len = c.arguments.len();
+
+        for argument in &c.arguments {
+            instructions.extend(self.accept_expr(argument));
+        }
+
+        instructions.push(Instruction::Op(Opcode::Constant));
+        instructions.push(Instruction::Operand(Value::Number(argument_len as f64)));
+
+        instructions.push(Instruction::Op(Opcode::FunctionCall));
+
+        todo!()
     }
 }
