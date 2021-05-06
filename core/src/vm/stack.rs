@@ -43,10 +43,6 @@ impl<T, const N: usize> Stack<T, N> {
             self.1 += 1;
         }
 
-        if idx == self.1 {
-            self.1 += 1;
-        }
-
         unsafe { self.0[idx].as_mut_ptr().write(value) }
     }
 
