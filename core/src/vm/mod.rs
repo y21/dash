@@ -1,4 +1,5 @@
 pub mod environment;
+pub mod frame;
 pub mod instruction;
 pub mod stack;
 pub mod value;
@@ -8,7 +9,7 @@ use std::{cell::RefCell, rc::Rc};
 use instruction::{Instruction, Opcode};
 use value::{JsValue, Value};
 
-use self::{environment::Environment, stack::Stack};
+use self::{environment::Environment, frame::Frame, stack::Stack, value::UserFunction};
 
 #[derive(Debug)]
 pub enum VMError {}
@@ -16,8 +17,8 @@ pub enum VMError {}
 macro_rules! binary_op {
     ($self:ident, $op:tt) => {
         let (b, a) = (
-            $self.read_number().unwrap(),
-            $self.read_number().unwrap()
+            $self.read_number(),
+            $self.read_number()
         );
 
         $self.stack.push(Rc::new(RefCell::new(Value::Number(a $op b))));
@@ -25,34 +26,73 @@ macro_rules! binary_op {
 }
 
 pub struct VM {
-    /// Bytecode
-    pub(crate) buffer: Vec<Instruction>,
+    /// Call stack
+    pub(crate) frames: Stack<Frame, 256>,
     /// Stack
     pub(crate) stack: Stack<Rc<RefCell<Value>>, 512>,
     /// Global namespace
     pub(crate) global: Environment,
-    /// Instruction pointer
-    pub(crate) ip: usize,
 }
 
 impl VM {
-    pub fn new(ins: Vec<Instruction>) -> Self {
+    pub fn new(func: UserFunction) -> Self {
+        let mut frames = Stack::new();
+        frames.push(Frame {
+            buffer: func.buffer,
+            ip: 0,
+            sp: 0,
+        });
+
         Self {
-            buffer: ins,
+            frames,
             stack: Stack::new(),
             global: Environment::new(),
-            ip: 0,
         }
     }
 
+    fn frame(&self) -> &Frame {
+        self.frames.get()
+    }
+
+    fn frame_mut(&mut self) -> &mut Frame {
+        self.frames.get_mut()
+    }
+
+    fn ip(&self) -> usize {
+        self.frame().ip
+    }
+
+    fn buffer(&self) -> &[Instruction] {
+        &self.frame().buffer
+    }
+
     fn is_eof(&self) -> bool {
-        self.ip >= self.buffer.len()
+        self.ip() >= self.buffer().len()
+    }
+
+    pub fn read_constant(&mut self) -> Option<Value> {
+        if self.is_eof() {
+            return None;
+        }
+
+        self.frame_mut().ip += 1;
+
+        Some(self.buffer()[self.ip() - 1].clone().into_operand())
+    }
+
+    pub fn read_number(&mut self) -> f64 {
+        self.stack.pop().borrow().as_number()
+    }
+
+    pub fn pop_owned(&mut self) -> Option<Value> {
+        Value::try_into_inner(self.stack.pop())
     }
 
     pub fn interpret(&mut self) -> Result<(), VMError> {
         while !self.is_eof() {
-            let instruction = self.buffer.remove(self.ip); //&self.buffer[self.ip];
-            let instruction = instruction.into_op();
+            let instruction = self.buffer()[self.ip()].as_op();
+
+            self.frame_mut().ip += 1;
 
             match instruction {
                 Opcode::Eof => return Ok(()),
@@ -62,7 +102,7 @@ impl VM {
                     self.stack.push(Rc::new(RefCell::new(constant)));
                 }
                 Opcode::Negate => {
-                    let maybe_number = self.read_number().unwrap();
+                    let maybe_number = self.read_number();
 
                     self.stack
                         .push(Rc::new(RefCell::new(Value::Number(-maybe_number))));
@@ -94,58 +134,79 @@ impl VM {
                     // TODO: handle case where var is not defined
                     let value = self.global.get_var(&name).unwrap();
 
-                    self.stack.push(value.clone());
+                    self.stack.push(value);
+                }
+                Opcode::SetLocal => {
+                    let stack_idx = self.read_number() as usize;
+                    let value = self.stack.pop();
+                    self.stack.set(stack_idx, value);
+                }
+                Opcode::GetLocal => {
+                    let stack_idx = self.read_number() as usize;
+
+                    self.stack.push(self.stack.peek(stack_idx).clone());
                 }
                 Opcode::ShortJmpIfFalse => {
-                    let instruction_count = self.pop_owned().unwrap().as_number().unwrap() as usize;
+                    let instruction_count = self.pop_owned().unwrap().as_number() as usize;
 
                     let condition_cell = self.stack.pop();
                     let condition = condition_cell.borrow().is_truthy();
 
                     if !condition {
-                        self.ip += instruction_count;
+                        self.frame_mut().ip += instruction_count;
                     }
                 }
-                _ => unimplemented!(),
+                Opcode::ShortJmpIfTrue => {
+                    let instruction_count = self.pop_owned().unwrap().as_number() as usize;
+
+                    let condition_cell = self.stack.get();
+                    let condition = condition_cell.borrow().is_truthy();
+
+                    if condition {
+                        self.frame_mut().ip += instruction_count;
+                    }
+                }
+                Opcode::BackJmp => {
+                    let instruction_count = self.pop_owned().unwrap().as_number() as usize;
+                    self.frame_mut().ip -= instruction_count;
+                }
+                Opcode::Pop => {
+                    self.stack.pop();
+                }
+                Opcode::AdditionAssignment => {
+                    let target_cell = self.stack.pop();
+
+                    let value_cell = self.stack.pop();
+
+                    let value = value_cell.borrow();
+
+                    target_cell.borrow_mut().add_assign(&*value);
+
+                    self.stack.push(target_cell);
+                }
+                Opcode::SubtractionAssignment => {
+                    let target_cell = self.stack.pop();
+
+                    let value_cell = self.stack.pop();
+
+                    let value = value_cell.borrow();
+
+                    target_cell.borrow_mut().sub_assign(&*value);
+
+                    self.stack.push(target_cell);
+                }
+                Opcode::Print => {
+                    let value_cell = self.stack.pop();
+                    let value = value_cell.borrow();
+
+                    println!("{:?}", &*value);
+                }
+                _ => {
+                    unimplemented!()
+                }
             };
         }
 
-        // unreachable!()
         Ok(())
-    }
-
-    pub fn read_constant(&mut self) -> Option<Value> {
-        if self.is_eof() {
-            return None;
-        }
-
-        Some(self.buffer.remove(self.ip).into_operand())
-    }
-
-    pub fn read_number(&mut self) -> Option<f64> {
-        self.stack.pop().borrow().as_number()
-    }
-
-    pub fn pop_owned(&mut self) -> Option<Value> {
-        Value::try_into_inner(self.stack.pop())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    pub fn aaa() {
-        let mut vm = VM::new(vec![
-            Instruction::Op(Opcode::Constant),
-            Instruction::Operand(Value::Number(5.0)),
-            Instruction::Op(Opcode::Constant),
-            Instruction::Operand(Value::Number(123.0)),
-            Instruction::Op(Opcode::Sub),
-            Instruction::Op(Opcode::Eof),
-        ]);
-
-        let result = vm.interpret();
     }
 }
