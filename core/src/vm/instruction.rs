@@ -2,7 +2,7 @@ use crate::parser::token::TokenType;
 
 use super::value::Value;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Opcode {
     Constant,
     Eof,
@@ -33,6 +33,7 @@ pub enum Opcode {
     Pop,
     Print,
     FunctionCall,
+    Return,
 }
 
 impl From<TokenType> for Opcode {
