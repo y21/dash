@@ -1,8 +1,8 @@
 use crate::parser::{
     expr::{AssignmentExpr, BinaryExpr, Expr, FunctionCall, GroupingExpr, LiteralExpr, UnaryExpr},
     statement::{
-        BlockStatement, FunctionDeclaration, IfStatement, Print, Statement, VariableDeclaration,
-        WhileLoop,
+        BlockStatement, FunctionDeclaration, IfStatement, Print, ReturnStatement, Statement,
+        VariableDeclaration, WhileLoop,
     },
 };
 
@@ -16,6 +16,7 @@ pub trait Visitor<'a, V> {
             Statement::Function(f) => self.visit_function_declaration(f),
             Statement::While(l) => self.visit_while_loop(l),
             Statement::Print(p) => self.visit_print_statement(p),
+            Statement::Return(r) => self.visit_return_statement(r),
         }
     }
 
@@ -43,4 +44,5 @@ pub trait Visitor<'a, V> {
     fn visit_assignment_expression(&mut self, e: &AssignmentExpr<'a>) -> V;
     fn visit_print_statement(&mut self, p: &Print<'a>) -> V;
     fn visit_function_call(&mut self, c: &FunctionCall<'a>) -> V;
+    fn visit_return_statement(&mut self, s: &ReturnStatement<'a>) -> V;
 }
