@@ -195,6 +195,40 @@ impl VM {
 
                     self.stack.push(target_cell);
                 }
+                Opcode::FunctionCall => {
+                    let param_count = self.read_number() as usize;
+                    let mut params = Vec::new();
+                    for _ in 0..param_count {
+                        params.push(self.stack.pop());
+                    }
+
+                    let current_sp = self.stack.get_stack_pointer();
+                    self.frame_mut().sp = current_sp;
+
+                    let func_cell = self.stack.pop();
+                    let func_cell_ref = func_cell.borrow();
+                    let func = func_cell_ref.as_user_function().unwrap();
+                    let frame = Frame {
+                        buffer: func.buffer.clone(),
+                        ip: 0,
+                        sp: current_sp,
+                    };
+                    self.frames.push(frame);
+                    for param in params {
+                        self.stack.push(param);
+                    }
+                }
+                Opcode::Return => {
+                    // Restore VM state to where we were before the function call happened
+                    let ret = self.stack.pop();
+                    self.frames.pop();
+                    if self.frames.get_stack_pointer() == 0 {
+                        return Ok(());
+                    }
+
+                    self.stack.set_stack_pointer(self.frame().sp);
+                    self.stack.push(ret);
+                }
                 Opcode::Print => {
                     let value_cell = self.stack.pop();
                     let value = value_cell.borrow();
