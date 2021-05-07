@@ -257,7 +257,7 @@ impl<'a> Parser<'a> {
         while self.expect_and_skip(&[TokenType::LeftParen]) {
             // TODO: read parameter list
             let mut arguments = Vec::new();
-            while !self.expect_and_skip(&[TokenType::Comma]) {
+            while !self.expect_and_skip(&[TokenType::Comma, TokenType::RightParen]) {
                 arguments.push(self.expression()?);
             }
 
