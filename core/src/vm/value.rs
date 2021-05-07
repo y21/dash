@@ -9,6 +9,8 @@ pub enum Value {
     Number(f64),
     Bool(bool),
     Object(Box<Object>),
+    Undefined,
+    Null,
 }
 
 impl From<Object> for Value {
@@ -38,6 +40,7 @@ impl JsValue for Value {
             Self::Bool(b) => *b,
             Self::Number(n) => *n != 0f64,
             Self::Object(o) => o.is_truthy(),
+            Self::Undefined | Self::Null => false,
             _ => unreachable!(),
         }
     }
@@ -66,6 +69,13 @@ impl JsValue for Value {
     fn as_object(&self) -> Option<&Object> {
         match self {
             Self::Object(o) => Some(o),
+            _ => None,
+        }
+    }
+
+    fn as_user_function(&self) -> Option<&UserFunction> {
+        match self {
+            Self::Object(o) => o.as_user_function(),
             _ => None,
         }
     }
@@ -113,7 +123,6 @@ impl JsValue for Value {
 #[derive(Debug, Clone)]
 pub struct UserFunction {
     pub params: u32,
-    // pub buffer: Vec<Instruction>,
     pub buffer: Box<[Instruction]>,
     pub name: Option<String>,
 }
@@ -189,6 +198,13 @@ impl JsValue for Object {
         }
     }
 
+    fn as_user_function(&self) -> Option<&UserFunction> {
+        match self {
+            Self::Function(FunctionKind::User(f), ty) => Some(f),
+            _ => None,
+        }
+    }
+
     fn into_object(self) -> Option<Object> {
         Some(self)
     }
@@ -214,6 +230,7 @@ pub trait JsValue {
     fn as_bool(&self) -> Option<bool>;
     fn as_object(&self) -> Option<&Object>;
     fn as_string(&self) -> Option<&str>;
+    fn as_user_function(&self) -> Option<&UserFunction>;
 
     fn sub_assign(&mut self, other: &Value);
     fn add_assign(&mut self, other: &Value);
