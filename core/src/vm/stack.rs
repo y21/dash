@@ -46,6 +46,14 @@ impl<T, const N: usize> Stack<T, N> {
         unsafe { self.0[idx].as_mut_ptr().write(value) }
     }
 
+    pub fn get_stack_pointer(&self) -> usize {
+        self.1
+    }
+
+    pub fn set_stack_pointer(&mut self, sp: usize) {
+        self.1 = sp;
+    }
+
     pub fn peek(&self, idx: usize) -> &T {
         assert!(idx <= self.1);
 
