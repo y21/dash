@@ -9,6 +9,16 @@ pub enum Statement<'a> {
     Function(FunctionDeclaration<'a>),
     While(WhileLoop<'a>),
     Print(Print<'a>),
+    Return(ReturnStatement<'a>),
+}
+
+#[derive(Debug, Clone)]
+pub struct ReturnStatement<'a>(pub Expr<'a>);
+
+impl<'a> ReturnStatement<'a> {
+    pub fn new(expr: Expr<'a>) -> Self {
+        Self(expr)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -16,14 +26,14 @@ pub struct Print<'a>(pub Expr<'a>);
 
 #[derive(Debug, Clone)]
 pub struct WhileLoop<'a> {
-    pub condition: Box<Expr<'a>>,
+    pub condition: Expr<'a>,
     pub body: Box<Statement<'a>>,
 }
 
 impl<'a> WhileLoop<'a> {
     pub fn new(condition: Expr<'a>, body: Statement<'a>) -> Self {
         Self {
-            condition: Box::new(condition),
+            condition: condition,
             body: Box::new(body),
         }
     }
@@ -33,7 +43,7 @@ impl<'a> WhileLoop<'a> {
 pub struct FunctionDeclaration<'a> {
     pub name: &'a [u8],
     pub arguments: Vec<&'a [u8]>,
-    pub statements: Vec<Statement<'a>>, // TODO: single statement?
+    pub statements: Vec<Statement<'a>>,
 }
 
 impl<'a> FunctionDeclaration<'a> {
