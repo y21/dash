@@ -15,12 +15,6 @@ pub enum Statement<'a> {
 #[derive(Debug, Clone)]
 pub struct ReturnStatement<'a>(pub Expr<'a>);
 
-impl<'a> ReturnStatement<'a> {
-    pub fn new(expr: Expr<'a>) -> Self {
-        Self(expr)
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct Print<'a>(pub Expr<'a>);
 
