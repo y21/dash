@@ -1,8 +1,8 @@
 use super::{
     expr::{Expr, UnaryExpr},
     statement::{
-        BlockStatement, FunctionDeclaration, IfStatement, Print, Statement, VariableDeclaration,
-        VariableDeclarationKind, WhileLoop,
+        BlockStatement, FunctionDeclaration, IfStatement, Print, ReturnStatement, Statement,
+        VariableDeclaration, VariableDeclarationKind, WhileLoop,
     },
     token::{Token, TokenType, ASSIGNMENT_TYPES},
 };
@@ -45,6 +45,7 @@ impl<'a> Parser<'a> {
             TokenType::LeftBrace => self.block().map(Statement::Block),
             TokenType::While => self.while_loop().map(Statement::While),
             TokenType::Print => self.print_statement().map(Statement::Print),
+            TokenType::Return => self.return_statement().map(Statement::Return),
             _ => {
                 // We've skipped the current character because of the statement cases that skip the current token
                 // So we go back, as the skipped token belongs to this expression
@@ -56,6 +57,11 @@ impl<'a> Parser<'a> {
         self.expect_and_skip(&[TokenType::Semicolon]);
 
         stmt
+    }
+
+    pub fn return_statement(&mut self) -> Option<ReturnStatement<'a>> {
+        let expr = self.expression()?;
+        Some(ReturnStatement(expr))
     }
 
     pub fn print_statement(&mut self) -> Option<Print<'a>> {
@@ -95,16 +101,17 @@ impl<'a> Parser<'a> {
 
     pub fn argument_list(&mut self) -> Option<Vec<&'a [u8]>> {
         let mut arguments = Vec::new();
-        while !self.expect_and_skip(&[TokenType::RightParen]) {
-            let tok = self.previous()?;
 
-            if tok.ty == TokenType::Identifier {
-                arguments.push(tok.full);
-            } else {
-                // ??? handle this case
-                todo!()
-            }
+        while !self.expect_and_skip(&[TokenType::RightParen]) {
+            let tok = self.next()?;
+
+            match tok.ty {
+                TokenType::Identifier => arguments.push(tok.full),
+                TokenType::Comma => continue,
+                _ => todo!(), // TODO: handle
+            };
         }
+
         Some(arguments)
     }
 
@@ -257,7 +264,8 @@ impl<'a> Parser<'a> {
         while self.expect_and_skip(&[TokenType::LeftParen]) {
             // TODO: read parameter list
             let mut arguments = Vec::new();
-            while !self.expect_and_skip(&[TokenType::Comma, TokenType::RightParen]) {
+            while !self.expect_and_skip(&[TokenType::RightParen]) {
+                self.expect_and_skip(&[TokenType::Comma]);
                 arguments.push(self.expression()?);
             }
 
