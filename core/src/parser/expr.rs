@@ -10,6 +10,7 @@ pub enum Expr<'a> {
     Unary(UnaryExpr<'a>),
     Assignment(AssignmentExpr<'a>),
     Call(FunctionCall<'a>),
+    Conditional(ConditionalExpr<'a>),
 }
 
 impl<'a> Expr<'a> {
@@ -55,6 +56,21 @@ impl<'a> Expr<'a> {
             arguments,
         })
     }
+
+    pub fn conditional(condition: Expr<'a>, then: Expr<'a>, el: Expr<'a>) -> Self {
+        Self::Conditional(ConditionalExpr {
+            condition: Box::new(condition),
+            then: Box::new(then),
+            el: Box::new(el),
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ConditionalExpr<'a> {
+    pub condition: Box<Expr<'a>>,
+    pub then: Box<Expr<'a>>,
+    pub el: Box<Expr<'a>>,
 }
 
 #[derive(Debug, Clone)]
