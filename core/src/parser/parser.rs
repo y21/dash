@@ -295,7 +295,11 @@ impl<'a> Parser<'a> {
             TokenType::Number => {
                 Expr::number_literal(std::str::from_utf8(full).unwrap().parse::<f64>().unwrap())
             }
-            TokenType::LeftParen => Expr::grouping(self.expression()?), // TODO: make sure there's a ) after the expression
+            TokenType::LeftParen => {
+                let expr = self.expression()?;
+                self.expect_and_skip(&[TokenType::RightParen]);
+                Expr::grouping(expr)
+            }
             _ => {
                 // TODO: this should return an error expr(?)
                 unimplemented!()
