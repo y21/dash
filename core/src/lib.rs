@@ -1,8 +1,6 @@
 #![feature(maybe_uninit_uninit_array, maybe_uninit_ref)]
 
-use std::{cell::RefCell, rc::Rc};
-
-use vm::value::Value;
+use vm::value::UserFunction;
 
 pub mod compiler;
 pub mod gc;
@@ -19,15 +17,16 @@ pub enum EvalError {
 
 /// Convenient function for evaluating a JavaScript source code string
 /// Returns the last evaluated value
-pub fn eval(code: impl AsRef<str>) -> Result<Rc<RefCell<Value>>, EvalError> {
+pub fn eval(code: impl AsRef<str>) -> Result<(), EvalError> {
     let code = code.as_ref();
     let tokens = parser::lexer::Lexer::new(code).scan_all();
     let statements = parser::parser::Parser::new(tokens).parse_all();
     let instructions = compiler::compiler::Compiler::new(statements).compile();
-    let mut vm = vm::VM::new(instructions);
+
+    let mut vm = vm::VM::new(UserFunction::new(instructions, 0));
     vm.interpret().map_err(EvalError::VMError)?;
 
-    Ok(vm.stack.pop())
+    Ok(())
 }
 
 #[cfg(test)]
@@ -36,17 +35,17 @@ mod tests {
 
     #[test]
     pub fn interpreter() {
-        /*let code = r#"
-            function hello() {
-                let a = 1 + 2 * 3;
-                let b = a * 3;
-                b
+        let code = r#"
+        function F(a, b) {
+            print a;
+            if (a) {
+                return F(a - 1, 2);
             }
-        "#;*/
-        let code = r#"if (true) 1+2;"#;
+        }
+        F(254, 1);
+        "#;
 
-        let res = Value::try_into_inner(eval(code).unwrap()).unwrap();
-        dbg!(res);
+        eval(code).unwrap();
     }
 
     #[test]
