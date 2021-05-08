@@ -95,7 +95,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
 
             instructions.push(Instruction::Op(Opcode::Constant));
             jmp_idx = isize::try_from(instructions.len()).unwrap();
-            instructions.push(Instruction::Operand(Value::Number(0f64)));
+            instructions.push(Instruction::Op(Opcode::Nop));
 
             if ty == TokenType::LogicalAnd {
                 instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
@@ -126,7 +126,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
 
         instructions.push(Instruction::Op(Opcode::Constant));
         let jmp_idx = instructions.len();
-        instructions.push(Instruction::Operand(Value::Number(0f64)));
+        instructions.push(Instruction::Op(Opcode::Nop));
 
         instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
 
@@ -197,7 +197,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
 
         instructions.push(Instruction::Op(Opcode::Constant));
         let jmp_idx = instructions.len();
-        instructions.push(Instruction::Operand(Value::Number(0f64)));
+        instructions.push(Instruction::Op(Opcode::Nop));
         instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
 
         let then_instructions = self.accept(&i.then);
