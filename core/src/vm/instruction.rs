@@ -34,6 +34,7 @@ pub enum Opcode {
     Print,
     FunctionCall,
     Return,
+    Nop, // Mainly used as a placeholder
 }
 
 impl From<TokenType> for Opcode {
