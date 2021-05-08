@@ -6,4 +6,4 @@ edition = "2018"
 
 [dependencies]
 dash = { path = "../core/" }
-clap = "2.33.3"
+structopt = "0.3"
