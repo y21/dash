@@ -4,7 +4,7 @@ use crate::{
             AssignmentExpr, BinaryExpr, Expr, FunctionCall, GroupingExpr, LiteralExpr, UnaryExpr,
         },
         statement::{
-            BlockStatement, FunctionDeclaration, IfStatement, Print, Statement,
+            BlockStatement, FunctionDeclaration, IfStatement, Print, ReturnStatement, Statement,
             VariableDeclaration, WhileLoop,
         },
         token::TokenType,
@@ -30,6 +30,13 @@ pub struct Compiler<'a> {
 impl<'a> Compiler<'a> {
     pub fn new(ast: Ast<'a>) -> Self {
         let scope = ScopeGuard::new();
+        Self {
+            ast: Some(ast),
+            scope,
+        }
+    }
+
+    pub fn with_scopeguard(ast: Ast<'a>, scope: ScopeGuard<'a, 1024>) -> Self {
         Self {
             ast: Some(ast),
             scope,
@@ -214,7 +221,25 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         let params = f.arguments.len();
         let statements = f.statements.clone(); // TODO: somehow avoid this clone
 
-        let func_instructions = Self::new(statements).compile();
+        let mut scope = ScopeGuard::new();
+        scope.enter_scope();
+        for argument in &f.arguments {
+            scope.push_local(Local::new(argument, 0));
+        }
+
+        let mut func_instructions = Self::with_scopeguard(statements, scope).compile();
+
+        if func_instructions.len() == 0 {
+            func_instructions.push(Instruction::Op(Opcode::Constant));
+            func_instructions.push(Instruction::Operand(Value::Undefined));
+            func_instructions.push(Instruction::Op(Opcode::Return));
+        } else if let Some(Instruction::Op(op)) = func_instructions.last() {
+            if !op.eq(&Opcode::Return) {
+                func_instructions.push(Instruction::Op(Opcode::Constant));
+                func_instructions.push(Instruction::Operand(Value::Undefined));
+                func_instructions.push(Instruction::Op(Opcode::Return));
+            }
+        }
 
         let func = UserFunction::new(func_instructions, params as u32);
         instructions.push(Instruction::Operand(func.into()));
@@ -268,6 +293,12 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
 
         instructions.push(Instruction::Op(Opcode::FunctionCall));
 
-        todo!()
+        instructions
+    }
+
+    fn visit_return_statement(&mut self, s: &ReturnStatement<'a>) -> Vec<Instruction> {
+        let mut instructions = self.accept_expr(&s.0);
+        instructions.push(Instruction::Op(Opcode::Return));
+        instructions
     }
 }
