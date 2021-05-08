@@ -1,7 +1,8 @@
 use crate::{
     parser::{
         expr::{
-            AssignmentExpr, BinaryExpr, Expr, FunctionCall, GroupingExpr, LiteralExpr, UnaryExpr,
+            AssignmentExpr, BinaryExpr, ConditionalExpr, Expr, FunctionCall, GroupingExpr,
+            LiteralExpr, UnaryExpr,
         },
         statement::{
             BlockStatement, FunctionDeclaration, IfStatement, Print, ReturnStatement, Statement,
@@ -12,7 +13,7 @@ use crate::{
     visitor::Visitor,
     vm::{
         instruction::{Instruction, Opcode},
-        value::{UserFunction, Value},
+        value::{FunctionType, UserFunction, Value},
     },
 };
 use std::convert::TryFrom;
@@ -241,7 +242,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
             }
         }
 
-        let func = UserFunction::new(func_instructions, params as u32);
+        let func = UserFunction::new(func_instructions, params as u32, FunctionType::Function);
         instructions.push(Instruction::Operand(func.into()));
 
         instructions.push(Instruction::Op(Opcode::Constant));
@@ -299,6 +300,34 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
     fn visit_return_statement(&mut self, s: &ReturnStatement<'a>) -> Vec<Instruction> {
         let mut instructions = self.accept_expr(&s.0);
         instructions.push(Instruction::Op(Opcode::Return));
+        instructions
+    }
+
+    fn visit_conditional_expr(&mut self, c: &ConditionalExpr<'a>) -> Vec<Instruction> {
+        let mut instructions = self.accept_expr(&c.condition);
+
+        instructions.push(Instruction::Op(Opcode::Constant));
+        let then_jmp_idx = instructions.len();
+        instructions.push(Instruction::Op(Opcode::Nop));
+
+        instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
+        let then_instructions = self.accept_expr(&c.then);
+        let then_instruction_count = then_instructions.len();
+        instructions.extend(then_instructions);
+        instructions[then_jmp_idx] =
+            Instruction::Operand(Value::Number((then_instruction_count + 3) as f64));
+
+        instructions.push(Instruction::Op(Opcode::Constant));
+        let else_jmp_idx = instructions.len();
+        instructions.push(Instruction::Op(Opcode::Nop));
+        instructions.push(Instruction::Op(Opcode::ShortJmp));
+
+        let else_instructions = self.accept_expr(&c.el);
+        let else_instruction_count = else_instructions.len();
+        instructions[else_jmp_idx] =
+            Instruction::Operand(Value::Number(else_instruction_count as f64));
+        instructions.extend(else_instructions);
+
         instructions
     }
 }
