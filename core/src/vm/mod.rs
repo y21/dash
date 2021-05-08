@@ -144,7 +144,8 @@ impl VM {
                 Opcode::GetLocal => {
                     let stack_idx = self.read_number() as usize;
 
-                    self.stack.push(self.stack.peek(stack_idx).clone());
+                    self.stack
+                        .push(self.stack.peek_relative(self.frame().sp, stack_idx).clone());
                 }
                 Opcode::ShortJmpIfFalse => {
                     let instruction_count = self.pop_owned().unwrap().as_number() as usize;
@@ -202,7 +203,7 @@ impl VM {
                         params.push(self.stack.pop());
                     }
 
-                    let current_sp = self.stack.get_stack_pointer();
+                    let current_sp = self.stack.get_stack_pointer() - 1;
                     self.frame_mut().sp = current_sp;
 
                     let func_cell = self.stack.pop();
@@ -214,7 +215,7 @@ impl VM {
                         sp: current_sp,
                     };
                     self.frames.push(frame);
-                    for param in params {
+                    for param in params.into_iter().rev() {
                         self.stack.push(param);
                     }
                 }
