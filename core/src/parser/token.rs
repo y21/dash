@@ -9,6 +9,7 @@ pub enum TokenType {
     Minus,
     Decrement,
     Plus,
+    Colon,
     Increment,
     Star,
     Slash,
