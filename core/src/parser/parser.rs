@@ -177,7 +177,20 @@ impl<'a> Parser<'a> {
     }
 
     pub fn assignment(&mut self) -> Option<Expr<'a>> {
-        self.read_infix_expression(|s| Self::nullish_coalescing(s), ASSIGNMENT_TYPES)
+        self.read_infix_expression(|s| Self::ternary(s), ASSIGNMENT_TYPES)
+    }
+
+    pub fn ternary(&mut self) -> Option<Expr<'a>> {
+        let mut expr = self.nullish_coalescing()?;
+
+        while self.expect_and_skip(&[TokenType::Conditional]) {
+            let then_branch = self.ternary()?;
+            self.expect_and_skip(&[TokenType::Colon]);
+            let else_branch = self.ternary()?;
+            expr = Expr::conditional(expr, then_branch, else_branch);
+        }
+
+        Some(expr)
     }
 
     pub fn nullish_coalescing(&mut self) -> Option<Expr<'a>> {
@@ -301,6 +314,7 @@ impl<'a> Parser<'a> {
                 Expr::grouping(expr)
             }
             _ => {
+                dbg!(ty, full);
                 // TODO: this should return an error expr(?)
                 unimplemented!()
             }
