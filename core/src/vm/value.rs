@@ -1,5 +1,9 @@
 use core::fmt::Debug;
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::RefCell,
+    fmt::{self, Formatter},
+    rc::Rc,
+};
 
 use super::instruction::Instruction;
 
@@ -21,10 +25,7 @@ impl From<Object> for Value {
 
 impl From<UserFunction> for Value {
     fn from(f: UserFunction) -> Self {
-        Self::Object(Box::new(Object::Function(
-            FunctionKind::User(f),
-            FunctionType::Function,
-        )))
+        Self::Object(Box::new(Object::Function(FunctionKind::User(f))))
     }
 }
 
@@ -55,6 +56,7 @@ impl JsValue for Value {
     fn as_number(&self) -> f64 {
         match self {
             Self::Number(n) => *n,
+            Self::Object(o) => o.as_number(),
             _ => f64::NAN,
         }
     }
@@ -73,9 +75,9 @@ impl JsValue for Value {
         }
     }
 
-    fn as_user_function(&self) -> Option<&UserFunction> {
+    fn as_function(&self) -> Option<&FunctionKind> {
         match self {
-            Self::Object(o) => o.as_user_function(),
+            Self::Object(o) => o.as_function(),
             _ => None,
         }
     }
@@ -123,27 +125,40 @@ impl JsValue for Value {
 #[derive(Debug, Clone)]
 pub struct UserFunction {
     pub params: u32,
+    pub ty: FunctionType,
     pub buffer: Box<[Instruction]>,
     pub name: Option<String>,
 }
 
 impl UserFunction {
-    pub fn new(buffer: Vec<Instruction>, params: u32) -> Self {
+    pub fn new(buffer: Vec<Instruction>, params: u32, ty: FunctionType) -> Self {
         Self {
             buffer: buffer.into_boxed_slice(),
             params,
             name: None,
+            ty,
         }
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct NativeFunction {}
+pub struct NativeFunction(pub fn(Vec<Rc<RefCell<Value>>>) -> Rc<RefCell<Value>>);
+
+impl Clone for NativeFunction {
+    fn clone(&self) -> Self {
+        Self(self.0)
+    }
+}
+
+impl Debug for NativeFunction {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("NativeFunction").finish()
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum Object {
     String(String),
-    Function(FunctionKind, FunctionType),
+    Function(FunctionKind),
 }
 
 #[derive(Debug, Clone)]
@@ -180,7 +195,7 @@ impl JsValue for Object {
     }
 
     fn as_number(&self) -> f64 {
-        unreachable!()
+        f64::NAN // TODO: try to convert it to number?
     }
 
     fn as_bool(&self) -> Option<bool> {
@@ -198,9 +213,9 @@ impl JsValue for Object {
         }
     }
 
-    fn as_user_function(&self) -> Option<&UserFunction> {
+    fn as_function(&self) -> Option<&FunctionKind> {
         match self {
-            Self::Function(FunctionKind::User(f), ty) => Some(f),
+            Self::Function(kind) => Some(kind),
             _ => None,
         }
     }
@@ -230,7 +245,7 @@ pub trait JsValue {
     fn as_bool(&self) -> Option<bool>;
     fn as_object(&self) -> Option<&Object>;
     fn as_string(&self) -> Option<&str>;
-    fn as_user_function(&self) -> Option<&UserFunction>;
+    fn as_function(&self) -> Option<&FunctionKind>;
 
     fn sub_assign(&mut self, other: &Value);
     fn add_assign(&mut self, other: &Value);
