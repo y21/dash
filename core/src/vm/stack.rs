@@ -55,9 +55,13 @@ impl<T, const N: usize> Stack<T, N> {
     }
 
     pub fn peek(&self, idx: usize) -> &T {
-        assert!(idx <= self.1);
+        self.peek_relative(0, idx)
+    }
 
-        unsafe { self.0[idx].assume_init_ref() }
+    pub fn peek_relative(&self, offset: usize, idx: usize) -> &T {
+        assert!(offset + idx <= self.1);
+
+        unsafe { self.0[offset + idx].assume_init_ref() }
     }
 
     pub fn reset(&mut self) {
