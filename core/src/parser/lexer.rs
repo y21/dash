@@ -254,7 +254,7 @@ impl<'a> Lexer<'a> {
                 Some(TokenType::Conditional),
                 &[(b".", TokenType::OptionalChaining)],
             ),
-            // b'?' => self.create_contextified_token(TokenType::Conditional),
+            b':' => self.create_contextified_token(TokenType::Colon),
             b';' => self.create_contextified_token(TokenType::Semicolon),
             b'=' => self.create_contextified_token(TokenType::Assignment), // TODO: this is obviously not safe to assume
             b'"' => self.read_string_literal(),
