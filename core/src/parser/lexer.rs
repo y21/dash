@@ -266,7 +266,7 @@ impl<'a> Lexer<'a> {
                 } else if util::is_alpha(cur) {
                     self.read_identifier();
                 } else {
-                    panic!("Unknown token: {}", cur as char)
+                    panic!("Unknown token: {} ({})", cur as char, cur)
                 }
             }
         };
