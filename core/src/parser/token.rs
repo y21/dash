@@ -23,6 +23,7 @@ pub enum TokenType {
     Remainder,
     ExponentiationAssignment,
     Exponential,
+    LeftShift,
     LeftShiftAssignment,
     RightShiftAssignment,
     RightShift,
@@ -71,6 +72,12 @@ pub enum TokenType {
     For,
     While,
     Print,
+    In,
+    Instanceof,
+    Await,
+    Delete,
+    Void,
+    Typeof,
 }
 
 pub const ASSIGNMENT_TYPES: &[TokenType] = &[
@@ -111,6 +118,12 @@ impl From<&[u8]> for TokenType {
             b"for" => Self::For,
             b"while" => Self::While,
             b"print" => Self::Print,
+            b"in" => Self::In,
+            b"instanceof" => Self::Instanceof,
+            b"await" => Self::Await,
+            b"delete" => Self::Delete,
+            b"void" => Self::Void,
+            b"typeof" => Self::Typeof,
             _ => Self::Identifier,
         }
     }
