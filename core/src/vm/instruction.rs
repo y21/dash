@@ -35,6 +35,10 @@ pub enum Opcode {
     FunctionCall,
     Return,
     Nop, // Mainly used as a placeholder
+    Less,
+    LessEqual,
+    Greater,
+    GreaterEqual,
 }
 
 impl From<TokenType> for Opcode {
@@ -52,9 +56,11 @@ impl From<TokenType> for Opcode {
             TokenType::SubtractionAssignment => Self::SubtractionAssignment,
             TokenType::Increment => Self::AdditionAssignment,
             TokenType::Decrement => Self::SubtractionAssignment,
-            _ => {
-                unimplemented!()
-            }
+            TokenType::Less => Self::Less,
+            TokenType::LessEqual => Self::LessEqual,
+            TokenType::Greater => Self::Greater,
+            TokenType::GreaterEqual => Self::GreaterEqual,
+            _ => unimplemented!(),
         }
     }
 }
