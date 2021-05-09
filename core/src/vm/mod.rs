@@ -9,7 +9,14 @@ use std::{cell::RefCell, rc::Rc};
 use instruction::{Instruction, Opcode};
 use value::{JsValue, Value};
 
-use self::{environment::Environment, frame::Frame, stack::Stack, value::UserFunction};
+use crate::vm::value::{Compare, FunctionType, NativeFunction, Object};
+
+use self::{
+    environment::Environment,
+    frame::Frame,
+    stack::Stack,
+    value::{FunctionKind, UserFunction},
+};
 
 #[derive(Debug)]
 pub enum VMError {}
@@ -43,11 +50,13 @@ impl VM {
             sp: 0,
         });
 
-        Self {
+        let mut vm = Self {
             frames,
             stack: Stack::new(),
             global: Environment::new(),
-        }
+        };
+        vm.prepare_stdlib();
+        vm
     }
 
     fn frame(&self) -> &Frame {
@@ -70,7 +79,7 @@ impl VM {
         self.ip() >= self.buffer().len()
     }
 
-    pub fn read_constant(&mut self) -> Option<Value> {
+    fn read_constant(&mut self) -> Option<Value> {
         if self.is_eof() {
             return None;
         }
@@ -80,12 +89,30 @@ impl VM {
         Some(self.buffer()[self.ip() - 1].clone().into_operand())
     }
 
-    pub fn read_number(&mut self) -> f64 {
+    fn read_number(&mut self) -> f64 {
         self.stack.pop().borrow().as_number()
     }
 
-    pub fn pop_owned(&mut self) -> Option<Value> {
+    fn pop_owned(&mut self) -> Option<Value> {
         Value::try_into_inner(self.stack.pop())
+    }
+
+    fn prepare_stdlib(&mut self) {
+        self.global.set_var(
+            "isNaN",
+            Rc::new(RefCell::new(Value::Object(Box::new(Object::Function(
+                FunctionKind::Native(NativeFunction("isNaN", |value| {
+                    let value = match value.first() {
+                        Some(v) => v,
+                        None => return Rc::new(RefCell::new(Value::Bool(true))),
+                    };
+
+                    let value = value.borrow().as_number();
+
+                    Rc::new(RefCell::new(Value::Bool(value.is_nan())))
+                })),
+            ))))),
+        )
     }
 
     pub fn interpret(&mut self) -> Result<(), VMError> {
@@ -167,6 +194,10 @@ impl VM {
                         self.frame_mut().ip += instruction_count;
                     }
                 }
+                Opcode::ShortJmp => {
+                    let instruction_count = self.pop_owned().unwrap().as_number() as usize;
+                    self.frame_mut().ip += instruction_count;
+                }
                 Opcode::BackJmp => {
                     let instruction_count = self.pop_owned().unwrap().as_number() as usize;
                     self.frame_mut().ip -= instruction_count;
@@ -203,12 +234,20 @@ impl VM {
                         params.push(self.stack.pop());
                     }
 
-                    let current_sp = self.stack.get_stack_pointer() - 1;
-                    self.frame_mut().sp = current_sp;
-
                     let func_cell = self.stack.pop();
                     let func_cell_ref = func_cell.borrow();
-                    let func = func_cell_ref.as_user_function().unwrap();
+                    let func = match func_cell_ref.as_function().unwrap() {
+                        FunctionKind::Native(f) => {
+                            let result = (f.1)(params);
+                            self.stack.push(result);
+                            continue;
+                        }
+                        FunctionKind::User(u) => u,
+                    };
+
+                    let current_sp = self.stack.get_stack_pointer();
+                    self.frame_mut().sp = current_sp;
+
                     let frame = Frame {
                         buffer: func.buffer.clone(),
                         ip: 0,
@@ -234,11 +273,54 @@ impl VM {
                     let value_cell = self.stack.pop();
                     let value = value_cell.borrow();
 
-                    println!("{:?}", &*value);
+                    println!("{}", value.to_string());
                 }
-                _ => {
-                    unimplemented!()
+                Opcode::Less => {
+                    let rhs_cell = self.stack.pop();
+                    let rhs = rhs_cell.borrow();
+                    let lhs_cell = self.stack.pop();
+                    let lhs = lhs_cell.borrow();
+
+                    let is_less = matches!(lhs.compare(&rhs), Some(Compare::Less));
+                    self.stack.push(Rc::new(RefCell::new(Value::Bool(is_less))));
                 }
+                Opcode::LessEqual => {
+                    let rhs_cell = self.stack.pop();
+                    let rhs = rhs_cell.borrow();
+                    let lhs_cell = self.stack.pop();
+                    let lhs = lhs_cell.borrow();
+
+                    let is_less_eq = matches!(
+                        lhs.compare(&rhs),
+                        Some(Compare::Less) | Some(Compare::Equal)
+                    );
+                    self.stack
+                        .push(Rc::new(RefCell::new(Value::Bool(is_less_eq))));
+                }
+                Opcode::Greater => {
+                    let rhs_cell = self.stack.pop();
+                    let rhs = rhs_cell.borrow();
+                    let lhs_cell = self.stack.pop();
+                    let lhs = lhs_cell.borrow();
+
+                    let is_greater = matches!(lhs.compare(&rhs), Some(Compare::Greater));
+                    self.stack
+                        .push(Rc::new(RefCell::new(Value::Bool(is_greater))));
+                }
+                Opcode::GreaterEqual => {
+                    let rhs_cell = self.stack.pop();
+                    let rhs = rhs_cell.borrow();
+                    let lhs_cell = self.stack.pop();
+                    let lhs = lhs_cell.borrow();
+
+                    let is_greater_eq = matches!(
+                        lhs.compare(&rhs),
+                        Some(Compare::Greater) | Some(Compare::Equal)
+                    );
+                    self.stack
+                        .push(Rc::new(RefCell::new(Value::Bool(is_greater_eq))));
+                }
+                _ => unreachable!(),
             };
         }
 
