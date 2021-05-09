@@ -233,6 +233,14 @@ impl<'a> Lexer<'a> {
                     (b">", TokenType::RightShift),
                 ],
             ),
+            b'<' => self.create_contextified_conditional_token(
+                Some(TokenType::Less),
+                &[
+                    (b"<=", TokenType::LeftShiftAssignment),
+                    (b"=", TokenType::LessEqual),
+                    (b"<", TokenType::LeftShift),
+                ],
+            ),
             b'%' => self.create_contextified_conditional_token(
                 Some(TokenType::Remainder),
                 &[(b"=", TokenType::RemainderAssignment)],
