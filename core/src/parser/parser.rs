@@ -237,6 +237,8 @@ impl<'a> Parser<'a> {
                 TokenType::Less,
                 TokenType::GreaterEqual,
                 TokenType::LessEqual,
+                TokenType::In,
+                TokenType::Instanceof,
             ],
         )
     }
@@ -246,11 +248,25 @@ impl<'a> Parser<'a> {
     }
 
     pub fn factor(&mut self) -> Option<Expr<'a>> {
-        self.read_infix_expression(|s| Self::unary(s), &[TokenType::Star, TokenType::Slash])
+        self.read_infix_expression(
+            |s| Self::unary(s),
+            &[TokenType::Star, TokenType::Slash, TokenType::Remainder],
+        )
     }
 
     pub fn unary(&mut self) -> Option<Expr<'a>> {
-        if self.expect_and_skip(&[TokenType::LogicalNot, TokenType::Minus]) {
+        if self.expect_and_skip(&[
+            TokenType::LogicalNot,
+            TokenType::Minus,
+            TokenType::Await,
+            TokenType::Delete,
+            TokenType::Void,
+            TokenType::Typeof,
+            TokenType::Decrement,
+            TokenType::Increment,
+            TokenType::Plus,
+            TokenType::BitwiseNot,
+        ]) {
             let operator = self.previous()?.ty;
             let rval = self.unary()?;
             Some(Expr::Unary(UnaryExpr::new(operator, rval)))
