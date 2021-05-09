@@ -1,5 +1,6 @@
 use core::fmt::Debug;
 use std::{
+    borrow::Cow,
     cell::RefCell,
     fmt::{self, Formatter},
     rc::Rc,
@@ -82,6 +83,41 @@ impl JsValue for Value {
         }
     }
 
+    fn to_string(&self) -> Cow<str> {
+        match self {
+            Self::Bool(b) => Cow::Owned(b.to_string()),
+            Self::Ident(s) => Cow::Borrowed(&s),
+            Self::Null => Cow::Borrowed("null"),
+            Self::Number(n) => Cow::Owned(n.to_string()),
+            Self::Object(o) => o.to_string(),
+            Self::Undefined => Cow::Borrowed("undefined"),
+        }
+    }
+
+    fn compare(&self, other: &Value) -> Option<Compare> {
+        match self {
+            Self::Number(n) => {
+                let rhs = other.as_number();
+                if *n > rhs {
+                    Some(Compare::Less)
+                } else {
+                    Some(Compare::Greater)
+                }
+            }
+            Self::Bool(b) => {
+                let rhs = other.as_number();
+                let lhs = *b as u8 as f64;
+
+                if lhs > rhs {
+                    Some(Compare::Less)
+                } else {
+                    Some(Compare::Greater)
+                }
+            }
+            _ => None,
+        }
+    }
+
     fn as_string(&self) -> Option<&str> {
         self.as_object().and_then(|o| o.as_string())
     }
@@ -141,11 +177,14 @@ impl UserFunction {
     }
 }
 
-pub struct NativeFunction(pub fn(Vec<Rc<RefCell<Value>>>) -> Rc<RefCell<Value>>);
+pub struct NativeFunction(
+    pub &'static str,
+    pub fn(Vec<Rc<RefCell<Value>>>) -> Rc<RefCell<Value>>,
+);
 
 impl Clone for NativeFunction {
     fn clone(&self) -> Self {
-        Self(self.0)
+        Self(self.0, self.1)
     }
 }
 
@@ -172,6 +211,15 @@ pub enum FunctionType {
 pub enum FunctionKind {
     User(UserFunction),
     Native(NativeFunction),
+}
+
+impl ToString for FunctionKind {
+    fn to_string(&self) -> String {
+        match self {
+            Self::Native(n) => format!("function {}() {{ [native code] }}", n.0),
+            Self::User(u) => format!("function {}() {{ ... }}", u.name.as_deref().unwrap_or("")),
+        }
+    }
 }
 
 impl JsValue for Object {
@@ -213,6 +261,18 @@ impl JsValue for Object {
         }
     }
 
+    fn to_string(&self) -> Cow<str> {
+        match self {
+            Self::String(s) => Cow::Borrowed(s),
+            Self::Function(f) => Cow::Owned(f.to_string()),
+            _ => Cow::Borrowed("[object Object]"),
+        }
+    }
+
+    fn compare(&self, other: &Value) -> Option<Compare> {
+        None
+    }
+
     fn as_function(&self) -> Option<&FunctionKind> {
         match self {
             Self::Function(kind) => Some(kind),
@@ -240,12 +300,21 @@ impl JsValue for Object {
     }
 }
 
+pub enum Compare {
+    Less,
+    Greater,
+    Equal,
+}
+
 pub trait JsValue {
     fn as_number(&self) -> f64;
     fn as_bool(&self) -> Option<bool>;
     fn as_object(&self) -> Option<&Object>;
     fn as_string(&self) -> Option<&str>;
     fn as_function(&self) -> Option<&FunctionKind>;
+
+    fn to_string(&self) -> Cow<str>;
+    fn compare(&self, other: &Value) -> Option<Compare>;
 
     fn sub_assign(&mut self, other: &Value);
     fn add_assign(&mut self, other: &Value);
