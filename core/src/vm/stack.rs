@@ -1,3 +1,4 @@
+use std::ops::Drop;
 use std::{fmt::Debug, mem::MaybeUninit};
 
 #[derive(Debug)]
@@ -59,7 +60,7 @@ impl<T, const N: usize> Stack<T, N> {
     }
 
     pub fn peek_relative(&self, offset: usize, idx: usize) -> &T {
-        assert!(offset + idx <= self.1);
+        assert!(offset + idx < self.1);
 
         unsafe { self.0[offset + idx].assume_init_ref() }
     }
@@ -101,6 +102,15 @@ impl<T, const N: usize> Stack<T, N> {
         for (idx, val) in self.0.iter().take(self.1).enumerate() {
             let val = unsafe { val.assume_init_ref() };
             println!("{:04}    {:?}", idx, val);
+        }
+    }
+}
+
+impl<T, const N: usize> Drop for Stack<T, N> {
+    fn drop(&mut self) {
+        for mu in self.0.iter_mut().take(self.1) {
+            let mu = std::mem::replace(mu, MaybeUninit::uninit());
+            drop(unsafe { mu.assume_init() })
         }
     }
 }
