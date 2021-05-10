@@ -6,9 +6,12 @@ dash tries to support most/all of ECMA-262 version 3, with additional ES5/6 feat
   - [x] Single quote strings
   - [ ] Template strings
   - [x] Whole numbers
-  - [ ] Floats
-  - [ ] `e` notation (1e3)
+  - [x] Floats
+  - [x] `e` notation (1e3)
   - [x] Boolean (true|false)
+  - [ ] Hex literal (0xA)
+  - [ ] Binary literal (0b1)
+  - [ ] Octal literal (01)
   - [x] null
   - [x] undefined
   - [x] NaN

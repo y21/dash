@@ -141,11 +141,32 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn read_number_literal(&mut self) {
+        let mut is_float = false;
+        let mut is_exp = false;
+
         while !self.is_eof() {
             let cur = self.current_real();
 
-            if !util::is_digit(cur) {
-                break;
+            match cur {
+                b'.' => {
+                    if is_float {
+                        break;
+                    }
+
+                    is_float = true;
+                }
+                b'e' => {
+                    if is_exp {
+                        break;
+                    }
+
+                    is_exp = true;
+                }
+                _ => {
+                    if !util::is_digit(cur) {
+                        break;
+                    }
+                }
             }
 
             self.advance();
