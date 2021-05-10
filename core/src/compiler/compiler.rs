@@ -2,7 +2,7 @@ use crate::{
     parser::{
         expr::{
             AssignmentExpr, BinaryExpr, ConditionalExpr, Expr, FunctionCall, GroupingExpr,
-            LiteralExpr, UnaryExpr,
+            LiteralExpr, PropertyAccessExpr, UnaryExpr,
         },
         statement::{
             BlockStatement, FunctionDeclaration, IfStatement, Print, ReturnStatement, Statement,
@@ -13,7 +13,7 @@ use crate::{
     visitor::Visitor,
     vm::{
         instruction::{Instruction, Opcode},
-        value::{FunctionType, UserFunction, Value},
+        value::{FunctionType, UserFunction, Value, ValueKind},
     },
 };
 use std::convert::TryFrom;
@@ -69,7 +69,9 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
                 let stack_idx = self.scope.find_variable(ident);
 
                 if let Some(stack_idx) = stack_idx {
-                    instructions.push(Instruction::Operand(Value::Number(stack_idx as f64)));
+                    instructions.push(Instruction::Operand(Value::new(ValueKind::Number(
+                        stack_idx as f64,
+                    ))));
                     instructions.push(Instruction::Op(Opcode::GetLocal));
                     return instructions;
                 }
@@ -91,21 +93,24 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         // TODO: implement ??
         let mut jmp_idx: isize = -1;
 
-        if [TokenType::LogicalAnd, TokenType::LogicalOr].contains(&e.operator) {
-            let ty = e.operator;
+        match e.operator {
+            TokenType::LogicalAnd | TokenType::LogicalOr => {
+                let ty = e.operator;
 
-            instructions.push(Instruction::Op(Opcode::Constant));
-            jmp_idx = isize::try_from(instructions.len()).unwrap();
-            instructions.push(Instruction::Op(Opcode::Nop));
+                instructions.push(Instruction::Op(Opcode::Constant));
+                jmp_idx = isize::try_from(instructions.len()).unwrap();
+                instructions.push(Instruction::Op(Opcode::Nop));
 
-            if ty == TokenType::LogicalAnd {
-                instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
-            } else {
-                instructions.push(Instruction::Op(Opcode::ShortJmpIfTrue));
+                if ty == TokenType::LogicalAnd {
+                    instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
+                } else {
+                    instructions.push(Instruction::Op(Opcode::ShortJmpIfTrue));
+                }
+
+                instructions.push(Instruction::Op(Opcode::Pop));
             }
-
-            instructions.push(Instruction::Op(Opcode::Pop));
-        }
+            _ => {}
+        };
 
         let right = self.accept_expr(&e.right);
         instructions.extend(right);
@@ -114,7 +119,8 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
             let jmp_idx = jmp_idx as usize;
 
             let instruction_count = instructions.len() - jmp_idx - 2;
-            instructions[jmp_idx] = Instruction::Operand(Value::Number(instruction_count as f64));
+            instructions[jmp_idx] =
+                Instruction::Operand(Value::new(ValueKind::Number(instruction_count as f64)));
         } else {
             instructions.push(Instruction::Op(e.operator.into()));
         }
@@ -135,13 +141,16 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         instructions.extend(self.accept(&l.body));
 
         let instruction_count_ = instructions.len() - jmp_idx + 1;
-        let instruction_count = Instruction::Operand(Value::Number(instruction_count_ as f64));
+        let instruction_count =
+            Instruction::Operand(Value::new(ValueKind::Number(instruction_count_ as f64)));
         instructions[jmp_idx] = instruction_count.clone();
 
         // Emit backjump to evaluate condition
         instructions.push(Instruction::Op(Opcode::Constant));
         let backjmp_count = instruction_count_ + jmp_idx + 2;
-        instructions.push(Instruction::Operand(Value::Number(backjmp_count as f64)));
+        instructions.push(Instruction::Operand(Value::new(ValueKind::Number(
+            backjmp_count as f64,
+        ))));
         instructions.push(Instruction::Op(Opcode::BackJmp));
 
         instructions
@@ -176,12 +185,14 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         if !global {
             let stack_idx = self.scope.push_local(Local::new(v.name, self.scope.depth));
             instructions.push(Instruction::Op(Opcode::Constant));
-            instructions.push(Instruction::Operand(Value::Number(stack_idx as f64)));
+            instructions.push(Instruction::Operand(Value::new(ValueKind::Number(
+                stack_idx as f64,
+            ))));
         } else {
             instructions.push(Instruction::Op(Opcode::Constant));
-            instructions.push(Instruction::Operand(Value::Ident(
+            instructions.push(Instruction::Operand(Value::new(ValueKind::Ident(
                 std::str::from_utf8(v.name).unwrap().to_owned(),
-            )));
+            ))));
         }
 
         if v.value.is_some() {
@@ -202,7 +213,9 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
 
         let then_instructions = self.accept(&i.then);
-        instructions[jmp_idx] = Instruction::Operand(Value::Number(then_instructions.len() as f64));
+        instructions[jmp_idx] = Instruction::Operand(Value::new(ValueKind::Number(
+            then_instructions.len() as f64,
+        )));
 
         instructions.extend(then_instructions);
 
@@ -232,12 +245,12 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
 
         if func_instructions.len() == 0 {
             func_instructions.push(Instruction::Op(Opcode::Constant));
-            func_instructions.push(Instruction::Operand(Value::Undefined));
+            func_instructions.push(Instruction::Operand(Value::new(ValueKind::Undefined)));
             func_instructions.push(Instruction::Op(Opcode::Return));
         } else if let Some(Instruction::Op(op)) = func_instructions.last() {
             if !op.eq(&Opcode::Return) {
                 func_instructions.push(Instruction::Op(Opcode::Constant));
-                func_instructions.push(Instruction::Operand(Value::Undefined));
+                func_instructions.push(Instruction::Operand(Value::new(ValueKind::Undefined)));
                 func_instructions.push(Instruction::Op(Opcode::Return));
             }
         }
@@ -246,9 +259,9 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         instructions.push(Instruction::Operand(func.into()));
 
         instructions.push(Instruction::Op(Opcode::Constant));
-        instructions.push(Instruction::Operand(Value::Ident(
+        instructions.push(Instruction::Operand(Value::new(ValueKind::Ident(
             std::str::from_utf8(f.name).unwrap().to_owned(),
-        )));
+        ))));
 
         if self.scope.is_global() {
             instructions.push(Instruction::Op(Opcode::SetGlobal));
@@ -290,7 +303,9 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         }
 
         instructions.push(Instruction::Op(Opcode::Constant));
-        instructions.push(Instruction::Operand(Value::Number(argument_len as f64)));
+        instructions.push(Instruction::Operand(Value::new(ValueKind::Number(
+            argument_len as f64,
+        ))));
 
         instructions.push(Instruction::Op(Opcode::FunctionCall));
 
@@ -314,8 +329,9 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         let then_instructions = self.accept_expr(&c.then);
         let then_instruction_count = then_instructions.len();
         instructions.extend(then_instructions);
-        instructions[then_jmp_idx] =
-            Instruction::Operand(Value::Number((then_instruction_count + 3) as f64));
+        instructions[then_jmp_idx] = Instruction::Operand(Value::new(ValueKind::Number(
+            (then_instruction_count + 3) as f64,
+        )));
 
         instructions.push(Instruction::Op(Opcode::Constant));
         let else_jmp_idx = instructions.len();
@@ -325,8 +341,32 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         let else_instructions = self.accept_expr(&c.el);
         let else_instruction_count = else_instructions.len();
         instructions[else_jmp_idx] =
-            Instruction::Operand(Value::Number(else_instruction_count as f64));
+            Instruction::Operand(Value::new(ValueKind::Number(else_instruction_count as f64)));
         instructions.extend(else_instructions);
+
+        instructions
+    }
+
+    fn visit_property_access_expr(&mut self, e: &PropertyAccessExpr<'a>) -> Vec<Instruction> {
+        assert!(!e.computed); // computed property access foo[bar] doesnt work yet
+
+        let mut instructions = self.accept_expr(&e.target);
+
+        let ident: &[u8] = if let Expr::Literal(lit) = &*e.property {
+            match lit {
+                LiteralExpr::Identifier(ident) => ident,
+                _ => todo!(),
+            }
+        } else {
+            todo!()
+        };
+
+        instructions.push(Instruction::Op(Opcode::Constant));
+        instructions.push(Instruction::Operand(Value::new(ValueKind::Ident(
+            std::str::from_utf8(ident).unwrap().to_owned(),
+        ))));
+
+        instructions.push(Instruction::Op(Opcode::StaticPropertyAccess));
 
         instructions
     }
