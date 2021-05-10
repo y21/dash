@@ -38,13 +38,17 @@ impl<T, const N: usize> Stack<T, N> {
     }
 
     pub fn set(&mut self, idx: usize, value: T) {
-        assert!(idx <= self.1);
+        self.set_relative(0, idx, value)
+    }
 
-        if idx == self.1 {
+    pub fn set_relative(&mut self, offset: usize, idx: usize, value: T) {
+        assert!(offset + idx <= self.1);
+
+        if offset + idx == self.1 {
             self.1 += 1;
         }
 
-        unsafe { self.0[idx].as_mut_ptr().write(value) }
+        unsafe { self.0[offset + idx].as_mut_ptr().write(value) }
     }
 
     pub fn get_stack_pointer(&self) -> usize {
