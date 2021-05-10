@@ -1,4 +1,4 @@
-use crate::vm::value::{Object, Value};
+use crate::vm::value::{Object, Value, ValueKind};
 
 use super::token::TokenType;
 
@@ -11,6 +11,7 @@ pub enum Expr<'a> {
     Assignment(AssignmentExpr<'a>),
     Call(FunctionCall<'a>),
     Conditional(ConditionalExpr<'a>),
+    PropertyAccess(PropertyAccessExpr<'a>),
 }
 
 impl<'a> Expr<'a> {
@@ -64,6 +65,21 @@ impl<'a> Expr<'a> {
             el: Box::new(el),
         })
     }
+
+    pub fn property_access(computed: bool, target: Expr<'a>, property: Expr<'a>) -> Self {
+        Self::PropertyAccess(PropertyAccessExpr {
+            computed,
+            target: Box::new(target),
+            property: Box::new(property),
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PropertyAccessExpr<'a> {
+    pub computed: bool,
+    pub target: Box<Expr<'a>>,
+    pub property: Box<Expr<'a>>,
 }
 
 #[derive(Debug, Clone)]
@@ -129,12 +145,14 @@ pub enum LiteralExpr<'a> {
 impl<'a> LiteralExpr<'a> {
     pub fn to_value(&self) -> Value {
         match self {
-            Self::Boolean(b) => Value::Bool(*b),
-            Self::Number(n) => Value::Number(*n),
-            Self::Identifier(i) => Value::Ident(std::str::from_utf8(i).unwrap().to_owned()),
-            Self::String(s) => Value::Object(Box::new(Object::String(
+            Self::Boolean(b) => Value::new(ValueKind::Bool(*b)),
+            Self::Number(n) => Value::new(ValueKind::Number(*n)),
+            Self::Identifier(i) => {
+                Value::new(ValueKind::Ident(std::str::from_utf8(i).unwrap().to_owned()))
+            }
+            Self::String(s) => Value::new(ValueKind::Object(Box::new(Object::String(
                 std::str::from_utf8(s).unwrap().to_owned(),
-            ))),
+            )))),
             _ => unimplemented!(),
         }
     }
