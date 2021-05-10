@@ -39,6 +39,8 @@ pub enum Opcode {
     LessEqual,
     Greater,
     GreaterEqual,
+    StaticPropertyAccess,
+    ComputedPropertyAccess,
 }
 
 impl From<TokenType> for Opcode {
