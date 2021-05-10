@@ -7,9 +7,12 @@ pub mod value;
 use std::{cell::RefCell, rc::Rc};
 
 use instruction::{Instruction, Opcode};
-use value::{JsValue, Value};
+use value::Value;
 
-use crate::vm::value::{Compare, FunctionType, NativeFunction, Object};
+use crate::{
+    js_std,
+    vm::value::{CallContext, Compare, NativeFunction, Object, ValueKind},
+};
 
 use self::{
     environment::Environment,
@@ -28,7 +31,7 @@ macro_rules! binary_op {
             $self.read_number()
         );
 
-        $self.stack.push(Rc::new(RefCell::new(Value::Number(a $op b))));
+        $self.stack.push(Rc::new(RefCell::new(Value::new(ValueKind::Number(a $op b)))));
     }
 }
 
@@ -100,16 +103,11 @@ impl VM {
     fn prepare_stdlib(&mut self) {
         self.global.set_var(
             "isNaN",
-            Rc::new(RefCell::new(Value::Object(Box::new(Object::Function(
-                FunctionKind::Native(NativeFunction("isNaN", |value| {
-                    let value = match value.first() {
-                        Some(v) => v,
-                        None => return Rc::new(RefCell::new(Value::Bool(true))),
-                    };
-
-                    let value = value.borrow().as_number();
-
-                    Rc::new(RefCell::new(Value::Bool(value.is_nan())))
+            Rc::new(RefCell::new(Value::new(ValueKind::Object(Box::new(
+                Object::Function(FunctionKind::Native(NativeFunction {
+                    name: "isNaN",
+                    func: js_std::functions::is_nan,
+                    receiver: None,
                 })),
             ))))),
         )
@@ -132,7 +130,9 @@ impl VM {
                     let maybe_number = self.read_number();
 
                     self.stack
-                        .push(Rc::new(RefCell::new(Value::Number(-maybe_number))));
+                        .push(Rc::new(RefCell::new(Value::new(ValueKind::Number(
+                            -maybe_number,
+                        )))));
                 }
                 Opcode::Add => {
                     binary_op!(self, +);
@@ -238,7 +238,12 @@ impl VM {
                     let func_cell_ref = func_cell.borrow();
                     let func = match func_cell_ref.as_function().unwrap() {
                         FunctionKind::Native(f) => {
-                            let result = (f.1)(params);
+                            let ctx = CallContext {
+                                vm: self,
+                                args: params,
+                                receiver: f.receiver.as_ref().map(|rx| rx.get().clone()),
+                            };
+                            let result = (f.func)(ctx);
                             self.stack.push(result);
                             continue;
                         }
@@ -282,7 +287,8 @@ impl VM {
                     let lhs = lhs_cell.borrow();
 
                     let is_less = matches!(lhs.compare(&rhs), Some(Compare::Less));
-                    self.stack.push(Rc::new(RefCell::new(Value::Bool(is_less))));
+                    self.stack
+                        .push(Rc::new(RefCell::new(Value::new(ValueKind::Bool(is_less)))));
                 }
                 Opcode::LessEqual => {
                     let rhs_cell = self.stack.pop();
@@ -295,7 +301,9 @@ impl VM {
                         Some(Compare::Less) | Some(Compare::Equal)
                     );
                     self.stack
-                        .push(Rc::new(RefCell::new(Value::Bool(is_less_eq))));
+                        .push(Rc::new(RefCell::new(Value::new(ValueKind::Bool(
+                            is_less_eq,
+                        )))));
                 }
                 Opcode::Greater => {
                     let rhs_cell = self.stack.pop();
@@ -305,7 +313,9 @@ impl VM {
 
                     let is_greater = matches!(lhs.compare(&rhs), Some(Compare::Greater));
                     self.stack
-                        .push(Rc::new(RefCell::new(Value::Bool(is_greater))));
+                        .push(Rc::new(RefCell::new(Value::new(ValueKind::Bool(
+                            is_greater,
+                        )))));
                 }
                 Opcode::GreaterEqual => {
                     let rhs_cell = self.stack.pop();
@@ -318,7 +328,15 @@ impl VM {
                         Some(Compare::Greater) | Some(Compare::Equal)
                     );
                     self.stack
-                        .push(Rc::new(RefCell::new(Value::Bool(is_greater_eq))));
+                        .push(Rc::new(RefCell::new(Value::new(ValueKind::Bool(
+                            is_greater_eq,
+                        )))));
+                }
+                Opcode::StaticPropertyAccess => {
+                    let property = self.pop_owned().unwrap().into_ident().unwrap();
+                    let target_cell = self.stack.pop();
+                    let value = Value::get_property(&target_cell, &property).unwrap();
+                    self.stack.push(value);
                 }
                 _ => unreachable!(),
             };
