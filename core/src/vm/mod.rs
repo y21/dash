@@ -166,7 +166,7 @@ impl VM {
                 Opcode::SetLocal => {
                     let stack_idx = self.read_number() as usize;
                     let value = self.stack.pop();
-                    self.stack.set(stack_idx, value);
+                    self.stack.set_relative(self.frame().sp, stack_idx, value);
                 }
                 Opcode::GetLocal => {
                     let stack_idx = self.read_number() as usize;
