@@ -1,6 +1,6 @@
 #![feature(maybe_uninit_uninit_array, maybe_uninit_ref)]
 
-use vm::value::UserFunction;
+use vm::value::{FunctionType, UserFunction};
 
 pub mod compiler;
 pub mod gc;
@@ -22,8 +22,7 @@ pub fn eval(code: impl AsRef<str>) -> Result<(), EvalError> {
     let tokens = parser::lexer::Lexer::new(code).scan_all();
     let statements = parser::parser::Parser::new(tokens).parse_all();
     let instructions = compiler::compiler::Compiler::new(statements).compile();
-
-    let mut vm = vm::VM::new(UserFunction::new(instructions, 0));
+    let mut vm = vm::VM::new(UserFunction::new(instructions, 0, FunctionType::Top));
     vm.interpret().map_err(EvalError::VMError)?;
 
     Ok(())
@@ -31,18 +30,22 @@ pub fn eval(code: impl AsRef<str>) -> Result<(), EvalError> {
 
 #[cfg(test)]
 mod tests {
+    use crate::vm::stack::Stack;
+
     use super::*;
 
     #[test]
     pub fn interpreter() {
         let code = r#"
-        function F(a, b) {
-            print a;
-            if (a) {
-                return F(a - 1, 2);
+        function F(n) {
+            if (n) {
+                let f = n * 2;
+                print f;
+                return F(n - 1);
             }
         }
-        F(254, 1);
+
+        F(16);
         "#;
 
         eval(code).unwrap();
@@ -51,5 +54,11 @@ mod tests {
     #[test]
     pub fn size() {
         dbg!(std::mem::size_of::<vm::value::Value>());
+    }
+
+    #[test]
+    pub fn stack_memory_leak() {
+        let mut s = Stack::<_, 5>::new();
+        s.push(String::from("test"));
     }
 }
