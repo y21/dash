@@ -1,7 +1,7 @@
 use crate::parser::{
     expr::{
         AssignmentExpr, BinaryExpr, ConditionalExpr, Expr, FunctionCall, GroupingExpr, LiteralExpr,
-        UnaryExpr,
+        PropertyAccessExpr, UnaryExpr,
     },
     statement::{
         BlockStatement, FunctionDeclaration, IfStatement, Print, ReturnStatement, Statement,
@@ -32,6 +32,7 @@ pub trait Visitor<'a, V> {
             Expr::Unary(e) => self.visit_unary_expression(e),
             Expr::Call(e) => self.visit_function_call(e),
             Expr::Conditional(e) => self.visit_conditional_expr(e),
+            Expr::PropertyAccess(e) => self.visit_property_access_expr(e),
         }
     }
 
@@ -50,4 +51,5 @@ pub trait Visitor<'a, V> {
     fn visit_function_call(&mut self, c: &FunctionCall<'a>) -> V;
     fn visit_return_statement(&mut self, s: &ReturnStatement<'a>) -> V;
     fn visit_conditional_expr(&mut self, c: &ConditionalExpr<'a>) -> V;
+    fn visit_property_access_expr(&mut self, e: &PropertyAccessExpr<'a>) -> V;
 }
