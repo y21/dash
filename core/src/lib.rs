@@ -4,6 +4,7 @@ use vm::value::{FunctionType, UserFunction};
 
 pub mod compiler;
 pub mod gc;
+pub mod js_std;
 pub mod optimizer;
 pub mod parser;
 pub mod util;
