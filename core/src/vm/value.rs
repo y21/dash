@@ -2,14 +2,38 @@ use core::fmt::Debug;
 use std::{
     borrow::Cow,
     cell::RefCell,
+    collections::HashMap,
     fmt::{self, Formatter},
     rc::Rc,
 };
 
-use super::instruction::Instruction;
+use crate::js_std;
+
+use super::{instruction::Instruction, VM};
+
+pub struct CallContext<'a> {
+    pub vm: &'a VM,
+    pub args: Vec<Rc<RefCell<Value>>>,
+    pub receiver: Option<Rc<RefCell<Value>>>,
+}
 
 #[derive(Debug, Clone)]
-pub enum Value {
+pub struct Value {
+    pub kind: ValueKind,
+    pub fields: HashMap<Box<str>, Rc<RefCell<Value>>>,
+}
+
+impl Value {
+    pub fn new(kind: ValueKind) -> Self {
+        Self {
+            kind,
+            fields: HashMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum ValueKind {
     Ident(String),
     Number(f64),
     Bool(bool),
@@ -20,13 +44,15 @@ pub enum Value {
 
 impl From<Object> for Value {
     fn from(o: Object) -> Self {
-        Self::Object(Box::new(o))
+        Self::new(ValueKind::Object(Box::new(o)))
     }
 }
 
 impl From<UserFunction> for Value {
     fn from(f: UserFunction) -> Self {
-        Self::Object(Box::new(Object::Function(FunctionKind::User(f))))
+        Self::new(ValueKind::Object(Box::new(Object::Function(
+            FunctionKind::User(f),
+        ))))
     }
 }
 
@@ -36,67 +62,75 @@ impl Value {
     }
 }
 
-impl JsValue for Value {
-    fn is_truthy(&self) -> bool {
-        match self {
-            Self::Bool(b) => *b,
-            Self::Number(n) => *n != 0f64,
-            Self::Object(o) => o.is_truthy(),
-            Self::Undefined | Self::Null => false,
+impl Value {
+    pub fn get_property(value_cell: &Rc<RefCell<Value>>, k: &str) -> Option<Rc<RefCell<Value>>> {
+        let value = value_cell.borrow();
+        match &value.kind {
+            ValueKind::Object(o) => o.get_property(value_cell, k),
             _ => unreachable!(),
         }
     }
 
-    fn is_assignment_target(&self) -> bool {
-        match self {
-            Self::Ident(_) => true,
+    pub fn is_truthy(&self) -> bool {
+        match &self.kind {
+            ValueKind::Bool(b) => *b,
+            ValueKind::Number(n) => *n != 0f64,
+            ValueKind::Object(o) => o.is_truthy(),
+            ValueKind::Undefined | ValueKind::Null => false,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn is_assignment_target(&self) -> bool {
+        match &self.kind {
+            ValueKind::Ident(_) => true,
             _ => false,
         }
     }
 
-    fn as_number(&self) -> f64 {
-        match self {
-            Self::Number(n) => *n,
-            Self::Object(o) => o.as_number(),
+    pub fn as_number(&self) -> f64 {
+        match &self.kind {
+            ValueKind::Number(n) => *n,
+            ValueKind::Object(o) => o.as_number(),
             _ => f64::NAN,
         }
     }
 
-    fn as_bool(&self) -> Option<bool> {
-        match self {
-            Self::Bool(b) => Some(*b),
+    pub fn as_bool(&self) -> Option<bool> {
+        match &self.kind {
+            ValueKind::Bool(b) => Some(*b),
             _ => None,
         }
     }
 
-    fn as_object(&self) -> Option<&Object> {
-        match self {
-            Self::Object(o) => Some(o),
+    pub fn as_object(&self) -> Option<&Object> {
+        match &self.kind {
+            ValueKind::Object(o) => Some(o),
             _ => None,
         }
     }
 
-    fn as_function(&self) -> Option<&FunctionKind> {
-        match self {
-            Self::Object(o) => o.as_function(),
+    pub fn as_function(&self) -> Option<&FunctionKind> {
+        match &self.kind {
+            ValueKind::Object(o) => o.as_function(),
             _ => None,
         }
     }
 
-    fn to_string(&self) -> Cow<str> {
-        match self {
-            Self::Bool(b) => Cow::Owned(b.to_string()),
-            Self::Ident(s) => Cow::Borrowed(&s),
-            Self::Null => Cow::Borrowed("null"),
-            Self::Number(n) => Cow::Owned(n.to_string()),
-            Self::Object(o) => o.to_string(),
-            Self::Undefined => Cow::Borrowed("undefined"),
+    pub fn to_string(&self) -> Cow<str> {
+        match &self.kind {
+            ValueKind::Bool(b) => Cow::Owned(b.to_string()),
+            ValueKind::Ident(s) => Cow::Borrowed(&s),
+            ValueKind::Null => Cow::Borrowed("null"),
+            ValueKind::Number(n) => Cow::Owned(n.to_string()),
+            ValueKind::Object(o) => o.to_string(),
+            ValueKind::Undefined => Cow::Borrowed("undefined"),
         }
     }
 
-    fn compare(&self, other: &Value) -> Option<Compare> {
-        match self {
-            Self::Number(n) => {
+    pub fn compare(&self, other: &Value) -> Option<Compare> {
+        match &self.kind {
+            ValueKind::Number(n) => {
                 let rhs = other.as_number();
                 if *n > rhs {
                     Some(Compare::Less)
@@ -104,7 +138,7 @@ impl JsValue for Value {
                     Some(Compare::Greater)
                 }
             }
-            Self::Bool(b) => {
+            ValueKind::Bool(b) => {
                 let rhs = other.as_number();
                 let lhs = *b as u8 as f64;
 
@@ -118,28 +152,28 @@ impl JsValue for Value {
         }
     }
 
-    fn as_string(&self) -> Option<&str> {
+    pub fn as_string(&self) -> Option<&str> {
         self.as_object().and_then(|o| o.as_string())
     }
 
-    fn into_ident(self) -> Option<String> {
-        match self {
-            Self::Ident(i) => Some(i),
+    pub fn into_ident(self) -> Option<String> {
+        match self.kind {
+            ValueKind::Ident(i) => Some(i),
             _ => None,
         }
     }
 
-    fn into_object(self) -> Option<Object> {
+    pub fn into_object(self) -> Option<Object> {
         todo!()
     }
 
-    fn into_string(self) -> Option<String> {
+    pub fn into_string(self) -> Option<String> {
         todo!()
     }
 
-    fn add_assign(&mut self, other: &Value) {
-        match self {
-            Self::Number(n) => {
+    pub fn add_assign(&mut self, other: &Value) {
+        match &mut self.kind {
+            ValueKind::Number(n) => {
                 let o = other.as_number();
                 *n += o;
             }
@@ -147,9 +181,9 @@ impl JsValue for Value {
         }
     }
 
-    fn sub_assign(&mut self, other: &Value) {
-        match self {
-            Self::Number(n) => {
+    pub fn sub_assign(&mut self, other: &Value) {
+        match &mut self.kind {
+            ValueKind::Number(n) => {
                 let o = other.as_number();
                 *n -= o;
             }
@@ -159,8 +193,24 @@ impl JsValue for Value {
 }
 
 #[derive(Debug, Clone)]
+pub enum Receiver {
+    Pinned(Rc<RefCell<Value>>),
+    Bound(Rc<RefCell<Value>>),
+}
+
+impl Receiver {
+    pub fn get(&self) -> &Rc<RefCell<Value>> {
+        match self {
+            Self::Pinned(p) => p,
+            Self::Bound(b) => b,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct UserFunction {
     pub params: u32,
+    pub receiver: Option<Receiver>,
     pub ty: FunctionType,
     pub buffer: Box<[Instruction]>,
     pub name: Option<String>,
@@ -173,18 +223,33 @@ impl UserFunction {
             params,
             name: None,
             ty,
+            receiver: None,
         }
+    }
+
+    pub fn bind(&mut self, recv: Receiver) {
+        self.receiver = Some(recv);
+    }
+
+    pub fn rebind(mut self, recv: Receiver) -> Self {
+        self.receiver = Some(recv);
+        self
     }
 }
 
-pub struct NativeFunction(
-    pub &'static str,
-    pub fn(Vec<Rc<RefCell<Value>>>) -> Rc<RefCell<Value>>,
-);
+pub struct NativeFunction {
+    pub name: &'static str,
+    pub func: for<'a> fn(CallContext<'a>) -> Rc<RefCell<Value>>,
+    pub receiver: Option<Receiver>,
+}
 
 impl Clone for NativeFunction {
     fn clone(&self) -> Self {
-        Self(self.0, self.1)
+        Self {
+            func: self.func,
+            name: self.name,
+            receiver: self.receiver.clone(),
+        }
     }
 }
 
@@ -216,13 +281,29 @@ pub enum FunctionKind {
 impl ToString for FunctionKind {
     fn to_string(&self) -> String {
         match self {
-            Self::Native(n) => format!("function {}() {{ [native code] }}", n.0),
+            Self::Native(n) => format!("function {}() {{ [native code] }}", n.name),
             Self::User(u) => format!("function {}() {{ ... }}", u.name.as_deref().unwrap_or("")),
         }
     }
 }
 
-impl JsValue for Object {
+impl Object {
+    fn get_property(&self, cell: &Rc<RefCell<Value>>, k: &str) -> Option<Rc<RefCell<Value>>> {
+        match self {
+            Self::String(_) => match &k[..] {
+                "indexOf" => Some(Rc::new(RefCell::new(Value::new(ValueKind::Object(
+                    Box::new(Object::Function(FunctionKind::Native(NativeFunction {
+                        name: "indexOf",
+                        func: js_std::string::index_of,
+                        receiver: Some(Receiver::Bound(cell.clone())),
+                    }))),
+                ))))),
+                _ => todo!(),
+            },
+            _ => todo!(),
+        }
+    }
+
     fn is_truthy(&self) -> bool {
         match self {
             Self::String(s) => s.len() != 0,
@@ -230,28 +311,8 @@ impl JsValue for Object {
         }
     }
 
-    fn add_assign(&mut self, other: &Value) {
-        todo!()
-    }
-
-    fn sub_assign(&mut self, other: &Value) {
-        todo!()
-    }
-
-    fn is_assignment_target(&self) -> bool {
-        false
-    }
-
     fn as_number(&self) -> f64 {
         f64::NAN // TODO: try to convert it to number?
-    }
-
-    fn as_bool(&self) -> Option<bool> {
-        unreachable!()
-    }
-
-    fn as_object(&self) -> Option<&Object> {
-        Some(self)
     }
 
     fn as_string(&self) -> Option<&str> {
@@ -269,34 +330,11 @@ impl JsValue for Object {
         }
     }
 
-    fn compare(&self, other: &Value) -> Option<Compare> {
-        None
-    }
-
     fn as_function(&self) -> Option<&FunctionKind> {
         match self {
             Self::Function(kind) => Some(kind),
             _ => None,
         }
-    }
-
-    fn into_object(self) -> Option<Object> {
-        Some(self)
-    }
-
-    fn into_string(self) -> Option<String> {
-        match self {
-            Self::String(s) => Some(s),
-            _ => None,
-        }
-    }
-
-    fn into_ident(self) -> Option<String> {
-        unreachable!()
-    }
-
-    fn logical_negate(&self) -> bool {
-        !self.is_truthy()
     }
 }
 
@@ -304,30 +342,4 @@ pub enum Compare {
     Less,
     Greater,
     Equal,
-}
-
-pub trait JsValue {
-    fn as_number(&self) -> f64;
-    fn as_bool(&self) -> Option<bool>;
-    fn as_object(&self) -> Option<&Object>;
-    fn as_string(&self) -> Option<&str>;
-    fn as_function(&self) -> Option<&FunctionKind>;
-
-    fn to_string(&self) -> Cow<str>;
-    fn compare(&self, other: &Value) -> Option<Compare>;
-
-    fn sub_assign(&mut self, other: &Value);
-    fn add_assign(&mut self, other: &Value);
-    fn unary_negate(&self) -> f64 {
-        -self.as_number()
-    }
-    fn logical_negate(&self) -> bool {
-        !self.is_truthy()
-    }
-
-    fn into_object(self) -> Option<Object>;
-    fn into_string(self) -> Option<String>;
-    fn into_ident(self) -> Option<String>;
-    fn is_truthy(&self) -> bool;
-    fn is_assignment_target(&self) -> bool;
 }
