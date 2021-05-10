@@ -116,9 +116,10 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn read_string_literal(&mut self) {
+        let quote = self.input[self.idx - 1];
         while !self.is_eof() {
             let cur = self.current_real();
-            if cur == b'"' {
+            if cur == quote {
                 self.advance();
                 break;
             }
@@ -267,7 +268,7 @@ impl<'a> Lexer<'a> {
             b':' => self.create_contextified_token(TokenType::Colon),
             b';' => self.create_contextified_token(TokenType::Semicolon),
             b'=' => self.create_contextified_token(TokenType::Assignment), // TODO: this is obviously not safe to assume
-            b'"' => self.read_string_literal(),
+            b'"' | b'\'' => self.read_string_literal(),
             b'\n' => self.line += 1,
             b' ' => {}
             _ => {

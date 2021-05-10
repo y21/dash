@@ -3,7 +3,7 @@ dash tries to support most/all of ECMA-262 version 3, with additional ES5/6 feat
 
 - [ ] Primitives
   - [x] Double quote strings
-  - [ ] Single quote strings
+  - [x] Single quote strings
   - [ ] Template strings
   - [x] Whole numbers
   - [ ] Floats
