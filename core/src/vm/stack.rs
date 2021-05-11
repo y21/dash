@@ -6,7 +6,7 @@ pub struct Stack<T, const N: usize>([MaybeUninit<T>; N], usize);
 
 impl<T, const N: usize> Stack<T, N> {
     pub fn new() -> Self {
-        Self(MaybeUninit::uninit_array(), 0)
+        unsafe { Self(MaybeUninit::uninit().assume_init(), 0) }
     }
 
     pub fn len(&self) -> usize {
@@ -29,12 +29,12 @@ impl<T, const N: usize> Stack<T, N> {
         unsafe { val.assume_init() }
     }
 
-    pub fn get(&self) -> &T {
-        unsafe { self.0[self.1 - 1].assume_init_ref() }
+    pub unsafe fn get_unchecked(&self) -> &T {
+        &*self.0[self.1 - 1].as_ptr()
     }
 
-    pub fn get_mut(&mut self) -> &mut T {
-        unsafe { self.0[self.1 - 1].assume_init_mut() }
+    pub unsafe fn get_mut_unchecked(&mut self) -> &mut T {
+        &mut *self.0[self.1 - 1].as_mut_ptr()
     }
 
     pub fn set(&mut self, idx: usize, value: T) {
@@ -59,14 +59,14 @@ impl<T, const N: usize> Stack<T, N> {
         self.1 = sp;
     }
 
-    pub fn peek(&self, idx: usize) -> &T {
-        self.peek_relative(0, idx)
+    pub unsafe fn peek_unchecked(&self, idx: usize) -> &T {
+        self.peek_relative_unchecked(0, idx)
     }
 
-    pub fn peek_relative(&self, offset: usize, idx: usize) -> &T {
+    pub unsafe fn peek_relative_unchecked(&self, offset: usize, idx: usize) -> &T {
         assert!(offset + idx < self.1);
 
-        unsafe { self.0[offset + idx].assume_init_ref() }
+        &*self.0[offset + idx].as_ptr()
     }
 
     pub fn reset(&mut self) {
@@ -89,7 +89,7 @@ impl<T, const N: usize> Stack<T, N> {
         F: Fn(&T) -> bool,
     {
         for (idx, value) in self.0.iter().take(self.1).enumerate() {
-            let value = unsafe { value.assume_init_ref() };
+            let value = unsafe { &*value.as_ptr() };
             if f(value) {
                 return Some((idx, value));
             }
@@ -104,7 +104,7 @@ impl<T, const N: usize> Stack<T, N> {
     {
         println!("=== STACK DUMP [sp={}] ===", self.1);
         for (idx, val) in self.0.iter().take(self.1).enumerate() {
-            let val = unsafe { val.assume_init_ref() };
+            let val = unsafe { &*val.as_ptr() };
             println!("{:04}    {:?}", idx, val);
         }
     }
