@@ -3,7 +3,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use super::value::Value;
 
 #[derive(Debug)]
-pub struct Environment(HashMap<String, Rc<RefCell<Value>>>);
+pub struct Environment(HashMap<Box<str>, Rc<RefCell<Value>>>);
 
 impl Environment {
     pub fn new() -> Self {
@@ -14,7 +14,7 @@ impl Environment {
         self.0.get(k.as_ref()).cloned()
     }
 
-    pub fn set_var(&mut self, k: impl Into<String>, v: Rc<RefCell<Value>>) {
+    pub fn set_var(&mut self, k: impl Into<Box<str>>, v: Rc<RefCell<Value>>) {
         self.0.insert(k.into(), v);
     }
 }
