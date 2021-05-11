@@ -4,11 +4,13 @@ use super::{
         BlockStatement, FunctionDeclaration, IfStatement, Print, ReturnStatement, Statement,
         VariableDeclaration, VariableDeclarationKind, WhileLoop,
     },
-    token::{Token, TokenType, ASSIGNMENT_TYPES},
+    token::{Error, ErrorKind, Token, TokenType, ASSIGNMENT_TYPES},
 };
 
 pub struct Parser<'a> {
     tokens: Box<[Token<'a>]>,
+    errors: Vec<Error<'a>>,
+    error_sync: bool,
     idx: usize,
 }
 
@@ -16,6 +18,8 @@ impl<'a> Parser<'a> {
     pub fn new(tokens: Vec<Token<'a>>) -> Self {
         Self {
             tokens: tokens.into_boxed_slice(),
+            errors: Vec::new(),
+            error_sync: false,
             idx: 0,
         }
     }
@@ -24,18 +28,25 @@ impl<'a> Parser<'a> {
         self.statement()
     }
 
-    pub fn parse_all(mut self) -> Vec<Statement<'a>> {
+    pub fn parse_all(mut self) -> Result<Vec<Statement<'a>>, Vec<Error<'a>>> {
         let mut stmts = Vec::new();
+
         while !self.is_eof() {
             if let Some(stmt) = self.parse() {
                 stmts.push(stmt);
             }
         }
-        stmts
+
+        if self.errors.len() > 0 {
+            Err(self.errors)
+        } else {
+            Ok(stmts)
+        }
     }
 
     // Statement rules
     pub fn statement(&mut self) -> Option<Statement<'a>> {
+        self.error_sync = false;
         let stmt = match self.next()?.ty {
             TokenType::Let | TokenType::Const | TokenType::Var => {
                 self.variable().map(Statement::Variable)
@@ -54,7 +65,7 @@ impl<'a> Parser<'a> {
             }
         };
 
-        self.expect_and_skip(&[TokenType::Semicolon]);
+        self.expect_and_skip(&[TokenType::Semicolon], false);
 
         stmt
     }
@@ -70,11 +81,15 @@ impl<'a> Parser<'a> {
     }
 
     pub fn while_loop(&mut self) -> Option<WhileLoop<'a>> {
-        self.expect_and_skip(&[TokenType::LeftParen]);
+        if !self.expect_and_skip(&[TokenType::LeftParen], true) {
+            return None;
+        }
 
         let condition = self.expression()?;
 
-        self.expect_and_skip(&[TokenType::RightParen]);
+        if !self.expect_and_skip(&[TokenType::RightParen], true) {
+            return None;
+        }
 
         let body = self.statement()?;
 
@@ -84,15 +99,19 @@ impl<'a> Parser<'a> {
     pub fn function(&mut self) -> Option<FunctionDeclaration<'a>> {
         let name = self.next()?.full;
 
-        // TODO: error if this isnt true
-        self.expect_and_skip(&[TokenType::LeftParen]);
+        if !self.expect_and_skip(&[TokenType::LeftParen], true) {
+            return None;
+        }
 
         let arguments = self.argument_list().unwrap();
 
-        // TODO: same as above
-        self.expect_and_skip(&[TokenType::RightParen]);
+        if !self.expect_and_skip(&[TokenType::RightParen], true) {
+            return None;
+        }
 
-        self.expect_and_skip(&[TokenType::LeftBrace]);
+        if !self.expect_and_skip(&[TokenType::LeftBrace], true) {
+            return None;
+        }
 
         let statements = self.block().unwrap().0;
 
@@ -102,7 +121,7 @@ impl<'a> Parser<'a> {
     pub fn argument_list(&mut self) -> Option<Vec<&'a [u8]>> {
         let mut arguments = Vec::new();
 
-        while !self.expect_and_skip(&[TokenType::RightParen]) {
+        while !self.expect_and_skip(&[TokenType::RightParen], false) {
             let tok = self.next()?;
 
             match tok.ty {
@@ -117,7 +136,7 @@ impl<'a> Parser<'a> {
 
     pub fn block(&mut self) -> Option<BlockStatement<'a>> {
         let mut stmts = Vec::new();
-        while !self.expect_and_skip(&[TokenType::RightBrace]) {
+        while !self.expect_and_skip(&[TokenType::RightBrace], false) {
             if let Some(stmt) = self.statement() {
                 stmts.push(stmt);
             }
@@ -131,7 +150,7 @@ impl<'a> Parser<'a> {
         let name = self.next()?.full;
 
         // If the next char is `=`, we assume this declaration has a value
-        let has_value = self.expect_and_skip(&[TokenType::Assignment]);
+        let has_value = self.expect_and_skip(&[TokenType::Assignment], false);
 
         if !has_value {
             return Some(VariableDeclaration::new(name, kind, None));
@@ -143,13 +162,13 @@ impl<'a> Parser<'a> {
     }
 
     pub fn if_statement(&mut self) -> Option<IfStatement<'a>> {
-        if !self.expect_and_skip(&[TokenType::LeftParen]) {
+        if !self.expect_and_skip(&[TokenType::LeftParen], true) {
             return None;
         }
 
         let condition = self.expression()?;
 
-        if !self.expect_and_skip(&[TokenType::RightParen]) {
+        if !self.expect_and_skip(&[TokenType::RightParen], true) {
             return None;
         }
 
@@ -166,7 +185,7 @@ impl<'a> Parser<'a> {
     }
 
     pub fn _yield(&mut self) -> Option<Expr<'a>> {
-        if self.expect_and_skip(&[TokenType::Yield]) {
+        if self.expect_and_skip(&[TokenType::Yield], false) {
             return Some(Expr::Unary(UnaryExpr::new(
                 TokenType::Yield,
                 self._yield()?,
@@ -183,9 +202,11 @@ impl<'a> Parser<'a> {
     pub fn ternary(&mut self) -> Option<Expr<'a>> {
         let mut expr = self.nullish_coalescing()?;
 
-        while self.expect_and_skip(&[TokenType::Conditional]) {
+        while self.expect_and_skip(&[TokenType::Conditional], false) {
             let then_branch = self.ternary()?;
-            self.expect_and_skip(&[TokenType::Colon]);
+            if !self.expect_and_skip(&[TokenType::Colon], true) {
+                return None;
+            }
             let else_branch = self.ternary()?;
             expr = Expr::conditional(expr, then_branch, else_branch);
         }
@@ -255,18 +276,21 @@ impl<'a> Parser<'a> {
     }
 
     pub fn unary(&mut self) -> Option<Expr<'a>> {
-        if self.expect_and_skip(&[
-            TokenType::LogicalNot,
-            TokenType::Minus,
-            TokenType::Await,
-            TokenType::Delete,
-            TokenType::Void,
-            TokenType::Typeof,
-            TokenType::Decrement,
-            TokenType::Increment,
-            TokenType::Plus,
-            TokenType::BitwiseNot,
-        ]) {
+        if self.expect_and_skip(
+            &[
+                TokenType::LogicalNot,
+                TokenType::Minus,
+                TokenType::Await,
+                TokenType::Delete,
+                TokenType::Void,
+                TokenType::Typeof,
+                TokenType::Decrement,
+                TokenType::Increment,
+                TokenType::Plus,
+                TokenType::BitwiseNot,
+            ],
+            false,
+        ) {
             let operator = self.previous()?.ty;
             let rval = self.unary()?;
             Some(Expr::Unary(UnaryExpr::new(operator, rval)))
@@ -277,11 +301,11 @@ impl<'a> Parser<'a> {
 
     pub fn postfix(&mut self) -> Option<Expr<'a>> {
         let expr = self.field_access()?;
-        if self.expect_and_skip(&[TokenType::Increment, TokenType::Decrement]) {
-            /*let operator = self.previous()?.ty;
+        if self.expect_and_skip(&[TokenType::Increment, TokenType::Decrement], false) {
+            let operator = self.previous()?.ty;
             // TODO: this is not true
             // `x++` is not the same as `x += 1`; it needs to return the old number
-            return Some(Expr::assignment(expr, Expr::number_literal(1f64), operator));*/
+            return Some(Expr::assignment(expr, Expr::number_literal(1f64), operator));
         }
         Some(expr)
     }
@@ -290,23 +314,26 @@ impl<'a> Parser<'a> {
         // TODO: right now this just matches function calls
         let mut expr = self.primary()?;
 
-        while self.expect_and_skip(&[
-            TokenType::LeftParen,
-            TokenType::Dot,
-            TokenType::LeftSquareBrace,
-        ]) {
-            // TODO: read parameter list
-
+        while self.expect_and_skip(
+            &[
+                TokenType::LeftParen,
+                TokenType::Dot,
+                TokenType::LeftSquareBrace,
+            ],
+            false,
+        ) {
             let previous = self.previous()?.ty;
             match previous {
                 TokenType::LeftParen => {
                     let mut arguments = Vec::new();
-                    while !self.expect_and_skip(&[TokenType::RightParen]) {
-                        self.expect_and_skip(&[TokenType::Comma]);
+                    while !self.expect_and_skip(&[TokenType::RightParen], false) {
+                        self.expect_and_skip(&[TokenType::Comma], false);
                         arguments.push(self.expression()?);
                     }
 
-                    self.expect_and_skip(&[TokenType::RightParen]);
+                    if !self.expect_and_skip(&[TokenType::RightParen], true) {
+                        return None;
+                    }
                     expr = Expr::function_call(expr, arguments);
                 }
                 TokenType::Dot => {
@@ -315,10 +342,10 @@ impl<'a> Parser<'a> {
                 }
                 TokenType::LeftSquareBrace => {
                     let property = self.expression()?;
-                    self.expect_and_skip(&[TokenType::RightSquareBrace]);
+                    self.expect_and_skip(&[TokenType::RightSquareBrace], false);
                     expr = Expr::property_access(true, expr, property);
                 }
-                _ => unimplemented!(),
+                _ => unreachable!(),
             }
         }
 
@@ -345,13 +372,15 @@ impl<'a> Parser<'a> {
             }
             TokenType::LeftParen => {
                 let expr = self.expression()?;
-                self.expect_and_skip(&[TokenType::RightParen]);
+                if !self.expect_and_skip(&[TokenType::RightParen], true) {
+                    return None;
+                }
                 Expr::grouping(expr)
             }
             _ => {
-                dbg!(ty, full);
-                // TODO: this should return an error expr(?)
-                unimplemented!()
+                let cur = self.previous().cloned()?;
+                self.create_error(ErrorKind::UnknownToken(cur));
+                return None;
             }
         };
 
@@ -360,13 +389,17 @@ impl<'a> Parser<'a> {
 
     // Helper functions
 
-    pub fn read_infix_expression<F>(&mut self, lower: F, tokens: &[TokenType]) -> Option<Expr<'a>>
+    pub fn read_infix_expression<F>(
+        &mut self,
+        lower: F,
+        tokens: &'static [TokenType],
+    ) -> Option<Expr<'a>>
     where
         F: Fn(&mut Self) -> Option<Expr<'a>>,
     {
         let mut expr = lower(self)?;
 
-        while self.expect_and_skip(tokens) {
+        while self.expect_and_skip(tokens, false) {
             let operator = self.previous()?.ty;
             let rval = lower(self)?;
             expr = Expr::binary(expr, rval, operator);
@@ -379,9 +412,9 @@ impl<'a> Parser<'a> {
         self.idx >= self.tokens.len()
     }
 
-    pub fn expect_and_skip(&mut self, ty: &[TokenType]) -> bool {
+    pub fn expect_and_skip(&mut self, ty: &'static [TokenType], emit_error: bool) -> bool {
         let current = match self.current() {
-            Some(k) => k,
+            Some(k) => *k,
             None => return false,
         };
 
@@ -389,9 +422,18 @@ impl<'a> Parser<'a> {
 
         if ok {
             self.advance();
+        } else if emit_error {
+            self.create_error(ErrorKind::UnexpectedTokenMultiple(current, ty));
         }
 
         ok
+    }
+
+    pub fn create_error(&mut self, kind: ErrorKind<'a>) {
+        if !self.error_sync {
+            self.errors.push(Error { kind });
+            self.error_sync = true;
+        }
     }
 
     pub fn advance(&mut self) {

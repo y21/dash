@@ -7,9 +7,22 @@ use crate::util;
 pub struct Lexer<'a> {
     input: &'a [u8],
     tokens: Vec<Token<'a>>,
+    errors: Vec<Error>,
     idx: usize,
     line: usize,
     start: usize,
+}
+
+#[derive(Debug)]
+pub struct Error {
+    pub kind: ErrorKind,
+    pub loc: Location,
+}
+
+#[derive(Debug)]
+pub enum ErrorKind {
+    UnknownCharacter(u8),
+    UnexpectedEof,
 }
 
 impl<'a> Lexer<'a> {
@@ -17,6 +30,7 @@ impl<'a> Lexer<'a> {
         Self {
             input: source.as_bytes(),
             tokens: Vec::new(),
+            errors: Vec::new(),
             idx: 0,
             line: 0,
             start: 0,
@@ -70,6 +84,13 @@ impl<'a> Lexer<'a> {
         if let Some(tt) = default {
             self.create_contextified_token(tt);
         }
+    }
+
+    pub fn create_error(&mut self, kind: ErrorKind) {
+        self.errors.push(Error {
+            loc: Location { line: self.line },
+            kind,
+        });
     }
 
     pub fn create_contextified_token_with_lexeme(&mut self, ty: TokenType, lexeme: &'a [u8]) {
@@ -132,8 +153,8 @@ impl<'a> Lexer<'a> {
         }
 
         if self.is_eof() {
-            // TODO: create error token
-            unreachable!();
+            self.create_error(ErrorKind::UnexpectedEof);
+            return;
         }
 
         let lexeme = self.subslice(self.start + 1..self.idx - 1);
@@ -298,18 +319,23 @@ impl<'a> Lexer<'a> {
                 } else if util::is_alpha(cur) {
                     self.read_identifier();
                 } else {
-                    panic!("Unknown token: {} ({})", cur as char, cur)
+                    self.create_error(ErrorKind::UnknownCharacter(cur))
                 }
             }
         };
     }
 
-    pub fn scan_all(mut self) -> Vec<Token<'a>> {
+    pub fn scan_all(mut self) -> Result<Vec<Token<'a>>, Vec<Error>> {
         while !self.is_eof() {
             self.start = self.idx;
             self.scan_next();
         }
 
-        self.tokens
+        // If there are errors, return them
+        if self.errors.len() > 0 {
+            Err(self.errors)
+        } else {
+            Ok(self.tokens)
+        }
     }
 }

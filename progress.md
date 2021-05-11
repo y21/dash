@@ -123,11 +123,11 @@ dash tries to support most/all of ECMA-262 version 3, with additional ES5/6 feat
   - [x] block
   - [ ] break
   - [ ] class
-  - [ ] const
+  - [x] const
   - [ ] continue
   - [ ] debugger
   - [ ] do...while
-  - [ ] empty
+  - [x] empty
   - [ ] export
   - [ ] for await...of
   - [ ] for...in
@@ -140,11 +140,11 @@ dash tries to support most/all of ECMA-262 version 3, with additional ES5/6 feat
   - [ ] import.meta
   - [ ] import
   - [ ] label
-  - [ ] let
+  - [x] let
   - [x] return
   - [ ] switch
   - [ ] throw
   - [ ] try...catch
-  - [ ] var
+  - [x] var (partial support; has same effect as let and const)
   - [x] while
   - [ ] ~~with~~

@@ -80,6 +80,7 @@ pub enum TokenType {
     Delete,
     Void,
     Typeof,
+    Error,
 }
 
 pub const ASSIGNMENT_TYPES: &[TokenType] = &[
@@ -141,14 +142,26 @@ impl From<TokenType> for &str {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Token<'a> {
     pub ty: TokenType,
     pub full: &'a [u8],
     pub loc: Location,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Location {
     pub line: usize,
+}
+
+#[derive(Debug)]
+pub enum ErrorKind<'a> {
+    UnknownToken(Token<'a>),
+    UnexpectedToken(Token<'a>, TokenType),
+    UnexpectedTokenMultiple(Token<'a>, &'static [TokenType]),
+}
+
+#[derive(Debug)]
+pub struct Error<'a> {
+    pub kind: ErrorKind<'a>,
 }
