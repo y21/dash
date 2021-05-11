@@ -21,6 +21,7 @@ pub struct CallContext<'a> {
 pub struct Value {
     pub kind: ValueKind,
     pub fields: HashMap<Box<str>, Rc<RefCell<Value>>>,
+    pub constructor: Option<Rc<RefCell<Value>>>,
 }
 
 impl Value {
@@ -28,6 +29,7 @@ impl Value {
         Self {
             kind,
             fields: HashMap::new(),
+            constructor: None,
         }
     }
 }
@@ -42,33 +44,29 @@ pub enum ValueKind {
     Null,
 }
 
-impl From<Object> for Value {
-    fn from(o: Object) -> Self {
-        Self::new(ValueKind::Object(Box::new(o)))
-    }
-}
-
-impl From<UserFunction> for Value {
-    fn from(f: UserFunction) -> Self {
-        Self::new(ValueKind::Object(Box::new(Object::Function(
-            FunctionKind::User(f),
-        ))))
-    }
-}
-
 impl Value {
     pub fn try_into_inner(value: Rc<RefCell<Self>>) -> Option<Self> {
         Some(Rc::try_unwrap(value).ok()?.into_inner())
     }
-}
 
-impl Value {
     pub fn get_property(value_cell: &Rc<RefCell<Value>>, k: &str) -> Option<Rc<RefCell<Value>>> {
         let value = value_cell.borrow();
+
+        if value.fields.len() > 0 {
+            // We only need to go the "slow" path and look up the given key in a HashMap if there are entries
+            if let Some(entry) = value.fields.get(k) {
+                return Some(entry.clone());
+            }
+        }
+
         match &value.kind {
             ValueKind::Object(o) => o.get_property(value_cell, k),
             _ => unreachable!(),
         }
+    }
+
+    pub fn set_property(&mut self, k: impl Into<Box<str>>, v: Rc<RefCell<Value>>) {
+        self.fields.insert(k.into(), v);
     }
 
     pub fn is_truthy(&self) -> bool {
@@ -243,6 +241,20 @@ pub struct NativeFunction {
     pub receiver: Option<Receiver>,
 }
 
+impl NativeFunction {
+    pub fn new(
+        name: &'static str,
+        func: for<'a> fn(CallContext<'a>) -> Rc<RefCell<Value>>,
+        receiver: Option<Receiver>,
+    ) -> Self {
+        Self {
+            name,
+            func,
+            receiver,
+        }
+    }
+}
+
 impl Clone for NativeFunction {
     fn clone(&self) -> Self {
         Self {
@@ -263,7 +275,11 @@ impl Debug for NativeFunction {
 pub enum Object {
     String(String),
     Function(FunctionKind),
+    Any(AnyObject),
 }
+
+#[derive(Debug, Clone)]
+pub struct AnyObject {}
 
 #[derive(Debug, Clone)]
 pub enum FunctionType {
@@ -308,6 +324,7 @@ impl Object {
         match self {
             Self::String(s) => s.len() != 0,
             Self::Function(..) => true,
+            Self::Any(_) => true,
         }
     }
 
@@ -326,7 +343,7 @@ impl Object {
         match self {
             Self::String(s) => Cow::Borrowed(s),
             Self::Function(f) => Cow::Owned(f.to_string()),
-            _ => Cow::Borrowed("[object Object]"),
+            _ => Cow::Borrowed("[object Object]"), // TODO: look if there's a toString function
         }
     }
 
