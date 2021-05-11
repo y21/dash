@@ -1,7 +1,9 @@
+pub mod conversions;
 pub mod environment;
 pub mod frame;
 pub mod instruction;
 pub mod stack;
+pub mod statics;
 pub mod value;
 
 use std::{cell::RefCell, rc::Rc};
@@ -9,16 +11,14 @@ use std::{cell::RefCell, rc::Rc};
 use instruction::{Instruction, Opcode};
 use value::Value;
 
-use crate::{
-    js_std,
-    vm::value::{CallContext, Compare, NativeFunction, Object, ValueKind},
-};
+use crate::vm::value::{CallContext, Compare, ValueKind};
 
 use self::{
     environment::Environment,
     frame::Frame,
     stack::Stack,
-    value::{FunctionKind, UserFunction},
+    statics::Statics,
+    value::{AnyObject, FunctionKind, Object, UserFunction},
 };
 
 #[derive(Debug)]
@@ -42,6 +42,8 @@ pub struct VM {
     pub(crate) stack: Stack<Rc<RefCell<Value>>, 512>,
     /// Global namespace
     pub(crate) global: Environment,
+    /// Static values created once when the VM is initialized
+    pub(crate) statics: Statics,
 }
 
 impl VM {
@@ -57,17 +59,18 @@ impl VM {
             frames,
             stack: Stack::new(),
             global: Environment::new(),
+            statics: Statics::new(),
         };
-        vm.prepare_stdlib();
+        unsafe { vm.prepare_stdlib() };
         vm
     }
 
     fn frame(&self) -> &Frame {
-        self.frames.get()
+        unsafe { self.frames.get_unchecked() }
     }
 
     fn frame_mut(&mut self) -> &mut Frame {
-        self.frames.get_mut()
+        unsafe { self.frames.get_mut_unchecked() }
     }
 
     fn ip(&self) -> usize {
@@ -100,17 +103,18 @@ impl VM {
         Value::try_into_inner(self.stack.pop())
     }
 
-    fn prepare_stdlib(&mut self) {
+    unsafe fn prepare_stdlib(&mut self) {
         self.global.set_var(
             "isNaN",
-            Rc::new(RefCell::new(Value::new(ValueKind::Object(Box::new(
-                Object::Function(FunctionKind::Native(NativeFunction {
-                    name: "isNaN",
-                    func: js_std::functions::is_nan,
-                    receiver: None,
-                })),
-            ))))),
-        )
+            self.statics.get_unchecked(statics::id::ISNAN).clone(),
+        );
+
+        let mut math_obj = Value::new(ValueKind::Object(Box::new(Object::Any(AnyObject {}))));
+        math_obj.set_property(
+            "pow",
+            self.statics.get_unchecked(statics::id::MATH_POW).clone(),
+        );
+        self.global.set_var("Math", Rc::new(RefCell::new(math_obj)));
     }
 
     pub fn interpret(&mut self) -> Result<(), VMError> {
@@ -171,8 +175,13 @@ impl VM {
                 Opcode::GetLocal => {
                     let stack_idx = self.read_number() as usize;
 
-                    self.stack
-                        .push(self.stack.peek_relative(self.frame().sp, stack_idx).clone());
+                    unsafe {
+                        self.stack.push(
+                            self.stack
+                                .peek_relative_unchecked(self.frame().sp, stack_idx)
+                                .clone(),
+                        )
+                    };
                 }
                 Opcode::ShortJmpIfFalse => {
                     let instruction_count = self.pop_owned().unwrap().as_number() as usize;
@@ -187,7 +196,7 @@ impl VM {
                 Opcode::ShortJmpIfTrue => {
                     let instruction_count = self.pop_owned().unwrap().as_number() as usize;
 
-                    let condition_cell = self.stack.get();
+                    let condition_cell = unsafe { self.stack.get_unchecked() };
                     let condition = condition_cell.borrow().is_truthy();
 
                     if condition {
