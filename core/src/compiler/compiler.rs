@@ -166,6 +166,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         match e.operator {
             TokenType::Minus => instructions.push(Instruction::Op(Opcode::Negate)),
             TokenType::Typeof => instructions.push(Instruction::Op(Opcode::Typeof)),
+            TokenType::LogicalNot => instructions.push(Instruction::Op(Opcode::LogicalNot)),
             _ => todo!(),
         }
 
