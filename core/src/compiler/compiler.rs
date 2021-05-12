@@ -2,7 +2,7 @@ use crate::{
     parser::{
         expr::{
             AssignmentExpr, BinaryExpr, ConditionalExpr, Expr, FunctionCall, GroupingExpr,
-            LiteralExpr, PropertyAccessExpr, UnaryExpr,
+            LiteralExpr, PropertyAccessExpr, Seq, UnaryExpr,
         },
         statement::{
             BlockStatement, FunctionDeclaration, IfStatement, Print, ReturnStatement, Statement,
@@ -162,9 +162,14 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
 
     fn visit_unary_expression(&mut self, e: &UnaryExpr<'a>) -> Vec<Instruction> {
         let mut instructions = self.accept_expr(&e.expr);
-        // TODO: don't assume negation to be `-`, it could be ! or any other unary operator
-        instructions.push(Instruction::Op(Opcode::Negate));
-        instructions
+
+        match e.operator {
+            TokenType::Minus => instructions.push(Instruction::Op(Opcode::Negate)),
+            TokenType::Typeof => instructions.push(Instruction::Op(Opcode::Typeof)),
+            _ => todo!(),
+        }
+
+        return instructions;
     }
 
     fn visit_variable_declaration(&mut self, v: &VariableDeclaration<'a>) -> Vec<Instruction> {
@@ -367,6 +372,16 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         ))));
 
         instructions.push(Instruction::Op(Opcode::StaticPropertyAccess));
+
+        instructions
+    }
+
+    fn visit_sequence_expr(&mut self, s: &Seq<'a>) -> Vec<Instruction> {
+        let mut instructions = self.accept_expr(&s.0);
+        instructions.push(Instruction::Op(Opcode::Pop));
+
+        let rhs = self.accept_expr(&s.1);
+        instructions.extend(rhs);
 
         instructions
     }
