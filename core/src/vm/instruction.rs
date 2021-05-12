@@ -41,6 +41,7 @@ pub enum Opcode {
     GreaterEqual,
     StaticPropertyAccess,
     ComputedPropertyAccess,
+    Typeof,
 }
 
 impl From<TokenType> for Opcode {

@@ -347,6 +347,14 @@ impl VM {
                     let value = Value::get_property(&target_cell, &property).unwrap();
                     self.stack.push(value);
                 }
+                Opcode::ComputedPropertyAccess => todo!(),
+                Opcode::Typeof => {
+                    let value = self.stack.pop().borrow()._typeof().to_owned();
+
+                    self.stack.push(
+                        Value::new(ValueKind::Object(Box::new(Object::String(value)))).into(),
+                    );
+                }
                 _ => unreachable!(),
             };
         }

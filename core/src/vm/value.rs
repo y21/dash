@@ -126,6 +126,17 @@ impl Value {
         }
     }
 
+    pub fn _typeof(&self) -> &'static str {
+        match &self.kind {
+            ValueKind::Bool(_) => "boolean",
+            ValueKind::Null => "object",
+            ValueKind::Object(o) => o._typeof(),
+            ValueKind::Number(_) => "number",
+            ValueKind::Undefined => "undefined",
+            _ => unreachable!(),
+        }
+    }
+
     pub fn compare(&self, other: &Value) -> Option<Compare> {
         match &self.kind {
             ValueKind::Number(n) => {
@@ -317,6 +328,14 @@ impl Object {
                 _ => todo!(),
             },
             _ => todo!(),
+        }
+    }
+
+    fn _typeof(&self) -> &'static str {
+        match self {
+            Self::Any(_) => "object",
+            Self::Function(_) => "function",
+            Self::String(_) => "string",
         }
     }
 
