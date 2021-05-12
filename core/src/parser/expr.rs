@@ -2,6 +2,8 @@ use crate::vm::value::{Object, Value, ValueKind};
 
 use super::token::TokenType;
 
+pub type Seq<'a> = (Box<Expr<'a>>, Box<Expr<'a>>);
+
 #[derive(Debug, Clone)]
 pub enum Expr<'a> {
     Binary(BinaryExpr<'a>),
@@ -12,6 +14,7 @@ pub enum Expr<'a> {
     Call(FunctionCall<'a>),
     Conditional(ConditionalExpr<'a>),
     PropertyAccess(PropertyAccessExpr<'a>),
+    Sequence(Seq<'a>),
 }
 
 impl<'a> Expr<'a> {

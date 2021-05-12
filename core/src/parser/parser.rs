@@ -181,7 +181,18 @@ impl<'a> Parser<'a> {
 
     // Expression rules
     pub fn expression(&mut self) -> Option<Expr<'a>> {
-        self._yield()
+        self.sequence()
+    }
+
+    pub fn sequence(&mut self) -> Option<Expr<'a>> {
+        let mut expr = self._yield()?;
+
+        while self.expect_and_skip(&[TokenType::Comma], false) {
+            let rhs = self._yield()?;
+            expr = Expr::Sequence((Box::new(expr), Box::new(rhs)));
+        }
+
+        Some(expr)
     }
 
     pub fn _yield(&mut self) -> Option<Expr<'a>> {
