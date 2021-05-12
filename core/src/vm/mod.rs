@@ -138,6 +138,14 @@ impl VM {
                             -maybe_number,
                         )))));
                 }
+                Opcode::LogicalNot => {
+                    let is_truthy = self.stack.pop().borrow().is_truthy();
+
+                    self.stack
+                        .push(Rc::new(RefCell::new(Value::new(ValueKind::Bool(
+                            !is_truthy,
+                        )))));
+                }
                 Opcode::Add => {
                     binary_op!(self, +);
                 }

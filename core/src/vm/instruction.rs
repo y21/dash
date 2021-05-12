@@ -24,7 +24,8 @@ pub enum Opcode {
     Mul,
     Div,
     Rem,
-    Negate, // TODO: ~ ! -
+    Negate, // TODO: ~
+    LogicalNot,
     ShortJmp,
     ShortJmpIfFalse,
     ShortJmpIfTrue,
