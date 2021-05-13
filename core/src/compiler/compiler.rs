@@ -236,7 +236,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
     }
 
     fn visit_function_declaration(&mut self, f: &FunctionDeclaration<'a>) -> Vec<Instruction> {
-        let mut instructions = vec![Instruction::Op(Opcode::Constant)];
+        let mut instructions = vec![Instruction::Op(Opcode::Closure)];
 
         let params = f.arguments.len();
         let statements = f.statements.clone(); // TODO: somehow avoid this clone
