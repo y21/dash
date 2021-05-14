@@ -105,10 +105,6 @@ impl<'a> Parser<'a> {
 
         let arguments = self.argument_list().unwrap();
 
-        if !self.expect_and_skip(&[TokenType::RightParen], true) {
-            return None;
-        }
-
         if !self.expect_and_skip(&[TokenType::LeftBrace], true) {
             return None;
         }
@@ -342,9 +338,6 @@ impl<'a> Parser<'a> {
                         arguments.push(self.expression()?);
                     }
 
-                    if !self.expect_and_skip(&[TokenType::RightParen], true) {
-                        return None;
-                    }
                     expr = Expr::function_call(expr, arguments);
                 }
                 TokenType::Dot => {
