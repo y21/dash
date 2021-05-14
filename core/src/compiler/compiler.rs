@@ -13,10 +13,11 @@ use crate::{
     visitor::Visitor,
     vm::{
         instruction::{Instruction, Opcode},
+        stack::Stack,
         value::{FunctionType, UserFunction, Value, ValueKind},
     },
 };
-use std::convert::TryFrom;
+use std::{convert::TryFrom, ptr::NonNull};
 
 use super::scope::{Local, ScopeGuard};
 
@@ -25,7 +26,9 @@ pub type Ast<'a> = Vec<Statement<'a>>;
 #[derive(Debug)]
 pub struct Compiler<'a> {
     ast: Option<Ast<'a>>,
-    scope: ScopeGuard<'a, 1024>,
+    top: Option<NonNull<Compiler<'a>>>,
+    upvalues: Stack<Local<'a>, 1024>,
+    scope: ScopeGuard<Local<'a>, 1024>,
 }
 
 impl<'a> Compiler<'a> {
@@ -33,16 +36,40 @@ impl<'a> Compiler<'a> {
         let scope = ScopeGuard::new();
         Self {
             ast: Some(ast),
+            top: None,
+            upvalues: Stack::new(),
             scope,
         }
     }
 
-    pub fn with_scopeguard(ast: Ast<'a>, scope: ScopeGuard<'a, 1024>) -> Self {
+    pub fn with_scopeguard<'b>(
+        ast: Ast<'a>,
+        scope: ScopeGuard<Local<'a>, 1024>,
+        caller: Option<NonNull<Compiler<'a>>>,
+    ) -> Self {
         Self {
             ast: Some(ast),
+            upvalues: Stack::new(),
+            top: caller,
             scope,
         }
     }
+
+    pub unsafe fn caller(&self) -> Option<&Compiler> {
+        self.top.as_ref().map(|t| t.as_ref())
+    }
+
+    pub unsafe fn find_upvalue(&self, name: &'a [u8]) -> Option<usize> {
+        let top = self.caller()?;
+
+        if let Some(idx) = top.scope.find_variable(name) {
+            return Some(idx);
+        }
+
+        None
+    }
+
+    pub unsafe fn add_upvalue(&self) {}
 
     pub fn compile(mut self) -> Vec<Instruction> {
         let mut instructions = Vec::new();
@@ -75,6 +102,14 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
                     instructions.push(Instruction::Op(Opcode::GetLocal));
                     return instructions;
                 }
+            }
+
+            if let Some(idx) = unsafe { self.find_upvalue(ident) } {
+                instructions.push(Instruction::Operand(Value::new(ValueKind::Number(
+                    idx as f64,
+                ))));
+                instructions.push(Instruction::Op(Opcode::GetLocal));
+                return instructions;
             }
 
             instructions.push(Instruction::Operand(e.to_value()));
@@ -247,7 +282,15 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
             scope.push_local(Local::new(argument, 0));
         }
 
-        let mut func_instructions = Self::with_scopeguard(statements, scope).compile();
+        let mut func_instructions = unsafe {
+            Self::with_scopeguard(
+                statements,
+                scope,
+                // SAFETY: self is never null
+                Some(NonNull::new_unchecked(self as *mut _)),
+            )
+            .compile()
+        };
 
         if func_instructions.len() == 0 {
             func_instructions.push(Instruction::Op(Opcode::Constant));
