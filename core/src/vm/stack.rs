@@ -1,5 +1,36 @@
-use std::ops::Drop;
-use std::{fmt::Debug, mem::MaybeUninit};
+use std::{
+    fmt::Debug,
+    mem::MaybeUninit,
+    ops::{Deref, DerefMut},
+};
+
+#[derive(Debug)]
+pub struct OwnedStack<T, const N: usize>(Stack<T, N>);
+impl<T, const N: usize> OwnedStack<T, N> {
+    pub fn new() -> Self {
+        Self(Stack::new())
+    }
+}
+
+impl<T, const N: usize> Deref for OwnedStack<T, N> {
+    type Target = Stack<T, N>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T, const N: usize> DerefMut for OwnedStack<T, N> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<T, const N: usize> Drop for OwnedStack<T, N> {
+    fn drop(&mut self) {
+        self.0.reset();
+    }
+}
 
 #[derive(Debug)]
 pub struct Stack<T, const N: usize>([MaybeUninit<T>; N], usize);
@@ -7,6 +38,20 @@ pub struct Stack<T, const N: usize>([MaybeUninit<T>; N], usize);
 impl<T, const N: usize> Stack<T, N> {
     pub fn new() -> Self {
         unsafe { Self(MaybeUninit::uninit().assume_init(), 0) }
+    }
+
+    pub fn into_iter(self, order: IteratorOrder) -> StackIterator<T, N> {
+        let top = self.1;
+        StackIterator {
+            array: self.into_array(),
+            index: 0,
+            order,
+            top,
+        }
+    }
+
+    pub fn into_array(self) -> [MaybeUninit<T>; N] {
+        self.0
     }
 
     pub fn len(&self) -> usize {
@@ -30,7 +75,11 @@ impl<T, const N: usize> Stack<T, N> {
     }
 
     pub unsafe fn get_unchecked(&self) -> &T {
-        &*self.0[self.1 - 1].as_ptr()
+        self.get_unchecked_at(self.1 - 1)
+    }
+
+    pub unsafe fn get_unchecked_at(&self, at: usize) -> &T {
+        &*self.0.get_unchecked(at).as_ptr()
     }
 
     pub unsafe fn get_mut_unchecked(&mut self) -> &mut T {
@@ -69,19 +118,8 @@ impl<T, const N: usize> Stack<T, N> {
         &*self.0[offset + idx].as_ptr()
     }
 
-    pub fn reset(&mut self) {
+    pub fn reset_stack_pointer(&mut self) {
         self.1 = 0;
-    }
-
-    /// Discards all values on the stack except for the one at the top
-    pub fn into_last(&mut self) {
-        let last = self.pop();
-
-        for _ in 0..self.1 {
-            self.pop();
-        }
-
-        self.push(last);
     }
 
     pub fn find<F>(&self, f: F) -> Option<(usize, &T)>
@@ -108,14 +146,56 @@ impl<T, const N: usize> Stack<T, N> {
             println!("{:04}    {:?}", idx, val);
         }
     }
-}
 
-impl<T, const N: usize> Drop for Stack<T, N> {
-    fn drop(&mut self) {
+    pub fn reset(&mut self) {
         for mu in self.0.iter_mut().take(self.1) {
             let mu = std::mem::replace(mu, MaybeUninit::uninit());
-            drop(unsafe { mu.assume_init() })
+
+            drop(unsafe { mu.assume_init() });
         }
+
+        self.reset_stack_pointer();
+    }
+}
+
+#[derive(Copy, Clone)]
+pub enum IteratorOrder {
+    TopToBottom, // 9 --> 0
+    BottomToTop, // 0 --> 9
+}
+
+// TODO: implement Drop and free remaining elements ?
+pub struct StackIterator<T, const N: usize> {
+    array: [MaybeUninit<T>; N],
+    order: IteratorOrder,
+    index: usize,
+    top: usize,
+}
+
+impl<T, const N: usize> Iterator for StackIterator<T, N> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let idx = match self.order {
+            IteratorOrder::BottomToTop => {
+                if self.index >= self.top {
+                    return None;
+                }
+                self.index += 1;
+                self.index - 1
+            }
+            IteratorOrder::TopToBottom => {
+                if self.index <= 0 {
+                    return None;
+                }
+                self.index -= 1;
+                self.index + 1
+            }
+        };
+
+        let value = std::mem::replace(&mut self.array[idx], MaybeUninit::uninit());
+
+        unsafe { Some(value.assume_init()) }
     }
 }
 

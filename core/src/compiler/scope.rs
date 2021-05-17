@@ -1,4 +1,4 @@
-use crate::vm::stack::Stack;
+use crate::vm::stack::{OwnedStack, Stack};
 
 #[derive(Debug)]
 pub struct Local<'a> {
@@ -15,7 +15,7 @@ impl<'a> Local<'a> {
 #[derive(Debug)]
 pub struct ScopeGuard<T, const N: usize> {
     pub depth: u16,
-    locals: Stack<T, N>,
+    locals: OwnedStack<T, N>,
 }
 
 impl<'a, const N: usize> ScopeGuard<Local<'a>, N> {
@@ -37,7 +37,7 @@ impl<'a, const N: usize> ScopeGuard<Local<'a>, N> {
 impl<T, const N: usize> ScopeGuard<T, N> {
     pub fn new() -> Self {
         Self {
-            locals: Stack::new(),
+            locals: OwnedStack::new(),
             depth: 0,
         }
     }
