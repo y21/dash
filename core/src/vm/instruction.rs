@@ -8,7 +8,11 @@ pub enum Opcode {
     Eof,
     SetLocalNoValue,
     SetLocal,
+    SetUpvalue,
+    UpvalueLocal,
+    UpvalueNonLocal,
     GetLocal,
+    GetUpvalue,
     GetLocalRef,
     GetGlobalRef,
     SetGlobalNoValue,
@@ -43,6 +47,7 @@ pub enum Opcode {
     StaticPropertyAccess,
     ComputedPropertyAccess,
     Typeof,
+    Closure,
 }
 
 impl From<TokenType> for Opcode {
