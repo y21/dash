@@ -181,12 +181,13 @@ impl<'a> Parser<'a> {
     }
 
     pub fn sequence(&mut self) -> Option<Expr<'a>> {
-        let mut expr = self._yield()?;
+        let expr = self._yield()?;
 
-        while self.expect_and_skip(&[TokenType::Comma], false) {
+        // TODO: this is ambiguous and causes problems when we're calling a function with multiple params
+        /* while self.expect_and_skip(&[TokenType::Comma], false) {
             let rhs = self._yield()?;
             expr = Expr::Sequence((Box::new(expr), Box::new(rhs)));
-        }
+        } */
 
         Some(expr)
     }
@@ -318,7 +319,6 @@ impl<'a> Parser<'a> {
     }
 
     pub fn field_access(&mut self) -> Option<Expr<'a>> {
-        // TODO: right now this just matches function calls
         let mut expr = self.primary()?;
 
         while self.expect_and_skip(
@@ -333,6 +333,7 @@ impl<'a> Parser<'a> {
             match previous {
                 TokenType::LeftParen => {
                     let mut arguments = Vec::new();
+
                     while !self.expect_and_skip(&[TokenType::RightParen], false) {
                         self.expect_and_skip(&[TokenType::Comma], false);
                         arguments.push(self.expression()?);
