@@ -13,13 +13,16 @@ use crate::{
     visitor::Visitor,
     vm::{
         instruction::{Instruction, Opcode},
-        stack::Stack,
+        stack::{IteratorOrder, OwnedStack, Stack},
         value::{FunctionType, UserFunction, Value, ValueKind},
     },
 };
 use std::{convert::TryFrom, ptr::NonNull};
 
-use super::scope::{Local, ScopeGuard};
+use super::{
+    scope::{Local, ScopeGuard},
+    upvalue::Upvalue,
+};
 
 pub type Ast<'a> = Vec<Statement<'a>>;
 
@@ -27,8 +30,13 @@ pub type Ast<'a> = Vec<Statement<'a>>;
 pub struct Compiler<'a> {
     ast: Option<Ast<'a>>,
     top: Option<NonNull<Compiler<'a>>>,
-    upvalues: Stack<Local<'a>, 1024>,
+    upvalues: Stack<Upvalue, 1024>,
     scope: ScopeGuard<Local<'a>, 1024>,
+}
+
+pub struct CompileResult {
+    pub instructions: Vec<Instruction>,
+    pub upvalues: Stack<Upvalue, 1024>,
 }
 
 impl<'a> Compiler<'a> {
@@ -55,23 +63,42 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    pub unsafe fn caller(&self) -> Option<&Compiler> {
+    pub unsafe fn caller(&self) -> Option<&Compiler<'a>> {
         self.top.as_ref().map(|t| t.as_ref())
     }
 
-    pub unsafe fn find_upvalue(&self, name: &'a [u8]) -> Option<usize> {
-        let top = self.caller()?;
+    pub unsafe fn caller_mut(&mut self) -> Option<&mut Compiler<'a>> {
+        self.top.as_mut().map(|t| t.as_mut())
+    }
+
+    pub unsafe fn find_upvalue(&mut self, name: &'a [u8]) -> Option<usize> {
+        let top = self.caller_mut()?;
 
         if let Some(idx) = top.scope.find_variable(name) {
-            return Some(idx);
+            return Some(self.add_upvalue(Upvalue::new(true, idx)));
+        }
+
+        if let Some(idx) = top.find_upvalue(name) {
+            return Some(self.add_upvalue(Upvalue::new(false, idx)));
         }
 
         None
     }
 
-    pub unsafe fn add_upvalue(&self) {}
+    pub fn add_upvalue(&mut self, value: Upvalue) -> usize {
+        if let Some((idx, _)) = self.upvalues.find(|&x| x == value) {
+            return idx;
+        }
 
-    pub fn compile(mut self) -> Vec<Instruction> {
+        self.upvalues.push(value);
+        self.upvalues.get_stack_pointer() - 1
+    }
+
+    pub fn compile(self) -> Vec<Instruction> {
+        self.compile_frame().instructions
+    }
+
+    fn compile_frame(mut self) -> CompileResult {
         let mut instructions = Vec::new();
 
         let statements = self.ast.take().unwrap();
@@ -82,7 +109,10 @@ impl<'a> Compiler<'a> {
             }
         }
 
-        instructions
+        CompileResult {
+            instructions,
+            upvalues: self.upvalues,
+        }
     }
 }
 
@@ -282,41 +312,59 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
             scope.push_local(Local::new(argument, 0));
         }
 
-        let mut func_instructions = unsafe {
+        let mut frame = unsafe {
             Self::with_scopeguard(
                 statements,
                 scope,
                 // SAFETY: self is never null
                 Some(NonNull::new_unchecked(self as *mut _)),
             )
-            .compile()
+            .compile_frame()
         };
 
-        if func_instructions.len() == 0 {
-            func_instructions.push(Instruction::Op(Opcode::Constant));
-            func_instructions.push(Instruction::Operand(Value::new(ValueKind::Undefined)));
-            func_instructions.push(Instruction::Op(Opcode::Return));
-        } else if let Some(Instruction::Op(op)) = func_instructions.last() {
+        if frame.instructions.len() == 0 {
+            frame.instructions.push(Instruction::Op(Opcode::Constant));
+            frame
+                .instructions
+                .push(Instruction::Operand(Value::new(ValueKind::Undefined)));
+            frame.instructions.push(Instruction::Op(Opcode::Return));
+        } else if let Some(Instruction::Op(op)) = frame.instructions.last() {
             if !op.eq(&Opcode::Return) {
-                func_instructions.push(Instruction::Op(Opcode::Constant));
-                func_instructions.push(Instruction::Operand(Value::new(ValueKind::Undefined)));
-                func_instructions.push(Instruction::Op(Opcode::Return));
+                frame.instructions.push(Instruction::Op(Opcode::Constant));
+                frame
+                    .instructions
+                    .push(Instruction::Operand(Value::new(ValueKind::Undefined)));
+                frame.instructions.push(Instruction::Op(Opcode::Return));
             }
         }
 
-        let func = UserFunction::new(func_instructions, params as u32, FunctionType::Function);
+        let func = UserFunction::new(frame.instructions, params as u32, FunctionType::Function);
         instructions.push(Instruction::Operand(func.into()));
 
-        instructions.push(Instruction::Op(Opcode::Constant));
-        instructions.push(Instruction::Operand(Value::new(ValueKind::Ident(
-            std::str::from_utf8(f.name).unwrap().to_owned(),
-        ))));
+        for upvalue in frame.upvalues.into_iter(IteratorOrder::BottomToTop) {
+            if upvalue.local {
+                instructions.push(Instruction::Op(Opcode::UpvalueLocal));
+            } else {
+                instructions.push(Instruction::Op(Opcode::UpvalueNonLocal));
+            }
+            instructions.push(Instruction::Operand(Value::new(ValueKind::Number(
+                upvalue.idx as f64,
+            ))));
+        }
 
         if self.scope.is_global() {
+            instructions.push(Instruction::Op(Opcode::Constant));
+            instructions.push(Instruction::Operand(Value::new(ValueKind::Ident(
+                std::str::from_utf8(f.name).unwrap().to_owned(),
+            ))));
             instructions.push(Instruction::Op(Opcode::SetGlobal));
         } else {
-            todo!()
-            // instructions.push(Instruction::Op(Opcode::SetLocal));
+            let stack_idx = self.scope.push_local(Local::new(f.name, self.scope.depth));
+            instructions.push(Instruction::Op(Opcode::Constant));
+            instructions.push(Instruction::Operand(Value::new(ValueKind::Number(
+                stack_idx as f64,
+            ))));
+            instructions.push(Instruction::Op(Opcode::SetLocal));
         }
 
         instructions
