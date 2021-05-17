@@ -156,6 +156,7 @@ impl<'a> LiteralExpr<'a> {
             Self::String(s) => Value::new(ValueKind::Object(Box::new(Object::String(
                 std::str::from_utf8(s).unwrap().to_owned(),
             )))),
+            Self::Undefined => Value::new(ValueKind::Undefined),
             _ => unimplemented!(),
         }
     }
