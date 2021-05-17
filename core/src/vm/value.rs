@@ -173,11 +173,14 @@ impl Value {
     }
 
     pub fn into_object(self) -> Option<Object> {
-        todo!()
+        match self.kind {
+            ValueKind::Object(o) => Some(*o),
+            _ => None,
+        }
     }
 
     pub fn into_string(self) -> Option<String> {
-        todo!()
+        self.into_object().and_then(|c| c.into_string())
     }
 
     pub fn add_assign(&mut self, other: &Value) {
@@ -215,6 +218,9 @@ impl Receiver {
         }
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct Closure(pub UserFunction);
 
 #[derive(Debug, Clone)]
 pub struct UserFunction {
@@ -301,6 +307,7 @@ pub enum FunctionType {
 
 #[derive(Debug, Clone)]
 pub enum FunctionKind {
+    Closure(Closure),
     User(UserFunction),
     Native(NativeFunction),
 }
@@ -310,6 +317,9 @@ impl ToString for FunctionKind {
         match self {
             Self::Native(n) => format!("function {}() {{ [native code] }}", n.name),
             Self::User(u) => format!("function {}() {{ ... }}", u.name.as_deref().unwrap_or("")),
+            Self::Closure(c) => {
+                format!("function {}() {{ ... }}", c.0.name.as_deref().unwrap_or(""))
+            }
         }
     }
 }
@@ -352,6 +362,13 @@ impl Object {
     }
 
     fn as_string(&self) -> Option<&str> {
+        match self {
+            Self::String(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    fn into_string(self) -> Option<String> {
         match self {
             Self::String(s) => Some(s),
             _ => None,

@@ -11,7 +11,7 @@ use std::{cell::RefCell, rc::Rc};
 use instruction::{Instruction, Opcode};
 use value::Value;
 
-use crate::vm::value::{CallContext, Compare, ValueKind};
+use crate::vm::value::{CallContext, Closure, Compare, ValueKind};
 
 use self::{
     environment::Environment,
@@ -95,6 +95,15 @@ impl VM {
         Some(self.buffer()[self.ip() - 1].clone().into_operand())
     }
 
+    fn read_user_function(&mut self) -> Option<UserFunction> {
+        self.read_constant()
+            .and_then(|c| c.into_object())
+            .and_then(|o| match o {
+                Object::Function(FunctionKind::User(f)) => Some(f),
+                _ => None,
+            })
+    }
+
     fn read_number(&mut self) -> f64 {
         self.stack.pop().borrow().as_number()
     }
@@ -129,6 +138,15 @@ impl VM {
                     let constant = self.read_constant().unwrap();
 
                     self.stack.push(Rc::new(RefCell::new(constant)));
+                }
+                Opcode::Closure => {
+                    let func = self.read_user_function().unwrap();
+                    let closure = Closure(func);
+
+                    self.stack
+                        .push(Rc::new(RefCell::new(Value::new(ValueKind::Object(
+                            Box::new(Object::Function(FunctionKind::Closure(closure))),
+                        )))));
                 }
                 Opcode::Negate => {
                     let maybe_number = self.read_number();
@@ -264,14 +282,16 @@ impl VM {
                             self.stack.push(result);
                             continue;
                         }
-                        FunctionKind::User(u) => u,
+                        FunctionKind::Closure(u) => u,
+                        // There should never be raw user functions
+                        _ => unreachable!(),
                     };
 
                     let current_sp = self.stack.get_stack_pointer();
                     self.frame_mut().sp = current_sp;
 
                     let frame = Frame {
-                        buffer: func.buffer.clone(),
+                        buffer: func.0.buffer.clone(),
                         ip: 0,
                         sp: current_sp,
                     };
@@ -368,5 +388,12 @@ impl VM {
         }
 
         Ok(())
+    }
+}
+
+impl Drop for VM {
+    fn drop(&mut self) {
+        self.stack.reset();
+        self.frames.reset();
     }
 }
