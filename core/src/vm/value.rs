@@ -9,7 +9,7 @@ use std::{
 
 use crate::js_std;
 
-use super::{instruction::Instruction, VM};
+use super::{instruction::Instruction, upvalue::Upvalue, VM};
 
 pub struct CallContext<'a> {
     pub vm: &'a VM,
@@ -220,7 +220,22 @@ impl Receiver {
 }
 
 #[derive(Debug, Clone)]
-pub struct Closure(pub UserFunction);
+pub struct Closure {
+    pub func: UserFunction,
+    pub upvalues: Vec<Upvalue>,
+}
+impl Closure {
+    pub fn new(func: UserFunction) -> Self {
+        Self {
+            func,
+            upvalues: Vec::new(),
+        }
+    }
+
+    pub fn with_upvalues(func: UserFunction, upvalues: Vec<Upvalue>) -> Self {
+        Self { func, upvalues }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct UserFunction {
@@ -229,16 +244,18 @@ pub struct UserFunction {
     pub ty: FunctionType,
     pub buffer: Box<[Instruction]>,
     pub name: Option<String>,
+    pub upvalues: u32,
 }
 
 impl UserFunction {
-    pub fn new(buffer: Vec<Instruction>, params: u32, ty: FunctionType) -> Self {
+    pub fn new(buffer: Vec<Instruction>, params: u32, ty: FunctionType, upvalues: u32) -> Self {
         Self {
             buffer: buffer.into_boxed_slice(),
             params,
             name: None,
             ty,
             receiver: None,
+            upvalues,
         }
     }
 
@@ -318,7 +335,10 @@ impl ToString for FunctionKind {
             Self::Native(n) => format!("function {}() {{ [native code] }}", n.name),
             Self::User(u) => format!("function {}() {{ ... }}", u.name.as_deref().unwrap_or("")),
             Self::Closure(c) => {
-                format!("function {}() {{ ... }}", c.0.name.as_deref().unwrap_or(""))
+                format!(
+                    "function {}() {{ ... }}",
+                    c.func.name.as_deref().unwrap_or("")
+                )
             }
         }
     }
