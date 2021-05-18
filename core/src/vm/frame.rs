@@ -1,10 +1,14 @@
-use super::instruction::Instruction;
+use std::{cell::RefCell, rc::Rc};
+
+use super::{
+    instruction::Instruction,
+    value::{UserFunction, Value},
+};
 
 #[derive(Debug)]
 pub struct Frame {
+    pub func: Rc<RefCell<Value>>,
     pub buffer: Box<[Instruction]>,
-    /// Instruction pointer
     pub ip: usize,
-    /// Stack pointer
     pub sp: usize,
 }
