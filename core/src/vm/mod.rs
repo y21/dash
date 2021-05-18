@@ -4,14 +4,18 @@ pub mod frame;
 pub mod instruction;
 pub mod stack;
 pub mod statics;
+pub mod upvalue;
 pub mod value;
 
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, mem::MaybeUninit, rc::Rc};
 
 use instruction::{Instruction, Opcode};
 use value::Value;
 
-use crate::vm::value::{CallContext, Closure, Compare, ValueKind};
+use crate::vm::{
+    upvalue::Upvalue,
+    value::{CallContext, Closure, Compare, ValueKind},
+};
 
 use self::{
     environment::Environment,
@@ -50,7 +54,10 @@ impl VM {
     pub fn new(func: UserFunction) -> Self {
         let mut frames = Stack::new();
         frames.push(Frame {
-            buffer: func.buffer,
+            buffer: func.buffer.clone(),
+            func: Rc::new(RefCell::new(Value::new(ValueKind::Object(Box::new(
+                Object::Function(FunctionKind::Closure(Closure::new(func))),
+            ))))),
             ip: 0,
             sp: 0,
         });
@@ -85,14 +92,18 @@ impl VM {
         self.ip() >= self.buffer().len()
     }
 
-    fn read_constant(&mut self) -> Option<Value> {
+    fn next(&mut self) -> Option<&Instruction> {
         if self.is_eof() {
             return None;
         }
 
         self.frame_mut().ip += 1;
 
-        Some(self.buffer()[self.ip() - 1].clone().into_operand())
+        Some(&self.buffer()[self.ip() - 1])
+    }
+
+    fn read_constant(&mut self) -> Option<Value> {
+        self.next().cloned().map(|x| x.into_operand())
     }
 
     fn read_user_function(&mut self) -> Option<UserFunction> {
@@ -141,7 +152,24 @@ impl VM {
                 }
                 Opcode::Closure => {
                     let func = self.read_user_function().unwrap();
-                    let closure = Closure(func);
+
+                    let upvalue_count = func.upvalues as usize;
+
+                    let mut closure =
+                        Closure::with_upvalues(func, Vec::with_capacity(upvalue_count));
+
+                    for _ in 0..closure.func.upvalues {
+                        let is_local =
+                            matches!(self.next().unwrap(), Instruction::Op(Opcode::UpvalueLocal));
+                        let stack_idx = self.read_constant().unwrap().as_number() as usize;
+                        if is_local {
+                            let value =
+                                unsafe { self.stack.peek_unchecked(self.frame().sp + stack_idx) };
+                            closure.upvalues.push(Upvalue(value.clone()));
+                        } else {
+                            todo!("Resolve upvalues")
+                        }
+                    }
 
                     self.stack
                         .push(Rc::new(RefCell::new(Value::new(ValueKind::Object(
@@ -208,6 +236,20 @@ impl VM {
                                 .clone(),
                         )
                     };
+                }
+                Opcode::GetUpvalue => {
+                    let upvalue_idx = self.read_number() as usize;
+
+                    let value = {
+                        let closure_cell = self.frame().func.borrow();
+                        let closure = match closure_cell.as_function().unwrap() {
+                            FunctionKind::Closure(c) => c,
+                            _ => unreachable!(),
+                        };
+                        closure.upvalues[upvalue_idx].0.clone()
+                    };
+
+                    self.stack.push(value);
                 }
                 Opcode::ShortJmpIfFalse => {
                     let instruction_count = self.pop_owned().unwrap().as_number() as usize;
@@ -287,12 +329,15 @@ impl VM {
                         _ => unreachable!(),
                     };
 
+                    // By this point we know func_cell is a UserFunction
+
                     let current_sp = self.stack.get_stack_pointer();
                     self.frame_mut().sp = current_sp;
 
                     let frame = Frame {
-                        buffer: func.0.buffer.clone(),
+                        buffer: func.func.buffer.clone(),
                         ip: 0,
+                        func: func_cell.clone(),
                         sp: current_sp,
                     };
                     self.frames.push(frame);
