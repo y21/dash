@@ -138,7 +138,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
                 instructions.push(Instruction::Operand(Value::new(ValueKind::Number(
                     idx as f64,
                 ))));
-                instructions.push(Instruction::Op(Opcode::GetLocal));
+                instructions.push(Instruction::Op(Opcode::GetUpvalue));
                 return instructions;
             }
 
@@ -338,7 +338,12 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
             }
         }
 
-        let func = UserFunction::new(frame.instructions, params as u32, FunctionType::Function);
+        let func = UserFunction::new(
+            frame.instructions,
+            params as u32,
+            FunctionType::Function,
+            frame.upvalues.len() as u32,
+        );
         instructions.push(Instruction::Operand(func.into()));
 
         for upvalue in frame.upvalues.into_iter(IteratorOrder::BottomToTop) {
