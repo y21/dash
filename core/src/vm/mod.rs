@@ -7,7 +7,7 @@ pub mod statics;
 pub mod upvalue;
 pub mod value;
 
-use std::{cell::RefCell, mem::MaybeUninit, rc::Rc};
+use std::{any::Any, cell::RefCell, rc::Rc};
 
 use instruction::{Instruction, Opcode};
 use value::Value;
@@ -48,6 +48,8 @@ pub struct VM {
     pub(crate) global: Environment,
     /// Static values created once when the VM is initialized
     pub(crate) statics: Statics,
+    /// Embedder specific slot data
+    pub(crate) slot: Option<Box<dyn Any>>,
 }
 
 impl VM {
@@ -67,9 +69,19 @@ impl VM {
             stack: Stack::new(),
             global: Environment::new(),
             statics: Statics::new(),
+            slot: None,
         };
         unsafe { vm.prepare_stdlib() };
         vm
+    }
+
+    pub fn set_slot<T: 'static>(&mut self, value: T) {
+        self.slot.insert(Box::new(value) as Box<dyn Any>);
+    }
+
+    pub fn get_slot<T: 'static>(&mut self) -> Option<&T> {
+        let slot = self.slot.as_ref()?;
+        slot.downcast_ref::<T>()
     }
 
     fn frame(&self) -> &Frame {
