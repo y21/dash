@@ -8,15 +8,11 @@ pub enum Statement<'a> {
     Block(BlockStatement<'a>),
     Function(FunctionDeclaration<'a>),
     While(WhileLoop<'a>),
-    Print(Print<'a>),
     Return(ReturnStatement<'a>),
 }
 
 #[derive(Debug, Clone)]
 pub struct ReturnStatement<'a>(pub Expr<'a>);
-
-#[derive(Debug, Clone)]
-pub struct Print<'a>(pub Expr<'a>);
 
 #[derive(Debug, Clone)]
 pub struct WhileLoop<'a> {

@@ -1,7 +1,7 @@
 use super::{
     expr::{Expr, UnaryExpr},
     statement::{
-        BlockStatement, FunctionDeclaration, IfStatement, Print, ReturnStatement, Statement,
+        BlockStatement, FunctionDeclaration, IfStatement, ReturnStatement, Statement,
         VariableDeclaration, VariableDeclarationKind, WhileLoop,
     },
     token::{Error, ErrorKind, Token, TokenType, ASSIGNMENT_TYPES},
@@ -55,7 +55,6 @@ impl<'a> Parser<'a> {
             TokenType::Function => self.function().map(Statement::Function),
             TokenType::LeftBrace => self.block().map(Statement::Block),
             TokenType::While => self.while_loop().map(Statement::While),
-            TokenType::Print => self.print_statement().map(Statement::Print),
             TokenType::Return => self.return_statement().map(Statement::Return),
             _ => {
                 // We've skipped the current character because of the statement cases that skip the current token
@@ -73,11 +72,6 @@ impl<'a> Parser<'a> {
     pub fn return_statement(&mut self) -> Option<ReturnStatement<'a>> {
         let expr = self.expression()?;
         Some(ReturnStatement(expr))
-    }
-
-    pub fn print_statement(&mut self) -> Option<Print<'a>> {
-        let expr = self.expression()?;
-        Some(Print(expr))
     }
 
     pub fn while_loop(&mut self) -> Option<WhileLoop<'a>> {

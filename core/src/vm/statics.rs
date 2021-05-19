@@ -5,12 +5,12 @@ use crate::js_std;
 use super::value::{NativeFunction, Value};
 
 pub mod id {
-    pub const ISNAN: usize = 0;
-
-    pub const MATH_POW: usize = 1;
+    pub const CONSOLE_LOG: usize = 0;
+    pub const ISNAN: usize = 1;
+    pub const MATH_POW: usize = 2;
 }
 
-const ID_COUNT: usize = 2;
+const ID_COUNT: usize = 3;
 
 /// Static values
 pub struct Statics([MaybeUninit<Rc<RefCell<Value>>>; ID_COUNT]);
@@ -31,7 +31,12 @@ impl Statics {
         self.set(
             id::MATH_POW,
             NativeFunction::new("pow", js_std::math::pow, None).into(),
-        )
+        );
+
+        self.set(
+            id::CONSOLE_LOG,
+            NativeFunction::new("log", js_std::console::log, None).into(),
+        );
     }
 
     pub fn set(&mut self, id: usize, value: Rc<RefCell<Value>>) {

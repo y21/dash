@@ -4,7 +4,7 @@ use crate::parser::{
         PropertyAccessExpr, Seq, UnaryExpr,
     },
     statement::{
-        BlockStatement, FunctionDeclaration, IfStatement, Print, ReturnStatement, Statement,
+        BlockStatement, FunctionDeclaration, IfStatement, ReturnStatement, Statement,
         VariableDeclaration, WhileLoop,
     },
 };
@@ -18,7 +18,6 @@ pub trait Visitor<'a, V> {
             Statement::Block(b) => self.visit_block_statement(b),
             Statement::Function(f) => self.visit_function_declaration(f),
             Statement::While(l) => self.visit_while_loop(l),
-            Statement::Print(p) => self.visit_print_statement(p),
             Statement::Return(r) => self.visit_return_statement(r),
         }
     }
@@ -48,7 +47,6 @@ pub trait Visitor<'a, V> {
     fn visit_function_declaration(&mut self, f: &FunctionDeclaration<'a>) -> V;
     fn visit_while_loop(&mut self, l: &WhileLoop<'a>) -> V;
     fn visit_assignment_expression(&mut self, e: &AssignmentExpr<'a>) -> V;
-    fn visit_print_statement(&mut self, p: &Print<'a>) -> V;
     fn visit_function_call(&mut self, c: &FunctionCall<'a>) -> V;
     fn visit_return_statement(&mut self, s: &ReturnStatement<'a>) -> V;
     fn visit_conditional_expr(&mut self, c: &ConditionalExpr<'a>) -> V;

@@ -147,6 +147,14 @@ impl VM {
             self.statics.get_unchecked(statics::id::MATH_POW).clone(),
         );
         self.global.set_var("Math", Rc::new(RefCell::new(math_obj)));
+
+        let mut console_obj = Value::new(ValueKind::Object(Box::new(Object::Any(AnyObject {}))));
+        console_obj.set_property(
+            "log",
+            self.statics.get_unchecked(statics::id::CONSOLE_LOG).clone(),
+        );
+        self.global
+            .set_var("console", Rc::new(RefCell::new(console_obj)));
     }
 
     pub fn interpret(&mut self) -> Result<(), VMError> {
@@ -367,12 +375,6 @@ impl VM {
 
                     self.stack.set_stack_pointer(self.frame().sp);
                     self.stack.push(ret);
-                }
-                Opcode::Print => {
-                    let value_cell = self.stack.pop();
-                    let value = value_cell.borrow();
-
-                    println!("{}", value.to_string());
                 }
                 Opcode::Less => {
                     let rhs_cell = self.stack.pop();

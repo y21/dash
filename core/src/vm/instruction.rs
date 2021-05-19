@@ -36,7 +36,6 @@ pub enum Opcode {
     LongJmp,
     BackJmp,
     Pop,
-    Print,
     FunctionCall,
     Return,
     Nop, // Mainly used as a placeholder

@@ -5,7 +5,7 @@ use crate::{
             LiteralExpr, PropertyAccessExpr, Seq, UnaryExpr,
         },
         statement::{
-            BlockStatement, FunctionDeclaration, IfStatement, Print, ReturnStatement, Statement,
+            BlockStatement, FunctionDeclaration, IfStatement, ReturnStatement, Statement,
             VariableDeclaration, WhileLoop,
         },
         token::TokenType,
@@ -386,12 +386,6 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
     fn visit_expression_statement(&mut self, e: &Expr<'a>) -> Vec<Instruction> {
         let mut instructions = self.accept_expr(e);
         instructions.push(Instruction::Op(Opcode::Pop));
-        instructions
-    }
-
-    fn visit_print_statement(&mut self, p: &Print<'a>) -> Vec<Instruction> {
-        let mut instructions = self.accept_expr(&p.0);
-        instructions.push(Instruction::Op(Opcode::Print));
         instructions
     }
 
