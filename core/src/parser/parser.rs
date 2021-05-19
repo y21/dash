@@ -127,6 +127,10 @@ impl<'a> Parser<'a> {
     pub fn block(&mut self) -> Option<BlockStatement<'a>> {
         let mut stmts = Vec::new();
         while !self.expect_and_skip(&[TokenType::RightBrace], false) {
+            if self.is_eof() {
+                return None;
+            }
+
             if let Some(stmt) = self.statement() {
                 stmts.push(stmt);
             }
