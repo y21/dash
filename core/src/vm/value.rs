@@ -456,10 +456,14 @@ impl Object {
 
                 s.eq(other)
             }
-            _ => std::ptr::eq(
-                self as *const _ as *const u8,
-                other as *const _ as *const u8,
-            ),
+            _ => {
+                let other = match &other.kind {
+                    ValueKind::Object(o) => &**o,
+                    _ => return false,
+                };
+
+                std::ptr::eq(self as *const _, other as *const _)
+            }
         }
     }
 }
