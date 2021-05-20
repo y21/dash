@@ -157,22 +157,10 @@ impl<'a> LiteralExpr<'a> {
                 std::str::from_utf8(s).unwrap().to_owned(),
             )))),
             Self::Undefined => Value::new(ValueKind::Undefined),
-            _ => unimplemented!(),
+            Self::Null => Value::new(ValueKind::Null),
         }
     }
 }
-
-/*impl<'a> From<LiteralExpr<'a>> for String {
-    fn from(e: LiteralExpr<'a>) -> Self {
-        match e {
-            LiteralExpr::Boolean(b) => b.to_string(),
-            LiteralExpr::Identifier(i) => String::from_utf8_lossy(i).to_string(),
-            LiteralExpr::Null => String::from("null"),
-            LiteralExpr::Undefined => String::from("undefined"),
-            LiteralExpr::
-        }
-    }
-}*/
 
 #[derive(Debug, Clone)]
 pub struct UnaryExpr<'a> {
