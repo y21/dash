@@ -75,13 +75,22 @@ impl VM {
         vm
     }
 
+    pub fn global_mut(&mut self) -> &mut Environment {
+        &mut self.global
+    }
+
     pub fn set_slot<T: 'static>(&mut self, value: T) {
         self.slot.insert(Box::new(value) as Box<dyn Any>);
     }
 
-    pub fn get_slot<T: 'static>(&mut self) -> Option<&T> {
+    pub fn get_slot<T: 'static>(&self) -> Option<&T> {
         let slot = self.slot.as_ref()?;
         slot.downcast_ref::<T>()
+    }
+
+    pub fn get_slot_mut<T: 'static>(&mut self) -> Option<&mut T> {
+        let slot = self.slot.as_mut()?;
+        slot.downcast_mut::<T>()
     }
 
     fn frame(&self) -> &Frame {
@@ -435,6 +444,17 @@ impl VM {
                     self.stack.push(value);
                 }
                 Opcode::ComputedPropertyAccess => todo!(),
+                Opcode::Equality | Opcode::StrictEquality => {
+                    // Todo: handle StrictEquality separately
+
+                    let rhs_cell = self.stack.pop();
+                    let rhs = rhs_cell.borrow();
+                    let lhs_cell = self.stack.pop();
+                    let lhs = lhs_cell.borrow();
+
+                    let eq = lhs.strict_equal(&*rhs);
+                    self.stack.push(Value::new(ValueKind::Bool(eq)).into());
+                }
                 Opcode::Typeof => {
                     let value = self.stack.pop().borrow()._typeof().to_owned();
 
