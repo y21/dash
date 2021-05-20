@@ -144,6 +144,22 @@ impl VM {
         Value::try_into_inner(self.stack.pop())
     }
 
+    fn read_lhs_rhs(&mut self) -> (Rc<RefCell<Value>>, Rc<RefCell<Value>>) {
+        let rhs = self.stack.pop();
+        let lhs = self.stack.pop();
+        (lhs, rhs)
+    }
+
+    fn with_lhs_rhs_borrowed<F, T>(&mut self, func: F) -> T
+    where
+        F: Fn(&Value, &Value) -> T,
+    {
+        let (lhs_cell, rhs_cell) = self.read_lhs_rhs();
+        let lhs = lhs_cell.borrow();
+        let rhs = rhs_cell.borrow();
+        func(&*lhs, &*rhs)
+    }
+
     unsafe fn prepare_stdlib(&mut self) {
         self.global.set_var(
             "isNaN",
@@ -444,15 +460,14 @@ impl VM {
                     self.stack.push(value);
                 }
                 Opcode::ComputedPropertyAccess => todo!(),
-                Opcode::Equality | Opcode::StrictEquality => {
-                    // Todo: handle StrictEquality separately
+                Opcode::Equality => {
+                    let eq = self.with_lhs_rhs_borrowed(Value::lossy_equal);
 
-                    let rhs_cell = self.stack.pop();
-                    let rhs = rhs_cell.borrow();
-                    let lhs_cell = self.stack.pop();
-                    let lhs = lhs_cell.borrow();
+                    self.stack.push(Value::new(ValueKind::Bool(eq)).into());
+                }
+                Opcode::StrictEquality => {
+                    let eq = self.with_lhs_rhs_borrowed(Value::strict_equal);
 
-                    let eq = lhs.strict_equal(&*rhs);
                     self.stack.push(Value::new(ValueKind::Bool(eq)).into());
                 }
                 Opcode::Typeof => {
