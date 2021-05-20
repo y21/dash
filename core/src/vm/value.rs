@@ -12,7 +12,7 @@ use crate::js_std;
 use super::{instruction::Instruction, upvalue::Upvalue, VM};
 
 pub struct CallContext<'a> {
-    pub vm: &'a VM,
+    pub vm: &'a mut VM,
     pub args: Vec<Rc<RefCell<Value>>>,
     pub receiver: Option<Rc<RefCell<Value>>>,
 }
@@ -142,9 +142,9 @@ impl Value {
             ValueKind::Number(n) => {
                 let rhs = other.as_number();
                 if *n > rhs {
-                    Some(Compare::Less)
-                } else {
                     Some(Compare::Greater)
+                } else {
+                    Some(Compare::Less)
                 }
             }
             ValueKind::Bool(b) => {
@@ -152,12 +152,41 @@ impl Value {
                 let lhs = *b as u8 as f64;
 
                 if lhs > rhs {
-                    Some(Compare::Less)
-                } else {
                     Some(Compare::Greater)
+                } else {
+                    Some(Compare::Less)
                 }
             }
             _ => None,
+        }
+    }
+
+    pub fn lossy_equal(&self, other: &Value) -> bool {
+        self.strict_equal(other) // TODO: handle it separately
+    }
+
+    pub fn strict_equal(&self, other: &Value) -> bool {
+        match &self.kind {
+            ValueKind::Number(n) => {
+                let other = match &other.kind {
+                    ValueKind::Number(n) => n,
+                    _ => return false,
+                };
+
+                return *other == *n;
+            }
+            ValueKind::Bool(b) => {
+                let other = match &other.kind {
+                    ValueKind::Bool(b) => b,
+                    _ => return false,
+                };
+
+                return *other == *b;
+            }
+            ValueKind::Null => matches!(other.kind, ValueKind::Null),
+            ValueKind::Undefined => matches!(other.kind, ValueKind::Undefined),
+            ValueKind::Object(o) => o.strict_equal(other),
+            _ => false,
         }
     }
 
@@ -407,6 +436,30 @@ impl Object {
         match self {
             Self::Function(kind) => Some(kind),
             _ => None,
+        }
+    }
+
+    fn lossy_equal(&self, other: &Value) -> bool {
+        self.strict_equal(other)
+    }
+
+    fn strict_equal(&self, other: &Value) -> bool {
+        match self {
+            Self::String(s) => {
+                let other = match &other.kind {
+                    ValueKind::Object(o) => match &**o {
+                        Object::String(s) => s,
+                        _ => return false,
+                    },
+                    _ => return false,
+                };
+
+                s.eq(other)
+            }
+            _ => std::ptr::eq(
+                self as *const _ as *const u8,
+                other as *const _ as *const u8,
+            ),
         }
     }
 }
