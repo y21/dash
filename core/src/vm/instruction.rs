@@ -47,6 +47,8 @@ pub enum Opcode {
     ComputedPropertyAccess,
     Typeof,
     Closure,
+    Equality,
+    StrictEquality,
 }
 
 impl From<TokenType> for Opcode {
@@ -68,6 +70,8 @@ impl From<TokenType> for Opcode {
             TokenType::LessEqual => Self::LessEqual,
             TokenType::Greater => Self::Greater,
             TokenType::GreaterEqual => Self::GreaterEqual,
+            TokenType::Equality => Self::Equality,
+            TokenType::StrictEquality => Self::StrictEquality,
             _ => unimplemented!(),
         }
     }
