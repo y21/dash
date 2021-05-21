@@ -3,6 +3,7 @@ use crate::vm::value::{Object, Value, ValueKind};
 use super::token::TokenType;
 
 pub type Seq<'a> = (Box<Expr<'a>>, Box<Expr<'a>>);
+pub type Postfix<'a> = (TokenType, Box<Expr<'a>>);
 
 #[derive(Debug, Clone)]
 pub enum Expr<'a> {
@@ -15,6 +16,7 @@ pub enum Expr<'a> {
     Conditional(ConditionalExpr<'a>),
     PropertyAccess(PropertyAccessExpr<'a>),
     Sequence(Seq<'a>),
+    Postfix(Postfix<'a>),
 }
 
 impl<'a> Expr<'a> {
