@@ -494,11 +494,8 @@ impl VM {
                     let target_cell = self.stack.pop();
 
                     let value = value_cell.borrow();
-                    let value = if matches!(value.kind, ValueKind::Object(_)) {
-                        todo!()
-                    } else {
-                        value.clone()
-                    };
+                    // TODO: cloning might not be the right thing to do
+                    let value = value.clone();
 
                     let mut target = target_cell.borrow_mut();
                     *target = value;
