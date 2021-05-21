@@ -299,7 +299,17 @@ impl<'a> Parser<'a> {
         ) {
             let operator = self.previous()?.ty;
             let rval = self.unary()?;
-            Some(Expr::Unary(UnaryExpr::new(operator, rval)))
+
+            if [TokenType::Increment, TokenType::Decrement].contains(&operator) {
+                let operator = if operator == TokenType::Increment {
+                    TokenType::PrefixIncrement
+                } else {
+                    TokenType::PrefixDecrement
+                };
+                Some(Expr::assignment(rval, Expr::number_literal(1f64), operator))
+            } else {
+                Some(Expr::Unary(UnaryExpr::new(operator, rval)))
+            }
         } else {
             self.postfix()
         }
@@ -309,9 +319,7 @@ impl<'a> Parser<'a> {
         let expr = self.field_access()?;
         if self.expect_and_skip(&[TokenType::Increment, TokenType::Decrement], false) {
             let operator = self.previous()?.ty;
-            // TODO: this is not true
-            // `x++` is not the same as `x += 1`; it needs to return the old number
-            return Some(Expr::assignment(expr, Expr::number_literal(1f64), operator));
+            return Some(Expr::Postfix((operator, Box::new(expr))));
         }
         Some(expr)
     }
