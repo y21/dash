@@ -477,7 +477,34 @@ impl VM {
                         Value::new(ValueKind::Object(Box::new(Object::String(value)))).into(),
                     );
                 }
-                _ => unreachable!(),
+                Opcode::PostfixIncrement | Opcode::PostfixDecrement => {
+                    let value_cell = self.stack.pop();
+                    let mut value = value_cell.borrow_mut();
+                    let one = Value::new(ValueKind::Number(1f64));
+                    let result = if instruction == Opcode::PostfixIncrement {
+                        value.add_assign(&one);
+                        value.sub(&one)
+                    } else {
+                        todo!()
+                    };
+                    self.stack.push(result.into());
+                }
+                Opcode::Assignment => {
+                    let value_cell = self.stack.pop();
+                    let target_cell = self.stack.pop();
+
+                    let value = value_cell.borrow();
+                    let value = if matches!(value.kind, ValueKind::Object(_)) {
+                        todo!()
+                    } else {
+                        value.clone()
+                    };
+
+                    let mut target = target_cell.borrow_mut();
+                    *target = value;
+                    self.stack.push(target_cell.clone());
+                }
+                _ => unreachable!("{:?}", instruction),
             };
         }
 
