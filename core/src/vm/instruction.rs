@@ -23,6 +23,7 @@ pub enum Opcode {
     BitwiseXor,
     AdditionAssignment,
     SubtractionAssignment,
+    Assignment,
     Add,
     Sub,
     Mul,
@@ -49,6 +50,8 @@ pub enum Opcode {
     Closure,
     Equality,
     StrictEquality,
+    PostfixIncrement,
+    PostfixDecrement,
 }
 
 impl From<TokenType> for Opcode {
@@ -64,15 +67,18 @@ impl From<TokenType> for Opcode {
             TokenType::BitwiseXor => Self::BitwiseXor,
             TokenType::AdditionAssignment => Self::AdditionAssignment,
             TokenType::SubtractionAssignment => Self::SubtractionAssignment,
-            TokenType::Increment => Self::AdditionAssignment,
-            TokenType::Decrement => Self::SubtractionAssignment,
+            TokenType::PrefixIncrement => Self::AdditionAssignment,
+            TokenType::PrefixDecrement => Self::SubtractionAssignment,
+            TokenType::PostfixIncrement | TokenType::Increment => Self::PostfixIncrement,
+            TokenType::PostfixDecrement | TokenType::Decrement => Self::PostfixDecrement,
+            TokenType::Assignment => Self::Assignment,
             TokenType::Less => Self::Less,
             TokenType::LessEqual => Self::LessEqual,
             TokenType::Greater => Self::Greater,
             TokenType::GreaterEqual => Self::GreaterEqual,
             TokenType::Equality => Self::Equality,
             TokenType::StrictEquality => Self::StrictEquality,
-            _ => unimplemented!(),
+            _ => unimplemented!("{:?}", tt),
         }
     }
 }
