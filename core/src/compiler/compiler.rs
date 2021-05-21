@@ -444,25 +444,29 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
     }
 
     fn visit_property_access_expr(&mut self, e: &PropertyAccessExpr<'a>) -> Vec<Instruction> {
-        assert!(!e.computed); // computed property access foo[bar] doesnt work yet
-
         let mut instructions = self.accept_expr(&e.target);
 
-        let ident: &[u8] = if let Expr::Literal(lit) = &*e.property {
-            match lit {
-                LiteralExpr::Identifier(ident) => ident,
-                _ => todo!(),
-            }
+        if e.computed {
+            let property = self.accept_expr(&e.property);
+            instructions.extend(property);
+            instructions.push(Instruction::Op(Opcode::ComputedPropertyAccess));
         } else {
-            todo!()
-        };
+            let ident: &[u8] = if let Expr::Literal(lit) = &*e.property {
+                match lit {
+                    LiteralExpr::Identifier(ident) => ident,
+                    _ => todo!(),
+                }
+            } else {
+                todo!()
+            };
 
-        instructions.push(Instruction::Op(Opcode::Constant));
-        instructions.push(Instruction::Operand(Value::new(ValueKind::Ident(
-            std::str::from_utf8(ident).unwrap().to_owned(),
-        ))));
+            instructions.push(Instruction::Op(Opcode::Constant));
+            instructions.push(Instruction::Operand(Value::new(ValueKind::Ident(
+                std::str::from_utf8(ident).unwrap().to_owned(),
+            ))));
 
-        instructions.push(Instruction::Op(Opcode::StaticPropertyAccess));
+            instructions.push(Instruction::Op(Opcode::StaticPropertyAccess));
+        }
 
         instructions
     }
