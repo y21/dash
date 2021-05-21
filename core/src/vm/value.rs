@@ -51,6 +51,7 @@ impl Value {
 
     pub fn get_property(value_cell: &Rc<RefCell<Value>>, k: &str) -> Option<Rc<RefCell<Value>>> {
         let value = value_cell.borrow();
+        let k = k.into();
 
         if value.fields.len() > 0 {
             // We only need to go the "slow" path and look up the given key in a HashMap if there are entries
@@ -193,6 +194,17 @@ impl Value {
 
     pub fn as_string(&self) -> Option<&str> {
         self.as_object().and_then(|o| o.as_string())
+    }
+
+    pub fn as_string_lossy(&self) -> Option<Cow<str>> {
+        match &self.kind {
+            ValueKind::Number(n) => Some(Cow::Owned(n.to_string())),
+            ValueKind::Bool(b) => Some(Cow::Owned(b.to_string())),
+            ValueKind::Null => Some(Cow::Borrowed("null")),
+            ValueKind::Undefined => Some(Cow::Borrowed("undefined")),
+            ValueKind::Ident(s) => Some(Cow::Borrowed(s)),
+            ValueKind::Object(o) => o.as_string_lossy(),
+        }
     }
 
     pub fn into_ident(self) -> Option<String> {
@@ -425,6 +437,14 @@ impl Object {
         match self {
             Self::String(s) => Some(s),
             _ => None,
+        }
+    }
+
+    fn as_string_lossy(&self) -> Option<Cow<str>> {
+        match self {
+            Self::String(s) => Some(Cow::Borrowed(s)),
+            Self::Function(s) => Some(Cow::Owned(s.to_string())),
+            Self::Any(_) => Some(Cow::Borrowed("[object Object]")),
         }
     }
 
