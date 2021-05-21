@@ -459,7 +459,6 @@ impl VM {
                     let value = Value::get_property(&target_cell, &property).unwrap();
                     self.stack.push(value);
                 }
-                Opcode::ComputedPropertyAccess => todo!(),
                 Opcode::Equality => {
                     let eq = self.with_lhs_rhs_borrowed(Value::lossy_equal);
 
@@ -500,6 +499,17 @@ impl VM {
                     let mut target = target_cell.borrow_mut();
                     *target = value;
                     self.stack.push(target_cell.clone());
+                }
+                Opcode::ComputedPropertyAccess => {
+                    let property_cell = self.stack.pop();
+                    let target_cell = self.stack.pop();
+                    let property = property_cell.borrow();
+                    let property_s = property.as_string_lossy().unwrap();
+
+                    let prop = Value::get_property(&target_cell, &*property_s)
+                        .unwrap_or_else(|| Value::new(ValueKind::Undefined).into());
+
+                    self.stack.push(prop);
                 }
                 _ => unreachable!("{:?}", instruction),
             };
