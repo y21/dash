@@ -2,7 +2,7 @@ use crate::{
     parser::{
         expr::{
             AssignmentExpr, BinaryExpr, ConditionalExpr, Expr, FunctionCall, GroupingExpr,
-            LiteralExpr, PropertyAccessExpr, Seq, UnaryExpr,
+            LiteralExpr, Postfix, PropertyAccessExpr, Seq, UnaryExpr,
         },
         statement::{
             BlockStatement, FunctionDeclaration, IfStatement, ReturnStatement, Statement,
@@ -475,5 +475,11 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         instructions.extend(rhs);
 
         instructions
+    }
+
+    fn visit_postfix_expr(&mut self, p: &Postfix<'a>) -> Vec<Instruction> {
+        let mut target = self.accept_expr(&p.1);
+        target.push(Instruction::Op(p.0.into()));
+        target
     }
 }
