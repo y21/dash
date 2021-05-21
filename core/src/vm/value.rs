@@ -89,6 +89,7 @@ impl Value {
     pub fn as_number(&self) -> f64 {
         match &self.kind {
             ValueKind::Number(n) => *n,
+            ValueKind::Bool(b) => *b as u8 as f64,
             ValueKind::Object(o) => o.as_number(),
             _ => f64::NAN,
         }
@@ -227,6 +228,16 @@ impl Value {
             ValueKind::Number(n) => {
                 let o = other.as_number();
                 *n -= o;
+            }
+            _ => todo!(),
+        }
+    }
+
+    pub fn sub(&self, other: &Value) -> Value {
+        match &self.kind {
+            ValueKind::Number(n) => {
+                let other = other.as_number();
+                Value::new(ValueKind::Number(*n - other))
             }
             _ => todo!(),
         }
