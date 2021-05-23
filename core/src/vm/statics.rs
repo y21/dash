@@ -7,10 +7,11 @@ use super::value::{NativeFunction, Value};
 pub mod id {
     pub const CONSOLE_LOG: usize = 0;
     pub const ISNAN: usize = 1;
-    pub const MATH_POW: usize = 2;
+    pub const ARRAY_PUSH: usize = 2;
+    pub const MATH_POW: usize = 3;
 }
 
-const ID_COUNT: usize = 3;
+const ID_COUNT: usize = 4;
 
 /// Static values
 pub struct Statics([MaybeUninit<Rc<RefCell<Value>>>; ID_COUNT]);
@@ -31,6 +32,11 @@ impl Statics {
         self.set(
             id::MATH_POW,
             NativeFunction::new("pow", js_std::math::pow, None).into(),
+        );
+
+        self.set(
+            id::ARRAY_PUSH,
+            NativeFunction::new("push", js_std::array::push, None).into(),
         );
 
         self.set(
