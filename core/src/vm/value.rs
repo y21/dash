@@ -7,9 +7,13 @@ use std::{
     rc::Rc,
 };
 
-use crate::js_std;
+use crate::{js_std, util};
 
-use super::{instruction::Instruction, upvalue::Upvalue, VM};
+use super::{
+    instruction::{Constant, Instruction},
+    upvalue::Upvalue,
+    VM,
+};
 
 pub struct CallContext<'a> {
     pub vm: &'a mut VM,
@@ -36,7 +40,7 @@ impl Value {
 
 #[derive(Debug, Clone)]
 pub enum ValueKind {
-    Ident(String),
+    Constant(Box<Constant>),
     Number(f64),
     Bool(bool),
     Object(Box<Object>),
@@ -62,7 +66,7 @@ impl Value {
 
         match &value.kind {
             ValueKind::Object(o) => o.get_property(value_cell, k),
-            _ => unreachable!(),
+            _ => Some(Rc::new(RefCell::new(Value::new(ValueKind::Undefined)))),
         }
     }
 
@@ -82,8 +86,15 @@ impl Value {
 
     pub fn is_assignment_target(&self) -> bool {
         match &self.kind {
-            ValueKind::Ident(_) => true,
+            ValueKind::Constant(_) => true,
             _ => false,
+        }
+    }
+
+    pub fn as_constant(&self) -> Option<&Constant> {
+        match &self.kind {
+            ValueKind::Constant(c) => Some(&**c),
+            _ => None,
         }
     }
 
@@ -110,6 +121,13 @@ impl Value {
         }
     }
 
+    pub fn as_object_mut(&mut self) -> Option<&mut Object> {
+        match &mut self.kind {
+            ValueKind::Object(o) => Some(o),
+            _ => None,
+        }
+    }
+
     pub fn as_function(&self) -> Option<&FunctionKind> {
         match &self.kind {
             ValueKind::Object(o) => o.as_function(),
@@ -120,7 +138,7 @@ impl Value {
     pub fn to_string(&self) -> Cow<str> {
         match &self.kind {
             ValueKind::Bool(b) => Cow::Owned(b.to_string()),
-            ValueKind::Ident(s) => Cow::Borrowed(&s),
+            ValueKind::Constant(_) => unreachable!(),
             ValueKind::Null => Cow::Borrowed("null"),
             ValueKind::Number(n) => Cow::Owned(n.to_string()),
             ValueKind::Object(o) => o.to_string(),
@@ -202,14 +220,14 @@ impl Value {
             ValueKind::Bool(b) => Some(Cow::Owned(b.to_string())),
             ValueKind::Null => Some(Cow::Borrowed("null")),
             ValueKind::Undefined => Some(Cow::Borrowed("undefined")),
-            ValueKind::Ident(s) => Some(Cow::Borrowed(s)),
+            ValueKind::Constant(_) => unreachable!(),
             ValueKind::Object(o) => o.as_string_lossy(),
         }
     }
 
     pub fn into_ident(self) -> Option<String> {
         match self.kind {
-            ValueKind::Ident(i) => Some(i),
+            ValueKind::Constant(i) => i.into_ident(),
             _ => None,
         }
     }
@@ -361,7 +379,19 @@ impl Debug for NativeFunction {
 pub enum Object {
     String(String),
     Function(FunctionKind),
+    Array(Array),
     Any(AnyObject),
+}
+
+#[derive(Debug, Clone)]
+pub struct Array {
+    pub elements: Vec<Rc<RefCell<Value>>>,
+}
+
+impl Array {
+    pub fn new(elements: Vec<Rc<RefCell<Value>>>) -> Self {
+        Self { elements }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -407,15 +437,37 @@ impl Object {
                         receiver: Some(Receiver::Bound(cell.clone())),
                     }))),
                 ))))),
-                _ => todo!(),
+                _ => Some(Rc::new(RefCell::new(Value::new(ValueKind::Undefined)))),
             },
-            _ => todo!(),
+            Self::Array(a) => match &k[..] {
+                "length" => Some(Value::new(ValueKind::Number(a.elements.len() as f64)).into()),
+                "push" => Some(Rc::new(RefCell::new(Value::new(ValueKind::Object(
+                    Box::new(Object::Function(FunctionKind::Native(NativeFunction {
+                        name: "push",
+                        func: js_std::array::push,
+                        receiver: Some(Receiver::Bound(cell.clone())),
+                    }))),
+                ))))),
+                _ => {
+                    if util::is_numeric(k) {
+                        // Unwrapping is ok, we've just made sure it's numeric
+                        // We might want to remove the util::is_numeric check and use .is_some()
+                        // Or even if let
+                        let num = k.parse::<usize>().unwrap();
+                        if num < a.elements.len() {
+                            return Some(a.elements[num].clone());
+                        }
+                    }
+                    Some(Rc::new(RefCell::new(Value::new(ValueKind::Undefined))))
+                }
+            },
+            _ => Some(Rc::new(RefCell::new(Value::new(ValueKind::Undefined)))),
         }
     }
 
     fn _typeof(&self) -> &'static str {
         match self {
-            Self::Any(_) => "object",
+            Self::Any(_) | Self::Array(_) => "object",
             Self::Function(_) => "function",
             Self::String(_) => "string",
         }
@@ -423,7 +475,8 @@ impl Object {
 
     fn is_truthy(&self) -> bool {
         match self {
-            Self::String(s) => s.len() != 0,
+            Self::String(s) => !s.is_empty(),
+            Self::Array(_) => true,
             Self::Function(..) => true,
             Self::Any(_) => true,
         }
@@ -444,6 +497,7 @@ impl Object {
         match self {
             Self::String(s) => Some(Cow::Borrowed(s)),
             Self::Function(s) => Some(Cow::Owned(s.to_string())),
+            Self::Array(_) => Some(Cow::Borrowed("[array, idk i havent done this yet]")),
             Self::Any(_) => Some(Cow::Borrowed("[object Object]")),
         }
     }
@@ -459,6 +513,18 @@ impl Object {
         match self {
             Self::String(s) => Cow::Borrowed(s),
             Self::Function(f) => Cow::Owned(f.to_string()),
+            Self::Array(a) => {
+                let mut s = String::from("[");
+                for (index, element_cell) in a.elements.iter().enumerate() {
+                    let element = element_cell.borrow();
+                    if index > 0 {
+                        s.push(',');
+                    }
+                    s.push_str(&*element.to_string());
+                }
+                s.push(']');
+                Cow::Owned(s)
+            }
             _ => Cow::Borrowed("[object Object]"), // TODO: look if there's a toString function
         }
     }
