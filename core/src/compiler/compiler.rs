@@ -1,8 +1,8 @@
 use crate::{
     parser::{
         expr::{
-            AssignmentExpr, BinaryExpr, ConditionalExpr, Expr, FunctionCall, GroupingExpr,
-            LiteralExpr, Postfix, PropertyAccessExpr, Seq, UnaryExpr,
+            ArrayLiteral, AssignmentExpr, BinaryExpr, ConditionalExpr, Expr, FunctionCall,
+            GroupingExpr, LiteralExpr, ObjectLiteral, Postfix, PropertyAccessExpr, Seq, UnaryExpr,
         },
         statement::{
             BlockStatement, FunctionDeclaration, IfStatement, ReturnStatement, Statement,
@@ -12,7 +12,7 @@ use crate::{
     },
     visitor::Visitor,
     vm::{
-        instruction::{Instruction, Opcode},
+        instruction::{Constant, Instruction, Opcode},
         stack::{IteratorOrder, OwnedStack, Stack},
         value::{FunctionType, UserFunction, Value, ValueKind},
     },
@@ -120,32 +120,34 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
     fn visit_literal_expression(&mut self, e: &LiteralExpr<'a>) -> Vec<Instruction> {
         let mut instructions = Vec::with_capacity(3);
         instructions.push(Instruction::Op(Opcode::Constant));
+        let value = match e {
+            LiteralExpr::Identifier(ident) => {
+                Constant::Identifier(std::str::from_utf8(ident).unwrap().to_owned())
+            }
+            other @ _ => Constant::JsValue(other.to_value()),
+        };
 
         if let LiteralExpr::Identifier(ident) = e {
             if !self.scope.is_global() {
                 let stack_idx = self.scope.find_variable(ident);
 
                 if let Some(stack_idx) = stack_idx {
-                    instructions.push(Instruction::Operand(Value::new(ValueKind::Number(
-                        stack_idx as f64,
-                    ))));
+                    instructions.push(Instruction::Operand(Constant::Index(stack_idx)));
                     instructions.push(Instruction::Op(Opcode::GetLocal));
                     return instructions;
                 }
             }
 
             if let Some(idx) = unsafe { self.find_upvalue(ident) } {
-                instructions.push(Instruction::Operand(Value::new(ValueKind::Number(
-                    idx as f64,
-                ))));
+                instructions.push(Instruction::Operand(Constant::Index(idx)));
                 instructions.push(Instruction::Op(Opcode::GetUpvalue));
                 return instructions;
             }
 
-            instructions.push(Instruction::Operand(e.to_value()));
+            instructions.push(Instruction::Operand(value));
             instructions.push(Instruction::Op(Opcode::GetGlobal));
         } else {
-            instructions.push(Instruction::Operand(e.to_value()));
+            instructions.push(Instruction::Operand(value));
         }
 
         instructions
@@ -184,8 +186,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
             let jmp_idx = jmp_idx as usize;
 
             let instruction_count = instructions.len() - jmp_idx - 2;
-            instructions[jmp_idx] =
-                Instruction::Operand(Value::new(ValueKind::Number(instruction_count as f64)));
+            instructions[jmp_idx] = Instruction::Operand(Constant::Index(instruction_count));
         } else {
             instructions.push(Instruction::Op(e.operator.into()));
         }
@@ -206,16 +207,13 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         instructions.extend(self.accept(&l.body));
 
         let instruction_count_ = instructions.len() - jmp_idx + 1;
-        let instruction_count =
-            Instruction::Operand(Value::new(ValueKind::Number(instruction_count_ as f64)));
+        let instruction_count = Instruction::Operand(Constant::Index(instruction_count_));
         instructions[jmp_idx] = instruction_count.clone();
 
         // Emit backjump to evaluate condition
         instructions.push(Instruction::Op(Opcode::Constant));
         let backjmp_count = instruction_count_ + jmp_idx + 2;
-        instructions.push(Instruction::Operand(Value::new(ValueKind::Number(
-            backjmp_count as f64,
-        ))));
+        instructions.push(Instruction::Operand(Constant::Index(backjmp_count)));
         instructions.push(Instruction::Op(Opcode::BackJmp));
 
         instructions
@@ -232,6 +230,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
             TokenType::Minus => instructions.push(Instruction::Op(Opcode::Negate)),
             TokenType::Typeof => instructions.push(Instruction::Op(Opcode::Typeof)),
             TokenType::LogicalNot => instructions.push(Instruction::Op(Opcode::LogicalNot)),
+            TokenType::Void => instructions.push(Instruction::Op(Opcode::Void)),
             _ => todo!(),
         }
 
@@ -256,14 +255,12 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         if !global {
             let stack_idx = self.scope.push_local(Local::new(v.name, self.scope.depth));
             instructions.push(Instruction::Op(Opcode::Constant));
-            instructions.push(Instruction::Operand(Value::new(ValueKind::Number(
-                stack_idx as f64,
-            ))));
+            instructions.push(Instruction::Operand(Constant::Index(stack_idx)));
         } else {
             instructions.push(Instruction::Op(Opcode::Constant));
-            instructions.push(Instruction::Operand(Value::new(ValueKind::Ident(
+            instructions.push(Instruction::Operand(Constant::Identifier(
                 std::str::from_utf8(v.name).unwrap().to_owned(),
-            ))));
+            )));
         }
 
         if v.value.is_some() {
@@ -284,9 +281,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
 
         let then_instructions = self.accept(&i.then);
-        instructions[jmp_idx] = Instruction::Operand(Value::new(ValueKind::Number(
-            then_instructions.len() as f64,
-        )));
+        instructions[jmp_idx] = Instruction::Operand(Constant::Index(then_instructions.len()));
 
         instructions.extend(then_instructions);
 
@@ -326,14 +321,18 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
             frame.instructions.push(Instruction::Op(Opcode::Constant));
             frame
                 .instructions
-                .push(Instruction::Operand(Value::new(ValueKind::Undefined)));
+                .push(Instruction::Operand(Constant::JsValue(Value::new(
+                    ValueKind::Undefined,
+                ))));
             frame.instructions.push(Instruction::Op(Opcode::Return));
         } else if let Some(Instruction::Op(op)) = frame.instructions.last() {
             if !op.eq(&Opcode::Return) {
                 frame.instructions.push(Instruction::Op(Opcode::Constant));
                 frame
                     .instructions
-                    .push(Instruction::Operand(Value::new(ValueKind::Undefined)));
+                    .push(Instruction::Operand(Constant::JsValue(Value::new(
+                        ValueKind::Undefined,
+                    ))));
                 frame.instructions.push(Instruction::Op(Opcode::Return));
             }
         }
@@ -344,7 +343,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
             FunctionType::Function,
             frame.upvalues.len() as u32,
         );
-        instructions.push(Instruction::Operand(func.into()));
+        instructions.push(Instruction::Operand(Constant::JsValue(func.into())));
 
         for upvalue in frame.upvalues.into_iter(IteratorOrder::BottomToTop) {
             if upvalue.local {
@@ -352,9 +351,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
             } else {
                 instructions.push(Instruction::Op(Opcode::UpvalueNonLocal));
             }
-            instructions.push(Instruction::Operand(Value::new(ValueKind::Number(
-                upvalue.idx as f64,
-            ))));
+            instructions.push(Instruction::Operand(Constant::Index(upvalue.idx)));
         }
         instructions
     }
@@ -364,18 +361,16 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
 
         if self.scope.is_global() {
             instructions.push(Instruction::Op(Opcode::Constant));
-            instructions.push(Instruction::Operand(Value::new(ValueKind::Ident(
+            instructions.push(Instruction::Operand(Constant::Identifier(
                 std::str::from_utf8(f.name.unwrap()).unwrap().to_owned(),
-            ))));
+            )));
             instructions.push(Instruction::Op(Opcode::SetGlobal));
         } else {
             let stack_idx = self
                 .scope
                 .push_local(Local::new(f.name.unwrap(), self.scope.depth));
             instructions.push(Instruction::Op(Opcode::Constant));
-            instructions.push(Instruction::Operand(Value::new(ValueKind::Number(
-                stack_idx as f64,
-            ))));
+            instructions.push(Instruction::Operand(Constant::Index(stack_idx)));
             instructions.push(Instruction::Op(Opcode::SetLocal));
         }
 
@@ -406,9 +401,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         }
 
         instructions.push(Instruction::Op(Opcode::Constant));
-        instructions.push(Instruction::Operand(Value::new(ValueKind::Number(
-            argument_len as f64,
-        ))));
+        instructions.push(Instruction::Operand(Constant::Index(argument_len)));
 
         instructions.push(Instruction::Op(Opcode::FunctionCall));
 
@@ -432,9 +425,8 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         let then_instructions = self.accept_expr(&c.then);
         let then_instruction_count = then_instructions.len();
         instructions.extend(then_instructions);
-        instructions[then_jmp_idx] = Instruction::Operand(Value::new(ValueKind::Number(
-            (then_instruction_count + 3) as f64,
-        )));
+        instructions[then_jmp_idx] =
+            Instruction::Operand(Constant::Index(then_instruction_count + 3));
 
         instructions.push(Instruction::Op(Opcode::Constant));
         let else_jmp_idx = instructions.len();
@@ -443,8 +435,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
 
         let else_instructions = self.accept_expr(&c.el);
         let else_instruction_count = else_instructions.len();
-        instructions[else_jmp_idx] =
-            Instruction::Operand(Value::new(ValueKind::Number(else_instruction_count as f64)));
+        instructions[else_jmp_idx] = Instruction::Operand(Constant::Index(else_instruction_count));
         instructions.extend(else_instructions);
 
         instructions
@@ -468,9 +459,9 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
             };
 
             instructions.push(Instruction::Op(Opcode::Constant));
-            instructions.push(Instruction::Operand(Value::new(ValueKind::Ident(
+            instructions.push(Instruction::Operand(Constant::Identifier(
                 std::str::from_utf8(ident).unwrap().to_owned(),
-            ))));
+            )));
 
             instructions.push(Instruction::Op(Opcode::StaticPropertyAccess));
         }
@@ -492,5 +483,41 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         let mut target = self.accept_expr(&p.1);
         target.push(Instruction::Op(p.0.into()));
         target
+    }
+
+    fn visit_array_literal(&mut self, a: &ArrayLiteral<'a>) -> Vec<Instruction> {
+        let element_count = a.len();
+        let mut instructions = Vec::new();
+        for expr in a.iter().rev() {
+            instructions.extend(self.accept_expr(expr));
+        }
+        instructions.push(Instruction::Op(Opcode::Constant));
+        instructions.push(Instruction::Operand(Constant::Index(element_count)));
+
+        instructions.push(Instruction::Op(Opcode::ArrayLiteral));
+        instructions
+    }
+
+    fn visit_object_literal(&mut self, o: &ObjectLiteral<'a>) -> Vec<Instruction> {
+        let property_count = o.len();
+        let mut instructions = Vec::new();
+
+        // First we emit instructions for all object values
+        for (_, value) in o.iter() {
+            instructions.extend(self.accept_expr(value));
+        }
+
+        instructions.push(Instruction::Op(Opcode::Constant));
+        instructions.push(Instruction::Operand(Constant::Index(property_count)));
+        instructions.push(Instruction::Op(Opcode::ObjectLiteral));
+
+        // ...And then we emit instructions for keys, because it shouldn't try to evaluate them at runtime
+        for (key, _) in o.iter() {
+            instructions.push(Instruction::Operand(Constant::Identifier(
+                String::from_utf8_lossy(key).to_string(),
+            )));
+        }
+
+        instructions
     }
 }
