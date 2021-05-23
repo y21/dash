@@ -1,9 +1,14 @@
-use crate::vm::value::{Object, Value, ValueKind};
+use crate::vm::{
+    instruction::Constant,
+    value::{Object, Value, ValueKind},
+};
 
 use super::{statement::FunctionDeclaration, token::TokenType};
 
 pub type Seq<'a> = (Box<Expr<'a>>, Box<Expr<'a>>);
 pub type Postfix<'a> = (TokenType, Box<Expr<'a>>);
+pub type ArrayLiteral<'a> = Vec<Expr<'a>>;
+pub type ObjectLiteral<'a> = Vec<(/*(Expr<'a>*/ &'a [u8], Expr<'a>)>;
 
 #[derive(Debug, Clone)]
 pub enum Expr<'a> {
@@ -18,6 +23,8 @@ pub enum Expr<'a> {
     Sequence(Seq<'a>),
     Postfix(Postfix<'a>),
     Function(FunctionDeclaration<'a>),
+    Array(ArrayLiteral<'a>),
+    Object(ObjectLiteral<'a>),
 }
 
 impl<'a> Expr<'a> {
@@ -153,9 +160,9 @@ impl<'a> LiteralExpr<'a> {
         match self {
             Self::Boolean(b) => Value::new(ValueKind::Bool(*b)),
             Self::Number(n) => Value::new(ValueKind::Number(*n)),
-            Self::Identifier(i) => {
-                Value::new(ValueKind::Ident(std::str::from_utf8(i).unwrap().to_owned()))
-            }
+            Self::Identifier(i) => Value::new(ValueKind::Constant(Box::new(Constant::Identifier(
+                std::str::from_utf8(i).unwrap().to_owned(),
+            )))),
             Self::String(s) => Value::new(ValueKind::Object(Box::new(Object::String(
                 std::str::from_utf8(s).unwrap().to_owned(),
             )))),

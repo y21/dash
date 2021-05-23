@@ -386,6 +386,27 @@ impl<'a> Parser<'a> {
             TokenType::UndefinedLit => Expr::undefined_literal(),
             TokenType::Identifier => Expr::identifier(full),
             TokenType::String => Expr::string_literal(full),
+            TokenType::LeftSquareBrace => {
+                let mut items = Vec::new();
+                while !self.expect_and_skip(&[TokenType::RightSquareBrace], false) {
+                    self.expect_and_skip(&[TokenType::Comma], false);
+                    items.push(self.expression()?);
+                }
+                Expr::Array(items)
+            }
+            TokenType::LeftBrace => {
+                let mut items = Vec::new();
+                while !self.expect_and_skip(&[TokenType::RightBrace], false) {
+                    self.expect_and_skip(&[TokenType::Comma], false);
+                    let key = self.next()?.full;
+
+                    // TODO: support property shorthand, e.g. { test } where test is a var in scope
+                    self.expect_and_skip(&[TokenType::Colon], true);
+                    let value = self.expression()?;
+                    items.push((key, value));
+                }
+                Expr::Object(items)
+            }
             TokenType::Number => {
                 Expr::number_literal(std::str::from_utf8(full).unwrap().parse::<f64>().unwrap())
             }

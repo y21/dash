@@ -1,6 +1,6 @@
 use crate::parser::token::TokenType;
 
-use super::value::Value;
+use super::value::{Value, ValueKind};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Opcode {
@@ -52,6 +52,9 @@ pub enum Opcode {
     StrictEquality,
     PostfixIncrement,
     PostfixDecrement,
+    Void,
+    ArrayLiteral,
+    ObjectLiteral,
 }
 
 impl From<TokenType> for Opcode {
@@ -84,9 +87,53 @@ impl From<TokenType> for Opcode {
 }
 
 #[derive(Debug, Clone)]
+pub enum Constant {
+    JsValue(Value),
+    Identifier(String),
+    Index(usize),
+}
+
+impl Constant {
+    pub fn into_value(self) -> Option<Value> {
+        match self {
+            Self::JsValue(v) => Some(v),
+            _ => None,
+        }
+    }
+
+    pub fn try_into_value(self) -> Value {
+        match self {
+            Self::JsValue(v) => v,
+            _ => Value::new(ValueKind::Constant(Box::new(self))),
+        }
+    }
+
+    pub fn into_ident(self) -> Option<String> {
+        match self {
+            Self::Identifier(ident) => Some(ident),
+            _ => None,
+        }
+    }
+
+    pub fn into_index(self) -> Option<usize> {
+        match self {
+            Self::Index(idx) => Some(idx),
+            _ => None,
+        }
+    }
+
+    pub fn as_index(&self) -> Option<usize> {
+        match self {
+            Self::Index(idx) => Some(*idx),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum Instruction {
     Op(Opcode),
-    Operand(Value),
+    Operand(Constant),
 }
 
 impl Instruction {
@@ -104,7 +151,7 @@ impl Instruction {
         }
     }
 
-    pub fn into_operand(self) -> Value {
+    pub fn into_operand(self) -> Constant {
         match self {
             Self::Operand(o) => o,
             _ => unreachable!(),

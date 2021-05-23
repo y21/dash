@@ -7,19 +7,20 @@ pub mod statics;
 pub mod upvalue;
 pub mod value;
 
-use std::{any::Any, cell::RefCell, rc::Rc};
+use std::{any::Any, cell::RefCell, collections::HashMap, rc::Rc};
 
 use instruction::{Instruction, Opcode};
 use value::Value;
 
 use crate::vm::{
     upvalue::Upvalue,
-    value::{CallContext, Closure, Compare, ValueKind},
+    value::{Array, CallContext, Closure, Compare, ValueKind},
 };
 
 use self::{
     environment::Environment,
     frame::Frame,
+    instruction::Constant,
     stack::Stack,
     statics::Statics,
     value::{AnyObject, FunctionKind, Object, UserFunction},
@@ -123,13 +124,14 @@ impl VM {
         Some(&self.buffer()[self.ip() - 1])
     }
 
-    fn read_constant(&mut self) -> Option<Value> {
+    fn read_constant(&mut self) -> Option<Constant> {
         self.next().cloned().map(|x| x.into_operand())
     }
 
     fn read_user_function(&mut self) -> Option<UserFunction> {
         self.read_constant()
-            .and_then(|c| c.into_object())
+            .and_then(|c| c.into_value())
+            .and_then(|v| v.into_object())
             .and_then(|o| match o {
                 Object::Function(FunctionKind::User(f)) => Some(f),
                 _ => None,
@@ -138,6 +140,14 @@ impl VM {
 
     fn read_number(&mut self) -> f64 {
         self.stack.pop().borrow().as_number()
+    }
+
+    fn read_index(&mut self) -> Option<usize> {
+        self.stack
+            .pop()
+            .borrow()
+            .as_constant()
+            .and_then(|c| c.as_index())
     }
 
     fn pop_owned(&mut self) -> Option<Value> {
@@ -191,7 +201,7 @@ impl VM {
             match instruction {
                 Opcode::Eof => return Ok(()),
                 Opcode::Constant => {
-                    let constant = self.read_constant().unwrap();
+                    let constant = self.read_constant().map(|c| c.try_into_value()).unwrap();
 
                     self.stack.push(Rc::new(RefCell::new(constant)));
                 }
@@ -206,7 +216,7 @@ impl VM {
                     for _ in 0..closure.func.upvalues {
                         let is_local =
                             matches!(self.next().unwrap(), Instruction::Op(Opcode::UpvalueLocal));
-                        let stack_idx = self.read_constant().unwrap().as_number() as usize;
+                        let stack_idx = self.read_constant().and_then(|c| c.into_index()).unwrap();
                         if is_local {
                             let value =
                                 unsafe { self.stack.peek_unchecked(self.frame().sp + stack_idx) };
@@ -267,12 +277,12 @@ impl VM {
                     self.stack.push(value);
                 }
                 Opcode::SetLocal => {
-                    let stack_idx = self.read_number() as usize;
+                    let stack_idx = self.read_index().unwrap();
                     let value = self.stack.pop();
                     self.stack.set_relative(self.frame().sp, stack_idx, value);
                 }
                 Opcode::GetLocal => {
-                    let stack_idx = self.read_number() as usize;
+                    let stack_idx = self.read_index().unwrap();
 
                     unsafe {
                         self.stack.push(
@@ -283,7 +293,7 @@ impl VM {
                     };
                 }
                 Opcode::GetUpvalue => {
-                    let upvalue_idx = self.read_number() as usize;
+                    let upvalue_idx = self.read_index().unwrap();
 
                     let value = {
                         let closure_cell = self.frame().func.borrow();
@@ -297,7 +307,7 @@ impl VM {
                     self.stack.push(value);
                 }
                 Opcode::ShortJmpIfFalse => {
-                    let instruction_count = self.pop_owned().unwrap().as_number() as usize;
+                    let instruction_count = self.read_index().unwrap();
 
                     let condition_cell = self.stack.pop();
                     let condition = condition_cell.borrow().is_truthy();
@@ -307,7 +317,7 @@ impl VM {
                     }
                 }
                 Opcode::ShortJmpIfTrue => {
-                    let instruction_count = self.pop_owned().unwrap().as_number() as usize;
+                    let instruction_count = self.read_index().unwrap();
 
                     let condition_cell = unsafe { self.stack.get_unchecked() };
                     let condition = condition_cell.borrow().is_truthy();
@@ -317,11 +327,11 @@ impl VM {
                     }
                 }
                 Opcode::ShortJmp => {
-                    let instruction_count = self.pop_owned().unwrap().as_number() as usize;
+                    let instruction_count = self.read_index().unwrap();
                     self.frame_mut().ip += instruction_count;
                 }
                 Opcode::BackJmp => {
-                    let instruction_count = self.pop_owned().unwrap().as_number() as usize;
+                    let instruction_count = self.read_index().unwrap();
                     self.frame_mut().ip -= instruction_count;
                 }
                 Opcode::Pop => {
@@ -350,7 +360,7 @@ impl VM {
                     self.stack.push(target_cell);
                 }
                 Opcode::FunctionCall => {
-                    let param_count = self.read_number() as usize;
+                    let param_count = self.read_index().unwrap();
                     let mut params = Vec::new();
                     for _ in 0..param_count {
                         params.push(self.stack.pop());
@@ -499,6 +509,46 @@ impl VM {
                     let mut target = target_cell.borrow_mut();
                     *target = value;
                     self.stack.push(target_cell.clone());
+                }
+                Opcode::Void => {
+                    self.stack.pop();
+                    self.stack.push(Value::new(ValueKind::Undefined).into());
+                }
+                Opcode::ArrayLiteral => {
+                    let element_count = self.read_index().unwrap();
+                    let mut elements = Vec::with_capacity(element_count);
+                    for _ in 0..element_count {
+                        elements.push(self.stack.pop());
+                    }
+                    self.stack.push(
+                        Value::new(ValueKind::Object(Box::new(Object::Array(Array::new(
+                            elements,
+                        )))))
+                        .into(),
+                    )
+                }
+                Opcode::ObjectLiteral => {
+                    let property_count = self.read_index().unwrap();
+
+                    let mut fields = HashMap::new();
+                    let mut raw_fields = Vec::new();
+
+                    for _ in 0..property_count {
+                        let value = self.stack.pop();
+                        raw_fields.push(value);
+                    }
+
+                    for value in raw_fields.into_iter().rev() {
+                        let key = self.read_constant().unwrap().into_ident().unwrap();
+                        fields.insert(key.into_boxed_str(), value);
+                    }
+
+                    let value = Value {
+                        constructor: None,
+                        fields,
+                        kind: ValueKind::Object(Box::new(Object::Any(AnyObject {}))),
+                    };
+                    self.stack.push(value.into());
                 }
                 Opcode::ComputedPropertyAccess => {
                     let property_cell = self.stack.pop();
