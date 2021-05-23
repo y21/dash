@@ -6,8 +6,6 @@ use crate::util;
 #[derive(Debug)]
 pub struct Lexer<'a> {
     input: &'a [u8],
-    tokens: Vec<Token<'a>>,
-    errors: Vec<Error>,
     idx: usize,
     line: usize,
     start: usize,
@@ -25,12 +23,15 @@ pub enum ErrorKind {
     UnexpectedEof,
 }
 
+pub enum Node<'a> {
+    Token(Token<'a>),
+    Error(Error),
+}
+
 impl<'a> Lexer<'a> {
     pub fn new(source: &'a str) -> Self {
         Self {
             input: source.as_bytes(),
-            tokens: Vec::new(),
-            errors: Vec::new(),
             idx: 0,
             line: 0,
             start: 0,
@@ -55,52 +56,55 @@ impl<'a> Lexer<'a> {
         self.input[self.idx]
     }
 
-    pub fn create_contextified_token(&mut self, ty: TokenType) {
-        let tok = Token {
+    pub fn create_contextified_token(&mut self, ty: TokenType) -> Node<'a> {
+        Node::Token(Token {
             ty,
             loc: Location { line: self.line },
             full: self.get_lexeme(),
-        };
-
-        self.tokens.push(tok);
+        })
     }
 
     pub fn create_contextified_conditional_token(
         &mut self,
         default: Option<TokenType>,
         tokens: &[(&[u8], TokenType)],
-    ) {
+    ) -> Node<'a> {
         for (expect, token) in tokens {
             let from = self.idx;
             let slice = self.safe_subslice(from, from + expect.len());
 
             if slice.eq(*expect) {
-                self.create_contextified_token(*token);
+                let tok = self.create_contextified_token(*token);
                 self.idx += expect.len();
-                return;
+                return tok;
             }
         }
 
         if let Some(tt) = default {
-            self.create_contextified_token(tt);
+            return self.create_contextified_token(tt);
+        }
+
+        // TODO: can we actually reach this branch?
+        unreachable!()
+    }
+
+    pub fn create_error(&mut self, kind: ErrorKind) -> Error {
+        Error {
+            loc: Location { line: self.line },
+            kind,
         }
     }
 
-    pub fn create_error(&mut self, kind: ErrorKind) {
-        self.errors.push(Error {
-            loc: Location { line: self.line },
-            kind,
-        });
-    }
-
-    pub fn create_contextified_token_with_lexeme(&mut self, ty: TokenType, lexeme: &'a [u8]) {
-        let tok = Token {
+    pub fn create_contextified_token_with_lexeme(
+        &mut self,
+        ty: TokenType,
+        lexeme: &'a [u8],
+    ) -> Token<'a> {
+        Token {
             ty,
             loc: Location { line: self.line },
             full: lexeme,
-        };
-
-        self.tokens.push(tok);
+        }
     }
 
     pub fn get_lexeme(&self) -> &'a [u8] {
@@ -136,7 +140,7 @@ impl<'a> Lexer<'a> {
         true
     }
 
-    pub fn read_string_literal(&mut self) {
+    pub fn read_string_literal(&mut self) -> Node<'a> {
         let quote = self.input[self.idx - 1];
         let mut found_quote = false;
         while !self.is_eof() {
@@ -155,15 +159,14 @@ impl<'a> Lexer<'a> {
         }
 
         if !found_quote && self.is_eof() {
-            self.create_error(ErrorKind::UnexpectedEof);
-            return;
+            return Node::Error(self.create_error(ErrorKind::UnexpectedEof));
         }
 
         let lexeme = self.subslice(self.start + 1..self.idx - 1);
-        self.create_contextified_token_with_lexeme(TokenType::String, lexeme)
+        Node::Token(self.create_contextified_token_with_lexeme(TokenType::String, lexeme))
     }
 
-    pub fn read_number_literal(&mut self) {
+    pub fn read_number_literal(&mut self) -> Node<'a> {
         let mut is_float = false;
         let mut is_exp = false;
 
@@ -198,7 +201,7 @@ impl<'a> Lexer<'a> {
         self.create_contextified_token(TokenType::Number)
     }
 
-    pub fn read_identifier(&mut self) {
+    pub fn read_identifier(&mut self) -> Node<'a> {
         while !self.is_eof() {
             let cur = self.current_real();
 
@@ -210,16 +213,18 @@ impl<'a> Lexer<'a> {
         }
 
         let lexeme = self.get_lexeme();
-        self.create_contextified_token(lexeme.into());
+        self.create_contextified_token(lexeme.into())
     }
 
-    pub fn scan_next(&mut self) {
+    pub fn scan_next(&mut self) -> Option<Node<'a>> {
+        self.skip_whitespaces();
+        self.start = self.idx;
         let cur = match self.next() {
             Some(c) => c,
-            None => return,
+            None => return None,
         };
 
-        match cur {
+        Some(match cur {
             b'(' => self.create_contextified_token(TokenType::LeftParen),
             b')' => self.create_contextified_token(TokenType::RightParen),
             b'{' => self.create_contextified_token(TokenType::LeftBrace),
@@ -319,31 +324,59 @@ impl<'a> Lexer<'a> {
                 ],
             ),
             b'"' | b'\'' => self.read_string_literal(),
-            b'\n' => self.line += 1,
-            b' ' => {}
             _ => {
                 if util::is_digit(cur) {
-                    self.read_number_literal();
+                    self.read_number_literal()
                 } else if util::is_alpha(cur) {
-                    self.read_identifier();
+                    self.read_identifier()
                 } else {
-                    self.create_error(ErrorKind::UnknownCharacter(cur))
+                    Node::Error(self.create_error(ErrorKind::UnknownCharacter(cur)))
                 }
             }
-        };
+        })
     }
 
-    pub fn scan_all(mut self) -> Result<Vec<Token<'a>>, Vec<Error>> {
+    pub fn skip_whitespaces(&mut self) {
         while !self.is_eof() {
-            self.start = self.idx;
-            self.scan_next();
+            let ch = if let Some(c) = self.current() {
+                c
+            } else {
+                return;
+            };
+
+            if ch == b'\n' {
+                self.line += 1;
+            } else if ch != b' ' {
+                return;
+            }
+
+            self.advance();
+        }
+    }
+
+    pub fn scan_all(self) -> Result<Vec<Token<'a>>, Vec<Error>> {
+        let mut errors = Vec::new();
+        let mut tokens = Vec::new();
+        for node in self {
+            match node {
+                Node::Token(t) => tokens.push(t),
+                Node::Error(e) => errors.push(e),
+            }
         }
 
         // If there are errors, return them
-        if self.errors.len() > 0 {
-            Err(self.errors)
+        if errors.len() > 0 {
+            Err(errors)
         } else {
-            Ok(self.tokens)
+            Ok(tokens)
         }
+    }
+}
+
+impl<'a> Iterator for Lexer<'a> {
+    type Item = Node<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.scan_next()
     }
 }
