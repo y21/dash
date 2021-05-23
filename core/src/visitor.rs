@@ -1,7 +1,7 @@
 use crate::parser::{
     expr::{
-        AssignmentExpr, BinaryExpr, ConditionalExpr, Expr, FunctionCall, GroupingExpr, LiteralExpr,
-        Postfix, PropertyAccessExpr, Seq, UnaryExpr,
+        ArrayLiteral, AssignmentExpr, BinaryExpr, ConditionalExpr, Expr, FunctionCall,
+        GroupingExpr, LiteralExpr, ObjectLiteral, Postfix, PropertyAccessExpr, Seq, UnaryExpr,
     },
     statement::{
         BlockStatement, FunctionDeclaration, IfStatement, ReturnStatement, Statement,
@@ -35,6 +35,8 @@ pub trait Visitor<'a, V> {
             Expr::Sequence(e) => self.visit_sequence_expr(e),
             Expr::Postfix(e) => self.visit_postfix_expr(e),
             Expr::Function(e) => self.visit_function_expr(e),
+            Expr::Array(e) => self.visit_array_literal(e),
+            Expr::Object(e) => self.visit_object_literal(e),
         }
     }
 
@@ -56,4 +58,6 @@ pub trait Visitor<'a, V> {
     fn visit_sequence_expr(&mut self, s: &Seq<'a>) -> V;
     fn visit_postfix_expr(&mut self, p: &Postfix<'a>) -> V;
     fn visit_function_expr(&mut self, f: &FunctionDeclaration<'a>) -> V;
+    fn visit_array_literal(&mut self, a: &ArrayLiteral<'a>) -> V;
+    fn visit_object_literal(&mut self, o: &ObjectLiteral<'a>) -> V;
 }
