@@ -1,6 +1,6 @@
 use crate::vm::value::{Object, Value, ValueKind};
 
-use super::token::TokenType;
+use super::{statement::FunctionDeclaration, token::TokenType};
 
 pub type Seq<'a> = (Box<Expr<'a>>, Box<Expr<'a>>);
 pub type Postfix<'a> = (TokenType, Box<Expr<'a>>);
@@ -17,6 +17,7 @@ pub enum Expr<'a> {
     PropertyAccess(PropertyAccessExpr<'a>),
     Sequence(Seq<'a>),
     Postfix(Postfix<'a>),
+    Function(FunctionDeclaration<'a>),
 }
 
 impl<'a> Expr<'a> {

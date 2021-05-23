@@ -34,6 +34,7 @@ pub trait Visitor<'a, V> {
             Expr::PropertyAccess(e) => self.visit_property_access_expr(e),
             Expr::Sequence(e) => self.visit_sequence_expr(e),
             Expr::Postfix(e) => self.visit_postfix_expr(e),
+            Expr::Function(e) => self.visit_function_expr(e),
         }
     }
 
@@ -54,4 +55,5 @@ pub trait Visitor<'a, V> {
     fn visit_property_access_expr(&mut self, e: &PropertyAccessExpr<'a>) -> V;
     fn visit_sequence_expr(&mut self, s: &Seq<'a>) -> V;
     fn visit_postfix_expr(&mut self, p: &Postfix<'a>) -> V;
+    fn visit_function_expr(&mut self, f: &FunctionDeclaration<'a>) -> V;
 }

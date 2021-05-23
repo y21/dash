@@ -1,5 +1,6 @@
 use super::{
     expr::{Expr, UnaryExpr},
+    lexer::Lexer,
     statement::{
         BlockStatement, FunctionDeclaration, IfStatement, ReturnStatement, Statement,
         VariableDeclaration, VariableDeclarationKind, WhileLoop,
@@ -91,7 +92,14 @@ impl<'a> Parser<'a> {
     }
 
     pub fn function(&mut self) -> Option<FunctionDeclaration<'a>> {
-        let name = self.next()?.full;
+        let name = {
+            let ty = self.current()?.ty;
+            if ty == TokenType::Identifier {
+                self.next().map(|x| x.full)
+            } else {
+                None
+            }
+        };
 
         if !self.expect_and_skip(&[TokenType::LeftParen], true) {
             return None;
@@ -388,6 +396,7 @@ impl<'a> Parser<'a> {
                 }
                 Expr::grouping(expr)
             }
+            TokenType::Function => Expr::Function(self.function()?),
             _ => {
                 let cur = self.previous().cloned()?;
                 self.create_error(ErrorKind::UnknownToken(cur));

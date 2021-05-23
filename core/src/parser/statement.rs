@@ -31,13 +31,17 @@ impl<'a> WhileLoop<'a> {
 
 #[derive(Debug, Clone)]
 pub struct FunctionDeclaration<'a> {
-    pub name: &'a [u8],
+    pub name: Option<&'a [u8]>,
     pub arguments: Vec<&'a [u8]>,
     pub statements: Vec<Statement<'a>>,
 }
 
 impl<'a> FunctionDeclaration<'a> {
-    pub fn new(name: &'a [u8], arguments: Vec<&'a [u8]>, statements: Vec<Statement<'a>>) -> Self {
+    pub fn new(
+        name: Option<&'a [u8]>,
+        arguments: Vec<&'a [u8]>,
+        statements: Vec<Statement<'a>>,
+    ) -> Self {
         Self {
             name,
             arguments,

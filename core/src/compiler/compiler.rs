@@ -300,7 +300,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         instructions
     }
 
-    fn visit_function_declaration(&mut self, f: &FunctionDeclaration<'a>) -> Vec<Instruction> {
+    fn visit_function_expr(&mut self, f: &FunctionDeclaration<'a>) -> Vec<Instruction> {
         let mut instructions = vec![Instruction::Op(Opcode::Closure)];
 
         let params = f.arguments.len();
@@ -356,15 +356,22 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
                 upvalue.idx as f64,
             ))));
         }
+        instructions
+    }
+
+    fn visit_function_declaration(&mut self, f: &FunctionDeclaration<'a>) -> Vec<Instruction> {
+        let mut instructions = self.visit_function_expr(f);
 
         if self.scope.is_global() {
             instructions.push(Instruction::Op(Opcode::Constant));
             instructions.push(Instruction::Operand(Value::new(ValueKind::Ident(
-                std::str::from_utf8(f.name).unwrap().to_owned(),
+                std::str::from_utf8(f.name.unwrap()).unwrap().to_owned(),
             ))));
             instructions.push(Instruction::Op(Opcode::SetGlobal));
         } else {
-            let stack_idx = self.scope.push_local(Local::new(f.name, self.scope.depth));
+            let stack_idx = self
+                .scope
+                .push_local(Local::new(f.name.unwrap(), self.scope.depth));
             instructions.push(Instruction::Op(Opcode::Constant));
             instructions.push(Instruction::Operand(Value::new(ValueKind::Number(
                 stack_idx as f64,

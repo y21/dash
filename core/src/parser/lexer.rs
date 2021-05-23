@@ -42,7 +42,7 @@ impl<'a> Lexer<'a> {
         self.idx >= self.input.len()
     }
 
-    pub fn next(&mut self) -> Option<u8> {
+    pub fn next_char(&mut self) -> Option<u8> {
         let cur = self.current()?;
         self.advance();
         Some(cur)
@@ -219,7 +219,7 @@ impl<'a> Lexer<'a> {
     pub fn scan_next(&mut self) -> Option<Node<'a>> {
         self.skip_whitespaces();
         self.start = self.idx;
-        let cur = match self.next() {
+        let cur = match self.next_char() {
             Some(c) => c,
             None => return None,
         };
