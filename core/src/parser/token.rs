@@ -28,7 +28,7 @@ pub enum TokenType {
     RemainderAssignment,
     Remainder,
     ExponentiationAssignment,
-    Exponential,
+    Exponentiation,
     LeftShift,
     LeftShiftAssignment,
     RightShiftAssignment,
