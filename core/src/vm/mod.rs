@@ -363,7 +363,7 @@ impl VM {
                 Opcode::ShortJmpIfFalse => {
                     let instruction_count = self.read_index().unwrap();
 
-                    let condition_cell = self.stack.pop();
+                    let condition_cell = unsafe { self.stack.get_unchecked() };
                     let condition = condition_cell.borrow().is_truthy();
 
                     if !condition {
