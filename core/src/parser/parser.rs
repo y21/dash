@@ -1,6 +1,5 @@
 use super::{
     expr::{Expr, UnaryExpr},
-    lexer::Lexer,
     statement::{
         BlockStatement, FunctionDeclaration, IfStatement, ReturnStatement, Statement,
         VariableDeclaration, VariableDeclarationKind, WhileLoop,
@@ -266,7 +265,7 @@ impl<'a> Parser<'a> {
 
     pub fn comparison(&mut self) -> Option<Expr<'a>> {
         self.read_infix_expression(
-            |s| Self::term(s),
+            |s| Self::shift(s),
             &[
                 TokenType::Greater,
                 TokenType::Less,
@@ -278,15 +277,30 @@ impl<'a> Parser<'a> {
         )
     }
 
+    pub fn shift(&mut self) -> Option<Expr<'a>> {
+        self.read_infix_expression(
+            |s| Self::term(s),
+            &[
+                TokenType::LeftShift,
+                TokenType::RightShift,
+                TokenType::UnsignedRightShift,
+            ],
+        )
+    }
+
     pub fn term(&mut self) -> Option<Expr<'a>> {
         self.read_infix_expression(|s| Self::factor(s), &[TokenType::Plus, TokenType::Minus])
     }
 
     pub fn factor(&mut self) -> Option<Expr<'a>> {
         self.read_infix_expression(
-            |s| Self::unary(s),
+            |s| Self::pow(s),
             &[TokenType::Star, TokenType::Slash, TokenType::Remainder],
         )
+    }
+
+    pub fn pow(&mut self) -> Option<Expr<'a>> {
+        self.read_infix_expression(|s| Self::unary(s), &[TokenType::Exponentiation])
     }
 
     pub fn unary(&mut self) -> Option<Expr<'a>> {
