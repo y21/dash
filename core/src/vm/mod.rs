@@ -14,7 +14,12 @@ use value::Value;
 
 use crate::vm::{
     upvalue::Upvalue,
-    value::{Array, CallContext, Closure, Compare, ValueKind},
+    value::{
+        array::Array,
+        function::{CallContext, Closure, FunctionKind, UserFunction},
+        ops::compare::Compare,
+        ValueKind,
+    },
 };
 
 use self::{
@@ -23,13 +28,13 @@ use self::{
     instruction::Constant,
     stack::Stack,
     statics::Statics,
-    value::{AnyObject, FunctionKind, Object, UserFunction},
+    value::object::{AnyObject, Object},
 };
 
 #[derive(Debug)]
 pub enum VMError {}
 
-macro_rules! binary_op {
+/*macro_rules! binary_op {
     ($self:ident, $op:tt) => {
         let (b, a) = (
             $self.read_number(),
@@ -38,7 +43,7 @@ macro_rules! binary_op {
 
         $self.stack.push(Rc::new(RefCell::new(Value::new(ValueKind::Number(a $op b)))));
     }
-}
+}*/
 
 pub struct VM {
     /// Call stack
@@ -248,25 +253,66 @@ impl VM {
                         )))));
                 }
                 Opcode::Add => {
-                    binary_op!(self, +);
+                    let result = self.with_lhs_rhs_borrowed(Value::add).into();
+                    self.stack.push(result);
                 }
                 Opcode::Sub => {
-                    binary_op!(self, -);
+                    let result = self.with_lhs_rhs_borrowed(Value::sub).into();
+                    self.stack.push(result);
                 }
                 Opcode::Mul => {
-                    binary_op!(self, *);
+                    let result = self.with_lhs_rhs_borrowed(Value::mul).into();
+                    self.stack.push(result);
                 }
                 Opcode::Div => {
-                    binary_op!(self, /);
+                    let result = self.with_lhs_rhs_borrowed(Value::div).into();
+                    self.stack.push(result);
                 }
                 Opcode::Rem => {
-                    binary_op!(self, %);
+                    let result = self.with_lhs_rhs_borrowed(Value::rem).into();
+                    self.stack.push(result);
+                }
+                Opcode::Exponentiation => {
+                    let result = self.with_lhs_rhs_borrowed(Value::pow).into();
+                    self.stack.push(result);
+                }
+                Opcode::LeftShift => {
+                    let result = self.with_lhs_rhs_borrowed(Value::left_shift).into();
+                    self.stack.push(result);
+                }
+                Opcode::RightShift => {
+                    let result = self.with_lhs_rhs_borrowed(Value::right_shift).into();
+                    self.stack.push(result);
+                }
+                Opcode::UnsignedRightShift => {
+                    let result = self
+                        .with_lhs_rhs_borrowed(Value::unsigned_right_shift)
+                        .into();
+                    self.stack.push(result);
+                }
+                Opcode::BitwiseAnd => {
+                    let result = self.with_lhs_rhs_borrowed(Value::bitwise_and).into();
+                    self.stack.push(result);
+                }
+                Opcode::BitwiseOr => {
+                    let result = self.with_lhs_rhs_borrowed(Value::bitwise_or).into();
+                    self.stack.push(result);
+                }
+                Opcode::BitwiseXor => {
+                    let result = self.with_lhs_rhs_borrowed(Value::bitwise_xor).into();
+                    self.stack.push(result);
                 }
                 Opcode::SetGlobal => {
                     let name = self.pop_owned().unwrap().into_ident().unwrap();
                     let value = self.stack.pop();
 
                     self.global.set_var(name, value);
+                }
+                Opcode::SetGlobalNoValue => {
+                    let name = self.pop_owned().unwrap().into_ident().unwrap();
+
+                    self.global
+                        .set_var(name, Value::new(ValueKind::Undefined).into());
                 }
                 Opcode::GetGlobal => {
                     let name = self.pop_owned().unwrap().into_ident().unwrap();
@@ -280,6 +326,14 @@ impl VM {
                     let stack_idx = self.read_index().unwrap();
                     let value = self.stack.pop();
                     self.stack.set_relative(self.frame().sp, stack_idx, value);
+                }
+                Opcode::SetLocalNoValue => {
+                    let stack_idx = self.read_index().unwrap();
+                    self.stack.set_relative(
+                        self.frame().sp,
+                        stack_idx,
+                        Value::new(ValueKind::Undefined).into(),
+                    );
                 }
                 Opcode::GetLocal => {
                     let stack_idx = self.read_index().unwrap();
@@ -339,24 +393,109 @@ impl VM {
                 }
                 Opcode::AdditionAssignment => {
                     let target_cell = self.stack.pop();
-
                     let value_cell = self.stack.pop();
-
                     let value = value_cell.borrow();
-
                     target_cell.borrow_mut().add_assign(&*value);
-
                     self.stack.push(target_cell);
                 }
                 Opcode::SubtractionAssignment => {
                     let target_cell = self.stack.pop();
-
                     let value_cell = self.stack.pop();
-
                     let value = value_cell.borrow();
-
                     target_cell.borrow_mut().sub_assign(&*value);
-
+                    self.stack.push(target_cell);
+                }
+                Opcode::MultiplicationAssignment => {
+                    let target_cell = self.stack.pop();
+                    let value_cell = self.stack.pop();
+                    let value = value_cell.borrow();
+                    target_cell.borrow_mut().mul_assign(&*value);
+                    self.stack.push(target_cell);
+                }
+                Opcode::DivisionAssignment => {
+                    let target_cell = self.stack.pop();
+                    let value_cell = self.stack.pop();
+                    let value = value_cell.borrow();
+                    target_cell.borrow_mut().div_assign(&*value);
+                    self.stack.push(target_cell);
+                }
+                Opcode::RemainderAssignment => {
+                    let target_cell = self.stack.pop();
+                    let value_cell = self.stack.pop();
+                    let value = value_cell.borrow();
+                    target_cell.borrow_mut().rem_assign(&*value);
+                    self.stack.push(target_cell);
+                }
+                Opcode::ExponentiationAssignment => {
+                    let target_cell = self.stack.pop();
+                    let value_cell = self.stack.pop();
+                    let value = value_cell.borrow();
+                    target_cell.borrow_mut().pow_assign(&*value);
+                    self.stack.push(target_cell);
+                }
+                Opcode::LeftShiftAssignment => {
+                    let target_cell = self.stack.pop();
+                    let value_cell = self.stack.pop();
+                    let value = value_cell.borrow();
+                    target_cell.borrow_mut().left_shift_assign(&*value);
+                    self.stack.push(target_cell);
+                }
+                Opcode::RightShiftAssignment => {
+                    let target_cell = self.stack.pop();
+                    let value_cell = self.stack.pop();
+                    let value = value_cell.borrow();
+                    target_cell.borrow_mut().right_shift_assign(&*value);
+                    self.stack.push(target_cell);
+                }
+                Opcode::UnsignedRightShiftAssignment => {
+                    let target_cell = self.stack.pop();
+                    let value_cell = self.stack.pop();
+                    let value = value_cell.borrow();
+                    target_cell
+                        .borrow_mut()
+                        .unsigned_right_shift_assign(&*value);
+                    self.stack.push(target_cell);
+                }
+                Opcode::BitwiseAndAssignment => {
+                    let target_cell = self.stack.pop();
+                    let value_cell = self.stack.pop();
+                    let value = value_cell.borrow();
+                    target_cell.borrow_mut().bitwise_and_assign(&*value);
+                    self.stack.push(target_cell);
+                }
+                Opcode::BitwiseOrAssignment => {
+                    let target_cell = self.stack.pop();
+                    let value_cell = self.stack.pop();
+                    let value = value_cell.borrow();
+                    target_cell.borrow_mut().bitwise_or_assign(&*value);
+                    self.stack.push(target_cell);
+                }
+                Opcode::BitwiseXorAssignment => {
+                    let target_cell = self.stack.pop();
+                    let value_cell = self.stack.pop();
+                    let value = value_cell.borrow();
+                    target_cell.borrow_mut().bitwise_xor_assign(&*value);
+                    self.stack.push(target_cell);
+                }
+                Opcode::LogicalAndAssignment => {
+                    let target_cell = self.stack.pop();
+                    let value_cell = self.stack.pop();
+                    let value = value_cell.borrow();
+                    target_cell.borrow_mut().logical_and_assign(&*value);
+                    self.stack.push(target_cell);
+                }
+                Opcode::LogicalOrAssignment => {
+                    let target_cell = self.stack.pop();
+                    let value_cell = self.stack.pop();
+                    let value = value_cell.borrow();
+                    target_cell.borrow_mut().logical_and_assign(&*value);
+                    self.stack.push(target_cell);
+                }
+                Opcode::LogicalNullishAssignment => {
+                    let target_cell = self.stack.pop();
+                    let value_cell = self.stack.pop();
+                    let value = value_cell.borrow();
+                    target_cell.borrow_mut().nullish_coalescing_assign(&*value);
                     self.stack.push(target_cell);
                 }
                 Opcode::FunctionCall => {
@@ -466,7 +605,8 @@ impl VM {
                 Opcode::StaticPropertyAccess => {
                     let property = self.pop_owned().unwrap().into_ident().unwrap();
                     let target_cell = self.stack.pop();
-                    let value = Value::get_property(&target_cell, &property).unwrap();
+                    let value =
+                        Value::unwrap_or_undefined(Value::get_property(&target_cell, &property));
                     self.stack.push(value);
                 }
                 Opcode::Equality => {
