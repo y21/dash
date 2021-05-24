@@ -380,6 +380,16 @@ impl VM {
                         self.frame_mut().ip += instruction_count;
                     }
                 }
+                Opcode::ShortJmpIfNullish => {
+                    let instruction_count = self.read_index().unwrap();
+
+                    let condition_cell = unsafe { self.stack.get_unchecked() };
+                    let condition = condition_cell.borrow().is_nullish();
+
+                    if !condition {
+                        self.frame_mut().ip += instruction_count;
+                    }
+                }
                 Opcode::ShortJmp => {
                     let instruction_count = self.read_index().unwrap();
                     self.frame_mut().ip += instruction_count;
@@ -611,13 +621,19 @@ impl VM {
                 }
                 Opcode::Equality => {
                     let eq = self.with_lhs_rhs_borrowed(Value::lossy_equal);
-
                     self.stack.push(Value::new(ValueKind::Bool(eq)).into());
+                }
+                Opcode::Inequality => {
+                    let eq = self.with_lhs_rhs_borrowed(Value::lossy_equal);
+                    self.stack.push(Value::new(ValueKind::Bool(!eq)).into());
                 }
                 Opcode::StrictEquality => {
                     let eq = self.with_lhs_rhs_borrowed(Value::strict_equal);
-
                     self.stack.push(Value::new(ValueKind::Bool(eq)).into());
+                }
+                Opcode::StrictInequality => {
+                    let eq = self.with_lhs_rhs_borrowed(Value::strict_equal);
+                    self.stack.push(Value::new(ValueKind::Bool(!eq)).into());
                 }
                 Opcode::Typeof => {
                     let value = self.stack.pop().borrow()._typeof().to_owned();
