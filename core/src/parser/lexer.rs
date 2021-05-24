@@ -33,7 +33,7 @@ impl<'a> Lexer<'a> {
         Self {
             input: source.as_bytes(),
             idx: 0,
-            line: 0,
+            line: 1,
             start: 0,
         }
     }
@@ -251,7 +251,7 @@ impl<'a> Lexer<'a> {
                 Some(TokenType::Star),
                 &[
                     (b"*=", TokenType::ExponentiationAssignment),
-                    (b"*", TokenType::Exponential),
+                    (b"*", TokenType::Exponentiation),
                     (b"=", TokenType::MultiplicationAssignment),
                 ],
             ),
@@ -312,7 +312,11 @@ impl<'a> Lexer<'a> {
             b'~' => self.create_contextified_token(TokenType::BitwiseNot),
             b'?' => self.create_contextified_conditional_token(
                 Some(TokenType::Conditional),
-                &[(b".", TokenType::OptionalChaining)],
+                &[
+                    (b"?=", TokenType::LogicalNullishAssignment),
+                    (b"?", TokenType::NullishCoalescing),
+                    (b".", TokenType::OptionalChaining),
+                ],
             ),
             b':' => self.create_contextified_token(TokenType::Colon),
             b';' => self.create_contextified_token(TokenType::Semicolon),
