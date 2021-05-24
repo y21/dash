@@ -164,18 +164,25 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         let mut jmp_idx: isize = -1;
 
         match e.operator {
-            TokenType::LogicalAnd | TokenType::LogicalOr => {
+            TokenType::LogicalAnd | TokenType::LogicalOr | TokenType::NullishCoalescing => {
                 let ty = e.operator;
 
                 instructions.push(Instruction::Op(Opcode::Constant));
                 jmp_idx = isize::try_from(instructions.len()).unwrap();
                 instructions.push(Instruction::Op(Opcode::Nop));
 
-                if ty == TokenType::LogicalAnd {
-                    instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
-                } else {
-                    instructions.push(Instruction::Op(Opcode::ShortJmpIfTrue));
-                }
+                match ty {
+                    TokenType::LogicalAnd => {
+                        instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse))
+                    }
+                    TokenType::LogicalOr => {
+                        instructions.push(Instruction::Op(Opcode::ShortJmpIfTrue))
+                    }
+                    TokenType::NullishCoalescing => {
+                        instructions.push(Instruction::Op(Opcode::ShortJmpIfNullish))
+                    }
+                    _ => {}
+                };
 
                 instructions.push(Instruction::Op(Opcode::Pop));
             }
