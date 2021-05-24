@@ -98,7 +98,20 @@ impl<'a> Compiler<'a> {
     }
 
     pub fn compile(self) -> Vec<Instruction> {
-        self.compile_frame().instructions
+        let is_top = self.top.is_none();
+        let mut instructions = self.compile_frame().instructions;
+
+        if is_top {
+            if let Some(last) = instructions.last() {
+                if matches!(last, Instruction::Op(Opcode::Pop)) {
+                    instructions.pop();
+                }
+            }
+
+            instructions.push(Instruction::Op(Opcode::Return));
+        }
+
+        instructions
     }
 
     fn compile_frame(mut self) -> CompileResult {
@@ -212,19 +225,21 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         instructions.push(Instruction::Op(Opcode::Nop));
 
         instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
+        instructions.push(Instruction::Op(Opcode::Pop));
 
         // Compile body
         instructions.extend(self.accept(&l.body));
 
         let instruction_count_ = instructions.len() - jmp_idx + 1;
         let instruction_count = Instruction::Operand(Constant::Index(instruction_count_));
-        instructions[jmp_idx] = instruction_count.clone();
+        instructions[jmp_idx] = instruction_count;
 
         // Emit backjump to evaluate condition
         instructions.push(Instruction::Op(Opcode::Constant));
         let backjmp_count = instruction_count_ + jmp_idx + 2;
         instructions.push(Instruction::Operand(Constant::Index(backjmp_count)));
         instructions.push(Instruction::Op(Opcode::BackJmp));
+        instructions.push(Instruction::Op(Opcode::Pop));
 
         instructions
     }
@@ -289,6 +304,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         let jmp_idx = instructions.len();
         instructions.push(Instruction::Op(Opcode::Nop));
         instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
+        instructions.push(Instruction::Op(Opcode::Pop));
 
         let then_instructions = self.accept(&i.then);
         instructions[jmp_idx] = Instruction::Operand(Constant::Index(then_instructions.len()));
@@ -432,6 +448,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         instructions.push(Instruction::Op(Opcode::Nop));
 
         instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
+        instructions.push(Instruction::Op(Opcode::Pop));
         let then_instructions = self.accept_expr(&c.then);
         let then_instruction_count = then_instructions.len();
         instructions.extend(then_instructions);

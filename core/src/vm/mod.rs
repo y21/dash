@@ -197,14 +197,14 @@ impl VM {
             .set_var("console", Rc::new(RefCell::new(console_obj)));
     }
 
-    pub fn interpret(&mut self) -> Result<(), VMError> {
+    pub fn interpret(&mut self) -> Result<Option<Rc<RefCell<Value>>>, VMError> {
         while !self.is_eof() {
             let instruction = self.buffer()[self.ip()].as_op();
 
             self.frame_mut().ip += 1;
 
             match instruction {
-                Opcode::Eof => return Ok(()),
+                Opcode::Eof => return Ok(None),
                 Opcode::Constant => {
                     let constant = self.read_constant().map(|c| c.try_into_value()).unwrap();
 
@@ -551,12 +551,18 @@ impl VM {
                 }
                 Opcode::Return => {
                     // Restore VM state to where we were before the function call happened
-                    let ret = self.stack.pop();
                     self.frames.pop();
                     if self.frames.get_stack_pointer() == 0 {
-                        return Ok(());
+                        if self.stack.get_stack_pointer() == 0 {
+                            return Ok(None);
+                        } else {
+                            return Ok(Some(self.stack.pop()));
+                        }
                     }
 
+                    let ret = self.stack.pop();
+
+                    // TODO: cleanup stack
                     self.stack.set_stack_pointer(self.frame().sp);
                     self.stack.push(ret);
                 }
@@ -721,12 +727,13 @@ impl VM {
             };
         }
 
-        Ok(())
+        Ok(None)
     }
 }
 
 impl Drop for VM {
     fn drop(&mut self) {
+        self.stack.dump();
         self.stack.reset();
         self.frames.reset();
     }
