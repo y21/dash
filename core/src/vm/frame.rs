@@ -1,9 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use super::{
-    instruction::Instruction,
-    value::{UserFunction, Value},
-};
+use super::{instruction::Instruction, value::Value};
 
 #[derive(Debug)]
 pub struct Frame {

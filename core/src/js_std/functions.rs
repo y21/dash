@@ -1,7 +1,7 @@
-use std::cell::RefCell;
 use std::rc::Rc;
+use std::{borrow::Cow, cell::RefCell};
 
-use crate::vm::value::{CallContext, Value, ValueKind};
+use crate::vm::value::{function::CallContext, Value, ValueKind};
 
 pub fn is_nan(value: CallContext) -> Rc<RefCell<Value>> {
     let value = match value.args.first() {

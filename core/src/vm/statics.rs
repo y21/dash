@@ -2,7 +2,8 @@ use std::{cell::RefCell, mem::MaybeUninit, rc::Rc};
 
 use crate::js_std;
 
-use super::value::{NativeFunction, Value};
+use super::value::function::NativeFunction;
+use super::value::Value;
 
 pub mod id {
     pub const CONSOLE_LOG: usize = 0;

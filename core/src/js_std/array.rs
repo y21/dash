@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::vm::value::{CallContext, Object, Value, ValueKind};
+use crate::vm::value::{function::CallContext, object::Object, Value, ValueKind};
 
 pub fn push(value: CallContext) -> Rc<RefCell<Value>> {
     let this_cell = value.receiver.unwrap();

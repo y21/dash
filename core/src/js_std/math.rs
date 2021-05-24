@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::vm::value::{CallContext, Value, ValueKind};
+use crate::vm::value::{function::CallContext, Value, ValueKind};
 
 pub fn pow(value: CallContext) -> Rc<RefCell<Value>> {
     let mut args = value.args.iter().rev();

@@ -1,4 +1,8 @@
-use super::value::*;
+use super::value::{
+    function::{FunctionKind, NativeFunction, UserFunction},
+    object::Object,
+    Value, ValueKind,
+};
 use std::cell::RefCell;
 use std::rc::Rc;
 

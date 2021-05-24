@@ -1,6 +1,6 @@
 use std::{borrow::Cow, cell::RefCell, rc::Rc};
 
-use crate::vm::value::{CallContext, Value, ValueKind};
+use crate::vm::value::{function::CallContext, Value, ValueKind};
 
 pub fn log(value: CallContext) -> Rc<RefCell<Value>> {
     let value_cell = value.args.first().map(|c| c.borrow());

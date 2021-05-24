@@ -13,8 +13,11 @@ use crate::{
     visitor::Visitor,
     vm::{
         instruction::{Constant, Instruction, Opcode},
-        stack::{IteratorOrder, OwnedStack, Stack},
-        value::{FunctionType, UserFunction, Value, ValueKind},
+        stack::{IteratorOrder, Stack},
+        value::{
+            function::{FunctionType, UserFunction},
+            Value, ValueKind,
+        },
     },
 };
 use std::{convert::TryFrom, ptr::NonNull};

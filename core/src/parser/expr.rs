@@ -1,6 +1,6 @@
 use crate::vm::{
     instruction::Constant,
-    value::{Object, Value, ValueKind},
+    value::{object::Object, Value, ValueKind},
 };
 
 use super::{statement::FunctionDeclaration, token::TokenType};
