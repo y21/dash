@@ -9,3 +9,10 @@ pub struct Frame {
     pub ip: usize,
     pub sp: usize,
 }
+
+#[derive(Debug)]
+pub struct UnwindHandler {
+    pub catch_ip: usize,
+    pub catch_value_sp: Option<usize>,
+    pub finally_ip: Option<usize>,
+}
