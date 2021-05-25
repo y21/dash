@@ -13,6 +13,7 @@ use instruction::{Instruction, Opcode};
 use value::Value;
 
 use crate::vm::{
+    frame::UnwindHandler,
     upvalue::Upvalue,
     value::{
         array::Array,
@@ -34,17 +35,6 @@ use self::{
 #[derive(Debug)]
 pub enum VMError {}
 
-/*macro_rules! binary_op {
-    ($self:ident, $op:tt) => {
-        let (b, a) = (
-            $self.read_number(),
-            $self.read_number()
-        );
-
-        $self.stack.push(Rc::new(RefCell::new(Value::new(ValueKind::Number(a $op b)))));
-    }
-}*/
-
 pub struct VM {
     /// Call stack
     pub(crate) frames: Stack<Frame, 256>,
@@ -56,6 +46,8 @@ pub struct VM {
     pub(crate) statics: Statics,
     /// Embedder specific slot data
     pub(crate) slot: Option<Box<dyn Any>>,
+    /// Unwind (try/catch) handlers
+    pub(crate) unwind_handlers: Stack<UnwindHandler, 128>,
 }
 
 impl VM {
@@ -75,9 +67,10 @@ impl VM {
             stack: Stack::new(),
             global: Environment::new(),
             statics: Statics::new(),
+            unwind_handlers: Stack::new(),
             slot: None,
         };
-        unsafe { vm.prepare_stdlib() };
+        vm.prepare_stdlib();
         vm
     }
 
@@ -133,6 +126,10 @@ impl VM {
         self.next().cloned().map(|x| x.into_operand())
     }
 
+    fn read_op(&mut self) -> Option<Opcode> {
+        self.next().cloned().map(|x| x.into_op())
+    }
+
     fn read_user_function(&mut self) -> Option<UserFunction> {
         self.read_constant()
             .and_then(|c| c.into_value())
@@ -175,24 +172,15 @@ impl VM {
         func(&*lhs, &*rhs)
     }
 
-    unsafe fn prepare_stdlib(&mut self) {
-        self.global.set_var(
-            "isNaN",
-            self.statics.get_unchecked(statics::id::ISNAN).clone(),
-        );
+    fn prepare_stdlib(&mut self) {
+        self.global.set_var("isNaN", self.statics.isnan.clone());
 
         let mut math_obj = Value::new(ValueKind::Object(Box::new(Object::Any(AnyObject {}))));
-        math_obj.set_property(
-            "pow",
-            self.statics.get_unchecked(statics::id::MATH_POW).clone(),
-        );
+        math_obj.set_property("pow", self.statics.math_pow.clone());
         self.global.set_var("Math", Rc::new(RefCell::new(math_obj)));
 
         let mut console_obj = Value::new(ValueKind::Object(Box::new(Object::Any(AnyObject {}))));
-        console_obj.set_property(
-            "log",
-            self.statics.get_unchecked(statics::id::CONSOLE_LOG).clone(),
-        );
+        console_obj.set_property("log", self.statics.console_log.clone());
         self.global
             .set_var("console", Rc::new(RefCell::new(console_obj)));
     }
@@ -401,6 +389,9 @@ impl VM {
                 Opcode::Pop => {
                     self.stack.pop();
                 }
+                Opcode::PopUnwindHandler => {
+                    self.unwind_handlers.pop();
+                }
                 Opcode::AdditionAssignment => {
                     let target_cell = self.stack.pop();
                     let value_cell = self.stack.pop();
@@ -549,6 +540,36 @@ impl VM {
                         self.stack.push(param);
                     }
                 }
+                Opcode::Try => {
+                    let catch_idx = self.read_constant().and_then(Constant::into_index).unwrap();
+                    let should_capture_error = self.read_op().unwrap() == Opcode::SetLocal;
+
+                    let error_catch_idx = if should_capture_error {
+                        Some(self.read_constant().and_then(Constant::into_index).unwrap())
+                    } else {
+                        None
+                    };
+
+                    let current_ip = self.ip();
+                    let handler = UnwindHandler {
+                        catch_ip: current_ip + catch_idx,
+                        catch_value_sp: error_catch_idx,
+                        finally_ip: None, // TODO: support finally
+                    };
+                    self.unwind_handlers.push(handler)
+                }
+                Opcode::Throw => {
+                    let value = self.stack.pop();
+
+                    // TODO: clean up resources caused by this unwind
+                    // TODO2: handle the case where there are no unwind handlers
+                    let handler = self.unwind_handlers.pop();
+                    if let Some(catch_value_sp) = handler.catch_value_sp {
+                        self.stack
+                            .set_relative(self.frame().sp, catch_value_sp, value);
+                    }
+                    self.frame_mut().ip = handler.catch_ip;
+                }
                 Opcode::Return => {
                     // Restore VM state to where we were before the function call happened
                     self.frames.pop();
@@ -562,7 +583,9 @@ impl VM {
 
                     let ret = self.stack.pop();
 
-                    // TODO: cleanup stack
+                    self.stack
+                        .discard_multiple(self.stack.get_stack_pointer() - self.frame().sp);
+
                     self.stack.set_stack_pointer(self.frame().sp);
                     self.stack.push(ret);
                 }
@@ -733,7 +756,6 @@ impl VM {
 
 impl Drop for VM {
     fn drop(&mut self) {
-        self.stack.dump();
         self.stack.reset();
         self.frames.reset();
     }
