@@ -74,6 +74,12 @@ impl<T, const N: usize> Stack<T, N> {
         unsafe { val.assume_init() }
     }
 
+    pub fn discard_multiple(&mut self, count: usize) {
+        for _ in 0..count {
+            self.pop();
+        }
+    }
+
     pub unsafe fn get_unchecked(&self) -> &T {
         self.get_unchecked_at(self.1 - 1)
     }
@@ -185,7 +191,7 @@ impl<T, const N: usize> Iterator for StackIterator<T, N> {
                 self.index - 1
             }
             IteratorOrder::TopToBottom => {
-                if self.index <= 0 {
+                if self.index == 0 {
                     return None;
                 }
                 self.index -= 1;
