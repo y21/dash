@@ -1,8 +1,8 @@
 use super::{
     expr::{Expr, UnaryExpr},
     statement::{
-        BlockStatement, FunctionDeclaration, IfStatement, ReturnStatement, Statement,
-        VariableDeclaration, VariableDeclarationKind, WhileLoop,
+        BlockStatement, Catch, FunctionDeclaration, IfStatement, ReturnStatement, Statement,
+        TryCatch, VariableDeclaration, VariableDeclarationKind, WhileLoop,
     },
     token::{Error, ErrorKind, Token, TokenType, ASSIGNMENT_TYPES},
 };
@@ -51,10 +51,12 @@ impl<'a> Parser<'a> {
             TokenType::Let | TokenType::Const | TokenType::Var => {
                 self.variable().map(Statement::Variable)
             }
-            TokenType::If => self.if_statement().map(Statement::If),
+            TokenType::If => self.if_statement(true).map(Statement::If),
             TokenType::Function => self.function().map(Statement::Function),
             TokenType::LeftBrace => self.block().map(Statement::Block),
             TokenType::While => self.while_loop().map(Statement::While),
+            TokenType::Try => self.try_block().map(Statement::Try),
+            TokenType::Throw => self.throw().map(Statement::Throw),
             TokenType::Return => self.return_statement().map(Statement::Return),
             _ => {
                 // We've skipped the current character because of the statement cases that skip the current token
@@ -67,6 +69,30 @@ impl<'a> Parser<'a> {
         self.expect_and_skip(&[TokenType::Semicolon], false);
 
         stmt
+    }
+
+    pub fn throw(&mut self) -> Option<Expr<'a>> {
+        self.expression()
+    }
+
+    pub fn try_block(&mut self) -> Option<TryCatch<'a>> {
+        let try_ = self.statement()?;
+
+        self.expect_and_skip(&[TokenType::Catch], true);
+
+        let capture_ident = if self.expect_and_skip(&[TokenType::LeftParen], false) {
+            let ident = self.next()?.full;
+            self.expect_and_skip(&[TokenType::RightParen], true);
+            Some(ident)
+        } else {
+            None
+        };
+
+        let catch = self.statement()?;
+
+        // TODO: finally
+
+        Some(TryCatch::new(try_, Catch::new(catch, capture_ident), None))
     }
 
     pub fn return_statement(&mut self) -> Option<ReturnStatement<'a>> {
@@ -162,7 +188,7 @@ impl<'a> Parser<'a> {
         return Some(VariableDeclaration::new(name, kind, Some(value)));
     }
 
-    pub fn if_statement(&mut self) -> Option<IfStatement<'a>> {
+    pub fn if_statement(&mut self, parse_else: bool) -> Option<IfStatement<'a>> {
         if !self.expect_and_skip(&[TokenType::LeftParen], true) {
             return None;
         }
@@ -175,9 +201,24 @@ impl<'a> Parser<'a> {
 
         let then = self.statement()?;
 
-        // TODO: else
+        let mut branches = Vec::new();
+        let mut el: Option<Box<Statement>> = None;
 
-        Some(IfStatement::new(condition, then, None))
+        if parse_else {
+            while self.expect_and_skip(&[TokenType::Else], false) {
+                let is_if = self.expect_and_skip(&[TokenType::If], false);
+
+                if is_if {
+                    let if_statement = self.if_statement(false)?;
+                    branches.push(if_statement);
+                } else {
+                    el = Some(Box::new(self.statement()?));
+                    break;
+                }
+            }
+        }
+
+        Some(IfStatement::new(condition, then, branches, el))
     }
 
     // Expression rules
@@ -394,6 +435,7 @@ impl<'a> Parser<'a> {
         self.advance();
 
         let expr = match ty {
+            TokenType::Semicolon => Expr::undefined_literal(),
             TokenType::FalseLit => Expr::bool_literal(false),
             TokenType::TrueLit => Expr::bool_literal(true),
             TokenType::NullLit => Expr::null_literal(),
