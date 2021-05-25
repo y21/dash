@@ -55,6 +55,7 @@ pub enum Opcode {
     LongJmp,
     BackJmp,
     Pop,
+    PopUnwindHandler,
     FunctionCall,
     Return,
     Nop, // Mainly used as a placeholder
@@ -75,6 +76,8 @@ pub enum Opcode {
     Void,
     ArrayLiteral,
     ObjectLiteral,
+    Try,
+    Throw,
 }
 
 impl From<TokenType> for Opcode {
