@@ -5,7 +5,7 @@ use crate::{
             GroupingExpr, LiteralExpr, ObjectLiteral, Postfix, PropertyAccessExpr, Seq, UnaryExpr,
         },
         statement::{
-            BlockStatement, FunctionDeclaration, IfStatement, ReturnStatement, Statement,
+            BlockStatement, FunctionDeclaration, IfStatement, ReturnStatement, Statement, TryCatch,
             VariableDeclaration, WhileLoop,
         },
         token::TokenType,
@@ -309,6 +309,8 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         let then_instructions = self.accept(&i.then);
         instructions[jmp_idx] = Instruction::Operand(Constant::Index(then_instructions.len()));
 
+        // TODO: emit instructions for else if branch
+
         instructions.extend(then_instructions);
 
         instructions
@@ -545,6 +547,56 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
             )));
         }
 
+        instructions
+    }
+
+    fn visit_try_catch(&mut self, t: &TryCatch<'a>) -> Vec<Instruction> {
+        let mut instructions = vec![Instruction::Op(Opcode::Try), Instruction::Op(Opcode::Nop)];
+
+        if t.catch.ident.is_some() {
+            instructions.push(Instruction::Op(Opcode::SetLocal));
+            instructions.push(Instruction::Op(Opcode::Nop));
+        } else {
+            instructions.push(Instruction::Op(Opcode::SetLocalNoValue));
+        };
+
+        let prefix_instructions = instructions.len();
+
+        instructions.extend(self.accept(&t.try_));
+
+        instructions.push(Instruction::Op(Opcode::PopUnwindHandler));
+        instructions.push(Instruction::Op(Opcode::Constant));
+        let thing_idx = instructions.len();
+        instructions.push(Instruction::Op(Opcode::Nop));
+        instructions.push(Instruction::Op(Opcode::ShortJmp));
+
+        self.scope.enter_scope();
+
+        if let Some(ident) = t.catch.ident {
+            let stack_idx = self.scope.push_local(Local::new(ident, self.scope.depth));
+
+            instructions[3] = Instruction::Operand(Constant::Index(stack_idx));
+        }
+
+        let catch = self.accept(&t.catch.body);
+        self.scope.leave_scope();
+
+        instructions[thing_idx] = Instruction::Operand(Constant::Index(catch.len()));
+
+        let catch_jmp_idx = instructions.len();
+        instructions.extend(catch);
+
+        // ...add catch jump index
+        instructions[1] = Instruction::Operand(Constant::Index(
+            catch_jmp_idx - prefix_instructions, /* we skipped the first 4 instructions at this point in vm, so we subtract 2 */
+        ));
+
+        instructions
+    }
+
+    fn visit_throw(&mut self, e: &Expr<'a>) -> Vec<Instruction> {
+        let mut instructions = self.accept_expr(e);
+        instructions.push(Instruction::Op(Opcode::Throw));
         instructions
     }
 }
