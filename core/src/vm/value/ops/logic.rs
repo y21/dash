@@ -15,7 +15,7 @@ impl Value {
                     _ => return false,
                 };
 
-                return *other == *n;
+                *other == *n
             }
             ValueKind::Bool(b) => {
                 let other = match &other.kind {
@@ -23,7 +23,7 @@ impl Value {
                     _ => return false,
                 };
 
-                return *other == *b;
+                *other == *b
             }
             ValueKind::Null => matches!(other.kind, ValueKind::Null),
             ValueKind::Undefined => matches!(other.kind, ValueKind::Undefined),
@@ -118,7 +118,7 @@ impl Value {
 impl Object {
     pub fn _typeof(&self) -> &'static str {
         match self {
-            Self::Any(_) | Self::Array(_) => "object",
+            Self::Any(_) | Self::Array(_) | Self::WeakSet(_) => "object",
             Self::Function(_) => "function",
             Self::String(_) => "string",
         }
@@ -130,6 +130,7 @@ impl Object {
             Self::Array(_) => true,
             Self::Function(..) => true,
             Self::Any(_) => true,
+            Self::WeakSet(_) => true,
         }
     }
     pub fn lossy_equal(&self, other: &Value) -> bool {

@@ -4,6 +4,7 @@ use super::{
         array::Array,
         function::{Closure, FunctionKind, NativeFunction, UserFunction},
         object::{AnyObject, Object},
+        weak::WeakSet,
         Value, ValueKind,
     },
 };
@@ -79,6 +80,12 @@ impl From<UserFunction> for Value {
 impl From<NativeFunction> for Value {
     fn from(f: NativeFunction) -> Self {
         FunctionKind::Native(f).into()
+    }
+}
+
+impl From<WeakSet<RefCell<Value>>> for Value {
+    fn from(s: WeakSet<RefCell<Value>>) -> Self {
+        Object::WeakSet(s).into()
     }
 }
 
