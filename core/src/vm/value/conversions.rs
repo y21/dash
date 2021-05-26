@@ -1,7 +1,13 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, cell::RefCell, rc::Rc};
 
-use super::{function::FunctionKind, object::Object, Value, ValueKind};
-use crate::vm::instruction::Constant;
+use super::{
+    array::Array,
+    function::{CallContext, FunctionKind},
+    object::{Object, PropertyLookup},
+    weak::WeakSet,
+    Value, ValueKind,
+};
+use crate::vm::{instruction::Constant, VM};
 
 impl Value {
     pub fn as_constant(&self) -> Option<&Constant> {
@@ -75,17 +81,6 @@ impl Value {
         self.as_object().and_then(|o| o.as_string())
     }
 
-    pub fn as_string_lossy(&self) -> Option<Cow<str>> {
-        match &self.kind {
-            ValueKind::Number(n) => Some(Cow::Owned(n.to_string())),
-            ValueKind::Bool(b) => Some(Cow::Owned(b.to_string())),
-            ValueKind::Null => Some(Cow::Borrowed("null")),
-            ValueKind::Undefined => Some(Cow::Borrowed("undefined")),
-            ValueKind::Constant(_) => unreachable!(),
-            ValueKind::Object(o) => o.as_string_lossy(),
-        }
-    }
-
     pub fn into_ident(self) -> Option<String> {
         match self.kind {
             ValueKind::Constant(i) => i.into_ident(),
@@ -117,15 +112,6 @@ impl Object {
         }
     }
 
-    pub fn as_string_lossy(&self) -> Option<Cow<str>> {
-        match self {
-            Self::String(s) => Some(Cow::Borrowed(s)),
-            Self::Function(s) => Some(Cow::Owned(s.to_string())),
-            Self::Array(_) => Some(Cow::Borrowed("[array, idk i havent done this yet]")),
-            Self::Any(_) => Some(Cow::Borrowed("[object Object]")),
-        }
-    }
-
     pub fn into_string(self) -> Option<String> {
         match self {
             Self::String(s) => Some(s),
@@ -149,6 +135,7 @@ impl Object {
                 s.push(']');
                 Cow::Owned(s)
             }
+            Self::WeakSet(s) => Cow::Owned(format!("WeakSet {{ <{} items> }}", s.0.len())),
             _ => Cow::Borrowed("[object Object]"), // TODO: look if there's a toString function
         }
     }
@@ -156,6 +143,27 @@ impl Object {
     pub fn as_function(&self) -> Option<&FunctionKind> {
         match self {
             Self::Function(kind) => Some(kind),
+            _ => None,
+        }
+    }
+
+    pub fn as_array(&self) -> Option<&Array> {
+        match self {
+            Self::Array(arr) => Some(arr),
+            _ => None,
+        }
+    }
+
+    pub fn as_weakset(&self) -> Option<&WeakSet<RefCell<Value>>> {
+        match self {
+            Self::WeakSet(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    pub fn as_weakset_mut(&mut self) -> Option<&mut WeakSet<RefCell<Value>>> {
+        match self {
+            Self::WeakSet(s) => Some(s),
             _ => None,
         }
     }
