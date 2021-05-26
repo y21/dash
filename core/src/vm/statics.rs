@@ -17,6 +17,10 @@ pub struct Statics {
     pub object_define_property: Rc<RefCell<Value>>,
     pub object_get_own_property_names: Rc<RefCell<Value>>,
     pub error_ctor: Rc<RefCell<Value>>,
+    pub weakset_ctor: Rc<RefCell<Value>>,
+    pub weakset_has: Rc<RefCell<Value>>,
+    pub weakset_add: Rc<RefCell<Value>>,
+    pub weakset_delete: Rc<RefCell<Value>>,
 }
 
 macro_rules! register_glob_method {
@@ -52,6 +56,10 @@ impl Statics {
                 js_std::object::get_own_property_names
             ),
             error_ctor: register_ctor!("Error", js_std::error::error_constructor),
+            weakset_ctor: register_ctor!("WeakSet", js_std::weakset::weakset_constructor),
+            weakset_has: register_glob_method!("has", js_std::weakset::has),
+            weakset_add: register_glob_method!("add", js_std::weakset::add),
+            weakset_delete: register_glob_method!("delete", js_std::weakset::delete),
         }
     }
 }
