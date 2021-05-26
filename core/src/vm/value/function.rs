@@ -13,6 +13,13 @@ pub struct CallContext<'a> {
     pub receiver: Option<Rc<RefCell<Value>>>,
 }
 
+impl<'a> CallContext<'a> {
+    pub fn arguments(&self) -> impl Iterator<Item = &Rc<RefCell<Value>>> {
+        // TODO: fix order
+        self.args.iter().rev()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum FunctionType {
     Top,
@@ -55,6 +62,7 @@ impl Closure {
 
 #[derive(Debug, Clone)]
 pub struct UserFunction {
+    pub ctor: bool,
     pub params: u32,
     pub receiver: Option<Receiver>,
     pub ty: FunctionType,
@@ -64,13 +72,20 @@ pub struct UserFunction {
 }
 
 impl UserFunction {
-    pub fn new(buffer: Vec<Instruction>, params: u32, ty: FunctionType, upvalues: u32) -> Self {
+    pub fn new(
+        buffer: Vec<Instruction>,
+        params: u32,
+        ty: FunctionType,
+        upvalues: u32,
+        ctor: bool,
+    ) -> Self {
         Self {
             buffer: buffer.into_boxed_slice(),
             params,
             name: None,
             ty,
             receiver: None,
+            ctor,
             upvalues,
         }
     }
@@ -86,6 +101,7 @@ impl UserFunction {
 }
 
 pub struct NativeFunction {
+    pub ctor: bool,
     pub name: &'static str,
     pub func: NativeFunctionCallback,
     pub receiver: Option<Receiver>,
@@ -96,8 +112,10 @@ impl NativeFunction {
         name: &'static str,
         func: for<'a> fn(CallContext<'a>) -> Rc<RefCell<Value>>,
         receiver: Option<Receiver>,
+        ctor: bool,
     ) -> Self {
         Self {
+            ctor,
             name,
             func,
             receiver,
@@ -108,6 +126,7 @@ impl NativeFunction {
 impl Clone for NativeFunction {
     fn clone(&self) -> Self {
         Self {
+            ctor: self.ctor,
             func: self.func,
             name: self.name,
             receiver: self.receiver.clone(),
@@ -139,6 +158,29 @@ impl ToString for FunctionKind {
                     c.func.name.as_deref().unwrap_or("")
                 )
             }
+        }
+    }
+}
+
+impl FunctionKind {
+    pub fn as_closure(&self) -> Option<&Closure> {
+        match self {
+            Self::Closure(c) => Some(c),
+            _ => None,
+        }
+    }
+
+    pub fn as_user(&self) -> Option<&UserFunction> {
+        match self {
+            Self::User(u) => Some(u),
+            _ => None,
+        }
+    }
+
+    pub fn as_native(&self) -> Option<&NativeFunction> {
+        match self {
+            Self::Native(n) => Some(n),
+            _ => None,
         }
     }
 }
