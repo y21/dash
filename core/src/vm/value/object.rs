@@ -1,7 +1,5 @@
+use std::cell::RefCell;
 use std::rc::Rc;
-use std::{borrow::Cow, cell::RefCell};
-
-use crate::{js_std, util};
 
 use super::{
     array::Array,
@@ -21,7 +19,7 @@ pub enum Object {
 pub struct AnyObject {}
 
 pub enum PropertyLookup {
-    Function(NativeFunctionCallback, &'static str),
+    Function(NativeFunctionCallback, &'static str, bool),
     Value(ValueKind),
     ValueRef(Rc<RefCell<Value>>),
 }
@@ -40,9 +38,9 @@ impl Object {
 
         Some(match result {
             PropertyLookup::ValueRef(r) => r,
-            PropertyLookup::Function(func, name) => Rc::new(RefCell::new(Value::new(
+            PropertyLookup::Function(func, name, ctor) => Rc::new(RefCell::new(Value::new(
                 ValueKind::Object(Box::new(Object::Function(FunctionKind::Native(
-                    NativeFunction::new(name, func, Some(Receiver::Bound(cell.clone()))),
+                    NativeFunction::new(name, func, Some(Receiver::Bound(cell.clone())), ctor),
                 )))),
             ))),
             PropertyLookup::Value(v) => Rc::new(RefCell::new(Value::new(v))),
