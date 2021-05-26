@@ -140,7 +140,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
             LiteralExpr::Identifier(ident) => {
                 Constant::Identifier(std::str::from_utf8(ident).unwrap().to_owned())
             }
-            other @ _ => Constant::JsValue(other.to_value()),
+            other => Constant::JsValue(other.to_value()),
         };
 
         if let LiteralExpr::Identifier(ident) = e {
@@ -184,8 +184,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
     fn visit_binary_expression(&mut self, e: &BinaryExpr<'a>) -> Vec<Instruction> {
         let mut instructions = self.accept_expr(&e.left);
 
-        // Will stay -1 if it's not && or ||
-        // TODO: implement ??
+        // Will stay -1 if it's not &&, || or ??
         let mut jmp_idx: isize = -1;
 
         match e.operator {
