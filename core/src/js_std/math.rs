@@ -45,7 +45,7 @@ pub fn max(value: CallContext) -> Rc<RefCell<Value>> {
         }
     }
 
-    max.clone()
+    max
 }
 
 pub fn min(value: CallContext) -> Rc<RefCell<Value>> {
@@ -61,7 +61,7 @@ pub fn min(value: CallContext) -> Rc<RefCell<Value>> {
         }
     }
 
-    max.clone()
+    max
 }
 
 pub fn pow(value: CallContext) -> Rc<RefCell<Value>> {
