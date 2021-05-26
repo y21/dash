@@ -8,6 +8,7 @@ pub fn get_property_unboxed(inner: &str, k: &str) -> Option<PropertyLookup> {
         "indexOf" => Some(PropertyLookup::Function(
             js_std::string::index_of,
             "indexOf",
+            false,
         )),
         _ => None,
     }

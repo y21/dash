@@ -23,7 +23,7 @@ impl Array {
             "length" => Some(PropertyLookup::Value(ValueKind::Number(
                 self.elements.len() as f64,
             ))),
-            "push" => Some(PropertyLookup::Function(js_std::array::push, "push")),
+            "push" => Some(PropertyLookup::Function(js_std::array::push, "push", false)),
             _ => {
                 if util::is_numeric(k) {
                     let idx = k.parse::<usize>().unwrap();
