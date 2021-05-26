@@ -58,6 +58,14 @@ impl<T, const N: usize> Stack<T, N> {
         self.1
     }
 
+    pub fn as_array(&self) -> impl Iterator<Item = &MaybeUninit<T>> {
+        self.0.iter().take(self.1)
+    }
+
+    pub fn as_array_bottom(&self) -> impl Iterator<Item = &MaybeUninit<T>> {
+        self.0.iter().take(self.1).rev()
+    }
+
     pub fn push(&mut self, v: T) {
         assert!(N > self.1);
 
