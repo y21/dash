@@ -1,25 +1,42 @@
 use core::fmt::Debug;
 use std::{
-    borrow::Cow,
     cell::RefCell,
     collections::HashMap,
-    fmt::{self, Formatter},
-    rc::Rc,
+    hash::{Hash, Hasher},
+    rc::{Rc, Weak},
 };
 
-use crate::{js_std, util};
+use super::ValueKind;
 
-use crate::vm::{
-    instruction::{Constant, Instruction},
-    upvalue::Upvalue,
-    VM,
-};
+#[derive(Debug, Clone)]
+pub struct HashRc<T>(pub Rc<T>);
 
-use super::{
-    function::{FunctionKind, NativeFunction, Receiver},
-    object::Object,
-    ValueKind,
-};
+#[derive(Debug, Clone)]
+pub struct HashWeak<T>(pub Weak<T>);
+
+impl<T> Hash for HashRc<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        Rc::as_ptr(&self.0).hash(state)
+    }
+}
+impl<T> PartialEq for HashRc<T> {
+    fn eq(&self, other: &HashRc<T>) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+impl<T> Eq for HashRc<T> {}
+
+impl<T> Hash for HashWeak<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        Weak::as_ptr(&self.0).hash(state)
+    }
+}
+impl<T> PartialEq for HashWeak<T> {
+    fn eq(&self, other: &HashWeak<T>) -> bool {
+        Weak::ptr_eq(&self.0, &other.0)
+    }
+}
+impl<T> Eq for HashWeak<T> {}
 
 #[derive(Debug, Clone)]
 pub struct Value {
