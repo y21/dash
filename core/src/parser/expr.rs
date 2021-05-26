@@ -64,8 +64,13 @@ impl<'a> Expr<'a> {
         Self::Literal(LiteralExpr::Undefined)
     }
 
-    pub fn function_call(target: Expr<'a>, arguments: Vec<Expr<'a>>) -> Self {
+    pub fn function_call(
+        target: Expr<'a>,
+        arguments: Vec<Expr<'a>>,
+        constructor_call: bool,
+    ) -> Self {
         Self::Call(FunctionCall {
+            constructor_call,
             target: Box::new(target),
             arguments,
         })
@@ -104,6 +109,7 @@ pub struct ConditionalExpr<'a> {
 
 #[derive(Debug, Clone)]
 pub struct FunctionCall<'a> {
+    pub constructor_call: bool,
     pub target: Box<Expr<'a>>,
     pub arguments: Vec<Expr<'a>>,
 }
