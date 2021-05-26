@@ -12,14 +12,17 @@ use std::{any::Any, cell::RefCell, collections::HashMap, rc::Rc};
 use instruction::{Instruction, Opcode};
 use value::Value;
 
-use crate::vm::{
-    frame::UnwindHandler,
-    upvalue::Upvalue,
-    value::{
-        array::Array,
-        function::{CallContext, Closure, FunctionKind, UserFunction},
-        ops::compare::Compare,
-        ValueKind,
+use crate::{
+    js_std::{self, error::MaybeRc},
+    vm::{
+        frame::UnwindHandler,
+        upvalue::Upvalue,
+        value::{
+            array::Array,
+            function::{CallContext, Closure, FunctionKind, UserFunction},
+            ops::compare::Compare,
+            ValueKind,
+        },
     },
 };
 
@@ -173,6 +176,10 @@ impl VM {
     }
 
     fn prepare_stdlib(&mut self) {
+        self.global.set_var("NaN", Value::from(f64::NAN).into());
+        self.global
+            .set_var("Infinity", Value::from(f64::INFINITY).into());
+
         self.global.set_var("isNaN", self.statics.isnan.clone());
 
         // TODO: make Object a function instead of object
@@ -209,6 +216,8 @@ impl VM {
 
         self.global
             .set_var("Error", self.statics.error_ctor.clone());
+        self.global
+            .set_var("WeakSet", self.statics.weakset_ctor.clone());
     }
 
     fn unwind(&mut self, value: Rc<RefCell<Value>>) -> Result<(), Rc<RefCell<Value>>> {
@@ -224,6 +233,29 @@ impl VM {
         }
         self.frame_mut().ip = handler.catch_ip;
         Ok(())
+    }
+
+    pub fn generate_stack_trace(&self, message: Option<&str>) -> String {
+        let mut stack = format!("Error: {}\n", message.unwrap_or(""));
+
+        // Iterate over frames and add it to the stack string
+        for frame in self.frames.as_array_bottom() {
+            let frame = unsafe { &*frame.as_ptr() };
+            stack.push_str("  at ");
+
+            // Get reference to function
+            let func = frame.func.borrow();
+            let func_name = func
+                .as_function()
+                .and_then(FunctionKind::as_closure)
+                .and_then(|c| c.func.name.as_ref());
+
+            // Add function name to string (or <anonymous> if it's an anonymous function)
+            stack.push_str(func_name.map(|x| &**x).unwrap_or("<anonymous>"));
+            stack.push('\n');
+        }
+
+        stack
     }
 
     pub fn interpret(&mut self) -> Result<Option<Rc<RefCell<Value>>>, VMError> {
@@ -360,7 +392,10 @@ impl VM {
 
                     let value = unwrap_or_unwind!(
                         self.global.get_var(&name),
-                        Value::from(Object::String(format!("{} is not defined", name))).into()
+                        js_std::error::create_error(
+                            MaybeRc::Owned(&format!("{} is not defined", name)),
+                            self
+                        )
                     );
 
                     self.stack.push(value)
@@ -788,7 +823,7 @@ impl VM {
                     let property_cell = self.stack.pop();
                     let target_cell = self.stack.pop();
                     let property = property_cell.borrow();
-                    let property_s = property.as_string_lossy().unwrap();
+                    let property_s = property.to_string();
 
                     let prop = Value::get_property(&target_cell, &*property_s)
                         .unwrap_or_else(|| Value::new(ValueKind::Undefined).into());
