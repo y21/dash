@@ -5,3 +5,4 @@ pub mod functions;
 pub mod math;
 pub mod object;
 pub mod string;
+pub mod weakset;
