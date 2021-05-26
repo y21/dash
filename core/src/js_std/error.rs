@@ -1,48 +1,43 @@
 use std::{borrow::Cow, cell::RefCell, rc::Rc};
 
-use crate::vm::value::{
-    function::{CallContext, FunctionKind},
-    object::{AnyObject, Object},
-    Value, ValueKind,
+use crate::vm::{
+    value::{
+        function::CallContext,
+        object::{AnyObject, Object},
+        Value,
+    },
+    VM,
 };
 
+pub enum MaybeRc<T> {
+    Rc(Rc<RefCell<Value>>),
+    Owned(T),
+}
+
+pub fn create_error(message: MaybeRc<&str>, vm: &VM) -> Rc<RefCell<Value>> {
+    let mut error = Value::from(AnyObject {});
+
+    let message_str = match message {
+        MaybeRc::Rc(r) => r.borrow().to_string().to_string(),
+        MaybeRc::Owned(r) => String::from(r),
+    };
+
+    let stack = vm.generate_stack_trace(Some(&message_str));
+
+    error.set_property("message", Value::from(Object::String(message_str)).into());
+
+    error.set_property("stack", Value::from(Object::String(stack)).into());
+
+    error.into()
+}
+
 pub fn error_constructor(value: CallContext) -> Rc<RefCell<Value>> {
-    // Get reference to message
     let message_cell = value.args.first();
     let message_cell_ref = message_cell.map(|c| c.borrow());
     let message = message_cell_ref
         .as_deref()
-        .and_then(Value::as_string_lossy)
+        .map(Value::to_string)
         .unwrap_or(Cow::Borrowed(""));
 
-    // Create error object
-    let mut error = Value::from(AnyObject {});
-    // Add message property
-    error.set_property("message", message_cell.unwrap().clone());
-
-    // Create stack string
-    let mut stack = format!("Error: {}\n", message);
-
-    // Iterate over frames and add it to the stack string
-    for frame in value.vm.frames.as_array_bottom() {
-        let frame = unsafe { &*frame.as_ptr() };
-        stack.push_str("  at ");
-
-        // Get reference to function
-        let func = frame.func.borrow();
-        let func_name = func
-            .as_function()
-            .and_then(FunctionKind::as_closure)
-            .and_then(|c| c.func.name.as_ref());
-
-        // Add function name to string (or <anonymous> if it's an anonymous function)
-        stack.push_str(func_name.map(|x| &**x).unwrap_or("<anonymous>"));
-        stack.push('\n');
-    }
-
-    // Add stack property
-    error.set_property("stack", Value::from(Object::String(stack)).into());
-
-    // Return constructed error object
-    error.into()
+    create_error(MaybeRc::Owned(&message), value.vm)
 }
