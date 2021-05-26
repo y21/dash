@@ -175,14 +175,63 @@ impl VM {
     fn prepare_stdlib(&mut self) {
         self.global.set_var("isNaN", self.statics.isnan.clone());
 
+        // TODO: make Object a function instead of object
+        let mut object_obj = Value::new(ValueKind::Object(Box::new(Object::Any(AnyObject {}))));
+        object_obj.set_property(
+            "defineProperty",
+            self.statics.object_define_property.clone(),
+        );
+        object_obj.set_property(
+            "getOwnPropertyNames",
+            self.statics.object_get_own_property_names.clone(),
+        );
+        self.global
+            .set_var("Object", Rc::new(RefCell::new(object_obj)));
+
         let mut math_obj = Value::new(ValueKind::Object(Box::new(Object::Any(AnyObject {}))));
         math_obj.set_property("pow", self.statics.math_pow.clone());
+        math_obj.set_property("abs", self.statics.math_abs.clone());
+        math_obj.set_property("ceil", self.statics.math_ceil.clone());
+        math_obj.set_property("floor", self.statics.math_floor.clone());
+        math_obj.set_property("max", self.statics.math_max.clone());
+
+        math_obj.set_property(
+            "PI",
+            Value::new(ValueKind::Number(std::f64::consts::PI)).into(),
+        );
+        math_obj.set_property(
+            "E",
+            Value::new(ValueKind::Number(std::f64::consts::E)).into(),
+        );
+        math_obj.set_property(
+            "LN10",
+            Value::new(ValueKind::Number(std::f64::consts::LN_10)).into(),
+        );
+        math_obj.set_property(
+            "LN2",
+            Value::new(ValueKind::Number(std::f64::consts::LN_2)).into(),
+        );
+        math_obj.set_property(
+            "LOG10E",
+            Value::new(ValueKind::Number(std::f64::consts::LOG10_E)).into(),
+        );
+        math_obj.set_property(
+            "LOG2E",
+            Value::new(ValueKind::Number(std::f64::consts::LOG2_E)).into(),
+        );
+        math_obj.set_property(
+            "SQRT2",
+            Value::new(ValueKind::Number(std::f64::consts::SQRT_2)).into(),
+        );
         self.global.set_var("Math", Rc::new(RefCell::new(math_obj)));
 
         let mut console_obj = Value::new(ValueKind::Object(Box::new(Object::Any(AnyObject {}))));
         console_obj.set_property("log", self.statics.console_log.clone());
         self.global
             .set_var("console", Rc::new(RefCell::new(console_obj)));
+
+        self.global
+            .set_var("Error", self.statics.error_ctor.clone());
     }
 
     pub fn interpret(&mut self) -> Result<Option<Rc<RefCell<Value>>>, VMError> {
@@ -381,6 +430,7 @@ impl VM {
                 Opcode::ShortJmp => {
                     let instruction_count = self.read_index().unwrap();
                     self.frame_mut().ip += instruction_count;
+                    println!("Jumped to {:?}", &self.buffer()[self.ip()]);
                 }
                 Opcode::BackJmp => {
                     let instruction_count = self.read_index().unwrap();
@@ -498,6 +548,23 @@ impl VM {
                     let value = value_cell.borrow();
                     target_cell.borrow_mut().nullish_coalescing_assign(&*value);
                     self.stack.push(target_cell);
+                }
+                Opcode::ConstructorCall => {
+                    todo!()
+                }
+                Opcode::GetThis => {
+                    let this = {
+                        let frame = self.frame();
+                        let func = frame.func.borrow();
+                        let raw_func = func
+                            .as_function()
+                            .and_then(FunctionKind::as_closure)
+                            .unwrap();
+
+                        let receiver = raw_func.func.receiver.as_ref().unwrap();
+                        receiver.get().clone()
+                    };
+                    self.stack.push(this);
                 }
                 Opcode::FunctionCall => {
                     let param_count = self.read_index().unwrap();
