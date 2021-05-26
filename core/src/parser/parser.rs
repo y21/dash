@@ -1,3 +1,5 @@
+use crate::parser::expr::LiteralExpr;
+
 use super::{
     expr::{Expr, UnaryExpr},
     statement::{
@@ -37,7 +39,7 @@ impl<'a> Parser<'a> {
             }
         }
 
-        if self.errors.len() > 0 {
+        if !self.errors.is_empty() {
             Err(self.errors)
         } else {
             Ok(stmts)
@@ -422,7 +424,7 @@ impl<'a> Parser<'a> {
                     expr = Expr::function_call(expr, arguments, false);
                 }
                 TokenType::Dot => {
-                    let property = self.primary()?;
+                    let property = Expr::Literal(LiteralExpr::Identifier(self.next()?.full));
                     expr = Expr::property_access(false, expr, property);
                 }
                 TokenType::LeftSquareBrace => {
