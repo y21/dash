@@ -144,6 +144,18 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         };
 
         if let LiteralExpr::Identifier(ident) = e {
+            match *ident {
+                b"this" => {
+                    instructions[0] = Instruction::Op(Opcode::GetThis);
+                    return instructions;
+                }
+                b"super" => {
+                    instructions[0] = Instruction::Op(Opcode::GetSuper);
+                    return instructions;
+                }
+                _ => {}
+            };
+
             if !self.scope.is_global() {
                 let stack_idx = self.scope.find_variable(ident);
 
@@ -307,7 +319,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         instructions.push(Instruction::Op(Opcode::Pop));
 
         let then_instructions = self.accept(&i.then);
-        instructions[jmp_idx] = Instruction::Operand(Constant::Index(then_instructions.len()));
+        instructions[jmp_idx] = Instruction::Operand(Constant::Index(then_instructions.len() + 1));
 
         // TODO: emit instructions for else if branch
 
@@ -365,12 +377,16 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
             }
         }
 
-        let func = UserFunction::new(
+        let mut func = UserFunction::new(
             frame.instructions,
             params as u32,
             FunctionType::Function,
             frame.upvalues.len() as u32,
+            true,
         );
+        if let Some(name) = f.name {
+            func.name = Some(std::str::from_utf8(name).unwrap().to_owned());
+        }
         instructions.push(Instruction::Operand(Constant::JsValue(func.into())));
 
         for upvalue in frame.upvalues.into_iter(IteratorOrder::BottomToTop) {
@@ -431,7 +447,11 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         instructions.push(Instruction::Op(Opcode::Constant));
         instructions.push(Instruction::Operand(Constant::Index(argument_len)));
 
-        instructions.push(Instruction::Op(Opcode::FunctionCall));
+        if c.constructor_call {
+            instructions.push(Instruction::Op(Opcode::ConstructorCall));
+        } else {
+            instructions.push(Instruction::Op(Opcode::FunctionCall));
+        }
 
         instructions
     }
