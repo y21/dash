@@ -1,6 +1,17 @@
-#![feature(maybe_uninit_uninit_array, maybe_uninit_ref)]
+use std::{cell::RefCell, rc::Rc};
 
-use vm::value::{FunctionType, UserFunction};
+use compiler::compiler::Compiler;
+use parser::{lexer::Lexer, parser::Parser};
+use vm::{
+    value::{
+        function::{FunctionType, NativeFunction, UserFunction},
+        object::{AnyObject, Object},
+        Value, ValueKind,
+    },
+    VM,
+};
+
+use crate::vm::value::function::Receiver;
 
 pub mod compiler;
 pub mod gc;
@@ -18,15 +29,17 @@ pub enum EvalError {
 
 /// Convenient function for evaluating a JavaScript source code string
 /// Returns the last evaluated value
-pub fn eval(code: impl AsRef<str>) -> Result<(), EvalError> {
+pub fn eval(code: impl AsRef<str>) -> Result<Option<Rc<RefCell<Value>>>, EvalError> {
     let code = code.as_ref();
-    let tokens = parser::lexer::Lexer::new(code).scan_all();
-    let statements = parser::parser::Parser::new(tokens).parse_all();
-    let instructions = compiler::compiler::Compiler::new(statements).compile();
-    let mut vm = vm::VM::new(UserFunction::new(instructions, 0, FunctionType::Top));
-    vm.interpret().map_err(EvalError::VMError)?;
+    let tokens = Lexer::new(code).scan_all().unwrap();
+    let statements = Parser::new(tokens).parse_all().unwrap();
+    let instructions = Compiler::new(statements).compile();
+    let mut func = UserFunction::new(instructions, 0, FunctionType::Top, 0, false);
+    func.bind(Receiver::Bound(Value::from(AnyObject {}).into()));
+    let mut vm = VM::new(func);
+    let result = vm.interpret().map_err(EvalError::VMError)?;
 
-    Ok(())
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -36,20 +49,56 @@ mod tests {
     use super::*;
 
     #[test]
-    pub fn interpreter() {
-        let code = r#"
-        function F(n) {
+    pub fn recursion() {
+        let result = eval(
+            r#"function F(n) {
+            function __nothing__() {}
+
             if (n) {
                 let f = n * 2;
-                print f;
+                console.log(f);
                 return F(n - 1);
             }
         }
 
-        F(16);
-        "#;
+        F(16);"#,
+        )
+        .unwrap();
+        println!("{:?}", result);
+    }
 
-        eval(code).unwrap();
+    #[test]
+    pub fn inner_fn() {
+        eval(
+            r#"
+                function a(b, c) {
+                    function d(e, f) {
+                        return e * f * c;
+                    }
+
+                    return d(b, c);
+                }
+
+                print a(3,3);
+        "#,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    pub fn upvalues() {
+        eval(
+            r#"
+            function a(b) {
+                function c(d) {
+                    print b * d;
+                }
+                return c;
+            }
+            a(2)(4);
+        "#,
+        )
+        .unwrap();
     }
 
     #[test]
