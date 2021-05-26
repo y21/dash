@@ -388,6 +388,17 @@ impl<'a> Parser<'a> {
     }
 
     pub fn field_access(&mut self) -> Option<Expr<'a>> {
+        if self.expect_and_skip(&[TokenType::New], false) {
+            let mut rval = self.field_access()?;
+            if let Expr::Call(fc) = &mut rval {
+                fc.constructor_call = true;
+            } else {
+                todo!()
+            };
+
+            return Some(rval);
+        }
+
         let mut expr = self.primary()?;
 
         while self.expect_and_skip(
@@ -408,7 +419,7 @@ impl<'a> Parser<'a> {
                         arguments.push(self.expression()?);
                     }
 
-                    expr = Expr::function_call(expr, arguments);
+                    expr = Expr::function_call(expr, arguments, false);
                 }
                 TokenType::Dot => {
                     let property = self.primary()?;
