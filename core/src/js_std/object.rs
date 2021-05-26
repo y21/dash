@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::vm::value::{array::Array, function::CallContext, object::Object, Value, ValueKind};
+use crate::vm::value::{array::Array, function::CallContext, Value};
 
 pub fn define_property(value: CallContext) -> Rc<RefCell<Value>> {
     let mut arguments = value.arguments();
@@ -9,7 +9,7 @@ pub fn define_property(value: CallContext) -> Rc<RefCell<Value>> {
     let mut obj = obj_cell.borrow_mut();
     let prop_cell = arguments.next().unwrap();
     let prop = prop_cell.borrow();
-    let prop_str = prop.as_string_lossy().unwrap();
+    let prop_str = prop.to_string();
     let descriptor_cell = arguments.next().unwrap();
 
     let value = Value::get_property(descriptor_cell, "value").unwrap();

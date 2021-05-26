@@ -50,7 +50,7 @@ impl Value {
         Value::new(ValueKind::Number((this >> other) as f64))
     }
 
-    pub fn unsigned_right_shift(&self, other: &Value) -> Value {
+    pub fn unsigned_right_shift(&self, _other: &Value) -> Value {
         todo!()
     }
 

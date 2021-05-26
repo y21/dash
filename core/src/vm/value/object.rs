@@ -1,6 +1,9 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::js_std;
+
+use super::weak::WeakSet;
 use super::{
     array::Array,
     function::{FunctionKind, NativeFunction, NativeFunctionCallback, Receiver},
@@ -12,6 +15,7 @@ pub enum Object {
     String(String),
     Function(FunctionKind),
     Array(Array),
+    WeakSet(WeakSet<RefCell<Value>>),
     Any(AnyObject),
 }
 
@@ -24,11 +28,30 @@ pub enum PropertyLookup {
     ValueRef(Rc<RefCell<Value>>),
 }
 
+impl PropertyLookup {
+    pub fn into_function(self) -> Option<(NativeFunctionCallback, &'static str, bool)> {
+        match self {
+            Self::Function(func, name, ctor) => Some((func, name, ctor)),
+            _ => None,
+        }
+    }
+}
+
 impl Object {
     pub fn get_property_unboxed(&self, k: &str) -> Option<PropertyLookup> {
         match self {
             Self::String(s) => super::string::get_property_unboxed(s, k),
             Self::Array(a) => a.get_property_unboxed(k),
+            Self::WeakSet(s) => match k {
+                "has" => Some(PropertyLookup::Function(js_std::weakset::has, "has", false)),
+                "add" => Some(PropertyLookup::Function(js_std::weakset::add, "add", false)),
+                "delete" => Some(PropertyLookup::Function(
+                    js_std::weakset::delete,
+                    "delete",
+                    false,
+                )),
+                _ => None,
+            },
             _ => None,
         }
     }
