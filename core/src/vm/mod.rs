@@ -33,7 +33,9 @@ use self::{
 };
 
 #[derive(Debug)]
-pub enum VMError {}
+pub enum VMError {
+    UncaughtError(Rc<RefCell<Value>>),
+}
 
 pub struct VM {
     /// Call stack
@@ -55,9 +57,7 @@ impl VM {
         let mut frames = Stack::new();
         frames.push(Frame {
             buffer: func.buffer.clone(),
-            func: Rc::new(RefCell::new(Value::new(ValueKind::Object(Box::new(
-                Object::Function(FunctionKind::Closure(Closure::new(func))),
-            ))))),
+            func: Value::from(Closure::new(func)).into(),
             ip: 0,
             sp: 0,
         });
@@ -176,7 +176,7 @@ impl VM {
         self.global.set_var("isNaN", self.statics.isnan.clone());
 
         // TODO: make Object a function instead of object
-        let mut object_obj = Value::new(ValueKind::Object(Box::new(Object::Any(AnyObject {}))));
+        let mut object_obj = Value::from(AnyObject {});
         object_obj.set_property(
             "defineProperty",
             self.statics.object_define_property.clone(),
@@ -185,56 +185,68 @@ impl VM {
             "getOwnPropertyNames",
             self.statics.object_get_own_property_names.clone(),
         );
-        self.global
-            .set_var("Object", Rc::new(RefCell::new(object_obj)));
+        self.global.set_var("Object", object_obj.into());
 
-        let mut math_obj = Value::new(ValueKind::Object(Box::new(Object::Any(AnyObject {}))));
+        let mut math_obj = Value::from(AnyObject {});
         math_obj.set_property("pow", self.statics.math_pow.clone());
         math_obj.set_property("abs", self.statics.math_abs.clone());
         math_obj.set_property("ceil", self.statics.math_ceil.clone());
         math_obj.set_property("floor", self.statics.math_floor.clone());
         math_obj.set_property("max", self.statics.math_max.clone());
 
-        math_obj.set_property(
-            "PI",
-            Value::new(ValueKind::Number(std::f64::consts::PI)).into(),
-        );
-        math_obj.set_property(
-            "E",
-            Value::new(ValueKind::Number(std::f64::consts::E)).into(),
-        );
-        math_obj.set_property(
-            "LN10",
-            Value::new(ValueKind::Number(std::f64::consts::LN_10)).into(),
-        );
-        math_obj.set_property(
-            "LN2",
-            Value::new(ValueKind::Number(std::f64::consts::LN_2)).into(),
-        );
-        math_obj.set_property(
-            "LOG10E",
-            Value::new(ValueKind::Number(std::f64::consts::LOG10_E)).into(),
-        );
-        math_obj.set_property(
-            "LOG2E",
-            Value::new(ValueKind::Number(std::f64::consts::LOG2_E)).into(),
-        );
-        math_obj.set_property(
-            "SQRT2",
-            Value::new(ValueKind::Number(std::f64::consts::SQRT_2)).into(),
-        );
-        self.global.set_var("Math", Rc::new(RefCell::new(math_obj)));
+        math_obj.set_property("PI", Value::from(std::f64::consts::PI).into());
+        math_obj.set_property("E", Value::from(std::f64::consts::E).into());
+        math_obj.set_property("LN10", Value::from(std::f64::consts::LN_10).into());
+        math_obj.set_property("LN2", Value::from(std::f64::consts::LN_2).into());
+        math_obj.set_property("LOG10E", Value::from(std::f64::consts::LOG10_E).into());
+        math_obj.set_property("LOG2E", Value::from(std::f64::consts::LOG2_E).into());
+        math_obj.set_property("SQRT2", Value::from(std::f64::consts::SQRT_2).into());
+        self.global.set_var("Math", math_obj.into());
 
-        let mut console_obj = Value::new(ValueKind::Object(Box::new(Object::Any(AnyObject {}))));
+        let mut console_obj = Value::from(AnyObject {});
         console_obj.set_property("log", self.statics.console_log.clone());
-        self.global
-            .set_var("console", Rc::new(RefCell::new(console_obj)));
+        self.global.set_var("console", console_obj.into());
 
         self.global
             .set_var("Error", self.statics.error_ctor.clone());
     }
 
+    fn unwind(&mut self, value: Rc<RefCell<Value>>) -> Result<(), Rc<RefCell<Value>>> {
+        // TODO: clean up resources caused by this unwind
+        if self.unwind_handlers.get_stack_pointer() == 0 {
+            return Err(value);
+        }
+
+        let handler = self.unwind_handlers.pop();
+        if let Some(catch_value_sp) = handler.catch_value_sp {
+            self.stack
+                .set_relative(self.frame().sp, catch_value_sp, value);
+        }
+        self.frame_mut().ip = handler.catch_ip;
+        Ok(())
+    }
+
     pub fn interpret(&mut self) -> Result<Option<Rc<RefCell<Value>>>, VMError> {
+        macro_rules! unwrap_or_unwind {
+            ($e:expr, $err:expr) => {
+                if let Some(v) = $e {
+                    v
+                } else {
+                    unwind_abort_if_uncaught!($err)
+                }
+            };
+        }
+
+        macro_rules! unwind_abort_if_uncaught {
+            ($e:expr) => {
+                if let Err(e) = self.unwind($e) {
+                    return Err(VMError::UncaughtError(e));
+                } else {
+                    continue;
+                }
+            };
+        }
+
         while !self.is_eof() {
             let instruction = self.buffer()[self.ip()].as_op();
 
@@ -245,7 +257,7 @@ impl VM {
                 Opcode::Constant => {
                     let constant = self.read_constant().map(|c| c.try_into_value()).unwrap();
 
-                    self.stack.push(Rc::new(RefCell::new(constant)));
+                    self.stack.push(constant.into());
                 }
                 Opcode::Closure => {
                     let func = self.read_user_function().unwrap();
@@ -269,25 +281,17 @@ impl VM {
                     }
 
                     self.stack
-                        .push(Rc::new(RefCell::new(Value::new(ValueKind::Object(
-                            Box::new(Object::Function(FunctionKind::Closure(closure))),
-                        )))));
+                        .push(Value::from(FunctionKind::Closure(closure)).into());
                 }
                 Opcode::Negate => {
                     let maybe_number = self.read_number();
 
-                    self.stack
-                        .push(Rc::new(RefCell::new(Value::new(ValueKind::Number(
-                            -maybe_number,
-                        )))));
+                    self.stack.push(Value::from(-maybe_number).into());
                 }
                 Opcode::LogicalNot => {
                     let is_truthy = self.stack.pop().borrow().is_truthy();
 
-                    self.stack
-                        .push(Rc::new(RefCell::new(Value::new(ValueKind::Bool(
-                            !is_truthy,
-                        )))));
+                    self.stack.push(Value::from(!is_truthy).into());
                 }
                 Opcode::Add => {
                     let result = self.with_lhs_rhs_borrowed(Value::add).into();
@@ -354,10 +358,12 @@ impl VM {
                 Opcode::GetGlobal => {
                     let name = self.pop_owned().unwrap().into_ident().unwrap();
 
-                    // TODO: handle case where var is not defined
-                    let value = self.global.get_var(&name).unwrap();
+                    let value = unwrap_or_unwind!(
+                        self.global.get_var(&name),
+                        Value::from(Object::String(format!("{} is not defined", name))).into()
+                    );
 
-                    self.stack.push(value);
+                    self.stack.push(value)
                 }
                 Opcode::SetLocal => {
                     let stack_idx = self.read_index().unwrap();
@@ -628,14 +634,7 @@ impl VM {
                 Opcode::Throw => {
                     let value = self.stack.pop();
 
-                    // TODO: clean up resources caused by this unwind
-                    // TODO2: handle the case where there are no unwind handlers
-                    let handler = self.unwind_handlers.pop();
-                    if let Some(catch_value_sp) = handler.catch_value_sp {
-                        self.stack
-                            .set_relative(self.frame().sp, catch_value_sp, value);
-                    }
-                    self.frame_mut().ip = handler.catch_ip;
+                    unwind_abort_if_uncaught!(value);
                 }
                 Opcode::Return => {
                     // Restore VM state to where we were before the function call happened
@@ -663,8 +662,7 @@ impl VM {
                     let lhs = lhs_cell.borrow();
 
                     let is_less = matches!(lhs.compare(&rhs), Some(Compare::Less));
-                    self.stack
-                        .push(Rc::new(RefCell::new(Value::new(ValueKind::Bool(is_less)))));
+                    self.stack.push(Value::from(is_less).into());
                 }
                 Opcode::LessEqual => {
                     let rhs_cell = self.stack.pop();
@@ -676,10 +674,7 @@ impl VM {
                         lhs.compare(&rhs),
                         Some(Compare::Less) | Some(Compare::Equal)
                     );
-                    self.stack
-                        .push(Rc::new(RefCell::new(Value::new(ValueKind::Bool(
-                            is_less_eq,
-                        )))));
+                    self.stack.push(Value::from(is_less_eq).into());
                 }
                 Opcode::Greater => {
                     let rhs_cell = self.stack.pop();
@@ -688,10 +683,7 @@ impl VM {
                     let lhs = lhs_cell.borrow();
 
                     let is_greater = matches!(lhs.compare(&rhs), Some(Compare::Greater));
-                    self.stack
-                        .push(Rc::new(RefCell::new(Value::new(ValueKind::Bool(
-                            is_greater,
-                        )))));
+                    self.stack.push(Value::from(is_greater).into());
                 }
                 Opcode::GreaterEqual => {
                     let rhs_cell = self.stack.pop();
@@ -703,10 +695,7 @@ impl VM {
                         lhs.compare(&rhs),
                         Some(Compare::Greater) | Some(Compare::Equal)
                     );
-                    self.stack
-                        .push(Rc::new(RefCell::new(Value::new(ValueKind::Bool(
-                            is_greater_eq,
-                        )))));
+                    self.stack.push(Value::from(is_greater_eq).into());
                 }
                 Opcode::StaticPropertyAccess => {
                     let property = self.pop_owned().unwrap().into_ident().unwrap();
@@ -734,9 +723,7 @@ impl VM {
                 Opcode::Typeof => {
                     let value = self.stack.pop().borrow()._typeof().to_owned();
 
-                    self.stack.push(
-                        Value::new(ValueKind::Object(Box::new(Object::String(value)))).into(),
-                    );
+                    self.stack.push(Value::from(Object::String(value)).into());
                 }
                 Opcode::PostfixIncrement | Opcode::PostfixDecrement => {
                     let value_cell = self.stack.pop();
@@ -772,12 +759,7 @@ impl VM {
                     for _ in 0..element_count {
                         elements.push(self.stack.pop());
                     }
-                    self.stack.push(
-                        Value::new(ValueKind::Object(Box::new(Object::Array(Array::new(
-                            elements,
-                        )))))
-                        .into(),
-                    )
+                    self.stack.push(Value::from(Array::new(elements)).into())
                 }
                 Opcode::ObjectLiteral => {
                     let property_count = self.read_index().unwrap();
