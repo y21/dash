@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::vm::value::{function::CallContext, object::Object, Value, ValueKind};
+use crate::vm::value::{function::CallContext, object::Object, Value};
 
 pub fn push(value: CallContext) -> Rc<RefCell<Value>> {
     let this_cell = value.receiver.unwrap();
@@ -16,7 +16,5 @@ pub fn push(value: CallContext) -> Rc<RefCell<Value>> {
         this_arr.elements.push(value);
     }
 
-    Rc::new(RefCell::new(Value::new(ValueKind::Number(
-        this_arr.elements.len() as f64,
-    ))))
+    Value::from(this_arr.elements.len() as f64).into()
 }

@@ -16,7 +16,7 @@ pub fn error_constructor(value: CallContext) -> Rc<RefCell<Value>> {
         .unwrap_or(Cow::Borrowed(""));
 
     // Create error object
-    let mut error = Value::new(ValueKind::Object(Box::new(Object::Any(AnyObject {}))));
+    let mut error = Value::from(AnyObject {});
     // Add message property
     error.set_property("message", message_cell.unwrap().clone());
 
@@ -41,10 +41,7 @@ pub fn error_constructor(value: CallContext) -> Rc<RefCell<Value>> {
     }
 
     // Add stack property
-    error.set_property(
-        "stack",
-        Value::new(ValueKind::Object(Box::new(Object::String(stack)))).into(),
-    );
+    error.set_property("stack", Value::from(Object::String(stack)).into());
 
     // Return constructed error object
     error.into()

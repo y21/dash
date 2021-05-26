@@ -38,12 +38,14 @@ impl Object {
 
         Some(match result {
             PropertyLookup::ValueRef(r) => r,
-            PropertyLookup::Function(func, name, ctor) => Rc::new(RefCell::new(Value::new(
-                ValueKind::Object(Box::new(Object::Function(FunctionKind::Native(
-                    NativeFunction::new(name, func, Some(Receiver::Bound(cell.clone())), ctor),
-                )))),
-            ))),
-            PropertyLookup::Value(v) => Rc::new(RefCell::new(Value::new(v))),
+            PropertyLookup::Function(func, name, ctor) => Value::from(NativeFunction::new(
+                name,
+                func,
+                Some(Receiver::Bound(cell.clone())),
+                ctor,
+            ))
+            .into(),
+            PropertyLookup::Value(v) => Value::new(v).into(),
         })
     }
 }

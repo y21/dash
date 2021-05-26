@@ -164,14 +164,12 @@ pub enum LiteralExpr<'a> {
 impl<'a> LiteralExpr<'a> {
     pub fn to_value(&self) -> Value {
         match self {
-            Self::Boolean(b) => Value::new(ValueKind::Bool(*b)),
-            Self::Number(n) => Value::new(ValueKind::Number(*n)),
-            Self::Identifier(i) => Value::new(ValueKind::Constant(Box::new(Constant::Identifier(
-                std::str::from_utf8(i).unwrap().to_owned(),
-            )))),
-            Self::String(s) => Value::new(ValueKind::Object(Box::new(Object::String(
-                std::str::from_utf8(s).unwrap().to_owned(),
-            )))),
+            Self::Boolean(b) => Value::from(*b),
+            Self::Number(n) => Value::from(*n),
+            Self::Identifier(i) => {
+                Constant::Identifier(std::str::from_utf8(i).unwrap().to_owned()).into()
+            }
+            Self::String(s) => Object::String(std::str::from_utf8(s).unwrap().to_owned()).into(),
             Self::Undefined => Value::new(ValueKind::Undefined),
             Self::Null => Value::new(ValueKind::Null),
         }

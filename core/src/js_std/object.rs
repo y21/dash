@@ -25,10 +25,8 @@ pub fn get_own_property_names(value: CallContext) -> Rc<RefCell<Value>> {
     let mut keys = Vec::with_capacity(obj.fields.len());
     for key in obj.fields.keys() {
         let key: &str = &*key;
-        keys.push(Rc::new(RefCell::new(Value::new(ValueKind::Object(
-            Box::new(Object::String(String::from(key))),
-        )))));
+        keys.push(Value::from(String::from(key)).into());
     }
 
-    Value::new(ValueKind::Object(Box::new(Object::Array(Array::new(keys))))).into()
+    Value::from(Array::new(keys)).into()
 }

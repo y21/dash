@@ -11,5 +11,5 @@ pub fn log(value: CallContext) -> Rc<RefCell<Value>> {
 
     println!("{}", &*value_string);
 
-    Rc::new(RefCell::new(Value::new(ValueKind::Undefined)))
+    Value::new(ValueKind::Undefined).into()
 }
