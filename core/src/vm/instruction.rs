@@ -12,6 +12,8 @@ pub enum Opcode {
     UpvalueLocal,
     UpvalueNonLocal,
     GetLocal,
+    GetThis,
+    GetSuper,
     GetUpvalue,
     GetLocalRef,
     GetGlobalRef,
@@ -57,6 +59,7 @@ pub enum Opcode {
     Pop,
     PopUnwindHandler,
     FunctionCall,
+    ConstructorCall,
     Return,
     Nop, // Mainly used as a placeholder
     Less,
