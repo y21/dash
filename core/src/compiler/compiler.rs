@@ -15,7 +15,7 @@ use crate::{
         instruction::{Constant, Instruction, Opcode},
         stack::{IteratorOrder, Stack},
         value::{
-            function::{FunctionType, UserFunction},
+            function::{Constructor, FunctionType, UserFunction},
             Value, ValueKind,
         },
     },
@@ -381,7 +381,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
             params as u32,
             FunctionType::Function,
             frame.upvalues.len() as u32,
-            true,
+            Constructor::Any,
         );
         if let Some(name) = f.name {
             func.name = Some(std::str::from_utf8(name).unwrap().to_owned());

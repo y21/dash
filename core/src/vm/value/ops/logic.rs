@@ -118,7 +118,7 @@ impl Value {
 impl Object {
     pub fn _typeof(&self) -> &'static str {
         match self {
-            Self::Any(_) | Self::Array(_) | Self::WeakSet(_) => "object",
+            Self::Any(_) | Self::Array(_) | Self::Weak(_) => "object",
             Self::Function(_) => "function",
             Self::String(_) => "string",
         }
@@ -130,7 +130,7 @@ impl Object {
             Self::Array(_) => true,
             Self::Function(..) => true,
             Self::Any(_) => true,
-            Self::WeakSet(_) => true,
+            Self::Weak(_) => true,
         }
     }
     pub fn lossy_equal(&self, other: &Value) -> bool {

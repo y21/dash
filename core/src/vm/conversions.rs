@@ -3,13 +3,13 @@ use super::{
     value::{
         array::Array,
         function::{Closure, FunctionKind, NativeFunction, UserFunction},
-        object::{AnyObject, Object},
-        weak::WeakSet,
+        object::{AnyObject, Object, Weak},
+        weak::{WeakMap, WeakSet},
         Value, ValueKind,
     },
 };
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::{cell::RefCell, convert::TryFrom};
+use std::{rc::Rc, str::Utf8Error};
 
 impl From<Constant> for Value {
     fn from(c: Constant) -> Self {
@@ -44,6 +44,17 @@ impl From<&'static str> for Value {
 impl From<String> for Value {
     fn from(s: String) -> Self {
         Object::String(s).into()
+    }
+}
+
+impl TryFrom<&[u8]> for Value {
+    type Error = Utf8Error;
+
+    fn try_from(s: &[u8]) -> Result<Value, Self::Error> {
+        std::str::from_utf8(s)
+            .map(ToOwned::to_owned)
+            .map(Object::String)
+            .map(Into::into)
     }
 }
 
@@ -83,9 +94,21 @@ impl From<NativeFunction> for Value {
     }
 }
 
+impl From<Weak> for Value {
+    fn from(s: Weak) -> Self {
+        Object::Weak(s).into()
+    }
+}
+
 impl From<WeakSet<RefCell<Value>>> for Value {
     fn from(s: WeakSet<RefCell<Value>>) -> Self {
-        Object::WeakSet(s).into()
+        Weak::Set(s).into()
+    }
+}
+
+impl From<WeakMap<RefCell<Value>, RefCell<Value>>> for Value {
+    fn from(m: WeakMap<RefCell<Value>, RefCell<Value>>) -> Self {
+        Weak::Map(m).into()
     }
 }
 

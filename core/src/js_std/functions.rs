@@ -1,15 +1,15 @@
+use std::cell::RefCell;
 use std::rc::Rc;
-use std::{borrow::Cow, cell::RefCell};
 
-use crate::vm::value::{function::CallContext, Value, ValueKind};
+use crate::vm::value::{function::CallContext, Value};
 
-pub fn is_nan(value: CallContext) -> Rc<RefCell<Value>> {
+pub fn is_nan(value: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
     let value = match value.args.first() {
         Some(v) => v,
-        None => return Value::from(true).into(),
+        None => return Ok(Value::from(true).into()),
     };
 
     let value = value.borrow().as_number();
 
-    Value::from(value.is_nan()).into()
+    Ok(Value::from(value.is_nan()).into())
 }

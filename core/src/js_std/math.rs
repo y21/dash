@@ -2,39 +2,42 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::vm::value::{function::CallContext, Value, ValueKind};
 
-pub fn abs(value: CallContext) -> Rc<RefCell<Value>> {
+pub fn abs(value: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
     let num = value
         .args
         .first()
         .map(|c| c.borrow().as_number())
         .unwrap_or(f64::NAN);
 
-    Value::new(ValueKind::Number(num.abs())).into()
+    Ok(Value::new(ValueKind::Number(num.abs())).into())
 }
 
-pub fn ceil(value: CallContext) -> Rc<RefCell<Value>> {
+pub fn ceil(value: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
     let num = value
         .args
         .first()
         .map(|c| c.borrow().as_number())
         .unwrap_or(f64::NAN);
 
-    Value::new(ValueKind::Number(num.ceil())).into()
+    Ok(Value::new(ValueKind::Number(num.ceil())).into())
 }
 
-pub fn floor(value: CallContext) -> Rc<RefCell<Value>> {
+pub fn floor(value: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
     let num = value
         .args
         .first()
         .map(|c| c.borrow().as_number())
         .unwrap_or(f64::NAN);
 
-    Value::new(ValueKind::Number(num.floor())).into()
+    Ok(Value::new(ValueKind::Number(num.floor())).into())
 }
 
-pub fn max(value: CallContext) -> Rc<RefCell<Value>> {
+pub fn max(value: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
     let mut arguments = value.arguments();
-    let mut max = arguments.next().cloned().unwrap();
+    let mut max = match arguments.next().cloned() {
+        Some(value) => value,
+        None => return Ok(Value::new(ValueKind::Number(-f64::INFINITY)).into()),
+    };
     let mut max_num = max.borrow().as_number();
 
     for arg_cell in arguments {
@@ -45,12 +48,15 @@ pub fn max(value: CallContext) -> Rc<RefCell<Value>> {
         }
     }
 
-    max
+    Ok(max)
 }
 
-pub fn min(value: CallContext) -> Rc<RefCell<Value>> {
+pub fn min(value: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
     let mut arguments = value.arguments();
-    let mut max = arguments.next().cloned().unwrap();
+    let mut max = match arguments.next().cloned() {
+        Some(value) => value,
+        None => return Ok(Value::new(ValueKind::Number(f64::INFINITY)).into()),
+    };
     let mut max_num = max.borrow().as_number();
 
     for arg_cell in arguments {
@@ -61,10 +67,10 @@ pub fn min(value: CallContext) -> Rc<RefCell<Value>> {
         }
     }
 
-    max
+    Ok(max)
 }
 
-pub fn pow(value: CallContext) -> Rc<RefCell<Value>> {
+pub fn pow(value: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
     let mut args = value.arguments();
 
     let lhs = args
@@ -79,5 +85,5 @@ pub fn pow(value: CallContext) -> Rc<RefCell<Value>> {
 
     let result = lhs.powf(rhs);
 
-    Value::new(ValueKind::Number(result)).into()
+    Ok(Value::new(ValueKind::Number(result)).into())
 }

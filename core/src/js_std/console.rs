@@ -1,15 +1,14 @@
-use std::{borrow::Cow, cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
 use crate::vm::value::{function::CallContext, Value, ValueKind};
 
-pub fn log(value: CallContext) -> Rc<RefCell<Value>> {
-    let value_cell = value.args.first().map(|c| c.borrow());
-    let value_string = value_cell
-        .as_deref()
-        .map(Value::to_string)
-        .unwrap_or(Cow::Borrowed("undefined"));
+pub fn log(value: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
+    for value_cell in value.arguments() {
+        let value_cell_ref = value_cell.borrow();
+        let value_string = value_cell_ref.inspect();
 
-    println!("{}", &*value_string);
+        println!("{}", &*value_string);
+    }
 
-    Value::new(ValueKind::Undefined).into()
+    Ok(Value::new(ValueKind::Undefined).into())
 }

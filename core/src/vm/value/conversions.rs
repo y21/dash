@@ -3,7 +3,7 @@ use std::{borrow::Cow, cell::RefCell, rc::Rc};
 use super::{
     array::Array,
     function::{CallContext, FunctionKind},
-    object::{Object, PropertyLookup},
+    object::{Object, PropertyLookup, Weak},
     weak::WeakSet,
     Value, ValueKind,
 };
@@ -68,12 +68,30 @@ impl Value {
 
     pub fn to_string(&self) -> Cow<str> {
         match &self.kind {
-            ValueKind::Bool(b) => Cow::Owned(b.to_string()),
+            ValueKind::Bool(b) => Cow::Borrowed(if *b { "true " } else { "false" }),
             ValueKind::Constant(_) => unreachable!(),
             ValueKind::Null => Cow::Borrowed("null"),
             ValueKind::Number(n) => Cow::Owned(n.to_string()),
             ValueKind::Object(o) => o.to_string(),
             ValueKind::Undefined => Cow::Borrowed("undefined"),
+        }
+    }
+
+    pub fn to_json(&self) -> Option<Cow<str>> {
+        match &self.kind {
+            ValueKind::Bool(b) => Some(self.to_string()),
+            ValueKind::Null => Some(self.to_string()),
+            ValueKind::Number(n) => Some(self.to_string()),
+            ValueKind::Undefined => Some(self.to_string()),
+            ValueKind::Object(o) => o.to_json(self),
+            ValueKind::Constant(c) => unreachable!(),
+        }
+    }
+
+    pub fn inspect(&self) -> Cow<str> {
+        match &self.kind {
+            ValueKind::Object(o) => o.inspect(self),
+            _ => self.to_string(),
         }
     }
 
@@ -123,20 +141,86 @@ impl Object {
         match self {
             Self::String(s) => Cow::Borrowed(s),
             Self::Function(f) => Cow::Owned(f.to_string()),
+            Self::Array(a) => Cow::Borrowed("[object Array]"),
+            Self::Weak(w) => w.to_string(),
+            _ => Cow::Borrowed("[object Object]"), // TODO: look if there's a toString function
+        }
+    }
+
+    pub fn to_json(&self, this: &Value) -> Option<Cow<str>> {
+        match self {
+            Self::String(s) => Some(Cow::Owned(format!("\"{}\"", s))),
+            Self::Function(_) => None,
             Self::Array(a) => {
-                let mut s = String::from("[");
+                let mut s = String::from("[ ");
+
+                for (index, element_cell) in a.elements.iter().enumerate() {
+                    if index > 0 {
+                        s.push_str(", ");
+                    }
+
+                    let element = element_cell.borrow();
+
+                    if let Some(element) = element.to_json() {
+                        s.push_str(&element);
+                    }
+                }
+
+                s.push_str(" ]");
+                Some(Cow::Owned(s))
+            }
+            Self::Any(a) => {
+                let mut s = String::from("{ ");
+
+                for (index, (key, value_cell)) in this.fields.iter().enumerate() {
+                    let value = value_cell.borrow();
+                    if index > 0 {
+                        s.push_str(", ");
+                    }
+
+                    if let Some(value) = value.to_json() {
+                        s.push_str(&format!(r#""{}": {}"#, key, &value));
+                    }
+                }
+
+                s.push_str(" }");
+                Some(Cow::Owned(s))
+            }
+            _ => None,
+        }
+    }
+
+    pub fn inspect(&self, this: &Value) -> Cow<str> {
+        match self {
+            Self::String(s) => Cow::Borrowed(s),
+            Self::Function(f) => Cow::Owned(f.to_string()),
+            Self::Array(a) => {
+                let mut s = String::from("[ ");
                 for (index, element_cell) in a.elements.iter().enumerate() {
                     let element = element_cell.borrow();
                     if index > 0 {
-                        s.push(',');
+                        s.push_str(", ");
                     }
-                    s.push_str(&*element.to_string());
+                    s.push_str(&*element.inspect());
                 }
-                s.push(']');
+                s.push_str(" ]");
                 Cow::Owned(s)
             }
-            Self::WeakSet(s) => Cow::Owned(format!("WeakSet {{ <{} items> }}", s.0.len())),
-            _ => Cow::Borrowed("[object Object]"), // TODO: look if there's a toString function
+            Self::Weak(w) => w.inspect(),
+            Self::Any(_) => {
+                let mut s = String::from("{ ");
+
+                for (index, (key, value_cell)) in this.fields.iter().enumerate() {
+                    let value = value_cell.borrow();
+                    if index > 0 {
+                        s.push_str(", ");
+                    }
+                    s.push_str(&format!(r#""{}": {}"#, key, value.inspect()));
+                }
+
+                s.push_str(" }");
+                Cow::Owned(s)
+            }
         }
     }
 
@@ -154,16 +238,16 @@ impl Object {
         }
     }
 
-    pub fn as_weakset(&self) -> Option<&WeakSet<RefCell<Value>>> {
+    pub fn as_weak(&self) -> Option<&Weak> {
         match self {
-            Self::WeakSet(s) => Some(s),
+            Self::Weak(w) => Some(w),
             _ => None,
         }
     }
 
-    pub fn as_weakset_mut(&mut self) -> Option<&mut WeakSet<RefCell<Value>>> {
+    pub fn as_weak_mut(&mut self) -> Option<&mut Weak> {
         match self {
-            Self::WeakSet(s) => Some(s),
+            Self::Weak(w) => Some(w),
             _ => None,
         }
     }

@@ -19,7 +19,7 @@ use crate::{
         upvalue::Upvalue,
         value::{
             array::Array,
-            function::{CallContext, Closure, FunctionKind, UserFunction},
+            function::{CallContext, Closure, Constructor, FunctionKind, UserFunction},
             ops::compare::Compare,
             ValueKind,
         },
@@ -210,6 +210,11 @@ impl VM {
         math_obj.set_property("SQRT2", Value::from(std::f64::consts::SQRT_2).into());
         self.global.set_var("Math", math_obj.into());
 
+        let mut json_obj = Value::from(AnyObject {});
+        json_obj.set_property("parse", self.statics.json_parse.clone());
+        json_obj.set_property("stringify", self.statics.json_stringify.clone());
+        self.global.set_var("JSON", json_obj.into());
+
         let mut console_obj = Value::from(AnyObject {});
         console_obj.set_property("log", self.statics.console_log.clone());
         self.global.set_var("console", console_obj.into());
@@ -218,6 +223,8 @@ impl VM {
             .set_var("Error", self.statics.error_ctor.clone());
         self.global
             .set_var("WeakSet", self.statics.weakset_ctor.clone());
+        self.global
+            .set_var("WeakMap", self.statics.weakmap_ctor.clone());
     }
 
     fn unwind(&mut self, value: Rc<RefCell<Value>>) -> Result<(), Rc<RefCell<Value>>> {
@@ -591,6 +598,45 @@ impl VM {
                     self.stack.push(target_cell);
                 }
                 Opcode::ConstructorCall => {
+                    let param_count = self.read_index().unwrap();
+                    let mut params = Vec::new();
+                    for _ in 0..param_count {
+                        params.push(self.stack.pop());
+                    }
+
+                    let func_cell = self.stack.pop();
+                    let func_cell_ref = func_cell.borrow();
+                    let func = match func_cell_ref.as_function().unwrap() {
+                        FunctionKind::Native(f) => {
+                            if !f.ctor.constructable() {
+                                // User tried to invoke non-constructor as a constructor
+                                unwind_abort_if_uncaught!(js_std::error::create_error(
+                                    MaybeRc::Owned(&format!("{} is not a constructor", f.name)),
+                                    self
+                                ));
+                            }
+
+                            let ctx = CallContext {
+                                vm: self,
+                                args: params,
+                                ctor: true,
+                                receiver: f.receiver.as_ref().map(|rx| rx.get().clone()),
+                            };
+                            let result = (f.func)(ctx);
+
+                            match result {
+                                Ok(res) => self.stack.push(res),
+                                Err(e) => unwind_abort_if_uncaught!(e),
+                            }
+
+                            continue;
+                        }
+                        FunctionKind::Closure(u) => u,
+                        // There should never be raw user functions
+                        _ => unreachable!(),
+                    };
+
+                    // TODO: support constructor call for user functions
                     todo!()
                 }
                 Opcode::GetThis => {
@@ -621,10 +667,16 @@ impl VM {
                             let ctx = CallContext {
                                 vm: self,
                                 args: params,
+                                ctor: false,
                                 receiver: f.receiver.as_ref().map(|rx| rx.get().clone()),
                             };
+
                             let result = (f.func)(ctx);
-                            self.stack.push(result);
+
+                            match result {
+                                Ok(res) => self.stack.push(res),
+                                Err(e) => unwind_abort_if_uncaught!(e),
+                            }
                             continue;
                         }
                         FunctionKind::Closure(u) => u,

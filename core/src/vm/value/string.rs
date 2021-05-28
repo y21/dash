@@ -1,6 +1,6 @@
 use crate::js_std;
 
-use super::{object::PropertyLookup, ValueKind};
+use super::{function::Constructor, object::PropertyLookup, ValueKind};
 
 pub fn get_property_unboxed(inner: &str, k: &str) -> Option<PropertyLookup> {
     match k {
@@ -8,7 +8,7 @@ pub fn get_property_unboxed(inner: &str, k: &str) -> Option<PropertyLookup> {
         "indexOf" => Some(PropertyLookup::Function(
             js_std::string::index_of,
             "indexOf",
-            false,
+            Constructor::NoCtor,
         )),
         _ => None,
     }

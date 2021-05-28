@@ -5,12 +5,30 @@ use std::rc::Rc;
 
 use super::Value;
 
-pub type NativeFunctionCallback = for<'a> fn(CallContext<'a>) -> Rc<RefCell<Value>>;
+pub type NativeFunctionCallback =
+    for<'a> fn(CallContext<'a>) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>>;
+
+#[derive(Debug, Clone, Copy)]
+pub enum Constructor {
+    // Function can be invoked with or without the new keyword
+    Any,
+    // Function can be invoked as a constructor using `new`, but also works without
+    Ctor,
+    // Function is not a constructor and cannot be called with `new`
+    NoCtor,
+}
+
+impl Constructor {
+    pub fn constructable(&self) -> bool {
+        matches!(self, Constructor::Ctor | Constructor::Any)
+    }
+}
 
 pub struct CallContext<'a> {
     pub vm: &'a mut VM,
     pub args: Vec<Rc<RefCell<Value>>>,
     pub receiver: Option<Rc<RefCell<Value>>>,
+    pub ctor: bool,
 }
 
 impl<'a> CallContext<'a> {
@@ -62,7 +80,7 @@ impl Closure {
 
 #[derive(Debug, Clone)]
 pub struct UserFunction {
-    pub ctor: bool,
+    pub ctor: Constructor,
     pub params: u32,
     pub receiver: Option<Receiver>,
     pub ty: FunctionType,
@@ -77,7 +95,7 @@ impl UserFunction {
         params: u32,
         ty: FunctionType,
         upvalues: u32,
-        ctor: bool,
+        ctor: Constructor,
     ) -> Self {
         Self {
             buffer: buffer.into_boxed_slice(),
@@ -101,7 +119,7 @@ impl UserFunction {
 }
 
 pub struct NativeFunction {
-    pub ctor: bool,
+    pub ctor: Constructor,
     pub name: &'static str,
     pub func: NativeFunctionCallback,
     pub receiver: Option<Receiver>,
@@ -110,9 +128,9 @@ pub struct NativeFunction {
 impl NativeFunction {
     pub fn new(
         name: &'static str,
-        func: for<'a> fn(CallContext<'a>) -> Rc<RefCell<Value>>,
+        func: for<'a> fn(CallContext<'a>) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>>,
         receiver: Option<Receiver>,
-        ctor: bool,
+        ctor: Constructor,
     ) -> Self {
         Self {
             ctor,

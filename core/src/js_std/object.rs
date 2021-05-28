@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::vm::value::{array::Array, function::CallContext, Value};
 
-pub fn define_property(value: CallContext) -> Rc<RefCell<Value>> {
+pub fn define_property(value: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
     let mut arguments = value.arguments();
 
     let obj_cell = arguments.next().unwrap();
@@ -15,10 +15,12 @@ pub fn define_property(value: CallContext) -> Rc<RefCell<Value>> {
     let value = Value::get_property(descriptor_cell, "value").unwrap();
     obj.set_property(&*prop_str, value);
 
-    obj_cell.clone()
+    Ok(obj_cell.clone())
 }
 
-pub fn get_own_property_names(value: CallContext) -> Rc<RefCell<Value>> {
+pub fn get_own_property_names(
+    value: CallContext,
+) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
     let obj_cell = value.args.first().unwrap();
     let obj = obj_cell.borrow();
 
@@ -28,5 +30,5 @@ pub fn get_own_property_names(value: CallContext) -> Rc<RefCell<Value>> {
         keys.push(Value::from(String::from(key)).into());
     }
 
-    Value::from(Array::new(keys)).into()
+    Ok(Value::from(Array::new(keys)).into())
 }

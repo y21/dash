@@ -31,7 +31,7 @@ pub fn create_error(message: MaybeRc<&str>, vm: &VM) -> Rc<RefCell<Value>> {
     error.into()
 }
 
-pub fn error_constructor(value: CallContext) -> Rc<RefCell<Value>> {
+pub fn error_constructor(value: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
     let message_cell = value.args.first();
     let message_cell_ref = message_cell.map(|c| c.borrow());
     let message = message_cell_ref
@@ -39,5 +39,5 @@ pub fn error_constructor(value: CallContext) -> Rc<RefCell<Value>> {
         .map(Value::to_string)
         .unwrap_or(Cow::Borrowed(""));
 
-    create_error(MaybeRc::Owned(&message), value.vm)
+    Ok(create_error(MaybeRc::Owned(&message), value.vm))
 }

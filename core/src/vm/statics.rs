@@ -1,6 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::js_std;
+use crate::vm::value::function::Constructor;
 
 use super::value::function::NativeFunction;
 use super::value::Value;
@@ -21,17 +22,24 @@ pub struct Statics {
     pub weakset_has: Rc<RefCell<Value>>,
     pub weakset_add: Rc<RefCell<Value>>,
     pub weakset_delete: Rc<RefCell<Value>>,
+    pub weakmap_ctor: Rc<RefCell<Value>>,
+    pub weakmap_has: Rc<RefCell<Value>>,
+    pub weakmap_add: Rc<RefCell<Value>>,
+    pub weakmap_get: Rc<RefCell<Value>>,
+    pub weakmap_delete: Rc<RefCell<Value>>,
+    pub json_parse: Rc<RefCell<Value>>,
+    pub json_stringify: Rc<RefCell<Value>>,
 }
 
 macro_rules! register_glob_method {
     ($name:expr, $path:expr) => {
-        Value::from(NativeFunction::new($name, $path, None, false)).into()
+        Value::from(NativeFunction::new($name, $path, None, Constructor::NoCtor)).into()
     };
 }
 
 macro_rules! register_ctor {
     ($name:expr, $path:expr) => {
-        Value::from(NativeFunction::new($name, $path, None, true)).into()
+        Value::from(NativeFunction::new($name, $path, None, Constructor::Ctor)).into()
     };
 }
 
@@ -60,6 +68,13 @@ impl Statics {
             weakset_has: register_glob_method!("has", js_std::weakset::has),
             weakset_add: register_glob_method!("add", js_std::weakset::add),
             weakset_delete: register_glob_method!("delete", js_std::weakset::delete),
+            weakmap_ctor: register_ctor!("WeakMap", js_std::weakmap::weakmap_constructor),
+            weakmap_has: register_glob_method!("has", js_std::weakmap::has),
+            weakmap_add: register_glob_method!("add", js_std::weakmap::add),
+            weakmap_get: register_glob_method!("get", js_std::weakmap::get),
+            weakmap_delete: register_glob_method!("delete", js_std::weakmap::delete),
+            json_parse: register_glob_method!("parse", js_std::json::parse),
+            json_stringify: register_glob_method!("stringify", js_std::json::stringify),
         }
     }
 }
