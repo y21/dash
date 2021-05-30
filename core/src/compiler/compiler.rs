@@ -5,8 +5,8 @@ use crate::{
             GroupingExpr, LiteralExpr, ObjectLiteral, Postfix, PropertyAccessExpr, Seq, UnaryExpr,
         },
         statement::{
-            BlockStatement, FunctionDeclaration, IfStatement, ReturnStatement, Statement, TryCatch,
-            VariableDeclaration, WhileLoop,
+            BlockStatement, ForLoop, FunctionDeclaration, IfStatement, ReturnStatement, Statement,
+            TryCatch, VariableDeclaration, WhileLoop,
         },
         token::TokenType,
     },
@@ -151,6 +151,10 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
                 }
                 b"super" => {
                     instructions[0] = Instruction::Op(Opcode::GetSuper);
+                    return instructions;
+                }
+                b"globalThis" => {
+                    instructions[0] = Instruction::Op(Opcode::GetGlobalThis);
                     return instructions;
                 }
                 _ => {}
@@ -421,8 +425,8 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
     }
 
     fn visit_assignment_expression(&mut self, e: &AssignmentExpr<'a>) -> Vec<Instruction> {
-        let mut instructions = self.accept_expr(&e.right);
-        instructions.extend(self.accept_expr(&e.left));
+        let mut instructions = self.accept_expr(&e.left);
+        instructions.extend(self.accept_expr(&e.right));
         instructions.push(Instruction::Op(e.operator.into()));
 
         instructions
@@ -617,5 +621,84 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         let mut instructions = self.accept_expr(e);
         instructions.push(Instruction::Op(Opcode::Throw));
         instructions
+    }
+
+    fn visit_for_loop(&mut self, f: &ForLoop<'a>) -> Vec<Instruction> {
+        let mut instructions = vec![
+            Instruction::Op(Opcode::LoopStart),
+            Instruction::Op(Opcode::Nop),
+            Instruction::Op(Opcode::Nop),
+        ];
+        self.scope.enter_scope();
+
+        if let Some(initializer) = &f.init {
+            instructions.extend(self.accept(initializer))
+        }
+
+        let begin_condition_idx = instructions.len();
+        instructions[1] = Instruction::Operand(Constant::Index(begin_condition_idx - 3));
+
+        if let Some(condition) = &f.condition {
+            instructions.extend(self.accept_expr(condition));
+        } else {
+            instructions.extend(self.accept_expr(&Expr::bool_literal(true)));
+        };
+
+        instructions.push(Instruction::Op(Opcode::Constant));
+        let end_of_loop_jmp = instructions.len();
+        instructions.push(Instruction::Op(Opcode::Nop));
+        instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
+
+        instructions.push(Instruction::Op(Opcode::Pop));
+
+        instructions.push(Instruction::Op(Opcode::Constant));
+        let body_jmp = instructions.len();
+        instructions.push(Instruction::Op(Opcode::Nop));
+        instructions.push(Instruction::Op(Opcode::ShortJmp));
+
+        let finalizer_idx = instructions.len();
+        if let Some(finalizer) = &f.finalizer {
+            instructions.extend(self.accept_expr(finalizer));
+            instructions.push(Instruction::Op(Opcode::Pop));
+        }
+
+        instructions.push(Instruction::Op(Opcode::Constant));
+        let condition_back_jmp = instructions.len();
+        instructions.push(Instruction::Op(Opcode::Nop));
+        instructions.push(Instruction::Op(Opcode::BackJmp));
+
+        let begin_body = instructions.len();
+        instructions.extend(self.accept(&f.body));
+
+        instructions.push(Instruction::Op(Opcode::Constant));
+        instructions.push(Instruction::Operand(Constant::Index(
+            instructions.len() - finalizer_idx + 2,
+        )));
+        instructions.push(Instruction::Op(Opcode::BackJmp));
+
+        instructions[end_of_loop_jmp] =
+            Instruction::Operand(Constant::Index(instructions.len() - (end_of_loop_jmp + 2)));
+        instructions[body_jmp] = Instruction::Operand(Constant::Index(begin_body - (body_jmp + 2)));
+        instructions[condition_back_jmp] = Instruction::Operand(Constant::Index(
+            condition_back_jmp - begin_condition_idx + 2,
+        ));
+
+        instructions.push(Instruction::Op(Opcode::Pop));
+
+        instructions[2] = Instruction::Operand(Constant::Index(instructions.len() - 3));
+
+        instructions.push(Instruction::Op(Opcode::LoopEnd));
+
+        self.scope.leave_scope();
+
+        instructions
+    }
+
+    fn visit_break(&mut self) -> Vec<Instruction> {
+        vec![Instruction::Op(Opcode::Break)]
+    }
+
+    fn visit_continue(&mut self) -> Vec<Instruction> {
+        vec![Instruction::Op(Opcode::Continue)]
     }
 }
