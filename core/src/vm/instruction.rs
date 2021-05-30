@@ -14,6 +14,7 @@ pub enum Opcode {
     GetLocal,
     GetThis,
     GetSuper,
+    GetGlobalThis,
     GetUpvalue,
     GetLocalRef,
     GetGlobalRef,
@@ -81,6 +82,10 @@ pub enum Opcode {
     ObjectLiteral,
     Try,
     Throw,
+    Continue,
+    Break,
+    LoopStart,
+    LoopEnd,
 }
 
 impl From<TokenType> for Opcode {
