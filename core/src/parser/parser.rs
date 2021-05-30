@@ -3,8 +3,8 @@ use crate::parser::expr::LiteralExpr;
 use super::{
     expr::{Expr, UnaryExpr},
     statement::{
-        BlockStatement, Catch, FunctionDeclaration, IfStatement, ReturnStatement, Statement,
-        TryCatch, VariableDeclaration, VariableDeclarationKind, WhileLoop,
+        BlockStatement, Catch, ForLoop, FunctionDeclaration, IfStatement, ReturnStatement,
+        Statement, TryCatch, VariableDeclaration, VariableDeclarationKind, WhileLoop,
     },
     token::{Error, ErrorKind, Token, TokenType, ASSIGNMENT_TYPES},
 };
@@ -60,6 +60,9 @@ impl<'a> Parser<'a> {
             TokenType::Try => self.try_block().map(Statement::Try),
             TokenType::Throw => self.throw().map(Statement::Throw),
             TokenType::Return => self.return_statement().map(Statement::Return),
+            TokenType::For => self.for_loop().map(Statement::For),
+            TokenType::Continue => Some(Statement::Continue),
+            TokenType::Break => Some(Statement::Break),
             _ => {
                 // We've skipped the current character because of the statement cases that skip the current token
                 // So we go back, as the skipped token belongs to this expression
@@ -100,6 +103,36 @@ impl<'a> Parser<'a> {
     pub fn return_statement(&mut self) -> Option<ReturnStatement<'a>> {
         let expr = self.expression()?;
         Some(ReturnStatement(expr))
+    }
+
+    pub fn for_loop(&mut self) -> Option<ForLoop<'a>> {
+        self.expect_and_skip(&[TokenType::LeftParen], true);
+
+        let init = if self.expect_and_skip(&[TokenType::Semicolon], false) {
+            None
+        } else {
+            self.statement()
+        };
+
+        let cond = if self.expect_and_skip(&[TokenType::Semicolon], false) {
+            None
+        } else {
+            let expr = self.expression();
+            self.expect_and_skip(&[TokenType::Semicolon], false);
+            expr
+        };
+
+        let finalizer = if self.expect_and_skip(&[TokenType::RightParen], false) {
+            None
+        } else {
+            let expr = self.expression();
+            self.expect_and_skip(&[TokenType::RightParen], false);
+            expr
+        };
+
+        let body = self.statement()?;
+
+        Some(ForLoop::new(init, cond, finalizer, body))
     }
 
     pub fn while_loop(&mut self) -> Option<WhileLoop<'a>> {
