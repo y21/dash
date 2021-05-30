@@ -81,7 +81,6 @@ pub enum TokenType {
     OptionalChaining,
     For,
     While,
-    Print,
     In,
     Instanceof,
     Await,
@@ -89,6 +88,8 @@ pub enum TokenType {
     Void,
     Typeof,
     Error,
+    Break,
+    Continue,
 }
 
 pub const ASSIGNMENT_TYPES: &[TokenType] = &[
@@ -132,13 +133,14 @@ impl From<&[u8]> for TokenType {
             b"new" => Self::New,
             b"for" => Self::For,
             b"while" => Self::While,
-            b"print" => Self::Print,
             b"in" => Self::In,
             b"instanceof" => Self::Instanceof,
             b"await" => Self::Await,
             b"delete" => Self::Delete,
             b"void" => Self::Void,
             b"typeof" => Self::Typeof,
+            b"continue" => Self::Continue,
+            b"break" => Self::Break,
             _ => Self::Identifier,
         }
     }
