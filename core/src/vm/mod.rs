@@ -19,7 +19,7 @@ use crate::{
         upvalue::Upvalue,
         value::{
             array::Array,
-            function::{CallContext, Closure, Constructor, FunctionKind, UserFunction},
+            function::{CallContext, Closure, FunctionKind, UserFunction},
             ops::compare::Compare,
             ValueKind,
         },
@@ -27,8 +27,7 @@ use crate::{
 };
 
 use self::{
-    environment::Environment,
-    frame::Frame,
+    frame::{Frame, Loop},
     instruction::Constant,
     stack::Stack,
     statics::Statics,
@@ -46,13 +45,15 @@ pub struct VM {
     /// Stack
     pub(crate) stack: Stack<Rc<RefCell<Value>>, 512>,
     /// Global namespace
-    pub(crate) global: Environment,
+    pub(crate) global: Rc<RefCell<Value>>,
     /// Static values created once when the VM is initialized
     pub(crate) statics: Statics,
     /// Embedder specific slot data
     pub(crate) slot: Option<Box<dyn Any>>,
     /// Unwind (try/catch) handlers
     pub(crate) unwind_handlers: Stack<UnwindHandler, 128>,
+    /// Loops
+    pub(crate) loops: Stack<Loop, 32>,
 }
 
 impl VM {
@@ -68,17 +69,18 @@ impl VM {
         let mut vm = Self {
             frames,
             stack: Stack::new(),
-            global: Environment::new(),
+            global: Value::from(AnyObject {}).into(),
             statics: Statics::new(),
             unwind_handlers: Stack::new(),
+            loops: Stack::new(),
             slot: None,
         };
         vm.prepare_stdlib();
         vm
     }
 
-    pub fn global_mut(&mut self) -> &mut Environment {
-        &mut self.global
+    pub fn global(&self) -> &Rc<RefCell<Value>> {
+        &self.global
     }
 
     pub fn set_slot<T: 'static>(&mut self, value: T) {
@@ -176,11 +178,13 @@ impl VM {
     }
 
     fn prepare_stdlib(&mut self) {
-        self.global.set_var("NaN", Value::from(f64::NAN).into());
-        self.global
-            .set_var("Infinity", Value::from(f64::INFINITY).into());
+        let mut global = self.global.borrow_mut();
+        global.set_property("globalThis", self.global.clone());
 
-        self.global.set_var("isNaN", self.statics.isnan.clone());
+        global.set_property("NaN", Value::from(f64::NAN).into());
+        global.set_property("Infinity", Value::from(f64::INFINITY).into());
+
+        global.set_property("isNaN", self.statics.isnan.clone());
 
         // TODO: make Object a function instead of object
         let mut object_obj = Value::from(AnyObject {});
@@ -192,7 +196,7 @@ impl VM {
             "getOwnPropertyNames",
             self.statics.object_get_own_property_names.clone(),
         );
-        self.global.set_var("Object", object_obj.into());
+        global.set_property("Object", object_obj.into());
 
         let mut math_obj = Value::from(AnyObject {});
         math_obj.set_property("pow", self.statics.math_pow.clone());
@@ -208,23 +212,20 @@ impl VM {
         math_obj.set_property("LOG10E", Value::from(std::f64::consts::LOG10_E).into());
         math_obj.set_property("LOG2E", Value::from(std::f64::consts::LOG2_E).into());
         math_obj.set_property("SQRT2", Value::from(std::f64::consts::SQRT_2).into());
-        self.global.set_var("Math", math_obj.into());
+        global.set_property("Math", math_obj.into());
 
         let mut json_obj = Value::from(AnyObject {});
         json_obj.set_property("parse", self.statics.json_parse.clone());
         json_obj.set_property("stringify", self.statics.json_stringify.clone());
-        self.global.set_var("JSON", json_obj.into());
+        global.set_property("JSON", json_obj.into());
 
         let mut console_obj = Value::from(AnyObject {});
         console_obj.set_property("log", self.statics.console_log.clone());
-        self.global.set_var("console", console_obj.into());
+        global.set_property("console", console_obj.into());
 
-        self.global
-            .set_var("Error", self.statics.error_ctor.clone());
-        self.global
-            .set_var("WeakSet", self.statics.weakset_ctor.clone());
-        self.global
-            .set_var("WeakMap", self.statics.weakmap_ctor.clone());
+        global.set_property("Error", self.statics.error_ctor.clone());
+        global.set_property("WeakSet", self.statics.weakset_ctor.clone());
+        global.set_property("WeakMap", self.statics.weakmap_ctor.clone());
     }
 
     fn unwind(&mut self, value: Rc<RefCell<Value>>) -> Result<(), Rc<RefCell<Value>>> {
@@ -386,19 +387,20 @@ impl VM {
                     let name = self.pop_owned().unwrap().into_ident().unwrap();
                     let value = self.stack.pop();
 
-                    self.global.set_var(name, value);
+                    let mut global = self.global.borrow_mut();
+                    global.set_property(name, value);
                 }
                 Opcode::SetGlobalNoValue => {
                     let name = self.pop_owned().unwrap().into_ident().unwrap();
 
-                    self.global
-                        .set_var(name, Value::new(ValueKind::Undefined).into());
+                    let mut global = self.global.borrow_mut();
+                    global.set_property(name, Value::new(ValueKind::Undefined).into());
                 }
                 Opcode::GetGlobal => {
                     let name = self.pop_owned().unwrap().into_ident().unwrap();
 
                     let value = unwrap_or_unwind!(
-                        self.global.get_var(&name),
+                        Value::get_property(&self.global, &name),
                         js_std::error::create_error(
                             MaybeRc::Owned(&format!("{} is not defined", name)),
                             self
@@ -478,7 +480,6 @@ impl VM {
                 Opcode::ShortJmp => {
                     let instruction_count = self.read_index().unwrap();
                     self.frame_mut().ip += instruction_count;
-                    println!("Jumped to {:?}", &self.buffer()[self.ip()]);
                 }
                 Opcode::BackJmp => {
                     let instruction_count = self.read_index().unwrap();
@@ -491,64 +492,64 @@ impl VM {
                     self.unwind_handlers.pop();
                 }
                 Opcode::AdditionAssignment => {
-                    let target_cell = self.stack.pop();
                     let value_cell = self.stack.pop();
+                    let target_cell = self.stack.pop();
                     let value = value_cell.borrow();
                     target_cell.borrow_mut().add_assign(&*value);
                     self.stack.push(target_cell);
                 }
                 Opcode::SubtractionAssignment => {
-                    let target_cell = self.stack.pop();
                     let value_cell = self.stack.pop();
+                    let target_cell = self.stack.pop();
                     let value = value_cell.borrow();
                     target_cell.borrow_mut().sub_assign(&*value);
                     self.stack.push(target_cell);
                 }
                 Opcode::MultiplicationAssignment => {
-                    let target_cell = self.stack.pop();
                     let value_cell = self.stack.pop();
+                    let target_cell = self.stack.pop();
                     let value = value_cell.borrow();
                     target_cell.borrow_mut().mul_assign(&*value);
                     self.stack.push(target_cell);
                 }
                 Opcode::DivisionAssignment => {
-                    let target_cell = self.stack.pop();
                     let value_cell = self.stack.pop();
+                    let target_cell = self.stack.pop();
                     let value = value_cell.borrow();
                     target_cell.borrow_mut().div_assign(&*value);
                     self.stack.push(target_cell);
                 }
                 Opcode::RemainderAssignment => {
-                    let target_cell = self.stack.pop();
                     let value_cell = self.stack.pop();
+                    let target_cell = self.stack.pop();
                     let value = value_cell.borrow();
                     target_cell.borrow_mut().rem_assign(&*value);
                     self.stack.push(target_cell);
                 }
                 Opcode::ExponentiationAssignment => {
-                    let target_cell = self.stack.pop();
                     let value_cell = self.stack.pop();
+                    let target_cell = self.stack.pop();
                     let value = value_cell.borrow();
                     target_cell.borrow_mut().pow_assign(&*value);
                     self.stack.push(target_cell);
                 }
                 Opcode::LeftShiftAssignment => {
-                    let target_cell = self.stack.pop();
                     let value_cell = self.stack.pop();
+                    let target_cell = self.stack.pop();
                     let value = value_cell.borrow();
                     target_cell.borrow_mut().left_shift_assign(&*value);
                     self.stack.push(target_cell);
                 }
                 Opcode::RightShiftAssignment => {
-                    let target_cell = self.stack.pop();
                     let value_cell = self.stack.pop();
+                    let target_cell = self.stack.pop();
                     let value = value_cell.borrow();
                     target_cell.borrow_mut().right_shift_assign(&*value);
                     self.stack.push(target_cell);
                 }
                 Opcode::UnsignedRightShiftAssignment => {
-                    let target_cell = self.stack.pop();
                     let value_cell = self.stack.pop();
+                    let target_cell = self.stack.pop();
                     let value = value_cell.borrow();
                     target_cell
                         .borrow_mut()
@@ -556,43 +557,43 @@ impl VM {
                     self.stack.push(target_cell);
                 }
                 Opcode::BitwiseAndAssignment => {
-                    let target_cell = self.stack.pop();
                     let value_cell = self.stack.pop();
+                    let target_cell = self.stack.pop();
                     let value = value_cell.borrow();
                     target_cell.borrow_mut().bitwise_and_assign(&*value);
                     self.stack.push(target_cell);
                 }
                 Opcode::BitwiseOrAssignment => {
-                    let target_cell = self.stack.pop();
                     let value_cell = self.stack.pop();
+                    let target_cell = self.stack.pop();
                     let value = value_cell.borrow();
                     target_cell.borrow_mut().bitwise_or_assign(&*value);
                     self.stack.push(target_cell);
                 }
                 Opcode::BitwiseXorAssignment => {
-                    let target_cell = self.stack.pop();
                     let value_cell = self.stack.pop();
+                    let target_cell = self.stack.pop();
                     let value = value_cell.borrow();
                     target_cell.borrow_mut().bitwise_xor_assign(&*value);
                     self.stack.push(target_cell);
                 }
                 Opcode::LogicalAndAssignment => {
-                    let target_cell = self.stack.pop();
                     let value_cell = self.stack.pop();
+                    let target_cell = self.stack.pop();
                     let value = value_cell.borrow();
                     target_cell.borrow_mut().logical_and_assign(&*value);
                     self.stack.push(target_cell);
                 }
                 Opcode::LogicalOrAssignment => {
-                    let target_cell = self.stack.pop();
                     let value_cell = self.stack.pop();
+                    let target_cell = self.stack.pop();
                     let value = value_cell.borrow();
                     target_cell.borrow_mut().logical_and_assign(&*value);
                     self.stack.push(target_cell);
                 }
                 Opcode::LogicalNullishAssignment => {
-                    let target_cell = self.stack.pop();
                     let value_cell = self.stack.pop();
+                    let target_cell = self.stack.pop();
                     let value = value_cell.borrow();
                     target_cell.borrow_mut().nullish_coalescing_assign(&*value);
                     self.stack.push(target_cell);
@@ -606,7 +607,7 @@ impl VM {
 
                     let func_cell = self.stack.pop();
                     let func_cell_ref = func_cell.borrow();
-                    let func = match func_cell_ref.as_function().unwrap() {
+                    let _func = match func_cell_ref.as_function().unwrap() {
                         FunctionKind::Native(f) => {
                             if !f.ctor.constructable() {
                                 // User tried to invoke non-constructor as a constructor
@@ -652,6 +653,9 @@ impl VM {
                         receiver.get().clone()
                     };
                     self.stack.push(this);
+                }
+                Opcode::GetGlobalThis => {
+                    self.stack.push(self.global.clone());
                 }
                 Opcode::FunctionCall => {
                     let param_count = self.read_index().unwrap();
@@ -881,6 +885,28 @@ impl VM {
                         .unwrap_or_else(|| Value::new(ValueKind::Undefined).into());
 
                     self.stack.push(prop);
+                }
+                Opcode::Continue => {
+                    let this = unsafe { self.loops.get_unchecked() };
+                    self.frame_mut().ip = this.condition_ip;
+                }
+                Opcode::Break => {
+                    let this = unsafe { self.loops.get_unchecked() };
+                    self.frame_mut().ip = this.end_ip;
+                }
+                Opcode::LoopStart => {
+                    let condition_offset =
+                        self.read_constant().and_then(Constant::into_index).unwrap();
+                    let end_offset = self.read_constant().and_then(Constant::into_index).unwrap();
+                    let ip = self.ip();
+                    let info = Loop {
+                        condition_ip: (ip + condition_offset),
+                        end_ip: (ip + end_offset),
+                    };
+                    self.loops.push(info);
+                }
+                Opcode::LoopEnd => {
+                    self.loops.pop();
                 }
                 _ => unreachable!("{:?}", instruction),
             };
