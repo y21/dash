@@ -1,5 +1,6 @@
 ## Progress
 dash tries to support most/all of ECMA-262 version 3, with additional ES5/6 features.
+This file should give you a short overview of what's missing but will likely be implemented in the future. This is a non exhaustive list.
 
 - [ ] Primitives
   - [x] Double quote strings
@@ -12,11 +13,14 @@ dash tries to support most/all of ECMA-262 version 3, with additional ES5/6 feat
   - [ ] Hex literal (0xA)
   - [ ] Binary literal (0b1)
   - [ ] Octal literal (01)
+  - [ ] Number literals with underscore
   - [x] null
   - [x] undefined
   - [x] NaN
 - [ ] Objects
+  - [x] Object literals
   - [ ] Arrays
+    - [x] Array literals
 - [ ] RegExp
   - [ ] RegExp literal
 - [ ] Standard library
@@ -30,101 +34,372 @@ dash tries to support most/all of ECMA-262 version 3, with additional ES5/6 feat
   - [ ] parseInt
   - [ ] parseFloat
   - [ ] Array
+    - [ ] length
+    - [ ] concat
+    - [ ] copyWithin
+    - [ ] fill
+    - [ ] find
+    - [ ] findIndex
+    - [ ] lastIndexOf
+    - [ ] pop
+    - [ ] push
+    - [ ] reverse
+    - [ ] shift
+    - [ ] unshift
+    - [ ] slice
+    - [ ] sort
+    - [ ] splice
+    - [ ] includes
+    - [ ] indexOf
+    - [ ] join
+    - [ ] keys
+    - [ ] entries
+    - [ ] values
+    - [ ] forEach
+    - [ ] filter
+    - [ ] flat
+    - [ ] flatMap
+    - [ ] map
+    - [ ] every
+    - [ ] some
+    - [ ] reduce
+    - [ ] reduceRight
+    - [ ] toLocaleString
+    - [ ] toString
+    - [ ] @@iterator
+    - [ ] @@unscopables
   - [ ] ArrayBuffer
-  - [ ] BigInt
+    - [ ] byteLength
+    - [ ] slice
+    - [ ] @@toStringTag
+  - [ ] Typed arrays
+    - [ ] Int8Array/Uint8Array
+    - [ ] Int16Array/Uint16Array
+    - [ ] Int32Array/Uint32Array
+    - [ ] Int64Array/Uint64Array
+  - [ ] ~~BigInt~~ (?)
   - [ ] Boolean
   - [ ] DataView
   - [ ] Date
-  - [ ] Error
+    - [ ] toString
+    - [ ] toDateString
+    - [ ] toTimeString
+    - [ ] toISOString
+    - [ ] toUTCString
+    - [ ] toGMTString
+    - [ ] getDate
+    - [ ] setDate
+    - [ ] getDay
+    - [ ] getFullYear
+    - [ ] setFullYear
+    - [ ] getHours
+    - [ ] setHours
+    - [ ] getMilliseconds
+    - [ ] setMilliseconds
+    - [ ] getMinutes
+    - [ ] setMinutes
+    - [ ] getMonth
+    - [ ] setMonth
+    - [ ] getSeconds
+    - [ ] setSeconds
+    - [ ] getTime
+    - [ ] setTime
+    - [ ] getTimezoneOffset
+    - [ ] getUTCDate
+    - [ ] setUTCDate
+    - [ ] getUTCDay
+    - [ ] getUTCFullYear
+    - [ ] setUTCFullYear
+    - [ ] getUTCHours
+    - [ ] setUTCHours
+    - [ ] getUTCMilliseconds
+    - [ ] setUTCMilliseconds
+    - [ ] getUTCMinutes
+    - [ ] setUTCMinutes
+    - [ ] getUTCMonth
+    - [ ] setUTCMonth
+    - [ ] getUTCSeconds
+    - [ ] setUTCSeconds
+    - [ ] valueOf
+    - [ ] getYear
+    - [ ] setYear
+    - [ ] toJSON
+    - [ ] toLocaleString
+    - [ ] toLocaleDateString
+    - [ ] toLocaleTimeString
+    - [ ] @@toPrimitive
+  - [x] Error (other sub error types are missing)
   - [ ] Function
-  - [ ] JSON
+  - [x] JSON
+    - [x] stringify
+    - [x] parse
   - [ ] Map
+    - [x] get
+    - [x] set
+    - [ ] has
+    - [x] delete
+    - [ ] clear
+    - [ ] entries
+    - [ ] forEach
+    - [ ] keys
+    - [ ] size
+    - [ ] values
+    - [ ] @@toStringTag
+    - [ ] @@iterator
   - [ ] Math
+    - [x] abs
+    - [ ] acos
+    - [ ] acosh
+    - [ ] asin
+    - [ ] asinh
+    - [ ] atan
+    - [ ] atanh
+    - [ ] atan2
+    - [ ] ceil
+    - [ ] cbrt
+    - [ ] expm1
+    - [ ] clz32
+    - [ ] cos
+    - [ ] cosh
+    - [ ] exp
+    - [ ] floor
+    - [ ] fround
+    - [ ] hypot
+    - [ ] imul
+    - [ ] log
+    - [ ] log1p
+    - [ ] log2
+    - [ ] log10
+    - [x] max
+    - [x] min
+    - [x] pow
+    - [ ] random
+    - [ ] round
+    - [ ] sign
+    - [ ] sin
+    - [ ] sinh
+    - [ ] sqrt
+    - [ ] tan
+    - [ ] tanh
+    - [ ] trunc
+    - [x] E
+    - [x] LN10
+    - [x] LN2
+    - [x] LOG10E
+    - [x] LOG2E
+    - [x] PI
+    - [x] SQRT1_2
+    - [x] SQRT2
+    - [ ] @@toStringTag
   - [ ] Number
+    - [ ] toExponential
+    - [ ] toFixed
+    - [ ] toPrecision
+    - [ ] toString
+    - [ ] valueOf
+    - [ ] toLocaleString
   - [ ] Object
+    - [ ] assign
+    - [ ] getOwnPropertyDescriptor
+    - [ ] getOwnPropertyDescriptors
+    - [ ] getOwnPropertyNames
+    - [ ] getOwnPropertySymbols
+    - [ ] is
+    - [ ] preventExtensions
+    - [ ] seal
+    - [ ] create
+    - [ ] defineProperties
+    - [ ] defineProperty
+    - [ ] freeze
+    - [ ] getPrototypeOf
+    - [ ] setPrototypeOf
+    - [ ] isExtensible
+    - [ ] isFrozen
+    - [ ] isSealed
+    - [ ] keys
+    - [ ] entries
+    - [ ] fromEntries
+    - [ ] values
+    - [ ] \_\_defineGetter\_\_
+    - [ ] \_\_defineSetter\_\_
+    - [ ] hasOwnProperty
+    - [ ] \_\_lookupGetter\_\_
+    - [ ] \_\_lookupSetter\_\_
+    - [ ] isPrototypeOf
+    - [ ] propertyIsEnumerable
+    - [ ] toString
+    - [ ] valueOf
+    - [ ] \_\_proto\_\_
+    - [ ] toLocaleString
   - [ ] Promise
   - [ ] Proxy
   - [ ] Reflect
   - [ ] RegExp
   - [ ] Set
+    - [x] has
+    - [x] add
+    - [x] delete
+    - [ ] clear
+    - [ ] entries
+    - [ ] forEach
+    - [ ] size
+    - [ ] values
+    - [ ] keys
+    - [ ] @@toStringTag
+    - [ ] @@iterator
   - [ ] String
+    - [x] length
+    - [ ] constructor
+    - [ ] anchor
+    - [ ] big
+    - [ ] blink
+    - [ ] bold
+    - [ ] charAt
+    - [ ] charCodeAt
+    - [ ] codePointAt
+    - [ ] concat
+    - [ ] endsWith
+    - [ ] fontcolor
+    - [ ] fontsize
+    - [ ] fixed
+    - [ ] includes
+    - [ ] indexOf
+    - [ ] italics
+    - [ ] lastIndexOf
+    - [ ] link
+    - [ ] localeCompare
+    - [ ] match
+    - [ ] matchAll
+    - [ ] normalize
+    - [ ] padEnd
+    - [ ] padStart
+    - [ ] repeat
+    - [ ] replace
+    - [ ] search
+    - [ ] slice
+    - [ ] small
+    - [ ] split
+    - [ ] strike
+    - [ ] sub
+    - [ ] substr
+    - [ ] substring
+    - [ ] sup
+    - [ ] startsWith
+    - [ ] toString
+    - [ ] trim
+    - [ ] trimStart
+    - [ ] trimLeft
+    - [ ] trimEnd
+    - [ ] trimRight
+    - [ ] toLocaleLowerCase
+    - [ ] toLocaleUpperCase
+    - [ ] toLowerCase
+    - [ ] toUpperCase
+    - [ ] valueOf
+    - [ ] replaceAll
   - [ ] Symbol
-  - [ ] WeakMap
-  - [ ] WeakSet
+    - [ ] @@keyFor
+    - [ ] @@hasInstance
+    - [ ] @@iterator
+    - [ ] @@matchAll
+    - [ ] @@search
+    - [ ] @@split
+    - [ ] @@toStringTag
+    - [ ] @@asyncIterator
+    - [ ] @@isConcatSpreadable
+    - [ ] @@match
+    - [ ] @@replace
+    - [ ] @@species
+    - [ ] @@toPrimitive
+    - [ ] @@unscopables
+  - [x] WeakMap
+    - [x] delete
+    - [x] get
+    - [x] has
+    - [x] set
+    - [ ] @@toStringTag
+  - [x] WeakSet
+    - [x] delete
+    - [x] has
+    - [x] add
+    - [ ] @@toStringTag
 - [ ] Operators
-  - [ ] +=
+  - [x] +=
   - [x] +
-  - [ ] =
+  - [x] =
   - [ ] async/await
-  - [ ] &=
-  - [ ] &
+  - [x] &=
+  - [x] &
   - [ ] ~
-  - [ ] |=
-  - [ ] |
-  - [ ] ^=
-  - [ ] ^
+  - [x] |=
+  - [x] |
+  - [x] ^=
+  - [x] ^
   - [ ] , (sequence)
   - [x] ? :
-  - [ ] --
-  - [ ] let [] = expr;
-  - [ ] /=
+  - [x] --expr
+  - [x] expr--
+  - [ ] let [foo] = bar;
+  - [ ] let {foo} = bar;
+  - [x] /=
   - [x] /
-  - [ ] ==
-  - [ ] **==
-  - [ ] **
+  - [x] ==
+  - [x] **=
+  - [x] **
   - [ ] function*
-  - [ ] function
+  - [x] function
   - [x] >=
   - [x] >
   - [x] (expr)
   - [ ] in
-  - [ ] ++
-  - [ ] !=
+  - [x] ++expr
+  - [x] expr++
+  - [x] !=
   - [ ] instanceof
-  - [ ] <<=
-  - [ ] <<
-  - [ ] <=
-  - [ ] <
-  - [ ] &&=
-  - [ ] &&
+  - [x] <<=
+  - [x] <<
+  - [x] <=
+  - [x] <
+  - [x] &&=
+  - [x] &&
   - [x] !
-  - [ ] ??=
-  - [ ] ||=
-  - [ ] ||
-  - [ ] *=
+  - [x] ??=
+  - [x] ||=
+  - [x] ||
+  - [x] *=
   - [x] *
   - [ ] new.target
-  - [ ] new
-  - [ ] ??
+  - [x] new
+  - [x] ??
   - [ ] ?.
-  - [ ] target.ident
-  - [ ] target[expr]
-  - [ ] %=
-  - [ ] %
-  - [ ] >>=
-  - [ ] >>
+  - [x] target.ident
+  - [x] target[expr]
+  - [x] %=
+  - [x] %
+  - [x] >>=
+  - [x] >>
   - [ ] ... (spread)
-  - [ ] ===
-  - [ ] !==
-  - [ ] -=
+  - [x] ===
+  - [x] !==
+  - [x] -=
   - [x] -
   - [ ] super
-  - [ ] this
-  - [ ] typeof
-  - [ ] -expr
-  - [ ] +expr
+  - [x] this
+  - [x] typeof
+  - [x] -expr
+  - [x] +expr
   - [ ] >>>=
   - [ ] >>>
-  - [ ] void
+  - [x] void
   - [ ] yield*
   - [ ] yield
 - [ ] Statements
   - [ ] async function
   - [x] block
-  - [ ] break
+  - [x] break
   - [ ] class
   - [x] const
-  - [ ] continue
+  - [x] continue
   - [ ] debugger
   - [ ] do...while
   - [x] empty
@@ -132,7 +407,7 @@ dash tries to support most/all of ECMA-262 version 3, with additional ES5/6 feat
   - [ ] for await...of
   - [ ] for...in
   - [ ] for...of
-  - [ ] for
+  - [x] for
   - [ ] function*
   - [x] function
   - [x] if
@@ -143,8 +418,12 @@ dash tries to support most/all of ECMA-262 version 3, with additional ES5/6 feat
   - [x] let
   - [x] return
   - [ ] switch
-  - [ ] throw
-  - [ ] try...catch
+  - [x] throw
+  - [x] try...catch
+    - [ ] finally
   - [x] var (partial support; has same effect as let and const)
   - [x] while
   - [ ] ~~with~~
+- [ ] Strict mode
+- [ ] Native -> user function calls
+- [x] User -> native function calls
