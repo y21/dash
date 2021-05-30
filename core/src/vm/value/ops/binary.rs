@@ -2,10 +2,19 @@ use crate::vm::value::{Value, ValueKind};
 
 impl Value {
     pub fn add(&self, other: &Value) -> Value {
-        // TODO: handle strings and other
-        let this = self.as_number();
-        let other = other.as_number();
-        Value::new(ValueKind::Number(this + other))
+        match &self.kind {
+            ValueKind::Object(_) => {
+                let left = String::from(self.to_string());
+                let right = other.to_string();
+
+                Value::from(left + &right).into()
+            }
+            _ => {
+                let this = self.as_number();
+                let other = other.as_number();
+                Value::from(this + other).into()
+            }
+        }
     }
 
     pub fn sub(&self, other: &Value) -> Value {
