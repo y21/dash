@@ -4,8 +4,8 @@ use crate::parser::{
         GroupingExpr, LiteralExpr, ObjectLiteral, Postfix, PropertyAccessExpr, Seq, UnaryExpr,
     },
     statement::{
-        BlockStatement, FunctionDeclaration, IfStatement, ReturnStatement, Statement, TryCatch,
-        VariableDeclaration, WhileLoop,
+        BlockStatement, ForLoop, FunctionDeclaration, IfStatement, ReturnStatement, Statement,
+        TryCatch, VariableDeclaration, WhileLoop,
     },
 };
 
@@ -21,6 +21,9 @@ pub trait Visitor<'a, V> {
             Statement::Return(r) => self.visit_return_statement(r),
             Statement::Try(t) => self.visit_try_catch(t),
             Statement::Throw(t) => self.visit_throw(t),
+            Statement::For(f) => self.visit_for_loop(f),
+            Statement::Continue => self.visit_continue(),
+            Statement::Break => self.visit_break(),
         }
     }
 
@@ -64,4 +67,7 @@ pub trait Visitor<'a, V> {
     fn visit_object_literal(&mut self, o: &ObjectLiteral<'a>) -> V;
     fn visit_try_catch(&mut self, t: &TryCatch<'a>) -> V;
     fn visit_throw(&mut self, e: &Expr<'a>) -> V;
+    fn visit_for_loop(&mut self, f: &ForLoop<'a>) -> V;
+    fn visit_break(&mut self) -> V;
+    fn visit_continue(&mut self) -> V;
 }
