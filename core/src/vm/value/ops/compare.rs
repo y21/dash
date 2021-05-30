@@ -13,8 +13,10 @@ impl Value {
                 let rhs = other.as_number();
                 if *n > rhs {
                     Some(Compare::Greater)
-                } else {
+                } else if *n < rhs {
                     Some(Compare::Less)
+                } else {
+                    Some(Compare::Equal)
                 }
             }
             ValueKind::Bool(b) => {
@@ -23,8 +25,10 @@ impl Value {
 
                 if lhs > rhs {
                     Some(Compare::Greater)
-                } else {
+                } else if lhs < rhs {
                     Some(Compare::Less)
+                } else {
+                    Some(Compare::Equal)
                 }
             }
             _ => None,
