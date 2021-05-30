@@ -8,9 +8,12 @@ pub enum Statement<'a> {
     Block(BlockStatement<'a>),
     Function(FunctionDeclaration<'a>),
     While(WhileLoop<'a>),
+    For(ForLoop<'a>),
     Return(ReturnStatement<'a>),
     Try(TryCatch<'a>),
     Throw(Expr<'a>),
+    Continue,
+    Break,
 }
 
 #[derive(Debug, Clone)]
@@ -47,6 +50,30 @@ impl<'a> TryCatch<'a> {
 
 #[derive(Debug, Clone)]
 pub struct ReturnStatement<'a>(pub Expr<'a>);
+
+#[derive(Debug, Clone)]
+pub struct ForLoop<'a> {
+    pub init: Option<Box<Statement<'a>>>,
+    pub condition: Option<Expr<'a>>,
+    pub finalizer: Option<Expr<'a>>,
+    pub body: Box<Statement<'a>>,
+}
+
+impl<'a> ForLoop<'a> {
+    pub fn new(
+        init: Option<Statement<'a>>,
+        condition: Option<Expr<'a>>,
+        finalizer: Option<Expr<'a>>,
+        body: Statement<'a>,
+    ) -> Self {
+        Self {
+            init: init.map(Box::new),
+            condition,
+            finalizer,
+            body: Box::new(body),
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct WhileLoop<'a> {
