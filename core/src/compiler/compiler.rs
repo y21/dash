@@ -1,3 +1,4 @@
+// This file is cursed. You've been warned
 use crate::{
     parser::{
         expr::{
@@ -130,6 +131,11 @@ impl<'a> Compiler<'a> {
             upvalues: self.upvalues,
         }
     }
+}
+
+pub struct CompiledIfStatement {
+    pub condition: Vec<Instruction>,
+    pub branches: Vec<CompiledIfStatement>,
 }
 
 impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
@@ -324,9 +330,47 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         let then_instructions = self.accept(&i.then);
         instructions[jmp_idx] = Instruction::Operand(Constant::Index(then_instructions.len() + 1));
 
-        // TODO: emit instructions for else if branch
-
         instructions.extend(then_instructions);
+
+        // TODO: emit instructions for else if branch
+        let mut jumps: Vec<(usize, usize, usize)> = Vec::new();
+
+        for branch in &i.branches {
+            let old_count = instructions.len();
+
+            let mut branch_instructions = self.accept_expr(&branch.condition);
+
+            branch_instructions.push(Instruction::Op(Opcode::Constant));
+            let condition_out_jmp_offset = branch_instructions.len();
+            branch_instructions.push(Instruction::Op(Opcode::Nop));
+            branch_instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
+            branch_instructions.push(Instruction::Op(Opcode::Pop));
+
+            branch_instructions.extend(self.accept(&branch.then));
+
+            branch_instructions.push(Instruction::Op(Opcode::Constant));
+            let final_out_jmp_offset = branch_instructions.len();
+            branch_instructions.push(Instruction::Op(Opcode::Nop));
+            branch_instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
+            branch_instructions.push(Instruction::Op(Opcode::Pop));
+
+            instructions.extend(branch_instructions);
+
+            jumps.push((old_count, condition_out_jmp_offset, final_out_jmp_offset));
+        }
+
+        let instruction_count = instructions.len();
+
+        for idx in 0..jumps.len() {
+            let current = jumps[idx];
+
+            instructions[current.0 + current.1] =
+                Instruction::Operand(Constant::Index(current.2 - current.1));
+
+            instructions[current.0 + current.2] = Instruction::Operand(Constant::Index(
+                instruction_count - (current.0 + current.2) - 3,
+            ));
+        }
 
         instructions
     }
