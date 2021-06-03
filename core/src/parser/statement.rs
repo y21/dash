@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 use super::{expr::Expr, token::TokenType};
 
 #[derive(Debug, Clone)]
@@ -118,7 +120,7 @@ pub struct BlockStatement<'a>(pub Vec<Statement<'a>>);
 pub struct IfStatement<'a> {
     pub condition: Expr<'a>,
     pub then: Box<Statement<'a>>,
-    pub branches: Vec<IfStatement<'a>>,
+    pub branches: RefCell<Vec<IfStatement<'a>>>, // Compiler hackery requires branches to be a RefCell
     pub el: Option<Box<Statement<'a>>>,
 }
 
@@ -138,7 +140,7 @@ impl<'a> IfStatement<'a> {
         Self {
             condition,
             then: Box::new(then),
-            branches,
+            branches: RefCell::new(branches),
             el,
         }
     }
