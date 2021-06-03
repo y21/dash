@@ -332,10 +332,21 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
 
         instructions.extend(then_instructions);
 
-        // TODO: emit instructions for else if branch
         let mut jumps: Vec<(usize, usize, usize)> = Vec::new();
 
-        for branch in &i.branches {
+        // For simplicitly, we desugar the last `else` to another `else if` branch
+        // with `true` as condition
+        if let Some(then) = &i.el {
+            let mut branches = i.branches.borrow_mut();
+            branches.push(IfStatement::new(
+                Expr::bool_literal(true),
+                *then.clone(),
+                Vec::new(),
+                None,
+            ));
+        }
+
+        for branch in i.branches.borrow().iter() {
             let old_count = instructions.len();
 
             let mut branch_instructions = self.accept_expr(&branch.condition);
