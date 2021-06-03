@@ -51,8 +51,8 @@ impl Weak {
 
     pub fn to_string(&self) -> Cow<str> {
         match self {
-            Self::Set(s) => Cow::Borrowed("[object WeakSet]"),
-            Self::Map(m) => Cow::Borrowed("[object WeakMap]"),
+            Self::Set(_) => Cow::Borrowed("[object WeakSet]"),
+            Self::Map(_) => Cow::Borrowed("[object WeakMap]"),
         }
     }
 
