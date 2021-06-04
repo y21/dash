@@ -23,6 +23,12 @@ pub enum ErrorKind {
     UnexpectedEof,
 }
 
+#[derive(Debug)]
+pub enum CommentKind {
+    Multiline,
+    Singleline,
+}
+
 pub enum Node<'a> {
     Token(Token<'a>),
     Error(Error),
@@ -50,6 +56,10 @@ impl<'a> Lexer<'a> {
 
     pub fn current(&self) -> Option<u8> {
         self.input.get(self.idx).copied()
+    }
+
+    pub fn peek(&self) -> Option<u8> {
+        self.input.get(self.idx + 1).copied()
     }
 
     pub fn current_real(&self) -> u8 {
@@ -123,6 +133,10 @@ impl<'a> Lexer<'a> {
 
     pub fn advance(&mut self) {
         self.idx += 1;
+    }
+
+    pub fn advance_n(&mut self, n: usize) {
+        self.idx += n;
     }
 
     pub fn expect_and_skip(&mut self, expected: u8) -> bool {
@@ -218,7 +232,13 @@ impl<'a> Lexer<'a> {
 
     pub fn scan_next(&mut self) -> Option<Node<'a>> {
         self.skip_whitespaces();
+        while self.current() == Some(b'/') {
+            self.skip_comments();
+            self.skip_whitespaces();
+        }
+        self.skip_whitespaces();
         self.start = self.idx;
+
         let cur = match self.next_char() {
             Some(c) => c,
             None => return None,
@@ -351,6 +371,60 @@ impl<'a> Lexer<'a> {
             if ch == b'\n' {
                 self.line += 1;
             } else if ch != b' ' {
+                return;
+            }
+
+            self.advance();
+        }
+    }
+
+    pub fn skip_comments(&mut self) {
+        let cur = if let Some(c) = self.current() {
+            c
+        } else {
+            return;
+        };
+
+        if cur == b'/' {
+            match self.peek() {
+                Some(b'/') => self.skip_single_line_comment(),
+                Some(b'*') => self.skip_multi_line_comment(),
+                _ => {}
+            };
+        }
+    }
+
+    pub fn skip_single_line_comment(&mut self) {
+        while !self.is_eof() {
+            let ch = if let Some(c) = self.current() {
+                c
+            } else {
+                return;
+            };
+
+            if ch == b'\n' {
+                self.line += 1;
+                return;
+            }
+
+            self.advance();
+        }
+    }
+
+    pub fn skip_multi_line_comment(&mut self) {
+        self.expect_and_skip(b'/');
+        self.expect_and_skip(b'*');
+        while !self.is_eof() {
+            let ch = if let Some(c) = self.current() {
+                c
+            } else {
+                return;
+            };
+
+            if ch == b'\n' {
+                self.line += 1;
+            } else if ch == b'*' && self.peek() == Some(b'/') {
+                self.advance_n(2);
                 return;
             }
 
