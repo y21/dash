@@ -6,8 +6,9 @@ use crate::{
             GroupingExpr, LiteralExpr, ObjectLiteral, Postfix, PropertyAccessExpr, Seq, UnaryExpr,
         },
         statement::{
-            BlockStatement, ForLoop, FunctionDeclaration, IfStatement, ReturnStatement, Statement,
-            TryCatch, VariableDeclaration, WhileLoop,
+            BlockStatement, ForLoop, FunctionDeclaration, IfStatement, ImportKind, ReturnStatement,
+            SpecifierKind, Statement, TryCatch, VariableDeclaration, VariableDeclarationKind,
+            WhileLoop,
         },
         token::TokenType,
     },
@@ -16,12 +17,12 @@ use crate::{
         instruction::{Constant, Instruction, Opcode},
         stack::{IteratorOrder, Stack},
         value::{
-            function::{Constructor, FunctionType, UserFunction},
+            function::{Constructor, FunctionType, Module, UserFunction},
             Value, ValueKind,
         },
     },
 };
-use std::{convert::TryFrom, ptr::NonNull};
+use std::{borrow::Cow, convert::TryFrom, ptr::NonNull};
 
 use super::{
     scope::{Local, ScopeGuard},
@@ -98,9 +99,9 @@ impl<'a> Compiler<'a> {
         self.upvalues.get_stack_pointer() - 1
     }
 
-    pub fn compile(self) -> Vec<Instruction> {
+    pub fn compile(self) -> Result<Vec<Instruction>, CompileError<'a>> {
         let is_top = self.top.is_none();
-        let mut instructions = self.compile_frame().instructions;
+        let mut instructions = self.compile_frame()?.instructions;
 
         if is_top {
             if let Some(last) = instructions.last() {
@@ -112,34 +113,89 @@ impl<'a> Compiler<'a> {
             instructions.push(Instruction::Op(Opcode::Return));
         }
 
-        instructions
+        Ok(instructions)
     }
 
-    fn compile_frame(mut self) -> CompileResult {
+    fn compile_frame(mut self) -> Result<CompileResult, CompileError<'a>> {
         let mut instructions = Vec::new();
 
         let statements = self.ast.take().unwrap();
 
         for statement in statements {
-            for instruction in self.accept(&statement) {
+            for instruction in self.accept(&statement)? {
                 instructions.push(instruction);
             }
         }
 
-        CompileResult {
+        Ok(CompileResult {
             instructions,
             upvalues: self.upvalues,
+        })
+    }
+
+    fn compile_variable_declaration(
+        &mut self,
+        var: &VariableDeclaration<'a>,
+        value: Vec<Instruction>,
+    ) -> Result<Vec<Instruction>, CompileError<'a>> {
+        let has_value = !value.is_empty() || var.value.is_some();
+
+        let mut instructions = value;
+
+        let global = self.scope.is_global();
+
+        let (op_with_value, op_no_value) = if global {
+            (Opcode::SetGlobal, Opcode::SetGlobalNoValue)
+        } else {
+            (Opcode::SetLocal, Opcode::SetLocalNoValue)
+        };
+
+        if !global {
+            let stack_idx = self
+                .scope
+                .push_local(Local::new(var.name, self.scope.depth));
+            instructions.push(Instruction::Op(Opcode::Constant));
+            instructions.push(Instruction::Operand(Constant::Index(stack_idx)));
+        } else {
+            instructions.push(Instruction::Op(Opcode::Constant));
+            instructions.push(Instruction::Operand(Constant::Identifier(
+                std::str::from_utf8(var.name).unwrap().to_owned(),
+            )));
+        }
+
+        if has_value {
+            instructions.push(Instruction::Op(op_with_value));
+        } else {
+            instructions.push(Instruction::Op(op_no_value));
+        }
+
+        Ok(instructions)
+    }
+}
+
+#[derive(Debug)]
+pub enum CompileError<'a> {
+    ModuleNotFound(&'a [u8]),
+    NotImplemented(&'static str),
+}
+
+impl<'a> CompileError<'a> {
+    pub fn to_string(&self) -> Cow<str> {
+        match self {
+            Self::ModuleNotFound(mo) => Cow::Owned(format!(
+                "Failed to resolve module specifier {}",
+                std::str::from_utf8(mo).unwrap()
+            )),
+            Self::NotImplemented(cause) => Cow::Borrowed(cause),
         }
     }
 }
 
-pub struct CompiledIfStatement {
-    pub condition: Vec<Instruction>,
-    pub branches: Vec<CompiledIfStatement>,
-}
-
-impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
-    fn visit_literal_expression(&mut self, e: &LiteralExpr<'a>) -> Vec<Instruction> {
+impl<'a> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for Compiler<'a> {
+    fn visit_literal_expression(
+        &mut self,
+        e: &LiteralExpr<'a>,
+    ) -> Result<Vec<Instruction>, CompileError<'a>> {
         let mut instructions = Vec::with_capacity(3);
         instructions.push(Instruction::Op(Opcode::Constant));
         let value = match e {
@@ -153,15 +209,15 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
             match *ident {
                 b"this" => {
                     instructions[0] = Instruction::Op(Opcode::GetThis);
-                    return instructions;
+                    return Ok(instructions);
                 }
                 b"super" => {
                     instructions[0] = Instruction::Op(Opcode::GetSuper);
-                    return instructions;
+                    return Ok(instructions);
                 }
                 b"globalThis" => {
                     instructions[0] = Instruction::Op(Opcode::GetGlobalThis);
-                    return instructions;
+                    return Ok(instructions);
                 }
                 _ => {}
             };
@@ -172,14 +228,14 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
                 if let Some(stack_idx) = stack_idx {
                     instructions.push(Instruction::Operand(Constant::Index(stack_idx)));
                     instructions.push(Instruction::Op(Opcode::GetLocal));
-                    return instructions;
+                    return Ok(instructions);
                 }
             }
 
             if let Some(idx) = unsafe { self.find_upvalue(ident) } {
                 instructions.push(Instruction::Operand(Constant::Index(idx)));
                 instructions.push(Instruction::Op(Opcode::GetUpvalue));
-                return instructions;
+                return Ok(instructions);
             }
 
             instructions.push(Instruction::Operand(value));
@@ -188,11 +244,14 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
             instructions.push(Instruction::Operand(value));
         }
 
-        instructions
+        Ok(instructions)
     }
 
-    fn visit_binary_expression(&mut self, e: &BinaryExpr<'a>) -> Vec<Instruction> {
-        let mut instructions = self.accept_expr(&e.left);
+    fn visit_binary_expression(
+        &mut self,
+        e: &BinaryExpr<'a>,
+    ) -> Result<Vec<Instruction>, CompileError<'a>> {
+        let mut instructions = self.accept_expr(&e.left)?;
 
         // Will stay -1 if it's not &&, || or ??
         let mut jmp_idx: isize = -1;
@@ -223,7 +282,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
             _ => {}
         };
 
-        let right = self.accept_expr(&e.right);
+        let right = self.accept_expr(&e.right)?;
         instructions.extend(right);
 
         if jmp_idx > -1 {
@@ -235,11 +294,14 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
             instructions.push(Instruction::Op(e.operator.into()));
         }
 
-        instructions
+        Ok(instructions)
     }
 
-    fn visit_while_loop(&mut self, l: &WhileLoop<'a>) -> Vec<Instruction> {
-        let mut instructions = self.accept_expr(&l.condition);
+    fn visit_while_loop(
+        &mut self,
+        l: &WhileLoop<'a>,
+    ) -> Result<Vec<Instruction>, CompileError<'a>> {
+        let mut instructions = self.accept_expr(&l.condition)?;
 
         instructions.push(Instruction::Op(Opcode::Constant));
         let jmp_idx = instructions.len();
@@ -249,7 +311,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         instructions.push(Instruction::Op(Opcode::Pop));
 
         // Compile body
-        instructions.extend(self.accept(&l.body));
+        instructions.extend(self.accept(&l.body)?);
 
         let instruction_count_ = instructions.len() - jmp_idx + 1;
         let instruction_count = Instruction::Operand(Constant::Index(instruction_count_));
@@ -262,15 +324,21 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         instructions.push(Instruction::Op(Opcode::BackJmp));
         instructions.push(Instruction::Op(Opcode::Pop));
 
-        instructions
+        Ok(instructions)
     }
 
-    fn visit_grouping_expression(&mut self, e: &GroupingExpr<'a>) -> Vec<Instruction> {
+    fn visit_grouping_expression(
+        &mut self,
+        e: &GroupingExpr<'a>,
+    ) -> Result<Vec<Instruction>, CompileError<'a>> {
         self.accept_expr(&e.0)
     }
 
-    fn visit_unary_expression(&mut self, e: &UnaryExpr<'a>) -> Vec<Instruction> {
-        let mut instructions = self.accept_expr(&e.expr);
+    fn visit_unary_expression(
+        &mut self,
+        e: &UnaryExpr<'a>,
+    ) -> Result<Vec<Instruction>, CompileError<'a>> {
+        let mut instructions = self.accept_expr(&e.expr)?;
 
         match e.operator {
             TokenType::Minus => instructions.push(Instruction::Op(Opcode::Negate)),
@@ -280,46 +348,27 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
             _ => todo!(),
         }
 
-        return instructions;
+        Ok(instructions)
     }
 
-    fn visit_variable_declaration(&mut self, v: &VariableDeclaration<'a>) -> Vec<Instruction> {
-        let mut instructions = Vec::new();
-
-        if let Some(value) = &v.value {
-            instructions.extend(self.accept_expr(value));
-        }
-
-        let global = self.scope.is_global();
-
-        let (op_with_value, op_no_value) = if global {
-            (Opcode::SetGlobal, Opcode::SetGlobalNoValue)
+    fn visit_variable_declaration(
+        &mut self,
+        v: &VariableDeclaration<'a>,
+    ) -> Result<Vec<Instruction>, CompileError<'a>> {
+        let value = if let Some(value) = &v.value {
+            self.accept_expr(value)?
         } else {
-            (Opcode::SetLocal, Opcode::SetLocalNoValue)
+            Vec::new()
         };
 
-        if !global {
-            let stack_idx = self.scope.push_local(Local::new(v.name, self.scope.depth));
-            instructions.push(Instruction::Op(Opcode::Constant));
-            instructions.push(Instruction::Operand(Constant::Index(stack_idx)));
-        } else {
-            instructions.push(Instruction::Op(Opcode::Constant));
-            instructions.push(Instruction::Operand(Constant::Identifier(
-                std::str::from_utf8(v.name).unwrap().to_owned(),
-            )));
-        }
-
-        if v.value.is_some() {
-            instructions.push(Instruction::Op(op_with_value));
-        } else {
-            instructions.push(Instruction::Op(op_no_value));
-        }
-
-        instructions
+        self.compile_variable_declaration(v, value)
     }
 
-    fn visit_if_statement(&mut self, i: &IfStatement<'a>) -> Vec<Instruction> {
-        let mut instructions = self.accept_expr(&i.condition);
+    fn visit_if_statement(
+        &mut self,
+        i: &IfStatement<'a>,
+    ) -> Result<Vec<Instruction>, CompileError<'a>> {
+        let mut instructions = self.accept_expr(&i.condition)?;
 
         instructions.push(Instruction::Op(Opcode::Constant));
         let jmp_idx = instructions.len();
@@ -327,7 +376,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
         instructions.push(Instruction::Op(Opcode::Pop));
 
-        let then_instructions = self.accept(&i.then);
+        let then_instructions = self.accept(&i.then)?;
         instructions[jmp_idx] = Instruction::Operand(Constant::Index(then_instructions.len() + 1));
 
         instructions.extend(then_instructions);
@@ -349,7 +398,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         for branch in i.branches.borrow().iter() {
             let old_count = instructions.len();
 
-            let mut branch_instructions = self.accept_expr(&branch.condition);
+            let mut branch_instructions = self.accept_expr(&branch.condition)?;
 
             branch_instructions.push(Instruction::Op(Opcode::Constant));
             let condition_out_jmp_offset = branch_instructions.len();
@@ -357,7 +406,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
             branch_instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
             branch_instructions.push(Instruction::Op(Opcode::Pop));
 
-            branch_instructions.extend(self.accept(&branch.then));
+            branch_instructions.extend(self.accept(&branch.then)?);
 
             branch_instructions.push(Instruction::Op(Opcode::Constant));
             let final_out_jmp_offset = branch_instructions.len();
@@ -383,17 +432,28 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
             ));
         }
 
-        instructions
+        Ok(instructions)
     }
 
-    fn visit_block_statement(&mut self, b: &BlockStatement<'a>) -> Vec<Instruction> {
+    fn visit_block_statement(
+        &mut self,
+        b: &BlockStatement<'a>,
+    ) -> Result<Vec<Instruction>, CompileError<'a>> {
         self.scope.enter_scope();
-        let instructions = b.0.iter().map(|s| self.accept(s)).flatten().collect();
+        let mut instructions = Vec::new();
+
+        for stmt in &b.0 {
+            instructions.extend(self.accept(stmt)?);
+        }
+
         self.scope.leave_scope();
-        instructions
+        Ok(instructions)
     }
 
-    fn visit_function_expr(&mut self, f: &FunctionDeclaration<'a>) -> Vec<Instruction> {
+    fn visit_function_expr(
+        &mut self,
+        f: &FunctionDeclaration<'a>,
+    ) -> Result<Vec<Instruction>, CompileError<'a>> {
         let mut instructions = vec![Instruction::Op(Opcode::Closure)];
 
         let params = f.arguments.len();
@@ -413,7 +473,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
                 Some(NonNull::new_unchecked(self as *mut _)),
             )
             .compile_frame()
-        };
+        }?;
 
         if frame.instructions.len() == 0 {
             frame.instructions.push(Instruction::Op(Opcode::Constant));
@@ -455,11 +515,14 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
             }
             instructions.push(Instruction::Operand(Constant::Index(upvalue.idx)));
         }
-        instructions
+        Ok(instructions)
     }
 
-    fn visit_function_declaration(&mut self, f: &FunctionDeclaration<'a>) -> Vec<Instruction> {
-        let mut instructions = self.visit_function_expr(f);
+    fn visit_function_declaration(
+        &mut self,
+        f: &FunctionDeclaration<'a>,
+    ) -> Result<Vec<Instruction>, CompileError<'a>> {
+        let mut instructions = self.visit_function_expr(f)?;
 
         if self.scope.is_global() {
             instructions.push(Instruction::Op(Opcode::Constant));
@@ -476,30 +539,39 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
             instructions.push(Instruction::Op(Opcode::SetLocal));
         }
 
-        instructions
+        Ok(instructions)
     }
 
-    fn visit_assignment_expression(&mut self, e: &AssignmentExpr<'a>) -> Vec<Instruction> {
-        let mut instructions = self.accept_expr(&e.left);
-        instructions.extend(self.accept_expr(&e.right));
+    fn visit_assignment_expression(
+        &mut self,
+        e: &AssignmentExpr<'a>,
+    ) -> Result<Vec<Instruction>, CompileError<'a>> {
+        let mut instructions = self.accept_expr(&e.left)?;
+        instructions.extend(self.accept_expr(&e.right)?);
         instructions.push(Instruction::Op(e.operator.into()));
 
-        instructions
+        Ok(instructions)
     }
 
-    fn visit_expression_statement(&mut self, e: &Expr<'a>) -> Vec<Instruction> {
-        let mut instructions = self.accept_expr(e);
+    fn visit_expression_statement(
+        &mut self,
+        e: &Expr<'a>,
+    ) -> Result<Vec<Instruction>, CompileError<'a>> {
+        let mut instructions = self.accept_expr(e)?;
         instructions.push(Instruction::Op(Opcode::Pop));
-        instructions
+        Ok(instructions)
     }
 
-    fn visit_function_call(&mut self, c: &FunctionCall<'a>) -> Vec<Instruction> {
-        let mut instructions = self.accept_expr(&c.target);
+    fn visit_function_call(
+        &mut self,
+        c: &FunctionCall<'a>,
+    ) -> Result<Vec<Instruction>, CompileError<'a>> {
+        let mut instructions = self.accept_expr(&c.target)?;
 
         let argument_len = c.arguments.len();
 
         for argument in &c.arguments {
-            instructions.extend(self.accept_expr(argument));
+            instructions.extend(self.accept_expr(argument)?);
         }
 
         instructions.push(Instruction::Op(Opcode::Constant));
@@ -511,17 +583,23 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
             instructions.push(Instruction::Op(Opcode::FunctionCall));
         }
 
-        instructions
+        Ok(instructions)
     }
 
-    fn visit_return_statement(&mut self, s: &ReturnStatement<'a>) -> Vec<Instruction> {
-        let mut instructions = self.accept_expr(&s.0);
+    fn visit_return_statement(
+        &mut self,
+        s: &ReturnStatement<'a>,
+    ) -> Result<Vec<Instruction>, CompileError<'a>> {
+        let mut instructions = self.accept_expr(&s.0)?;
         instructions.push(Instruction::Op(Opcode::Return));
-        instructions
+        Ok(instructions)
     }
 
-    fn visit_conditional_expr(&mut self, c: &ConditionalExpr<'a>) -> Vec<Instruction> {
-        let mut instructions = self.accept_expr(&c.condition);
+    fn visit_conditional_expr(
+        &mut self,
+        c: &ConditionalExpr<'a>,
+    ) -> Result<Vec<Instruction>, CompileError<'a>> {
+        let mut instructions = self.accept_expr(&c.condition)?;
 
         instructions.push(Instruction::Op(Opcode::Constant));
         let then_jmp_idx = instructions.len();
@@ -529,7 +607,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
 
         instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
         instructions.push(Instruction::Op(Opcode::Pop));
-        let then_instructions = self.accept_expr(&c.then);
+        let then_instructions = self.accept_expr(&c.then)?;
         let then_instruction_count = then_instructions.len();
         instructions.extend(then_instructions);
         instructions[then_jmp_idx] =
@@ -540,19 +618,22 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         instructions.push(Instruction::Op(Opcode::Nop));
         instructions.push(Instruction::Op(Opcode::ShortJmp));
 
-        let else_instructions = self.accept_expr(&c.el);
+        let else_instructions = self.accept_expr(&c.el)?;
         let else_instruction_count = else_instructions.len();
         instructions[else_jmp_idx] = Instruction::Operand(Constant::Index(else_instruction_count));
         instructions.extend(else_instructions);
 
-        instructions
+        Ok(instructions)
     }
 
-    fn visit_property_access_expr(&mut self, e: &PropertyAccessExpr<'a>) -> Vec<Instruction> {
-        let mut instructions = self.accept_expr(&e.target);
+    fn visit_property_access_expr(
+        &mut self,
+        e: &PropertyAccessExpr<'a>,
+    ) -> Result<Vec<Instruction>, CompileError<'a>> {
+        let mut instructions = self.accept_expr(&e.target)?;
 
         if e.computed {
-            let property = self.accept_expr(&e.property);
+            let property = self.accept_expr(&e.property)?;
             instructions.extend(property);
             instructions.push(Instruction::Op(Opcode::ComputedPropertyAccess));
         } else {
@@ -573,45 +654,54 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
             instructions.push(Instruction::Op(Opcode::StaticPropertyAccess));
         }
 
-        instructions
+        Ok(instructions)
     }
 
-    fn visit_sequence_expr(&mut self, s: &Seq<'a>) -> Vec<Instruction> {
-        let mut instructions = self.accept_expr(&s.0);
+    fn visit_sequence_expr(&mut self, s: &Seq<'a>) -> Result<Vec<Instruction>, CompileError<'a>> {
+        let mut instructions = self.accept_expr(&s.0)?;
         instructions.push(Instruction::Op(Opcode::Pop));
 
-        let rhs = self.accept_expr(&s.1);
+        let rhs = self.accept_expr(&s.1)?;
         instructions.extend(rhs);
 
-        instructions
+        Ok(instructions)
     }
 
-    fn visit_postfix_expr(&mut self, p: &Postfix<'a>) -> Vec<Instruction> {
-        let mut target = self.accept_expr(&p.1);
+    fn visit_postfix_expr(
+        &mut self,
+        p: &Postfix<'a>,
+    ) -> Result<Vec<Instruction>, CompileError<'a>> {
+        let mut target = self.accept_expr(&p.1)?;
         target.push(Instruction::Op(p.0.into()));
-        target
+        Ok(target)
     }
 
-    fn visit_array_literal(&mut self, a: &ArrayLiteral<'a>) -> Vec<Instruction> {
+    fn visit_array_literal(
+        &mut self,
+        a: &ArrayLiteral<'a>,
+    ) -> Result<Vec<Instruction>, CompileError<'a>> {
         let element_count = a.len();
         let mut instructions = Vec::new();
         for expr in a.iter().rev() {
-            instructions.extend(self.accept_expr(expr));
+            instructions.extend(self.accept_expr(expr)?);
         }
         instructions.push(Instruction::Op(Opcode::Constant));
         instructions.push(Instruction::Operand(Constant::Index(element_count)));
 
         instructions.push(Instruction::Op(Opcode::ArrayLiteral));
-        instructions
+        Ok(instructions)
     }
 
-    fn visit_object_literal(&mut self, o: &ObjectLiteral<'a>) -> Vec<Instruction> {
+    fn visit_object_literal(
+        &mut self,
+        o: &ObjectLiteral<'a>,
+    ) -> Result<Vec<Instruction>, CompileError<'a>> {
         let property_count = o.len();
         let mut instructions = Vec::new();
 
         // First we emit instructions for all object values
         for (_, value) in o.iter() {
-            instructions.extend(self.accept_expr(value));
+            instructions.extend(self.accept_expr(value)?);
         }
 
         instructions.push(Instruction::Op(Opcode::Constant));
@@ -625,10 +715,10 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
             )));
         }
 
-        instructions
+        Ok(instructions)
     }
 
-    fn visit_try_catch(&mut self, t: &TryCatch<'a>) -> Vec<Instruction> {
+    fn visit_try_catch(&mut self, t: &TryCatch<'a>) -> Result<Vec<Instruction>, CompileError<'a>> {
         let mut instructions = vec![Instruction::Op(Opcode::Try), Instruction::Op(Opcode::Nop)];
 
         if t.catch.ident.is_some() {
@@ -640,7 +730,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
 
         let prefix_instructions = instructions.len();
 
-        instructions.extend(self.accept(&t.try_));
+        instructions.extend(self.accept(&t.try_)?);
 
         instructions.push(Instruction::Op(Opcode::PopUnwindHandler));
         instructions.push(Instruction::Op(Opcode::Constant));
@@ -656,7 +746,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
             instructions[3] = Instruction::Operand(Constant::Index(stack_idx));
         }
 
-        let catch = self.accept(&t.catch.body);
+        let catch = self.accept(&t.catch.body)?;
         self.scope.leave_scope();
 
         instructions[thing_idx] = Instruction::Operand(Constant::Index(catch.len()));
@@ -669,16 +759,16 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
             catch_jmp_idx - prefix_instructions, /* we skipped the first 4 instructions at this point in vm, so we subtract 2 */
         ));
 
-        instructions
+        Ok(instructions)
     }
 
-    fn visit_throw(&mut self, e: &Expr<'a>) -> Vec<Instruction> {
-        let mut instructions = self.accept_expr(e);
+    fn visit_throw(&mut self, e: &Expr<'a>) -> Result<Vec<Instruction>, CompileError<'a>> {
+        let mut instructions = self.accept_expr(e)?;
         instructions.push(Instruction::Op(Opcode::Throw));
-        instructions
+        Ok(instructions)
     }
 
-    fn visit_for_loop(&mut self, f: &ForLoop<'a>) -> Vec<Instruction> {
+    fn visit_for_loop(&mut self, f: &ForLoop<'a>) -> Result<Vec<Instruction>, CompileError<'a>> {
         let mut instructions = vec![
             Instruction::Op(Opcode::LoopStart),
             Instruction::Op(Opcode::Nop),
@@ -687,16 +777,16 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         self.scope.enter_scope();
 
         if let Some(initializer) = &f.init {
-            instructions.extend(self.accept(initializer))
+            instructions.extend(self.accept(initializer)?)
         }
 
         let begin_condition_idx = instructions.len();
         instructions[1] = Instruction::Operand(Constant::Index(begin_condition_idx - 3));
 
         if let Some(condition) = &f.condition {
-            instructions.extend(self.accept_expr(condition));
+            instructions.extend(self.accept_expr(condition)?);
         } else {
-            instructions.extend(self.accept_expr(&Expr::bool_literal(true)));
+            instructions.extend(self.accept_expr(&Expr::bool_literal(true))?);
         };
 
         instructions.push(Instruction::Op(Opcode::Constant));
@@ -713,7 +803,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
 
         let finalizer_idx = instructions.len();
         if let Some(finalizer) = &f.finalizer {
-            instructions.extend(self.accept_expr(finalizer));
+            instructions.extend(self.accept_expr(finalizer)?);
             instructions.push(Instruction::Op(Opcode::Pop));
         }
 
@@ -723,7 +813,7 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
         instructions.push(Instruction::Op(Opcode::BackJmp));
 
         let begin_body = instructions.len();
-        instructions.extend(self.accept(&f.body));
+        instructions.extend(self.accept(&f.body)?);
 
         instructions.push(Instruction::Op(Opcode::Constant));
         instructions.push(Instruction::Operand(Constant::Index(
@@ -746,14 +836,55 @@ impl<'a> Visitor<'a, Vec<Instruction>> for Compiler<'a> {
 
         self.scope.leave_scope();
 
-        instructions
+        Ok(instructions)
     }
 
-    fn visit_break(&mut self) -> Vec<Instruction> {
-        vec![Instruction::Op(Opcode::Break)]
+    fn visit_break(&mut self) -> Result<Vec<Instruction>, CompileError<'a>> {
+        Ok(vec![Instruction::Op(Opcode::Break)])
     }
 
-    fn visit_continue(&mut self) -> Vec<Instruction> {
-        vec![Instruction::Op(Opcode::Continue)]
+    fn visit_continue(&mut self) -> Result<Vec<Instruction>, CompileError<'a>> {
+        Ok(vec![Instruction::Op(Opcode::Continue)])
+    }
+
+    fn visit_import_statement(
+        &mut self,
+        i: &ImportKind<'a>,
+    ) -> Result<Vec<Instruction>, CompileError<'a>> {
+        if let ImportKind::Dynamic(_) = i {
+            return Err(CompileError::NotImplemented(
+                "Dynamic imports are not implemented yet",
+            ));
+        }
+
+        // module_instructions is coming from somewhere else
+        let mut module_instructions: Vec<Instruction> = Vec::new();
+        // ---
+
+        // We only want to insert a ReturnModule opcode if it's not there already
+        let has_module_return = match module_instructions.last() {
+            Some(last) => matches!(last, Instruction::Op(Opcode::ReturnModule)),
+            None => false,
+        };
+
+        if !has_module_return {
+            module_instructions.push(Instruction::Op(Opcode::ReturnModule));
+        }
+
+        let mut instructions: Vec<Instruction> = vec![Instruction::Op(Opcode::EvaluateModule)];
+
+        let module = Module::new(module_instructions);
+        instructions.push(Instruction::Operand(Constant::JsValue(module.into())));
+
+        let instructions = self.compile_variable_declaration(
+            &VariableDeclaration::new(
+                i.get_specifier().and_then(SpecifierKind::as_ident).unwrap(),
+                VariableDeclarationKind::Var,
+                None,
+            ),
+            instructions,
+        )?;
+
+        Ok(instructions)
     }
 }
