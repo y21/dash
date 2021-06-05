@@ -1,13 +1,12 @@
-use std::{borrow::Cow, cell::RefCell, rc::Rc};
+use std::borrow::Cow;
 
 use super::{
     array::Array,
-    function::{CallContext, FunctionKind},
-    object::{Object, PropertyLookup, Weak},
-    weak::WeakSet,
+    function::FunctionKind,
+    object::{Object, Weak},
     Value, ValueKind,
 };
-use crate::vm::{instruction::Constant, VM};
+use crate::vm::instruction::Constant;
 
 impl Value {
     pub fn as_constant(&self) -> Option<&Constant> {
@@ -66,6 +65,13 @@ impl Value {
         }
     }
 
+    pub fn as_function_mut(&mut self) -> Option<&mut FunctionKind> {
+        match &mut self.kind {
+            ValueKind::Object(o) => o.as_function_mut(),
+            _ => None,
+        }
+    }
+
     pub fn to_string(&self) -> Cow<str> {
         match &self.kind {
             ValueKind::Bool(b) => Cow::Borrowed(if *b { "true " } else { "false" }),
@@ -79,12 +85,12 @@ impl Value {
 
     pub fn to_json(&self) -> Option<Cow<str>> {
         match &self.kind {
-            ValueKind::Bool(b) => Some(self.to_string()),
+            ValueKind::Bool(_) => Some(self.to_string()),
             ValueKind::Null => Some(self.to_string()),
-            ValueKind::Number(n) => Some(self.to_string()),
+            ValueKind::Number(_) => Some(self.to_string()),
             ValueKind::Undefined => Some(self.to_string()),
             ValueKind::Object(o) => o.to_json(self),
-            ValueKind::Constant(c) => unreachable!(),
+            ValueKind::Constant(_) => unreachable!(),
         }
     }
 
@@ -141,7 +147,7 @@ impl Object {
         match self {
             Self::String(s) => Cow::Borrowed(s),
             Self::Function(f) => Cow::Owned(f.to_string()),
-            Self::Array(a) => Cow::Borrowed("[object Array]"),
+            Self::Array(_) => Cow::Borrowed("[object Array]"),
             Self::Weak(w) => w.to_string(),
             _ => Cow::Borrowed("[object Object]"), // TODO: look if there's a toString function
         }
@@ -169,7 +175,7 @@ impl Object {
                 s.push_str(" ]");
                 Some(Cow::Owned(s))
             }
-            Self::Any(a) => {
+            Self::Any(_) => {
                 let mut s = String::from("{ ");
 
                 for (index, (key, value_cell)) in this.fields.iter().enumerate() {
@@ -224,7 +230,21 @@ impl Object {
         }
     }
 
+    pub fn into_function(self) -> Option<FunctionKind> {
+        match self {
+            Self::Function(kind) => Some(kind),
+            _ => None,
+        }
+    }
+
     pub fn as_function(&self) -> Option<&FunctionKind> {
+        match self {
+            Self::Function(kind) => Some(kind),
+            _ => None,
+        }
+    }
+
+    pub fn as_function_mut(&mut self) -> Option<&mut FunctionKind> {
         match self {
             Self::Function(kind) => Some(kind),
             _ => None,
