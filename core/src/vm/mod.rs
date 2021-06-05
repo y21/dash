@@ -179,7 +179,9 @@ impl VM {
 
     fn prepare_stdlib(&mut self) {
         let mut global = self.global.borrow_mut();
-        global.set_property("globalThis", self.global.clone());
+        // TODO: attaching globalThis causes a reference cycle and memory leaks
+        // We somehow need to have
+        // global.set_property("globalThis", self.global.clone());
 
         global.set_property("NaN", Value::from(f64::NAN).into());
         global.set_property("Infinity", Value::from(f64::INFINITY).into());
@@ -400,7 +402,7 @@ impl VM {
                     let name = self.pop_owned().unwrap().into_ident().unwrap();
 
                     let value = unwrap_or_unwind!(
-                        Value::get_property(&self.global, &name),
+                        Value::get_property(&self.global, &name, None),
                         js_std::error::create_error(
                             MaybeRc::Owned(&format!("{} is not defined", name)),
                             self
@@ -588,7 +590,7 @@ impl VM {
                     let value_cell = self.stack.pop();
                     let target_cell = self.stack.pop();
                     let value = value_cell.borrow();
-                    target_cell.borrow_mut().logical_and_assign(&*value);
+                    target_cell.borrow_mut().logical_or_assign(&*value);
                     self.stack.push(target_cell);
                 }
                 Opcode::LogicalNullishAssignment => {
@@ -656,6 +658,35 @@ impl VM {
                 }
                 Opcode::GetGlobalThis => {
                     self.stack.push(self.global.clone());
+                }
+                Opcode::EvaluateModule => {
+                    let (value_cell, buffer) = {
+                        let mut module =
+                            self.read_constant().and_then(Constant::into_value).unwrap();
+
+                        let buffer = module
+                            .as_function_mut()
+                            .unwrap()
+                            .as_module_mut()
+                            .unwrap()
+                            .buffer
+                            .take()
+                            .unwrap();
+
+                        (module.into(), buffer)
+                    };
+
+                    let current_sp = self.stack.get_stack_pointer();
+                    self.frame_mut().sp = current_sp;
+
+                    let frame = Frame {
+                        func: value_cell,
+                        buffer,
+                        ip: 0,
+                        sp: current_sp,
+                    };
+
+                    self.frames.push(frame);
                 }
                 Opcode::FunctionCall => {
                     let param_count = self.read_index().unwrap();
@@ -727,6 +758,32 @@ impl VM {
 
                     unwind_abort_if_uncaught!(value);
                 }
+                Opcode::ReturnModule => {
+                    let frame = self.frames.pop();
+                    let func_ref = frame.func.borrow();
+                    let func = func_ref
+                        .as_function()
+                        .and_then(FunctionKind::as_module)
+                        .unwrap();
+
+                    let exports = if let Some(default) = &func.exports.default {
+                        Rc::clone(default)
+                    } else {
+                        Value::from(AnyObject {}).into()
+                    };
+
+                    {
+                        let mut exports_mut = exports.borrow_mut();
+                        for (key, value) in &func.exports.named {
+                            exports_mut.set_property(&**key, Rc::clone(value));
+                        }
+                    }
+
+                    self.stack
+                        .discard_multiple(self.stack.get_stack_pointer() - self.frame().sp);
+                    self.stack.set_stack_pointer(self.frame().sp);
+                    self.stack.push(exports);
+                }
                 Opcode::Return => {
                     // Restore VM state to where we were before the function call happened
                     self.frames.pop();
@@ -791,8 +848,11 @@ impl VM {
                 Opcode::StaticPropertyAccess => {
                     let property = self.pop_owned().unwrap().into_ident().unwrap();
                     let target_cell = self.stack.pop();
-                    let value =
-                        Value::unwrap_or_undefined(Value::get_property(&target_cell, &property));
+                    let value = Value::unwrap_or_undefined(Value::get_property(
+                        &target_cell,
+                        &property,
+                        None,
+                    ));
                     self.stack.push(value);
                 }
                 Opcode::Equality => {
@@ -871,6 +931,7 @@ impl VM {
                     let value = Value {
                         constructor: None,
                         fields,
+                        proto: None,
                         kind: ValueKind::Object(Box::new(Object::Any(AnyObject {}))),
                     };
                     self.stack.push(value.into());
@@ -881,7 +942,7 @@ impl VM {
                     let property = property_cell.borrow();
                     let property_s = property.to_string();
 
-                    let prop = Value::get_property(&target_cell, &*property_s)
+                    let prop = Value::get_property(&target_cell, &*property_s, None)
                         .unwrap_or_else(|| Value::new(ValueKind::Undefined).into());
 
                     self.stack.push(prop);

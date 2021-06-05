@@ -62,6 +62,7 @@ pub enum Opcode {
     FunctionCall,
     ConstructorCall,
     Return,
+    ReturnModule,
     Nop, // Mainly used as a placeholder
     Less,
     LessEqual,
@@ -86,6 +87,7 @@ pub enum Opcode {
     Break,
     LoopStart,
     LoopEnd,
+    EvaluateModule,
 }
 
 impl From<TokenType> for Opcode {

@@ -2,7 +2,7 @@ use super::{
     instruction::Constant,
     value::{
         array::Array,
-        function::{Closure, FunctionKind, NativeFunction, UserFunction},
+        function::{Closure, FunctionKind, Module, NativeFunction, UserFunction},
         object::{AnyObject, Object, Weak},
         weak::{WeakMap, WeakSet},
         Value, ValueKind,
@@ -91,6 +91,12 @@ impl From<UserFunction> for Value {
 impl From<NativeFunction> for Value {
     fn from(f: NativeFunction) -> Self {
         FunctionKind::Native(f).into()
+    }
+}
+
+impl From<Module> for Value {
+    fn from(f: Module) -> Self {
+        FunctionKind::Module(f).into()
     }
 }
 
