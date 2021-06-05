@@ -3,8 +3,9 @@ use crate::parser::expr::LiteralExpr;
 use super::{
     expr::{Expr, UnaryExpr},
     statement::{
-        BlockStatement, Catch, ForLoop, FunctionDeclaration, IfStatement, ReturnStatement,
-        Statement, TryCatch, VariableDeclaration, VariableDeclarationKind, WhileLoop,
+        BlockStatement, Catch, ForLoop, FunctionDeclaration, IfStatement, ImportKind,
+        ReturnStatement, SpecifierKind, Statement, TryCatch, VariableDeclaration,
+        VariableDeclarationKind, WhileLoop,
     },
     token::{Error, ErrorKind, Token, TokenType, ASSIGNMENT_TYPES},
 };
@@ -61,6 +62,7 @@ impl<'a> Parser<'a> {
             TokenType::Throw => self.throw().map(Statement::Throw),
             TokenType::Return => self.return_statement().map(Statement::Return),
             TokenType::For => self.for_loop().map(Statement::For),
+            TokenType::Import => self.import().map(Statement::Import),
             TokenType::Continue => Some(Statement::Continue),
             TokenType::Break => Some(Statement::Break),
             _ => {
@@ -74,6 +76,41 @@ impl<'a> Parser<'a> {
         self.expect_and_skip(&[TokenType::Semicolon], false);
 
         stmt
+    }
+
+    pub fn import(&mut self) -> Option<ImportKind<'a>> {
+        // `import` followed by ( is considered a dynamic import
+        let is_dynamic = self.expect_and_skip(&[TokenType::LeftParen], false);
+        if is_dynamic {
+            let specifier = self.expression()?;
+            self.expect_and_skip(&[TokenType::RightParen], true);
+            return Some(ImportKind::Dynamic(specifier));
+        }
+
+        // `import` followed by a `*` imports all exported values
+        let is_import_all = self.expect_and_skip(&[TokenType::Star], false);
+        if is_import_all {
+            self.expect_and_skip(&[TokenType::Identifier], true);
+            // TODO: enforce identifier be == b"as"
+            let ident = self.next()?.full;
+            self.expect_and_skip(&[TokenType::Identifier], true);
+            // TODO: enforce identifier be == b"from"
+            let specifier = self.next()?.full;
+            return Some(ImportKind::AllAs(SpecifierKind::Ident(ident), specifier));
+        }
+
+        // `import` followed by an identifier is considered a default import
+        if let Some(default_import_ident) = self.next().map(|tok| tok.full) {
+            self.expect_and_skip(&[TokenType::Identifier], true);
+            // TODO: enforce identifier be == b"from"
+            let specifier = self.next()?.full;
+            return Some(ImportKind::DefaultAs(
+                SpecifierKind::Ident(default_import_ident),
+                specifier,
+            ));
+        }
+
+        None
     }
 
     pub fn throw(&mut self) -> Option<Expr<'a>> {
