@@ -90,6 +90,7 @@ pub enum TokenType {
     Error,
     Break,
     Continue,
+    Import,
 }
 
 pub const ASSIGNMENT_TYPES: &[TokenType] = &[
@@ -141,6 +142,7 @@ impl From<&[u8]> for TokenType {
             b"typeof" => Self::Typeof,
             b"continue" => Self::Continue,
             b"break" => Self::Break,
+            b"import" => Self::Import,
             _ => Self::Identifier,
         }
     }
