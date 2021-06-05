@@ -14,8 +14,50 @@ pub enum Statement<'a> {
     Return(ReturnStatement<'a>),
     Try(TryCatch<'a>),
     Throw(Expr<'a>),
+    Import(ImportKind<'a>),
     Continue,
     Break,
+}
+
+#[derive(Debug, Clone)]
+pub enum SpecifierKind<'a> {
+    Ident(&'a [u8]),
+}
+
+impl<'a> SpecifierKind<'a> {
+    pub fn as_ident(&self) -> Option<&'a [u8]> {
+        match self {
+            Self::Ident(i) => Some(i),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum ImportKind<'a> {
+    /// import("foo")
+    Dynamic(Expr<'a>),
+    /// import foo from "bar"
+    DefaultAs(SpecifierKind<'a>, &'a [u8]),
+    /// import * as foo from "bar"
+    AllAs(SpecifierKind<'a>, &'a [u8]),
+}
+
+impl<'a> ImportKind<'a> {
+    pub fn get_specifier(&self) -> Option<&SpecifierKind<'a>> {
+        match self {
+            Self::Dynamic(_) => None,
+            Self::DefaultAs(s, _) => Some(s),
+            Self::AllAs(s, _) => Some(s),
+        }
+    }
+
+    pub fn get_module_target(&self) -> Option<&'a [u8]> {
+        match self {
+            Self::Dynamic(_) => None,
+            Self::DefaultAs(_, i) => Some(i),
+            Self::AllAs(_, i) => Some(i),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
