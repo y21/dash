@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use compiler::compiler::Compiler;
+use compiler::compiler::{CompileError, Compiler};
 use parser::{
     lexer::{Error as LexError, Lexer},
     parser::Parser,
@@ -33,6 +33,7 @@ pub mod vm;
 pub enum EvalError<'a> {
     LexError(Vec<LexError>),
     ParseError(Vec<ParseError<'a>>),
+    CompileError(CompileError<'a>),
     VMError(vm::VMError),
 }
 
@@ -45,7 +46,9 @@ pub fn eval<'a>(code: &'a str) -> Result<Option<Rc<RefCell<Value>>>, EvalError<'
     let statements = Parser::new(tokens)
         .parse_all()
         .map_err(EvalError::ParseError)?;
-    let instructions = Compiler::new(statements).compile();
+    let instructions = Compiler::new(statements)
+        .compile()
+        .map_err(EvalError::CompileError)?;
     let mut func = UserFunction::new(instructions, 0, FunctionType::Top, 0, Constructor::NoCtor);
     func.bind(Receiver::Bound(Value::from(AnyObject {}).into()));
     let mut vm = VM::new(func);
