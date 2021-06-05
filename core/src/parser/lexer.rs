@@ -233,7 +233,15 @@ impl<'a> Lexer<'a> {
     pub fn scan_next(&mut self) -> Option<Node<'a>> {
         self.skip_whitespaces();
         while self.current() == Some(b'/') {
+            let index_before_skip = self.idx;
             self.skip_comments();
+
+            // We need to manually break out of the loop if the index didn't change
+            // This is the case when visiting a single slash
+            if self.idx == index_before_skip {
+                break;
+            }
+
             self.skip_whitespaces();
         }
         self.skip_whitespaces();
