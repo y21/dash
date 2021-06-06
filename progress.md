@@ -1,5 +1,5 @@
 ## Progress
-dash tries to support most/all of ECMA-262 version 3, with additional ES5/6 features.
+dash tries to support most of ECMAScript 2015.
 This file should give you a short overview of what's missing but will likely be implemented in the future. This is a non exhaustive list.
 
 - [ ] Primitives
@@ -12,7 +12,7 @@ This file should give you a short overview of what's missing but will likely be 
   - [x] Boolean (true|false)
   - [ ] Hex literal (0xA)
   - [ ] Binary literal (0b1)
-  - [ ] Octal literal (01)
+  - [ ] Octal literal (0o1)
   - [ ] Number literals with underscore
   - [x] null
   - [x] undefined
@@ -23,6 +23,110 @@ This file should give you a short overview of what's missing but will likely be 
     - [x] Array literals
 - [ ] RegExp
   - [ ] RegExp literal
+- [ ] Operators
+  - [x] +=
+  - [x] +
+  - [x] =
+  - [ ] async/await
+  - [x] &=
+  - [x] &
+  - [ ] ~
+  - [x] |=
+  - [x] |
+  - [x] ^=
+  - [x] ^
+  - [ ] , (sequence)
+  - [x] ? :
+  - [x] --expr
+  - [x] expr--
+  - [ ] let [foo] = bar;
+  - [ ] let {foo} = bar;
+  - [x] /=
+  - [x] /
+  - [x] ==
+  - [x] **=
+  - [x] **
+  - [ ] function*
+  - [x] function
+  - [x] >=
+  - [x] >
+  - [x] (expr)
+  - [ ] in
+  - [x] ++expr
+  - [x] expr++
+  - [x] !=
+  - [ ] instanceof
+  - [x] <<=
+  - [x] <<
+  - [x] <=
+  - [x] <
+  - [x] &&=
+  - [x] &&
+  - [x] !
+  - [x] ??=
+  - [x] ||=
+  - [x] ||
+  - [x] *=
+  - [x] *
+  - [ ] new.target
+  - [x] new
+  - [x] ??
+  - [ ] ?.
+  - [x] target.ident
+  - [x] target[expr]
+  - [x] %=
+  - [x] %
+  - [x] >>=
+  - [x] >>
+  - [ ] ... (spread)
+  - [x] ===
+  - [x] !==
+  - [x] -=
+  - [x] -
+  - [ ] super
+  - [x] this
+  - [x] typeof
+  - [x] -expr
+  - [x] +expr
+  - [ ] >>>=
+  - [ ] >>>
+  - [x] void
+  - [ ] yield*
+  - [ ] yield
+- [ ] Statements
+  - [ ] async function
+  - [x] block
+  - [x] break
+  - [ ] class
+  - [x] const
+  - [x] continue
+  - [ ] debugger
+  - [ ] do...while
+  - [x] empty
+  - [ ] export
+  - [ ] for await...of
+  - [ ] for...in
+  - [ ] for...of
+  - [x] for
+  - [ ] function*
+  - [x] function
+  - [x] if
+  - [x] if...else
+  - [ ] import.meta
+  - [ ] import
+  - [ ] label
+  - [x] let
+  - [x] return
+  - [ ] switch
+  - [x] throw
+  - [x] try...catch
+    - [ ] finally
+  - [x] var (partial support; has same effect as let and const)
+  - [x] while
+  - [ ] ~~with~~
+- [ ] Strict mode
+- [ ] Native -> user function calls
+- [x] User -> native function calls
 - [ ] Standard library
   - [ ] decodeURI
   - [ ] decodeURIComponent
@@ -323,107 +427,3 @@ This file should give you a short overview of what's missing but will likely be 
     - [x] has
     - [x] add
     - [ ] @@toStringTag
-- [ ] Operators
-  - [x] +=
-  - [x] +
-  - [x] =
-  - [ ] async/await
-  - [x] &=
-  - [x] &
-  - [ ] ~
-  - [x] |=
-  - [x] |
-  - [x] ^=
-  - [x] ^
-  - [ ] , (sequence)
-  - [x] ? :
-  - [x] --expr
-  - [x] expr--
-  - [ ] let [foo] = bar;
-  - [ ] let {foo} = bar;
-  - [x] /=
-  - [x] /
-  - [x] ==
-  - [x] **=
-  - [x] **
-  - [ ] function*
-  - [x] function
-  - [x] >=
-  - [x] >
-  - [x] (expr)
-  - [ ] in
-  - [x] ++expr
-  - [x] expr++
-  - [x] !=
-  - [ ] instanceof
-  - [x] <<=
-  - [x] <<
-  - [x] <=
-  - [x] <
-  - [x] &&=
-  - [x] &&
-  - [x] !
-  - [x] ??=
-  - [x] ||=
-  - [x] ||
-  - [x] *=
-  - [x] *
-  - [ ] new.target
-  - [x] new
-  - [x] ??
-  - [ ] ?.
-  - [x] target.ident
-  - [x] target[expr]
-  - [x] %=
-  - [x] %
-  - [x] >>=
-  - [x] >>
-  - [ ] ... (spread)
-  - [x] ===
-  - [x] !==
-  - [x] -=
-  - [x] -
-  - [ ] super
-  - [x] this
-  - [x] typeof
-  - [x] -expr
-  - [x] +expr
-  - [ ] >>>=
-  - [ ] >>>
-  - [x] void
-  - [ ] yield*
-  - [ ] yield
-- [ ] Statements
-  - [ ] async function
-  - [x] block
-  - [x] break
-  - [ ] class
-  - [x] const
-  - [x] continue
-  - [ ] debugger
-  - [ ] do...while
-  - [x] empty
-  - [ ] export
-  - [ ] for await...of
-  - [ ] for...in
-  - [ ] for...of
-  - [x] for
-  - [ ] function*
-  - [x] function
-  - [x] if
-  - [ ] if...else
-  - [ ] import.meta
-  - [ ] import
-  - [ ] label
-  - [x] let
-  - [x] return
-  - [ ] switch
-  - [x] throw
-  - [x] try...catch
-    - [ ] finally
-  - [x] var (partial support; has same effect as let and const)
-  - [x] while
-  - [ ] ~~with~~
-- [ ] Strict mode
-- [ ] Native -> user function calls
-- [x] User -> native function calls
