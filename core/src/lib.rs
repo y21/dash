@@ -1,6 +1,9 @@
 use std::{cell::RefCell, rc::Rc};
 
-use compiler::compiler::{CompileError, Compiler};
+use compiler::{
+    agent::Agent,
+    compiler::{CompileError, Compiler},
+};
 use parser::{
     lexer::{Error as LexError, Lexer},
     parser::Parser,
@@ -40,13 +43,16 @@ pub enum EvalError<'a> {
 /// Convenient function for evaluating a JavaScript source code string with default settings
 /// Returns the last evaluated value
 /// Consider compiling source code once and creating a new VM directly for multiple calls with same source code
-pub fn eval<'a>(code: &'a str) -> Result<Option<Rc<RefCell<Value>>>, EvalError<'a>> {
+pub fn eval<'a, A: Agent>(
+    code: &'a str,
+    agent: Option<A>,
+) -> Result<Option<Rc<RefCell<Value>>>, EvalError<'a>> {
     let code = code.as_ref();
     let tokens = Lexer::new(code).scan_all().map_err(EvalError::LexError)?;
     let statements = Parser::new(tokens)
         .parse_all()
         .map_err(EvalError::ParseError)?;
-    let instructions = Compiler::new(statements)
+    let instructions = Compiler::new(statements, agent)
         .compile()
         .map_err(EvalError::CompileError)?;
     let mut func = UserFunction::new(instructions, 0, FunctionType::Top, 0, Constructor::NoCtor);
