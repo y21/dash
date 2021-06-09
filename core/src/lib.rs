@@ -9,6 +9,7 @@ use parser::{
     parser::Parser,
     token::Error as ParseError,
 };
+use util::MaybeOwned;
 use vm::{
     value::{
         function::{Constructor, FunctionType, UserFunction},
@@ -52,7 +53,7 @@ pub fn eval<'a, A: Agent>(
     let statements = Parser::new(tokens)
         .parse_all()
         .map_err(EvalError::ParseError)?;
-    let instructions = Compiler::new(statements, agent)
+    let instructions = Compiler::new(statements, agent.map(MaybeOwned::Owned), false)
         .compile()
         .map_err(EvalError::CompileError)?;
     let mut func = UserFunction::new(instructions, 0, FunctionType::Top, 0, Constructor::NoCtor);
