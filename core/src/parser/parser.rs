@@ -3,11 +3,11 @@ use crate::parser::expr::LiteralExpr;
 use super::{
     expr::{Expr, UnaryExpr},
     statement::{
-        BlockStatement, Catch, ForLoop, FunctionDeclaration, IfStatement, ImportKind,
+        BlockStatement, Catch, ExportKind, ForLoop, FunctionDeclaration, IfStatement, ImportKind,
         ReturnStatement, SpecifierKind, Statement, TryCatch, VariableDeclaration,
         VariableDeclarationKind, WhileLoop,
     },
-    token::{Error, ErrorKind, Token, TokenType, ASSIGNMENT_TYPES},
+    token::{Error, ErrorKind, Token, TokenType, ASSIGNMENT_TYPES, VARIABLE_TYPES},
 };
 
 pub struct Parser<'a> {
@@ -63,6 +63,7 @@ impl<'a> Parser<'a> {
             TokenType::Return => self.return_statement().map(Statement::Return),
             TokenType::For => self.for_loop().map(Statement::For),
             TokenType::Import => self.import().map(Statement::Import),
+            TokenType::Export => self.export().map(Statement::Export),
             TokenType::Continue => Some(Statement::Continue),
             TokenType::Break => Some(Statement::Break),
             _ => {
@@ -76,6 +77,41 @@ impl<'a> Parser<'a> {
         self.expect_and_skip(&[TokenType::Semicolon], false);
 
         stmt
+    }
+
+    pub fn export(&mut self) -> Option<ExportKind<'a>> {
+        let is_named = self.expect_and_skip(&[TokenType::LeftBrace], false);
+
+        if is_named {
+            let mut names = Vec::new();
+            while !self.expect_and_skip(&[TokenType::RightBrace], false) {
+                let name = self.next()?.full;
+                names.push(name);
+                self.expect_and_skip(&[TokenType::Comma], false);
+            }
+            return Some(ExportKind::Named(names));
+        }
+
+        let current = self.current()?;
+
+        if VARIABLE_TYPES.contains(&current.ty) {
+            let mut variables = Vec::new();
+            while self.expect_and_skip(VARIABLE_TYPES, false) {
+                let variable = self.variable()?;
+                variables.push(variable);
+                self.expect_and_skip(&[TokenType::Comma], false);
+            }
+            return Some(ExportKind::NamedVar(variables));
+        }
+
+        // We emit an error because this is the last possible way to create
+        // an export statement
+        if self.expect_and_skip(&[TokenType::Default], true) {
+            let expr = self.expression()?;
+            return Some(ExportKind::Default(expr));
+        }
+
+        unreachable!()
     }
 
     pub fn import(&mut self) -> Option<ImportKind<'a>> {

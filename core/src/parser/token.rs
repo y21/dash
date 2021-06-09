@@ -91,6 +91,8 @@ pub enum TokenType {
     Break,
     Continue,
     Import,
+    Export,
+    Default,
 }
 
 pub const ASSIGNMENT_TYPES: &[TokenType] = &[
@@ -111,6 +113,8 @@ pub const ASSIGNMENT_TYPES: &[TokenType] = &[
     TokenType::LogicalOrAssignment,
     TokenType::LogicalNullishAssignment,
 ];
+
+pub const VARIABLE_TYPES: &[TokenType] = &[TokenType::Let, TokenType::Const, TokenType::Var];
 
 impl From<&[u8]> for TokenType {
     fn from(s: &[u8]) -> Self {
@@ -143,6 +147,8 @@ impl From<&[u8]> for TokenType {
             b"continue" => Self::Continue,
             b"break" => Self::Break,
             b"import" => Self::Import,
+            b"export" => Self::Export,
+            b"default" => Self::Default,
             _ => Self::Identifier,
         }
     }

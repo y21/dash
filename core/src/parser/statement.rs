@@ -15,6 +15,7 @@ pub enum Statement<'a> {
     Try(TryCatch<'a>),
     Throw(Expr<'a>),
     Import(ImportKind<'a>),
+    Export(ExportKind<'a>),
     Continue,
     Break,
 }
@@ -40,6 +41,16 @@ pub enum ImportKind<'a> {
     DefaultAs(SpecifierKind<'a>, &'a [u8]),
     /// import * as foo from "bar"
     AllAs(SpecifierKind<'a>, &'a [u8]),
+}
+
+#[derive(Debug, Clone)]
+pub enum ExportKind<'a> {
+    /// export default foo
+    Default(Expr<'a>),
+    // export { foo, bar }
+    Named(Vec<&'a [u8]>),
+    // export let foo = "bar"
+    NamedVar(Vec<VariableDeclaration<'a>>),
 }
 
 impl<'a> ImportKind<'a> {
