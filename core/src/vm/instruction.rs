@@ -49,6 +49,7 @@ pub enum Opcode {
     LeftShift,
     RightShift,
     UnsignedRightShift,
+    Positive,
     Negate,
     LogicalNot,
     ShortJmp,
@@ -88,6 +89,7 @@ pub enum Opcode {
     LoopStart,
     LoopEnd,
     EvaluateModule,
+    ExportDefault,
 }
 
 impl From<TokenType> for Opcode {
