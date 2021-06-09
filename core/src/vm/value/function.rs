@@ -1,6 +1,7 @@
 use crate::vm::{instruction::Instruction, upvalue::Upvalue, VM};
 use core::fmt::{self, Debug, Formatter};
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use super::Value;
@@ -43,6 +44,7 @@ pub enum FunctionType {
     Top,
     Function,
     Closure,
+    Module,
 }
 
 #[derive(Debug, Clone)]
@@ -57,6 +59,15 @@ impl Receiver {
             Self::Pinned(p) => p,
             Self::Bound(b) => b,
         }
+    }
+
+    // TODO: this should be a no op if self is pinned
+    pub fn bind(&mut self, recv: Receiver) {
+        *self = recv;
+    }
+
+    pub fn rebind(mut self, recv: Receiver) -> Self {
+        recv
     }
 }
 
@@ -91,14 +102,14 @@ pub struct UserFunction {
 
 impl UserFunction {
     pub fn new(
-        buffer: Vec<Instruction>,
+        buffer: impl Into<Box<[Instruction]>>,
         params: u32,
         ty: FunctionType,
         upvalues: u32,
         ctor: Constructor,
     ) -> Self {
         Self {
-            buffer: buffer.into_boxed_slice(),
+            buffer: buffer.into(),
             params,
             name: None,
             ty,
@@ -108,12 +119,16 @@ impl UserFunction {
         }
     }
 
-    pub fn bind(&mut self, recv: Receiver) {
-        self.receiver = Some(recv);
+    pub fn bind(&mut self, new_recv: Receiver) {
+        if let Some(recv) = &mut self.receiver {
+            recv.bind(new_recv);
+        }
     }
 
-    pub fn rebind(mut self, recv: Receiver) -> Self {
-        self.receiver = Some(recv);
+    pub fn rebind(mut self, new_recv: Receiver) -> Self {
+        if let Some(recv) = &mut self.receiver {
+            recv.bind(new_recv);
+        }
         self
     }
 }
@@ -159,15 +174,39 @@ impl Debug for NativeFunction {
 }
 
 #[derive(Debug, Clone)]
+pub struct Module {
+    pub buffer: Option<Box<[Instruction]>>,
+    pub exports: Exports,
+}
+
+impl Module {
+    pub fn new(buffer: impl Into<Box<[Instruction]>>) -> Self {
+        Self {
+            buffer: Some(buffer.into()),
+            exports: Exports::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct Exports {
+    pub default: Option<Rc<RefCell<Value>>>,
+    pub named: HashMap<Box<str>, Rc<RefCell<Value>>>,
+}
+
+#[derive(Debug, Clone)]
 pub enum FunctionKind {
     Closure(Closure),
     User(UserFunction),
     Native(NativeFunction),
+    Module(Module),
 }
 
 impl ToString for FunctionKind {
     fn to_string(&self) -> String {
         match self {
+            // Users cannot access modules directly
+            Self::Module(_) => unreachable!(),
             Self::Native(n) => format!("function {}() {{ [native code] }}", n.name),
             Self::User(u) => format!("function {}() {{ ... }}", u.name.as_deref().unwrap_or("")),
             Self::Closure(c) => {
@@ -188,7 +227,21 @@ impl FunctionKind {
         }
     }
 
+    pub fn into_closure(self) -> Option<Closure> {
+        match self {
+            Self::Closure(c) => Some(c),
+            _ => None,
+        }
+    }
+
     pub fn as_user(&self) -> Option<&UserFunction> {
+        match self {
+            Self::User(u) => Some(u),
+            _ => None,
+        }
+    }
+
+    pub fn into_user(self) -> Option<UserFunction> {
         match self {
             Self::User(u) => Some(u),
             _ => None,
@@ -198,6 +251,34 @@ impl FunctionKind {
     pub fn as_native(&self) -> Option<&NativeFunction> {
         match self {
             Self::Native(n) => Some(n),
+            _ => None,
+        }
+    }
+
+    pub fn into_native(self) -> Option<NativeFunction> {
+        match self {
+            Self::Native(n) => Some(n),
+            _ => None,
+        }
+    }
+
+    pub fn as_module(&self) -> Option<&Module> {
+        match self {
+            Self::Module(m) => Some(m),
+            _ => None,
+        }
+    }
+
+    pub fn as_module_mut(&mut self) -> Option<&mut Module> {
+        match self {
+            Self::Module(m) => Some(m),
+            _ => None,
+        }
+    }
+
+    pub fn into_module(self) -> Option<Module> {
+        match self {
+            Self::Module(m) => Some(m),
             _ => None,
         }
     }
