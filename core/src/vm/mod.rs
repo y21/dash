@@ -205,6 +205,7 @@ impl VM {
 
     fn prepare_stdlib(&mut self) {
         let mut global = self.global.borrow_mut();
+        global.detect_internal_properties(self);
         // TODO: attaching globalThis causes a reference cycle and memory leaks
         // We somehow need to have
         // global.set_property("globalThis", self.global.clone());
@@ -221,93 +222,148 @@ impl VM {
         self.statics.weakset_proto = self.create_object().into();
         self.statics.weakmap_proto = self.create_object().into();
         self.statics.error_proto = self.create_object().into();
-        {
-            let mut object_proto = self.statics.object_proto.borrow_mut();
-            object_proto.constructor = Some(Rc::downgrade(&self.statics.object_ctor));
-            object_proto.proto = Some(Rc::downgrade(&Value::new(ValueKind::Null).into()));
+
+        let mut object_proto = self.statics.object_proto.borrow_mut();
+        object_proto.constructor = Some(Rc::downgrade(&self.statics.object_ctor));
+        object_proto.proto = Some(Rc::downgrade(&Value::new(ValueKind::Null).into()));
+
+        // All functions that live in self.statics do not have a [[Prototype]] set
+        // so we do it here
+        fn patch_function_value(this: &VM, func: &Rc<RefCell<Value>>) {
+            func.borrow_mut().detect_internal_properties(this);
         }
 
-        self.statics
-            .boolean_ctor
-            .borrow_mut()
-            .detect_internal_properties(self);
-        self.statics
-            .number_ctor
-            .borrow_mut()
-            .detect_internal_properties(self);
-        self.statics
-            .string_ctor
-            .borrow_mut()
-            .detect_internal_properties(self);
-        self.statics
-            .function_ctor
-            .borrow_mut()
-            .detect_internal_properties(self);
-        self.statics
-            .array_ctor
-            .borrow_mut()
-            .detect_internal_properties(self);
-        self.statics
-            .weakset_ctor
-            .borrow_mut()
-            .detect_internal_properties(self);
-        self.statics
-            .weakmap_ctor
-            .borrow_mut()
-            .detect_internal_properties(self);
-        self.statics
-            .object_ctor
-            .borrow_mut()
-            .detect_internal_properties(self);
-        self.statics
-            .error_ctor
-            .borrow_mut()
-            .detect_internal_properties(self);
+        fn patch_constructor(this: &VM, func: &Rc<RefCell<Value>>, prototype: &Rc<RefCell<Value>>) {
+            let mut func_ref = func.borrow_mut();
+            let real_func = func_ref.as_function_mut().unwrap();
+            real_func.set_prototype(Rc::downgrade(prototype));
+            func_ref.detect_internal_properties(this);
+        }
 
-        global.set_property("NaN", Value::from(f64::NAN).into());
-        global.set_property("Infinity", Value::from(f64::INFINITY).into());
+        // Constructors
+        patch_constructor(
+            self,
+            &self.statics.boolean_ctor,
+            &self.statics.boolean_proto,
+        );
+        patch_constructor(self, &self.statics.number_ctor, &self.statics.number_proto);
+        patch_constructor(self, &self.statics.string_ctor, &self.statics.string_proto);
+        patch_constructor(
+            self,
+            &self.statics.function_ctor,
+            &self.statics.function_proto,
+        );
+        patch_constructor(self, &self.statics.array_ctor, &self.statics.array_proto);
+        patch_constructor(
+            self,
+            &self.statics.weakset_ctor,
+            &self.statics.weakset_proto,
+        );
+        patch_constructor(
+            self,
+            &self.statics.weakmap_ctor,
+            &self.statics.weakmap_proto,
+        );
+        patch_constructor(self, &self.statics.object_ctor, &self.statics.object_proto);
+        patch_constructor(self, &self.statics.error_ctor, &self.statics.error_proto);
+        // Other functions/methods
+        patch_function_value(self, &self.statics.isnan);
+        patch_function_value(self, &self.statics.object_define_property);
+        patch_function_value(self, &self.statics.object_get_own_property_names);
+        patch_function_value(self, &self.statics.isnan);
+        patch_function_value(self, &self.statics.console_log);
+        patch_function_value(self, &self.statics.array_push);
+        patch_function_value(self, &self.statics.math_pow);
+        patch_function_value(self, &self.statics.math_abs);
+        patch_function_value(self, &self.statics.math_ceil);
+        patch_function_value(self, &self.statics.math_floor);
+        patch_function_value(self, &self.statics.math_max);
+        patch_function_value(self, &self.statics.weakset_has);
+        patch_function_value(self, &self.statics.weakset_add);
+        patch_function_value(self, &self.statics.weakset_delete);
+        patch_function_value(self, &self.statics.weakmap_has);
+        patch_function_value(self, &self.statics.weakmap_add);
+        patch_function_value(self, &self.statics.weakmap_get);
+        patch_function_value(self, &self.statics.weakmap_delete);
+        patch_function_value(self, &self.statics.json_parse);
+        patch_function_value(self, &self.statics.json_stringify);
+
+        global.set_property("NaN", self.create_contextified_value(f64::NAN).into());
+        global.set_property(
+            "Infinity",
+            self.create_contextified_value(f64::INFINITY).into(),
+        );
 
         global.set_property("isNaN", self.statics.isnan.clone());
 
-        // TODO: make Object a function instead of object
-
-        let mut object_obj = self.statics.object_ctor.borrow_mut();
-        object_obj.set_property(
+        let mut object_ctor = self.statics.object_ctor.borrow_mut();
+        object_ctor.set_property(
             "defineProperty",
             self.statics.object_define_property.clone(),
         );
-        object_obj.set_property(
+        object_ctor.set_property(
             "getOwnPropertyNames",
             self.statics.object_get_own_property_names.clone(),
         );
         global.set_property("Object", Rc::clone(&self.statics.object_ctor));
 
-        let mut math_obj = Value::from(AnyObject {});
-        math_obj.set_property("pow", self.statics.math_pow.clone());
-        math_obj.set_property("abs", self.statics.math_abs.clone());
-        math_obj.set_property("ceil", self.statics.math_ceil.clone());
-        math_obj.set_property("floor", self.statics.math_floor.clone());
-        math_obj.set_property("max", self.statics.math_max.clone());
+        let mut math_obj = self.create_object();
+        math_obj.set_property("pow", Rc::clone(&self.statics.math_pow));
+        math_obj.set_property("abs", Rc::clone(&self.statics.math_abs));
+        math_obj.set_property("ceil", Rc::clone(&self.statics.math_ceil));
+        math_obj.set_property("floor", Rc::clone(&self.statics.math_floor));
+        math_obj.set_property("max", Rc::clone(&self.statics.math_max));
 
-        math_obj.set_property("PI", Value::from(std::f64::consts::PI).into());
-        math_obj.set_property("E", Value::from(std::f64::consts::E).into());
-        math_obj.set_property("LN10", Value::from(std::f64::consts::LN_10).into());
-        math_obj.set_property("LN2", Value::from(std::f64::consts::LN_2).into());
-        math_obj.set_property("LOG10E", Value::from(std::f64::consts::LOG10_E).into());
-        math_obj.set_property("LOG2E", Value::from(std::f64::consts::LOG2_E).into());
-        math_obj.set_property("SQRT2", Value::from(std::f64::consts::SQRT_2).into());
+        math_obj.set_property(
+            "PI",
+            self.create_contextified_value(std::f64::consts::PI).into(),
+        );
+        math_obj.set_property(
+            "E",
+            self.create_contextified_value(std::f64::consts::E).into(),
+        );
+        math_obj.set_property(
+            "LN10",
+            self.create_contextified_value(std::f64::consts::LN_10)
+                .into(),
+        );
+        math_obj.set_property(
+            "LN2",
+            self.create_contextified_value(std::f64::consts::LN_2)
+                .into(),
+        );
+        math_obj.set_property(
+            "LOG10E",
+            self.create_contextified_value(std::f64::consts::LOG10_E)
+                .into(),
+        );
+        math_obj.set_property(
+            "LOG2E",
+            self.create_contextified_value(std::f64::consts::LOG2_E)
+                .into(),
+        );
+        math_obj.set_property(
+            "SQRT2",
+            self.create_contextified_value(std::f64::consts::SQRT_2)
+                .into(),
+        );
         global.set_property("Math", math_obj.into());
 
-        let mut json_obj = Value::from(AnyObject {});
+        let mut json_obj = self.create_object();
         json_obj.set_property("parse", self.statics.json_parse.clone());
         json_obj.set_property("stringify", self.statics.json_stringify.clone());
         global.set_property("JSON", json_obj.into());
 
-        let mut console_obj = Value::from(AnyObject {});
+        let mut console_obj = self.create_object();
         console_obj.set_property("log", self.statics.console_log.clone());
         global.set_property("console", console_obj.into());
 
         global.set_property("Error", self.statics.error_ctor.clone());
+        global.set_property("Boolean", self.statics.boolean_ctor.clone());
+        global.set_property("Number", self.statics.number_ctor.clone());
+        global.set_property("String", self.statics.string_ctor.clone());
+        global.set_property("Function", self.statics.function_ctor.clone());
+        global.set_property("Array", self.statics.array_ctor.clone());
         global.set_property("WeakSet", self.statics.weakset_ctor.clone());
         global.set_property("WeakMap", self.statics.weakmap_ctor.clone());
     }
@@ -408,23 +464,28 @@ impl VM {
                         }
                     }
 
-                    self.stack
-                        .push(Value::from(FunctionKind::Closure(closure)).into());
+                    self.stack.push(
+                        self.create_contextified_value(FunctionKind::Closure(closure))
+                            .into(),
+                    );
                 }
                 Opcode::Negate => {
                     let maybe_number = self.read_number();
 
-                    self.stack.push(Value::from(-maybe_number).into());
+                    self.stack
+                        .push(self.create_contextified_value(-maybe_number).into());
                 }
                 Opcode::Positive => {
                     let maybe_number = self.read_number();
 
-                    self.stack.push(Value::from(maybe_number).into());
+                    self.stack
+                        .push(self.create_contextified_value(maybe_number).into());
                 }
                 Opcode::LogicalNot => {
                     let is_truthy = self.stack.pop().borrow().is_truthy();
 
-                    self.stack.push(Value::from(!is_truthy).into());
+                    self.stack
+                        .push(self.create_contextified_value(!is_truthy).into());
                 }
                 Opcode::Add => {
                     let result = self.with_lhs_rhs_borrowed(Value::add).into();
@@ -860,7 +921,7 @@ impl VM {
                     let exports = if let Some(default) = &func.exports.default {
                         Rc::clone(default)
                     } else {
-                        Value::from(AnyObject {}).into()
+                        self.create_object().into()
                     };
 
                     {
@@ -901,7 +962,8 @@ impl VM {
                     let lhs = lhs_cell.borrow();
 
                     let is_less = matches!(lhs.compare(&rhs), Some(Compare::Less));
-                    self.stack.push(Value::from(is_less).into());
+                    self.stack
+                        .push(self.create_contextified_value(is_less).into());
                 }
                 Opcode::LessEqual => {
                     let rhs_cell = self.stack.pop();
@@ -913,7 +975,8 @@ impl VM {
                         lhs.compare(&rhs),
                         Some(Compare::Less) | Some(Compare::Equal)
                     );
-                    self.stack.push(Value::from(is_less_eq).into());
+                    self.stack
+                        .push(self.create_contextified_value(is_less_eq).into());
                 }
                 Opcode::Greater => {
                     let rhs_cell = self.stack.pop();
@@ -922,7 +985,8 @@ impl VM {
                     let lhs = lhs_cell.borrow();
 
                     let is_greater = matches!(lhs.compare(&rhs), Some(Compare::Greater));
-                    self.stack.push(Value::from(is_greater).into());
+                    self.stack
+                        .push(self.create_contextified_value(is_greater).into());
                 }
                 Opcode::GreaterEqual => {
                     let rhs_cell = self.stack.pop();
@@ -934,7 +998,8 @@ impl VM {
                         lhs.compare(&rhs),
                         Some(Compare::Greater) | Some(Compare::Equal)
                     );
-                    self.stack.push(Value::from(is_greater_eq).into());
+                    self.stack
+                        .push(self.create_contextified_value(is_greater_eq).into());
                 }
                 Opcode::StaticPropertyAccess => {
                     let property = self.pop_owned().unwrap().into_ident().unwrap();
@@ -948,29 +1013,30 @@ impl VM {
                 }
                 Opcode::Equality => {
                     let eq = self.with_lhs_rhs_borrowed(Value::lossy_equal);
-                    self.stack.push(Value::new(ValueKind::Bool(eq)).into());
+                    self.stack.push(self.create_contextified_value(eq).into());
                 }
                 Opcode::Inequality => {
                     let eq = self.with_lhs_rhs_borrowed(Value::lossy_equal);
-                    self.stack.push(Value::new(ValueKind::Bool(!eq)).into());
+                    self.stack.push(self.create_contextified_value(!eq).into());
                 }
                 Opcode::StrictEquality => {
                     let eq = self.with_lhs_rhs_borrowed(Value::strict_equal);
-                    self.stack.push(Value::new(ValueKind::Bool(eq)).into());
+                    self.stack.push(self.create_contextified_value(eq).into());
                 }
                 Opcode::StrictInequality => {
                     let eq = self.with_lhs_rhs_borrowed(Value::strict_equal);
-                    self.stack.push(Value::new(ValueKind::Bool(!eq)).into());
+                    self.stack.push(self.create_contextified_value(!eq).into());
                 }
                 Opcode::Typeof => {
                     let value = self.stack.pop().borrow()._typeof().to_owned();
 
-                    self.stack.push(Value::from(Object::String(value)).into());
+                    self.stack
+                        .push(self.create_contextified_value(Object::String(value)).into());
                 }
                 Opcode::PostfixIncrement | Opcode::PostfixDecrement => {
                     let value_cell = self.stack.pop();
                     let mut value = value_cell.borrow_mut();
-                    let one = Value::new(ValueKind::Number(1f64));
+                    let one = self.create_contextified_value(1f64);
                     let result = if instruction == Opcode::PostfixIncrement {
                         value.add_assign(&one);
                         value.sub(&one)
