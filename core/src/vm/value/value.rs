@@ -6,7 +6,14 @@ use std::{
     rc::{Rc, Weak},
 };
 
-use super::ValueKind;
+use crate::vm::VM;
+
+use super::{
+    function::{FunctionKind, Receiver},
+    object::{Object, Weak as JsWeak},
+    weak::MaybeWeak,
+    ValueKind,
+};
 
 #[derive(Debug, Clone)]
 pub struct HashRc<T>(pub Rc<T>);
@@ -42,7 +49,10 @@ impl<T> Eq for HashWeak<T> {}
 pub struct Value {
     pub kind: ValueKind,
     pub fields: HashMap<Box<str>, Rc<RefCell<Value>>>,
-    pub constructor: Option<Rc<RefCell<Value>>>,
+    /// [[Prototype]] of this value
+    pub proto: Option<Weak<RefCell<Value>>>,
+    /// Constructor of this value
+    pub constructor: Option<Weak<RefCell<Value>>>,
 }
 
 impl Value {
@@ -51,11 +61,81 @@ impl Value {
             kind,
             fields: HashMap::new(),
             constructor: None,
+            proto: None,
         }
     }
-}
 
-impl Value {
+    pub fn with_prototype(kind: ValueKind, proto: MaybeWeak<RefCell<Value>>) -> Self {
+        Self {
+            kind,
+            fields: HashMap::new(),
+            constructor: None,
+            proto: Some(proto.into_weak()),
+        }
+    }
+
+    pub fn with_constructor(kind: ValueKind, constructor: MaybeWeak<RefCell<Value>>) -> Self {
+        Self {
+            kind,
+            fields: HashMap::new(),
+            constructor: Some(constructor.into_weak()),
+            proto: None,
+        }
+    }
+
+    pub fn update_internal_properties(
+        &mut self,
+        proto: &Rc<RefCell<Value>>,
+        ctor: &Rc<RefCell<Value>>,
+    ) {
+        self.proto = Some(Rc::downgrade(proto));
+        self.constructor = Some(Rc::downgrade(ctor));
+    }
+
+    /// Tries to detect the [[Prototype]] and constructor of this value given self.kind, and updates it
+    pub fn detect_internal_properties(&mut self, vm: &VM) {
+        let statics = &vm.statics;
+        match &self.kind {
+            ValueKind::Bool(_) => {
+                self.update_internal_properties(&statics.boolean_proto, &statics.boolean_ctor)
+            }
+            ValueKind::Number(_) => {
+                self.update_internal_properties(&statics.number_proto, &statics.number_ctor)
+            }
+            ValueKind::Object(o) => {
+                // can't pattern match box ;/
+                match &**o {
+                    Object::String(_) => {
+                        self.update_internal_properties(&statics.string_proto, &statics.string_ctor)
+                    }
+                    Object::Function(_) => self.update_internal_properties(
+                        &statics.function_proto,
+                        &statics.function_ctor,
+                    ),
+                    Object::Array(_) => {
+                        self.update_internal_properties(&statics.array_proto, &statics.array_ctor)
+                    }
+                    Object::Any(_) => {
+                        self.update_internal_properties(&statics.object_proto, &statics.object_ctor)
+                    }
+                    Object::Weak(JsWeak::Set(_)) => self
+                        .update_internal_properties(&statics.weakset_proto, &statics.weakset_ctor),
+                    Object::Weak(JsWeak::Map(_)) => self
+                        .update_internal_properties(&statics.weakmap_proto, &statics.weakmap_ctor),
+                };
+            }
+            _ => {}
+        }
+    }
+
+    pub fn strong_proto(&self) -> Option<Rc<RefCell<Value>>> {
+        self.proto.as_ref().and_then(Weak::upgrade)
+    }
+
+    pub fn strong_constructor(&self) -> Option<Rc<RefCell<Value>>> {
+        self.constructor.as_ref().and_then(Weak::upgrade)
+    }
+
     pub fn try_into_inner(value: Rc<RefCell<Self>>) -> Option<Self> {
         Some(Rc::try_unwrap(value).ok()?.into_inner())
     }
@@ -64,20 +144,59 @@ impl Value {
         o.unwrap_or_else(|| Value::new(ValueKind::Undefined).into())
     }
 
-    pub fn get_property(value_cell: &Rc<RefCell<Value>>, k: &str) -> Option<Rc<RefCell<Value>>> {
+    pub fn get_property(
+        value_cell: &Rc<RefCell<Value>>,
+        k: &str,
+        override_this: Option<&Rc<RefCell<Value>>>,
+    ) -> Option<Rc<RefCell<Value>>> {
         let value = value_cell.borrow();
         let k = k.into();
 
+        match k {
+            "__proto__" => {
+                return Some(
+                    value
+                        .strong_proto()
+                        .unwrap_or_else(|| Value::new(ValueKind::Null).into()),
+                )
+            }
+            "constructor" => return value.strong_constructor(),
+            _ => {}
+        };
+
         if value.fields.len() > 0 {
-            // We only need to go the "slow" path and look up the given key in a HashMap if there are entries
-            if let Some(entry) = value.fields.get(k) {
-                return Some(entry.clone());
+            if let Some(entry_cell) = value.fields.get(k) {
+                if let Some(override_this) = override_this {
+                    let mut entry = entry_cell.borrow_mut();
+
+                    if let Some(f) = entry.as_function_mut() {
+                        let receiver = Receiver::Bound(Rc::clone(&override_this));
+
+                        match f {
+                            FunctionKind::Closure(c) => c.func.bind(receiver),
+                            FunctionKind::Native(n) => {
+                                if let Some(recv) = &mut n.receiver {
+                                    recv.bind(receiver);
+                                } else {
+                                    n.receiver = Some(receiver);
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                return Some(Rc::clone(entry_cell));
             }
         }
 
-        match &value.kind {
-            ValueKind::Object(o) => o.get_property(value_cell, k),
-            _ => None,
+        if let Some(proto_weak) = &value.proto {
+            if let Some(proto_cell) = proto_weak.upgrade() {
+                Value::get_property(&proto_cell, k, Some(value_cell))
+            } else {
+                None
+            }
+        } else {
+            None
         }
     }
 
