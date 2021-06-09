@@ -1,17 +1,19 @@
 // This file is cursed. You've been warned
 use crate::{
+    compiler::agent::ImportResult,
     parser::{
         expr::{
             ArrayLiteral, AssignmentExpr, BinaryExpr, ConditionalExpr, Expr, FunctionCall,
             GroupingExpr, LiteralExpr, ObjectLiteral, Postfix, PropertyAccessExpr, Seq, UnaryExpr,
         },
         statement::{
-            BlockStatement, ForLoop, FunctionDeclaration, IfStatement, ImportKind, ReturnStatement,
-            SpecifierKind, Statement, TryCatch, VariableDeclaration, VariableDeclarationKind,
-            WhileLoop,
+            BlockStatement, ExportKind, ForLoop, FunctionDeclaration, IfStatement, ImportKind,
+            ReturnStatement, SpecifierKind, Statement, TryCatch, VariableDeclaration,
+            VariableDeclarationKind, WhileLoop,
         },
         token::TokenType,
     },
+    util::MaybeOwned,
     visitor::Visitor,
     vm::{
         instruction::{Constant, Instruction, Opcode},
@@ -25,6 +27,7 @@ use crate::{
 use std::{borrow::Cow, convert::TryFrom, ptr::NonNull};
 
 use super::{
+    agent::Agent,
     scope::{Local, ScopeGuard},
     upvalue::Upvalue,
 };
@@ -32,11 +35,13 @@ use super::{
 pub type Ast<'a> = Vec<Statement<'a>>;
 
 #[derive(Debug)]
-pub struct Compiler<'a> {
+pub struct Compiler<'a, A> {
     ast: Option<Ast<'a>>,
-    top: Option<NonNull<Compiler<'a>>>,
+    top: Option<NonNull<Compiler<'a, A>>>,
     upvalues: Stack<Upvalue, 1024>,
     scope: ScopeGuard<Local<'a>, 1024>,
+    agent: Option<MaybeOwned<A>>,
+    is_module: bool,
 }
 
 pub struct CompileResult {
@@ -44,35 +49,41 @@ pub struct CompileResult {
     pub upvalues: Stack<Upvalue, 1024>,
 }
 
-impl<'a> Compiler<'a> {
-    pub fn new(ast: Ast<'a>) -> Self {
+impl<'a, A: Agent> Compiler<'a, A> {
+    pub fn new(ast: Ast<'a>, agent: Option<MaybeOwned<A>>, is_module: bool) -> Self {
         let scope = ScopeGuard::new();
         Self {
             ast: Some(ast),
             top: None,
             upvalues: Stack::new(),
+            agent,
             scope,
+            is_module,
         }
     }
 
     pub fn with_scopeguard<'b>(
         ast: Ast<'a>,
         scope: ScopeGuard<Local<'a>, 1024>,
-        caller: Option<NonNull<Compiler<'a>>>,
+        agent: Option<MaybeOwned<A>>,
+        caller: Option<NonNull<Compiler<'a, A>>>,
+        is_module: bool,
     ) -> Self {
         Self {
             ast: Some(ast),
             upvalues: Stack::new(),
             top: caller,
+            agent,
             scope,
+            is_module,
         }
     }
 
-    pub unsafe fn caller(&self) -> Option<&Compiler<'a>> {
+    pub unsafe fn caller(&self) -> Option<&Compiler<'a, A>> {
         self.top.as_ref().map(|t| t.as_ref())
     }
 
-    pub unsafe fn caller_mut(&mut self) -> Option<&mut Compiler<'a>> {
+    pub unsafe fn caller_mut(&mut self) -> Option<&mut Compiler<'a, A>> {
         self.top.as_mut().map(|t| t.as_mut())
     }
 
@@ -101,6 +112,7 @@ impl<'a> Compiler<'a> {
 
     pub fn compile(self) -> Result<Vec<Instruction>, CompileError<'a>> {
         let is_top = self.top.is_none();
+        let is_module = self.is_module;
         let mut instructions = self.compile_frame()?.instructions;
 
         if is_top {
@@ -110,7 +122,11 @@ impl<'a> Compiler<'a> {
                 }
             }
 
-            instructions.push(Instruction::Op(Opcode::Return));
+            if is_module {
+                instructions.push(Instruction::Op(Opcode::ReturnModule));
+            } else {
+                instructions.push(Instruction::Op(Opcode::Return));
+            }
         }
 
         Ok(instructions)
@@ -177,6 +193,8 @@ impl<'a> Compiler<'a> {
 pub enum CompileError<'a> {
     ModuleNotFound(&'a [u8]),
     NotImplemented(&'static str),
+    ImportDisabled,
+    NativeImportFailed,
 }
 
 impl<'a> CompileError<'a> {
@@ -187,11 +205,13 @@ impl<'a> CompileError<'a> {
                 std::str::from_utf8(mo).unwrap()
             )),
             Self::NotImplemented(cause) => Cow::Borrowed(cause),
+            Self::ImportDisabled => Cow::Borrowed("Imports are disabled for this context"),
+            Self::NativeImportFailed => Cow::Borrowed("Native import failed"),
         }
     }
 }
 
-impl<'a> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for Compiler<'a> {
+impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for Compiler<'a, A> {
     fn visit_literal_expression(
         &mut self,
         e: &LiteralExpr<'a>,
@@ -341,6 +361,7 @@ impl<'a> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for Compiler<'a
         let mut instructions = self.accept_expr(&e.expr)?;
 
         match e.operator {
+            TokenType::Plus => instructions.push(Instruction::Op(Opcode::Positive)),
             TokenType::Minus => instructions.push(Instruction::Op(Opcode::Negate)),
             TokenType::Typeof => instructions.push(Instruction::Op(Opcode::Typeof)),
             TokenType::LogicalNot => instructions.push(Instruction::Op(Opcode::LogicalNot)),
@@ -469,8 +490,10 @@ impl<'a> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for Compiler<'a
             Self::with_scopeguard(
                 statements,
                 scope,
+                self.agent.as_mut().map(MaybeOwned::as_borrowed),
                 // SAFETY: self is never null
                 Some(NonNull::new_unchecked(self as *mut _)),
+                false,
             )
             .compile_frame()
         }?;
@@ -857,9 +880,25 @@ impl<'a> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for Compiler<'a
             ));
         }
 
-        // module_instructions is coming from somewhere else
-        let mut module_instructions: Vec<Instruction> = Vec::new();
-        // ---
+        // todo: don't unwrap and handle dynamic imports
+        let module_name = i.get_module_target().unwrap();
+
+        let mut module_instructions = if let Some(agent) = &mut self.agent {
+            let agent = unsafe { agent.as_mut() };
+
+            match agent.import(module_name) {
+                Some(ImportResult::Bytecode(code)) => code,
+                Some(ImportResult::Value(value)) => vec![
+                    Instruction::Op(Opcode::Constant),
+                    Instruction::Operand(Constant::JsValue(value)),
+                    Instruction::Op(Opcode::ExportDefault),
+                    Instruction::Op(Opcode::ReturnModule),
+                ],
+                _ => return Err(CompileError::NativeImportFailed),
+            }
+        } else {
+            return Err(CompileError::ImportDisabled);
+        };
 
         // We only want to insert a ReturnModule opcode if it's not there already
         let has_module_return = match module_instructions.last() {
@@ -886,5 +925,21 @@ impl<'a> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for Compiler<'a
         )?;
 
         Ok(instructions)
+    }
+
+    fn visit_export_statement(
+        &mut self,
+        e: &ExportKind<'a>,
+    ) -> Result<Vec<Instruction>, CompileError<'a>> {
+        match e {
+            ExportKind::Default(expr) => {
+                let mut instructions = self.accept_expr(expr)?;
+                instructions.push(Instruction::Op(Opcode::ExportDefault));
+                Ok(instructions)
+            }
+            _ => Err(CompileError::NotImplemented(
+                "Only default exports are currently supported",
+            )),
+        }
     }
 }
