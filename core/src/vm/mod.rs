@@ -177,11 +177,92 @@ impl VM {
         func(&*lhs, &*rhs)
     }
 
+    fn create_object(&self) -> Value {
+        self.create_contextified_value(AnyObject {})
+    }
+
+    fn create_object_with_fields(
+        &self,
+        fields: impl Into<HashMap<Box<str>, Rc<RefCell<Value>>>>,
+    ) -> Value {
+        let mut o = self.create_object();
+        o.fields = fields.into();
+        o
+    }
+
+    fn create_contextified_value(&self, value: impl Into<Value>) -> Value {
+        let mut value = value.into();
+        value.detect_internal_properties(self);
+        value
+    }
+
+    fn create_array(&self, arr: Array) -> Value {
+        let mut o = Value::from(arr);
+        o.proto = Some(Rc::downgrade(&self.statics.array_proto));
+        o.constructor = Some(Rc::downgrade(&self.statics.array_ctor));
+        o
+    }
+
     fn prepare_stdlib(&mut self) {
         let mut global = self.global.borrow_mut();
         // TODO: attaching globalThis causes a reference cycle and memory leaks
         // We somehow need to have
         // global.set_property("globalThis", self.global.clone());
+
+        self.statics.boolean_proto = self.create_object().into();
+        self.statics.number_proto = self.create_object().into();
+        self.statics.string_proto = self.create_object().into();
+        self.statics.function_proto = self.create_object().into();
+        self.statics.array_proto = {
+            let mut o = self.create_object();
+            o.set_property("push", Rc::clone(&self.statics.array_push));
+            o.into()
+        };
+        self.statics.weakset_proto = self.create_object().into();
+        self.statics.weakmap_proto = self.create_object().into();
+        self.statics.error_proto = self.create_object().into();
+        {
+            let mut object_proto = self.statics.object_proto.borrow_mut();
+            object_proto.constructor = Some(Rc::downgrade(&self.statics.object_ctor));
+            object_proto.proto = Some(Rc::downgrade(&Value::new(ValueKind::Null).into()));
+        }
+
+        self.statics
+            .boolean_ctor
+            .borrow_mut()
+            .detect_internal_properties(self);
+        self.statics
+            .number_ctor
+            .borrow_mut()
+            .detect_internal_properties(self);
+        self.statics
+            .string_ctor
+            .borrow_mut()
+            .detect_internal_properties(self);
+        self.statics
+            .function_ctor
+            .borrow_mut()
+            .detect_internal_properties(self);
+        self.statics
+            .array_ctor
+            .borrow_mut()
+            .detect_internal_properties(self);
+        self.statics
+            .weakset_ctor
+            .borrow_mut()
+            .detect_internal_properties(self);
+        self.statics
+            .weakmap_ctor
+            .borrow_mut()
+            .detect_internal_properties(self);
+        self.statics
+            .object_ctor
+            .borrow_mut()
+            .detect_internal_properties(self);
+        self.statics
+            .error_ctor
+            .borrow_mut()
+            .detect_internal_properties(self);
 
         global.set_property("NaN", Value::from(f64::NAN).into());
         global.set_property("Infinity", Value::from(f64::INFINITY).into());
@@ -189,7 +270,8 @@ impl VM {
         global.set_property("isNaN", self.statics.isnan.clone());
 
         // TODO: make Object a function instead of object
-        let mut object_obj = Value::from(AnyObject {});
+
+        let mut object_obj = self.statics.object_ctor.borrow_mut();
         object_obj.set_property(
             "defineProperty",
             self.statics.object_define_property.clone(),
@@ -198,7 +280,7 @@ impl VM {
             "getOwnPropertyNames",
             self.statics.object_get_own_property_names.clone(),
         );
-        global.set_property("Object", object_obj.into());
+        global.set_property("Object", Rc::clone(&self.statics.object_ctor));
 
         let mut math_obj = Value::from(AnyObject {});
         math_obj.set_property("pow", self.statics.math_pow.clone());
@@ -297,7 +379,11 @@ impl VM {
             match instruction {
                 Opcode::Eof => return Ok(None),
                 Opcode::Constant => {
-                    let constant = self.read_constant().map(|c| c.try_into_value()).unwrap();
+                    let mut constant = self.read_constant().map(|c| c.try_into_value()).unwrap();
+
+                    // Values emitted by the compiler do not have a [[Prototype]] set
+                    // so we need to do that here when pushing a value onto the stack
+                    constant.detect_internal_properties(self);
 
                     self.stack.push(constant.into());
                 }
@@ -329,6 +415,11 @@ impl VM {
                     let maybe_number = self.read_number();
 
                     self.stack.push(Value::from(-maybe_number).into());
+                }
+                Opcode::Positive => {
+                    let maybe_number = self.read_number();
+
+                    self.stack.push(Value::from(maybe_number).into());
                 }
                 Opcode::LogicalNot => {
                     let is_truthy = self.stack.pop().borrow().is_truthy();
@@ -910,7 +1001,8 @@ impl VM {
                     for _ in 0..element_count {
                         elements.push(self.stack.pop());
                     }
-                    self.stack.push(Value::from(Array::new(elements)).into())
+                    self.stack
+                        .push(self.create_array(Array::new(elements)).into());
                 }
                 Opcode::ObjectLiteral => {
                     let property_count = self.read_index().unwrap();
@@ -928,13 +1020,8 @@ impl VM {
                         fields.insert(key.into_boxed_str(), value);
                     }
 
-                    let value = Value {
-                        constructor: None,
-                        fields,
-                        proto: None,
-                        kind: ValueKind::Object(Box::new(Object::Any(AnyObject {}))),
-                    };
-                    self.stack.push(value.into());
+                    self.stack
+                        .push(self.create_object_with_fields(fields).into());
                 }
                 Opcode::ComputedPropertyAccess => {
                     let property_cell = self.stack.pop();
@@ -969,7 +1056,31 @@ impl VM {
                 Opcode::LoopEnd => {
                     self.loops.pop();
                 }
-                _ => unreachable!("{:?}", instruction),
+                Opcode::ExportDefault => {
+                    let export_status = {
+                        let value = self.stack.pop();
+                        let mut func_ref = self.frame().func.borrow_mut();
+
+                        let maybe_module = func_ref
+                            .as_function_mut()
+                            .and_then(FunctionKind::as_module_mut);
+
+                        if let Some(module) = maybe_module {
+                            module.exports.default = Some(value);
+                            true
+                        } else {
+                            false
+                        }
+                    };
+
+                    if !export_status {
+                        unwind_abort_if_uncaught!(js_std::error::create_error(
+                            MaybeRc::Owned("Can only export at the top level in a module"),
+                            self
+                        ))
+                    }
+                }
+                _ => unimplemented!("{:?}", instruction),
             };
         }
 
