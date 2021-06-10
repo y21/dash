@@ -1,16 +1,15 @@
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::convert::TryFrom;
 use std::num::ParseFloatError;
 use std::rc::Rc;
 use std::str::Utf8Error;
 
 use crate::util;
 use crate::vm::value::array::Array;
-use crate::vm::value::object::AnyObject;
 use crate::vm::value::Value as JsValue;
 use crate::vm::value::ValueKind;
+use crate::vm::VM;
 
 #[derive(Debug)]
 pub enum Value<'a> {
@@ -65,28 +64,31 @@ impl From<Utf8Error> for ConversionError {
 }
 
 impl<'a> Value<'a> {
-    pub(crate) fn into_js_value(self) -> Result<JsValue, ConversionError> {
+    pub(crate) fn into_js_value(self, vm: &VM) -> Result<JsValue, ConversionError> {
         match self {
-            Self::String(s) => JsValue::try_from(s).map_err(Into::into),
-            Self::Number(n) => Ok(JsValue::new(ValueKind::Number(n))),
-            Self::Bool(b) => Ok(JsValue::new(ValueKind::Bool(b))),
-            Self::Array(arr) => Ok(JsValue::from(Array::new({
+            Self::String(s) => std::str::from_utf8(s)
+                .map(String::from)
+                .map(|s| vm.create_js_value(s))
+                .map_err(Into::into),
+            Self::Number(n) => Ok(vm.create_js_value(n)),
+            Self::Bool(b) => Ok(vm.create_js_value(b)),
+            Self::Array(arr) => Ok(vm.create_js_value(Array::new({
                 let mut js_arr = Vec::with_capacity(arr.len());
 
                 for value in arr {
-                    js_arr.push(value.into_js_value().map(Into::into)?);
+                    js_arr.push(value.into_js_value(vm).map(Into::into)?);
                 }
 
                 js_arr
             }))),
             Self::Object(obj) => {
-                let mut js_obj = JsValue::from(AnyObject {});
+                let mut js_obj = vm.create_object();
 
                 for (key, value) in obj {
                     let key = std::str::from_utf8(key)?;
                     js_obj.set_property(
                         String::from(key).into_boxed_str(),
-                        Rc::new(RefCell::new(value.into_js_value()?)),
+                        Rc::new(RefCell::new(value.into_js_value(vm)?)),
                     );
                 }
 
