@@ -24,7 +24,7 @@ pub fn num_mul() {
 
 #[test]
 pub fn num_div() {
-    assert_eval_num!(eval::<()>("12 / 34", None), 34f64 / 16f64);
+    assert_eval_num!(eval::<()>("34 / 16", None), 34f64 / 16f64);
 }
 
 #[test]
@@ -34,7 +34,7 @@ pub fn num_rem() {
 
 #[test]
 pub fn num_pow() {
-    assert_eval_num!(eval::<()>("12 ** 34", None), 4f64.powf(6f64));
+    assert_eval_num!(eval::<()>("4 ** 6", None), 4f64.powf(6f64));
 }
 
 #[test]
