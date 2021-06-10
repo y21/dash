@@ -19,7 +19,7 @@ use crate::{
         upvalue::Upvalue,
         value::{
             array::Array,
-            function::{CallContext, Closure, FunctionKind, UserFunction},
+            function::{CallContext, Closure, FunctionKind, Receiver, UserFunction},
             ops::compare::Compare,
             ValueKind,
         },
@@ -177,11 +177,19 @@ impl VM {
         func(&*lhs, &*rhs)
     }
 
-    fn create_object(&self) -> Value {
-        self.create_contextified_value(AnyObject {})
+    pub fn create_object(&self) -> Value {
+        self.create_js_value(AnyObject {})
     }
 
-    fn create_object_with_fields(
+    pub fn create_null_object(&self) -> Value {
+        let mut o = Value::from(AnyObject {});
+        o.detect_internal_properties(self);
+        // Override [[Prototype]]
+        o.proto = None;
+        o
+    }
+
+    pub fn create_object_with_fields(
         &self,
         fields: impl Into<HashMap<Box<str>, Rc<RefCell<Value>>>>,
     ) -> Value {
@@ -190,13 +198,13 @@ impl VM {
         o
     }
 
-    fn create_contextified_value(&self, value: impl Into<Value>) -> Value {
+    pub fn create_js_value(&self, value: impl Into<Value>) -> Value {
         let mut value = value.into();
         value.detect_internal_properties(self);
         value
     }
 
-    fn create_array(&self, arr: Array) -> Value {
+    pub fn create_array(&self, arr: Array) -> Value {
         let mut o = Value::from(arr);
         o.proto = Some(Rc::downgrade(&self.statics.array_proto));
         o.constructor = Some(Rc::downgrade(&self.statics.array_ctor));
@@ -288,11 +296,8 @@ impl VM {
         patch_function_value(self, &self.statics.json_parse);
         patch_function_value(self, &self.statics.json_stringify);
 
-        global.set_property("NaN", self.create_contextified_value(f64::NAN).into());
-        global.set_property(
-            "Infinity",
-            self.create_contextified_value(f64::INFINITY).into(),
-        );
+        global.set_property("NaN", self.create_js_value(f64::NAN).into());
+        global.set_property("Infinity", self.create_js_value(f64::INFINITY).into());
 
         global.set_property("isNaN", self.statics.isnan.clone());
 
@@ -305,6 +310,10 @@ impl VM {
             "getOwnPropertyNames",
             self.statics.object_get_own_property_names.clone(),
         );
+        object_ctor.set_property(
+            "getPrototypeOf",
+            self.statics.object_get_prototype_of.clone(),
+        );
         global.set_property("Object", Rc::clone(&self.statics.object_ctor));
 
         let mut math_obj = self.create_object();
@@ -314,38 +323,21 @@ impl VM {
         math_obj.set_property("floor", Rc::clone(&self.statics.math_floor));
         math_obj.set_property("max", Rc::clone(&self.statics.math_max));
 
-        math_obj.set_property(
-            "PI",
-            self.create_contextified_value(std::f64::consts::PI).into(),
-        );
-        math_obj.set_property(
-            "E",
-            self.create_contextified_value(std::f64::consts::E).into(),
-        );
-        math_obj.set_property(
-            "LN10",
-            self.create_contextified_value(std::f64::consts::LN_10)
-                .into(),
-        );
-        math_obj.set_property(
-            "LN2",
-            self.create_contextified_value(std::f64::consts::LN_2)
-                .into(),
-        );
+        math_obj.set_property("PI", self.create_js_value(std::f64::consts::PI).into());
+        math_obj.set_property("E", self.create_js_value(std::f64::consts::E).into());
+        math_obj.set_property("LN10", self.create_js_value(std::f64::consts::LN_10).into());
+        math_obj.set_property("LN2", self.create_js_value(std::f64::consts::LN_2).into());
         math_obj.set_property(
             "LOG10E",
-            self.create_contextified_value(std::f64::consts::LOG10_E)
-                .into(),
+            self.create_js_value(std::f64::consts::LOG10_E).into(),
         );
         math_obj.set_property(
             "LOG2E",
-            self.create_contextified_value(std::f64::consts::LOG2_E)
-                .into(),
+            self.create_js_value(std::f64::consts::LOG2_E).into(),
         );
         math_obj.set_property(
             "SQRT2",
-            self.create_contextified_value(std::f64::consts::SQRT_2)
-                .into(),
+            self.create_js_value(std::f64::consts::SQRT_2).into(),
         );
         global.set_property("Math", math_obj.into());
 
@@ -464,28 +456,23 @@ impl VM {
                         }
                     }
 
-                    self.stack.push(
-                        self.create_contextified_value(FunctionKind::Closure(closure))
-                            .into(),
-                    );
+                    self.stack
+                        .push(self.create_js_value(FunctionKind::Closure(closure)).into());
                 }
                 Opcode::Negate => {
                     let maybe_number = self.read_number();
 
-                    self.stack
-                        .push(self.create_contextified_value(-maybe_number).into());
+                    self.stack.push(self.create_js_value(-maybe_number).into());
                 }
                 Opcode::Positive => {
                     let maybe_number = self.read_number();
 
-                    self.stack
-                        .push(self.create_contextified_value(maybe_number).into());
+                    self.stack.push(self.create_js_value(maybe_number).into());
                 }
                 Opcode::LogicalNot => {
                     let is_truthy = self.stack.pop().borrow().is_truthy();
 
-                    self.stack
-                        .push(self.create_contextified_value(!is_truthy).into());
+                    self.stack.push(self.create_js_value(!is_truthy).into());
                 }
                 Opcode::Add => {
                     let result = self.with_lhs_rhs_borrowed(Value::add).into();
@@ -760,8 +747,10 @@ impl VM {
                     }
 
                     let func_cell = self.stack.pop();
-                    let func_cell_ref = func_cell.borrow();
-                    let _func = match func_cell_ref.as_function().unwrap() {
+                    let mut func_cell_ref = func_cell.borrow_mut();
+                    let func_cell_kind = func_cell_ref.as_function_mut().unwrap();
+                    let this = func_cell_kind.construct(&func_cell);
+                    let func = match func_cell_kind {
                         FunctionKind::Native(f) => {
                             if !f.ctor.constructable() {
                                 // User tried to invoke non-constructor as a constructor
@@ -775,7 +764,7 @@ impl VM {
                                 vm: self,
                                 args: params,
                                 ctor: true,
-                                receiver: f.receiver.as_ref().map(|rx| rx.get().clone()),
+                                receiver: Some(this.into()),
                             };
                             let result = (f.func)(ctx);
 
@@ -786,13 +775,30 @@ impl VM {
 
                             continue;
                         }
-                        FunctionKind::Closure(u) => u,
+                        FunctionKind::Closure(closure) => {
+                            closure.func.receiver = Some(Receiver::Bound(this.into()));
+                            closure
+                        }
                         // There should never be raw user functions
                         _ => unreachable!(),
                     };
 
-                    // TODO: support constructor call for user functions
-                    todo!()
+                    // By this point we know func_cell is a UserFunction
+                    // TODO: get rid of this copy paste and share code with Opcode::FunctionCall
+
+                    let current_sp = self.stack.get_stack_pointer();
+                    self.frame_mut().sp = current_sp;
+
+                    let frame = Frame {
+                        buffer: func.func.buffer.clone(),
+                        ip: 0,
+                        func: Rc::clone(&func_cell),
+                        sp: current_sp,
+                    };
+                    self.frames.push(frame);
+                    for param in params.into_iter().rev() {
+                        self.stack.push(param);
+                    }
                 }
                 Opcode::GetThis => {
                     let this = {
@@ -938,7 +944,7 @@ impl VM {
                 }
                 Opcode::Return => {
                     // Restore VM state to where we were before the function call happened
-                    self.frames.pop();
+                    let this = self.frames.pop();
                     if self.frames.get_stack_pointer() == 0 {
                         if self.stack.get_stack_pointer() == 0 {
                             return Ok(None);
@@ -953,7 +959,17 @@ impl VM {
                         .discard_multiple(self.stack.get_stack_pointer() - self.frame().sp);
 
                     self.stack.set_stack_pointer(self.frame().sp);
-                    self.stack.push(ret);
+
+                    let func_ref = this.func.borrow();
+                    if let Some(this) = func_ref
+                        .as_function()
+                        .and_then(FunctionKind::as_closure)
+                        .and_then(|c| c.func.receiver.as_ref())
+                    {
+                        self.stack.push(Rc::clone(this.get()));
+                    } else {
+                        self.stack.push(ret);
+                    }
                 }
                 Opcode::Less => {
                     let rhs_cell = self.stack.pop();
@@ -962,8 +978,7 @@ impl VM {
                     let lhs = lhs_cell.borrow();
 
                     let is_less = matches!(lhs.compare(&rhs), Some(Compare::Less));
-                    self.stack
-                        .push(self.create_contextified_value(is_less).into());
+                    self.stack.push(self.create_js_value(is_less).into());
                 }
                 Opcode::LessEqual => {
                     let rhs_cell = self.stack.pop();
@@ -975,8 +990,7 @@ impl VM {
                         lhs.compare(&rhs),
                         Some(Compare::Less) | Some(Compare::Equal)
                     );
-                    self.stack
-                        .push(self.create_contextified_value(is_less_eq).into());
+                    self.stack.push(self.create_js_value(is_less_eq).into());
                 }
                 Opcode::Greater => {
                     let rhs_cell = self.stack.pop();
@@ -985,8 +999,7 @@ impl VM {
                     let lhs = lhs_cell.borrow();
 
                     let is_greater = matches!(lhs.compare(&rhs), Some(Compare::Greater));
-                    self.stack
-                        .push(self.create_contextified_value(is_greater).into());
+                    self.stack.push(self.create_js_value(is_greater).into());
                 }
                 Opcode::GreaterEqual => {
                     let rhs_cell = self.stack.pop();
@@ -998,8 +1011,7 @@ impl VM {
                         lhs.compare(&rhs),
                         Some(Compare::Greater) | Some(Compare::Equal)
                     );
-                    self.stack
-                        .push(self.create_contextified_value(is_greater_eq).into());
+                    self.stack.push(self.create_js_value(is_greater_eq).into());
                 }
                 Opcode::StaticPropertyAccess => {
                     let property = self.pop_owned().unwrap().into_ident().unwrap();
@@ -1013,30 +1025,30 @@ impl VM {
                 }
                 Opcode::Equality => {
                     let eq = self.with_lhs_rhs_borrowed(Value::lossy_equal);
-                    self.stack.push(self.create_contextified_value(eq).into());
+                    self.stack.push(self.create_js_value(eq).into());
                 }
                 Opcode::Inequality => {
                     let eq = self.with_lhs_rhs_borrowed(Value::lossy_equal);
-                    self.stack.push(self.create_contextified_value(!eq).into());
+                    self.stack.push(self.create_js_value(!eq).into());
                 }
                 Opcode::StrictEquality => {
                     let eq = self.with_lhs_rhs_borrowed(Value::strict_equal);
-                    self.stack.push(self.create_contextified_value(eq).into());
+                    self.stack.push(self.create_js_value(eq).into());
                 }
                 Opcode::StrictInequality => {
                     let eq = self.with_lhs_rhs_borrowed(Value::strict_equal);
-                    self.stack.push(self.create_contextified_value(!eq).into());
+                    self.stack.push(self.create_js_value(!eq).into());
                 }
                 Opcode::Typeof => {
                     let value = self.stack.pop().borrow()._typeof().to_owned();
 
                     self.stack
-                        .push(self.create_contextified_value(Object::String(value)).into());
+                        .push(self.create_js_value(Object::String(value)).into());
                 }
                 Opcode::PostfixIncrement | Opcode::PostfixDecrement => {
                     let value_cell = self.stack.pop();
                     let mut value = value_cell.borrow_mut();
-                    let one = self.create_contextified_value(1f64);
+                    let one = self.create_js_value(1f64);
                     let result = if instruction == Opcode::PostfixIncrement {
                         value.add_assign(&one);
                         value.sub(&one)
