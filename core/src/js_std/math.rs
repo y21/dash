@@ -1,42 +1,42 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::vm::value::{function::CallContext, Value, ValueKind};
+use crate::vm::value::{function::CallContext, Value};
 
-pub fn abs(value: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
-    let num = value
+pub fn abs(ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
+    let num = ctx
         .args
         .first()
         .map(|c| c.borrow().as_number())
         .unwrap_or(f64::NAN);
 
-    Ok(Value::new(ValueKind::Number(num.abs())).into())
+    Ok(ctx.vm.create_js_value(num.abs()).into())
 }
 
-pub fn ceil(value: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
-    let num = value
+pub fn ceil(ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
+    let num = ctx
         .args
         .first()
         .map(|c| c.borrow().as_number())
         .unwrap_or(f64::NAN);
 
-    Ok(Value::new(ValueKind::Number(num.ceil())).into())
+    Ok(ctx.vm.create_js_value(num.ceil()).into())
 }
 
-pub fn floor(value: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
-    let num = value
+pub fn floor(ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
+    let num = ctx
         .args
         .first()
         .map(|c| c.borrow().as_number())
         .unwrap_or(f64::NAN);
 
-    Ok(Value::new(ValueKind::Number(num.floor())).into())
+    Ok(ctx.vm.create_js_value(num.floor()).into())
 }
 
-pub fn max(value: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
-    let mut arguments = value.arguments();
+pub fn max(ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
+    let mut arguments = ctx.arguments();
     let mut max = match arguments.next().cloned() {
         Some(value) => value,
-        None => return Ok(Value::new(ValueKind::Number(-f64::INFINITY)).into()),
+        None => return Ok(ctx.vm.create_js_value(-f64::INFINITY).into()),
     };
     let mut max_num = max.borrow().as_number();
 
@@ -44,18 +44,18 @@ pub fn max(value: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>>
         let arg = arg_cell.borrow().as_number();
         if arg > max_num {
             max_num = arg;
-            max = arg_cell.clone();
+            max = Rc::clone(&arg_cell);
         }
     }
 
     Ok(max)
 }
 
-pub fn min(value: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
-    let mut arguments = value.arguments();
+pub fn min(ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
+    let mut arguments = ctx.arguments();
     let mut max = match arguments.next().cloned() {
         Some(value) => value,
-        None => return Ok(Value::new(ValueKind::Number(f64::INFINITY)).into()),
+        None => return Ok(ctx.vm.create_js_value(f64::INFINITY).into()),
     };
     let mut max_num = max.borrow().as_number();
 
@@ -63,15 +63,15 @@ pub fn min(value: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>>
         let arg = arg_cell.borrow().as_number();
         if arg < max_num {
             max_num = arg;
-            max = arg_cell.clone();
+            max = Rc::clone(&arg_cell);
         }
     }
 
     Ok(max)
 }
 
-pub fn pow(value: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
-    let mut args = value.arguments();
+pub fn pow(ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
+    let mut args = ctx.arguments();
 
     let lhs = args
         .next()
@@ -85,5 +85,5 @@ pub fn pow(value: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>>
 
     let result = lhs.powf(rhs);
 
-    Ok(Value::new(ValueKind::Number(result)).into())
+    Ok(ctx.vm.create_js_value(result).into())
 }

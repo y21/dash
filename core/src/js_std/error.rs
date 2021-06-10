@@ -1,11 +1,7 @@
 use std::{borrow::Cow, cell::RefCell, rc::Rc};
 
 use crate::vm::{
-    value::{
-        function::CallContext,
-        object::{AnyObject, Object},
-        Value,
-    },
+    value::{function::CallContext, Value},
     VM,
 };
 
@@ -15,7 +11,7 @@ pub enum MaybeRc<T> {
 }
 
 pub fn create_error(message: MaybeRc<&str>, vm: &VM) -> Rc<RefCell<Value>> {
-    let mut error = Value::from(AnyObject {});
+    let mut error = vm.create_object();
 
     let message_str = match message {
         MaybeRc::Rc(r) => r.borrow().to_string().to_string(),
@@ -24,9 +20,9 @@ pub fn create_error(message: MaybeRc<&str>, vm: &VM) -> Rc<RefCell<Value>> {
 
     let stack = vm.generate_stack_trace(Some(&message_str));
 
-    error.set_property("message", Value::from(Object::String(message_str)).into());
+    error.set_property("message", vm.create_js_value(message_str).into());
 
-    error.set_property("stack", Value::from(Object::String(stack)).into());
+    error.set_property("stack", vm.create_js_value(stack).into());
 
     error.into()
 }

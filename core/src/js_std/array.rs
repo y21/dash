@@ -1,8 +1,12 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::vm::value::{function::CallContext, object::Object, Value};
+use crate::vm::value::{function::CallContext, object::Object, Value, ValueKind};
 
 use super::error::{self, MaybeRc};
+
+pub fn array_constructor(_args: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
+    Ok(Value::new(ValueKind::Undefined).into())
+}
 
 pub fn push(value: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
     let this_cell = value.receiver.unwrap();
@@ -22,5 +26,8 @@ pub fn push(value: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>
         this_arr.elements.push(value);
     }
 
-    Ok(Value::from(this_arr.elements.len() as f64).into())
+    Ok(value
+        .vm
+        .create_js_value(this_arr.elements.len() as f64)
+        .into())
 }

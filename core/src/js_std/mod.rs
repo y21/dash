@@ -1,9 +1,12 @@
 pub mod array;
+pub mod boolean;
 pub mod console;
 pub mod error;
+pub mod function;
 pub mod functions;
 pub mod json;
 pub mod math;
+pub mod number;
 pub mod object;
 pub mod string;
 pub mod weakmap;

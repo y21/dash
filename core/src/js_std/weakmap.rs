@@ -7,8 +7,8 @@ use crate::vm::value::{
     HashWeak, Value, ValueKind,
 };
 
-pub fn weakmap_constructor(value: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
-    let elements_cell = value.args.get(0);
+pub fn weakmap_constructor(ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
+    let elements_cell = ctx.args.get(0);
     let elements = elements_cell.map(|c| c.borrow());
     let arr = elements
         .as_deref()
@@ -28,17 +28,17 @@ pub fn weakmap_constructor(value: CallContext) -> Result<Rc<RefCell<Value>>, Rc<
 
         let weak_key = HashWeak(Rc::downgrade(key));
 
-        map.insert(weak_key, value.clone());
+        map.insert(weak_key, Rc::clone(&value));
     }
 
     let wm = WeakMap::from(map);
-    Ok(Value::from(wm).into())
+    Ok(ctx.vm.create_js_value(wm).into())
 }
 
-pub fn has(value: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
-    let value_cell = value.args.get(0).unwrap();
+pub fn has(ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
+    let value_cell = ctx.args.get(0).unwrap();
 
-    let this_ref = value.receiver.as_ref().map(|c| c.borrow());
+    let this_ref = ctx.receiver.as_ref().map(|c| c.borrow());
     let this = this_ref
         .as_deref()
         .and_then(Value::as_object)
@@ -46,13 +46,13 @@ pub fn has(value: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>>
         .and_then(Weak::as_map)
         .unwrap();
 
-    Ok(Value::from(this.has_rc_key(value_cell)).into())
+    Ok(ctx.vm.create_js_value(this.has_rc_key(value_cell)).into())
 }
 
-pub fn get(value: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
-    let value_cell = value.args.get(0).unwrap();
+pub fn get(ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
+    let value_cell = ctx.args.get(0).unwrap();
 
-    let this_ref = value.receiver.as_ref().map(|c| c.borrow());
+    let this_ref = ctx.receiver.as_ref().map(|c| c.borrow());
     let this = this_ref
         .as_deref()
         .and_then(Value::as_object)
@@ -85,13 +85,13 @@ pub fn add(mut args: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value
 
     this_map.add(key, value);
 
-    Ok(this.clone())
+    Ok(Rc::clone(&this))
 }
 
-pub fn delete(mut value: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
-    let value_cell = value.args.get(0).unwrap();
+pub fn delete(mut ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
+    let value_cell = ctx.args.get(0).unwrap();
 
-    let this = value.receiver.as_mut().unwrap();
+    let this = ctx.receiver.as_mut().unwrap();
     let mut this_ref = this.borrow_mut();
     let this_map = this_ref
         .as_object_mut()
@@ -101,5 +101,5 @@ pub fn delete(mut value: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<V
 
     let found = this_map.delete_rc_key(value_cell);
 
-    Ok(Value::from(found).into())
+    Ok(ctx.vm.create_js_value(found).into())
 }
