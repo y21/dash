@@ -1,0 +1,17 @@
+.CodeMirror {
+    font-size: 15px;
+    border: 1px solid white;
+    margin: 5px 0px;
+}
+body {
+    background-color: #242424;
+    color: white;
+    font-family: "Arial";
+}
+a {
+    color: white;
+}
+.embedded-console {
+    padding: 0px;
+    height: 500px !important;
+}
