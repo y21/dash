@@ -161,6 +161,11 @@ impl Value {
                 )
             }
             "constructor" => return value.strong_constructor(),
+            "prototype" => {
+                if let Some(func) = value.as_function() {
+                    return func.prototype();
+                }
+            }
             _ => {}
         };
 
@@ -189,12 +194,8 @@ impl Value {
             }
         }
 
-        if let Some(proto_weak) = &value.proto {
-            if let Some(proto_cell) = proto_weak.upgrade() {
-                Value::get_property(&proto_cell, k, Some(value_cell))
-            } else {
-                None
-            }
+        if let Some(proto_cell) = value.proto.as_ref().and_then(Weak::upgrade) {
+            Value::get_property(&proto_cell, k, Some(value_cell))
         } else {
             None
         }

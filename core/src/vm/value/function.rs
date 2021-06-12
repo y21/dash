@@ -3,7 +3,9 @@ use core::fmt::{self, Debug, Formatter};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::rc::Weak;
 
+use super::object::AnyObject;
 use super::Value;
 
 pub type NativeFunctionCallback =
@@ -66,7 +68,7 @@ impl Receiver {
         *self = recv;
     }
 
-    pub fn rebind(mut self, recv: Receiver) -> Self {
+    pub fn rebind(self, recv: Receiver) -> Self {
         recv
     }
 }
@@ -92,6 +94,7 @@ impl Closure {
 #[derive(Debug, Clone)]
 pub struct UserFunction {
     pub ctor: Constructor,
+    pub prototype: Option<Weak<RefCell<Value>>>,
     pub params: u32,
     pub receiver: Option<Receiver>,
     pub ty: FunctionType,
@@ -116,6 +119,7 @@ impl UserFunction {
             receiver: None,
             ctor,
             upvalues,
+            prototype: None,
         }
     }
 
@@ -138,6 +142,7 @@ pub struct NativeFunction {
     pub name: &'static str,
     pub func: NativeFunctionCallback,
     pub receiver: Option<Receiver>,
+    pub prototype: Option<Weak<RefCell<Value>>>,
 }
 
 impl NativeFunction {
@@ -152,6 +157,7 @@ impl NativeFunction {
             name,
             func,
             receiver,
+            prototype: None,
         }
     }
 }
@@ -159,6 +165,7 @@ impl NativeFunction {
 impl Clone for NativeFunction {
     fn clone(&self) -> Self {
         Self {
+            prototype: self.prototype.clone(),
             ctor: self.ctor,
             func: self.func,
             name: self.name,
@@ -220,6 +227,35 @@ impl ToString for FunctionKind {
 }
 
 impl FunctionKind {
+    pub fn prototype_weak(&self) -> Option<&Weak<RefCell<Value>>> {
+        match self {
+            Self::Closure(c) => c.func.prototype.as_ref(),
+            Self::User(u) => u.prototype.as_ref(),
+            Self::Native(n) => n.prototype.as_ref(),
+            _ => None,
+        }
+    }
+
+    pub fn prototype(&self) -> Option<Rc<RefCell<Value>>> {
+        self.prototype_weak().and_then(Weak::upgrade)
+    }
+
+    pub fn construct(&self, this: &Rc<RefCell<Value>>) -> Value {
+        let mut o = Value::from(AnyObject {});
+        o.proto = self.prototype_weak().cloned();
+        o.constructor = Some(Rc::downgrade(this));
+        o
+    }
+
+    pub fn set_prototype(&mut self, proto: Weak<RefCell<Value>>) {
+        match self {
+            Self::Closure(c) => c.func.prototype = Some(proto),
+            Self::User(u) => u.prototype = Some(proto),
+            Self::Native(n) => n.prototype = Some(proto),
+            _ => {}
+        };
+    }
+
     pub fn as_closure(&self) -> Option<&Closure> {
         match self {
             Self::Closure(c) => Some(c),

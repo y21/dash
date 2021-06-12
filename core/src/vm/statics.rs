@@ -39,6 +39,7 @@ pub struct Statics {
     pub math_max: Rc<RefCell<Value>>,
     pub object_define_property: Rc<RefCell<Value>>,
     pub object_get_own_property_names: Rc<RefCell<Value>>,
+    pub object_get_prototype_of: Rc<RefCell<Value>>,
     pub weakset_has: Rc<RefCell<Value>>,
     pub weakset_add: Rc<RefCell<Value>>,
     pub weakset_delete: Rc<RefCell<Value>>,
@@ -101,6 +102,10 @@ impl Statics {
             object_get_own_property_names: register_glob_method!(
                 "getOwnPropertyNames",
                 js_std::object::get_own_property_names
+            ),
+            object_get_prototype_of: register_glob_method!(
+                "getPrototypeOf",
+                js_std::object::get_prototype_of
             ),
             weakset_has: register_glob_method!("has", js_std::weakset::has),
             weakset_add: register_glob_method!("add", js_std::weakset::add),
