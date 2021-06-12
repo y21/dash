@@ -53,7 +53,7 @@ fn repl() {
                 let result_ref = result.as_deref().map(RefCell::borrow);
                 let result_fmt = result_ref
                     .as_deref()
-                    .map(Value::inspect)
+                    .map(|v| Value::inspect(v, false))
                     .unwrap_or(Cow::Borrowed("undefined"));
 
                 println!("{}", result_fmt);
