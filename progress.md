@@ -2,6 +2,8 @@
 dash tries to support most of ECMAScript 2015.
 This file should give you a short overview of what's missing but will likely be implemented in the future. This is a non exhaustive list.
 
+Note: A checkmark here doesn't mean it matches the defined behavior in the spec. It means that test cases are passing.
+
 - [ ] Primitives
   - [x] Double quote strings
   - [x] Single quote strings
@@ -48,6 +50,7 @@ This file should give you a short overview of what's missing but will likely be 
   - [x] **
   - [ ] function*
   - [x] function
+  - [ ] () => {}
   - [x] >=
   - [x] >
   - [x] (expr)
@@ -103,7 +106,7 @@ This file should give you a short overview of what's missing but will likely be 
   - [ ] debugger
   - [ ] do...while
   - [x] empty
-  - [ ] export
+  - [x] export
   - [ ] for await...of
   - [ ] for...in
   - [ ] for...of
@@ -113,7 +116,7 @@ This file should give you a short overview of what's missing but will likely be 
   - [x] if
   - [x] if...else
   - [ ] import.meta
-  - [ ] import
+  - [x] import
   - [ ] label
   - [x] let
   - [x] return
@@ -306,16 +309,16 @@ This file should give you a short overview of what's missing but will likely be 
     - [ ] assign
     - [ ] getOwnPropertyDescriptor
     - [ ] getOwnPropertyDescriptors
-    - [ ] getOwnPropertyNames
+    - [x] getOwnPropertyNames
     - [ ] getOwnPropertySymbols
     - [ ] is
     - [ ] preventExtensions
     - [ ] seal
     - [ ] create
     - [ ] defineProperties
-    - [ ] defineProperty
+    - [x] defineProperty
     - [ ] freeze
-    - [ ] getPrototypeOf
+    - [x] getPrototypeOf
     - [ ] setPrototypeOf
     - [ ] isExtensible
     - [ ] isFrozen
@@ -333,7 +336,7 @@ This file should give you a short overview of what's missing but will likely be 
     - [ ] propertyIsEnumerable
     - [ ] toString
     - [ ] valueOf
-    - [ ] \_\_proto\_\_
+    - [x] \_\_proto\_\_
     - [ ] toLocaleString
   - [ ] Promise
   - [ ] Proxy
