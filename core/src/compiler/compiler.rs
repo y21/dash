@@ -169,7 +169,7 @@ impl<'a, A: Agent> Compiler<'a, A> {
         if !global {
             let stack_idx = self
                 .scope
-                .push_local(Local::new(var.name, self.scope.depth));
+                .push_local(Local::new(var.name, self.scope.depth, var.kind));
             instructions.push(Instruction::Op(Opcode::Constant));
             instructions.push(Instruction::Operand(Constant::Index(stack_idx)));
         } else {
@@ -483,7 +483,7 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         let mut scope = ScopeGuard::new();
         scope.enter_scope();
         for argument in &f.arguments {
-            scope.push_local(Local::new(argument, 0));
+            scope.push_local(Local::new(argument, 0, VariableDeclarationKind::Var));
         }
 
         let mut frame = unsafe {
@@ -554,9 +554,11 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
             )));
             instructions.push(Instruction::Op(Opcode::SetGlobal));
         } else {
-            let stack_idx = self
-                .scope
-                .push_local(Local::new(f.name.unwrap(), self.scope.depth));
+            let stack_idx = self.scope.push_local(Local::new(
+                f.name.unwrap(),
+                self.scope.depth,
+                VariableDeclarationKind::Var,
+            ));
             instructions.push(Instruction::Op(Opcode::Constant));
             instructions.push(Instruction::Operand(Constant::Index(stack_idx)));
             instructions.push(Instruction::Op(Opcode::SetLocal));
@@ -764,7 +766,11 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         self.scope.enter_scope();
 
         if let Some(ident) = t.catch.ident {
-            let stack_idx = self.scope.push_local(Local::new(ident, self.scope.depth));
+            let stack_idx = self.scope.push_local(Local::new(
+                ident,
+                self.scope.depth,
+                VariableDeclarationKind::Var,
+            ));
 
             instructions[3] = Instruction::Operand(Constant::Index(stack_idx));
         }

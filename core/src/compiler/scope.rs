@@ -1,14 +1,15 @@
-use crate::vm::stack::{OwnedStack, Stack};
+use crate::{parser::statement::VariableDeclarationKind, vm::stack::OwnedStack};
 
 #[derive(Debug)]
 pub struct Local<'a> {
     pub ident: &'a [u8],
     pub depth: u16,
+    pub kind: VariableDeclarationKind,
 }
 
 impl<'a> Local<'a> {
-    pub fn new(ident: &'a [u8], depth: u16) -> Self {
-        Self { ident, depth }
+    pub fn new(ident: &'a [u8], depth: u16, kind: VariableDeclarationKind) -> Self {
+        Self { ident, depth, kind }
     }
 }
 
