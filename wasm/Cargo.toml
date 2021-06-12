@@ -1,0 +1,11 @@
+[package]
+name = "wasm"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+dash = { path = "../core" }
+runtime = { path = "../runtime" }
+
+[lib]
+crate-type = ["cdylib"]
