@@ -94,9 +94,9 @@ impl Value {
         }
     }
 
-    pub fn inspect(&self) -> Cow<str> {
+    pub fn inspect(&self, in_object: bool) -> Cow<str> {
         match &self.kind {
-            ValueKind::Object(o) => o.inspect(self),
+            ValueKind::Object(o) => o.inspect(self, in_object),
             _ => self.to_string(),
         }
     }
@@ -196,9 +196,18 @@ impl Object {
         }
     }
 
-    pub fn inspect(&self, this: &Value) -> Cow<str> {
+    pub fn inspect(&self, this: &Value, in_object: bool) -> Cow<str> {
         match self {
-            Self::String(s) => Cow::Borrowed(s),
+            Self::String(s) => {
+                if in_object {
+                    Cow::Owned(format!(
+                        "\"{}\"",
+                        s.replace("\n", "\\n").replace("\"", "\\\"")
+                    ))
+                } else {
+                    Cow::Borrowed(s)
+                }
+            }
             Self::Function(f) => Cow::Owned(f.to_string()),
             Self::Array(a) => {
                 let mut s = String::from("[ ");
@@ -207,7 +216,7 @@ impl Object {
                     if index > 0 {
                         s.push_str(", ");
                     }
-                    s.push_str(&*element.inspect());
+                    s.push_str(&*element.inspect(true));
                 }
                 s.push_str(" ]");
                 Cow::Owned(s)
@@ -221,7 +230,7 @@ impl Object {
                     if index > 0 {
                         s.push_str(", ");
                     }
-                    s.push_str(&format!(r#""{}": {}"#, key, value.inspect()));
+                    s.push_str(&format!(r#""{}": {}"#, key, value.inspect(true)));
                 }
 
                 s.push_str(" }");
