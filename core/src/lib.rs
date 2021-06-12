@@ -48,7 +48,6 @@ pub fn eval<'a, A: Agent>(
     code: &'a str,
     agent: Option<A>,
 ) -> Result<Option<Rc<RefCell<Value>>>, EvalError<'a>> {
-    let code = code.as_ref();
     let tokens = Lexer::new(code).scan_all().map_err(EvalError::LexError)?;
     let statements = Parser::new(tokens)
         .parse_all()

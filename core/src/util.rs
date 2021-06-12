@@ -1,5 +1,3 @@
-use std::ptr::NonNull;
-
 pub fn is_digit(c: u8) -> bool {
     (b'0'..=b'9').contains(&c)
 }

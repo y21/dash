@@ -325,7 +325,6 @@ impl<'a> Lexer<'a> {
                 Some(TokenType::Remainder),
                 &[(b"=", TokenType::RemainderAssignment)],
             ),
-            // TODO: comments...
             b'/' => self.create_contextified_conditional_token(
                 Some(TokenType::Slash),
                 &[(b"=", TokenType::DivisionAssignment)],
