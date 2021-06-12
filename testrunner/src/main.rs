@@ -34,7 +34,7 @@ fn run_test(path: OsString) {
     let path_str = path.to_str().unwrap();
     let source = std::fs::read_to_string(path_str).unwrap();
 
-    let pass = dash::eval(&source).is_ok();
+    let pass = dash::eval::<()>(&source, None).is_ok();
     if pass {
         println!("{} {}", style(path_str).green(), style("passed").green());
     } else {
