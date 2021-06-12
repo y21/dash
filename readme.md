@@ -21,3 +21,4 @@ A list of supported ECMAScript features can be found in progress.md.
 - `runtime/`: A runtime that adds additional features that are often used by JavaScript applications, such as access to the file system.
 - `testrunner/` and `test262/`: ECMAScript spec compliance testing. Not used yet because of lack of features required for running tests.
 - `wasm/`: WebAssembly back- and frontend. Provides bindings to core project and makes it possible to embed the engine in the browser.
+- `site/`: A site that embeds the engine and a PoC of the project. It makes testing features easy as it doesn't require building the source.
