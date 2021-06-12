@@ -292,6 +292,13 @@ export class Engine {
     }
 
     /**
+     * Whether this Engine is initialized
+     */
+    public get initialized() {
+        return Boolean(this.internal);
+    }
+
+    /**
      * Returns this.internal, or throws an error if it's not set (presumably because it hasn't been initialized yet)
      */
     private getInternal(): Internal {
