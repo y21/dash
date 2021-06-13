@@ -1,9 +1,7 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{borrow::Cow, cell::RefCell, rc::Rc};
 
-use compiler::{
-    agent::Agent,
-    compiler::{CompileError, Compiler},
-};
+use agent::Agent;
+use compiler::compiler::{CompileError, Compiler};
 use parser::{
     lexer::{Error as LexError, Lexer},
     parser::Parser,
@@ -21,6 +19,7 @@ use vm::{
 
 use crate::vm::value::function::Receiver;
 
+pub mod agent;
 pub mod compiler;
 pub mod gc;
 pub mod js_std;
@@ -39,6 +38,27 @@ pub enum EvalError<'a> {
     ParseError(Vec<ParseError<'a>>),
     CompileError(CompileError<'a>),
     VMError(vm::VMError),
+}
+
+impl<'a> EvalError<'a> {
+    pub fn to_string(&self) -> Cow<str> {
+        match self {
+            Self::LexError(l) => Cow::Owned(
+                l.iter()
+                    .map(|e| e.to_string().to_string())
+                    .collect::<Vec<String>>()
+                    .join("\n"),
+            ),
+            Self::ParseError(p) => Cow::Owned(
+                p.iter()
+                    .map(|e| e.to_string())
+                    .collect::<Vec<String>>()
+                    .join("\n"),
+            ),
+            Self::CompileError(c) => c.to_string(),
+            Self::VMError(e) => e.to_string(),
+        }
+    }
 }
 
 /// Convenient function for evaluating a JavaScript source code string with default settings
