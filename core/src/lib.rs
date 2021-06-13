@@ -35,7 +35,7 @@ pub mod vm;
 
 #[derive(Debug)]
 pub enum EvalError<'a> {
-    LexError(Vec<LexError>),
+    LexError(Vec<LexError<'a>>),
     ParseError(Vec<ParseError<'a>>),
     CompileError(CompileError<'a>),
     VMError(vm::VMError),
@@ -49,7 +49,7 @@ pub fn eval<'a, A: Agent>(
     agent: Option<A>,
 ) -> Result<Option<Rc<RefCell<Value>>>, EvalError<'a>> {
     let tokens = Lexer::new(code).scan_all().map_err(EvalError::LexError)?;
-    let statements = Parser::new(tokens)
+    let statements = Parser::new(code, tokens)
         .parse_all()
         .map_err(EvalError::ParseError)?;
     let instructions = Compiler::new(statements, agent.map(MaybeOwned::Owned), false)
