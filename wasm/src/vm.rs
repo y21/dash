@@ -34,7 +34,7 @@ pub extern "C" fn create_vm<'a>(source: *const i8) -> Handle<WasmResult<VM, Crea
     let source = unsafe { CStr::from_ptr(source).to_str().unwrap() };
 
     let tokens = try_result!(Lexer::new(source).scan_all());
-    let stmts = try_result!(Parser::new(tokens).parse_all());
+    let stmts = try_result!(Parser::new(source, tokens).parse_all());
     let bytecode = try_result!(Compiler::<()>::new(stmts, None, false).compile());
     let func = UserFunction::new(bytecode, 0, FunctionType::Top, 0, Constructor::NoCtor);
 
