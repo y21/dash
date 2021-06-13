@@ -15,15 +15,17 @@ pub struct Parser<'a> {
     errors: Vec<Error<'a>>,
     error_sync: bool,
     idx: usize,
+    input: &'a [u8]
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(tokens: Vec<Token<'a>>) -> Self {
+    pub fn new(input: &'a str, tokens: Vec<Token<'a>>) -> Self {
         Self {
             tokens: tokens.into_boxed_slice(),
             errors: Vec::new(),
             error_sync: false,
             idx: 0,
+            input: input.as_bytes()
         }
     }
 
@@ -647,7 +649,10 @@ impl<'a> Parser<'a> {
 
     pub fn create_error(&mut self, kind: ErrorKind<'a>) {
         if !self.error_sync {
-            self.errors.push(Error { kind });
+            self.errors.push(Error {
+                kind,
+                source: self.input
+            });
             self.error_sync = true;
         }
     }
