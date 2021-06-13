@@ -1,12 +1,12 @@
-
 use std::{cell::RefCell, ffi::CString, rc::Rc};
 
-use dash::{compiler::compiler::CompileError, parser::{
-    lexer::Error as LexError,
-    token::Error as ParseError
-}, vm::{VMError, value::Value}};
+use dash::{
+    compiler::compiler::CompileError,
+    parser::{lexer::Error as LexError, token::Error as ParseError},
+    vm::{value::Value, VMError},
+};
 
-use crate::handle::{Handle, HandleRef};
+use crate::handle::HandleRef;
 
 #[derive(Debug)]
 #[repr(C)]
@@ -38,13 +38,17 @@ impl<'a> From<CompileError<'a>> for CreateVMError<'a> {
 pub extern "C" fn inspect_create_vm_error(e: HandleRef<CreateVMError<'_>>) -> *mut i8 {
     let e = unsafe { e.as_ref() };
     let msg = match e {
-        CreateVMError::Lexer(l) => {
-            l.iter().map(|e| e.to_string().to_string()).collect::<Vec<String>>().join("\n")
-        },
-        CreateVMError::Parser(p) => {
-            p.iter().map(|e| e.to_string()).collect::<Vec<String>>().join("\n")
-        }
-        CreateVMError::Compiler(c) => c.to_string().to_string()
+        CreateVMError::Lexer(l) => l
+            .iter()
+            .map(|e| e.to_string().to_string())
+            .collect::<Vec<String>>()
+            .join("\n"),
+        CreateVMError::Parser(p) => p
+            .iter()
+            .map(|e| e.to_string())
+            .collect::<Vec<String>>()
+            .join("\n"),
+        CreateVMError::Compiler(c) => c.to_string().to_string(),
     };
 
     CString::new(msg).unwrap().into_raw()
@@ -53,13 +57,13 @@ pub extern "C" fn inspect_create_vm_error(e: HandleRef<CreateVMError<'_>>) -> *m
 #[repr(C)]
 #[derive(Debug)]
 pub enum VMInterpretError {
-    UncaughtError(Rc<RefCell<Value>>)
+    UncaughtError(Rc<RefCell<Value>>),
 }
 
 impl From<VMError> for VMInterpretError {
     fn from(value: VMError) -> Self {
         match value {
-            VMError::UncaughtError(e) => Self::UncaughtError(e)
+            VMError::UncaughtError(e) => Self::UncaughtError(e),
         }
     }
 }
