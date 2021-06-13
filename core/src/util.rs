@@ -47,3 +47,58 @@ impl<T> MaybeOwned<T> {
         }
     }
 }
+
+pub enum Either<L, R> {
+    Left(L),
+    Right(R)
+}
+
+impl<L, R> Either<L, R> {
+    pub fn as_left(&self) -> Option<&L> {
+        match self {
+            Self::Left(l) => Some(l),
+            Self::Right(r) => None,
+        }
+    }
+
+    pub fn as_left_or_else<F>(&self, f: F) -> Option<&L>
+    where
+        F: FnOnce(&R) -> Option<&L>
+    {
+        match self {
+            Self::Left(l) => Some(l),
+            Self::Right(r) => f(r),
+        }
+    }
+
+    pub fn as_right(&self) -> Option<&R> {
+        match self {
+            Self::Left(l) => None,
+            Self::Right(r) => Some(r),
+        }
+    }
+
+    pub fn as_right_or_else<F>(&self, f: F) -> Option<&R>
+    where
+        F: FnOnce(&L) -> Option<&R>
+    {
+        match self {
+            Self::Left(l) => f(l),
+            Self::Right(r) => Some(r),
+        }
+    }
+
+    pub fn into_left(self) -> Option<L> {
+        match self {
+            Self::Left(l) => Some(l),
+            Self::Right(r) => None,
+        }
+    }
+
+    pub fn into_right(self) -> Option<R> {
+        match self {
+            Self::Left(l) => None,
+            Self::Right(r) => Some(r),
+        }
+    }
+}
