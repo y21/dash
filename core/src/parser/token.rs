@@ -179,34 +179,35 @@ pub struct Token<'a> {
 pub struct Location {
     pub line: usize,
     pub offset: usize,
-    pub line_offset: usize
+    pub line_offset: usize,
 }
 
 impl Location {
-    pub fn to_string(
-        &self,
-        source: &[u8],
-        full: Either<&str, char>,
-        message: &str
-    ) -> String {
+    pub fn to_string(&self, source: &[u8], full: Either<&str, char>, message: &str) -> String {
         let line_partial = &source[self.line_offset + 1..];
-        let end = line_partial.iter().position(|&c| c == b'\n').unwrap_or(line_partial.len());
+        let end = line_partial
+            .iter()
+            .position(|&c| c == b'\n')
+            .unwrap_or(line_partial.len());
         let line = &line_partial[..end];
 
         let col = self.offset - self.line_offset;
 
-        let full_len = full.as_left().map(|s|s.len()).unwrap_or(1);
+        let full_len = full.as_left().map(|s| s.len()).unwrap_or(1);
         let full = match &full {
             Either::Left(l) => l as &dyn Display,
-            Either::Right(r) => r as &dyn Display
+            Either::Right(r) => r as &dyn Display,
         };
 
         let mut s = std::str::from_utf8(line).unwrap().to_owned();
         s.push('\n');
         s.push_str(&" ".repeat((self.offset - self.line_offset).saturating_sub(1)));
         s.push_str(&"^".repeat(full_len));
-        s.push_str(&format!(" {}: {}\n  at script.js:{}:{}", message, full, self.line, col));
-        
+        s.push_str(&format!(
+            " {}: {}\n  at script.js:{}:{}",
+            message, full, self.line, col
+        ));
+
         s
     }
 }
@@ -221,7 +222,7 @@ pub enum ErrorKind<'a> {
 #[derive(Debug)]
 pub struct Error<'a> {
     pub kind: ErrorKind<'a>,
-    pub source: &'a [u8]
+    pub source: &'a [u8],
 }
 
 impl<'a> ErrorKind<'a> {
@@ -229,11 +230,13 @@ impl<'a> ErrorKind<'a> {
         match self {
             Self::UnknownToken(tok) => {
                 let full_utf8 = std::str::from_utf8(tok.full).unwrap();
-                tok.loc.to_string(source, Either::Left(full_utf8), "unknown token")
-            },
+                tok.loc
+                    .to_string(source, Either::Left(full_utf8), "unknown token")
+            }
             Self::UnexpectedToken(tok, _) | Self::UnexpectedTokenMultiple(tok, _) => {
                 let full_utf8 = std::str::from_utf8(tok.full).unwrap();
-                tok.loc.to_string(source, Either::Left(full_utf8), "unexpected token")
+                tok.loc
+                    .to_string(source, Either::Left(full_utf8), "unexpected token")
             }
         }
     }

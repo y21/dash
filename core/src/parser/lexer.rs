@@ -9,23 +9,25 @@ pub struct Lexer<'a> {
     idx: usize,
     line: usize,
     start: usize,
-    line_idx: usize
+    line_idx: usize,
 }
 
 #[derive(Debug)]
 pub struct Error<'a> {
     pub kind: ErrorKind,
     pub loc: Location,
-    pub source: &'a [u8]
+    pub source: &'a [u8],
 }
 
 impl<'a> Error<'a> {
     pub fn to_string(&self) -> Cow<str> {
         match &self.kind {
-            ErrorKind::UnknownCharacter(c) => {
-                Cow::Owned(self.loc.to_string(self.source, Either::Right(*c as char), "unknown character"))
-            },
-            ErrorKind::UnexpectedEof => Cow::Borrowed("Unexpected end of input")
+            ErrorKind::UnknownCharacter(c) => Cow::Owned(self.loc.to_string(
+                self.source,
+                Either::Right(*c as char),
+                "unknown character",
+            )),
+            ErrorKind::UnexpectedEof => Cow::Borrowed("Unexpected end of input"),
         }
     }
 }
@@ -54,7 +56,7 @@ impl<'a> Lexer<'a> {
             idx: 0,
             line: 1,
             start: 0,
-            line_idx: 0
+            line_idx: 0,
         }
     }
 
@@ -86,7 +88,7 @@ impl<'a> Lexer<'a> {
             loc: Location {
                 line: self.line,
                 offset: self.start,
-                line_offset: self.line_idx
+                line_offset: self.line_idx,
             },
             full: self.get_lexeme(),
         })
@@ -121,10 +123,10 @@ impl<'a> Lexer<'a> {
             loc: Location {
                 line: self.line,
                 offset: self.start,
-                line_offset: self.line_idx
+                line_offset: self.line_idx,
             },
             kind,
-            source: self.input
+            source: self.input,
         }
     }
 
@@ -138,7 +140,7 @@ impl<'a> Lexer<'a> {
             loc: Location {
                 line: self.line,
                 offset: lexeme.as_ptr() as usize - self.input.as_ptr() as usize,
-                line_offset: self.line_idx
+                line_offset: self.line_idx,
             },
             full: lexeme,
         }

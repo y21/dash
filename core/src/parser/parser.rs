@@ -15,7 +15,7 @@ pub struct Parser<'a> {
     errors: Vec<Error<'a>>,
     error_sync: bool,
     idx: usize,
-    input: &'a [u8]
+    input: &'a [u8],
 }
 
 impl<'a> Parser<'a> {
@@ -25,7 +25,7 @@ impl<'a> Parser<'a> {
             errors: Vec::new(),
             error_sync: false,
             idx: 0,
-            input: input.as_bytes()
+            input: input.as_bytes(),
         }
     }
 
@@ -651,7 +651,7 @@ impl<'a> Parser<'a> {
         if !self.error_sync {
             self.errors.push(Error {
                 kind,
-                source: self.input
+                source: self.input,
             });
             self.error_sync = true;
         }

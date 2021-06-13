@@ -1,6 +1,6 @@
 // This file is cursed. You've been warned
 use crate::{
-    compiler::agent::ImportResult,
+    agent::{Agent, ImportResult},
     parser::{
         expr::{
             ArrayLiteral, AssignmentExpr, BinaryExpr, ConditionalExpr, Expr, FunctionCall,
@@ -27,7 +27,6 @@ use crate::{
 use std::{borrow::Cow, convert::TryFrom, ptr::NonNull};
 
 use super::{
-    agent::Agent,
     scope::{Local, ScopeGuard},
     upvalue::Upvalue,
 };
