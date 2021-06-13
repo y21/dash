@@ -66,15 +66,6 @@ impl From<VMError> for VMInterpretError {
 
 #[no_mangle]
 pub extern "C" fn inspect_vm_interpret_error(e: HandleRef<VMError>) -> *mut i8 {
-    let err = unsafe { e.as_ref() };
-    let st = match err {
-        VMError::UncaughtError(err_cell) => {
-            let stack_cell = Value::get_property(&err_cell, "stack", None).unwrap();
-            let stack_ref = stack_cell.borrow();
-            let stack_string = stack_ref.as_string().unwrap();
-            CString::new(stack_string).unwrap()
-        }
-    };
-    
-    st.into_raw()
+    let err = unsafe { CString::new(&*e.as_ref().to_string()).unwrap() };
+    err.into_raw()
 }

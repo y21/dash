@@ -7,7 +7,7 @@ pub mod statics;
 pub mod upvalue;
 pub mod value;
 
-use std::{any::Any, cell::RefCell, collections::HashMap, rc::Rc};
+use std::{any::Any, borrow::Cow, cell::RefCell, collections::HashMap, rc::Rc};
 
 use instruction::{Instruction, Opcode};
 use value::Value;
@@ -37,6 +37,19 @@ use self::{
 #[derive(Debug)]
 pub enum VMError {
     UncaughtError(Rc<RefCell<Value>>),
+}
+
+impl VMError {
+    pub fn to_string(&self) -> Cow<str> {
+        match self {
+            Self::UncaughtError(err_cell) => {
+                let stack_cell = Value::get_property(&err_cell, "stack", None).unwrap();
+                let stack_ref = stack_cell.borrow();
+                let stack_string = stack_ref.as_string().unwrap();
+                Cow::Owned(String::from(stack_string))
+            }
+        }
+    }
 }
 
 pub struct VM {
