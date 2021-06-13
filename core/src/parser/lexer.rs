@@ -1,7 +1,7 @@
-use std::ops::Range;
+use std::{borrow::Cow, ops::Range};
 
 use super::token::{Location, Token, TokenType};
-use crate::util;
+use crate::util::{self, Either};
 
 #[derive(Debug)]
 pub struct Lexer<'a> {
@@ -9,12 +9,25 @@ pub struct Lexer<'a> {
     idx: usize,
     line: usize,
     start: usize,
+    line_idx: usize
 }
 
 #[derive(Debug)]
-pub struct Error {
+pub struct Error<'a> {
     pub kind: ErrorKind,
     pub loc: Location,
+    pub source: &'a [u8]
+}
+
+impl<'a> Error<'a> {
+    pub fn to_string(&self) -> Cow<str> {
+        match &self.kind {
+            ErrorKind::UnknownCharacter(c) => {
+                Cow::Owned(self.loc.to_string(self.source, Either::Right(*c as char), "unknown character"))
+            },
+            ErrorKind::UnexpectedEof => Cow::Borrowed("Unexpected end of input")
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -31,7 +44,7 @@ pub enum CommentKind {
 
 pub enum Node<'a> {
     Token(Token<'a>),
-    Error(Error),
+    Error(Error<'a>),
 }
 
 impl<'a> Lexer<'a> {
@@ -41,6 +54,7 @@ impl<'a> Lexer<'a> {
             idx: 0,
             line: 1,
             start: 0,
+            line_idx: 0
         }
     }
 
@@ -69,7 +83,11 @@ impl<'a> Lexer<'a> {
     pub fn create_contextified_token(&mut self, ty: TokenType) -> Node<'a> {
         Node::Token(Token {
             ty,
-            loc: Location { line: self.line },
+            loc: Location {
+                line: self.line,
+                offset: self.start,
+                line_offset: self.line_idx
+            },
             full: self.get_lexeme(),
         })
     }
@@ -98,10 +116,15 @@ impl<'a> Lexer<'a> {
         unreachable!()
     }
 
-    pub fn create_error(&mut self, kind: ErrorKind) -> Error {
+    pub fn create_error(&mut self, kind: ErrorKind) -> Error<'a> {
         Error {
-            loc: Location { line: self.line },
+            loc: Location {
+                line: self.line,
+                offset: self.start,
+                line_offset: self.line_idx
+            },
             kind,
+            source: self.input
         }
     }
 
@@ -112,7 +135,11 @@ impl<'a> Lexer<'a> {
     ) -> Token<'a> {
         Token {
             ty,
-            loc: Location { line: self.line },
+            loc: Location {
+                line: self.line,
+                offset: lexeme.as_ptr() as usize - self.input.as_ptr() as usize,
+                line_offset: self.line_idx
+            },
             full: lexeme,
         }
     }
@@ -167,6 +194,7 @@ impl<'a> Lexer<'a> {
 
             if cur == b'\n' {
                 self.line += 1;
+                self.line_idx = self.idx;
             }
 
             self.advance();
@@ -377,6 +405,7 @@ impl<'a> Lexer<'a> {
 
             if ch == b'\n' {
                 self.line += 1;
+                self.line_idx = self.idx;
             } else if ch != b' ' {
                 return;
             }
@@ -411,6 +440,7 @@ impl<'a> Lexer<'a> {
 
             if ch == b'\n' {
                 self.line += 1;
+                self.line_idx = self.idx;
                 return;
             }
 
@@ -430,6 +460,7 @@ impl<'a> Lexer<'a> {
 
             if ch == b'\n' {
                 self.line += 1;
+                self.line_idx = self.idx;
             } else if ch == b'*' && self.peek() == Some(b'/') {
                 self.advance_n(2);
                 return;
@@ -439,7 +470,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn scan_all(self) -> Result<Vec<Token<'a>>, Vec<Error>> {
+    pub fn scan_all(self) -> Result<Vec<Token<'a>>, Vec<Error<'a>>> {
         let mut errors = Vec::new();
         let mut tokens = Vec::new();
         for node in self {
