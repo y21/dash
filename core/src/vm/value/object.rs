@@ -2,14 +2,12 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::js_std;
-
 use super::function::Constructor;
 use super::weak::WeakMap;
 use super::weak::WeakSet;
 use super::{
     array::Array,
-    function::{FunctionKind, NativeFunction, NativeFunctionCallback, Receiver},
+    function::{FunctionKind, NativeFunctionCallback},
     Value, ValueKind,
 };
 
@@ -62,52 +60,6 @@ impl Weak {
             Self::Map(m) => Cow::Owned(format!("WeakMap {{ <{} items> }}", m.0.len())),
         }
     }
-
-    pub fn get_property_unboxed(&self, k: &str) -> Option<PropertyLookup> {
-        match self {
-            Self::Set(_) => match k {
-                "has" => Some(PropertyLookup::Function(
-                    js_std::weakset::has,
-                    "has",
-                    Constructor::NoCtor,
-                )),
-                "add" => Some(PropertyLookup::Function(
-                    js_std::weakset::add,
-                    "add",
-                    Constructor::NoCtor,
-                )),
-                "delete" => Some(PropertyLookup::Function(
-                    js_std::weakset::delete,
-                    "delete",
-                    Constructor::NoCtor,
-                )),
-                _ => None,
-            },
-            Self::Map(_) => match k {
-                "has" => Some(PropertyLookup::Function(
-                    js_std::weakmap::has,
-                    "has",
-                    Constructor::NoCtor,
-                )),
-                "add" => Some(PropertyLookup::Function(
-                    js_std::weakmap::add,
-                    "add",
-                    Constructor::NoCtor,
-                )),
-                "delete" => Some(PropertyLookup::Function(
-                    js_std::weakmap::delete,
-                    "delete",
-                    Constructor::NoCtor,
-                )),
-                "get" => Some(PropertyLookup::Function(
-                    js_std::weakmap::get,
-                    "get",
-                    Constructor::NoCtor,
-                )),
-                _ => None,
-            },
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -134,32 +86,5 @@ impl PropertyLookup {
             Self::Function(func, name, ctor) => Some((func, name, ctor)),
             _ => None,
         }
-    }
-}
-
-impl Object {
-    pub fn get_property_unboxed(&self, k: &str) -> Option<PropertyLookup> {
-        match self {
-            Self::String(s) => super::string::get_property_unboxed(s, k),
-            Self::Array(a) => a.get_property_unboxed(k),
-            Self::Weak(w) => w.get_property_unboxed(k),
-            _ => None,
-        }
-    }
-
-    pub fn get_property(&self, cell: &Rc<RefCell<Value>>, k: &str) -> Option<Rc<RefCell<Value>>> {
-        let result = self.get_property_unboxed(k)?;
-
-        Some(match result {
-            PropertyLookup::ValueRef(r) => r,
-            PropertyLookup::Function(func, name, ctor) => Value::from(NativeFunction::new(
-                name,
-                func,
-                Some(Receiver::Bound(cell.clone())),
-                ctor,
-            ))
-            .into(),
-            PropertyLookup::Value(v) => Value::new(v).into(),
-        })
     }
 }
