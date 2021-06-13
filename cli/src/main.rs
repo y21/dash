@@ -6,7 +6,7 @@ use std::{
     path::PathBuf,
 };
 
-use dash::{compiler::agent::Agent, vm::value::Value};
+use dash::{agent::Agent, vm::value::Value};
 use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
@@ -59,7 +59,7 @@ fn repl() {
                 println!("{}", result_fmt);
             }
             Err(e) => {
-                println!("{:?}", e);
+                println!("{}", e.to_string());
             }
         };
     }
