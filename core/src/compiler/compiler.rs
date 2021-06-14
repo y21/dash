@@ -363,6 +363,7 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
             TokenType::Plus => instructions.push(Instruction::Op(Opcode::Positive)),
             TokenType::Minus => instructions.push(Instruction::Op(Opcode::Negate)),
             TokenType::Typeof => instructions.push(Instruction::Op(Opcode::Typeof)),
+            TokenType::BitwiseNot => instructions.push(Instruction::Op(Opcode::BitwiseNot)),
             TokenType::LogicalNot => instructions.push(Instruction::Op(Opcode::LogicalNot)),
             TokenType::Void => instructions.push(Instruction::Op(Opcode::Void)),
             _ => todo!(),
