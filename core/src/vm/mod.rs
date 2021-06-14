@@ -13,6 +13,7 @@ use instruction::{Instruction, Opcode};
 use value::Value;
 
 use crate::{
+    agent::Agent,
     js_std::{self, error::MaybeRc},
     vm::{
         frame::UnwindHandler,
@@ -67,10 +68,12 @@ pub struct VM {
     pub(crate) unwind_handlers: Stack<UnwindHandler, 128>,
     /// Loops
     pub(crate) loops: Stack<Loop, 32>,
+    /// Agent
+    pub(crate) agent: Box<dyn Agent>,
 }
 
 impl VM {
-    pub fn new(func: UserFunction) -> Self {
+    pub fn new_with_agent(func: UserFunction, agent: Box<dyn Agent>) -> Self {
         let mut frames = Stack::new();
         frames.push(Frame {
             buffer: func.buffer.clone(),
@@ -87,9 +90,14 @@ impl VM {
             unwind_handlers: Stack::new(),
             loops: Stack::new(),
             slot: None,
+            agent,
         };
         vm.prepare_stdlib();
         vm
+    }
+
+    pub fn new(func: UserFunction) -> Self {
+        Self::new_with_agent(func, Box::new(()))
     }
 
     pub fn global(&self) -> &Rc<RefCell<Value>> {
@@ -308,6 +316,7 @@ impl VM {
         patch_function_value(self, &self.statics.math_ceil);
         patch_function_value(self, &self.statics.math_floor);
         patch_function_value(self, &self.statics.math_max);
+        patch_function_value(self, &self.statics.math_random);
         patch_function_value(self, &self.statics.weakset_has);
         patch_function_value(self, &self.statics.weakset_add);
         patch_function_value(self, &self.statics.weakset_delete);
@@ -344,6 +353,7 @@ impl VM {
         math_obj.set_property("ceil", Rc::clone(&self.statics.math_ceil));
         math_obj.set_property("floor", Rc::clone(&self.statics.math_floor));
         math_obj.set_property("max", Rc::clone(&self.statics.math_max));
+        math_obj.set_property("random", Rc::clone(&self.statics.math_random));
 
         math_obj.set_property("PI", self.create_js_value(std::f64::consts::PI).into());
         math_obj.set_property("E", self.create_js_value(std::f64::consts::E).into());

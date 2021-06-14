@@ -37,6 +37,7 @@ pub struct Statics {
     pub math_ceil: Rc<RefCell<Value>>,
     pub math_floor: Rc<RefCell<Value>>,
     pub math_max: Rc<RefCell<Value>>,
+    pub math_random: Rc<RefCell<Value>>,
     pub object_define_property: Rc<RefCell<Value>>,
     pub object_get_own_property_names: Rc<RefCell<Value>>,
     pub object_get_prototype_of: Rc<RefCell<Value>>,
@@ -95,6 +96,7 @@ impl Statics {
             math_ceil: register_glob_method!("ceil", js_std::math::ceil),
             math_floor: register_glob_method!("floor", js_std::math::floor),
             math_max: register_glob_method!("max", js_std::math::max),
+            math_random: register_glob_method!("random", js_std::math::random),
             object_define_property: register_glob_method!(
                 "defineProperty",
                 js_std::object::define_property

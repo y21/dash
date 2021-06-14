@@ -1,5 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
+use super::error::{self, MaybeRc};
 use crate::vm::value::{function::CallContext, Value};
 
 pub fn abs(ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
@@ -86,4 +87,16 @@ pub fn pow(ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
     let result = lhs.powf(rhs);
 
     Ok(ctx.vm.create_js_value(result).into())
+}
+
+pub fn random(ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
+    let maybe_random = ctx.vm.agent.random();
+
+    match maybe_random {
+        Some(rand) => Ok(ctx.vm.create_js_value(rand).into()),
+        None => Err(error::create_error(
+            MaybeRc::Owned("Random number generation failed"),
+            ctx.vm,
+        )),
+    }
 }
