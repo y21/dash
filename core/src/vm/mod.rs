@@ -180,6 +180,15 @@ impl VM {
         (lhs, rhs)
     }
 
+    fn with_lhs_borrowed<F, T>(&mut self, func: F) -> T
+    where
+        F: Fn(&Value) -> T,
+    {
+        let lhs_cell = self.stack.pop();
+        let lhs = lhs_cell.borrow();
+        func(&*lhs)
+    }
+
     fn with_lhs_rhs_borrowed<F, T>(&mut self, func: F) -> T
     where
         F: Fn(&Value, &Value) -> T,
@@ -535,6 +544,10 @@ impl VM {
                 }
                 Opcode::BitwiseXor => {
                     let result = self.with_lhs_rhs_borrowed(Value::bitwise_xor).into();
+                    self.stack.push(result);
+                }
+                Opcode::BitwiseNot => {
+                    let result = self.with_lhs_borrowed(Value::bitwise_not).into();
                     self.stack.push(result);
                 }
                 Opcode::SetGlobal => {

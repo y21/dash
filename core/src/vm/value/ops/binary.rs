@@ -48,14 +48,14 @@ impl Value {
     }
 
     pub fn left_shift(&self, other: &Value) -> Value {
-        let this = self.as_whole_number();
-        let other = other.as_whole_number();
+        let this = self.as_32bit_number();
+        let other = other.as_32bit_number();
         Value::new(ValueKind::Number((this << other) as f64))
     }
 
     pub fn right_shift(&self, other: &Value) -> Value {
-        let this = self.as_whole_number();
-        let other = other.as_whole_number();
+        let this = self.as_32bit_number();
+        let other = other.as_32bit_number();
         Value::new(ValueKind::Number((this >> other) as f64))
     }
 
@@ -64,20 +64,25 @@ impl Value {
     }
 
     pub fn bitwise_and(&self, other: &Value) -> Value {
-        let this = self.as_whole_number();
-        let other = other.as_whole_number();
+        let this = self.as_32bit_number();
+        let other = other.as_32bit_number();
         Value::new(ValueKind::Number((this & other) as f64))
     }
 
     pub fn bitwise_or(&self, other: &Value) -> Value {
-        let this = self.as_whole_number();
-        let other = other.as_whole_number();
+        let this = self.as_32bit_number();
+        let other = other.as_32bit_number();
         Value::new(ValueKind::Number((this | other) as f64))
     }
 
     pub fn bitwise_xor(&self, other: &Value) -> Value {
-        let this = self.as_whole_number();
-        let other = other.as_whole_number();
+        let this = self.as_32bit_number();
+        let other = other.as_32bit_number();
         Value::new(ValueKind::Number((this ^ other) as f64))
+    }
+
+    pub fn bitwise_not(&self) -> Value {
+        let this = self.as_32bit_number();
+        Value::new(ValueKind::Number(!this as f64))
     }
 }

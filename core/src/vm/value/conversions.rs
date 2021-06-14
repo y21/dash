@@ -37,6 +37,10 @@ impl Value {
         self.as_number().floor() as i64
     }
 
+    pub fn as_32bit_number(&self) -> i32 {
+        self.as_number().floor() as i32
+    }
+
     pub fn as_bool(&self) -> Option<bool> {
         match &self.kind {
             ValueKind::Bool(b) => Some(*b),

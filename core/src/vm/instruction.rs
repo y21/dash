@@ -52,6 +52,7 @@ pub enum Opcode {
     Positive,
     Negate,
     LogicalNot,
+    BitwiseNot,
     ShortJmp,
     ShortJmpIfFalse,
     ShortJmpIfTrue,
