@@ -48,6 +48,9 @@ fn read_file(call: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>
 }
 
 impl Agent for RuntimeAgent {
+    fn random(&mut self) -> Option<f64> {
+        None
+    }
     fn import(&mut self, module_name: &[u8]) -> Option<ImportResult> {
         match module_name {
             b"fs" if self.allow_fs() => {
