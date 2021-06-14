@@ -20,6 +20,10 @@ impl<T: ?Sized> Handle<T> {
     pub fn as_ptr(&self) -> *mut T {
         self.0
     }
+
+    pub unsafe fn into_box(self) -> Box<T> {
+        Box::from_raw(self.0)
+    }
 }
 
 /// A pointer to a heap allocated object that can be transferred through WebAssembly boundaries

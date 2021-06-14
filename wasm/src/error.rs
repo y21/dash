@@ -6,7 +6,7 @@ use dash::{
     vm::{value::Value, VMError},
 };
 
-use crate::handle::HandleRef;
+use crate::handle::{Handle, HandleRef};
 
 #[derive(Debug)]
 #[repr(C)]
@@ -68,8 +68,18 @@ impl From<VMError> for VMInterpretError {
     }
 }
 
+impl From<VMInterpretError> for VMError {
+    fn from(value: VMInterpretError) -> VMError {
+        match value {
+            VMInterpretError::UncaughtError(e) => VMError::UncaughtError(e),
+        }
+    }
+}
+
 #[no_mangle]
-pub extern "C" fn inspect_vm_interpret_error(e: HandleRef<VMError>) -> *mut i8 {
-    let err = unsafe { CString::new(&*e.as_ref().to_string()).unwrap() };
+pub extern "C" fn inspect_vm_interpret_error(err: Handle<VMInterpretError>) -> *mut i8 {
+    let err = unsafe { *err.into_box() };
+    let err = VMError::from(err);
+    let err = unsafe { CString::new(&*err.to_string()).unwrap() };
     err.into_raw()
 }
