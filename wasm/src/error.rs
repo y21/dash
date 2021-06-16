@@ -80,6 +80,6 @@ impl From<VMInterpretError> for VMError {
 pub extern "C" fn inspect_vm_interpret_error(err: Handle<VMInterpretError>) -> *mut i8 {
     let err = unsafe { *err.into_box() };
     let err = VMError::from(err);
-    let err = unsafe { CString::new(&*err.to_string()).unwrap() };
+    let err = CString::new(&*err.to_string()).unwrap();
     err.into_raw()
 }

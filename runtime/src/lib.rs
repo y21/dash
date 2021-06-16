@@ -7,7 +7,7 @@ use dash::{
     parser::{lexer::Lexer, parser::Parser},
     util::MaybeOwned,
     vm::value::{
-        function::{CallContext, NativeFunction},
+        function::{CallContext, CallResult, NativeFunction},
         object::AnyObject,
         Value,
     },
@@ -30,7 +30,7 @@ impl RuntimeAgent {
     }
 }
 
-fn read_file(call: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
+fn read_file(call: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let mut args = call.arguments();
     let filename_cell = args.next();
     let filename_ref = filename_cell.map(|c| c.borrow());
@@ -44,7 +44,7 @@ fn read_file(call: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>
     let content = std::fs::read_to_string(filename)
         .map_err(|e| js_std::error::create_error(MaybeRc::Owned(&e.to_string()), call.vm))?;
 
-    Ok(Value::from(content).into())
+    Ok(CallResult::Ready(Value::from(content).into()))
 }
 
 impl Agent for RuntimeAgent {

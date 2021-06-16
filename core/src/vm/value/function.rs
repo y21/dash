@@ -1,5 +1,6 @@
 use crate::vm::{instruction::Instruction, upvalue::Upvalue, VM};
 use core::fmt::{self, Debug, Formatter};
+use std::any::Any;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -9,7 +10,7 @@ use super::object::AnyObject;
 use super::Value;
 
 pub type NativeFunctionCallback =
-    for<'a> fn(CallContext<'a>) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>>;
+    for<'a> fn(CallContext<'a>) -> Result<CallResult, Rc<RefCell<Value>>>;
 
 #[derive(Debug, Clone, Copy)]
 pub enum Constructor {
@@ -27,17 +28,81 @@ impl Constructor {
     }
 }
 
+pub enum CallResult {
+    UserFunction(Rc<RefCell<Value>>, Vec<Rc<RefCell<Value>>>),
+    Ready(Rc<RefCell<Value>>),
+}
+
+pub struct CallState<T>(Option<T>);
+
+impl<T> Debug for CallState<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str("CallState")
+    }
+}
+
+impl<T> Default for CallState<T> {
+    fn default() -> Self {
+        Self(None)
+    }
+}
+
+impl<T> CallState<T> {
+    pub fn with<F, V>(&mut self, mut func: F) -> Option<V>
+    where
+        F: FnMut(&mut T) -> V,
+    {
+        if let Some(state) = &mut self.0 {
+            Some(func(state))
+        } else {
+            None
+        }
+    }
+
+    pub fn get(&self) -> Option<&T> {
+        self.0.as_ref()
+    }
+
+    pub fn get_or_insert(&mut self, value: T) -> &mut T {
+        self.0.get_or_insert(value)
+    }
+
+    pub fn get_or_insert_with<F>(&mut self, func: F) -> &mut T
+    where
+        F: FnMut() -> T,
+    {
+        self.0.get_or_insert_with(func)
+    }
+}
+
+impl CallState<Box<dyn Any>> {
+    pub fn get_or_insert_as<F, V>(&mut self, mut func: F) -> Option<&mut V>
+    where
+        V: 'static,
+        F: FnMut() -> V,
+    {
+        self.get_or_insert_with(|| Box::new(func()))
+            .downcast_mut::<V>()
+    }
+}
+
 pub struct CallContext<'a> {
     pub vm: &'a mut VM,
-    pub args: Vec<Rc<RefCell<Value>>>,
+    pub args: &'a mut Vec<Rc<RefCell<Value>>>,
     pub receiver: Option<Rc<RefCell<Value>>>,
     pub ctor: bool,
+    pub state: &'a mut CallState<Box<dyn Any>>,
+    pub function_call_response: Option<Rc<RefCell<Value>>>,
 }
 
 impl<'a> CallContext<'a> {
     pub fn arguments(&self) -> impl Iterator<Item = &Rc<RefCell<Value>>> {
         // TODO: fix order
         self.args.iter().rev()
+    }
+
+    pub fn state<V: 'static>(&self) -> Option<&V> {
+        self.state.get().and_then(|x| x.downcast_ref::<V>())
     }
 }
 
@@ -148,7 +213,7 @@ pub struct NativeFunction {
 impl NativeFunction {
     pub fn new(
         name: &'static str,
-        func: for<'a> fn(CallContext<'a>) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>>,
+        func: NativeFunctionCallback,
         receiver: Option<Receiver>,
         ctor: Constructor,
     ) -> Self {
