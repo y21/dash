@@ -1,6 +1,17 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{any::Any, cell::RefCell, rc::Rc};
 
-use super::{instruction::Instruction, value::Value};
+use super::{
+    instruction::Instruction,
+    value::{function::CallState, Value},
+};
+
+#[derive(Debug)]
+pub struct NativeResume {
+    pub func: Rc<RefCell<Value>>,
+    pub args: Vec<Rc<RefCell<Value>>>,
+    pub ctor: bool,
+    pub receiver: Option<Rc<RefCell<Value>>>,
+}
 
 #[derive(Debug)]
 pub struct Frame {
@@ -8,6 +19,8 @@ pub struct Frame {
     pub buffer: Box<[Instruction]>,
     pub ip: usize,
     pub sp: usize,
+    pub state: Option<CallState<Box<dyn Any>>>,
+    pub resume: Option<NativeResume>,
 }
 
 #[derive(Debug)]

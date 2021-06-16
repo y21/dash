@@ -16,11 +16,13 @@ use crate::{
     agent::Agent,
     js_std::{self, error::MaybeRc},
     vm::{
-        frame::UnwindHandler,
+        frame::{NativeResume, UnwindHandler},
         upvalue::Upvalue,
         value::{
             array::Array,
-            function::{CallContext, Closure, FunctionKind, Receiver, UserFunction},
+            function::{
+                CallContext, CallResult, CallState, Closure, FunctionKind, Receiver, UserFunction,
+            },
             ops::compare::Compare,
             ValueKind,
         },
@@ -80,6 +82,8 @@ impl VM {
             func: Value::from(Closure::new(func)).into(),
             ip: 0,
             sp: 0,
+            state: None,
+            resume: None,
         });
 
         let mut vm = Self {
@@ -255,6 +259,7 @@ impl VM {
         self.statics.array_proto = {
             let mut o = self.create_object();
             o.set_property("push", Rc::clone(&self.statics.array_push));
+            o.set_property("map", Rc::clone(&self.statics.array_map));
             o.into()
         };
         self.statics.weakset_proto = self.create_object().into();
@@ -428,6 +433,44 @@ impl VM {
         }
 
         stack
+    }
+
+    fn handle_native_return(
+        &mut self,
+        old_func: Rc<RefCell<Value>>,
+        new_func: Rc<RefCell<Value>>,
+        old_args: Vec<Rc<RefCell<Value>>>,
+        new_args: Vec<Rc<RefCell<Value>>>,
+        state: CallState<Box<dyn Any>>,
+        receiver: Option<Rc<RefCell<Value>>>,
+    ) {
+        let func_ref = new_func.borrow();
+        match func_ref.as_function().unwrap() {
+            FunctionKind::Closure(closure) => {
+                let sp = self.stack.get_stack_pointer();
+                self.frame_mut().sp = sp;
+
+                let frame = Frame {
+                    buffer: closure.func.buffer.clone(),
+                    ip: 0,
+                    func: Rc::clone(&new_func),
+                    sp,
+                    state: Some(state),
+                    resume: Some(NativeResume {
+                        args: old_args,
+                        ctor: false,
+                        func: old_func,
+                        receiver,
+                    }),
+                };
+
+                self.frames.push(frame);
+                for param in new_args.into_iter().rev() {
+                    self.stack.push(param);
+                }
+            }
+            _ => todo!(),
+        };
     }
 
     pub fn interpret(&mut self) -> Result<Option<Rc<RefCell<Value>>>, VMError> {
@@ -796,17 +839,21 @@ impl VM {
                                 ));
                             }
 
+                            let mut state = CallState::default();
                             let ctx = CallContext {
                                 vm: self,
-                                args: params,
+                                args: &mut params,
                                 ctor: true,
                                 receiver: Some(this.into()),
+                                state: &mut state,
+                                function_call_response: None,
                             };
                             let result = (f.func)(ctx);
 
                             match result {
-                                Ok(res) => self.stack.push(res),
+                                Ok(CallResult::Ready(res)) => self.stack.push(res),
                                 Err(e) => unwind_abort_if_uncaught!(e),
+                                _ => todo!(),
                             }
 
                             continue;
@@ -825,11 +872,14 @@ impl VM {
                     let current_sp = self.stack.get_stack_pointer();
                     self.frame_mut().sp = current_sp;
 
+                    let state = self.frame_mut().state.take();
                     let frame = Frame {
                         buffer: func.func.buffer.clone(),
                         ip: 0,
                         func: Rc::clone(&func_cell),
                         sp: current_sp,
+                        state,
+                        resume: None,
                     };
                     self.frames.push(frame);
                     for param in params.into_iter().rev() {
@@ -878,6 +928,8 @@ impl VM {
                         buffer,
                         ip: 0,
                         sp: current_sp,
+                        state: None,
+                        resume: None,
                     };
 
                     self.frames.push(frame);
@@ -893,19 +945,32 @@ impl VM {
                     let func_cell_ref = func_cell.borrow();
                     let func = match func_cell_ref.as_function().unwrap() {
                         FunctionKind::Native(f) => {
+                            let receiver = f.receiver.as_ref().map(|rx| rx.get().clone());
+                            let mut state = CallState::default();
                             let ctx = CallContext {
                                 vm: self,
-                                args: params,
+                                args: &mut params,
                                 ctor: false,
-                                receiver: f.receiver.as_ref().map(|rx| rx.get().clone()),
+                                receiver: receiver.clone(),
+                                state: &mut state,
+                                function_call_response: None,
                             };
 
                             let result = (f.func)(ctx);
 
                             match result {
-                                Ok(res) => self.stack.push(res),
+                                Ok(CallResult::Ready(ret)) => self.stack.push(ret),
+                                Ok(CallResult::UserFunction(new_func_cell, args)) => self
+                                    .handle_native_return(
+                                        Rc::clone(&func_cell),
+                                        new_func_cell,
+                                        params,
+                                        args,
+                                        state,
+                                        receiver,
+                                    ),
                                 Err(e) => unwind_abort_if_uncaught!(e),
-                            }
+                            };
                             continue;
                         }
                         FunctionKind::Closure(u) => u,
@@ -923,6 +988,8 @@ impl VM {
                         ip: 0,
                         func: func_cell.clone(),
                         sp: current_sp,
+                        state: self.frame_mut().state.take(),
+                        resume: None,
                     };
                     self.frames.push(frame);
                     for param in params.into_iter().rev() {
@@ -980,12 +1047,14 @@ impl VM {
                 }
                 Opcode::Return => {
                     // Restore VM state to where we were before the function call happened
-                    let this = self.frames.pop();
+                    let mut this = self.frames.pop();
+
                     if self.frames.get_stack_pointer() == 0 {
                         if self.stack.get_stack_pointer() == 0 {
                             return Ok(None);
                         } else {
-                            return Ok(Some(self.stack.pop()));
+                            let value = self.stack.pop();
+                            return Ok(Some(value));
                         }
                     }
 
@@ -995,6 +1064,41 @@ impl VM {
                         .discard_multiple(self.stack.get_stack_pointer() - self.frame().sp);
 
                     self.stack.set_stack_pointer(self.frame().sp);
+
+                    if let Some(mut resume) = this.resume.take() {
+                        let mut state = this.state.take().unwrap_or_else(CallState::default);
+                        let func_ref = resume.func.borrow();
+                        let f = func_ref
+                            .as_function()
+                            .and_then(FunctionKind::as_native)
+                            .unwrap();
+
+                        let context = CallContext {
+                            args: &mut resume.args,
+                            ctor: resume.ctor,
+                            function_call_response: Some(ret),
+                            receiver: resume.receiver.clone(),
+                            state: &mut state,
+                            vm: self,
+                        };
+
+                        let ret = (f.func)(context);
+
+                        match ret {
+                            Ok(CallResult::Ready(ret)) => self.stack.push(ret),
+                            Ok(CallResult::UserFunction(new_func_cell, args)) => self
+                                .handle_native_return(
+                                    Rc::clone(&resume.func),
+                                    new_func_cell,
+                                    resume.args,
+                                    args,
+                                    state,
+                                    resume.receiver,
+                                ),
+                            Err(e) => unwind_abort_if_uncaught!(e),
+                        };
+                        continue;
+                    }
 
                     let func_ref = this.func.borrow();
                     if let Some(this) = func_ref
