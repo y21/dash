@@ -465,12 +465,71 @@ impl VM {
                 };
 
                 self.frames.push(frame);
-                for param in new_args.into_iter().rev() {
+                for param in new_args.into_iter() {
                     self.stack.push(param);
                 }
             }
             _ => todo!(),
         };
+    }
+
+    fn begin_function_call(
+        &mut self,
+        func_cell: Rc<RefCell<Value>>,
+        mut params: Vec<Rc<RefCell<Value>>>,
+    ) -> Result<(), Rc<RefCell<Value>>> {
+        let func_cell_ref = func_cell.borrow();
+        let func = match func_cell_ref.as_function().unwrap() {
+            FunctionKind::Native(f) => {
+                let receiver = f.receiver.as_ref().map(|rx| rx.get().clone());
+                let mut state = CallState::default();
+                let ctx = CallContext {
+                    vm: self,
+                    args: &mut params,
+                    ctor: false,
+                    receiver: receiver.clone(),
+                    state: &mut state,
+                    function_call_response: None,
+                };
+
+                let result = (f.func)(ctx)?;
+
+                match result {
+                    CallResult::Ready(ret) => self.stack.push(ret),
+                    CallResult::UserFunction(new_func_cell, args) => self.handle_native_return(
+                        Rc::clone(&func_cell),
+                        new_func_cell,
+                        params,
+                        args,
+                        state,
+                        receiver,
+                    ),
+                };
+                return Ok(());
+            }
+            FunctionKind::Closure(u) => u,
+            // There should never be raw user functions
+            _ => unreachable!(),
+        };
+
+        // By this point we know func_cell is a UserFunction
+
+        let current_sp = self.stack.get_stack_pointer();
+        self.frame_mut().sp = current_sp;
+
+        let frame = Frame {
+            buffer: func.func.buffer.clone(),
+            ip: 0,
+            func: func_cell.clone(),
+            sp: current_sp,
+            state: self.frame_mut().state.take(),
+            resume: None,
+        };
+        self.frames.push(frame);
+        for param in params.into_iter().rev() {
+            self.stack.push(param);
+        }
+        Ok(())
     }
 
     pub fn interpret(&mut self) -> Result<Option<Rc<RefCell<Value>>>, VMError> {
@@ -942,58 +1001,8 @@ impl VM {
                     }
 
                     let func_cell = self.stack.pop();
-                    let func_cell_ref = func_cell.borrow();
-                    let func = match func_cell_ref.as_function().unwrap() {
-                        FunctionKind::Native(f) => {
-                            let receiver = f.receiver.as_ref().map(|rx| rx.get().clone());
-                            let mut state = CallState::default();
-                            let ctx = CallContext {
-                                vm: self,
-                                args: &mut params,
-                                ctor: false,
-                                receiver: receiver.clone(),
-                                state: &mut state,
-                                function_call_response: None,
-                            };
-
-                            let result = (f.func)(ctx);
-
-                            match result {
-                                Ok(CallResult::Ready(ret)) => self.stack.push(ret),
-                                Ok(CallResult::UserFunction(new_func_cell, args)) => self
-                                    .handle_native_return(
-                                        Rc::clone(&func_cell),
-                                        new_func_cell,
-                                        params,
-                                        args,
-                                        state,
-                                        receiver,
-                                    ),
-                                Err(e) => unwind_abort_if_uncaught!(e),
-                            };
-                            continue;
-                        }
-                        FunctionKind::Closure(u) => u,
-                        // There should never be raw user functions
-                        _ => unreachable!(),
-                    };
-
-                    // By this point we know func_cell is a UserFunction
-
-                    let current_sp = self.stack.get_stack_pointer();
-                    self.frame_mut().sp = current_sp;
-
-                    let frame = Frame {
-                        buffer: func.func.buffer.clone(),
-                        ip: 0,
-                        func: func_cell.clone(),
-                        sp: current_sp,
-                        state: self.frame_mut().state.take(),
-                        resume: None,
-                    };
-                    self.frames.push(frame);
-                    for param in params.into_iter().rev() {
-                        self.stack.push(param);
+                    if let Err(e) = self.begin_function_call(func_cell, params) {
+                        unwind_abort_if_uncaught!(e);
                     }
                 }
                 Opcode::Try => {
@@ -1296,6 +1305,31 @@ impl VM {
                             MaybeRc::Owned("Can only export at the top level in a module"),
                             self
                         ))
+                    }
+                }
+                Opcode::ToPrimitive => {
+                    let obj_cell = self.stack.pop();
+
+                    {
+                        // If this is already a primitive value, we do not need to try to convert it
+                        let obj = obj_cell.borrow();
+                        if obj.is_primitive() {
+                            self.stack.push(Rc::clone(&obj_cell));
+                            continue;
+                        }
+                    }
+
+                    let to_prim = unwrap_or_unwind!(
+                        Value::get_property(&obj_cell, "toString", None)
+                            .or_else(|| Value::get_property(&obj_cell, "valueOf", None)),
+                        js_std::error::create_error(
+                            MaybeRc::Owned("Cannot convert object to primitive value"),
+                            self
+                        )
+                    );
+
+                    if let Err(e) = self.begin_function_call(to_prim, Vec::new()) {
+                        unwind_abort_if_uncaught!(e);
                     }
                 }
                 _ => unimplemented!("{:?}", instruction),

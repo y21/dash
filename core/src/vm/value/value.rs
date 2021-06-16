@@ -128,6 +128,21 @@ impl Value {
         }
     }
 
+    pub fn is_primitive(&self) -> bool {
+        // https://262.ecma-international.org/6.0/#sec-toprimitive
+        match &self.kind {
+            ValueKind::Number(_) => true,
+            ValueKind::Bool(_) => true,
+            ValueKind::Null => true,
+            ValueKind::Undefined => true,
+            ValueKind::Object(o) => match &**o {
+                Object::String(_) => true,
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
     pub fn strong_proto(&self) -> Option<Rc<RefCell<Value>>> {
         self.proto.as_ref().and_then(Weak::upgrade)
     }

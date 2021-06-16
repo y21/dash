@@ -91,6 +91,7 @@ pub enum Opcode {
     LoopEnd,
     EvaluateModule,
     ExportDefault,
+    ToPrimitive,
 }
 
 impl From<TokenType> for Opcode {
