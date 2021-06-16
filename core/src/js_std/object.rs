@@ -3,13 +3,17 @@ use std::{
     rc::{Rc, Weak},
 };
 
-use crate::vm::value::{array::Array, function::CallContext, Value, ValueKind};
+use crate::vm::value::{
+    array::Array,
+    function::{CallContext, CallResult},
+    Value, ValueKind,
+};
 
-pub fn object_constructor(_args: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
-    Ok(Value::new(ValueKind::Undefined).into())
+pub fn object_constructor(_args: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+    Ok(CallResult::Ready(Value::new(ValueKind::Undefined).into()))
 }
 
-pub fn define_property(ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
+pub fn define_property(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let mut arguments = ctx.arguments();
 
     let obj_cell = arguments.next().unwrap();
@@ -22,10 +26,10 @@ pub fn define_property(ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCel
     let value = Value::get_property(descriptor_cell, "value", None).unwrap();
     obj.set_property(&*prop_str, value);
 
-    Ok(Rc::clone(&obj_cell))
+    Ok(CallResult::Ready(Rc::clone(&obj_cell)))
 }
 
-pub fn get_own_property_names(ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
+pub fn get_own_property_names(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let obj_cell = ctx.args.first().unwrap();
     let obj = obj_cell.borrow();
 
@@ -35,15 +39,18 @@ pub fn get_own_property_names(ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc
         keys.push(ctx.vm.create_js_value(String::from(key)).into());
     }
 
-    Ok(ctx.vm.create_js_value(Array::new(keys)).into())
+    Ok(CallResult::Ready(
+        ctx.vm.create_js_value(Array::new(keys)).into(),
+    ))
 }
 
-pub fn get_prototype_of(ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
+pub fn get_prototype_of(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let obj_cell = ctx.args.first().unwrap();
     let obj = obj_cell.borrow();
-    Ok(obj
-        .proto
-        .as_ref()
-        .and_then(Weak::upgrade)
-        .unwrap_or_else(|| Value::new(ValueKind::Null).into()))
+    Ok(CallResult::Ready(
+        obj.proto
+            .as_ref()
+            .and_then(Weak::upgrade)
+            .unwrap_or_else(|| Value::new(ValueKind::Null).into()),
+    ))
 }

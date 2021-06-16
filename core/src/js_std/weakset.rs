@@ -1,13 +1,8 @@
 use std::{cell::RefCell, collections::HashSet, rc::Rc};
 
-use crate::vm::value::{
-    function::CallContext,
-    object::{Object, Weak},
-    weak::WeakSet,
-    HashWeak, Value,
-};
+use crate::vm::value::{HashWeak, Value, function::{CallContext, CallResult}, object::{Object, Weak}, weak::WeakSet};
 
-pub fn weakset_constructor(ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
+pub fn weakset_constructor(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let elements_cell = ctx.args.get(0);
     let elements = elements_cell.map(|c| c.borrow());
     let arr = elements
@@ -24,10 +19,10 @@ pub fn weakset_constructor(ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<Re
     }
 
     let ws = WeakSet::<RefCell<Value>>::from(set);
-    Ok(ctx.vm.create_js_value(ws).into())
+    Ok(CallResult::Ready(ctx.vm.create_js_value(ws).into()))
 }
 
-pub fn has(ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
+pub fn has(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let value_cell = ctx.args.get(0).unwrap();
 
     let this_ref = ctx.receiver.as_ref().map(|c| c.borrow());
@@ -38,10 +33,12 @@ pub fn has(ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
         .and_then(Weak::as_set)
         .unwrap();
 
-    Ok(ctx.vm.create_js_value(this.has(value_cell)).into())
+    Ok(CallResult::Ready(
+        ctx.vm.create_js_value(this.has(value_cell)).into(),
+    ))
 }
 
-pub fn add(mut ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
+pub fn add(mut ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let value_cell = ctx.args.get(0).unwrap();
 
     let this = ctx.receiver.as_mut().unwrap();
@@ -54,10 +51,10 @@ pub fn add(mut ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>
 
     this_set.add(value_cell);
 
-    Ok(Rc::clone(&this))
+    Ok(CallResult::Ready(Rc::clone(&this)))
 }
 
-pub fn delete(mut ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
+pub fn delete(mut ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let value_cell = ctx.args.get(0).unwrap();
 
     let this = ctx.receiver.as_mut().unwrap();
@@ -70,5 +67,5 @@ pub fn delete(mut ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Val
 
     let found = this_set.delete(value_cell);
 
-    Ok(ctx.vm.create_js_value(found).into())
+    Ok(CallResult::Ready(ctx.vm.create_js_value(found).into()))
 }

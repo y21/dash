@@ -1,13 +1,13 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::vm::value::{
-    function::CallContext,
+    function::{CallContext, CallResult},
     object::{Object, Weak},
     weak::WeakMap,
     HashWeak, Value, ValueKind,
 };
 
-pub fn weakmap_constructor(ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
+pub fn weakmap_constructor(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let elements_cell = ctx.args.get(0);
     let elements = elements_cell.map(|c| c.borrow());
     let arr = elements
@@ -32,10 +32,10 @@ pub fn weakmap_constructor(ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<Re
     }
 
     let wm = WeakMap::from(map);
-    Ok(ctx.vm.create_js_value(wm).into())
+    Ok(CallResult::Ready(ctx.vm.create_js_value(wm).into()))
 }
 
-pub fn has(ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
+pub fn has(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let value_cell = ctx.args.get(0).unwrap();
 
     let this_ref = ctx.receiver.as_ref().map(|c| c.borrow());
@@ -46,10 +46,12 @@ pub fn has(ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
         .and_then(Weak::as_map)
         .unwrap();
 
-    Ok(ctx.vm.create_js_value(this.has_rc_key(value_cell)).into())
+    Ok(CallResult::Ready(
+        ctx.vm.create_js_value(this.has_rc_key(value_cell)).into(),
+    ))
 }
 
-pub fn get(ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
+pub fn get(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let value_cell = ctx.args.get(0).unwrap();
 
     let this_ref = ctx.receiver.as_ref().map(|c| c.borrow());
@@ -60,13 +62,14 @@ pub fn get(ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
         .and_then(Weak::as_map)
         .unwrap();
 
-    Ok(this
-        .get_rc_key(value_cell)
-        .cloned()
-        .unwrap_or_else(|| Value::new(ValueKind::Undefined).into()))
+    Ok(CallResult::Ready(
+        this.get_rc_key(value_cell)
+            .cloned()
+            .unwrap_or_else(|| Value::new(ValueKind::Undefined).into()),
+    ))
 }
 
-pub fn add(mut args: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
+pub fn add(mut args: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let (key, value) = {
         let mut arguments = args.arguments();
         (
@@ -85,10 +88,10 @@ pub fn add(mut args: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value
 
     this_map.add(key, value);
 
-    Ok(Rc::clone(&this))
+    Ok(CallResult::Ready(Rc::clone(&this)))
 }
 
-pub fn delete(mut ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Value>>> {
+pub fn delete(mut ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let value_cell = ctx.args.get(0).unwrap();
 
     let this = ctx.receiver.as_mut().unwrap();
@@ -101,5 +104,5 @@ pub fn delete(mut ctx: CallContext) -> Result<Rc<RefCell<Value>>, Rc<RefCell<Val
 
     let found = this_map.delete_rc_key(value_cell);
 
-    Ok(ctx.vm.create_js_value(found).into())
+    Ok(CallResult::Ready(ctx.vm.create_js_value(found).into()))
 }
