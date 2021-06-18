@@ -259,9 +259,39 @@ impl VM {
         self.statics.array_proto = {
             let mut o = self.create_object();
             o.set_property("push", Rc::clone(&self.statics.array_push));
+            o.set_property("concat", Rc::clone(&self.statics.array_concat));
             o.set_property("map", Rc::clone(&self.statics.array_map));
+            o.set_property("every", Rc::clone(&self.statics.array_every));
+            o.set_property("fill", Rc::clone(&self.statics.array_fill));
+            o.set_property("filter", Rc::clone(&self.statics.array_filter));
+            o.set_property("find", Rc::clone(&self.statics.array_find));
+            o.set_property("findIndex", Rc::clone(&self.statics.array_find_index));
+            o.set_property("flat", Rc::clone(&self.statics.array_flat));
+            o.set_property("forEach", Rc::clone(&self.statics.array_for_each));
+            o.set_property("from", Rc::clone(&self.statics.array_from));
+            o.set_property("includes", Rc::clone(&self.statics.array_includes));
+            o.set_property("indexOf", Rc::clone(&self.statics.array_index_of));
+            o.set_property("join", Rc::clone(&self.statics.array_join));
+            o.set_property("lastIndexOf", Rc::clone(&self.statics.array_last_index_of));
+            o.set_property("of", Rc::clone(&self.statics.array_of));
+            o.set_property("pop", Rc::clone(&self.statics.array_pop));
+            o.set_property("reduce", Rc::clone(&self.statics.array_reduce));
+            o.set_property("reduceRight", Rc::clone(&self.statics.array_reduce_right));
+            o.set_property("reverse", Rc::clone(&self.statics.array_reverse));
+            o.set_property("shift", Rc::clone(&self.statics.array_shift));
+            o.set_property("slice", Rc::clone(&self.statics.array_slice));
+            o.set_property("some", Rc::clone(&self.statics.array_some));
+            o.set_property("sort", Rc::clone(&self.statics.array_sort));
+            o.set_property("splice", Rc::clone(&self.statics.array_splice));
+            o.set_property("unshift", Rc::clone(&self.statics.array_unshift));
             o.into()
         };
+
+        {
+            let mut array_ctor = self.statics.array_ctor.borrow_mut();
+            array_ctor.set_property("isArray", Rc::clone(&self.statics.array_is_array));
+        }
+
         self.statics.weakset_proto = self.create_object().into();
         self.statics.weakmap_proto = self.create_object().into();
         self.statics.error_proto = self.create_object().into();
