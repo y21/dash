@@ -13,6 +13,12 @@ pub enum MaybeRc<T> {
     Owned(T),
 }
 
+impl<'a> From<&'a str> for MaybeRc<&'a str> {
+    fn from(s: &'a str) -> Self {
+        Self::Owned(s)
+    }
+}
+
 pub fn create_error(message: MaybeRc<&str>, vm: &VM) -> Rc<RefCell<Value>> {
     let mut error = vm.create_object();
 
