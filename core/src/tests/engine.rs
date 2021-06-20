@@ -1,4 +1,9 @@
-use crate::eval;
+use std::borrow::Cow;
+
+use crate::{
+    eval,
+    parser::{lexer::Lexer, parser::Parser},
+};
 
 #[test]
 pub fn recursion() {
@@ -22,6 +27,41 @@ pub fn recursion() {
     .as_number();
 
     assert_eq!(result, 2251799813685248f64);
+}
+
+#[test]
+pub fn tree() {
+    // Taken from https://github.com/boa-dev/boa/issues/1183 and modified a bit
+    // This caught a strange bug that used to exist in this engine
+    let result = eval::<()>(
+        r#"
+    function Node(left, right) {
+        Object.defineProperty(this, "left", { value: left });
+        Object.defineProperty(this, "right", { value: right });
+    }
+
+    let nNodes = 0;
+    function makeTree(depth) {
+        nNodes += 1;
+        if (depth == 0) {
+            return new Node(undefined, undefined);
+        }
+        const na = makeTree(depth - 1);
+        const nb = makeTree(depth - 1);
+        return new Node(na, nb);
+    }
+    
+    let tree = makeTree(5);
+    nNodes
+    "#,
+        None,
+    )
+    .unwrap()
+    .unwrap()
+    .borrow()
+    .as_number();
+
+    assert_eq!(result, 63f64);
 }
 
 #[test]

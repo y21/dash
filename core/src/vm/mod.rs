@@ -545,7 +545,6 @@ impl VM {
         // By this point we know func_cell is a UserFunction
 
         let current_sp = self.stack.get_stack_pointer();
-        self.frame_mut().sp = current_sp;
 
         let frame = Frame {
             buffer: func.func.buffer.clone(),
@@ -959,7 +958,6 @@ impl VM {
                     // TODO: get rid of this copy paste and share code with Opcode::FunctionCall
 
                     let current_sp = self.stack.get_stack_pointer();
-                    self.frame_mut().sp = current_sp;
 
                     let state = self.frame_mut().state.take();
                     let frame = Frame {
@@ -1080,8 +1078,9 @@ impl VM {
                     }
 
                     self.stack
-                        .discard_multiple(self.stack.get_stack_pointer() - self.frame().sp);
-                    self.stack.set_stack_pointer(self.frame().sp);
+                        .discard_multiple(self.stack.get_stack_pointer() - frame.sp);
+
+                    self.stack.set_stack_pointer(frame.sp);
                     self.stack.push(exports);
                 }
                 Opcode::Return => {
@@ -1100,9 +1099,9 @@ impl VM {
                     let ret = self.stack.pop();
 
                     self.stack
-                        .discard_multiple(self.stack.get_stack_pointer() - self.frame().sp);
+                        .discard_multiple(self.stack.get_stack_pointer() - this.sp);
 
-                    self.stack.set_stack_pointer(self.frame().sp);
+                    self.stack.set_stack_pointer(this.sp);
 
                     if let Some(mut resume) = this.resume.take() {
                         let mut state = this.state.take().unwrap_or_else(CallState::default);
