@@ -30,8 +30,10 @@ interface Exports {
     __data_end: WebAssembly.Global,
     __heap_base: WebAssembly.Global,
     create_vm: (ptr: Pointer) => Pointer,
+    eval: (ptr: Pointer) => Pointer,
     free_c_string: (ptr: Pointer) => void,
     free_create_vm_result: (ptr: Pointer) => void,
+    free_eval_result: (ptr: Pointer) => void,
     free_vm_interpret_result: (ptr: Pointer) => void,
     inspect_create_vm_error: (ptr: Pointer) => Pointer,
     inspect_vm_interpret_error: (ptr: Pointer) => Pointer,
@@ -216,7 +218,7 @@ class Internal {
     public readString(ptr: Pointer): string {
         return this.withDataView((view) => {
             let s = "";
-            for (let i = 0;; ++i) {
+            for (let i = 0; ; ++i) {
                 const cur = view.getUint8(ptr + i);
                 if (cur === 0) break;
                 s += String.fromCharCode(cur);
@@ -228,14 +230,14 @@ class Internal {
 
 class VM {
     private internal: Internal;
-    private vmResultPtr: Pointer;
+    private vmDataPtr: Pointer;
     private sourcePtr: Pointer;
     private sourceLen: Usize;
     private _freed: boolean;
 
-    constructor(internal: Internal, vmResultPtr: Pointer, sourcePtr: Pointer, sourceLen: Usize) {
+    constructor(internal: Internal, vmDataPtr: Pointer, sourcePtr: Pointer, sourceLen: Usize) {
         this.internal = internal;
-        this.vmResultPtr = vmResultPtr;
+        this.vmDataPtr = vmDataPtr;
         this.sourcePtr = sourcePtr;
         this.sourceLen = sourceLen;
         this._freed = false;
@@ -248,7 +250,8 @@ class VM {
     free() {
         if (this._freed) throw new Error("This resource has been freed up already");
         this.internal.wasm.dealloc(this.sourcePtr, this.sourceLen);
-        this.internal.wasm.free_create_vm_result(this.vmResultPtr);
+        const vmResultPtr = this.vmDataPtr - ENUM_DATA_OFFSET;
+        this.internal.wasm.free_create_vm_result(vmResultPtr);
         this._freed = true;
     }
 
@@ -257,7 +260,7 @@ class VM {
      * @returns {string | undefined}
      */
     exec(): string | undefined {
-        const resultPtr = this.internal.wasm.vm_interpret(this.vmResultPtr);
+        const resultPtr = this.internal.wasm.vm_interpret(this.vmDataPtr);
         const valueResult = new Result(this.internal, resultPtr);
 
         try {
@@ -278,7 +281,7 @@ class VM {
 
 export class Engine {
     private internal?: Internal;
-    constructor() {}
+    constructor() { }
 
     /**
      * Initializes this Engine by compiling the WebAssembly binary
@@ -304,7 +307,7 @@ export class Engine {
     private getInternal(): Internal {
         if (this.internal) return this.internal;
         throw new Error("This Engine has not been initialized yet. " +
-                        "Call init on this instance first and wait for its promise to resolve");
+            "Call init on this instance first and wait for its promise to resolve");
     }
 
     /**
@@ -321,7 +324,7 @@ export class Engine {
         try {
             const vmDataPtr = vmResult.unwrap(internal.wasm.inspect_create_vm_error.bind(internal));
             return new VM(internal, vmDataPtr, stringPtr, source.length + 1);
-        } catch(e) {
+        } catch (e) {
             internal.wasm.dealloc(stringPtr, source.length + 1);
             internal.wasm.free_create_vm_result(vmResultPtr);
             throw e;
@@ -330,15 +333,28 @@ export class Engine {
 
     /**
      * Convenient method for evaluating a JavaScript source string and returning the last value.
-     * This is a shortcut for creating a VM, executing it, freeing its resources and returning the last value.
      * @param {string} source 
      * @returns 
      */
     public eval(source: string) {
-        const vm = this.createVM(source);
-        const result = vm.exec();
-        vm.free();
-        return result;
+        const internal = this.getInternal();
+        const stringPtr = internal.writeString(source);
+        const resultPtr = internal.wasm.eval(stringPtr);
+        const result = new Result(internal, resultPtr);
+
+        try {
+            const valueOption = new Option(internal, result.unwrap(internal.wasm.inspect_create_vm_error));
+
+            if (!valueOption.isSome()) return;
+
+            const valueInspectPtr = internal.wasm.value_inspect(valueOption.getDataPointer());
+            const message = internal.readString(valueInspectPtr);
+            internal.wasm.free_c_string(valueInspectPtr);
+            return message;
+        } finally {
+            internal.wasm.free_eval_result(resultPtr);
+            internal.wasm.dealloc(stringPtr, source.length + 1);
+        }
     }
 }
 
