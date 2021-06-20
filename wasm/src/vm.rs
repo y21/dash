@@ -6,27 +6,38 @@ use std::{
 
 use dash::{
     compiler::compiler::Compiler,
-    parser::{
-        lexer::Lexer,
-        parser::Parser,
-    },
+    parser::{lexer::Lexer, parser::Parser},
     vm::{
         value::{
             function::{Constructor, FunctionType, UserFunction},
             Value,
-        }, VM,
+        },
+        VM,
     },
 };
 
-use crate::{error::{CreateVMError, VMInterpretError}, ffi::{WasmOption, WasmResult}, handle::{Handle, HandleRef}};
+use crate::{
+    error::{CreateVMError, VMInterpretError},
+    ffi::{WasmOption, WasmResult},
+    handle::{Handle, HandleRef},
+};
 
 macro_rules! try_result {
     ($e:expr) => {
         match $e {
             Ok(o) => o,
-            Err(e) => return Handle::new(WasmResult::Err(e.into()))
-        } 
+            Err(e) => return Handle::new(WasmResult::Err(e.into())),
+        }
     };
+}
+
+#[no_mangle]
+pub extern "C" fn eval<'a>(
+    source: *const i8,
+) -> Handle<WasmResult<WasmOption<Rc<RefCell<Value>>>, CreateVMError<'a>>> {
+    let source = unsafe { CStr::from_ptr(source).to_str().unwrap() };
+    let result = WasmOption::from(try_result!(dash::eval::<()>(source, None)));
+    Handle::new(WasmResult::Ok(result))
 }
 
 #[no_mangle]
@@ -42,10 +53,12 @@ pub extern "C" fn create_vm<'a>(source: *const i8) -> Handle<WasmResult<VM, Crea
 }
 
 #[no_mangle]
-pub extern "C" fn vm_interpret(mut vm: HandleRef<VM>) -> Handle<WasmResult<WasmOption<Rc<RefCell<Value>>>, VMInterpretError>> {
+pub extern "C" fn vm_interpret(
+    mut vm: HandleRef<VM>,
+) -> Handle<WasmResult<WasmOption<Rc<RefCell<Value>>>, VMInterpretError>> {
     let vm = unsafe { vm.as_mut() };
-    let value = try_result!(vm.interpret()).unwrap();
-    Handle::new(WasmResult::Ok(WasmOption::Some(value)))
+    let value = WasmOption::from(try_result!(vm.interpret()));
+    Handle::new(WasmResult::Ok(value))
 }
 
 #[no_mangle]
@@ -65,11 +78,20 @@ pub extern "C" fn value_to_string(value: HandleRef<Rc<RefCell<Value>>>) -> *mut 
 }
 
 #[no_mangle]
-pub extern "C" fn free_create_vm_result<'a>(value: Handle<WasmResult<Handle<VM>, CreateVMError<'a>>>) {
+pub extern "C" fn free_create_vm_result<'a>(value: Handle<WasmResult<VM, CreateVMError<'a>>>) {
     unsafe { value.drop() };
 }
 
 #[no_mangle]
-pub extern "C" fn free_vm_interpret_result<'a>(value: Handle<WasmResult<Handle<WasmOption<Rc<RefCell<Value>>>>, VMInterpretError>>) {
+pub extern "C" fn free_eval_result<'a>(
+    value: Handle<WasmResult<WasmOption<Rc<RefCell<Value>>>, CreateVMError<'a>>>,
+) {
+    unsafe { value.drop() };
+}
+
+#[no_mangle]
+pub extern "C" fn free_vm_interpret_result<'a>(
+    value: Handle<WasmResult<WasmOption<Rc<RefCell<Value>>>, VMInterpretError>>,
+) {
     unsafe { value.drop() };
 }
