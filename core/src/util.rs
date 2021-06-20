@@ -3,12 +3,12 @@ pub fn is_digit(c: u8) -> bool {
 }
 
 pub fn is_alpha(c: u8) -> bool {
-    (b'a'..=b'z').contains(&c) || (b'A'..=b'Z').contains(&c) || c == b'_'
+    is_identifier_start(c) || is_digit(c)
 }
 
 /// Checks if `c` is a valid character for the start of an identifier
 pub fn is_identifier_start(c: u8) -> bool {
-    is_alpha(c)
+    (b'a'..=b'z').contains(&c) || (b'A'..=b'Z').contains(&c) || c == b'_' || c == b'$'
 }
 
 pub fn is_numeric(c: impl AsRef<str>) -> bool {

@@ -388,7 +388,7 @@ impl<'a> Lexer<'a> {
             _ => {
                 if util::is_digit(cur) {
                     self.read_number_literal()
-                } else if util::is_alpha(cur) {
+                } else if util::is_identifier_start(cur) {
                     self.read_identifier()
                 } else {
                     Node::Error(self.create_error(ErrorKind::UnknownCharacter(cur)))
