@@ -4,6 +4,7 @@ use dash::{
     compiler::compiler::CompileError,
     parser::{lexer::Error as LexError, token::Error as ParseError},
     vm::{value::Value, VMError},
+    EvalError,
 };
 
 use crate::handle::{Handle, HandleRef};
@@ -14,6 +15,7 @@ pub enum CreateVMError<'a> {
     Lexer(Vec<LexError<'a>>),
     Parser(Vec<ParseError<'a>>),
     Compiler(CompileError<'a>),
+    VM(VMError),
 }
 
 impl<'a> From<Vec<LexError<'a>>> for CreateVMError<'a> {
@@ -34,6 +36,23 @@ impl<'a> From<CompileError<'a>> for CreateVMError<'a> {
     }
 }
 
+impl<'a> From<VMError> for CreateVMError<'a> {
+    fn from(value: VMError) -> Self {
+        Self::VM(value)
+    }
+}
+
+impl<'a> From<EvalError<'a>> for CreateVMError<'a> {
+    fn from(value: EvalError<'a>) -> Self {
+        match value {
+            EvalError::LexError(l) => Self::Lexer(l),
+            EvalError::ParseError(p) => Self::Parser(p),
+            EvalError::CompileError(c) => Self::Compiler(c),
+            EvalError::VMError(v) => Self::VM(v),
+        }
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn inspect_create_vm_error(e: HandleRef<CreateVMError<'_>>) -> *mut i8 {
     let e = unsafe { e.as_ref() };
@@ -49,6 +68,7 @@ pub extern "C" fn inspect_create_vm_error(e: HandleRef<CreateVMError<'_>>) -> *m
             .collect::<Vec<String>>()
             .join("\n"),
         CreateVMError::Compiler(c) => c.to_string().to_string(),
+        CreateVMError::VM(v) => v.to_string().to_string(),
     };
 
     CString::new(msg).unwrap().into_raw()
