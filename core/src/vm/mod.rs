@@ -555,9 +555,18 @@ impl VM {
             resume: None,
         };
         self.frames.push(frame);
+
+        let origin_param_count = func.func.params as usize;
+        let param_count = params.len();
+
         for param in params.into_iter().rev() {
             self.stack.push(param);
         }
+
+        for _ in 0..(origin_param_count.saturating_sub(param_count)) {
+            self.stack.push(Value::new(ValueKind::Undefined).into());
+        }
+
         Ok(())
     }
 
