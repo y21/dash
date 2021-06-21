@@ -166,8 +166,8 @@ impl<'a> LiteralExpr<'a> {
         match self {
             Self::Boolean(b) => Value::from(*b),
             Self::Number(n) => Value::from(*n),
-            Self::Identifier(i) => {
-                Constant::Identifier(std::str::from_utf8(i).unwrap().to_owned()).into()
+            Self::Identifier(ident) => {
+                Constant::Identifier(std::str::from_utf8(ident).unwrap().to_owned()).into()
             }
             Self::String(s) => Object::String(std::str::from_utf8(s).unwrap().to_owned()).into(),
             Self::Undefined => Value::new(ValueKind::Undefined),

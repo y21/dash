@@ -1202,12 +1202,24 @@ impl VM {
                 }
                 Opcode::StaticPropertyAccess => {
                     let property = self.pop_owned().unwrap().into_ident().unwrap();
+                    let is_assignment = self.read_index().unwrap() == 1;
                     let target_cell = self.stack.pop();
-                    let value = Value::unwrap_or_undefined(Value::get_property(
-                        &target_cell,
-                        &property,
-                        None,
-                    ));
+
+                    let value = if is_assignment {
+                        let maybe_value = Value::get_property(&target_cell, &property, None);
+                        maybe_value.unwrap_or_else(|| {
+                            let mut target = target_cell.borrow_mut();
+                            let value = Value::new(ValueKind::Undefined).into();
+                            target.set_property(property, Rc::clone(&value));
+                            value
+                        })
+                    } else {
+                        Value::unwrap_or_undefined(Value::get_property(
+                            &target_cell,
+                            &property,
+                            None,
+                        ))
+                    };
                     self.stack.push(value);
                 }
                 Opcode::Equality => {
@@ -1290,14 +1302,28 @@ impl VM {
                 }
                 Opcode::ComputedPropertyAccess => {
                     let property_cell = self.stack.pop();
+                    let is_assignment = self.read_index().unwrap() == 1;
                     let target_cell = self.stack.pop();
                     let property = property_cell.borrow();
                     let property_s = property.to_string();
 
-                    let prop = Value::get_property(&target_cell, &*property_s, None)
-                        .unwrap_or_else(|| Value::new(ValueKind::Undefined).into());
+                    let value = if is_assignment {
+                        let maybe_value = Value::get_property(&target_cell, &*property_s, None);
+                        maybe_value.unwrap_or_else(|| {
+                            let mut target = target_cell.borrow_mut();
+                            let value = Value::new(ValueKind::Undefined).into();
+                            target.set_property(property_s.to_string(), Rc::clone(&value));
+                            value
+                        })
+                    } else {
+                        Value::unwrap_or_undefined(Value::get_property(
+                            &target_cell,
+                            &*property_s,
+                            None,
+                        ))
+                    };
 
-                    self.stack.push(prop);
+                    self.stack.push(value);
                 }
                 Opcode::Continue => {
                     let this = unsafe { self.loops.get_unchecked() };

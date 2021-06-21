@@ -31,6 +31,41 @@ use super::{
     upvalue::Upvalue,
 };
 
+mod context_states {
+    pub const ASSIGNING: u64 = 1 << 0;
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Context {
+    state: u64,
+}
+
+impl Context {
+    pub fn new(state: u64) -> Self {
+        Self { state }
+    }
+
+    pub fn enter_assign(&mut self) {
+        self.state |= context_states::ASSIGNING;
+    }
+
+    pub fn leave_assign(&mut self) {
+        self.state &= !context_states::ASSIGNING;
+    }
+
+    pub fn set_assign(&mut self, assign: bool) {
+        if assign {
+            self.enter_assign();
+        } else {
+            self.leave_assign();
+        }
+    }
+
+    pub fn is_assign(&self) -> bool {
+        (self.state & context_states::ASSIGNING) == context_states::ASSIGNING
+    }
+}
+
 pub type Ast<'a> = Vec<Statement<'a>>;
 
 #[derive(Debug)]
@@ -40,6 +75,7 @@ pub struct Compiler<'a, A> {
     upvalues: Stack<Upvalue, 1024>,
     scope: ScopeGuard<Local<'a>, 1024>,
     agent: Option<MaybeOwned<A>>,
+    ctx: MaybeOwned<Context>,
     is_module: bool,
 }
 
@@ -58,6 +94,7 @@ impl<'a, A: Agent> Compiler<'a, A> {
             agent,
             scope,
             is_module,
+            ctx: MaybeOwned::Owned(Context::default()),
         }
     }
 
@@ -66,6 +103,7 @@ impl<'a, A: Agent> Compiler<'a, A> {
         scope: ScopeGuard<Local<'a>, 1024>,
         agent: Option<MaybeOwned<A>>,
         caller: Option<NonNull<Compiler<'a, A>>>,
+        ctx: NonNull<Context>,
         is_module: bool,
     ) -> Self {
         Self {
@@ -74,6 +112,7 @@ impl<'a, A: Agent> Compiler<'a, A> {
             top: caller,
             agent,
             scope,
+            ctx: MaybeOwned::Borrowed(ctx.as_ptr()),
             is_module,
         }
     }
@@ -493,6 +532,7 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
                 self.agent.as_mut().map(MaybeOwned::as_borrowed),
                 // SAFETY: self is never null
                 Some(NonNull::new_unchecked(self as *mut _)),
+                NonNull::new_unchecked(self.ctx.as_ptr()),
                 false,
             )
             .compile_frame()
@@ -571,7 +611,23 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         &mut self,
         e: &AssignmentExpr<'a>,
     ) -> Result<Vec<Instruction>, CompileError<'a>> {
-        let mut instructions = self.accept_expr(&e.left)?;
+        let assign_status_before = unsafe {
+            let ctx = self.ctx.as_mut();
+            let before = ctx.is_assign();
+            ctx.enter_assign();
+            before
+        };
+
+        let mut instructions = match self.accept_expr(&e.left) {
+            Ok(r) => r,
+            Err(e) => {
+                unsafe { self.ctx.as_mut().set_assign(assign_status_before) };
+                return Err(e);
+            }
+        };
+
+        unsafe { self.ctx.as_mut().set_assign(assign_status_before) };
+
         instructions.extend(self.accept_expr(&e.right)?);
         instructions.push(Instruction::Op(e.operator.into()));
 
@@ -657,13 +713,17 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
     ) -> Result<Vec<Instruction>, CompileError<'a>> {
         let mut instructions = self.accept_expr(&e.target)?;
 
+        let is_assign = unsafe { self.ctx.as_ref().is_assign() };
+        instructions.push(Instruction::Op(Opcode::Constant));
+        instructions.push(Instruction::Operand(Constant::Index(is_assign as usize)));
+
         if e.computed {
             let property = self.accept_expr(&e.property)?;
             instructions.extend(property);
             instructions.push(Instruction::Op(Opcode::ToPrimitive));
             instructions.push(Instruction::Op(Opcode::ComputedPropertyAccess));
         } else {
-            let ident: &[u8] = if let Expr::Literal(lit) = &*e.property {
+            let ident = if let Expr::Literal(lit) = &*e.property {
                 match lit {
                     LiteralExpr::Identifier(ident) => ident,
                     _ => todo!(),

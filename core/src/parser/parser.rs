@@ -360,7 +360,15 @@ impl<'a> Parser<'a> {
     }
 
     pub fn assignment(&mut self) -> Option<Expr<'a>> {
-        self.read_infix_expression(|s| Self::ternary(s), ASSIGNMENT_TYPES)
+        let mut expr = self.ternary()?;
+
+        while self.expect_and_skip(ASSIGNMENT_TYPES, false) {
+            let operator = self.previous()?.ty;
+            let rval = self.ternary()?;
+            expr = Expr::assignment(expr, rval, operator);
+        }
+
+        Some(expr)
     }
 
     pub fn ternary(&mut self) -> Option<Expr<'a>> {
