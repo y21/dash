@@ -3,6 +3,7 @@ dash tries to support most of ECMAScript 2015.
 This file should give you a short overview of what's missing but will likely be implemented in the future. This is a non exhaustive list.
 
 Note: A checkmark here doesn't mean it matches the defined behavior in the spec. It means that test cases are passing.
+This should just act as a short "cheat sheet", and used to see what's left to implement. Once everything is implemented, we can start working on matching the spec.
 
 - [ ] Primitives
   - [x] Double quote strings
@@ -128,7 +129,8 @@ Note: A checkmark here doesn't mean it matches the defined behavior in the spec.
   - [x] while
   - [ ] ~~with~~
 - [ ] Strict mode
-- [ ] Native -> user function calls
+- [x] Native -> user function calls
+  - [ ] Native -> user -> native calls
 - [x] User -> native function calls
 - [ ] Standard library
   - [ ] decodeURI
@@ -140,24 +142,27 @@ Note: A checkmark here doesn't mean it matches the defined behavior in the spec.
   - [x] isNaN
   - [ ] parseInt
   - [ ] parseFloat
+  - [ ] WeakRef
+    - [ ] deref
+    - [ ] @@toStringTag
   - [ ] Array
     - [ ] length
-    - [ ] concat
+    - [x] concat
     - [ ] copyWithin
-    - [ ] fill
+    - [x] fill
     - [ ] find
     - [ ] findIndex
-    - [ ] lastIndexOf
+    - [x] lastIndexOf
     - [ ] pop
-    - [ ] push
+    - [x] push
     - [ ] reverse
     - [ ] shift
     - [ ] unshift
     - [ ] slice
     - [ ] sort
     - [ ] splice
-    - [ ] includes
-    - [ ] indexOf
+    - [x] includes
+    - [x] indexOf
     - [ ] join
     - [ ] keys
     - [ ] entries
@@ -166,8 +171,8 @@ Note: A checkmark here doesn't mean it matches the defined behavior in the spec.
     - [ ] filter
     - [ ] flat
     - [ ] flatMap
-    - [ ] map
-    - [ ] every
+    - [x] map
+    - [x] every
     - [ ] some
     - [ ] reduce
     - [ ] reduceRight
