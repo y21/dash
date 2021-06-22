@@ -1,10 +1,13 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{borrow::Cow, cell::RefCell, rc::Rc};
 
-use crate::vm::value::{
-    array::Array,
-    function::{CallContext, CallResult},
-    object::Object,
-    Value, ValueKind,
+use crate::vm::{
+    abstractions,
+    value::{
+        array::Array,
+        function::{CallContext, CallResult},
+        object::Object,
+        Value, ValueKind,
+    },
 };
 
 use super::error::{self, MaybeRc};
@@ -314,8 +317,65 @@ pub fn is_array(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     ))
 }
 
-pub fn join(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
-    todo!()
+pub fn join(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+    let mut arguments = ctx.arguments();
+    let separator = arguments.next();
+
+    // TODO: 1. Let O be ? ToObject(this value).
+    let this_cell = ctx.receiver.as_ref().unwrap();
+
+    // 2. Let len be ? LengthOfArrayLike(O).
+    let len = abstractions::object::length_of_array_like(ctx.vm, this_cell)? as usize;
+
+    // 3. If separator is undefined, let sep be the single-element String ",".
+    // 4. Else, let sep be ? ToString(separator).
+    let sep = if let Some(separator_cell) = separator {
+        Cow::Owned(separator_cell.borrow().to_string().to_string())
+    } else {
+        Cow::Borrowed(",")
+    };
+
+    // 5. Let R be the empty String.
+    let mut r = String::new();
+
+    // 6. Let k be 0.
+    let mut k = 0;
+
+    let mut this_ref = this_cell.borrow_mut();
+    let this_arr = match this_ref.as_object_mut() {
+        Some(Object::Array(a)) => a,
+        _ => {
+            return Err(error::create_error(
+                "Array.prototype.join called on non-array".into(),
+                ctx.vm,
+            ))
+        }
+    };
+
+    // 7. Repeat, while k < len,
+    while k < len {
+        // a. If k > 0, set R to the string-concatenation of R and sep.
+        if k > 0 {
+            r += &sep;
+        }
+
+        // b. Let element be ? Get(O, ! ToString(𝔽(k))).
+        let element_cell = &this_arr.elements[k];
+        let element = element_cell.borrow();
+
+        // c. If element is undefined or null,
+        // let next be the empty String; otherwise,
+        // let next be ? ToString(element).
+        if !element.is_nullish() {
+            let next = element.to_string();
+            // d. Set R to the string-concatenation of R and next.
+            r += &next;
+            // e. Set k to k + 1.
+            k += 1;
+        }
+    }
+
+    Ok(CallResult::Ready(ctx.vm.create_js_value(r).into()))
 }
 
 pub fn last_index_of(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
