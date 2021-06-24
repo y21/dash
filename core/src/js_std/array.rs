@@ -8,6 +8,7 @@ use crate::vm::{
         object::Object,
         Value, ValueKind,
     },
+    VM,
 };
 
 use super::error::{self, MaybeRc};
@@ -317,15 +318,63 @@ pub fn is_array(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     ))
 }
 
+pub enum ArrayLikeIterable<'a> {
+    String(Box<dyn Iterator<Item = char> + 'a>),
+    Array {
+        source: &'a [Rc<RefCell<Value>>],
+        index: usize,
+    },
+    Object {
+        source_cell: &'a Rc<RefCell<Value>>,
+        index: usize,
+    },
+    Empty,
+}
+
+impl<'a> ArrayLikeIterable<'a> {
+    pub fn from_value(value: &'a Value, value_cell: &'a Rc<RefCell<Value>>) -> Self {
+        match value.as_object() {
+            Some(Object::String(s)) => Self::String(Box::new(s.chars())),
+            Some(Object::Array(a)) => Self::Array {
+                source: &a.elements,
+                index: 0,
+            },
+            Some(Object::Any(_)) => Self::Object {
+                source_cell: value_cell,
+                index: 0,
+            },
+            _ => Self::Empty,
+        }
+    }
+    pub fn next<'b>(&mut self, vm: &'b VM) -> Option<Rc<RefCell<Value>>> {
+        match self {
+            Self::String(s) => s.next().map(String::from).map(Value::from).map(Into::into),
+            Self::Array { source, index } => {
+                *index += 1;
+                source.get(*index - 1).cloned()
+            }
+            Self::Object { source_cell, index } => {
+                *index += 1;
+                Value::get_property(vm, source_cell, &(*index - 1).to_string(), None)
+            }
+            Self::Empty => None,
+        }
+    }
+}
+
 pub fn join(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let mut arguments = ctx.arguments();
     let separator = arguments.next();
 
-    // TODO: 1. Let O be ? ToObject(this value).
+    // 1. Let O be ? ToObject(this value).
     let this_cell = ctx.receiver.as_ref().unwrap();
 
     // 2. Let len be ? LengthOfArrayLike(O).
     let len = abstractions::object::length_of_array_like(ctx.vm, this_cell)? as usize;
+
+    // ... Step 1 requires len
+    let this_ref = this_cell.borrow_mut();
+    let mut o = ArrayLikeIterable::from_value(&this_ref, this_cell);
 
     // 3. If separator is undefined, let sep be the single-element String ",".
     // 4. Else, let sep be ? ToString(separator).
@@ -341,17 +390,6 @@ pub fn join(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     // 6. Let k be 0.
     let mut k = 0;
 
-    let mut this_ref = this_cell.borrow_mut();
-    let this_arr = match this_ref.as_object_mut() {
-        Some(Object::Array(a)) => a,
-        _ => {
-            return Err(error::create_error(
-                "Array.prototype.join called on non-array".into(),
-                ctx.vm,
-            ))
-        }
-    };
-
     // 7. Repeat, while k < len,
     while k < len {
         // a. If k > 0, set R to the string-concatenation of R and sep.
@@ -360,7 +398,10 @@ pub fn join(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
         }
 
         // b. Let element be ? Get(O, ! ToString(𝔽(k))).
-        let element_cell = &this_arr.elements[k];
+        let element_cell = o
+            .next(ctx.vm)
+            .unwrap_or_else(|| Value::new(ValueKind::Undefined).into());
+
         let element = element_cell.borrow();
 
         // c. If element is undefined or null,
