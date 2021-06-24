@@ -23,7 +23,7 @@ pub fn define_property(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>
     let prop_str = prop.to_string();
     let descriptor_cell = arguments.next().unwrap();
 
-    let value = Value::get_property(descriptor_cell, "value", None).unwrap();
+    let value = Value::get_property(ctx.vm, descriptor_cell, "value", None).unwrap();
     obj.set_property(&*prop_str, value);
 
     Ok(CallResult::Ready(Rc::clone(&obj_cell)))

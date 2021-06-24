@@ -1,3 +1,4 @@
+pub mod abstractions;
 pub mod conversions;
 pub mod environment;
 pub mod frame;
@@ -46,7 +47,8 @@ impl VMError {
     pub fn to_string(&self) -> Cow<str> {
         match self {
             Self::UncaughtError(err_cell) => {
-                let stack_cell = Value::get_property(&err_cell, "stack", None).unwrap();
+                let err = err_cell.borrow();
+                let stack_cell = err.get_field("stack").unwrap();
                 let stack_ref = stack_cell.borrow();
                 let stack_string = stack_ref.as_string().unwrap();
                 Cow::Owned(String::from(stack_string))
@@ -717,7 +719,7 @@ impl VM {
                     let name = self.pop_owned().unwrap().into_ident().unwrap();
 
                     let value = unwrap_or_unwind!(
-                        Value::get_property(&self.global, &name, None),
+                        Value::get_property(self, &self.global, &name, None),
                         js_std::error::create_error(
                             MaybeRc::Owned(&format!("{} is not defined", name)),
                             self
@@ -977,9 +979,18 @@ impl VM {
                         state,
                         resume: None,
                     };
+
                     self.frames.push(frame);
+
+                    let origin_param_count = func.func.params as usize;
+                    let param_count = params.len();
+
                     for param in params.into_iter().rev() {
                         self.stack.push(param);
+                    }
+
+                    for _ in 0..(origin_param_count.saturating_sub(param_count)) {
+                        self.stack.push(Value::new(ValueKind::Undefined).into());
                     }
                 }
                 Opcode::GetThis => {
@@ -1206,7 +1217,7 @@ impl VM {
                     let target_cell = self.stack.pop();
 
                     let value = if is_assignment {
-                        let maybe_value = Value::get_property(&target_cell, &property, None);
+                        let maybe_value = Value::get_property(self, &target_cell, &property, None);
                         maybe_value.unwrap_or_else(|| {
                             let mut target = target_cell.borrow_mut();
                             let value = Value::new(ValueKind::Undefined).into();
@@ -1215,6 +1226,7 @@ impl VM {
                         })
                     } else {
                         Value::unwrap_or_undefined(Value::get_property(
+                            self,
                             &target_cell,
                             &property,
                             None,
@@ -1308,7 +1320,8 @@ impl VM {
                     let property_s = property.to_string();
 
                     let value = if is_assignment {
-                        let maybe_value = Value::get_property(&target_cell, &*property_s, None);
+                        let maybe_value =
+                            Value::get_property(self, &target_cell, &*property_s, None);
                         maybe_value.unwrap_or_else(|| {
                             let mut target = target_cell.borrow_mut();
                             let value = Value::new(ValueKind::Undefined).into();
@@ -1317,6 +1330,7 @@ impl VM {
                         })
                     } else {
                         Value::unwrap_or_undefined(Value::get_property(
+                            self,
                             &target_cell,
                             &*property_s,
                             None,
@@ -1384,8 +1398,8 @@ impl VM {
                     }
 
                     let to_prim = unwrap_or_unwind!(
-                        Value::get_property(&obj_cell, "toString", None)
-                            .or_else(|| Value::get_property(&obj_cell, "valueOf", None)),
+                        Value::get_property(self, &obj_cell, "toString", None)
+                            .or_else(|| Value::get_property(self, &obj_cell, "valueOf", None)),
                         js_std::error::create_error(
                             MaybeRc::Owned("Cannot convert object to primitive value"),
                             self

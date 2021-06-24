@@ -159,15 +159,20 @@ impl Value {
         o.unwrap_or_else(|| Value::new(ValueKind::Undefined).into())
     }
 
+    pub fn get_field(&self, key: &str) -> Option<&Rc<RefCell<Value>>> {
+        self.fields.get(key)
+    }
+
     pub fn get_property(
+        vm: &VM,
         value_cell: &Rc<RefCell<Value>>,
-        k: &str,
+        key: &str,
         override_this: Option<&Rc<RefCell<Value>>>,
     ) -> Option<Rc<RefCell<Value>>> {
         let value = value_cell.borrow();
-        let k = k.into();
+        let key = key.into();
 
-        match k {
+        match key {
             "__proto__" => {
                 return Some(
                     value
@@ -181,11 +186,31 @@ impl Value {
                     return func.prototype();
                 }
             }
-            _ => {}
+            "length" => {
+                match &value.kind {
+                    ValueKind::Object(o) => match &**o {
+                        Object::Array(a) => {
+                            return Some(vm.create_js_value(a.elements.len() as f64).into())
+                        }
+                        Object::String(s) => {
+                            return Some(vm.create_js_value(s.len() as f64).into())
+                        }
+                        _ => {}
+                    },
+                    _ => {}
+                };
+            }
+            _ => {
+                if let Ok(idx) = key.parse::<usize>() {
+                    if let Some(a) = value.as_object().and_then(Object::as_array) {
+                        return a.elements.get(idx).cloned();
+                    }
+                }
+            }
         };
 
         if value.fields.len() > 0 {
-            if let Some(entry_cell) = value.fields.get(k) {
+            if let Some(entry_cell) = value.fields.get(key) {
                 if let Some(override_this) = override_this {
                     let mut entry = entry_cell.borrow_mut();
 
@@ -210,7 +235,7 @@ impl Value {
         }
 
         if let Some(proto_cell) = value.proto.as_ref().and_then(Weak::upgrade) {
-            Value::get_property(&proto_cell, k, Some(value_cell))
+            Value::get_property(vm, &proto_cell, key, Some(value_cell))
         } else {
             None
         }
