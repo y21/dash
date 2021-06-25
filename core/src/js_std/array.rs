@@ -411,9 +411,10 @@ pub fn join(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
             let next = element.to_string();
             // d. Set R to the string-concatenation of R and next.
             r += &next;
-            // e. Set k to k + 1.
-            k += 1;
         }
+
+        // e. Set k to k + 1.
+        k += 1;
     }
 
     Ok(CallResult::Ready(ctx.vm.create_js_value(r).into()))
