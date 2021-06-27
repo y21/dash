@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     cell::RefCell,
     rc::{Rc, Weak},
 };
@@ -52,5 +53,39 @@ pub fn get_prototype_of(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value
             .as_ref()
             .and_then(Weak::upgrade)
             .unwrap_or_else(|| Value::new(ValueKind::Null).into()),
+    ))
+}
+
+pub fn to_string(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+    let this_cell = ctx
+        .receiver
+        .as_ref()
+        .cloned()
+        .unwrap_or_else(|| Value::new(ValueKind::Undefined).into());
+
+    let this_ref = this_cell.borrow();
+
+    let s = match &this_ref.kind {
+        // 1. If the this value is undefined, return "[object Undefined]".
+        ValueKind::Undefined => Cow::Borrowed("[object Undefined]"),
+        // 2. If the this value is null, return "[object Null]".
+        ValueKind::Null => Cow::Borrowed("[object Null]"),
+        // 3. Let O be ! ToObject(this value).
+        _ => {
+            if let Some(constructor_cell) = this_ref.constructor.as_ref().and_then(Weak::upgrade) {
+                let constructor = constructor_cell.borrow();
+                let constructor_func = constructor.as_function().unwrap();
+                Cow::Owned(format!(
+                    "[object {}]",
+                    constructor_func.name().unwrap_or("Function")
+                ))
+            } else {
+                Cow::Borrowed("Undefined")
+            }
+        }
+    };
+
+    Ok(CallResult::Ready(
+        ctx.vm.create_js_value(s.to_string()).into(),
     ))
 }
