@@ -36,15 +36,15 @@ pub fn tree() {
     let result = eval::<()>(
         r#"
     function Node(left, right) {
-        Object.defineProperty(this, "left", { value: left });
-        Object.defineProperty(this, "right", { value: right });
+        this.left = left;
+        this.right = right;
     }
 
     let nNodes = 0;
     function makeTree(depth) {
         nNodes += 1;
         if (depth == 0) {
-            return new Node(undefined, undefined);
+            return new Node();
         }
         const na = makeTree(depth - 1);
         const nb = makeTree(depth - 1);

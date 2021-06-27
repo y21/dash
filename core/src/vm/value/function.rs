@@ -292,6 +292,15 @@ impl ToString for FunctionKind {
 }
 
 impl FunctionKind {
+    pub fn name(&self) -> Option<&str> {
+        match self {
+            Self::Closure(c) => c.func.name.as_deref(),
+            Self::User(u) => u.name.as_deref(),
+            Self::Native(n) => Some(n.name),
+            _ => None,
+        }
+    }
+
     pub fn prototype_weak(&self) -> Option<&Weak<RefCell<Value>>> {
         match self {
             Self::Closure(c) => c.func.prototype.as_ref(),

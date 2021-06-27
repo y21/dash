@@ -301,6 +301,7 @@ impl VM {
         let mut object_proto = self.statics.object_proto.borrow_mut();
         object_proto.constructor = Some(Rc::downgrade(&self.statics.object_ctor));
         object_proto.proto = Some(Rc::downgrade(&Value::new(ValueKind::Null).into()));
+        object_proto.set_property("toString", Rc::clone(&self.statics.object_to_string));
 
         // All functions that live in self.statics do not have a [[Prototype]] set
         // so we do it here
@@ -345,6 +346,7 @@ impl VM {
         patch_function_value(self, &self.statics.isnan);
         patch_function_value(self, &self.statics.object_define_property);
         patch_function_value(self, &self.statics.object_get_own_property_names);
+        patch_function_value(self, &self.statics.object_to_string);
         patch_function_value(self, &self.statics.isnan);
         patch_function_value(self, &self.statics.console_log);
         patch_function_value(self, &self.statics.array_push);

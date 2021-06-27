@@ -67,6 +67,7 @@ pub struct Statics {
     pub object_define_property: Rc<RefCell<Value>>,
     pub object_get_own_property_names: Rc<RefCell<Value>>,
     pub object_get_prototype_of: Rc<RefCell<Value>>,
+    pub object_to_string: Rc<RefCell<Value>>,
     pub weakset_has: Rc<RefCell<Value>>,
     pub weakset_add: Rc<RefCell<Value>>,
     pub weakset_delete: Rc<RefCell<Value>>,
@@ -161,6 +162,7 @@ impl Statics {
                 "getPrototypeOf",
                 js_std::object::get_prototype_of
             ),
+            object_to_string: register_glob_method!("toString", js_std::object::to_string),
             weakset_has: register_glob_method!("has", js_std::weakset::has),
             weakset_add: register_glob_method!("add", js_std::weakset::add),
             weakset_delete: register_glob_method!("delete", js_std::weakset::delete),
