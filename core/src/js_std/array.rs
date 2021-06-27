@@ -1,4 +1,4 @@
-use std::{borrow::Cow, cell::RefCell, rc::Rc};
+use std::{borrow::Cow, cell::RefCell, rc::Rc, str::Chars};
 
 use crate::vm::{
     abstractions,
@@ -318,106 +318,129 @@ pub fn is_array(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     ))
 }
 
-pub enum ArrayLikeIterable<'a> {
-    String(Box<dyn Iterator<Item = char> + 'a>),
-    Array {
-        source: &'a [Rc<RefCell<Value>>],
-        index: usize,
-    },
-    Object {
-        source_cell: &'a Rc<RefCell<Value>>,
-        index: usize,
-    },
+pub enum ArrayLikeKind<'a> {
+    String(Chars<'a>),
+    Array(&'a [Rc<RefCell<Value>>]),
+    Object(&'a Rc<RefCell<Value>>),
     Empty,
 }
 
+pub struct ArrayLikeIterable<'a> {
+    pub kind: ArrayLikeKind<'a>,
+    pub index: usize,
+}
+
 impl<'a> ArrayLikeIterable<'a> {
+    pub fn new(kind: ArrayLikeKind<'a>) -> Self {
+        Self { kind, index: 0 }
+    }
     pub fn from_value(value: &'a Value, value_cell: &'a Rc<RefCell<Value>>) -> Self {
         match value.as_object() {
-            Some(Object::String(s)) => Self::String(Box::new(s.chars())),
-            Some(Object::Array(a)) => Self::Array {
-                source: &a.elements,
-                index: 0,
-            },
-            Some(Object::Any(_)) => Self::Object {
-                source_cell: value_cell,
-                index: 0,
-            },
-            _ => Self::Empty,
+            Some(Object::String(s)) => Self::new(ArrayLikeKind::String(s.chars())),
+            Some(Object::Array(a)) => Self::new(ArrayLikeKind::Array(&a.elements)),
+            Some(Object::Any(_)) => Self::new(ArrayLikeKind::Object(value_cell)),
+            _ => Self::new(ArrayLikeKind::Empty),
         }
     }
     pub fn next<'b>(&mut self, vm: &'b VM) -> Option<Rc<RefCell<Value>>> {
-        match self {
-            Self::String(s) => s.next().map(String::from).map(Value::from).map(Into::into),
-            Self::Array { source, index } => {
-                *index += 1;
-                source.get(*index - 1).cloned()
+        self.index += 1;
+        match &mut self.kind {
+            ArrayLikeKind::String(s) => s.next().map(String::from).map(Value::from).map(Into::into),
+            ArrayLikeKind::Array(source) => source.get(self.index - 1).cloned(),
+            ArrayLikeKind::Object(source_cell) => {
+                Value::get_property(vm, source_cell, &(self.index - 1).to_string(), None)
             }
-            Self::Object { source_cell, index } => {
-                *index += 1;
-                Value::get_property(vm, source_cell, &(*index - 1).to_string(), None)
-            }
-            Self::Empty => None,
+            ArrayLikeKind::Empty => None,
+        }
+    }
+}
+
+pub struct Join {
+    dest: Option<String>,
+    idx: usize,
+}
+
+impl Join {
+    pub fn new() -> Self {
+        Self {
+            dest: Some(String::new()),
+            idx: 0,
         }
     }
 }
 
 pub fn join(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
-    let mut arguments = ctx.arguments();
-    let separator = arguments.next();
-
-    // 1. Let O be ? ToObject(this value).
     let this_cell = ctx.receiver.as_ref().unwrap();
 
-    // 2. Let len be ? LengthOfArrayLike(O).
     let len = abstractions::object::length_of_array_like(ctx.vm, this_cell)? as usize;
-
-    // ... Step 1 requires len
     let this_ref = this_cell.borrow_mut();
+
     let mut o = ArrayLikeIterable::from_value(&this_ref, this_cell);
 
-    // 3. If separator is undefined, let sep be the single-element String ",".
-    // 4. Else, let sep be ? ToString(separator).
+    let separator = ctx.arguments().next().cloned();
+
     let sep = if let Some(separator_cell) = separator {
         Cow::Owned(separator_cell.borrow().to_string().to_string())
     } else {
         Cow::Borrowed(",")
     };
 
-    // 5. Let R be the empty String.
     let mut r = String::new();
 
-    // 6. Let k be 0.
-    let mut k = 0;
+    if let Some(response_cell) = &ctx.function_call_response {
+        let response = response_cell.borrow();
+        let response_string = response.as_string().ok_or_else(|| {
+            error::create_error("Cannot convert to primitive value".into(), ctx.vm)
+        })?;
 
-    // 7. Repeat, while k < len,
-    while k < len {
-        // a. If k > 0, set R to the string-concatenation of R and sep.
-        if k > 0 {
+        let state = ctx.state.get_or_insert_as(Join::new).unwrap();
+        let dest = state.dest.as_mut().expect("cannot fail");
+
+        r.push_str(dest);
+        r.push_str(response_string);
+
+        state.idx += 1;
+        o.index = state.idx;
+
+        if state.idx >= len {
+            return Ok(CallResult::Ready(ctx.vm.create_js_value(r).into()));
+        }
+    }
+
+    while o.index < len {
+        if o.index > 0 {
             r += &sep;
         }
 
-        // b. Let element be ? Get(O, ! ToString(𝔽(k))).
         let element_cell = o
             .next(ctx.vm)
             .unwrap_or_else(|| Value::new(ValueKind::Undefined).into());
 
         let element = element_cell.borrow();
 
-        // c. If element is undefined or null,
-        // let next be the empty String; otherwise,
-        // let next be ? ToString(element).
         if !element.is_nullish() {
-            let next = element.to_string();
-            // d. Set R to the string-concatenation of R and next.
-            r += &next;
-        }
+            let next = match abstractions::conversions::to_string(ctx.vm, &element_cell)? {
+                CallResult::Ready(r) => r,
+                CallResult::UserFunction(func, args) => {
+                    let state = ctx.state.get_or_insert_as(Join::new).unwrap();
+                    let dest = state.dest.as_mut().unwrap();
+                    *dest = r;
+                    return Ok(CallResult::UserFunction(func, args));
+                }
+            };
 
-        // e. Set k to k + 1.
-        k += 1;
+            let next_ref = next.borrow();
+            let next_string = next_ref.as_string().ok_or_else(|| {
+                error::create_error("Cannot convert to primitive value".into(), ctx.vm)
+            })?;
+
+            r += next_string;
+        }
     }
 
-    Ok(CallResult::Ready(ctx.vm.create_js_value(r).into()))
+    Ok(CallResult::Ready(
+        ctx.vm.create_js_value(String::from(&*r)).into(),
+    ))
 }
 
 pub fn last_index_of(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
