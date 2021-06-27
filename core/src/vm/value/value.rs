@@ -187,16 +187,13 @@ impl Value {
                 }
             }
             "length" => {
-                match &value.kind {
-                    ValueKind::Object(o) => match &**o {
-                        Object::Array(a) => {
-                            return Some(vm.create_js_value(a.elements.len() as f64).into())
-                        }
-                        Object::String(s) => {
-                            return Some(vm.create_js_value(s.len() as f64).into())
-                        }
-                        _ => {}
-                    },
+                match value.as_object() {
+                    Some(Object::Array(a)) => {
+                        return Some(vm.create_js_value(a.elements.len() as f64).into())
+                    }
+                    Some(Object::String(s)) => {
+                        return Some(vm.create_js_value(s.len() as f64).into())
+                    }
                     _ => {}
                 };
             }
@@ -235,7 +232,12 @@ impl Value {
         }
 
         if let Some(proto_cell) = value.proto.as_ref().and_then(Weak::upgrade) {
-            Value::get_property(vm, &proto_cell, key, Some(value_cell))
+            Value::get_property(
+                vm,
+                &proto_cell,
+                key,
+                override_this.or_else(|| Some(value_cell)),
+            )
         } else {
             None
         }
