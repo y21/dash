@@ -8,6 +8,7 @@ use std::{
         atomic::{AtomicU32, Ordering},
         Arc,
     },
+    time::Duration,
 };
 
 use console::style;
@@ -45,7 +46,7 @@ fn get_all_files(dir: &OsString) -> io::Result<Vec<OsString>> {
 }
 
 /// Runs a test case
-async fn run_test(path: OsString, mode: Mode) -> bool {
+async fn run_test(path: OsString, mode: Mode, verbose: bool) -> bool {
     let path_str = path.to_str().unwrap();
     let source = tokio::fs::read_to_string(path_str).await.unwrap();
 
@@ -69,13 +70,15 @@ async fn run_test(path: OsString, mode: Mode) -> bool {
         Mode::Interpret => dash::eval::<()>(&source, None).is_ok(),
     };
 
-    if pass {
-        println!("{} {}", style(path_str).green(), style("passed").green());
-        true
-    } else {
-        println!("{} {}", style(path_str).red(), style("did not pass").red());
-        false
+    if verbose {
+        if pass {
+            println!("{} {}", style(path_str).green(), style("passed").green());
+        } else {
+            println!("{} {}", style(path_str).red(), style("did not pass").red());
+        }
     }
+
+    pass
 }
 
 #[derive(StructOpt, Debug)]
@@ -88,6 +91,8 @@ struct Args {
     lexer: bool,
     #[structopt(long = "compiler")]
     compiler: bool,
+    #[structopt(long = "verbose", short = "v")]
+    verbose: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -131,6 +136,11 @@ async fn main() {
 
     let tests = get_all_files(&OsString::from_str(&path).unwrap()).unwrap();
 
+    if opt.verbose {
+        println!("Running {} tests in 3 seconds", tests.len());
+        tokio::time::sleep(Duration::from_secs(3)).await;
+    }
+
     let counter = Arc::new(Counter {
         pass: AtomicU32::new(0),
         fail: AtomicU32::new(0),
@@ -139,9 +149,10 @@ async fn main() {
     let mut futures = Vec::new();
 
     for test in tests {
+        let verbose = opt.verbose;
         let counter = Arc::clone(&counter);
         let fut = async move {
-            if run_test(test, mode).await {
+            if run_test(test, mode, verbose).await {
                 counter.pass.fetch_add(1, Ordering::Relaxed);
             } else {
                 counter.fail.fetch_add(1, Ordering::Relaxed);
