@@ -7,4 +7,5 @@ edition = "2018"
 
 [dependencies]
 console = "0.14.1"
-dash = { path = "../core/" }
+dash = { path="../core/" }
+structopt = "0.3"
