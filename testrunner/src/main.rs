@@ -1,4 +1,14 @@
-use std::{ffi::OsString, fs::DirEntry, io, path::PathBuf, str::FromStr};
+use std::{
+    ffi::OsString,
+    fs::DirEntry,
+    io,
+    path::PathBuf,
+    str::FromStr,
+    sync::{
+        atomic::{AtomicU32, Ordering},
+        Arc,
+    },
+};
 
 use console::style;
 use dash::{
@@ -35,9 +45,9 @@ fn get_all_files(dir: &OsString) -> io::Result<Vec<OsString>> {
 }
 
 /// Runs a test case
-fn run_test(path: OsString, mode: Mode) {
+async fn run_test(path: OsString, mode: Mode) -> bool {
     let path_str = path.to_str().unwrap();
-    let source = std::fs::read_to_string(path_str).unwrap();
+    let source = tokio::fs::read_to_string(path_str).await.unwrap();
 
     let pass = match mode {
         Mode::Lex => Lexer::new(&source).scan_all().is_ok(),
@@ -61,8 +71,10 @@ fn run_test(path: OsString, mode: Mode) {
 
     if pass {
         println!("{} {}", style(path_str).green(), style("passed").green());
+        true
     } else {
         println!("{} {}", style(path_str).red(), style("did not pass").red());
+        false
     }
 }
 
@@ -100,7 +112,13 @@ impl Mode {
     }
 }
 
-fn main() {
+struct Counter {
+    pass: AtomicU32,
+    fail: AtomicU32,
+}
+
+#[tokio::main]
+async fn main() {
     let opt = Args::from_args();
 
     let path = opt
@@ -113,7 +131,29 @@ fn main() {
 
     let tests = get_all_files(&OsString::from_str(&path).unwrap()).unwrap();
 
+    let counter = Arc::new(Counter {
+        pass: AtomicU32::new(0),
+        fail: AtomicU32::new(0),
+    });
+
+    let mut futures = Vec::new();
+
     for test in tests {
-        run_test(test, mode);
+        let counter = Arc::clone(&counter);
+        let fut = async move {
+            if run_test(test, mode).await {
+                counter.pass.fetch_add(1, Ordering::Relaxed);
+            } else {
+                counter.fail.fetch_add(1, Ordering::Relaxed);
+            }
+        };
+
+        futures.push(fut);
     }
+
+    futures::future::join_all(futures).await;
+
+    let pass = counter.pass.load(Ordering::Relaxed);
+    let fail = counter.fail.load(Ordering::Relaxed);
+    println!("{} tests passed, {} tests failed", pass, fail);
 }
