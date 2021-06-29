@@ -14,6 +14,8 @@ use structopt::StructOpt;
 struct Args {
     #[structopt(name = "file", parse(from_os_str))]
     file: Option<PathBuf>,
+    #[structopt(name = "eval", short = "e")]
+    eval: Option<String>,
 }
 
 fn create_agent() -> impl Agent {
@@ -29,7 +31,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let code = fs::read_to_string(file)?;
 
         if let Err(e) = dash::eval(&code, Some(create_agent())) {
-            println!("{:?}", e);
+            println!("{:?}", e.to_string());
+        }
+    } else if let Some(eval) = &opt.eval {
+        if let Err(e) = dash::eval(eval, Some(create_agent())) {
+            println!("{:?}", e.to_string());
         }
     } else {
         repl();
