@@ -1,7 +1,7 @@
 use std::{
     ffi::OsString,
     fs::DirEntry,
-    io,
+    io::{self, Read},
     path::PathBuf,
     str::FromStr,
     sync::{
@@ -21,13 +21,6 @@ use structopt::StructOpt;
 // Some tests are ignored because they either cause a segmentation fault or get stuck in an infinite loop
 // which causes the testrunner to never finish
 const IGNORED_TESTS: &[&str] = &[
-    // segfaults
-    "annexB/language/global-code/if-decl-else-decl-a-global-existing-fn-update.js",
-    "annexB/language/global-code/if-decl-else-decl-a-global-existing-var-update.js",
-    "annexB/language/global-code/if-decl-else-decl-a-global-update.js",
-    "annexB/language/global-code/if-decl-else-stmt-global-existing-fn-update.js",
-    "annexB/language/global-code/if-decl-else-stmt-global-existing-var-update.js",
-    "annexB/language/global-code/if-decl-else-stmt-global-update.js",
     // stuck in infinite loop
     "language/block-scope/leave/for-loop-block-let-declaration-only-shadows-outer-parameter-value-1.js",
     "language/block-scope/leave/verify-context-in-for-loop-block.js",
@@ -158,6 +151,9 @@ struct Args {
     /// Disables multithreaded testing. Can help with debugging.
     #[structopt(long = "singlethreaded", short = "st")]
     single_threaded: bool,
+    /// "Pauses" after a failed test and waits for the user to hit return
+    #[structopt(long = "step")]
+    step: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -214,6 +210,11 @@ async fn main() {
     let tests = get_all_files(&OsString::from_str(&path).unwrap()).unwrap();
     let total_tests = tests.len();
 
+    if opt.step && !opt.single_threaded {
+        eprintln!("Step mode may only be used in singlethreaded mode");
+        return;
+    }
+
     if opt.verbose {
         println!("Running {} tests in 3 seconds", tests.len());
         tokio::time::sleep(Duration::from_secs(3)).await;
@@ -235,6 +236,7 @@ async fn main() {
     for test in tests {
         let verbose = opt.verbose;
         let single_threaded = opt.single_threaded;
+        let step = opt.step;
         let counter = Arc::clone(&counter);
 
         let fut = async move {
@@ -249,6 +251,10 @@ async fn main() {
             };
 
             count.fetch_add(1, Ordering::Relaxed);
+
+            if result.is_fail() && step {
+                io::stdin().read(&mut [0]).unwrap();
+            }
         };
 
         if single_threaded {

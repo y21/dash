@@ -441,6 +441,11 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
 
         instructions.extend(then_instructions);
 
+        instructions.push(Instruction::Op(Opcode::Constant));
+        let final_jmp_idx = instructions.len();
+        instructions.push(Instruction::Op(Opcode::Nop));
+        instructions.push(Instruction::Op(Opcode::ShortJmp));
+
         let mut jumps: Vec<(usize, usize, usize)> = Vec::new();
 
         // For simplicitly, we desugar the last `else` to another `else if` branch
@@ -471,7 +476,7 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
             branch_instructions.push(Instruction::Op(Opcode::Constant));
             let final_out_jmp_offset = branch_instructions.len();
             branch_instructions.push(Instruction::Op(Opcode::Nop));
-            branch_instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
+            branch_instructions.push(Instruction::Op(Opcode::ShortJmp));
             branch_instructions.push(Instruction::Op(Opcode::Pop));
 
             instructions.extend(branch_instructions);
@@ -491,6 +496,9 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
                 instruction_count - (current.0 + current.2) - 3,
             ));
         }
+
+        instructions[final_jmp_idx] =
+            Instruction::Operand(Constant::Index(instruction_count - final_jmp_idx - 2));
 
         Ok(instructions)
     }
