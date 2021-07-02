@@ -128,7 +128,7 @@ impl<'a, A: Agent> Compiler<'a, A> {
     pub unsafe fn find_upvalue(&mut self, name: &'a [u8]) -> Option<usize> {
         let top = self.caller_mut()?;
 
-        if let Some(idx) = top.scope.find_variable(name) {
+        if let Some((idx, _)) = top.scope.find_variable(name) {
             return Some(self.add_upvalue(Upvalue::new(true, idx)));
         }
 
@@ -196,26 +196,13 @@ impl<'a, A: Agent> Compiler<'a, A> {
 
         let mut instructions = value;
 
-        let global = self.scope.is_global();
+        let (op_with_value, op_no_value) = (Opcode::SetLocal, Opcode::SetLocalNoValue);
 
-        let (op_with_value, op_no_value) = if global {
-            (Opcode::SetGlobal, Opcode::SetGlobalNoValue)
-        } else {
-            (Opcode::SetLocal, Opcode::SetLocalNoValue)
-        };
-
-        if !global {
-            let stack_idx = self
-                .scope
-                .push_local(Local::new(var.name, self.scope.depth, var.kind));
-            instructions.push(Instruction::Op(Opcode::Constant));
-            instructions.push(Instruction::Operand(Constant::Index(stack_idx)));
-        } else {
-            instructions.push(Instruction::Op(Opcode::Constant));
-            instructions.push(Instruction::Operand(Constant::Identifier(
-                std::str::from_utf8(var.name).unwrap().to_owned(),
-            )));
-        }
+        let stack_idx = self
+            .scope
+            .push_local(Local::new(var.name, self.scope.depth, var.kind));
+        instructions.push(Instruction::Op(Opcode::Constant));
+        instructions.push(Instruction::Operand(Constant::Index(stack_idx)));
 
         if has_value {
             instructions.push(Instruction::Op(op_with_value));
@@ -232,6 +219,7 @@ pub enum CompileError<'a> {
     ModuleNotFound(&'a [u8]),
     NotImplemented(&'static str),
     ImportDisabled,
+    ConstAssignment,
     NativeImportFailed,
 }
 
@@ -244,6 +232,7 @@ impl<'a> CompileError<'a> {
             )),
             Self::NotImplemented(cause) => Cow::Borrowed(cause),
             Self::ImportDisabled => Cow::Borrowed("Imports are disabled for this context"),
+            Self::ConstAssignment => Cow::Borrowed("Assignment to constant variable"),
             Self::NativeImportFailed => Cow::Borrowed("Native import failed"),
         }
     }
@@ -280,14 +269,17 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
                 _ => {}
             };
 
-            if !self.scope.is_global() {
-                let stack_idx = self.scope.find_variable(ident);
+            let stack_idx = self.scope.find_variable(ident);
 
-                if let Some(stack_idx) = stack_idx {
-                    instructions.push(Instruction::Operand(Constant::Index(stack_idx)));
-                    instructions.push(Instruction::Op(Opcode::GetLocal));
-                    return Ok(instructions);
+            if let Some((stack_idx, local)) = stack_idx {
+                let ctx = unsafe { self.ctx.as_ref() };
+                if ctx.is_assign() && local.read_only() {
+                    return Err(CompileError::ConstAssignment);
                 }
+
+                instructions.push(Instruction::Operand(Constant::Index(stack_idx)));
+                instructions.push(Instruction::Op(Opcode::GetLocal));
+                return Ok(instructions);
             }
 
             if let Some(idx) = unsafe { self.find_upvalue(ident) } {

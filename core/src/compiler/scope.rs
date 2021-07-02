@@ -11,6 +11,10 @@ impl<'a> Local<'a> {
     pub fn new(ident: &'a [u8], depth: u16, kind: VariableDeclarationKind) -> Self {
         Self { ident, depth, kind }
     }
+
+    pub fn read_only(&self) -> bool {
+        matches!(self.kind, VariableDeclarationKind::Const)
+    }
 }
 
 #[derive(Debug)]
@@ -20,13 +24,11 @@ pub struct ScopeGuard<T, const N: usize> {
 }
 
 impl<'a, const N: usize> ScopeGuard<Local<'a>, N> {
-    pub fn find_variable(&self, name: &'a [u8]) -> Option<usize> {
+    pub fn find_variable(&self, name: &'a [u8]) -> Option<(usize, &Local)> {
         let depth = self.depth;
-        self.locals
-            .find(|local| {
-                local.depth <= depth && local.ident.len() == name.len() && local.ident.eq(name)
-            })
-            .map(|(idx, _)| idx)
+        self.locals.find(|local| {
+            local.depth <= depth && local.ident.len() == name.len() && local.ident.eq(name)
+        })
     }
 
     pub fn push_local(&mut self, local: Local<'a>) -> usize {
