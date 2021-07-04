@@ -88,6 +88,14 @@ impl<T, const N: usize> Stack<T, N> {
         }
     }
 
+    pub unsafe fn get(&self) -> Option<&T> {
+        if self.1 > 0 && N >= self.1 {
+            Some(&*self.0[self.1 - 1].as_ptr())
+        } else {
+            None
+        }
+    }
+
     pub unsafe fn get_unchecked(&self) -> &T {
         self.get_unchecked_at(self.1 - 1)
     }

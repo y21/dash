@@ -1121,6 +1121,16 @@ impl VM {
                     self.stack.push(exports);
                 }
                 Opcode::Return => {
+                    // We might be in a try block, in which case we need to remove the handler
+                    let maybe_tc_frame_pointer =
+                        unsafe { self.unwind_handlers.get() }.map(|c| c.frame_pointer);
+
+                    let frame_pointer = self.frames.get_stack_pointer();
+
+                    if maybe_tc_frame_pointer == Some(frame_pointer) {
+                        self.unwind_handlers.pop();
+                    }
+
                     // Restore VM state to where we were before the function call happened
                     let mut this = self.frames.pop();
 
