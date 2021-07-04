@@ -429,7 +429,7 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         instructions.push(Instruction::Op(Opcode::Pop));
 
         let then_instructions = self.accept(&i.then)?;
-        instructions[jmp_idx] = Instruction::Operand(Constant::Index(then_instructions.len() + 1));
+        instructions[jmp_idx] = Instruction::Operand(Constant::Index(then_instructions.len() + 4));
 
         instructions.extend(then_instructions);
 
