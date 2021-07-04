@@ -141,6 +141,9 @@ impl VM {
     }
 
     fn is_eof(&self) -> bool {
+        // If we ever somehow jump too far, that's a bug
+        // In debug builds, we can afford to assert this
+        debug_assert!(self.ip() <= self.buffer().len());
         self.ip() >= self.buffer().len()
     }
 
@@ -437,12 +440,22 @@ impl VM {
             return Err(value);
         }
 
+        // Try to get the last unwind handler
         let handler = self.unwind_handlers.pop();
         if let Some(catch_value_sp) = handler.catch_value_sp {
+            // If this handler has a catch value associated, we want to set it
             self.stack
                 .set_relative(self.frame().sp, catch_value_sp, value);
         }
+
+        // Go back the call stack back to where the last try/catch block lives
+        let this_frame_pointer = self.frames.get_stack_pointer();
+        self.frames
+            .discard_multiple(this_frame_pointer - handler.frame_pointer);
+
+        // ... and update the instruction pointer to the catch ip
         self.frame_mut().ip = handler.catch_ip;
+
         Ok(())
     }
 
@@ -1070,6 +1083,7 @@ impl VM {
                         catch_ip: current_ip + catch_idx,
                         catch_value_sp: error_catch_idx,
                         finally_ip: None, // TODO: support finally
+                        frame_pointer: self.frames.get_stack_pointer(),
                     };
                     self.unwind_handlers.push(handler)
                 }

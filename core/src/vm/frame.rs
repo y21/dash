@@ -31,6 +31,8 @@ pub struct UnwindHandler {
     pub catch_value_sp: Option<usize>,
     /// Finally block instruction pointer
     pub finally_ip: Option<usize>,
+    /// Pointer to frame where this try/catch block lives
+    pub frame_pointer: usize,
 }
 
 #[derive(Debug)]
