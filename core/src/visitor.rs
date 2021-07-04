@@ -26,6 +26,7 @@ pub trait Visitor<'a, V> {
             Statement::Export(e) => self.visit_export_statement(e),
             Statement::Continue => self.visit_continue(),
             Statement::Break => self.visit_break(),
+            Statement::Debugger => self.visit_debugger(),
         }
     }
 
@@ -74,4 +75,5 @@ pub trait Visitor<'a, V> {
     fn visit_export_statement(&mut self, e: &ExportKind<'a>) -> V;
     fn visit_break(&mut self) -> V;
     fn visit_continue(&mut self) -> V;
+    fn visit_debugger(&mut self) -> V;
 }

@@ -68,6 +68,7 @@ impl<'a> Parser<'a> {
             TokenType::Export => self.export().map(Statement::Export),
             TokenType::Continue => Some(Statement::Continue),
             TokenType::Break => Some(Statement::Break),
+            TokenType::Debugger => Some(Statement::Debugger),
             _ => {
                 // We've skipped the current character because of the statement cases that skip the current token
                 // So we go back, as the skipped token belongs to this expression

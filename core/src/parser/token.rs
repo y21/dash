@@ -97,6 +97,7 @@ pub enum TokenType {
     Import,
     Export,
     Default,
+    Debugger,
 }
 
 pub const ASSIGNMENT_TYPES: &[TokenType] = &[
@@ -153,6 +154,7 @@ impl From<&[u8]> for TokenType {
             b"import" => Self::Import,
             b"export" => Self::Export,
             b"default" => Self::Default,
+            b"debugger" => Self::Debugger,
             _ => Self::Identifier,
         }
     }

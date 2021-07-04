@@ -92,6 +92,7 @@ pub enum Opcode {
     EvaluateModule,
     ExportDefault,
     ToPrimitive,
+    Debugger,
 }
 
 impl From<TokenType> for Opcode {

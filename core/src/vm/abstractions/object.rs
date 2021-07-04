@@ -1,11 +1,8 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::{
-    js_std,
-    vm::{
-        value::{object::Object, Value, ValueKind},
-        VM,
-    },
+use crate::vm::{
+    value::{object::Object, Value, ValueKind},
+    VM,
 };
 
 const MAX: f64 = 9007199254740991f64;

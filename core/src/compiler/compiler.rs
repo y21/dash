@@ -1009,4 +1009,8 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
             )),
         }
     }
+
+    fn visit_debugger(&mut self) -> Result<Vec<Instruction>, CompileError<'a>> {
+        Ok(vec![Instruction::Op(Opcode::Debugger)])
+    }
 }

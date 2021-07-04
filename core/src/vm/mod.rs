@@ -1437,6 +1437,7 @@ impl VM {
                         unwind_abort_if_uncaught!(e);
                     }
                 }
+                Opcode::Debugger => self.agent.debugger(),
                 _ => unimplemented!("{:?}", instruction),
             };
         }

@@ -18,6 +18,7 @@ pub enum Statement<'a> {
     Export(ExportKind<'a>),
     Continue,
     Break,
+    Debugger,
 }
 
 #[derive(Debug, Clone)]
