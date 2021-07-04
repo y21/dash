@@ -442,11 +442,6 @@ impl VM {
 
         // Try to get the last unwind handler
         let handler = self.unwind_handlers.pop();
-        if let Some(catch_value_sp) = handler.catch_value_sp {
-            // If this handler has a catch value associated, we want to set it
-            self.stack
-                .set_relative(self.frame().sp, catch_value_sp, value);
-        }
 
         // Go back the call stack back to where the last try/catch block lives
         let this_frame_pointer = self.frames.get_stack_pointer();
@@ -455,6 +450,12 @@ impl VM {
 
         // ... and update the instruction pointer to the catch ip
         self.frame_mut().ip = handler.catch_ip;
+
+        if let Some(catch_value_sp) = handler.catch_value_sp {
+            // If this handler has a catch value associated, we want to set it
+            self.stack
+                .set_relative(self.frame().sp, catch_value_sp, value);
+        }
 
         Ok(())
     }
