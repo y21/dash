@@ -3,6 +3,7 @@ use std::{borrow::Cow, cell::RefCell, rc::Rc};
 use crate::vm::{
     value::{
         function::{CallContext, CallResult},
+        object::AnyObject,
         Value,
     },
     VM,
@@ -20,7 +21,8 @@ impl<'a> From<&'a str> for MaybeRc<&'a str> {
 }
 
 pub fn create_error(message: MaybeRc<&str>, vm: &VM) -> Rc<RefCell<Value>> {
-    let mut error = vm.create_object();
+    let mut error = Value::from(AnyObject {});
+    error.update_internal_properties(&vm.statics.error_proto, &vm.statics.error_ctor);
 
     let message_str = match message {
         MaybeRc::Rc(r) => r.borrow().to_string().to_string(),
