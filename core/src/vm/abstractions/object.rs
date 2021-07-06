@@ -10,18 +10,17 @@ const MAX: f64 = 9007199254740991f64;
 // https://tc39.es/ecma262/multipage/abstract-operations.html#sec-lengthofarraylike
 pub fn length_of_array_like(vm: &VM, obj: &Rc<RefCell<Value>>) -> Result<f64, Rc<RefCell<Value>>> {
     // ? Get(obj, "length")
-    let len_prop_cell = Value::get_property(vm, obj, "length", None)
-        .unwrap_or_else(|| Value::new(ValueKind::Undefined).into());
-    let len_prop = len_prop_cell.borrow();
+    let len_prop_cell = Value::get_property(vm, obj, "length", None);
+    let len_prop = len_prop_cell.as_ref().map(|x| x.borrow());
 
     // ? ToLength(prop)
-    let len = to_length(&*len_prop)?;
+    let len = to_length(len_prop.as_deref())?;
 
     // Return
     Ok(len)
 }
 
-pub fn to_length(argument: &Value) -> Result<f64, Rc<RefCell<Value>>> {
+pub fn to_length(argument: Option<&Value>) -> Result<f64, Rc<RefCell<Value>>> {
     // 1. Let len be ? ToIntegerOrInfinity(argument).
     let len = to_integer_or_infinity(argument)?;
 
@@ -35,7 +34,7 @@ pub fn to_length(argument: &Value) -> Result<f64, Rc<RefCell<Value>>> {
 }
 
 // https://tc39.es/ecma262/multipage/abstract-operations.html#sec-tointegerorinfinity
-pub fn to_integer_or_infinity(argument: &Value) -> Result<f64, Rc<RefCell<Value>>> {
+pub fn to_integer_or_infinity(argument: Option<&Value>) -> Result<f64, Rc<RefCell<Value>>> {
     // 1. Let number be ? ToNumber(argument).
     let number = to_number(argument)?;
 
@@ -63,16 +62,17 @@ pub fn to_integer_or_infinity(argument: &Value) -> Result<f64, Rc<RefCell<Value>
 }
 
 // https://tc39.es/ecma262/multipage/abstract-operations.html#sec-tonumber
-pub fn to_number(argument: &Value) -> Result<f64, Rc<RefCell<Value>>> {
-    match &argument.kind {
-        ValueKind::Undefined => Ok(f64::NAN),
-        ValueKind::Null => Ok(0f64),
-        ValueKind::Bool(b) => Ok(*b as u8 as f64),
-        ValueKind::Number(n) => Ok(*n),
-        ValueKind::Object(o) => match &**o {
+pub fn to_number(argument: Option<&Value>) -> Result<f64, Rc<RefCell<Value>>> {
+    match argument.as_ref().map(|a| &a.kind) {
+        Some(ValueKind::Undefined) => Ok(f64::NAN),
+        Some(ValueKind::Null) => Ok(0f64),
+        Some(ValueKind::Bool(b)) => Ok(*b as u8 as f64),
+        Some(ValueKind::Number(n)) => Ok(*n),
+        Some(ValueKind::Object(o)) => match &**o {
             Object::String(s) => Ok(to_number_from_string(s)),
             _ => todo!(),
         },
+        None => Ok(f64::NAN),
         _ => todo!(),
     }
 }

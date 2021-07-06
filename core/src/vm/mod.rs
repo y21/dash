@@ -259,7 +259,13 @@ impl VM {
 
         self.statics.boolean_proto = self.create_object().into();
         self.statics.number_proto = self.create_object().into();
-        self.statics.string_proto = self.create_object().into();
+        self.statics.string_proto = {
+            let mut o = self.create_object();
+            o.set_property("charAt", Rc::clone(&self.statics.string_char_at));
+            o.set_property("charCodeAt", Rc::clone(&self.statics.string_char_code_at));
+            o.set_property("endsWith", Rc::clone(&self.statics.string_ends_with));
+            o.into()
+        };
         self.statics.function_proto = self.create_object().into();
         self.statics.array_proto = {
             let mut o = self.create_object();
@@ -368,6 +374,9 @@ impl VM {
         patch_function_value(self, &self.statics.weakmap_delete);
         patch_function_value(self, &self.statics.json_parse);
         patch_function_value(self, &self.statics.json_stringify);
+        patch_function_value(self, &self.statics.string_char_at);
+        patch_function_value(self, &self.statics.string_char_code_at);
+        patch_function_value(self, &self.statics.string_ends_with);
 
         global.set_property("NaN", self.create_js_value(f64::NAN).into());
         global.set_property("Infinity", self.create_js_value(f64::INFINITY).into());

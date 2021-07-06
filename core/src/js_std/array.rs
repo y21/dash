@@ -412,6 +412,7 @@ pub fn join(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
             r += &sep;
         }
 
+        // TODO: unwrap_or_else is unnecessary here. to_string operation takes Option<&Value>
         let element_cell = o
             .next(ctx.vm)
             .unwrap_or_else(|| Value::new(ValueKind::Undefined).into());
@@ -419,7 +420,7 @@ pub fn join(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
         let element = element_cell.borrow();
 
         if !element.is_nullish() {
-            let next = match abstractions::conversions::to_string(ctx.vm, &element_cell)? {
+            let next = match abstractions::conversions::to_string(ctx.vm, Some(&element_cell))? {
                 CallResult::Ready(r) => r,
                 CallResult::UserFunction(func, args) => {
                     let state = ctx.state.get_or_insert_as(Join::new).unwrap();

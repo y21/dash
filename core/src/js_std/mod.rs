@@ -11,3 +11,13 @@ pub mod object;
 pub mod string;
 pub mod weakmap;
 pub mod weakset;
+
+#[macro_export]
+macro_rules! unwrap_call_result {
+    ($e:expr) => {
+        match $e? {
+            CallResult::Ready(value) => value,
+            CallResult::UserFunction(func, args) => return Ok(CallResult::UserFunction(func, args)),
+        }
+    };
+}

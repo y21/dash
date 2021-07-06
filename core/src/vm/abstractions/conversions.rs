@@ -11,28 +11,33 @@ use crate::{
 // https://tc39.es/ecma262/multipage/abstract-operations.html#sec-tostring
 pub fn to_string(
     vm: &VM,
-    argument_cell: &Rc<RefCell<Value>>,
+    argument_cell: Option<&Rc<RefCell<Value>>>,
 ) -> Result<CallResult, Rc<RefCell<Value>>> {
-    let argument = argument_cell.borrow();
-    let ready_string = match &argument.kind {
-        ValueKind::Undefined => Cow::Borrowed("undefined"),
-        ValueKind::Null => Cow::Borrowed("null"),
-        ValueKind::Bool(b) => Cow::Borrowed(if *b { "true" } else { "false" }),
-        ValueKind::Number(n) => number_to_string(*n),
-        ValueKind::Object(o) => match &**o {
+    let argument = argument_cell.map(|x| x.borrow());
+    let ready_string = match argument.as_ref().map(|x| &x.kind) {
+        Some(ValueKind::Undefined) | None => Cow::Borrowed("undefined"),
+        Some(ValueKind::Null) => Cow::Borrowed("null"),
+        Some(ValueKind::Bool(b)) => Cow::Borrowed(if *b { "true" } else { "false" }),
+        Some(ValueKind::Number(n)) => number_to_string(*n),
+        Some(ValueKind::Object(o)) => match &**o {
             Object::String(s) => Cow::Borrowed(&**s),
             _ => {
                 // 1. Let primValue be ? ToPrimitive(argument, string).
-                let prim_value = to_primitive(vm, &argument, argument_cell, Some("string"))?;
+                let prim_value = to_primitive(
+                    vm,
+                    argument.as_ref().unwrap(),
+                    argument_cell.unwrap(),
+                    Some("string"),
+                )?;
 
                 // 2. Return ? ToString(primValue).
                 return Ok(match prim_value {
-                    CallResult::Ready(r) => return to_string(vm, &r),
+                    CallResult::Ready(r) => return to_string(vm, Some(&r)),
                     CallResult::UserFunction(func, args) => CallResult::UserFunction(func, args),
                 });
             }
         },
-        ValueKind::Constant(_) => unreachable!(),
+        Some(ValueKind::Constant(_)) => unreachable!(),
     };
 
     Ok(CallResult::Ready(
