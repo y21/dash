@@ -65,7 +65,7 @@ pub extern "C" fn vm_interpret(
 pub extern "C" fn value_inspect(value: HandleRef<Rc<RefCell<Value>>>) -> *mut i8 {
     let value_cell = unsafe { value.as_ref() };
     let value = value_cell.borrow();
-    let string = CString::new(&*value.inspect(false)).unwrap();
+    let string = CString::new(&*value.inspect(0)).unwrap();
     string.into_raw()
 }
 
