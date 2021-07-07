@@ -2,6 +2,7 @@
 name = "runtime"
 version = "0.1.0"
 edition = "2018"
+license = "MIT"
 
 [dependencies]
-dash = { path = "../core/" }
+dash = { path="../core/" }

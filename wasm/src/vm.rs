@@ -5,7 +5,7 @@ use std::{
 };
 
 use dash::{
-    compiler::compiler::Compiler,
+    compiler::compiler::{Compiler, FunctionKind},
     parser::{lexer::Lexer, parser::Parser},
     vm::{
         value::{
@@ -46,7 +46,7 @@ pub extern "C" fn create_vm<'a>(source: *const i8) -> Handle<WasmResult<VM, Crea
 
     let tokens = try_result!(Lexer::new(source).scan_all());
     let stmts = try_result!(Parser::new(source, tokens).parse_all());
-    let bytecode = try_result!(Compiler::<()>::new(stmts, None, false).compile());
+    let bytecode = try_result!(Compiler::<()>::new(stmts, None, FunctionKind::Function).compile());
     let func = UserFunction::new(bytecode, 0, FunctionType::Top, 0, Constructor::NoCtor);
 
     Handle::new(WasmResult::Ok(VM::new(func)))

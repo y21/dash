@@ -3,5 +3,6 @@ name = "dash"
 version = "0.1.0"
 authors = ["y21"]
 edition = "2018"
+license = "MIT"
 
 [dependencies]

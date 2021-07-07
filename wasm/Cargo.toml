@@ -2,10 +2,11 @@
 name = "wasm"
 version = "0.1.0"
 edition = "2018"
+license = "MIT"
 
 [dependencies]
-dash = { path = "../core" }
-runtime = { path = "../runtime" }
+dash = { path="../core" }
+runtime = { path="../runtime" }
 
 [lib]
 crate-type = ["cdylib"]
