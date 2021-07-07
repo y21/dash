@@ -570,7 +570,16 @@ impl<'a> Parser<'a> {
             TokenType::TrueLit => Expr::bool_literal(true),
             TokenType::NullLit => Expr::null_literal(),
             TokenType::UndefinedLit => Expr::undefined_literal(),
-            TokenType::Identifier => Expr::identifier(full),
+            TokenType::Identifier => {
+                let expr = Expr::identifier(full);
+
+                // If this identifier is followed by an arrow, this is an arrow function
+                if self.expect_and_skip(&[TokenType::Arrow], false) {
+                    return self.arrow_function(vec![expr]).map(Expr::Function);
+                }
+
+                expr
+            }
             TokenType::String => Expr::string_literal(full),
             TokenType::LeftSquareBrace => {
                 let mut items = Vec::new();

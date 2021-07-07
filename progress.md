@@ -51,7 +51,7 @@ This should just act as a short "cheat sheet", and used to see what's left to im
   - [x] **
   - [ ] function*
   - [x] function
-  - [ ] () => {}
+  - [x] () => {}
   - [x] >=
   - [x] >
   - [x] (expr)
@@ -104,7 +104,7 @@ This should just act as a short "cheat sheet", and used to see what's left to im
   - [ ] class
   - [x] const
   - [x] continue
-  - [ ] debugger
+  - [x] debugger
   - [ ] do...while
   - [x] empty
   - [x] export
@@ -146,6 +146,7 @@ This should just act as a short "cheat sheet", and used to see what's left to im
     - [ ] deref
     - [ ] @@toStringTag
   - [ ] Array
+    - [x] isArray
     - [ ] length
     - [x] concat
     - [ ] copyWithin
@@ -163,7 +164,7 @@ This should just act as a short "cheat sheet", and used to see what's left to im
     - [ ] splice
     - [x] includes
     - [x] indexOf
-    - [ ] join
+    - [x] join
     - [ ] keys
     - [ ] entries
     - [ ] values
@@ -366,11 +367,11 @@ This should just act as a short "cheat sheet", and used to see what's left to im
     - [ ] big
     - [ ] blink
     - [ ] bold
-    - [ ] charAt
-    - [ ] charCodeAt
+    - [x] charAt
+    - [x] charCodeAt
     - [ ] codePointAt
     - [ ] concat
-    - [ ] endsWith
+    - [x] endsWith
     - [ ] fontcolor
     - [ ] fontsize
     - [ ] fixed
