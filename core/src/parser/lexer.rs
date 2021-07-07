@@ -382,6 +382,7 @@ impl<'a> Lexer<'a> {
                 &[
                     (b"==", TokenType::StrictEquality),
                     (b"=", TokenType::Equality),
+                    (b">", TokenType::Arrow),
                 ],
             ),
             b'"' | b'\'' => self.read_string_literal(),

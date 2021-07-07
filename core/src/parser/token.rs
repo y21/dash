@@ -98,6 +98,7 @@ pub enum TokenType {
     Export,
     Default,
     Debugger,
+    Arrow,
 }
 
 pub const ASSIGNMENT_TYPES: &[TokenType] = &[
@@ -219,6 +220,7 @@ pub enum ErrorKind<'a> {
     UnknownToken(Token<'a>),
     UnexpectedToken(Token<'a>, TokenType),
     UnexpectedTokenMultiple(Token<'a>, &'static [TokenType]),
+    UnexpectedEof,
 }
 
 #[derive(Debug)]
@@ -240,6 +242,7 @@ impl<'a> ErrorKind<'a> {
                 tok.loc
                     .to_string(source, Either::Left(full_utf8), "unexpected token")
             }
+            Self::UnexpectedEof => String::from("unexpected end of input"),
         }
     }
 }
