@@ -661,6 +661,11 @@ impl<'a> Parser<'a> {
             other => other,
         };
 
+        // If the last token is a semicolon, we want to go back to it
+        if self.previous().map(|x| x.ty) == Some(TokenType::Semicolon) {
+            self.advance_back();
+        }
+
         Some(FunctionDeclaration::new(None, list, vec![body], true))
     }
 
