@@ -32,8 +32,8 @@ impl<'a> Expr<'a> {
         Self::Binary(BinaryExpr::new(l, r, op))
     }
 
-    pub fn grouping(expr: Expr<'a>) -> Self {
-        Self::Grouping(GroupingExpr(Box::new(expr)))
+    pub fn grouping(expr: Vec<Expr<'a>>) -> Self {
+        Self::Grouping(GroupingExpr(expr))
     }
 
     pub fn assignment(l: Expr<'a>, r: Expr<'a>, op: TokenType) -> Self {
@@ -90,6 +90,27 @@ impl<'a> Expr<'a> {
             target: Box::new(target),
             property: Box::new(property),
         })
+    }
+
+    pub fn to_arrow_function_parameter_list(&self) -> Option<Vec<&'a [u8]>> {
+        match self {
+            Self::Grouping(g) => {
+                let mut list = Vec::with_capacity(g.0.len());
+                for expr in &g.0 {
+                    list.push(expr.to_identifier()?);
+                }
+                Some(list)
+            }
+            Self::Literal(lit) => Some(vec![lit.to_identifier()?]),
+            _ => None,
+        }
+    }
+
+    pub fn to_identifier(&self) -> Option<&'a [u8]> {
+        match self {
+            Self::Literal(lit) => lit.to_identifier(),
+            _ => None,
+        }
     }
 }
 
@@ -149,7 +170,7 @@ impl<'a> BinaryExpr<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub struct GroupingExpr<'a>(pub Box<Expr<'a>>);
+pub struct GroupingExpr<'a>(pub Vec<Expr<'a>>);
 
 #[derive(Debug, Clone)]
 pub enum LiteralExpr<'a> {
@@ -172,6 +193,14 @@ impl<'a> LiteralExpr<'a> {
             Self::String(s) => Object::String(std::str::from_utf8(s).unwrap().to_owned()).into(),
             Self::Undefined => Value::new(ValueKind::Undefined),
             Self::Null => Value::new(ValueKind::Null),
+        }
+    }
+
+    pub fn to_identifier(&self) -> Option<&'a [u8]> {
+        match self {
+            Self::Identifier(ident) => Some(ident),
+            Self::Undefined => Some(b"undefined"),
+            _ => None,
         }
     }
 }

@@ -249,7 +249,7 @@ impl<'a> Parser<'a> {
 
         let statements = self.block().unwrap().0;
 
-        Some(FunctionDeclaration::new(name, arguments, statements))
+        Some(FunctionDeclaration::new(name, arguments, statements, false))
     }
 
     pub fn argument_list(&mut self) -> Option<Vec<&'a [u8]>> {
@@ -597,11 +597,29 @@ impl<'a> Parser<'a> {
                 Expr::number_literal(std::str::from_utf8(full).unwrap().parse::<f64>().unwrap())
             }
             TokenType::LeftParen => {
-                let expr = self.expression()?;
-                if !self.expect_and_skip(&[TokenType::RightParen], true) {
-                    return None;
+                if self.expect_and_skip(&[TokenType::RightParen], false) {
+                    // () MUST be followed by an arrow. Empty groups are not valid syntax
+                    if !self.expect_and_skip(&[TokenType::Arrow], true) {
+                        return None;
+                    }
+
+                    return self.arrow_function(Vec::new()).map(Expr::Function);
                 }
-                Expr::grouping(expr)
+
+                let mut exprs = vec![self.expression()?];
+
+                while !self.expect_and_skip(&[TokenType::RightParen], false) {
+                    self.expect_and_skip(&[TokenType::Comma], false);
+                    exprs.push(self.expression()?);
+                }
+
+                // This is an arrow function if the next token is an arrow (`=>`)
+                if self.expect_and_skip(&[TokenType::Arrow], false) {
+                    return self.arrow_function(exprs).map(Expr::Function);
+                }
+
+                // If it's not an arrow function, then it is a group
+                Expr::grouping(exprs)
             }
             TokenType::Function => Expr::Function(self.function()?),
             _ => {
@@ -612,6 +630,29 @@ impl<'a> Parser<'a> {
         };
 
         Some(expr)
+    }
+
+    // Arrow functions are ambiguous and share the same beginning as grouping operator,
+    // so this can only be called when we having consumed =>
+    // Calling this will turn all parameters, which were parsed as if they were part of the grouping operator
+    // into their arrow function parameter equivalent
+    pub fn arrow_function(
+        &mut self,
+        parameter_list: Vec<Expr<'a>>,
+    ) -> Option<FunctionDeclaration<'a>> {
+        let mut list = Vec::with_capacity(parameter_list.len());
+
+        // If it is arrow function, we need to convert everything to their arrow func equivalents
+        for expr in parameter_list {
+            list.push(expr.to_identifier()?);
+        }
+
+        let body = match self.statement()? {
+            Statement::Expression(expr) => Statement::Return(ReturnStatement(expr)),
+            other => other,
+        };
+
+        Some(FunctionDeclaration::new(None, list, vec![body], true))
     }
 
     // Helper functions
@@ -642,7 +683,12 @@ impl<'a> Parser<'a> {
     pub fn expect_and_skip(&mut self, ty: &'static [TokenType], emit_error: bool) -> bool {
         let current = match self.current() {
             Some(k) => *k,
-            None => return false,
+            None => {
+                if emit_error {
+                    self.create_error(ErrorKind::UnexpectedEof);
+                }
+                return false;
+            }
         };
 
         let ok = ty.iter().any(|ty| ty.eq(&current.ty));

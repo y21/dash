@@ -381,7 +381,13 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         &mut self,
         e: &GroupingExpr<'a>,
     ) -> Result<Vec<Instruction>, CompileError<'a>> {
-        self.accept_expr(&e.0)
+        let mut instructions = Vec::new();
+
+        for expr in &e.0 {
+            instructions.extend(self.accept_expr(expr)?);
+        }
+
+        Ok(instructions)
     }
 
     fn visit_unary_expression(

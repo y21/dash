@@ -151,6 +151,7 @@ pub struct FunctionDeclaration<'a> {
     pub name: Option<&'a [u8]>,
     pub arguments: Vec<&'a [u8]>,
     pub statements: Vec<Statement<'a>>,
+    pub arrow: bool,
 }
 
 impl<'a> FunctionDeclaration<'a> {
@@ -158,11 +159,13 @@ impl<'a> FunctionDeclaration<'a> {
         name: Option<&'a [u8]>,
         arguments: Vec<&'a [u8]>,
         statements: Vec<Statement<'a>>,
+        arrow: bool,
     ) -> Self {
         Self {
             name,
             arguments,
             statements,
+            arrow,
         }
     }
 }
