@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use dash::{
     agent::{Agent, ImportResult},
-    compiler::compiler::Compiler,
+    compiler::compiler::{Compiler, FunctionKind},
     js_std::{self, error::MaybeRc},
     parser::{lexer::Lexer, parser::Parser},
     util::MaybeOwned,
@@ -73,9 +73,13 @@ impl Agent for RuntimeAgent {
 
                 let tok = Lexer::new(&source).scan_all().ok()?;
                 let ast = Parser::new(&source, tok).parse_all().ok()?;
-                let comp = Compiler::new(ast, Some(MaybeOwned::Borrowed(self as _)), true)
-                    .compile()
-                    .ok()?;
+                let comp = Compiler::new(
+                    ast,
+                    Some(MaybeOwned::Borrowed(self as _)),
+                    FunctionKind::Function,
+                )
+                .compile()
+                .ok()?;
 
                 Some(ImportResult::Bytecode(comp))
             }

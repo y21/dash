@@ -69,6 +69,15 @@ impl Context {
 pub type Ast<'a> = Vec<Statement<'a>>;
 
 #[derive(Debug)]
+pub enum FunctionKind {
+    Module,
+    Function,
+    Generator,
+    AsyncGenerator,
+    AsyncFunction,
+}
+
+#[derive(Debug)]
 pub struct Compiler<'a, A> {
     ast: Option<Ast<'a>>,
     top: Option<NonNull<Compiler<'a, A>>>,
@@ -76,7 +85,7 @@ pub struct Compiler<'a, A> {
     scope: ScopeGuard<Local<'a>, 1024>,
     agent: Option<MaybeOwned<A>>,
     ctx: MaybeOwned<Context>,
-    is_module: bool,
+    kind: FunctionKind,
 }
 
 pub struct CompileResult {
@@ -85,7 +94,7 @@ pub struct CompileResult {
 }
 
 impl<'a, A: Agent> Compiler<'a, A> {
-    pub fn new(ast: Ast<'a>, agent: Option<MaybeOwned<A>>, is_module: bool) -> Self {
+    pub fn new(ast: Ast<'a>, agent: Option<MaybeOwned<A>>, kind: FunctionKind) -> Self {
         let scope = ScopeGuard::new();
         Self {
             ast: Some(ast),
@@ -93,7 +102,7 @@ impl<'a, A: Agent> Compiler<'a, A> {
             upvalues: Stack::new(),
             agent,
             scope,
-            is_module,
+            kind,
             ctx: MaybeOwned::Owned(Context::default()),
         }
     }
@@ -104,7 +113,7 @@ impl<'a, A: Agent> Compiler<'a, A> {
         agent: Option<MaybeOwned<A>>,
         caller: Option<NonNull<Compiler<'a, A>>>,
         ctx: NonNull<Context>,
-        is_module: bool,
+        kind: FunctionKind,
     ) -> Self {
         Self {
             ast: Some(ast),
@@ -113,7 +122,7 @@ impl<'a, A: Agent> Compiler<'a, A> {
             agent,
             scope,
             ctx: MaybeOwned::Borrowed(ctx.as_ptr()),
-            is_module,
+            kind,
         }
     }
 
@@ -150,7 +159,7 @@ impl<'a, A: Agent> Compiler<'a, A> {
 
     pub fn compile(self) -> Result<Vec<Instruction>, CompileError<'a>> {
         let is_top = self.top.is_none();
-        let is_module = self.is_module;
+        let is_module = matches!(self.kind, FunctionKind::Module);
         let mut instructions = self.compile_frame()?.instructions;
 
         if is_top {
@@ -221,6 +230,8 @@ pub enum CompileError<'a> {
     ImportDisabled,
     ConstAssignment,
     NativeImportFailed,
+    UnexpectedAwait,
+    UnexpectedYield,
 }
 
 impl<'a> CompileError<'a> {
@@ -234,6 +245,8 @@ impl<'a> CompileError<'a> {
             Self::ImportDisabled => Cow::Borrowed("Imports are disabled for this context"),
             Self::ConstAssignment => Cow::Borrowed("Assignment to constant variable"),
             Self::NativeImportFailed => Cow::Borrowed("Native import failed"),
+            Self::UnexpectedAwait => Cow::Borrowed("await is only valid in async functions"),
+            Self::UnexpectedYield => Cow::Borrowed("yield is only valid in generator functions"),
         }
     }
 }
@@ -403,6 +416,9 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
             TokenType::BitwiseNot => instructions.push(Instruction::Op(Opcode::BitwiseNot)),
             TokenType::LogicalNot => instructions.push(Instruction::Op(Opcode::LogicalNot)),
             TokenType::Void => instructions.push(Instruction::Op(Opcode::Void)),
+            // not yet implemented
+            TokenType::Await => return Err(CompileError::UnexpectedAwait),
+            TokenType::Yield => return Err(CompileError::UnexpectedYield),
             _ => todo!(),
         }
 
@@ -539,7 +555,7 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
                 // SAFETY: self is never null
                 Some(NonNull::new_unchecked(self as *mut _)),
                 NonNull::new_unchecked(self.ctx.as_ptr()),
-                false,
+                FunctionKind::Function,
             )
             .compile_frame()
         }?;

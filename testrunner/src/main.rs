@@ -13,7 +13,7 @@ use std::{
 
 use console::style;
 use dash::{
-    compiler::compiler::Compiler,
+    compiler::compiler::{Compiler, FunctionKind},
     parser::{lexer::Lexer, parser::Parser},
 };
 use structopt::StructOpt;
@@ -101,7 +101,9 @@ async fn run_test(path: OsString, mode: Mode, verbose: bool) -> RunResult {
             Mode::Compile => {
                 if let Ok(tokens) = Lexer::new(&source).scan_all() {
                     if let Ok(stmts) = Parser::new(&source, tokens).parse_all() {
-                        Compiler::<()>::new(stmts, None, false).compile().is_ok()
+                        Compiler::<()>::new(stmts, None, FunctionKind::Function)
+                            .compile()
+                            .is_ok()
                     } else {
                         false
                     }

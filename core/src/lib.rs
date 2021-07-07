@@ -1,7 +1,7 @@
 use std::{borrow::Cow, cell::RefCell, rc::Rc};
 
 use agent::Agent;
-use compiler::compiler::{CompileError, Compiler};
+use compiler::compiler::{CompileError, Compiler, FunctionKind};
 use parser::{
     lexer::{Error as LexError, Lexer},
     parser::Parser,
@@ -72,9 +72,13 @@ pub fn eval<'a, A: Agent>(
     let statements = Parser::new(code, tokens)
         .parse_all()
         .map_err(EvalError::ParseError)?;
-    let instructions = Compiler::new(statements, agent.map(MaybeOwned::Owned), false)
-        .compile()
-        .map_err(EvalError::CompileError)?;
+    let instructions = Compiler::new(
+        statements,
+        agent.map(MaybeOwned::Owned),
+        FunctionKind::Function,
+    )
+    .compile()
+    .map_err(EvalError::CompileError)?;
     let mut func = UserFunction::new(instructions, 0, FunctionType::Top, 0, Constructor::NoCtor);
     func.bind(Receiver::Bound(Value::from(AnyObject {}).into()));
     let mut vm = VM::new(func);
