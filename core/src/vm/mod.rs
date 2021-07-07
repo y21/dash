@@ -264,6 +264,19 @@ impl VM {
             o.set_property("charAt", Rc::clone(&self.statics.string_char_at));
             o.set_property("charCodeAt", Rc::clone(&self.statics.string_char_code_at));
             o.set_property("endsWith", Rc::clone(&self.statics.string_ends_with));
+            o.set_property("anchor", Rc::clone(&self.statics.string_anchor));
+            o.set_property("big", Rc::clone(&self.statics.string_big));
+            o.set_property("blink", Rc::clone(&self.statics.string_blink));
+            o.set_property("bold", Rc::clone(&self.statics.string_bold));
+            o.set_property("fixed", Rc::clone(&self.statics.string_fixed));
+            o.set_property("fontcolor", Rc::clone(&self.statics.string_fontcolor));
+            o.set_property("fontsize", Rc::clone(&self.statics.string_fontsize));
+            o.set_property("italics", Rc::clone(&self.statics.string_italics));
+            o.set_property("link", Rc::clone(&self.statics.string_link));
+            o.set_property("small", Rc::clone(&self.statics.string_small));
+            o.set_property("strike", Rc::clone(&self.statics.string_strike));
+            o.set_property("sub", Rc::clone(&self.statics.string_sub));
+            o.set_property("sup", Rc::clone(&self.statics.string_sup));
             o.into()
         };
         self.statics.function_proto = self.create_object().into();
@@ -377,6 +390,19 @@ impl VM {
         patch_function_value(self, &self.statics.string_char_at);
         patch_function_value(self, &self.statics.string_char_code_at);
         patch_function_value(self, &self.statics.string_ends_with);
+        patch_function_value(self, &self.statics.string_anchor);
+        patch_function_value(self, &self.statics.string_big);
+        patch_function_value(self, &self.statics.string_blink);
+        patch_function_value(self, &self.statics.string_bold);
+        patch_function_value(self, &self.statics.string_fixed);
+        patch_function_value(self, &self.statics.string_fontcolor);
+        patch_function_value(self, &self.statics.string_fontsize);
+        patch_function_value(self, &self.statics.string_italics);
+        patch_function_value(self, &self.statics.string_link);
+        patch_function_value(self, &self.statics.string_small);
+        patch_function_value(self, &self.statics.string_strike);
+        patch_function_value(self, &self.statics.string_sub);
+        patch_function_value(self, &self.statics.string_sup);
 
         global.set_property("NaN", self.create_js_value(f64::NAN).into());
         global.set_property("Infinity", self.create_js_value(f64::INFINITY).into());

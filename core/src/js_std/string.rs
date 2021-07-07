@@ -85,13 +85,12 @@ pub struct EndsWith {
 pub fn ends_with(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let this = {
         let state = ctx.state.get_or_insert_as(EndsWith::default).unwrap();
-        match state.this.clone() {
-            Some(this) => this,
-            None => {
-                let this = to_generic_string!(ctx);
-                state.this = Some(Rc::clone(&this));
-                this
-            }
+        if let Some(this) = state.this.clone() {
+            this
+        } else {
+            let this = to_generic_string!(ctx);
+            state.this = Some(Rc::clone(&this));
+            this
         }
     };
     let this_ref = this.borrow();
@@ -128,4 +127,106 @@ pub fn ends_with(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
 
 pub fn index_of(_args: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     Ok(CallResult::Ready(Value::new(ValueKind::Undefined).into()))
+}
+
+#[derive(Default)]
+pub struct CreateHtml {
+    pub this: Option<Rc<RefCell<Value>>>,
+}
+
+fn create_html(
+    ctx: CallContext,
+    tag: &str,
+    attribute: Option<&str>,
+) -> Result<CallResult, Rc<RefCell<Value>>> {
+    let this = {
+        let state = ctx.state.get_or_insert_as(CreateHtml::default).unwrap();
+        if let Some(this) = state.this.clone() {
+            this
+        } else {
+            let this = to_generic_string!(ctx);
+            state.this = Some(Rc::clone(&this));
+            this
+        }
+    };
+    let this_ref = this.borrow();
+    let this_str = this_ref.as_string().unwrap();
+
+    let mut p1 = format!("<{}", tag);
+
+    if let Some(attribute) = attribute {
+        let name_cell = if let Some(resp) = &ctx.function_call_response {
+            Rc::clone(resp)
+        } else {
+            let name = ctx.args.first();
+            unwrap_call_result!(abstractions::conversions::to_string(ctx.vm, name))
+        };
+        let name_ref = name_cell.borrow();
+        let name_str = name_ref.as_string().unwrap().replace("\"", "&quot;");
+        p1.push(' ');
+        p1.push_str(attribute);
+        p1.push_str("=\"");
+        p1.push_str(&name_str);
+        p1.push('"');
+    }
+
+    p1.push('>');
+    p1.push_str(this_str);
+    p1.push_str("</");
+    p1.push_str(tag);
+    p1.push('>');
+
+    Ok(CallResult::Ready(ctx.vm.create_js_value(p1).into()))
+}
+
+pub fn anchor(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+    create_html(ctx, "a", Some("name"))
+}
+
+pub fn big(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+    create_html(ctx, "big", None)
+}
+
+pub fn blink(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+    create_html(ctx, "blink", None)
+}
+
+pub fn bold(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+    create_html(ctx, "b", None)
+}
+
+pub fn fixed(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+    create_html(ctx, "tt", None)
+}
+
+pub fn fontcolor(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+    create_html(ctx, "font", Some("color"))
+}
+
+pub fn fontsize(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+    create_html(ctx, "font", Some("size"))
+}
+
+pub fn italics(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+    create_html(ctx, "i", None)
+}
+
+pub fn link(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+    create_html(ctx, "a", Some("href"))
+}
+
+pub fn small(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+    create_html(ctx, "small", None)
+}
+
+pub fn strike(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+    create_html(ctx, "strike", None)
+}
+
+pub fn sub(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+    create_html(ctx, "sub", None)
+}
+
+pub fn sup(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+    create_html(ctx, "sup", None)
 }
