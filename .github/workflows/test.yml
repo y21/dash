@@ -10,9 +10,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
 
-      - name: Directory
-        run: cd core
-
       - name: Install
         uses: actions-rs/toolchain@v1
         with:
@@ -24,3 +21,4 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
+          args: --manifest-path core/Cargo.toml
