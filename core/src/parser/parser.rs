@@ -2,6 +2,7 @@ use crate::parser::expr::LiteralExpr;
 
 use super::{
     expr::{Expr, UnaryExpr},
+    lexer::{self, Lexer},
     statement::{
         BlockStatement, Catch, ExportKind, ForLoop, FunctionDeclaration, IfStatement, ImportKind,
         ReturnStatement, SpecifierKind, Statement, TryCatch, VariableDeclaration,
@@ -19,6 +20,11 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
+    pub fn from_str(input: &'a str) -> Result<Self, Vec<lexer::Error>> {
+        let tokens = Lexer::new(input).scan_all()?;
+        Ok(Self::new(input, tokens))
+    }
+
     pub fn new(input: &'a str, tokens: Vec<Token<'a>>) -> Self {
         Self {
             tokens: tokens.into_boxed_slice(),

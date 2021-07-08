@@ -2,7 +2,10 @@ use std::{any::Any, cell::RefCell, rc::Rc};
 
 use super::{
     instruction::Instruction,
-    value::{function::CallState, Value},
+    value::{
+        function::{CallState, Constructor, FunctionType, UserFunction},
+        Value,
+    },
 };
 
 #[derive(Debug)]
@@ -21,6 +24,32 @@ pub struct Frame {
     pub sp: usize,
     pub state: Option<CallState<Box<dyn Any>>>,
     pub resume: Option<NativeResume>,
+}
+
+impl Frame {
+    pub fn from_buffer<B>(buffer: B, sp: usize) -> Self
+    where
+        B: Into<Box<[Instruction]>>,
+    {
+        let buffer = buffer.into();
+
+        let func = UserFunction::new(
+            buffer.clone(),
+            0,
+            FunctionType::Function,
+            0,
+            Constructor::NoCtor,
+        );
+
+        Self {
+            func: Value::from(func).into(),
+            buffer,
+            ip: 0,
+            sp,
+            state: None,
+            resume: None,
+        }
+    }
 }
 
 #[derive(Debug)]

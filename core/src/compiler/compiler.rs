@@ -6,12 +6,14 @@ use crate::{
             ArrayLiteral, AssignmentExpr, BinaryExpr, ConditionalExpr, Expr, FunctionCall,
             GroupingExpr, LiteralExpr, ObjectLiteral, Postfix, PropertyAccessExpr, Seq, UnaryExpr,
         },
+        lexer,
+        parser::Parser,
         statement::{
             BlockStatement, ExportKind, ForLoop, FunctionDeclaration, IfStatement, ImportKind,
             ReturnStatement, SpecifierKind, Statement, TryCatch, VariableDeclaration,
             VariableDeclarationKind, WhileLoop,
         },
-        token::TokenType,
+        token::{self, TokenType},
     },
     util::MaybeOwned,
     visitor::Visitor,
@@ -93,7 +95,26 @@ pub struct CompileResult {
     pub upvalues: Stack<Upvalue, 1024>,
 }
 
+#[derive(Debug)]
+pub enum FromStrError<'a> {
+    LexError(Vec<lexer::Error<'a>>),
+    ParseError(Vec<token::Error<'a>>),
+}
+
 impl<'a, A: Agent> Compiler<'a, A> {
+    pub fn from_str(
+        input: &'a str,
+        agent: Option<MaybeOwned<A>>,
+        kind: FunctionKind,
+    ) -> Result<Self, FromStrError<'a>> {
+        let ast = Parser::from_str(input)
+            .map_err(FromStrError::LexError)?
+            .parse_all()
+            .map_err(FromStrError::ParseError)?;
+
+        Ok(Self::new(ast, agent, kind))
+    }
+
     pub fn new(ast: Ast<'a>, agent: Option<MaybeOwned<A>>, kind: FunctionKind) -> Self {
         let scope = ScopeGuard::new();
         Self {

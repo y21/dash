@@ -15,14 +15,18 @@ use value::Value;
 
 use crate::{
     agent::Agent,
+    compiler::compiler::{self, CompileError, Compiler, FunctionKind as CompilerFunctionKind},
     js_std::{self, error::MaybeRc},
+    parser::{lexer, token},
+    util::MaybeOwned,
     vm::{
         frame::{NativeResume, UnwindHandler},
         upvalue::Upvalue,
         value::{
             array::Array,
             function::{
-                CallContext, CallResult, CallState, Closure, FunctionKind, Receiver, UserFunction,
+                CallContext, CallResult, CallState, Closure, Constructor, FunctionKind,
+                FunctionType, Receiver, UserFunction,
             },
             ops::compare::Compare,
             ValueKind,
@@ -53,6 +57,22 @@ impl VMError {
                 let stack_string = stack_ref.as_string().unwrap();
                 Cow::Owned(String::from(stack_string))
             }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum FromStrError<'a> {
+    LexError(Vec<lexer::Error<'a>>),
+    ParseError(Vec<token::Error<'a>>),
+    CompileError(CompileError<'a>),
+}
+
+impl<'a> From<compiler::FromStrError<'a>> for FromStrError<'a> {
+    fn from(e: compiler::FromStrError<'a>) -> Self {
+        match e {
+            compiler::FromStrError::LexError(l) => Self::LexError(l),
+            compiler::FromStrError::ParseError(p) => Self::ParseError(p),
         }
     }
 }
@@ -103,6 +123,26 @@ impl VM {
         };
         vm.prepare_stdlib();
         vm
+    }
+
+    pub fn from_str<'a, A: Agent + 'static>(
+        input: &'a str,
+        mut agent: Option<A>,
+    ) -> Result<Self, FromStrError<'a>> {
+        let buffer = Compiler::from_str(
+            input,
+            agent.as_mut().map(|a| MaybeOwned::Borrowed(a)),
+            CompilerFunctionKind::Function,
+        )?
+        .compile()
+        .map_err(FromStrError::CompileError)?;
+
+        let func = UserFunction::new(buffer, 0, FunctionType::Top, 0, Constructor::NoCtor);
+
+        Ok(match agent {
+            Some(agent) => Self::new_with_agent(func, Box::new(agent)),
+            None => Self::new(func),
+        })
     }
 
     pub fn new(func: UserFunction) -> Self {
@@ -628,10 +668,14 @@ impl VM {
 
     pub fn run_async_tasks(&mut self) {
         debug_assert!(self.frames.get_stack_pointer() == 0);
-
         let async_frames = self.async_frames.take();
-
         self.frames = async_frames;
+        // Uncaught errors and return values in async tasks are swallowed.
+        let _ = self.interpret();
+    }
+
+    pub fn queue_async_task(&mut self, frame: Frame) {
+        self.async_frames.push(frame);
     }
 
     pub fn interpret(&mut self) -> Result<Option<Rc<RefCell<Value>>>, VMError> {
