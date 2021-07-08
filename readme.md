@@ -1,8 +1,12 @@
 # dash
+![Tests](https://github.com/y21/dash/actions/workflows/test.yml/badge.svg)
+![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/y21/dash)
+
 ECMA-262 implementation in Rust.
 This includes a source code lexer, parser, bytecode compiler and VM. 
 
 [Try it in your browser](http://dash.y21_.repl.co/)
+
 
 ## ⚠️ WIP
 This is a *WIP* and **not** yet production ready.
