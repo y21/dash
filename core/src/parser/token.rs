@@ -187,14 +187,20 @@ pub struct Location {
 
 impl Location {
     pub fn to_string(&self, source: &[u8], full: Either<&str, char>, message: &str) -> String {
-        let line_partial = &source[self.line_offset + 1..];
+        let offset = if self.line <= 1 {
+            self.line_offset
+        } else {
+            self.line_offset + 1
+        };
+
+        let line_partial = &source[offset..];
         let end = line_partial
             .iter()
             .position(|&c| c == b'\n')
             .unwrap_or(line_partial.len());
         let line = &line_partial[..end];
 
-        let col = self.offset - self.line_offset;
+        let col = self.offset - offset;
 
         let full_len = full.as_left().map(|s| s.len()).unwrap_or(1);
         let full = match &full {
