@@ -169,6 +169,15 @@ impl<T, const N: usize> Stack<T, N> {
         }
     }
 
+    pub fn take(&mut self) -> Stack<T, N> {
+        let stack: [MaybeUninit<T>; N] = unsafe { MaybeUninit::uninit().assume_init() };
+        let old_stack = std::mem::replace(&mut self.0, stack);
+        let old_index = self.1;
+        self.1 = 0;
+
+        Stack(old_stack, old_index)
+    }
+
     pub fn reset(&mut self) {
         for mu in self.0.iter_mut().take(self.1) {
             let mu = std::mem::replace(mu, MaybeUninit::uninit());

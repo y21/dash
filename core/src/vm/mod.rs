@@ -60,6 +60,8 @@ impl VMError {
 pub struct VM {
     /// Call stack
     pub(crate) frames: Stack<Frame, 256>,
+    /// Async task queue. Processed when execution has finished
+    pub(crate) async_frames: Stack<Frame, 256>,
     /// Stack
     pub(crate) stack: Stack<Rc<RefCell<Value>>, 512>,
     /// Global namespace
@@ -90,6 +92,7 @@ impl VM {
 
         let mut vm = Self {
             frames,
+            async_frames: Stack::new(),
             stack: Stack::new(),
             global: Value::from(AnyObject {}).into(),
             statics: Statics::new(),
@@ -621,6 +624,14 @@ impl VM {
         }
 
         Ok(())
+    }
+
+    pub fn run_async_tasks(&mut self) {
+        debug_assert!(self.frames.get_stack_pointer() == 0);
+
+        let async_frames = self.async_frames.take();
+
+        self.frames = async_frames;
     }
 
     pub fn interpret(&mut self) -> Result<Option<Rc<RefCell<Value>>>, VMError> {
