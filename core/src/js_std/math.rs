@@ -6,6 +6,9 @@ use crate::vm::value::{
     Value,
 };
 
+/// Implements Math.abs
+///
+/// https://tc39.es/ecma262/multipage/numbers-and-dates.html#sec-math.abs
 pub fn abs(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let num = ctx
         .args
@@ -16,6 +19,9 @@ pub fn abs(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     Ok(CallResult::Ready(ctx.vm.create_js_value(num.abs()).into()))
 }
 
+/// Implements Math.ceil
+///
+/// https://tc39.es/ecma262/multipage/numbers-and-dates.html#sec-ceil.abs
 pub fn ceil(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let num = ctx
         .args
@@ -26,6 +32,9 @@ pub fn ceil(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     Ok(CallResult::Ready(ctx.vm.create_js_value(num.ceil()).into()))
 }
 
+/// Implements Math.floor
+///
+/// https://tc39.es/ecma262/multipage/numbers-and-dates.html#sec-floor.abs
 pub fn floor(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let num = ctx
         .args
@@ -38,6 +47,9 @@ pub fn floor(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     ))
 }
 
+/// Implements Math.max
+///
+/// https://tc39.es/ecma262/multipage/numbers-and-dates.html#sec-math.max
 pub fn max(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let mut arguments = ctx.arguments();
     let mut max = match arguments.next().cloned() {
@@ -60,6 +72,9 @@ pub fn max(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     Ok(CallResult::Ready(max))
 }
 
+/// Implements Math.min
+///
+/// https://tc39.es/ecma262/multipage/numbers-and-dates.html#sec-math.min
 pub fn min(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let mut arguments = ctx.arguments();
     let mut max = match arguments.next().cloned() {
@@ -82,6 +97,9 @@ pub fn min(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     Ok(CallResult::Ready(max))
 }
 
+/// Implements Math.pow
+///
+/// https://tc39.es/ecma262/multipage/numbers-and-dates.html#sec-math.pow
 pub fn pow(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let mut args = ctx.arguments();
 
@@ -100,6 +118,9 @@ pub fn pow(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     ))
 }
 
+/// Implements Math.random
+///
+/// https://tc39.es/ecma262/multipage/numbers-and-dates.html#sec-math.random
 pub fn random(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let maybe_random = ctx.vm.agent.random();
 

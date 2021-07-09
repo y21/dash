@@ -9,8 +9,11 @@ use crate::vm::{
     VM,
 };
 
+/// A value that is either reference counted or owned
 pub enum MaybeRc<T> {
+    /// Reference counted JS value
     Rc(Rc<RefCell<Value>>),
+    /// Owned T
     Owned(T),
 }
 
@@ -20,6 +23,7 @@ impl<'a> From<&'a str> for MaybeRc<&'a str> {
     }
 }
 
+/// Creates a JS error given a string
 pub fn create_error(message: MaybeRc<&str>, vm: &VM) -> Rc<RefCell<Value>> {
     let mut error = Value::from(AnyObject {});
     error.update_internal_properties(&vm.statics.error_proto, &vm.statics.error_ctor);
@@ -38,6 +42,9 @@ pub fn create_error(message: MaybeRc<&str>, vm: &VM) -> Rc<RefCell<Value>> {
     error.into()
 }
 
+/// The error constructor
+///
+/// https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-error-constructor
 pub fn error_constructor(value: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let message_cell = value.args.first();
     let message_cell_ref = message_cell.map(|c| c.borrow());

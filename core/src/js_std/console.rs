@@ -5,6 +5,9 @@ use crate::vm::value::{
     Value, ValueKind,
 };
 
+/// Implements console.log
+///
+/// This is not part of the JS standard and may get removed at some point
 pub fn log(value: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     for value_cell in value.arguments() {
         let value_cell_ref = value_cell.borrow();

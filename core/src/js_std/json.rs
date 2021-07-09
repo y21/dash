@@ -9,6 +9,9 @@ use crate::{
     },
 };
 
+/// Implements JSON.parse
+///
+/// https://tc39.es/ecma262/multipage/structured-data.html#sec-json.parse
 pub fn parse(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let source_cell = ctx
         .args
@@ -28,6 +31,9 @@ pub fn parse(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     Ok(CallResult::Ready(parsed.into()))
 }
 
+/// Implements JSON.stringify
+///
+/// https://tc39.es/ecma262/multipage/structured-data.html#sec-json.stringify
 pub fn stringify(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let target = ctx.args.first().map(|c| c.borrow());
 

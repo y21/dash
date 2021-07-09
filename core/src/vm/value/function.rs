@@ -28,8 +28,17 @@ impl Constructor {
     }
 }
 
+/// The result of calling a native function
+///
+/// It is common for a native function to call into a user function
+/// I.e. due to conversion that invokes a user function
+/// In that case, the function needs to be temporarily suspended
+/// and return [CallResult::UserFunction] to notify the caller that it cannot proceed
+///
 pub enum CallResult {
+    /// A user function needs to be called to proceed
     UserFunction(Rc<RefCell<Value>>, Vec<Rc<RefCell<Value>>>),
+    /// We have a value
     Ready(Rc<RefCell<Value>>),
 }
 

@@ -1,3 +1,7 @@
+//! JavaScript implementation written in Rust
+
+// #![deny(missing_docs)]
+
 use std::{borrow::Cow, cell::RefCell, rc::Rc};
 
 use agent::Agent;
@@ -19,28 +23,44 @@ use vm::{
 
 use crate::vm::value::function::Receiver;
 
+/// Allows embedders to control behavior
 pub mod agent;
+/// AST to bytecode compiler
 pub mod compiler;
+/// Garbage collector, to free resources that are no longer used
 pub mod gc;
+/// JavaScript standard library
 pub mod js_std;
+/// JSON parser and serializer
 pub mod json;
+/// Applies optimizations to JavaScript code at compile time
 pub mod optimizer;
+/// JavaScript lexer and parser
 pub mod parser;
 #[cfg(test)]
 pub mod tests;
+/// Utility types and functions used in this implementation
 pub mod util;
+/// Visitor trait, used to walk the AST
 pub mod visitor;
+/// Bytecode VM
 pub mod vm;
 
+/// An error that occurred during a call to [eval]
 #[derive(Debug)]
 pub enum EvalError<'a> {
+    /// A lexer error
     LexError(Vec<LexError<'a>>),
+    /// A parser error
     ParseError(Vec<ParseError<'a>>),
+    /// A compiler error
     CompileError(CompileError<'a>),
+    /// A VM (runtime) error
     VMError(vm::VMError),
 }
 
 impl<'a> EvalError<'a> {
+    /// Formats this error by calling to_string on the underlying error
     pub fn to_string(&self) -> Cow<str> {
         match self {
             Self::LexError(l) => Cow::Owned(
@@ -61,9 +81,8 @@ impl<'a> EvalError<'a> {
     }
 }
 
-/// Convenient function for evaluating a JavaScript source code string with default settings
-/// Returns the last evaluated value
-/// Consider compiling source code once and creating a new VM directly for multiple calls with same source code
+/// Convenient function for evaluating a JavaScript source code string with default settings.
+/// Returns the last value. Async tasks are not evaluated.
 pub fn eval<'a, A: Agent>(
     code: &'a str,
     agent: Option<A>,

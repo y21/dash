@@ -1,7 +1,15 @@
 use std::{cell::RefCell, collections::HashSet, rc::Rc};
 
-use crate::vm::value::{HashWeak, Value, function::{CallContext, CallResult}, object::{Object, Weak}, weak::WeakSet};
+use crate::vm::value::{
+    function::{CallContext, CallResult},
+    object::{Object, Weak},
+    weak::WeakSet,
+    HashWeak, Value,
+};
 
+/// The WeakSet constructor
+///
+/// https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-weakset-constructor
 pub fn weakset_constructor(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let elements_cell = ctx.args.get(0);
     let elements = elements_cell.map(|c| c.borrow());
@@ -22,6 +30,9 @@ pub fn weakset_constructor(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Va
     Ok(CallResult::Ready(ctx.vm.create_js_value(ws).into()))
 }
 
+/// Implements WeakSet.prototype.has
+///
+/// https://tc39.es/ecma262/multipage/text-processing.html#sec-weakset.prototype.has
 pub fn has(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let value_cell = ctx.args.get(0).unwrap();
 
@@ -38,6 +49,9 @@ pub fn has(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     ))
 }
 
+/// Implements WeakSet.prototype.add
+///
+/// https://tc39.es/ecma262/multipage/text-processing.html#sec-weakset.prototype.add
 pub fn add(mut ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let value_cell = ctx.args.get(0).unwrap();
 
@@ -54,6 +68,9 @@ pub fn add(mut ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     Ok(CallResult::Ready(Rc::clone(&this)))
 }
 
+/// Implements WeakSet.prototype.delete
+///
+/// https://tc39.es/ecma262/multipage/text-processing.html#sec-weakset.prototype.delete
 pub fn delete(mut ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let value_cell = ctx.args.get(0).unwrap();
 

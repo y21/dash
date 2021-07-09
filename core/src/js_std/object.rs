@@ -10,10 +10,16 @@ use crate::vm::value::{
     Value, ValueKind,
 };
 
+/// The object constructor
+///
+/// https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-object-constructor
 pub fn object_constructor(_args: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     Ok(CallResult::Ready(Value::new(ValueKind::Undefined).into()))
 }
 
+/// Implements Object.defineProperty
+///
+/// https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-object.defineproperty
 pub fn define_property(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let mut arguments = ctx.arguments();
 
@@ -30,6 +36,9 @@ pub fn define_property(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>
     Ok(CallResult::Ready(Rc::clone(&obj_cell)))
 }
 
+/// Implements Object.getOwnPropertyNames
+///
+/// https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-object.getownpropertynames
 pub fn get_own_property_names(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let obj_cell = ctx.args.first().unwrap();
     let obj = obj_cell.borrow();
@@ -45,6 +54,9 @@ pub fn get_own_property_names(ctx: CallContext) -> Result<CallResult, Rc<RefCell
     ))
 }
 
+/// Implements Object.getPrototypeOf
+///
+/// https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-object.getprototypeof
 pub fn get_prototype_of(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let obj_cell = ctx.args.first().unwrap();
     let obj = obj_cell.borrow();
@@ -56,6 +68,9 @@ pub fn get_prototype_of(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value
     ))
 }
 
+/// Implements Object.prototype.toString
+///
+/// https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-object.prototype.tostring
 pub fn to_string(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let this_cell = ctx
         .receiver

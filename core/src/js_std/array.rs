@@ -13,10 +13,16 @@ use crate::vm::{
 
 use super::error::{self, MaybeRc};
 
+/// The array constructor
+///
+/// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array-constructor
 pub fn array_constructor(_args: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     Ok(CallResult::Ready(Value::new(ValueKind::Undefined).into()))
 }
 
+/// This function implements Array.prototype.push
+///
+/// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.push
 pub fn push(value: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let this_cell = value.receiver.unwrap();
 
@@ -43,6 +49,9 @@ pub fn push(value: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     ))
 }
 
+/// This function implements Array.prototype.concat
+///
+/// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.concat
 pub fn concat(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this = this_cell.borrow_mut();
@@ -76,6 +85,9 @@ impl Map {
     }
 }
 
+/// This function implements Array.prototype.map
+///
+/// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.map
 pub fn map(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this_ref = this_cell.borrow_mut();
@@ -129,6 +141,9 @@ impl Every {
     }
 }
 
+/// This function implements Array.prototype.every
+///
+/// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.every
 pub fn every(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this_ref = this_cell.borrow_mut();
@@ -171,6 +186,9 @@ pub fn every(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     ))
 }
 
+/// This function implements Array.prototype.fill
+///
+/// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.fill
 pub fn fill(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this_ref = this_cell.borrow_mut();
@@ -210,30 +228,51 @@ pub fn fill(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     Ok(CallResult::Ready(Rc::clone(this_cell)))
 }
 
+/// This function implements Array.prototype.filter
+///
+/// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.filter
 pub fn filter(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     todo!()
 }
 
+/// This function implements Array.prototype.find
+///
+/// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.find
 pub fn find(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     todo!()
 }
 
+/// This function implements Array.prototype.find
+///
+/// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.findIndex
 pub fn find_index(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     todo!()
 }
 
+/// This function implements Array.prototype.flat
+///
+/// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.flat
 pub fn flat(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     todo!()
 }
 
+/// This function implements Array.prototype.forEach
+///
+/// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.forEach
 pub fn for_each(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     todo!()
 }
 
+/// This function implements Array.from
+///
+/// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.from
 pub fn from(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     todo!()
 }
 
+/// This function implements Array.prototype.includes
+///
+/// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.includes
 pub fn includes(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this_ref = this_cell.borrow_mut();
@@ -268,6 +307,9 @@ pub fn includes(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     Ok(CallResult::Ready(ctx.vm.create_js_value(found).into()))
 }
 
+/// This function implements Array.prototype.indexOf
+///
+/// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.indexOf
 pub fn index_of(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this_ref = this_cell.borrow_mut();
@@ -304,6 +346,9 @@ pub fn index_of(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     Ok(CallResult::Ready(ctx.vm.create_js_value(index).into()))
 }
 
+/// This function implements Array.isArray
+///
+/// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.isArray
 pub fn is_array(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let mut arguments = ctx.arguments();
     let value_cell = arguments
@@ -318,22 +363,32 @@ pub fn is_array(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     ))
 }
 
+/// An array-like value
 pub enum ArrayLikeKind<'a> {
+    /// Iterator over characters of a string
     String(Chars<'a>),
+    /// Array of JS Values
     Array(&'a [Rc<RefCell<Value>>]),
+    /// Javascript object
     Object(&'a Rc<RefCell<Value>>),
+    /// No value
     Empty,
 }
 
+/// An array-like value that can be iterated over
 pub struct ArrayLikeIterable<'a> {
+    /// What kind of array
     pub kind: ArrayLikeKind<'a>,
+    /// Current index
     pub index: usize,
 }
 
 impl<'a> ArrayLikeIterable<'a> {
+    /// Creates a new array like iterable given an [ArrayLikeKind]
     pub fn new(kind: ArrayLikeKind<'a>) -> Self {
         Self { kind, index: 0 }
     }
+    /// Creates a new array like iterable given a Value by detecting its kind
     pub fn from_value(value: &'a Value, value_cell: &'a Rc<RefCell<Value>>) -> Self {
         match value.as_object() {
             Some(Object::String(s)) => Self::new(ArrayLikeKind::String(s.chars())),
@@ -342,6 +397,7 @@ impl<'a> ArrayLikeIterable<'a> {
             _ => Self::new(ArrayLikeKind::Empty),
         }
     }
+    /// Yields the next value
     pub fn next<'b>(&mut self, vm: &'b VM) -> Option<Rc<RefCell<Value>>> {
         self.index += 1;
         match &mut self.kind {
@@ -355,12 +411,14 @@ impl<'a> ArrayLikeIterable<'a> {
     }
 }
 
+/// State for a call to Array.prototype.join
 pub struct Join {
     dest: Option<String>,
     idx: usize,
 }
 
 impl Join {
+    /// Creates new Join state
     pub fn new() -> Self {
         Self {
             dest: Some(String::new()),
@@ -369,6 +427,9 @@ impl Join {
     }
 }
 
+/// This function implements Array.prototype.join
+///
+/// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.join
 pub fn join(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
 
@@ -444,6 +505,9 @@ pub fn join(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     ))
 }
 
+/// This function implements Array.prototype.lastIndexOf
+///
+/// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.lastIndexOf
 pub fn last_index_of(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this_ref = this_cell.borrow_mut();
@@ -487,46 +551,79 @@ pub fn last_index_of(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>>
     Ok(CallResult::Ready(ctx.vm.create_js_value(index).into()))
 }
 
+/// This function implements Array.of
+///
+/// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.of
 pub fn of(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     todo!()
 }
 
+/// This function implements Array.prototype.pop
+///
+/// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.pop
 pub fn pop(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     todo!()
 }
 
+/// This function implements Array.prototype.reduce
+///
+/// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.reduce
 pub fn reduce(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     todo!()
 }
 
+/// This function implements Array.prototype.reduceRight
+///
+/// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.reduceRight
 pub fn reduce_right(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     todo!()
 }
 
+/// This function implements Array.prototype.reverse
+///
+/// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.reverse
 pub fn reverse(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     todo!()
 }
 
+/// This function implements Array.prototype.shift
+///
+/// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.shift
 pub fn shift(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     todo!()
 }
 
+/// This function implements Array.prototype.slice
+///
+/// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.slice
 pub fn slice(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     todo!()
 }
 
+/// This function implements Array.prototype.some
+///
+/// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.some
 pub fn some(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     todo!()
 }
 
+/// This function implements Array.prototype.sort
+///
+/// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.sort
 pub fn sort(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     todo!()
 }
 
+/// This function implements Array.prototype.splice
+///
+/// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.splice
 pub fn splice(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     todo!()
 }
 
+/// This function implements Array.prototype.unshift
+///
+/// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.unshift
 pub fn unshift(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     todo!()
 }
