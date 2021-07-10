@@ -15,9 +15,15 @@ use super::{
     ValueKind,
 };
 
+/// A wrapper for Rc<T>, but always implements the Hash trait by hasing the pointer
+///
+/// This makes it suitable for putting JavaScript values in a HashMap
 #[derive(Debug, Clone)]
 pub struct HashRc<T>(pub Rc<T>);
 
+/// A wrapper for Weak<T>, but always implements the Hash trait by hasing the pointer
+///
+/// This makes it suitable for putting weak JavaScript values in a HashMap
 #[derive(Debug, Clone)]
 pub struct HashWeak<T>(pub Weak<T>);
 
@@ -45,9 +51,12 @@ impl<T> PartialEq for HashWeak<T> {
 }
 impl<T> Eq for HashWeak<T> {}
 
+/// A JavaScript value
 #[derive(Debug, Clone)]
 pub struct Value {
+    /// The type of value
     pub kind: ValueKind,
+    /// The fields of this value
     pub fields: HashMap<Box<str>, Rc<RefCell<Value>>>,
     /// [[Prototype]] of this value
     pub proto: Option<Weak<RefCell<Value>>>,
@@ -56,6 +65,11 @@ pub struct Value {
 }
 
 impl Value {
+    /// Creates a new value
+    ///
+    /// It is recommended to only create values using this function
+    /// if it is not necessary to have a [[Prototype]] set, such as for
+    /// undefined and null values
     pub fn new(kind: ValueKind) -> Self {
         Self {
             kind,
@@ -65,24 +79,8 @@ impl Value {
         }
     }
 
-    pub fn with_prototype(kind: ValueKind, proto: MaybeWeak<RefCell<Value>>) -> Self {
-        Self {
-            kind,
-            fields: HashMap::new(),
-            constructor: None,
-            proto: Some(proto.into_weak()),
-        }
-    }
-
-    pub fn with_constructor(kind: ValueKind, constructor: MaybeWeak<RefCell<Value>>) -> Self {
-        Self {
-            kind,
-            fields: HashMap::new(),
-            constructor: Some(constructor.into_weak()),
-            proto: None,
-        }
-    }
-
+    /// Updates the internal properties ([[Prototype]] and constructor)
+    /// of this JavaScript value
     pub fn update_internal_properties(
         &mut self,
         proto: &Rc<RefCell<Value>>,
@@ -128,6 +126,7 @@ impl Value {
         }
     }
 
+    /// Returns whether this value is a primitive
     pub fn is_primitive(&self) -> bool {
         // https://262.ecma-international.org/6.0/#sec-toprimitive
         match &self.kind {
@@ -143,26 +142,34 @@ impl Value {
         }
     }
 
+    /// Returns a Rc to the [[Prototype]] of this value, if it has one
     pub fn strong_proto(&self) -> Option<Rc<RefCell<Value>>> {
         self.proto.as_ref().and_then(Weak::upgrade)
     }
 
+    /// Returns a Rc to the constructor of this value, if it has one
     pub fn strong_constructor(&self) -> Option<Rc<RefCell<Value>>> {
         self.constructor.as_ref().and_then(Weak::upgrade)
     }
 
+    /// Tries to unwrap a Rc<RefCell<Value>> into a Value
     pub fn try_into_inner(value: Rc<RefCell<Self>>) -> Option<Self> {
         Some(Rc::try_unwrap(value).ok()?.into_inner())
     }
 
+    /// Unwraps o, or returns undefined if it is None
     pub fn unwrap_or_undefined(o: Option<Rc<RefCell<Self>>>) -> Rc<RefCell<Self>> {
         o.unwrap_or_else(|| Value::new(ValueKind::Undefined).into())
     }
 
+    /// Looks up a field directly
     pub fn get_field(&self, key: &str) -> Option<&Rc<RefCell<Value>>> {
         self.fields.get(key)
     }
 
+    /// Looks up a property and goes through exotic property matching
+    ///
+    /// For a direct field lookup, use [Value::get_field]
     pub fn get_property(
         vm: &VM,
         value_cell: &Rc<RefCell<Value>>,
@@ -243,6 +250,7 @@ impl Value {
         }
     }
 
+    /// Adds a field
     pub fn set_property(&mut self, k: impl Into<Box<str>>, v: Rc<RefCell<Value>>) {
         self.fields.insert(k.into(), v);
     }

@@ -1,11 +1,18 @@
+/// Abstract operations defined in the spec
 pub mod abstractions;
+/// JavaScript value conversions
 pub mod conversions;
-pub mod environment;
+/// Frame
 pub mod frame;
+/// Instruction
 pub mod instruction;
+/// Stack data structure
 pub mod stack;
+/// Static/global data
 pub mod statics;
+/// Runtime upvalues
 pub mod upvalue;
+/// JavaScript values
 pub mod value;
 
 use std::{any::Any, borrow::Cow, cell::RefCell, collections::HashMap, rc::Rc};
@@ -42,12 +49,15 @@ use self::{
     value::object::{AnyObject, Object},
 };
 
+/// An error that may occur during bytecode execution
 #[derive(Debug)]
 pub enum VMError {
+    /// An error was thrown and user code did not catch it
     UncaughtError(Rc<RefCell<Value>>),
 }
 
 impl VMError {
+    /// Formats this error by taking the `stack` property of the error object
     pub fn to_string(&self) -> Cow<str> {
         match self {
             Self::UncaughtError(err_cell) => {
@@ -61,10 +71,14 @@ impl VMError {
     }
 }
 
+/// An error that may occur in one of the previous stages before interpreting
 #[derive(Debug)]
 pub enum FromStrError<'a> {
+    /// Lexer error
     LexError(Vec<lexer::Error<'a>>),
+    /// Parser
     ParseError(Vec<token::Error<'a>>),
+    /// Compiler error
     CompileError(CompileError<'a>),
 }
 
@@ -77,6 +91,7 @@ impl<'a> From<compiler::FromStrError<'a>> for FromStrError<'a> {
     }
 }
 
+/// A JavaScript bytecode VM
 pub struct VM {
     /// Call stack
     pub(crate) frames: Stack<Frame, 256>,
@@ -99,6 +114,7 @@ pub struct VM {
 }
 
 impl VM {
+    /// Creates a new VM with a provided agent
     pub fn new_with_agent(func: UserFunction, agent: Box<dyn Agent>) -> Self {
         let mut frames = Stack::new();
         frames.push(Frame {
@@ -125,6 +141,10 @@ impl VM {
         vm
     }
 
+    /// Convenience function for creating a new VM given an input string
+    ///
+    /// The input string is sent through all previous stages. Any errors that occur
+    /// are returned to the caller
     pub fn from_str<'a, A: Agent + 'static>(
         input: &'a str,
         mut agent: Option<A>,
@@ -145,44 +165,56 @@ impl VM {
         })
     }
 
+    /// Creates a new VM
     pub fn new(func: UserFunction) -> Self {
         Self::new_with_agent(func, Box::new(()))
     }
 
+    /// Returns a reference to the global object
     pub fn global(&self) -> &Rc<RefCell<Value>> {
         &self.global
     }
 
+    /// Sets data slot
+    ///
+    /// Embedders can use this to store data that may be used throughout native calls
     pub fn set_slot<T: 'static>(&mut self, value: T) {
         self.slot.insert(Box::new(value) as Box<dyn Any>);
     }
 
+    /// Gets slot data and tries to downcast it to T
     pub fn get_slot<T: 'static>(&self) -> Option<&T> {
         let slot = self.slot.as_ref()?;
         slot.downcast_ref::<T>()
     }
 
+    /// Returns a mutable reference to slot data and tries to downcast to T
     pub fn get_slot_mut<T: 'static>(&mut self) -> Option<&mut T> {
         let slot = self.slot.as_mut()?;
         slot.downcast_mut::<T>()
     }
 
+    /// Returns a reference to the current execution frame
     fn frame(&self) -> &Frame {
         unsafe { self.frames.get_unchecked() }
     }
 
+    /// Returns a mutable reference to the current execution frame
     fn frame_mut(&mut self) -> &mut Frame {
         unsafe { self.frames.get_mut_unchecked() }
     }
 
+    /// Returns the current instruction pointer
     fn ip(&self) -> usize {
         self.frame().ip
     }
 
+    /// Returns the bytecode buffer of the current execution frame
     fn buffer(&self) -> &[Instruction] {
         &self.frame().buffer
     }
 
+    /// Checks whether the VM has reached the end of this buffer
     fn is_eof(&self) -> bool {
         // If we ever somehow jump too far, that's a bug
         // In debug builds, we can afford to assert this
@@ -190,6 +222,7 @@ impl VM {
         self.ip() >= self.buffer().len()
     }
 
+    /// Returns the next instruction
     fn next(&mut self) -> Option<&Instruction> {
         if self.is_eof() {
             return None;
@@ -200,14 +233,17 @@ impl VM {
         Some(&self.buffer()[self.ip() - 1])
     }
 
+    /// Reads a constant
     fn read_constant(&mut self) -> Option<Constant> {
         self.next().cloned().map(|x| x.into_operand())
     }
 
+    /// Reads an opode
     fn read_op(&mut self) -> Option<Opcode> {
         self.next().cloned().map(|x| x.into_op())
     }
 
+    /// Reads a user function
     fn read_user_function(&mut self) -> Option<UserFunction> {
         self.read_constant()
             .and_then(|c| c.into_value())
@@ -218,10 +254,12 @@ impl VM {
             })
     }
 
+    /// Reads a number
     fn read_number(&mut self) -> f64 {
         self.stack.pop().borrow().as_number()
     }
 
+    /// Reads an index
     fn read_index(&mut self) -> Option<usize> {
         self.stack
             .pop()
@@ -259,10 +297,12 @@ impl VM {
         func(&*lhs, &*rhs)
     }
 
+    /// Creates a JavaScript object
     pub fn create_object(&self) -> Value {
         self.create_js_value(AnyObject {})
     }
 
+    /// Creates a JavaScript object with its [[Prototype]] set to null
     pub fn create_null_object(&self) -> Value {
         let mut o = Value::from(AnyObject {});
         o.detect_internal_properties(self);
@@ -271,6 +311,7 @@ impl VM {
         o
     }
 
+    /// Creates a JavaScript object with provided fields
     pub fn create_object_with_fields(
         &self,
         fields: impl Into<HashMap<Box<str>, Rc<RefCell<Value>>>>,
@@ -280,12 +321,14 @@ impl VM {
         o
     }
 
+    /// Creates a JavaScript value
     pub fn create_js_value(&self, value: impl Into<Value>) -> Value {
         let mut value = value.into();
         value.detect_internal_properties(self);
         value
     }
 
+    /// Creates a JavaScript array
     pub fn create_array(&self, arr: Array) -> Value {
         let mut o = Value::from(arr);
         o.proto = Some(Rc::downgrade(&self.statics.array_proto));
@@ -538,6 +581,10 @@ impl VM {
         Ok(())
     }
 
+    /// Generates a formatted stacktrace
+    ///
+    /// This prints the call stack, specifically function names.
+    /// It is used by the `Error` constructor.
     pub fn generate_stack_trace(&self, message: Option<&str>) -> String {
         let mut stack = format!("Error: {}\n", message.unwrap_or(""));
 
@@ -666,6 +713,9 @@ impl VM {
         Ok(())
     }
 
+    /// Runs all async tasks in the queue
+    ///
+    /// This should only be called when the frame stack is empty
     pub fn run_async_tasks(&mut self) {
         debug_assert!(self.frames.get_stack_pointer() == 0);
         let async_frames = self.async_frames.take();
@@ -674,10 +724,12 @@ impl VM {
         let _ = self.interpret();
     }
 
+    /// Queues a task/frame for execution when the call stack is empty
     pub fn queue_async_task(&mut self, frame: Frame) {
         self.async_frames.push(frame);
     }
 
+    /// Starts interpreting bytecode
     pub fn interpret(&mut self) -> Result<Option<Rc<RefCell<Value>>>, VMError> {
         macro_rules! unwrap_or_unwind {
             ($e:expr, $err:expr) => {
@@ -1207,7 +1259,7 @@ impl VM {
                     self.stack
                         .discard_multiple(self.stack.get_stack_pointer() - frame.sp);
 
-                    self.stack.set_stack_pointer(frame.sp);
+                    unsafe { self.stack.set_stack_pointer(frame.sp) };
                     self.stack.push(exports);
                 }
                 Opcode::Return => {
@@ -1238,7 +1290,7 @@ impl VM {
                     self.stack
                         .discard_multiple(self.stack.get_stack_pointer() - this.sp);
 
-                    self.stack.set_stack_pointer(this.sp);
+                    unsafe { self.stack.set_stack_pointer(this.sp) };
 
                     if let Some(mut resume) = this.resume.take() {
                         let mut state = this.state.take().unwrap_or_else(CallState::default);
@@ -1540,5 +1592,6 @@ impl Drop for VM {
     fn drop(&mut self) {
         self.stack.reset();
         self.frames.reset();
+        self.async_frames.reset();
     }
 }

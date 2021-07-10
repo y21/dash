@@ -4,9 +4,14 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
+/// An owned stack
+///
+/// It wraps [Stack] and implements the [Drop] trait,
+/// where its contents are deallocated
 #[derive(Debug)]
 pub struct OwnedStack<T, const N: usize>(Stack<T, N>);
 impl<T, const N: usize> OwnedStack<T, N> {
+    /// Creates a new owned stack
     pub fn new() -> Self {
         Self(Stack::new())
     }
@@ -32,14 +37,19 @@ impl<T, const N: usize> Drop for OwnedStack<T, N> {
     }
 }
 
+/// A stack data structure
+///
+/// It has a fixed capacity and lives on the stack.
 #[derive(Debug)]
 pub struct Stack<T, const N: usize>([MaybeUninit<T>; N], usize);
 
 impl<T, const N: usize> Stack<T, N> {
+    /// Creates a new stack
     pub fn new() -> Self {
         unsafe { Self(MaybeUninit::uninit().assume_init(), 0) }
     }
 
+    /// Returns an iterator for this stack
     pub fn into_iter(self, order: IteratorOrder) -> StackIterator<T, N> {
         let top = self.1;
         StackIterator {
@@ -50,22 +60,27 @@ impl<T, const N: usize> Stack<T, N> {
         }
     }
 
+    /// Returns the underlying array for this stack
     pub fn into_array(self) -> [MaybeUninit<T>; N] {
         self.0
     }
 
+    /// Stack length (number of filled items)
     pub fn len(&self) -> usize {
         self.1
     }
 
+    /// Returns an iterator over the initialized items
     pub fn as_array(&self) -> impl Iterator<Item = &MaybeUninit<T>> {
         self.0.iter().take(self.1)
     }
 
+    /// Returns an iterator over the initialized items, starting at the top
     pub fn as_array_bottom(&self) -> impl Iterator<Item = &MaybeUninit<T>> {
         self.0.iter().take(self.1).rev()
     }
 
+    /// Pushes a value on the stack
     pub fn push(&mut self, v: T) {
         assert!(N > self.1);
 
@@ -73,6 +88,7 @@ impl<T, const N: usize> Stack<T, N> {
         self.1 += 1;
     }
 
+    /// Pops the last value that was pushed off the stack and returns it
     pub fn pop(&mut self) -> T {
         assert!(self.1 > 0);
 
@@ -82,12 +98,14 @@ impl<T, const N: usize> Stack<T, N> {
         unsafe { val.assume_init() }
     }
 
+    /// Pops multiple values off the stack and discards them
     pub fn discard_multiple(&mut self, count: usize) {
         for _ in 0..count {
             self.pop();
         }
     }
 
+    /// Returns a reference to the last value, assuming it is initialized
     pub unsafe fn get(&self) -> Option<&T> {
         if self.1 > 0 && N >= self.1 {
             Some(&*self.0[self.1 - 1].as_ptr())
@@ -96,22 +114,33 @@ impl<T, const N: usize> Stack<T, N> {
         }
     }
 
+    /// Returns a reference to the last value, assuming it is initialized
+    ///
+    /// No boundary checks are performed
     pub unsafe fn get_unchecked(&self) -> &T {
         self.get_unchecked_at(self.1 - 1)
     }
 
+    /// Returns a reference to value at any position, assuming it is initialized
+    ///
+    /// No boundary checks are performed
     pub unsafe fn get_unchecked_at(&self, at: usize) -> &T {
         &*self.0.get_unchecked(at).as_ptr()
     }
 
+    /// Returns a mutable reference to the last value, assuming it is initialized
+    ///
+    /// No boundary checks are performed
     pub unsafe fn get_mut_unchecked(&mut self) -> &mut T {
         &mut *self.0[self.1 - 1].as_mut_ptr()
     }
 
+    /// Sets a value at a given position
     pub fn set(&mut self, idx: usize, value: T) {
         self.set_relative(0, idx, value)
     }
 
+    /// Sets a value at a given position, relative from `offset`
     pub fn set_relative(&mut self, offset: usize, idx: usize, value: T) {
         assert!(offset + idx <= self.1);
 
@@ -122,28 +151,35 @@ impl<T, const N: usize> Stack<T, N> {
         unsafe { self.0[offset + idx].as_mut_ptr().write(value) }
     }
 
+    /// Returns the stack pointer (length)
     pub fn get_stack_pointer(&self) -> usize {
         self.1
     }
 
-    pub fn set_stack_pointer(&mut self, sp: usize) {
+    /// Sets the stack pointer
+    pub unsafe fn set_stack_pointer(&mut self, sp: usize) {
         self.1 = sp;
     }
 
+    /// Returns a reference to the current value, assuming it is initialized
     pub unsafe fn peek_unchecked(&self, idx: usize) -> &T {
         self.peek_relative_unchecked(0, idx)
     }
 
+    /// Returns a reference to a value relative from `offset`, assuming it is initialized
     pub unsafe fn peek_relative_unchecked(&self, offset: usize, idx: usize) -> &T {
         assert!(offset + idx < self.1);
 
         &*self.0[offset + idx].as_ptr()
     }
 
+    /// Resets the stack pointer
     pub fn reset_stack_pointer(&mut self) {
         self.1 = 0;
     }
 
+    /// Iterates over the stack, applies the predicate on each value
+    /// and returns the element that caused the function to return true
     pub fn find<F>(&self, f: F) -> Option<(usize, &T)>
     where
         F: Fn(&T) -> bool,
@@ -158,6 +194,9 @@ impl<T, const N: usize> Stack<T, N> {
         None
     }
 
+    /// Dumps the stack
+    ///
+    /// This iterates over the array and prints the value of each item
     pub fn dump(&self)
     where
         T: Debug,
@@ -169,6 +208,7 @@ impl<T, const N: usize> Stack<T, N> {
         }
     }
 
+    /// Replaces the underlying array with an empty array and returns the old stack
     pub fn take(&mut self) -> Stack<T, N> {
         let stack: [MaybeUninit<T>; N] = unsafe { MaybeUninit::uninit().assume_init() };
         let old_stack = std::mem::replace(&mut self.0, stack);
@@ -178,6 +218,7 @@ impl<T, const N: usize> Stack<T, N> {
         Stack(old_stack, old_index)
     }
 
+    /// Resets this stack by dropping every value and setting the stack pointer to 0
     pub fn reset(&mut self) {
         for mu in self.0.iter_mut().take(self.1) {
             let mu = std::mem::replace(mu, MaybeUninit::uninit());
@@ -189,13 +230,17 @@ impl<T, const N: usize> Stack<T, N> {
     }
 }
 
+/// The order of a stack iterator
 #[derive(Copy, Clone)]
 pub enum IteratorOrder {
+    /// Starting at the top
     TopToBottom, // 9 --> 0
+    /// Starting at the bottom
     BottomToTop, // 0 --> 9
 }
 
-// TODO: implement Drop and free remaining elements ?
+/// An owned iterator over a stack
+// TODO: implement Drop and free remaining elements?
 pub struct StackIterator<T, const N: usize> {
     array: [MaybeUninit<T>; N],
     order: IteratorOrder,

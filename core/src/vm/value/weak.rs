@@ -5,8 +5,11 @@ use std::{
 
 use super::HashWeak;
 
+/// A type that may be either weak or strong
 pub enum MaybeWeak<T> {
+    /// A weak reference
     Weak(StdWeak<T>),
+    /// A strong reference
     Strong(Rc<T>),
 }
 
@@ -23,6 +26,7 @@ impl<T> From<Rc<T>> for MaybeWeak<T> {
 }
 
 impl<T> MaybeWeak<T> {
+    /// Returns a [StdWeak] to the underlying MaybeWeak
     pub fn into_weak(self) -> StdWeak<T> {
         match self {
             Self::Weak(w) => w,
@@ -30,6 +34,7 @@ impl<T> MaybeWeak<T> {
         }
     }
 
+    /// Returns a [Rc] to the underlying MaybeWeak
     pub fn into_strong(self) -> Option<Rc<T>> {
         match self {
             Self::Weak(w) => StdWeak::upgrade(&w),
@@ -38,74 +43,88 @@ impl<T> MaybeWeak<T> {
     }
 }
 
+/// A JavaScript WeakMap
 #[derive(Debug, Clone)]
 pub struct WeakMap<K, V>(pub HashMap<HashWeak<K>, Rc<V>>);
 
 impl<K, V> WeakMap<K, V> {
+    /// Creates a new WeakMap
     pub fn new() -> Self {
         Self(HashMap::new())
     }
 
+    /// Checks whether this WeakMap contains a key
     pub fn has<Q: Into<MaybeWeak<K>>>(&self, key: Q) -> bool {
         let key = key.into();
         let hashweak = HashWeak(key.into_weak());
         self.0.contains_key(&hashweak)
     }
 
+    /// Checks whether this WeakMap contains a key given a value cell
     pub fn has_rc_key(&self, key: &Rc<K>) -> bool {
         let hashweak = HashWeak(Rc::downgrade(key));
         self.0.contains_key(&hashweak)
     }
 
+    /// Looks up a key
     pub fn get<Q: Into<MaybeWeak<K>>>(&self, key: Q) -> Option<&Rc<V>> {
         let key = key.into();
         let hashweak = HashWeak(key.into_weak());
         self.0.get(&hashweak)
     }
 
+    /// Looks up a key, given a value cell
     pub fn get_rc_key(&self, key: &Rc<K>) -> Option<&Rc<V>> {
         let hashweak = HashWeak(Rc::downgrade(key));
         self.0.get(&hashweak)
     }
 
+    /// Adds a value to this WeakMap
     pub fn add<Q: Into<MaybeWeak<K>>>(&mut self, key: Q, value: Rc<V>) {
         let key = key.into();
         let hashweak = HashWeak(key.into_weak());
         self.0.insert(hashweak, value);
     }
 
+    /// Deletes an entry from this WeakMap
     pub fn delete<Q: Into<MaybeWeak<K>>>(&mut self, key: Q) -> bool {
         let key = key.into();
         let hashweak = HashWeak(key.into_weak());
         self.0.remove(&hashweak).is_some()
     }
 
+    /// Deletes an entry from this WeakMap, given a value cell
     pub fn delete_rc_key(&mut self, key: &Rc<K>) -> bool {
         let hashweak = HashWeak(Rc::downgrade(key));
         self.0.remove(&hashweak).is_some()
     }
 }
 
+/// A JavaScript WeakSet
 #[derive(Debug, Clone)]
 pub struct WeakSet<K>(pub HashSet<HashWeak<K>>);
 
 impl<K> WeakSet<K> {
+    /// Creates a new WeakSet
     pub fn new() -> Self {
         Self(HashSet::new())
     }
 
+    /// Checks whether this WeakSet contains a key
     pub fn has(&self, rc: &Rc<K>) -> bool {
         let weak = Rc::downgrade(rc);
         let hashweak = HashWeak(weak);
         self.0.contains(&hashweak)
     }
 
+    /// Adds a key to this WeakSet
     pub fn add(&mut self, key: &Rc<K>) {
         let weak = Rc::downgrade(key);
         let hashweak = HashWeak(weak);
         self.0.insert(hashweak);
     }
 
+    /// Deletes a key from this WeakSet
     pub fn delete(&mut self, rc: &Rc<K>) -> bool {
         let weak = Rc::downgrade(rc);
         let hashweak = HashWeak(weak);

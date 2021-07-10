@@ -7,91 +7,171 @@ use crate::vm::value::object::AnyObject;
 use super::value::function::NativeFunction;
 use super::value::Value;
 
+/// Static data used by the VM
 pub struct Statics {
-    // Prototypes
+    /// Represents Boolean.prototype
     pub boolean_proto: Rc<RefCell<Value>>,
+    /// Represents Number.prototype
     pub number_proto: Rc<RefCell<Value>>,
+    /// Represents String.prototype
     pub string_proto: Rc<RefCell<Value>>,
+    /// Represents Function.prototype
     pub function_proto: Rc<RefCell<Value>>,
+    /// Represents Array.prototype
     pub array_proto: Rc<RefCell<Value>>,
+    /// Represents WeakSet.prototype
     pub weakset_proto: Rc<RefCell<Value>>,
+    /// Represents WeakMap.prototype
     pub weakmap_proto: Rc<RefCell<Value>>,
+    /// Represents Object.prototype
     pub object_proto: Rc<RefCell<Value>>,
+    /// Represents Error.prototype
     pub error_proto: Rc<RefCell<Value>>,
-    // Constructors
+    /// Represents the Boolean constructor
     pub boolean_ctor: Rc<RefCell<Value>>,
+    /// Represents the Number constructor
     pub number_ctor: Rc<RefCell<Value>>,
+    /// Represents the String constructor
     pub string_ctor: Rc<RefCell<Value>>,
+    /// Represents the Function constructor
     pub function_ctor: Rc<RefCell<Value>>,
+    /// Represents the Array constructor
     pub array_ctor: Rc<RefCell<Value>>,
+    /// Represents the WeakSet constructor
     pub weakset_ctor: Rc<RefCell<Value>>,
+    /// Represents the WeakMap constructor
     pub weakmap_ctor: Rc<RefCell<Value>>,
+    /// Represents the Object constructor
     pub object_ctor: Rc<RefCell<Value>>,
+    /// Represents the Error constructor
     pub error_ctor: Rc<RefCell<Value>>,
-    // Methods
+    /// Represents console.log
     pub console_log: Rc<RefCell<Value>>,
+    /// Represents isNaN
     pub isnan: Rc<RefCell<Value>>,
+    /// Represents Array.prototype.push
     pub array_push: Rc<RefCell<Value>>,
+    /// Represents Array.prototype.concat
     pub array_concat: Rc<RefCell<Value>>,
+    /// Represents Array.prototype.map
     pub array_map: Rc<RefCell<Value>>,
+    /// Represents Array.prototype.every
     pub array_every: Rc<RefCell<Value>>,
+    /// Represents Array.prototype.fill
     pub array_fill: Rc<RefCell<Value>>,
+    /// Represents Array.prototype.filter
     pub array_filter: Rc<RefCell<Value>>,
+    /// Represents Array.prototype.find
     pub array_find: Rc<RefCell<Value>>,
+    /// Represents Array.prototype.findIndex
     pub array_find_index: Rc<RefCell<Value>>,
+    /// Represents Array.prototype.flat
     pub array_flat: Rc<RefCell<Value>>,
+    /// Represents Array.prototype.forEach
     pub array_for_each: Rc<RefCell<Value>>,
+    /// Represents Array.from
     pub array_from: Rc<RefCell<Value>>,
+    /// Represents Array.prototype.includes
     pub array_includes: Rc<RefCell<Value>>,
+    /// Represents Array.prototype.indexOf
     pub array_index_of: Rc<RefCell<Value>>,
+    /// Represents Array.isArray
     pub array_is_array: Rc<RefCell<Value>>,
+    /// Represents Array.prototype.join
     pub array_join: Rc<RefCell<Value>>,
+    /// Represents Array.prototype.lastIndexOf
     pub array_last_index_of: Rc<RefCell<Value>>,
+    /// Represents Array.of
     pub array_of: Rc<RefCell<Value>>,
+    /// Represents Array.prototype.pop
     pub array_pop: Rc<RefCell<Value>>,
+    /// Represents Array.prototype.reduce
     pub array_reduce: Rc<RefCell<Value>>,
+    /// Represents Array.prototype.reduceRight
     pub array_reduce_right: Rc<RefCell<Value>>,
+    /// Represents Array.prototype.reverse
     pub array_reverse: Rc<RefCell<Value>>,
+    /// Represents Array.prototype.shift
     pub array_shift: Rc<RefCell<Value>>,
+    /// Represents Array.prototype.slice
     pub array_slice: Rc<RefCell<Value>>,
+    /// Represents Array.prototype.some
     pub array_some: Rc<RefCell<Value>>,
+    /// Represents Array.prototype.sort
     pub array_sort: Rc<RefCell<Value>>,
+    /// Represents Array.prototype.splice
     pub array_splice: Rc<RefCell<Value>>,
+    /// Represents Array.prototype.unshift
     pub array_unshift: Rc<RefCell<Value>>,
+    /// Represents String.prototype.charAt
     pub string_char_at: Rc<RefCell<Value>>,
+    /// Represents String.prototype.charCodeAt
     pub string_char_code_at: Rc<RefCell<Value>>,
+    /// Represents String.prototype.endsWith
     pub string_ends_with: Rc<RefCell<Value>>,
+    /// Represents String.prototype.anchor
     pub string_anchor: Rc<RefCell<Value>>,
+    /// Represents String.prototype.big
     pub string_big: Rc<RefCell<Value>>,
+    /// Represents String.prototype.blink
     pub string_blink: Rc<RefCell<Value>>,
+    /// Represents String.prototype.bold
     pub string_bold: Rc<RefCell<Value>>,
+    /// Represents String.prototype.fixed
     pub string_fixed: Rc<RefCell<Value>>,
+    /// Represents String.prototype.fontcolor
     pub string_fontcolor: Rc<RefCell<Value>>,
+    /// Represents String.prototype.fontsize
     pub string_fontsize: Rc<RefCell<Value>>,
+    /// Represents String.prototype.italics
     pub string_italics: Rc<RefCell<Value>>,
+    /// Represents String.prototype.link
     pub string_link: Rc<RefCell<Value>>,
+    /// Represents String.prototype.small
     pub string_small: Rc<RefCell<Value>>,
+    /// Represents String.prototype.strike
     pub string_strike: Rc<RefCell<Value>>,
+    /// Represents String.prototype.sub
     pub string_sub: Rc<RefCell<Value>>,
+    /// Represents String.prototype.sup
     pub string_sup: Rc<RefCell<Value>>,
+    /// Represents Math.pow
     pub math_pow: Rc<RefCell<Value>>,
+    /// Represents Math.abs
     pub math_abs: Rc<RefCell<Value>>,
+    /// Represents Math.ceil
     pub math_ceil: Rc<RefCell<Value>>,
+    /// Represents Math.floor
     pub math_floor: Rc<RefCell<Value>>,
+    /// Represents Math.max
     pub math_max: Rc<RefCell<Value>>,
+    /// Represents Math.random
     pub math_random: Rc<RefCell<Value>>,
+    /// Represents Object.defineProperty
     pub object_define_property: Rc<RefCell<Value>>,
+    /// Represents Object.getOwnPropertyNames
     pub object_get_own_property_names: Rc<RefCell<Value>>,
+    /// Represents Object.getPrototypeOf
     pub object_get_prototype_of: Rc<RefCell<Value>>,
+    /// Represents Object.prototype.toString
     pub object_to_string: Rc<RefCell<Value>>,
+    /// Represents WeakSet.prototype.has
     pub weakset_has: Rc<RefCell<Value>>,
+    /// Represents WeakSet.prototype.add
     pub weakset_add: Rc<RefCell<Value>>,
+    /// Represents WeakSet.prototype.delete
     pub weakset_delete: Rc<RefCell<Value>>,
+    /// Represents WeakMap.prototype.has
     pub weakmap_has: Rc<RefCell<Value>>,
+    /// Represents WeakMap.prototype.add
     pub weakmap_add: Rc<RefCell<Value>>,
+    /// Represents WeakMap.prototype.get
     pub weakmap_get: Rc<RefCell<Value>>,
+    /// Represents WeakMap.prototype.delete
     pub weakmap_delete: Rc<RefCell<Value>>,
+    /// Represents JSON.parse
     pub json_parse: Rc<RefCell<Value>>,
+    /// Represents JSON.stringify
     pub json_stringify: Rc<RefCell<Value>>,
 }
 
@@ -108,6 +188,7 @@ macro_rules! register_ctor {
 }
 
 impl Statics {
+    /// Creates a new global data object
     pub fn new() -> Self {
         Self {
             // Proto

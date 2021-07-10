@@ -8,25 +8,39 @@ use super::{
     },
 };
 
+/// Represents a function that needs to be resumed at a later point
 #[derive(Debug)]
 pub struct NativeResume {
+    /// The function that needs to be called
     pub func: Rc<RefCell<Value>>,
+    /// Arguments that were originally passed to the function when called initially
     pub args: Vec<Rc<RefCell<Value>>>,
+    /// Whether this is a constructor call
     pub ctor: bool,
+    /// The receiver of this function
     pub receiver: Option<Rc<RefCell<Value>>>,
 }
 
+/// An execution frame
 #[derive(Debug)]
 pub struct Frame {
+    /// JavaScript function
     pub func: Rc<RefCell<Value>>,
+    /// This frames bytecode
     pub buffer: Box<[Instruction]>,
+    /// Instruction pointer
     pub ip: usize,
+    /// Stack pointer
     pub sp: usize,
+    /// State that is associated to a native function
+    /// that called this user function
     pub state: Option<CallState<Box<dyn Any>>>,
+    /// Native resume
     pub resume: Option<NativeResume>,
 }
 
 impl Frame {
+    /// Creates a frame from bytecode and a stack pointer
     pub fn from_buffer<B>(buffer: B, sp: usize) -> Self
     where
         B: Into<Box<[Instruction]>>,
@@ -52,6 +66,7 @@ impl Frame {
     }
 }
 
+/// An unwind handler, also known as a try catch block
 #[derive(Debug)]
 pub struct UnwindHandler {
     /// Catch block instruction pointer
@@ -64,6 +79,7 @@ pub struct UnwindHandler {
     pub frame_pointer: usize,
 }
 
+/// A loop
 #[derive(Debug)]
 pub struct Loop {
     /// Loop condition instruction pointer
