@@ -3,6 +3,7 @@ use std::{borrow::Cow, ops::Range};
 use super::token::{Location, Token, TokenType};
 use crate::util::{self, Either};
 
+/// A JavaScript source code lexer
 #[derive(Debug)]
 pub struct Lexer<'a> {
     input: &'a [u8],
@@ -12,14 +13,23 @@ pub struct Lexer<'a> {
     line_idx: usize,
 }
 
+/// An error that may occur during lexing
 #[derive(Debug)]
 pub struct Error<'a> {
+    /// The kind of error
     pub kind: ErrorKind,
+    /// Where this error is located in the source string
     pub loc: Location,
+    /// The input string
+    ///
+    /// Errors carry the input string with them because this is necessary
+    /// when formatting errors. In the future, we might be able to avoid storing
+    /// it here.
     pub source: &'a [u8],
 }
 
 impl<'a> Error<'a> {
+    /// Formats this error
     pub fn to_string(&self) -> Cow<str> {
         match &self.kind {
             ErrorKind::UnknownCharacter(c) => Cow::Owned(self.loc.to_string(
@@ -32,24 +42,34 @@ impl<'a> Error<'a> {
     }
 }
 
+/// The type of error
 #[derive(Debug)]
 pub enum ErrorKind {
+    /// An unknown character/byte
     UnknownCharacter(u8),
+    /// Unexpected end of file
     UnexpectedEof,
 }
 
+/// Represents a comment
 #[derive(Debug)]
 pub enum CommentKind {
+    /// A multiline comment: /* */
     Multiline,
+    /// A singleline comment: //
     Singleline,
 }
 
+/// A lexer node (either a token or an error)
 pub enum Node<'a> {
+    /// A valid token
     Token(Token<'a>),
+    /// An error
     Error(Error<'a>),
 }
 
 impl<'a> Lexer<'a> {
+    /// Creates a new lexer
     pub fn new(source: &'a str) -> Self {
         Self {
             input: source.as_bytes(),
@@ -60,29 +80,35 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn is_eof(&self) -> bool {
+    /// This lexer is exhausted and has reached the end of the string
+    fn is_eof(&self) -> bool {
         self.idx >= self.input.len()
     }
 
-    pub fn next_char(&mut self) -> Option<u8> {
+    /// Returns the next character
+    fn next_char(&mut self) -> Option<u8> {
         let cur = self.current()?;
         self.advance();
         Some(cur)
     }
 
-    pub fn current(&self) -> Option<u8> {
+    /// Returns the current byte
+    fn current(&self) -> Option<u8> {
         self.input.get(self.idx).copied()
     }
 
-    pub fn peek(&self) -> Option<u8> {
+    /// Looks ahead by one and returns the next byte
+    fn peek(&self) -> Option<u8> {
         self.input.get(self.idx + 1).copied()
     }
 
-    pub fn current_real(&self) -> u8 {
+    /// Returns the current byte, without returning an Option
+    fn current_real(&self) -> u8 {
         self.input[self.idx]
     }
 
-    pub fn create_contextified_token(&mut self, ty: TokenType) -> Node<'a> {
+    /// Creates a token based on the current location
+    fn create_contextified_token(&mut self, ty: TokenType) -> Node<'a> {
         Node::Token(Token {
             ty,
             loc: Location {
@@ -94,7 +120,11 @@ impl<'a> Lexer<'a> {
         })
     }
 
-    pub fn create_contextified_conditional_token(
+    /// Creates a token based on the current location and a given predicate
+    ///
+    /// A token may be multiple bytes wide, in which case this function can be used.
+    /// This function can be seen as a helper function to create a token based on the next bytes.
+    fn create_contextified_conditional_token(
         &mut self,
         default: Option<TokenType>,
         tokens: &[(&[u8], TokenType)],
@@ -118,7 +148,8 @@ impl<'a> Lexer<'a> {
         unreachable!()
     }
 
-    pub fn create_error(&mut self, kind: ErrorKind) -> Error<'a> {
+    /// Creates a new error token
+    fn create_error(&mut self, kind: ErrorKind) -> Error<'a> {
         Error {
             loc: Location {
                 line: self.line,
@@ -130,7 +161,8 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn create_contextified_token_with_lexeme(
+    /// Creates a token based on the current location and a given lexeme
+    fn create_contextified_token_with_lexeme(
         &mut self,
         ty: TokenType,
         lexeme: &'a [u8],
@@ -146,29 +178,35 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn get_lexeme(&self) -> &'a [u8] {
+    /// Returns the current lexeme
+    fn get_lexeme(&self) -> &'a [u8] {
         &self.input[self.start..self.idx]
     }
 
-    pub fn subslice(&self, r: Range<usize>) -> &'a [u8] {
+    /// Slices into the source string
+    fn subslice(&self, r: Range<usize>) -> &'a [u8] {
         &self.input[r]
     }
 
-    pub fn safe_subslice(&self, from: usize, to: usize) -> &'a [u8] {
+    /// Slices into the source string, but makes sure no panic occurs
+    fn safe_subslice(&self, from: usize, to: usize) -> &'a [u8] {
         let from = from.max(0);
         let to = to.min(self.input.len());
         &self.input[from..to]
     }
 
-    pub fn advance(&mut self) {
+    /// Advances the cursor
+    fn advance(&mut self) {
         self.idx += 1;
     }
 
-    pub fn advance_n(&mut self, n: usize) {
+    /// Advances the cursor by n
+    fn advance_n(&mut self, n: usize) {
         self.idx += n;
     }
 
-    pub fn expect_and_skip(&mut self, expected: u8) -> bool {
+    /// Expects the current byte to be `expected` and advances the stream if matched
+    fn expect_and_skip(&mut self, expected: u8) -> bool {
         let cur = match self.current() {
             Some(c) => c,
             None => return false,
@@ -183,7 +221,10 @@ impl<'a> Lexer<'a> {
         true
     }
 
-    pub fn read_string_literal(&mut self) -> Node<'a> {
+    /// Reads a string literal
+    ///
+    /// This function expects to be one byte ahead of a quote
+    fn read_string_literal(&mut self) -> Node<'a> {
         let quote = self.input[self.idx - 1];
         let mut found_quote = false;
         while !self.is_eof() {
@@ -210,7 +251,8 @@ impl<'a> Lexer<'a> {
         Node::Token(self.create_contextified_token_with_lexeme(TokenType::String, lexeme))
     }
 
-    pub fn read_number_literal(&mut self) -> Node<'a> {
+    /// Reads a number literal
+    fn read_number_literal(&mut self) -> Node<'a> {
         let mut is_float = false;
         let mut is_exp = false;
 
@@ -245,7 +287,8 @@ impl<'a> Lexer<'a> {
         self.create_contextified_token(TokenType::Number)
     }
 
-    pub fn read_identifier(&mut self) -> Node<'a> {
+    /// Reads an identifier and returns it as a node
+    fn read_identifier(&mut self) -> Node<'a> {
         while !self.is_eof() {
             let cur = self.current_real();
 
@@ -260,6 +303,7 @@ impl<'a> Lexer<'a> {
         self.create_contextified_token(lexeme.into())
     }
 
+    /// Iterates through the input string and yields the next node
     pub fn scan_next(&mut self) -> Option<Node<'a>> {
         self.skip_whitespaces();
         while self.current() == Some(b'/') {
@@ -398,7 +442,8 @@ impl<'a> Lexer<'a> {
         })
     }
 
-    pub fn skip_whitespaces(&mut self) {
+    /// Skips any meaningless whitespaces
+    fn skip_whitespaces(&mut self) {
         while !self.is_eof() {
             let ch = if let Some(c) = self.current() {
                 c
@@ -417,7 +462,8 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn skip_comments(&mut self) {
+    /// Skips any comments
+    fn skip_comments(&mut self) {
         let cur = if let Some(c) = self.current() {
             c
         } else {
@@ -433,7 +479,8 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn skip_single_line_comment(&mut self) {
+    /// Skips a single line comment
+    fn skip_single_line_comment(&mut self) {
         while !self.is_eof() {
             let ch = if let Some(c) = self.current() {
                 c
@@ -451,7 +498,8 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn skip_multi_line_comment(&mut self) {
+    /// Skips a multi line comment
+    fn skip_multi_line_comment(&mut self) {
         self.expect_and_skip(b'/');
         self.expect_and_skip(b'*');
         while !self.is_eof() {
@@ -473,6 +521,9 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    /// Drives this lexer to completion
+    ///
+    /// Calling this function will exhaust the lexer and return all nodes
     pub fn scan_all(self) -> Result<Vec<Token<'a>>, Vec<Error<'a>>> {
         let mut errors = Vec::new();
         let mut tokens = Vec::new();

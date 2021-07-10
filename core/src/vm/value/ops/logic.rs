@@ -3,10 +3,12 @@ use std::{cell::RefCell, rc::Rc};
 use crate::vm::value::{object::Object, Value, ValueKind};
 
 impl Value {
+    /// Implements the behavior of the == operator
     pub fn lossy_equal(&self, other: &Value) -> bool {
         self.strict_equal(other) // TODO: handle it separately
     }
 
+    /// Implements the behavior of the === operator
     pub fn strict_equal(&self, other: &Value) -> bool {
         match &self.kind {
             ValueKind::Number(n) => {
@@ -32,6 +34,7 @@ impl Value {
         }
     }
 
+    /// Checks whether a value is considered to be truthy
     pub fn is_truthy(&self) -> bool {
         match &self.kind {
             ValueKind::Bool(b) => *b,
@@ -42,6 +45,7 @@ impl Value {
         }
     }
 
+    /// Checks whether a value is considered to be nullish
     pub fn is_nullish(&self) -> bool {
         match &self.kind {
             ValueKind::Null | ValueKind::Undefined => true,
@@ -49,6 +53,7 @@ impl Value {
         }
     }
 
+    /// Implements the logical and operator, given references to two [Value]s
     pub fn logical_and_ref<'a>(&'a self, other: &'a Value) -> &'a Value {
         let this = self.is_truthy();
         if this {
@@ -58,6 +63,7 @@ impl Value {
         }
     }
 
+    /// Implements the logical and operator, given cells to two [Value]s
     pub fn logical_and(this: Rc<RefCell<Value>>, other: Rc<RefCell<Value>>) -> Rc<RefCell<Value>> {
         if this.borrow().is_truthy() {
             other
@@ -66,6 +72,7 @@ impl Value {
         }
     }
 
+    /// Implements the logical or operator, given references to two [Value]s
     pub fn logical_or_ref<'a>(&'a self, other: &'a Value) -> &'a Value {
         let this = self.is_truthy();
         if !this {
@@ -75,6 +82,7 @@ impl Value {
         }
     }
 
+    /// Implements the logical or operator, given cells to two [Value]s
     pub fn logical_or(this: Rc<RefCell<Value>>, other: Rc<RefCell<Value>>) -> Rc<RefCell<Value>> {
         if !this.borrow().is_truthy() {
             other
@@ -83,6 +91,7 @@ impl Value {
         }
     }
 
+    /// Implements the nullish coalescing operator, given references to two [Value]s
     pub fn nullish_coalescing_ref<'a>(&'a self, other: &'a Value) -> &'a Value {
         let this = self.is_nullish();
         if this {
@@ -92,6 +101,7 @@ impl Value {
         }
     }
 
+    /// Implements the nullish coalescing operator, given cells to two [Value]s
     pub fn nullish_coalescing(
         this: Rc<RefCell<Value>>,
         other: Rc<RefCell<Value>>,
@@ -103,6 +113,7 @@ impl Value {
         }
     }
 
+    /// Implements the behavior of the typeof operator
     pub fn _typeof(&self) -> &'static str {
         match &self.kind {
             ValueKind::Bool(_) => "boolean",
@@ -116,6 +127,7 @@ impl Value {
 }
 
 impl Object {
+    /// Implements the behavior of the typeof operator specifically on [Object]s
     pub fn _typeof(&self) -> &'static str {
         match self {
             Self::Any(_) | Self::Array(_) | Self::Weak(_) => "object",
@@ -124,6 +136,7 @@ impl Object {
         }
     }
 
+    /// Checks whether an object is considered to be truthy
     pub fn is_truthy(&self) -> bool {
         match self {
             Self::String(s) => !s.is_empty(),
@@ -133,10 +146,13 @@ impl Object {
             Self::Weak(_) => true,
         }
     }
+
+    /// Implements the == operator on objects
     pub fn lossy_equal(&self, other: &Value) -> bool {
         self.strict_equal(other)
     }
 
+    /// Implements the === operator on objects
     pub fn strict_equal(&self, other: &Value) -> bool {
         match self {
             Self::String(s) => {

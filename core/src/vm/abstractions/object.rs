@@ -7,6 +7,8 @@ use crate::vm::{
 
 const MAX: f64 = 9007199254740991f64;
 
+/// Implements the abstract operation LengthOfArrayLike
+///
 // https://tc39.es/ecma262/multipage/abstract-operations.html#sec-lengthofarraylike
 pub fn length_of_array_like(vm: &VM, obj: &Rc<RefCell<Value>>) -> Result<f64, Rc<RefCell<Value>>> {
     // ? Get(obj, "length")
@@ -20,6 +22,9 @@ pub fn length_of_array_like(vm: &VM, obj: &Rc<RefCell<Value>>) -> Result<f64, Rc
     Ok(len)
 }
 
+/// Implements the abstract operation ToLength
+///
+/// https://tc39.es/ecma262/multipage/abstract-operations.html#sec-tolength
 pub fn to_length(argument: Option<&Value>) -> Result<f64, Rc<RefCell<Value>>> {
     // 1. Let len be ? ToIntegerOrInfinity(argument).
     let len = to_integer_or_infinity(argument)?;
@@ -33,6 +38,8 @@ pub fn to_length(argument: Option<&Value>) -> Result<f64, Rc<RefCell<Value>>> {
     Ok(len.min(MAX))
 }
 
+/// Implements the abstract operation ToIntegerOrInfinity
+///
 // https://tc39.es/ecma262/multipage/abstract-operations.html#sec-tointegerorinfinity
 pub fn to_integer_or_infinity(argument: Option<&Value>) -> Result<f64, Rc<RefCell<Value>>> {
     // 1. Let number be ? ToNumber(argument).
@@ -61,6 +68,8 @@ pub fn to_integer_or_infinity(argument: Option<&Value>) -> Result<f64, Rc<RefCel
     Ok(integer)
 }
 
+/// Implements the abstract operation ToNumber
+///
 // https://tc39.es/ecma262/multipage/abstract-operations.html#sec-tonumber
 pub fn to_number(argument: Option<&Value>) -> Result<f64, Rc<RefCell<Value>>> {
     match argument.as_ref().map(|a| &a.kind) {
@@ -77,6 +86,8 @@ pub fn to_number(argument: Option<&Value>) -> Result<f64, Rc<RefCell<Value>>> {
     }
 }
 
+/// Implements the abstract operation ToNumberFromString
+///
 // https://tc39.es/ecma262/multipage/abstract-operations.html#sec-tonumber-applied-to-the-string-type
 pub fn to_number_from_string(argument: &str) -> f64 {
     argument.parse::<f64>().unwrap_or_else(|_| f64::NAN)

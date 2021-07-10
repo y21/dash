@@ -8,6 +8,8 @@ use crate::{
     },
 };
 
+/// Implements the abstract operation ToString
+///
 // https://tc39.es/ecma262/multipage/abstract-operations.html#sec-tostring
 pub fn to_string(
     vm: &VM,
@@ -45,6 +47,8 @@ pub fn to_string(
     ))
 }
 
+/// Implements the abstract operation Number::ToString
+///
 // https://tc39.es/ecma262/multipage/ecmascript-data-types-and-values.html#sec-numeric-types-number-tostring
 pub fn number_to_string(x: f64) -> Cow<'static, str> {
     if x.is_nan() {
@@ -56,6 +60,8 @@ pub fn number_to_string(x: f64) -> Cow<'static, str> {
     }
 }
 
+/// Implements the abstract operation ToPrimitive
+///
 // https://tc39.es/ecma262/multipage/abstract-operations.html#sec-toprimitive
 pub fn to_primitive(
     vm: &VM,
@@ -78,7 +84,9 @@ pub fn to_primitive(
     Ok(CallResult::Ready(Rc::clone(input_cell)))
 }
 
-// TODO: use enum for hint?
+/// Implements the abstract operation OrdinaryToPrimitive
+///
+/// https://tc39.es/ecma262/multipage/abstract-operations.html#sec-ordinarytoprimitive
 pub fn ordinary_to_primitive(
     vm: &VM,
     obj: &Rc<RefCell<Value>>,

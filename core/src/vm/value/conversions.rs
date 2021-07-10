@@ -9,6 +9,7 @@ use super::{
 use crate::vm::instruction::Constant;
 
 impl Value {
+    /// Attempts to convert self to a constant
     pub fn as_constant(&self) -> Option<&Constant> {
         match &self.kind {
             ValueKind::Constant(c) => Some(c),
@@ -16,6 +17,7 @@ impl Value {
         }
     }
 
+    /// Attempts to convert self into a constant by consuming self
     pub fn into_constant(self) -> Option<Constant> {
         match self.kind {
             ValueKind::Constant(c) => Some(*c),
@@ -23,6 +25,9 @@ impl Value {
         }
     }
 
+    /// Converts a JavaScript value to a number
+    ///
+    /// If the value is not a number, [f64::NAN] is returned
     pub fn as_number(&self) -> f64 {
         match &self.kind {
             ValueKind::Number(n) => *n,
@@ -33,14 +38,20 @@ impl Value {
         }
     }
 
+    /// Converts a JavaScript value to a whole number (i64)
     pub fn as_whole_number(&self) -> i64 {
         self.as_number().floor() as i64
     }
 
+    /// Converts a JavaScript value to a whole number (i32)
     pub fn as_32bit_number(&self) -> i32 {
         self.as_number().floor() as i32
     }
 
+    /// Attempts to return self as a boolean
+    ///
+    /// This does not *convert* a value to a boolean. To get the effect of `!!value`,
+    /// use [Value::is_truthy]
     pub fn as_bool(&self) -> Option<bool> {
         match &self.kind {
             ValueKind::Bool(b) => Some(*b),
@@ -48,6 +59,7 @@ impl Value {
         }
     }
 
+    /// Attempts to return a reference to the inner object if it is one
     pub fn as_object(&self) -> Option<&Object> {
         match &self.kind {
             ValueKind::Object(o) => Some(o),
@@ -55,6 +67,7 @@ impl Value {
         }
     }
 
+    /// Attempts to return a mutable reference to the inner object if it is one
     pub fn as_object_mut(&mut self) -> Option<&mut Object> {
         match &mut self.kind {
             ValueKind::Object(o) => Some(o),
@@ -62,6 +75,7 @@ impl Value {
         }
     }
 
+    /// Attempts to return a reference to the inner function kind if it is one
     pub fn as_function(&self) -> Option<&FunctionKind> {
         match &self.kind {
             ValueKind::Object(o) => o.as_function(),
@@ -69,6 +83,7 @@ impl Value {
         }
     }
 
+    /// Attempts to return a mutable reference to the inner function kind if it is one
     pub fn as_function_mut(&mut self) -> Option<&mut FunctionKind> {
         match &mut self.kind {
             ValueKind::Object(o) => o.as_function_mut(),
@@ -76,6 +91,7 @@ impl Value {
         }
     }
 
+    /// Converts a JavaScript value to a string
     pub fn to_string(&self) -> Cow<str> {
         match &self.kind {
             ValueKind::Bool(b) => Cow::Borrowed(if *b { "true " } else { "false" }),
@@ -87,6 +103,7 @@ impl Value {
         }
     }
 
+    /// Converts a JavaScript value to a JSON string
     pub fn to_json(&self) -> Option<Cow<str>> {
         match &self.kind {
             ValueKind::Bool(_) => Some(self.to_string()),
@@ -98,6 +115,11 @@ impl Value {
         }
     }
 
+    /// Inspects a JavaScript value, and returns a string that may be more useful
+    /// than calling [Value::to_string]
+    ///
+    /// In particular, this actually returns all entries of an object instead of
+    /// returning "[object Object]"
     pub fn inspect(&self, depth: u32) -> Cow<str> {
         match &self.kind {
             ValueKind::Object(o) => o.inspect(self, depth),
@@ -105,10 +127,15 @@ impl Value {
         }
     }
 
+    /// Attempts to return self as a string
+    ///
+    /// This does not *convert* a value to a string. To get the effect of `"" + value`,
+    /// use [Value::to_string]
     pub fn as_string(&self) -> Option<&str> {
         self.as_object().and_then(|o| o.as_string())
     }
 
+    /// Attempts to return the identifier of this value if it is a constant
     pub fn into_ident(self) -> Option<String> {
         match self.kind {
             ValueKind::Constant(i) => i.into_ident(),
@@ -116,6 +143,7 @@ impl Value {
         }
     }
 
+    /// Attempts to return the inner object if it is one
     pub fn into_object(self) -> Option<Object> {
         match self.kind {
             ValueKind::Object(o) => Some(*o),
@@ -123,16 +151,22 @@ impl Value {
         }
     }
 
+    /// Attempts to return the inner string if it is one
     pub fn into_string(self) -> Option<String> {
         self.into_object().and_then(|c| c.into_string())
     }
 }
 
 impl Object {
+    /// Converts a JavaScript object to a number
     pub fn as_number(&self) -> f64 {
         f64::NAN // TODO: try to convert it to number?
     }
 
+    /// Attempts to return self as a string
+    ///
+    /// This does not *convert* a value to a string. To get the effect of `"" + value`,
+    /// use [Value::to_string]
     pub fn as_string(&self) -> Option<&str> {
         match self {
             Self::String(s) => Some(s),
@@ -140,6 +174,7 @@ impl Object {
         }
     }
 
+    /// Attempts to return self as a string if it is one
     pub fn into_string(self) -> Option<String> {
         match self {
             Self::String(s) => Some(s),
@@ -147,6 +182,7 @@ impl Object {
         }
     }
 
+    /// Converts a JavaScript value to a string
     pub fn to_string(&self) -> Cow<str> {
         match self {
             Self::String(s) => Cow::Borrowed(s),
@@ -157,6 +193,7 @@ impl Object {
         }
     }
 
+    /// Converts a JavaScript value to a JSON string
     pub fn to_json(&self, this: &Value) -> Option<Cow<str>> {
         match self {
             Self::String(s) => Some(Cow::Owned(format!("\"{}\"", s))),
@@ -200,6 +237,9 @@ impl Object {
         }
     }
 
+    /// Inspects a JavaScript value
+    ///
+    /// See [Value::inspect] for the difference between to_string and inspect
     pub fn inspect(&self, this: &Value, depth: u32) -> Cow<str> {
         if depth > 5 {
             return Cow::Borrowed("…");
@@ -248,6 +288,7 @@ impl Object {
         }
     }
 
+    /// Attempts to return self as a function if it is one
     pub fn into_function(self) -> Option<FunctionKind> {
         match self {
             Self::Function(kind) => Some(kind),
@@ -255,6 +296,7 @@ impl Object {
         }
     }
 
+    /// Attempts to return self as a reference to the function if it is one
     pub fn as_function(&self) -> Option<&FunctionKind> {
         match self {
             Self::Function(kind) => Some(kind),
@@ -262,6 +304,7 @@ impl Object {
         }
     }
 
+    /// Attempts to return self as a mutable reference to the function if it is one
     pub fn as_function_mut(&mut self) -> Option<&mut FunctionKind> {
         match self {
             Self::Function(kind) => Some(kind),
@@ -269,6 +312,7 @@ impl Object {
         }
     }
 
+    /// Attempts to return self as an array if it is one
     pub fn as_array(&self) -> Option<&Array> {
         match self {
             Self::Array(arr) => Some(arr),
@@ -276,6 +320,7 @@ impl Object {
         }
     }
 
+    /// Attempts to return self as a reference to [Weak] if it is one
     pub fn as_weak(&self) -> Option<&Weak> {
         match self {
             Self::Weak(w) => Some(w),
@@ -283,6 +328,7 @@ impl Object {
         }
     }
 
+    /// Attempts to return self as a mutable reference to [Weak] if it is one
     pub fn as_weak_mut(&mut self) -> Option<&mut Weak> {
         match self {
             Self::Weak(w) => Some(w),
