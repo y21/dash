@@ -130,7 +130,7 @@ impl Object {
     /// Implements the behavior of the typeof operator specifically on [Object]s
     pub fn _typeof(&self) -> &'static str {
         match self {
-            Self::Any(_) | Self::Array(_) | Self::Weak(_) => "object",
+            Self::Any(_) | Self::Array(_) | Self::Weak(_) | Self::Promise(_) => "object",
             Self::Function(_) => "function",
             Self::String(_) => "string",
         }
@@ -144,6 +144,7 @@ impl Object {
             Self::Function(..) => true,
             Self::Any(_) => true,
             Self::Weak(_) => true,
+            Self::Promise(_) => true,
         }
     }
 

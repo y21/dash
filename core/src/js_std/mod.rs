@@ -18,6 +18,8 @@ pub mod math;
 pub mod number;
 /// Implements `Object`
 pub mod object;
+/// Implements `Promise`
+pub mod promise;
 /// Implements `String`
 pub mod string;
 /// Implements `WeakMap`

@@ -4,6 +4,7 @@ use super::{
         array::Array,
         function::{Closure, FunctionKind, Module, NativeFunction, UserFunction},
         object::{AnyObject, Object, Weak},
+        promise::Promise,
         weak::{WeakMap, WeakSet},
         Value, ValueKind,
     },
@@ -115,6 +116,12 @@ impl From<WeakSet<RefCell<Value>>> for Value {
 impl From<WeakMap<RefCell<Value>, RefCell<Value>>> for Value {
     fn from(m: WeakMap<RefCell<Value>, RefCell<Value>>) -> Self {
         Weak::Map(m).into()
+    }
+}
+
+impl From<Promise> for Value {
+    fn from(p: Promise) -> Self {
+        Object::Promise(p).into()
     }
 }
 

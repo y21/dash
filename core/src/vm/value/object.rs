@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::cell::RefCell;
 
+use super::promise::Promise;
 use super::weak::WeakMap;
 use super::weak::WeakSet;
 use super::{array::Array, function::FunctionKind, Value};
@@ -76,6 +77,8 @@ pub enum Object {
     Array(Array),
     /// A JavaScript weak type
     Weak(Weak),
+    /// A JavaScript promise
+    Promise(Promise),
     /// A non-special ordinary object
     Any(AnyObject),
 }

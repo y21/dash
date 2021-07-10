@@ -11,7 +11,6 @@ use crate::vm::VM;
 use super::{
     function::{FunctionKind, Receiver},
     object::{Object, Weak as JsWeak},
-    weak::MaybeWeak,
     ValueKind,
 };
 
@@ -103,6 +102,8 @@ impl Value {
             ValueKind::Object(o) => {
                 // can't pattern match box ;/
                 match &**o {
+                    Object::Promise(_) => self
+                        .update_internal_properties(&statics.promise_proto, &statics.promise_ctor),
                     Object::String(_) => {
                         self.update_internal_properties(&statics.string_proto, &statics.string_ctor)
                     }

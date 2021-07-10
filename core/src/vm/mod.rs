@@ -343,6 +343,7 @@ impl VM {
         // We somehow need to have
         // global.set_property("globalThis", self.global.clone());
 
+        self.statics.promise_proto = self.create_object().into();
         self.statics.boolean_proto = self.create_object().into();
         self.statics.number_proto = self.create_object().into();
         self.statics.string_proto = {
@@ -402,6 +403,12 @@ impl VM {
             array_ctor.set_property("isArray", Rc::clone(&self.statics.array_is_array));
         }
 
+        {
+            let mut promise_ctor = self.statics.promise_ctor.borrow_mut();
+            promise_ctor.set_property("resolve", Rc::clone(&self.statics.promise_resolve));
+            promise_ctor.set_property("reject", Rc::clone(&self.statics.promise_reject));
+        }
+
         self.statics.weakset_proto = self.create_object().into();
         self.statics.weakmap_proto = self.create_object().into();
         self.statics.error_proto = self.create_object().into();
@@ -450,6 +457,11 @@ impl VM {
         );
         patch_constructor(self, &self.statics.object_ctor, &self.statics.object_proto);
         patch_constructor(self, &self.statics.error_ctor, &self.statics.error_proto);
+        patch_constructor(
+            self,
+            &self.statics.promise_ctor,
+            &self.statics.promise_proto,
+        );
         // Other functions/methods
         patch_function_value(self, &self.statics.isnan);
         patch_function_value(self, &self.statics.object_define_property);
@@ -489,6 +501,8 @@ impl VM {
         patch_function_value(self, &self.statics.string_strike);
         patch_function_value(self, &self.statics.string_sub);
         patch_function_value(self, &self.statics.string_sup);
+        patch_function_value(self, &self.statics.promise_resolve);
+        patch_function_value(self, &self.statics.promise_reject);
 
         global.set_property("NaN", self.create_js_value(f64::NAN).into());
         global.set_property("Infinity", self.create_js_value(f64::INFINITY).into());
@@ -553,6 +567,7 @@ impl VM {
         global.set_property("Array", self.statics.array_ctor.clone());
         global.set_property("WeakSet", self.statics.weakset_ctor.clone());
         global.set_property("WeakMap", self.statics.weakmap_ctor.clone());
+        global.set_property("Promise", self.statics.promise_ctor.clone());
     }
 
     fn unwind(&mut self, value: Rc<RefCell<Value>>) -> Result<(), Rc<RefCell<Value>>> {

@@ -12,6 +12,8 @@ pub mod map;
 pub mod object;
 /// Implements JavaScript operations
 pub mod ops;
+/// JavaScript promise
+pub mod promise;
 /// JavaScript string
 pub mod string;
 /// JavaScript value

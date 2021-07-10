@@ -4,9 +4,10 @@ use super::{
     array::Array,
     function::FunctionKind,
     object::{Object, Weak},
+    promise::Promise,
     Value, ValueKind,
 };
-use crate::vm::instruction::Constant;
+use crate::vm::{instruction::Constant, value::promise::PromiseState};
 
 impl Value {
     /// Attempts to convert self to a constant
@@ -271,6 +272,23 @@ impl Object {
                 Cow::Owned(s)
             }
             Self::Weak(w) => w.inspect(),
+            Self::Promise(p) => match &p.value {
+                PromiseState::Resolved(value_cell) => {
+                    let value = value_cell.borrow();
+                    Cow::Owned(format!(
+                        "Promise {{ <resolved> {} }}",
+                        value.inspect(depth + 1)
+                    ))
+                }
+                PromiseState::Rejected(value_cell) => {
+                    let value = value_cell.borrow();
+                    Cow::Owned(format!(
+                        "Promise {{ <rejected> {} }}",
+                        value.inspect(depth + 1)
+                    ))
+                }
+                PromiseState::Pending => Cow::Borrowed("Promise {<pending>}"),
+            },
             Self::Any(_) => {
                 let mut s = String::from("{ ");
 
@@ -332,6 +350,14 @@ impl Object {
     pub fn as_weak_mut(&mut self) -> Option<&mut Weak> {
         match self {
             Self::Weak(w) => Some(w),
+            _ => None,
+        }
+    }
+
+    /// Attempts to return self as a reference to [Promise] if it is one
+    pub fn as_promise(&self) -> Option<&Promise> {
+        match self {
+            Self::Promise(p) => Some(p),
             _ => None,
         }
     }

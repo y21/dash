@@ -27,6 +27,8 @@ pub struct Statics {
     pub object_proto: Rc<RefCell<Value>>,
     /// Represents Error.prototype
     pub error_proto: Rc<RefCell<Value>>,
+    /// Represents Promise.prototype
+    pub promise_proto: Rc<RefCell<Value>>,
     /// Represents the Boolean constructor
     pub boolean_ctor: Rc<RefCell<Value>>,
     /// Represents the Number constructor
@@ -45,6 +47,8 @@ pub struct Statics {
     pub object_ctor: Rc<RefCell<Value>>,
     /// Represents the Error constructor
     pub error_ctor: Rc<RefCell<Value>>,
+    /// Represents the Promise constructor
+    pub promise_ctor: Rc<RefCell<Value>>,
     /// Represents console.log
     pub console_log: Rc<RefCell<Value>>,
     /// Represents isNaN
@@ -173,6 +177,10 @@ pub struct Statics {
     pub json_parse: Rc<RefCell<Value>>,
     /// Represents JSON.stringify
     pub json_stringify: Rc<RefCell<Value>>,
+    /// Represents Promise.resolve
+    pub promise_resolve: Rc<RefCell<Value>>,
+    /// Represents Promise.reject
+    pub promise_reject: Rc<RefCell<Value>>,
 }
 
 macro_rules! register_glob_method {
@@ -201,6 +209,7 @@ impl Statics {
             weakmap_proto: Value::from(AnyObject {}).into(),
             object_proto: Value::from(AnyObject {}).into(),
             error_proto: Value::from(AnyObject {}).into(),
+            promise_proto: Value::from(AnyObject {}).into(),
             // Ctor
             error_ctor: register_ctor!("Error", js_std::error::error_constructor),
             weakset_ctor: register_ctor!("WeakSet", js_std::weakset::weakset_constructor),
@@ -211,6 +220,7 @@ impl Statics {
             function_ctor: register_ctor!("Function", js_std::function::function_constructor),
             array_ctor: register_ctor!("Array", js_std::array::array_constructor),
             object_ctor: register_ctor!("Object", js_std::object::object_constructor),
+            promise_ctor: register_ctor!("Promise", js_std::promise::promise_constructor),
             // Methods
             console_log: register_glob_method!("log", js_std::console::log),
             isnan: register_glob_method!("isNaN", js_std::functions::is_nan),
@@ -285,6 +295,8 @@ impl Statics {
             weakmap_delete: register_glob_method!("delete", js_std::weakmap::delete),
             json_parse: register_glob_method!("parse", js_std::json::parse),
             json_stringify: register_glob_method!("stringify", js_std::json::stringify),
+            promise_resolve: register_glob_method!("resolve", js_std::promise::resolve),
+            promise_reject: register_glob_method!("reject", js_std::promise::reject),
         }
     }
 }
