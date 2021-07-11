@@ -5,23 +5,9 @@
 use std::{borrow::Cow, cell::RefCell, rc::Rc};
 
 use agent::Agent;
-use compiler::compiler::{CompileError, Compiler, FunctionKind};
-use parser::{
-    lexer::{Error as LexError, Lexer},
-    parser::Parser,
-    token::Error as ParseError,
-};
-use util::MaybeOwned;
-use vm::{
-    value::{
-        function::{Constructor, FunctionType, UserFunction},
-        object::AnyObject,
-        Value,
-    },
-    VM,
-};
-
-use crate::vm::value::function::Receiver;
+use compiler::compiler::CompileError;
+use parser::{lexer::Error as LexError, token::Error as ParseError};
+use vm::{value::Value, FromStrError, VMError, VM};
 
 /// Allows embedders to control behavior
 pub mod agent;
@@ -81,27 +67,30 @@ impl<'a> EvalError<'a> {
     }
 }
 
+impl<'a> From<FromStrError<'a>> for EvalError<'a> {
+    fn from(value: FromStrError<'a>) -> Self {
+        match value {
+            FromStrError::LexError(l) => Self::LexError(l),
+            FromStrError::ParseError(p) => Self::ParseError(p),
+            FromStrError::CompileError(c) => Self::CompileError(c),
+        }
+    }
+}
+
+impl<'a> From<VMError> for EvalError<'a> {
+    fn from(value: VMError) -> Self {
+        Self::VMError(value)
+    }
+}
+
 /// Convenient function for evaluating a JavaScript source code string with default settings.
 /// Returns the last value. Async tasks are not evaluated.
-pub fn eval<'a, A: Agent>(
+pub fn eval<'a, A: Agent + 'static>(
     code: &'a str,
     agent: Option<A>,
 ) -> Result<Option<Rc<RefCell<Value>>>, EvalError<'a>> {
-    let tokens = Lexer::new(code).scan_all().map_err(EvalError::LexError)?;
-    let statements = Parser::new(code, tokens)
-        .parse_all()
-        .map_err(EvalError::ParseError)?;
-    let instructions = Compiler::new(
-        statements,
-        agent.map(MaybeOwned::Owned),
-        FunctionKind::Function,
-    )
-    .compile()
-    .map_err(EvalError::CompileError)?;
-    let mut func = UserFunction::new(instructions, 0, FunctionType::Top, 0, Constructor::NoCtor);
-    func.bind(Receiver::Bound(Value::from(AnyObject {}).into()));
-    let mut vm = VM::new(func);
-    let result = vm.interpret().map_err(EvalError::VMError)?;
+    let mut vm = VM::from_str(code, agent)?;
+    let result = vm.interpret()?;
 
     Ok(result)
 }
