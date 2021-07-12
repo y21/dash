@@ -1,5 +1,5 @@
 use super::{
-    handle::InnerHandle,
+    handle::InnerHandleGuard,
     heap::{Heap, Node},
     Handle,
 };
@@ -7,7 +7,7 @@ use super::{
 /// A tracing garbage collector
 pub struct Gc<T> {
     /// The underlying heap
-    pub heap: Heap<InnerHandle<T>>,
+    pub heap: Heap<InnerHandleGuard<T>>,
 }
 
 impl<T> Gc<T> {
@@ -21,7 +21,7 @@ impl<T> Gc<T> {
     /// It scans through the heap and deallocates every object that is not marked as visited.
     /// This operation is unsafe as it invalidates any [Handle] that may be still alive.
     pub unsafe fn sweep(&mut self) {
-        let mut previous = <Option<*mut Node<InnerHandle<T>>>>::None;
+        let mut previous = <Option<*mut Node<InnerHandleGuard<T>>>>::None;
         let mut node = self.heap.tail;
 
         loop {
@@ -29,7 +29,7 @@ impl<T> Gc<T> {
                 let (marked, next) = unsafe {
                     let node = &*ptr;
 
-                    (node.value.is_marked(), node.next)
+                    (node.value.get_unchecked().is_marked(), node.next)
                 };
 
                 node = next;
@@ -65,7 +65,7 @@ impl<T> Gc<T> {
     /// If not marked as visited, the returned [Handle] will dangle when sweep is called.
     pub fn register<H>(&mut self, value: H) -> Handle<T>
     where
-        H: Into<InnerHandle<T>>,
+        H: Into<InnerHandleGuard<T>>,
     {
         let ptr = self.heap.add(value.into());
         unsafe { Handle::new(ptr) }
@@ -134,8 +134,8 @@ mod tests {
     pub fn gc_single_value_mark() {
         let mut gc = Gc::new();
 
-        let mut handle1 = gc.register(Value::new(ValueKind::Number(123f64)));
-        handle1.mark_visited();
+        let handle1 = gc.register(Value::new(ValueKind::Number(123f64)));
+        handle1.borrow_mut().mark_visited();
         let ptr1 = handle1.as_ptr();
 
         assert_eq!(gc.heap.len, 1);
@@ -152,10 +152,10 @@ mod tests {
     pub fn gc_multi_value_mark() {
         let mut gc = Gc::new();
 
-        let mut handle1 = gc.register(Value::new(ValueKind::Number(123f64)));
-        let mut handle2 = gc.register(Value::new(ValueKind::Number(456f64)));
-        handle1.mark_visited();
-        handle2.mark_visited();
+        let handle1 = gc.register(Value::new(ValueKind::Number(123f64)));
+        let handle2 = gc.register(Value::new(ValueKind::Number(456f64)));
+        handle1.borrow_mut().mark_visited();
+        handle2.borrow_mut().mark_visited();
         let ptr1 = handle1.as_ptr();
         let ptr2 = handle2.as_ptr();
 

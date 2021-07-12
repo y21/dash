@@ -9,6 +9,7 @@ impl Value {
     }
 
     /// Implements the behavior of the === operator
+    #[allow(clippy::float_cmp)]
     pub fn strict_equal(&self, other: &Value) -> bool {
         match &self.kind {
             ValueKind::Number(n) => {

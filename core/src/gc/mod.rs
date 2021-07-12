@@ -1,9 +1,9 @@
 /// A tracing garbage collector
-mod gc;
+pub mod gc;
 /// Handles to heap allocations that can be passed around
-mod handle;
+pub mod handle;
 /// A collection of heap elements
-mod heap;
+pub mod heap;
 
-use gc::*;
-use handle::*;
+pub use gc::*;
+pub use handle::*;
