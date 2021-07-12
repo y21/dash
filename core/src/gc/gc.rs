@@ -1,0 +1,171 @@
+use super::{
+    handle::InnerHandle,
+    heap::{Heap, Node},
+    Handle,
+};
+
+/// A tracing garbage collector
+pub struct Gc<T> {
+    /// The underlying heap
+    pub heap: Heap<InnerHandle<T>>,
+}
+
+impl<T> Gc<T> {
+    /// Creates a new garbage collector
+    pub fn new() -> Self {
+        Self { heap: Heap::new() }
+    }
+
+    /// Performs a GC cycle
+    ///
+    /// It scans through the heap and deallocates every object that is not marked as visited.
+    /// This operation is unsafe as it invalidates any [Handle] that may be still alive.
+    pub unsafe fn sweep(&mut self) {
+        let mut previous = <Option<*mut Node<InnerHandle<T>>>>::None;
+        let mut node = self.heap.tail;
+
+        loop {
+            if let Some(ptr) = node {
+                let (marked, next) = unsafe {
+                    let node = &*ptr;
+
+                    (node.value.is_marked(), node.next)
+                };
+
+                node = next;
+
+                if !marked {
+                    // No more references to the object, we can deallocate it
+
+                    // If this is the heap tail, we need to update it
+                    if self.heap.tail.map(|p| p == ptr).unwrap_or(true) {
+                        self.heap.tail = next;
+                    }
+
+                    // If this is the heap head, we need to update it
+                    if self.heap.head.map(|p| p == ptr).unwrap_or(true) {
+                        self.heap.head = previous;
+                    }
+
+                    // Finally, deallocate
+                    drop(unsafe { Box::from_raw(ptr) });
+
+                    self.heap.len -= 1;
+                } else {
+                    previous = Some(ptr);
+                }
+            } else {
+                break;
+            }
+        }
+    }
+
+    /// Registers a new value
+    ///
+    /// If not marked as visited, the returned [Handle] will dangle when sweep is called.
+    pub fn register<H>(&mut self, value: H) -> Handle<T>
+    where
+        H: Into<InnerHandle<T>>,
+    {
+        let ptr = self.heap.add(value.into());
+        unsafe { Handle::new(ptr) }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::vm::value::{Value, ValueKind};
+    use std::ptr::eq as ptr_eq;
+
+    fn assert_node_eq<T>(l: Option<*mut Node<T>>, r: *mut T) {
+        assert!(l
+            .map(|x| unsafe { ptr_eq(&(*x).value, r) })
+            .unwrap_or(false));
+    }
+
+    #[test]
+    pub fn gc_single_value_reclaim() {
+        let mut gc = Gc::new();
+        let handle = gc.register(Value::new(ValueKind::Number(123f64)));
+        let ptr = handle.as_ptr();
+
+        // When gc only has one element, len must be 1
+        assert_eq!(gc.heap.len, 1);
+
+        // Assert that when gc only has one element, tail and head must point to it
+        assert_node_eq(gc.heap.head, ptr);
+        assert_node_eq(gc.heap.tail, ptr);
+
+        unsafe { gc.sweep() };
+
+        // After GC sweep, len must be 0
+        assert_eq!(gc.heap.len, 0);
+
+        // Tail and head must be none
+        assert!(gc.heap.tail.is_none());
+        assert!(gc.heap.head.is_none());
+    }
+
+    #[test]
+    pub fn gc_multi_value_reclaim() {
+        let mut gc = Gc::new();
+
+        let handle1 = gc.register(Value::new(ValueKind::Number(123f64)));
+        let handle2 = gc.register(Value::new(ValueKind::Number(456f64)));
+        let ptr1 = handle1.as_ptr();
+        let ptr2 = handle2.as_ptr();
+
+        assert_eq!(gc.heap.len, 2);
+
+        // Tail = 1st element
+        assert_node_eq(gc.heap.tail, ptr1);
+        // Head = last element
+        assert_node_eq(gc.heap.head, ptr2);
+
+        unsafe { gc.sweep() };
+
+        assert_eq!(gc.heap.len, 0);
+        assert!(gc.heap.tail.is_none());
+        assert!(gc.heap.head.is_none());
+    }
+
+    #[test]
+    pub fn gc_single_value_mark() {
+        let mut gc = Gc::new();
+
+        let mut handle1 = gc.register(Value::new(ValueKind::Number(123f64)));
+        handle1.mark_visited();
+        let ptr1 = handle1.as_ptr();
+
+        assert_eq!(gc.heap.len, 1);
+
+        unsafe { gc.sweep() };
+
+        assert_eq!(gc.heap.len, 1);
+
+        assert_node_eq(gc.heap.tail, ptr1);
+        assert_node_eq(gc.heap.head, ptr1);
+    }
+
+    #[test]
+    pub fn gc_multi_value_mark() {
+        let mut gc = Gc::new();
+
+        let mut handle1 = gc.register(Value::new(ValueKind::Number(123f64)));
+        let mut handle2 = gc.register(Value::new(ValueKind::Number(456f64)));
+        handle1.mark_visited();
+        handle2.mark_visited();
+        let ptr1 = handle1.as_ptr();
+        let ptr2 = handle2.as_ptr();
+
+        assert_eq!(gc.heap.len, 2);
+
+        unsafe { gc.sweep() };
+
+        assert_eq!(gc.heap.len, 2);
+
+        assert_node_eq(gc.heap.tail, ptr1);
+        assert_node_eq(gc.heap.head, ptr2);
+    }
+}

@@ -1,6 +1,7 @@
 //! JavaScript implementation written in Rust
 
 #![deny(missing_docs)]
+#![allow(unused_unsafe)]
 
 use std::{borrow::Cow, cell::RefCell, rc::Rc};
 
