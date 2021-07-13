@@ -1,6 +1,7 @@
-use std::{cell::RefCell, rc::Rc};
-
-use crate::vm::value::{object::Object, Value, ValueKind};
+use crate::{
+    gc::Handle,
+    vm::value::{object::Object, Value, ValueKind},
+};
 
 impl Value {
     /// Implements the behavior of the == operator
@@ -65,7 +66,7 @@ impl Value {
     }
 
     /// Implements the logical and operator, given cells to two [Value]s
-    pub fn logical_and(this: Rc<RefCell<Value>>, other: Rc<RefCell<Value>>) -> Rc<RefCell<Value>> {
+    pub fn logical_and(this: Handle<Value>, other: Handle<Value>) -> Handle<Value> {
         if this.borrow().is_truthy() {
             other
         } else {
@@ -84,7 +85,7 @@ impl Value {
     }
 
     /// Implements the logical or operator, given cells to two [Value]s
-    pub fn logical_or(this: Rc<RefCell<Value>>, other: Rc<RefCell<Value>>) -> Rc<RefCell<Value>> {
+    pub fn logical_or(this: Handle<Value>, other: Handle<Value>) -> Handle<Value> {
         if !this.borrow().is_truthy() {
             other
         } else {
@@ -103,10 +104,7 @@ impl Value {
     }
 
     /// Implements the nullish coalescing operator, given cells to two [Value]s
-    pub fn nullish_coalescing(
-        this: Rc<RefCell<Value>>,
-        other: Rc<RefCell<Value>>,
-    ) -> Rc<RefCell<Value>> {
+    pub fn nullish_coalescing(this: Handle<Value>, other: Handle<Value>) -> Handle<Value> {
         if this.borrow().is_nullish() {
             other
         } else {

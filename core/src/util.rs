@@ -127,3 +127,14 @@ impl<L, R> Either<L, R> {
         }
     }
 }
+
+#[inline(never)]
+#[cold]
+fn unlikely_inner() {}
+
+pub(crate) fn unlikely(b: bool) -> bool {
+    if b {
+        unlikely_inner();
+    }
+    b
+}

@@ -1,17 +1,14 @@
+use crate::gc::Handle;
 use crate::vm::{instruction::Instruction, upvalue::Upvalue, VM};
 use core::fmt::{self, Debug, Formatter};
 use std::any::Any;
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
-use std::rc::Weak;
 
 use super::object::AnyObject;
 use super::Value;
 
 /// A native function that can be called from JavaScript code
-pub type NativeFunctionCallback =
-    for<'a> fn(CallContext<'a>) -> Result<CallResult, Rc<RefCell<Value>>>;
+pub type NativeFunctionCallback = for<'a> fn(CallContext<'a>) -> Result<CallResult, Handle<Value>>;
 
 /// Represents whether a function can be invoked as a constructor
 #[derive(Debug, Clone, Copy)]
@@ -39,9 +36,9 @@ impl Constructor {
 /// and return [CallResult::UserFunction] to notify the caller that it cannot proceed
 pub enum CallResult {
     /// A user function needs to be called to proceed
-    UserFunction(Rc<RefCell<Value>>, Vec<Rc<RefCell<Value>>>),
+    UserFunction(Handle<Value>, Vec<Handle<Value>>),
     /// We have a value
-    Ready(Rc<RefCell<Value>>),
+    Ready(Handle<Value>),
 }
 
 /// State that may be used in a native function
@@ -123,9 +120,9 @@ pub struct CallContext<'a> {
     /// Note that the order of arguments is last to first,
     /// i.e. the first argument is the last item of the vec
     /// due to the nature of a stack
-    pub args: &'a mut Vec<Rc<RefCell<Value>>>,
+    pub args: &'a mut Vec<Handle<Value>>,
     /// The receiver (`this`) value
-    pub receiver: Option<Rc<RefCell<Value>>>,
+    pub receiver: Option<Handle<Value>>,
     /// Whether this function call is invoked as a constructor call
     pub ctor: bool,
     /// State for this native call
@@ -136,12 +133,12 @@ pub struct CallContext<'a> {
     /// returning [CallResult::UserFunction]
     ///
     /// See docs for [CallResult] for when this would be set
-    pub function_call_response: Option<Rc<RefCell<Value>>>,
+    pub function_call_response: Option<Handle<Value>>,
 }
 
 impl<'a> CallContext<'a> {
     /// An iterator over arguments in fixed order
-    pub fn arguments(&self) -> impl Iterator<Item = &Rc<RefCell<Value>>> {
+    pub fn arguments(&self) -> impl Iterator<Item = &Handle<Value>> {
         // TODO: fix order
         self.args.iter().rev()
     }
@@ -171,14 +168,14 @@ pub enum FunctionType {
 #[derive(Debug, Clone)]
 pub enum Receiver {
     /// Receiver is pinned and may not be changed
-    Pinned(Rc<RefCell<Value>>),
+    Pinned(Handle<Value>),
     /// Receiver is bound to a specific value
-    Bound(Rc<RefCell<Value>>),
+    Bound(Handle<Value>),
 }
 
 impl Receiver {
     /// Returns the inner `this` value
-    pub fn get(&self) -> &Rc<RefCell<Value>> {
+    pub fn get(&self) -> &Handle<Value> {
         match self {
             Self::Pinned(p) => p,
             Self::Bound(b) => b,
@@ -227,7 +224,7 @@ pub struct UserFunction {
     /// Whether this function is constructable
     pub ctor: Constructor,
     /// The prototype of this function
-    pub prototype: Option<Weak<RefCell<Value>>>,
+    pub prototype: Option<Handle<Value>>,
     /// Number of parameters this function takes
     pub params: u32,
     /// The receiver of this function
@@ -290,7 +287,7 @@ pub struct NativeFunction {
     /// The receiver of this function
     pub receiver: Option<Receiver>,
     /// The prototype of this function
-    pub prototype: Option<Weak<RefCell<Value>>>,
+    pub prototype: Option<Handle<Value>>,
 }
 
 impl NativeFunction {
@@ -325,7 +322,9 @@ impl Clone for NativeFunction {
 
 impl Debug for NativeFunction {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.debug_struct("NativeFunction").finish()
+        f.debug_struct("NativeFunction")
+            .field("name", &self.name)
+            .finish()
     }
 }
 
@@ -352,9 +351,9 @@ impl Module {
 #[derive(Debug, Clone, Default)]
 pub struct Exports {
     /// The default export, if set
-    pub default: Option<Rc<RefCell<Value>>>,
+    pub default: Option<Handle<Value>>,
     /// Named exports
-    pub named: HashMap<Box<str>, Rc<RefCell<Value>>>,
+    pub named: HashMap<Box<str>, Handle<Value>>,
 }
 
 /// The kind of this function
@@ -398,8 +397,8 @@ impl FunctionKind {
         }
     }
 
-    /// Returns a [Weak] to the prototype of this function, if it has one
-    pub fn prototype_weak(&self) -> Option<&Weak<RefCell<Value>>> {
+    /// Returns a [Handle] to the prototype of this function, if it has one
+    pub fn prototype(&self) -> Option<&Handle<Value>> {
         match self {
             Self::Closure(c) => c.func.prototype.as_ref(),
             Self::User(u) => u.prototype.as_ref(),
@@ -408,22 +407,62 @@ impl FunctionKind {
         }
     }
 
-    /// Returns a [Rc] to the prototype of this function, if it has one
-    pub fn prototype(&self) -> Option<Rc<RefCell<Value>>> {
-        self.prototype_weak().and_then(Weak::upgrade)
+    pub(crate) fn mark(&self) {
+        match self {
+            FunctionKind::Module(module) => {
+                if let Some(handle) = &module.exports.default {
+                    Value::mark(handle)
+                }
+
+                for (_, handle) in &module.exports.named {
+                    Value::mark(handle)
+                }
+            }
+            FunctionKind::Native(native) => {
+                if let Some(handle) = &native.receiver {
+                    Value::mark(handle.get())
+                }
+
+                if let Some(handle) = &native.prototype {
+                    Value::mark(handle)
+                }
+            }
+            FunctionKind::User(func) => {
+                if let Some(handle) = &func.receiver {
+                    Value::mark(handle.get())
+                }
+
+                if let Some(handle) = &func.prototype {
+                    Value::mark(handle)
+                }
+            }
+            FunctionKind::Closure(closure) => {
+                if let Some(handle) = &closure.func.receiver {
+                    Value::mark(handle.get())
+                }
+
+                if let Some(handle) = &closure.func.prototype {
+                    Value::mark(handle)
+                }
+
+                for upvalue in &closure.upvalues {
+                    upvalue.mark_visited();
+                }
+            }
+        }
     }
 
     /// Attempts to create an object with its [[Prototype]] set to this
     /// functions prototype
-    pub fn construct(&self, this: &Rc<RefCell<Value>>) -> Value {
+    pub fn construct(&self, this: &Handle<Value>) -> Value {
         let mut o = Value::from(AnyObject {});
-        o.proto = self.prototype_weak().cloned();
-        o.constructor = Some(Rc::downgrade(this));
+        o.proto = self.prototype().cloned();
+        o.constructor = Some(Handle::clone(this));
         o
     }
 
     /// Sets the prototype of this function
-    pub fn set_prototype(&mut self, proto: Weak<RefCell<Value>>) {
+    pub fn set_prototype(&mut self, proto: Handle<Value>) {
         match self {
             Self::Closure(c) => c.func.prototype = Some(proto),
             Self::User(u) => u.prototype = Some(proto),

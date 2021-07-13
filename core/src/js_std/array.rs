@@ -1,14 +1,17 @@
-use std::{borrow::Cow, cell::RefCell, rc::Rc, str::Chars};
+use std::{borrow::Cow, str::Chars};
 
-use crate::vm::{
-    abstractions,
-    value::{
-        array::Array,
-        function::{CallContext, CallResult},
-        object::Object,
-        Value, ValueKind,
+use crate::{
+    gc::Handle,
+    vm::{
+        abstractions,
+        value::{
+            array::Array,
+            function::{CallContext, CallResult},
+            object::Object,
+            Value, ValueKind,
+        },
+        VM,
     },
-    VM,
 };
 
 use super::error::{self, MaybeRc};
@@ -16,14 +19,14 @@ use super::error::{self, MaybeRc};
 /// The array constructor
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array-constructor
-pub fn array_constructor(_args: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
-    Ok(CallResult::Ready(Value::new(ValueKind::Undefined).into()))
+pub fn array_constructor(_args: CallContext) -> Result<CallResult, Handle<Value>> {
+    todo!()
 }
 
 /// This function implements Array.prototype.push
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.push
-pub fn push(value: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+pub fn push(value: CallContext) -> Result<CallResult, Handle<Value>> {
     let this_cell = value.receiver.unwrap();
 
     let mut this = this_cell.borrow_mut();
@@ -38,21 +41,21 @@ pub fn push(value: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     };
 
     for value in value.args.into_iter().rev() {
-        this_arr.elements.push(Rc::clone(&value));
+        this_arr.elements.push(Handle::clone(&value));
     }
 
     Ok(CallResult::Ready(
         value
             .vm
             .create_js_value(this_arr.elements.len() as f64)
-            .into(),
+            .into_handle(value.vm),
     ))
 }
 
 /// This function implements Array.prototype.concat
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.concat
-pub fn concat(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+pub fn concat(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this = this_cell.borrow_mut();
     let this_arr = match this.as_object_mut() {
@@ -67,14 +70,14 @@ pub fn concat(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
 
     let mut arr = this_arr.clone();
     for arg in ctx.arguments() {
-        arr.elements.push(Rc::clone(arg));
+        arr.elements.push(Handle::clone(arg));
     }
 
-    Ok(CallResult::Ready(Value::from(arr).into()))
+    Ok(CallResult::Ready(Value::from(arr).into_handle(ctx.vm)))
 }
 
 struct Map {
-    pub result: Option<Vec<Rc<RefCell<Value>>>>,
+    pub result: Option<Vec<Handle<Value>>>,
 }
 
 impl Map {
@@ -88,7 +91,7 @@ impl Map {
 /// This function implements Array.prototype.map
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.map
-pub fn map(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+pub fn map(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this_ref = this_cell.borrow_mut();
     let this_arr = match this_ref.as_object_mut() {
@@ -105,7 +108,7 @@ pub fn map(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
 
     if let Some(response) = &ctx.function_call_response {
         let arr = state.result.as_mut().unwrap();
-        arr.push(Rc::clone(response));
+        arr.push(Handle::clone(response));
     }
 
     let length = state.result.as_ref().unwrap().len();
@@ -113,7 +116,7 @@ pub fn map(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     if length == this_arr.elements.len() {
         let arr = state.result.take().unwrap();
         return Ok(CallResult::Ready(
-            ctx.vm.create_array(Array::new(arr)).into(),
+            ctx.vm.create_array(Array::new(arr)).into_handle(ctx.vm),
         ));
     }
 
@@ -122,11 +125,11 @@ pub fn map(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let cb = ctx.args.first().unwrap();
 
     Ok(CallResult::UserFunction(
-        Rc::clone(cb),
+        Handle::clone(cb),
         vec![
             element,
-            ctx.vm.create_js_value(length as f64).into(),
-            Rc::clone(this_cell),
+            ctx.vm.create_js_value(length as f64).into_handle(ctx.vm),
+            Handle::clone(this_cell),
         ],
     ))
 }
@@ -144,7 +147,7 @@ impl Every {
 /// This function implements Array.prototype.every
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.every
-pub fn every(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+pub fn every(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this_ref = this_cell.borrow_mut();
     let this_arr = match this_ref.as_object_mut() {
@@ -162,14 +165,18 @@ pub fn every(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     if let Some(response_cell) = ctx.function_call_response {
         let response = response_cell.borrow().is_truthy();
         if !response {
-            return Ok(CallResult::Ready(ctx.vm.create_js_value(false).into()));
+            return Ok(CallResult::Ready(
+                ctx.vm.create_js_value(false).into_handle(ctx.vm),
+            ));
         }
 
         state.index += 1;
     }
 
     if state.index == this_arr.elements.len() {
-        return Ok(CallResult::Ready(ctx.vm.create_js_value(true).into()));
+        return Ok(CallResult::Ready(
+            ctx.vm.create_js_value(true).into_handle(ctx.vm),
+        ));
     }
 
     let cb = ctx.args.first().unwrap();
@@ -177,11 +184,13 @@ pub fn every(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let element = this_arr.elements.get(state.index).cloned().unwrap();
 
     Ok(CallResult::UserFunction(
-        Rc::clone(cb),
+        Handle::clone(cb),
         vec![
             element,
-            ctx.vm.create_js_value(state.index as f64).into(),
-            Rc::clone(this_cell),
+            ctx.vm
+                .create_js_value(state.index as f64)
+                .into_handle(ctx.vm),
+            Handle::clone(this_cell),
         ],
     ))
 }
@@ -189,7 +198,7 @@ pub fn every(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
 /// This function implements Array.prototype.fill
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.fill
-pub fn fill(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+pub fn fill(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this_ref = this_cell.borrow_mut();
     let this_arr = match this_ref.as_object_mut() {
@@ -208,7 +217,7 @@ pub fn fill(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let value = args
         .next()
         .cloned()
-        .unwrap_or_else(|| Value::new(ValueKind::Undefined).into());
+        .unwrap_or_else(|| Value::new(ValueKind::Undefined).into_handle(ctx.vm));
 
     let start = args
         .next()
@@ -222,58 +231,58 @@ pub fn fill(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
         .unwrap_or_else(|| this_arr.elements.len());
 
     for idx in start..end {
-        this_arr.elements[idx] = Rc::clone(&value);
+        this_arr.elements[idx] = Handle::clone(&value);
     }
 
-    Ok(CallResult::Ready(Rc::clone(this_cell)))
+    Ok(CallResult::Ready(Handle::clone(this_cell)))
 }
 
 /// This function implements Array.prototype.filter
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.filter
-pub fn filter(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+pub fn filter(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.find
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.find
-pub fn find(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+pub fn find(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.find
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.findIndex
-pub fn find_index(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+pub fn find_index(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.flat
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.flat
-pub fn flat(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+pub fn flat(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.forEach
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.forEach
-pub fn for_each(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+pub fn for_each(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.from
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.from
-pub fn from(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+pub fn from(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.includes
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.includes
-pub fn includes(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+pub fn includes(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this_ref = this_cell.borrow_mut();
     let this_arr = match this_ref.as_object_mut() {
@@ -290,7 +299,7 @@ pub fn includes(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let search_element_cell = args
         .next()
         .cloned()
-        .unwrap_or_else(|| Value::new(ValueKind::Undefined).into());
+        .unwrap_or_else(|| Value::new(ValueKind::Undefined).into_handle(ctx.vm));
     let search_element = search_element_cell.borrow();
     let from_index = args
         .next()
@@ -304,13 +313,15 @@ pub fn includes(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
         .skip(from_index)
         .any(|cell| cell.borrow().strict_equal(&search_element));
 
-    Ok(CallResult::Ready(ctx.vm.create_js_value(found).into()))
+    Ok(CallResult::Ready(
+        ctx.vm.create_js_value(found).into_handle(ctx.vm),
+    ))
 }
 
 /// This function implements Array.prototype.indexOf
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.indexOf
-pub fn index_of(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+pub fn index_of(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this_ref = this_cell.borrow_mut();
     let this_arr = match this_ref.as_object_mut() {
@@ -327,7 +338,7 @@ pub fn index_of(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let search_element_cell = args
         .next()
         .cloned()
-        .unwrap_or_else(|| Value::new(ValueKind::Undefined).into());
+        .unwrap_or_else(|| Value::new(ValueKind::Undefined).into_handle(ctx.vm));
     let search_element = search_element_cell.borrow();
     let from_index = args
         .next()
@@ -343,23 +354,25 @@ pub fn index_of(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
         .map(|v| v as f64)
         .unwrap_or(-1f64);
 
-    Ok(CallResult::Ready(ctx.vm.create_js_value(index).into()))
+    Ok(CallResult::Ready(
+        ctx.vm.create_js_value(index).into_handle(ctx.vm),
+    ))
 }
 
 /// This function implements Array.isArray
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.isArray
-pub fn is_array(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+pub fn is_array(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     let mut arguments = ctx.arguments();
     let value_cell = arguments
         .next()
         .cloned()
-        .unwrap_or_else(|| Value::new(ValueKind::Undefined).into());
+        .unwrap_or_else(|| Value::new(ValueKind::Undefined).into_handle(ctx.vm));
     let value = value_cell.borrow();
     Ok(CallResult::Ready(
         ctx.vm
             .create_js_value(value.as_object().and_then(Object::as_array).is_some())
-            .into(),
+            .into_handle(ctx.vm),
     ))
 }
 
@@ -368,9 +381,9 @@ pub enum ArrayLikeKind<'a> {
     /// Iterator over characters of a string
     String(Chars<'a>),
     /// Array of JS Values
-    Array(&'a [Rc<RefCell<Value>>]),
+    Array(&'a [Handle<Value>]),
     /// Javascript object
-    Object(&'a Rc<RefCell<Value>>),
+    Object(&'a Handle<Value>),
     /// No value
     Empty,
 }
@@ -389,7 +402,7 @@ impl<'a> ArrayLikeIterable<'a> {
         Self { kind, index: 0 }
     }
     /// Creates a new array like iterable given a Value by detecting its kind
-    pub fn from_value(value: &'a Value, value_cell: &'a Rc<RefCell<Value>>) -> Self {
+    pub fn from_value(value: &'a Value, value_cell: &'a Handle<Value>) -> Self {
         match value.as_object() {
             Some(Object::String(s)) => Self::new(ArrayLikeKind::String(s.chars())),
             Some(Object::Array(a)) => Self::new(ArrayLikeKind::Array(&a.elements)),
@@ -398,10 +411,14 @@ impl<'a> ArrayLikeIterable<'a> {
         }
     }
     /// Yields the next value
-    pub fn next<'b>(&mut self, vm: &'b VM) -> Option<Rc<RefCell<Value>>> {
+    pub fn next<'b>(&mut self, vm: &'b mut VM) -> Option<Handle<Value>> {
         self.index += 1;
         match &mut self.kind {
-            ArrayLikeKind::String(s) => s.next().map(String::from).map(Value::from).map(Into::into),
+            ArrayLikeKind::String(s) => s
+                .next()
+                .map(String::from)
+                .map(Value::from)
+                .map(|v| v.into_handle(vm)),
             ArrayLikeKind::Array(source) => source.get(self.index - 1).cloned(),
             ArrayLikeKind::Object(source_cell) => {
                 Value::get_property(vm, source_cell, &(self.index - 1).to_string(), None)
@@ -430,7 +447,7 @@ impl Join {
 /// This function implements Array.prototype.join
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.join
-pub fn join(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+pub fn join(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
 
     let len = abstractions::object::length_of_array_like(ctx.vm, this_cell)? as usize;
@@ -464,7 +481,9 @@ pub fn join(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
         o.index = state.idx;
 
         if state.idx >= len {
-            return Ok(CallResult::Ready(ctx.vm.create_js_value(r).into()));
+            return Ok(CallResult::Ready(
+                ctx.vm.create_js_value(r).into_handle(ctx.vm),
+            ));
         }
     }
 
@@ -476,7 +495,7 @@ pub fn join(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
         // TODO: unwrap_or_else is unnecessary here. to_string operation takes Option<&Value>
         let element_cell = o
             .next(ctx.vm)
-            .unwrap_or_else(|| Value::new(ValueKind::Undefined).into());
+            .unwrap_or_else(|| Value::new(ValueKind::Undefined).into_handle(ctx.vm));
 
         let element = element_cell.borrow();
 
@@ -501,14 +520,16 @@ pub fn join(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     }
 
     Ok(CallResult::Ready(
-        ctx.vm.create_js_value(String::from(&*r)).into(),
+        ctx.vm
+            .create_js_value(String::from(&*r))
+            .into_handle(ctx.vm),
     ))
 }
 
 /// This function implements Array.prototype.lastIndexOf
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.lastIndexOf
-pub fn last_index_of(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+pub fn last_index_of(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this_ref = this_cell.borrow_mut();
     let this_arr = match this_ref.as_object_mut() {
@@ -527,7 +548,7 @@ pub fn last_index_of(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>>
     let search_element_cell = args
         .next()
         .cloned()
-        .unwrap_or_else(|| Value::new(ValueKind::Undefined).into());
+        .unwrap_or_else(|| Value::new(ValueKind::Undefined).into_handle(ctx.vm));
 
     let search_element = search_element_cell.borrow();
     let from_index = args
@@ -548,82 +569,84 @@ pub fn last_index_of(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>>
         .map(|c| c as f64)
         .unwrap_or(-1f64);
 
-    Ok(CallResult::Ready(ctx.vm.create_js_value(index).into()))
+    Ok(CallResult::Ready(
+        ctx.vm.create_js_value(index).into_handle(ctx.vm),
+    ))
 }
 
 /// This function implements Array.of
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.of
-pub fn of(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+pub fn of(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.pop
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.pop
-pub fn pop(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+pub fn pop(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.reduce
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.reduce
-pub fn reduce(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+pub fn reduce(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.reduceRight
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.reduceRight
-pub fn reduce_right(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+pub fn reduce_right(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.reverse
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.reverse
-pub fn reverse(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+pub fn reverse(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.shift
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.shift
-pub fn shift(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+pub fn shift(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.slice
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.slice
-pub fn slice(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+pub fn slice(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.some
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.some
-pub fn some(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+pub fn some(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.sort
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.sort
-pub fn sort(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+pub fn sort(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.splice
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.splice
-pub fn splice(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+pub fn splice(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.unshift
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.unshift
-pub fn unshift(_ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+pub fn unshift(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     todo!()
 }

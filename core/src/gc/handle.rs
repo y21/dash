@@ -1,9 +1,13 @@
-use std::{cell::RefCell, ops::Deref};
+use std::{
+    cell::RefCell,
+    ops::{Deref, DerefMut},
+};
 
 /// An inner garbage collected value
 ///
 /// If an [InnerHandle] does not get marked as visited by the next GC cycle,
 /// it will get garbage collected
+#[derive(Debug)]
 pub struct InnerHandle<T> {
     value: T,
     marked: bool,
@@ -32,15 +36,24 @@ impl<T> From<T> for InnerHandle<T> {
     }
 }
 
-impl<T> From<T> for InnerHandleGuard<T> {
-    fn from(t: T) -> Self {
-        Self(RefCell::new(t.into()))
+impl<T> Deref for InnerHandle<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl<T> DerefMut for InnerHandle<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
     }
 }
 
 /// A guarded handle to a garbage collected handle
 ///
 /// It uses [RefCell] to ensure that no aliasing happens
+#[derive(Debug)]
 pub struct InnerHandleGuard<T>(RefCell<InnerHandle<T>>);
 
 impl<T> InnerHandleGuard<T> {
@@ -59,6 +72,12 @@ impl<T> InnerHandleGuard<T> {
     }
 }
 
+impl<T> From<T> for InnerHandleGuard<T> {
+    fn from(t: T) -> Self {
+        Self(RefCell::new(t.into()))
+    }
+}
+
 impl<T> Deref for InnerHandleGuard<T> {
     type Target = RefCell<InnerHandle<T>>;
 
@@ -68,6 +87,7 @@ impl<T> Deref for InnerHandleGuard<T> {
 }
 
 /// A handle that
+#[derive(Debug, Clone)]
 pub struct Handle<T>(*mut InnerHandleGuard<T>);
 
 impl<T> Handle<T> {

@@ -1,24 +1,25 @@
-use std::{cell::RefCell, rc::Rc};
-
-use crate::vm::value::{
-    function::{CallContext, CallResult},
-    object::Object,
-    promise::{Promise, PromiseState},
-    Value, ValueKind,
+use crate::{
+    gc::Handle,
+    vm::value::{
+        function::{CallContext, CallResult},
+        object::Object,
+        promise::{Promise, PromiseState},
+        Value,
+    },
 };
 
 /// The promise constructor
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-promise-constructor
-pub fn promise_constructor(_args: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
-    Ok(CallResult::Ready(Value::new(ValueKind::Undefined).into()))
+pub fn promise_constructor(_args: CallContext) -> Result<CallResult, Handle<Value>> {
+    todo!()
 }
 
 /// Implements Promise.resolve
 ///
 /// https://tc39.es/ecma262/multipage/control-abstraction-objects.html#sec-promise.resolve
-pub fn resolve(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
-    let value_cell = Value::unwrap_or_undefined(ctx.args.first().cloned());
+pub fn resolve(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+    let value_cell = Value::unwrap_or_undefined(ctx.args.first().cloned(), ctx.vm);
     let is_promise = value_cell
         .borrow()
         .as_object()
@@ -30,16 +31,20 @@ pub fn resolve(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
         Ok(CallResult::Ready(value_cell))
     } else {
         let promise = Promise::new(PromiseState::Resolved(value_cell));
-        Ok(CallResult::Ready(ctx.vm.create_js_value(promise).into()))
+        Ok(CallResult::Ready(
+            ctx.vm.create_js_value(promise).into_handle(ctx.vm),
+        ))
     }
 }
 
 /// Implements Promise.reject
 ///
 /// https://tc39.es/ecma262/multipage/control-abstraction-objects.html#sec-promise.reject
-pub fn reject(ctx: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
-    let value_cell = Value::unwrap_or_undefined(ctx.args.first().cloned());
+pub fn reject(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+    let value_cell = Value::unwrap_or_undefined(ctx.args.first().cloned(), ctx.vm);
 
     let promise = Promise::new(PromiseState::Rejected(value_cell));
-    Ok(CallResult::Ready(ctx.vm.create_js_value(promise).into()))
+    Ok(CallResult::Ready(
+        ctx.vm.create_js_value(promise).into_handle(ctx.vm),
+    ))
 }

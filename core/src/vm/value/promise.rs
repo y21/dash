@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use crate::gc::Handle;
 
 use super::Value;
 
@@ -18,18 +18,18 @@ pub enum PromiseState<P> {
 #[derive(Debug, Clone)]
 pub struct Promise {
     /// The value of this promise
-    pub value: PromiseState<Rc<RefCell<Value>>>,
+    pub value: PromiseState<Handle<Value>>,
     /// The `then` handler of this promise
-    pub then: Option<Rc<RefCell<Value>>>,
+    pub then: Option<Handle<Value>>,
     /// The `catch` handler of this promise
-    pub catch: Option<Rc<RefCell<Value>>>,
+    pub catch: Option<Handle<Value>>,
     /// The `finally` handler of this promise
-    pub finally: Option<Rc<RefCell<Value>>>,
+    pub finally: Option<Handle<Value>>,
 }
 
 impl Promise {
     /// Creates a new promise
-    pub fn new(value: PromiseState<Rc<RefCell<Value>>>) -> Self {
+    pub fn new(value: PromiseState<Handle<Value>>) -> Self {
         Self {
             value,
             then: None,

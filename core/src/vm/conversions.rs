@@ -9,8 +9,8 @@ use super::{
         Value, ValueKind,
     },
 };
+use std::str::Utf8Error;
 use std::{cell::RefCell, convert::TryFrom};
-use std::{rc::Rc, str::Utf8Error};
 
 impl From<Constant> for Value {
     fn from(c: Constant) -> Self {
@@ -122,11 +122,5 @@ impl From<WeakMap<RefCell<Value>, RefCell<Value>>> for Value {
 impl From<Promise> for Value {
     fn from(p: Promise) -> Self {
         Object::Promise(p).into()
-    }
-}
-
-impl From<Value> for Rc<RefCell<Value>> {
-    fn from(v: Value) -> Self {
-        Rc::new(RefCell::new(v))
     }
 }

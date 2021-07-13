@@ -3,10 +3,11 @@
 #![deny(missing_docs)]
 #![allow(unused_unsafe)]
 
-use std::{borrow::Cow, cell::RefCell, rc::Rc};
+use std::borrow::Cow;
 
 use agent::Agent;
 use compiler::compiler::CompileError;
+use gc::Handle;
 use parser::{lexer::Error as LexError, token::Error as ParseError};
 use vm::{value::Value, FromStrError, VMError, VM};
 
@@ -89,7 +90,7 @@ impl<'a> From<VMError> for EvalError<'a> {
 pub fn eval<'a, A: Agent + 'static>(
     code: &'a str,
     agent: Option<A>,
-) -> Result<Option<Rc<RefCell<Value>>>, EvalError<'a>> {
+) -> Result<Option<Handle<Value>>, EvalError<'a>> {
     let mut vm = VM::from_str(code, agent)?;
     let result = vm.interpret()?;
 

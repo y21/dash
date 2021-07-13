@@ -15,7 +15,7 @@ pub mod upvalue;
 /// JavaScript values
 pub mod value;
 
-use std::{any::Any, borrow::Cow, cell::RefCell, collections::HashMap, rc::Rc};
+use std::{any::Any, borrow::Cow, cell::RefCell, collections::HashMap};
 
 use instruction::{Instruction, Opcode};
 use value::Value;
@@ -23,9 +23,10 @@ use value::Value;
 use crate::{
     agent::Agent,
     compiler::compiler::{self, CompileError, Compiler, FunctionKind as CompilerFunctionKind},
+    gc::{Gc, Handle},
     js_std::{self, error::MaybeRc},
     parser::{lexer, token},
-    util::MaybeOwned,
+    util::{unlikely, MaybeOwned},
     vm::{
         frame::{NativeResume, UnwindHandler},
         upvalue::Upvalue,
@@ -53,7 +54,7 @@ use self::{
 #[derive(Debug)]
 pub enum VMError {
     /// An error was thrown and user code did not catch it
-    UncaughtError(Rc<RefCell<Value>>),
+    UncaughtError(Handle<Value>),
 }
 
 impl VMError {
@@ -93,14 +94,16 @@ impl<'a> From<compiler::FromStrError<'a>> for FromStrError<'a> {
 
 /// A JavaScript bytecode VM
 pub struct VM {
+    /// Garbage collector that manages the heap of this VM
+    pub(crate) gc: RefCell<Gc<Value>>,
     /// Call stack
     pub(crate) frames: Stack<Frame, 256>,
     /// Async task queue. Processed when execution has finished
     pub(crate) async_frames: Stack<Frame, 256>,
     /// Stack
-    pub(crate) stack: Stack<Rc<RefCell<Value>>, 512>,
+    pub(crate) stack: Stack<Handle<Value>, 512>,
     /// Global namespace
-    pub(crate) global: Rc<RefCell<Value>>,
+    pub(crate) global: Handle<Value>,
     /// Static values created once when the VM is initialized
     pub(crate) statics: Statics,
     /// Embedder specific slot data
@@ -116,10 +119,14 @@ pub struct VM {
 impl VM {
     /// Creates a new VM with a provided agent
     pub fn new_with_agent(func: UserFunction, agent: Box<dyn Agent>) -> Self {
+        let mut gc = Gc::new();
+        let statics = Statics::new(&mut gc);
+        let global = gc.register(Value::from(AnyObject {}));
+
         let mut frames = Stack::new();
         frames.push(Frame {
             buffer: func.buffer.clone(),
-            func: Value::from(Closure::new(func)).into(),
+            func: gc.register(Value::from(Closure::new(func))),
             ip: 0,
             sp: 0,
             state: None,
@@ -128,10 +135,11 @@ impl VM {
 
         let mut vm = Self {
             frames,
+            gc: RefCell::new(gc),
             async_frames: Stack::new(),
             stack: Stack::new(),
-            global: Value::from(AnyObject {}).into(),
-            statics: Statics::new(),
+            global,
+            statics,
             unwind_handlers: Stack::new(),
             loops: Stack::new(),
             slot: None,
@@ -171,7 +179,7 @@ impl VM {
     }
 
     /// Returns a reference to the global object
-    pub fn global(&self) -> &Rc<RefCell<Value>> {
+    pub fn global(&self) -> &Handle<Value> {
         &self.global
     }
 
@@ -207,6 +215,28 @@ impl VM {
     /// Returns the current instruction pointer
     fn ip(&self) -> usize {
         self.frame().ip
+    }
+
+    /// Estimates whether it makes sense to perform a garbage collection
+    fn should_gc(&self) -> bool {
+        true
+    }
+
+    /// Setup for a GC cycle
+    ///
+    /// Everything that can possibly be reached from JS code needs to be marked.
+    fn mark_roots(&mut self) {
+        Value::mark(&self.global);
+        self.stack.mark_visited();
+        self.frames.mark_visited();
+        self.async_frames.mark_visited();
+    }
+
+    /// Performs a GC cycle
+    // TODO: safe?
+    pub unsafe fn perform_gc(&mut self) {
+        self.mark_roots();
+        unsafe { self.gc.borrow_mut().sweep() };
     }
 
     /// Returns the bytecode buffer of the current execution frame
@@ -269,10 +299,10 @@ impl VM {
     }
 
     fn pop_owned(&mut self) -> Option<Value> {
-        Value::try_into_inner(self.stack.pop())
+        Some(self.stack.pop().borrow().clone())
     }
 
-    fn read_lhs_rhs(&mut self) -> (Rc<RefCell<Value>>, Rc<RefCell<Value>>) {
+    fn read_lhs_rhs(&mut self) -> (Handle<Value>, Handle<Value>) {
         let rhs = self.stack.pop();
         let lhs = self.stack.pop();
         (lhs, rhs)
@@ -314,7 +344,7 @@ impl VM {
     /// Creates a JavaScript object with provided fields
     pub fn create_object_with_fields(
         &self,
-        fields: impl Into<HashMap<Box<str>, Rc<RefCell<Value>>>>,
+        fields: impl Into<HashMap<Box<str>, Handle<Value>>>,
     ) -> Value {
         let mut o = self.create_object();
         o.fields = fields.into();
@@ -331,233 +361,222 @@ impl VM {
     /// Creates a JavaScript array
     pub fn create_array(&self, arr: Array) -> Value {
         let mut o = Value::from(arr);
-        o.proto = Some(Rc::downgrade(&self.statics.array_proto));
-        o.constructor = Some(Rc::downgrade(&self.statics.array_ctor));
+        o.proto = Some(Handle::clone(&self.statics.array_proto));
+        o.constructor = Some(Handle::clone(&self.statics.array_ctor));
         o
     }
 
+    #[rustfmt::skip]
     fn prepare_stdlib(&mut self) {
+        // All values that live in self.statics do not have a [[Prototype]] set
+        // so we do it here
+        fn patch_value(this: &VM, value: &Handle<Value>) {
+            value.borrow_mut().detect_internal_properties(this);
+        }
+        
+        fn patch_constructor(this: &VM, func: &Handle<Value>, prototype: &Handle<Value>) {
+            let mut func_ref = func.borrow_mut();
+            let real_func = func_ref.as_function_mut().unwrap();
+            real_func.set_prototype(Handle::clone(prototype));
+            func_ref.detect_internal_properties(this);
+        }
+
         let mut global = self.global.borrow_mut();
         global.detect_internal_properties(self);
         // TODO: attaching globalThis causes a reference cycle and memory leaks
         // We somehow need to have
         // global.set_property("globalThis", self.global.clone());
+        global.set_property("globalThis", Handle::clone(&self.global));
 
-        self.statics.promise_proto = self.create_object().into();
-        self.statics.boolean_proto = self.create_object().into();
-        self.statics.number_proto = self.create_object().into();
-        self.statics.string_proto = {
-            let mut o = self.create_object();
-            o.set_property("charAt", Rc::clone(&self.statics.string_char_at));
-            o.set_property("charCodeAt", Rc::clone(&self.statics.string_char_code_at));
-            o.set_property("endsWith", Rc::clone(&self.statics.string_ends_with));
-            o.set_property("anchor", Rc::clone(&self.statics.string_anchor));
-            o.set_property("big", Rc::clone(&self.statics.string_big));
-            o.set_property("blink", Rc::clone(&self.statics.string_blink));
-            o.set_property("bold", Rc::clone(&self.statics.string_bold));
-            o.set_property("fixed", Rc::clone(&self.statics.string_fixed));
-            o.set_property("fontcolor", Rc::clone(&self.statics.string_fontcolor));
-            o.set_property("fontsize", Rc::clone(&self.statics.string_fontsize));
-            o.set_property("italics", Rc::clone(&self.statics.string_italics));
-            o.set_property("link", Rc::clone(&self.statics.string_link));
-            o.set_property("small", Rc::clone(&self.statics.string_small));
-            o.set_property("strike", Rc::clone(&self.statics.string_strike));
-            o.set_property("sub", Rc::clone(&self.statics.string_sub));
-            o.set_property("sup", Rc::clone(&self.statics.string_sup));
-            o.into()
-        };
-        self.statics.function_proto = self.create_object().into();
-        self.statics.array_proto = {
-            let mut o = self.create_object();
-            o.set_property("push", Rc::clone(&self.statics.array_push));
-            o.set_property("concat", Rc::clone(&self.statics.array_concat));
-            o.set_property("map", Rc::clone(&self.statics.array_map));
-            o.set_property("every", Rc::clone(&self.statics.array_every));
-            o.set_property("fill", Rc::clone(&self.statics.array_fill));
-            o.set_property("filter", Rc::clone(&self.statics.array_filter));
-            o.set_property("find", Rc::clone(&self.statics.array_find));
-            o.set_property("findIndex", Rc::clone(&self.statics.array_find_index));
-            o.set_property("flat", Rc::clone(&self.statics.array_flat));
-            o.set_property("forEach", Rc::clone(&self.statics.array_for_each));
-            o.set_property("from", Rc::clone(&self.statics.array_from));
-            o.set_property("includes", Rc::clone(&self.statics.array_includes));
-            o.set_property("indexOf", Rc::clone(&self.statics.array_index_of));
-            o.set_property("join", Rc::clone(&self.statics.array_join));
-            o.set_property("lastIndexOf", Rc::clone(&self.statics.array_last_index_of));
-            o.set_property("of", Rc::clone(&self.statics.array_of));
-            o.set_property("pop", Rc::clone(&self.statics.array_pop));
-            o.set_property("reduce", Rc::clone(&self.statics.array_reduce));
-            o.set_property("reduceRight", Rc::clone(&self.statics.array_reduce_right));
-            o.set_property("reverse", Rc::clone(&self.statics.array_reverse));
-            o.set_property("shift", Rc::clone(&self.statics.array_shift));
-            o.set_property("slice", Rc::clone(&self.statics.array_slice));
-            o.set_property("some", Rc::clone(&self.statics.array_some));
-            o.set_property("sort", Rc::clone(&self.statics.array_sort));
-            o.set_property("splice", Rc::clone(&self.statics.array_splice));
-            o.set_property("unshift", Rc::clone(&self.statics.array_unshift));
-            o.into()
-        };
+        patch_value(self, &self.statics.error_proto);
+        patch_value(self, &self.statics.function_proto);
+        patch_value(self, &self.statics.promise_proto);
+        patch_value(self, &self.statics.boolean_proto);
+        patch_value(self, &self.statics.number_proto);
+        
+        {
+            let mut o = self.statics.string_proto.borrow_mut();
+            o.detect_internal_properties(self);
+            o.set_property("charAt", Handle::clone(&self.statics.string_char_at));
+            o.set_property("charCodeAt", Handle::clone(&self.statics.string_char_code_at));
+            o.set_property("endsWith", Handle::clone(&self.statics.string_ends_with));
+            o.set_property("anchor", Handle::clone(&self.statics.string_anchor));
+            o.set_property("big", Handle::clone(&self.statics.string_big));
+            o.set_property("blink", Handle::clone(&self.statics.string_blink));
+            o.set_property("bold", Handle::clone(&self.statics.string_bold));
+            o.set_property("fixed", Handle::clone(&self.statics.string_fixed));
+            o.set_property("fontcolor", Handle::clone(&self.statics.string_fontcolor));
+            o.set_property("fontsize", Handle::clone(&self.statics.string_fontsize));
+            o.set_property("italics", Handle::clone(&self.statics.string_italics));
+            o.set_property("link", Handle::clone(&self.statics.string_link));
+            o.set_property("small", Handle::clone(&self.statics.string_small));
+            o.set_property("strike", Handle::clone(&self.statics.string_strike));
+            o.set_property("sub", Handle::clone(&self.statics.string_sub));
+            o.set_property("sup", Handle::clone(&self.statics.string_sup));
+        }
+
+        {
+            let mut o = self.statics.array_proto.borrow_mut();
+            o.detect_internal_properties(self);
+            o.set_property("push", Handle::clone(&self.statics.array_push));
+            o.set_property("concat", Handle::clone(&self.statics.array_concat));
+            o.set_property("map", Handle::clone(&self.statics.array_map));
+            o.set_property("every", Handle::clone(&self.statics.array_every));
+            o.set_property("fill", Handle::clone(&self.statics.array_fill));
+            o.set_property("filter", Handle::clone(&self.statics.array_filter));
+            o.set_property("find", Handle::clone(&self.statics.array_find));
+            o.set_property("findIndex", Handle::clone(&self.statics.array_find_index));
+            o.set_property("flat", Handle::clone(&self.statics.array_flat));
+            o.set_property("forEach", Handle::clone(&self.statics.array_for_each));
+            o.set_property("from", Handle::clone(&self.statics.array_from));
+            o.set_property("includes", Handle::clone(&self.statics.array_includes));
+            o.set_property("indexOf", Handle::clone(&self.statics.array_index_of));
+            o.set_property("join", Handle::clone(&self.statics.array_join));
+            o.set_property("lastIndexOf", Handle::clone(&self.statics.array_last_index_of));
+            o.set_property("of", Handle::clone(&self.statics.array_of));
+            o.set_property("pop", Handle::clone(&self.statics.array_pop));
+            o.set_property("reduce", Handle::clone(&self.statics.array_reduce));
+            o.set_property("reduceRight", Handle::clone(&self.statics.array_reduce_right));
+            o.set_property("reverse", Handle::clone(&self.statics.array_reverse));
+            o.set_property("shift", Handle::clone(&self.statics.array_shift));
+            o.set_property("slice", Handle::clone(&self.statics.array_slice));
+            o.set_property("some", Handle::clone(&self.statics.array_some));
+            o.set_property("sort", Handle::clone(&self.statics.array_sort));
+            o.set_property("splice", Handle::clone(&self.statics.array_splice));
+            o.set_property("unshift", Handle::clone(&self.statics.array_unshift));
+        }
 
         {
             let mut array_ctor = self.statics.array_ctor.borrow_mut();
-            array_ctor.set_property("isArray", Rc::clone(&self.statics.array_is_array));
+            array_ctor.set_property("isArray", Handle::clone(&self.statics.array_is_array));
         }
 
         {
             let mut promise_ctor = self.statics.promise_ctor.borrow_mut();
-            promise_ctor.set_property("resolve", Rc::clone(&self.statics.promise_resolve));
-            promise_ctor.set_property("reject", Rc::clone(&self.statics.promise_reject));
+            promise_ctor.set_property("resolve", Handle::clone(&self.statics.promise_resolve));
+            promise_ctor.set_property("reject", Handle::clone(&self.statics.promise_reject));
         }
 
-        self.statics.weakset_proto = self.create_object().into();
-        self.statics.weakmap_proto = self.create_object().into();
-        self.statics.error_proto = self.create_object().into();
-
-        let mut object_proto = self.statics.object_proto.borrow_mut();
-        object_proto.constructor = Some(Rc::downgrade(&self.statics.object_ctor));
-        object_proto.proto = Some(Rc::downgrade(&Value::new(ValueKind::Null).into()));
-        object_proto.set_property("toString", Rc::clone(&self.statics.object_to_string));
-
-        // All functions that live in self.statics do not have a [[Prototype]] set
-        // so we do it here
-        fn patch_function_value(this: &VM, func: &Rc<RefCell<Value>>) {
-            func.borrow_mut().detect_internal_properties(this);
+        {
+            let mut o = self.statics.weakset_proto.borrow_mut();
+            o.detect_internal_properties(self);
+            o.set_property("has", Handle::clone(&self.statics.weakset_has));
+            o.set_property("add", Handle::clone(&self.statics.weakset_add));
+            o.set_property("delete", Handle::clone(&self.statics.weakset_delete));
         }
 
-        fn patch_constructor(this: &VM, func: &Rc<RefCell<Value>>, prototype: &Rc<RefCell<Value>>) {
-            let mut func_ref = func.borrow_mut();
-            let real_func = func_ref.as_function_mut().unwrap();
-            real_func.set_prototype(Rc::downgrade(prototype));
-            func_ref.detect_internal_properties(this);
+        {
+            let mut o = self.statics.weakmap_proto.borrow_mut();
+            o.detect_internal_properties(self);
+            o.set_property("has", Handle::clone(&self.statics.weakmap_has));
+            o.set_property("add", Handle::clone(&self.statics.weakmap_add));
+            o.set_property("get", Handle::clone(&self.statics.weakmap_get));
+            o.set_property("delete", Handle::clone(&self.statics.weakmap_delete));
+        }
+
+        {
+            let mut object_proto = self.statics.object_proto.borrow_mut();
+            object_proto.constructor = Some(Handle::clone(&self.statics.object_ctor));
+            object_proto.proto = Some(Value::new(ValueKind::Null).into_handle(self));
+            object_proto.set_property("toString", Handle::clone(&self.statics.object_to_string));
         }
 
         // Constructors
-        patch_constructor(
-            self,
-            &self.statics.boolean_ctor,
-            &self.statics.boolean_proto,
-        );
+        patch_constructor(self, &self.statics.boolean_ctor, &self.statics.boolean_proto);
         patch_constructor(self, &self.statics.number_ctor, &self.statics.number_proto);
         patch_constructor(self, &self.statics.string_ctor, &self.statics.string_proto);
-        patch_constructor(
-            self,
-            &self.statics.function_ctor,
-            &self.statics.function_proto,
-        );
+        patch_constructor(self, &self.statics.function_ctor, &self.statics.function_proto);
         patch_constructor(self, &self.statics.array_ctor, &self.statics.array_proto);
-        patch_constructor(
-            self,
-            &self.statics.weakset_ctor,
-            &self.statics.weakset_proto,
-        );
-        patch_constructor(
-            self,
-            &self.statics.weakmap_ctor,
-            &self.statics.weakmap_proto,
-        );
+        patch_constructor(self, &self.statics.weakset_ctor, &self.statics.weakset_proto);
+        patch_constructor(self, &self.statics.weakmap_ctor, &self.statics.weakmap_proto);
         patch_constructor(self, &self.statics.object_ctor, &self.statics.object_proto);
         patch_constructor(self, &self.statics.error_ctor, &self.statics.error_proto);
-        patch_constructor(
-            self,
-            &self.statics.promise_ctor,
-            &self.statics.promise_proto,
-        );
+        patch_constructor(self, &self.statics.promise_ctor, &self.statics.promise_proto);
         // Other functions/methods
-        patch_function_value(self, &self.statics.isnan);
-        patch_function_value(self, &self.statics.object_define_property);
-        patch_function_value(self, &self.statics.object_get_own_property_names);
-        patch_function_value(self, &self.statics.object_to_string);
-        patch_function_value(self, &self.statics.isnan);
-        patch_function_value(self, &self.statics.console_log);
-        patch_function_value(self, &self.statics.array_push);
-        patch_function_value(self, &self.statics.math_pow);
-        patch_function_value(self, &self.statics.math_abs);
-        patch_function_value(self, &self.statics.math_ceil);
-        patch_function_value(self, &self.statics.math_floor);
-        patch_function_value(self, &self.statics.math_max);
-        patch_function_value(self, &self.statics.math_random);
-        patch_function_value(self, &self.statics.weakset_has);
-        patch_function_value(self, &self.statics.weakset_add);
-        patch_function_value(self, &self.statics.weakset_delete);
-        patch_function_value(self, &self.statics.weakmap_has);
-        patch_function_value(self, &self.statics.weakmap_add);
-        patch_function_value(self, &self.statics.weakmap_get);
-        patch_function_value(self, &self.statics.weakmap_delete);
-        patch_function_value(self, &self.statics.json_parse);
-        patch_function_value(self, &self.statics.json_stringify);
-        patch_function_value(self, &self.statics.string_char_at);
-        patch_function_value(self, &self.statics.string_char_code_at);
-        patch_function_value(self, &self.statics.string_ends_with);
-        patch_function_value(self, &self.statics.string_anchor);
-        patch_function_value(self, &self.statics.string_big);
-        patch_function_value(self, &self.statics.string_blink);
-        patch_function_value(self, &self.statics.string_bold);
-        patch_function_value(self, &self.statics.string_fixed);
-        patch_function_value(self, &self.statics.string_fontcolor);
-        patch_function_value(self, &self.statics.string_fontsize);
-        patch_function_value(self, &self.statics.string_italics);
-        patch_function_value(self, &self.statics.string_link);
-        patch_function_value(self, &self.statics.string_small);
-        patch_function_value(self, &self.statics.string_strike);
-        patch_function_value(self, &self.statics.string_sub);
-        patch_function_value(self, &self.statics.string_sup);
-        patch_function_value(self, &self.statics.promise_resolve);
-        patch_function_value(self, &self.statics.promise_reject);
+        patch_value(self, &self.statics.isnan);
+        patch_value(self, &self.statics.object_define_property);
+        patch_value(self, &self.statics.object_get_own_property_names);
+        patch_value(self, &self.statics.object_to_string);
+        patch_value(self, &self.statics.isnan);
+        patch_value(self, &self.statics.console_log);
+        patch_value(self, &self.statics.array_push);
+        patch_value(self, &self.statics.math_pow);
+        patch_value(self, &self.statics.math_abs);
+        patch_value(self, &self.statics.math_ceil);
+        patch_value(self, &self.statics.math_floor);
+        patch_value(self, &self.statics.math_max);
+        patch_value(self, &self.statics.math_random);
+        patch_value(self, &self.statics.weakset_has);
+        patch_value(self, &self.statics.weakset_add);
+        patch_value(self, &self.statics.weakset_delete);
+        patch_value(self, &self.statics.weakmap_has);
+        patch_value(self, &self.statics.weakmap_add);
+        patch_value(self, &self.statics.weakmap_get);
+        patch_value(self, &self.statics.weakmap_delete);
+        patch_value(self, &self.statics.json_parse);
+        patch_value(self, &self.statics.json_stringify);
+        patch_value(self, &self.statics.string_char_at);
+        patch_value(self, &self.statics.string_char_code_at);
+        patch_value(self, &self.statics.string_ends_with);
+        patch_value(self, &self.statics.string_anchor);
+        patch_value(self, &self.statics.string_big);
+        patch_value(self, &self.statics.string_blink);
+        patch_value(self, &self.statics.string_bold);
+        patch_value(self, &self.statics.string_fixed);
+        patch_value(self, &self.statics.string_fontcolor);
+        patch_value(self, &self.statics.string_fontsize);
+        patch_value(self, &self.statics.string_italics);
+        patch_value(self, &self.statics.string_link);
+        patch_value(self, &self.statics.string_small);
+        patch_value(self, &self.statics.string_strike);
+        patch_value(self, &self.statics.string_sub);
+        patch_value(self, &self.statics.string_sup);
+        patch_value(self, &self.statics.promise_resolve);
+        patch_value(self, &self.statics.promise_reject);
 
-        global.set_property("NaN", self.create_js_value(f64::NAN).into());
-        global.set_property("Infinity", self.create_js_value(f64::INFINITY).into());
-
+        global.set_property("NaN", self.create_js_value(f64::NAN).into_handle(self));
+        global.set_property("Infinity", self.create_js_value(f64::INFINITY).into_handle(self));
         global.set_property("isNaN", self.statics.isnan.clone());
 
-        let mut object_ctor = self.statics.object_ctor.borrow_mut();
-        object_ctor.set_property(
-            "defineProperty",
-            self.statics.object_define_property.clone(),
-        );
-        object_ctor.set_property(
-            "getOwnPropertyNames",
-            self.statics.object_get_own_property_names.clone(),
-        );
-        object_ctor.set_property(
-            "getPrototypeOf",
-            self.statics.object_get_prototype_of.clone(),
-        );
-        global.set_property("Object", Rc::clone(&self.statics.object_ctor));
+        {
+            let mut object_ctor = self.statics.object_ctor.borrow_mut();
+            object_ctor.set_property("defineProperty", self.statics.object_define_property.clone());
+            object_ctor.set_property("getOwnPropertyNames", self.statics.object_get_own_property_names.clone());
+            object_ctor.set_property("getPrototypeOf", self.statics.object_get_prototype_of.clone());
+            global.set_property("Object", Handle::clone(&self.statics.object_ctor));
+        }
 
-        let mut math_obj = self.create_object();
-        math_obj.set_property("pow", Rc::clone(&self.statics.math_pow));
-        math_obj.set_property("abs", Rc::clone(&self.statics.math_abs));
-        math_obj.set_property("ceil", Rc::clone(&self.statics.math_ceil));
-        math_obj.set_property("floor", Rc::clone(&self.statics.math_floor));
-        math_obj.set_property("max", Rc::clone(&self.statics.math_max));
-        math_obj.set_property("random", Rc::clone(&self.statics.math_random));
+        {
+            let mut math_obj = self.create_object();
+            math_obj.set_property("pow", Handle::clone(&self.statics.math_pow));
+            math_obj.set_property("abs", Handle::clone(&self.statics.math_abs));
+            math_obj.set_property("ceil", Handle::clone(&self.statics.math_ceil));
+            math_obj.set_property("floor", Handle::clone(&self.statics.math_floor));
+            math_obj.set_property("max", Handle::clone(&self.statics.math_max));
+            math_obj.set_property("random", Handle::clone(&self.statics.math_random));
 
-        math_obj.set_property("PI", self.create_js_value(std::f64::consts::PI).into());
-        math_obj.set_property("E", self.create_js_value(std::f64::consts::E).into());
-        math_obj.set_property("LN10", self.create_js_value(std::f64::consts::LN_10).into());
-        math_obj.set_property("LN2", self.create_js_value(std::f64::consts::LN_2).into());
-        math_obj.set_property(
-            "LOG10E",
-            self.create_js_value(std::f64::consts::LOG10_E).into(),
-        );
-        math_obj.set_property(
-            "LOG2E",
-            self.create_js_value(std::f64::consts::LOG2_E).into(),
-        );
-        math_obj.set_property(
-            "SQRT2",
-            self.create_js_value(std::f64::consts::SQRT_2).into(),
-        );
-        global.set_property("Math", math_obj.into());
+            math_obj.set_property("PI", self.create_js_value(std::f64::consts::PI).into_handle(self));
+            math_obj.set_property("E", self.create_js_value(std::f64::consts::E).into_handle(self));
+            math_obj.set_property("LN10", self.create_js_value(std::f64::consts::LN_10).into_handle(self));
+            math_obj.set_property("LN2", self.create_js_value(std::f64::consts::LN_2).into_handle(self));
+            math_obj.set_property("LOG10E", self.create_js_value(std::f64::consts::LOG10_E).into_handle(self));
+            math_obj.set_property("LOG2E", self.create_js_value(std::f64::consts::LOG2_E).into_handle(self));
+            math_obj.set_property("SQRT2",self.create_js_value(std::f64::consts::SQRT_2).into_handle(self));
+            global.set_property("Math", math_obj.into_handle(self));
+        }
 
-        let mut json_obj = self.create_object();
-        json_obj.set_property("parse", self.statics.json_parse.clone());
-        json_obj.set_property("stringify", self.statics.json_stringify.clone());
-        global.set_property("JSON", json_obj.into());
+        {
+            let mut json_obj = self.create_object();
+            json_obj.set_property("parse", Handle::clone(&self.statics.json_parse));
+            json_obj.set_property("stringify", Handle::clone(&self.statics.json_stringify));
+            global.set_property("JSON", json_obj.into_handle(self));
+        }
 
-        let mut console_obj = self.create_object();
-        console_obj.set_property("log", self.statics.console_log.clone());
-        global.set_property("console", console_obj.into());
+        {
+            let mut console_obj = self.create_object();
+            console_obj.set_property("log", Handle::clone(&self.statics.console_log));
+            global.set_property("console", console_obj.into_handle(self));
+        }
 
         global.set_property("Error", self.statics.error_ctor.clone());
         global.set_property("Boolean", self.statics.boolean_ctor.clone());
@@ -570,7 +589,7 @@ impl VM {
         global.set_property("Promise", self.statics.promise_ctor.clone());
     }
 
-    fn unwind(&mut self, value: Rc<RefCell<Value>>) -> Result<(), Rc<RefCell<Value>>> {
+    fn unwind(&mut self, value: Handle<Value>) -> Result<(), Handle<Value>> {
         // TODO: clean up resources caused by this unwind
         if self.unwind_handlers.get_stack_pointer() == 0 {
             return Err(value);
@@ -625,12 +644,12 @@ impl VM {
 
     fn handle_native_return(
         &mut self,
-        old_func: Rc<RefCell<Value>>,
-        new_func: Rc<RefCell<Value>>,
-        old_args: Vec<Rc<RefCell<Value>>>,
-        new_args: Vec<Rc<RefCell<Value>>>,
+        old_func: Handle<Value>,
+        new_func: Handle<Value>,
+        old_args: Vec<Handle<Value>>,
+        new_args: Vec<Handle<Value>>,
         state: CallState<Box<dyn Any>>,
-        receiver: Option<Rc<RefCell<Value>>>,
+        receiver: Option<Handle<Value>>,
     ) {
         let func_ref = new_func.borrow();
         match func_ref.as_function().unwrap() {
@@ -641,7 +660,7 @@ impl VM {
                 let frame = Frame {
                     buffer: closure.func.buffer.clone(),
                     ip: 0,
-                    func: Rc::clone(&new_func),
+                    func: Handle::clone(&new_func),
                     sp,
                     state: Some(state),
                     resume: Some(NativeResume {
@@ -663,9 +682,9 @@ impl VM {
 
     fn begin_function_call(
         &mut self,
-        func_cell: Rc<RefCell<Value>>,
-        mut params: Vec<Rc<RefCell<Value>>>,
-    ) -> Result<(), Rc<RefCell<Value>>> {
+        func_cell: Handle<Value>,
+        mut params: Vec<Handle<Value>>,
+    ) -> Result<(), Handle<Value>> {
         let func_cell_ref = func_cell.borrow();
         let func = match func_cell_ref.as_function().unwrap() {
             FunctionKind::Native(f) => {
@@ -685,7 +704,7 @@ impl VM {
                 match result {
                     CallResult::Ready(ret) => self.stack.push(ret),
                     CallResult::UserFunction(new_func_cell, args) => self.handle_native_return(
-                        Rc::clone(&func_cell),
+                        Handle::clone(&func_cell),
                         new_func_cell,
                         params,
                         args,
@@ -722,7 +741,8 @@ impl VM {
         }
 
         for _ in 0..(origin_param_count.saturating_sub(param_count)) {
-            self.stack.push(Value::new(ValueKind::Undefined).into());
+            self.stack
+                .push(Value::new(ValueKind::Undefined).into_handle(self));
         }
 
         Ok(())
@@ -745,7 +765,7 @@ impl VM {
     }
 
     /// Starts interpreting bytecode
-    pub fn interpret(&mut self) -> Result<Option<Rc<RefCell<Value>>>, VMError> {
+    pub fn interpret(&mut self) -> Result<Option<Handle<Value>>, VMError> {
         macro_rules! unwrap_or_unwind {
             ($e:expr, $err:expr) => {
                 if let Some(v) = $e {
@@ -767,6 +787,10 @@ impl VM {
         }
 
         while !self.is_eof() {
+            if unlikely(self.should_gc()) {
+                unsafe { self.perform_gc() };
+            }
+
             let instruction = self.buffer()[self.ip()].as_op();
 
             self.frame_mut().ip += 1;
@@ -780,7 +804,7 @@ impl VM {
                     // so we need to do that here when pushing a value onto the stack
                     constant.detect_internal_properties(self);
 
-                    self.stack.push(constant.into());
+                    self.stack.push(constant.into_handle(self));
                 }
                 Opcode::Closure => {
                     let func = self.read_user_function().unwrap();
@@ -803,76 +827,91 @@ impl VM {
                         }
                     }
 
-                    self.stack
-                        .push(self.create_js_value(FunctionKind::Closure(closure)).into());
+                    self.stack.push(
+                        self.create_js_value(FunctionKind::Closure(closure))
+                            .into_handle(self),
+                    );
                 }
                 Opcode::Negate => {
                     let maybe_number = self.read_number();
 
-                    self.stack.push(self.create_js_value(-maybe_number).into());
+                    self.stack
+                        .push(self.create_js_value(-maybe_number).into_handle(self));
                 }
                 Opcode::Positive => {
                     let maybe_number = self.read_number();
 
-                    self.stack.push(self.create_js_value(maybe_number).into());
+                    self.stack
+                        .push(self.create_js_value(maybe_number).into_handle(self));
                 }
                 Opcode::LogicalNot => {
                     let is_truthy = self.stack.pop().borrow().is_truthy();
 
-                    self.stack.push(self.create_js_value(!is_truthy).into());
+                    self.stack
+                        .push(self.create_js_value(!is_truthy).into_handle(self));
                 }
                 Opcode::Add => {
-                    let result = self.with_lhs_rhs_borrowed(Value::add).into();
+                    let result = self.with_lhs_rhs_borrowed(Value::add).into_handle(self);
                     self.stack.push(result);
                 }
                 Opcode::Sub => {
-                    let result = self.with_lhs_rhs_borrowed(Value::sub).into();
+                    let result = self.with_lhs_rhs_borrowed(Value::sub).into_handle(self);
                     self.stack.push(result);
                 }
                 Opcode::Mul => {
-                    let result = self.with_lhs_rhs_borrowed(Value::mul).into();
+                    let result = self.with_lhs_rhs_borrowed(Value::mul).into_handle(self);
                     self.stack.push(result);
                 }
                 Opcode::Div => {
-                    let result = self.with_lhs_rhs_borrowed(Value::div).into();
+                    let result = self.with_lhs_rhs_borrowed(Value::div).into_handle(self);
                     self.stack.push(result);
                 }
                 Opcode::Rem => {
-                    let result = self.with_lhs_rhs_borrowed(Value::rem).into();
+                    let result = self.with_lhs_rhs_borrowed(Value::rem).into_handle(self);
                     self.stack.push(result);
                 }
                 Opcode::Exponentiation => {
-                    let result = self.with_lhs_rhs_borrowed(Value::pow).into();
+                    let result = self.with_lhs_rhs_borrowed(Value::pow).into_handle(self);
                     self.stack.push(result);
                 }
                 Opcode::LeftShift => {
-                    let result = self.with_lhs_rhs_borrowed(Value::left_shift).into();
+                    let result = self
+                        .with_lhs_rhs_borrowed(Value::left_shift)
+                        .into_handle(self);
                     self.stack.push(result);
                 }
                 Opcode::RightShift => {
-                    let result = self.with_lhs_rhs_borrowed(Value::right_shift).into();
+                    let result = self
+                        .with_lhs_rhs_borrowed(Value::right_shift)
+                        .into_handle(self);
                     self.stack.push(result);
                 }
                 Opcode::UnsignedRightShift => {
                     let result = self
                         .with_lhs_rhs_borrowed(Value::unsigned_right_shift)
-                        .into();
+                        .into_handle(self);
                     self.stack.push(result);
                 }
                 Opcode::BitwiseAnd => {
-                    let result = self.with_lhs_rhs_borrowed(Value::bitwise_and).into();
+                    let result = self
+                        .with_lhs_rhs_borrowed(Value::bitwise_and)
+                        .into_handle(self);
                     self.stack.push(result);
                 }
                 Opcode::BitwiseOr => {
-                    let result = self.with_lhs_rhs_borrowed(Value::bitwise_or).into();
+                    let result = self
+                        .with_lhs_rhs_borrowed(Value::bitwise_or)
+                        .into_handle(self);
                     self.stack.push(result);
                 }
                 Opcode::BitwiseXor => {
-                    let result = self.with_lhs_rhs_borrowed(Value::bitwise_xor).into();
+                    let result = self
+                        .with_lhs_rhs_borrowed(Value::bitwise_xor)
+                        .into_handle(self);
                     self.stack.push(result);
                 }
                 Opcode::BitwiseNot => {
-                    let result = self.with_lhs_borrowed(Value::bitwise_not).into();
+                    let result = self.with_lhs_borrowed(Value::bitwise_not).into_handle(self);
                     self.stack.push(result);
                 }
                 Opcode::SetGlobal => {
@@ -886,7 +925,7 @@ impl VM {
                     let name = self.pop_owned().unwrap().into_ident().unwrap();
 
                     let mut global = self.global.borrow_mut();
-                    global.set_property(name, Value::new(ValueKind::Undefined).into());
+                    global.set_property(name, Value::new(ValueKind::Undefined).into_handle(self));
                 }
                 Opcode::GetGlobal => {
                     let name = self.pop_owned().unwrap().into_ident().unwrap();
@@ -911,7 +950,7 @@ impl VM {
                     self.stack.set_relative(
                         self.frame().sp,
                         stack_idx,
-                        Value::new(ValueKind::Undefined).into(),
+                        Value::new(ValueKind::Undefined).into_handle(self),
                     );
                 }
                 Opcode::GetLocal => {
@@ -1112,11 +1151,12 @@ impl VM {
                             }
 
                             let mut state = CallState::default();
+                            let receiver = Some(this.into_handle(self));
                             let ctx = CallContext {
                                 vm: self,
                                 args: &mut params,
                                 ctor: true,
-                                receiver: Some(this.into()),
+                                receiver,
                                 state: &mut state,
                                 function_call_response: None,
                             };
@@ -1131,7 +1171,7 @@ impl VM {
                             continue;
                         }
                         FunctionKind::Closure(closure) => {
-                            closure.func.receiver = Some(Receiver::Bound(this.into()));
+                            closure.func.receiver = Some(Receiver::Bound(this.into_handle(self)));
                             closure
                         }
                         // There should never be raw user functions
@@ -1147,7 +1187,7 @@ impl VM {
                     let frame = Frame {
                         buffer: func.func.buffer.clone(),
                         ip: 0,
-                        func: Rc::clone(&func_cell),
+                        func: Handle::clone(&func_cell),
                         sp: current_sp,
                         state,
                         resume: None,
@@ -1163,7 +1203,8 @@ impl VM {
                     }
 
                     for _ in 0..(origin_param_count.saturating_sub(param_count)) {
-                        self.stack.push(Value::new(ValueKind::Undefined).into());
+                        self.stack
+                            .push(Value::new(ValueKind::Undefined).into_handle(self));
                     }
                 }
                 Opcode::GetThis => {
@@ -1197,7 +1238,7 @@ impl VM {
                             .take()
                             .unwrap();
 
-                        (module.into(), buffer)
+                        (module.into_handle(self), buffer)
                     };
 
                     let current_sp = self.stack.get_stack_pointer();
@@ -1259,15 +1300,15 @@ impl VM {
                         .unwrap();
 
                     let exports = if let Some(default) = &func.exports.default {
-                        Rc::clone(default)
+                        Handle::clone(default)
                     } else {
-                        self.create_object().into()
+                        self.create_object().into_handle(self)
                     };
 
                     {
                         let mut exports_mut = exports.borrow_mut();
                         for (key, value) in &func.exports.named {
-                            exports_mut.set_property(&**key, Rc::clone(value));
+                            exports_mut.set_property(&**key, Handle::clone(value));
                         }
                     }
 
@@ -1330,7 +1371,7 @@ impl VM {
                             Ok(CallResult::Ready(ret)) => self.stack.push(ret),
                             Ok(CallResult::UserFunction(new_func_cell, args)) => self
                                 .handle_native_return(
-                                    Rc::clone(&resume.func),
+                                    Handle::clone(&resume.func),
                                     new_func_cell,
                                     resume.args,
                                     args,
@@ -1348,7 +1389,7 @@ impl VM {
                         .and_then(FunctionKind::as_closure)
                         .and_then(|c| c.func.receiver.as_ref())
                     {
-                        self.stack.push(Rc::clone(this.get()));
+                        self.stack.push(Handle::clone(this.get()));
                     } else {
                         self.stack.push(ret);
                     }
@@ -1360,7 +1401,8 @@ impl VM {
                     let lhs = lhs_cell.borrow();
 
                     let is_less = matches!(lhs.compare(&rhs), Some(Compare::Less));
-                    self.stack.push(self.create_js_value(is_less).into());
+                    self.stack
+                        .push(self.create_js_value(is_less).into_handle(self));
                 }
                 Opcode::LessEqual => {
                     let rhs_cell = self.stack.pop();
@@ -1372,7 +1414,8 @@ impl VM {
                         lhs.compare(&rhs),
                         Some(Compare::Less) | Some(Compare::Equal)
                     );
-                    self.stack.push(self.create_js_value(is_less_eq).into());
+                    self.stack
+                        .push(self.create_js_value(is_less_eq).into_handle(self));
                 }
                 Opcode::Greater => {
                     let rhs_cell = self.stack.pop();
@@ -1381,7 +1424,8 @@ impl VM {
                     let lhs = lhs_cell.borrow();
 
                     let is_greater = matches!(lhs.compare(&rhs), Some(Compare::Greater));
-                    self.stack.push(self.create_js_value(is_greater).into());
+                    self.stack
+                        .push(self.create_js_value(is_greater).into_handle(self));
                 }
                 Opcode::GreaterEqual => {
                     let rhs_cell = self.stack.pop();
@@ -1393,7 +1437,8 @@ impl VM {
                         lhs.compare(&rhs),
                         Some(Compare::Greater) | Some(Compare::Equal)
                     );
-                    self.stack.push(self.create_js_value(is_greater_eq).into());
+                    self.stack
+                        .push(self.create_js_value(is_greater_eq).into_handle(self));
                 }
                 Opcode::StaticPropertyAccess => {
                     let property = self.pop_owned().unwrap().into_ident().unwrap();
@@ -1404,41 +1449,41 @@ impl VM {
                         let maybe_value = Value::get_property(self, &target_cell, &property, None);
                         maybe_value.unwrap_or_else(|| {
                             let mut target = target_cell.borrow_mut();
-                            let value = Value::new(ValueKind::Undefined).into();
-                            target.set_property(property, Rc::clone(&value));
+                            let value = Value::new(ValueKind::Undefined).into_handle(self);
+                            target.set_property(property, Handle::clone(&value));
                             value
                         })
                     } else {
-                        Value::unwrap_or_undefined(Value::get_property(
+                        Value::unwrap_or_undefined(
+                            Value::get_property(self, &target_cell, &property, None),
                             self,
-                            &target_cell,
-                            &property,
-                            None,
-                        ))
+                        )
                     };
                     self.stack.push(value);
                 }
                 Opcode::Equality => {
                     let eq = self.with_lhs_rhs_borrowed(Value::lossy_equal);
-                    self.stack.push(self.create_js_value(eq).into());
+                    self.stack.push(self.create_js_value(eq).into_handle(self));
                 }
                 Opcode::Inequality => {
                     let eq = self.with_lhs_rhs_borrowed(Value::lossy_equal);
-                    self.stack.push(self.create_js_value(!eq).into());
+                    self.stack.push(self.create_js_value(!eq).into_handle(self));
                 }
                 Opcode::StrictEquality => {
                     let eq = self.with_lhs_rhs_borrowed(Value::strict_equal);
-                    self.stack.push(self.create_js_value(eq).into());
+                    self.stack.push(self.create_js_value(eq).into_handle(self));
                 }
                 Opcode::StrictInequality => {
                     let eq = self.with_lhs_rhs_borrowed(Value::strict_equal);
-                    self.stack.push(self.create_js_value(!eq).into());
+                    self.stack.push(self.create_js_value(!eq).into_handle(self));
                 }
                 Opcode::Typeof => {
                     let value = self.stack.pop().borrow()._typeof().to_owned();
 
-                    self.stack
-                        .push(self.create_js_value(Object::String(value)).into());
+                    self.stack.push(
+                        self.create_js_value(Object::String(value))
+                            .into_handle(self),
+                    );
                 }
                 Opcode::PostfixIncrement | Opcode::PostfixDecrement => {
                     let value_cell = self.stack.pop();
@@ -1450,7 +1495,7 @@ impl VM {
                     } else {
                         todo!()
                     };
-                    self.stack.push(result.into());
+                    self.stack.push(result.into_handle(self));
                 }
                 Opcode::Assignment => {
                     let value_cell = self.stack.pop();
@@ -1461,12 +1506,13 @@ impl VM {
                     let value = value.clone();
 
                     let mut target = target_cell.borrow_mut();
-                    *target = value;
+                    **target = value;
                     self.stack.push(target_cell.clone());
                 }
                 Opcode::Void => {
                     self.stack.pop();
-                    self.stack.push(Value::new(ValueKind::Undefined).into());
+                    self.stack
+                        .push(Value::new(ValueKind::Undefined).into_handle(self));
                 }
                 Opcode::ArrayLiteral => {
                     let element_count = self.read_index().unwrap();
@@ -1475,7 +1521,7 @@ impl VM {
                         elements.push(self.stack.pop());
                     }
                     self.stack
-                        .push(self.create_array(Array::new(elements)).into());
+                        .push(self.create_array(Array::new(elements)).into_handle(self));
                 }
                 Opcode::ObjectLiteral => {
                     let property_count = self.read_index().unwrap();
@@ -1494,7 +1540,7 @@ impl VM {
                     }
 
                     self.stack
-                        .push(self.create_object_with_fields(fields).into());
+                        .push(self.create_object_with_fields(fields).into_handle(self));
                 }
                 Opcode::ComputedPropertyAccess => {
                     let property_cell = self.stack.pop();
@@ -1508,17 +1554,15 @@ impl VM {
                             Value::get_property(self, &target_cell, &*property_s, None);
                         maybe_value.unwrap_or_else(|| {
                             let mut target = target_cell.borrow_mut();
-                            let value = Value::new(ValueKind::Undefined).into();
-                            target.set_property(property_s.to_string(), Rc::clone(&value));
+                            let value = Value::new(ValueKind::Undefined).into_handle(self);
+                            target.set_property(property_s.to_string(), Handle::clone(&value));
                             value
                         })
                     } else {
-                        Value::unwrap_or_undefined(Value::get_property(
+                        Value::unwrap_or_undefined(
+                            Value::get_property(self, &target_cell, &*property_s, None),
                             self,
-                            &target_cell,
-                            &*property_s,
-                            None,
-                        ))
+                        )
                     };
 
                     self.stack.push(value);
@@ -1576,7 +1620,7 @@ impl VM {
                         // If this is already a primitive value, we do not need to try to convert it
                         let obj = obj_cell.borrow();
                         if obj.is_primitive() {
-                            self.stack.push(Rc::clone(&obj_cell));
+                            self.stack.push(Handle::clone(&obj_cell));
                             continue;
                         }
                     }

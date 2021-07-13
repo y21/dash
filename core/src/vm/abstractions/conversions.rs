@@ -1,6 +1,7 @@
-use std::{borrow::Cow, cell::RefCell, rc::Rc};
+use std::borrow::Cow;
 
 use crate::{
+    gc::Handle,
     js_std,
     vm::{
         value::{function::CallResult, object::Object, Value, ValueKind},
@@ -13,8 +14,8 @@ use crate::{
 // https://tc39.es/ecma262/multipage/abstract-operations.html#sec-tostring
 pub fn to_string(
     vm: &VM,
-    argument_cell: Option<&Rc<RefCell<Value>>>,
-) -> Result<CallResult, Rc<RefCell<Value>>> {
+    argument_cell: Option<&Handle<Value>>,
+) -> Result<CallResult, Handle<Value>> {
     let argument = argument_cell.map(|x| x.borrow());
     let ready_string = match argument.as_ref().map(|x| &x.kind) {
         Some(ValueKind::Undefined) | None => Cow::Borrowed("undefined"),
@@ -43,7 +44,8 @@ pub fn to_string(
     };
 
     Ok(CallResult::Ready(
-        vm.create_js_value(String::from(ready_string)).into(),
+        vm.create_js_value(String::from(ready_string))
+            .into_handle(vm),
     ))
 }
 
@@ -66,9 +68,9 @@ pub fn number_to_string(x: f64) -> Cow<'static, str> {
 pub fn to_primitive(
     vm: &VM,
     input: &Value,
-    input_cell: &Rc<RefCell<Value>>,
+    input_cell: &Handle<Value>,
     preferred_type: Option<&str>,
-) -> Result<CallResult, Rc<RefCell<Value>>> {
+) -> Result<CallResult, Handle<Value>> {
     // 2. If Type(input) is Object, then
     if input.as_object().is_some() {
         // Let exoticToPrim be ? GetMethod(input, @@toPrimitive).
@@ -81,7 +83,7 @@ pub fn to_primitive(
         return ordinary_to_primitive(vm, input_cell, preferred_type);
     }
 
-    Ok(CallResult::Ready(Rc::clone(input_cell)))
+    Ok(CallResult::Ready(Handle::clone(input_cell)))
 }
 
 /// Implements the abstract operation OrdinaryToPrimitive
@@ -89,9 +91,9 @@ pub fn to_primitive(
 /// https://tc39.es/ecma262/multipage/abstract-operations.html#sec-ordinarytoprimitive
 pub fn ordinary_to_primitive(
     vm: &VM,
-    obj: &Rc<RefCell<Value>>,
+    obj: &Handle<Value>,
     hint: &str,
-) -> Result<CallResult, Rc<RefCell<Value>>> {
+) -> Result<CallResult, Handle<Value>> {
     // 3. If hint is string, then
     let method_names = if hint == "string" {
         // a. Let methodNames be « "toString", "valueOf" ».
@@ -110,7 +112,7 @@ pub fn ordinary_to_primitive(
 
             // b. If IsCallable(method) is true, then
             if method_ref.as_function().is_some() {
-                return Ok(CallResult::UserFunction(Rc::clone(&method), Vec::new()));
+                return Ok(CallResult::UserFunction(Handle::clone(&method), Vec::new()));
             }
         }
     }

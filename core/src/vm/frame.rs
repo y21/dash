@@ -1,4 +1,6 @@
-use std::{any::Any, cell::RefCell, rc::Rc};
+use std::any::Any;
+
+use crate::gc::Handle;
 
 use super::{
     instruction::Instruction,
@@ -6,26 +8,27 @@ use super::{
         function::{CallState, Constructor, FunctionType, UserFunction},
         Value,
     },
+    VM,
 };
 
 /// Represents a function that needs to be resumed at a later point
 #[derive(Debug)]
 pub struct NativeResume {
     /// The function that needs to be called
-    pub func: Rc<RefCell<Value>>,
+    pub func: Handle<Value>,
     /// Arguments that were originally passed to the function when called initially
-    pub args: Vec<Rc<RefCell<Value>>>,
+    pub args: Vec<Handle<Value>>,
     /// Whether this is a constructor call
     pub ctor: bool,
     /// The receiver of this function
-    pub receiver: Option<Rc<RefCell<Value>>>,
+    pub receiver: Option<Handle<Value>>,
 }
 
 /// An execution frame
 #[derive(Debug)]
 pub struct Frame {
     /// JavaScript function
-    pub func: Rc<RefCell<Value>>,
+    pub func: Handle<Value>,
     /// This frames bytecode
     pub buffer: Box<[Instruction]>,
     /// Instruction pointer
@@ -41,10 +44,11 @@ pub struct Frame {
 
 impl Frame {
     /// Creates a frame from bytecode and a stack pointer
-    pub fn from_buffer<B>(buffer: B, sp: usize) -> Self
+    pub fn from_buffer<B>(buffer: B, vm: &VM) -> Self
     where
         B: Into<Box<[Instruction]>>,
     {
+        let sp = vm.stack.get_stack_pointer();
         let buffer = buffer.into();
 
         let func = UserFunction::new(
@@ -56,12 +60,28 @@ impl Frame {
         );
 
         Self {
-            func: Value::from(func).into(),
+            func: Value::from(func).into_handle(vm),
             buffer,
             ip: 0,
             sp,
             state: None,
             resume: None,
+        }
+    }
+
+    pub(crate) fn mark_visited(&self) {
+        Value::mark(&self.func);
+
+        if let Some(resume) = &self.resume {
+            Value::mark(&resume.func);
+
+            for arg in &resume.args {
+                Value::mark(arg);
+            }
+
+            if let Some(receiver) = &resume.receiver {
+                Value::mark(receiver);
+            }
         }
     }
 }
