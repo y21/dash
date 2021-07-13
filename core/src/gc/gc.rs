@@ -50,6 +50,13 @@ impl<T> Gc<T> {
                     // Finally, deallocate
                     drop(unsafe { Box::from_raw(ptr) });
 
+                    // Update previous node's next ptr to the next pointer
+                    if let Some(previous) = previous {
+                        unsafe {
+                            (*previous).next = next;
+                        };
+                    }
+
                     self.heap.len -= 1;
                 } else {
                     previous = Some(ptr);
