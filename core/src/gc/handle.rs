@@ -25,6 +25,10 @@ impl<T> InnerHandle<T> {
         self.marked = true;
     }
 
+    pub(crate) fn unmark_visited(&mut self) {
+        self.marked = false;
+    }
+
     pub(crate) fn is_marked(&self) -> bool {
         self.marked
     }

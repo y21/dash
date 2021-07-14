@@ -59,6 +59,7 @@ impl<T> Gc<T> {
 
                     self.heap.len -= 1;
                 } else {
+                    unsafe { (*ptr).value.get_mut_unchecked().unmark_visited() };
                     previous = Some(ptr);
                 }
             } else {
