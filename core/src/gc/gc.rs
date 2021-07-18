@@ -71,12 +71,12 @@ impl<T> Gc<T> {
     /// Registers a new value
     ///
     /// If not marked as visited, the returned [Handle] will dangle when sweep is called.
-    pub fn register<H>(&mut self, value: H) -> Handle<T>
+    pub fn register<H>(&mut self, value: H, marker: *const ()) -> Handle<T>
     where
         H: Into<InnerHandleGuard<T>>,
     {
         let ptr = self.heap.add(value.into());
-        unsafe { Handle::new(ptr) }
+        unsafe { Handle::new(ptr, marker) }
     }
 }
 
@@ -95,7 +95,7 @@ mod tests {
     #[test]
     pub fn gc_single_value_reclaim() {
         let mut gc = Gc::new();
-        let handle = gc.register(Value::new(ValueKind::Number(123f64)));
+        let handle = gc.register(Value::new(ValueKind::Number(123f64)), &());
         let ptr = handle.as_ptr();
 
         // When gc only has one element, len must be 1
@@ -119,8 +119,8 @@ mod tests {
     pub fn gc_multi_value_reclaim() {
         let mut gc = Gc::new();
 
-        let handle1 = gc.register(Value::new(ValueKind::Number(123f64)));
-        let handle2 = gc.register(Value::new(ValueKind::Number(456f64)));
+        let handle1 = gc.register(Value::new(ValueKind::Number(123f64)), &());
+        let handle2 = gc.register(Value::new(ValueKind::Number(456f64)), &());
         let ptr1 = handle1.as_ptr();
         let ptr2 = handle2.as_ptr();
 
@@ -142,8 +142,8 @@ mod tests {
     pub fn gc_single_value_mark() {
         let mut gc = Gc::new();
 
-        let handle1 = gc.register(Value::new(ValueKind::Number(123f64)));
-        handle1.borrow_mut().mark_visited();
+        let handle1 = gc.register(Value::new(ValueKind::Number(123f64)), &());
+        unsafe { handle1.borrow_mut_unbounded() }.mark_visited();
         let ptr1 = handle1.as_ptr();
 
         assert_eq!(gc.heap.len, 1);
@@ -154,16 +154,19 @@ mod tests {
 
         assert_node_eq(gc.heap.tail, ptr1);
         assert_node_eq(gc.heap.head, ptr1);
+
+        // cleanup
+        unsafe { gc.sweep() };
     }
 
     #[test]
     pub fn gc_multi_value_mark() {
         let mut gc = Gc::new();
 
-        let handle1 = gc.register(Value::new(ValueKind::Number(123f64)));
-        let handle2 = gc.register(Value::new(ValueKind::Number(456f64)));
-        handle1.borrow_mut().mark_visited();
-        handle2.borrow_mut().mark_visited();
+        let handle1 = gc.register(Value::new(ValueKind::Number(123f64)), &());
+        let handle2 = gc.register(Value::new(ValueKind::Number(456f64)), &());
+        unsafe { handle1.borrow_mut_unbounded() }.mark_visited();
+        unsafe { handle2.borrow_mut_unbounded() }.mark_visited();
         let ptr1 = handle1.as_ptr();
         let ptr2 = handle2.as_ptr();
 
@@ -175,5 +178,18 @@ mod tests {
 
         assert_node_eq(gc.heap.tail, ptr1);
         assert_node_eq(gc.heap.head, ptr2);
+
+        // cleanup
+        unsafe { gc.sweep() };
+    }
+
+    // We are relying on the fact that *const () does not get optimized to a pointer to 0x1 like Box::new(()) does it
+    // (Box::new is defined to not allocate on ZSTs, but we add a test case anyway)
+    #[test]
+    pub fn const_ptr_unit() {
+        let x = Box::new(0u8);
+        let y = &*x as *const u8;
+        let z = &*x as *const _ as *const ();
+        assert!(y as usize == z as usize);
     }
 }

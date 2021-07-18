@@ -81,7 +81,7 @@ impl Value {
     /// Registers this value for garbage collection and returns a handle to it
     // TODO: re-think whether this is fine to not be unsafe?
     pub fn into_handle(self, vm: &VM) -> Handle<Self> {
-        vm.gc.borrow_mut().register(self)
+        vm.gc.borrow_mut().register(self, vm.get_gc_marker())
     }
 
     /// Updates the internal properties ([[Prototype]] and constructor)
@@ -179,7 +179,7 @@ impl Value {
         key: &str,
         override_this: Option<&Handle<Value>>,
     ) -> Option<Handle<Value>> {
-        let value = value_cell.borrow();
+        let value = unsafe { value_cell.borrow_unbounded() };
         let key = key.into();
 
         match key {
@@ -219,7 +219,7 @@ impl Value {
         if value.fields.len() > 0 {
             if let Some(entry_cell) = value.fields.get(key) {
                 if let Some(override_this) = override_this {
-                    let mut entry = entry_cell.borrow_mut();
+                    let mut entry = unsafe { entry_cell.borrow_mut_unbounded() };
 
                     if let Some(f) = entry.as_function_mut() {
                         let receiver = Receiver::Bound(Handle::clone(&override_this));
@@ -259,7 +259,7 @@ impl Value {
     }
 
     pub(crate) fn mark(this: &Handle<Value>) {
-        let mut this = if let Ok(this) = this.try_borrow_mut() {
+        let mut this = if let Ok(this) = unsafe { this.get_unchecked().try_borrow_mut() } {
             this
         } else {
             return;

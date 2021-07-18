@@ -264,6 +264,8 @@ impl UserFunction {
     pub fn bind(&mut self, new_recv: Receiver) {
         if let Some(recv) = &mut self.receiver {
             recv.bind(new_recv);
+        } else {
+            self.receiver = Some(new_recv);
         }
     }
 
@@ -271,6 +273,8 @@ impl UserFunction {
     pub fn rebind(mut self, new_recv: Receiver) -> Self {
         if let Some(recv) = &mut self.receiver {
             recv.bind(new_recv);
+        } else {
+            self.receiver = Some(new_recv);
         }
         self
     }

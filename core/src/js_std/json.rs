@@ -20,7 +20,7 @@ pub fn parse(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
         .cloned()
         .unwrap_or_else(|| Value::new(ValueKind::Undefined).into_handle(ctx.vm));
 
-    let source = source_cell.borrow();
+    let source = unsafe { source_cell.borrow_unbounded() };
     let source_str = source.to_string();
 
     let parsed = Parser::new(source_str.as_bytes())
@@ -36,7 +36,7 @@ pub fn parse(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
 ///
 /// https://tc39.es/ecma262/multipage/structured-data.html#sec-json.stringify
 pub fn stringify(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
-    let target = ctx.args.first().map(|c| c.borrow());
+    let target = ctx.args.first().map(|c| unsafe { c.borrow_unbounded() });
 
     let result = target
         .as_ref()

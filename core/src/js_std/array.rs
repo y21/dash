@@ -29,7 +29,7 @@ pub fn array_constructor(_args: CallContext) -> Result<CallResult, Handle<Value>
 pub fn push(value: CallContext) -> Result<CallResult, Handle<Value>> {
     let this_cell = value.receiver.unwrap();
 
-    let mut this = this_cell.borrow_mut();
+    let mut this = unsafe { this_cell.borrow_mut_unbounded() };
     let this_arr = match this.as_object_mut() {
         Some(Object::Array(a)) => a,
         _ => {
@@ -57,7 +57,7 @@ pub fn push(value: CallContext) -> Result<CallResult, Handle<Value>> {
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.concat
 pub fn concat(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
-    let mut this = this_cell.borrow_mut();
+    let mut this = unsafe { this_cell.borrow_mut_unbounded() };
     let this_arr = match this.as_object_mut() {
         Some(Object::Array(a)) => a,
         _ => {
@@ -93,7 +93,7 @@ impl Map {
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.map
 pub fn map(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
-    let mut this_ref = this_cell.borrow_mut();
+    let mut this_ref = unsafe { this_cell.borrow_mut_unbounded() };
     let this_arr = match this_ref.as_object_mut() {
         Some(Object::Array(a)) => a,
         _ => {
@@ -149,7 +149,7 @@ impl Every {
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.every
 pub fn every(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
-    let mut this_ref = this_cell.borrow_mut();
+    let mut this_ref = unsafe { this_cell.borrow_mut_unbounded() };
     let this_arr = match this_ref.as_object_mut() {
         Some(Object::Array(a)) => a,
         _ => {
@@ -163,7 +163,7 @@ pub fn every(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     let state = ctx.state.get_or_insert_as(Every::new).unwrap();
 
     if let Some(response_cell) = ctx.function_call_response {
-        let response = response_cell.borrow().is_truthy();
+        let response = unsafe { response_cell.borrow_unbounded() }.is_truthy();
         if !response {
             return Ok(CallResult::Ready(
                 ctx.vm.create_js_value(false).into_handle(ctx.vm),
@@ -200,7 +200,7 @@ pub fn every(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.fill
 pub fn fill(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
-    let mut this_ref = this_cell.borrow_mut();
+    let mut this_ref = unsafe { this_cell.borrow_mut_unbounded() };
     let this_arr = match this_ref.as_object_mut() {
         Some(Object::Array(a)) => a,
         _ => {
@@ -221,12 +221,12 @@ pub fn fill(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
 
     let start = args
         .next()
-        .map(|c| c.borrow().as_number() as usize)
+        .map(|c| unsafe { c.borrow_unbounded() }.as_number() as usize)
         .map(|c| c.max(length))
         .unwrap_or(0);
     let end = args
         .next()
-        .map(|c| c.borrow().as_number() as usize)
+        .map(|c| unsafe { c.borrow_unbounded() }.as_number() as usize)
         .map(|c| c.min(length))
         .unwrap_or_else(|| this_arr.elements.len());
 
@@ -284,7 +284,7 @@ pub fn from(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.includes
 pub fn includes(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
-    let mut this_ref = this_cell.borrow_mut();
+    let mut this_ref = unsafe { this_cell.borrow_mut_unbounded() };
     let this_arr = match this_ref.as_object_mut() {
         Some(Object::Array(a)) => a,
         _ => {
@@ -300,10 +300,10 @@ pub fn includes(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
         .next()
         .cloned()
         .unwrap_or_else(|| Value::new(ValueKind::Undefined).into_handle(ctx.vm));
-    let search_element = search_element_cell.borrow();
+    let search_element = unsafe { search_element_cell.borrow_mut_unbounded() };
     let from_index = args
         .next()
-        .map(|c| c.borrow().as_number())
+        .map(|c| unsafe { c.borrow_unbounded() }.as_number())
         .map(|c| c as usize)
         .unwrap_or(0);
 
@@ -311,7 +311,7 @@ pub fn includes(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
         .elements
         .iter()
         .skip(from_index)
-        .any(|cell| cell.borrow().strict_equal(&search_element));
+        .any(|c| unsafe { c.borrow_unbounded() }.strict_equal(&search_element));
 
     Ok(CallResult::Ready(
         ctx.vm.create_js_value(found).into_handle(ctx.vm),
@@ -323,7 +323,7 @@ pub fn includes(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.indexOf
 pub fn index_of(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
-    let mut this_ref = this_cell.borrow_mut();
+    let mut this_ref = unsafe { this_cell.borrow_mut_unbounded() };
     let this_arr = match this_ref.as_object_mut() {
         Some(Object::Array(a)) => a,
         _ => {
@@ -339,10 +339,10 @@ pub fn index_of(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
         .next()
         .cloned()
         .unwrap_or_else(|| Value::new(ValueKind::Undefined).into_handle(ctx.vm));
-    let search_element = search_element_cell.borrow();
+    let search_element = unsafe { search_element_cell.borrow_unbounded() };
     let from_index = args
         .next()
-        .map(|c| c.borrow().as_number())
+        .map(|c| unsafe { c.borrow_unbounded() }.as_number())
         .map(|c| c as usize)
         .unwrap_or(0);
 
@@ -350,7 +350,7 @@ pub fn index_of(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
         .elements
         .iter()
         .skip(from_index)
-        .position(|cell| cell.borrow().strict_equal(&search_element))
+        .position(|cell| unsafe { cell.borrow_unbounded() }.strict_equal(&search_element))
         .map(|v| v as f64)
         .unwrap_or(-1f64);
 
@@ -368,7 +368,7 @@ pub fn is_array(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
         .next()
         .cloned()
         .unwrap_or_else(|| Value::new(ValueKind::Undefined).into_handle(ctx.vm));
-    let value = value_cell.borrow();
+    let value = unsafe { value_cell.borrow_unbounded() };
     Ok(CallResult::Ready(
         ctx.vm
             .create_js_value(value.as_object().and_then(Object::as_array).is_some())
@@ -451,14 +451,18 @@ pub fn join(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
 
     let len = abstractions::object::length_of_array_like(ctx.vm, this_cell)? as usize;
-    let this_ref = this_cell.borrow_mut();
+    let this_ref = unsafe { this_cell.borrow_mut_unbounded() };
 
     let mut o = ArrayLikeIterable::from_value(&this_ref, this_cell);
 
     let separator = ctx.arguments().next().cloned();
 
     let sep = if let Some(separator_cell) = separator {
-        Cow::Owned(separator_cell.borrow().to_string().to_string())
+        Cow::Owned(
+            unsafe { separator_cell.borrow_unbounded() }
+                .to_string()
+                .to_string(),
+        )
     } else {
         Cow::Borrowed(",")
     };
@@ -466,7 +470,7 @@ pub fn join(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     let mut r = String::new();
 
     if let Some(response_cell) = &ctx.function_call_response {
-        let response = response_cell.borrow();
+        let response = unsafe { response_cell.borrow_unbounded() };
         let response_string = response.as_string().ok_or_else(|| {
             error::create_error("Cannot convert to primitive value".into(), ctx.vm)
         })?;
@@ -497,7 +501,7 @@ pub fn join(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
             .next(ctx.vm)
             .unwrap_or_else(|| Value::new(ValueKind::Undefined).into_handle(ctx.vm));
 
-        let element = element_cell.borrow();
+        let element = unsafe { element_cell.borrow_unbounded() };
 
         if !element.is_nullish() {
             let next = match abstractions::conversions::to_string(ctx.vm, Some(&element_cell))? {
@@ -510,7 +514,7 @@ pub fn join(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
                 }
             };
 
-            let next_ref = next.borrow();
+            let next_ref = unsafe { next.borrow_unbounded() };
             let next_string = next_ref.as_string().ok_or_else(|| {
                 error::create_error("Cannot convert to primitive value".into(), ctx.vm)
             })?;
@@ -531,7 +535,7 @@ pub fn join(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.lastIndexOf
 pub fn last_index_of(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
-    let mut this_ref = this_cell.borrow_mut();
+    let mut this_ref = unsafe { this_cell.borrow_mut_unbounded() };
     let this_arr = match this_ref.as_object_mut() {
         Some(Object::Array(a)) => a,
         _ => {
@@ -550,10 +554,10 @@ pub fn last_index_of(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
         .cloned()
         .unwrap_or_else(|| Value::new(ValueKind::Undefined).into_handle(ctx.vm));
 
-    let search_element = search_element_cell.borrow();
+    let search_element = unsafe { search_element_cell.borrow_unbounded() };
     let from_index = args
         .next()
-        .map(|c| c.borrow().as_number())
+        .map(|c| unsafe { c.borrow_unbounded() }.as_number())
         .map(|c| c as usize)
         .unwrap_or(len - 1);
 
@@ -564,7 +568,7 @@ pub fn last_index_of(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
         .iter()
         .rev()
         .skip(skip)
-        .position(|c| c.borrow().strict_equal(&search_element))
+        .position(|c| unsafe { c.borrow_unbounded() }.strict_equal(&search_element))
         .map(|c| len - c - skip - 1)
         .map(|c| c as f64)
         .unwrap_or(-1f64);

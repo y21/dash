@@ -50,6 +50,9 @@ use self::{
     value::object::{AnyObject, Object},
 };
 
+// Force garbage collection at 1000 objects
+const GC_OBJECT_COUNT_THRESHOLD: usize = 1000;
+
 /// An error that may occur during bytecode execution
 #[derive(Debug)]
 pub enum VMError {
@@ -57,14 +60,31 @@ pub enum VMError {
     UncaughtError(Handle<Value>),
 }
 
+/// An owned error that may occur during bytecode execution
+///
+/// The contained value is cloned.
+#[derive(Debug)]
+pub enum OwnedVMError {
+    /// An error was thrown and user code did not catch it
+    UncaughtError(Value), // TODO: not static
+}
+
+impl From<VMError> for OwnedVMError {
+    fn from(e: VMError) -> Self {
+        match e {
+            VMError::UncaughtError(e) => Self::UncaughtError(unsafe { e.borrow_unbounded() }.clone())
+        }
+    }
+}
+
 impl VMError {
     /// Formats this error by taking the `stack` property of the error object
     pub fn to_string(&self) -> Cow<str> {
         match self {
             Self::UncaughtError(err_cell) => {
-                let err = err_cell.borrow();
+                let err = unsafe { err_cell.borrow_unbounded() };
                 let stack_cell = err.get_field("stack").unwrap();
-                let stack_ref = stack_cell.borrow();
+                let stack_ref = unsafe { stack_cell.borrow_unbounded() };
                 let stack_string = stack_ref.as_string().unwrap();
                 Cow::Owned(String::from(stack_string))
             }
@@ -114,19 +134,23 @@ pub struct VM {
     pub(crate) loops: Stack<Loop, 32>,
     /// Agent
     pub(crate) agent: Box<dyn Agent>,
+    gc_marker: Box<u8>
 }
 
 impl VM {
     /// Creates a new VM with a provided agent
     pub fn new_with_agent(func: UserFunction, agent: Box<dyn Agent>) -> Self {
+        let gc_marker = Box::new(0u8);
+        let gc_marker_ptr = &*gc_marker as *const _ as *const ();
+        
         let mut gc = Gc::new();
-        let statics = Statics::new(&mut gc);
-        let global = gc.register(Value::from(AnyObject {}));
+        let statics = Statics::new(&mut gc, gc_marker_ptr);
+        let global = gc.register(Value::from(AnyObject {}), gc_marker_ptr);
 
         let mut frames = Stack::new();
         frames.push(Frame {
             buffer: func.buffer.clone(),
-            func: gc.register(Value::from(Closure::new(func))),
+            func: gc.register(Value::from(Closure::new(func)), gc_marker_ptr),
             ip: 0,
             sp: 0,
             state: None,
@@ -144,9 +168,14 @@ impl VM {
             loops: Stack::new(),
             slot: None,
             agent,
+            gc_marker
         };
         vm.prepare_stdlib();
         vm
+    }
+
+    pub(crate) fn get_gc_marker(&self) -> *const () {
+        &*self.gc_marker as *const _ as *const ()
     }
 
     /// Convenience function for creating a new VM given an input string
@@ -218,8 +247,8 @@ impl VM {
     }
 
     /// Estimates whether it makes sense to perform a garbage collection
-    fn should_gc(&self) -> bool {
-        true
+    unsafe fn should_gc(&self) -> bool {
+        unsafe { (&mut *self.gc.as_ptr()).heap.len >= GC_OBJECT_COUNT_THRESHOLD }
     }
 
     /// Setup for a GC cycle
@@ -286,20 +315,20 @@ impl VM {
 
     /// Reads a number
     fn read_number(&mut self) -> f64 {
-        self.stack.pop().borrow().as_number()
+        unsafe { self.stack.pop().borrow_unbounded() }.as_number()
     }
 
     /// Reads an index
     fn read_index(&mut self) -> Option<usize> {
-        self.stack
+        unsafe { self.stack
             .pop()
-            .borrow()
+            .borrow_unbounded() }
             .as_constant()
             .and_then(|c| c.as_index())
     }
 
     fn pop_owned(&mut self) -> Option<Value> {
-        Some(self.stack.pop().borrow().clone())
+        Some(unsafe { self.stack.pop().borrow_unbounded() }.clone())
     }
 
     fn read_lhs_rhs(&mut self) -> (Handle<Value>, Handle<Value>) {
@@ -313,7 +342,7 @@ impl VM {
         F: Fn(&Value) -> T,
     {
         let lhs_cell = self.stack.pop();
-        let lhs = lhs_cell.borrow();
+        let lhs = unsafe { lhs_cell.borrow_unbounded() };
         func(&*lhs)
     }
 
@@ -322,8 +351,8 @@ impl VM {
         F: Fn(&Value, &Value) -> T,
     {
         let (lhs_cell, rhs_cell) = self.read_lhs_rhs();
-        let lhs = lhs_cell.borrow();
-        let rhs = rhs_cell.borrow();
+        let lhs = unsafe { lhs_cell.borrow_unbounded() };
+        let rhs = unsafe { rhs_cell.borrow_unbounded() };
         func(&*lhs, &*rhs)
     }
 
@@ -371,17 +400,17 @@ impl VM {
         // All values that live in self.statics do not have a [[Prototype]] set
         // so we do it here
         fn patch_value(this: &VM, value: &Handle<Value>) {
-            value.borrow_mut().detect_internal_properties(this);
+            unsafe { value.borrow_mut_unbounded() }.detect_internal_properties(this);
         }
         
         fn patch_constructor(this: &VM, func: &Handle<Value>, prototype: &Handle<Value>) {
-            let mut func_ref = func.borrow_mut();
+            let mut func_ref = unsafe { func.borrow_mut_unbounded() };
             let real_func = func_ref.as_function_mut().unwrap();
             real_func.set_prototype(Handle::clone(prototype));
             func_ref.detect_internal_properties(this);
         }
 
-        let mut global = self.global.borrow_mut();
+        let mut global = unsafe { self.global.borrow_mut_unbounded() };
         global.detect_internal_properties(self);
         // TODO: attaching globalThis causes a reference cycle and memory leaks
         // We somehow need to have
@@ -395,7 +424,7 @@ impl VM {
         patch_value(self, &self.statics.number_proto);
         
         {
-            let mut o = self.statics.string_proto.borrow_mut();
+            let mut o = unsafe { self.statics.string_proto.borrow_mut_unbounded() };
             o.detect_internal_properties(self);
             o.set_property("charAt", Handle::clone(&self.statics.string_char_at));
             o.set_property("charCodeAt", Handle::clone(&self.statics.string_char_code_at));
@@ -416,7 +445,7 @@ impl VM {
         }
 
         {
-            let mut o = self.statics.array_proto.borrow_mut();
+            let mut o = unsafe { self.statics. array_proto.borrow_mut_unbounded() };
             o.detect_internal_properties(self);
             o.set_property("push", Handle::clone(&self.statics.array_push));
             o.set_property("concat", Handle::clone(&self.statics.array_concat));
@@ -447,18 +476,18 @@ impl VM {
         }
 
         {
-            let mut array_ctor = self.statics.array_ctor.borrow_mut();
+            let mut array_ctor = unsafe { self.statics.array_ctor.borrow_mut_unbounded() };
             array_ctor.set_property("isArray", Handle::clone(&self.statics.array_is_array));
         }
 
         {
-            let mut promise_ctor = self.statics.promise_ctor.borrow_mut();
+            let mut promise_ctor = unsafe { self.statics.promise_ctor.borrow_mut_unbounded() };
             promise_ctor.set_property("resolve", Handle::clone(&self.statics.promise_resolve));
             promise_ctor.set_property("reject", Handle::clone(&self.statics.promise_reject));
         }
 
         {
-            let mut o = self.statics.weakset_proto.borrow_mut();
+            let mut o = unsafe { self.statics.weakset_proto.borrow_mut_unbounded() };
             o.detect_internal_properties(self);
             o.set_property("has", Handle::clone(&self.statics.weakset_has));
             o.set_property("add", Handle::clone(&self.statics.weakset_add));
@@ -466,7 +495,7 @@ impl VM {
         }
 
         {
-            let mut o = self.statics.weakmap_proto.borrow_mut();
+            let mut o = unsafe { self.statics.weakmap_proto.borrow_mut_unbounded() };
             o.detect_internal_properties(self);
             o.set_property("has", Handle::clone(&self.statics.weakmap_has));
             o.set_property("add", Handle::clone(&self.statics.weakmap_add));
@@ -475,7 +504,7 @@ impl VM {
         }
 
         {
-            let mut object_proto = self.statics.object_proto.borrow_mut();
+            let mut object_proto = unsafe { self.statics.object_proto.borrow_mut_unbounded() };
             object_proto.constructor = Some(Handle::clone(&self.statics.object_ctor));
             object_proto.proto = Some(Value::new(ValueKind::Null).into_handle(self));
             object_proto.set_property("toString", Handle::clone(&self.statics.object_to_string));
@@ -539,7 +568,7 @@ impl VM {
         global.set_property("isNaN", self.statics.isnan.clone());
 
         {
-            let mut object_ctor = self.statics.object_ctor.borrow_mut();
+            let mut object_ctor = unsafe { self.statics.object_ctor.borrow_mut_unbounded() };
             object_ctor.set_property("defineProperty", self.statics.object_define_property.clone());
             object_ctor.set_property("getOwnPropertyNames", self.statics.object_get_own_property_names.clone());
             object_ctor.set_property("getPrototypeOf", self.statics.object_get_prototype_of.clone());
@@ -628,7 +657,7 @@ impl VM {
             stack.push_str("  at ");
 
             // Get reference to function
-            let func = frame.func.borrow();
+            let func = unsafe { frame.func.borrow_unbounded() };
             let func_name = func
                 .as_function()
                 .and_then(FunctionKind::as_closure)
@@ -651,7 +680,7 @@ impl VM {
         state: CallState<Box<dyn Any>>,
         receiver: Option<Handle<Value>>,
     ) {
-        let func_ref = new_func.borrow();
+        let func_ref = unsafe { new_func.borrow_unbounded() };
         match func_ref.as_function().unwrap() {
             FunctionKind::Closure(closure) => {
                 let sp = self.stack.get_stack_pointer();
@@ -685,7 +714,7 @@ impl VM {
         func_cell: Handle<Value>,
         mut params: Vec<Handle<Value>>,
     ) -> Result<(), Handle<Value>> {
-        let func_cell_ref = func_cell.borrow();
+        let func_cell_ref = unsafe { func_cell.borrow_unbounded() };
         let func = match func_cell_ref.as_function().unwrap() {
             FunctionKind::Native(f) => {
                 let receiver = f.receiver.as_ref().map(|rx| rx.get().clone());
@@ -787,8 +816,10 @@ impl VM {
         }
 
         while !self.is_eof() {
-            if unlikely(self.should_gc()) {
-                unsafe { self.perform_gc() };
+            unsafe {
+                if unlikely(self.should_gc()) {
+                    self.perform_gc();
+                }
             }
 
             let instruction = self.buffer()[self.ip()].as_op();
@@ -845,7 +876,7 @@ impl VM {
                         .push(self.create_js_value(maybe_number).into_handle(self));
                 }
                 Opcode::LogicalNot => {
-                    let is_truthy = self.stack.pop().borrow().is_truthy();
+                    let is_truthy = unsafe { self.stack.pop().borrow_unbounded() }.is_truthy();
 
                     self.stack
                         .push(self.create_js_value(!is_truthy).into_handle(self));
@@ -918,13 +949,13 @@ impl VM {
                     let name = self.pop_owned().unwrap().into_ident().unwrap();
                     let value = self.stack.pop();
 
-                    let mut global = self.global.borrow_mut();
+                    let mut global = unsafe { self.global.borrow_mut_unbounded() };
                     global.set_property(name, value);
                 }
                 Opcode::SetGlobalNoValue => {
                     let name = self.pop_owned().unwrap().into_ident().unwrap();
 
-                    let mut global = self.global.borrow_mut();
+                    let mut global = unsafe { self.global.borrow_mut_unbounded() };
                     global.set_property(name, Value::new(ValueKind::Undefined).into_handle(self));
                 }
                 Opcode::GetGlobal => {
@@ -968,7 +999,7 @@ impl VM {
                     let upvalue_idx = self.read_index().unwrap();
 
                     let value = {
-                        let closure_cell = self.frame().func.borrow();
+                        let closure_cell = unsafe { self.frame().func.borrow_unbounded() };
                         let closure = match closure_cell.as_function().unwrap() {
                             FunctionKind::Closure(c) => c,
                             _ => unreachable!(),
@@ -982,7 +1013,7 @@ impl VM {
                     let instruction_count = self.read_index().unwrap();
 
                     let condition_cell = unsafe { self.stack.get_unchecked() };
-                    let condition = condition_cell.borrow().is_truthy();
+                    let condition = unsafe { condition_cell.borrow_unbounded() }.is_truthy();
 
                     if !condition {
                         self.frame_mut().ip += instruction_count;
@@ -992,7 +1023,7 @@ impl VM {
                     let instruction_count = self.read_index().unwrap();
 
                     let condition_cell = unsafe { self.stack.get_unchecked() };
-                    let condition = condition_cell.borrow().is_truthy();
+                    let condition = unsafe { condition_cell.borrow_unbounded() }.is_truthy();
 
                     if condition {
                         self.frame_mut().ip += instruction_count;
@@ -1002,7 +1033,7 @@ impl VM {
                     let instruction_count = self.read_index().unwrap();
 
                     let condition_cell = unsafe { self.stack.get_unchecked() };
-                    let condition = condition_cell.borrow().is_nullish();
+                    let condition = unsafe { condition_cell.borrow_unbounded() }.is_nullish();
 
                     if !condition {
                         self.frame_mut().ip += instruction_count;
@@ -1025,108 +1056,108 @@ impl VM {
                 Opcode::AdditionAssignment => {
                     let value_cell = self.stack.pop();
                     let target_cell = self.stack.pop();
-                    let value = value_cell.borrow();
-                    target_cell.borrow_mut().add_assign(&*value);
+                    let value = unsafe { value_cell.borrow_unbounded() };
+                    unsafe { target_cell.borrow_mut_unbounded() }.add_assign(&*value);
                     self.stack.push(target_cell);
                 }
                 Opcode::SubtractionAssignment => {
                     let value_cell = self.stack.pop();
                     let target_cell = self.stack.pop();
-                    let value = value_cell.borrow();
-                    target_cell.borrow_mut().sub_assign(&*value);
+                    let value = unsafe { value_cell.borrow_unbounded() };
+                    unsafe { target_cell.borrow_mut_unbounded() }.sub_assign(&*value);
                     self.stack.push(target_cell);
                 }
                 Opcode::MultiplicationAssignment => {
                     let value_cell = self.stack.pop();
                     let target_cell = self.stack.pop();
-                    let value = value_cell.borrow();
-                    target_cell.borrow_mut().mul_assign(&*value);
+                    let value = unsafe { value_cell.borrow_unbounded() };
+                    unsafe { target_cell.borrow_mut_unbounded() }.mul_assign(&*value);
                     self.stack.push(target_cell);
                 }
                 Opcode::DivisionAssignment => {
                     let value_cell = self.stack.pop();
                     let target_cell = self.stack.pop();
-                    let value = value_cell.borrow();
-                    target_cell.borrow_mut().div_assign(&*value);
+                    let value = unsafe { value_cell.borrow_unbounded() };
+                    unsafe { target_cell.borrow_mut_unbounded() }.div_assign(&*value);
                     self.stack.push(target_cell);
                 }
                 Opcode::RemainderAssignment => {
                     let value_cell = self.stack.pop();
                     let target_cell = self.stack.pop();
-                    let value = value_cell.borrow();
-                    target_cell.borrow_mut().rem_assign(&*value);
+                    let value = unsafe { value_cell.borrow_unbounded() };
+                    unsafe { target_cell.borrow_mut_unbounded() }.rem_assign(&*value);
                     self.stack.push(target_cell);
                 }
                 Opcode::ExponentiationAssignment => {
                     let value_cell = self.stack.pop();
                     let target_cell = self.stack.pop();
-                    let value = value_cell.borrow();
-                    target_cell.borrow_mut().pow_assign(&*value);
+                    let value = unsafe { value_cell.borrow_unbounded() };
+                    unsafe { target_cell.borrow_mut_unbounded() }.pow_assign(&*value);
                     self.stack.push(target_cell);
                 }
                 Opcode::LeftShiftAssignment => {
                     let value_cell = self.stack.pop();
                     let target_cell = self.stack.pop();
-                    let value = value_cell.borrow();
-                    target_cell.borrow_mut().left_shift_assign(&*value);
+                    let value = unsafe { value_cell.borrow_unbounded() };
+                    unsafe { target_cell.borrow_mut_unbounded() }.left_shift_assign(&*value);
                     self.stack.push(target_cell);
                 }
                 Opcode::RightShiftAssignment => {
                     let value_cell = self.stack.pop();
                     let target_cell = self.stack.pop();
-                    let value = value_cell.borrow();
-                    target_cell.borrow_mut().right_shift_assign(&*value);
+                    let value = unsafe { value_cell.borrow_unbounded() };
+                    unsafe { target_cell.borrow_mut_unbounded() }.right_shift_assign(&*value);
                     self.stack.push(target_cell);
                 }
                 Opcode::UnsignedRightShiftAssignment => {
                     let value_cell = self.stack.pop();
                     let target_cell = self.stack.pop();
-                    let value = value_cell.borrow();
-                    target_cell
-                        .borrow_mut()
+                    let value = unsafe { value_cell.borrow_unbounded() };
+                    unsafe { target_cell
+                        .borrow_mut_unbounded() }
                         .unsigned_right_shift_assign(&*value);
                     self.stack.push(target_cell);
                 }
                 Opcode::BitwiseAndAssignment => {
                     let value_cell = self.stack.pop();
                     let target_cell = self.stack.pop();
-                    let value = value_cell.borrow();
-                    target_cell.borrow_mut().bitwise_and_assign(&*value);
+                    let value = unsafe { value_cell.borrow_unbounded() };
+                    unsafe { target_cell.borrow_mut_unbounded() }.bitwise_and_assign(&*value);
                     self.stack.push(target_cell);
                 }
                 Opcode::BitwiseOrAssignment => {
                     let value_cell = self.stack.pop();
                     let target_cell = self.stack.pop();
-                    let value = value_cell.borrow();
-                    target_cell.borrow_mut().bitwise_or_assign(&*value);
+                    let value = unsafe { value_cell.borrow_unbounded() };
+                    unsafe { target_cell.borrow_mut_unbounded() }.bitwise_or_assign(&*value);
                     self.stack.push(target_cell);
                 }
                 Opcode::BitwiseXorAssignment => {
                     let value_cell = self.stack.pop();
                     let target_cell = self.stack.pop();
-                    let value = value_cell.borrow();
-                    target_cell.borrow_mut().bitwise_xor_assign(&*value);
+                    let value = unsafe { value_cell.borrow_unbounded() };
+                    unsafe { target_cell.borrow_mut_unbounded() }.bitwise_xor_assign(&*value);
                     self.stack.push(target_cell);
                 }
                 Opcode::LogicalAndAssignment => {
                     let value_cell = self.stack.pop();
                     let target_cell = self.stack.pop();
-                    let value = value_cell.borrow();
-                    target_cell.borrow_mut().logical_and_assign(&*value);
+                    let value = unsafe { value_cell.borrow_unbounded() };
+                    unsafe { target_cell.borrow_mut_unbounded() }.logical_and_assign(&*value);
                     self.stack.push(target_cell);
                 }
                 Opcode::LogicalOrAssignment => {
                     let value_cell = self.stack.pop();
                     let target_cell = self.stack.pop();
-                    let value = value_cell.borrow();
-                    target_cell.borrow_mut().logical_or_assign(&*value);
+                    let value = unsafe { value_cell.borrow_unbounded() };
+                    unsafe { target_cell.borrow_mut_unbounded() }.logical_or_assign(&*value);
                     self.stack.push(target_cell);
                 }
                 Opcode::LogicalNullishAssignment => {
                     let value_cell = self.stack.pop();
                     let target_cell = self.stack.pop();
-                    let value = value_cell.borrow();
-                    target_cell.borrow_mut().nullish_coalescing_assign(&*value);
+                    let value = unsafe { value_cell.borrow_unbounded() };
+                    unsafe { target_cell.borrow_mut_unbounded() }.nullish_coalescing_assign(&*value);
                     self.stack.push(target_cell);
                 }
                 Opcode::ConstructorCall => {
@@ -1137,7 +1168,7 @@ impl VM {
                     }
 
                     let func_cell = self.stack.pop();
-                    let mut func_cell_ref = func_cell.borrow_mut();
+                    let mut func_cell_ref = unsafe { func_cell.borrow_mut_unbounded() };
                     let func_cell_kind = func_cell_ref.as_function_mut().unwrap();
                     let this = func_cell_kind.construct(&func_cell);
                     let func = match func_cell_kind {
@@ -1210,7 +1241,7 @@ impl VM {
                 Opcode::GetThis => {
                     let this = {
                         let frame = self.frame();
-                        let func = frame.func.borrow();
+                        let func = unsafe { frame.func.borrow_unbounded() };
                         let raw_func = func
                             .as_function()
                             .and_then(FunctionKind::as_closure)
@@ -1293,7 +1324,7 @@ impl VM {
                 }
                 Opcode::ReturnModule => {
                     let frame = self.frames.pop();
-                    let func_ref = frame.func.borrow();
+                    let func_ref = unsafe { frame.func.borrow_unbounded() };
                     let func = func_ref
                         .as_function()
                         .and_then(FunctionKind::as_module)
@@ -1306,7 +1337,7 @@ impl VM {
                     };
 
                     {
-                        let mut exports_mut = exports.borrow_mut();
+                        let mut exports_mut = unsafe { exports.borrow_mut_unbounded() };
                         for (key, value) in &func.exports.named {
                             exports_mut.set_property(&**key, Handle::clone(value));
                         }
@@ -1350,7 +1381,7 @@ impl VM {
 
                     if let Some(mut resume) = this.resume.take() {
                         let mut state = this.state.take().unwrap_or_else(CallState::default);
-                        let func_ref = resume.func.borrow();
+                        let func_ref = unsafe { resume.func.borrow_unbounded() };
                         let f = func_ref
                             .as_function()
                             .and_then(FunctionKind::as_native)
@@ -1383,7 +1414,7 @@ impl VM {
                         continue;
                     }
 
-                    let func_ref = this.func.borrow();
+                    let func_ref = unsafe { this.func.borrow_unbounded() };
                     if let Some(this) = func_ref
                         .as_function()
                         .and_then(FunctionKind::as_closure)
@@ -1396,9 +1427,9 @@ impl VM {
                 }
                 Opcode::Less => {
                     let rhs_cell = self.stack.pop();
-                    let rhs = rhs_cell.borrow();
+                    let rhs = unsafe { rhs_cell.borrow_unbounded() };
                     let lhs_cell = self.stack.pop();
-                    let lhs = lhs_cell.borrow();
+                    let lhs = unsafe { lhs_cell.borrow_unbounded() };
 
                     let is_less = matches!(lhs.compare(&rhs), Some(Compare::Less));
                     self.stack
@@ -1406,9 +1437,9 @@ impl VM {
                 }
                 Opcode::LessEqual => {
                     let rhs_cell = self.stack.pop();
-                    let rhs = rhs_cell.borrow();
+                    let rhs = unsafe { rhs_cell.borrow_unbounded() };
                     let lhs_cell = self.stack.pop();
-                    let lhs = lhs_cell.borrow();
+                    let lhs = unsafe { lhs_cell.borrow_unbounded() };
 
                     let is_less_eq = matches!(
                         lhs.compare(&rhs),
@@ -1419,9 +1450,9 @@ impl VM {
                 }
                 Opcode::Greater => {
                     let rhs_cell = self.stack.pop();
-                    let rhs = rhs_cell.borrow();
+                    let rhs = unsafe { rhs_cell.borrow_unbounded() };
                     let lhs_cell = self.stack.pop();
-                    let lhs = lhs_cell.borrow();
+                    let lhs = unsafe { lhs_cell.borrow_unbounded() };
 
                     let is_greater = matches!(lhs.compare(&rhs), Some(Compare::Greater));
                     self.stack
@@ -1429,9 +1460,9 @@ impl VM {
                 }
                 Opcode::GreaterEqual => {
                     let rhs_cell = self.stack.pop();
-                    let rhs = rhs_cell.borrow();
+                    let rhs = unsafe { rhs_cell.borrow_unbounded() };
                     let lhs_cell = self.stack.pop();
-                    let lhs = lhs_cell.borrow();
+                    let lhs = unsafe { lhs_cell.borrow_unbounded() };
 
                     let is_greater_eq = matches!(
                         lhs.compare(&rhs),
@@ -1448,7 +1479,7 @@ impl VM {
                     let value = if is_assignment {
                         let maybe_value = Value::get_property(self, &target_cell, &property, None);
                         maybe_value.unwrap_or_else(|| {
-                            let mut target = target_cell.borrow_mut();
+                            let mut target = unsafe { target_cell.borrow_mut_unbounded() };
                             let value = Value::new(ValueKind::Undefined).into_handle(self);
                             target.set_property(property, Handle::clone(&value));
                             value
@@ -1478,7 +1509,7 @@ impl VM {
                     self.stack.push(self.create_js_value(!eq).into_handle(self));
                 }
                 Opcode::Typeof => {
-                    let value = self.stack.pop().borrow()._typeof().to_owned();
+                    let value = unsafe { self.stack.pop().borrow_unbounded() }._typeof().to_owned();
 
                     self.stack.push(
                         self.create_js_value(Object::String(value))
@@ -1487,13 +1518,14 @@ impl VM {
                 }
                 Opcode::PostfixIncrement | Opcode::PostfixDecrement => {
                     let value_cell = self.stack.pop();
-                    let mut value = value_cell.borrow_mut();
+                    let mut value = unsafe { value_cell.borrow_mut_unbounded() };
                     let one = self.create_js_value(1f64);
                     let result = if instruction == Opcode::PostfixIncrement {
                         value.add_assign(&one);
                         value.sub(&one)
                     } else {
-                        todo!()
+                        value.sub_assign(&one);
+                        value.add(&one)
                     };
                     self.stack.push(result.into_handle(self));
                 }
@@ -1501,11 +1533,11 @@ impl VM {
                     let value_cell = self.stack.pop();
                     let target_cell = self.stack.pop();
 
-                    let value = value_cell.borrow();
+                    let value = unsafe { value_cell.borrow_unbounded() };
                     // TODO: cloning might not be the right thing to do
                     let value = value.clone();
 
-                    let mut target = target_cell.borrow_mut();
+                    let mut target = unsafe { target_cell.borrow_mut_unbounded() };
                     **target = value;
                     self.stack.push(target_cell.clone());
                 }
@@ -1546,14 +1578,14 @@ impl VM {
                     let property_cell = self.stack.pop();
                     let is_assignment = self.read_index().unwrap() == 1;
                     let target_cell = self.stack.pop();
-                    let property = property_cell.borrow();
+                    let property = unsafe { property_cell.borrow_unbounded() };
                     let property_s = property.to_string();
 
                     let value = if is_assignment {
                         let maybe_value =
                             Value::get_property(self, &target_cell, &*property_s, None);
                         maybe_value.unwrap_or_else(|| {
-                            let mut target = target_cell.borrow_mut();
+                            let mut target = unsafe { target_cell.borrow_mut_unbounded() };
                             let value = Value::new(ValueKind::Undefined).into_handle(self);
                             target.set_property(property_s.to_string(), Handle::clone(&value));
                             value
@@ -1592,7 +1624,7 @@ impl VM {
                 Opcode::ExportDefault => {
                     let export_status = {
                         let value = self.stack.pop();
-                        let mut func_ref = self.frame().func.borrow_mut();
+                        let mut func_ref = unsafe { self.frame().func.borrow_mut_unbounded() };
 
                         let maybe_module = func_ref
                             .as_function_mut()
@@ -1618,7 +1650,7 @@ impl VM {
 
                     {
                         // If this is already a primitive value, we do not need to try to convert it
-                        let obj = obj_cell.borrow();
+                        let obj = unsafe { obj_cell.borrow_unbounded() };
                         if obj.is_primitive() {
                             self.stack.push(Handle::clone(&obj_cell));
                             continue;
@@ -1652,5 +1684,8 @@ impl Drop for VM {
         self.stack.reset();
         self.frames.reset();
         self.async_frames.reset();
+
+        // Final GC
+        // unsafe { self.unsafe { gc.borrow_mut_unbounded() }.sweep() };
     }
 }

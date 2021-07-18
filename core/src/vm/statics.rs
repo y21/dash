@@ -183,144 +183,196 @@ pub struct Statics {
 }
 
 macro_rules! register_glob_method {
-    ($gc:expr, $name:expr, $path:expr) => {
-        $gc.register(Value::from(NativeFunction::new(
-            $name,
-            $path,
-            None,
-            Constructor::NoCtor,
-        )))
+    ($gc:expr, $name:expr, $path:expr, $marker:expr) => {
+        $gc.register(
+            Value::from(NativeFunction::new($name, $path, None, Constructor::NoCtor)),
+            $marker,
+        )
     };
 }
 
 macro_rules! register_ctor {
-    ($gc:expr, $name:expr, $path:expr) => {
-        $gc.register(Value::from(NativeFunction::new(
-            $name,
-            $path,
-            None,
-            Constructor::Ctor,
-        )))
+    ($gc:expr, $name:expr, $path:expr, $marker:expr) => {
+        $gc.register(
+            Value::from(NativeFunction::new($name, $path, None, Constructor::Ctor)),
+            $marker,
+        )
     };
 }
 
 impl Statics {
     /// Creates a new global data object
-    pub fn new(gc: &mut Gc<Value>) -> Self {
+    pub fn new(gc: &mut Gc<Value>, marker: *const ()) -> Self {
         Self {
             // Proto
-            boolean_proto: gc.register(Value::from(AnyObject {})),
-            number_proto: gc.register(Value::from(AnyObject {})),
-            string_proto: gc.register(Value::from(AnyObject {})),
-            function_proto: gc.register(Value::from(AnyObject {})),
-            array_proto: gc.register(Value::from(AnyObject {})),
-            weakset_proto: gc.register(Value::from(AnyObject {})),
-            weakmap_proto: gc.register(Value::from(AnyObject {})),
-            object_proto: gc.register(Value::from(AnyObject {})),
-            error_proto: gc.register(Value::from(AnyObject {})),
-            promise_proto: gc.register(Value::from(AnyObject {})),
+            boolean_proto: gc.register(Value::from(AnyObject {}), marker),
+            number_proto: gc.register(Value::from(AnyObject {}), marker),
+            string_proto: gc.register(Value::from(AnyObject {}), marker),
+            function_proto: gc.register(Value::from(AnyObject {}), marker),
+            array_proto: gc.register(Value::from(AnyObject {}), marker),
+            weakset_proto: gc.register(Value::from(AnyObject {}), marker),
+            weakmap_proto: gc.register(Value::from(AnyObject {}), marker),
+            object_proto: gc.register(Value::from(AnyObject {}), marker),
+            error_proto: gc.register(Value::from(AnyObject {}), marker),
+            promise_proto: gc.register(Value::from(AnyObject {}), marker),
             // Ctor
-            error_ctor: register_ctor!(gc, "Error", js_std::error::error_constructor),
-            weakset_ctor: register_ctor!(gc, "WeakSet", js_std::weakset::weakset_constructor),
-            weakmap_ctor: register_ctor!(gc, "WeakMap", js_std::weakmap::weakmap_constructor),
-            boolean_ctor: register_ctor!(gc, "Boolean", js_std::boolean::boolean_constructor),
-            number_ctor: register_ctor!(gc, "Number", js_std::number::number_constructor),
-            string_ctor: register_ctor!(gc, "String", js_std::string::string_constructor),
-            function_ctor: register_ctor!(gc, "Function", js_std::function::function_constructor),
-            array_ctor: register_ctor!(gc, "Array", js_std::array::array_constructor),
-            object_ctor: register_ctor!(gc, "Object", js_std::object::object_constructor),
-            promise_ctor: register_ctor!(gc, "Promise", js_std::promise::promise_constructor),
+            error_ctor: register_ctor!(gc, "Error", js_std::error::error_constructor, marker),
+            weakset_ctor: register_ctor!(
+                gc,
+                "WeakSet",
+                js_std::weakset::weakset_constructor,
+                marker
+            ),
+            weakmap_ctor: register_ctor!(
+                gc,
+                "WeakMap",
+                js_std::weakmap::weakmap_constructor,
+                marker
+            ),
+            boolean_ctor: register_ctor!(
+                gc,
+                "Boolean",
+                js_std::boolean::boolean_constructor,
+                marker
+            ),
+            number_ctor: register_ctor!(gc, "Number", js_std::number::number_constructor, marker),
+            string_ctor: register_ctor!(gc, "String", js_std::string::string_constructor, marker),
+            function_ctor: register_ctor!(
+                gc,
+                "Function",
+                js_std::function::function_constructor,
+                marker
+            ),
+            array_ctor: register_ctor!(gc, "Array", js_std::array::array_constructor, marker),
+            object_ctor: register_ctor!(gc, "Object", js_std::object::object_constructor, marker),
+            promise_ctor: register_ctor!(
+                gc,
+                "Promise",
+                js_std::promise::promise_constructor,
+                marker
+            ),
             // Methods
-            console_log: register_glob_method!(gc, "log", js_std::console::log),
-            isnan: register_glob_method!(gc, "isNaN", js_std::functions::is_nan),
-            array_push: register_glob_method!(gc, "push", js_std::array::push),
-            array_concat: register_glob_method!(gc, "concat", js_std::array::concat),
-            array_map: register_glob_method!(gc, "map", js_std::array::map),
-            array_every: register_glob_method!(gc, "every", js_std::array::every),
-            array_fill: register_glob_method!(gc, "fill", js_std::array::fill),
-            array_filter: register_glob_method!(gc, "filter", js_std::array::filter),
-            array_find: register_glob_method!(gc, "find", js_std::array::find),
-            array_find_index: register_glob_method!(gc, "findIndex", js_std::array::find_index),
-            array_flat: register_glob_method!(gc, "flat", js_std::array::flat),
-            array_for_each: register_glob_method!(gc, "forEach", js_std::array::for_each),
-            array_from: register_glob_method!(gc, "from", js_std::array::from),
-            array_includes: register_glob_method!(gc, "includes", js_std::array::includes),
-            array_index_of: register_glob_method!(gc, "indexOf", js_std::array::index_of),
-            array_is_array: register_glob_method!(gc, "isArray", js_std::array::is_array),
-            array_join: register_glob_method!(gc, "join", js_std::array::join),
+            console_log: register_glob_method!(gc, "log", js_std::console::log, marker),
+            isnan: register_glob_method!(gc, "isNaN", js_std::functions::is_nan, marker),
+            array_push: register_glob_method!(gc, "push", js_std::array::push, marker),
+            array_concat: register_glob_method!(gc, "concat", js_std::array::concat, marker),
+            array_map: register_glob_method!(gc, "map", js_std::array::map, marker),
+            array_every: register_glob_method!(gc, "every", js_std::array::every, marker),
+            array_fill: register_glob_method!(gc, "fill", js_std::array::fill, marker),
+            array_filter: register_glob_method!(gc, "filter", js_std::array::filter, marker),
+            array_find: register_glob_method!(gc, "find", js_std::array::find, marker),
+            array_find_index: register_glob_method!(
+                gc,
+                "findIndex",
+                js_std::array::find_index,
+                marker
+            ),
+            array_flat: register_glob_method!(gc, "flat", js_std::array::flat, marker),
+            array_for_each: register_glob_method!(gc, "forEach", js_std::array::for_each, marker),
+            array_from: register_glob_method!(gc, "from", js_std::array::from, marker),
+            array_includes: register_glob_method!(gc, "includes", js_std::array::includes, marker),
+            array_index_of: register_glob_method!(gc, "indexOf", js_std::array::index_of, marker),
+            array_is_array: register_glob_method!(gc, "isArray", js_std::array::is_array, marker),
+            array_join: register_glob_method!(gc, "join", js_std::array::join, marker),
             array_last_index_of: register_glob_method!(
                 gc,
                 "lastIndexOf",
-                js_std::array::last_index_of
+                js_std::array::last_index_of,
+                marker
             ),
-            array_of: register_glob_method!(gc, "of", js_std::array::of),
-            array_pop: register_glob_method!(gc, "pop", js_std::array::pop),
-            array_reduce: register_glob_method!(gc, "reduce", js_std::array::reduce),
+            array_of: register_glob_method!(gc, "of", js_std::array::of, marker),
+            array_pop: register_glob_method!(gc, "pop", js_std::array::pop, marker),
+            array_reduce: register_glob_method!(gc, "reduce", js_std::array::reduce, marker),
             array_reduce_right: register_glob_method!(
                 gc,
                 "reduceRight",
-                js_std::array::reduce_right
+                js_std::array::reduce_right,
+                marker
             ),
-            array_reverse: register_glob_method!(gc, "reverse", js_std::array::reverse),
-            array_shift: register_glob_method!(gc, "shift", js_std::array::shift),
-            array_slice: register_glob_method!(gc, "slice", js_std::array::slice),
-            array_some: register_glob_method!(gc, "some", js_std::array::some),
-            array_sort: register_glob_method!(gc, "sort", js_std::array::sort),
-            array_splice: register_glob_method!(gc, "splice", js_std::array::splice),
-            array_unshift: register_glob_method!(gc, "unshift", js_std::array::unshift),
-            string_char_at: register_glob_method!(gc, "charAt", js_std::string::char_at),
+            array_reverse: register_glob_method!(gc, "reverse", js_std::array::reverse, marker),
+            array_shift: register_glob_method!(gc, "shift", js_std::array::shift, marker),
+            array_slice: register_glob_method!(gc, "slice", js_std::array::slice, marker),
+            array_some: register_glob_method!(gc, "some", js_std::array::some, marker),
+            array_sort: register_glob_method!(gc, "sort", js_std::array::sort, marker),
+            array_splice: register_glob_method!(gc, "splice", js_std::array::splice, marker),
+            array_unshift: register_glob_method!(gc, "unshift", js_std::array::unshift, marker),
+            string_char_at: register_glob_method!(gc, "charAt", js_std::string::char_at, marker),
             string_char_code_at: register_glob_method!(
                 gc,
                 "charCodeAt",
-                js_std::string::char_code_at
+                js_std::string::char_code_at,
+                marker
             ),
-            string_ends_with: register_glob_method!(gc, "endsWith", js_std::string::ends_with),
-            string_anchor: register_glob_method!(gc, "anchor", js_std::string::anchor),
-            string_big: register_glob_method!(gc, "big", js_std::string::big),
-            string_blink: register_glob_method!(gc, "blink", js_std::string::blink),
-            string_bold: register_glob_method!(gc, "bold", js_std::string::bold),
-            string_fixed: register_glob_method!(gc, "fixed", js_std::string::fixed),
-            string_fontcolor: register_glob_method!(gc, "fontcolor", js_std::string::fontcolor),
-            string_fontsize: register_glob_method!(gc, "fontsize", js_std::string::fontsize),
-            string_italics: register_glob_method!(gc, "italics", js_std::string::italics),
-            string_link: register_glob_method!(gc, "link", js_std::string::link),
-            string_small: register_glob_method!(gc, "small", js_std::string::small),
-            string_strike: register_glob_method!(gc, "strike", js_std::string::strike),
-            string_sub: register_glob_method!(gc, "sub", js_std::string::sub),
-            string_sup: register_glob_method!(gc, "sup", js_std::string::sup),
-            math_pow: register_glob_method!(gc, "pow", js_std::math::pow),
-            math_abs: register_glob_method!(gc, "abs", js_std::math::abs),
-            math_ceil: register_glob_method!(gc, "ceil", js_std::math::ceil),
-            math_floor: register_glob_method!(gc, "floor", js_std::math::floor),
-            math_max: register_glob_method!(gc, "max", js_std::math::max),
-            math_random: register_glob_method!(gc, "random", js_std::math::random),
+            string_ends_with: register_glob_method!(
+                gc,
+                "endsWith",
+                js_std::string::ends_with,
+                marker
+            ),
+            string_anchor: register_glob_method!(gc, "anchor", js_std::string::anchor, marker),
+            string_big: register_glob_method!(gc, "big", js_std::string::big, marker),
+            string_blink: register_glob_method!(gc, "blink", js_std::string::blink, marker),
+            string_bold: register_glob_method!(gc, "bold", js_std::string::bold, marker),
+            string_fixed: register_glob_method!(gc, "fixed", js_std::string::fixed, marker),
+            string_fontcolor: register_glob_method!(
+                gc,
+                "fontcolor",
+                js_std::string::fontcolor,
+                marker
+            ),
+            string_fontsize: register_glob_method!(
+                gc,
+                "fontsize",
+                js_std::string::fontsize,
+                marker
+            ),
+            string_italics: register_glob_method!(gc, "italics", js_std::string::italics, marker),
+            string_link: register_glob_method!(gc, "link", js_std::string::link, marker),
+            string_small: register_glob_method!(gc, "small", js_std::string::small, marker),
+            string_strike: register_glob_method!(gc, "strike", js_std::string::strike, marker),
+            string_sub: register_glob_method!(gc, "sub", js_std::string::sub, marker),
+            string_sup: register_glob_method!(gc, "sup", js_std::string::sup, marker),
+            math_pow: register_glob_method!(gc, "pow", js_std::math::pow, marker),
+            math_abs: register_glob_method!(gc, "abs", js_std::math::abs, marker),
+            math_ceil: register_glob_method!(gc, "ceil", js_std::math::ceil, marker),
+            math_floor: register_glob_method!(gc, "floor", js_std::math::floor, marker),
+            math_max: register_glob_method!(gc, "max", js_std::math::max, marker),
+            math_random: register_glob_method!(gc, "random", js_std::math::random, marker),
             object_define_property: register_glob_method!(
                 gc,
                 "defineProperty",
-                js_std::object::define_property
+                js_std::object::define_property,
+                marker
             ),
             object_get_own_property_names: register_glob_method!(
                 gc,
                 "getOwnPropertyNames",
-                js_std::object::get_own_property_names
+                js_std::object::get_own_property_names,
+                marker
             ),
             object_get_prototype_of: register_glob_method!(
                 gc,
                 "getPrototypeOf",
-                js_std::object::get_prototype_of
+                js_std::object::get_prototype_of,
+                marker
             ),
-            object_to_string: register_glob_method!(gc, "toString", js_std::object::to_string),
-            weakset_has: register_glob_method!(gc, "has", js_std::weakset::has),
-            weakset_add: register_glob_method!(gc, "add", js_std::weakset::add),
-            weakset_delete: register_glob_method!(gc, "delete", js_std::weakset::delete),
-            weakmap_has: register_glob_method!(gc, "has", js_std::weakmap::has),
-            weakmap_add: register_glob_method!(gc, "add", js_std::weakmap::add),
-            weakmap_get: register_glob_method!(gc, "get", js_std::weakmap::get),
-            weakmap_delete: register_glob_method!(gc, "delete", js_std::weakmap::delete),
-            json_parse: register_glob_method!(gc, "parse", js_std::json::parse),
-            json_stringify: register_glob_method!(gc, "stringify", js_std::json::stringify),
-            promise_resolve: register_glob_method!(gc, "resolve", js_std::promise::resolve),
-            promise_reject: register_glob_method!(gc, "reject", js_std::promise::reject),
+            object_to_string: register_glob_method!(
+                gc,
+                "toString",
+                js_std::object::to_string,
+                marker
+            ),
+            weakset_has: register_glob_method!(gc, "has", js_std::weakset::has, marker),
+            weakset_add: register_glob_method!(gc, "add", js_std::weakset::add, marker),
+            weakset_delete: register_glob_method!(gc, "delete", js_std::weakset::delete, marker),
+            weakmap_has: register_glob_method!(gc, "has", js_std::weakmap::has, marker),
+            weakmap_add: register_glob_method!(gc, "add", js_std::weakmap::add, marker),
+            weakmap_get: register_glob_method!(gc, "get", js_std::weakmap::get, marker),
+            weakmap_delete: register_glob_method!(gc, "delete", js_std::weakmap::delete, marker),
+            json_parse: register_glob_method!(gc, "parse", js_std::json::parse, marker),
+            json_stringify: register_glob_method!(gc, "stringify", js_std::json::stringify, marker),
+            promise_resolve: register_glob_method!(gc, "resolve", js_std::promise::resolve, marker),
+            promise_reject: register_glob_method!(gc, "reject", js_std::promise::reject, marker),
         }
     }
 }

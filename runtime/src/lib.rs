@@ -3,6 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use dash::{
     agent::{Agent, ImportResult},
     compiler::compiler::{Compiler, FunctionKind},
+    gc::Handle,
     js_std::{self, error::MaybeRc},
     parser::{lexer::Lexer, parser::Parser},
     util::MaybeOwned,
@@ -30,12 +31,13 @@ impl RuntimeAgent {
     }
 }
 
-fn read_file(call: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
+fn read_file(call: CallContext) -> Result<CallResult, Handle<Value>> {
     let mut args = call.arguments();
     let filename_cell = args.next();
-    let filename_ref = filename_cell.map(|c| c.borrow());
+    let filename_ref = filename_cell.map(|c| unsafe { c.borrow_unbounded() });
     let filename = filename_ref
-        .as_deref()
+        .as_ref()
+        .map(|x| &***x)
         .and_then(Value::as_string)
         .ok_or_else(|| {
             js_std::error::create_error(MaybeRc::Owned("path must be a string"), call.vm)
@@ -44,7 +46,7 @@ fn read_file(call: CallContext) -> Result<CallResult, Rc<RefCell<Value>>> {
     let content = std::fs::read_to_string(filename)
         .map_err(|e| js_std::error::create_error(MaybeRc::Owned(&e.to_string()), call.vm))?;
 
-    Ok(CallResult::Ready(Value::from(content).into()))
+    Ok(CallResult::Ready(Value::from(content).into_handle(call.vm)))
 }
 
 impl Agent for RuntimeAgent {
@@ -56,14 +58,14 @@ impl Agent for RuntimeAgent {
             b"fs" if self.allow_fs() => {
                 let mut obj = Value::from(AnyObject {});
 
-                let read_file = Value::from(NativeFunction::new(
+                /*let read_file = Value::from(NativeFunction::new(
                     "readFile",
                     read_file,
                     None,
                     dash::vm::value::function::Constructor::NoCtor,
                 ))
-                .into();
-                obj.set_property("readFile", read_file);
+                .into_handle();
+                obj.set_property("readFile", read_file);*/
 
                 Some(ImportResult::Value(obj))
             }

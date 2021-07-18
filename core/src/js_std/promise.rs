@@ -20,8 +20,7 @@ pub fn promise_constructor(_args: CallContext) -> Result<CallResult, Handle<Valu
 /// https://tc39.es/ecma262/multipage/control-abstraction-objects.html#sec-promise.resolve
 pub fn resolve(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     let value_cell = Value::unwrap_or_undefined(ctx.args.first().cloned(), ctx.vm);
-    let is_promise = value_cell
-        .borrow()
+    let is_promise = unsafe { value_cell.borrow_unbounded() }
         .as_object()
         .and_then(Object::as_promise)
         .is_some();

@@ -32,7 +32,7 @@ pub fn create_error(message: MaybeRc<&str>, vm: &VM) -> Handle<Value> {
     error.update_internal_properties(&vm.statics.error_proto, &vm.statics.error_ctor);
 
     let message_str = match message {
-        MaybeRc::Rc(r) => r.borrow().to_string().to_string(),
+        MaybeRc::Rc(r) => unsafe { r.borrow_unbounded() }.to_string().to_string(),
         MaybeRc::Owned(r) => String::from(r),
     };
 
@@ -50,7 +50,7 @@ pub fn create_error(message: MaybeRc<&str>, vm: &VM) -> Handle<Value> {
 /// https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-error-constructor
 pub fn error_constructor(value: CallContext) -> Result<CallResult, Handle<Value>> {
     let message_cell = value.args.first();
-    let message_cell_ref = message_cell.map(|c| c.borrow());
+    let message_cell_ref = message_cell.map(|c| unsafe { c.borrow_unbounded() });
     let message = message_cell_ref
         .as_deref()
         .map(|v| &**v)

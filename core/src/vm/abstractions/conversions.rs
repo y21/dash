@@ -16,7 +16,7 @@ pub fn to_string(
     vm: &VM,
     argument_cell: Option<&Handle<Value>>,
 ) -> Result<CallResult, Handle<Value>> {
-    let argument = argument_cell.map(|x| x.borrow());
+    let argument = argument_cell.map(|x| unsafe { x.borrow_unbounded() });
     let ready_string = match argument.as_ref().map(|x| &x.kind) {
         Some(ValueKind::Undefined) | None => Cow::Borrowed("undefined"),
         Some(ValueKind::Null) => Cow::Borrowed("null"),
@@ -108,7 +108,7 @@ pub fn ordinary_to_primitive(
     for name in method_names {
         // a. Let method be ? Get(O, name).
         if let Some(method) = Value::get_property(vm, obj, name, None) {
-            let method_ref = method.borrow();
+            let method_ref = unsafe { method.borrow_unbounded() };
 
             // b. If IsCallable(method) is true, then
             if method_ref.as_function().is_some() {

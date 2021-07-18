@@ -14,7 +14,9 @@ const MAX: f64 = 9007199254740991f64;
 pub fn length_of_array_like(vm: &VM, obj: &Handle<Value>) -> Result<f64, Handle<Value>> {
     // ? Get(obj, "length")
     let len_prop_cell = Value::get_property(vm, obj, "length", None);
-    let len_prop = len_prop_cell.as_ref().map(|x| x.borrow());
+    let len_prop = len_prop_cell
+        .as_ref()
+        .map(|x| unsafe { x.borrow_unbounded() });
 
     // ? ToLength(prop)
     let len = to_length(len_prop.as_ref().map(|c| &***c))?;

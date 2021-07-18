@@ -14,7 +14,7 @@ pub fn abs(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     let num = ctx
         .args
         .first()
-        .map(|c| c.borrow().as_number())
+        .map(|c| unsafe { c.borrow_unbounded() }.as_number())
         .unwrap_or(f64::NAN);
 
     Ok(CallResult::Ready(
@@ -29,7 +29,7 @@ pub fn ceil(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     let num = ctx
         .args
         .first()
-        .map(|c| c.borrow().as_number())
+        .map(|c| unsafe { c.borrow_unbounded() }.as_number())
         .unwrap_or(f64::NAN);
 
     Ok(CallResult::Ready(
@@ -44,7 +44,7 @@ pub fn floor(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     let num = ctx
         .args
         .first()
-        .map(|c| c.borrow().as_number())
+        .map(|c| unsafe { c.borrow_unbounded() }.as_number())
         .unwrap_or(f64::NAN);
 
     Ok(CallResult::Ready(
@@ -65,10 +65,10 @@ pub fn max(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
             ))
         }
     };
-    let mut max_num = max.borrow().as_number();
+    let mut max_num = unsafe { max.borrow_unbounded() }.as_number();
 
     for arg_cell in arguments {
-        let arg = arg_cell.borrow().as_number();
+        let arg = unsafe { arg_cell.borrow_unbounded() }.as_number();
         if arg > max_num {
             max_num = arg;
             max = Handle::clone(&arg_cell);
@@ -90,10 +90,10 @@ pub fn min(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
             ))
         }
     };
-    let mut max_num = max.borrow().as_number();
+    let mut max_num = unsafe { max.borrow_unbounded() }.as_number();
 
     for arg_cell in arguments {
-        let arg = arg_cell.borrow().as_number();
+        let arg = unsafe { arg_cell.borrow_unbounded() }.as_number();
         if arg < max_num {
             max_num = arg;
             max = Handle::clone(&arg_cell);
@@ -110,12 +110,12 @@ pub fn pow(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
 
     let lhs = args
         .next()
-        .map(|n| n.borrow().as_number())
+        .map(|n| unsafe { n.borrow_unbounded() }.as_number())
         .unwrap_or(f64::NAN);
 
     let rhs = args
         .next()
-        .map(|n| n.borrow().as_number())
+        .map(|n| unsafe { n.borrow_unbounded() }.as_number())
         .unwrap_or(f64::NAN);
 
     Ok(CallResult::Ready(

@@ -28,12 +28,12 @@ macro_rules! to_generic_string {
 pub fn char_at(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     // 2. Let S be ? ToString(O).
     let this = to_generic_string!(ctx);
-    let this_ref = this.borrow();
+    let this_ref = unsafe { this.borrow_unbounded() };
     let this_s = this_ref.as_string().unwrap();
 
     // Let position be ? ToIntegerOrInfinity(pos).
     let position = {
-        let maybe_pos = ctx.args.first().map(|x| x.borrow());
+        let maybe_pos = ctx.args.first().map(|x| unsafe { x.borrow_unbounded() });
         abstractions::object::to_integer_or_infinity(maybe_pos.as_ref().map(|x| &***x))?
     };
 
@@ -62,12 +62,12 @@ pub fn char_at(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
 pub fn char_code_at(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     // 2. Let S be ? ToString(O).
     let this = to_generic_string!(ctx);
-    let this_ref = this.borrow();
+    let this_ref = unsafe { this.borrow_unbounded() };
     let this_s = this_ref.as_string().unwrap();
 
     // Let position be ? ToIntegerOrInfinity(pos).
     let position = {
-        let maybe_pos = ctx.args.first().map(|x| x.borrow());
+        let maybe_pos = ctx.args.first().map(|x| unsafe { x.borrow_unbounded() });
         abstractions::object::to_integer_or_infinity(maybe_pos.as_ref().map(|x| &***x))?
     };
 
@@ -110,14 +110,14 @@ pub fn ends_with(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
             this
         }
     };
-    let this_ref = this.borrow();
+    let this_ref = unsafe { this.borrow_unbounded() };
     let this_s = this_ref.as_string().unwrap();
 
     let (search_str_cell, _) = {
         let mut arguments = ctx.arguments();
 
         let search_str = arguments.next();
-        let end_position_ref = arguments.next().map(|x| x.borrow());
+        let end_position_ref = arguments.next().map(|x| unsafe { x.borrow_unbounded() });
         let end_position =
             abstractions::object::to_integer_or_infinity(end_position_ref.as_ref().map(|x| &***x))?;
 
@@ -135,7 +135,7 @@ pub fn ends_with(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
             ))
         }
     };
-    let search_str_ref = search_str_cell.borrow();
+    let search_str_ref = unsafe { search_str_cell.borrow_unbounded() };
     let search_str = search_str_ref.as_string().unwrap();
 
     let ret = this_s.ends_with(search_str);
@@ -176,7 +176,7 @@ fn create_html(
             this
         }
     };
-    let this_ref = this.borrow();
+    let this_ref = unsafe { this.borrow_unbounded() };
     let this_str = this_ref.as_string().unwrap();
 
     let mut p1 = format!("<{}", tag);
@@ -188,7 +188,7 @@ fn create_html(
             let name = ctx.args.first();
             unwrap_call_result!(abstractions::conversions::to_string(ctx.vm, name))
         };
-        let name_ref = name_cell.borrow();
+        let name_ref = unsafe { name_cell.borrow_unbounded() };
         let name_str = name_ref.as_string().unwrap().replace("\"", "&quot;");
         p1.push(' ');
         p1.push_str(attribute);

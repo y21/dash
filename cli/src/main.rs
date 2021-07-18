@@ -56,7 +56,7 @@ fn repl() {
 
         match dash::eval(s, Some(create_agent())) {
             Ok(result) => {
-                let result_ref = result.as_deref().map(RefCell::borrow);
+                let result_ref = result.as_ref().map(|x| unsafe { x.borrow_unbounded() });
                 let result_fmt = result_ref
                     .as_deref()
                     .map(|v| Value::inspect(v, 0))

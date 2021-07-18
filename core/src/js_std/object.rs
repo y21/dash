@@ -23,9 +23,9 @@ pub fn define_property(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     let mut arguments = ctx.arguments();
 
     let obj_cell = arguments.next().unwrap();
-    let mut obj = obj_cell.borrow_mut();
+    let mut obj = unsafe { obj_cell.borrow_mut_unbounded() };
     let prop_cell = arguments.next().unwrap();
-    let prop = prop_cell.borrow();
+    let prop = unsafe { prop_cell.borrow_unbounded() };
     let prop_str = prop.to_string();
     let descriptor_cell = arguments.next().unwrap();
 
@@ -40,7 +40,7 @@ pub fn define_property(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
 /// https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-object.getownpropertynames
 pub fn get_own_property_names(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     let obj_cell = ctx.args.first().unwrap();
-    let obj = obj_cell.borrow();
+    let obj = unsafe { obj_cell.borrow_unbounded() };
 
     let mut keys = Vec::with_capacity(obj.fields.len());
     for key in obj.fields.keys() {
@@ -62,7 +62,7 @@ pub fn get_own_property_names(ctx: CallContext) -> Result<CallResult, Handle<Val
 /// https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-object.getprototypeof
 pub fn get_prototype_of(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     let obj_cell = ctx.args.first().unwrap();
-    let obj = obj_cell.borrow();
+    let obj = unsafe { obj_cell.borrow_unbounded() };
     Ok(CallResult::Ready(obj.proto.clone().unwrap_or_else(|| {
         Value::new(ValueKind::Null).into_handle(ctx.vm)
     })))
@@ -78,7 +78,7 @@ pub fn to_string(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
         .cloned()
         .unwrap_or_else(|| Value::new(ValueKind::Undefined).into_handle(ctx.vm));
 
-    let this_ref = this_cell.borrow();
+    let this_ref = unsafe { this_cell.borrow_unbounded() };
 
     let s = match &this_ref.kind {
         // 1. If the this value is undefined, return "[object Undefined]".
@@ -88,7 +88,7 @@ pub fn to_string(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
         // 3. Let O be ! ToObject(this value).
         _ => {
             if let Some(constructor_cell) = this_ref.constructor.as_ref() {
-                let constructor = constructor_cell.borrow();
+                let constructor = unsafe { constructor_cell.borrow_unbounded() };
                 let constructor_func = constructor.as_function().unwrap();
                 Cow::Owned(format!(
                     "[object {}]",

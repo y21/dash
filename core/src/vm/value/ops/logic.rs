@@ -67,7 +67,7 @@ impl Value {
 
     /// Implements the logical and operator, given cells to two [Value]s
     pub fn logical_and(this: Handle<Value>, other: Handle<Value>) -> Handle<Value> {
-        if this.borrow().is_truthy() {
+        if unsafe { this.borrow_unbounded() }.is_truthy() {
             other
         } else {
             this
@@ -86,7 +86,7 @@ impl Value {
 
     /// Implements the logical or operator, given cells to two [Value]s
     pub fn logical_or(this: Handle<Value>, other: Handle<Value>) -> Handle<Value> {
-        if !this.borrow().is_truthy() {
+        if !unsafe { this.borrow_unbounded() }.is_truthy() {
             other
         } else {
             this
@@ -105,7 +105,7 @@ impl Value {
 
     /// Implements the nullish coalescing operator, given cells to two [Value]s
     pub fn nullish_coalescing(this: Handle<Value>, other: Handle<Value>) -> Handle<Value> {
-        if this.borrow().is_nullish() {
+        if unsafe { this.borrow_unbounded() }.is_nullish() {
             other
         } else {
             this

@@ -15,7 +15,7 @@ pub fn is_nan(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
         }
     };
 
-    let value = value.borrow().as_number();
+    let value = unsafe { value.borrow_unbounded() }.as_number();
 
     Ok(CallResult::Ready(
         ctx.vm.create_js_value(value.is_nan()).into_handle(ctx.vm),
