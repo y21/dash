@@ -90,9 +90,11 @@ impl<'a> From<VMError> for EvalError<'a> {
 pub fn eval<'a, A: Agent + 'static>(
     code: &'a str,
     agent: Option<A>,
-) -> Result<Option<Handle<Value>>, EvalError<'a>> {
-    let mut vm = VM::from_str(code, agent)?;
-    let result = vm.interpret()?;
+) -> Result<(Option<Handle<Value>>, VM), (EvalError<'a>, Option<VM>)> {
+    let mut vm = VM::from_str(code, agent).map_err(|e| (e.into(), None))?;
 
-    Ok(result)
+    match vm.interpret() {
+        Ok(value) => Ok((value, vm)),
+        Err(e) => Err((e.into(), Some(vm))),
+    }
 }

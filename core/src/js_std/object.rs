@@ -2,24 +2,20 @@ use std::borrow::Cow;
 
 use crate::{
     gc::Handle,
-    vm::value::{
-        array::Array,
-        function::{CallContext, CallResult},
-        Value, ValueKind,
-    },
+    vm::value::{array::Array, function::CallContext, Value, ValueKind},
 };
 
 /// The object constructor
 ///
 /// https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-object-constructor
-pub fn object_constructor(_args: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn object_constructor(_args: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     todo!()
 }
 
 /// Implements Object.defineProperty
 ///
 /// https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-object.defineproperty
-pub fn define_property(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn define_property(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     let mut arguments = ctx.arguments();
 
     let obj_cell = arguments.next().unwrap();
@@ -32,13 +28,13 @@ pub fn define_property(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
     let value = Value::get_property(ctx.vm, descriptor_cell, "value", None).unwrap();
     obj.set_property(&*prop_str, value);
 
-    Ok(CallResult::Ready(Handle::clone(&obj_cell)))
+    Ok(Handle::clone(&obj_cell))
 }
 
 /// Implements Object.getOwnPropertyNames
 ///
 /// https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-object.getownpropertynames
-pub fn get_own_property_names(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn get_own_property_names(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     let obj_cell = ctx.args.first().unwrap();
     let obj = unsafe { obj_cell.borrow_unbounded() };
 
@@ -52,26 +48,25 @@ pub fn get_own_property_names(ctx: CallContext) -> Result<CallResult, Handle<Val
         );
     }
 
-    Ok(CallResult::Ready(
-        ctx.vm.create_js_value(Array::new(keys)).into_handle(ctx.vm),
-    ))
+    Ok(ctx.vm.create_js_value(Array::new(keys)).into_handle(ctx.vm))
 }
 
 /// Implements Object.getPrototypeOf
 ///
 /// https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-object.getprototypeof
-pub fn get_prototype_of(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn get_prototype_of(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     let obj_cell = ctx.args.first().unwrap();
     let obj = unsafe { obj_cell.borrow_unbounded() };
-    Ok(CallResult::Ready(obj.proto.clone().unwrap_or_else(|| {
-        Value::new(ValueKind::Null).into_handle(ctx.vm)
-    })))
+    Ok(obj
+        .proto
+        .clone()
+        .unwrap_or_else(|| Value::new(ValueKind::Null).into_handle(ctx.vm)))
 }
 
 /// Implements Object.prototype.toString
 ///
 /// https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-object.prototype.tostring
-pub fn to_string(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn to_string(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     let this_cell = ctx
         .receiver
         .as_ref()
@@ -100,7 +95,5 @@ pub fn to_string(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
         }
     };
 
-    Ok(CallResult::Ready(
-        ctx.vm.create_js_value(s.to_string()).into_handle(ctx.vm),
-    ))
+    Ok(ctx.vm.create_js_value(s.to_string()).into_handle(ctx.vm))
 }

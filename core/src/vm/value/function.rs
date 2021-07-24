@@ -1,14 +1,14 @@
 use crate::gc::Handle;
 use crate::vm::{instruction::Instruction, upvalue::Upvalue, VM};
 use core::fmt::{self, Debug, Formatter};
-use std::any::Any;
 use std::collections::HashMap;
 
 use super::object::AnyObject;
 use super::Value;
 
 /// A native function that can be called from JavaScript code
-pub type NativeFunctionCallback = for<'a> fn(CallContext<'a>) -> Result<CallResult, Handle<Value>>;
+pub type NativeFunctionCallback =
+    for<'a> fn(CallContext<'a>) -> Result<Handle<Value>, Handle<Value>>;
 
 /// Represents whether a function can be invoked as a constructor
 #[derive(Debug, Clone, Copy)]
@@ -28,89 +28,6 @@ impl Constructor {
     }
 }
 
-/// The result of calling a native function
-///
-/// It is common for a native function to call into a user function
-/// I.e. due to conversion that invokes a user function
-/// In that case, the function needs to be temporarily suspended
-/// and return [CallResult::UserFunction] to notify the caller that it cannot proceed
-pub enum CallResult {
-    /// A user function needs to be called to proceed
-    UserFunction(Handle<Value>, Vec<Handle<Value>>),
-    /// We have a value
-    Ready(Handle<Value>),
-}
-
-/// State that may be used in a native function
-///
-/// It is common for a native function to use `CallState` to keep track
-/// of work it has done. Sometimes, it needs to call a user function and will
-/// be called again at a later time when the called function returns.
-/// To know where it left off, [CallState] may be used
-pub struct CallState<T>(Option<T>);
-
-impl<T> Debug for CallState<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str("CallState")
-    }
-}
-
-impl<T> Default for CallState<T> {
-    fn default() -> Self {
-        Self(None)
-    }
-}
-
-impl<T> CallState<T> {
-    /// Applies a function on the inner call state, if present and returns
-    /// the closure return value
-    pub fn with<F, V>(&mut self, mut func: F) -> Option<V>
-    where
-        F: FnMut(&mut T) -> V,
-    {
-        if let Some(state) = &mut self.0 {
-            Some(func(state))
-        } else {
-            None
-        }
-    }
-
-    /// Returns a reference to the inner optional call state
-    pub fn get(&self) -> Option<&T> {
-        self.0.as_ref()
-    }
-
-    /// Returns a mutable reference to the call state.
-    ///
-    /// If None, the value passed to this function is stored.
-    pub fn get_or_insert(&mut self, value: T) -> &mut T {
-        self.0.get_or_insert(value)
-    }
-
-    /// Returns a mutable reference to the call state.
-    ///
-    /// If None, the passed function is called and its return value
-    /// will be used as call state.
-    pub fn get_or_insert_with<F>(&mut self, func: F) -> &mut T
-    where
-        F: FnMut() -> T,
-    {
-        self.0.get_or_insert_with(func)
-    }
-}
-
-impl CallState<Box<dyn Any>> {
-    /// Casts the inner call state to V and returns a mutable reference to it
-    pub fn get_or_insert_as<F, V>(&mut self, mut func: F) -> Option<&mut V>
-    where
-        V: 'static,
-        F: FnMut() -> V,
-    {
-        self.get_or_insert_with(|| Box::new(func()))
-            .downcast_mut::<V>()
-    }
-}
-
 /// Native function call context
 pub struct CallContext<'a> {
     /// A mutable reference to the underlying VM
@@ -125,15 +42,6 @@ pub struct CallContext<'a> {
     pub receiver: Option<Handle<Value>>,
     /// Whether this function call is invoked as a constructor call
     pub ctor: bool,
-    /// State for this native call
-    ///
-    /// See docs for [CallState]
-    pub state: &'a mut CallState<Box<dyn Any>>,
-    /// The return value of a user function call that was made due to
-    /// returning [CallResult::UserFunction]
-    ///
-    /// See docs for [CallResult] for when this would be set
-    pub function_call_response: Option<Handle<Value>>,
 }
 
 impl<'a> CallContext<'a> {
@@ -141,11 +49,6 @@ impl<'a> CallContext<'a> {
     pub fn arguments(&self) -> impl Iterator<Item = &Handle<Value>> {
         // TODO: fix order
         self.args.iter().rev()
-    }
-
-    /// Returns state associated to this call by downcasting it to V
-    pub fn state<V: 'static>(&self) -> Option<&V> {
-        self.state.get().and_then(|x| x.downcast_ref::<V>())
     }
 }
 

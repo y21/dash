@@ -4,12 +4,7 @@ use crate::{
     gc::Handle,
     vm::{
         abstractions,
-        value::{
-            array::Array,
-            function::{CallContext, CallResult},
-            object::Object,
-            Value, ValueKind,
-        },
+        value::{array::Array, function::CallContext, object::Object, Value, ValueKind},
         VM,
     },
 };
@@ -19,14 +14,14 @@ use super::error::{self, MaybeRc};
 /// The array constructor
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array-constructor
-pub fn array_constructor(_args: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn array_constructor(_args: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.push
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.push
-pub fn push(value: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn push(value: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     let this_cell = value.receiver.unwrap();
 
     let mut this = unsafe { this_cell.borrow_mut_unbounded() };
@@ -44,18 +39,16 @@ pub fn push(value: CallContext) -> Result<CallResult, Handle<Value>> {
         this_arr.elements.push(Handle::clone(&value));
     }
 
-    Ok(CallResult::Ready(
-        value
-            .vm
-            .create_js_value(this_arr.elements.len() as f64)
-            .into_handle(value.vm),
-    ))
+    Ok(value
+        .vm
+        .create_js_value(this_arr.elements.len() as f64)
+        .into_handle(value.vm))
 }
 
 /// This function implements Array.prototype.concat
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.concat
-pub fn concat(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn concat(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this = unsafe { this_cell.borrow_mut_unbounded() };
     let this_arr = match this.as_object_mut() {
@@ -73,28 +66,16 @@ pub fn concat(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
         arr.elements.push(Handle::clone(arg));
     }
 
-    Ok(CallResult::Ready(Value::from(arr).into_handle(ctx.vm)))
-}
-
-struct Map {
-    pub result: Option<Vec<Handle<Value>>>,
-}
-
-impl Map {
-    pub fn new() -> Self {
-        Self {
-            result: Some(Vec::new()),
-        }
-    }
+    Ok(Value::from(arr).into_handle(ctx.vm))
 }
 
 /// This function implements Array.prototype.map
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.map
-pub fn map(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn map(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
-    let mut this_ref = unsafe { this_cell.borrow_mut_unbounded() };
-    let this_arr = match this_ref.as_object_mut() {
+    let this_ref = unsafe { this_cell.borrow_unbounded() };
+    let this_arr = match this_ref.as_object() {
         Some(Object::Array(a)) => a,
         _ => {
             return Err(error::create_error(
@@ -104,50 +85,24 @@ pub fn map(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
         }
     };
 
-    let state = ctx.state.get_or_insert_as(Map::new).unwrap();
-
-    if let Some(response) = &ctx.function_call_response {
-        let arr = state.result.as_mut().unwrap();
-        arr.push(Handle::clone(response));
-    }
-
-    let length = state.result.as_ref().unwrap().len();
-
-    if length == this_arr.elements.len() {
-        let arr = state.result.take().unwrap();
-        return Ok(CallResult::Ready(
-            ctx.vm.create_array(Array::new(arr)).into_handle(ctx.vm),
-        ));
-    }
-
-    let element = this_arr.elements.get(length).cloned().unwrap();
-
     let cb = ctx.args.first().unwrap();
 
-    Ok(CallResult::UserFunction(
-        Handle::clone(cb),
-        vec![
-            element,
-            ctx.vm.create_js_value(length as f64).into_handle(ctx.vm),
-            Handle::clone(this_cell),
-        ],
-    ))
-}
+    let mut arr = Vec::new();
 
-struct Every {
-    index: usize,
-}
+    for (idx, value) in this_arr.elements.iter().enumerate() {
+        let idx = ctx.vm.create_js_value(idx as f64).into_handle(ctx.vm);
+        let value = Handle::clone(&value);
 
-impl Every {
-    pub fn new() -> Self {
-        Self { index: 0 }
+        arr.push(Value::call(cb, vec![value, idx], ctx.vm)?);
     }
+
+    Ok(ctx.vm.create_js_value(Array::new(arr)).into_handle(ctx.vm))
 }
 
 /// This function implements Array.prototype.every
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.every
-pub fn every(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn every(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this_ref = unsafe { this_cell.borrow_mut_unbounded() };
     let this_arr = match this_ref.as_object_mut() {
@@ -160,45 +115,24 @@ pub fn every(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
         }
     };
 
-    let state = ctx.state.get_or_insert_as(Every::new).unwrap();
-
-    if let Some(response_cell) = ctx.function_call_response {
-        let response = unsafe { response_cell.borrow_unbounded() }.is_truthy();
-        if !response {
-            return Ok(CallResult::Ready(
-                ctx.vm.create_js_value(false).into_handle(ctx.vm),
-            ));
-        }
-
-        state.index += 1;
-    }
-
-    if state.index == this_arr.elements.len() {
-        return Ok(CallResult::Ready(
-            ctx.vm.create_js_value(true).into_handle(ctx.vm),
-        ));
-    }
-
     let cb = ctx.args.first().unwrap();
 
-    let element = this_arr.elements.get(state.index).cloned().unwrap();
+    for value in &this_arr.elements {
+        let value = Value::call(cb, vec![Handle::clone(value)], ctx.vm)?;
+        let is_truthy = unsafe { value.borrow_unbounded() }.is_truthy();
 
-    Ok(CallResult::UserFunction(
-        Handle::clone(cb),
-        vec![
-            element,
-            ctx.vm
-                .create_js_value(state.index as f64)
-                .into_handle(ctx.vm),
-            Handle::clone(this_cell),
-        ],
-    ))
+        if !is_truthy {
+            return Ok(ctx.vm.create_js_value(false).into_handle(ctx.vm));
+        }
+    }
+
+    Ok(ctx.vm.create_js_value(true).into_handle(ctx.vm))
 }
 
 /// This function implements Array.prototype.fill
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.fill
-pub fn fill(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn fill(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this_ref = unsafe { this_cell.borrow_mut_unbounded() };
     let this_arr = match this_ref.as_object_mut() {
@@ -234,55 +168,55 @@ pub fn fill(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
         this_arr.elements[idx] = Handle::clone(&value);
     }
 
-    Ok(CallResult::Ready(Handle::clone(this_cell)))
+    Ok(Handle::clone(this_cell))
 }
 
 /// This function implements Array.prototype.filter
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.filter
-pub fn filter(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn filter(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.find
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.find
-pub fn find(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn find(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.find
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.findIndex
-pub fn find_index(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn find_index(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.flat
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.flat
-pub fn flat(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn flat(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.forEach
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.forEach
-pub fn for_each(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn for_each(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.from
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.from
-pub fn from(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn from(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.includes
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.includes
-pub fn includes(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn includes(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this_ref = unsafe { this_cell.borrow_mut_unbounded() };
     let this_arr = match this_ref.as_object_mut() {
@@ -313,15 +247,13 @@ pub fn includes(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
         .skip(from_index)
         .any(|c| unsafe { c.borrow_unbounded() }.strict_equal(&search_element));
 
-    Ok(CallResult::Ready(
-        ctx.vm.create_js_value(found).into_handle(ctx.vm),
-    ))
+    Ok(ctx.vm.create_js_value(found).into_handle(ctx.vm))
 }
 
 /// This function implements Array.prototype.indexOf
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.indexOf
-pub fn index_of(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn index_of(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this_ref = unsafe { this_cell.borrow_mut_unbounded() };
     let this_arr = match this_ref.as_object_mut() {
@@ -354,26 +286,23 @@ pub fn index_of(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
         .map(|v| v as f64)
         .unwrap_or(-1f64);
 
-    Ok(CallResult::Ready(
-        ctx.vm.create_js_value(index).into_handle(ctx.vm),
-    ))
+    Ok(ctx.vm.create_js_value(index).into_handle(ctx.vm))
 }
 
 /// This function implements Array.isArray
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.isArray
-pub fn is_array(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn is_array(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     let mut arguments = ctx.arguments();
     let value_cell = arguments
         .next()
         .cloned()
         .unwrap_or_else(|| Value::new(ValueKind::Undefined).into_handle(ctx.vm));
     let value = unsafe { value_cell.borrow_unbounded() };
-    Ok(CallResult::Ready(
-        ctx.vm
-            .create_js_value(value.as_object().and_then(Object::as_array).is_some())
-            .into_handle(ctx.vm),
-    ))
+    Ok(ctx
+        .vm
+        .create_js_value(value.as_object().and_then(Object::as_array).is_some())
+        .into_handle(ctx.vm))
 }
 
 /// An array-like value
@@ -428,26 +357,10 @@ impl<'a> ArrayLikeIterable<'a> {
     }
 }
 
-/// State for a call to Array.prototype.join
-pub struct Join {
-    dest: Option<String>,
-    idx: usize,
-}
-
-impl Join {
-    /// Creates new Join state
-    pub fn new() -> Self {
-        Self {
-            dest: Some(String::new()),
-            idx: 0,
-        }
-    }
-}
-
 /// This function implements Array.prototype.join
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.join
-pub fn join(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn join(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
 
     let len = abstractions::object::length_of_array_like(ctx.vm, this_cell)? as usize;
@@ -469,71 +382,32 @@ pub fn join(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
 
     let mut r = String::new();
 
-    if let Some(response_cell) = &ctx.function_call_response {
-        let response = unsafe { response_cell.borrow_unbounded() };
-        let response_string = response.as_string().ok_or_else(|| {
-            error::create_error("Cannot convert to primitive value".into(), ctx.vm)
-        })?;
-
-        let state = ctx.state.get_or_insert_as(Join::new).unwrap();
-        let dest = state.dest.as_mut().expect("cannot fail");
-
-        r.push_str(dest);
-        r.push_str(response_string);
-
-        state.idx += 1;
-        o.index = state.idx;
-
-        if state.idx >= len {
-            return Ok(CallResult::Ready(
-                ctx.vm.create_js_value(r).into_handle(ctx.vm),
-            ));
-        }
-    }
-
     while o.index < len {
         if o.index > 0 {
-            r += &sep;
+            r.push_str(&sep);
         }
 
-        // TODO: unwrap_or_else is unnecessary here. to_string operation takes Option<&Value>
         let element_cell = o
             .next(ctx.vm)
             .unwrap_or_else(|| Value::new(ValueKind::Undefined).into_handle(ctx.vm));
 
-        let element = unsafe { element_cell.borrow_unbounded() };
+        let is_nullish = unsafe { element_cell.borrow_unbounded() }.is_nullish();
 
-        if !element.is_nullish() {
-            let next = match abstractions::conversions::to_string(ctx.vm, Some(&element_cell))? {
-                CallResult::Ready(r) => r,
-                CallResult::UserFunction(func, args) => {
-                    let state = ctx.state.get_or_insert_as(Join::new).unwrap();
-                    let dest = state.dest.as_mut().unwrap();
-                    *dest = r;
-                    return Ok(CallResult::UserFunction(func, args));
-                }
-            };
-
-            let next_ref = unsafe { next.borrow_unbounded() };
-            let next_string = next_ref.as_string().ok_or_else(|| {
-                error::create_error("Cannot convert to primitive value".into(), ctx.vm)
-            })?;
-
-            r += next_string;
+        if !is_nullish {
+            let element = abstractions::conversions::to_string(ctx.vm, Some(&element_cell))?;
+            let element_ref = unsafe { element.borrow_unbounded() };
+            // TODO: use as_string and throw if none
+            r.push_str(&element_ref.to_string());
         }
     }
 
-    Ok(CallResult::Ready(
-        ctx.vm
-            .create_js_value(String::from(&*r))
-            .into_handle(ctx.vm),
-    ))
+    Ok(ctx.vm.create_js_value(r).into_handle(ctx.vm))
 }
 
 /// This function implements Array.prototype.lastIndexOf
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.lastIndexOf
-pub fn last_index_of(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn last_index_of(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this_ref = unsafe { this_cell.borrow_mut_unbounded() };
     let this_arr = match this_ref.as_object_mut() {
@@ -573,84 +447,82 @@ pub fn last_index_of(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
         .map(|c| c as f64)
         .unwrap_or(-1f64);
 
-    Ok(CallResult::Ready(
-        ctx.vm.create_js_value(index).into_handle(ctx.vm),
-    ))
+    Ok(ctx.vm.create_js_value(index).into_handle(ctx.vm))
 }
 
 /// This function implements Array.of
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.of
-pub fn of(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn of(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.pop
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.pop
-pub fn pop(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn pop(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.reduce
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.reduce
-pub fn reduce(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn reduce(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.reduceRight
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.reduceRight
-pub fn reduce_right(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn reduce_right(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.reverse
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.reverse
-pub fn reverse(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn reverse(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.shift
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.shift
-pub fn shift(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn shift(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.slice
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.slice
-pub fn slice(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn slice(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.some
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.some
-pub fn some(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn some(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.sort
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.sort
-pub fn sort(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn sort(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.splice
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.splice
-pub fn splice(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn splice(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     todo!()
 }
 
 /// This function implements Array.prototype.unshift
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.unshift
-pub fn unshift(_ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn unshift(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     todo!()
 }

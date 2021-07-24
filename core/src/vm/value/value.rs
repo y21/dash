@@ -6,7 +6,10 @@ use std::{
     rc::{Rc, Weak},
 };
 
-use crate::{gc::Handle, vm::VM};
+use crate::{
+    gc::Handle,
+    vm::{frame::Frame, value::function::CallContext, VM},
+};
 
 use super::{
     function::{FunctionKind, Receiver},
@@ -75,6 +78,59 @@ impl Value {
             fields: HashMap::new(),
             constructor: None,
             proto: None,
+        }
+    }
+
+    /// Attempts to call a value
+    pub fn call(
+        this: &Handle<Value>,
+        mut args: Vec<Handle<Value>>,
+        vm: &mut VM,
+    ) -> Result<Handle<Value>, Handle<Value>> {
+        let value = unsafe { this.borrow_unbounded() };
+
+        // todo: dont unwrap
+        let func = match value.as_function().unwrap() {
+            FunctionKind::Native(func) => {
+                let receiver = func.receiver.as_ref().map(|rx| rx.get().clone());
+                let ctx = CallContext {
+                    vm,
+                    args: &mut args,
+                    ctor: false,
+                    receiver: receiver.clone(),
+                };
+
+                return (func.func)(ctx);
+            }
+            FunctionKind::Closure(closure) => &closure.func,
+            _ => unreachable!(),
+        };
+
+        let sp = vm.stack.get_stack_pointer();
+
+        let frame = Frame {
+            ip: 0,
+            func: Handle::clone(this),
+            buffer: func.buffer.clone(),
+            sp,
+        };
+
+        let origin_param_count = func.params as usize;
+        let param_count = args.len();
+
+        for param in args.into_iter() {
+            vm.stack.push(param);
+        }
+
+        for _ in 0..(origin_param_count.saturating_sub(param_count)) {
+            vm.stack
+                .push(Value::new(ValueKind::Undefined).into_handle(vm));
+        }
+
+        match vm.execute_frame(frame, true) {
+            Ok(Some(ret)) => Ok(ret),
+            Ok(None) => Ok(Value::new(ValueKind::Undefined).into_handle(vm)),
+            Err(e) => Err(e.into_value()),
         }
     }
 

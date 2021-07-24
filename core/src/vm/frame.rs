@@ -1,28 +1,13 @@
-use std::any::Any;
-
 use crate::gc::Handle;
 
 use super::{
     instruction::Instruction,
     value::{
-        function::{CallState, Constructor, FunctionType, UserFunction},
+        function::{Constructor, FunctionType, UserFunction},
         Value,
     },
     VM,
 };
-
-/// Represents a function that needs to be resumed at a later point
-#[derive(Debug)]
-pub struct NativeResume {
-    /// The function that needs to be called
-    pub func: Handle<Value>,
-    /// Arguments that were originally passed to the function when called initially
-    pub args: Vec<Handle<Value>>,
-    /// Whether this is a constructor call
-    pub ctor: bool,
-    /// The receiver of this function
-    pub receiver: Option<Handle<Value>>,
-}
 
 /// An execution frame
 #[derive(Debug)]
@@ -35,11 +20,6 @@ pub struct Frame {
     pub ip: usize,
     /// Stack pointer
     pub sp: usize,
-    /// State that is associated to a native function
-    /// that called this user function
-    pub state: Option<CallState<Box<dyn Any>>>,
-    /// Native resume
-    pub resume: Option<NativeResume>,
 }
 
 impl Frame {
@@ -64,25 +44,11 @@ impl Frame {
             buffer,
             ip: 0,
             sp,
-            state: None,
-            resume: None,
         }
     }
 
     pub(crate) fn mark_visited(&self) {
         Value::mark(&self.func);
-
-        if let Some(resume) = &self.resume {
-            Value::mark(&resume.func);
-
-            for arg in &resume.args {
-                Value::mark(arg);
-            }
-
-            if let Some(receiver) = &resume.receiver {
-                Value::mark(receiver);
-            }
-        }
     }
 }
 

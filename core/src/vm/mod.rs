@@ -14,33 +14,22 @@ pub mod statics;
 pub mod upvalue;
 /// JavaScript values
 pub mod value;
+/// VM instruction dispatching
+mod dispatch;
 
-use std::{any::Any, borrow::Cow, cell::RefCell, collections::HashMap};
+use std::{any::Any, borrow::Cow, cell::RefCell, collections::HashMap, fmt::Debug};
 
 use instruction::{Instruction, Opcode};
 use value::Value;
 
-use crate::{
-    agent::Agent,
-    compiler::compiler::{self, CompileError, Compiler, FunctionKind as CompilerFunctionKind},
-    gc::{Gc, Handle},
-    js_std::{self, error::MaybeRc},
-    parser::{lexer, token},
-    util::{unlikely, MaybeOwned},
-    vm::{
-        frame::{NativeResume, UnwindHandler},
-        upvalue::Upvalue,
-        value::{
+use crate::{agent::Agent, compiler::compiler::{self, CompileError, Compiler, FunctionKind as CompilerFunctionKind}, gc::{Gc, Handle}, parser::{lexer, token}, util::{unlikely, MaybeOwned}, vm::{dispatch::DispatchResult, frame::UnwindHandler, value::{
             array::Array,
             function::{
-                CallContext, CallResult, CallState, Closure, Constructor, FunctionKind,
-                FunctionType, Receiver, UserFunction,
+                CallContext, Closure, Constructor, FunctionKind,
+                FunctionType, UserFunction,
             },
-            ops::compare::Compare,
             ValueKind,
-        },
-    },
-};
+        }}};
 
 use self::{
     frame::{Frame, Loop},
@@ -50,8 +39,8 @@ use self::{
     value::object::{AnyObject, Object},
 };
 
-// Force garbage collection at 1000 objects
-const GC_OBJECT_COUNT_THRESHOLD: usize = 1000;
+// Force garbage collection at 10000 objects
+const GC_OBJECT_COUNT_THRESHOLD: usize = 10000;
 
 /// An error that may occur during bytecode execution
 #[derive(Debug)]
@@ -78,6 +67,13 @@ impl From<VMError> for OwnedVMError {
 }
 
 impl VMError {
+    /// Returns the inner value of the error
+    pub fn into_value(self) -> Handle<Value> {
+        match self {
+            Self::UncaughtError(err) => err
+        }
+    }
+
     /// Formats this error by taking the `stack` property of the error object
     pub fn to_string(&self) -> Cow<str> {
         match self {
@@ -137,6 +133,12 @@ pub struct VM {
     gc_marker: Box<u8>
 }
 
+impl Debug for VM {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "VM")
+    }
+}
+
 impl VM {
     /// Creates a new VM with a provided agent
     pub fn new_with_agent(func: UserFunction, agent: Box<dyn Agent>) -> Self {
@@ -153,8 +155,6 @@ impl VM {
             func: gc.register(Value::from(Closure::new(func)), gc_marker_ptr),
             ip: 0,
             sp: 0,
-            state: None,
-            resume: None,
         });
 
         let mut vm = Self {
@@ -248,7 +248,7 @@ impl VM {
 
     /// Estimates whether it makes sense to perform a garbage collection
     unsafe fn should_gc(&self) -> bool {
-        unsafe { (&mut *self.gc.as_ptr()).heap.len >= GC_OBJECT_COUNT_THRESHOLD }
+        unsafe { (&*self.gc.as_ptr()).heap.len >= GC_OBJECT_COUNT_THRESHOLD }
     }
 
     /// Setup for a GC cycle
@@ -618,17 +618,26 @@ impl VM {
         global.set_property("Promise", self.statics.promise_ctor.clone());
     }
 
-    fn unwind(&mut self, value: Handle<Value>) -> Result<(), Handle<Value>> {
+    fn unwind(&mut self, value: Handle<Value>, fp: usize) -> Result<(), Handle<Value>> {
         // TODO: clean up resources caused by this unwind
         if self.unwind_handlers.get_stack_pointer() == 0 {
+            return Err(value);
+        }
+
+        if let Some(handler) = unsafe { self.unwind_handlers.get() } {
+            if handler.frame_pointer < fp {
+                return Err(value);
+            }
+        } else {
+            // todo: this branch is unnecessary, see if statement above
             return Err(value);
         }
 
         // Try to get the last unwind handler
         let handler = self.unwind_handlers.pop();
 
-        // Go back the call stack back to where the last try/catch block lives
         let this_frame_pointer = self.frames.get_stack_pointer();
+        // Go back the call stack back to where the last try/catch block lives
         self.frames
             .discard_multiple(this_frame_pointer - handler.frame_pointer);
 
@@ -671,44 +680,6 @@ impl VM {
         stack
     }
 
-    fn handle_native_return(
-        &mut self,
-        old_func: Handle<Value>,
-        new_func: Handle<Value>,
-        old_args: Vec<Handle<Value>>,
-        new_args: Vec<Handle<Value>>,
-        state: CallState<Box<dyn Any>>,
-        receiver: Option<Handle<Value>>,
-    ) {
-        let func_ref = unsafe { new_func.borrow_unbounded() };
-        match func_ref.as_function().unwrap() {
-            FunctionKind::Closure(closure) => {
-                let sp = self.stack.get_stack_pointer();
-                self.frame_mut().sp = sp;
-
-                let frame = Frame {
-                    buffer: closure.func.buffer.clone(),
-                    ip: 0,
-                    func: Handle::clone(&new_func),
-                    sp,
-                    state: Some(state),
-                    resume: Some(NativeResume {
-                        args: old_args,
-                        ctor: false,
-                        func: old_func,
-                        receiver,
-                    }),
-                };
-
-                self.frames.push(frame);
-                for param in new_args.into_iter() {
-                    self.stack.push(param);
-                }
-            }
-            _ => todo!(),
-        };
-    }
-
     fn begin_function_call(
         &mut self,
         func_cell: Handle<Value>,
@@ -718,29 +689,16 @@ impl VM {
         let func = match func_cell_ref.as_function().unwrap() {
             FunctionKind::Native(f) => {
                 let receiver = f.receiver.as_ref().map(|rx| rx.get().clone());
-                let mut state = CallState::default();
                 let ctx = CallContext {
                     vm: self,
                     args: &mut params,
                     ctor: false,
                     receiver: receiver.clone(),
-                    state: &mut state,
-                    function_call_response: None,
                 };
 
                 let result = (f.func)(ctx)?;
+                self.stack.push(result);
 
-                match result {
-                    CallResult::Ready(ret) => self.stack.push(ret),
-                    CallResult::UserFunction(new_func_cell, args) => self.handle_native_return(
-                        Handle::clone(&func_cell),
-                        new_func_cell,
-                        params,
-                        args,
-                        state,
-                        receiver,
-                    ),
-                };
                 return Ok(());
             }
             FunctionKind::Closure(u) => u,
@@ -757,8 +715,6 @@ impl VM {
             ip: 0,
             func: func_cell.clone(),
             sp: current_sp,
-            state: self.frame_mut().state.take(),
-            resume: None,
         };
         self.frames.push(frame);
 
@@ -793,21 +749,14 @@ impl VM {
         self.async_frames.push(frame);
     }
 
-    /// Starts interpreting bytecode
-    pub fn interpret(&mut self) -> Result<Option<Handle<Value>>, VMError> {
-        macro_rules! unwrap_or_unwind {
-            ($e:expr, $err:expr) => {
-                if let Some(v) = $e {
-                    v
-                } else {
-                    unwind_abort_if_uncaught!($err)
-                }
-            };
-        }
+    /// Executes an execution frame
+    pub fn execute_frame(&mut self, frame: Frame, can_gc: bool) -> Result<Option<Handle<Value>>, VMError> {
+        let frame_idx = self.frames.get_stack_pointer();
+        self.frames.push(frame);
 
         macro_rules! unwind_abort_if_uncaught {
             ($e:expr) => {
-                if let Err(e) = self.unwind($e) {
+                if let Err(e) = self.unwind($e, frame_idx) {
                     return Err(VMError::UncaughtError(e));
                 } else {
                     continue;
@@ -815,867 +764,31 @@ impl VM {
             };
         }
 
-        while !self.is_eof() {
+        while self.frames.get_stack_pointer() > frame_idx {
             unsafe {
-                if unlikely(self.should_gc()) {
+                if can_gc && unlikely(self.should_gc()) {
                     self.perform_gc();
                 }
             }
 
-            let instruction = self.buffer()[self.ip()].as_op();
+            let opcode = self.buffer()[self.ip()].as_op();
 
             self.frame_mut().ip += 1;
 
-            match instruction {
-                Opcode::Eof => return Ok(None),
-                Opcode::Constant => {
-                    let mut constant = self.read_constant().map(|c| c.try_into_value()).unwrap();
-
-                    // Values emitted by the compiler do not have a [[Prototype]] set
-                    // so we need to do that here when pushing a value onto the stack
-                    constant.detect_internal_properties(self);
-
-                    self.stack.push(constant.into_handle(self));
-                }
-                Opcode::Closure => {
-                    let func = self.read_user_function().unwrap();
-
-                    let upvalue_count = func.upvalues as usize;
-
-                    let mut closure =
-                        Closure::with_upvalues(func, Vec::with_capacity(upvalue_count));
-
-                    for _ in 0..closure.func.upvalues {
-                        let is_local =
-                            matches!(self.next().unwrap(), Instruction::Op(Opcode::UpvalueLocal));
-                        let stack_idx = self.read_constant().and_then(|c| c.into_index()).unwrap();
-                        if is_local {
-                            let value =
-                                unsafe { self.stack.peek_unchecked(self.frame().sp + stack_idx) };
-                            closure.upvalues.push(Upvalue(value.clone()));
-                        } else {
-                            todo!("Resolve upvalues")
-                        }
-                    }
-
-                    self.stack.push(
-                        self.create_js_value(FunctionKind::Closure(closure))
-                            .into_handle(self),
-                    );
-                }
-                Opcode::Negate => {
-                    let maybe_number = self.read_number();
-
-                    self.stack
-                        .push(self.create_js_value(-maybe_number).into_handle(self));
-                }
-                Opcode::Positive => {
-                    let maybe_number = self.read_number();
-
-                    self.stack
-                        .push(self.create_js_value(maybe_number).into_handle(self));
-                }
-                Opcode::LogicalNot => {
-                    let is_truthy = unsafe { self.stack.pop().borrow_unbounded() }.is_truthy();
-
-                    self.stack
-                        .push(self.create_js_value(!is_truthy).into_handle(self));
-                }
-                Opcode::Add => {
-                    let result = self.with_lhs_rhs_borrowed(Value::add).into_handle(self);
-                    self.stack.push(result);
-                }
-                Opcode::Sub => {
-                    let result = self.with_lhs_rhs_borrowed(Value::sub).into_handle(self);
-                    self.stack.push(result);
-                }
-                Opcode::Mul => {
-                    let result = self.with_lhs_rhs_borrowed(Value::mul).into_handle(self);
-                    self.stack.push(result);
-                }
-                Opcode::Div => {
-                    let result = self.with_lhs_rhs_borrowed(Value::div).into_handle(self);
-                    self.stack.push(result);
-                }
-                Opcode::Rem => {
-                    let result = self.with_lhs_rhs_borrowed(Value::rem).into_handle(self);
-                    self.stack.push(result);
-                }
-                Opcode::Exponentiation => {
-                    let result = self.with_lhs_rhs_borrowed(Value::pow).into_handle(self);
-                    self.stack.push(result);
-                }
-                Opcode::LeftShift => {
-                    let result = self
-                        .with_lhs_rhs_borrowed(Value::left_shift)
-                        .into_handle(self);
-                    self.stack.push(result);
-                }
-                Opcode::RightShift => {
-                    let result = self
-                        .with_lhs_rhs_borrowed(Value::right_shift)
-                        .into_handle(self);
-                    self.stack.push(result);
-                }
-                Opcode::UnsignedRightShift => {
-                    let result = self
-                        .with_lhs_rhs_borrowed(Value::unsigned_right_shift)
-                        .into_handle(self);
-                    self.stack.push(result);
-                }
-                Opcode::BitwiseAnd => {
-                    let result = self
-                        .with_lhs_rhs_borrowed(Value::bitwise_and)
-                        .into_handle(self);
-                    self.stack.push(result);
-                }
-                Opcode::BitwiseOr => {
-                    let result = self
-                        .with_lhs_rhs_borrowed(Value::bitwise_or)
-                        .into_handle(self);
-                    self.stack.push(result);
-                }
-                Opcode::BitwiseXor => {
-                    let result = self
-                        .with_lhs_rhs_borrowed(Value::bitwise_xor)
-                        .into_handle(self);
-                    self.stack.push(result);
-                }
-                Opcode::BitwiseNot => {
-                    let result = self.with_lhs_borrowed(Value::bitwise_not).into_handle(self);
-                    self.stack.push(result);
-                }
-                Opcode::SetGlobal => {
-                    let name = self.pop_owned().unwrap().into_ident().unwrap();
-                    let value = self.stack.pop();
-
-                    let mut global = unsafe { self.global.borrow_mut_unbounded() };
-                    global.set_property(name, value);
-                }
-                Opcode::SetGlobalNoValue => {
-                    let name = self.pop_owned().unwrap().into_ident().unwrap();
-
-                    let mut global = unsafe { self.global.borrow_mut_unbounded() };
-                    global.set_property(name, Value::new(ValueKind::Undefined).into_handle(self));
-                }
-                Opcode::GetGlobal => {
-                    let name = self.pop_owned().unwrap().into_ident().unwrap();
-
-                    let value = unwrap_or_unwind!(
-                        Value::get_property(self, &self.global, &name, None),
-                        js_std::error::create_error(
-                            MaybeRc::Owned(&format!("{} is not defined", name)),
-                            self
-                        )
-                    );
-
-                    self.stack.push(value)
-                }
-                Opcode::SetLocal => {
-                    let stack_idx = self.read_index().unwrap();
-                    let value = self.stack.pop();
-                    self.stack.set_relative(self.frame().sp, stack_idx, value);
-                }
-                Opcode::SetLocalNoValue => {
-                    let stack_idx = self.read_index().unwrap();
-                    self.stack.set_relative(
-                        self.frame().sp,
-                        stack_idx,
-                        Value::new(ValueKind::Undefined).into_handle(self),
-                    );
-                }
-                Opcode::GetLocal => {
-                    let stack_idx = self.read_index().unwrap();
-
-                    unsafe {
-                        self.stack.push(
-                            self.stack
-                                .peek_relative_unchecked(self.frame().sp, stack_idx)
-                                .clone(),
-                        )
-                    };
-                }
-                Opcode::GetUpvalue => {
-                    let upvalue_idx = self.read_index().unwrap();
-
-                    let value = {
-                        let closure_cell = unsafe { self.frame().func.borrow_unbounded() };
-                        let closure = match closure_cell.as_function().unwrap() {
-                            FunctionKind::Closure(c) => c,
-                            _ => unreachable!(),
-                        };
-                        closure.upvalues[upvalue_idx].0.clone()
-                    };
-
-                    self.stack.push(value);
-                }
-                Opcode::ShortJmpIfFalse => {
-                    let instruction_count = self.read_index().unwrap();
-
-                    let condition_cell = unsafe { self.stack.get_unchecked() };
-                    let condition = unsafe { condition_cell.borrow_unbounded() }.is_truthy();
-
-                    if !condition {
-                        self.frame_mut().ip += instruction_count;
-                    }
-                }
-                Opcode::ShortJmpIfTrue => {
-                    let instruction_count = self.read_index().unwrap();
-
-                    let condition_cell = unsafe { self.stack.get_unchecked() };
-                    let condition = unsafe { condition_cell.borrow_unbounded() }.is_truthy();
-
-                    if condition {
-                        self.frame_mut().ip += instruction_count;
-                    }
-                }
-                Opcode::ShortJmpIfNullish => {
-                    let instruction_count = self.read_index().unwrap();
-
-                    let condition_cell = unsafe { self.stack.get_unchecked() };
-                    let condition = unsafe { condition_cell.borrow_unbounded() }.is_nullish();
-
-                    if !condition {
-                        self.frame_mut().ip += instruction_count;
-                    }
-                }
-                Opcode::ShortJmp => {
-                    let instruction_count = self.read_index().unwrap();
-                    self.frame_mut().ip += instruction_count;
-                }
-                Opcode::BackJmp => {
-                    let instruction_count = self.read_index().unwrap();
-                    self.frame_mut().ip -= instruction_count;
-                }
-                Opcode::Pop => {
-                    self.stack.pop();
-                }
-                Opcode::PopUnwindHandler => {
-                    self.unwind_handlers.pop();
-                }
-                Opcode::AdditionAssignment => {
-                    let value_cell = self.stack.pop();
-                    let target_cell = self.stack.pop();
-                    let value = unsafe { value_cell.borrow_unbounded() };
-                    unsafe { target_cell.borrow_mut_unbounded() }.add_assign(&*value);
-                    self.stack.push(target_cell);
-                }
-                Opcode::SubtractionAssignment => {
-                    let value_cell = self.stack.pop();
-                    let target_cell = self.stack.pop();
-                    let value = unsafe { value_cell.borrow_unbounded() };
-                    unsafe { target_cell.borrow_mut_unbounded() }.sub_assign(&*value);
-                    self.stack.push(target_cell);
-                }
-                Opcode::MultiplicationAssignment => {
-                    let value_cell = self.stack.pop();
-                    let target_cell = self.stack.pop();
-                    let value = unsafe { value_cell.borrow_unbounded() };
-                    unsafe { target_cell.borrow_mut_unbounded() }.mul_assign(&*value);
-                    self.stack.push(target_cell);
-                }
-                Opcode::DivisionAssignment => {
-                    let value_cell = self.stack.pop();
-                    let target_cell = self.stack.pop();
-                    let value = unsafe { value_cell.borrow_unbounded() };
-                    unsafe { target_cell.borrow_mut_unbounded() }.div_assign(&*value);
-                    self.stack.push(target_cell);
-                }
-                Opcode::RemainderAssignment => {
-                    let value_cell = self.stack.pop();
-                    let target_cell = self.stack.pop();
-                    let value = unsafe { value_cell.borrow_unbounded() };
-                    unsafe { target_cell.borrow_mut_unbounded() }.rem_assign(&*value);
-                    self.stack.push(target_cell);
-                }
-                Opcode::ExponentiationAssignment => {
-                    let value_cell = self.stack.pop();
-                    let target_cell = self.stack.pop();
-                    let value = unsafe { value_cell.borrow_unbounded() };
-                    unsafe { target_cell.borrow_mut_unbounded() }.pow_assign(&*value);
-                    self.stack.push(target_cell);
-                }
-                Opcode::LeftShiftAssignment => {
-                    let value_cell = self.stack.pop();
-                    let target_cell = self.stack.pop();
-                    let value = unsafe { value_cell.borrow_unbounded() };
-                    unsafe { target_cell.borrow_mut_unbounded() }.left_shift_assign(&*value);
-                    self.stack.push(target_cell);
-                }
-                Opcode::RightShiftAssignment => {
-                    let value_cell = self.stack.pop();
-                    let target_cell = self.stack.pop();
-                    let value = unsafe { value_cell.borrow_unbounded() };
-                    unsafe { target_cell.borrow_mut_unbounded() }.right_shift_assign(&*value);
-                    self.stack.push(target_cell);
-                }
-                Opcode::UnsignedRightShiftAssignment => {
-                    let value_cell = self.stack.pop();
-                    let target_cell = self.stack.pop();
-                    let value = unsafe { value_cell.borrow_unbounded() };
-                    unsafe { target_cell
-                        .borrow_mut_unbounded() }
-                        .unsigned_right_shift_assign(&*value);
-                    self.stack.push(target_cell);
-                }
-                Opcode::BitwiseAndAssignment => {
-                    let value_cell = self.stack.pop();
-                    let target_cell = self.stack.pop();
-                    let value = unsafe { value_cell.borrow_unbounded() };
-                    unsafe { target_cell.borrow_mut_unbounded() }.bitwise_and_assign(&*value);
-                    self.stack.push(target_cell);
-                }
-                Opcode::BitwiseOrAssignment => {
-                    let value_cell = self.stack.pop();
-                    let target_cell = self.stack.pop();
-                    let value = unsafe { value_cell.borrow_unbounded() };
-                    unsafe { target_cell.borrow_mut_unbounded() }.bitwise_or_assign(&*value);
-                    self.stack.push(target_cell);
-                }
-                Opcode::BitwiseXorAssignment => {
-                    let value_cell = self.stack.pop();
-                    let target_cell = self.stack.pop();
-                    let value = unsafe { value_cell.borrow_unbounded() };
-                    unsafe { target_cell.borrow_mut_unbounded() }.bitwise_xor_assign(&*value);
-                    self.stack.push(target_cell);
-                }
-                Opcode::LogicalAndAssignment => {
-                    let value_cell = self.stack.pop();
-                    let target_cell = self.stack.pop();
-                    let value = unsafe { value_cell.borrow_unbounded() };
-                    unsafe { target_cell.borrow_mut_unbounded() }.logical_and_assign(&*value);
-                    self.stack.push(target_cell);
-                }
-                Opcode::LogicalOrAssignment => {
-                    let value_cell = self.stack.pop();
-                    let target_cell = self.stack.pop();
-                    let value = unsafe { value_cell.borrow_unbounded() };
-                    unsafe { target_cell.borrow_mut_unbounded() }.logical_or_assign(&*value);
-                    self.stack.push(target_cell);
-                }
-                Opcode::LogicalNullishAssignment => {
-                    let value_cell = self.stack.pop();
-                    let target_cell = self.stack.pop();
-                    let value = unsafe { value_cell.borrow_unbounded() };
-                    unsafe { target_cell.borrow_mut_unbounded() }.nullish_coalescing_assign(&*value);
-                    self.stack.push(target_cell);
-                }
-                Opcode::ConstructorCall => {
-                    let param_count = self.read_index().unwrap();
-                    let mut params = Vec::new();
-                    for _ in 0..param_count {
-                        params.push(self.stack.pop());
-                    }
-
-                    let func_cell = self.stack.pop();
-                    let mut func_cell_ref = unsafe { func_cell.borrow_mut_unbounded() };
-                    let func_cell_kind = func_cell_ref.as_function_mut().unwrap();
-                    let this = func_cell_kind.construct(&func_cell);
-                    let func = match func_cell_kind {
-                        FunctionKind::Native(f) => {
-                            if !f.ctor.constructable() {
-                                // User tried to invoke non-constructor as a constructor
-                                unwind_abort_if_uncaught!(js_std::error::create_error(
-                                    MaybeRc::Owned(&format!("{} is not a constructor", f.name)),
-                                    self
-                                ));
-                            }
-
-                            let mut state = CallState::default();
-                            let receiver = Some(this.into_handle(self));
-                            let ctx = CallContext {
-                                vm: self,
-                                args: &mut params,
-                                ctor: true,
-                                receiver,
-                                state: &mut state,
-                                function_call_response: None,
-                            };
-                            let result = (f.func)(ctx);
-
-                            match result {
-                                Ok(CallResult::Ready(res)) => self.stack.push(res),
-                                Err(e) => unwind_abort_if_uncaught!(e),
-                                _ => todo!(),
-                            }
-
-                            continue;
-                        }
-                        FunctionKind::Closure(closure) => {
-                            closure.func.receiver = Some(Receiver::Bound(this.into_handle(self)));
-                            closure
-                        }
-                        // There should never be raw user functions
-                        _ => unreachable!(),
-                    };
-
-                    // By this point we know func_cell is a UserFunction
-                    // TODO: get rid of this copy paste and share code with Opcode::FunctionCall
-
-                    let current_sp = self.stack.get_stack_pointer();
-
-                    let state = self.frame_mut().state.take();
-                    let frame = Frame {
-                        buffer: func.func.buffer.clone(),
-                        ip: 0,
-                        func: Handle::clone(&func_cell),
-                        sp: current_sp,
-                        state,
-                        resume: None,
-                    };
-
-                    self.frames.push(frame);
-
-                    let origin_param_count = func.func.params as usize;
-                    let param_count = params.len();
-
-                    for param in params.into_iter().rev() {
-                        self.stack.push(param);
-                    }
-
-                    for _ in 0..(origin_param_count.saturating_sub(param_count)) {
-                        self.stack
-                            .push(Value::new(ValueKind::Undefined).into_handle(self));
-                    }
-                }
-                Opcode::GetThis => {
-                    let this = {
-                        let frame = self.frame();
-                        let func = unsafe { frame.func.borrow_unbounded() };
-                        let raw_func = func
-                            .as_function()
-                            .and_then(FunctionKind::as_closure)
-                            .unwrap();
-
-                        let receiver = raw_func.func.receiver.as_ref().unwrap();
-                        receiver.get().clone()
-                    };
-                    self.stack.push(this);
-                }
-                Opcode::GetGlobalThis => {
-                    self.stack.push(self.global.clone());
-                }
-                Opcode::EvaluateModule => {
-                    let (value_cell, buffer) = {
-                        let mut module =
-                            self.read_constant().and_then(Constant::into_value).unwrap();
-
-                        let buffer = module
-                            .as_function_mut()
-                            .unwrap()
-                            .as_module_mut()
-                            .unwrap()
-                            .buffer
-                            .take()
-                            .unwrap();
-
-                        (module.into_handle(self), buffer)
-                    };
-
-                    let current_sp = self.stack.get_stack_pointer();
-                    self.frame_mut().sp = current_sp;
-
-                    let frame = Frame {
-                        func: value_cell,
-                        buffer,
-                        ip: 0,
-                        sp: current_sp,
-                        state: None,
-                        resume: None,
-                    };
-
-                    self.frames.push(frame);
-                }
-                Opcode::FunctionCall => {
-                    let param_count = self.read_index().unwrap();
-                    let mut params = Vec::new();
-                    for _ in 0..param_count {
-                        params.push(self.stack.pop());
-                    }
-
-                    let func_cell = self.stack.pop();
-                    if let Err(e) = self.begin_function_call(func_cell, params) {
-                        unwind_abort_if_uncaught!(e);
-                    }
-                }
-                Opcode::Try => {
-                    let catch_idx = self.read_constant().and_then(Constant::into_index).unwrap();
-                    let should_capture_error = self.read_op().unwrap() == Opcode::SetLocal;
-
-                    let error_catch_idx = if should_capture_error {
-                        Some(self.read_constant().and_then(Constant::into_index).unwrap())
-                    } else {
-                        None
-                    };
-
-                    let current_ip = self.ip();
-                    let handler = UnwindHandler {
-                        catch_ip: current_ip + catch_idx,
-                        catch_value_sp: error_catch_idx,
-                        finally_ip: None, // TODO: support finally
-                        frame_pointer: self.frames.get_stack_pointer(),
-                    };
-                    self.unwind_handlers.push(handler)
-                }
-                Opcode::Throw => {
-                    let value = self.stack.pop();
-
-                    unwind_abort_if_uncaught!(value);
-                }
-                Opcode::ReturnModule => {
-                    let frame = self.frames.pop();
-                    let func_ref = unsafe { frame.func.borrow_unbounded() };
-                    let func = func_ref
-                        .as_function()
-                        .and_then(FunctionKind::as_module)
-                        .unwrap();
-
-                    let exports = if let Some(default) = &func.exports.default {
-                        Handle::clone(default)
-                    } else {
-                        self.create_object().into_handle(self)
-                    };
-
-                    {
-                        let mut exports_mut = unsafe { exports.borrow_mut_unbounded() };
-                        for (key, value) in &func.exports.named {
-                            exports_mut.set_property(&**key, Handle::clone(value));
-                        }
-                    }
-
-                    self.stack
-                        .discard_multiple(self.stack.get_stack_pointer() - frame.sp);
-
-                    unsafe { self.stack.set_stack_pointer(frame.sp) };
-                    self.stack.push(exports);
-                }
-                Opcode::Return => {
-                    // We might be in a try block, in which case we need to remove the handler
-                    let maybe_tc_frame_pointer =
-                        unsafe { self.unwind_handlers.get() }.map(|c| c.frame_pointer);
-
-                    let frame_pointer = self.frames.get_stack_pointer();
-
-                    if maybe_tc_frame_pointer == Some(frame_pointer) {
-                        self.unwind_handlers.pop();
-                    }
-
-                    // Restore VM state to where we were before the function call happened
-                    let mut this = self.frames.pop();
-
-                    if self.frames.get_stack_pointer() == 0 {
-                        if self.stack.get_stack_pointer() == 0 {
-                            return Ok(None);
-                        } else {
-                            let value = self.stack.pop();
-                            return Ok(Some(value));
-                        }
-                    }
-
-                    let ret = self.stack.pop();
-
-                    self.stack
-                        .discard_multiple(self.stack.get_stack_pointer() - this.sp);
-
-                    unsafe { self.stack.set_stack_pointer(this.sp) };
-
-                    if let Some(mut resume) = this.resume.take() {
-                        let mut state = this.state.take().unwrap_or_else(CallState::default);
-                        let func_ref = unsafe { resume.func.borrow_unbounded() };
-                        let f = func_ref
-                            .as_function()
-                            .and_then(FunctionKind::as_native)
-                            .unwrap();
-
-                        let context = CallContext {
-                            args: &mut resume.args,
-                            ctor: resume.ctor,
-                            function_call_response: Some(ret),
-                            receiver: resume.receiver.clone(),
-                            state: &mut state,
-                            vm: self,
-                        };
-
-                        let ret = (f.func)(context);
-
-                        match ret {
-                            Ok(CallResult::Ready(ret)) => self.stack.push(ret),
-                            Ok(CallResult::UserFunction(new_func_cell, args)) => self
-                                .handle_native_return(
-                                    Handle::clone(&resume.func),
-                                    new_func_cell,
-                                    resume.args,
-                                    args,
-                                    state,
-                                    resume.receiver,
-                                ),
-                            Err(e) => unwind_abort_if_uncaught!(e),
-                        };
-                        continue;
-                    }
-
-                    let func_ref = unsafe { this.func.borrow_unbounded() };
-                    if let Some(this) = func_ref
-                        .as_function()
-                        .and_then(FunctionKind::as_closure)
-                        .and_then(|c| c.func.receiver.as_ref())
-                    {
-                        self.stack.push(Handle::clone(this.get()));
-                    } else {
-                        self.stack.push(ret);
-                    }
-                }
-                Opcode::Less => {
-                    let rhs_cell = self.stack.pop();
-                    let rhs = unsafe { rhs_cell.borrow_unbounded() };
-                    let lhs_cell = self.stack.pop();
-                    let lhs = unsafe { lhs_cell.borrow_unbounded() };
-
-                    let is_less = matches!(lhs.compare(&rhs), Some(Compare::Less));
-                    self.stack
-                        .push(self.create_js_value(is_less).into_handle(self));
-                }
-                Opcode::LessEqual => {
-                    let rhs_cell = self.stack.pop();
-                    let rhs = unsafe { rhs_cell.borrow_unbounded() };
-                    let lhs_cell = self.stack.pop();
-                    let lhs = unsafe { lhs_cell.borrow_unbounded() };
-
-                    let is_less_eq = matches!(
-                        lhs.compare(&rhs),
-                        Some(Compare::Less) | Some(Compare::Equal)
-                    );
-                    self.stack
-                        .push(self.create_js_value(is_less_eq).into_handle(self));
-                }
-                Opcode::Greater => {
-                    let rhs_cell = self.stack.pop();
-                    let rhs = unsafe { rhs_cell.borrow_unbounded() };
-                    let lhs_cell = self.stack.pop();
-                    let lhs = unsafe { lhs_cell.borrow_unbounded() };
-
-                    let is_greater = matches!(lhs.compare(&rhs), Some(Compare::Greater));
-                    self.stack
-                        .push(self.create_js_value(is_greater).into_handle(self));
-                }
-                Opcode::GreaterEqual => {
-                    let rhs_cell = self.stack.pop();
-                    let rhs = unsafe { rhs_cell.borrow_unbounded() };
-                    let lhs_cell = self.stack.pop();
-                    let lhs = unsafe { lhs_cell.borrow_unbounded() };
-
-                    let is_greater_eq = matches!(
-                        lhs.compare(&rhs),
-                        Some(Compare::Greater) | Some(Compare::Equal)
-                    );
-                    self.stack
-                        .push(self.create_js_value(is_greater_eq).into_handle(self));
-                }
-                Opcode::StaticPropertyAccess => {
-                    let property = self.pop_owned().unwrap().into_ident().unwrap();
-                    let is_assignment = self.read_index().unwrap() == 1;
-                    let target_cell = self.stack.pop();
-
-                    let value = if is_assignment {
-                        let maybe_value = Value::get_property(self, &target_cell, &property, None);
-                        maybe_value.unwrap_or_else(|| {
-                            let mut target = unsafe { target_cell.borrow_mut_unbounded() };
-                            let value = Value::new(ValueKind::Undefined).into_handle(self);
-                            target.set_property(property, Handle::clone(&value));
-                            value
-                        })
-                    } else {
-                        Value::unwrap_or_undefined(
-                            Value::get_property(self, &target_cell, &property, None),
-                            self,
-                        )
-                    };
-                    self.stack.push(value);
-                }
-                Opcode::Equality => {
-                    let eq = self.with_lhs_rhs_borrowed(Value::lossy_equal);
-                    self.stack.push(self.create_js_value(eq).into_handle(self));
-                }
-                Opcode::Inequality => {
-                    let eq = self.with_lhs_rhs_borrowed(Value::lossy_equal);
-                    self.stack.push(self.create_js_value(!eq).into_handle(self));
-                }
-                Opcode::StrictEquality => {
-                    let eq = self.with_lhs_rhs_borrowed(Value::strict_equal);
-                    self.stack.push(self.create_js_value(eq).into_handle(self));
-                }
-                Opcode::StrictInequality => {
-                    let eq = self.with_lhs_rhs_borrowed(Value::strict_equal);
-                    self.stack.push(self.create_js_value(!eq).into_handle(self));
-                }
-                Opcode::Typeof => {
-                    let value = unsafe { self.stack.pop().borrow_unbounded() }._typeof().to_owned();
-
-                    self.stack.push(
-                        self.create_js_value(Object::String(value))
-                            .into_handle(self),
-                    );
-                }
-                Opcode::PostfixIncrement | Opcode::PostfixDecrement => {
-                    let value_cell = self.stack.pop();
-                    let mut value = unsafe { value_cell.borrow_mut_unbounded() };
-                    let one = self.create_js_value(1f64);
-                    let result = if instruction == Opcode::PostfixIncrement {
-                        value.add_assign(&one);
-                        value.sub(&one)
-                    } else {
-                        value.sub_assign(&one);
-                        value.add(&one)
-                    };
-                    self.stack.push(result.into_handle(self));
-                }
-                Opcode::Assignment => {
-                    let value_cell = self.stack.pop();
-                    let target_cell = self.stack.pop();
-
-                    let value = unsafe { value_cell.borrow_unbounded() };
-                    // TODO: cloning might not be the right thing to do
-                    let value = value.clone();
-
-                    let mut target = unsafe { target_cell.borrow_mut_unbounded() };
-                    **target = value;
-                    self.stack.push(target_cell.clone());
-                }
-                Opcode::Void => {
-                    self.stack.pop();
-                    self.stack
-                        .push(Value::new(ValueKind::Undefined).into_handle(self));
-                }
-                Opcode::ArrayLiteral => {
-                    let element_count = self.read_index().unwrap();
-                    let mut elements = Vec::with_capacity(element_count);
-                    for _ in 0..element_count {
-                        elements.push(self.stack.pop());
-                    }
-                    self.stack
-                        .push(self.create_array(Array::new(elements)).into_handle(self));
-                }
-                Opcode::ObjectLiteral => {
-                    let property_count = self.read_index().unwrap();
-
-                    let mut fields = HashMap::new();
-                    let mut raw_fields = Vec::new();
-
-                    for _ in 0..property_count {
-                        let value = self.stack.pop();
-                        raw_fields.push(value);
-                    }
-
-                    for value in raw_fields.into_iter().rev() {
-                        let key = self.read_constant().unwrap().into_ident().unwrap();
-                        fields.insert(key.into_boxed_str(), value);
-                    }
-
-                    self.stack
-                        .push(self.create_object_with_fields(fields).into_handle(self));
-                }
-                Opcode::ComputedPropertyAccess => {
-                    let property_cell = self.stack.pop();
-                    let is_assignment = self.read_index().unwrap() == 1;
-                    let target_cell = self.stack.pop();
-                    let property = unsafe { property_cell.borrow_unbounded() };
-                    let property_s = property.to_string();
-
-                    let value = if is_assignment {
-                        let maybe_value =
-                            Value::get_property(self, &target_cell, &*property_s, None);
-                        maybe_value.unwrap_or_else(|| {
-                            let mut target = unsafe { target_cell.borrow_mut_unbounded() };
-                            let value = Value::new(ValueKind::Undefined).into_handle(self);
-                            target.set_property(property_s.to_string(), Handle::clone(&value));
-                            value
-                        })
-                    } else {
-                        Value::unwrap_or_undefined(
-                            Value::get_property(self, &target_cell, &*property_s, None),
-                            self,
-                        )
-                    };
-
-                    self.stack.push(value);
-                }
-                Opcode::Continue => {
-                    let this = unsafe { self.loops.get_unchecked() };
-                    self.frame_mut().ip = this.condition_ip;
-                }
-                Opcode::Break => {
-                    let this = unsafe { self.loops.get_unchecked() };
-                    self.frame_mut().ip = this.end_ip;
-                }
-                Opcode::LoopStart => {
-                    let condition_offset =
-                        self.read_constant().and_then(Constant::into_index).unwrap();
-                    let end_offset = self.read_constant().and_then(Constant::into_index).unwrap();
-                    let ip = self.ip();
-                    let info = Loop {
-                        condition_ip: (ip + condition_offset),
-                        end_ip: (ip + end_offset),
-                    };
-                    self.loops.push(info);
-                }
-                Opcode::LoopEnd => {
-                    self.loops.pop();
-                }
-                Opcode::ExportDefault => {
-                    let export_status = {
-                        let value = self.stack.pop();
-                        let mut func_ref = unsafe { self.frame().func.borrow_mut_unbounded() };
-
-                        let maybe_module = func_ref
-                            .as_function_mut()
-                            .and_then(FunctionKind::as_module_mut);
-
-                        if let Some(module) = maybe_module {
-                            module.exports.default = Some(value);
-                            true
-                        } else {
-                            false
-                        }
-                    };
-
-                    if !export_status {
-                        unwind_abort_if_uncaught!(js_std::error::create_error(
-                            MaybeRc::Owned("Can only export at the top level in a module"),
-                            self
-                        ))
-                    }
-                }
-                Opcode::ToPrimitive => {
-                    let obj_cell = self.stack.pop();
-
-                    {
-                        // If this is already a primitive value, we do not need to try to convert it
-                        let obj = unsafe { obj_cell.borrow_unbounded() };
-                        if obj.is_primitive() {
-                            self.stack.push(Handle::clone(&obj_cell));
-                            continue;
-                        }
-                    }
-
-                    let to_prim = unwrap_or_unwind!(
-                        Value::get_property(self, &obj_cell, "toString", None)
-                            .or_else(|| Value::get_property(self, &obj_cell, "valueOf", None)),
-                        js_std::error::create_error(
-                            MaybeRc::Owned("Cannot convert object to primitive value"),
-                            self
-                        )
-                    );
-
-                    if let Err(e) = self.begin_function_call(to_prim, Vec::new()) {
-                        unwind_abort_if_uncaught!(e);
-                    }
-                }
-                Opcode::Debugger => self.agent.debugger(),
-                _ => unimplemented!("{:?}", instruction),
+            match dispatch::handle(self, opcode, frame_idx) {
+                Ok(Some(DispatchResult::Return(ret))) => return Ok(ret),
+                Ok(None) => {}
+                Err(e) => unwind_abort_if_uncaught!(e),
             };
-        }
+       }
 
-        Ok(None)
+        todo!()
+    }
+
+    /// Starts interpreting bytecode
+    pub fn interpret(&mut self) -> Result<Option<Handle<Value>>, VMError> {
+        let frame = self.frames.pop();
+        self.execute_frame(frame, true)
     }
 }
 
@@ -1686,6 +799,6 @@ impl Drop for VM {
         self.async_frames.reset();
 
         // Final GC
-        // unsafe { self.unsafe { gc.borrow_mut_unbounded() }.sweep() };
+        unsafe { self.gc.borrow_mut().sweep() };
     }
 }

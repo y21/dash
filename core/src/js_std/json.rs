@@ -4,16 +4,13 @@ use crate::{
     gc::Handle,
     js_std::error::{self, MaybeRc},
     json::parser::Parser,
-    vm::value::{
-        function::{CallContext, CallResult},
-        Value, ValueKind,
-    },
+    vm::value::{function::CallContext, Value, ValueKind},
 };
 
 /// Implements JSON.parse
 ///
 /// https://tc39.es/ecma262/multipage/structured-data.html#sec-json.parse
-pub fn parse(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn parse(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     let source_cell = ctx
         .args
         .first()
@@ -29,13 +26,13 @@ pub fn parse(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
         .into_js_value(ctx.vm)
         .map_err(|e| error::create_error(MaybeRc::Owned(&e.to_string()), ctx.vm))?;
 
-    Ok(CallResult::Ready(parsed.into_handle(ctx.vm)))
+    Ok(parsed.into_handle(ctx.vm))
 }
 
 /// Implements JSON.stringify
 ///
 /// https://tc39.es/ecma262/multipage/structured-data.html#sec-json.stringify
-pub fn stringify(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn stringify(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     let target = ctx.args.first().map(|c| unsafe { c.borrow_unbounded() });
 
     let result = target
@@ -43,9 +40,8 @@ pub fn stringify(ctx: CallContext) -> Result<CallResult, Handle<Value>> {
         .and_then(|c| c.to_json())
         .unwrap_or(Cow::Borrowed("undefined"));
 
-    Ok(CallResult::Ready(
-        ctx.vm
-            .create_js_value(String::from(result))
-            .into_handle(ctx.vm),
-    ))
+    Ok(ctx
+        .vm
+        .create_js_value(String::from(result))
+        .into_handle(ctx.vm))
 }

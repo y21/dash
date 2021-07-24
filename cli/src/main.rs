@@ -1,6 +1,5 @@
 use std::{
     borrow::Cow,
-    cell::RefCell,
     fs,
     io::{self, Write},
     path::PathBuf,
@@ -30,11 +29,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let code = fs::read_to_string(file)?;
 
-        if let Err(e) = dash::eval(&code, Some(create_agent())) {
+        if let Err((e, _vm)) = dash::eval(&code, Some(create_agent())) {
             println!("{}", e.to_string());
         }
     } else if let Some(eval) = &opt.eval {
-        if let Err(e) = dash::eval(eval, Some(create_agent())) {
+        if let Err((e, _vm)) = dash::eval(eval, Some(create_agent())) {
             println!("{}", e.to_string());
         }
     } else {
@@ -55,7 +54,7 @@ fn repl() {
         io::stdin().read_line(s).expect("Failed to read line");
 
         match dash::eval(s, Some(create_agent())) {
-            Ok(result) => {
+            Ok((result, _vm)) => {
                 let result_ref = result.as_ref().map(|x| unsafe { x.borrow_unbounded() });
                 let result_fmt = result_ref
                     .as_deref()
@@ -64,7 +63,7 @@ fn repl() {
 
                 println!("{}", result_fmt);
             }
-            Err(e) => {
+            Err((e, _vm)) => {
                 println!("{}", e.to_string());
             }
         };

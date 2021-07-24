@@ -3,14 +3,12 @@ use std::borrow::Cow;
 use crate::{
     gc::Handle,
     vm::{
-        value::{
-            function::{CallContext, CallResult},
-            object::AnyObject,
-            Value,
-        },
+        value::{function::CallContext, object::AnyObject, Value},
         VM,
     },
 };
+
+// TODO: not rc
 
 /// A value that is either reference counted or owned
 pub enum MaybeRc<T> {
@@ -48,7 +46,7 @@ pub fn create_error(message: MaybeRc<&str>, vm: &VM) -> Handle<Value> {
 /// The error constructor
 ///
 /// https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-error-constructor
-pub fn error_constructor(value: CallContext) -> Result<CallResult, Handle<Value>> {
+pub fn error_constructor(value: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     let message_cell = value.args.first();
     let message_cell_ref = message_cell.map(|c| unsafe { c.borrow_unbounded() });
     let message = message_cell_ref
@@ -57,8 +55,5 @@ pub fn error_constructor(value: CallContext) -> Result<CallResult, Handle<Value>
         .map(Value::to_string)
         .unwrap_or(Cow::Borrowed(""));
 
-    Ok(CallResult::Ready(create_error(
-        MaybeRc::Owned(&message),
-        value.vm,
-    )))
+    Ok(create_error(MaybeRc::Owned(&message), value.vm))
 }

@@ -168,11 +168,3 @@ impl<T> Handle<T> {
         self.1 == vm.get_gc_marker()
     }
 }
-
-// impl<T> Deref for Handle<T> {
-//     type Target = InnerHandleGuard<T>;
-
-//     fn deref(&self) -> &Self::Target {
-//         unsafe { &*self.0 }
-//     }
-// }
