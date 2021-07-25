@@ -12,7 +12,7 @@ pub enum ImportResult {
 ///
 /// Embedders of this implementation may want to choose behavior when something occurs and handle it differently.
 /// For example, embedders can choose to control what happens when an `import` statement is reached.
-/// A regular runtime may want to let users
+/// A regular runtime may want to let users import another file.
 pub trait Agent {
     /// A method that is called when the compiler resolves an import statement
     fn import(&mut self, _module_name: &[u8]) -> Option<ImportResult> {

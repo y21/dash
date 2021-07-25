@@ -566,9 +566,7 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
 
         let instruction_count = instructions.len();
 
-        for idx in 0..jumps.len() {
-            let current = jumps[idx];
-
+        for current in &jumps {
             instructions[current.0 + current.1] =
                 Instruction::Operand(Constant::Index(current.2 - current.1));
 
@@ -626,7 +624,7 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
             .compile_frame()
         }?;
 
-        if frame.instructions.len() == 0 {
+        if frame.instructions.is_empty() {
             frame.instructions.push(Instruction::Op(Opcode::Constant));
             frame
                 .instructions
@@ -1055,11 +1053,10 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
             return Err(CompileError::ImportDisabled);
         };
 
-        // We only want to insert a ReturnModule opcode if it's not there already
-        let has_module_return = match module_instructions.last() {
-            Some(last) => matches!(last, Instruction::Op(Opcode::ReturnModule)),
-            None => false,
-        };
+        let has_module_return = matches!(
+            module_instructions.last(),
+            Some(Instruction::Op(Opcode::ReturnModule))
+        );
 
         if !has_module_return {
             module_instructions.push(Instruction::Op(Opcode::ReturnModule));

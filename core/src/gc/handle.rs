@@ -66,15 +66,15 @@ impl<T> InnerHandleGuard<T> {
     /// Returns a mutable reference to the underlying [InnerHandle]
     ///
     /// This does **not** check if it's already borrowed
-    pub fn get_mut_unchecked(&self) -> &mut InnerHandle<T> {
-        unsafe { &mut *self.0.as_ptr() }
+    pub unsafe fn get_mut_unchecked(&self) -> &mut InnerHandle<T> {
+        &mut *self.0.as_ptr()
     }
 
     /// Returns a reference to the underlying [InnerHandle]
     ///
     /// This does **not** check if it's already borrowed
-    pub fn get_unchecked(&self) -> &InnerHandle<T> {
-        unsafe { &*self.0.as_ptr() }
+    pub unsafe fn get_unchecked(&self) -> &InnerHandle<T> {
+        &*self.0.as_ptr()
     }
 }
 

@@ -23,7 +23,7 @@ pub struct Frame {
 }
 
 impl Frame {
-    /// Creates a frame from bytecode and a stack pointer
+    /// Creates a frame from bytecode and a vm
     pub fn from_buffer<B>(buffer: B, vm: &VM) -> Self
     where
         B: Into<Box<[Instruction]>>,

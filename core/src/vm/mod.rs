@@ -22,11 +22,11 @@ use std::{any::Any, borrow::Cow, cell::RefCell, collections::HashMap, fmt::Debug
 use instruction::{Instruction, Opcode};
 use value::Value;
 
-use crate::{agent::Agent, compiler::compiler::{self, CompileError, Compiler, FunctionKind as CompilerFunctionKind}, gc::{Gc, Handle}, parser::{lexer, token}, util::{unlikely, MaybeOwned}, vm::{dispatch::DispatchResult, frame::UnwindHandler, value::{
+use crate::{EvalError, agent::Agent, compiler::compiler::{self, CompileError, Compiler, FunctionKind as CompilerFunctionKind}, gc::{Gc, Handle}, parser::{lexer, token}, util::{unlikely, MaybeOwned}, vm::{dispatch::DispatchResult, frame::UnwindHandler, value::{
             array::Array,
             function::{
-                CallContext, Closure, Constructor, FunctionKind,
-                FunctionType, UserFunction,
+                CallContext, FunctionKind,
+                UserFunction,
             },
             ValueKind,
         }}};
@@ -141,7 +141,7 @@ impl Debug for VM {
 
 impl VM {
     /// Creates a new VM with a provided agent
-    pub fn new_with_agent(func: UserFunction, agent: Box<dyn Agent>) -> Self {
+    pub fn new_with_agent(agent: Box<dyn Agent>) -> Self {
         let gc_marker = Box::new(0u8);
         let gc_marker_ptr = &*gc_marker as *const _ as *const ();
         
@@ -149,16 +149,8 @@ impl VM {
         let statics = Statics::new(&mut gc, gc_marker_ptr);
         let global = gc.register(Value::from(AnyObject {}), gc_marker_ptr);
 
-        let mut frames = Stack::new();
-        frames.push(Frame {
-            buffer: func.buffer.clone(),
-            func: gc.register(Value::from(Closure::new(func)), gc_marker_ptr),
-            ip: 0,
-            sp: 0,
-        });
-
         let mut vm = Self {
-            frames,
+            frames: Stack::new(),
             gc: RefCell::new(gc),
             async_frames: Stack::new(),
             stack: Stack::new(),
@@ -194,17 +186,20 @@ impl VM {
         .compile()
         .map_err(FromStrError::CompileError)?;
 
-        let func = UserFunction::new(buffer, 0, FunctionType::Top, 0, Constructor::NoCtor);
+        let mut vm = match agent {
+            Some(agent) => Self::new_with_agent(Box::new(agent)),
+            None => Self::new(),
+        };
 
-        Ok(match agent {
-            Some(agent) => Self::new_with_agent(func, Box::new(agent)),
-            None => Self::new(func),
-        })
+        let frame = Frame::from_buffer(buffer, &vm);
+        vm.frames.push(frame);
+
+        Ok(vm)
     }
 
     /// Creates a new VM
-    pub fn new(func: UserFunction) -> Self {
-        Self::new_with_agent(func, Box::new(()))
+    pub fn new() -> Self {
+        Self::new_with_agent(Box::new(()))
     }
 
     /// Returns a reference to the global object
@@ -693,7 +688,7 @@ impl VM {
                     vm: self,
                     args: &mut params,
                     ctor: false,
-                    receiver: receiver.clone(),
+                    receiver,
                 };
 
                 let result = (f.func)(ctx)?;
@@ -789,6 +784,19 @@ impl VM {
     pub fn interpret(&mut self) -> Result<Option<Handle<Value>>, VMError> {
         let frame = self.frames.pop();
         self.execute_frame(frame, true)
+    }
+
+    /// Evaluates a JavaScript source string in this VM
+    pub fn eval<'a>(&mut self, source: &'a str) -> Result<Option<Handle<Value>>, EvalError<'a>> {
+        let buffer = Compiler::<()>::from_str(source, None, CompilerFunctionKind::Function)
+            .map_err(FromStrError::from)
+            .map_err(EvalError::from)?
+            .compile()
+            .map_err(EvalError::CompileError)?;
+
+        let frame = Frame::from_buffer(buffer, self);
+
+        self.execute_frame(frame, true).map_err(EvalError::VMError)
     }
 }
 

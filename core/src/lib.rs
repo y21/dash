@@ -34,7 +34,7 @@ pub mod visitor;
 /// Bytecode VM
 pub mod vm;
 
-/// An error that occurred during a call to [eval]
+/// An error that occurred during a call to eval
 #[derive(Debug)]
 pub enum EvalError<'a> {
     /// A lexer error

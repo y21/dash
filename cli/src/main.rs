@@ -5,7 +5,10 @@ use std::{
     path::PathBuf,
 };
 
-use dash::{agent::Agent, vm::value::Value};
+use dash::{
+    agent::Agent,
+    vm::{value::Value, VM},
+};
 use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
@@ -46,6 +49,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn repl() {
     println!("Welcome to the dash REPL\nType JavaScript code and hit enter to evaluate it");
 
+    let mut vm = VM::new_with_agent(Box::new(create_agent()));
+
     loop {
         print!("> ");
         io::stdout().flush().expect("Failed to flush stdout");
@@ -53,8 +58,8 @@ fn repl() {
         let s = &mut String::new();
         io::stdin().read_line(s).expect("Failed to read line");
 
-        match dash::eval(s, Some(create_agent())) {
-            Ok((result, _vm)) => {
+        match vm.eval(s) {
+            Ok(result) => {
                 let result_ref = result.as_ref().map(|x| unsafe { x.borrow_unbounded() });
                 let result_fmt = result_ref
                     .as_deref()
@@ -63,7 +68,7 @@ fn repl() {
 
                 println!("{}", result_fmt);
             }
-            Err((e, _vm)) => {
+            Err(e) => {
                 println!("{}", e.to_string());
             }
         };

@@ -321,7 +321,7 @@ impl FunctionKind {
                     Value::mark(handle)
                 }
 
-                for (_, handle) in &module.exports.named {
+                for handle in module.exports.named.values() {
                     Value::mark(handle)
                 }
             }

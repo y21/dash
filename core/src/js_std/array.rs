@@ -35,7 +35,7 @@ pub fn push(value: CallContext) -> Result<Handle<Value>, Handle<Value>> {
         }
     };
 
-    for value in value.args.into_iter().rev() {
+    for value in value.args.iter_mut().rev() {
         this_arr.elements.push(Handle::clone(&value));
     }
 
@@ -340,7 +340,7 @@ impl<'a> ArrayLikeIterable<'a> {
         }
     }
     /// Yields the next value
-    pub fn next<'b>(&mut self, vm: &'b mut VM) -> Option<Handle<Value>> {
+    pub fn next(&mut self, vm: &mut VM) -> Option<Handle<Value>> {
         self.index += 1;
         match &mut self.kind {
             ArrayLikeKind::String(s) => s

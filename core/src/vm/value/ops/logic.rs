@@ -49,10 +49,7 @@ impl Value {
 
     /// Checks whether a value is considered to be nullish
     pub fn is_nullish(&self) -> bool {
-        match &self.kind {
-            ValueKind::Null | ValueKind::Undefined => true,
-            _ => false,
-        }
+        matches!(self.kind, ValueKind::Null | ValueKind::Undefined)
     }
 
     /// Implements the logical and operator, given references to two [Value]s

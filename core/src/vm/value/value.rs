@@ -97,7 +97,7 @@ impl Value {
                     vm,
                     args: &mut args,
                     ctor: false,
-                    receiver: receiver.clone(),
+                    receiver,
                 };
 
                 return (func.func)(ctx);
@@ -193,10 +193,7 @@ impl Value {
             ValueKind::Bool(_) => true,
             ValueKind::Null => true,
             ValueKind::Undefined => true,
-            ValueKind::Object(o) => match &**o {
-                Object::String(_) => true,
-                _ => false,
-            },
+            ValueKind::Object(o) => matches!(&**o, Object::String(_)),
             _ => false,
         }
     }
@@ -236,7 +233,6 @@ impl Value {
         override_this: Option<&Handle<Value>>,
     ) -> Option<Handle<Value>> {
         let value = unsafe { value_cell.borrow_unbounded() };
-        let key = key.into();
 
         match key {
             "__proto__" => {
@@ -272,7 +268,7 @@ impl Value {
             }
         };
 
-        if value.fields.len() > 0 {
+        if !value.fields.is_empty() {
             if let Some(entry_cell) = value.fields.get(key) {
                 if let Some(override_this) = override_this {
                     let mut entry = unsafe { entry_cell.borrow_mut_unbounded() };
@@ -298,12 +294,7 @@ impl Value {
         }
 
         if let Some(proto_cell) = value.proto.as_ref() {
-            Value::get_property(
-                vm,
-                proto_cell,
-                key,
-                override_this.or_else(|| Some(value_cell)),
-            )
+            Value::get_property(vm, proto_cell, key, override_this.or(Some(value_cell)))
         } else {
             None
         }
@@ -336,7 +327,7 @@ impl Value {
             Value::mark(constructor)
         }
 
-        for (_, handle) in &this.fields {
+        for handle in this.fields.values() {
             Value::mark(handle)
         }
 
