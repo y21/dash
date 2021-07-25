@@ -100,7 +100,7 @@ mod handlers {
     }
 
     pub fn div(vm: &mut VM) {
-        let result = vm.with_lhs_rhs_borrowed(Value::add).into_handle(vm);
+        let result = vm.with_lhs_rhs_borrowed(Value::div).into_handle(vm);
         vm.stack.push(result);
     }
 
@@ -609,40 +609,7 @@ mod handlers {
             .discard_multiple(vm.stack.get_stack_pointer() - this.sp);
 
         unsafe { vm.stack.set_stack_pointer(this.sp) };
-        /*
-                if let Some(mut resume) = this.resume.take() {
-                    let mut state = this.state.take().unwrap_or_else(CallState::default);
-                    let func_ref = unsafe { resume.func.borrow_unbounded() };
-                    let f = func_ref
-                        .as_function()
-                        .and_then(FunctionKind::as_native)
-                        .unwrap();
 
-                    let context = CallContext {
-                        args: &mut resume.args,
-                        ctor: resume.ctor,
-                        function_call_response: Some(ret),
-                        receiver: resume.receiver.clone(),
-                        state: &mut state,
-                        vm,
-                    };
-
-                    let ret = (f.func)(context)?;
-
-                    match ret {
-                        CallResult::Ready(ret) => vm.stack.push(ret),
-                        CallResult::UserFunction(new_func_cell, args) => vm.handle_native_return(
-                            Handle::clone(&resume.func),
-                            new_func_cell,
-                            resume.args,
-                            args,
-                            state,
-                            resume.receiver,
-                        ),
-                    };
-                    return Ok(None);
-                }
-        */
         let func_ref = unsafe { this.func.borrow_unbounded() };
         if let Some(this) = func_ref
             .as_function()

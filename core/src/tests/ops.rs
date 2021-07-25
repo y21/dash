@@ -2,7 +2,8 @@ use crate::eval;
 
 macro_rules! assert_eval_num {
     ($left:expr, $right:expr) => {{
-        let result = $left.unwrap().unwrap().borrow().as_number();
+        let (result, _vm) = $left.unwrap();
+        let result = unsafe { result.unwrap().borrow_unbounded() }.as_number();
         assert_eq!(result, ($right) as f64);
     }};
 }
