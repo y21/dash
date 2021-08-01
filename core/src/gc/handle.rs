@@ -1,9 +1,15 @@
 use std::{
     cell::{Ref, RefCell, RefMut},
+    collections::HashSet,
     ops::{Deref, DerefMut},
 };
 
-use crate::vm::VM;
+use crate::vm::{
+    value::{Value, ValueKind},
+    VM,
+};
+
+use super::GcVisitor;
 
 /// An inner garbage collected value
 ///
@@ -110,6 +116,20 @@ impl<T> Handle<T> {
         self.0
     }
 
+    /// Drops the inner data in place.
+    ///
+    /// # Safety
+    /// It is very unlikely for a user to want to call this function,
+    /// as it is almost impossible to do this operation safely.
+    /// Explicitly dropping a handle that is registered by a GC by calling this function
+    /// will lead to undefined behavior in the next GC cycle as it needs to be dereferenced
+    /// to know whether the inner handle was visited.
+    /// After a call to this function, it is also UB to attempt to do
+    /// nearly everything with a handle, such as attempting to borrow the inner handle.
+    pub unsafe fn drop_in_place(&self) {
+        drop(Box::from_raw(self.0));
+    }
+
     /// Returns a reference to the underlying [InnerHandleGuard]
     ///
     /// ## Panics
@@ -167,4 +187,110 @@ impl<T> Handle<T> {
     pub fn check_marker(&self, vm: &VM) -> bool {
         self.1 == vm.get_gc_marker()
     }
+}
+
+/// A handle that is independent of a GC
+///
+/// This may be useful for dealing with types that operate on handles without
+/// having access to a GC
+pub struct OwnedHandle<T: GcVisitor> {
+    marker: Box<u8>,
+    inner: *mut InnerHandleGuard<T>,
+}
+
+impl<T: GcVisitor> OwnedHandle<T> {
+    /// Creates a new [OwnedHandle]
+    pub fn new(value: T) -> Self {
+        let marker = Box::new(0);
+        let handle = InnerHandle::new(value);
+        let handle = InnerHandleGuard(RefCell::new(handle));
+
+        Self {
+            inner: Box::into_raw(Box::new(handle)),
+            marker,
+        }
+    }
+
+    /// Registers a new value and returns a handle to it, with its marker
+    /// set to the one of this OwnedHandle
+    pub fn register(&self, value: T) -> Handle<T> {
+        let ptr = Box::into_raw(Box::new(InnerHandleGuard::from(value)));
+        unsafe { Handle::new(ptr, self.get_marker()) }
+    }
+
+    /// Returns a reference to the inner handle
+    pub fn borrow(&self) -> Ref<'_, InnerHandle<T>> {
+        unsafe { &*self.inner }.borrow()
+    }
+
+    /// Returns a reference to the inner handle mutably
+    pub fn borrow_mut(&mut self) -> RefMut<'_, InnerHandle<T>> {
+        unsafe { &*self.inner }.borrow_mut()
+    }
+
+    /// Returns this OwnedHandle as a regular Handle
+    pub fn as_handle(&self) -> Handle<T> {
+        unsafe { Handle::new(self.inner, self.get_marker()) }
+    }
+
+    pub(crate) fn get_marker(&self) -> *const () {
+        *self.marker as *const ()
+    }
+}
+
+impl<T: GcVisitor> Drop for OwnedHandle<T> {
+    fn drop(&mut self) {
+        // TODO: careful, dont double free.. somehow
+        // TODO2: make sure we dont box-alias
+        let handle = unsafe { Box::from_raw(self.inner) };
+        let mut value = handle.borrow_mut();
+        let mut cx = DropContext::new();
+        unsafe { <T as GcVisitor>::drop_reachable(&mut value, &mut cx) };
+    }
+}
+
+/// When an [OwnedHandle] goes out of scope, it needs to drop everything it can
+/// before dropping itself. To avoid double free, it needs to keep track of
+/// all the handles that were already freed.
+/// Instead of calling [Handle::drop_in_place] directly, one should use the given DropContext
+/// to drop handles
+pub struct DropContext {
+    dropped: HashSet<*mut ()>,
+}
+
+impl DropContext {
+    /// Creates a new [DropContext]
+    pub fn new() -> Self {
+        Self {
+            dropped: HashSet::new(),
+        }
+    }
+
+    /// Drops a handle if it hasn't already been dropped
+    pub unsafe fn drop<T>(&mut self, handle: &Handle<T>) {
+        let ptr = handle.as_ptr();
+        let not_dropped = self.dropped.insert(ptr.cast());
+        if not_dropped {
+            handle.drop_in_place();
+        }
+    }
+}
+
+#[test]
+fn test_owned_handle() {
+    let handle = {
+        let js_value = Value::new(ValueKind::Number(123f64));
+        OwnedHandle::new(js_value)
+    };
+
+    let prop = Value::new(ValueKind::Number(456f64));
+    let handle2 = handle.register(prop);
+
+    {
+        let handle = handle.as_handle();
+        unsafe {
+            handle.borrow_mut_unbounded().set_property("test", handle2);
+        }
+    }
+    drop(handle);
 }

@@ -39,8 +39,8 @@ use self::{
     value::object::{AnyObject, Object},
 };
 
-// Force garbage collection at 10000 objects
-const GC_OBJECT_COUNT_THRESHOLD: usize = 10000;
+// Force garbage collection at 10000 objects by default
+const DEFAULT_GC_OBJECT_COUNT_THRESHOLD: usize = 10000;
 
 /// An error that may occur during bytecode execution
 #[derive(Debug)]
@@ -130,7 +130,8 @@ pub struct VM {
     pub(crate) loops: Stack<Loop, 32>,
     /// Agent
     pub(crate) agent: Box<dyn Agent>,
-    gc_marker: Box<u8>
+    gc_marker: Box<u8>,
+    gc_object_threshold: usize
 }
 
 impl Debug for VM {
@@ -160,7 +161,8 @@ impl VM {
             loops: Stack::new(),
             slot: None,
             agent,
-            gc_marker
+            gc_marker,
+            gc_object_threshold: DEFAULT_GC_OBJECT_COUNT_THRESHOLD
         };
         vm.prepare_stdlib();
         vm
@@ -226,6 +228,14 @@ impl VM {
         slot.downcast_mut::<T>()
     }
 
+    /// Sets the object threshold for garbage collection
+    ///
+    /// The VM may perform a GC cycle at a GC point if the number of objects in the heap
+    /// is greater than this threshold
+    pub fn set_gc_object_threshold(&mut self, threshold: usize) {
+        self.gc_object_threshold = threshold;
+    }
+
     /// Returns a reference to the current execution frame
     fn frame(&self) -> &Frame {
         unsafe { self.frames.get_unchecked() }
@@ -243,7 +253,7 @@ impl VM {
 
     /// Estimates whether it makes sense to perform a garbage collection
     unsafe fn should_gc(&self) -> bool {
-        unsafe { (&*self.gc.as_ptr()).heap.len >= GC_OBJECT_COUNT_THRESHOLD }
+        unsafe { (&*self.gc.as_ptr()).heap.len >= self.gc_object_threshold }
     }
 
     /// Setup for a GC cycle

@@ -2,6 +2,7 @@ use std::{borrow::Cow, str::Chars};
 
 use crate::{
     gc::Handle,
+    js_std,
     vm::{
         abstractions,
         value::{array::Array, function::CallContext, object::Object, Value, ValueKind},
@@ -10,6 +11,75 @@ use crate::{
 };
 
 use super::error::{self, MaybeRc};
+
+/// An array-like value
+pub enum ArrayLikeKind<'a> {
+    /// Iterator over characters of a string
+    String(Chars<'a>),
+    /// Array of JS Values
+    Array(&'a [Handle<Value>]),
+    /// Javascript object
+    Object(&'a Handle<Value>),
+    /// No value
+    Empty,
+}
+
+/// An array-like value that can be iterated over
+pub struct ArrayLikeIterable<'a> {
+    /// What kind of array
+    pub kind: ArrayLikeKind<'a>,
+    /// Current index
+    pub index: usize,
+}
+
+impl<'a> ArrayLikeIterable<'a> {
+    /// Creates a new array like iterable given an [ArrayLikeKind]
+    pub fn new(kind: ArrayLikeKind<'a>) -> Self {
+        Self { kind, index: 0 }
+    }
+
+    /// Creates a new array like iterable given a Value by detecting its kind
+    pub fn from_value(value: &'a Value, value_cell: &'a Handle<Value>) -> Self {
+        match value.as_object() {
+            Some(Object::String(s)) => Self::new(ArrayLikeKind::String(s.chars())),
+            Some(Object::Array(a)) => Self::new(ArrayLikeKind::Array(&a.elements)),
+            Some(Object::Any(_)) => Self::new(ArrayLikeKind::Object(value_cell)),
+            _ => Self::new(ArrayLikeKind::Empty),
+        }
+    }
+
+    /// Yields the next value
+    pub fn next(&mut self, vm: &mut VM) -> Option<Handle<Value>> {
+        self.index += 1;
+        match &mut self.kind {
+            ArrayLikeKind::String(s) => s
+                .next()
+                .map(String::from)
+                .map(Value::from)
+                .map(|v| v.into_handle(vm)),
+            ArrayLikeKind::Array(source) => source.get(self.index - 1).cloned(),
+            ArrayLikeKind::Object(source_cell) => {
+                Value::get_property(vm, source_cell, &(self.index - 1).to_string(), None)
+            }
+            ArrayLikeKind::Empty => None,
+        }
+    }
+}
+
+fn iterable_from_value<'a>(
+    vm: &VM,
+    value_cell: Option<&'a Handle<Value>>,
+    value: Option<&'a Value>,
+    error: &str,
+) -> Result<(usize, ArrayLikeIterable<'a>), Handle<Value>> {
+    let value_cell = value_cell.ok_or_else(|| js_std::error::create_error(error.into(), vm))?;
+    let value = value.unwrap();
+
+    let len = abstractions::object::length_of_array_like(vm, value_cell)?;
+    let iterable = ArrayLikeIterable::from_value(value, value_cell);
+
+    Ok((len as usize, iterable))
+}
 
 /// The array constructor
 ///
@@ -305,68 +375,18 @@ pub fn is_array(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
         .into_handle(ctx.vm))
 }
 
-/// An array-like value
-pub enum ArrayLikeKind<'a> {
-    /// Iterator over characters of a string
-    String(Chars<'a>),
-    /// Array of JS Values
-    Array(&'a [Handle<Value>]),
-    /// Javascript object
-    Object(&'a Handle<Value>),
-    /// No value
-    Empty,
-}
-
-/// An array-like value that can be iterated over
-pub struct ArrayLikeIterable<'a> {
-    /// What kind of array
-    pub kind: ArrayLikeKind<'a>,
-    /// Current index
-    pub index: usize,
-}
-
-impl<'a> ArrayLikeIterable<'a> {
-    /// Creates a new array like iterable given an [ArrayLikeKind]
-    pub fn new(kind: ArrayLikeKind<'a>) -> Self {
-        Self { kind, index: 0 }
-    }
-    /// Creates a new array like iterable given a Value by detecting its kind
-    pub fn from_value(value: &'a Value, value_cell: &'a Handle<Value>) -> Self {
-        match value.as_object() {
-            Some(Object::String(s)) => Self::new(ArrayLikeKind::String(s.chars())),
-            Some(Object::Array(a)) => Self::new(ArrayLikeKind::Array(&a.elements)),
-            Some(Object::Any(_)) => Self::new(ArrayLikeKind::Object(value_cell)),
-            _ => Self::new(ArrayLikeKind::Empty),
-        }
-    }
-    /// Yields the next value
-    pub fn next(&mut self, vm: &mut VM) -> Option<Handle<Value>> {
-        self.index += 1;
-        match &mut self.kind {
-            ArrayLikeKind::String(s) => s
-                .next()
-                .map(String::from)
-                .map(Value::from)
-                .map(|v| v.into_handle(vm)),
-            ArrayLikeKind::Array(source) => source.get(self.index - 1).cloned(),
-            ArrayLikeKind::Object(source_cell) => {
-                Value::get_property(vm, source_cell, &(self.index - 1).to_string(), None)
-            }
-            ArrayLikeKind::Empty => None,
-        }
-    }
-}
-
 /// This function implements Array.prototype.join
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.join
 pub fn join(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
-    let this_cell = ctx.receiver.as_ref().unwrap();
-
-    let len = abstractions::object::length_of_array_like(ctx.vm, this_cell)? as usize;
-    let this_ref = unsafe { this_cell.borrow_mut_unbounded() };
-
-    let mut o = ArrayLikeIterable::from_value(&this_ref, this_cell);
+    let this_cell = ctx.receiver.as_ref();
+    let this_ref = this_cell.map(|x| unsafe { x.borrow_unbounded() });
+    let (len, mut this) = iterable_from_value(
+        ctx.vm,
+        this_cell,
+        this_ref.as_ref().map(|x| &***x),
+        "Array.prototype.join called on null value",
+    )?;
 
     let separator = ctx.arguments().next().cloned();
 
@@ -382,12 +402,12 @@ pub fn join(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 
     let mut r = String::new();
 
-    while o.index < len {
-        if o.index > 0 {
+    while this.index < len {
+        if this.index > 0 {
             r.push_str(&sep);
         }
 
-        let element_cell = o
+        let element_cell = this
             .next(ctx.vm)
             .unwrap_or_else(|| Value::new(ValueKind::Undefined).into_handle(ctx.vm));
 
