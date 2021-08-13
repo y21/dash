@@ -4,16 +4,38 @@ use super::{
     Handle,
 };
 
+// todo: static AtomicUsize for next id instead of using pointers?
+/// A marker that uniquely identifies an instance of a type
+#[derive(Clone, Debug)]
+pub struct Marker(Box<u8>);
+
+impl Marker {
+    pub(crate) fn new() -> Self {
+        Self(Box::new(0))
+    }
+
+    /// Returns the marker pointer
+    pub fn get(&self) -> *const () {
+        *self.0 as *const ()
+    }
+}
+
 /// A tracing garbage collector
+#[derive(Debug)]
 pub struct Gc<T> {
     /// The underlying heap
     pub heap: Heap<InnerHandleGuard<T>>,
+    /// A unique marker for this specific GC
+    pub marker: Marker,
 }
 
 impl<T> Gc<T> {
     /// Creates a new garbage collector
     pub fn new() -> Self {
-        Self { heap: Heap::new() }
+        Self {
+            heap: Heap::new(),
+            marker: Marker::new(),
+        }
     }
 
     /// Performs a GC cycle
@@ -71,12 +93,12 @@ impl<T> Gc<T> {
     /// Registers a new value
     ///
     /// If not marked as visited, the returned [Handle] will dangle when sweep is called.
-    pub fn register<H>(&mut self, value: H, marker: *const ()) -> Handle<T>
+    pub fn register<H>(&mut self, value: H) -> Handle<T>
     where
         H: Into<InnerHandleGuard<T>>,
     {
         let ptr = self.heap.add(value.into());
-        unsafe { Handle::new(ptr, marker) }
+        unsafe { Handle::new(ptr, self.marker.get()) }
     }
 }
 
@@ -95,7 +117,7 @@ mod tests {
     #[test]
     pub fn gc_single_value_reclaim() {
         let mut gc = Gc::new();
-        let handle = gc.register(Value::new(ValueKind::Number(123f64)), &());
+        let handle = gc.register(Value::new(ValueKind::Number(123f64)));
         let ptr = handle.as_ptr();
 
         // When gc only has one element, len must be 1
@@ -119,8 +141,8 @@ mod tests {
     pub fn gc_multi_value_reclaim() {
         let mut gc = Gc::new();
 
-        let handle1 = gc.register(Value::new(ValueKind::Number(123f64)), &());
-        let handle2 = gc.register(Value::new(ValueKind::Number(456f64)), &());
+        let handle1 = gc.register(Value::new(ValueKind::Number(123f64)));
+        let handle2 = gc.register(Value::new(ValueKind::Number(456f64)));
         let ptr1 = handle1.as_ptr();
         let ptr2 = handle2.as_ptr();
 
@@ -142,7 +164,7 @@ mod tests {
     pub fn gc_single_value_mark() {
         let mut gc = Gc::new();
 
-        let handle1 = gc.register(Value::new(ValueKind::Number(123f64)), &());
+        let handle1 = gc.register(Value::new(ValueKind::Number(123f64)));
         unsafe { handle1.borrow_mut_unbounded() }.mark_visited();
         let ptr1 = handle1.as_ptr();
 
@@ -163,8 +185,8 @@ mod tests {
     pub fn gc_multi_value_mark() {
         let mut gc = Gc::new();
 
-        let handle1 = gc.register(Value::new(ValueKind::Number(123f64)), &());
-        let handle2 = gc.register(Value::new(ValueKind::Number(456f64)), &());
+        let handle1 = gc.register(Value::new(ValueKind::Number(123f64)));
+        let handle2 = gc.register(Value::new(ValueKind::Number(456f64)));
         unsafe { handle1.borrow_mut_unbounded() }.mark_visited();
         unsafe { handle2.borrow_mut_unbounded() }.mark_visited();
         let ptr1 = handle1.as_ptr();

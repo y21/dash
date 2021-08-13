@@ -1,6 +1,12 @@
-use crate::parser::token::TokenType;
+use crate::{gc::Handle, parser::token::TokenType};
 
-use super::value::{Value, ValueKind};
+use super::{
+    value::{
+        function::{FunctionKind, UserFunction},
+        Value, ValueKind,
+    },
+    VM,
+};
 
 /// A VM opcode, used in bytecode to denote the type of work it should do
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -231,31 +237,33 @@ impl From<TokenType> for Opcode {
 #[derive(Debug, Clone)]
 pub enum Constant {
     /// A JavaScript value
-    JsValue(Value),
+    JsValue(Handle<Value>),
     /// An identifier
     Identifier(String),
     /// An index
     Index(usize),
+    /// A function
+    Function(FunctionKind),
 }
 
 impl Constant {
     /// Returns self as an owned JavaScript value, if it one
-    pub fn into_value(self) -> Option<Value> {
+    pub fn into_value(self) -> Option<Handle<Value>> {
         match self {
             Self::JsValue(v) => Some(v),
             _ => None,
         }
     }
 
-    /// Returns self as an owned JavaScript value, or uses [ValueKind::Constant] if it isn't one
-    pub fn try_into_value(self) -> Value {
+    /// Returns self as an owned JavaScript value
+    pub fn try_into_value(self) -> Option<Handle<Value>> {
         match self {
-            Self::JsValue(v) => v,
-            _ => Value::new(ValueKind::Constant(Box::new(self))),
+            Self::JsValue(v) => Some(v),
+            _ => None,
         }
     }
 
-    /// Returns self as an owned identifier, if it one
+    /// Returns self as an owned identifier, if it is one
     pub fn into_ident(self) -> Option<String> {
         match self {
             Self::Identifier(ident) => Some(ident),
@@ -263,7 +271,7 @@ impl Constant {
         }
     }
 
-    /// Returns self as an owned index, if it one
+    /// Returns self as an owned index, if it is one
     pub fn into_index(self) -> Option<usize> {
         match self {
             Self::Index(idx) => Some(idx),
@@ -271,7 +279,15 @@ impl Constant {
         }
     }
 
-    /// Returns self as an index, if it one
+    /// Returns self as an index, if it is one
+    pub fn into_function(self) -> Option<FunctionKind> {
+        match self {
+            Self::Function(fun) => Some(fun),
+            _ => None,
+        }
+    }
+
+    /// Returns self as an index, if it is one
     pub fn as_index(&self) -> Option<usize> {
         match self {
             Self::Index(idx) => Some(*idx),

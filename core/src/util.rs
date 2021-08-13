@@ -41,6 +41,14 @@ impl<T> MaybeOwned<T> {
         Self::Borrowed(self.as_ptr())
     }
 
+    /// Attempts to return self as an owned T
+    pub fn into_owned(self) -> Option<T> {
+        match self {
+            Self::Owned(v) => Some(v),
+            _ => None,
+        }
+    }
+
     /// Returns a reference to the T
     ///
     /// This operation is unsafe because the pointer may be invalid

@@ -13,6 +13,7 @@ impl<T> From<T> for Node<T> {
 }
 
 /// A datastructure similar to a linked list which allows efficiently removing nodes
+#[derive(Clone, Debug)]
 pub struct Heap<T> {
     /// Top of the heap (value that was added last)
     pub head: Option<*mut Node<T>>,

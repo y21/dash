@@ -38,7 +38,8 @@ pub trait Visitor<'a, V> {
             Expr::Binary(e) => self.visit_binary_expression(e),
             Expr::Assignment(e) => self.visit_assignment_expression(e),
             Expr::Grouping(e) => self.visit_grouping_expression(e),
-            Expr::Literal(e) => self.visit_literal_expression(e),
+            Expr::Literal(LiteralExpr::Identifier(i)) => self.visit_identifier_expression(i),
+            Expr::Literal(l) => self.visit_literal_expression(l),
             Expr::Unary(e) => self.visit_unary_expression(e),
             Expr::Call(e) => self.visit_function_call(e),
             Expr::Conditional(e) => self.visit_conditional_expr(e),
@@ -63,6 +64,9 @@ pub trait Visitor<'a, V> {
     /// Visits a literal expression
     fn visit_literal_expression(&mut self, e: &LiteralExpr<'a>) -> V;
 
+    /// Visits an identifier
+    fn visit_identifier_expression(&mut self, i: &'a [u8]) -> V;
+
     /// Visits an unary expression
     fn visit_unary_expression(&mut self, e: &UnaryExpr<'a>) -> V;
 
@@ -83,16 +87,19 @@ pub trait Visitor<'a, V> {
 
     /// Visits an assignment expression
     fn visit_assignment_expression(&mut self, e: &AssignmentExpr<'a>) -> V;
+
     /// Visits a function call
     fn visit_function_call(&mut self, c: &FunctionCall<'a>) -> V;
+
     /// Visits a return statement
     fn visit_return_statement(&mut self, s: &ReturnStatement<'a>) -> V;
+
     /// Visits a conditional expression
     fn visit_conditional_expr(&mut self, c: &ConditionalExpr<'a>) -> V;
+
     /// Visits a property access expression
     ///
     /// This includes both computed access and static access
-
     fn visit_property_access_expr(&mut self, e: &PropertyAccessExpr<'a>) -> V;
 
     /// Visits a sequence expression

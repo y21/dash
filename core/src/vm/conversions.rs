@@ -124,3 +124,9 @@ impl From<Promise> for Value {
         Object::Promise(p).into()
     }
 }
+
+impl From<UserFunction> for FunctionKind {
+    fn from(f: UserFunction) -> Self {
+        Self::User(f)
+    }
+}

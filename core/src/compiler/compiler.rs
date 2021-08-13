@@ -1,6 +1,7 @@
 // This file is cursed. You've been warned
 use crate::{
     agent::{Agent, ImportResult},
+    gc::{Gc, Handle},
     parser::{
         expr::{
             ArrayLiteral, AssignmentExpr, BinaryExpr, ConditionalExpr, Expr, FunctionCall,
@@ -104,6 +105,7 @@ pub struct Compiler<'a, A> {
     scope: ScopeGuard<Local<'a>, 1024>,
     agent: Option<MaybeOwned<A>>,
     ctx: MaybeOwned<Context>,
+    gc: Option<MaybeOwned<Gc<Value>>>,
     kind: FunctionKind,
 }
 
@@ -114,6 +116,10 @@ pub struct CompileResult {
     /// Upvalues, needed for when the compiler recursively compiles other functions
     /// that use values from the upper scope
     pub upvalues: Stack<Upvalue, 1024>,
+    /// The garbage collector associated to this function compiler
+    ///
+    /// NOTE: This will only be [Some] if this is the topmost frame
+    pub gc: Option<Gc<Value>>,
 }
 
 /// An error that occurred during a call to Compiler::from_str
@@ -152,6 +158,7 @@ impl<'a, A: Agent> Compiler<'a, A> {
             scope,
             kind,
             ctx: MaybeOwned::Owned(Context::default()),
+            gc: Some(MaybeOwned::Owned(Gc::new())),
         }
     }
 
@@ -164,6 +171,7 @@ impl<'a, A: Agent> Compiler<'a, A> {
         agent: Option<MaybeOwned<A>>,
         caller: Option<NonNull<Compiler<'a, A>>>,
         ctx: NonNull<Context>,
+        gc: NonNull<Gc<Value>>,
         kind: FunctionKind,
     ) -> Self {
         Self {
@@ -173,8 +181,14 @@ impl<'a, A: Agent> Compiler<'a, A> {
             agent,
             scope,
             ctx: MaybeOwned::Borrowed(ctx.as_ptr()),
+            gc: Some(MaybeOwned::Borrowed(gc.as_ptr())),
             kind,
         }
+    }
+
+    fn register_value(&mut self, value: Value) -> Handle<Value> {
+        let gc = unsafe { self.gc.as_mut().unwrap().as_mut() };
+        gc.register(value)
     }
 
     /// Returns a reference to the compiler that invoked this compilation
@@ -213,10 +227,15 @@ impl<'a, A: Agent> Compiler<'a, A> {
     }
 
     /// Compiles this AST to bytecode
-    pub fn compile(self) -> Result<Vec<Instruction>, CompileError<'a>> {
+    pub fn compile(self) -> Result<(Vec<Instruction>, Gc<Value>), CompileError<'a>> {
         let is_top = self.top.is_none();
         let is_module = matches!(self.kind, FunctionKind::Module);
-        let mut instructions = self.compile_frame()?.instructions;
+        let CompileResult {
+            mut instructions,
+            gc,
+            ..
+        } = self.compile_frame()?;
+        let gc = gc.unwrap();
 
         if is_top {
             if let Some(last) = instructions.last() {
@@ -232,7 +251,7 @@ impl<'a, A: Agent> Compiler<'a, A> {
             }
         }
 
-        Ok(instructions)
+        Ok((instructions, gc))
     }
 
     /// Compiles a frame
@@ -249,6 +268,7 @@ impl<'a, A: Agent> Compiler<'a, A> {
 
         Ok(CompileResult {
             instructions,
+            gc: self.gc.take().and_then(|x| x.into_owned()),
             upvalues: self.upvalues,
         })
     }
@@ -267,14 +287,14 @@ impl<'a, A: Agent> Compiler<'a, A> {
         let stack_idx = self
             .scope
             .push_local(Local::new(var.name, self.scope.depth, var.kind));
-        instructions.push(Instruction::Op(Opcode::Constant));
-        instructions.push(Instruction::Operand(Constant::Index(stack_idx)));
 
         if has_value {
             instructions.push(Instruction::Op(op_with_value));
         } else {
             instructions.push(Instruction::Op(op_no_value));
         }
+
+        instructions.push(Instruction::Operand(Constant::Index(stack_idx)));
 
         Ok(instructions)
     }
@@ -322,58 +342,61 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         &mut self,
         e: &LiteralExpr<'a>,
     ) -> Result<Vec<Instruction>, CompileError<'a>> {
+        let value = self.register_value(e.to_value());
+
         let mut instructions = Vec::with_capacity(3);
         instructions.push(Instruction::Op(Opcode::Constant));
-        let value = match e {
-            LiteralExpr::Identifier(ident) => {
-                Constant::Identifier(std::str::from_utf8(ident).unwrap().to_owned())
-            }
-            other => Constant::JsValue(other.to_value()),
-        };
-
-        if let LiteralExpr::Identifier(ident) = e {
-            match *ident {
-                b"this" => {
-                    instructions[0] = Instruction::Op(Opcode::GetThis);
-                    return Ok(instructions);
-                }
-                b"super" => {
-                    instructions[0] = Instruction::Op(Opcode::GetSuper);
-                    return Ok(instructions);
-                }
-                b"globalThis" => {
-                    instructions[0] = Instruction::Op(Opcode::GetGlobalThis);
-                    return Ok(instructions);
-                }
-                _ => {}
-            };
-
-            let stack_idx = self.scope.find_variable(ident);
-
-            if let Some((stack_idx, local)) = stack_idx {
-                let ctx = unsafe { self.ctx.as_ref() };
-                if ctx.is_assign() && local.read_only() {
-                    return Err(CompileError::ConstAssignment);
-                }
-
-                instructions.push(Instruction::Operand(Constant::Index(stack_idx)));
-                instructions.push(Instruction::Op(Opcode::GetLocal));
-                return Ok(instructions);
-            }
-
-            if let Some(idx) = unsafe { self.find_upvalue(ident) } {
-                instructions.push(Instruction::Operand(Constant::Index(idx)));
-                instructions.push(Instruction::Op(Opcode::GetUpvalue));
-                return Ok(instructions);
-            }
-
-            instructions.push(Instruction::Operand(value));
-            instructions.push(Instruction::Op(Opcode::GetGlobal));
-        } else {
-            instructions.push(Instruction::Operand(value));
-        }
+        instructions.push(Instruction::Operand(Constant::JsValue(value)));
 
         Ok(instructions)
+    }
+
+    fn visit_identifier_expression(
+        &mut self,
+        ident: &'a [u8],
+    ) -> Result<Vec<Instruction>, CompileError<'a>> {
+        // Special identifiers
+        match ident {
+            b"this" => return Ok(vec![Instruction::Op(Opcode::GetThis)]),
+            b"super" => return Ok(vec![Instruction::Op(Opcode::GetSuper)]),
+            b"globalThis" => return Ok(vec![Instruction::Op(Opcode::GetGlobalThis)]),
+            _ => {}
+        };
+
+        let is_assign = {
+            let ctx = unsafe { self.ctx.as_ref() };
+            ctx.is_assign()
+        };
+
+        // Regular locals declared in this scope
+        if let Some((stack_idx, local)) = self.scope.find_variable(ident) {
+            if is_assign && local.read_only() {
+                return Err(CompileError::ConstAssignment);
+            }
+
+            return Ok(vec![
+                Instruction::Op(Opcode::GetLocal),
+                Instruction::Operand(Constant::Index(stack_idx)),
+            ]);
+        }
+
+        // Locals from an upper scope
+        if let Some(idx) = unsafe { self.find_upvalue(ident) } {
+            return Ok(vec![
+                Instruction::Op(Opcode::GetUpvalue),
+                Instruction::Operand(Constant::Index(idx)),
+            ]);
+        }
+
+        // If we haven't found the local by now, we have to look in the global scope
+
+        // TODO: handle
+        let identifier = std::str::from_utf8(ident).map(String::from).unwrap();
+
+        Ok(vec![
+            Instruction::Op(Opcode::GetGlobal),
+            Instruction::Operand(Constant::Identifier(identifier)),
+        ])
     }
 
     fn visit_binary_expression(
@@ -619,6 +642,7 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
                 // SAFETY: self is never null
                 Some(NonNull::new_unchecked(self as *mut _)),
                 NonNull::new_unchecked(self.ctx.as_ptr()),
+                NonNull::new_unchecked(self.gc.as_mut().map(|x| x.as_ptr()).unwrap()),
                 FunctionKind::Function,
             )
             .compile_frame()
@@ -628,18 +652,18 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
             frame.instructions.push(Instruction::Op(Opcode::Constant));
             frame
                 .instructions
-                .push(Instruction::Operand(Constant::JsValue(Value::new(
-                    ValueKind::Undefined,
-                ))));
+                .push(Instruction::Operand(Constant::JsValue(
+                    self.register_value(Value::new(ValueKind::Undefined)),
+                )));
             frame.instructions.push(Instruction::Op(Opcode::Return));
         } else if let Some(Instruction::Op(op)) = frame.instructions.last() {
             if !op.eq(&Opcode::Return) {
                 frame.instructions.push(Instruction::Op(Opcode::Constant));
                 frame
                     .instructions
-                    .push(Instruction::Operand(Constant::JsValue(Value::new(
-                        ValueKind::Undefined,
-                    ))));
+                    .push(Instruction::Operand(Constant::JsValue(
+                        self.register_value(Value::new(ValueKind::Undefined)),
+                    )));
                 frame.instructions.push(Instruction::Op(Opcode::Return));
             }
         }
@@ -654,7 +678,7 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         if let Some(name) = f.name {
             func.name = Some(std::str::from_utf8(name).unwrap().to_owned());
         }
-        instructions.push(Instruction::Operand(Constant::JsValue(func.into())));
+        instructions.push(Instruction::Operand(Constant::Function(func.into())));
 
         for upvalue in frame.upvalues.into_iter(IteratorOrder::BottomToTop) {
             if upvalue.local {
@@ -674,20 +698,18 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         let mut instructions = self.visit_function_expr(f)?;
 
         if self.scope.is_global() {
-            instructions.push(Instruction::Op(Opcode::Constant));
+            instructions.push(Instruction::Op(Opcode::SetGlobal));
             instructions.push(Instruction::Operand(Constant::Identifier(
                 std::str::from_utf8(f.name.unwrap()).unwrap().to_owned(),
             )));
-            instructions.push(Instruction::Op(Opcode::SetGlobal));
         } else {
             let stack_idx = self.scope.push_local(Local::new(
                 f.name.unwrap(),
                 self.scope.depth,
                 VariableDeclarationKind::Var,
             ));
-            instructions.push(Instruction::Op(Opcode::Constant));
-            instructions.push(Instruction::Operand(Constant::Index(stack_idx)));
             instructions.push(Instruction::Op(Opcode::SetLocal));
+            instructions.push(Instruction::Operand(Constant::Index(stack_idx)));
         }
 
         Ok(instructions)
@@ -1043,7 +1065,7 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
                 Some(ImportResult::Bytecode(code)) => code,
                 Some(ImportResult::Value(value)) => vec![
                     Instruction::Op(Opcode::Constant),
-                    Instruction::Operand(Constant::JsValue(value)),
+                    Instruction::Operand(Constant::JsValue(self.register_value(value))),
                     Instruction::Op(Opcode::ExportDefault),
                     Instruction::Op(Opcode::ReturnModule),
                 ],
@@ -1065,7 +1087,9 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         let mut instructions: Vec<Instruction> = vec![Instruction::Op(Opcode::EvaluateModule)];
 
         let module = Module::new(module_instructions);
-        instructions.push(Instruction::Operand(Constant::JsValue(module.into())));
+        instructions.push(Instruction::Operand(Constant::JsValue(
+            self.register_value(module.into()),
+        )));
 
         let instructions = self.compile_variable_declaration(
             &VariableDeclaration::new(

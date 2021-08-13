@@ -30,13 +30,19 @@ mod handlers {
     use super::DispatchResult;
 
     pub fn constant(vm: &mut VM) {
-        let mut constant = vm.read_constant().map(|c| c.try_into_value()).unwrap();
+        let mut constant = vm.read_constant().and_then(|c| c.try_into_value()).unwrap();
 
         // Values emitted by the compiler do not have a [[Prototype]] set
         // so we need to do that here when pushing a value onto the stack
-        constant.detect_internal_properties(vm);
+        unsafe {
+            constant
+                .borrow_mut_unbounded()
+                .detect_internal_properties(vm);
 
-        vm.stack.push(constant.into_handle(vm));
+            constant.set_marker(vm.gc_marker);
+        }
+
+        vm.stack.push(constant);
     }
 
     pub fn closure(vm: &mut VM) {
@@ -152,7 +158,7 @@ mod handlers {
     }
 
     pub fn set_global(vm: &mut VM) {
-        let name = vm.pop_owned().unwrap().into_ident().unwrap();
+        let name = vm.read_constant().and_then(Constant::into_ident).unwrap();
         let value = vm.stack.pop();
 
         let mut global = unsafe { vm.global.borrow_mut_unbounded() };
@@ -160,14 +166,14 @@ mod handlers {
     }
 
     pub fn set_global_no_value(vm: &mut VM) {
-        let name = vm.pop_owned().unwrap().into_ident().unwrap();
+        let name = vm.read_constant().and_then(Constant::into_ident).unwrap();
 
         let mut global = unsafe { vm.global.borrow_mut_unbounded() };
         global.set_property(name, Value::new(ValueKind::Undefined).into_handle(vm));
     }
 
     pub fn get_global(vm: &mut VM) -> Result<(), Handle<Value>> {
-        let name = vm.pop_owned().unwrap().into_ident().unwrap();
+        let name = vm.read_constant().and_then(Constant::into_ident).unwrap();
 
         let value = Value::get_property(vm, &vm.global, &name, None).ok_or_else(|| {
             js_std::error::create_error(MaybeRc::Owned(&format!("{} is not defined", name)), vm)
@@ -487,18 +493,21 @@ mod handlers {
 
     pub fn evaluate_module(vm: &mut VM) {
         let (value_cell, buffer) = {
-            let mut module = vm.read_constant().and_then(Constant::into_value).unwrap();
+            let module = vm.read_constant().and_then(Constant::into_value).unwrap();
 
-            let buffer = module
-                .as_function_mut()
-                .unwrap()
-                .as_module_mut()
-                .unwrap()
-                .buffer
-                .take()
-                .unwrap();
+            let buffer = unsafe {
+                module
+                    .borrow_mut_unbounded()
+                    .as_function_mut()
+                    .unwrap()
+                    .as_module_mut()
+                    .unwrap()
+                    .buffer
+                    .take()
+                    .unwrap()
+            };
 
-            (module.into_handle(vm), buffer)
+            (module, buffer)
         };
 
         let current_sp = vm.stack.get_stack_pointer();
@@ -509,8 +518,6 @@ mod handlers {
             buffer,
             ip: 0,
             sp: current_sp,
-            // state: None,
-            // resume: None,
         };
 
         vm.frames.push(frame);
@@ -596,7 +603,7 @@ mod handlers {
         if vm.frames.get_stack_pointer() == frame_idx {
             // TODO: vm.stack.get()
             if vm.stack.get_stack_pointer() == 0 {
-                return Ok(None);
+                return Ok(Some(DispatchResult::Return(None)));
             } else {
                 let value = vm.stack.pop();
                 return Ok(Some(DispatchResult::Return(Some(value))));

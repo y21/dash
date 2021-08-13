@@ -187,6 +187,15 @@ impl<T> Handle<T> {
     pub fn check_marker(&self, vm: &VM) -> bool {
         self.1 == vm.get_gc_marker()
     }
+
+    /// Updates the inner marker that is used to ensure that calls to `borrow`
+    /// only succeed for the same GC
+    ///
+    /// ## Safety
+    /// This function is unsafe because it allows setting the inner marker
+    pub unsafe fn set_marker(&mut self, marker: *const ()) {
+        self.1 = marker;
+    }
 }
 
 /// A handle that is independent of a GC

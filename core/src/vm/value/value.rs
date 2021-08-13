@@ -137,7 +137,7 @@ impl Value {
     /// Registers this value for garbage collection and returns a handle to it
     // TODO: re-think whether this is fine to not be unsafe?
     pub fn into_handle(self, vm: &VM) -> Handle<Self> {
-        vm.gc.borrow_mut().register(self, vm.get_gc_marker())
+        vm.gc.borrow_mut().register(self)
     }
 
     /// Updates the internal properties ([[Prototype]] and constructor)

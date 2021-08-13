@@ -226,7 +226,7 @@ pub fn async_task() {
     )
     .unwrap();
 
-    let buffer = Compiler::<()>::from_str(
+    let (buffer, _gc) = Compiler::<()>::from_str(
         r#"
         console.log("async task?!");
     "#,

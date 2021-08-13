@@ -130,7 +130,8 @@ pub struct VM {
     pub(crate) loops: Stack<Loop, 32>,
     /// Agent
     pub(crate) agent: Box<dyn Agent>,
-    gc_marker: Box<u8>,
+    /// A copy of the garbage collector's unique marker
+    gc_marker: *const (),
     gc_object_threshold: usize
 }
 
@@ -143,12 +144,10 @@ impl Debug for VM {
 impl VM {
     /// Creates a new VM with a provided agent
     pub fn new_with_agent(agent: Box<dyn Agent>) -> Self {
-        let gc_marker = Box::new(0u8);
-        let gc_marker_ptr = &*gc_marker as *const _ as *const ();
-        
         let mut gc = Gc::new();
-        let statics = Statics::new(&mut gc, gc_marker_ptr);
-        let global = gc.register(Value::from(AnyObject {}), gc_marker_ptr);
+        let gc_marker = gc.marker.get();
+        let statics = Statics::new(&mut gc, gc_marker);
+        let global = gc.register(Value::from(AnyObject {}));
 
         let mut vm = Self {
             frames: Stack::new(),
@@ -161,15 +160,15 @@ impl VM {
             loops: Stack::new(),
             slot: None,
             agent,
-            gc_marker,
-            gc_object_threshold: DEFAULT_GC_OBJECT_COUNT_THRESHOLD
+            gc_object_threshold: DEFAULT_GC_OBJECT_COUNT_THRESHOLD,
+            gc_marker
         };
         vm.prepare_stdlib();
         vm
     }
 
     pub(crate) fn get_gc_marker(&self) -> *const () {
-        &*self.gc_marker as *const _ as *const ()
+        self.gc_marker
     }
 
     /// Convenience function for creating a new VM given an input string
@@ -180,7 +179,7 @@ impl VM {
         input: &'a str,
         mut agent: Option<A>,
     ) -> Result<Self, FromStrError<'a>> {
-        let buffer = Compiler::from_str(
+        let (buffer, gc) = Compiler::from_str(
             input,
             agent.as_mut().map(|a| MaybeOwned::Borrowed(a)),
             CompilerFunctionKind::Function,
@@ -310,12 +309,8 @@ impl VM {
     /// Reads a user function
     fn read_user_function(&mut self) -> Option<UserFunction> {
         self.read_constant()
-            .and_then(|c| c.into_value())
-            .and_then(|v| v.into_object())
-            .and_then(|o| match o {
-                Object::Function(FunctionKind::User(f)) => Some(f),
-                _ => None,
-            })
+            .and_then(Constant::into_function)
+            .and_then(FunctionKind::into_user)
     }
 
     /// Reads a number
@@ -325,11 +320,8 @@ impl VM {
 
     /// Reads an index
     fn read_index(&mut self) -> Option<usize> {
-        unsafe { self.stack
-            .pop()
-            .borrow_unbounded() }
-            .as_constant()
-            .and_then(|c| c.as_index())
+        self.read_constant()
+            .and_then(Constant::into_index)
     }
 
     fn pop_owned(&mut self) -> Option<Value> {
@@ -787,7 +779,8 @@ impl VM {
             };
        }
 
-        todo!()
+       // is it *really* ok to even get to this point? undecided.
+       unreachable!()
     }
 
     /// Starts interpreting bytecode
@@ -798,7 +791,7 @@ impl VM {
 
     /// Evaluates a JavaScript source string in this VM
     pub fn eval<'a>(&mut self, source: &'a str) -> Result<Option<Handle<Value>>, EvalError<'a>> {
-        let buffer = Compiler::<()>::from_str(source, None, CompilerFunctionKind::Function)
+        let (buffer, gc) = Compiler::<()>::from_str(source, None, CompilerFunctionKind::Function)
             .map_err(FromStrError::from)
             .map_err(EvalError::from)?
             .compile()
