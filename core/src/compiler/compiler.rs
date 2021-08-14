@@ -412,10 +412,6 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
             TokenType::LogicalAnd | TokenType::LogicalOr | TokenType::NullishCoalescing => {
                 let ty = e.operator;
 
-                instructions.push(Instruction::Op(Opcode::Constant));
-                jmp_idx = isize::try_from(instructions.len()).unwrap();
-                instructions.push(Instruction::Op(Opcode::Nop));
-
                 match ty {
                     TokenType::LogicalAnd => {
                         instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse))
@@ -429,6 +425,9 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
                     _ => {}
                 };
 
+                jmp_idx = isize::try_from(instructions.len()).unwrap();
+                instructions.push(Instruction::Op(Opcode::Nop));
+
                 instructions.push(Instruction::Op(Opcode::Pop));
             }
             _ => {}
@@ -440,7 +439,7 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         if jmp_idx > -1 {
             let jmp_idx = jmp_idx as usize;
 
-            let instruction_count = instructions.len() - jmp_idx - 2;
+            let instruction_count = instructions.len() - jmp_idx - 1;
             instructions[jmp_idx] = Instruction::Operand(Constant::Index(instruction_count));
         } else {
             instructions.push(Instruction::Op(e.operator.into()));
@@ -455,11 +454,11 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
     ) -> Result<Vec<Instruction>, CompileError<'a>> {
         let mut instructions = self.accept_expr(&l.condition)?;
 
-        instructions.push(Instruction::Op(Opcode::Constant));
+        instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
+
         let jmp_idx = instructions.len();
         instructions.push(Instruction::Op(Opcode::Nop));
 
-        instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
         instructions.push(Instruction::Op(Opcode::Pop));
 
         // Compile body
@@ -470,10 +469,9 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         instructions[jmp_idx] = instruction_count;
 
         // Emit backjump to evaluate condition
-        instructions.push(Instruction::Op(Opcode::Constant));
-        let backjmp_count = instruction_count_ + jmp_idx + 2;
-        instructions.push(Instruction::Operand(Constant::Index(backjmp_count)));
+        let backjmp_count = instruction_count_ + jmp_idx + 1;
         instructions.push(Instruction::Op(Opcode::BackJmp));
+        instructions.push(Instruction::Operand(Constant::Index(backjmp_count)));
         instructions.push(Instruction::Op(Opcode::Pop));
 
         Ok(instructions)
@@ -533,21 +531,19 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
     ) -> Result<Vec<Instruction>, CompileError<'a>> {
         let mut instructions = self.accept_expr(&i.condition)?;
 
-        instructions.push(Instruction::Op(Opcode::Constant));
+        instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
         let jmp_idx = instructions.len();
         instructions.push(Instruction::Op(Opcode::Nop));
-        instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
         instructions.push(Instruction::Op(Opcode::Pop));
 
         let then_instructions = self.accept(&i.then)?;
-        instructions[jmp_idx] = Instruction::Operand(Constant::Index(then_instructions.len() + 4));
+        instructions[jmp_idx] = Instruction::Operand(Constant::Index(then_instructions.len() + 3));
 
         instructions.extend(then_instructions);
 
-        instructions.push(Instruction::Op(Opcode::Constant));
+        instructions.push(Instruction::Op(Opcode::ShortJmp));
         let final_jmp_idx = instructions.len();
         instructions.push(Instruction::Op(Opcode::Nop));
-        instructions.push(Instruction::Op(Opcode::ShortJmp));
 
         let mut jumps: Vec<(usize, usize, usize)> = Vec::new();
 
@@ -568,18 +564,16 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
 
             let mut branch_instructions = self.accept_expr(&branch.condition)?;
 
-            branch_instructions.push(Instruction::Op(Opcode::Constant));
+            branch_instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
             let condition_out_jmp_offset = branch_instructions.len();
             branch_instructions.push(Instruction::Op(Opcode::Nop));
-            branch_instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
             branch_instructions.push(Instruction::Op(Opcode::Pop));
 
             branch_instructions.extend(self.accept(&branch.then)?);
 
-            branch_instructions.push(Instruction::Op(Opcode::Constant));
+            branch_instructions.push(Instruction::Op(Opcode::ShortJmp));
             let final_out_jmp_offset = branch_instructions.len();
             branch_instructions.push(Instruction::Op(Opcode::Nop));
-            branch_instructions.push(Instruction::Op(Opcode::ShortJmp));
             branch_instructions.push(Instruction::Op(Opcode::Pop));
 
             instructions.extend(branch_instructions);
@@ -594,12 +588,12 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
                 Instruction::Operand(Constant::Index(current.2 - current.1));
 
             instructions[current.0 + current.2] = Instruction::Operand(Constant::Index(
-                instruction_count - (current.0 + current.2) - 3,
+                instruction_count - (current.0 + current.2) - 2,
             ));
         }
 
         instructions[final_jmp_idx] =
-            Instruction::Operand(Constant::Index(instruction_count - final_jmp_idx - 2));
+            Instruction::Operand(Constant::Index(instruction_count - final_jmp_idx - 1));
 
         Ok(instructions)
     }
