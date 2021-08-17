@@ -239,7 +239,7 @@ impl<'a, A: Agent> Compiler<'a, A> {
 
         if is_top {
             if let Some(last) = instructions.last() {
-                if matches!(last, Instruction::Op(Opcode::Pop)) {
+                if matches!(last, Instruction::Op(Opcode::PopElide)) {
                     instructions.pop();
                 }
             }
@@ -545,8 +545,6 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         let final_jmp_idx = instructions.len();
         instructions.push(Instruction::Op(Opcode::Nop));
 
-        let mut jumps: Vec<(usize, usize, usize)> = Vec::new();
-
         // For simplicitly, we desugar the last `else` to another `else if` branch
         // with `true` as condition
         if let Some(then) = &i.el {
@@ -559,7 +557,11 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
             ));
         }
 
-        for branch in i.branches.borrow().iter() {
+        let branches = i.branches.borrow();
+
+        let mut jumps: Vec<(usize, usize, usize)> = Vec::with_capacity(branches.len());
+
+        for branch in branches.iter() {
             let old_count = instructions.len();
 
             let mut branch_instructions = self.accept_expr(&branch.condition)?;
@@ -650,8 +652,8 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
                     self.register_value(Value::new(ValueKind::Undefined)),
                 )));
             frame.instructions.push(Instruction::Op(Opcode::Return));
-        } else if let Some(Instruction::Op(op)) = frame.instructions.last() {
-            if !op.eq(&Opcode::Return) {
+        } else if let Some(instruction) = frame.instructions.last() {
+            if !matches!(instruction, Instruction::Op(Opcode::Return)) {
                 frame.instructions.push(Instruction::Op(Opcode::Constant));
                 frame
                     .instructions
@@ -741,7 +743,7 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         e: &Expr<'a>,
     ) -> Result<Vec<Instruction>, CompileError<'a>> {
         let mut instructions = self.accept_expr(e)?;
-        instructions.push(Instruction::Op(Opcode::Pop));
+        instructions.push(Instruction::Op(Opcode::PopElide));
         Ok(instructions)
     }
 
@@ -757,14 +759,13 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
             instructions.extend(self.accept_expr(argument)?);
         }
 
-        instructions.push(Instruction::Op(Opcode::Constant));
-        instructions.push(Instruction::Operand(Constant::Index(argument_len)));
-
         if c.constructor_call {
             instructions.push(Instruction::Op(Opcode::ConstructorCall));
         } else {
             instructions.push(Instruction::Op(Opcode::FunctionCall));
         }
+
+        instructions.push(Instruction::Operand(Constant::Index(argument_len)));
 
         Ok(instructions)
     }
@@ -784,11 +785,10 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
     ) -> Result<Vec<Instruction>, CompileError<'a>> {
         let mut instructions = self.accept_expr(&c.condition)?;
 
-        instructions.push(Instruction::Op(Opcode::Constant));
+        instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
         let then_jmp_idx = instructions.len();
         instructions.push(Instruction::Op(Opcode::Nop));
 
-        instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
         instructions.push(Instruction::Op(Opcode::Pop));
         let then_instructions = self.accept_expr(&c.then)?;
         let then_instruction_count = then_instructions.len();
@@ -796,10 +796,9 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         instructions[then_jmp_idx] =
             Instruction::Operand(Constant::Index(then_instruction_count + 3));
 
-        instructions.push(Instruction::Op(Opcode::Constant));
+        instructions.push(Instruction::Op(Opcode::ShortJmp));
         let else_jmp_idx = instructions.len();
         instructions.push(Instruction::Op(Opcode::Nop));
-        instructions.push(Instruction::Op(Opcode::ShortJmp));
 
         let else_instructions = self.accept_expr(&c.el)?;
         let else_instruction_count = else_instructions.len();
@@ -816,8 +815,6 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         let mut instructions = self.accept_expr(&e.target)?;
 
         let is_assign = unsafe { self.ctx.as_ref().is_assign() };
-        instructions.push(Instruction::Op(Opcode::Constant));
-        instructions.push(Instruction::Operand(Constant::Index(is_assign as usize)));
 
         if e.computed {
             let property = self.accept_expr(&e.property)?;
@@ -834,13 +831,14 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
                 todo!()
             };
 
-            instructions.push(Instruction::Op(Opcode::Constant));
+            instructions.push(Instruction::Op(Opcode::StaticPropertyAccess));
+
             instructions.push(Instruction::Operand(Constant::Identifier(
                 std::str::from_utf8(ident).unwrap().to_owned(),
             )));
-
-            instructions.push(Instruction::Op(Opcode::StaticPropertyAccess));
         }
+
+        instructions.push(Instruction::Operand(Constant::Index(is_assign as usize)));
 
         Ok(instructions)
     }
@@ -873,10 +871,9 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         for expr in a.iter().rev() {
             instructions.extend(self.accept_expr(expr)?);
         }
-        instructions.push(Instruction::Op(Opcode::Constant));
-        instructions.push(Instruction::Operand(Constant::Index(element_count)));
 
         instructions.push(Instruction::Op(Opcode::ArrayLiteral));
+        instructions.push(Instruction::Operand(Constant::Index(element_count)));
         Ok(instructions)
     }
 
@@ -892,11 +889,11 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
             instructions.extend(self.accept_expr(value)?);
         }
 
-        instructions.push(Instruction::Op(Opcode::Constant));
-        instructions.push(Instruction::Operand(Constant::Index(property_count)));
         instructions.push(Instruction::Op(Opcode::ObjectLiteral));
+        instructions.push(Instruction::Operand(Constant::Index(property_count)));
 
         // ...And then we emit instructions for keys, because it shouldn't try to evaluate them at runtime
+        // TODO: implement { ["computed"]: 1 } (using computed keys)
         for (key, _) in o.iter() {
             instructions.push(Instruction::Operand(Constant::Identifier(
                 String::from_utf8_lossy(key).to_string(),
@@ -921,10 +918,9 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         instructions.extend(self.accept(&t.try_)?);
 
         instructions.push(Instruction::Op(Opcode::PopUnwindHandler));
-        instructions.push(Instruction::Op(Opcode::Constant));
+        instructions.push(Instruction::Op(Opcode::ShortJmp));
         let thing_idx = instructions.len();
         instructions.push(Instruction::Op(Opcode::Nop));
-        instructions.push(Instruction::Op(Opcode::ShortJmp));
 
         self.scope.enter_scope();
 
@@ -935,7 +931,14 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
                 VariableDeclarationKind::Var,
             ));
 
-            instructions[3] = Instruction::Operand(Constant::Index(stack_idx));
+            let catch_stack_idx_instruction = &mut instructions[3];
+
+            debug_assert!(matches!(
+                catch_stack_idx_instruction,
+                Instruction::Op(Opcode::Nop)
+            ));
+
+            *catch_stack_idx_instruction = Instruction::Operand(Constant::Index(stack_idx));
         }
 
         let catch = self.accept(&t.catch.body)?;
@@ -981,17 +984,15 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
             instructions.extend(self.accept_expr(&Expr::bool_literal(true))?);
         };
 
-        instructions.push(Instruction::Op(Opcode::Constant));
+        instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
         let end_of_loop_jmp = instructions.len();
         instructions.push(Instruction::Op(Opcode::Nop));
-        instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
 
         instructions.push(Instruction::Op(Opcode::Pop));
 
-        instructions.push(Instruction::Op(Opcode::Constant));
+        instructions.push(Instruction::Op(Opcode::ShortJmp));
         let body_jmp = instructions.len();
         instructions.push(Instruction::Op(Opcode::Nop));
-        instructions.push(Instruction::Op(Opcode::ShortJmp));
 
         let finalizer_idx = instructions.len();
         if let Some(finalizer) = &f.finalizer {
@@ -999,25 +1000,23 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
             instructions.push(Instruction::Op(Opcode::Pop));
         }
 
-        instructions.push(Instruction::Op(Opcode::Constant));
+        instructions.push(Instruction::Op(Opcode::BackJmp));
         let condition_back_jmp = instructions.len();
         instructions.push(Instruction::Op(Opcode::Nop));
-        instructions.push(Instruction::Op(Opcode::BackJmp));
 
         let begin_body = instructions.len();
         instructions.extend(self.accept(&f.body)?);
 
-        instructions.push(Instruction::Op(Opcode::Constant));
-        instructions.push(Instruction::Operand(Constant::Index(
-            instructions.len() - finalizer_idx + 2,
-        )));
         instructions.push(Instruction::Op(Opcode::BackJmp));
+        instructions.push(Instruction::Operand(Constant::Index(
+            instructions.len() - finalizer_idx + 1,
+        )));
 
         instructions[end_of_loop_jmp] =
-            Instruction::Operand(Constant::Index(instructions.len() - (end_of_loop_jmp + 2)));
-        instructions[body_jmp] = Instruction::Operand(Constant::Index(begin_body - (body_jmp + 2)));
+            Instruction::Operand(Constant::Index(instructions.len() - (end_of_loop_jmp + 1)));
+        instructions[body_jmp] = Instruction::Operand(Constant::Index(begin_body - (body_jmp + 1)));
         instructions[condition_back_jmp] = Instruction::Operand(Constant::Index(
-            condition_back_jmp - begin_condition_idx + 2,
+            condition_back_jmp - begin_condition_idx + 1,
         ));
 
         instructions.push(Instruction::Op(Opcode::Pop));
