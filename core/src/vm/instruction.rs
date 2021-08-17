@@ -118,6 +118,11 @@ pub enum Opcode {
     BackJmp,
     /// Discards a value on the stack
     Pop,
+    /// Same as `Pop`, but allows the compiler to elide this pop instruction if it's the last one
+    ///
+    /// In particular, constructs like for and if generate jump instructions that expect instructions
+    /// not to be removed. If that is the case, `Pop` should be used.
+    PopElide,
     /// Pops an unwind handler
     PopUnwindHandler,
     /// Calls a function
@@ -129,6 +134,7 @@ pub enum Opcode {
     /// Returns from the current JavaScript module
     ReturnModule,
     /// No-op, do nothing
+    // TODO: change to InvalidInstruction or similar
     Nop,
     /// Performs less (<)
     Less,

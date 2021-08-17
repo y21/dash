@@ -14,7 +14,7 @@ mod handlers {
         js_std::{self, error::MaybeRc},
         vm::{
             frame::{Frame, Loop, UnwindHandler},
-            instruction::{Constant, Instruction, Opcode},
+            instruction::{self, Constant, Instruction, Opcode},
             upvalue::Upvalue,
             value::{
                 array::Array,
@@ -539,7 +539,7 @@ mod handlers {
         let should_capture_error = vm.read_op().unwrap() == Opcode::SetLocal;
 
         let error_catch_idx = if should_capture_error {
-            Some(vm.read_constant().and_then(Constant::into_index).unwrap())
+            vm.read_index()
         } else {
             None
         };
@@ -681,7 +681,7 @@ mod handlers {
     }
 
     pub fn static_property_access(vm: &mut VM) {
-        let property = vm.pop_owned().unwrap().into_ident().unwrap();
+        let property = vm.read_constant().and_then(Constant::into_ident).unwrap();
         let is_assignment = vm.read_index().unwrap() == 1;
         let target_cell = vm.stack.pop();
 
@@ -827,8 +827,8 @@ mod handlers {
     }
 
     pub fn loop_start(vm: &mut VM) {
-        let condition_offset = vm.read_constant().and_then(Constant::into_index).unwrap();
-        let end_offset = vm.read_constant().and_then(Constant::into_index).unwrap();
+        let condition_offset = vm.read_index().unwrap();
+        let end_offset = vm.read_index().unwrap();
         let ip = vm.ip();
         let info = Loop {
             condition_ip: (ip + condition_offset),
@@ -934,7 +934,7 @@ pub fn handle(
         Opcode::ShortJmpIfNullish => handlers::short_jmp_if_nullish(vm),
         Opcode::ShortJmp => handlers::short_jmp(vm),
         Opcode::BackJmp => handlers::back_jmp(vm),
-        Opcode::Pop => handlers::pop(vm),
+        Opcode::Pop | Opcode::PopElide => handlers::pop(vm),
         Opcode::PopUnwindHandler => handlers::pop_unwind_handler(vm),
         Opcode::AdditionAssignment => handlers::addition_assignment(vm),
         Opcode::SubtractionAssignment => handlers::subtraction_assignment(vm),

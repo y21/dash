@@ -16,7 +16,7 @@ impl Marker {
 
     /// Returns the marker pointer
     pub fn get(&self) -> *const () {
-        *self.0 as *const ()
+        &*self.0 as *const u8 as *const ()
     }
 }
 
