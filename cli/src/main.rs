@@ -9,6 +9,8 @@ use dash::{
     agent::Agent,
     vm::{value::Value, VM},
 };
+
+use backtrace::Backtrace;
 use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
@@ -26,6 +28,32 @@ fn create_agent() -> impl Agent {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opt = Args::from_args();
+
+    std::panic::set_hook(Box::new(|info| {
+        eprintln!(
+            "{}",
+            console::style("dash has unexpectedly panicked. this is a bug.").red()
+        );
+        eprintln!("please open a bug report: https://github.com/y21/dash/issues/new\n");
+
+        let location = info
+            .location()
+            .map(|x| x.to_string())
+            .unwrap_or_else(|| String::from("<unknown panic>"));
+
+        eprintln!("message: {}", info);
+
+        let display_backtrace = std::env::var("BACKTRACE")
+            .map(|x| x.eq("1"))
+            .unwrap_or_default();
+
+        if display_backtrace {
+            eprintln!("---- backtrace ----");
+            eprintln!("{:?}", Backtrace::new());
+        } else {
+            eprintln!("set `BACKTRACE=1` environment variable to display a backtrace");
+        }
+    }));
 
     if let Some(file) = &opt.file {
         let file = file.to_str().expect("Failed to parse file input string");
