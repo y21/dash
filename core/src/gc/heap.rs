@@ -53,3 +53,16 @@ impl<T> Heap<T> {
         unsafe { &mut (*node).value as *mut T }
     }
 }
+
+impl<T> Drop for Heap<T> {
+    fn drop(&mut self) {
+        let mut next = self.tail.as_ref();
+
+        while let Some(ptr) = next {
+            unsafe {
+                next = (**ptr).next.as_ref();
+                Box::from_raw(*ptr)
+            };
+        }
+    }
+}

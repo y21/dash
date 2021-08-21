@@ -112,6 +112,8 @@ impl<'a> From<compiler::FromStrError<'a>> for FromStrError<'a> {
 pub struct VM {
     /// Garbage collector that manages the heap of this VM
     pub(crate) gc: RefCell<Gc<Value>>,
+    /// Garbage collector specifically for constant values produced by the compiler
+    pub(crate) constants_gc: Gc<Value>,
     /// Call stack
     pub(crate) frames: Stack<Frame, 256>,
     /// Async task queue. Processed when execution has finished
@@ -152,6 +154,7 @@ impl VM {
         let mut vm = Self {
             frames: Stack::new(),
             gc: RefCell::new(gc),
+            constants_gc: Gc::new(),
             async_frames: Stack::new(),
             stack: Stack::new(),
             global,
@@ -179,7 +182,7 @@ impl VM {
         input: &'a str,
         mut agent: Option<A>,
     ) -> Result<Self, FromStrError<'a>> {
-        let (buffer, gc) = Compiler::from_str(
+        let (buffer, constants, gc) = Compiler::from_str(
             input,
             agent.as_mut().map(|a| MaybeOwned::Borrowed(a)),
             CompilerFunctionKind::Function,
@@ -192,7 +195,9 @@ impl VM {
             None => Self::new(),
         };
 
-        let frame = Frame::from_buffer(buffer, &vm);
+        vm.constants_gc.transfer(gc);
+
+        let frame = Frame::from_buffer(buffer, constants, &vm);
         vm.frames.push(frame);
 
         Ok(vm)
@@ -277,6 +282,18 @@ impl VM {
         &self.frame().buffer
     }
 
+    /// Returns the constant pool of the current execution frame
+    fn constants(&self) -> &[Constant] {
+        // TODO: resolve unsoundness
+        let value = unsafe { &*self.frame().func.as_ptr() };
+        let func = unsafe { &*value.as_ptr() };
+
+        func.as_function()
+            .and_then(|x| x.as_user())
+            .map(|x| &x.constants)
+            .unwrap()
+    }
+
     /// Checks whether the VM has reached the end of this buffer
     fn is_eof(&self) -> bool {
         // If we ever somehow jump too far, that's a bug
@@ -298,7 +315,8 @@ impl VM {
 
     /// Reads a constant
     fn read_constant(&mut self) -> Option<Constant> {
-        self.next().cloned().map(|x| x.into_operand())
+        let index = self.next().cloned().map(|x| x.into_operand())?;
+        self.constants().get(index as usize).cloned()
     }
 
     /// Reads an opode
@@ -322,10 +340,6 @@ impl VM {
     fn read_index(&mut self) -> Option<usize> {
         self.read_constant()
             .and_then(Constant::into_index)
-    }
-
-    fn pop_owned(&mut self) -> Option<Value> {
-        Some(unsafe { self.stack.pop().borrow_unbounded() }.clone())
     }
 
     fn read_lhs_rhs(&mut self) -> (Handle<Value>, Handle<Value>) {
@@ -791,13 +805,15 @@ impl VM {
 
     /// Evaluates a JavaScript source string in this VM
     pub fn eval<'a>(&mut self, source: &'a str) -> Result<Option<Handle<Value>>, EvalError<'a>> {
-        let (buffer, gc) = Compiler::<()>::from_str(source, None, CompilerFunctionKind::Function)
+        let (buffer, constants, gc) = Compiler::<()>::from_str(source, None, CompilerFunctionKind::Function)
             .map_err(FromStrError::from)
             .map_err(EvalError::from)?
             .compile()
             .map_err(EvalError::CompileError)?;
 
-        let frame = Frame::from_buffer(buffer, self);
+        self.constants_gc.transfer(gc);
+
+        let frame = Frame::from_buffer(buffer, constants, self);
 
         self.execute_frame(frame, true).map_err(EvalError::VMError)
     }

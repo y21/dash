@@ -1,4 +1,5 @@
 use crate::gc::Handle;
+use crate::vm::instruction::Constant;
 use crate::vm::{instruction::Instruction, upvalue::Upvalue, VM};
 use core::fmt::{self, Debug, Formatter};
 use std::collections::HashMap;
@@ -136,6 +137,8 @@ pub struct UserFunction {
     pub ty: FunctionType,
     /// Function bytecode
     pub buffer: Box<[Instruction]>,
+    /// A pool of constants
+    pub constants: Box<[Constant]>,
     /// The name of this function
     pub name: Option<String>,
     /// Number of values
@@ -150,9 +153,11 @@ impl UserFunction {
         ty: FunctionType,
         upvalues: u32,
         ctor: Constructor,
+        constants: impl Into<Box<[Constant]>>,
     ) -> Self {
         Self {
             buffer: buffer.into(),
+            constants: constants.into(),
             params,
             name: None,
             ty,
@@ -335,6 +340,14 @@ impl FunctionKind {
                 }
             }
             FunctionKind::User(func) => {
+                // Constants need to be marked, otherwise constants_gc will GC these
+                for constant in func.constants.iter() {
+                    match constant {
+                        Constant::JsValue(handle) => Value::mark(handle),
+                        _ => {}
+                    };
+                }
+
                 if let Some(handle) = &func.receiver {
                     Value::mark(handle.get())
                 }
@@ -398,6 +411,7 @@ impl FunctionKind {
     pub fn as_user(&self) -> Option<&UserFunction> {
         match self {
             Self::User(u) => Some(u),
+            Self::Closure(c) => Some(&c.func),
             _ => None,
         }
     }

@@ -21,8 +21,6 @@ pub mod gc;
 pub mod js_std;
 /// JSON parser and serializer
 pub mod json;
-/// Applies optimizations to JavaScript code at compile time
-pub mod optimizer;
 /// JavaScript lexer and parser
 pub mod parser;
 #[cfg(test)]

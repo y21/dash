@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use super::{
     handle::InnerHandleGuard,
     heap::{Heap, Node},
@@ -95,10 +97,40 @@ impl<T> Gc<T> {
     /// If not marked as visited, the returned [Handle] will dangle when sweep is called.
     pub fn register<H>(&mut self, value: H) -> Handle<T>
     where
-        H: Into<InnerHandleGuard<T>>,
+        H: Into<InnerHandleGuard<T>> + Debug,
     {
         let ptr = self.heap.add(value.into());
+
         unsafe { Handle::new(ptr, self.marker.get()) }
+    }
+
+    /// Transfers all values from the provided [Gc<T>] to self
+    pub fn transfer(&mut self, gc: Gc<T>) {
+        let mut heap = gc.heap;
+
+        if self.heap.len == 0 {
+            // if our heap is empty, we can cheat by just swapping instead of appending
+            self.heap = heap;
+            return;
+        }
+
+        // slow path: append all objects
+        let mut next = heap.tail;
+
+        while let Some(ptr) = next {
+            unsafe {
+                next = (*ptr).next;
+                if let Some(head) = self.heap.head {
+                    (*head).next = Some(ptr);
+                }
+                self.heap.head = Some(ptr);
+                self.heap.len += 1;
+            }
+        }
+
+        // set old heap tail/head to None so that its destructor doesn't deallocate moved objects
+        heap.tail = None;
+        heap.head = None;
     }
 }
 

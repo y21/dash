@@ -307,8 +307,8 @@ impl Constant {
 pub enum Instruction {
     /// An opcode
     Op(Opcode),
-    /// An operand carrying a value
-    Operand(Constant),
+    /// Index for a constant
+    Operand(u8),
 }
 
 impl Instruction {
@@ -329,7 +329,7 @@ impl Instruction {
     }
 
     /// Returns self as a constant and consumes self
-    pub fn into_operand(self) -> Constant {
+    pub fn into_operand(self) -> u8 {
         match self {
             Self::Operand(o) => o,
             _ => unreachable!(),

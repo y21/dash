@@ -1,7 +1,7 @@
 use crate::gc::Handle;
 
 use super::{
-    instruction::Instruction,
+    instruction::{Constant, Instruction},
     value::{
         function::{Constructor, FunctionType, UserFunction},
         Value,
@@ -24,9 +24,10 @@ pub struct Frame {
 
 impl Frame {
     /// Creates a frame from bytecode and a vm
-    pub fn from_buffer<B>(buffer: B, vm: &VM) -> Self
+    pub fn from_buffer<B, C>(buffer: B, constants: C, vm: &VM) -> Self
     where
         B: Into<Box<[Instruction]>>,
+        C: Into<Box<[Constant]>>,
     {
         let sp = vm.stack.get_stack_pointer();
         let buffer = buffer.into();
@@ -37,6 +38,7 @@ impl Frame {
             FunctionType::Function,
             0,
             Constructor::NoCtor,
+            constants.into(),
         );
 
         Self {

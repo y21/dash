@@ -226,7 +226,7 @@ pub fn async_task() {
     )
     .unwrap();
 
-    let (buffer, _gc) = Compiler::<()>::from_str(
+    let (buffer, constants, _gc) = Compiler::<()>::from_str(
         r#"
         console.log("async task?!");
     "#,
@@ -237,7 +237,7 @@ pub fn async_task() {
     .compile()
     .unwrap();
 
-    let frame = Frame::from_buffer(buffer, &vm);
+    let frame = Frame::from_buffer(buffer, constants, &vm);
 
     vm.queue_async_task(frame);
 
