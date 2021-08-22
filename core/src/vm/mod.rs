@@ -768,6 +768,9 @@ impl VM {
         macro_rules! unwind_abort_if_uncaught {
             ($e:expr) => {
                 if let Err(e) = self.unwind($e, frame_idx) {
+                    self.frames.reset();
+                    self.stack.reset();
+                    self.loops.reset();
                     return Err(VMError::UncaughtError(e));
                 } else {
                     continue;
