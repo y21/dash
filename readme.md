@@ -54,14 +54,16 @@ dash = { git = "https://github.com/y21/dash", path = "core" }
 ```rs
 fn main() {
     let source = "const x = 42; x * x";
-    let res: f64 = dash::eval::<()>(source, None)
-        .unwrap()     // → Option<Rc<RefCell<Value>>>
-        .unwrap()     // → RefCell<Value>
-        .borrow()     // → Ref<Value>
-        .as_number(); // → f64
+    let (result, vm) = dash::eval::<()>(source, None)
+        .unwrap(); // unwrap, we know the source string is valid!
+    
+    let result: f64 = result
+        .unwrap() // unwrap, we know there *is* a value
+        .borrow(&vm)
+        .as_number();
 
     // Result: 1764.0
-    println!("Result: {:?}", res);
+    println!("Result: {:?}", result);
 }
 ```
 <sub>See `cli/` for a more detailed example</sub>
