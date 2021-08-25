@@ -36,11 +36,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
         eprintln!("please open a bug report: https://github.com/y21/dash/issues/new\n");
 
-        let location = info
-            .location()
-            .map(|x| x.to_string())
-            .unwrap_or_else(|| String::from("<unknown panic>"));
-
         eprintln!("message: {}", info);
 
         let display_backtrace = std::env::var("BACKTRACE")
