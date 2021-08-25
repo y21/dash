@@ -247,14 +247,20 @@ pub struct Module {
     pub buffer: Option<Box<[Instruction]>>,
     /// The exports namespace
     pub exports: Exports,
+    /// Compile-time constants used within the module
+    pub constants: Box<[Constant]>,
 }
 
 impl Module {
     /// Creates a new module
-    pub fn new(buffer: impl Into<Box<[Instruction]>>) -> Self {
+    pub fn new(
+        buffer: impl Into<Box<[Instruction]>>,
+        constants: impl Into<Box<[Constant]>>,
+    ) -> Self {
         Self {
             buffer: Some(buffer.into()),
             exports: Exports::default(),
+            constants: constants.into(),
         }
     }
 }

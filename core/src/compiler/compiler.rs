@@ -1,6 +1,8 @@
 // This file is cursed. You've been warned
+use super::instruction::Instruction;
 use crate::{
     agent::{Agent, ImportResult},
+    compiler::instruction::to_vm_instructions,
     gc::{Gc, Handle},
     parser::{
         expr::{
@@ -19,7 +21,7 @@ use crate::{
     util::MaybeOwned,
     visitor::Visitor,
     vm::{
-        instruction::{Constant, Instruction, Opcode},
+        instruction::{Constant, Instruction as VMInstruction, Opcode},
         stack::{IteratorOrder, Stack},
         value::{
             function::{Constructor, FunctionType, Module, UserFunction},
@@ -688,7 +690,7 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         }
 
         let mut func = UserFunction::new(
-            frame.instructions,
+            to_vm_instructions(frame.instructions),
             params as u32,
             FunctionType::Function,
             frame.upvalues.len() as u32,
@@ -1095,19 +1097,22 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         // todo: don't unwrap and handle dynamic imports
         let module_name = i.get_module_target().unwrap();
 
-        let mut module_instructions = if let Some(agent) = &mut self.agent {
+        let (mut module_instructions, module_constants) = if let Some(agent) = &mut self.agent {
             let agent = unsafe { agent.as_mut() };
 
             match agent.import(module_name) {
-                Some(ImportResult::Bytecode(code)) => code,
+                Some(ImportResult::Bytecode(code, constants)) => (code, constants),
                 Some(ImportResult::Value(value)) => {
+                    let mut constants = ConstantPool::new();
                     let handle = self.register_value(value);
-                    vec![
+                    let instructions = vec![
                         Instruction::Op(Opcode::Constant),
-                        Instruction::Operand(self.add_constant(Constant::JsValue(handle))),
+                        Instruction::Operand(constants.add(Constant::JsValue(handle))),
                         Instruction::Op(Opcode::ExportDefault),
                         Instruction::Op(Opcode::ReturnModule),
-                    ]
+                    ];
+
+                    (instructions, constants.into())
                 }
                 _ => return Err(CompileError::NativeImportFailed),
             }
@@ -1126,7 +1131,7 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
 
         let mut instructions: Vec<Instruction> = vec![Instruction::Op(Opcode::EvaluateModule)];
 
-        let module = Module::new(module_instructions);
+        let module = Module::new(to_vm_instructions(module_instructions), module_constants);
         // TODO: do we need to do something with constants here?
         let handle = self.register_value(module.into());
         instructions.push(Instruction::Operand(

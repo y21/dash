@@ -1,5 +1,8 @@
 use crate::{
-    compiler::compiler::{Compiler, FunctionKind},
+    compiler::{
+        compiler::{Compiler, FunctionKind},
+        instruction::to_vm_instructions,
+    },
     eval,
     vm::{frame::Frame, VM},
 };
@@ -216,6 +219,18 @@ pub fn if_() {
 }
 
 #[test]
+pub fn stack_reset() {
+    eval::<()>(
+        r#"
+        function f() {}
+        f([1].map(x => x));
+    "#,
+        None,
+    )
+    .unwrap();
+}
+
+#[test]
 pub fn async_task() {
     let mut vm = VM::from_str::<()>(
         r#"
@@ -236,6 +251,8 @@ pub fn async_task() {
     .unwrap()
     .compile()
     .unwrap();
+
+    let buffer = to_vm_instructions(buffer);
 
     let frame = Frame::from_buffer(buffer, constants, &vm);
 

@@ -22,10 +22,21 @@ impl ConstantPool {
     pub fn get(&self, index: u8) -> Option<&Constant> {
         self.0.get(index as usize)
     }
+
+    /// Boxes the inner vector of constants and returns it
+    pub fn into_boxed_slice(self) -> Box<[Constant]> {
+        self.0.into_boxed_slice()
+    }
 }
 
 impl From<ConstantPool> for Box<[Constant]> {
     fn from(this: ConstantPool) -> Self {
-        this.0.into_boxed_slice()
+        this.into_boxed_slice()
+    }
+}
+
+impl From<ConstantPool> for Vec<Constant> {
+    fn from(this: ConstantPool) -> Self {
+        this.0
     }
 }

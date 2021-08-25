@@ -14,7 +14,7 @@ mod handlers {
         js_std::{self, error::MaybeRc},
         vm::{
             frame::{Frame, Loop, UnwindHandler},
-            instruction::{Constant, Instruction, Opcode},
+            instruction::{Constant, Opcode},
             upvalue::Upvalue,
             value::{
                 array::Array,
@@ -53,7 +53,10 @@ mod handlers {
         let mut closure = Closure::with_upvalues(func, Vec::with_capacity(upvalue_count));
 
         for _ in 0..closure.func.upvalues {
-            let is_local = matches!(vm.next().unwrap(), Instruction::Op(Opcode::UpvalueLocal));
+            let is_local = {
+                let next = vm.next().unwrap().as_op();
+                matches!(next, Opcode::UpvalueLocal)
+            };
             let stack_idx = vm.read_constant().and_then(|c| c.into_index()).unwrap();
             if is_local {
                 let value = unsafe { vm.stack.peek_unchecked(vm.frame().sp + stack_idx) };

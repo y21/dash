@@ -22,7 +22,7 @@ use std::{any::Any, borrow::Cow, cell::RefCell, collections::HashMap, fmt::Debug
 use instruction::{Instruction, Opcode};
 use value::Value;
 
-use crate::{EvalError, agent::Agent, compiler::compiler::{self, CompileError, Compiler, FunctionKind as CompilerFunctionKind}, gc::{Gc, Handle}, parser::{lexer, token}, util::{unlikely, MaybeOwned}, vm::{dispatch::DispatchResult, frame::UnwindHandler, value::{
+use crate::{EvalError, agent::Agent, compiler::{compiler::{self, CompileError, Compiler, FunctionKind as CompilerFunctionKind}, instruction::to_vm_instructions}, gc::{Gc, Handle}, parser::{lexer, token}, util::{unlikely, MaybeOwned}, vm::{dispatch::DispatchResult, frame::UnwindHandler, value::{
             array::Array,
             function::{
                 CallContext, FunctionKind,
@@ -36,7 +36,7 @@ use self::{
     instruction::Constant,
     stack::Stack,
     statics::Statics,
-    value::object::{AnyObject, Object},
+    value::object::{AnyObject},
 };
 
 // Force garbage collection at 10000 objects by default
@@ -197,7 +197,7 @@ impl VM {
 
         vm.constants_gc.transfer(gc);
 
-        let frame = Frame::from_buffer(buffer, constants, &vm);
+        let frame = Frame::from_buffer(to_vm_instructions(buffer), constants, &vm);
         vm.frames.push(frame);
 
         Ok(vm)
@@ -321,7 +321,7 @@ impl VM {
 
     /// Reads an opode
     fn read_op(&mut self) -> Option<Opcode> {
-        self.next().cloned().map(|x| x.into_op())
+        self.next().map(|x| x.as_op())
     }
 
     /// Reads a user function
@@ -816,7 +816,7 @@ impl VM {
 
         self.constants_gc.transfer(gc);
 
-        let frame = Frame::from_buffer(buffer, constants, self);
+        let frame = Frame::from_buffer(to_vm_instructions(buffer), constants, self);
 
         self.execute_frame(frame, true).map_err(EvalError::VMError)
     }

@@ -1,11 +1,14 @@
-use crate::vm::{instruction::Instruction, value::Value};
+use crate::{
+    compiler::instruction::Instruction,
+    vm::{instruction::Constant, value::Value},
+};
 
 /// The result of a successful import resolve
 pub enum ImportResult {
     /// This import resolves to a JavaScript value
     Value(Value),
     /// This import resolves to bytecode
-    Bytecode(Vec<Instruction>), // TODO: Box<[Instruction]>?
+    Bytecode(Vec<Instruction>, Vec<Constant>),
 }
 
 /// Embedder specific methods.
