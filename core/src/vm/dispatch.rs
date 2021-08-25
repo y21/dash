@@ -14,7 +14,7 @@ mod handlers {
         js_std::{self, error::MaybeRc},
         vm::{
             frame::{Frame, Loop, UnwindHandler},
-            instruction::{self, Constant, Instruction, Opcode},
+            instruction::{Constant, Instruction, Opcode},
             upvalue::Upvalue,
             value::{
                 array::Array,
@@ -600,22 +600,22 @@ mod handlers {
         // Restore VM state to where we were before the function call happened
         let this = vm.frames.pop();
 
-        if vm.frames.get_stack_pointer() == frame_idx {
-            // TODO: vm.stack.get()
-            if vm.stack.get_stack_pointer() == 0 {
-                return Ok(Some(DispatchResult::Return(None)));
-            } else {
-                let value = vm.stack.pop();
-                return Ok(Some(DispatchResult::Return(Some(value))));
-            }
-        }
-
-        let ret = vm.stack.pop();
+        let ret = if vm.stack.get_stack_pointer() == 0 {
+            None
+        } else {
+            Some(vm.stack.pop())
+        };
 
         vm.stack
             .discard_multiple(vm.stack.get_stack_pointer() - this.sp);
 
-        unsafe { vm.stack.set_stack_pointer(this.sp) };
+        if vm.frames.get_stack_pointer() == frame_idx {
+            if let Some(value) = ret {
+                return Ok(Some(DispatchResult::Return(Some(value))));
+            } else {
+                return Ok(Some(DispatchResult::Return(None)));
+            }
+        }
 
         let func_ref = unsafe { this.func.borrow_unbounded() };
         if let Some(this) = func_ref
@@ -625,7 +625,7 @@ mod handlers {
         {
             vm.stack.push(Handle::clone(this.get()));
         } else {
-            vm.stack.push(ret);
+            vm.stack.push(ret.unwrap());
         }
 
         Ok(None)
