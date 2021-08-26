@@ -56,12 +56,12 @@ impl<T> Heap<T> {
 
 impl<T> Drop for Heap<T> {
     fn drop(&mut self) {
-        let mut next = self.tail.as_ref();
+        let mut next = self.tail;
 
         while let Some(ptr) = next {
             unsafe {
-                next = (**ptr).next.as_ref();
-                Box::from_raw(*ptr)
+                next = (*ptr).next;
+                Box::from_raw(ptr)
             };
         }
     }

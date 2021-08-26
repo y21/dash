@@ -21,7 +21,7 @@ use crate::{
     util::MaybeOwned,
     visitor::Visitor,
     vm::{
-        instruction::{Constant, Instruction as VMInstruction, Opcode},
+        instruction::{Constant, Opcode},
         stack::{IteratorOrder, Stack},
         value::{
             function::{Constructor, FunctionType, Module, UserFunction},
