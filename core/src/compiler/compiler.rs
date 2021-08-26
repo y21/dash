@@ -1100,7 +1100,9 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         let (mut module_instructions, module_constants) = if let Some(agent) = &mut self.agent {
             let agent = unsafe { agent.as_mut() };
 
-            match agent.import(module_name) {
+            let gc = unsafe { self.gc.as_mut().unwrap().as_mut() };
+
+            match agent.import(module_name, gc) {
                 Some(ImportResult::Bytecode(code, constants)) => (code, constants),
                 Some(ImportResult::Value(value)) => {
                     let mut constants = ConstantPool::new();

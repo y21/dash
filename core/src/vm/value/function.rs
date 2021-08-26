@@ -470,4 +470,14 @@ impl FunctionKind {
             _ => None,
         }
     }
+
+    /// Returns a reference to constants used by this function
+    pub(crate) fn constants(&self) -> Option<&[Constant]> {
+        match self {
+            Self::User(u) => Some(&u.constants),
+            Self::Closure(c) => Some(&c.func.constants),
+            Self::Module(m) => Some(&m.constants),
+            _ => None,
+        }
+    }
 }

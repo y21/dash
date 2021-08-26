@@ -514,7 +514,6 @@ mod handlers {
         };
 
         let current_sp = vm.stack.get_stack_pointer();
-        vm.frame_mut().sp = current_sp;
 
         let frame = Frame {
             func: value_cell,

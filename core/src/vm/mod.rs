@@ -289,8 +289,7 @@ impl VM {
         let func = unsafe { &*value.as_ptr() };
 
         func.as_function()
-            .and_then(|x| x.as_user())
-            .map(|x| &x.constants)
+            .and_then(|x| x.constants())
             .unwrap()
     }
 

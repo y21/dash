@@ -1,5 +1,6 @@
 use crate::{
     compiler::instruction::Instruction,
+    gc::Gc,
     vm::{instruction::Constant, value::Value},
 };
 
@@ -18,7 +19,7 @@ pub enum ImportResult {
 /// A regular runtime may want to let users import another file.
 pub trait Agent {
     /// A method that is called when the compiler resolves an import statement
-    fn import(&mut self, _module_name: &[u8]) -> Option<ImportResult> {
+    fn import(&mut self, _module_name: &[u8], _gc: &mut Gc<Value>) -> Option<ImportResult> {
         None
     }
     /// A method that is called at runtime when Math.random() is called
