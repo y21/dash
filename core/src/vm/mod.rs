@@ -827,8 +827,5 @@ impl Drop for VM {
         self.stack.reset();
         self.frames.reset();
         self.async_frames.reset();
-
-        // Final GC
-        unsafe { self.gc.borrow_mut().sweep() };
     }
 }
