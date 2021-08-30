@@ -274,7 +274,14 @@ impl VM {
     // TODO: safe?
     pub unsafe fn perform_gc(&mut self) {
         self.mark_roots();
-        unsafe { self.gc.borrow_mut().sweep() };
+        let new_object_count = unsafe {
+            let mut gc = self.gc.borrow_mut();
+            gc.sweep();
+            gc.heap.len
+        };
+
+        // Adjust threshold
+        self.gc_object_threshold = new_object_count * 2;
     }
 
     /// Returns the bytecode buffer of the current execution frame
