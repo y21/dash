@@ -1,17 +1,15 @@
+use crate::gc::Handle;
+use crate::vm::instruction::Constant;
 use crate::vm::{instruction::Instruction, upvalue::Upvalue, VM};
 use core::fmt::{self, Debug, Formatter};
-use std::any::Any;
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
-use std::rc::Weak;
 
 use super::object::AnyObject;
 use super::Value;
 
 /// A native function that can be called from JavaScript code
 pub type NativeFunctionCallback =
-    for<'a> fn(CallContext<'a>) -> Result<CallResult, Rc<RefCell<Value>>>;
+    for<'a> fn(CallContext<'a>) -> Result<Handle<Value>, Handle<Value>>;
 
 /// Represents whether a function can be invoked as a constructor
 #[derive(Debug, Clone, Copy)]
@@ -31,89 +29,6 @@ impl Constructor {
     }
 }
 
-/// The result of calling a native function
-///
-/// It is common for a native function to call into a user function
-/// I.e. due to conversion that invokes a user function
-/// In that case, the function needs to be temporarily suspended
-/// and return [CallResult::UserFunction] to notify the caller that it cannot proceed
-pub enum CallResult {
-    /// A user function needs to be called to proceed
-    UserFunction(Rc<RefCell<Value>>, Vec<Rc<RefCell<Value>>>),
-    /// We have a value
-    Ready(Rc<RefCell<Value>>),
-}
-
-/// State that may be used in a native function
-///
-/// It is common for a native function to use `CallState` to keep track
-/// of work it has done. Sometimes, it needs to call a user function and will
-/// be called again at a later time when the called function returns.
-/// To know where it left off, [CallState] may be used
-pub struct CallState<T>(Option<T>);
-
-impl<T> Debug for CallState<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str("CallState")
-    }
-}
-
-impl<T> Default for CallState<T> {
-    fn default() -> Self {
-        Self(None)
-    }
-}
-
-impl<T> CallState<T> {
-    /// Applies a function on the inner call state, if present and returns
-    /// the closure return value
-    pub fn with<F, V>(&mut self, mut func: F) -> Option<V>
-    where
-        F: FnMut(&mut T) -> V,
-    {
-        if let Some(state) = &mut self.0 {
-            Some(func(state))
-        } else {
-            None
-        }
-    }
-
-    /// Returns a reference to the inner optional call state
-    pub fn get(&self) -> Option<&T> {
-        self.0.as_ref()
-    }
-
-    /// Returns a mutable reference to the call state.
-    ///
-    /// If None, the value passed to this function is stored.
-    pub fn get_or_insert(&mut self, value: T) -> &mut T {
-        self.0.get_or_insert(value)
-    }
-
-    /// Returns a mutable reference to the call state.
-    ///
-    /// If None, the passed function is called and its return value
-    /// will be used as call state.
-    pub fn get_or_insert_with<F>(&mut self, func: F) -> &mut T
-    where
-        F: FnMut() -> T,
-    {
-        self.0.get_or_insert_with(func)
-    }
-}
-
-impl CallState<Box<dyn Any>> {
-    /// Casts the inner call state to V and returns a mutable reference to it
-    pub fn get_or_insert_as<F, V>(&mut self, mut func: F) -> Option<&mut V>
-    where
-        V: 'static,
-        F: FnMut() -> V,
-    {
-        self.get_or_insert_with(|| Box::new(func()))
-            .downcast_mut::<V>()
-    }
-}
-
 /// Native function call context
 pub struct CallContext<'a> {
     /// A mutable reference to the underlying VM
@@ -123,32 +38,18 @@ pub struct CallContext<'a> {
     /// Note that the order of arguments is last to first,
     /// i.e. the first argument is the last item of the vec
     /// due to the nature of a stack
-    pub args: &'a mut Vec<Rc<RefCell<Value>>>,
+    pub args: &'a mut Vec<Handle<Value>>,
     /// The receiver (`this`) value
-    pub receiver: Option<Rc<RefCell<Value>>>,
+    pub receiver: Option<Handle<Value>>,
     /// Whether this function call is invoked as a constructor call
     pub ctor: bool,
-    /// State for this native call
-    ///
-    /// See docs for [CallState]
-    pub state: &'a mut CallState<Box<dyn Any>>,
-    /// The return value of a user function call that was made due to
-    /// returning [CallResult::UserFunction]
-    ///
-    /// See docs for [CallResult] for when this would be set
-    pub function_call_response: Option<Rc<RefCell<Value>>>,
 }
 
 impl<'a> CallContext<'a> {
     /// An iterator over arguments in fixed order
-    pub fn arguments(&self) -> impl Iterator<Item = &Rc<RefCell<Value>>> {
+    pub fn arguments(&self) -> impl Iterator<Item = &Handle<Value>> {
         // TODO: fix order
         self.args.iter().rev()
-    }
-
-    /// Returns state associated to this call by downcasting it to V
-    pub fn state<V: 'static>(&self) -> Option<&V> {
-        self.state.get().and_then(|x| x.downcast_ref::<V>())
     }
 }
 
@@ -171,14 +72,14 @@ pub enum FunctionType {
 #[derive(Debug, Clone)]
 pub enum Receiver {
     /// Receiver is pinned and may not be changed
-    Pinned(Rc<RefCell<Value>>),
+    Pinned(Handle<Value>),
     /// Receiver is bound to a specific value
-    Bound(Rc<RefCell<Value>>),
+    Bound(Handle<Value>),
 }
 
 impl Receiver {
     /// Returns the inner `this` value
-    pub fn get(&self) -> &Rc<RefCell<Value>> {
+    pub fn get(&self) -> &Handle<Value> {
         match self {
             Self::Pinned(p) => p,
             Self::Bound(b) => b,
@@ -227,7 +128,7 @@ pub struct UserFunction {
     /// Whether this function is constructable
     pub ctor: Constructor,
     /// The prototype of this function
-    pub prototype: Option<Weak<RefCell<Value>>>,
+    pub prototype: Option<Handle<Value>>,
     /// Number of parameters this function takes
     pub params: u32,
     /// The receiver of this function
@@ -236,6 +137,8 @@ pub struct UserFunction {
     pub ty: FunctionType,
     /// Function bytecode
     pub buffer: Box<[Instruction]>,
+    /// A pool of constants
+    pub constants: Box<[Constant]>,
     /// The name of this function
     pub name: Option<String>,
     /// Number of values
@@ -250,9 +153,11 @@ impl UserFunction {
         ty: FunctionType,
         upvalues: u32,
         ctor: Constructor,
+        constants: impl Into<Box<[Constant]>>,
     ) -> Self {
         Self {
             buffer: buffer.into(),
+            constants: constants.into(),
             params,
             name: None,
             ty,
@@ -267,6 +172,8 @@ impl UserFunction {
     pub fn bind(&mut self, new_recv: Receiver) {
         if let Some(recv) = &mut self.receiver {
             recv.bind(new_recv);
+        } else {
+            self.receiver = Some(new_recv);
         }
     }
 
@@ -274,6 +181,8 @@ impl UserFunction {
     pub fn rebind(mut self, new_recv: Receiver) -> Self {
         if let Some(recv) = &mut self.receiver {
             recv.bind(new_recv);
+        } else {
+            self.receiver = Some(new_recv);
         }
         self
     }
@@ -290,7 +199,7 @@ pub struct NativeFunction {
     /// The receiver of this function
     pub receiver: Option<Receiver>,
     /// The prototype of this function
-    pub prototype: Option<Weak<RefCell<Value>>>,
+    pub prototype: Option<Handle<Value>>,
 }
 
 impl NativeFunction {
@@ -325,7 +234,9 @@ impl Clone for NativeFunction {
 
 impl Debug for NativeFunction {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.debug_struct("NativeFunction").finish()
+        f.debug_struct("NativeFunction")
+            .field("name", &self.name)
+            .finish()
     }
 }
 
@@ -336,14 +247,20 @@ pub struct Module {
     pub buffer: Option<Box<[Instruction]>>,
     /// The exports namespace
     pub exports: Exports,
+    /// Compile-time constants used within the module
+    pub constants: Box<[Constant]>,
 }
 
 impl Module {
     /// Creates a new module
-    pub fn new(buffer: impl Into<Box<[Instruction]>>) -> Self {
+    pub fn new(
+        buffer: impl Into<Box<[Instruction]>>,
+        constants: impl Into<Box<[Constant]>>,
+    ) -> Self {
         Self {
             buffer: Some(buffer.into()),
             exports: Exports::default(),
+            constants: constants.into(),
         }
     }
 }
@@ -352,9 +269,9 @@ impl Module {
 #[derive(Debug, Clone, Default)]
 pub struct Exports {
     /// The default export, if set
-    pub default: Option<Rc<RefCell<Value>>>,
+    pub default: Option<Handle<Value>>,
     /// Named exports
-    pub named: HashMap<Box<str>, Rc<RefCell<Value>>>,
+    pub named: HashMap<Box<str>, Handle<Value>>,
 }
 
 /// The kind of this function
@@ -398,8 +315,8 @@ impl FunctionKind {
         }
     }
 
-    /// Returns a [Weak] to the prototype of this function, if it has one
-    pub fn prototype_weak(&self) -> Option<&Weak<RefCell<Value>>> {
+    /// Returns a [Handle] to the prototype of this function, if it has one
+    pub fn prototype(&self) -> Option<&Handle<Value>> {
         match self {
             Self::Closure(c) => c.func.prototype.as_ref(),
             Self::User(u) => u.prototype.as_ref(),
@@ -408,22 +325,70 @@ impl FunctionKind {
         }
     }
 
-    /// Returns a [Rc] to the prototype of this function, if it has one
-    pub fn prototype(&self) -> Option<Rc<RefCell<Value>>> {
-        self.prototype_weak().and_then(Weak::upgrade)
+    pub(crate) fn mark(&self) {
+        match self {
+            FunctionKind::Module(module) => {
+                if let Some(handle) = &module.exports.default {
+                    Value::mark(handle)
+                }
+
+                for handle in module.exports.named.values() {
+                    Value::mark(handle)
+                }
+            }
+            FunctionKind::Native(native) => {
+                if let Some(handle) = &native.receiver {
+                    Value::mark(handle.get())
+                }
+
+                if let Some(handle) = &native.prototype {
+                    Value::mark(handle)
+                }
+            }
+            FunctionKind::User(func) => {
+                // Constants need to be marked, otherwise constants_gc will GC these
+                for constant in func.constants.iter() {
+                    match constant {
+                        Constant::JsValue(handle) => Value::mark(handle),
+                        _ => {}
+                    };
+                }
+
+                if let Some(handle) = &func.receiver {
+                    Value::mark(handle.get())
+                }
+
+                if let Some(handle) = &func.prototype {
+                    Value::mark(handle)
+                }
+            }
+            FunctionKind::Closure(closure) => {
+                if let Some(handle) = &closure.func.receiver {
+                    Value::mark(handle.get())
+                }
+
+                if let Some(handle) = &closure.func.prototype {
+                    Value::mark(handle)
+                }
+
+                for upvalue in &closure.upvalues {
+                    upvalue.mark_visited();
+                }
+            }
+        }
     }
 
     /// Attempts to create an object with its [[Prototype]] set to this
     /// functions prototype
-    pub fn construct(&self, this: &Rc<RefCell<Value>>) -> Value {
+    pub fn construct(&self, this: &Handle<Value>) -> Value {
         let mut o = Value::from(AnyObject {});
-        o.proto = self.prototype_weak().cloned();
-        o.constructor = Some(Rc::downgrade(this));
+        o.proto = self.prototype().cloned();
+        o.constructor = Some(Handle::clone(this));
         o
     }
 
     /// Sets the prototype of this function
-    pub fn set_prototype(&mut self, proto: Weak<RefCell<Value>>) {
+    pub fn set_prototype(&mut self, proto: Handle<Value>) {
         match self {
             Self::Closure(c) => c.func.prototype = Some(proto),
             Self::User(u) => u.prototype = Some(proto),
@@ -452,6 +417,7 @@ impl FunctionKind {
     pub fn as_user(&self) -> Option<&UserFunction> {
         match self {
             Self::User(u) => Some(u),
+            Self::Closure(c) => Some(&c.func),
             _ => None,
         }
     }
@@ -501,6 +467,16 @@ impl FunctionKind {
     pub fn into_module(self) -> Option<Module> {
         match self {
             Self::Module(m) => Some(m),
+            _ => None,
+        }
+    }
+
+    /// Returns a reference to constants used by this function
+    pub(crate) fn constants(&self) -> Option<&[Constant]> {
+        match self {
+            Self::User(u) => Some(&u.constants),
+            Self::Closure(c) => Some(&c.func.constants),
+            Self::Module(m) => Some(&m.constants),
             _ => None,
         }
     }

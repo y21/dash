@@ -1,9 +1,10 @@
-use std::{borrow::Cow, cell::RefCell, rc::Rc};
+use std::borrow::Cow;
 
 use crate::{
+    gc::Handle,
     js_std,
     vm::{
-        value::{function::CallResult, object::Object, Value, ValueKind},
+        value::{object::Object, Value, ValueKind},
         VM,
     },
 };
@@ -12,10 +13,10 @@ use crate::{
 ///
 // https://tc39.es/ecma262/multipage/abstract-operations.html#sec-tostring
 pub fn to_string(
-    vm: &VM,
-    argument_cell: Option<&Rc<RefCell<Value>>>,
-) -> Result<CallResult, Rc<RefCell<Value>>> {
-    let argument = argument_cell.map(|x| x.borrow());
+    vm: &mut VM,
+    argument_cell: Option<&Handle<Value>>,
+) -> Result<Handle<Value>, Handle<Value>> {
+    let argument = argument_cell.map(|x| unsafe { x.borrow_unbounded() });
     let ready_string = match argument.as_ref().map(|x| &x.kind) {
         Some(ValueKind::Undefined) | None => Cow::Borrowed("undefined"),
         Some(ValueKind::Null) => Cow::Borrowed("null"),
@@ -33,18 +34,15 @@ pub fn to_string(
                 )?;
 
                 // 2. Return ? ToString(primValue).
-                return Ok(match prim_value {
-                    CallResult::Ready(r) => return to_string(vm, Some(&r)),
-                    CallResult::UserFunction(func, args) => CallResult::UserFunction(func, args),
-                });
+                return to_string(vm, Some(&prim_value));
             }
         },
         Some(ValueKind::Constant(_)) => unreachable!(),
     };
 
-    Ok(CallResult::Ready(
-        vm.create_js_value(String::from(ready_string)).into(),
-    ))
+    Ok(vm
+        .create_js_value(String::from(ready_string))
+        .into_handle(vm))
 }
 
 /// Implements the abstract operation Number::ToString
@@ -64,11 +62,11 @@ pub fn number_to_string(x: f64) -> Cow<'static, str> {
 ///
 // https://tc39.es/ecma262/multipage/abstract-operations.html#sec-toprimitive
 pub fn to_primitive(
-    vm: &VM,
+    vm: &mut VM,
     input: &Value,
-    input_cell: &Rc<RefCell<Value>>,
+    input_cell: &Handle<Value>,
     preferred_type: Option<&str>,
-) -> Result<CallResult, Rc<RefCell<Value>>> {
+) -> Result<Handle<Value>, Handle<Value>> {
     // 2. If Type(input) is Object, then
     if input.as_object().is_some() {
         // Let exoticToPrim be ? GetMethod(input, @@toPrimitive).
@@ -81,17 +79,17 @@ pub fn to_primitive(
         return ordinary_to_primitive(vm, input_cell, preferred_type);
     }
 
-    Ok(CallResult::Ready(Rc::clone(input_cell)))
+    Ok(Handle::clone(input_cell))
 }
 
 /// Implements the abstract operation OrdinaryToPrimitive
 ///
 /// https://tc39.es/ecma262/multipage/abstract-operations.html#sec-ordinarytoprimitive
 pub fn ordinary_to_primitive(
-    vm: &VM,
-    obj: &Rc<RefCell<Value>>,
+    vm: &mut VM,
+    obj: &Handle<Value>,
     hint: &str,
-) -> Result<CallResult, Rc<RefCell<Value>>> {
+) -> Result<Handle<Value>, Handle<Value>> {
     // 3. If hint is string, then
     let method_names = if hint == "string" {
         // a. Let methodNames be « "toString", "valueOf" ».
@@ -106,11 +104,11 @@ pub fn ordinary_to_primitive(
     for name in method_names {
         // a. Let method be ? Get(O, name).
         if let Some(method) = Value::get_property(vm, obj, name, None) {
-            let method_ref = method.borrow();
+            let method_ref = unsafe { method.borrow_unbounded() };
 
             // b. If IsCallable(method) is true, then
             if method_ref.as_function().is_some() {
-                return Ok(CallResult::UserFunction(Rc::clone(&method), Vec::new()));
+                return Value::call(&method, Vec::new(), vm);
             }
         }
     }

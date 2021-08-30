@@ -1,9 +1,19 @@
-use std::borrow::Cow;
-
 use crate::{
+    compiler::{
+        compiler::{Compiler, FunctionKind},
+        instruction::to_vm_instructions,
+    },
     eval,
-    parser::{lexer::Lexer, parser::Parser},
+    vm::{frame::Frame, VM},
 };
+
+macro_rules! assert_eval_num {
+    ($left:expr, $right:expr) => {{
+        let (result, _vm) = $left.unwrap();
+        let result = unsafe { result.unwrap().borrow_unbounded() }.as_number();
+        assert_eq!(result, ($right) as f64);
+    }};
+}
 
 #[test]
 pub fn recursion() {
@@ -20,13 +30,9 @@ pub fn recursion() {
     recurse(50, 2);
     "#,
         None,
-    )
-    .unwrap()
-    .unwrap()
-    .borrow()
-    .as_number();
+    );
 
-    assert_eq!(result, 2251799813685248f64);
+    assert_eval_num!(result, 2251799813685248f64);
 }
 
 #[test]
@@ -55,13 +61,27 @@ pub fn tree() {
     nNodes
     "#,
         None,
-    )
-    .unwrap()
-    .unwrap()
-    .borrow()
-    .as_number();
+    );
 
-    assert_eq!(result, 63f64);
+    assert_eval_num!(result, 63f64);
+}
+
+#[test]
+pub fn leak() {
+    let result = eval::<()>(
+        r#"
+function foo(a, b) {
+    if (a === 0) return;
+    const b = 254;
+    return foo(a - 1, {});
+}
+foo(5);
+63
+    "#,
+        None,
+    );
+
+    assert_eval_num!(result, 63f64);
 }
 
 #[test]
@@ -77,13 +97,9 @@ pub fn loop_break() {
         i
     "#,
         None,
-    )
-    .unwrap()
-    .unwrap()
-    .borrow()
-    .as_number();
+    );
 
-    assert_eq!(result, 52f64);
+    assert_eval_num!(result, 52f64);
 }
 
 #[test]
@@ -94,13 +110,9 @@ pub fn single_line_comments() {
         1+2
     "#,
         None,
-    )
-    .unwrap()
-    .unwrap()
-    .borrow()
-    .as_number();
+    );
 
-    assert_eq!(result, 3f64);
+    assert_eval_num!(result, 3f64);
 }
 
 #[test]
@@ -119,13 +131,9 @@ pub fn multi_line_comments() {
         3+3
     "#,
         None,
-    )
-    .unwrap()
-    .unwrap()
-    .borrow()
-    .as_number();
+    );
 
-    assert_eq!(result, 6f64);
+    assert_eval_num!(result, 6f64);
 }
 
 #[test]
@@ -141,13 +149,9 @@ pub fn else_if() {
           let x = 6; x
     "#,
         None,
-    )
-    .unwrap()
-    .unwrap()
-    .borrow()
-    .as_number();
+    );
 
-    assert_eq!(result, 6f64);
+    assert_eval_num!(result, 6f64);
 }
 
 #[test]
@@ -157,13 +161,9 @@ pub fn conditional() {
         typeof true ? 6 : 1
     "#,
         None,
-    )
-    .unwrap()
-    .unwrap()
-    .borrow()
-    .as_number();
+    );
 
-    assert_eq!(result, 6f64);
+    assert_eval_num!(result, 6f64);
 }
 
 #[test]
@@ -173,11 +173,92 @@ pub fn property_lookup_this_binding() {
         true.constructor === Boolean ? 6 : false
     "#,
         None,
+    );
+
+    assert_eval_num!(result, 6f64);
+}
+
+#[test]
+pub fn if_() {
+    // Tests for miss-compilation in if statements
+    // e.g. invalid jumps or other index errors
+    eval::<()>(
+        r#"
+        function assert_eq(lhs, rhs) {
+            if (lhs !== rhs) {
+                throw new Error("FAIL");
+            }
+        }
+
+        function fail() {
+            throw new Error("unreachable code detected");
+        }
+
+        if (false) { fail(); }
+        else if (false) { fail(); }
+        else { 1+1 };
+
+        assert_eq(6 * 6 - 35, 1);
+
+        if (true) {}
+
+        assert_eq(3 * 3 - 7, 2);
+
+        if (false) { fail(); } else if (false) { fail(); } else {}
+        if (false) { fail(); } else if (false) { fail(); }
+        if (true) {} else { fail(); }
+        if (true) {} else if (true) { fail(); } else { fail(); }
+        if (true) {} else if (false) { fail(); } else { fail(); }
+
+        assert_eq(4 * 4 - 14, 2);
+
+    "#,
+        None,
+    )
+    .unwrap();
+}
+
+#[test]
+pub fn stack_reset() {
+    eval::<()>(
+        r#"
+        function f() {}
+        f([1].map(x => x));
+    "#,
+        None,
+    )
+    .unwrap();
+}
+
+#[test]
+pub fn async_task() {
+    let mut vm = VM::from_str::<()>(
+        r#"
+        console.log("hi");
+        123
+    "#,
+        None,
+    )
+    .unwrap();
+
+    let (buffer, constants, _gc) = Compiler::<()>::from_str(
+        r#"
+        console.log("async task?!");
+    "#,
+        None,
+        FunctionKind::Function,
     )
     .unwrap()
-    .unwrap()
-    .borrow()
-    .as_number();
+    .compile()
+    .unwrap();
 
-    assert_eq!(result, 6f64);
+    let buffer = to_vm_instructions(buffer);
+
+    let frame = Frame::from_buffer(buffer, constants, &vm);
+
+    vm.queue_async_task(frame);
+
+    vm.interpret().unwrap().unwrap();
+
+    vm.run_async_tasks();
 }

@@ -13,6 +13,7 @@ impl<T> From<T> for Node<T> {
 }
 
 /// A datastructure similar to a linked list which allows efficiently removing nodes
+#[derive(Clone, Debug)]
 pub struct Heap<T> {
     /// Top of the heap (value that was added last)
     pub head: Option<*mut Node<T>>,
@@ -50,5 +51,18 @@ impl<T> Heap<T> {
         self.len += 1;
 
         unsafe { &mut (*node).value as *mut T }
+    }
+}
+
+impl<T> Drop for Heap<T> {
+    fn drop(&mut self) {
+        let mut next = self.tail;
+
+        while let Some(ptr) = next {
+            unsafe {
+                next = (*ptr).next;
+                Box::from_raw(ptr)
+            };
+        }
     }
 }

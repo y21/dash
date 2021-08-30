@@ -8,3 +8,5 @@ edition = "2018"
 dash = { path = "../core/" }
 runtime = { path = "../runtime/" }
 structopt = "0.3"
+console = "0.14.1"
+backtrace = "0.3.61"

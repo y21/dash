@@ -1,12 +1,16 @@
 use std::{
     borrow::Cow,
-    cell::RefCell,
     fs,
     io::{self, Write},
     path::PathBuf,
 };
 
-use dash::{agent::Agent, vm::value::Value};
+use dash::{
+    agent::Agent,
+    vm::{value::Value, VM},
+};
+
+use backtrace::Backtrace;
 use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
@@ -25,16 +29,37 @@ fn create_agent() -> impl Agent {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opt = Args::from_args();
 
+    std::panic::set_hook(Box::new(|info| {
+        eprintln!(
+            "{}",
+            console::style("dash has unexpectedly panicked. this is a bug.").red()
+        );
+        eprintln!("please open a bug report: https://github.com/y21/dash/issues/new\n");
+
+        eprintln!("message: {}", info);
+
+        let display_backtrace = std::env::var("BACKTRACE")
+            .map(|x| x.eq("1"))
+            .unwrap_or_default();
+
+        if display_backtrace {
+            eprintln!("---- backtrace ----");
+            eprintln!("{:?}", Backtrace::new());
+        } else {
+            eprintln!("set `BACKTRACE=1` environment variable to display a backtrace");
+        }
+    }));
+
     if let Some(file) = &opt.file {
         let file = file.to_str().expect("Failed to parse file input string");
 
         let code = fs::read_to_string(file)?;
 
-        if let Err(e) = dash::eval(&code, Some(create_agent())) {
+        if let Err((e, _vm)) = dash::eval(&code, Some(create_agent())) {
             println!("{}", e.to_string());
         }
     } else if let Some(eval) = &opt.eval {
-        if let Err(e) = dash::eval(eval, Some(create_agent())) {
+        if let Err((e, _vm)) = dash::eval(eval, Some(create_agent())) {
             println!("{}", e.to_string());
         }
     } else {
@@ -47,6 +72,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn repl() {
     println!("Welcome to the dash REPL\nType JavaScript code and hit enter to evaluate it");
 
+    let mut vm = VM::new_with_agent(Box::new(create_agent()));
+
     loop {
         print!("> ");
         io::stdout().flush().expect("Failed to flush stdout");
@@ -54,9 +81,9 @@ fn repl() {
         let s = &mut String::new();
         io::stdin().read_line(s).expect("Failed to read line");
 
-        match dash::eval(s, Some(create_agent())) {
+        match vm.eval(s) {
             Ok(result) => {
-                let result_ref = result.as_deref().map(RefCell::borrow);
+                let result_ref = result.as_ref().map(|x| unsafe { x.borrow_unbounded() });
                 let result_fmt = result_ref
                     .as_deref()
                     .map(|v| Value::inspect(v, 0))

@@ -1,19 +1,43 @@
+use std::fmt::Debug;
+
 use super::{
     handle::InnerHandleGuard,
     heap::{Heap, Node},
     Handle,
 };
 
+// todo: static AtomicUsize for next id instead of using pointers?
+/// A marker that uniquely identifies an instance of a type
+#[derive(Clone, Debug)]
+pub struct Marker(Box<u8>);
+
+impl Marker {
+    pub(crate) fn new() -> Self {
+        Self(Box::new(0))
+    }
+
+    /// Returns the marker pointer
+    pub fn get(&self) -> *const () {
+        &*self.0 as *const u8 as *const ()
+    }
+}
+
 /// A tracing garbage collector
+#[derive(Debug)]
 pub struct Gc<T> {
     /// The underlying heap
     pub heap: Heap<InnerHandleGuard<T>>,
+    /// A unique marker for this specific GC
+    pub marker: Marker,
 }
 
 impl<T> Gc<T> {
     /// Creates a new garbage collector
     pub fn new() -> Self {
-        Self { heap: Heap::new() }
+        Self {
+            heap: Heap::new(),
+            marker: Marker::new(),
+        }
     }
 
     /// Performs a GC cycle
@@ -59,6 +83,7 @@ impl<T> Gc<T> {
 
                     self.heap.len -= 1;
                 } else {
+                    unsafe { (*ptr).value.get_mut_unchecked().unmark_visited() };
                     previous = Some(ptr);
                 }
             } else {
@@ -72,10 +97,40 @@ impl<T> Gc<T> {
     /// If not marked as visited, the returned [Handle] will dangle when sweep is called.
     pub fn register<H>(&mut self, value: H) -> Handle<T>
     where
-        H: Into<InnerHandleGuard<T>>,
+        H: Into<InnerHandleGuard<T>> + Debug,
     {
         let ptr = self.heap.add(value.into());
-        unsafe { Handle::new(ptr) }
+
+        unsafe { Handle::new(ptr, self.marker.get()) }
+    }
+
+    /// Transfers all values from the provided [Gc<T>] to self
+    pub fn transfer(&mut self, gc: Gc<T>) {
+        let mut heap = gc.heap;
+
+        if self.heap.len == 0 {
+            // if our heap is empty, we can cheat by just swapping instead of appending
+            self.heap = heap;
+            return;
+        }
+
+        // slow path: append all objects
+        let mut next = heap.tail;
+
+        while let Some(ptr) = next {
+            unsafe {
+                next = (*ptr).next;
+                if let Some(head) = self.heap.head {
+                    (*head).next = Some(ptr);
+                }
+                self.heap.head = Some(ptr);
+                self.heap.len += 1;
+            }
+        }
+
+        // set old heap tail/head to None so that its destructor doesn't deallocate moved objects
+        heap.tail = None;
+        heap.head = None;
     }
 }
 
@@ -142,7 +197,7 @@ mod tests {
         let mut gc = Gc::new();
 
         let handle1 = gc.register(Value::new(ValueKind::Number(123f64)));
-        handle1.borrow_mut().mark_visited();
+        unsafe { handle1.borrow_mut_unbounded() }.mark_visited();
         let ptr1 = handle1.as_ptr();
 
         assert_eq!(gc.heap.len, 1);
@@ -153,6 +208,9 @@ mod tests {
 
         assert_node_eq(gc.heap.tail, ptr1);
         assert_node_eq(gc.heap.head, ptr1);
+
+        // cleanup
+        unsafe { gc.sweep() };
     }
 
     #[test]
@@ -161,8 +219,8 @@ mod tests {
 
         let handle1 = gc.register(Value::new(ValueKind::Number(123f64)));
         let handle2 = gc.register(Value::new(ValueKind::Number(456f64)));
-        handle1.borrow_mut().mark_visited();
-        handle2.borrow_mut().mark_visited();
+        unsafe { handle1.borrow_mut_unbounded() }.mark_visited();
+        unsafe { handle2.borrow_mut_unbounded() }.mark_visited();
         let ptr1 = handle1.as_ptr();
         let ptr2 = handle2.as_ptr();
 
@@ -174,5 +232,18 @@ mod tests {
 
         assert_node_eq(gc.heap.tail, ptr1);
         assert_node_eq(gc.heap.head, ptr2);
+
+        // cleanup
+        unsafe { gc.sweep() };
+    }
+
+    // We are relying on the fact that *const () does not get optimized to a pointer to 0x1 like Box::new(()) does it
+    // (Box::new is defined to not allocate on ZSTs, but we add a test case anyway)
+    #[test]
+    pub fn const_ptr_unit() {
+        let x = Box::new(0u8);
+        let y = &*x as *const u8;
+        let z = &*x as *const _ as *const ();
+        assert!(y as usize == z as usize);
     }
 }

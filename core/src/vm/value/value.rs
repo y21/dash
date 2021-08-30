@@ -6,7 +6,10 @@ use std::{
     rc::{Rc, Weak},
 };
 
-use crate::vm::VM;
+use crate::{
+    gc::Handle,
+    vm::{frame::Frame, value::function::CallContext, VM},
+};
 
 use super::{
     function::{FunctionKind, Receiver},
@@ -56,11 +59,11 @@ pub struct Value {
     /// The type of value
     pub kind: ValueKind,
     /// The fields of this value
-    pub fields: HashMap<Box<str>, Rc<RefCell<Value>>>,
+    pub fields: HashMap<Box<str>, Handle<Value>>,
     /// [[Prototype]] of this value
-    pub proto: Option<Weak<RefCell<Value>>>,
+    pub proto: Option<Handle<Value>>,
     /// Constructor of this value
-    pub constructor: Option<Weak<RefCell<Value>>>,
+    pub constructor: Option<Handle<Value>>,
 }
 
 impl Value {
@@ -78,15 +81,70 @@ impl Value {
         }
     }
 
+    /// Attempts to call a value
+    pub fn call(
+        this: &Handle<Value>,
+        mut args: Vec<Handle<Value>>,
+        vm: &mut VM,
+    ) -> Result<Handle<Value>, Handle<Value>> {
+        let value = unsafe { this.borrow_unbounded() };
+
+        // todo: dont unwrap
+        let func = match value.as_function().unwrap() {
+            FunctionKind::Native(func) => {
+                let receiver = func.receiver.as_ref().map(|rx| rx.get().clone());
+                let ctx = CallContext {
+                    vm,
+                    args: &mut args,
+                    ctor: false,
+                    receiver,
+                };
+
+                return (func.func)(ctx);
+            }
+            FunctionKind::Closure(closure) => &closure.func,
+            _ => unreachable!(),
+        };
+
+        let sp = vm.stack.get_stack_pointer();
+
+        let frame = Frame {
+            ip: 0,
+            func: Handle::clone(this),
+            buffer: func.buffer.clone(),
+            sp,
+        };
+
+        let origin_param_count = func.params as usize;
+        let param_count = args.len();
+
+        for param in args.into_iter() {
+            vm.stack.push(param);
+        }
+
+        for _ in 0..(origin_param_count.saturating_sub(param_count)) {
+            vm.stack
+                .push(Value::new(ValueKind::Undefined).into_handle(vm));
+        }
+
+        match vm.execute_frame(frame, true) {
+            Ok(Some(ret)) => Ok(ret),
+            Ok(None) => Ok(Value::new(ValueKind::Undefined).into_handle(vm)),
+            Err(e) => Err(e.into_value()),
+        }
+    }
+
+    /// Registers this value for garbage collection and returns a handle to it
+    // TODO: re-think whether this is fine to not be unsafe?
+    pub fn into_handle(self, vm: &VM) -> Handle<Self> {
+        vm.gc.borrow_mut().register(self)
+    }
+
     /// Updates the internal properties ([[Prototype]] and constructor)
     /// of this JavaScript value
-    pub fn update_internal_properties(
-        &mut self,
-        proto: &Rc<RefCell<Value>>,
-        ctor: &Rc<RefCell<Value>>,
-    ) {
-        self.proto = Some(Rc::downgrade(proto));
-        self.constructor = Some(Rc::downgrade(ctor));
+    pub fn update_internal_properties(&mut self, proto: &Handle<Value>, ctor: &Handle<Value>) {
+        self.proto = Some(Handle::clone(proto));
+        self.constructor = Some(Handle::clone(ctor));
     }
 
     /// Tries to detect the [[Prototype]] and constructor of this value given self.kind, and updates it
@@ -135,36 +193,33 @@ impl Value {
             ValueKind::Bool(_) => true,
             ValueKind::Null => true,
             ValueKind::Undefined => true,
-            ValueKind::Object(o) => match &**o {
-                Object::String(_) => true,
-                _ => false,
-            },
+            ValueKind::Object(o) => matches!(&**o, Object::String(_)),
             _ => false,
         }
     }
 
     /// Returns a Rc to the [[Prototype]] of this value, if it has one
-    pub fn strong_proto(&self) -> Option<Rc<RefCell<Value>>> {
-        self.proto.as_ref().and_then(Weak::upgrade)
+    pub fn strong_proto(&self) -> Option<Handle<Value>> {
+        self.proto.clone()
     }
 
     /// Returns a Rc to the constructor of this value, if it has one
-    pub fn strong_constructor(&self) -> Option<Rc<RefCell<Value>>> {
-        self.constructor.as_ref().and_then(Weak::upgrade)
+    pub fn strong_constructor(&self) -> Option<Handle<Value>> {
+        self.constructor.clone()
     }
 
-    /// Tries to unwrap a Rc<RefCell<Value>> into a Value
+    /// Tries to unwrap a Handle<Value> into a Value
     pub fn try_into_inner(value: Rc<RefCell<Self>>) -> Option<Self> {
         Some(Rc::try_unwrap(value).ok()?.into_inner())
     }
 
     /// Unwraps o, or returns undefined if it is None
-    pub fn unwrap_or_undefined(o: Option<Rc<RefCell<Self>>>) -> Rc<RefCell<Self>> {
-        o.unwrap_or_else(|| Value::new(ValueKind::Undefined).into())
+    pub fn unwrap_or_undefined(o: Option<Handle<Self>>, vm: &VM) -> Handle<Self> {
+        o.unwrap_or_else(|| Value::new(ValueKind::Undefined).into_handle(vm))
     }
 
     /// Looks up a field directly
-    pub fn get_field(&self, key: &str) -> Option<&Rc<RefCell<Value>>> {
+    pub fn get_field(&self, key: &str) -> Option<&Handle<Value>> {
         self.fields.get(key)
     }
 
@@ -173,34 +228,33 @@ impl Value {
     /// For a direct field lookup, use [Value::get_field]
     pub fn get_property(
         vm: &VM,
-        value_cell: &Rc<RefCell<Value>>,
+        value_cell: &Handle<Value>,
         key: &str,
-        override_this: Option<&Rc<RefCell<Value>>>,
-    ) -> Option<Rc<RefCell<Value>>> {
-        let value = value_cell.borrow();
-        let key = key.into();
+        override_this: Option<&Handle<Value>>,
+    ) -> Option<Handle<Value>> {
+        let value = unsafe { value_cell.borrow_unbounded() };
 
         match key {
             "__proto__" => {
                 return Some(
                     value
                         .strong_proto()
-                        .unwrap_or_else(|| Value::new(ValueKind::Null).into()),
+                        .unwrap_or_else(|| Value::new(ValueKind::Null).into_handle(vm)),
                 )
             }
             "constructor" => return value.strong_constructor(),
             "prototype" => {
                 if let Some(func) = value.as_function() {
-                    return func.prototype();
+                    return func.prototype().cloned();
                 }
             }
             "length" => {
                 match value.as_object() {
                     Some(Object::Array(a)) => {
-                        return Some(vm.create_js_value(a.elements.len() as f64).into())
+                        return Some(vm.create_js_value(a.elements.len() as f64).into_handle(vm))
                     }
                     Some(Object::String(s)) => {
-                        return Some(vm.create_js_value(s.len() as f64).into())
+                        return Some(vm.create_js_value(s.len() as f64).into_handle(vm))
                     }
                     _ => {}
                 };
@@ -214,13 +268,13 @@ impl Value {
             }
         };
 
-        if value.fields.len() > 0 {
+        if !value.fields.is_empty() {
             if let Some(entry_cell) = value.fields.get(key) {
                 if let Some(override_this) = override_this {
-                    let mut entry = entry_cell.borrow_mut();
+                    let mut entry = unsafe { entry_cell.borrow_mut_unbounded() };
 
                     if let Some(f) = entry.as_function_mut() {
-                        let receiver = Receiver::Bound(Rc::clone(&override_this));
+                        let receiver = Receiver::Bound(Handle::clone(&override_this));
 
                         match f {
                             FunctionKind::Closure(c) => c.func.bind(receiver),
@@ -235,24 +289,60 @@ impl Value {
                         }
                     }
                 }
-                return Some(Rc::clone(entry_cell));
+                return Some(Handle::clone(entry_cell));
             }
         }
 
-        if let Some(proto_cell) = value.proto.as_ref().and_then(Weak::upgrade) {
-            Value::get_property(
-                vm,
-                &proto_cell,
-                key,
-                override_this.or_else(|| Some(value_cell)),
-            )
+        if let Some(proto_cell) = value.proto.as_ref() {
+            Value::get_property(vm, proto_cell, key, override_this.or(Some(value_cell)))
         } else {
             None
         }
     }
 
     /// Adds a field
-    pub fn set_property(&mut self, k: impl Into<Box<str>>, v: Rc<RefCell<Value>>) {
+    pub fn set_property(&mut self, k: impl Into<Box<str>>, v: Handle<Value>) {
         self.fields.insert(k.into(), v);
+    }
+
+    pub(crate) fn mark(this: &Handle<Value>) {
+        let mut this = if let Ok(this) = unsafe { this.get_unchecked().try_borrow_mut() } {
+            this
+        } else {
+            return;
+        };
+
+        if this.is_marked() {
+            // We're already marked as visited. Don't get stuck in an infinite loop
+            return;
+        }
+
+        this.mark_visited();
+
+        if let Some(proto) = &this.proto {
+            Value::mark(proto)
+        }
+
+        if let Some(constructor) = &this.constructor {
+            Value::mark(constructor)
+        }
+
+        for handle in this.fields.values() {
+            Value::mark(handle)
+        }
+
+        match &this.kind {
+            ValueKind::Object(o) => match &**o {
+                Object::Array(a) => {
+                    for handle in &a.elements {
+                        Value::mark(handle)
+                    }
+                }
+                Object::Function(f) => f.mark(),
+                Object::Promise(_) => todo!(),
+                _ => {}
+            },
+            _ => {}
+        };
     }
 }

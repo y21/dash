@@ -1,54 +1,93 @@
-use std::{cell::RefCell, ffi::CString, rc::Rc};
+use std::ffi::CString;
 
 use dash::{
     compiler::compiler::CompileError,
+    gc::handle::Handle as GcHandle,
     parser::{lexer::Error as LexError, token::Error as ParseError},
-    vm::{value::Value, VMError},
+    vm::{value::Value, FromStrError, VMError, VM},
     EvalError,
 };
 
-use crate::handle::{Handle, HandleRef};
+use crate::handle::HandleRef;
 
 #[derive(Debug)]
 #[repr(C)]
-pub enum CreateVMError<'a> {
+pub enum CreateVMErrorKind<'a> {
     Lexer(Vec<LexError<'a>>),
     Parser(Vec<ParseError<'a>>),
     Compiler(CompileError<'a>),
     VM(VMError),
 }
 
+#[derive(Debug)]
+#[repr(C)]
+pub struct CreateVMError<'a> {
+    pub kind: CreateVMErrorKind<'a>,
+    pub vm: Option<VM>,
+}
+
+impl<'a> CreateVMError<'a> {
+    pub fn new(kind: CreateVMErrorKind<'a>) -> Self {
+        Self { kind, vm: None }
+    }
+
+    pub fn with_vm(kind: CreateVMErrorKind<'a>, vm: Option<VM>) -> Self {
+        Self { kind, vm }
+    }
+}
+
 impl<'a> From<Vec<LexError<'a>>> for CreateVMError<'a> {
     fn from(value: Vec<LexError<'a>>) -> Self {
-        Self::Lexer(value)
+        Self::new(CreateVMErrorKind::Lexer(value))
     }
 }
 
 impl<'a> From<Vec<ParseError<'a>>> for CreateVMError<'a> {
     fn from(value: Vec<ParseError<'a>>) -> Self {
-        Self::Parser(value)
+        Self::new(CreateVMErrorKind::Parser(value))
     }
 }
 
 impl<'a> From<CompileError<'a>> for CreateVMError<'a> {
     fn from(value: CompileError<'a>) -> Self {
-        Self::Compiler(value)
+        Self::new(CreateVMErrorKind::Compiler(value))
     }
 }
 
 impl<'a> From<VMError> for CreateVMError<'a> {
     fn from(value: VMError) -> Self {
-        Self::VM(value)
+        Self::new(CreateVMErrorKind::VM(value))
+    }
+}
+
+impl<'a> From<(EvalError<'a>, Option<VM>)> for CreateVMError<'a> {
+    fn from(value: (EvalError<'a>, Option<VM>)) -> Self {
+        match value.0 {
+            EvalError::LexError(l) => Self::with_vm(CreateVMErrorKind::Lexer(l), value.1),
+            EvalError::ParseError(p) => Self::with_vm(CreateVMErrorKind::Parser(p), value.1),
+            EvalError::CompileError(c) => Self::with_vm(CreateVMErrorKind::Compiler(c), value.1),
+            EvalError::VMError(v) => Self::with_vm(CreateVMErrorKind::VM(v), value.1),
+        }
     }
 }
 
 impl<'a> From<EvalError<'a>> for CreateVMError<'a> {
     fn from(value: EvalError<'a>) -> Self {
         match value {
-            EvalError::LexError(l) => Self::Lexer(l),
-            EvalError::ParseError(p) => Self::Parser(p),
-            EvalError::CompileError(c) => Self::Compiler(c),
-            EvalError::VMError(v) => Self::VM(v),
+            EvalError::LexError(l) => Self::new(CreateVMErrorKind::Lexer(l)),
+            EvalError::ParseError(p) => Self::new(CreateVMErrorKind::Parser(p)),
+            EvalError::CompileError(c) => Self::new(CreateVMErrorKind::Compiler(c)),
+            EvalError::VMError(v) => Self::new(CreateVMErrorKind::VM(v)),
+        }
+    }
+}
+
+impl<'a> From<FromStrError<'a>> for CreateVMError<'a> {
+    fn from(value: FromStrError<'a>) -> Self {
+        match value {
+            FromStrError::CompileError(c) => Self::new(CreateVMErrorKind::Compiler(c)),
+            FromStrError::LexError(l) => Self::new(CreateVMErrorKind::Lexer(l)),
+            FromStrError::ParseError(p) => Self::new(CreateVMErrorKind::Parser(p)),
         }
     }
 }
@@ -56,28 +95,27 @@ impl<'a> From<EvalError<'a>> for CreateVMError<'a> {
 #[no_mangle]
 pub extern "C" fn inspect_create_vm_error(e: HandleRef<CreateVMError<'_>>) -> *mut i8 {
     let e = unsafe { e.as_ref() };
-    let msg = match e {
-        CreateVMError::Lexer(l) => l
+    let msg = match &e.kind {
+        CreateVMErrorKind::Lexer(l) => l
             .iter()
             .map(|e| e.to_string().to_string())
             .collect::<Vec<String>>()
             .join("\n"),
-        CreateVMError::Parser(p) => p
+        CreateVMErrorKind::Parser(p) => p
             .iter()
             .map(|e| e.to_string())
             .collect::<Vec<String>>()
             .join("\n"),
-        CreateVMError::Compiler(c) => c.to_string().to_string(),
-        CreateVMError::VM(v) => v.to_string().to_string(),
+        CreateVMErrorKind::Compiler(c) => c.to_string().to_string(),
+        CreateVMErrorKind::VM(v) => v.to_string().to_string(),
     };
 
     CString::new(msg).unwrap().into_raw()
 }
 
 #[repr(C)]
-#[derive(Debug)]
 pub enum VMInterpretError {
-    UncaughtError(Rc<RefCell<Value>>),
+    UncaughtError(GcHandle<Value>),
 }
 
 impl From<VMError> for VMInterpretError {
@@ -94,12 +132,4 @@ impl From<VMInterpretError> for VMError {
             VMInterpretError::UncaughtError(e) => VMError::UncaughtError(e),
         }
     }
-}
-
-#[no_mangle]
-pub extern "C" fn inspect_vm_interpret_error(err: Handle<VMInterpretError>) -> *mut i8 {
-    let err = unsafe { *err.into_box() };
-    let err = VMError::from(err);
-    let err = CString::new(&*err.to_string()).unwrap();
-    err.into_raw()
 }

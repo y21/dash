@@ -8,12 +8,12 @@ impl Value {
                 let left = String::from(self.to_string());
                 let right = other.to_string();
 
-                Value::from(left + &right).into()
+                Value::from(left + &right)
             }
             _ => {
                 let this = self.as_number();
                 let other = other.as_number();
-                Value::from(this + other).into()
+                Value::from(this + other)
             }
         }
     }

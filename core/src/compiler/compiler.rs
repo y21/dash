@@ -1,6 +1,9 @@
 // This file is cursed. You've been warned
+use super::instruction::Instruction;
 use crate::{
     agent::{Agent, ImportResult},
+    compiler::instruction::to_vm_instructions,
+    gc::{Gc, Handle},
     parser::{
         expr::{
             ArrayLiteral, AssignmentExpr, BinaryExpr, ConditionalExpr, Expr, FunctionCall,
@@ -18,7 +21,7 @@ use crate::{
     util::MaybeOwned,
     visitor::Visitor,
     vm::{
-        instruction::{Constant, Instruction, Opcode},
+        instruction::{Constant, Opcode},
         stack::{IteratorOrder, Stack},
         value::{
             function::{Constructor, FunctionType, Module, UserFunction},
@@ -29,6 +32,7 @@ use crate::{
 use std::{borrow::Cow, convert::TryFrom, ptr::NonNull};
 
 use super::{
+    constants::ConstantPool,
     scope::{Local, ScopeGuard},
     upvalue::Upvalue,
 };
@@ -104,6 +108,8 @@ pub struct Compiler<'a, A> {
     scope: ScopeGuard<Local<'a>, 1024>,
     agent: Option<MaybeOwned<A>>,
     ctx: MaybeOwned<Context>,
+    gc: Option<MaybeOwned<Gc<Value>>>,
+    constants: ConstantPool,
     kind: FunctionKind,
 }
 
@@ -114,6 +120,14 @@ pub struct CompileResult {
     /// Upvalues, needed for when the compiler recursively compiles other functions
     /// that use values from the upper scope
     pub upvalues: Stack<Upvalue, 1024>,
+    /// The garbage collector associated to this function compiler
+    ///
+    /// NOTE: This will only be [Some] if this is the topmost frame
+    pub gc: Option<Gc<Value>>,
+    /// A pool of constants
+    ///
+    /// Operands in bytecode will be indexes into this pool
+    pub constants: ConstantPool,
 }
 
 /// An error that occurred during a call to Compiler::from_str
@@ -152,6 +166,8 @@ impl<'a, A: Agent> Compiler<'a, A> {
             scope,
             kind,
             ctx: MaybeOwned::Owned(Context::default()),
+            constants: ConstantPool::new(),
+            gc: Some(MaybeOwned::Owned(Gc::new())),
         }
     }
 
@@ -164,6 +180,7 @@ impl<'a, A: Agent> Compiler<'a, A> {
         agent: Option<MaybeOwned<A>>,
         caller: Option<NonNull<Compiler<'a, A>>>,
         ctx: NonNull<Context>,
+        gc: NonNull<Gc<Value>>,
         kind: FunctionKind,
     ) -> Self {
         Self {
@@ -173,8 +190,20 @@ impl<'a, A: Agent> Compiler<'a, A> {
             agent,
             scope,
             ctx: MaybeOwned::Borrowed(ctx.as_ptr()),
+            gc: Some(MaybeOwned::Borrowed(gc.as_ptr())),
+            constants: ConstantPool::new(),
             kind,
         }
+    }
+
+    /// Adds a constant and returns its index
+    fn add_constant(&mut self, constant: Constant) -> u8 {
+        self.constants.add(constant)
+    }
+
+    fn register_value(&mut self, value: Value) -> Handle<Value> {
+        let gc = unsafe { self.gc.as_mut().unwrap().as_mut() };
+        gc.register(value)
     }
 
     /// Returns a reference to the compiler that invoked this compilation
@@ -213,14 +242,20 @@ impl<'a, A: Agent> Compiler<'a, A> {
     }
 
     /// Compiles this AST to bytecode
-    pub fn compile(self) -> Result<Vec<Instruction>, CompileError<'a>> {
+    pub fn compile(self) -> Result<(Vec<Instruction>, ConstantPool, Gc<Value>), CompileError<'a>> {
         let is_top = self.top.is_none();
         let is_module = matches!(self.kind, FunctionKind::Module);
-        let mut instructions = self.compile_frame()?.instructions;
+        let CompileResult {
+            mut instructions,
+            gc,
+            constants,
+            ..
+        } = self.compile_frame()?;
+        let gc = gc.unwrap();
 
         if is_top {
             if let Some(last) = instructions.last() {
-                if matches!(last, Instruction::Op(Opcode::Pop)) {
+                if matches!(last, Instruction::Op(Opcode::PopElide)) {
                     instructions.pop();
                 }
             }
@@ -232,7 +267,7 @@ impl<'a, A: Agent> Compiler<'a, A> {
             }
         }
 
-        Ok(instructions)
+        Ok((instructions, constants, gc))
     }
 
     /// Compiles a frame
@@ -249,7 +284,9 @@ impl<'a, A: Agent> Compiler<'a, A> {
 
         Ok(CompileResult {
             instructions,
+            gc: self.gc.take().and_then(|x| x.into_owned()),
             upvalues: self.upvalues,
+            constants: self.constants,
         })
     }
 
@@ -267,14 +304,16 @@ impl<'a, A: Agent> Compiler<'a, A> {
         let stack_idx = self
             .scope
             .push_local(Local::new(var.name, self.scope.depth, var.kind));
-        instructions.push(Instruction::Op(Opcode::Constant));
-        instructions.push(Instruction::Operand(Constant::Index(stack_idx)));
 
         if has_value {
             instructions.push(Instruction::Op(op_with_value));
         } else {
             instructions.push(Instruction::Op(op_no_value));
         }
+
+        instructions.push(Instruction::Operand(
+            self.add_constant(Constant::Index(stack_idx)),
+        ));
 
         Ok(instructions)
     }
@@ -322,58 +361,63 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         &mut self,
         e: &LiteralExpr<'a>,
     ) -> Result<Vec<Instruction>, CompileError<'a>> {
+        let value = self.register_value(e.to_value());
+
         let mut instructions = Vec::with_capacity(3);
         instructions.push(Instruction::Op(Opcode::Constant));
-        let value = match e {
-            LiteralExpr::Identifier(ident) => {
-                Constant::Identifier(std::str::from_utf8(ident).unwrap().to_owned())
-            }
-            other => Constant::JsValue(other.to_value()),
-        };
-
-        if let LiteralExpr::Identifier(ident) = e {
-            match *ident {
-                b"this" => {
-                    instructions[0] = Instruction::Op(Opcode::GetThis);
-                    return Ok(instructions);
-                }
-                b"super" => {
-                    instructions[0] = Instruction::Op(Opcode::GetSuper);
-                    return Ok(instructions);
-                }
-                b"globalThis" => {
-                    instructions[0] = Instruction::Op(Opcode::GetGlobalThis);
-                    return Ok(instructions);
-                }
-                _ => {}
-            };
-
-            let stack_idx = self.scope.find_variable(ident);
-
-            if let Some((stack_idx, local)) = stack_idx {
-                let ctx = unsafe { self.ctx.as_ref() };
-                if ctx.is_assign() && local.read_only() {
-                    return Err(CompileError::ConstAssignment);
-                }
-
-                instructions.push(Instruction::Operand(Constant::Index(stack_idx)));
-                instructions.push(Instruction::Op(Opcode::GetLocal));
-                return Ok(instructions);
-            }
-
-            if let Some(idx) = unsafe { self.find_upvalue(ident) } {
-                instructions.push(Instruction::Operand(Constant::Index(idx)));
-                instructions.push(Instruction::Op(Opcode::GetUpvalue));
-                return Ok(instructions);
-            }
-
-            instructions.push(Instruction::Operand(value));
-            instructions.push(Instruction::Op(Opcode::GetGlobal));
-        } else {
-            instructions.push(Instruction::Operand(value));
-        }
+        instructions.push(Instruction::Operand(
+            self.add_constant(Constant::JsValue(value)),
+        ));
 
         Ok(instructions)
+    }
+
+    fn visit_identifier_expression(
+        &mut self,
+        ident: &'a [u8],
+    ) -> Result<Vec<Instruction>, CompileError<'a>> {
+        // Special identifiers
+        match ident {
+            b"this" => return Ok(vec![Instruction::Op(Opcode::GetThis)]),
+            b"super" => return Ok(vec![Instruction::Op(Opcode::GetSuper)]),
+            b"globalThis" => return Ok(vec![Instruction::Op(Opcode::GetGlobalThis)]),
+            _ => {}
+        };
+
+        let is_assign = {
+            let ctx = unsafe { self.ctx.as_ref() };
+            ctx.is_assign()
+        };
+
+        // Regular locals declared in this scope
+        if let Some((stack_idx, local)) = self.scope.find_variable(ident) {
+            if is_assign && local.read_only() {
+                return Err(CompileError::ConstAssignment);
+            }
+
+            return Ok(vec![
+                Instruction::Op(Opcode::GetLocal),
+                Instruction::Operand(self.add_constant(Constant::Index(stack_idx))),
+            ]);
+        }
+
+        // Locals from an upper scope
+        if let Some(idx) = unsafe { self.find_upvalue(ident) } {
+            return Ok(vec![
+                Instruction::Op(Opcode::GetUpvalue),
+                Instruction::Operand(self.add_constant(Constant::Index(idx))),
+            ]);
+        }
+
+        // If we haven't found the local by now, we have to look in the global scope
+
+        // TODO: handle
+        let identifier = std::str::from_utf8(ident).map(String::from).unwrap();
+
+        Ok(vec![
+            Instruction::Op(Opcode::GetGlobal),
+            Instruction::Operand(self.add_constant(Constant::Identifier(identifier))),
+        ])
     }
 
     fn visit_binary_expression(
@@ -389,10 +433,6 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
             TokenType::LogicalAnd | TokenType::LogicalOr | TokenType::NullishCoalescing => {
                 let ty = e.operator;
 
-                instructions.push(Instruction::Op(Opcode::Constant));
-                jmp_idx = isize::try_from(instructions.len()).unwrap();
-                instructions.push(Instruction::Op(Opcode::Nop));
-
                 match ty {
                     TokenType::LogicalAnd => {
                         instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse))
@@ -406,6 +446,9 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
                     _ => {}
                 };
 
+                jmp_idx = isize::try_from(instructions.len()).unwrap();
+                instructions.push(Instruction::Op(Opcode::Nop));
+
                 instructions.push(Instruction::Op(Opcode::Pop));
             }
             _ => {}
@@ -417,8 +460,9 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         if jmp_idx > -1 {
             let jmp_idx = jmp_idx as usize;
 
-            let instruction_count = instructions.len() - jmp_idx - 2;
-            instructions[jmp_idx] = Instruction::Operand(Constant::Index(instruction_count));
+            let instruction_count = instructions.len() - jmp_idx - 1;
+            instructions[jmp_idx] =
+                Instruction::Operand(self.add_constant(Constant::Index(instruction_count)));
         } else {
             instructions.push(Instruction::Op(e.operator.into()));
         }
@@ -432,25 +476,27 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
     ) -> Result<Vec<Instruction>, CompileError<'a>> {
         let mut instructions = self.accept_expr(&l.condition)?;
 
-        instructions.push(Instruction::Op(Opcode::Constant));
+        instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
+
         let jmp_idx = instructions.len();
         instructions.push(Instruction::Op(Opcode::Nop));
 
-        instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
         instructions.push(Instruction::Op(Opcode::Pop));
 
         // Compile body
         instructions.extend(self.accept(&l.body)?);
 
         let instruction_count_ = instructions.len() - jmp_idx + 1;
-        let instruction_count = Instruction::Operand(Constant::Index(instruction_count_));
+        let instruction_count =
+            Instruction::Operand(self.add_constant(Constant::Index(instruction_count_)));
         instructions[jmp_idx] = instruction_count;
 
         // Emit backjump to evaluate condition
-        instructions.push(Instruction::Op(Opcode::Constant));
-        let backjmp_count = instruction_count_ + jmp_idx + 2;
-        instructions.push(Instruction::Operand(Constant::Index(backjmp_count)));
+        let backjmp_count = instruction_count_ + jmp_idx + 1;
         instructions.push(Instruction::Op(Opcode::BackJmp));
+        instructions.push(Instruction::Operand(
+            self.add_constant(Constant::Index(backjmp_count)),
+        ));
         instructions.push(Instruction::Op(Opcode::Pop));
 
         Ok(instructions)
@@ -510,23 +556,20 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
     ) -> Result<Vec<Instruction>, CompileError<'a>> {
         let mut instructions = self.accept_expr(&i.condition)?;
 
-        instructions.push(Instruction::Op(Opcode::Constant));
+        instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
         let jmp_idx = instructions.len();
         instructions.push(Instruction::Op(Opcode::Nop));
-        instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
         instructions.push(Instruction::Op(Opcode::Pop));
 
         let then_instructions = self.accept(&i.then)?;
-        instructions[jmp_idx] = Instruction::Operand(Constant::Index(then_instructions.len() + 4));
+        instructions[jmp_idx] =
+            Instruction::Operand(self.add_constant(Constant::Index(then_instructions.len() + 3)));
 
         instructions.extend(then_instructions);
 
-        instructions.push(Instruction::Op(Opcode::Constant));
+        instructions.push(Instruction::Op(Opcode::ShortJmp));
         let final_jmp_idx = instructions.len();
         instructions.push(Instruction::Op(Opcode::Nop));
-        instructions.push(Instruction::Op(Opcode::ShortJmp));
-
-        let mut jumps: Vec<(usize, usize, usize)> = Vec::new();
 
         // For simplicitly, we desugar the last `else` to another `else if` branch
         // with `true` as condition
@@ -540,23 +583,25 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
             ));
         }
 
-        for branch in i.branches.borrow().iter() {
+        let branches = i.branches.borrow();
+
+        let mut jumps: Vec<(usize, usize, usize)> = Vec::with_capacity(branches.len());
+
+        for branch in branches.iter() {
             let old_count = instructions.len();
 
             let mut branch_instructions = self.accept_expr(&branch.condition)?;
 
-            branch_instructions.push(Instruction::Op(Opcode::Constant));
+            branch_instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
             let condition_out_jmp_offset = branch_instructions.len();
             branch_instructions.push(Instruction::Op(Opcode::Nop));
-            branch_instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
             branch_instructions.push(Instruction::Op(Opcode::Pop));
 
             branch_instructions.extend(self.accept(&branch.then)?);
 
-            branch_instructions.push(Instruction::Op(Opcode::Constant));
+            branch_instructions.push(Instruction::Op(Opcode::ShortJmp));
             let final_out_jmp_offset = branch_instructions.len();
             branch_instructions.push(Instruction::Op(Opcode::Nop));
-            branch_instructions.push(Instruction::Op(Opcode::ShortJmp));
             branch_instructions.push(Instruction::Op(Opcode::Pop));
 
             instructions.extend(branch_instructions);
@@ -566,19 +611,18 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
 
         let instruction_count = instructions.len();
 
-        for idx in 0..jumps.len() {
-            let current = jumps[idx];
-
+        for current in &jumps {
             instructions[current.0 + current.1] =
-                Instruction::Operand(Constant::Index(current.2 - current.1));
+                Instruction::Operand(self.add_constant(Constant::Index(current.2 - current.1)));
 
-            instructions[current.0 + current.2] = Instruction::Operand(Constant::Index(
-                instruction_count - (current.0 + current.2) - 3,
+            instructions[current.0 + current.2] = Instruction::Operand(self.add_constant(
+                Constant::Index(instruction_count - (current.0 + current.2) - 2),
             ));
         }
 
-        instructions[final_jmp_idx] =
-            Instruction::Operand(Constant::Index(instruction_count - final_jmp_idx - 2));
+        instructions[final_jmp_idx] = Instruction::Operand(
+            self.add_constant(Constant::Index(instruction_count - final_jmp_idx - 1)),
+        );
 
         Ok(instructions)
     }
@@ -621,42 +665,44 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
                 // SAFETY: self is never null
                 Some(NonNull::new_unchecked(self as *mut _)),
                 NonNull::new_unchecked(self.ctx.as_ptr()),
+                NonNull::new_unchecked(self.gc.as_mut().map(|x| x.as_ptr()).unwrap()),
                 FunctionKind::Function,
             )
             .compile_frame()
         }?;
 
-        if frame.instructions.len() == 0 {
+        if frame.instructions.is_empty() {
+            let undefined_value = self.register_value(Value::new(ValueKind::Undefined));
             frame.instructions.push(Instruction::Op(Opcode::Constant));
-            frame
-                .instructions
-                .push(Instruction::Operand(Constant::JsValue(Value::new(
-                    ValueKind::Undefined,
-                ))));
+            frame.instructions.push(Instruction::Operand(
+                frame.constants.add(Constant::JsValue(undefined_value)),
+            ));
             frame.instructions.push(Instruction::Op(Opcode::Return));
-        } else if let Some(Instruction::Op(op)) = frame.instructions.last() {
-            if !op.eq(&Opcode::Return) {
+        } else if let Some(instruction) = frame.instructions.last() {
+            if !matches!(instruction, Instruction::Op(Opcode::Return)) {
+                let undefined_value = self.register_value(Value::new(ValueKind::Undefined));
                 frame.instructions.push(Instruction::Op(Opcode::Constant));
-                frame
-                    .instructions
-                    .push(Instruction::Operand(Constant::JsValue(Value::new(
-                        ValueKind::Undefined,
-                    ))));
+                frame.instructions.push(Instruction::Operand(
+                    frame.constants.add(Constant::JsValue(undefined_value)),
+                ));
                 frame.instructions.push(Instruction::Op(Opcode::Return));
             }
         }
 
         let mut func = UserFunction::new(
-            frame.instructions,
+            to_vm_instructions(frame.instructions),
             params as u32,
             FunctionType::Function,
             frame.upvalues.len() as u32,
             Constructor::Any,
+            frame.constants,
         );
         if let Some(name) = f.name {
             func.name = Some(std::str::from_utf8(name).unwrap().to_owned());
         }
-        instructions.push(Instruction::Operand(Constant::JsValue(func.into())));
+        instructions.push(Instruction::Operand(
+            self.add_constant(Constant::Function(func.into())),
+        ));
 
         for upvalue in frame.upvalues.into_iter(IteratorOrder::BottomToTop) {
             if upvalue.local {
@@ -664,7 +710,9 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
             } else {
                 instructions.push(Instruction::Op(Opcode::UpvalueNonLocal));
             }
-            instructions.push(Instruction::Operand(Constant::Index(upvalue.idx)));
+            instructions.push(Instruction::Operand(
+                self.add_constant(Constant::Index(upvalue.idx)),
+            ));
         }
         Ok(instructions)
     }
@@ -676,20 +724,20 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         let mut instructions = self.visit_function_expr(f)?;
 
         if self.scope.is_global() {
-            instructions.push(Instruction::Op(Opcode::Constant));
-            instructions.push(Instruction::Operand(Constant::Identifier(
-                std::str::from_utf8(f.name.unwrap()).unwrap().to_owned(),
-            )));
             instructions.push(Instruction::Op(Opcode::SetGlobal));
+            instructions.push(Instruction::Operand(self.add_constant(
+                Constant::Identifier(std::str::from_utf8(f.name.unwrap()).unwrap().to_owned()),
+            )));
         } else {
             let stack_idx = self.scope.push_local(Local::new(
                 f.name.unwrap(),
                 self.scope.depth,
                 VariableDeclarationKind::Var,
             ));
-            instructions.push(Instruction::Op(Opcode::Constant));
-            instructions.push(Instruction::Operand(Constant::Index(stack_idx)));
             instructions.push(Instruction::Op(Opcode::SetLocal));
+            instructions.push(Instruction::Operand(
+                self.add_constant(Constant::Index(stack_idx)),
+            ));
         }
 
         Ok(instructions)
@@ -727,7 +775,7 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         e: &Expr<'a>,
     ) -> Result<Vec<Instruction>, CompileError<'a>> {
         let mut instructions = self.accept_expr(e)?;
-        instructions.push(Instruction::Op(Opcode::Pop));
+        instructions.push(Instruction::Op(Opcode::PopElide));
         Ok(instructions)
     }
 
@@ -743,14 +791,15 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
             instructions.extend(self.accept_expr(argument)?);
         }
 
-        instructions.push(Instruction::Op(Opcode::Constant));
-        instructions.push(Instruction::Operand(Constant::Index(argument_len)));
-
         if c.constructor_call {
             instructions.push(Instruction::Op(Opcode::ConstructorCall));
         } else {
             instructions.push(Instruction::Op(Opcode::FunctionCall));
         }
+
+        instructions.push(Instruction::Operand(
+            self.add_constant(Constant::Index(argument_len)),
+        ));
 
         Ok(instructions)
     }
@@ -770,26 +819,25 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
     ) -> Result<Vec<Instruction>, CompileError<'a>> {
         let mut instructions = self.accept_expr(&c.condition)?;
 
-        instructions.push(Instruction::Op(Opcode::Constant));
+        instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
         let then_jmp_idx = instructions.len();
         instructions.push(Instruction::Op(Opcode::Nop));
 
-        instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
         instructions.push(Instruction::Op(Opcode::Pop));
         let then_instructions = self.accept_expr(&c.then)?;
         let then_instruction_count = then_instructions.len();
         instructions.extend(then_instructions);
         instructions[then_jmp_idx] =
-            Instruction::Operand(Constant::Index(then_instruction_count + 3));
+            Instruction::Operand(self.add_constant(Constant::Index(then_instruction_count + 3)));
 
-        instructions.push(Instruction::Op(Opcode::Constant));
+        instructions.push(Instruction::Op(Opcode::ShortJmp));
         let else_jmp_idx = instructions.len();
         instructions.push(Instruction::Op(Opcode::Nop));
-        instructions.push(Instruction::Op(Opcode::ShortJmp));
 
         let else_instructions = self.accept_expr(&c.el)?;
         let else_instruction_count = else_instructions.len();
-        instructions[else_jmp_idx] = Instruction::Operand(Constant::Index(else_instruction_count));
+        instructions[else_jmp_idx] =
+            Instruction::Operand(self.add_constant(Constant::Index(else_instruction_count)));
         instructions.extend(else_instructions);
 
         Ok(instructions)
@@ -802,8 +850,6 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         let mut instructions = self.accept_expr(&e.target)?;
 
         let is_assign = unsafe { self.ctx.as_ref().is_assign() };
-        instructions.push(Instruction::Op(Opcode::Constant));
-        instructions.push(Instruction::Operand(Constant::Index(is_assign as usize)));
 
         if e.computed {
             let property = self.accept_expr(&e.property)?;
@@ -820,13 +866,16 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
                 todo!()
             };
 
-            instructions.push(Instruction::Op(Opcode::Constant));
-            instructions.push(Instruction::Operand(Constant::Identifier(
-                std::str::from_utf8(ident).unwrap().to_owned(),
-            )));
-
             instructions.push(Instruction::Op(Opcode::StaticPropertyAccess));
+
+            instructions.push(Instruction::Operand(self.add_constant(
+                Constant::Identifier(std::str::from_utf8(ident).unwrap().to_owned()),
+            )));
         }
+
+        instructions.push(Instruction::Operand(
+            self.add_constant(Constant::Index(is_assign as usize)),
+        ));
 
         Ok(instructions)
     }
@@ -859,10 +908,11 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         for expr in a.iter().rev() {
             instructions.extend(self.accept_expr(expr)?);
         }
-        instructions.push(Instruction::Op(Opcode::Constant));
-        instructions.push(Instruction::Operand(Constant::Index(element_count)));
 
         instructions.push(Instruction::Op(Opcode::ArrayLiteral));
+        instructions.push(Instruction::Operand(
+            self.add_constant(Constant::Index(element_count)),
+        ));
         Ok(instructions)
     }
 
@@ -878,14 +928,16 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
             instructions.extend(self.accept_expr(value)?);
         }
 
-        instructions.push(Instruction::Op(Opcode::Constant));
-        instructions.push(Instruction::Operand(Constant::Index(property_count)));
         instructions.push(Instruction::Op(Opcode::ObjectLiteral));
+        instructions.push(Instruction::Operand(
+            self.add_constant(Constant::Index(property_count)),
+        ));
 
         // ...And then we emit instructions for keys, because it shouldn't try to evaluate them at runtime
+        // TODO: implement { ["computed"]: 1 } (using computed keys)
         for (key, _) in o.iter() {
-            instructions.push(Instruction::Operand(Constant::Identifier(
-                String::from_utf8_lossy(key).to_string(),
+            instructions.push(Instruction::Operand(self.add_constant(
+                Constant::Identifier(String::from_utf8_lossy(key).to_string()),
             )));
         }
 
@@ -907,10 +959,9 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         instructions.extend(self.accept(&t.try_)?);
 
         instructions.push(Instruction::Op(Opcode::PopUnwindHandler));
-        instructions.push(Instruction::Op(Opcode::Constant));
+        instructions.push(Instruction::Op(Opcode::ShortJmp));
         let thing_idx = instructions.len();
         instructions.push(Instruction::Op(Opcode::Nop));
-        instructions.push(Instruction::Op(Opcode::ShortJmp));
 
         self.scope.enter_scope();
 
@@ -921,21 +972,30 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
                 VariableDeclarationKind::Var,
             ));
 
-            instructions[3] = Instruction::Operand(Constant::Index(stack_idx));
+            let catch_stack_idx_instruction = &mut instructions[3];
+
+            debug_assert!(matches!(
+                catch_stack_idx_instruction,
+                Instruction::Op(Opcode::Nop)
+            ));
+
+            *catch_stack_idx_instruction =
+                Instruction::Operand(self.add_constant(Constant::Index(stack_idx)));
         }
 
         let catch = self.accept(&t.catch.body)?;
         self.scope.leave_scope();
 
-        instructions[thing_idx] = Instruction::Operand(Constant::Index(catch.len()));
+        instructions[thing_idx] =
+            Instruction::Operand(self.add_constant(Constant::Index(catch.len())));
 
         let catch_jmp_idx = instructions.len();
         instructions.extend(catch);
 
         // ...add catch jump index
-        instructions[1] = Instruction::Operand(Constant::Index(
+        instructions[1] = Instruction::Operand(self.add_constant(Constant::Index(
             catch_jmp_idx - prefix_instructions, /* we skipped the first 4 instructions at this point in vm, so we subtract 2 */
-        ));
+        )));
 
         Ok(instructions)
     }
@@ -959,7 +1019,8 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         }
 
         let begin_condition_idx = instructions.len();
-        instructions[1] = Instruction::Operand(Constant::Index(begin_condition_idx - 3));
+        instructions[1] =
+            Instruction::Operand(self.add_constant(Constant::Index(begin_condition_idx - 3)));
 
         if let Some(condition) = &f.condition {
             instructions.extend(self.accept_expr(condition)?);
@@ -967,17 +1028,15 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
             instructions.extend(self.accept_expr(&Expr::bool_literal(true))?);
         };
 
-        instructions.push(Instruction::Op(Opcode::Constant));
+        instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
         let end_of_loop_jmp = instructions.len();
         instructions.push(Instruction::Op(Opcode::Nop));
-        instructions.push(Instruction::Op(Opcode::ShortJmpIfFalse));
 
         instructions.push(Instruction::Op(Opcode::Pop));
 
-        instructions.push(Instruction::Op(Opcode::Constant));
+        instructions.push(Instruction::Op(Opcode::ShortJmp));
         let body_jmp = instructions.len();
         instructions.push(Instruction::Op(Opcode::Nop));
-        instructions.push(Instruction::Op(Opcode::ShortJmp));
 
         let finalizer_idx = instructions.len();
         if let Some(finalizer) = &f.finalizer {
@@ -985,31 +1044,31 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
             instructions.push(Instruction::Op(Opcode::Pop));
         }
 
-        instructions.push(Instruction::Op(Opcode::Constant));
+        instructions.push(Instruction::Op(Opcode::BackJmp));
         let condition_back_jmp = instructions.len();
         instructions.push(Instruction::Op(Opcode::Nop));
-        instructions.push(Instruction::Op(Opcode::BackJmp));
 
         let begin_body = instructions.len();
         instructions.extend(self.accept(&f.body)?);
 
-        instructions.push(Instruction::Op(Opcode::Constant));
-        instructions.push(Instruction::Operand(Constant::Index(
-            instructions.len() - finalizer_idx + 2,
-        )));
         instructions.push(Instruction::Op(Opcode::BackJmp));
+        instructions.push(Instruction::Operand(
+            self.add_constant(Constant::Index(instructions.len() - finalizer_idx + 1)),
+        ));
 
-        instructions[end_of_loop_jmp] =
-            Instruction::Operand(Constant::Index(instructions.len() - (end_of_loop_jmp + 2)));
-        instructions[body_jmp] = Instruction::Operand(Constant::Index(begin_body - (body_jmp + 2)));
-        instructions[condition_back_jmp] = Instruction::Operand(Constant::Index(
-            condition_back_jmp - begin_condition_idx + 2,
+        instructions[end_of_loop_jmp] = Instruction::Operand(
+            self.add_constant(Constant::Index(instructions.len() - (end_of_loop_jmp + 1))),
+        );
+        instructions[body_jmp] =
+            Instruction::Operand(self.add_constant(Constant::Index(begin_body - (body_jmp + 1))));
+        instructions[condition_back_jmp] = Instruction::Operand(self.add_constant(
+            Constant::Index(condition_back_jmp - begin_condition_idx + 1),
         ));
 
         instructions.push(Instruction::Op(Opcode::Pop));
 
-        instructions[2] = Instruction::Operand(Constant::Index(instructions.len() - 3));
-
+        instructions[2] =
+            Instruction::Operand(self.add_constant(Constant::Index(instructions.len() - 3)));
         instructions.push(Instruction::Op(Opcode::LoopEnd));
 
         self.scope.leave_scope();
@@ -1038,28 +1097,35 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         // todo: don't unwrap and handle dynamic imports
         let module_name = i.get_module_target().unwrap();
 
-        let mut module_instructions = if let Some(agent) = &mut self.agent {
+        let (mut module_instructions, module_constants) = if let Some(agent) = &mut self.agent {
             let agent = unsafe { agent.as_mut() };
 
-            match agent.import(module_name) {
-                Some(ImportResult::Bytecode(code)) => code,
-                Some(ImportResult::Value(value)) => vec![
-                    Instruction::Op(Opcode::Constant),
-                    Instruction::Operand(Constant::JsValue(value)),
-                    Instruction::Op(Opcode::ExportDefault),
-                    Instruction::Op(Opcode::ReturnModule),
-                ],
+            let gc = unsafe { self.gc.as_mut().unwrap().as_mut() };
+
+            match agent.import(module_name, gc) {
+                Some(ImportResult::Bytecode(code, constants)) => (code, constants),
+                Some(ImportResult::Value(value)) => {
+                    let mut constants = ConstantPool::new();
+                    let handle = self.register_value(value);
+                    let instructions = vec![
+                        Instruction::Op(Opcode::Constant),
+                        Instruction::Operand(constants.add(Constant::JsValue(handle))),
+                        Instruction::Op(Opcode::ExportDefault),
+                        Instruction::Op(Opcode::ReturnModule),
+                    ];
+
+                    (instructions, constants.into())
+                }
                 _ => return Err(CompileError::NativeImportFailed),
             }
         } else {
             return Err(CompileError::ImportDisabled);
         };
 
-        // We only want to insert a ReturnModule opcode if it's not there already
-        let has_module_return = match module_instructions.last() {
-            Some(last) => matches!(last, Instruction::Op(Opcode::ReturnModule)),
-            None => false,
-        };
+        let has_module_return = matches!(
+            module_instructions.last(),
+            Some(Instruction::Op(Opcode::ReturnModule))
+        );
 
         if !has_module_return {
             module_instructions.push(Instruction::Op(Opcode::ReturnModule));
@@ -1067,8 +1133,12 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
 
         let mut instructions: Vec<Instruction> = vec![Instruction::Op(Opcode::EvaluateModule)];
 
-        let module = Module::new(module_instructions);
-        instructions.push(Instruction::Operand(Constant::JsValue(module.into())));
+        let module = Module::new(to_vm_instructions(module_instructions), module_constants);
+        // TODO: do we need to do something with constants here?
+        let handle = self.register_value(module.into());
+        instructions.push(Instruction::Operand(
+            self.add_constant(Constant::JsValue(handle)),
+        ));
 
         let instructions = self.compile_variable_declaration(
             &VariableDeclaration::new(

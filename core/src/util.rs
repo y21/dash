@@ -41,6 +41,14 @@ impl<T> MaybeOwned<T> {
         Self::Borrowed(self.as_ptr())
     }
 
+    /// Attempts to return self as an owned T
+    pub fn into_owned(self) -> Option<T> {
+        match self {
+            Self::Owned(v) => Some(v),
+            _ => None,
+        }
+    }
+
     /// Returns a reference to the T
     ///
     /// This operation is unsafe because the pointer may be invalid
@@ -126,4 +134,15 @@ impl<L, R> Either<L, R> {
             Self::Right(r) => Some(r),
         }
     }
+}
+
+#[inline(never)]
+#[cold]
+fn unlikely_inner() {}
+
+pub(crate) fn unlikely(b: bool) -> bool {
+    if b {
+        unlikely_inner();
+    }
+    b
 }

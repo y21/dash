@@ -207,7 +207,7 @@ impl Object {
                         s.push_str(", ");
                     }
 
-                    let element = element_cell.borrow();
+                    let element = unsafe { element_cell.borrow_unbounded() };
 
                     if let Some(element) = element.to_json() {
                         s.push_str(&element);
@@ -221,7 +221,7 @@ impl Object {
                 let mut s = String::from("{ ");
 
                 for (index, (key, value_cell)) in this.fields.iter().enumerate() {
-                    let value = value_cell.borrow();
+                    let value = unsafe { value_cell.borrow_unbounded() };
                     if index > 0 {
                         s.push_str(", ");
                     }
@@ -262,7 +262,7 @@ impl Object {
                 let mut s = String::from("[ ");
 
                 for (index, element_cell) in a.elements.iter().enumerate() {
-                    let element = element_cell.borrow();
+                    let element = unsafe { element_cell.borrow_unbounded() };
                     if index > 0 {
                         s.push_str(", ");
                     }
@@ -274,14 +274,14 @@ impl Object {
             Self::Weak(w) => w.inspect(),
             Self::Promise(p) => match &p.value {
                 PromiseState::Resolved(value_cell) => {
-                    let value = value_cell.borrow();
+                    let value = unsafe { value_cell.borrow_unbounded() };
                     Cow::Owned(format!(
                         "Promise {{ <resolved> {} }}",
                         value.inspect(depth + 1)
                     ))
                 }
                 PromiseState::Rejected(value_cell) => {
-                    let value = value_cell.borrow();
+                    let value = unsafe { value_cell.borrow_unbounded() };
                     Cow::Owned(format!(
                         "Promise {{ <rejected> {} }}",
                         value.inspect(depth + 1)
@@ -293,7 +293,7 @@ impl Object {
                 let mut s = String::from("{ ");
 
                 for (index, (key, value_cell)) in this.fields.iter().enumerate() {
-                    let value = value_cell.borrow();
+                    let value = unsafe { value_cell.borrow_unbounded() };
                     if index > 0 {
                         s.push_str(", ");
                     }

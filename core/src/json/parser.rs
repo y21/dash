@@ -1,8 +1,6 @@
 use std::borrow::Cow;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::num::ParseFloatError;
-use std::rc::Rc;
 use std::str::Utf8Error;
 
 use crate::util;
@@ -97,7 +95,7 @@ impl<'a> Value<'a> {
                 let mut js_arr = Vec::with_capacity(arr.len());
 
                 for value in arr {
-                    js_arr.push(value.into_js_value(vm).map(Into::into)?);
+                    js_arr.push(value.into_js_value(vm).map(|v| v.into_handle(vm))?);
                 }
 
                 js_arr
@@ -109,7 +107,7 @@ impl<'a> Value<'a> {
                     let key = std::str::from_utf8(key)?;
                     js_obj.set_property(
                         String::from(key).into_boxed_str(),
-                        Rc::new(RefCell::new(value.into_js_value(vm)?)),
+                        value.into_js_value(vm)?.into_handle(vm),
                     );
                 }
 

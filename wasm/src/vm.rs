@@ -1,23 +1,12 @@
-use std::{
-    cell::RefCell,
-    ffi::{CStr, CString},
-    rc::Rc,
-};
+use std::ffi::{CStr, CString};
 
 use dash::{
-    compiler::compiler::{Compiler, FunctionKind},
-    parser::{lexer::Lexer, parser::Parser},
-    vm::{
-        value::{
-            function::{Constructor, FunctionType, UserFunction},
-            Value,
-        },
-        VM,
-    },
+    gc::Handle as GcHandle,
+    vm::{value::Value, VMError, VM},
 };
 
 use crate::{
-    error::{CreateVMError, VMInterpretError},
+    error::CreateVMError,
     ffi::{WasmOption, WasmResult},
     handle::{Handle, HandleRef},
 };
@@ -31,67 +20,105 @@ macro_rules! try_result {
     };
 }
 
+#[repr(C)]
+pub struct Eval {
+    value: WasmOption<Handle<GcHandle<Value>>>,
+    vm: Handle<VM>,
+}
+
+type EvalResult<'a> = WasmResult<Eval, CreateVMError<'a>>;
+type CreateVMFromStringResult<'a> = WasmResult<Handle<VM>, CreateVMError<'a>>;
+type InterpretVMResult = WasmResult<WasmOption<Handle<GcHandle<Value>>>, VMError>;
+type VMEvalResult<'a> = WasmResult<WasmOption<Handle<GcHandle<Value>>>, CreateVMError<'a>>;
+
 #[no_mangle]
-pub extern "C" fn eval<'a>(
+pub extern "C" fn eval<'a>(source: *const i8) -> Handle<EvalResult<'a>> {
+    let source = unsafe { CStr::from_ptr(source).to_str().unwrap() };
+    let (value, vm) = try_result!(dash::eval::<()>(source, None));
+    let value = WasmOption::from(value.map(Handle::new));
+    let vm = Handle::new(vm);
+    Handle::new(WasmResult::Ok(Eval { value, vm }))
+}
+
+#[no_mangle]
+pub extern "C" fn create_vm() -> Handle<VM> {
+    Handle::new(VM::new())
+}
+
+#[no_mangle]
+pub extern "C" fn create_vm_from_string<'a>(
     source: *const i8,
-) -> Handle<WasmResult<WasmOption<Rc<RefCell<Value>>>, CreateVMError<'a>>> {
+) -> Handle<CreateVMFromStringResult<'a>> {
     let source = unsafe { CStr::from_ptr(source).to_str().unwrap() };
-    let result = WasmOption::from(try_result!(dash::eval::<()>(source, None)));
-    Handle::new(WasmResult::Ok(result))
+    let vm = try_result!(VM::from_str::<()>(source, None));
+    Handle::new(WasmResult::Ok(Handle::new(vm)))
 }
 
 #[no_mangle]
-pub extern "C" fn create_vm<'a>(source: *const i8) -> Handle<WasmResult<VM, CreateVMError<'a>>> {
-    let source = unsafe { CStr::from_ptr(source).to_str().unwrap() };
-
-    let tokens = try_result!(Lexer::new(source).scan_all());
-    let stmts = try_result!(Parser::new(source, tokens).parse_all());
-    let bytecode = try_result!(Compiler::<()>::new(stmts, None, FunctionKind::Function).compile());
-    let func = UserFunction::new(bytecode, 0, FunctionType::Top, 0, Constructor::NoCtor);
-
-    Handle::new(WasmResult::Ok(VM::new(func)))
-}
-
-#[no_mangle]
-pub extern "C" fn vm_interpret(
-    mut vm: HandleRef<VM>,
-) -> Handle<WasmResult<WasmOption<Rc<RefCell<Value>>>, VMInterpretError>> {
+pub extern "C" fn vm_interpret(mut vm: HandleRef<VM>) -> Handle<InterpretVMResult> {
     let vm = unsafe { vm.as_mut() };
-    let value = WasmOption::from(try_result!(vm.interpret()));
-    Handle::new(WasmResult::Ok(value))
+    let value = try_result!(vm.interpret());
+    Handle::new(WasmResult::Ok(WasmOption::from(value.map(Handle::new))))
 }
 
 #[no_mangle]
-pub extern "C" fn value_inspect(value: HandleRef<Rc<RefCell<Value>>>) -> *mut i8 {
-    let value_cell = unsafe { value.as_ref() };
-    let value = value_cell.borrow();
-    let string = CString::new(&*value.inspect(0)).unwrap();
+pub extern "C" fn vm_eval<'a>(
+    mut vm: HandleRef<VM>,
+    source: *const i8,
+) -> Handle<VMEvalResult<'a>> {
+    let vm = unsafe { vm.as_mut() };
+    let source = unsafe { CStr::from_ptr(source).to_str().unwrap() };
+    let value = try_result!(vm.eval(source));
+    Handle::new(WasmResult::Ok(WasmOption::from(value.map(Handle::new))))
+}
+
+#[no_mangle]
+pub extern "C" fn value_inspect(value: HandleRef<GcHandle<Value>>) -> *mut i8 {
+    let value = unsafe { value.as_ref() };
+    let value_ref = unsafe { value.borrow_unbounded() };
+    let inspected = value_ref.inspect(0);
+    let string = CString::new(&*inspected).unwrap();
+    string.into_raw()
+}
+
+// TODO: this should return... a result?
+// it may call a user function, which can throw an error
+#[no_mangle]
+pub extern "C" fn value_to_string(value: HandleRef<GcHandle<Value>>) -> *mut i8 {
+    let value = unsafe { value.as_ref() };
+    let value_ref = unsafe { value.borrow_unbounded() };
+    let inspected = value_ref.to_string();
+    let string = CString::new(&*inspected).unwrap();
     string.into_raw()
 }
 
 #[no_mangle]
-pub extern "C" fn value_to_string(value: HandleRef<Rc<RefCell<Value>>>) -> *mut i8 {
-    let value_cell = unsafe { value.as_ref() };
-    let value = value_cell.borrow();
-    let string = CString::new(&*value.to_string()).unwrap();
-    string.into_raw()
+pub extern "C" fn vm_set_gc_object_threshold(mut vm: HandleRef<VM>, threshold: usize) {
+    let vm = unsafe { vm.as_mut() };
+    vm.set_gc_object_threshold(threshold);
 }
 
 #[no_mangle]
-pub extern "C" fn free_create_vm_result<'a>(value: Handle<WasmResult<VM, CreateVMError<'a>>>) {
-    unsafe { value.drop() };
+pub extern "C" fn vm_run_async_tasks(mut vm: HandleRef<VM>) {
+    let vm = unsafe { vm.as_mut() };
+    vm.run_async_tasks();
 }
 
-#[no_mangle]
-pub extern "C" fn free_eval_result<'a>(
-    value: Handle<WasmResult<WasmOption<Rc<RefCell<Value>>>, CreateVMError<'a>>>,
-) {
-    unsafe { value.drop() };
+macro_rules! define_destructors {
+    ($($name:ident => $type:ty),*) => {
+        $(
+            #[no_mangle]
+            pub extern "C" fn $name(handle: Handle<$type>) {
+                unsafe { handle.drop() };
+            }
+        )*
+    }
 }
 
-#[no_mangle]
-pub extern "C" fn free_vm_interpret_result<'a>(
-    value: Handle<WasmResult<WasmOption<Rc<RefCell<Value>>>, VMInterpretError>>,
-) {
-    unsafe { value.drop() };
+define_destructors! {
+    free_vm => VM,
+    free_eval_result => EvalResult,
+    free_create_vm_from_string_result => CreateVMFromStringResult,
+    free_vm_interpret_result => InterpretVMResult,
+    free_vm_eval => VMEvalResult
 }

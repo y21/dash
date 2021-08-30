@@ -535,7 +535,7 @@ impl<'a> Lexer<'a> {
         }
 
         // If there are errors, return them
-        if errors.len() > 0 {
+        if !errors.is_empty() {
             Err(errors)
         } else {
             Ok(tokens)

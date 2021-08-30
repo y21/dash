@@ -26,17 +26,3 @@ pub mod string;
 pub mod weakmap;
 /// Implements `WeakSet`
 pub mod weakset;
-
-/// Unwraps a native [CallResult]
-///
-/// This macro is a shorthand for either getting the value if a CallResult is ready, or
-/// returning the callresult from this function
-#[macro_export]
-macro_rules! unwrap_call_result {
-    ($e:expr) => {
-        match $e? {
-            CallResult::Ready(value) => value,
-            CallResult::UserFunction(func, args) => return Ok(CallResult::UserFunction(func, args)),
-        }
-    };
-}

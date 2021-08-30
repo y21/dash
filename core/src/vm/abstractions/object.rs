@@ -1,8 +1,9 @@
-use std::{cell::RefCell, rc::Rc};
-
-use crate::vm::{
-    value::{object::Object, Value, ValueKind},
-    VM,
+use crate::{
+    gc::Handle,
+    vm::{
+        value::{object::Object, Value, ValueKind},
+        VM,
+    },
 };
 
 const MAX: f64 = 9007199254740991f64;
@@ -10,13 +11,15 @@ const MAX: f64 = 9007199254740991f64;
 /// Implements the abstract operation LengthOfArrayLike
 ///
 // https://tc39.es/ecma262/multipage/abstract-operations.html#sec-lengthofarraylike
-pub fn length_of_array_like(vm: &VM, obj: &Rc<RefCell<Value>>) -> Result<f64, Rc<RefCell<Value>>> {
+pub fn length_of_array_like(vm: &VM, obj: &Handle<Value>) -> Result<f64, Handle<Value>> {
     // ? Get(obj, "length")
     let len_prop_cell = Value::get_property(vm, obj, "length", None);
-    let len_prop = len_prop_cell.as_ref().map(|x| x.borrow());
+    let len_prop = len_prop_cell
+        .as_ref()
+        .map(|x| unsafe { x.borrow_unbounded() });
 
     // ? ToLength(prop)
-    let len = to_length(len_prop.as_deref())?;
+    let len = to_length(len_prop.as_ref().map(|c| &***c))?;
 
     // Return
     Ok(len)
@@ -25,7 +28,7 @@ pub fn length_of_array_like(vm: &VM, obj: &Rc<RefCell<Value>>) -> Result<f64, Rc
 /// Implements the abstract operation ToLength
 ///
 /// https://tc39.es/ecma262/multipage/abstract-operations.html#sec-tolength
-pub fn to_length(argument: Option<&Value>) -> Result<f64, Rc<RefCell<Value>>> {
+pub fn to_length(argument: Option<&Value>) -> Result<f64, Handle<Value>> {
     // 1. Let len be ? ToIntegerOrInfinity(argument).
     let len = to_integer_or_infinity(argument)?;
 
@@ -41,7 +44,7 @@ pub fn to_length(argument: Option<&Value>) -> Result<f64, Rc<RefCell<Value>>> {
 /// Implements the abstract operation ToIntegerOrInfinity
 ///
 // https://tc39.es/ecma262/multipage/abstract-operations.html#sec-tointegerorinfinity
-pub fn to_integer_or_infinity(argument: Option<&Value>) -> Result<f64, Rc<RefCell<Value>>> {
+pub fn to_integer_or_infinity(argument: Option<&Value>) -> Result<f64, Handle<Value>> {
     // 1. Let number be ? ToNumber(argument).
     let number = to_number(argument)?;
 
@@ -71,7 +74,7 @@ pub fn to_integer_or_infinity(argument: Option<&Value>) -> Result<f64, Rc<RefCel
 /// Implements the abstract operation ToNumber
 ///
 // https://tc39.es/ecma262/multipage/abstract-operations.html#sec-tonumber
-pub fn to_number(argument: Option<&Value>) -> Result<f64, Rc<RefCell<Value>>> {
+pub fn to_number(argument: Option<&Value>) -> Result<f64, Handle<Value>> {
     match argument.as_ref().map(|a| &a.kind) {
         Some(ValueKind::Undefined) => Ok(f64::NAN),
         Some(ValueKind::Null) => Ok(0f64),

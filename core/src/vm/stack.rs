@@ -4,6 +4,10 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
+use crate::gc::Handle;
+
+use super::{frame::Frame, value::Value};
+
 /// An owned stack
 ///
 /// It wraps [Stack] and implements the [Drop] trait,
@@ -42,6 +46,26 @@ impl<T, const N: usize> Drop for OwnedStack<T, N> {
 /// It has a fixed capacity and lives on the stack.
 #[derive(Debug)]
 pub struct Stack<T, const N: usize>([MaybeUninit<T>; N], usize);
+
+impl<const N: usize> Stack<Handle<Value>, N> {
+    /// Marks every handle in the stack as visited
+    pub fn mark_visited(&self) {
+        for handle in self.as_array() {
+            let handle = unsafe { &*handle.as_ptr() };
+            Value::mark(handle)
+        }
+    }
+}
+
+impl<const N: usize> Stack<Frame, N> {
+    /// Marks every frame as visited
+    pub fn mark_visited(&self) {
+        for frame in self.as_array() {
+            let frame = unsafe { &*frame.as_ptr() };
+            frame.mark_visited();
+        }
+    }
+}
 
 impl<T, const N: usize> Stack<T, N> {
     /// Creates a new stack

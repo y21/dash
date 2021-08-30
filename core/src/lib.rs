@@ -3,10 +3,11 @@
 #![deny(missing_docs)]
 #![allow(unused_unsafe)]
 
-use std::{borrow::Cow, cell::RefCell, rc::Rc};
+use std::borrow::Cow;
 
 use agent::Agent;
 use compiler::compiler::CompileError;
+use gc::Handle;
 use parser::{lexer::Error as LexError, token::Error as ParseError};
 use vm::{value::Value, FromStrError, VMError, VM};
 
@@ -20,8 +21,6 @@ pub mod gc;
 pub mod js_std;
 /// JSON parser and serializer
 pub mod json;
-/// Applies optimizations to JavaScript code at compile time
-pub mod optimizer;
 /// JavaScript lexer and parser
 pub mod parser;
 #[cfg(test)]
@@ -33,7 +32,7 @@ pub mod visitor;
 /// Bytecode VM
 pub mod vm;
 
-/// An error that occurred during a call to [eval]
+/// An error that occurred during a call to eval
 #[derive(Debug)]
 pub enum EvalError<'a> {
     /// A lexer error
@@ -89,9 +88,11 @@ impl<'a> From<VMError> for EvalError<'a> {
 pub fn eval<'a, A: Agent + 'static>(
     code: &'a str,
     agent: Option<A>,
-) -> Result<Option<Rc<RefCell<Value>>>, EvalError<'a>> {
-    let mut vm = VM::from_str(code, agent)?;
-    let result = vm.interpret()?;
+) -> Result<(Option<Handle<Value>>, VM), (EvalError<'a>, Option<VM>)> {
+    let mut vm = VM::from_str(code, agent).map_err(|e| (e.into(), None))?;
 
-    Ok(result)
+    match vm.interpret() {
+        Ok(value) => Ok((value, vm)),
+        Err(e) => Err((e.into(), Some(vm))),
+    }
 }
