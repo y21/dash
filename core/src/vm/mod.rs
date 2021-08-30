@@ -236,6 +236,9 @@ impl VM {
     ///
     /// The VM may perform a GC cycle at a GC point if the number of objects in the heap
     /// is greater than this threshold
+    ///
+    /// Note: the VM will automatically adjust this value to a more appropriate number
+    /// as GC cycles occur
     pub fn set_gc_object_threshold(&mut self, threshold: usize) {
         self.gc_object_threshold = threshold;
     }

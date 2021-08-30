@@ -269,8 +269,7 @@ class VM {
 
     /**
      * Sets the threshold for number of objects needed before the garbage collector runs
-     * - setting this value to 0 causes the GC to always run (slow)
-     * - setting this value to a high number causes the GC to run less frequently (faster)
+     * Note: the VM will automatically adjust this value to what is appropriate for the current number of objects
      * @param {number} threshold 
      */
     public setGcObjectThreshold(threshold: number) {
