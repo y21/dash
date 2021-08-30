@@ -21,25 +21,42 @@ type Pointer64 = BigInt;
 const ENUM_DATA_OFFSET = 1 << 2;
 
 /**
+ * Size of a pointer in bytes
+ */
+const POINTER_SIZE = 1 << 2;
+
+/**
  * Exported Rust functions that can be called from JavaScript
  */
 interface Exports {
     memory: WebAssembly.Memory,
+    inspect_create_vm_error: (ptr: Pointer) => Pointer,
     alloc: (size: Usize) => Pointer,
     dealloc: (ptr: Pointer, len: Usize) => void,
-    __data_end: WebAssembly.Global,
-    __heap_base: WebAssembly.Global,
-    create_vm: (ptr: Pointer) => Pointer,
-    eval: (ptr: Pointer) => Pointer,
     free_c_string: (ptr: Pointer) => void,
-    free_create_vm_result: (ptr: Pointer) => void,
-    free_eval_result: (ptr: Pointer) => void,
-    free_vm_interpret_result: (ptr: Pointer) => void,
-    inspect_create_vm_error: (ptr: Pointer) => Pointer,
-    inspect_vm_interpret_error: (ptr: Pointer) => Pointer,
+    eval: (ptr: Pointer) => Pointer,
+    create_vm: () => Pointer,
+    create_vm_from_string: (ptr: Pointer) => Pointer,
+    vm_interpret: (ptr: Pointer) => Pointer,
+    vm_eval: (vm_ptr: Pointer, source_ptr: Pointer) => Pointer,
+    vm_set_gc_object_threshold: (ptr: Pointer, threshold: Usize) => void,
+    vm_run_async_tasks: (ptr: Pointer) => void,
     value_inspect: (ptr: Pointer) => Pointer,
     value_to_string: (ptr: Pointer) => Pointer,
-    vm_interpret: (ptr: Pointer) => Pointer
+    free_vm: (ptr: Pointer) => void,
+    free_create_vm_from_string_result: (ptr: Pointer) => void,
+    free_vm_interpret_result: (ptr: Pointer) => void,
+    free_eval_result: (ptr: Pointer) => void,
+    free_vm_eval: (ptr: Pointer) => void,
+    __data_end: WebAssembly.Global,
+    __heap_base: WebAssembly.Global,
+}
+
+namespace errors {
+    /**
+     * Thrown when attempting to access a resource that has been freed
+     */
+    export const RESOURCE_FREED = new Error("Resource has been freed");
 }
 
 /**
@@ -58,16 +75,33 @@ enum OptionDiscriminant {
     NONE = 1
 }
 
+abstract class TaggedUnion<D> {
+    protected ptr: Pointer;
+    protected internal: Internal;
+
+    constructor(internal: Internal, ptr: Pointer) {
+        this.ptr = ptr;
+        this.internal = internal;
+    }
+
+    protected rawDiscriminant(): number {
+        // First byte is the discriminant
+        return this.internal.withDataView((view) => view.getUint8(this.ptr));
+    }
+
+    abstract discriminant(): D;
+
+    getDataPointer(): number {
+        return this.ptr + ENUM_DATA_OFFSET;
+    }
+}
+
 /**
  * Wrapper for a Result coming from WebAssembly
  */
-class Result {
-    private ptr: Pointer;
-    private internal: Internal;
-
+class Result extends TaggedUnion<ResultDiscriminant> {
     constructor(internal: Internal, ptr: Pointer) {
-        this.internal = internal;
-        this.ptr = ptr;
+        super(internal, ptr);
     }
 
     /**
@@ -75,7 +109,9 @@ class Result {
      * @returns {ResultDiscriminant}
      */
     discriminant(): ResultDiscriminant {
-        return this.internal.withDataView((view) => view.getUint8(this.ptr) === 0 ? ResultDiscriminant.OK : ResultDiscriminant.ERR);
+        return this.rawDiscriminant() === 0
+            ? ResultDiscriminant.OK
+            : ResultDiscriminant.ERR;
     }
 
     /**
@@ -84,14 +120,6 @@ class Result {
      */
     isOk(): boolean {
         return this.discriminant() === ResultDiscriminant.OK;
-    }
-
-    /**
-     * A pointer to data to this enum
-     * @returns {Pointer}
-     */
-    getDataPointer(): Pointer {
-        return this.ptr + ENUM_DATA_OFFSET;
     }
 
     /**
@@ -116,13 +144,10 @@ class Result {
 /**
  * Wrapper for an Option coming from WebAssembly
  */
-class Option {
-    private ptr: Pointer;
-    private internal: Internal;
+class Option extends TaggedUnion<OptionDiscriminant> {
 
     constructor(internal: Internal, ptr: Pointer) {
-        this.internal = internal;
-        this.ptr = ptr;
+        super(internal, ptr);
     }
 
     /**
@@ -130,7 +155,9 @@ class Option {
      * @returns {OptionDiscriminant}
      */
     discriminant(): OptionDiscriminant {
-        return this.internal.withDataView((view) => view.getUint8(this.ptr) === 0 ? OptionDiscriminant.SOME : OptionDiscriminant.NONE);
+        return this.rawDiscriminant() === 0
+            ? OptionDiscriminant.SOME
+            : OptionDiscriminant.NONE;
     }
 
     /**
@@ -139,14 +166,6 @@ class Option {
      */
     isSome(): boolean {
         return this.discriminant() === OptionDiscriminant.SOME;
-    }
-
-    /**
-     * A pointer to data to contained data
-     * @returns {Pointer}
-     */
-    getDataPointer(): Pointer {
-        return this.ptr + ENUM_DATA_OFFSET;
     }
 }
 
@@ -230,51 +249,74 @@ class Internal {
 
 class VM {
     private internal: Internal;
-    private vmDataPtr: Pointer;
-    private sourcePtr: Pointer;
-    private sourceLen: Usize;
-    private _freed: boolean;
+    private ptr: Pointer;
+    private freed: boolean;
 
-    constructor(internal: Internal, vmDataPtr: Pointer, sourcePtr: Pointer, sourceLen: Usize) {
+    constructor(internal: Internal, ptr: Pointer) {
         this.internal = internal;
-        this.vmDataPtr = vmDataPtr;
-        this.sourcePtr = sourcePtr;
-        this.sourceLen = sourceLen;
-        this._freed = false;
+        this.ptr = ptr;
+        this.freed = false;
     }
 
     /**
      * Frees memory that belongs to this VM
-     * This must be called when a VM is manually created, e.g. by calling `engine.createVM()`, otherwise memory is leaked
      */
-    free() {
-        if (this._freed) throw new Error("This resource has been freed up already");
-        this.internal.wasm.dealloc(this.sourcePtr, this.sourceLen);
-        const vmResultPtr = this.vmDataPtr - ENUM_DATA_OFFSET;
-        this.internal.wasm.free_create_vm_result(vmResultPtr);
-        this._freed = true;
+    public free() {
+        if (this.freed) throw errors.RESOURCE_FREED;
+        this.internal.wasm.free_vm(this.ptr);
+        this.freed = true;
     }
 
     /**
-     * Executes bytecode associated to this VM, inspects the last value and returns it as a string
+     * Sets the threshold for number of objects needed before the garbage collector runs
+     * - setting this value to 0 causes the GC to always run (slow)
+     * - setting this value to a high number causes the GC to run less frequently (faster)
+     * @param {number} threshold 
+     */
+    public setGcObjectThreshold(threshold: number) {
+        if (this.freed) throw errors.RESOURCE_FREED;
+        this.internal.wasm.vm_set_gc_object_threshold(this.ptr, threshold);
+    }
+
+    /**
+     * Runs scheduled async tasks
+     */
+    public runAsyncTasks() {
+        if (this.freed) throw errors.RESOURCE_FREED;
+        this.internal.wasm.vm_run_async_tasks(this.ptr);
+    }
+
+    /**
+     * Evaluates the given source code and returns the result as a string.
+     * 
+     * @param {string} source
      * @returns {string | undefined}
      */
-    exec(): string | undefined {
-        const resultPtr = this.internal.wasm.vm_interpret(this.vmDataPtr);
-        const valueResult = new Result(this.internal, resultPtr);
+    public eval(source: string) {
+        if (this.freed) throw errors.RESOURCE_FREED;
+
+        const sourcePtr = this.internal.writeString(source);
+        const resultPtr = this.internal.wasm.vm_eval(this.ptr, sourcePtr);
 
         try {
-            const valueResultPtr = valueResult.unwrap(this.internal.wasm.inspect_vm_interpret_error.bind(this.internal));
+            const result = new Result(this.internal, resultPtr)
+                .unwrap(this.internal.wasm.inspect_create_vm_error.bind(this.internal));
 
-            const valueOption = new Option(this.internal, valueResultPtr);
-            if (!valueOption.isSome()) return;
+            const option = new Option(this.internal, result);
+            if (!option.isSome()) return;
 
-            const valueInspectPtr = this.internal.wasm.value_inspect(valueOption.getDataPointer());
-            const message = this.internal.readString(valueInspectPtr);
-            this.internal.wasm.free_c_string(valueInspectPtr);
+            const value = option.getDataPointer();
+
+            const valuePtr = this.internal.withDataView((view) => view.getUint32(value, true));
+
+            const inspectPtr = this.internal.wasm.value_inspect(valuePtr);
+            const message = this.internal.readString(inspectPtr);
+            this.internal.wasm.free_c_string(inspectPtr);
+
             return message;
         } finally {
-            this.internal.wasm.free_vm_interpret_result(resultPtr);
+            this.internal.wasm.free_c_string(sourcePtr);
+            this.internal.wasm.free_vm_eval(resultPtr);
         }
     }
 }
@@ -311,24 +353,16 @@ export class Engine {
     }
 
     /**
-     * Creates a VM. You must manually free memory allocated for this VM by calling free on the returned object.
-     * @param {string} source 
-     * @returns 
+     * Creates a VM.
+     * You must manually free memory allocated for this VM by calling free on the returned object.
      */
-    public createVM(source: string) {
+    public createVM() {
         const internal = this.getInternal();
-        const stringPtr = internal.writeString(source);
-        const vmResultPtr = internal.wasm.create_vm(stringPtr);
-        const vmResult = new Result(internal, vmResultPtr);
+        const vmPointer = internal.wasm.create_vm();
+        const vm = new VM(internal, vmPointer);
+        // TODO: FinalizationRegistry.register(vm)
 
-        try {
-            const vmDataPtr = vmResult.unwrap(internal.wasm.inspect_create_vm_error.bind(internal));
-            return new VM(internal, vmDataPtr, stringPtr, source.length + 1);
-        } catch (e) {
-            internal.wasm.dealloc(stringPtr, source.length + 1);
-            internal.wasm.free_create_vm_result(vmResultPtr);
-            throw e;
-        }
+        return vm;
     }
 
     /**
@@ -339,21 +373,32 @@ export class Engine {
     public eval(source: string) {
         const internal = this.getInternal();
         const stringPtr = internal.writeString(source);
-        const resultPtr = internal.wasm.eval(stringPtr);
-        const result = new Result(internal, resultPtr);
+        const evalPtr = internal.wasm.eval(stringPtr);
+        let vmPtr: Pointer = 0;
 
         try {
-            const valueOption = new Option(internal, result.unwrap(internal.wasm.inspect_create_vm_error));
+            const result = new Result(internal, evalPtr).unwrap(internal.wasm.inspect_create_vm_error.bind(internal));
 
-            if (!valueOption.isSome()) return;
+            vmPtr = internal.withDataView((view) => view.getUint32(evalPtr + 12, true));
 
-            const valueInspectPtr = internal.wasm.value_inspect(valueOption.getDataPointer());
-            const message = internal.readString(valueInspectPtr);
-            internal.wasm.free_c_string(valueInspectPtr);
+            const maybeValue = new Option(internal, result);
+            if (!maybeValue.isSome()) return;
+            const value = maybeValue.getDataPointer();
+
+            const valuePtr = internal.withDataView((view) => view.getUint32(value, true));
+
+            const inspectPtr = internal.wasm.value_inspect(valuePtr);
+            const message = internal.readString(inspectPtr);
+            internal.wasm.free_c_string(inspectPtr);
+
             return message;
         } finally {
-            internal.wasm.free_eval_result(resultPtr);
-            internal.wasm.dealloc(stringPtr, source.length + 1);
+            internal.wasm.free_c_string(stringPtr);
+            internal.wasm.free_eval_result(evalPtr);
+
+            if (vmPtr) {
+                internal.wasm.free_vm(vmPtr);
+            }
         }
     }
 }

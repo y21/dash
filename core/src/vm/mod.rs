@@ -801,7 +801,12 @@ impl VM {
 
     /// Starts interpreting bytecode
     pub fn interpret(&mut self) -> Result<Option<Handle<Value>>, VMError> {
-        let frame = self.frames.pop();
+        let frame = if self.frames.get_stack_pointer() > 0 {
+            self.frames.pop()
+        } else {
+            return Ok(None);
+        };
+
         self.execute_frame(frame, true)
     }
 
