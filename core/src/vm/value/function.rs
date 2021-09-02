@@ -54,7 +54,8 @@ impl<'a> CallContext<'a> {
 }
 
 /// The type of a function at runtime
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
+#[repr(u8)]
 pub enum FunctionType {
     /// Top frame
     ///

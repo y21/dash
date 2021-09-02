@@ -5,8 +5,6 @@ use super::object::Object;
 /// The type of value
 #[derive(Debug, Clone)]
 pub enum ValueKind {
-    /// A compiled constant
-    Constant(Box<Constant>),
     /// A JavaScript number
     Number(f64),
     /// A JavaScript bool

@@ -10,22 +10,6 @@ use super::{
 use crate::vm::{instruction::Constant, value::promise::PromiseState};
 
 impl Value {
-    /// Attempts to convert self to a constant
-    pub fn as_constant(&self) -> Option<&Constant> {
-        match &self.kind {
-            ValueKind::Constant(c) => Some(c),
-            _ => None,
-        }
-    }
-
-    /// Attempts to convert self into a constant by consuming self
-    pub fn into_constant(self) -> Option<Constant> {
-        match self.kind {
-            ValueKind::Constant(c) => Some(*c),
-            _ => None,
-        }
-    }
-
     /// Converts a JavaScript value to a number
     ///
     /// If the value is not a number, [f64::NAN] is returned
@@ -96,7 +80,6 @@ impl Value {
     pub fn to_string(&self) -> Cow<str> {
         match &self.kind {
             ValueKind::Bool(b) => Cow::Borrowed(if *b { "true " } else { "false" }),
-            ValueKind::Constant(_) => unreachable!(),
             ValueKind::Null => Cow::Borrowed("null"),
             ValueKind::Number(n) => Cow::Owned(n.to_string()),
             ValueKind::Object(o) => o.to_string(),
@@ -112,7 +95,6 @@ impl Value {
             ValueKind::Number(_) => Some(self.to_string()),
             ValueKind::Undefined => Some(self.to_string()),
             ValueKind::Object(o) => o.to_json(self),
-            ValueKind::Constant(_) => unreachable!(),
         }
     }
 
@@ -134,14 +116,6 @@ impl Value {
     /// use [Value::to_string]
     pub fn as_string(&self) -> Option<&str> {
         self.as_object().and_then(|o| o.as_string())
-    }
-
-    /// Attempts to return the identifier of this value if it is a constant
-    pub fn into_ident(self) -> Option<String> {
-        match self.kind {
-            ValueKind::Constant(i) => i.into_ident(),
-            _ => None,
-        }
     }
 
     /// Attempts to return the inner object if it is one

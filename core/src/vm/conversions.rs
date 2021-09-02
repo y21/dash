@@ -12,12 +12,6 @@ use super::{
 use std::str::Utf8Error;
 use std::{cell::RefCell, convert::TryFrom};
 
-impl From<Constant> for Value {
-    fn from(c: Constant) -> Self {
-        Self::new(ValueKind::Constant(Box::new(c)))
-    }
-}
-
 impl From<f64> for Value {
     fn from(n: f64) -> Self {
         Self::new(ValueKind::Number(n))

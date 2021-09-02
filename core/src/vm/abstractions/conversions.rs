@@ -37,7 +37,6 @@ pub fn to_string(
                 return to_string(vm, Some(&prim_value));
             }
         },
-        Some(ValueKind::Constant(_)) => unreachable!(),
     };
 
     Ok(vm
