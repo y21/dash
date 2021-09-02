@@ -366,4 +366,9 @@ impl Instruction {
     pub fn into_operand(self) -> u8 {
         unsafe { self.0.operand }
     }
+
+    /// Returns self as a constant
+    pub fn as_operand(&self) -> u8 {
+        unsafe { self.0.operand }
+    }
 }

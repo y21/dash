@@ -23,8 +23,10 @@ pub mod js_std;
 pub mod json;
 /// JavaScript lexer and parser
 pub mod parser;
+/// Bytecode/Heap snapshot
+pub mod snapshot;
 #[cfg(test)]
-pub mod tests;
+mod tests;
 /// Utility types and functions used in this implementation
 pub mod util;
 /// Visitor trait, used to walk the AST
