@@ -138,6 +138,14 @@ pub struct Statics {
     pub string_sub: Handle<Value>,
     /// Represents String.prototype.sup
     pub string_sup: Handle<Value>,
+    /// Represents String.prototype.includes
+    pub string_includes: Handle<Value>,
+    /// Represents String.prototype.indexOf
+    pub string_index_of: Handle<Value>,
+    /// Represents String.prototype.padStart
+    pub string_pad_start: Handle<Value>,
+    /// Represents String.prototype.padEnd
+    pub string_pad_end: Handle<Value>,
     /// Represents Math.pow
     pub math_pow: Handle<Value>,
     /// Represents Math.abs
@@ -288,6 +296,10 @@ impl Statics {
             string_strike: register_glob_method!(gc, "strike", js_std::string::strike),
             string_sub: register_glob_method!(gc, "sub", js_std::string::sub),
             string_sup: register_glob_method!(gc, "sup", js_std::string::sup),
+            string_includes: register_glob_method!(gc, "includes", js_std::string::includes),
+            string_index_of: register_glob_method!(gc, "indexOf", js_std::string::index_of),
+            string_pad_start: register_glob_method!(gc, "padStart", js_std::string::pad_start),
+            string_pad_end: register_glob_method!(gc, "padEnd", js_std::string::pad_end),
             math_pow: register_glob_method!(gc, "pow", js_std::math::pow),
             math_abs: register_glob_method!(gc, "abs", js_std::math::abs),
             math_ceil: register_glob_method!(gc, "ceil", js_std::math::ceil),

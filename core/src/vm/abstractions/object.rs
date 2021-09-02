@@ -1,6 +1,7 @@
 use crate::{
     gc::Handle,
     vm::{
+        abstractions::conversions::to_string,
         value::{object::Object, Value, ValueKind},
         VM,
     },
@@ -85,7 +86,6 @@ pub fn to_number(argument: Option<&Value>) -> Result<f64, Handle<Value>> {
             _ => todo!(),
         },
         None => Ok(f64::NAN),
-        _ => todo!(),
     }
 }
 
@@ -94,4 +94,38 @@ pub fn to_number(argument: Option<&Value>) -> Result<f64, Handle<Value>> {
 // https://tc39.es/ecma262/multipage/abstract-operations.html#sec-tonumber-applied-to-the-string-type
 pub fn to_number_from_string(argument: &str) -> f64 {
     argument.parse::<f64>().unwrap_or_else(|_| f64::NAN)
+}
+
+/// Implements indexOf
+pub fn index_of(
+    vm: &mut VM,
+    hay: Option<&Handle<Value>>,
+    needle: Option<&Handle<Value>>,
+    position: Option<&Handle<Value>>,
+) -> Result<f64, Handle<Value>> {
+    // Let S be ? ToString(O).
+    let this = to_string(vm, hay)?;
+    let this_ref = unsafe { this.borrow_unbounded() };
+    let this_s = this_ref.as_string().unwrap();
+
+    // 5. Let searchStr be ? ToString(searchString).
+    let search_str = to_string(vm, needle)?;
+    let search_str_ref = unsafe { search_str.borrow_unbounded() };
+    let search_s = search_str_ref.as_string().unwrap();
+
+    // 6. Let pos be ? ToIntegerOrInfinity(position).
+    let pos = position.as_ref().map(|x| unsafe { x.borrow_unbounded() });
+    let pos = to_integer_or_infinity(pos.as_ref().map(|x| &***x))? as usize;
+
+    // 8. Let len be the length of S.
+    let len = this_s.len();
+
+    // 9. Let start be the result of clamping pos between 0 and len.
+    let start = pos.clamp(0, len);
+
+    let sub = String::from_utf8_lossy(&this_s.as_bytes()[start..len]);
+
+    let idx = sub.find(search_s).map(|x| x as f64).unwrap_or(-1f64);
+
+    Ok(idx)
 }

@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use crate::gc::Handle;
 use crate::vm::abstractions;
 use crate::vm::value::{function::CallContext, Value};
@@ -93,13 +95,6 @@ pub fn ends_with(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 
     let ret = this_s.ends_with(search_str);
     Ok(ctx.vm.create_js_value(ret).into_handle(ctx.vm))
-}
-
-/// Implements String.prototype.indexOf
-///
-/// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.indexOf
-pub fn index_of(_args: CallContext) -> Result<Handle<Value>, Handle<Value>> {
-    todo!()
 }
 
 /// Implements the abstract operation CreateHTML
@@ -225,4 +220,129 @@ pub fn sub(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 /// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.sup
 pub fn sup(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     create_html(ctx, "sup", None)
+}
+
+/// Implements String.prototype.indexOf
+///
+/// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.indexof
+pub fn index_of(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    let hay = ctx.receiver.as_ref();
+    let (needle, pos) = {
+        let mut iter = ctx.arguments();
+
+        (iter.next().cloned(), iter.next().cloned())
+    };
+
+    let idx = abstractions::object::index_of(ctx.vm, hay, needle.as_ref(), pos.as_ref())?;
+
+    Ok(ctx.vm.create_js_value(idx).into_handle(ctx.vm))
+}
+
+/// Implements String.prototype.includes
+///
+/// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.includes
+pub fn includes(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    let hay = ctx.receiver.as_ref();
+    let (needle, pos) = {
+        let mut iter = ctx.arguments();
+
+        (iter.next().cloned(), iter.next().cloned())
+    };
+
+    let idx = abstractions::object::index_of(ctx.vm, hay, needle.as_ref(), pos.as_ref())?;
+
+    Ok(ctx.vm.create_js_value(idx != -1f64).into_handle(ctx.vm))
+}
+
+enum StringPadKind {
+    Start, // String.prototype.padStart
+    End,   // String.prototype.padEnd
+}
+
+fn string_pad(ctx: CallContext, pad_kind: StringPadKind) -> Result<Handle<Value>, Handle<Value>> {
+    // 1. Let S be ? ToString(O).
+    let this = abstractions::conversions::to_string(ctx.vm, ctx.receiver.as_ref())?;
+    let this_ref = unsafe { this.borrow_unbounded() };
+    let this_s = this_ref.as_string().unwrap();
+
+    let (max_length, fill_string) = {
+        let mut iter = ctx.arguments();
+
+        (iter.next().cloned(), iter.next().cloned())
+    };
+
+    // 2. Let intMaxLength be ℝ(? ToLength(maxLength)).
+    let int_max_length = max_length.as_ref().map(|x| unsafe { x.borrow_unbounded() });
+    let int_max_length =
+        abstractions::object::to_length(int_max_length.as_ref().map(|x| &***x))? as usize;
+
+    // 3. Let stringLength be the length of S.
+    let string_length = this_s.len();
+
+    // 4. If intMaxLength ≤ stringLength, return S.
+    if int_max_length <= string_length {
+        return Ok(Handle::clone(&this));
+    }
+
+    // 5. If fillString is undefined, let filler be the String value consisting solely of the code unit 0x0020 (SPACE).
+    // 6. Else, let filler be ? ToString(fillString).
+    let filler = if let Some(filler) = fill_string {
+        let handle = abstractions::conversions::to_string(ctx.vm, Some(&filler))?;
+        let value = unsafe { handle.borrow_unbounded() };
+        Cow::Owned(unsafe { value.as_string().unwrap().to_owned() })
+    } else {
+        Cow::Borrowed(" ")
+    };
+
+    // 7. If filler is the empty String, return S.
+    if filler.is_empty() {
+        return Ok(Handle::clone(&this));
+    }
+
+    // 8. Let fillLen be intMaxLength - stringLength.
+    let fill_len = int_max_length - string_length;
+
+    // 9. Let truncatedStringFiller be the String value consisting of repeated concatenations of filler truncated to length fillLen.
+    let mut truncated_string_filler = String::new();
+
+    let filler_raw = filler.as_bytes();
+
+    loop {
+        let len = fill_len - truncated_string_filler.len();
+
+        let filler_len = filler_raw.len();
+
+        let truncated_filler = &filler_raw[0..len.min(filler_len)];
+
+        let truncated_filler = String::from_utf8_lossy(truncated_filler);
+
+        truncated_string_filler += &truncated_filler;
+
+        if len < filler_len {
+            break;
+        }
+    }
+
+    // 10. If placement is start, return the string-concatenation of truncatedStringFiller and S.
+    // 11. Else, return the string-concatenation of S and truncatedStringFiller.
+    let result = match pad_kind {
+        StringPadKind::Start => truncated_string_filler + this_s,
+        StringPadKind::End => this_s.to_owned() + &truncated_string_filler,
+    };
+
+    Ok(ctx.vm.create_js_value(result).into_handle(ctx.vm))
+}
+
+/// Implements String.prototype.padStart
+///
+/// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.padstart
+pub fn pad_start(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    string_pad(ctx, StringPadKind::Start)
+}
+
+/// Implements String.prototype.padEnd
+///
+/// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.padend
+pub fn pad_end(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    string_pad(ctx, StringPadKind::End)
 }

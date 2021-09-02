@@ -462,6 +462,10 @@ impl VM {
             o.set_property("strike", Handle::clone(&self.statics.string_strike));
             o.set_property("sub", Handle::clone(&self.statics.string_sub));
             o.set_property("sup", Handle::clone(&self.statics.string_sup));
+            o.set_property("includes", Handle::clone(&self.statics.string_includes));
+            o.set_property("indexOf", Handle::clone(&self.statics.string_index_of));
+            o.set_property("padStart", Handle::clone(&self.statics.string_pad_start));
+            o.set_property("padEnd", Handle::clone(&self.statics.string_pad_end));
         }
 
         {
