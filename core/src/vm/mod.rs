@@ -466,6 +466,9 @@ impl VM {
             o.set_property("indexOf", Handle::clone(&self.statics.string_index_of));
             o.set_property("padStart", Handle::clone(&self.statics.string_pad_start));
             o.set_property("padEnd", Handle::clone(&self.statics.string_pad_end));
+            o.set_property("repeat", Handle::clone(&self.statics.string_repeat));
+            o.set_property("toLowerCase", Handle::clone(&self.statics.string_to_lowercase));
+            o.set_property("toUpperCase", Handle::clone(&self.statics.string_to_uppercase));
         }
 
         {
@@ -584,6 +587,13 @@ impl VM {
         patch_value(self, &self.statics.string_strike);
         patch_value(self, &self.statics.string_sub);
         patch_value(self, &self.statics.string_sup);
+        patch_value(self, &self.statics.string_includes);
+        patch_value(self, &self.statics.string_index_of);
+        patch_value(self, &self.statics.string_pad_start);
+        patch_value(self, &self.statics.string_pad_end);
+        patch_value(self, &self.statics.string_repeat);
+        patch_value(self, &self.statics.string_to_lowercase);
+        patch_value(self, &self.statics.string_to_uppercase);
         patch_value(self, &self.statics.promise_resolve);
         patch_value(self, &self.statics.promise_reject);
 

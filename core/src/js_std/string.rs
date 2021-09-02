@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 
 use crate::gc::Handle;
+use crate::js_std::error;
 use crate::vm::abstractions;
 use crate::vm::value::{function::CallContext, Value};
 
@@ -345,4 +346,63 @@ pub fn pad_start(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 /// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.padend
 pub fn pad_end(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     string_pad(ctx, StringPadKind::End)
+}
+
+/// Implements String.prototype.repeat
+///
+/// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.repeat
+pub fn repeat(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    // 2. Let S be ? ToString(O).
+    let this = abstractions::conversions::to_string(ctx.vm, ctx.receiver.as_ref())?;
+    let this_ref = unsafe { this.borrow_unbounded() };
+    let this_s = this_ref.as_string().unwrap();
+
+    // 3. Let n be ? ToIntegerOrInfinity(count).
+    let n = {
+        let count = ctx.args.first().map(|x| unsafe { x.borrow_unbounded() });
+        abstractions::object::to_integer_or_infinity(count.as_ref().map(|x| &***x))?
+    };
+
+    // 4. If n < 0 or n is +∞, throw a RangeError exception.
+    if n < 0f64 || n.is_infinite() {
+        return Err(error::create_error("Invalid count value".into(), ctx.vm));
+    }
+
+    // 5. If n is 0, return the empty String.
+    if n == 0f64 {
+        return Ok(ctx.vm.create_js_value(String::new()).into_handle(ctx.vm));
+    }
+
+    // 6. Return the String value that is made from n copies of S appended together.
+    let result = this_s.repeat(n as usize);
+
+    Ok(ctx.vm.create_js_value(result).into_handle(ctx.vm))
+}
+
+/// Implements String.prototype.toLowerCase
+///
+/// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.tolowercase
+pub fn to_lowercase(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    // 2. Let S be ? ToString(O).
+    let this = abstractions::conversions::to_string(ctx.vm, ctx.receiver.as_ref())?;
+    let this_ref = unsafe { this.borrow_unbounded() };
+    let this_s = this_ref.as_string().unwrap();
+
+    let result = this_s.to_lowercase();
+
+    Ok(ctx.vm.create_js_value(result).into_handle(ctx.vm))
+}
+
+/// Implements String.prototype.toUpperCase
+///
+/// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.touppercase
+pub fn to_uppercase(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    // 2. Let S be ? ToString(O).
+    let this = abstractions::conversions::to_string(ctx.vm, ctx.receiver.as_ref())?;
+    let this_ref = unsafe { this.borrow_unbounded() };
+    let this_s = this_ref.as_string().unwrap();
+
+    let result = this_s.to_uppercase();
+
+    Ok(ctx.vm.create_js_value(result).into_handle(ctx.vm))
 }

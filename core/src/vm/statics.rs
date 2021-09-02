@@ -146,6 +146,12 @@ pub struct Statics {
     pub string_pad_start: Handle<Value>,
     /// Represents String.prototype.padEnd
     pub string_pad_end: Handle<Value>,
+    /// Represents String.prototype.repeat
+    pub string_repeat: Handle<Value>,
+    /// Represents String.prototype.toLowerCase
+    pub string_to_lowercase: Handle<Value>,
+    /// Represents String.prototype.toUpperCase
+    pub string_to_uppercase: Handle<Value>,
     /// Represents Math.pow
     pub math_pow: Handle<Value>,
     /// Represents Math.abs
@@ -300,6 +306,17 @@ impl Statics {
             string_index_of: register_glob_method!(gc, "indexOf", js_std::string::index_of),
             string_pad_start: register_glob_method!(gc, "padStart", js_std::string::pad_start),
             string_pad_end: register_glob_method!(gc, "padEnd", js_std::string::pad_end),
+            string_repeat: register_glob_method!(gc, "repeat", js_std::string::repeat),
+            string_to_lowercase: register_glob_method!(
+                gc,
+                "toLowerCase",
+                js_std::string::to_lowercase
+            ),
+            string_to_uppercase: register_glob_method!(
+                gc,
+                "toUpperCase",
+                js_std::string::to_uppercase
+            ),
             math_pow: register_glob_method!(gc, "pow", js_std::math::pow),
             math_abs: register_glob_method!(gc, "abs", js_std::math::abs),
             math_ceil: register_glob_method!(gc, "ceil", js_std::math::ceil),
