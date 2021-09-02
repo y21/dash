@@ -83,7 +83,7 @@ fn repl() {
 
         match vm.eval(s) {
             Ok(result) => {
-                let result_ref = result.as_ref().map(|x| unsafe { x.borrow_unbounded() });
+                let result_ref = result.as_ref().map(|x| x.borrow(&vm));
                 let result_fmt = result_ref
                     .as_deref()
                     .map(|v| Value::inspect(v, 0))
