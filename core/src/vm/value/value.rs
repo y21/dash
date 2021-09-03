@@ -7,8 +7,8 @@ use std::{
 };
 
 use crate::{
-    js_std,
     gc::Handle,
+    js_std,
     vm::{frame::Frame, value::function::CallContext, VM},
 };
 
@@ -103,7 +103,12 @@ impl Value {
                 return (func.func)(ctx);
             }
             Some(FunctionKind::Closure(closure)) => &closure.func,
-            None => return Err(js_std::error::create_error("Invoked value is not a function".into(), vm)),
+            None => {
+                return Err(js_std::error::create_error(
+                    "Invoked value is not a function".into(),
+                    vm,
+                ))
+            }
             _ => unreachable!(),
         };
 
@@ -195,6 +200,13 @@ impl Value {
             ValueKind::Null => true,
             ValueKind::Undefined => true,
             ValueKind::Object(o) => matches!(&**o, Object::String(_)),
+        }
+    }
+
+    /// Returns whether this value is callable
+    pub fn is_callable(&self) -> bool {
+        match &self.kind {
+            ValueKind::Object(o) => matches!(&**o, Object::Function(_)),
             _ => false,
         }
     }

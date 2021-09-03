@@ -152,6 +152,8 @@ pub struct Statics {
     pub string_to_lowercase: Handle<Value>,
     /// Represents String.prototype.toUpperCase
     pub string_to_uppercase: Handle<Value>,
+    /// Represents String.prototype.replace
+    pub string_replace: Handle<Value>,
     /// Represents Math.pow
     pub math_pow: Handle<Value>,
     /// Represents Math.abs
@@ -317,6 +319,7 @@ impl Statics {
                 "toUpperCase",
                 js_std::string::to_uppercase
             ),
+            string_replace: register_glob_method!(gc, "replace", js_std::string::replace),
             math_pow: register_glob_method!(gc, "pow", js_std::math::pow),
             math_abs: register_glob_method!(gc, "abs", js_std::math::abs),
             math_ceil: register_glob_method!(gc, "ceil", js_std::math::ceil),

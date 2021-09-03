@@ -406,3 +406,43 @@ pub fn to_uppercase(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 
     Ok(ctx.vm.create_js_value(result).into_handle(ctx.vm))
 }
+
+/// Implements String.prototype.replace
+///
+/// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.replace
+pub fn replace(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    let this = abstractions::conversions::to_string(ctx.vm, ctx.receiver.as_ref())?;
+    let this_ref = unsafe { this.borrow_unbounded() };
+    let this_s = this_ref.as_string().unwrap();
+
+    let (search_value, replace_value) = {
+        let mut iter = ctx.arguments();
+
+        (iter.next().cloned(), iter.next().cloned())
+    };
+
+    let search_value = abstractions::conversions::to_string(ctx.vm, search_value.as_ref())?;
+    let search_value_ref = unsafe { search_value.borrow_unbounded() };
+    let search_value_s = search_value_ref.as_string().unwrap();
+    let replace_value_ref = replace_value
+        .as_ref()
+        .map(|x| unsafe { x.borrow_unbounded() });
+
+    let functional_replace = replace_value_ref
+        .as_ref()
+        .map(|x| x.is_callable())
+        .unwrap_or_default();
+
+    let replacer = if functional_replace {
+        let this = replace_value.as_ref().unwrap();
+        Value::call(this, Vec::new(), ctx.vm)?
+    } else {
+        abstractions::conversions::to_string(ctx.vm, replace_value.as_ref())?
+    };
+
+    let replacer_ref = unsafe { replacer.borrow_unbounded() };
+    let replacer_s = replacer_ref.as_string().unwrap();
+
+    let result = this_s.replacen(search_value_s, replacer_s, 1);
+    Ok(ctx.vm.create_js_value(result).into_handle(ctx.vm))
+}
