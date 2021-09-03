@@ -7,6 +7,7 @@ use std::{
 };
 
 use crate::{
+    js_std,
     gc::Handle,
     vm::{frame::Frame, value::function::CallContext, VM},
 };
@@ -89,9 +90,8 @@ impl Value {
     ) -> Result<Handle<Value>, Handle<Value>> {
         let value = unsafe { this.borrow_unbounded() };
 
-        // todo: dont unwrap
-        let func = match value.as_function().unwrap() {
-            FunctionKind::Native(func) => {
+        let func = match value.as_function() {
+            Some(FunctionKind::Native(func)) => {
                 let receiver = func.receiver.as_ref().map(|rx| rx.get().clone());
                 let ctx = CallContext {
                     vm,
@@ -102,7 +102,8 @@ impl Value {
 
                 return (func.func)(ctx);
             }
-            FunctionKind::Closure(closure) => &closure.func,
+            Some(FunctionKind::Closure(closure)) => &closure.func,
+            None => return Err(js_std::error::create_error("Invoked value is not a function".into(), vm)),
             _ => unreachable!(),
         };
 

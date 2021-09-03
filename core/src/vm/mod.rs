@@ -30,6 +30,7 @@ use crate::{EvalError, agent::Agent, compiler::{compiler::{self, CompileError, C
             },
             ValueKind,
         }}};
+use crate::js_std;
 
 use self::{
     frame::{Frame, Loop},
@@ -720,8 +721,8 @@ impl VM {
         mut params: Vec<Handle<Value>>,
     ) -> Result<(), Handle<Value>> {
         let func_cell_ref = unsafe { func_cell.borrow_unbounded() };
-        let func = match func_cell_ref.as_function().unwrap() {
-            FunctionKind::Native(f) => {
+        let func = match func_cell_ref.as_function() {
+            Some(FunctionKind::Native(f)) => {
                 let receiver = f.receiver.as_ref().map(|rx| rx.get().clone());
                 let ctx = CallContext {
                     vm: self,
@@ -735,7 +736,8 @@ impl VM {
 
                 return Ok(());
             }
-            FunctionKind::Closure(u) => u,
+            Some(FunctionKind::Closure(u)) => u,
+            None => return Err(js_std::error::create_error("Invoked value is not a function".into(), self)),
             // There should never be raw user functions
             _ => unreachable!(),
         };
