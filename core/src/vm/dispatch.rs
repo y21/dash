@@ -30,7 +30,15 @@ mod handlers {
     use super::DispatchResult;
 
     pub fn constant(vm: &mut VM) {
-        let mut constant = vm.read_constant().and_then(|c| c.try_into_value()).unwrap();
+        let constant = vm.read_constant().and_then(|c| c.try_into_value()).unwrap();
+
+        // We clone constants to avoid mutating the original constant.
+        // See https://github.com/y21/dash/issues/17
+        // TODO: ideally, we should only Clone on Write
+        // aka only clone when we need to mutate this
+        let mut constant = unsafe { constant.borrow_unbounded() }
+            .clone()
+            .into_handle(vm);
 
         // Values emitted by the compiler do not have a [[Prototype]] set
         // so we need to do that here when pushing a value onto the stack
