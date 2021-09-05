@@ -29,7 +29,7 @@ impl Frame {
         B: Into<Box<[Instruction]>>,
         C: Into<Box<[Constant]>>,
     {
-        let sp = vm.stack.get_stack_pointer();
+        let sp = vm.stack.len();
         let buffer = buffer.into();
 
         let func = UserFunction::new(

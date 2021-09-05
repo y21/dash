@@ -32,13 +32,7 @@ use crate::{EvalError, agent::Agent, compiler::{compiler::{self, CompileError, C
         }}};
 use crate::js_std;
 
-use self::{
-    frame::{Frame, Loop},
-    instruction::Constant,
-    stack::Stack,
-    statics::Statics,
-    value::object::{AnyObject},
-};
+use self::{frame::{Frame, Loop}, instruction::Constant, stack::Stack, statics::Statics, value::object::Object};
 
 // Force garbage collection at 10000 objects by default
 const DEFAULT_GC_OBJECT_COUNT_THRESHOLD: usize = 10000;
@@ -149,8 +143,8 @@ impl VM {
     pub fn new_with_agent(agent: Box<dyn Agent>) -> Self {
         let mut gc = Gc::new();
         let gc_marker = gc.marker.get();
-        let statics = Statics::new(&mut gc, gc_marker);
-        let global = gc.register(Value::from(AnyObject {}));
+        let statics = Statics::new(&mut gc);
+        let global = gc.register(Value::from(Object::Ordinary));
 
         let mut vm = Self {
             frames: Stack::new(),
@@ -218,7 +212,7 @@ impl VM {
     ///
     /// Embedders can use this to store data that may be used throughout native calls
     pub fn set_slot<T: 'static>(&mut self, value: T) {
-        self.slot.insert(Box::new(value) as Box<dyn Any>);
+        let _ = self.slot.insert(Box::new(value) as Box<dyn Any>);
     }
 
     /// Gets slot data and tries to downcast it to T
@@ -379,12 +373,12 @@ impl VM {
 
     /// Creates a JavaScript object
     pub fn create_object(&self) -> Value {
-        self.create_js_value(AnyObject {})
+        self.create_js_value(Object::Ordinary)
     }
 
     /// Creates a JavaScript object with its [[Prototype]] set to null
     pub fn create_null_object(&self) -> Value {
-        let mut o = Value::from(AnyObject {});
+        let mut o = Value::from(Object::Ordinary);
         o.detect_internal_properties(self);
         // Override [[Prototype]]
         o.proto = None;
@@ -657,7 +651,7 @@ impl VM {
 
     fn unwind(&mut self, value: Handle<Value>, fp: usize) -> Result<(), Handle<Value>> {
         // TODO: clean up resources caused by this unwind
-        if self.unwind_handlers.get_stack_pointer() == 0 {
+        if self.unwind_handlers.is_empty() {
             return Err(value);
         }
 
@@ -673,7 +667,7 @@ impl VM {
         // Try to get the last unwind handler
         let handler = self.unwind_handlers.pop();
 
-        let this_frame_pointer = self.frames.get_stack_pointer();
+        let this_frame_pointer = self.frames.len();
         // Go back the call stack back to where the last try/catch block lives
         self.frames
             .discard_multiple(this_frame_pointer - handler.frame_pointer);
@@ -746,7 +740,7 @@ impl VM {
 
         // By this point we know func_cell is a UserFunction
 
-        let current_sp = self.stack.get_stack_pointer();
+        let current_sp = self.stack.len();
 
         let frame = Frame {
             buffer: func.func.buffer.clone(),
@@ -775,7 +769,7 @@ impl VM {
     ///
     /// This should only be called when the frame stack is empty
     pub fn run_async_tasks(&mut self) {
-        debug_assert!(self.frames.get_stack_pointer() == 0);
+        debug_assert!(self.frames.is_empty());
         let async_frames = self.async_frames.take();
         self.frames = async_frames;
         // Uncaught errors and return values in async tasks are swallowed.
@@ -789,7 +783,7 @@ impl VM {
 
     /// Executes an execution frame
     pub fn execute_frame(&mut self, frame: Frame, can_gc: bool) -> Result<Option<Handle<Value>>, VMError> {
-        let frame_idx = self.frames.get_stack_pointer();
+        let frame_idx = self.frames.len();
         self.frames.push(frame);
 
         macro_rules! unwind_abort_if_uncaught {
@@ -805,7 +799,7 @@ impl VM {
             };
         }
 
-        while self.frames.get_stack_pointer() > frame_idx {
+        while self.frames.len() > frame_idx {
             unsafe {
                 if can_gc && unlikely(self.should_gc()) {
                     self.perform_gc();
@@ -829,7 +823,7 @@ impl VM {
 
     /// Starts interpreting bytecode
     pub fn interpret(&mut self) -> Result<Option<Handle<Value>>, VMError> {
-        let frame = if self.frames.get_stack_pointer() > 0 {
+        let frame = if !self.frames.is_empty() {
             self.frames.pop()
         } else {
             return Ok(None);

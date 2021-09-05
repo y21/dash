@@ -19,7 +19,7 @@ mod handlers {
             value::{
                 array::Array,
                 function::{CallContext, Closure, FunctionKind, Receiver},
-                object::Object,
+                object::ExoticObject,
                 ops::compare::Compare,
                 Value, ValueKind,
             },
@@ -454,7 +454,7 @@ mod handlers {
         // By this point we know func_cell is a UserFunction
         // TODO: get rid of this copy paste and share code with Opcode::FunctionCall
 
-        let current_sp = vm.stack.get_stack_pointer();
+        let current_sp = vm.stack.len();
 
         // let state = vm.frame_mut().state.take();
         let frame = Frame {
@@ -521,7 +521,7 @@ mod handlers {
             (module, buffer)
         };
 
-        let current_sp = vm.stack.get_stack_pointer();
+        let current_sp = vm.stack.len();
 
         let frame = Frame {
             func: value_cell,
@@ -559,7 +559,7 @@ mod handlers {
             catch_ip: current_ip + catch_idx,
             catch_value_sp: error_catch_idx,
             finally_ip: None, // TODO: support finally
-            frame_pointer: vm.frames.get_stack_pointer(),
+            frame_pointer: vm.frames.len(),
         };
         vm.unwind_handlers.push(handler)
     }
@@ -590,8 +590,7 @@ mod handlers {
             }
         }
 
-        vm.stack
-            .discard_multiple(vm.stack.get_stack_pointer() - frame.sp);
+        vm.stack.discard_multiple(vm.stack.len() - frame.sp);
 
         unsafe { vm.stack.set_stack_pointer(frame.sp) };
         vm.stack.push(exports);
@@ -601,7 +600,7 @@ mod handlers {
         // We might be in a try block, in which case we need to remove the handler
         let maybe_tc_frame_pointer = unsafe { vm.unwind_handlers.get() }.map(|c| c.frame_pointer);
 
-        let frame_pointer = vm.frames.get_stack_pointer();
+        let frame_pointer = vm.frames.len();
 
         if maybe_tc_frame_pointer == Some(frame_pointer) {
             vm.unwind_handlers.pop();
@@ -610,16 +609,15 @@ mod handlers {
         // Restore VM state to where we were before the function call happened
         let this = vm.frames.pop();
 
-        let ret = if vm.stack.get_stack_pointer() == 0 {
+        let ret = if vm.stack.is_empty() {
             None
         } else {
             Some(vm.stack.pop())
         };
 
-        vm.stack
-            .discard_multiple(vm.stack.get_stack_pointer() - this.sp);
+        vm.stack.discard_multiple(vm.stack.len() - this.sp);
 
-        if vm.frames.get_stack_pointer() == frame_idx {
+        if vm.frames.len() == frame_idx {
             if let Some(value) = ret {
                 return Ok(Some(DispatchResult::Return(Some(value))));
             } else {
@@ -734,8 +732,10 @@ mod handlers {
             ._typeof()
             .to_owned();
 
-        vm.stack
-            .push(vm.create_js_value(Object::String(value)).into_handle(vm));
+        vm.stack.push(
+            vm.create_js_value(ExoticObject::String(value))
+                .into_handle(vm),
+        );
     }
 
     pub fn postfix_increment_decrement(vm: &mut VM, opcode: Opcode) {

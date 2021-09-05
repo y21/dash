@@ -3,7 +3,7 @@ use crate::vm::{
     value::{
         array::Array,
         function::{FunctionKind, Module, UserFunction},
-        object::Object,
+        object::{ExoticObject, Object},
         Value, ValueKind,
     },
 };
@@ -274,19 +274,19 @@ impl Serialize for Object {
         let mut data = Vec::new();
 
         match self {
-            Self::String(s) => {
+            Self::Exotic(ExoticObject::String(s)) => {
                 data.push(ObjectDiscriminant::String as u8);
                 data.extend(s.serialize());
             }
-            Self::Function(f) => {
+            Self::Exotic(ExoticObject::Function(f)) => {
                 data.push(ObjectDiscriminant::Function as u8);
                 data.extend(f.serialize());
             }
-            Self::Array(a) => {
+            Self::Exotic(ExoticObject::Array(a)) => {
                 data.push(ObjectDiscriminant::Array as u8);
                 data.extend(a.serialize());
             }
-            Self::Any(_) => {
+            Self::Ordinary => {
                 data.push(ObjectDiscriminant::Any as u8);
             }
             _ => unreachable!("not emitted by the compiler"),

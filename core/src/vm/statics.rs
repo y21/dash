@@ -1,7 +1,7 @@
 use crate::gc::{Gc, Handle};
 use crate::js_std;
 use crate::vm::value::function::Constructor;
-use crate::vm::value::object::AnyObject;
+use crate::vm::value::object::Object;
 
 use super::value::function::NativeFunction;
 use super::value::Value;
@@ -222,19 +222,19 @@ macro_rules! register_ctor {
 
 impl Statics {
     /// Creates a new global data object
-    pub fn new(gc: &mut Gc<Value>, marker: *const ()) -> Self {
+    pub fn new(gc: &mut Gc<Value>) -> Self {
         Self {
             // Proto
-            boolean_proto: gc.register(Value::from(AnyObject {})),
-            number_proto: gc.register(Value::from(AnyObject {})),
-            string_proto: gc.register(Value::from(AnyObject {})),
-            function_proto: gc.register(Value::from(AnyObject {})),
-            array_proto: gc.register(Value::from(AnyObject {})),
-            weakset_proto: gc.register(Value::from(AnyObject {})),
-            weakmap_proto: gc.register(Value::from(AnyObject {})),
-            object_proto: gc.register(Value::from(AnyObject {})),
-            error_proto: gc.register(Value::from(AnyObject {})),
-            promise_proto: gc.register(Value::from(AnyObject {})),
+            boolean_proto: gc.register(Value::from(Object::Ordinary)),
+            number_proto: gc.register(Value::from(Object::Ordinary)),
+            string_proto: gc.register(Value::from(Object::Ordinary)),
+            function_proto: gc.register(Value::from(Object::Ordinary)),
+            array_proto: gc.register(Value::from(Object::Ordinary)),
+            weakset_proto: gc.register(Value::from(Object::Ordinary)),
+            weakmap_proto: gc.register(Value::from(Object::Ordinary)),
+            object_proto: gc.register(Value::from(Object::Ordinary)),
+            error_proto: gc.register(Value::from(Object::Ordinary)),
+            promise_proto: gc.register(Value::from(Object::Ordinary)),
             // Ctor
             error_ctor: register_ctor!(gc, "Error", js_std::error::error_constructor),
             weakset_ctor: register_ctor!(gc, "WeakSet", js_std::weakset::weakset_constructor),

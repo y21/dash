@@ -3,11 +3,11 @@ use std::borrow::Cow;
 use super::{
     array::Array,
     function::FunctionKind,
-    object::{Object, Weak},
+    object::{ExoticObject, Object, Weak},
     promise::Promise,
     Value, ValueKind,
 };
-use crate::vm::{instruction::Constant, value::promise::PromiseState};
+use crate::vm::value::promise::PromiseState;
 
 impl Value {
     /// Converts a JavaScript value to a number
@@ -52,10 +52,32 @@ impl Value {
         }
     }
 
+    /// Attempts to return a reference to the inner exotic object if it is one
+    pub fn as_exotic_object(&self) -> Option<&ExoticObject> {
+        match &self.kind {
+            ValueKind::Object(o) => match &**o {
+                Object::Exotic(o) => Some(o),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
     /// Attempts to return a mutable reference to the inner object if it is one
     pub fn as_object_mut(&mut self) -> Option<&mut Object> {
         match &mut self.kind {
             ValueKind::Object(o) => Some(o),
+            _ => None,
+        }
+    }
+
+    /// Attempts to return a reference to the inner exotic object if it is one
+    pub fn as_exotic_object_mut(&mut self) -> Option<&mut ExoticObject> {
+        match &mut self.kind {
+            ValueKind::Object(o) => match &mut **o {
+                Object::Exotic(o) => Some(o),
+                _ => None,
+            },
             _ => None,
         }
     }
@@ -144,7 +166,7 @@ impl Object {
     /// use [Value::to_string]
     pub fn as_string(&self) -> Option<&str> {
         match self {
-            Self::String(s) => Some(s),
+            Self::Exotic(ExoticObject::String(s)) => Some(s),
             _ => None,
         }
     }
@@ -152,7 +174,7 @@ impl Object {
     /// Attempts to return self as a string if it is one
     pub fn into_string(self) -> Option<String> {
         match self {
-            Self::String(s) => Some(s),
+            Self::Exotic(ExoticObject::String(s)) => Some(s),
             _ => None,
         }
     }
@@ -160,10 +182,10 @@ impl Object {
     /// Converts a JavaScript value to a string
     pub fn to_string(&self) -> Cow<str> {
         match self {
-            Self::String(s) => Cow::Borrowed(s),
-            Self::Function(f) => Cow::Owned(f.to_string()),
-            Self::Array(_) => Cow::Borrowed("[object Array]"),
-            Self::Weak(w) => w.to_string(),
+            Self::Exotic(ExoticObject::String(s)) => Cow::Borrowed(s),
+            Self::Exotic(ExoticObject::Function(f)) => Cow::Owned(f.to_string()),
+            Self::Exotic(ExoticObject::Array(_)) => Cow::Borrowed("[object Array]"),
+            Self::Exotic(ExoticObject::Weak(w)) => w.to_string(),
             _ => Cow::Borrowed("[object Object]"), // TODO: look if there's a toString function
         }
     }
@@ -171,9 +193,9 @@ impl Object {
     /// Converts a JavaScript value to a JSON string
     pub fn to_json(&self, this: &Value) -> Option<Cow<str>> {
         match self {
-            Self::String(s) => Some(Cow::Owned(format!("\"{}\"", s))),
-            Self::Function(_) => None,
-            Self::Array(a) => {
+            Self::Exotic(ExoticObject::String(s)) => Some(Cow::Owned(format!("\"{}\"", s))),
+            Self::Exotic(ExoticObject::Function(_)) => None,
+            Self::Exotic(ExoticObject::Array(a)) => {
                 let mut s = String::from("[ ");
 
                 for (index, element_cell) in a.elements.iter().enumerate() {
@@ -191,7 +213,7 @@ impl Object {
                 s.push_str(" ]");
                 Some(Cow::Owned(s))
             }
-            Self::Any(_) => {
+            Self::Ordinary => {
                 let mut s = String::from("{ ");
 
                 for (index, (key, value_cell)) in this.fields.iter().enumerate() {
@@ -221,7 +243,7 @@ impl Object {
         }
 
         match self {
-            Self::String(s) => {
+            Self::Exotic(ExoticObject::String(s)) => {
                 if depth > 0 {
                     Cow::Owned(format!(
                         "\"{}\"",
@@ -231,8 +253,8 @@ impl Object {
                     Cow::Borrowed(s)
                 }
             }
-            Self::Function(f) => Cow::Owned(f.to_string()),
-            Self::Array(a) => {
+            Self::Exotic(ExoticObject::Function(f)) => Cow::Owned(f.to_string()),
+            Self::Exotic(ExoticObject::Array(a)) => {
                 let mut s = String::from("[ ");
 
                 for (index, element_cell) in a.elements.iter().enumerate() {
@@ -245,8 +267,8 @@ impl Object {
                 s.push_str(" ]");
                 Cow::Owned(s)
             }
-            Self::Weak(w) => w.inspect(),
-            Self::Promise(p) => match &p.value {
+            Self::Exotic(ExoticObject::Weak(w)) => w.inspect(),
+            Self::Exotic(ExoticObject::Promise(p)) => match &p.value {
                 PromiseState::Resolved(value_cell) => {
                     let value = unsafe { value_cell.borrow_unbounded() };
                     Cow::Owned(format!(
@@ -263,7 +285,7 @@ impl Object {
                 }
                 PromiseState::Pending => Cow::Borrowed("Promise {<pending>}"),
             },
-            Self::Any(_) => {
+            Self::Ordinary => {
                 let mut s = String::from("{ ");
 
                 for (index, (key, value_cell)) in this.fields.iter().enumerate() {
@@ -283,7 +305,7 @@ impl Object {
     /// Attempts to return self as a function if it is one
     pub fn into_function(self) -> Option<FunctionKind> {
         match self {
-            Self::Function(kind) => Some(kind),
+            Self::Exotic(ExoticObject::Function(kind)) => Some(kind),
             _ => None,
         }
     }
@@ -291,7 +313,7 @@ impl Object {
     /// Attempts to return self as a reference to the function if it is one
     pub fn as_function(&self) -> Option<&FunctionKind> {
         match self {
-            Self::Function(kind) => Some(kind),
+            Self::Exotic(ExoticObject::Function(kind)) => Some(kind),
             _ => None,
         }
     }
@@ -299,7 +321,7 @@ impl Object {
     /// Attempts to return self as a mutable reference to the function if it is one
     pub fn as_function_mut(&mut self) -> Option<&mut FunctionKind> {
         match self {
-            Self::Function(kind) => Some(kind),
+            Self::Exotic(ExoticObject::Function(kind)) => Some(kind),
             _ => None,
         }
     }
@@ -307,7 +329,7 @@ impl Object {
     /// Attempts to return self as an array if it is one
     pub fn as_array(&self) -> Option<&Array> {
         match self {
-            Self::Array(arr) => Some(arr),
+            Self::Exotic(ExoticObject::Array(arr)) => Some(arr),
             _ => None,
         }
     }
@@ -315,7 +337,7 @@ impl Object {
     /// Attempts to return self as a reference to [Weak] if it is one
     pub fn as_weak(&self) -> Option<&Weak> {
         match self {
-            Self::Weak(w) => Some(w),
+            Self::Exotic(ExoticObject::Weak(w)) => Some(w),
             _ => None,
         }
     }
@@ -323,7 +345,7 @@ impl Object {
     /// Attempts to return self as a mutable reference to [Weak] if it is one
     pub fn as_weak_mut(&mut self) -> Option<&mut Weak> {
         match self {
-            Self::Weak(w) => Some(w),
+            Self::Exotic(ExoticObject::Weak(w)) => Some(w),
             _ => None,
         }
     }
@@ -331,7 +353,7 @@ impl Object {
     /// Attempts to return self as a reference to [Promise] if it is one
     pub fn as_promise(&self) -> Option<&Promise> {
         match self {
-            Self::Promise(p) => Some(p),
+            Self::Exotic(ExoticObject::Promise(p)) => Some(p),
             _ => None,
         }
     }

@@ -1,5 +1,3 @@
-use crate::vm::instruction::Constant;
-
 use super::object::Object;
 
 /// The type of value

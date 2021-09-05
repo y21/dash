@@ -66,9 +66,12 @@ impl Weak {
     }
 }
 
-/// A JavaScript object
+/// A JavaScript exotic object
+///
+/// Any kind of object that is "magic" in some way is exotic.
+/// For example, functions are callable objects.
 #[derive(Debug, Clone)]
-pub enum Object {
+pub enum ExoticObject {
     /// A JavaScript String
     String(String),
     /// A JavaScript function
@@ -79,10 +82,13 @@ pub enum Object {
     Weak(Weak),
     /// A JavaScript promise
     Promise(Promise),
-    /// A non-special ordinary object
-    Any(AnyObject),
 }
 
-/// An ordinary JavaScript object
+/// A JavaScript object
 #[derive(Debug, Clone)]
-pub struct AnyObject {}
+pub enum Object {
+    /// Exotic object
+    Exotic(ExoticObject),
+    /// Ordinary, regular object
+    Ordinary,
+}

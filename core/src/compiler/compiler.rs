@@ -238,7 +238,7 @@ impl<'a, A: Agent> Compiler<'a, A> {
         }
 
         self.upvalues.push(value);
-        self.upvalues.get_stack_pointer() - 1
+        self.upvalues.len() - 1
     }
 
     /// Compiles this AST to bytecode

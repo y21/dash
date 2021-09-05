@@ -7,7 +7,7 @@ use dash::{
     util::MaybeOwned,
     vm::value::{
         function::{CallContext, NativeFunction},
-        object::AnyObject,
+        object::Object,
         Value,
     },
 };
@@ -17,6 +17,7 @@ pub mod fs;
 pub mod agent_flags {
     pub const FS: u32 = 1 << 0;
     pub const FS_CACHE: u32 = 1 << 1;
+    pub const MEM: u32 = 1 << 2;
 }
 pub struct RuntimeAgent(u32);
 
@@ -27,10 +28,13 @@ impl RuntimeAgent {
     fn allow_fs(&self) -> bool {
         self.has_flag(agent_flags::FS)
     }
+    fn allow_mem(&self) -> bool {
+        self.has_flag(agent_flags::MEM)
+    }
 }
 
-fn read_file(call: CallContext) -> Result<Handle<Value>, Handle<Value>> {
-    let mut args = call.arguments();
+fn read_file(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    let mut args = ctx.arguments();
     let filename_cell = args.next();
     let filename_ref = filename_cell.map(|c| unsafe { c.borrow_unbounded() });
     let filename = filename_ref
@@ -38,13 +42,19 @@ fn read_file(call: CallContext) -> Result<Handle<Value>, Handle<Value>> {
         .map(|x| &***x)
         .and_then(Value::as_string)
         .ok_or_else(|| {
-            js_std::error::create_error(MaybeRc::Owned("path must be a string"), call.vm)
+            js_std::error::create_error(MaybeRc::Owned("path must be a string"), ctx.vm)
         })?;
 
     let content = std::fs::read_to_string(filename)
-        .map_err(|e| js_std::error::create_error(MaybeRc::Owned(&e.to_string()), call.vm))?;
+        .map_err(|e| js_std::error::create_error(MaybeRc::Owned(&e.to_string()), ctx.vm))?;
 
-    Ok(Value::from(content).into_handle(call.vm))
+    Ok(ctx.vm.create_js_value(content).into_handle(ctx.vm))
+}
+
+fn mem_address_of(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    let handle = ctx.args.first().unwrap();
+    let ptr = handle.as_ptr() as usize as f64;
+    Ok(ctx.vm.create_js_value(ptr).into_handle(ctx.vm))
 }
 
 impl Agent for RuntimeAgent {
@@ -54,7 +64,7 @@ impl Agent for RuntimeAgent {
     fn import(&mut self, module_name: &[u8], gc: &mut Gc<Value>) -> Option<ImportResult> {
         match module_name {
             b"fs" if self.allow_fs() => {
-                let mut obj = Value::from(AnyObject {});
+                let mut obj = Value::from(Object::Ordinary);
 
                 let read_file = Value::from(NativeFunction::new(
                     "readFile",
@@ -63,6 +73,19 @@ impl Agent for RuntimeAgent {
                     dash::vm::value::function::Constructor::NoCtor,
                 ));
                 obj.set_property("readFile", gc.register(read_file));
+
+                Some(ImportResult::Value(obj))
+            }
+            b"mem" if self.allow_mem() => {
+                let mut obj = Value::from(Object::Ordinary);
+
+                let address_of = Value::from(NativeFunction::new(
+                    "addressOf",
+                    mem_address_of,
+                    None,
+                    dash::vm::value::function::Constructor::NoCtor,
+                ));
+                obj.set_property("addressOf", gc.register(address_of));
 
                 Some(ImportResult::Value(obj))
             }

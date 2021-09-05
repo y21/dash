@@ -4,7 +4,7 @@ use crate::vm::{instruction::Instruction, upvalue::Upvalue, VM};
 use core::fmt::{self, Debug, Formatter};
 use std::collections::HashMap;
 
-use super::object::AnyObject;
+use super::object::Object;
 use super::Value;
 
 /// A native function that can be called from JavaScript code
@@ -349,10 +349,9 @@ impl FunctionKind {
             FunctionKind::User(func) => {
                 // Constants need to be marked, otherwise constants_gc will GC these
                 for constant in func.constants.iter() {
-                    match constant {
-                        Constant::JsValue(handle) => Value::mark(handle),
-                        _ => {}
-                    };
+                    if let Constant::JsValue(handle) = constant {
+                        Value::mark(handle);
+                    }
                 }
 
                 if let Some(handle) = &func.receiver {
@@ -382,7 +381,7 @@ impl FunctionKind {
     /// Attempts to create an object with its [[Prototype]] set to this
     /// functions prototype
     pub fn construct(&self, this: &Handle<Value>) -> Value {
-        let mut o = Value::from(AnyObject {});
+        let mut o = Value::from(Object::Ordinary);
         o.proto = self.prototype().cloned();
         o.constructor = Some(Handle::clone(this));
         o

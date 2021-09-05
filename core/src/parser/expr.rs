@@ -1,4 +1,7 @@
-use crate::vm::value::{object::Object, Value, ValueKind};
+use crate::vm::value::{
+    object::{ExoticObject, Object},
+    Value, ValueKind,
+};
 
 use super::{statement::FunctionDeclaration, token::TokenType};
 
@@ -251,11 +254,11 @@ impl<'a> LiteralExpr<'a> {
         match self {
             Self::Boolean(b) => Value::from(*b),
             Self::Number(n) => Value::from(*n),
-            Self::Identifier(_) => {
-                unreachable!()
-                // Constant::Identifier(std::str::from_utf8(ident).unwrap().to_owned()).into()
-            }
-            Self::String(s) => Object::String(std::str::from_utf8(s).unwrap().to_owned()).into(),
+            Self::Identifier(_) => unreachable!(),
+            Self::String(s) => Object::Exotic(ExoticObject::String(
+                std::str::from_utf8(s).unwrap().to_owned(),
+            ))
+            .into(),
             Self::Undefined => Value::new(ValueKind::Undefined),
             Self::Null => Value::new(ValueKind::Null),
         }

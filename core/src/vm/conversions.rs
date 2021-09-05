@@ -1,13 +1,10 @@
-use super::{
-    instruction::Constant,
-    value::{
-        array::Array,
-        function::{Closure, FunctionKind, Module, NativeFunction, UserFunction},
-        object::{AnyObject, Object, Weak},
-        promise::Promise,
-        weak::{WeakMap, WeakSet},
-        Value, ValueKind,
-    },
+use super::value::{
+    array::Array,
+    function::{Closure, FunctionKind, Module, NativeFunction, UserFunction},
+    object::{ExoticObject, Object, Weak},
+    promise::Promise,
+    weak::{WeakMap, WeakSet},
+    Value, ValueKind,
 };
 use std::str::Utf8Error;
 use std::{cell::RefCell, convert::TryFrom};
@@ -30,15 +27,21 @@ impl From<Object> for Value {
     }
 }
 
+impl From<ExoticObject> for Value {
+    fn from(o: ExoticObject) -> Self {
+        Object::Exotic(o).into()
+    }
+}
+
 impl From<&'static str> for Value {
     fn from(s: &'static str) -> Self {
-        Object::String(s.to_owned()).into()
+        ExoticObject::String(s.to_owned()).into()
     }
 }
 
 impl From<String> for Value {
     fn from(s: String) -> Self {
-        Object::String(s).into()
+        ExoticObject::String(s).into()
     }
 }
 
@@ -48,26 +51,20 @@ impl TryFrom<&[u8]> for Value {
     fn try_from(s: &[u8]) -> Result<Value, Self::Error> {
         std::str::from_utf8(s)
             .map(ToOwned::to_owned)
-            .map(Object::String)
+            .map(ExoticObject::String)
             .map(Into::into)
     }
 }
 
 impl From<FunctionKind> for Value {
     fn from(f: FunctionKind) -> Self {
-        Object::Function(f).into()
+        ExoticObject::Function(f).into()
     }
 }
 
 impl From<Array> for Value {
     fn from(a: Array) -> Self {
-        Object::Array(a).into()
-    }
-}
-
-impl From<AnyObject> for Value {
-    fn from(o: AnyObject) -> Self {
-        Object::Any(o).into()
+        ExoticObject::Array(a).into()
     }
 }
 
@@ -97,7 +94,7 @@ impl From<Module> for Value {
 
 impl From<Weak> for Value {
     fn from(s: Weak) -> Self {
-        Object::Weak(s).into()
+        ExoticObject::Weak(s).into()
     }
 }
 
@@ -115,7 +112,7 @@ impl From<WeakMap<RefCell<Value>, RefCell<Value>>> for Value {
 
 impl From<Promise> for Value {
     fn from(p: Promise) -> Self {
-        Object::Promise(p).into()
+        ExoticObject::Promise(p).into()
     }
 }
 

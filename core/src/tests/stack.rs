@@ -13,6 +13,6 @@ pub fn take() {
     assert_eq!(stack2.pop(), 1);
 
     // Check that both stack pointers are at zero
-    assert_eq!(stack2.get_stack_pointer(), 0);
-    assert_eq!(stack.get_stack_pointer(), 0);
+    assert!(stack2.is_empty());
+    assert!(stack.is_empty());
 }

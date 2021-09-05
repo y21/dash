@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use crate::{
     gc::Handle,
     vm::{
-        value::{function::CallContext, object::AnyObject, Value},
+        value::{function::CallContext, object::Object, Value},
         VM,
     },
 };
@@ -26,7 +26,7 @@ impl<'a> From<&'a str> for MaybeRc<&'a str> {
 
 /// Creates a JS error given a string
 pub fn create_error(message: MaybeRc<&str>, vm: &VM) -> Handle<Value> {
-    let mut error = Value::from(AnyObject {});
+    let mut error = Value::from(Object::Ordinary);
     error.update_internal_properties(&vm.statics.error_proto, &vm.statics.error_ctor);
 
     let message_str = match message {

@@ -5,7 +5,12 @@ use crate::{
     js_std,
     vm::{
         abstractions,
-        value::{array::Array, function::CallContext, object::Object, Value, ValueKind},
+        value::{
+            array::Array,
+            function::CallContext,
+            object::{ExoticObject, Object},
+            Value, ValueKind,
+        },
         VM,
     },
 };
@@ -41,9 +46,13 @@ impl<'a> ArrayLikeIterable<'a> {
     /// Creates a new array like iterable given a Value by detecting its kind
     pub fn from_value(value: &'a Value, value_cell: &'a Handle<Value>) -> Self {
         match value.as_object() {
-            Some(Object::String(s)) => Self::new(ArrayLikeKind::String(s.chars())),
-            Some(Object::Array(a)) => Self::new(ArrayLikeKind::Array(&a.elements)),
-            Some(Object::Any(_)) => Self::new(ArrayLikeKind::Object(value_cell)),
+            Some(Object::Exotic(ExoticObject::String(s))) => {
+                Self::new(ArrayLikeKind::String(s.chars()))
+            }
+            Some(Object::Exotic(ExoticObject::Array(a))) => {
+                Self::new(ArrayLikeKind::Array(&a.elements))
+            }
+            Some(Object::Ordinary) => Self::new(ArrayLikeKind::Object(value_cell)),
             _ => Self::new(ArrayLikeKind::Empty),
         }
     }
@@ -95,8 +104,8 @@ pub fn push(value: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     let this_cell = value.receiver.unwrap();
 
     let mut this = unsafe { this_cell.borrow_mut_unbounded() };
-    let this_arr = match this.as_object_mut() {
-        Some(Object::Array(a)) => a,
+    let this_arr = match this.as_exotic_object_mut() {
+        Some(ExoticObject::Array(a)) => a,
         _ => {
             return Err(error::create_error(
                 MaybeRc::Owned("Array.prototype.push called on non-array"),
@@ -121,8 +130,8 @@ pub fn push(value: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 pub fn concat(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this = unsafe { this_cell.borrow_mut_unbounded() };
-    let this_arr = match this.as_object_mut() {
-        Some(Object::Array(a)) => a,
+    let this_arr = match this.as_exotic_object_mut() {
+        Some(ExoticObject::Array(a)) => a,
         _ => {
             return Err(error::create_error(
                 MaybeRc::Owned("Array.prototype.concat called on non-array"),
@@ -145,8 +154,8 @@ pub fn concat(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 pub fn map(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let this_ref = unsafe { this_cell.borrow_unbounded() };
-    let this_arr = match this_ref.as_object() {
-        Some(Object::Array(a)) => a,
+    let this_arr = match this_ref.as_exotic_object() {
+        Some(ExoticObject::Array(a)) => a,
         _ => {
             return Err(error::create_error(
                 MaybeRc::Owned("Array.prototype.map called on non-array"),
@@ -175,8 +184,8 @@ pub fn map(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 pub fn every(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this_ref = unsafe { this_cell.borrow_mut_unbounded() };
-    let this_arr = match this_ref.as_object_mut() {
-        Some(Object::Array(a)) => a,
+    let this_arr = match this_ref.as_exotic_object_mut() {
+        Some(ExoticObject::Array(a)) => a,
         _ => {
             return Err(error::create_error(
                 MaybeRc::Owned("Array.prototype.every called on non-array"),
@@ -205,8 +214,8 @@ pub fn every(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 pub fn fill(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this_ref = unsafe { this_cell.borrow_mut_unbounded() };
-    let this_arr = match this_ref.as_object_mut() {
-        Some(Object::Array(a)) => a,
+    let this_arr = match this_ref.as_exotic_object_mut() {
+        Some(ExoticObject::Array(a)) => a,
         _ => {
             return Err(error::create_error(
                 "Array.prototype.fill called on non-array".into(),
@@ -289,8 +298,8 @@ pub fn from(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 pub fn includes(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this_ref = unsafe { this_cell.borrow_mut_unbounded() };
-    let this_arr = match this_ref.as_object_mut() {
-        Some(Object::Array(a)) => a,
+    let this_arr = match this_ref.as_exotic_object_mut() {
+        Some(ExoticObject::Array(a)) => a,
         _ => {
             return Err(error::create_error(
                 "Array.prototype.includes called on non-array".into(),
@@ -326,8 +335,8 @@ pub fn includes(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 pub fn index_of(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this_ref = unsafe { this_cell.borrow_mut_unbounded() };
-    let this_arr = match this_ref.as_object_mut() {
-        Some(Object::Array(a)) => a,
+    let this_arr = match this_ref.as_exotic_object_mut() {
+        Some(ExoticObject::Array(a)) => a,
         _ => {
             return Err(error::create_error(
                 "Array.prototype.indexOf called on non-array".into(),
@@ -430,8 +439,8 @@ pub fn join(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 pub fn last_index_of(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this_ref = unsafe { this_cell.borrow_mut_unbounded() };
-    let this_arr = match this_ref.as_object_mut() {
-        Some(Object::Array(a)) => a,
+    let this_arr = match this_ref.as_exotic_object_mut() {
+        Some(ExoticObject::Array(a)) => a,
         _ => {
             return Err(error::create_error(
                 "Array.prototype.indexOf called on non-array".into(),

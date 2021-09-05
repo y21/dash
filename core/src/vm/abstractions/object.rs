@@ -1,11 +1,4 @@
-use crate::{
-    gc::Handle,
-    vm::{
-        abstractions::conversions::to_string,
-        value::{object::Object, Value, ValueKind},
-        VM,
-    },
-};
+use crate::{gc::Handle, vm::{VM, abstractions::conversions::to_string, value::{Value, ValueKind, object::{ExoticObject, Object}}}};
 
 const MAX: f64 = 9007199254740991f64;
 
@@ -82,7 +75,7 @@ pub fn to_number(argument: Option<&Value>) -> Result<f64, Handle<Value>> {
         Some(ValueKind::Bool(b)) => Ok(*b as u8 as f64),
         Some(ValueKind::Number(n)) => Ok(*n),
         Some(ValueKind::Object(o)) => match &**o {
-            Object::String(s) => Ok(to_number_from_string(s)),
+            Object::Exotic(ExoticObject::String(s)) => Ok(to_number_from_string(s)),
             _ => todo!(),
         },
         None => Ok(f64::NAN),

@@ -89,6 +89,11 @@ impl<T, const N: usize> Stack<T, N> {
         self.0
     }
 
+    /// Returns a bool, indicating whether this stack is empty
+    pub fn is_empty(&self) -> bool {
+        self.1 == 0
+    }
+
     /// Stack length (number of filled items)
     pub fn len(&self) -> usize {
         self.1
@@ -173,11 +178,6 @@ impl<T, const N: usize> Stack<T, N> {
         }
 
         unsafe { self.0[offset + idx].as_mut_ptr().write(value) }
-    }
-
-    /// Returns the stack pointer (length)
-    pub fn get_stack_pointer(&self) -> usize {
-        self.1
     }
 
     /// Sets the stack pointer
