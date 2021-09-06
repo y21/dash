@@ -854,7 +854,6 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         if e.computed {
             let property = self.accept_expr(&e.property)?;
             instructions.extend(property);
-            instructions.push(Instruction::Op(Opcode::ToPrimitive));
             instructions.push(Instruction::Op(Opcode::ComputedPropertyAccess));
         } else {
             let ident = if let Expr::Literal(lit) = &*e.property {

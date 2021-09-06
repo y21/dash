@@ -44,7 +44,10 @@ $ dashjs example.js
 ```
 ### Embedding into a JavaScript application
 This implementation can be used in another JavaScript engine that supports WebAssembly. To do so, build `wasm/` and include `dash.ts` in your application. In the future, this project will be published on npm to make this easier. There will be an example for this soon.
+
 ### Embedding into a Rust application
+Note that the API is not stable. Things are constantly changing, so your code may break at any time when bumping the version, which is why it is highly recommended to lock in to a specific revision for now.
+
 - Cargo.toml
 ```toml
 [dependencies]

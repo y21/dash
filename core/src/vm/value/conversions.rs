@@ -285,6 +285,7 @@ impl Object {
                 }
                 PromiseState::Pending => Cow::Borrowed("Promise {<pending>}"),
             },
+            Self::Exotic(ExoticObject::Custom(_)) => Cow::Borrowed("[Custom]"),
             Self::Ordinary => {
                 let mut s = String::from("{ ");
 

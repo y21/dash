@@ -36,19 +36,9 @@ mod handlers {
         // See https://github.com/y21/dash/issues/17
         // TODO: ideally, we should only Clone on Write
         // aka only clone when we need to mutate this
-        let mut constant = unsafe { constant.borrow_unbounded() }
+        let constant = unsafe { constant.borrow_unbounded() }
             .clone()
             .into_handle(vm);
-
-        // Values emitted by the compiler do not have a [[Prototype]] set
-        // so we need to do that here when pushing a value onto the stack
-        unsafe {
-            constant
-                .borrow_mut_unbounded()
-                .detect_internal_properties(vm);
-
-            constant.set_marker(vm.gc_marker);
-        }
 
         vm.stack.push(constant);
     }
@@ -434,8 +424,6 @@ mod handlers {
                     args: &mut params,
                     ctor: true,
                     receiver,
-                    // state: &mut state,
-                    // function_call_response: None,
                 };
                 let result = (f.func)(ctx)?;
 
@@ -878,30 +866,6 @@ mod handlers {
         Ok(())
     }
 
-    pub fn to_primitive(vm: &mut VM) -> Result<(), Handle<Value>> {
-        let obj_cell = vm.stack.pop();
-
-        {
-            // If this is already a primitive value, we do not need to try to convert it
-            let obj = unsafe { obj_cell.borrow_unbounded() };
-            if obj.is_primitive() {
-                vm.stack.push(Handle::clone(&obj_cell));
-                return Ok(());
-            }
-        }
-
-        let to_prim = Value::get_property(vm, &obj_cell, "toString", None)
-            .or_else(|| Value::get_property(vm, &obj_cell, "valueOf", None))
-            .ok_or_else(|| {
-                js_std::error::create_error(
-                    MaybeRc::Owned("Cannot convert object to primitive value"),
-                    vm,
-                )
-            })?;
-
-        vm.begin_function_call(to_prim, Vec::new())
-    }
-
     pub fn debugger(vm: &mut VM) {
         vm.agent.debugger();
     }
@@ -993,7 +957,6 @@ pub fn handle(
         Opcode::LoopStart => handlers::loop_start(vm),
         Opcode::LoopEnd => handlers::loop_end(vm),
         Opcode::ExportDefault => handlers::export_default(vm)?,
-        Opcode::ToPrimitive => handlers::to_primitive(vm)?,
         Opcode::Debugger => handlers::debugger(vm),
 
         _ => unimplemented!("{:?}", opcode),

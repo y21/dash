@@ -182,14 +182,14 @@ impl Value {
                     Object::Exotic(ExoticObject::Array(_)) => {
                         self.update_internal_properties(&statics.array_proto, &statics.array_ctor)
                     }
-                    Object::Ordinary => {
+                    Object::Ordinary | Object::Exotic(ExoticObject::Custom(_)) => {
                         self.update_internal_properties(&statics.object_proto, &statics.object_ctor)
                     }
                     Object::Exotic(ExoticObject::Weak(JsWeak::Set(_))) => self
                         .update_internal_properties(&statics.weakset_proto, &statics.weakset_ctor),
                     Object::Exotic(ExoticObject::Weak(JsWeak::Map(_))) => self
                         .update_internal_properties(&statics.weakmap_proto, &statics.weakmap_ctor),
-                };
+                }
             }
             _ => {}
         }

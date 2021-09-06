@@ -2,6 +2,8 @@
 pub mod array;
 /// Implements value conversions
 pub mod conversions;
+/// Exotic JavaScript objects
+pub mod exotic;
 /// JavaScript function
 pub mod function;
 /// Value kind

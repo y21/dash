@@ -183,8 +183,6 @@ pub enum Opcode {
     EvaluateModule,
     /// Exports a default value
     ExportDefault,
-    /// Performs the abstract `ToPrimitive` operation
-    ToPrimitive,
     /// Invokes the debugger, if present
     Debugger,
 }

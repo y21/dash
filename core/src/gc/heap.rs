@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 /// A heap allocated heap node
 pub struct Node<T> {
     /// The value of this node
@@ -52,6 +54,14 @@ impl<T> Heap<T> {
 
         unsafe { &mut (*node).value as *mut T }
     }
+
+    /// Returns an iterator over the heap
+    pub fn iter(&self) -> HeapIter<'_, T> {
+        HeapIter {
+            next: self.tail,
+            _heap: PhantomData,
+        }
+    }
 }
 
 impl<T> Drop for Heap<T> {
@@ -63,6 +73,31 @@ impl<T> Drop for Heap<T> {
                 next = (*ptr).next;
                 Box::from_raw(ptr)
             };
+        }
+    }
+}
+
+/// An iterator over the values in a heap
+pub struct HeapIter<'a, T> {
+    /// The next node to be returned
+    next: Option<*mut Node<T>>,
+    /// PhantomData to ensure that HeapIter does not outlive its Heap
+    _heap: PhantomData<&'a ()>,
+}
+
+impl<'a, T: 'a> Iterator for HeapIter<'a, T> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let next = self.next;
+
+        if let Some(ptr) = next {
+            unsafe {
+                self.next = (*ptr).next;
+                Some(&(*ptr).value)
+            }
+        } else {
+            None
         }
     }
 }

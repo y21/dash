@@ -1,6 +1,8 @@
 use std::borrow::Cow;
 use std::cell::RefCell;
+use std::fmt::Debug;
 
+use super::exotic::Exotic;
 use super::promise::Promise;
 use super::weak::WeakMap;
 use super::weak::WeakSet;
@@ -82,6 +84,8 @@ pub enum ExoticObject {
     Weak(Weak),
     /// A JavaScript promise
     Promise(Promise),
+    /// Custom exotic types
+    Custom(Box<dyn Exotic>),
 }
 
 /// A JavaScript object

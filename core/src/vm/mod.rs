@@ -177,7 +177,7 @@ impl VM {
         input: &'a str,
         mut agent: Option<A>,
     ) -> Result<Self, FromStrError<'a>> {
-        let (buffer, constants, gc) = Compiler::from_str(
+        let (buffer, constants, mut gc) = Compiler::from_str(
             input,
             agent.as_mut().map(|a| MaybeOwned::Borrowed(a)),
             CompilerFunctionKind::Function,
@@ -189,6 +189,8 @@ impl VM {
             Some(agent) => Self::new_with_agent(Box::new(agent)),
             None => Self::new(),
         };
+
+        vm.mark_constants(&mut gc);
 
         vm.constants_gc.transfer(gc);
 
@@ -717,6 +719,7 @@ impl VM {
         mut params: Vec<Handle<Value>>,
     ) -> Result<(), Handle<Value>> {
         let func_cell_ref = unsafe { func_cell.borrow_unbounded() };
+        
         let func = match func_cell_ref.as_function() {
             Some(FunctionKind::Native(f)) => {
                 let receiver = f.receiver.as_ref().map(|rx| rx.get().clone());
@@ -834,17 +837,26 @@ impl VM {
 
     /// Evaluates a JavaScript source string in this VM
     pub fn eval<'a>(&mut self, source: &'a str) -> Result<Option<Handle<Value>>, EvalError<'a>> {
-        let (buffer, constants, gc) = Compiler::<()>::from_str(source, None, CompilerFunctionKind::Function)
+        let (buffer, constants, mut gc) = Compiler::<()>::from_str(source, None, CompilerFunctionKind::Function)
             .map_err(FromStrError::from)
             .map_err(EvalError::from)?
             .compile()
             .map_err(EvalError::CompileError)?;
+
+        self.mark_constants(&mut gc);
 
         self.constants_gc.transfer(gc);
 
         let frame = Frame::from_buffer(to_vm_instructions(buffer), constants, self);
 
         self.execute_frame(frame, true).map_err(EvalError::VMError)
+    }
+
+    fn mark_constants(&self, gc: &mut Gc<Value>) {
+        for guard in gc.heap.iter() {
+            let mut value = guard.borrow_mut();
+            value.detect_internal_properties(self);
+        }
     }
 }
 
