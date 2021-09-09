@@ -814,14 +814,28 @@ mod handlers {
         vm.stack.push(value);
     }
 
-    pub fn loop_continue(vm: &mut VM) {
-        let this = unsafe { vm.loops.get_unchecked() };
-        vm.frame_mut().ip = this.condition_ip;
+    pub fn loop_continue(vm: &mut VM) -> Result<(), Handle<Value>> {
+        if let Some(this) = unsafe { vm.loops.get() } {
+            vm.frame_mut().ip = this.condition_ip;
+            Ok(())
+        } else {
+            Err(js_std::error::create_error(
+                "Illegal continue statement".into(),
+                vm,
+            ))
+        }
     }
 
-    pub fn loop_break(vm: &mut VM) {
-        let this = unsafe { vm.loops.get_unchecked() };
-        vm.frame_mut().ip = this.end_ip;
+    pub fn loop_break(vm: &mut VM) -> Result<(), Handle<Value>> {
+        if let Some(this) = unsafe { vm.loops.get() } {
+            vm.frame_mut().ip = this.end_ip;
+            Ok(())
+        } else {
+            Err(js_std::error::create_error(
+                "Illegal break statement".into(),
+                vm,
+            ))
+        }
     }
 
     pub fn loop_start(vm: &mut VM) {
@@ -952,8 +966,8 @@ pub fn handle(
         Opcode::ArrayLiteral => handlers::array_literal(vm),
         Opcode::ObjectLiteral => handlers::object_literal(vm),
         Opcode::ComputedPropertyAccess => handlers::computed_property_access(vm),
-        Opcode::Continue => handlers::loop_continue(vm),
-        Opcode::Break => handlers::loop_break(vm),
+        Opcode::Continue => handlers::loop_continue(vm)?,
+        Opcode::Break => handlers::loop_break(vm)?,
         Opcode::LoopStart => handlers::loop_start(vm),
         Opcode::LoopEnd => handlers::loop_end(vm),
         Opcode::ExportDefault => handlers::export_default(vm)?,
