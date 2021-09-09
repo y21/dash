@@ -42,7 +42,7 @@ impl Value {
     pub fn is_truthy(&self) -> bool {
         match &self.kind {
             ValueKind::Bool(b) => *b,
-            ValueKind::Number(n) => *n != 0f64,
+            ValueKind::Number(n) => *n != 0f64 && !n.is_nan(),
             ValueKind::Object(o) => o.is_truthy(),
             ValueKind::Undefined | ValueKind::Null => false,
         }
