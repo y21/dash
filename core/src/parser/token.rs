@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::num::ParseIntError;
 
 use crate::util::Either;
 
@@ -127,7 +128,13 @@ pub enum TokenType {
     /// String: "foo"
     String,
     /// Number: 42
-    Number,
+    NumberDec,
+    /// Hex number literal: 0x
+    NumberHex,
+    /// Binary number literal: 0b
+    NumberBin,
+    /// Octal number literal: 0o
+    NumberOct,
     /// If: if
     If,
     /// Else: else
@@ -301,7 +308,13 @@ impl Location {
     ///
     /// The caller is supposed to pass in the same input string.
     /// This function is used to format errors
-    pub fn to_string(&self, source: &[u8], full: Either<&str, char>, message: &str) -> String {
+    pub fn to_string(
+        &self,
+        source: &[u8],
+        full: Either<&str, char>,
+        message: &str,
+        display_token: bool,
+    ) -> String {
         let offset = if self.line <= 1 {
             self.line_offset
         } else {
@@ -327,10 +340,14 @@ impl Location {
         s.push('\n');
         s.push_str(&" ".repeat((self.offset - self.line_offset).saturating_sub(1)));
         s.push_str(&"^".repeat(full_len));
-        s.push_str(&format!(
-            " {}: {}\n  at script.js:{}:{}",
-            message, full, self.line, col
-        ));
+        s.push(' ');
+        s.push_str(message);
+
+        if display_token {
+            s.push_str(&format!(": {}", full));
+        }
+
+        s.push_str(&format!("\n    at script.js:{}:{}", self.line, col));
 
         s
     }
@@ -347,6 +364,8 @@ pub enum ErrorKind<'a> {
     UnexpectedTokenMultiple(Token<'a>, &'static [TokenType]),
     /// Unexpected end of file
     UnexpectedEof,
+    /// Integer parsing failed
+    ParseIntError(Token<'a>, ParseIntError),
 }
 
 /// An error that occurred during parsing
@@ -367,12 +386,21 @@ impl<'a> ErrorKind<'a> {
             Self::UnknownToken(tok) => {
                 let full_utf8 = std::str::from_utf8(tok.full).unwrap();
                 tok.loc
-                    .to_string(source, Either::Left(full_utf8), "unknown token")
+                    .to_string(source, Either::Left(full_utf8), "unknown token", true)
             }
             Self::UnexpectedToken(tok, _) | Self::UnexpectedTokenMultiple(tok, _) => {
                 let full_utf8 = std::str::from_utf8(tok.full).unwrap();
                 tok.loc
-                    .to_string(source, Either::Left(full_utf8), "unexpected token")
+                    .to_string(source, Either::Left(full_utf8), "unexpected token", true)
+            }
+            Self::ParseIntError(tok, err) => {
+                let full_utf8 = std::str::from_utf8(tok.full).unwrap();
+                tok.loc.to_string(
+                    source,
+                    Either::Left(full_utf8),
+                    &format!("int parsing failed: {}", err),
+                    false,
+                )
             }
             Self::UnexpectedEof => String::from("unexpected end of input"),
         }

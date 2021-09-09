@@ -36,6 +36,7 @@ impl<'a> Error<'a> {
                 self.source,
                 Either::Right(*c as char),
                 "unknown character",
+                true,
             )),
             ErrorKind::UnexpectedEof => Cow::Borrowed("Unexpected end of input"),
         }
@@ -251,6 +252,27 @@ impl<'a> Lexer<'a> {
         Node::Token(self.create_contextified_token_with_lexeme(TokenType::String, lexeme))
     }
 
+    /// Reads a prefixed number literal (0x, 0b, 0o)
+    fn read_prefixed_literal<P>(&mut self, ty: TokenType, predicate: P) -> Node<'a>
+    where
+        P: Fn(u8) -> bool,
+    {
+        // Skip prefix (0x)
+        self.advance();
+
+        while !self.is_eof() {
+            let cur = self.current_real();
+
+            if cur == b'_' || predicate(cur) {
+                self.advance();
+            } else {
+                break;
+            }
+        }
+
+        self.create_contextified_token(ty)
+    }
+
     /// Reads a number literal
     fn read_number_literal(&mut self) -> Node<'a> {
         let mut is_float = false;
@@ -284,7 +306,7 @@ impl<'a> Lexer<'a> {
             self.advance();
         }
 
-        self.create_contextified_token(TokenType::Number)
+        self.create_contextified_token(TokenType::NumberDec)
     }
 
     /// Reads an identifier and returns it as a node
@@ -432,7 +454,20 @@ impl<'a> Lexer<'a> {
             b'"' | b'\'' => self.read_string_literal(),
             _ => {
                 if util::is_digit(cur) {
-                    self.read_number_literal()
+                    let is_prefixed = cur == b'0';
+
+                    match (is_prefixed, self.current()) {
+                        (true, Some(b'x' | b'X')) => {
+                            self.read_prefixed_literal(TokenType::NumberHex, util::is_hex_digit)
+                        }
+                        (true, Some(b'b' | b'B')) => {
+                            self.read_prefixed_literal(TokenType::NumberBin, util::is_binary_digit)
+                        }
+                        (true, Some(b'o' | b'O')) => {
+                            self.read_prefixed_literal(TokenType::NumberOct, util::is_octal_digit)
+                        }
+                        _ => self.read_number_literal(),
+                    }
                 } else if util::is_identifier_start(cur) {
                     self.read_identifier()
                 } else {

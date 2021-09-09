@@ -619,9 +619,18 @@ impl<'a> Parser<'a> {
                 }
                 Expr::Object(items)
             }
-            TokenType::Number => {
+            TokenType::NumberDec => {
                 Expr::number_literal(std::str::from_utf8(full).unwrap().parse::<f64>().unwrap())
             }
+            TokenType::NumberHex => self
+                .parse_prefixed_number_literal(full, 16)
+                .map(Expr::number_literal)?,
+            TokenType::NumberBin => self
+                .parse_prefixed_number_literal(full, 2)
+                .map(Expr::number_literal)?,
+            TokenType::NumberOct => self
+                .parse_prefixed_number_literal(full, 8)
+                .map(Expr::number_literal)?,
             TokenType::LeftParen => {
                 if self.expect_and_skip(&[TokenType::RightParen], false) {
                     // () MUST be followed by an arrow. Empty groups are not valid syntax
@@ -656,6 +665,18 @@ impl<'a> Parser<'a> {
         };
 
         Some(expr)
+    }
+
+    /// Parses a prefixed number literal (0x, 0o, 0b) and returns the number
+    pub fn parse_prefixed_number_literal(&mut self, full: &[u8], radix: u32) -> Option<f64> {
+        let src = std::str::from_utf8(&full[2..]).unwrap();
+        match u64::from_str_radix(src, radix).map(|x| x as f64) {
+            Ok(f) => Some(f),
+            Err(e) => {
+                self.create_error(ErrorKind::ParseIntError(self.previous().copied()?, e));
+                None
+            }
+        }
     }
 
     /// Parses an arrow function
