@@ -247,7 +247,7 @@ class Internal {
     }
 }
 
-class VM {
+export class VM {
     private internal: Internal;
     private ptr: Pointer;
     private freed: boolean;
