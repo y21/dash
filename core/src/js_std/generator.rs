@@ -97,3 +97,20 @@ pub fn next(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
         }
     }
 }
+
+/// Implements the return function on generator iterators
+pub fn return_(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    let this = ctx.receiver.unwrap();
+
+    let mut this_ref = unsafe { this.borrow_mut_unbounded() };
+    let this_gen_iter = this_ref
+        .as_object_mut()
+        .and_then(Object::as_generator_iterator_mut)
+        .unwrap();
+
+    this_gen_iter.state = GeneratorState::Finished;
+    Ok(Value::unwrap_or_undefined(
+        ctx.args.first().cloned(),
+        ctx.vm,
+    ))
+}

@@ -56,6 +56,8 @@ pub struct Statics {
     pub isnan: Handle<Value>,
     /// Represents GeneratorIterator.prototype.next
     pub generator_iterator_next: Handle<Value>,
+    /// Represents GeneratorIterator.prototype.return
+    pub generator_iterator_return: Handle<Value>,
     /// Represents Array.prototype.push
     pub array_push: Handle<Value>,
     /// Represents Array.prototype.concat
@@ -255,6 +257,11 @@ impl Statics {
             console_log: register_glob_method!(gc, "log", js_std::console::log),
             isnan: register_glob_method!(gc, "isNaN", js_std::functions::is_nan),
             generator_iterator_next: register_glob_method!(gc, "next", js_std::generator::next),
+            generator_iterator_return: register_glob_method!(
+                gc,
+                "return",
+                js_std::generator::return_
+            ),
             array_push: register_glob_method!(gc, "push", js_std::array::push),
             array_concat: register_glob_method!(gc, "concat", js_std::array::concat),
             array_map: register_glob_method!(gc, "map", js_std::array::map),

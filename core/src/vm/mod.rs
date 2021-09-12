@@ -437,6 +437,7 @@ impl VM {
             let mut o = unsafe { self.statics.generator_iterator_proto.borrow_mut_unbounded() };
             o.detect_internal_properties(self);
             o.set_property("next", Handle::clone(&self.statics.generator_iterator_next));
+            o.set_property("return", Handle::clone(&self.statics.generator_iterator_return));
         }
         
         {
@@ -594,6 +595,9 @@ impl VM {
         patch_value(self, &self.statics.string_replace);
         patch_value(self, &self.statics.promise_resolve);
         patch_value(self, &self.statics.promise_reject);
+        patch_value(self, &self.statics.generator_iterator_next);
+        patch_value(self, &self.statics.generator_iterator_return);
+        
 
         global.set_property("NaN", self.create_js_value(f64::NAN).into_handle(self));
         global.set_property("Infinity", self.create_js_value(f64::INFINITY).into_handle(self));
