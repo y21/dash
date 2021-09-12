@@ -335,6 +335,28 @@ pub fn instanceof_keyword() {
 }
 
 #[test]
+pub fn generator_arg_mismatch() {
+    eval::<()>(
+        r#"
+        function assert(l, r) {
+            if (l !== r) {
+                throw new Error("FAIL");
+            }
+        }
+        
+        function* x(a, b) {
+            yield b;
+        }
+
+        const gen = x(1);
+        assert(gen.next().value, undefined);
+        "#,
+        None,
+    )
+    .unwrap();
+}
+
+#[test]
 pub fn async_task() {
     let mut vm = VM::from_str::<()>(
         r#"

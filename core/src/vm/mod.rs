@@ -719,7 +719,7 @@ impl VM {
     ) -> Result<(), Handle<Value>> {
         let func_cell_ref = unsafe { func_cell.borrow_unbounded() };
 
-        let func = match func_cell_ref.as_function() {
+        let closure = match func_cell_ref.as_function() {
             Some(FunctionKind::Native(f)) => {
                 let receiver = f.receiver.as_ref().map(|rx| rx.get().clone());
                 let ctx = CallContext {
@@ -740,7 +740,20 @@ impl VM {
             _ => unreachable!(),
         };
 
-        if func.func.ty.is_generator() {
+        let origin_param_count = closure.func.params as usize;
+        let param_count = params.len();
+
+        if param_count > origin_param_count {
+            // remove extra params
+            params.drain(param_count..);
+        }
+
+        for _ in 0..(origin_param_count.saturating_sub(param_count)) {
+            // add dummy undefined values for remaining, missing arguments
+            params.push(Value::new(ValueKind::Undefined).into_handle(self));
+        }
+
+        if closure.func.ty.is_generator() {
             let iterator = GeneratorIterator::new(Handle::clone(&func_cell), params);
             let value = self.create_js_value(iterator).into_handle(self);
             self.stack.push(value);
@@ -750,7 +763,7 @@ impl VM {
         let current_sp = self.stack.len();
 
         let frame = Frame {
-            buffer: func.func.buffer.clone(),
+            buffer: closure.func.buffer.clone(),
             ip: 0,
             func: func_cell.clone(),
             sp: current_sp,
@@ -758,16 +771,8 @@ impl VM {
         };
         self.frames.push(frame);
 
-        let origin_param_count = func.func.params as usize;
-        let param_count = params.len();
-
         for param in params.into_iter() {
             self.stack.push(param);
-        }
-
-        for _ in 0..(origin_param_count.saturating_sub(param_count)) {
-            self.stack
-                .push(Value::new(ValueKind::Undefined).into_handle(self));
         }
 
         Ok(())
