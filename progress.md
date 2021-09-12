@@ -13,10 +13,10 @@ This should just act as a short "cheat sheet", and used to see what's left to im
   - [x] Floats
   - [x] `e` notation (1e3)
   - [x] Boolean (true|false)
-  - [ ] Hex literal (0xA)
-  - [ ] Binary literal (0b1)
-  - [ ] Octal literal (0o1)
-  - [ ] Number literals with underscore
+  - [x] Hex literal (0xA)
+  - [x] Binary literal (0b1)
+  - [x] Octal literal (0o1)
+  - [x] Number literals with underscore
   - [x] null
   - [x] undefined
   - [x] NaN
@@ -24,6 +24,7 @@ This should just act as a short "cheat sheet", and used to see what's left to im
   - [x] Object literals
   - [ ] Arrays
     - [x] Array literals
+    - [ ] Holey arrays
 - [ ] RegExp
   - [ ] RegExp literal
 - [ ] Operators
@@ -33,7 +34,7 @@ This should just act as a short "cheat sheet", and used to see what's left to im
   - [ ] async/await
   - [x] &=
   - [x] &
-  - [ ] ~
+  - [x] ~
   - [x] |=
   - [x] |
   - [x] ^=
@@ -49,7 +50,7 @@ This should just act as a short "cheat sheet", and used to see what's left to im
   - [x] ==
   - [x] **=
   - [x] **
-  - [ ] function*
+  - [x] function*
   - [x] function
   - [x] () => {}
   - [x] >=
@@ -96,7 +97,7 @@ This should just act as a short "cheat sheet", and used to see what's left to im
   - [ ] >>>
   - [x] void
   - [ ] yield*
-  - [ ] yield
+  - [x] yield
 - [ ] Statements
   - [ ] async function
   - [x] block
@@ -112,7 +113,7 @@ This should just act as a short "cheat sheet", and used to see what's left to im
   - [ ] for...in
   - [ ] for...of
   - [x] for
-  - [ ] function*
+  - [x] function*
   - [x] function
   - [x] if
   - [x] if...else
@@ -130,7 +131,7 @@ This should just act as a short "cheat sheet", and used to see what's left to im
   - [ ] ~~with~~
 - [ ] Strict mode
 - [x] Native -> user function calls
-  - [ ] Native -> user -> native calls
+  - [x] Native -> user -> native calls
 - [x] User -> native function calls
 - [ ] Standard library
   - [ ] decodeURI
@@ -318,6 +319,7 @@ This should just act as a short "cheat sheet", and used to see what's left to im
     - [x] getOwnPropertyNames
     - [ ] getOwnPropertySymbols
     - [ ] is
+    - [ ] has
     - [ ] preventExtensions
     - [ ] seal
     - [ ] create
