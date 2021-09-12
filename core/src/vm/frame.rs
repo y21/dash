@@ -85,7 +85,7 @@ pub struct UnwindHandler {
 }
 
 /// A loop
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Loop {
     /// Loop condition instruction pointer
     pub condition_ip: usize,

@@ -28,6 +28,7 @@ mod handlers {
         gc::Handle,
         js_std::{self, error::MaybeRc},
         vm::{
+            abstractions,
             frame::{Frame, Loop, UnwindHandler},
             instruction::{Constant, Opcode},
             upvalue::Upvalue,
@@ -905,8 +906,40 @@ mod handlers {
     }
 
     pub fn yield_(vm: &mut VM) -> Result<Option<DispatchResult>, Handle<Value>> {
-        let x = vm.stack.pop();
-        Ok(Some(DispatchResult::Yield(Some(x))))
+        let value = vm.stack.pop();
+        Ok(Some(DispatchResult::Yield(Some(value))))
+    }
+
+    pub fn in_(vm: &mut VM) -> Result<(), Handle<Value>> {
+        let target = vm.stack.pop();
+        let searcher = vm.stack.pop();
+
+        let searcher = abstractions::conversions::to_string(vm, Some(&searcher))?;
+        let searcher_ref = unsafe { searcher.borrow_unbounded() };
+        let searcher_s = searcher_ref.as_string().unwrap();
+
+        let target_ref = unsafe { target.borrow_unbounded() };
+
+        let has_key = target_ref.has_property(vm, searcher_s);
+
+        vm.stack.push(vm.create_js_value(has_key).into_handle(vm));
+
+        Ok(())
+    }
+
+    pub fn instanceof(vm: &mut VM) {
+        let ctor = vm.stack.pop();
+        let test = vm.stack.pop();
+
+        let test = unsafe { test.borrow_unbounded() };
+        let is_instanceof = test
+            .constructor
+            .as_ref()
+            .map(|x| std::ptr::eq(x.as_ptr(), ctor.as_ptr()))
+            .unwrap_or_default();
+
+        vm.stack
+            .push(vm.create_js_value(is_instanceof).into_handle(vm));
     }
 
     pub fn debugger(vm: &mut VM) {
@@ -1002,6 +1035,8 @@ pub fn handle(
         Opcode::LoopEnd => handlers::loop_end(vm),
         Opcode::ExportDefault => handlers::export_default(vm)?,
         Opcode::Yield => return handlers::yield_(vm),
+        Opcode::In => handlers::in_(vm)?,
+        Opcode::Instanceof => handlers::instanceof(vm),
         Opcode::Debugger => handlers::debugger(vm),
 
         _ => unimplemented!("{:?}", opcode),

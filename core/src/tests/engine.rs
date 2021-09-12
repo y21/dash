@@ -295,6 +295,46 @@ pub fn generator_loop() {
 }
 
 #[test]
+pub fn in_keyword() {
+    eval::<()>(
+        r#"
+        function assert(l, r) {
+            if (l !== r) {
+                throw new Error("FAIL");
+            }
+        }
+
+        assert('a' in { a: 1 }, true);
+        assert('a' in {}, false);
+        assert('toString' in {}, true);
+        "#,
+        None,
+    )
+    .unwrap();
+}
+
+#[test]
+pub fn instanceof_keyword() {
+    eval::<()>(
+        r#"
+        function assert(l, r) {
+            if (l !== r) {
+                throw new Error("FAIL");
+            }
+        }
+
+        function Obj() {}
+        let o = new Obj();
+
+        assert({} instanceof Object, true);
+        assert(o instanceof Obj, true);
+        "#,
+        None,
+    )
+    .unwrap();
+}
+
+#[test]
 pub fn async_task() {
     let mut vm = VM::from_str::<()>(
         r#"

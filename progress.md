@@ -3,7 +3,7 @@ dash tries to support most of ECMAScript 2015.
 This file should give you a short overview of what's missing but will likely be implemented in the future. This is a non exhaustive list.
 
 Note: A checkmark here doesn't mean it matches the defined behavior in the spec. It means that test cases are passing.
-This should just act as a short "cheat sheet", and used to see what's left to implement. Once everything is implemented, we can start working on matching the spec.
+This should just act as a short "cheat sheet" for contributors, and used to see what's left to implement. Once everything is implemented, we can start working on matching spec behavior.
 
 - [ ] Primitives
   - [x] Double quote strings
@@ -56,11 +56,11 @@ This should just act as a short "cheat sheet", and used to see what's left to im
   - [x] >=
   - [x] >
   - [x] (expr)
-  - [ ] in
+  - [x] in
   - [x] ++expr
   - [x] expr++
   - [x] !=
-  - [ ] instanceof
+  - [x] instanceof
   - [x] <<=
   - [x] <<
   - [x] <=

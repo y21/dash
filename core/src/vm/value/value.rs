@@ -248,6 +248,20 @@ impl Value {
         self.fields.get(key)
     }
 
+    /// Checks whether this value (or one of the values in its prototype chain) contains a field
+    pub fn has_property(&self, vm: &VM, key: &str) -> bool {
+        if self.fields.contains_key(key) {
+            return true;
+        }
+
+        if let Some(proto) = self.proto.as_ref() {
+            let proto_ref = proto.borrow(vm);
+            proto_ref.has_property(vm, key)
+        } else {
+            false
+        }
+    }
+
     /// Looks up a property and goes through exotic property matching
     ///
     /// For a direct field lookup, use [Value::get_field]
