@@ -127,13 +127,26 @@ impl<T, const N: usize> Stack<T, N> {
         unsafe { val.assume_init() }
     }
 
-    /// Pops multiple values off the stack
-    pub fn pop_multiple(&mut self, count: usize) -> Vec<T> {
-        let mut v = Vec::with_capacity(self.len());
-        for _ in 0..count {
-            v.push(self.pop());
-        }
-        v
+    /// Drains this stack from the given index, without doing any boundary checks
+    pub unsafe fn drain_from_unchecked(&mut self, from: usize) -> Vec<T> {
+        let old_len = self.1;
+        self.1 = from;
+
+        self.0
+            .iter_mut()
+            .take(old_len)
+            .skip(from)
+            .map(|mu| {
+                let value = std::mem::replace(mu, MaybeUninit::uninit());
+                unsafe { value.assume_init() }
+            })
+            .collect()
+    }
+
+    /// Drains this stack from the given index to the top
+    pub fn drain_from(&mut self, from: usize) -> Vec<T> {
+        assert!(from <= self.1);
+        unsafe { self.drain_from_unchecked(from) }
     }
 
     /// Pops multiple values off the stack and discards them

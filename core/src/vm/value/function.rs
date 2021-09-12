@@ -74,6 +74,13 @@ pub enum FunctionType {
     AsyncGenerator,
 }
 
+impl FunctionType {
+    /// Returns whether this function is a generator
+    pub fn is_generator(&self) -> bool {
+        matches!(self, FunctionType::Generator | FunctionType::AsyncGenerator)
+    }
+}
+
 impl From<CompilerFunctionKind> for FunctionType {
     fn from(kind: CompilerFunctionKind) -> Self {
         match kind {

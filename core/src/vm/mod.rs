@@ -740,14 +740,13 @@ impl VM {
             _ => unreachable!(),
         };
 
-        if matches!(func.func.ty, FunctionType::Generator) {
+        if func.func.ty.is_generator() {
+            params.reverse();
             let iterator = GeneratorIterator::new(Handle::clone(&func_cell), params);
             let value = self.create_js_value(iterator).into_handle(self);
             self.stack.push(value);
             return Ok(());
         }
-
-        // By this point we know func_cell is a UserFunction
 
         let current_sp = self.stack.len();
 

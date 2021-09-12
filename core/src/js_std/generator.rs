@@ -83,10 +83,7 @@ pub fn next(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
             let frame = ctx.vm.frames.pop();
 
             // Stack capturing etc
-            let count = ctx.vm.stack.len() - frame.sp;
-            let mut stack = ctx.vm.stack.pop_multiple(count);
-
-            stack.reverse();
+            let stack = unsafe { ctx.vm.stack.drain_from_unchecked(frame.sp) };
 
             iter.state = GeneratorState::Running {
                 ip: frame.ip + 1,
