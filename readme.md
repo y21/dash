@@ -23,13 +23,14 @@ This is a *WIP* and **not** yet production ready. It is actively being worked on
 ### Using the CLI
 ```js
 // example.js
-function* powersOf(n) {
-    for (let i = 0; ; ++i) {
-        yield i ** n;
+function* idGenerator() {
+    let index = 0;
+    while (true) {
+        yield index++;
     }
 }
 
-const generator = powersOf(2);
+const generator = idGenerator();
 while (true) {
     console.log(generator.next().value);
 }
