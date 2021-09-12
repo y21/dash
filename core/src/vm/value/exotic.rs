@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::{borrow::Cow, fmt::Debug};
 
 use crate::{gc::Handle, js_std, vm::VM};
 
@@ -31,6 +31,9 @@ impl Clone for Box<dyn Exotic> {
 
 /// Implements object behavior
 pub trait Exotic: Debug + ExoticClone {
+    /// Inspects a JavaScript value
+    fn inspect(&self, this: &Value, depth: u32) -> Cow<str>;
+
     /// Trap for function calls
     fn apply(
         &self,

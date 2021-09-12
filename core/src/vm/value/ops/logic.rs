@@ -130,7 +130,8 @@ impl Object {
             | Self::Exotic(ExoticObject::Array(_))
             | Self::Exotic(ExoticObject::Weak(_))
             | Self::Exotic(ExoticObject::Promise(_))
-            | Self::Exotic(ExoticObject::Custom(_)) => "object",
+            | Self::Exotic(ExoticObject::Custom(_))
+            | Self::Exotic(ExoticObject::GeneratorIterator(_)) => "object",
             Self::Exotic(ExoticObject::Function(_)) => "function",
             Self::Exotic(ExoticObject::String(_)) => "string",
         }
@@ -145,6 +146,7 @@ impl Object {
             Self::Exotic(ExoticObject::Weak(_)) => true,
             Self::Exotic(ExoticObject::Promise(_)) => true,
             Self::Exotic(ExoticObject::Custom(_)) => true,
+            Self::Exotic(ExoticObject::GeneratorIterator(_)) => true,
             Self::Ordinary => true,
         }
     }

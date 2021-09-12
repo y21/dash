@@ -4,8 +4,8 @@ use super::{
     expr::{Expr, UnaryExpr},
     lexer::{self, Lexer},
     statement::{
-        BlockStatement, Catch, ExportKind, ForLoop, FunctionDeclaration, IfStatement, ImportKind,
-        ReturnStatement, SpecifierKind, Statement, TryCatch, VariableDeclaration,
+        BlockStatement, Catch, ExportKind, ForLoop, FunctionDeclaration, FunctionKind, IfStatement,
+        ImportKind, ReturnStatement, SpecifierKind, Statement, TryCatch, VariableDeclaration,
         VariableDeclarationKind, WhileLoop,
     },
     token::{Error, ErrorKind, Token, TokenType, ASSIGNMENT_TYPES, VARIABLE_TYPES},
@@ -245,6 +245,14 @@ impl<'a> Parser<'a> {
     }
 
     fn function(&mut self) -> Option<FunctionDeclaration<'a>> {
+        let is_generator = self.expect_and_skip(&[TokenType::Star], false);
+
+        let ty = if is_generator {
+            FunctionKind::Generator
+        } else {
+            FunctionKind::Function
+        };
+
         let name = {
             let ty = self.current()?.ty;
             if ty == TokenType::Identifier {
@@ -266,7 +274,7 @@ impl<'a> Parser<'a> {
 
         let statements = self.block().unwrap().0;
 
-        Some(FunctionDeclaration::new(name, arguments, statements, false))
+        Some(FunctionDeclaration::new(name, arguments, statements, ty))
     }
 
     fn argument_list(&mut self) -> Option<Vec<&'a [u8]>> {
@@ -703,7 +711,12 @@ impl<'a> Parser<'a> {
             self.advance_back();
         }
 
-        Some(FunctionDeclaration::new(None, list, vec![body], true))
+        Some(FunctionDeclaration::new(
+            None,
+            list,
+            vec![body],
+            FunctionKind::Arrow,
+        ))
     }
 
     fn read_infix_expression<F>(

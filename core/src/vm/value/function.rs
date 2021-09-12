@@ -1,3 +1,4 @@
+use crate::compiler::compiler::FunctionKind as CompilerFunctionKind;
 use crate::gc::Handle;
 use crate::vm::instruction::Constant;
 use crate::vm::{instruction::Instruction, upvalue::Upvalue, VM};
@@ -48,8 +49,7 @@ pub struct CallContext<'a> {
 impl<'a> CallContext<'a> {
     /// An iterator over arguments in fixed order
     pub fn arguments(&self) -> impl Iterator<Item = &Handle<Value>> {
-        // TODO: fix order
-        self.args.iter().rev()
+        self.args.iter()
     }
 }
 
@@ -67,6 +67,27 @@ pub enum FunctionType {
     Closure,
     /// A JavaScript module
     Module,
+    /// A JavaScript generator
+    Generator,
+    /// A JavaScript async generator
+    AsyncGenerator,
+}
+
+impl FunctionType {
+    /// Returns whether this function is a generator
+    pub fn is_generator(&self) -> bool {
+        matches!(self, FunctionType::Generator | FunctionType::AsyncGenerator)
+    }
+}
+
+impl From<CompilerFunctionKind> for FunctionType {
+    fn from(kind: CompilerFunctionKind) -> Self {
+        match kind {
+            CompilerFunctionKind::Function => Self::Function,
+            CompilerFunctionKind::Generator => Self::Generator,
+            CompilerFunctionKind::Module => Self::Module,
+        }
+    }
 }
 
 /// The receiver (`this`) of a function
@@ -187,6 +208,11 @@ impl UserFunction {
         }
         self
     }
+
+    /// Returns whether this function is contructable
+    pub fn constructable(&self) -> bool {
+        self.ctor.constructable() && !matches!(self.ty, FunctionType::Generator)
+    }
 }
 
 /// A native function that can be called from JavaScript code
@@ -296,9 +322,15 @@ impl ToString for FunctionKind {
             Self::Native(n) => format!("function {}() {{ [native code] }}", n.name),
             Self::User(u) => format!("function {}() {{ ... }}", u.name.as_deref().unwrap_or("")),
             Self::Closure(c) => {
+                let func = &c.func;
                 format!(
-                    "function {}() {{ ... }}",
-                    c.func.name.as_deref().unwrap_or("")
+                    "function{} {}() {{ [code] }}",
+                    if matches!(func.ty, FunctionType::Generator) {
+                        "*"
+                    } else {
+                        ""
+                    },
+                    func.name.as_deref().unwrap_or("")
                 )
             }
         }

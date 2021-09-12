@@ -183,6 +183,12 @@ pub enum Opcode {
     EvaluateModule,
     /// Exports a default value
     ExportDefault,
+    /// `yield` keyword
+    Yield,
+    /// `in` keyword
+    In,
+    /// `instanceof` keyword
+    Instanceof,
     /// Invokes the debugger, if present
     Debugger,
 }
@@ -242,6 +248,8 @@ impl From<TokenType> for Opcode {
             TokenType::Inequality => Self::Inequality,
             TokenType::StrictEquality => Self::StrictEquality,
             TokenType::StrictInequality => Self::StrictInequality,
+            TokenType::In => Self::In,
+            TokenType::Instanceof => Self::Instanceof,
             _ => unimplemented!("{:?}", tt),
         }
     }

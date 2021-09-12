@@ -127,6 +127,28 @@ impl<T, const N: usize> Stack<T, N> {
         unsafe { val.assume_init() }
     }
 
+    /// Drains this stack from the given index, without doing any boundary checks
+    pub unsafe fn drain_from_unchecked(&mut self, from: usize) -> Vec<T> {
+        let old_len = self.1;
+        self.1 = from;
+
+        self.0
+            .iter_mut()
+            .take(old_len)
+            .skip(from)
+            .map(|mu| {
+                let value = std::mem::replace(mu, MaybeUninit::uninit());
+                unsafe { value.assume_init() }
+            })
+            .collect()
+    }
+
+    /// Drains this stack from the given index to the top
+    pub fn drain_from(&mut self, from: usize) -> Vec<T> {
+        assert!(from <= self.1);
+        unsafe { self.drain_from_unchecked(from) }
+    }
+
     /// Pops multiple values off the stack and discards them
     pub fn discard_multiple(&mut self, count: usize) {
         for _ in 0..count {
@@ -134,10 +156,21 @@ impl<T, const N: usize> Stack<T, N> {
         }
     }
 
-    /// Returns a reference to the last value, assuming it is initialized
-    pub unsafe fn get(&self) -> Option<&T> {
+    /// Returns a reference to the last value
+    pub fn get(&self) -> Option<&T> {
         if self.1 > 0 && N >= self.1 {
-            Some(&*self.0[self.1 - 1].as_ptr())
+            // SAFETY: The index is checked against the length of the array
+            Some(unsafe { &*self.0[self.1 - 1].as_ptr() })
+        } else {
+            None
+        }
+    }
+
+    /// Returns a mutable reference to the last value
+    pub fn get_mut(&mut self) -> Option<&mut T> {
+        if self.1 > 0 && N >= self.1 {
+            // SAFETY: The index is checked against the length of the array
+            Some(unsafe { &mut *self.0[self.1 - 1].as_mut_ptr() })
         } else {
             None
         }

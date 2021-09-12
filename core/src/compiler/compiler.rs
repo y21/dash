@@ -12,9 +12,10 @@ use crate::{
         lexer,
         parser::Parser,
         statement::{
-            BlockStatement, ExportKind, ForLoop, FunctionDeclaration, IfStatement, ImportKind,
-            ReturnStatement, SpecifierKind, Statement, TryCatch, VariableDeclaration,
-            VariableDeclarationKind, WhileLoop,
+            BlockStatement, ExportKind, ForLoop, FunctionDeclaration,
+            FunctionKind as ParserFunctionKind, IfStatement, ImportKind, ReturnStatement,
+            SpecifierKind, Statement, TryCatch, VariableDeclaration, VariableDeclarationKind,
+            WhileLoop,
         },
         token::{self, TokenType},
     },
@@ -24,7 +25,7 @@ use crate::{
         instruction::{Constant, Opcode},
         stack::{IteratorOrder, Stack},
         value::{
-            function::{Constructor, FunctionType, Module, UserFunction},
+            function::{Constructor, Module, UserFunction},
             Value, ValueKind,
         },
     },
@@ -82,7 +83,7 @@ impl Context {
 pub type Ast<'a> = Vec<Statement<'a>>;
 
 /// The type of a compiling function
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum FunctionKind {
     /// JavaScript module
     Module,
@@ -90,10 +91,16 @@ pub enum FunctionKind {
     Function,
     /// Generator function (`function*`)
     Generator,
-    /// Async generator function (`async function*`)
-    AsyncGenerator,
-    /// Async function (`async function`)
-    AsyncFunction,
+}
+
+impl From<ParserFunctionKind> for FunctionKind {
+    fn from(kind: ParserFunctionKind) -> Self {
+        match kind {
+            ParserFunctionKind::Arrow => FunctionKind::Function,
+            ParserFunctionKind::Function => FunctionKind::Function,
+            ParserFunctionKind::Generator => FunctionKind::Generator,
+        }
+    }
 }
 
 /// A bytecode compiler
@@ -528,9 +535,15 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
             TokenType::BitwiseNot => instructions.push(Instruction::Op(Opcode::BitwiseNot)),
             TokenType::LogicalNot => instructions.push(Instruction::Op(Opcode::LogicalNot)),
             TokenType::Void => instructions.push(Instruction::Op(Opcode::Void)),
+            TokenType::Yield => {
+                if let FunctionKind::Generator = self.kind {
+                    instructions.push(Instruction::Op(Opcode::Yield));
+                } else {
+                    return Err(CompileError::UnexpectedYield);
+                }
+            }
             // not yet implemented
             TokenType::Await => return Err(CompileError::UnexpectedAwait),
-            TokenType::Yield => return Err(CompileError::UnexpectedYield),
             _ => todo!(),
         }
 
@@ -657,6 +670,8 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
             scope.push_local(Local::new(argument, 0, VariableDeclarationKind::Var));
         }
 
+        let ty: FunctionKind = f.ty.into();
+
         let mut frame = unsafe {
             Self::with_scopeguard(
                 statements,
@@ -666,7 +681,7 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
                 Some(NonNull::new_unchecked(self as *mut _)),
                 NonNull::new_unchecked(self.ctx.as_ptr()),
                 NonNull::new_unchecked(self.gc.as_mut().map(|x| x.as_ptr()).unwrap()),
-                FunctionKind::Function,
+                ty,
             )
             .compile_frame()
         }?;
@@ -692,7 +707,7 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         let mut func = UserFunction::new(
             to_vm_instructions(frame.instructions),
             params as u32,
-            FunctionType::Function,
+            ty.into(),
             frame.upvalues.len() as u32,
             Constructor::Any,
             frame.constants,
@@ -1133,7 +1148,7 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         let mut instructions: Vec<Instruction> = vec![Instruction::Op(Opcode::EvaluateModule)];
 
         let module = Module::new(to_vm_instructions(module_instructions), module_constants);
-        // TODO: do we need to do something with constants here?
+
         let handle = self.register_value(module.into());
         instructions.push(Instruction::Operand(
             self.add_constant(Constant::JsValue(handle)),

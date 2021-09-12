@@ -10,6 +10,7 @@ use crate::{
     gc::Handle,
     js_std,
     vm::{
+        dispatch::DispatchResult,
         frame::Frame,
         value::{function::CallContext, object::ExoticObject},
         VM,
@@ -123,6 +124,7 @@ impl Value {
             func: Handle::clone(this),
             buffer: func.buffer.clone(),
             sp,
+            iterator_caller: None,
         };
 
         let origin_param_count = func.params as usize;
@@ -138,8 +140,8 @@ impl Value {
         }
 
         match vm.execute_frame(frame, true) {
-            Ok(Some(ret)) => Ok(ret),
-            Ok(None) => Ok(Value::new(ValueKind::Undefined).into_handle(vm)),
+            Ok(DispatchResult::Return(Some(r)) | DispatchResult::Yield(Some(r))) => Ok(r),
+            Ok(_) => Ok(Value::new(ValueKind::Undefined).into_handle(vm)),
             Err(e) => Err(e.into_value()),
         }
     }
@@ -181,6 +183,12 @@ impl Value {
                     ),
                     Object::Exotic(ExoticObject::Array(_)) => {
                         self.update_internal_properties(&statics.array_proto, &statics.array_ctor)
+                    }
+                    Object::Exotic(ExoticObject::GeneratorIterator(_)) => {
+                        self.update_internal_properties(
+                            &statics.generator_iterator_proto,
+                            &statics.object_ctor, // TODO: generator iterator ctor
+                        )
                     }
                     Object::Ordinary | Object::Exotic(ExoticObject::Custom(_)) => {
                         self.update_internal_properties(&statics.object_proto, &statics.object_ctor)
@@ -238,6 +246,20 @@ impl Value {
     /// Looks up a field directly
     pub fn get_field(&self, key: &str) -> Option<&Handle<Value>> {
         self.fields.get(key)
+    }
+
+    /// Checks whether this value (or one of the values in its prototype chain) contains a field
+    pub fn has_property(&self, vm: &VM, key: &str) -> bool {
+        if self.fields.contains_key(key) {
+            return true;
+        }
+
+        if let Some(proto) = self.proto.as_ref() {
+            let proto_ref = proto.borrow(vm);
+            proto_ref.has_property(vm, key)
+        } else {
+            false
+        }
     }
 
     /// Looks up a property and goes through exotic property matching
@@ -355,6 +377,7 @@ impl Value {
                         Value::mark(handle)
                     }
                 }
+                Object::Exotic(ExoticObject::GeneratorIterator(gen)) => gen.mark(),
                 Object::Exotic(ExoticObject::Function(f)) => f.mark(),
                 Object::Exotic(ExoticObject::Promise(_)) => todo!(),
                 _ => {}

@@ -3,6 +3,7 @@ use std::borrow::Cow;
 use super::{
     array::Array,
     function::FunctionKind,
+    generator::GeneratorIterator,
     object::{ExoticObject, Object, Weak},
     promise::Promise,
     Value, ValueKind,
@@ -285,7 +286,10 @@ impl Object {
                 }
                 PromiseState::Pending => Cow::Borrowed("Promise {<pending>}"),
             },
-            Self::Exotic(ExoticObject::Custom(_)) => Cow::Borrowed("[Custom]"),
+            Self::Exotic(ExoticObject::GeneratorIterator(_)) => {
+                Cow::Borrowed("[GeneratorIterator]")
+            }
+            Self::Exotic(ExoticObject::Custom(c)) => c.inspect(this, depth),
             Self::Ordinary => {
                 let mut s = String::from("{ ");
 
@@ -355,6 +359,22 @@ impl Object {
     pub fn as_promise(&self) -> Option<&Promise> {
         match self {
             Self::Exotic(ExoticObject::Promise(p)) => Some(p),
+            _ => None,
+        }
+    }
+
+    /// Attempts to return self as a reference to [GeneratorIterator] if it is one
+    pub fn as_generator_iterator(&self) -> Option<&GeneratorIterator> {
+        match self {
+            Self::Exotic(ExoticObject::GeneratorIterator(g)) => Some(g),
+            _ => None,
+        }
+    }
+
+    /// Attempts to return self as a mutable reference to [GeneratorIterator] if it is one
+    pub fn as_generator_iterator_mut(&mut self) -> Option<&mut GeneratorIterator> {
+        match self {
+            Self::Exotic(ExoticObject::GeneratorIterator(g)) => Some(g),
             _ => None,
         }
     }

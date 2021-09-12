@@ -9,7 +9,7 @@ This includes a source code lexer, parser, bytecode compiler and VM.
 
 
 ## ⚠️ WIP
-This is a *WIP* and **not** yet production ready.
+This is a *WIP* and **not** yet production ready. It is actively being worked on and the API is constantly changing.
 
 ## Goals
 - Target ECMAScript 2015
@@ -23,11 +23,16 @@ This is a *WIP* and **not** yet production ready.
 ### Using the CLI
 ```js
 // example.js
-for (let i = 0; i < 100; ++i) {
-    if (!(i % 15)) console.log("Fizzbuzz");
-    else if (!(i % 5)) console.log("Fizz");
-    else if (!(i % 3)) console.log("Buzz");
-    else console.log(i);
+function* idGenerator() {
+    let index = 0;
+    while (true) {
+        yield index++;
+    }
+}
+
+const generator = idGenerator();
+while (true) {
+    console.log(generator.next().value);
 }
 ```
 ```sh

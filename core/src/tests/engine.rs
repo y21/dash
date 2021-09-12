@@ -231,6 +231,132 @@ pub fn stack_reset() {
 }
 
 #[test]
+pub fn generator() {
+    eval::<()>(
+        r#"
+        function assert(l, r) {
+            if (l !== r) {
+                throw new Error("FAIL");
+            }
+        }
+
+        function* powersOf(n) {
+            yield n ** 0;
+            yield n ** 1;
+            yield n ** 2;
+            yield n ** 3;
+        }
+
+        const generator = powersOf(2);
+        assert(generator.next().value, 1);
+        assert(generator.next().value, 2);
+        assert(generator.next().value, 4);
+        assert(generator.next().value, 8);
+        assert(generator.next().value, undefined);
+    "#,
+        None,
+    )
+    .unwrap();
+}
+
+#[test]
+pub fn generator_loop() {
+    eval::<()>(
+        r#"
+        function assert(l, r) {
+            if (l !== r) {
+                throw new Error("FAIL");
+            }
+        }
+
+        function* powersOf(n) {
+            for (let i = 0; ; ++i) {
+
+                // A bunch of locals...
+                let z = 1;
+                let zz = 2;
+                let zzz = 3;
+
+                yield n ** i;
+            }
+        }
+        
+        const generator = powersOf(2);
+        assert(generator.next().value, 1);
+        assert(generator.next().value, 2);
+        assert(generator.next().value, 4);
+        assert(generator.next().value, 8);
+        assert(generator.next().value, 16);
+        assert(generator.next().value, 32);
+    "#,
+        None,
+    )
+    .unwrap();
+}
+
+#[test]
+pub fn in_keyword() {
+    eval::<()>(
+        r#"
+        function assert(l, r) {
+            if (l !== r) {
+                throw new Error("FAIL");
+            }
+        }
+
+        assert('a' in { a: 1 }, true);
+        assert('a' in {}, false);
+        assert('toString' in {}, true);
+        "#,
+        None,
+    )
+    .unwrap();
+}
+
+#[test]
+pub fn instanceof_keyword() {
+    eval::<()>(
+        r#"
+        function assert(l, r) {
+            if (l !== r) {
+                throw new Error("FAIL");
+            }
+        }
+
+        function Obj() {}
+        let o = new Obj();
+
+        assert({} instanceof Object, true);
+        assert(o instanceof Obj, true);
+        "#,
+        None,
+    )
+    .unwrap();
+}
+
+#[test]
+pub fn generator_arg_mismatch() {
+    eval::<()>(
+        r#"
+        function assert(l, r) {
+            if (l !== r) {
+                throw new Error("FAIL");
+            }
+        }
+        
+        function* x(a, b) {
+            yield b;
+        }
+
+        const gen = x(1);
+        assert(gen.next().value, undefined);
+        "#,
+        None,
+    )
+    .unwrap();
+}
+
+#[test]
 pub fn async_task() {
     let mut vm = VM::from_str::<()>(
         r#"

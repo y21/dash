@@ -192,6 +192,17 @@ impl<'a> WhileLoop<'a> {
     }
 }
 
+/// The type of function
+#[derive(Debug, Copy, Clone)]
+pub enum FunctionKind {
+    /// A normal function
+    Function,
+    /// A generator function
+    Generator,
+    /// An arrow function
+    Arrow,
+}
+
 /// A function declaration
 #[derive(Debug, Clone)]
 pub struct FunctionDeclaration<'a> {
@@ -201,8 +212,8 @@ pub struct FunctionDeclaration<'a> {
     pub arguments: Vec<&'a [u8]>,
     /// Function body
     pub statements: Vec<Statement<'a>>,
-    /// Whether this function is an arrow function
-    pub arrow: bool,
+    /// The type of function
+    pub ty: FunctionKind,
 }
 
 impl<'a> FunctionDeclaration<'a> {
@@ -211,13 +222,13 @@ impl<'a> FunctionDeclaration<'a> {
         name: Option<&'a [u8]>,
         arguments: Vec<&'a [u8]>,
         statements: Vec<Statement<'a>>,
-        arrow: bool,
+        ty: FunctionKind,
     ) -> Self {
         Self {
             name,
             arguments,
             statements,
-            arrow,
+            ty,
         }
     }
 }
