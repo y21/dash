@@ -49,8 +49,7 @@ pub struct CallContext<'a> {
 impl<'a> CallContext<'a> {
     /// An iterator over arguments in fixed order
     pub fn arguments(&self) -> impl Iterator<Item = &Handle<Value>> {
-        // TODO: fix order
-        self.args.iter().rev()
+        self.args.iter()
     }
 }
 

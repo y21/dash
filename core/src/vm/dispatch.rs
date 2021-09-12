@@ -548,10 +548,7 @@ mod handlers {
 
     pub fn function_call(vm: &mut VM) -> Result<(), Handle<Value>> {
         let param_count = vm.read_index().unwrap();
-        let mut params = Vec::new();
-        for _ in 0..param_count {
-            params.push(vm.stack.pop());
-        }
+        let params = vm.stack.drain_from(vm.stack.len() - param_count);
 
         let func_cell = vm.stack.pop();
         vm.begin_function_call(func_cell, params)

@@ -22,7 +22,7 @@ use std::{any::Any, borrow::Cow, cell::RefCell, collections::HashMap, fmt::Debug
 use instruction::{Instruction, Opcode};
 use value::Value;
 
-use crate::{EvalError, agent::Agent, compiler::{compiler::{self, CompileError, Compiler, FunctionKind as CompilerFunctionKind}, instruction::to_vm_instructions}, gc::{Gc, Handle}, parser::{lexer, token}, util::{unlikely, MaybeOwned}, vm::{dispatch::DispatchResult, frame::UnwindHandler, value::{ValueKind, array::Array, function::{CallContext, FunctionKind, FunctionType, UserFunction}, generator::GeneratorIterator}}};
+use crate::{EvalError, agent::Agent, compiler::{compiler::{self, CompileError, Compiler, FunctionKind as CompilerFunctionKind}, instruction::to_vm_instructions}, gc::{Gc, Handle}, parser::{lexer, token}, util::{unlikely, MaybeOwned}, vm::{dispatch::DispatchResult, frame::UnwindHandler, value::{ValueKind, array::Array, function::{CallContext, FunctionKind, UserFunction}, generator::GeneratorIterator}}};
 use crate::js_std;
 
 use self::{frame::{Frame, Loop}, instruction::Constant, stack::Stack, statics::Statics, value::object::Object};
@@ -741,7 +741,6 @@ impl VM {
         };
 
         if func.func.ty.is_generator() {
-            params.reverse();
             let iterator = GeneratorIterator::new(Handle::clone(&func_cell), params);
             let value = self.create_js_value(iterator).into_handle(self);
             self.stack.push(value);
@@ -762,7 +761,7 @@ impl VM {
         let origin_param_count = func.func.params as usize;
         let param_count = params.len();
 
-        for param in params.into_iter().rev() {
+        for param in params.into_iter() {
             self.stack.push(param);
         }
 

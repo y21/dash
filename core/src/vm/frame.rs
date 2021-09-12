@@ -72,7 +72,7 @@ impl Frame {
 }
 
 /// An unwind handler, also known as a try catch block
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UnwindHandler {
     /// Catch block instruction pointer
     pub catch_ip: usize,
