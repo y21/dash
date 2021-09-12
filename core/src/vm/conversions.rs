@@ -1,6 +1,7 @@
 use super::value::{
     array::Array,
     function::{Closure, FunctionKind, Module, NativeFunction, UserFunction},
+    generator::GeneratorIterator,
     object::{ExoticObject, Object, Weak},
     promise::Promise,
     weak::{WeakMap, WeakSet},
@@ -95,6 +96,12 @@ impl From<Module> for Value {
 impl From<Weak> for Value {
     fn from(s: Weak) -> Self {
         ExoticObject::Weak(s).into()
+    }
+}
+
+impl From<GeneratorIterator> for Value {
+    fn from(g: GeneratorIterator) -> Self {
+        ExoticObject::GeneratorIterator(g).into()
     }
 }
 

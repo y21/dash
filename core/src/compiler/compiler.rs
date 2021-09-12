@@ -25,7 +25,7 @@ use crate::{
         instruction::{Constant, Opcode},
         stack::{IteratorOrder, Stack},
         value::{
-            function::{Constructor, FunctionType, Module, UserFunction},
+            function::{Constructor, Module, UserFunction},
             Value, ValueKind,
         },
     },

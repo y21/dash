@@ -10,6 +10,7 @@ use crate::{
     gc::Handle,
     js_std,
     vm::{
+        dispatch::DispatchResult,
         frame::Frame,
         value::{function::CallContext, object::ExoticObject},
         VM,
@@ -123,6 +124,7 @@ impl Value {
             func: Handle::clone(this),
             buffer: func.buffer.clone(),
             sp,
+            iterator_caller: None,
         };
 
         let origin_param_count = func.params as usize;
@@ -138,8 +140,8 @@ impl Value {
         }
 
         match vm.execute_frame(frame, true) {
-            Ok(Some(ret)) => Ok(ret),
-            Ok(None) => Ok(Value::new(ValueKind::Undefined).into_handle(vm)),
+            Ok(DispatchResult::Return(Some(r)) | DispatchResult::Yield(Some(r))) => Ok(r),
+            Ok(_) => Ok(Value::new(ValueKind::Undefined).into_handle(vm)),
             Err(e) => Err(e.into_value()),
         }
     }
@@ -181,6 +183,12 @@ impl Value {
                     ),
                     Object::Exotic(ExoticObject::Array(_)) => {
                         self.update_internal_properties(&statics.array_proto, &statics.array_ctor)
+                    }
+                    Object::Exotic(ExoticObject::GeneratorIterator(_)) => {
+                        self.update_internal_properties(
+                            &statics.generator_iterator_proto,
+                            &statics.object_ctor, // TODO: generator iterator ctor
+                        )
                     }
                     Object::Ordinary | Object::Exotic(ExoticObject::Custom(_)) => {
                         self.update_internal_properties(&statics.object_proto, &statics.object_ctor)
@@ -355,6 +363,7 @@ impl Value {
                         Value::mark(handle)
                     }
                 }
+                Object::Exotic(ExoticObject::GeneratorIterator(gen)) => gen.mark(),
                 Object::Exotic(ExoticObject::Function(f)) => f.mark(),
                 Object::Exotic(ExoticObject::Promise(_)) => todo!(),
                 _ => {}

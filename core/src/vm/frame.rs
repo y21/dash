@@ -20,11 +20,27 @@ pub struct Frame {
     pub ip: usize,
     /// Stack pointer
     pub sp: usize,
+    /// Calling generator iterator, if present
+    pub iterator_caller: Option<Handle<Value>>,
 }
 
 impl Frame {
     /// Creates a frame from bytecode and a vm
     pub fn from_buffer<B, C>(buffer: B, constants: C, vm: &VM) -> Self
+    where
+        B: Into<Box<[Instruction]>>,
+        C: Into<Box<[Constant]>>,
+    {
+        Self::from_buffer_with_iterator(buffer, constants, vm, None)
+    }
+
+    /// Creates a frame from bytecode and a vm, given a generator iterator
+    pub fn from_buffer_with_iterator<B, C>(
+        buffer: B,
+        constants: C,
+        vm: &VM,
+        iterator_caller: Option<Handle<Value>>,
+    ) -> Self
     where
         B: Into<Box<[Instruction]>>,
         C: Into<Box<[Constant]>>,
@@ -46,6 +62,7 @@ impl Frame {
             buffer,
             ip: 0,
             sp,
+            iterator_caller,
         }
     }
 

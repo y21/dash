@@ -6,6 +6,8 @@ pub mod conversions;
 pub mod exotic;
 /// JavaScript function
 pub mod function;
+/// JavaScript generators
+pub mod generator;
 /// Value kind
 pub mod kind;
 /// JavaScript Map

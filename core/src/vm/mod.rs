@@ -15,21 +15,14 @@ pub mod upvalue;
 /// JavaScript values
 pub mod value;
 /// VM instruction dispatching
-mod dispatch;
+pub mod dispatch;
 
 use std::{any::Any, borrow::Cow, cell::RefCell, collections::HashMap, fmt::Debug};
 
 use instruction::{Instruction, Opcode};
 use value::Value;
 
-use crate::{EvalError, agent::Agent, compiler::{compiler::{self, CompileError, Compiler, FunctionKind as CompilerFunctionKind}, instruction::to_vm_instructions}, gc::{Gc, Handle}, parser::{lexer, token}, util::{unlikely, MaybeOwned}, vm::{dispatch::DispatchResult, frame::UnwindHandler, value::{
-            array::Array,
-            function::{
-                CallContext, FunctionKind,
-                UserFunction,
-            },
-            ValueKind,
-        }}};
+use crate::{EvalError, agent::Agent, compiler::{compiler::{self, CompileError, Compiler, FunctionKind as CompilerFunctionKind}, instruction::to_vm_instructions}, gc::{Gc, Handle}, parser::{lexer, token}, util::{unlikely, MaybeOwned}, vm::{dispatch::DispatchResult, frame::UnwindHandler, value::{ValueKind, array::Array, function::{CallContext, FunctionKind, FunctionType, UserFunction}, generator::GeneratorIterator}}};
 use crate::js_std;
 
 use self::{frame::{Frame, Loop}, instruction::Constant, stack::Stack, statics::Statics, value::object::Object};
@@ -439,6 +432,12 @@ impl VM {
         patch_value(self, &self.statics.promise_proto);
         patch_value(self, &self.statics.boolean_proto);
         patch_value(self, &self.statics.number_proto);
+
+        {
+            let mut o = unsafe { self.statics.generator_iterator_proto.borrow_mut_unbounded() };
+            o.detect_internal_properties(self);
+            o.set_property("next", Handle::clone(&self.statics.generator_iterator_next));
+        }
         
         {
             let mut o = unsafe { self.statics.string_proto.borrow_mut_unbounded() };
@@ -470,7 +469,7 @@ impl VM {
         }
 
         {
-            let mut o = unsafe { self.statics. array_proto.borrow_mut_unbounded() };
+            let mut o = unsafe { self.statics.array_proto.borrow_mut_unbounded() };
             o.detect_internal_properties(self);
             o.set_property("push", Handle::clone(&self.statics.array_push));
             o.set_property("concat", Handle::clone(&self.statics.array_concat));
@@ -719,7 +718,7 @@ impl VM {
         mut params: Vec<Handle<Value>>,
     ) -> Result<(), Handle<Value>> {
         let func_cell_ref = unsafe { func_cell.borrow_unbounded() };
-        
+
         let func = match func_cell_ref.as_function() {
             Some(FunctionKind::Native(f)) => {
                 let receiver = f.receiver.as_ref().map(|rx| rx.get().clone());
@@ -741,6 +740,13 @@ impl VM {
             _ => unreachable!(),
         };
 
+        if matches!(func.func.ty, FunctionType::Generator) {
+            let iterator = GeneratorIterator::new(Handle::clone(&func_cell), params);
+            let value = self.create_js_value(iterator).into_handle(self);
+            self.stack.push(value);
+            return Ok(());
+        }
+
         // By this point we know func_cell is a UserFunction
 
         let current_sp = self.stack.len();
@@ -750,6 +756,7 @@ impl VM {
             ip: 0,
             func: func_cell.clone(),
             sp: current_sp,
+            iterator_caller: None
         };
         self.frames.push(frame);
 
@@ -785,7 +792,7 @@ impl VM {
     }
 
     /// Executes an execution frame
-    pub fn execute_frame(&mut self, frame: Frame, can_gc: bool) -> Result<Option<Handle<Value>>, VMError> {
+    pub fn execute_frame(&mut self, frame: Frame, can_gc: bool) -> Result<DispatchResult, VMError> {
         let frame_idx = self.frames.len();
         self.frames.push(frame);
 
@@ -814,7 +821,7 @@ impl VM {
             self.frame_mut().ip += 1;
 
             match dispatch::handle(self, opcode, frame_idx) {
-                Ok(Some(DispatchResult::Return(ret))) => return Ok(ret),
+                Ok(Some(result)) => return Ok(result),
                 Ok(None) => {}
                 Err(e) => unwind_abort_if_uncaught!(e),
             };
@@ -832,7 +839,7 @@ impl VM {
             return Ok(None);
         };
 
-        self.execute_frame(frame, true)
+        self.execute_frame(frame, true).map(DispatchResult::into_value)
     }
 
     /// Evaluates a JavaScript source string in this VM
@@ -849,7 +856,9 @@ impl VM {
 
         let frame = Frame::from_buffer(to_vm_instructions(buffer), constants, self);
 
-        self.execute_frame(frame, true).map_err(EvalError::VMError)
+        self.execute_frame(frame, true)
+            .map(DispatchResult::into_value)
+            .map_err(EvalError::VMError)
     }
 
     fn mark_constants(&self, gc: &mut Gc<Value>) {

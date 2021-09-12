@@ -2,8 +2,23 @@ use crate::gc::Handle;
 
 use super::{instruction::Opcode, value::Value, VM};
 
+/// A meaningful dispatch result that needs to be handled by the dispatcher
+#[derive(Debug, Clone)]
 pub enum DispatchResult {
+    /// Return a value
     Return(Option<Handle<Value>>),
+    /// Suspend ("yield" a value) the current frame
+    Yield(Option<Handle<Value>>),
+}
+
+impl DispatchResult {
+    /// Returns the inner value of this result
+    pub fn into_value(self) -> Option<Handle<Value>> {
+        match self {
+            Self::Return(r) => r,
+            Self::Yield(y) => y,
+        }
+    }
 }
 
 mod handlers {
@@ -440,18 +455,26 @@ mod handlers {
         };
 
         // By this point we know func_cell is a UserFunction
+        if !func.func.constructable() {
+            // User tried to invoke non-constructor as a constructor
+            return Err(js_std::error::create_error(
+                MaybeRc::Owned(&format!(
+                    "{} is not a constructor",
+                    func.func.name.as_deref().unwrap_or("[Function]")
+                )),
+                vm,
+            ));
+        }
         // TODO: get rid of this copy paste and share code with Opcode::FunctionCall
 
         let current_sp = vm.stack.len();
 
-        // let state = vm.frame_mut().state.take();
         let frame = Frame {
             buffer: func.func.buffer.clone(),
             ip: 0,
             func: Handle::clone(&func_cell),
             sp: current_sp,
-            // state,
-            // resume: None,
+            iterator_caller: None,
         };
 
         vm.frames.push(frame);
@@ -516,6 +539,7 @@ mod handlers {
             buffer,
             ip: 0,
             sp: current_sp,
+            iterator_caller: None,
         };
 
         vm.frames.push(frame);
@@ -880,11 +904,17 @@ mod handlers {
         Ok(())
     }
 
+    pub fn yield_(vm: &mut VM) -> Result<Option<DispatchResult>, Handle<Value>> {
+        let x = vm.stack.pop();
+        Ok(Some(DispatchResult::Yield(Some(x))))
+    }
+
     pub fn debugger(vm: &mut VM) {
         vm.agent.debugger();
     }
 }
 
+/// Handles an instruction
 pub fn handle(
     vm: &mut VM,
     opcode: Opcode,
@@ -971,6 +1001,7 @@ pub fn handle(
         Opcode::LoopStart => handlers::loop_start(vm),
         Opcode::LoopEnd => handlers::loop_end(vm),
         Opcode::ExportDefault => handlers::export_default(vm)?,
+        Opcode::Yield => return handlers::yield_(vm),
         Opcode::Debugger => handlers::debugger(vm),
 
         _ => unimplemented!("{:?}", opcode),

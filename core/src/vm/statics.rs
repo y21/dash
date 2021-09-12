@@ -26,6 +26,8 @@ pub struct Statics {
     pub object_proto: Handle<Value>,
     /// Represents Error.prototype
     pub error_proto: Handle<Value>,
+    /// Represents the prototype of a generator iterator
+    pub generator_iterator_proto: Handle<Value>,
     /// Represents Promise.prototype
     pub promise_proto: Handle<Value>,
     /// Represents the Boolean constructor
@@ -52,6 +54,8 @@ pub struct Statics {
     pub console_log: Handle<Value>,
     /// Represents isNaN
     pub isnan: Handle<Value>,
+    /// Represents GeneratorIterator.prototype.next
+    pub generator_iterator_next: Handle<Value>,
     /// Represents Array.prototype.push
     pub array_push: Handle<Value>,
     /// Represents Array.prototype.concat
@@ -235,6 +239,7 @@ impl Statics {
             object_proto: gc.register(Value::from(Object::Ordinary)),
             error_proto: gc.register(Value::from(Object::Ordinary)),
             promise_proto: gc.register(Value::from(Object::Ordinary)),
+            generator_iterator_proto: gc.register(Value::from(Object::Ordinary)),
             // Ctor
             error_ctor: register_ctor!(gc, "Error", js_std::error::error_constructor),
             weakset_ctor: register_ctor!(gc, "WeakSet", js_std::weakset::weakset_constructor),
@@ -249,6 +254,7 @@ impl Statics {
             // Methods
             console_log: register_glob_method!(gc, "log", js_std::console::log),
             isnan: register_glob_method!(gc, "isNaN", js_std::functions::is_nan),
+            generator_iterator_next: register_glob_method!(gc, "next", js_std::generator::next),
             array_push: register_glob_method!(gc, "push", js_std::array::push),
             array_concat: register_glob_method!(gc, "concat", js_std::array::concat),
             array_map: register_glob_method!(gc, "map", js_std::array::map),

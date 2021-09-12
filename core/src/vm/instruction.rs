@@ -183,6 +183,8 @@ pub enum Opcode {
     EvaluateModule,
     /// Exports a default value
     ExportDefault,
+    /// `yield` keyword
+    Yield,
     /// Invokes the debugger, if present
     Debugger,
 }

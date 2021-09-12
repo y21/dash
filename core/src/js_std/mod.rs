@@ -10,6 +10,8 @@ pub mod error;
 pub mod function;
 /// Implements global functions
 pub mod functions;
+/// Implements generators
+pub mod generator;
 /// Implements `JSON`
 pub mod json;
 /// Implements `Math`
