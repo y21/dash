@@ -5,6 +5,7 @@ use std::fmt::Debug;
 use super::exotic::Exotic;
 use super::generator::GeneratorIterator;
 use super::promise::Promise;
+use super::symbol::Symbol;
 use super::weak::WeakMap;
 use super::weak::WeakSet;
 use super::{array::Array, function::FunctionKind, Value};
@@ -87,6 +88,8 @@ pub enum ExoticObject {
     Promise(Promise),
     /// A JavaScript iterator over a generator function
     GeneratorIterator(GeneratorIterator),
+    /// A JavaScript symbol
+    Symbol(Symbol),
     /// Custom exotic types
     Custom(Box<dyn Exotic>),
 }

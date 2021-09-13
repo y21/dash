@@ -8,31 +8,12 @@ use crate::{
     },
 };
 
-// TODO: not rc
-
-/// A value that is either reference counted or owned
-pub enum MaybeRc<T> {
-    /// Reference counted JS value
-    Rc(Handle<Value>),
-    /// Owned T
-    Owned(T),
-}
-
-impl<'a> From<&'a str> for MaybeRc<&'a str> {
-    fn from(s: &'a str) -> Self {
-        Self::Owned(s)
-    }
-}
-
 /// Creates a JS error given a string
-pub fn create_error(message: MaybeRc<&str>, vm: &VM) -> Handle<Value> {
+pub fn create_error<S: Into<String>>(message: S, vm: &VM) -> Handle<Value> {
     let mut error = Value::from(Object::Ordinary);
     error.update_internal_properties(&vm.statics.error_proto, &vm.statics.error_ctor);
 
-    let message_str = match message {
-        MaybeRc::Rc(r) => unsafe { r.borrow_unbounded() }.to_string().to_string(),
-        MaybeRc::Owned(r) => String::from(r),
-    };
+    let message_str: String = message.into();
 
     let stack = vm.generate_stack_trace(Some(&message_str));
 
@@ -55,5 +36,5 @@ pub fn error_constructor(value: CallContext) -> Result<Handle<Value>, Handle<Val
         .map(Value::to_string)
         .unwrap_or(Cow::Borrowed(""));
 
-    Ok(create_error(MaybeRc::Owned(&message), value.vm))
+    Ok(create_error(message.into_owned(), value.vm))
 }

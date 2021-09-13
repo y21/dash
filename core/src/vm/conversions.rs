@@ -4,6 +4,7 @@ use super::value::{
     generator::GeneratorIterator,
     object::{ExoticObject, Object, Weak},
     promise::Promise,
+    symbol::Symbol,
     weak::{WeakMap, WeakSet},
     Value, ValueKind,
 };
@@ -96,6 +97,12 @@ impl From<Module> for Value {
 impl From<Weak> for Value {
     fn from(s: Weak) -> Self {
         ExoticObject::Weak(s).into()
+    }
+}
+
+impl From<Symbol> for Value {
+    fn from(s: Symbol) -> Self {
+        ExoticObject::Symbol(s).into()
     }
 }
 

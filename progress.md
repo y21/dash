@@ -412,21 +412,21 @@ This should just act as a short "cheat sheet" for contributors, and used to see 
     - [ ] toUpperCase
     - [ ] valueOf
     - [ ] replaceAll
-  - [ ] Symbol
-    - [ ] @@keyFor
-    - [ ] @@hasInstance
-    - [ ] @@iterator
-    - [ ] @@matchAll
-    - [ ] @@search
-    - [ ] @@split
-    - [ ] @@toStringTag
-    - [ ] @@asyncIterator
-    - [ ] @@isConcatSpreadable
-    - [ ] @@match
-    - [ ] @@replace
-    - [ ] @@species
-    - [ ] @@toPrimitive
-    - [ ] @@unscopables
+  - [x] Symbol
+    - [x] keyFor
+    - [x] @@hasInstance
+    - [x] @@iterator
+    - [x] @@matchAll
+    - [x] @@search
+    - [x] @@split
+    - [x] @@toStringTag
+    - [x] @@asyncIterator
+    - [x] @@isConcatSpreadable
+    - [x] @@match
+    - [x] @@replace
+    - [x] @@species
+    - [x] @@toPrimitive
+    - [x] @@unscopables
   - [x] WeakMap
     - [x] delete
     - [x] get

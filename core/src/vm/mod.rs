@@ -25,7 +25,7 @@ use value::Value;
 use crate::{EvalError, agent::Agent, compiler::{compiler::{self, CompileError, Compiler, FunctionKind as CompilerFunctionKind}, instruction::to_vm_instructions}, gc::{Gc, Handle}, parser::{lexer, token}, util::{unlikely, MaybeOwned}, vm::{dispatch::DispatchResult, frame::UnwindHandler, value::{ValueKind, array::Array, function::{CallContext, FunctionKind, UserFunction}, generator::GeneratorIterator}}};
 use crate::js_std;
 
-use self::{frame::{Frame, Loop}, instruction::Constant, stack::Stack, statics::Statics, value::object::Object};
+use self::{frame::{Frame, Loop}, instruction::Constant, stack::Stack, statics::Statics, value::{object::Object, symbol::Symbol}};
 
 // Force garbage collection at 10000 objects by default
 const DEFAULT_GC_OBJECT_COUNT_THRESHOLD: usize = 10000;
@@ -120,6 +120,9 @@ pub struct VM {
     pub(crate) loops: Stack<Loop, 32>,
     /// Agent
     pub(crate) agent: Box<dyn Agent>,
+    /// This realms symbol registry
+    // TODO: weak references
+    pub(crate) symbols: HashMap<Box<str>, Handle<Value>>,
     /// A copy of the garbage collector's unique marker
     gc_marker: *const (),
     gc_object_threshold: usize
@@ -145,14 +148,15 @@ impl VM {
             constants_gc: Gc::new(),
             async_frames: Stack::new(),
             stack: Stack::new(),
-            global,
-            statics,
             unwind_handlers: Stack::new(),
             loops: Stack::new(),
+            gc_object_threshold: DEFAULT_GC_OBJECT_COUNT_THRESHOLD,
+            symbols: HashMap::new(),
+            global,
+            statics,
             slot: None,
             agent,
-            gc_object_threshold: DEFAULT_GC_OBJECT_COUNT_THRESHOLD,
-            gc_marker
+            gc_marker,
         };
         vm.prepare_stdlib();
         vm
@@ -422,9 +426,6 @@ impl VM {
 
         let mut global = unsafe { self.global.borrow_mut_unbounded() };
         global.detect_internal_properties(self);
-        // TODO: attaching globalThis causes a reference cycle and memory leaks
-        // We somehow need to have
-        // global.set_property("globalThis", self.global.clone());
         global.set_property("globalThis", Handle::clone(&self.global));
 
         patch_value(self, &self.statics.error_proto);
@@ -438,6 +439,27 @@ impl VM {
             o.detect_internal_properties(self);
             o.set_property("next", Handle::clone(&self.statics.generator_iterator_next));
             o.set_property("return", Handle::clone(&self.statics.generator_iterator_return));
+        }
+
+        {
+            let mut o = unsafe { self.statics.symbol_ctor.borrow_mut_unbounded() };
+            o.detect_internal_properties(self);
+            o.set_property("for", Handle::clone(&self.statics.symbol_for));
+            o.set_property("keyFor", Handle::clone(&self.statics.symbol_key_for));
+            o.set_property("iterator", Handle::clone(&self.statics.symbol_iterator));
+            o.set_property("asyncIterator", Handle::clone(&self.statics.symbol_async_iterator));
+            o.set_property("hasInstance", Handle::clone(&self.statics.symbol_has_instance));
+            o.set_property("isConcatSpreadable", Handle::clone(&self.statics.symbol_is_concat_spreadable));
+            o.set_property("match", Handle::clone(&self.statics.symbol_match));
+            o.set_property("matchAll", Handle::clone(&self.statics.symbol_match_all));
+            o.set_property("replace", Handle::clone(&self.statics.symbol_replace));
+            o.set_property("search", Handle::clone(&self.statics.symbol_search));
+            o.set_property("species", Handle::clone(&self.statics.symbol_species));
+            o.set_property("split", Handle::clone(&self.statics.symbol_split));
+            o.set_property("toPrimitive", Handle::clone(&self.statics.symbol_to_primitive));
+            o.set_property("toStringTag", Handle::clone(&self.statics.symbol_to_string_tag));
+            o.set_property("unscopables", Handle::clone(&self.statics.symbol_unscopables));
+            global.set_property("Symbol", Handle::clone(&self.statics.symbol_ctor));
         }
         
         {
@@ -546,6 +568,7 @@ impl VM {
         patch_constructor(self, &self.statics.object_ctor, &self.statics.object_proto);
         patch_constructor(self, &self.statics.error_ctor, &self.statics.error_proto);
         patch_constructor(self, &self.statics.promise_ctor, &self.statics.promise_proto);
+        patch_constructor(self, &self.statics.symbol_ctor, &self.statics.symbol_proto);
         // Other functions/methods
         patch_value(self, &self.statics.isnan);
         patch_value(self, &self.statics.object_define_property);
@@ -597,6 +620,21 @@ impl VM {
         patch_value(self, &self.statics.promise_reject);
         patch_value(self, &self.statics.generator_iterator_next);
         patch_value(self, &self.statics.generator_iterator_return);
+        patch_value(self, &self.statics.symbol_iterator);
+        patch_value(self, &self.statics.symbol_async_iterator);
+        patch_value(self, &self.statics.symbol_has_instance);
+        patch_value(self, &self.statics.symbol_is_concat_spreadable);
+        patch_value(self, &self.statics.symbol_match);
+        patch_value(self, &self.statics.symbol_match_all);
+        patch_value(self, &self.statics.symbol_replace);
+        patch_value(self, &self.statics.symbol_search);
+        patch_value(self, &self.statics.symbol_species);
+        patch_value(self, &self.statics.symbol_split);
+        patch_value(self, &self.statics.symbol_to_primitive);
+        patch_value(self, &self.statics.symbol_to_string_tag);
+        patch_value(self, &self.statics.symbol_unscopables);
+        patch_value(self, &self.statics.symbol_for);
+        patch_value(self, &self.statics.symbol_key_for);
         
 
         global.set_property("NaN", self.create_js_value(f64::NAN).into_handle(self));
@@ -739,7 +777,7 @@ impl VM {
                 return Ok(());
             }
             Some(FunctionKind::Closure(u)) => u,
-            None => return Err(js_std::error::create_error("Invoked value is not a function".into(), self)),
+            None => return Err(js_std::error::create_error("Invoked value is not a function", self)),
             // There should never be raw user functions
             _ => unreachable!(),
         };

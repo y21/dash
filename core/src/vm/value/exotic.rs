@@ -5,7 +5,7 @@ use crate::{gc::Handle, js_std, vm::VM};
 use super::Value;
 
 fn not_implemented_error(vm: &VM) -> Handle<Value> {
-    js_std::error::create_error("not yet implemented".into(), vm)
+    js_std::error::create_error("not yet implemented", vm)
 }
 
 /// Clonable exotic object

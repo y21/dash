@@ -15,7 +15,7 @@ use crate::{
     },
 };
 
-use super::error::{self, MaybeRc};
+use super::error::{self};
 
 /// An array-like value
 pub enum ArrayLikeKind<'a> {
@@ -81,7 +81,7 @@ fn iterable_from_value<'a>(
     value: Option<&'a Value>,
     error: &str,
 ) -> Result<(usize, ArrayLikeIterable<'a>), Handle<Value>> {
-    let value_cell = value_cell.ok_or_else(|| js_std::error::create_error(error.into(), vm))?;
+    let value_cell = value_cell.ok_or_else(|| js_std::error::create_error(error, vm))?;
     let value = value.unwrap();
 
     let len = abstractions::object::length_of_array_like(vm, value_cell)?;
@@ -108,7 +108,7 @@ pub fn push(value: CallContext) -> Result<Handle<Value>, Handle<Value>> {
         Some(ExoticObject::Array(a)) => a,
         _ => {
             return Err(error::create_error(
-                MaybeRc::Owned("Array.prototype.push called on non-array"),
+                "Array.prototype.push called on non-array",
                 value.vm,
             ))
         }
@@ -134,7 +134,7 @@ pub fn concat(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
         Some(ExoticObject::Array(a)) => a,
         _ => {
             return Err(error::create_error(
-                MaybeRc::Owned("Array.prototype.concat called on non-array"),
+                "Array.prototype.concat called on non-array",
                 ctx.vm,
             ))
         }
@@ -158,7 +158,7 @@ pub fn map(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
         Some(ExoticObject::Array(a)) => a,
         _ => {
             return Err(error::create_error(
-                MaybeRc::Owned("Array.prototype.map called on non-array"),
+                "Array.prototype.map called on non-array",
                 ctx.vm,
             ))
         }
@@ -188,7 +188,7 @@ pub fn every(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
         Some(ExoticObject::Array(a)) => a,
         _ => {
             return Err(error::create_error(
-                MaybeRc::Owned("Array.prototype.every called on non-array"),
+                "Array.prototype.every called on non-array",
                 ctx.vm,
             ))
         }
@@ -218,7 +218,7 @@ pub fn fill(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
         Some(ExoticObject::Array(a)) => a,
         _ => {
             return Err(error::create_error(
-                "Array.prototype.fill called on non-array".into(),
+                "Array.prototype.fill called on non-array",
                 ctx.vm,
             ))
         }
@@ -302,7 +302,7 @@ pub fn includes(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
         Some(ExoticObject::Array(a)) => a,
         _ => {
             return Err(error::create_error(
-                "Array.prototype.includes called on non-array".into(),
+                "Array.prototype.includes called on non-array",
                 ctx.vm,
             ))
         }
@@ -339,7 +339,7 @@ pub fn index_of(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
         Some(ExoticObject::Array(a)) => a,
         _ => {
             return Err(error::create_error(
-                "Array.prototype.indexOf called on non-array".into(),
+                "Array.prototype.indexOf called on non-array",
                 ctx.vm,
             ))
         }
@@ -443,7 +443,7 @@ pub fn last_index_of(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
         Some(ExoticObject::Array(a)) => a,
         _ => {
             return Err(error::create_error(
-                "Array.prototype.indexOf called on non-array".into(),
+                "Array.prototype.indexOf called on non-array",
                 ctx.vm,
             ))
         }

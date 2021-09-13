@@ -20,6 +20,8 @@ pub mod ops;
 pub mod promise;
 /// JavaScript string
 pub mod string;
+/// JavaScript symbol
+pub mod symbol;
 /// JavaScript value
 pub mod value;
 /// JavaScript weak types

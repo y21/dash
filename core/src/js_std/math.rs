@@ -1,4 +1,4 @@
-use super::error::{self, MaybeRc};
+use super::error;
 use crate::{
     gc::Handle,
     vm::value::{function::CallContext, Value},
@@ -113,7 +113,7 @@ pub fn random(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     match maybe_random {
         Some(rand) => Ok(ctx.vm.create_js_value(rand).into_handle(ctx.vm)),
         None => Err(error::create_error(
-            MaybeRc::Owned("Random number generation failed"),
+            "Random number generation failed",
             ctx.vm,
         )),
     }

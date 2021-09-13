@@ -6,6 +6,7 @@ use super::{
     generator::GeneratorIterator,
     object::{ExoticObject, Object, Weak},
     promise::Promise,
+    symbol::Symbol,
     Value, ValueKind,
 };
 use crate::vm::value::promise::PromiseState;
@@ -254,6 +255,9 @@ impl Object {
                     Cow::Borrowed(s)
                 }
             }
+            Self::Exotic(ExoticObject::Symbol(s)) => {
+                Cow::Owned(format!("Symbol({})", s.0.as_deref().unwrap_or("undefined")))
+            }
             Self::Exotic(ExoticObject::Function(f)) => Cow::Owned(f.to_string()),
             Self::Exotic(ExoticObject::Array(a)) => {
                 let mut s = String::from("[ ");
@@ -375,6 +379,14 @@ impl Object {
     pub fn as_generator_iterator_mut(&mut self) -> Option<&mut GeneratorIterator> {
         match self {
             Self::Exotic(ExoticObject::GeneratorIterator(g)) => Some(g),
+            _ => None,
+        }
+    }
+
+    /// Attempts to return self as a reference to [Symbol] if it is one
+    pub fn as_symbol(&self) -> Option<&Symbol> {
+        match self {
+            Self::Exotic(ExoticObject::Symbol(s)) => Some(s),
             _ => None,
         }
     }

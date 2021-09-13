@@ -116,7 +116,7 @@ pub fn ordinary_to_primitive(
     }
 
     Err(js_std::error::create_error(
-        "Cannot convert to primitive value".into(),
+        "Cannot convert to primitive value",
         vm,
     ))
 }

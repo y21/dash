@@ -2,7 +2,7 @@ use dash::{
     agent::{Agent, ImportResult},
     compiler::compiler::{Compiler, FunctionKind},
     gc::{Gc, Handle},
-    js_std::{self, error::MaybeRc},
+    js_std,
     parser::{lexer::Lexer, parser::Parser},
     util::MaybeOwned,
     vm::value::{
@@ -41,12 +41,10 @@ fn read_file(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
         .as_ref()
         .map(|x| &***x)
         .and_then(Value::as_string)
-        .ok_or_else(|| {
-            js_std::error::create_error(MaybeRc::Owned("path must be a string"), ctx.vm)
-        })?;
+        .ok_or_else(|| js_std::error::create_error("path must be a string", ctx.vm))?;
 
     let content = std::fs::read_to_string(filename)
-        .map_err(|e| js_std::error::create_error(MaybeRc::Owned(&e.to_string()), ctx.vm))?;
+        .map_err(|e| js_std::error::create_error(e.to_string(), ctx.vm))?;
 
     Ok(ctx.vm.create_js_value(content).into_handle(ctx.vm))
 }

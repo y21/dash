@@ -111,29 +111,64 @@ impl Value {
     }
 
     /// Implements the behavior of the typeof operator
-    pub fn _typeof(&self) -> &'static str {
+    pub fn _typeof(&self) -> Typeof {
         match &self.kind {
-            ValueKind::Bool(_) => "boolean",
-            ValueKind::Null => "object",
+            ValueKind::Bool(_) => Typeof::Boolean,
+            ValueKind::Null => Typeof::Object,
             ValueKind::Object(o) => o._typeof(),
-            ValueKind::Number(_) => "number",
-            ValueKind::Undefined => "undefined",
+            ValueKind::Number(_) => Typeof::Number,
+            ValueKind::Undefined => Typeof::Undefined,
+        }
+    }
+}
+
+/// The result of a typeof check
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Typeof {
+    /// Boolean type
+    Boolean,
+    /// String type
+    String,
+    /// Object type
+    Object,
+    /// Function type
+    Function,
+    /// Symbol type
+    Symbol,
+    /// Number type
+    Number,
+    /// Undefined type
+    Undefined,
+}
+
+impl Typeof {
+    /// Formats the typeof result as a string
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Boolean => "boolean",
+            Self::String => "string",
+            Self::Object => "object",
+            Self::Symbol => "symbol",
+            Self::Number => "number",
+            Self::Function => "function",
+            Self::Undefined => "undefined",
         }
     }
 }
 
 impl Object {
     /// Implements the behavior of the typeof operator specifically on [Object]s
-    pub fn _typeof(&self) -> &'static str {
+    pub fn _typeof(&self) -> Typeof {
         match self {
             Self::Ordinary
             | Self::Exotic(ExoticObject::Array(_))
             | Self::Exotic(ExoticObject::Weak(_))
             | Self::Exotic(ExoticObject::Promise(_))
             | Self::Exotic(ExoticObject::Custom(_))
-            | Self::Exotic(ExoticObject::GeneratorIterator(_)) => "object",
-            Self::Exotic(ExoticObject::Function(_)) => "function",
-            Self::Exotic(ExoticObject::String(_)) => "string",
+            | Self::Exotic(ExoticObject::GeneratorIterator(_)) => Typeof::Object,
+            Self::Exotic(ExoticObject::Function(_)) => Typeof::Function,
+            Self::Exotic(ExoticObject::Symbol(_)) => Typeof::Symbol,
+            Self::Exotic(ExoticObject::String(_)) => Typeof::String,
         }
     }
 
@@ -147,6 +182,7 @@ impl Object {
             Self::Exotic(ExoticObject::Promise(_)) => true,
             Self::Exotic(ExoticObject::Custom(_)) => true,
             Self::Exotic(ExoticObject::GeneratorIterator(_)) => true,
+            Self::Exotic(ExoticObject::Symbol(_)) => true,
             Self::Ordinary => true,
         }
     }

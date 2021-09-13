@@ -26,7 +26,7 @@ mod handlers {
 
     use crate::{
         gc::Handle,
-        js_std::{self, error::MaybeRc},
+        js_std,
         vm::{
             abstractions,
             frame::{Frame, Loop, UnwindHandler},
@@ -192,9 +192,8 @@ mod handlers {
     pub fn get_global(vm: &mut VM) -> Result<(), Handle<Value>> {
         let name = vm.read_constant().and_then(Constant::into_ident).unwrap();
 
-        let value = Value::get_property(vm, &vm.global, &name, None).ok_or_else(|| {
-            js_std::error::create_error(MaybeRc::Owned(&format!("{} is not defined", name)), vm)
-        })?;
+        let value = Value::get_property(vm, &vm.global, &name, None)
+            .ok_or_else(|| js_std::error::create_error(format!("{} is not defined", name), vm))?;
 
         vm.stack.push(value);
         Ok(())
@@ -429,7 +428,7 @@ mod handlers {
                 if !f.ctor.constructable() {
                     // User tried to invoke non-constructor as a constructor
                     return Err(js_std::error::create_error(
-                        MaybeRc::Owned(&format!("{} is not a constructor", f.name)),
+                        format!("{} is not a constructor", f.name),
                         vm,
                     ));
                 }
@@ -459,10 +458,10 @@ mod handlers {
         if !func.func.constructable() {
             // User tried to invoke non-constructor as a constructor
             return Err(js_std::error::create_error(
-                MaybeRc::Owned(&format!(
+                format!(
                     "{} is not a constructor",
                     func.func.name.as_deref().unwrap_or("[Function]")
-                )),
+                ),
                 vm,
             ));
         }
@@ -743,7 +742,7 @@ mod handlers {
             .to_owned();
 
         vm.stack.push(
-            vm.create_js_value(ExoticObject::String(value))
+            vm.create_js_value(ExoticObject::String(value.as_str().into()))
                 .into_handle(vm),
         );
     }
@@ -842,7 +841,7 @@ mod handlers {
             Ok(())
         } else {
             Err(js_std::error::create_error(
-                "Illegal continue statement".into(),
+                "Illegal continue statement",
                 vm,
             ))
         }
@@ -853,10 +852,7 @@ mod handlers {
             vm.frame_mut().ip = this.end_ip;
             Ok(())
         } else {
-            Err(js_std::error::create_error(
-                "Illegal break statement".into(),
-                vm,
-            ))
+            Err(js_std::error::create_error("Illegal break statement", vm))
         }
     }
 
@@ -894,7 +890,7 @@ mod handlers {
 
         if !export_status {
             return Err(js_std::error::create_error(
-                MaybeRc::Owned("Can only export at the top level in a module"),
+                "Can only export at the top level in a module",
                 vm,
             ));
         }

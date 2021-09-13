@@ -365,7 +365,7 @@ pub fn repeat(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 
     // 4. If n < 0 or n is +∞, throw a RangeError exception.
     if n < 0f64 || n.is_infinite() {
-        return Err(error::create_error("Invalid count value".into(), ctx.vm));
+        return Err(error::create_error("Invalid count value", ctx.vm));
     }
 
     // 5. If n is 0, return the empty String.

@@ -4,6 +4,8 @@ use crate::vm::value::function::Constructor;
 use crate::vm::value::object::Object;
 
 use super::value::function::NativeFunction;
+use super::value::object::ExoticObject;
+use super::value::symbol::Symbol;
 use super::value::Value;
 
 /// Static data used by the VM
@@ -30,6 +32,8 @@ pub struct Statics {
     pub generator_iterator_proto: Handle<Value>,
     /// Represents Promise.prototype
     pub promise_proto: Handle<Value>,
+    /// Represents Symbol.prototype
+    pub symbol_proto: Handle<Value>,
     /// Represents the Boolean constructor
     pub boolean_ctor: Handle<Value>,
     /// Represents the Number constructor
@@ -50,6 +54,12 @@ pub struct Statics {
     pub error_ctor: Handle<Value>,
     /// Represents the Promise constructor
     pub promise_ctor: Handle<Value>,
+    /// Represents the Symbol constructor
+    pub symbol_ctor: Handle<Value>,
+    /// Represents Symbol.for
+    pub symbol_for: Handle<Value>,
+    /// Represents Symbol.keyFor
+    pub symbol_key_for: Handle<Value>,
     /// Represents console.log
     pub console_log: Handle<Value>,
     /// Represents isNaN
@@ -202,6 +212,33 @@ pub struct Statics {
     pub promise_resolve: Handle<Value>,
     /// Represents Promise.reject
     pub promise_reject: Handle<Value>,
+
+    /// Represents Symbol.asyncIterator
+    pub symbol_async_iterator: Handle<Value>,
+    /// Represents Symbol.hasInstance
+    pub symbol_has_instance: Handle<Value>,
+    /// Represents Symbol.isConcatSpreadable
+    pub symbol_is_concat_spreadable: Handle<Value>,
+    /// Represents Symbol.iterator
+    pub symbol_iterator: Handle<Value>,
+    /// Represents Symbol.match
+    pub symbol_match: Handle<Value>,
+    /// Represents Symbol.matchAll
+    pub symbol_match_all: Handle<Value>,
+    /// Represents Symbol.replace
+    pub symbol_replace: Handle<Value>,
+    /// Represents Symbol.search
+    pub symbol_search: Handle<Value>,
+    /// Represents Symbol.species
+    pub symbol_species: Handle<Value>,
+    /// Represents Symbol.split
+    pub symbol_split: Handle<Value>,
+    /// Represents Symbol.toPrimitive
+    pub symbol_to_primitive: Handle<Value>,
+    /// Represents Symbol.toStringTag
+    pub symbol_to_string_tag: Handle<Value>,
+    /// Represents Symbol.unscopables
+    pub symbol_unscopables: Handle<Value>,
 }
 
 macro_rules! register_glob_method {
@@ -226,6 +263,10 @@ macro_rules! register_ctor {
     };
 }
 
+fn register_symbol<S: Into<Box<str>>>(gc: &mut Gc<Value>, name: S) -> Handle<Value> {
+    gc.register(Value::from(ExoticObject::Symbol(Symbol(Some(name.into())))))
+}
+
 impl Statics {
     /// Creates a new global data object
     pub fn new(gc: &mut Gc<Value>) -> Self {
@@ -241,6 +282,7 @@ impl Statics {
             object_proto: gc.register(Value::from(Object::Ordinary)),
             error_proto: gc.register(Value::from(Object::Ordinary)),
             promise_proto: gc.register(Value::from(Object::Ordinary)),
+            symbol_proto: gc.register(Value::from(Object::Ordinary)),
             generator_iterator_proto: gc.register(Value::from(Object::Ordinary)),
             // Ctor
             error_ctor: register_ctor!(gc, "Error", js_std::error::error_constructor),
@@ -253,6 +295,9 @@ impl Statics {
             array_ctor: register_ctor!(gc, "Array", js_std::array::array_constructor),
             object_ctor: register_ctor!(gc, "Object", js_std::object::object_constructor),
             promise_ctor: register_ctor!(gc, "Promise", js_std::promise::promise_constructor),
+            symbol_ctor: register_ctor!(gc, "Symbol", js_std::symbol::symbol_constructor),
+            symbol_for: register_ctor!(gc, "for", js_std::symbol::symbol_for),
+            symbol_key_for: register_ctor!(gc, "keyFor", js_std::symbol::symbol_key_for),
             // Methods
             console_log: register_glob_method!(gc, "log", js_std::console::log),
             isnan: register_glob_method!(gc, "isNaN", js_std::functions::is_nan),
@@ -366,6 +411,20 @@ impl Statics {
             json_stringify: register_glob_method!(gc, "stringify", js_std::json::stringify),
             promise_resolve: register_glob_method!(gc, "resolve", js_std::promise::resolve),
             promise_reject: register_glob_method!(gc, "reject", js_std::promise::reject),
+            // Well known symbols
+            symbol_iterator: register_symbol(gc, "iterator"),
+            symbol_async_iterator: register_symbol(gc, "asyncIterator"),
+            symbol_has_instance: register_symbol(gc, "hasInstance"),
+            symbol_is_concat_spreadable: register_symbol(gc, "isConcatSpreadable"),
+            symbol_match: register_symbol(gc, "match"),
+            symbol_match_all: register_symbol(gc, "matchAll"),
+            symbol_replace: register_symbol(gc, "replace"),
+            symbol_search: register_symbol(gc, "search"),
+            symbol_species: register_symbol(gc, "species"),
+            symbol_split: register_symbol(gc, "split"),
+            symbol_to_primitive: register_symbol(gc, "toPrimitive"),
+            symbol_to_string_tag: register_symbol(gc, "toStringTag"),
+            symbol_unscopables: register_symbol(gc, "unscopables"),
         }
     }
 }

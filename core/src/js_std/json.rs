@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use crate::{
     gc::Handle,
-    js_std::error::{self, MaybeRc},
+    js_std::error::{self},
     json::parser::Parser,
     vm::value::{function::CallContext, Value, ValueKind},
 };
@@ -22,9 +22,9 @@ pub fn parse(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 
     let parsed = Parser::new(source_str.as_bytes())
         .parse()
-        .map_err(|e| error::create_error(MaybeRc::Owned(&e.to_string()), ctx.vm))?
+        .map_err(|e| error::create_error(e.to_string(), ctx.vm))?
         .into_js_value(ctx.vm)
-        .map_err(|e| error::create_error(MaybeRc::Owned(&e.to_string()), ctx.vm))?;
+        .map_err(|e| error::create_error(e.to_string(), ctx.vm))?;
 
     Ok(parsed.into_handle(ctx.vm))
 }

@@ -24,6 +24,8 @@ pub mod object;
 pub mod promise;
 /// Implements `String`
 pub mod string;
+/// Implements `Symbol`
+pub mod symbol;
 /// Implements `WeakMap`
 pub mod weakmap;
 /// Implements `WeakSet`
