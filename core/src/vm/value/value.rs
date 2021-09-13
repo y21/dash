@@ -110,7 +110,7 @@ impl Value {
             Some(FunctionKind::Closure(closure)) => &closure.func,
             None => {
                 return Err(js_std::error::create_error(
-                    "Invoked value is not a function".into(),
+                    "Invoked value is not a function",
                     vm,
                 ))
             }
@@ -189,6 +189,9 @@ impl Value {
                             &statics.generator_iterator_proto,
                             &statics.object_ctor, // TODO: generator iterator ctor
                         )
+                    }
+                    Object::Exotic(ExoticObject::Symbol(_)) => {
+                        self.update_internal_properties(&statics.symbol_proto, &statics.symbol_ctor)
                     }
                     Object::Ordinary | Object::Exotic(ExoticObject::Custom(_)) => {
                         self.update_internal_properties(&statics.object_proto, &statics.object_ctor)
