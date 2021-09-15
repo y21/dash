@@ -77,6 +77,13 @@ impl<'a> PropertyKey<'a> {
             }
         }
     }
+
+    pub(crate) fn mark(&self) {
+        if let PropertyKey::Symbol(handle) = self {
+            let mut handle = unsafe { handle.get_unchecked().borrow_mut() };
+            handle.mark_visited();
+        }
+    }
 }
 
 impl From<String> for PropertyKey<'_> {
@@ -420,8 +427,9 @@ impl Value {
             Value::mark(constructor)
         }
 
-        for handle in this.fields.values() {
-            Value::mark(handle)
+        for (key, value) in this.fields.iter() {
+            key.mark();
+            Value::mark(value)
         }
 
         match &this.kind {
