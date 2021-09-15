@@ -4,9 +4,10 @@ use super::{
     array::Array,
     function::FunctionKind,
     generator::GeneratorIterator,
-    object::{ExoticObject, Object, Weak},
+    object::{ExoticObject, Object},
     promise::Promise,
     symbol::Symbol,
+    weak::Weak,
     Value, ValueKind,
 };
 use crate::vm::value::promise::PromiseState;

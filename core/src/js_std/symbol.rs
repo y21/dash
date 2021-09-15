@@ -3,7 +3,7 @@ use crate::{
     js_std,
     vm::{
         abstractions,
-        value::{function::CallContext, ops::logic::Typeof, symbol::Symbol, Value, ValueKind},
+        value::{function::CallContext, symbol::Symbol, Value, ValueKind},
     },
 };
 

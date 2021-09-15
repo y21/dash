@@ -19,7 +19,8 @@ use crate::{
 
 use super::{
     function::{FunctionKind, Receiver},
-    object::{Object, Weak as JsWeak},
+    object::Object,
+    weak::Weak as JsWeak,
     ValueKind,
 };
 

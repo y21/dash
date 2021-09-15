@@ -2,10 +2,10 @@ use super::value::{
     array::Array,
     function::{Closure, FunctionKind, Module, NativeFunction, UserFunction},
     generator::GeneratorIterator,
-    object::{ExoticObject, Object, Weak},
+    object::{ExoticObject, Object},
     promise::Promise,
     symbol::Symbol,
-    weak::{WeakMap, WeakSet},
+    weak::{Weak, WeakMap, WeakSet},
     Value, ValueKind,
 };
 use std::str::Utf8Error;

@@ -125,7 +125,7 @@ pub struct VM {
     pub(crate) symbols: HashMap<Box<str>, Handle<Value>>,
     /// A copy of the garbage collector's unique marker
     gc_marker: *const (),
-    gc_object_threshold: usize
+    gc_object_threshold: usize,
 }
 
 impl Debug for VM {

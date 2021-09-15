@@ -1,6 +1,7 @@
 use std::{
     cell::{Ref, RefCell, RefMut},
     fmt::Debug,
+    hash::{Hash, Hasher},
     ops::{Deref, DerefMut},
 };
 
@@ -94,7 +95,7 @@ impl<T> Deref for InnerHandleGuard<T> {
 }
 
 /// A handle that
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Handle<T>(*mut InnerHandleGuard<T>, *const ());
 
 impl<T> Handle<T> {
@@ -190,5 +191,12 @@ impl<T> Handle<T> {
     /// This function is unsafe because it allows setting the inner marker
     pub unsafe fn set_marker(&mut self, marker: *const ()) {
         self.1 = marker;
+    }
+}
+
+impl<T> Hash for Handle<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+        self.1.hash(state);
     }
 }
