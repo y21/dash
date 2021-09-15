@@ -1,6 +1,7 @@
 use std::ffi::{CStr, CString};
 
 use dash::{
+    agent::Agent,
     gc::Handle as GcHandle,
     vm::{value::Value, VMError, VM},
 };
@@ -31,10 +32,14 @@ type CreateVMFromStringResult<'a> = WasmResult<Handle<VM>, CreateVMError<'a>>;
 type InterpretVMResult = WasmResult<WasmOption<Handle<GcHandle<Value>>>, VMError>;
 type VMEvalResult<'a> = WasmResult<WasmOption<Handle<GcHandle<Value>>>, CreateVMError<'a>>;
 
+fn create_agent() -> impl Agent {
+    runtime::agent(runtime::agent_flags::FS | runtime::agent_flags::MEM)
+}
+
 #[no_mangle]
 pub extern "C" fn eval<'a>(source: *const i8) -> Handle<EvalResult<'a>> {
     let source = unsafe { CStr::from_ptr(source).to_str().unwrap() };
-    let (value, vm) = try_result!(dash::eval::<()>(source, None));
+    let (value, vm) = try_result!(dash::eval(source, Some(create_agent())));
     let value = WasmOption::from(value.map(Handle::new));
     let vm = Handle::new(vm);
     Handle::new(WasmResult::Ok(Eval { value, vm }))
@@ -50,7 +55,7 @@ pub extern "C" fn create_vm_from_string<'a>(
     source: *const i8,
 ) -> Handle<CreateVMFromStringResult<'a>> {
     let source = unsafe { CStr::from_ptr(source).to_str().unwrap() };
-    let vm = try_result!(VM::from_str::<()>(source, None));
+    let vm = try_result!(VM::from_str(source, Some(create_agent())));
     Handle::new(WasmResult::Ok(Handle::new(vm)))
 }
 

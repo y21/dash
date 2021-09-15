@@ -8,7 +8,7 @@ use dash::{
     EvalError,
 };
 
-use crate::handle::HandleRef;
+use crate::handle::{Handle, HandleRef};
 
 #[derive(Debug)]
 #[repr(C)]
@@ -23,7 +23,7 @@ pub enum CreateVMErrorKind<'a> {
 #[repr(C)]
 pub struct CreateVMError<'a> {
     pub kind: CreateVMErrorKind<'a>,
-    pub vm: Option<VM>,
+    pub vm: Option<Handle<VM>>,
 }
 
 impl<'a> CreateVMError<'a> {
@@ -32,7 +32,10 @@ impl<'a> CreateVMError<'a> {
     }
 
     pub fn with_vm(kind: CreateVMErrorKind<'a>, vm: Option<VM>) -> Self {
-        Self { kind, vm }
+        Self {
+            kind,
+            vm: vm.map(Handle::new),
+        }
     }
 }
 

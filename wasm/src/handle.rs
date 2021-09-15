@@ -1,5 +1,6 @@
 /// A heap allocated object that can be transferred through WebAssembly boundaries
 #[repr(C)]
+#[derive(Debug, Clone)]
 pub struct Handle<T: ?Sized>(*mut T);
 
 impl<T> Handle<T> {
