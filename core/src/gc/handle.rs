@@ -95,8 +95,16 @@ impl<T> Deref for InnerHandleGuard<T> {
 }
 
 /// A handle that
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Handle<T>(*mut InnerHandleGuard<T>, *const ());
+
+impl<T> PartialEq for Handle<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0 && self.1 == other.1
+    }
+}
+
+impl<T> Eq for Handle<T> {}
 
 impl<T> Handle<T> {
     /// Creates a new [Handle]

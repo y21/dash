@@ -17,9 +17,12 @@ pub fn create_error<S: Into<String>>(message: S, vm: &VM) -> Handle<Value> {
 
     let stack = vm.generate_stack_trace(Some(&message_str));
 
-    error.set_property("message", vm.create_js_value(message_str).into_handle(vm));
+    error.set_property(
+        "message".into(),
+        vm.create_js_value(message_str).into_handle(vm),
+    );
 
-    error.set_property("stack", vm.create_js_value(stack).into_handle(vm));
+    error.set_property("stack".into(), vm.create_js_value(stack).into_handle(vm));
 
     error.into_handle(vm)
 }

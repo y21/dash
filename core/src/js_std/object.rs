@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use crate::{
     gc::Handle,
-    vm::value::{array::Array, function::CallContext, Value, ValueKind},
+    vm::value::{array::Array, function::CallContext, PropertyKey, Value, ValueKind},
 };
 
 /// The object constructor
@@ -22,11 +22,12 @@ pub fn define_property(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>>
     let mut obj = unsafe { obj_cell.borrow_mut_unbounded() };
     let prop_cell = arguments.next().unwrap();
     let prop = unsafe { prop_cell.borrow_unbounded() };
-    let prop_str = prop.to_string();
+    let prop_str = prop.to_property_key(Handle::clone(obj_cell));
     let descriptor_cell = arguments.next().unwrap();
 
-    let value = Value::get_property(ctx.vm, descriptor_cell, "value", None).unwrap();
-    obj.set_property(&*prop_str, value);
+    let value =
+        Value::get_property(ctx.vm, descriptor_cell, &PropertyKey::from("value"), None).unwrap();
+    obj.set_property(prop_str, value);
 
     Ok(Handle::clone(&obj_cell))
 }
@@ -40,12 +41,10 @@ pub fn get_own_property_names(ctx: CallContext) -> Result<Handle<Value>, Handle<
 
     let mut keys = Vec::with_capacity(obj.fields.len());
     for key in obj.fields.keys() {
-        let key: &str = &*key;
-        keys.push(
-            ctx.vm
-                .create_js_value(String::from(key))
-                .into_handle(ctx.vm),
-        );
+        // We only want to collect string keys, not symbols
+        if let PropertyKey::String(s) = key {
+            keys.push(ctx.vm.create_js_value(s.to_string()).into_handle(ctx.vm));
+        }
     }
 
     Ok(ctx.vm.create_js_value(Array::new(keys)).into_handle(ctx.vm))

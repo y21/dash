@@ -4,7 +4,7 @@ use crate::vm::{
         array::Array,
         function::{FunctionKind, Module, UserFunction},
         object::{ExoticObject, Object},
-        Value, ValueKind,
+        PropertyKey, Value, ValueKind,
     },
 };
 
@@ -223,6 +223,28 @@ impl Serialize for Value {
     }
 }
 
+impl Serialize for PropertyKey<'_> {
+    fn serialize(&self) -> Vec<u8> {
+        let mut data = Vec::new();
+
+        match self {
+            Self::String(s) => {
+                // Enum discriminant
+                data.push(PropertyKindDiscriminant::String as u8);
+                data.extend(s.serialize());
+            }
+            Self::Symbol(s) => {
+                // Enum discriminant
+                data.push(PropertyKindDiscriminant::Symbol as u8);
+                let value = unsafe { s.borrow_unbounded() };
+                data.extend(value.serialize());
+            }
+        }
+
+        data
+    }
+}
+
 impl Serialize for ValueKind {
     fn serialize(&self) -> Vec<u8> {
         let mut data = Vec::new();
@@ -259,6 +281,12 @@ enum ValueKindDiscriminant {
     Object,
     Undefined,
     Null,
+}
+
+#[repr(u8)]
+enum PropertyKindDiscriminant {
+    String,
+    Symbol,
 }
 
 #[repr(u8)]

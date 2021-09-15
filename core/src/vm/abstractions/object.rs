@@ -1,4 +1,14 @@
-use crate::{gc::Handle, vm::{VM, abstractions::conversions::to_string, value::{Value, ValueKind, object::{ExoticObject, Object}}}};
+use crate::{
+    gc::Handle,
+    vm::{
+        abstractions::conversions::to_string,
+        value::{
+            object::{ExoticObject, Object},
+            PropertyKey, Value, ValueKind,
+        },
+        VM,
+    },
+};
 
 const MAX: f64 = 9007199254740991f64;
 
@@ -7,7 +17,7 @@ const MAX: f64 = 9007199254740991f64;
 // https://tc39.es/ecma262/multipage/abstract-operations.html#sec-lengthofarraylike
 pub fn length_of_array_like(vm: &VM, obj: &Handle<Value>) -> Result<f64, Handle<Value>> {
     // ? Get(obj, "length")
-    let len_prop_cell = Value::get_property(vm, obj, "length", None);
+    let len_prop_cell = Value::get_property(vm, obj, &PropertyKey::from("length"), None);
     let len_prop = len_prop_cell
         .as_ref()
         .map(|x| unsafe { x.borrow_unbounded() });

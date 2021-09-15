@@ -6,7 +6,7 @@ use crate::{
     vm::{
         value::{
             object::{ExoticObject, Object},
-            Value, ValueKind,
+            PropertyKey, Value, ValueKind,
         },
         VM,
     },
@@ -105,7 +105,7 @@ pub fn ordinary_to_primitive(
     // 5. For each element name of methodNames, do
     for name in method_names {
         // a. Let method be ? Get(O, name).
-        if let Some(method) = Value::get_property(vm, obj, name, None) {
+        if let Some(method) = Value::get_property(vm, obj, &PropertyKey::from(name), None) {
             let method_ref = unsafe { method.borrow_unbounded() };
 
             // b. If IsCallable(method) is true, then

@@ -24,10 +24,10 @@ pub fn next(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
             GeneratorState::Finished => {
                 let mut result = ctx.vm.create_object();
                 result.set_property(
-                    "value",
+                    "value".into(),
                     Value::new(ValueKind::Undefined).into_handle(ctx.vm),
                 );
-                result.set_property("done", Value::from(true).into_handle(ctx.vm));
+                result.set_property("done".into(), Value::from(true).into_handle(ctx.vm));
                 return Ok(result.into_handle(ctx.vm));
             }
             GeneratorState::Running { ip, ref mut stack } => {
@@ -75,8 +75,8 @@ pub fn next(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
             iter.state = GeneratorState::Finished;
 
             let mut result = ctx.vm.create_object();
-            result.set_property("value", Value::unwrap_or_undefined(r, ctx.vm));
-            result.set_property("done", Value::from(true).into_handle(ctx.vm));
+            result.set_property("value".into(), Value::unwrap_or_undefined(r, ctx.vm));
+            result.set_property("done".into(), Value::from(true).into_handle(ctx.vm));
             Ok(result.into_handle(ctx.vm))
         }
         DispatchResult::Yield(r) => {
@@ -91,8 +91,8 @@ pub fn next(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
             };
 
             let mut result = ctx.vm.create_object();
-            result.set_property("value", Value::unwrap_or_undefined(r, ctx.vm));
-            result.set_property("done", Value::from(false).into_handle(ctx.vm));
+            result.set_property("value".into(), Value::unwrap_or_undefined(r, ctx.vm));
+            result.set_property("done".into(), Value::from(false).into_handle(ctx.vm));
             Ok(result.into_handle(ctx.vm))
         }
     }

@@ -10,7 +10,10 @@ use super::{
     weak::Weak,
     Value, ValueKind,
 };
-use crate::vm::value::promise::PromiseState;
+use crate::{
+    gc::Handle,
+    vm::value::{promise::PromiseState, PropertyKey},
+};
 
 impl Value {
     /// Converts a JavaScript value to a number
@@ -104,12 +107,24 @@ impl Value {
     /// Converts a JavaScript value to a string
     pub fn to_string(&self) -> Cow<str> {
         match &self.kind {
-            ValueKind::Bool(b) => Cow::Borrowed(if *b { "true " } else { "false" }),
+            ValueKind::Bool(b) => Cow::Borrowed(if *b { "true" } else { "false" }),
             ValueKind::Null => Cow::Borrowed("null"),
             ValueKind::Number(n) => Cow::Owned(n.to_string()),
             ValueKind::Object(o) => o.to_string(),
             ValueKind::Undefined => Cow::Borrowed("undefined"),
         }
+    }
+
+    /// Converts a JavaScript value to a property key (string or symbol)
+    pub fn to_property_key(&self, handle: Handle<Value>) -> PropertyKey<'static> {
+        match self.as_object() {
+            Some(Object::Exotic(ExoticObject::String(s))) => return PropertyKey::from(s.clone()),
+            Some(Object::Exotic(ExoticObject::Symbol(_))) => return PropertyKey::from(handle),
+            _ => {}
+        };
+
+        // For all other types, fall back to converting to string
+        PropertyKey::from(self.to_string().into_owned())
     }
 
     /// Converts a JavaScript value to a JSON string
@@ -225,7 +240,8 @@ impl Object {
                         s.push_str(", ");
                     }
 
-                    if let Some(value) = value.to_json() {
+                    // Symbols are not JSON serialized
+                    if let (PropertyKey::String(key), Some(value)) = (key, value.to_json()) {
                         s.push_str(&format!(r#""{}": {}"#, key, &value));
                     }
                 }
@@ -303,7 +319,12 @@ impl Object {
                     if index > 0 {
                         s.push_str(", ");
                     }
-                    s.push_str(&format!(r#""{}": {}"#, key, value.inspect(depth + 1)));
+
+                    s.push_str(&format!(
+                        r#""{}": {}"#,
+                        key.inspect(depth + 1),
+                        value.inspect(depth + 1)
+                    ));
                 }
 
                 s.push_str(" }");

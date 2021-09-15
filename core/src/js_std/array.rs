@@ -9,7 +9,7 @@ use crate::{
             array::Array,
             function::CallContext,
             object::{ExoticObject, Object},
-            Value, ValueKind,
+            PropertyKey, Value, ValueKind,
         },
         VM,
     },
@@ -68,7 +68,8 @@ impl<'a> ArrayLikeIterable<'a> {
                 .map(|v| v.into_handle(vm)),
             ArrayLikeKind::Array(source) => source.get(self.index - 1).cloned(),
             ArrayLikeKind::Object(source_cell) => {
-                Value::get_property(vm, source_cell, &(self.index - 1).to_string(), None)
+                let pk = (self.index - 1).to_string();
+                Value::get_property(vm, source_cell, &PropertyKey::from(pk.as_str()), None)
             }
             ArrayLikeKind::Empty => None,
         }

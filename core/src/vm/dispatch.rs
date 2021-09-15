@@ -37,7 +37,7 @@ mod handlers {
                 function::{CallContext, Closure, FunctionKind, Receiver},
                 object::ExoticObject,
                 ops::compare::Compare,
-                Value, ValueKind,
+                PropertyKey, Value, ValueKind,
             },
             VM,
         },
@@ -179,20 +179,23 @@ mod handlers {
         let value = vm.stack.pop();
 
         let mut global = unsafe { vm.global.borrow_mut_unbounded() };
-        global.set_property(name, value);
+        global.set_property(name.into(), value);
     }
 
     pub fn set_global_no_value(vm: &mut VM) {
         let name = vm.read_constant().and_then(Constant::into_ident).unwrap();
 
         let mut global = unsafe { vm.global.borrow_mut_unbounded() };
-        global.set_property(name, Value::new(ValueKind::Undefined).into_handle(vm));
+        global.set_property(
+            name.into(),
+            Value::new(ValueKind::Undefined).into_handle(vm),
+        );
     }
 
     pub fn get_global(vm: &mut VM) -> Result<(), Handle<Value>> {
         let name = vm.read_constant().and_then(Constant::into_ident).unwrap();
 
-        let value = Value::get_property(vm, &vm.global, &name, None)
+        let value = Value::get_property(vm, &vm.global, &PropertyKey::from(name.as_str()), None)
             .ok_or_else(|| js_std::error::create_error(format!("{} is not defined", name), vm))?;
 
         vm.stack.push(value);
@@ -595,7 +598,7 @@ mod handlers {
         {
             let mut exports_mut = unsafe { exports.borrow_mut_unbounded() };
             for (key, value) in &func.exports.named {
-                exports_mut.set_property(&**key, Handle::clone(value));
+                exports_mut.set_property(String::from(&**key).into(), Handle::clone(value));
             }
         }
 
@@ -703,15 +706,28 @@ mod handlers {
         let target_cell = vm.stack.pop();
 
         let value = if is_assignment {
-            let maybe_value = Value::get_property(vm, &target_cell, &property, None);
+            let maybe_value = Value::get_property(
+                vm,
+                &target_cell,
+                &PropertyKey::from(property.as_str()),
+                None,
+            );
             maybe_value.unwrap_or_else(|| {
                 let mut target = unsafe { target_cell.borrow_mut_unbounded() };
                 let value = Value::new(ValueKind::Undefined).into_handle(vm);
-                target.set_property(property, Handle::clone(&value));
+                target.set_property(property.into(), Handle::clone(&value));
                 value
             })
         } else {
-            Value::unwrap_or_undefined(Value::get_property(vm, &target_cell, &property, None), vm)
+            Value::unwrap_or_undefined(
+                Value::get_property(
+                    vm,
+                    &target_cell,
+                    &PropertyKey::from(property.as_str()),
+                    None,
+                ),
+                vm,
+            )
         };
         vm.stack.push(value);
     }
@@ -803,7 +819,7 @@ mod handlers {
 
         for value in raw_fields.into_iter().rev() {
             let key = vm.read_constant().unwrap().into_ident().unwrap();
-            fields.insert(key.into_boxed_str(), value);
+            fields.insert(PropertyKey::from(key), value);
         }
 
         vm.stack
@@ -815,21 +831,18 @@ mod handlers {
         let is_assignment = vm.read_index().unwrap() == 1;
         let target_cell = vm.stack.pop();
         let property = unsafe { property_cell.borrow_unbounded() };
-        let property_s = property.to_string();
+        let property_s = property.to_property_key(Handle::clone(&property_cell));
 
         let value = if is_assignment {
-            let maybe_value = Value::get_property(vm, &target_cell, &*property_s, None);
+            let maybe_value = Value::get_property(vm, &target_cell, &property_s, None);
             maybe_value.unwrap_or_else(|| {
                 let mut target = unsafe { target_cell.borrow_mut_unbounded() };
                 let value = Value::new(ValueKind::Undefined).into_handle(vm);
-                target.set_property(property_s.to_string(), Handle::clone(&value));
+                target.set_property(property_s, Handle::clone(&value));
                 value
             })
         } else {
-            Value::unwrap_or_undefined(
-                Value::get_property(vm, &target_cell, &*property_s, None),
-                vm,
-            )
+            Value::unwrap_or_undefined(Value::get_property(vm, &target_cell, &property_s, None), vm)
         };
 
         vm.stack.push(value);
@@ -913,7 +926,7 @@ mod handlers {
 
         let target_ref = unsafe { target.borrow_unbounded() };
 
-        let has_key = target_ref.has_property(vm, searcher_s);
+        let has_key = target_ref.has_property(vm, PropertyKey::from(searcher_s));
 
         vm.stack.push(vm.create_js_value(has_key).into_handle(vm));
 

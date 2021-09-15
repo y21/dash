@@ -25,7 +25,7 @@ use value::Value;
 use crate::{EvalError, agent::Agent, compiler::{compiler::{self, CompileError, Compiler, FunctionKind as CompilerFunctionKind}, instruction::to_vm_instructions}, gc::{Gc, Handle}, parser::{lexer, token}, util::{unlikely, MaybeOwned}, vm::{dispatch::DispatchResult, frame::UnwindHandler, value::{ValueKind, array::Array, function::{CallContext, FunctionKind, UserFunction}, generator::GeneratorIterator}}};
 use crate::js_std;
 
-use self::{frame::{Frame, Loop}, instruction::Constant, stack::Stack, statics::Statics, value::{object::Object, symbol::Symbol}};
+use self::{frame::{Frame, Loop}, instruction::Constant, stack::Stack, statics::Statics, value::{PropertyKey, object::Object}};
 
 // Force garbage collection at 10000 objects by default
 const DEFAULT_GC_OBJECT_COUNT_THRESHOLD: usize = 10000;
@@ -67,7 +67,7 @@ impl VMError {
         match self {
             Self::UncaughtError(err_cell) => {
                 let err = unsafe { err_cell.borrow_unbounded() };
-                let stack_cell = err.get_field("stack").unwrap();
+                let stack_cell = err.get_field(PropertyKey::from("stack")).unwrap();
                 let stack_ref = unsafe { stack_cell.borrow_unbounded() };
                 let stack_string = stack_ref.as_string().unwrap();
                 Cow::Owned(String::from(stack_string))
@@ -387,7 +387,7 @@ impl VM {
     /// Creates a JavaScript object with provided fields
     pub fn create_object_with_fields(
         &self,
-        fields: impl Into<HashMap<Box<str>, Handle<Value>>>,
+        fields: impl Into<HashMap<PropertyKey<'static>, Handle<Value>>>,
     ) -> Value {
         let mut o = self.create_object();
         o.fields = fields.into();
@@ -426,7 +426,7 @@ impl VM {
 
         let mut global = unsafe { self.global.borrow_mut_unbounded() };
         global.detect_internal_properties(self);
-        global.set_property("globalThis", Handle::clone(&self.global));
+        global.set_property("globalThis".into(), Handle::clone(&self.global));
 
         patch_value(self, &self.statics.error_proto);
         patch_value(self, &self.statics.function_proto);
@@ -437,124 +437,124 @@ impl VM {
         {
             let mut o = unsafe { self.statics.generator_iterator_proto.borrow_mut_unbounded() };
             o.detect_internal_properties(self);
-            o.set_property("next", Handle::clone(&self.statics.generator_iterator_next));
-            o.set_property("return", Handle::clone(&self.statics.generator_iterator_return));
+            o.set_property("next".into(), Handle::clone(&self.statics.generator_iterator_next));
+            o.set_property("return".into(), Handle::clone(&self.statics.generator_iterator_return));
         }
 
         {
             let mut o = unsafe { self.statics.symbol_ctor.borrow_mut_unbounded() };
             o.detect_internal_properties(self);
-            o.set_property("for", Handle::clone(&self.statics.symbol_for));
-            o.set_property("keyFor", Handle::clone(&self.statics.symbol_key_for));
-            o.set_property("iterator", Handle::clone(&self.statics.symbol_iterator));
-            o.set_property("asyncIterator", Handle::clone(&self.statics.symbol_async_iterator));
-            o.set_property("hasInstance", Handle::clone(&self.statics.symbol_has_instance));
-            o.set_property("isConcatSpreadable", Handle::clone(&self.statics.symbol_is_concat_spreadable));
-            o.set_property("match", Handle::clone(&self.statics.symbol_match));
-            o.set_property("matchAll", Handle::clone(&self.statics.symbol_match_all));
-            o.set_property("replace", Handle::clone(&self.statics.symbol_replace));
-            o.set_property("search", Handle::clone(&self.statics.symbol_search));
-            o.set_property("species", Handle::clone(&self.statics.symbol_species));
-            o.set_property("split", Handle::clone(&self.statics.symbol_split));
-            o.set_property("toPrimitive", Handle::clone(&self.statics.symbol_to_primitive));
-            o.set_property("toStringTag", Handle::clone(&self.statics.symbol_to_string_tag));
-            o.set_property("unscopables", Handle::clone(&self.statics.symbol_unscopables));
-            global.set_property("Symbol", Handle::clone(&self.statics.symbol_ctor));
+            o.set_property("for".into(), Handle::clone(&self.statics.symbol_for));
+            o.set_property("keyFor".into(), Handle::clone(&self.statics.symbol_key_for));
+            o.set_property("iterator".into(), Handle::clone(&self.statics.symbol_iterator));
+            o.set_property("asyncIterator".into(), Handle::clone(&self.statics.symbol_async_iterator));
+            o.set_property("hasInstance".into(), Handle::clone(&self.statics.symbol_has_instance));
+            o.set_property("isConcatSpreadable".into(), Handle::clone(&self.statics.symbol_is_concat_spreadable));
+            o.set_property("match".into(), Handle::clone(&self.statics.symbol_match));
+            o.set_property("matchAll".into(), Handle::clone(&self.statics.symbol_match_all));
+            o.set_property("replace".into(), Handle::clone(&self.statics.symbol_replace));
+            o.set_property("search".into(), Handle::clone(&self.statics.symbol_search));
+            o.set_property("species".into(), Handle::clone(&self.statics.symbol_species));
+            o.set_property("split".into(), Handle::clone(&self.statics.symbol_split));
+            o.set_property("toPrimitive".into(), Handle::clone(&self.statics.symbol_to_primitive));
+            o.set_property("toStringTag".into(), Handle::clone(&self.statics.symbol_to_string_tag));
+            o.set_property("unscopables".into(), Handle::clone(&self.statics.symbol_unscopables));
+            global.set_property("Symbol".into(), Handle::clone(&self.statics.symbol_ctor));
         }
         
         {
             let mut o = unsafe { self.statics.string_proto.borrow_mut_unbounded() };
             o.detect_internal_properties(self);
-            o.set_property("charAt", Handle::clone(&self.statics.string_char_at));
-            o.set_property("charCodeAt", Handle::clone(&self.statics.string_char_code_at));
-            o.set_property("endsWith", Handle::clone(&self.statics.string_ends_with));
-            o.set_property("anchor", Handle::clone(&self.statics.string_anchor));
-            o.set_property("big", Handle::clone(&self.statics.string_big));
-            o.set_property("blink", Handle::clone(&self.statics.string_blink));
-            o.set_property("bold", Handle::clone(&self.statics.string_bold));
-            o.set_property("fixed", Handle::clone(&self.statics.string_fixed));
-            o.set_property("fontcolor", Handle::clone(&self.statics.string_fontcolor));
-            o.set_property("fontsize", Handle::clone(&self.statics.string_fontsize));
-            o.set_property("italics", Handle::clone(&self.statics.string_italics));
-            o.set_property("link", Handle::clone(&self.statics.string_link));
-            o.set_property("small", Handle::clone(&self.statics.string_small));
-            o.set_property("strike", Handle::clone(&self.statics.string_strike));
-            o.set_property("sub", Handle::clone(&self.statics.string_sub));
-            o.set_property("sup", Handle::clone(&self.statics.string_sup));
-            o.set_property("includes", Handle::clone(&self.statics.string_includes));
-            o.set_property("indexOf", Handle::clone(&self.statics.string_index_of));
-            o.set_property("padStart", Handle::clone(&self.statics.string_pad_start));
-            o.set_property("padEnd", Handle::clone(&self.statics.string_pad_end));
-            o.set_property("repeat", Handle::clone(&self.statics.string_repeat));
-            o.set_property("toLowerCase", Handle::clone(&self.statics.string_to_lowercase));
-            o.set_property("toUpperCase", Handle::clone(&self.statics.string_to_uppercase));
-            o.set_property("replace", Handle::clone(&self.statics.string_replace));
+            o.set_property("charAt".into(), Handle::clone(&self.statics.string_char_at));
+            o.set_property("charCodeAt".into(), Handle::clone(&self.statics.string_char_code_at));
+            o.set_property("endsWith".into(), Handle::clone(&self.statics.string_ends_with));
+            o.set_property("anchor".into(), Handle::clone(&self.statics.string_anchor));
+            o.set_property("big".into(), Handle::clone(&self.statics.string_big));
+            o.set_property("blink".into(), Handle::clone(&self.statics.string_blink));
+            o.set_property("bold".into(), Handle::clone(&self.statics.string_bold));
+            o.set_property("fixed".into(), Handle::clone(&self.statics.string_fixed));
+            o.set_property("fontcolor".into(), Handle::clone(&self.statics.string_fontcolor));
+            o.set_property("fontsize".into(), Handle::clone(&self.statics.string_fontsize));
+            o.set_property("italics".into(), Handle::clone(&self.statics.string_italics));
+            o.set_property("link".into(), Handle::clone(&self.statics.string_link));
+            o.set_property("small".into(), Handle::clone(&self.statics.string_small));
+            o.set_property("strike".into(), Handle::clone(&self.statics.string_strike));
+            o.set_property("sub".into(), Handle::clone(&self.statics.string_sub));
+            o.set_property("sup".into(), Handle::clone(&self.statics.string_sup));
+            o.set_property("includes".into(), Handle::clone(&self.statics.string_includes));
+            o.set_property("indexOf".into(), Handle::clone(&self.statics.string_index_of));
+            o.set_property("padStart".into(), Handle::clone(&self.statics.string_pad_start));
+            o.set_property("padEnd".into(), Handle::clone(&self.statics.string_pad_end));
+            o.set_property("repeat".into(), Handle::clone(&self.statics.string_repeat));
+            o.set_property("toLowerCase".into(), Handle::clone(&self.statics.string_to_lowercase));
+            o.set_property("toUpperCase".into(), Handle::clone(&self.statics.string_to_uppercase));
+            o.set_property("replace".into(), Handle::clone(&self.statics.string_replace));
         }
 
         {
             let mut o = unsafe { self.statics.array_proto.borrow_mut_unbounded() };
             o.detect_internal_properties(self);
-            o.set_property("push", Handle::clone(&self.statics.array_push));
-            o.set_property("concat", Handle::clone(&self.statics.array_concat));
-            o.set_property("map", Handle::clone(&self.statics.array_map));
-            o.set_property("every", Handle::clone(&self.statics.array_every));
-            o.set_property("fill", Handle::clone(&self.statics.array_fill));
-            o.set_property("filter", Handle::clone(&self.statics.array_filter));
-            o.set_property("find", Handle::clone(&self.statics.array_find));
-            o.set_property("findIndex", Handle::clone(&self.statics.array_find_index));
-            o.set_property("flat", Handle::clone(&self.statics.array_flat));
-            o.set_property("forEach", Handle::clone(&self.statics.array_for_each));
-            o.set_property("from", Handle::clone(&self.statics.array_from));
-            o.set_property("includes", Handle::clone(&self.statics.array_includes));
-            o.set_property("indexOf", Handle::clone(&self.statics.array_index_of));
-            o.set_property("join", Handle::clone(&self.statics.array_join));
-            o.set_property("lastIndexOf", Handle::clone(&self.statics.array_last_index_of));
-            o.set_property("of", Handle::clone(&self.statics.array_of));
-            o.set_property("pop", Handle::clone(&self.statics.array_pop));
-            o.set_property("reduce", Handle::clone(&self.statics.array_reduce));
-            o.set_property("reduceRight", Handle::clone(&self.statics.array_reduce_right));
-            o.set_property("reverse", Handle::clone(&self.statics.array_reverse));
-            o.set_property("shift", Handle::clone(&self.statics.array_shift));
-            o.set_property("slice", Handle::clone(&self.statics.array_slice));
-            o.set_property("some", Handle::clone(&self.statics.array_some));
-            o.set_property("sort", Handle::clone(&self.statics.array_sort));
-            o.set_property("splice", Handle::clone(&self.statics.array_splice));
-            o.set_property("unshift", Handle::clone(&self.statics.array_unshift));
+            o.set_property("push".into(), Handle::clone(&self.statics.array_push));
+            o.set_property("concat".into(), Handle::clone(&self.statics.array_concat));
+            o.set_property("map".into(), Handle::clone(&self.statics.array_map));
+            o.set_property("every".into(), Handle::clone(&self.statics.array_every));
+            o.set_property("fill".into(), Handle::clone(&self.statics.array_fill));
+            o.set_property("filter".into(), Handle::clone(&self.statics.array_filter));
+            o.set_property("find".into(), Handle::clone(&self.statics.array_find));
+            o.set_property("findIndex".into(), Handle::clone(&self.statics.array_find_index));
+            o.set_property("flat".into(), Handle::clone(&self.statics.array_flat));
+            o.set_property("forEach".into(), Handle::clone(&self.statics.array_for_each));
+            o.set_property("from".into(), Handle::clone(&self.statics.array_from));
+            o.set_property("includes".into(), Handle::clone(&self.statics.array_includes));
+            o.set_property("indexOf".into(), Handle::clone(&self.statics.array_index_of));
+            o.set_property("join".into(), Handle::clone(&self.statics.array_join));
+            o.set_property("lastIndexOf".into(), Handle::clone(&self.statics.array_last_index_of));
+            o.set_property("of".into(), Handle::clone(&self.statics.array_of));
+            o.set_property("pop".into(), Handle::clone(&self.statics.array_pop));
+            o.set_property("reduce".into(), Handle::clone(&self.statics.array_reduce));
+            o.set_property("reduceRight".into(), Handle::clone(&self.statics.array_reduce_right));
+            o.set_property("reverse".into(), Handle::clone(&self.statics.array_reverse));
+            o.set_property("shift".into(), Handle::clone(&self.statics.array_shift));
+            o.set_property("slice".into(), Handle::clone(&self.statics.array_slice));
+            o.set_property("some".into(), Handle::clone(&self.statics.array_some));
+            o.set_property("sort".into(), Handle::clone(&self.statics.array_sort));
+            o.set_property("splice".into(), Handle::clone(&self.statics.array_splice));
+            o.set_property("unshift".into(), Handle::clone(&self.statics.array_unshift));
         }
 
         {
             let mut array_ctor = unsafe { self.statics.array_ctor.borrow_mut_unbounded() };
-            array_ctor.set_property("isArray", Handle::clone(&self.statics.array_is_array));
+            array_ctor.set_property("isArray".into(), Handle::clone(&self.statics.array_is_array));
         }
 
         {
             let mut promise_ctor = unsafe { self.statics.promise_ctor.borrow_mut_unbounded() };
-            promise_ctor.set_property("resolve", Handle::clone(&self.statics.promise_resolve));
-            promise_ctor.set_property("reject", Handle::clone(&self.statics.promise_reject));
+            promise_ctor.set_property("resolve".into(), Handle::clone(&self.statics.promise_resolve));
+            promise_ctor.set_property("reject".into(), Handle::clone(&self.statics.promise_reject));
         }
 
         {
             let mut o = unsafe { self.statics.weakset_proto.borrow_mut_unbounded() };
             o.detect_internal_properties(self);
-            o.set_property("has", Handle::clone(&self.statics.weakset_has));
-            o.set_property("add", Handle::clone(&self.statics.weakset_add));
-            o.set_property("delete", Handle::clone(&self.statics.weakset_delete));
+            o.set_property("has".into(), Handle::clone(&self.statics.weakset_has));
+            o.set_property("add".into(), Handle::clone(&self.statics.weakset_add));
+            o.set_property("delete".into(), Handle::clone(&self.statics.weakset_delete));
         }
 
         {
             let mut o = unsafe { self.statics.weakmap_proto.borrow_mut_unbounded() };
             o.detect_internal_properties(self);
-            o.set_property("has", Handle::clone(&self.statics.weakmap_has));
-            o.set_property("add", Handle::clone(&self.statics.weakmap_add));
-            o.set_property("get", Handle::clone(&self.statics.weakmap_get));
-            o.set_property("delete", Handle::clone(&self.statics.weakmap_delete));
+            o.set_property("has".into(), Handle::clone(&self.statics.weakmap_has));
+            o.set_property("add".into(), Handle::clone(&self.statics.weakmap_add));
+            o.set_property("get".into(), Handle::clone(&self.statics.weakmap_get));
+            o.set_property("delete".into(), Handle::clone(&self.statics.weakmap_delete));
         }
 
         {
             let mut object_proto = unsafe { self.statics.object_proto.borrow_mut_unbounded() };
             object_proto.constructor = Some(Handle::clone(&self.statics.object_ctor));
             object_proto.proto = Some(Value::new(ValueKind::Null).into_handle(self));
-            object_proto.set_property("toString", Handle::clone(&self.statics.object_to_string));
+            object_proto.set_property("toString".into(), Handle::clone(&self.statics.object_to_string));
         }
 
         // Constructors
@@ -637,59 +637,59 @@ impl VM {
         patch_value(self, &self.statics.symbol_key_for);
         
 
-        global.set_property("NaN", self.create_js_value(f64::NAN).into_handle(self));
-        global.set_property("Infinity", self.create_js_value(f64::INFINITY).into_handle(self));
-        global.set_property("isNaN", self.statics.isnan.clone());
+        global.set_property("NaN".into(), self.create_js_value(f64::NAN).into_handle(self));
+        global.set_property("Infinity".into(), self.create_js_value(f64::INFINITY).into_handle(self));
+        global.set_property("isNaN".into(), self.statics.isnan.clone());
 
         {
             let mut object_ctor = unsafe { self.statics.object_ctor.borrow_mut_unbounded() };
-            object_ctor.set_property("defineProperty", self.statics.object_define_property.clone());
-            object_ctor.set_property("getOwnPropertyNames", self.statics.object_get_own_property_names.clone());
-            object_ctor.set_property("getPrototypeOf", self.statics.object_get_prototype_of.clone());
-            global.set_property("Object", Handle::clone(&self.statics.object_ctor));
+            object_ctor.set_property("defineProperty".into(), self.statics.object_define_property.clone());
+            object_ctor.set_property("getOwnPropertyNames".into(), self.statics.object_get_own_property_names.clone());
+            object_ctor.set_property("getPrototypeOf".into(), self.statics.object_get_prototype_of.clone());
+            global.set_property("Object".into(), Handle::clone(&self.statics.object_ctor));
         }
 
         {
             let mut math_obj = self.create_object();
-            math_obj.set_property("pow", Handle::clone(&self.statics.math_pow));
-            math_obj.set_property("abs", Handle::clone(&self.statics.math_abs));
-            math_obj.set_property("ceil", Handle::clone(&self.statics.math_ceil));
-            math_obj.set_property("floor", Handle::clone(&self.statics.math_floor));
-            math_obj.set_property("max", Handle::clone(&self.statics.math_max));
-            math_obj.set_property("random", Handle::clone(&self.statics.math_random));
+            math_obj.set_property("pow".into(), Handle::clone(&self.statics.math_pow));
+            math_obj.set_property("abs".into(), Handle::clone(&self.statics.math_abs));
+            math_obj.set_property("ceil".into(), Handle::clone(&self.statics.math_ceil));
+            math_obj.set_property("floor".into(), Handle::clone(&self.statics.math_floor));
+            math_obj.set_property("max".into(), Handle::clone(&self.statics.math_max));
+            math_obj.set_property("random".into(), Handle::clone(&self.statics.math_random));
 
-            math_obj.set_property("PI", self.create_js_value(std::f64::consts::PI).into_handle(self));
-            math_obj.set_property("E", self.create_js_value(std::f64::consts::E).into_handle(self));
-            math_obj.set_property("LN10", self.create_js_value(std::f64::consts::LN_10).into_handle(self));
-            math_obj.set_property("LN2", self.create_js_value(std::f64::consts::LN_2).into_handle(self));
-            math_obj.set_property("LOG10E", self.create_js_value(std::f64::consts::LOG10_E).into_handle(self));
-            math_obj.set_property("LOG2E", self.create_js_value(std::f64::consts::LOG2_E).into_handle(self));
-            math_obj.set_property("SQRT2",self.create_js_value(std::f64::consts::SQRT_2).into_handle(self));
-            global.set_property("Math", math_obj.into_handle(self));
+            math_obj.set_property("PI".into(), self.create_js_value(std::f64::consts::PI).into_handle(self));
+            math_obj.set_property("E".into(), self.create_js_value(std::f64::consts::E).into_handle(self));
+            math_obj.set_property("LN10".into(), self.create_js_value(std::f64::consts::LN_10).into_handle(self));
+            math_obj.set_property("LN2".into(), self.create_js_value(std::f64::consts::LN_2).into_handle(self));
+            math_obj.set_property("LOG10E".into(), self.create_js_value(std::f64::consts::LOG10_E).into_handle(self));
+            math_obj.set_property("LOG2E".into(), self.create_js_value(std::f64::consts::LOG2_E).into_handle(self));
+            math_obj.set_property("SQRT2".into(),self.create_js_value(std::f64::consts::SQRT_2).into_handle(self));
+            global.set_property("Math".into(), math_obj.into_handle(self));
         }
 
         {
             let mut json_obj = self.create_object();
-            json_obj.set_property("parse", Handle::clone(&self.statics.json_parse));
-            json_obj.set_property("stringify", Handle::clone(&self.statics.json_stringify));
-            global.set_property("JSON", json_obj.into_handle(self));
+            json_obj.set_property("parse".into(), Handle::clone(&self.statics.json_parse));
+            json_obj.set_property("stringify".into(), Handle::clone(&self.statics.json_stringify));
+            global.set_property("JSON".into(), json_obj.into_handle(self));
         }
 
         {
             let mut console_obj = self.create_object();
-            console_obj.set_property("log", Handle::clone(&self.statics.console_log));
-            global.set_property("console", console_obj.into_handle(self));
+            console_obj.set_property("log".into(), Handle::clone(&self.statics.console_log));
+            global.set_property("console".into(), console_obj.into_handle(self));
         }
 
-        global.set_property("Error", self.statics.error_ctor.clone());
-        global.set_property("Boolean", self.statics.boolean_ctor.clone());
-        global.set_property("Number", self.statics.number_ctor.clone());
-        global.set_property("String", self.statics.string_ctor.clone());
-        global.set_property("Function", self.statics.function_ctor.clone());
-        global.set_property("Array", self.statics.array_ctor.clone());
-        global.set_property("WeakSet", self.statics.weakset_ctor.clone());
-        global.set_property("WeakMap", self.statics.weakmap_ctor.clone());
-        global.set_property("Promise", self.statics.promise_ctor.clone());
+        global.set_property("Error".into(), self.statics.error_ctor.clone());
+        global.set_property("Boolean".into(), self.statics.boolean_ctor.clone());
+        global.set_property("Number".into(), self.statics.number_ctor.clone());
+        global.set_property("String".into(), self.statics.string_ctor.clone());
+        global.set_property("Function".into(), self.statics.function_ctor.clone());
+        global.set_property("Array".into(), self.statics.array_ctor.clone());
+        global.set_property("WeakSet".into(), self.statics.weakset_ctor.clone());
+        global.set_property("WeakMap".into(), self.statics.weakmap_ctor.clone());
+        global.set_property("Promise".into(), self.statics.promise_ctor.clone());
     }
 
     fn unwind(&mut self, value: Handle<Value>, fp: usize) -> Result<(), Handle<Value>> {

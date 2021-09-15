@@ -106,7 +106,7 @@ impl<'a> Value<'a> {
                 for (key, value) in obj {
                     let key = std::str::from_utf8(key)?;
                     js_obj.set_property(
-                        String::from(key).into_boxed_str(),
+                        String::from(key).into(),
                         value.into_js_value(vm)?.into_handle(vm),
                     );
                 }

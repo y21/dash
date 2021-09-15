@@ -1,5 +1,6 @@
 use core::fmt::Debug;
 use std::{
+    borrow::Cow,
     cell::RefCell,
     collections::HashMap,
     hash::{Hash, Hasher},
@@ -48,6 +49,54 @@ impl<T> PartialEq for HashRc<T> {
 }
 impl<T> Eq for HashRc<T> {}
 
+/// A property key
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum PropertyKey<'a> {
+    /// String
+    String(Cow<'a, str>),
+    /// Symbol
+    Symbol(Handle<Value>),
+}
+
+impl<'a> PropertyKey<'a> {
+    /// Returns the inner string of this property, if it is a string
+    pub fn as_str(&self) -> Option<&Cow<'a, str>> {
+        match self {
+            PropertyKey::String(s) => Some(s),
+            PropertyKey::Symbol(_) => None,
+        }
+    }
+
+    /// Inspects this property key
+    pub fn inspect(&self, depth: u32) -> String {
+        match self {
+            PropertyKey::String(s) => s.to_string(),
+            PropertyKey::Symbol(s) => {
+                let s = unsafe { s.borrow_unbounded() };
+                s.inspect(depth).to_string()
+            }
+        }
+    }
+}
+
+impl From<String> for PropertyKey<'_> {
+    fn from(s: String) -> Self {
+        Self::String(Cow::Owned(s))
+    }
+}
+
+impl<'a> From<&'a str> for PropertyKey<'a> {
+    fn from(s: &'a str) -> Self {
+        Self::String(Cow::Borrowed(s))
+    }
+}
+
+impl From<Handle<Value>> for PropertyKey<'_> {
+    fn from(h: Handle<Value>) -> Self {
+        Self::Symbol(h)
+    }
+}
+
 impl<T> Hash for HashWeak<T> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         Weak::as_ptr(&self.0).hash(state)
@@ -66,7 +115,7 @@ pub struct Value {
     /// The type of value
     pub kind: ValueKind,
     /// The fields of this value
-    pub fields: HashMap<Box<str>, Handle<Value>>,
+    pub fields: HashMap<PropertyKey<'static>, Handle<Value>>,
     /// [[Prototype]] of this value
     pub proto: Option<Handle<Value>>,
     /// Constructor of this value
@@ -248,13 +297,13 @@ impl Value {
     }
 
     /// Looks up a field directly
-    pub fn get_field(&self, key: &str) -> Option<&Handle<Value>> {
-        self.fields.get(key)
+    pub fn get_field(&self, key: PropertyKey<'_>) -> Option<Handle<Value>> {
+        self.fields.get(&key).cloned()
     }
 
     /// Checks whether this value (or one of the values in its prototype chain) contains a field
-    pub fn has_property(&self, vm: &VM, key: &str) -> bool {
-        if self.fields.contains_key(key) {
+    pub fn has_property(&self, vm: &VM, key: PropertyKey<'_>) -> bool {
+        if self.fields.contains_key(&key) {
             return true;
         }
 
@@ -272,26 +321,26 @@ impl Value {
     pub fn get_property(
         vm: &VM,
         value_cell: &Handle<Value>,
-        key: &str,
+        key: &PropertyKey<'_>,
         override_this: Option<&Handle<Value>>,
     ) -> Option<Handle<Value>> {
         let value = unsafe { value_cell.borrow_unbounded() };
 
-        match key {
-            "__proto__" => {
+        match key.as_str().map(|x| x.as_ref()) {
+            Some("__proto__") => {
                 return Some(
                     value
                         .strong_proto()
                         .unwrap_or_else(|| Value::new(ValueKind::Null).into_handle(vm)),
                 )
             }
-            "constructor" => return value.strong_constructor(),
-            "prototype" => {
+            Some("constructor") => return value.strong_constructor(),
+            Some("prototype") => {
                 if let Some(func) = value.as_function() {
                     return func.prototype().cloned();
                 }
             }
-            "length" => {
+            Some("length") => {
                 match value.as_object() {
                     Some(Object::Exotic(ExoticObject::Array(a))) => {
                         return Some(vm.create_js_value(a.elements.len() as f64).into_handle(vm))
@@ -302,13 +351,14 @@ impl Value {
                     _ => {}
                 };
             }
-            _ => {
+            Some(key) => {
                 if let Ok(idx) = key.parse::<usize>() {
                     if let Some(a) = value.as_object().and_then(Object::as_array) {
                         return a.elements.get(idx).cloned();
                     }
                 }
             }
+            _ => {}
         };
 
         if !value.fields.is_empty() {
@@ -344,8 +394,8 @@ impl Value {
     }
 
     /// Adds a field
-    pub fn set_property(&mut self, k: impl Into<Box<str>>, v: Handle<Value>) {
-        self.fields.insert(k.into(), v);
+    pub fn set_property(&mut self, k: PropertyKey<'static>, v: Handle<Value>) {
+        self.fields.insert(k, v);
     }
 
     pub(crate) fn mark(this: &Handle<Value>) {

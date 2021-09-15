@@ -70,7 +70,7 @@ impl Agent for RuntimeAgent {
                     None,
                     dash::vm::value::function::Constructor::NoCtor,
                 ));
-                obj.set_property("readFile", gc.register(read_file));
+                obj.set_property("readFile".into(), gc.register(read_file));
 
                 Some(ImportResult::Value(obj))
             }
@@ -83,7 +83,7 @@ impl Agent for RuntimeAgent {
                     None,
                     dash::vm::value::function::Constructor::NoCtor,
                 ));
-                obj.set_property("addressOf", gc.register(address_of));
+                obj.set_property("addressOf".into(), gc.register(address_of));
 
                 Some(ImportResult::Value(obj))
             }
