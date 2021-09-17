@@ -15,10 +15,8 @@ pub enum Statement<'a> {
     Block(BlockStatement<'a>),
     /// Function declaration
     Function(FunctionDeclaration<'a>),
-    /// While loop
-    While(WhileLoop<'a>),
-    /// For loop
-    For(ForLoop<'a>),
+    /// Any loop
+    Loop(Loop<'a>),
     /// Return statement
     Return(ReturnStatement<'a>),
     /// Try catch block
@@ -142,6 +140,40 @@ impl<'a> TryCatch<'a> {
 /// A return statement
 #[derive(Debug, Clone)]
 pub struct ReturnStatement<'a>(pub Expr<'a>);
+
+/// A loop statement
+#[derive(Debug, Clone)]
+pub enum Loop<'a> {
+    /// A for loop
+    For(ForLoop<'a>),
+    /// A for..of loop
+    ForOf(ForOfLoop<'a>),
+    /// A while loop
+    While(WhileLoop<'a>),
+}
+
+impl<'a> From<ForLoop<'a>> for Loop<'a> {
+    fn from(f: ForLoop<'a>) -> Self {
+        Self::For(f)
+    }
+}
+
+impl<'a> From<WhileLoop<'a>> for Loop<'a> {
+    fn from(f: WhileLoop<'a>) -> Self {
+        Self::While(f)
+    }
+}
+
+/// A for..of loop
+#[derive(Debug, Clone)]
+pub struct ForOfLoop<'a> {
+    /// The binding of this loop
+    pub binding: VariableBinding<'a>,
+    /// The expression to iterate over
+    pub expr: Expr<'a>,
+    /// The body of this loop
+    pub body: Box<Statement<'a>>,
+}
 
 /// A for loop
 #[derive(Debug, Clone)]
@@ -294,20 +326,27 @@ impl From<TokenType> for VariableDeclarationKind {
     }
 }
 
-/// A variable declaration
+/// A variable binding
 #[derive(Debug, Clone)]
-pub struct VariableDeclaration<'a> {
+pub struct VariableBinding<'a> {
     /// The name/identifier of this variable
     pub name: &'a [u8],
     /// The type of this variable
     pub kind: VariableDeclarationKind,
+}
+
+/// A variable declaration
+#[derive(Debug, Clone)]
+pub struct VariableDeclaration<'a> {
+    /// Variable bindings
+    pub binding: VariableBinding<'a>,
     /// The value of this variable, if it was initialized
     pub value: Option<Expr<'a>>,
 }
 
 impl<'a> VariableDeclaration<'a> {
     /// Creates a new variable declaration
-    pub fn new(name: &'a [u8], kind: VariableDeclarationKind, value: Option<Expr<'a>>) -> Self {
-        Self { name, kind, value }
+    pub fn new(binding: VariableBinding<'a>, value: Option<Expr<'a>>) -> Self {
+        Self { binding, value }
     }
 }

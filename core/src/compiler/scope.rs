@@ -1,25 +1,65 @@
-use crate::{parser::statement::VariableDeclarationKind, vm::stack::OwnedStack};
+use crate::{
+    parser::statement::{VariableBinding, VariableDeclarationKind},
+    vm::stack::OwnedStack,
+};
+
+/// A local binding
+#[derive(Debug)]
+pub enum LocalBinding<'a> {
+    /// An unnamed binding, usually used for reserving stack space by the VM
+    Unnamed,
+    /// A named binding (variables, functions)
+    Named {
+        /// The identifier
+        ident: &'a [u8],
+        /// The type of the variable
+        kind: VariableDeclarationKind,
+    },
+}
+
+impl<'a> LocalBinding<'a> {
+    /// Attempts to return a reference to the identifier
+    pub fn ident(&self) -> Option<&'a [u8]> {
+        match self {
+            Self::Named { ident, .. } => Some(ident),
+            _ => None,
+        }
+    }
+}
+
+impl<'a> From<VariableBinding<'a>> for LocalBinding<'a> {
+    fn from(b: VariableBinding<'a>) -> Self {
+        Self::Named {
+            ident: b.name,
+            kind: b.kind,
+        }
+    }
+}
 
 /// A variable declaration.
 #[derive(Debug)]
 pub struct Local<'a> {
-    /// Identifier
-    pub ident: &'a [u8],
-    /// Depth of this declaration
+    /// The depth of this local
     pub depth: u16,
-    /// Variable kind
-    pub kind: VariableDeclarationKind,
+    /// The binding of this local
+    pub binding: LocalBinding<'a>,
 }
 
 impl<'a> Local<'a> {
     /// Creates a new variable
-    pub fn new(ident: &'a [u8], depth: u16, kind: VariableDeclarationKind) -> Self {
-        Self { ident, depth, kind }
+    pub fn new(depth: u16, binding: LocalBinding<'a>) -> Self {
+        Self { depth, binding }
     }
 
     /// Checks whether this variable is a `const` and can't be assigned to
     pub fn read_only(&self) -> bool {
-        matches!(self.kind, VariableDeclarationKind::Const)
+        matches!(
+            self.binding,
+            LocalBinding::Named {
+                kind: VariableDeclarationKind::Const,
+                ..
+            }
+        )
     }
 }
 
@@ -35,9 +75,8 @@ impl<'a, const N: usize> ScopeGuard<Local<'a>, N> {
     /// Tries to find a variable
     pub fn find_variable(&self, name: &'a [u8]) -> Option<(usize, &Local)> {
         let depth = self.depth;
-        self.locals.find(|local| {
-            local.depth <= depth && local.ident.len() == name.len() && local.ident.eq(name)
-        })
+        self.locals
+            .find(|local| local.depth <= depth && local.binding.ident() == Some(name))
     }
 
     /// Stores a variable declaration

@@ -1,12 +1,12 @@
-use crate::parser::expr::LiteralExpr;
+use crate::parser::{expr::LiteralExpr, statement::ForOfLoop};
 
 use super::{
     expr::{Expr, UnaryExpr},
     lexer::{self, Lexer},
     statement::{
         BlockStatement, Catch, ExportKind, ForLoop, FunctionDeclaration, FunctionKind, IfStatement,
-        ImportKind, ReturnStatement, SpecifierKind, Statement, TryCatch, VariableDeclaration,
-        VariableDeclarationKind, WhileLoop,
+        ImportKind, Loop, ReturnStatement, SpecifierKind, Statement, TryCatch, VariableBinding,
+        VariableDeclaration, VariableDeclarationKind, WhileLoop,
     },
     token::{Error, ErrorKind, Token, TokenType, ASSIGNMENT_TYPES, VARIABLE_TYPES},
 };
@@ -76,11 +76,11 @@ impl<'a> Parser<'a> {
             TokenType::If => self.if_statement(true).map(Statement::If),
             TokenType::Function => self.function().map(Statement::Function),
             TokenType::LeftBrace => self.block().map(Statement::Block),
-            TokenType::While => self.while_loop().map(Statement::While),
+            TokenType::While => self.while_loop().map(Statement::Loop),
             TokenType::Try => self.try_block().map(Statement::Try),
             TokenType::Throw => self.throw().map(Statement::Throw),
             TokenType::Return => self.return_statement().map(Statement::Return),
-            TokenType::For => self.for_loop().map(Statement::For),
+            TokenType::For => self.for_loop().map(Statement::Loop),
             TokenType::Import => self.import().map(Statement::Import),
             TokenType::Export => self.export().map(Statement::Export),
             TokenType::Continue => Some(Statement::Continue),
@@ -198,13 +198,42 @@ impl<'a> Parser<'a> {
         Some(ReturnStatement(expr))
     }
 
-    fn for_loop(&mut self) -> Option<ForLoop<'a>> {
+    fn for_loop(&mut self) -> Option<Loop<'a>> {
         self.expect_and_skip(&[TokenType::LeftParen], true);
 
         let init = if self.expect_and_skip(&[TokenType::Semicolon], false) {
             None
         } else {
-            self.statement()
+            let is_binding = self.expect_and_skip(VARIABLE_TYPES, false);
+
+            if is_binding {
+                let binding = self.variable_binding()?;
+                let is_of = self.expect_and_skip(&[TokenType::Of], false);
+
+                if is_of {
+                    let expr = self.expression()?;
+
+                    self.expect_and_skip(&[TokenType::RightParen], true);
+
+                    let body = Box::new(self.statement()?);
+
+                    return Some(Loop::ForOf(ForOfLoop {
+                        binding,
+                        expr,
+                        body,
+                    }));
+                } else {
+                    let value = self.variable_value();
+
+                    self.expect_and_skip(&[TokenType::Semicolon], false);
+
+                    Some(Statement::Variable(VariableDeclaration::new(
+                        binding, value,
+                    )))
+                }
+            } else {
+                self.statement()
+            }
         };
 
         let cond = if self.expect_and_skip(&[TokenType::Semicolon], false) {
@@ -225,10 +254,10 @@ impl<'a> Parser<'a> {
 
         let body = self.statement()?;
 
-        Some(ForLoop::new(init, cond, finalizer, body))
+        Some(ForLoop::new(init, cond, finalizer, body).into())
     }
 
-    fn while_loop(&mut self) -> Option<WhileLoop<'a>> {
+    fn while_loop(&mut self) -> Option<Loop<'a>> {
         if !self.expect_and_skip(&[TokenType::LeftParen], true) {
             return None;
         }
@@ -241,7 +270,7 @@ impl<'a> Parser<'a> {
 
         let body = self.statement()?;
 
-        Some(WhileLoop::new(condition, body))
+        Some(WhileLoop::new(condition, body).into())
     }
 
     fn function(&mut self) -> Option<FunctionDeclaration<'a>> {
@@ -307,21 +336,31 @@ impl<'a> Parser<'a> {
         Some(BlockStatement(stmts))
     }
 
-    fn variable(&mut self) -> Option<VariableDeclaration<'a>> {
+    fn variable_binding(&mut self) -> Option<VariableBinding<'a>> {
         let kind: VariableDeclarationKind = self.previous()?.ty.into();
 
         let name = self.next()?.full;
 
+        Some(VariableBinding { kind, name })
+    }
+
+    fn variable_value(&mut self) -> Option<Expr<'a>> {
         // If the next char is `=`, we assume this declaration has a value
         let has_value = self.expect_and_skip(&[TokenType::Assignment], false);
 
         if !has_value {
-            return Some(VariableDeclaration::new(name, kind, None));
+            return None;
         }
 
-        let value = self.expression()?;
+        self.expression()
+    }
 
-        return Some(VariableDeclaration::new(name, kind, Some(value)));
+    fn variable(&mut self) -> Option<VariableDeclaration<'a>> {
+        let binding = self.variable_binding()?;
+
+        let value = self.variable_value();
+
+        Some(VariableDeclaration::new(binding, value))
     }
 
     fn if_statement(&mut self, parse_else: bool) -> Option<IfStatement<'a>> {

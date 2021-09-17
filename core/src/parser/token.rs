@@ -203,6 +203,8 @@ pub enum TokenType {
     Default,
     /// Debugger keyword: debugger
     Debugger,
+    /// Of keyword
+    Of,
     /// Arrow: =>
     ///
     /// Used for arrow functions
@@ -266,6 +268,7 @@ impl From<&[u8]> for TokenType {
             b"export" => Self::Export,
             b"default" => Self::Default,
             b"debugger" => Self::Debugger,
+            b"of" => Self::Of,
             _ => Self::Identifier,
         }
     }

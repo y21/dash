@@ -1,5 +1,5 @@
 // This file is cursed. You've been warned
-use super::instruction::Instruction;
+use super::{instruction::Instruction, scope::LocalBinding};
 use crate::{
     agent::{Agent, ImportResult},
     compiler::instruction::to_vm_instructions,
@@ -12,10 +12,10 @@ use crate::{
         lexer,
         parser::Parser,
         statement::{
-            BlockStatement, ExportKind, ForLoop, FunctionDeclaration,
+            BlockStatement, ExportKind, ForLoop, ForOfLoop, FunctionDeclaration,
             FunctionKind as ParserFunctionKind, IfStatement, ImportKind, ReturnStatement,
-            SpecifierKind, Statement, TryCatch, VariableDeclaration, VariableDeclarationKind,
-            WhileLoop,
+            SpecifierKind, Statement, TryCatch, VariableBinding, VariableDeclaration,
+            VariableDeclarationKind, WhileLoop,
         },
         token::{self, TokenType},
     },
@@ -310,7 +310,7 @@ impl<'a, A: Agent> Compiler<'a, A> {
 
         let stack_idx = self
             .scope
-            .push_local(Local::new(var.name, self.scope.depth, var.kind));
+            .push_local(Local::new(self.scope.depth, var.binding.clone().into()));
 
         if has_value {
             instructions.push(Instruction::Op(op_with_value));
@@ -667,7 +667,13 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         let mut scope = ScopeGuard::new();
         scope.enter_scope();
         for argument in &f.arguments {
-            scope.push_local(Local::new(argument, 0, VariableDeclarationKind::Var));
+            scope.push_local(Local::new(
+                0,
+                LocalBinding::Named {
+                    ident: argument,
+                    kind: VariableDeclarationKind::Const,
+                },
+            ));
         }
 
         let ty: FunctionKind = f.ty.into();
@@ -745,9 +751,11 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
             )));
         } else {
             let stack_idx = self.scope.push_local(Local::new(
-                f.name.unwrap(),
                 self.scope.depth,
-                VariableDeclarationKind::Var,
+                LocalBinding::Named {
+                    ident: f.name.unwrap(),
+                    kind: VariableDeclarationKind::Var,
+                },
             ));
             instructions.push(Instruction::Op(Opcode::SetLocal));
             instructions.push(Instruction::Operand(
@@ -981,9 +989,11 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
 
         if let Some(ident) = t.catch.ident {
             let stack_idx = self.scope.push_local(Local::new(
-                ident,
                 self.scope.depth,
-                VariableDeclarationKind::Var,
+                LocalBinding::Named {
+                    ident,
+                    kind: VariableDeclarationKind::Var,
+                },
             ));
 
             let catch_stack_idx_instruction = &mut instructions[3];
@@ -1018,6 +1028,14 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         let mut instructions = self.accept_expr(e)?;
         instructions.push(Instruction::Op(Opcode::Throw));
         Ok(instructions)
+    }
+
+    fn visit_for_of_loop(
+        &mut self,
+        f: &ForOfLoop<'a>,
+    ) -> Result<Vec<Instruction>, CompileError<'a>> {
+        let data = self.accept_expr(&f.expr)?;
+        Ok(data)
     }
 
     fn visit_for_loop(&mut self, f: &ForLoop<'a>) -> Result<Vec<Instruction>, CompileError<'a>> {
@@ -1156,8 +1174,10 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
 
         let instructions = self.compile_variable_declaration(
             &VariableDeclaration::new(
-                i.get_specifier().and_then(SpecifierKind::as_ident).unwrap(),
-                VariableDeclarationKind::Var,
+                VariableBinding {
+                    name: i.get_specifier().and_then(SpecifierKind::as_ident).unwrap(),
+                    kind: VariableDeclarationKind::Var,
+                },
                 None,
             ),
             instructions,

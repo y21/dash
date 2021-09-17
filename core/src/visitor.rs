@@ -4,8 +4,8 @@ use crate::parser::{
         GroupingExpr, LiteralExpr, ObjectLiteral, Postfix, PropertyAccessExpr, Seq, UnaryExpr,
     },
     statement::{
-        BlockStatement, ExportKind, ForLoop, FunctionDeclaration, IfStatement, ImportKind,
-        ReturnStatement, Statement, TryCatch, VariableDeclaration, WhileLoop,
+        BlockStatement, ExportKind, ForLoop, ForOfLoop, FunctionDeclaration, IfStatement,
+        ImportKind, Loop, ReturnStatement, Statement, TryCatch, VariableDeclaration, WhileLoop,
     },
 };
 
@@ -19,11 +19,12 @@ pub trait Visitor<'a, V> {
             Statement::If(i) => self.visit_if_statement(i),
             Statement::Block(b) => self.visit_block_statement(b),
             Statement::Function(f) => self.visit_function_declaration(f),
-            Statement::While(l) => self.visit_while_loop(l),
+            Statement::Loop(Loop::For(f)) => self.visit_for_loop(f),
+            Statement::Loop(Loop::While(w)) => self.visit_while_loop(w),
+            Statement::Loop(Loop::ForOf(f)) => self.visit_for_of_loop(f),
             Statement::Return(r) => self.visit_return_statement(r),
             Statement::Try(t) => self.visit_try_catch(t),
             Statement::Throw(t) => self.visit_throw(t),
-            Statement::For(f) => self.visit_for_loop(f),
             Statement::Import(i) => self.visit_import_statement(i),
             Statement::Export(e) => self.visit_export_statement(e),
             Statement::Continue => self.visit_continue(),
@@ -125,6 +126,9 @@ pub trait Visitor<'a, V> {
 
     /// Visits a for loop
     fn visit_for_loop(&mut self, f: &ForLoop<'a>) -> V;
+
+    /// Visits a for..of loop
+    fn visit_for_of_loop(&mut self, f: &ForOfLoop<'a>) -> V;
 
     /// Visits an import statement
     fn visit_import_statement(&mut self, i: &ImportKind<'a>) -> V;
