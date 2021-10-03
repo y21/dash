@@ -22,7 +22,7 @@ impl DispatchResult {
 }
 
 mod handlers {
-    use std::{borrow::Borrow, collections::HashMap};
+    use std::collections::HashMap;
 
     use crate::{
         gc::Handle,

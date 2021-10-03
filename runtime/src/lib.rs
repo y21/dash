@@ -19,11 +19,15 @@ pub mod agent_flags {
     pub const FS_CACHE: u32 = 1 << 1;
     pub const MEM: u32 = 1 << 2;
 }
-pub struct RuntimeAgent(u32);
+pub struct RuntimeAgent {
+    flags: u32,
+    #[cfg(feature = "random")]
+    local_rng: rand::rngs::ThreadRng,
+}
 
 impl RuntimeAgent {
     fn has_flag(&self, flag: u32) -> bool {
-        (self.0 & flag) == flag
+        (self.flags & flag) == flag
     }
     fn allow_fs(&self) -> bool {
         self.has_flag(agent_flags::FS)
@@ -57,7 +61,15 @@ fn mem_address_of(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 
 impl Agent for RuntimeAgent {
     fn random(&mut self) -> Option<f64> {
-        None
+        #[cfg(feature = "random")]
+        {
+            use rand::Rng;
+            Some(self.local_rng.gen())
+        }
+        #[cfg(not(feature = "random"))]
+        {
+            None
+        }
     }
     fn import(&mut self, module_name: &[u8], gc: &mut Gc<Value>) -> Option<ImportResult> {
         match module_name {
@@ -115,5 +127,9 @@ impl Agent for RuntimeAgent {
 }
 
 pub fn agent(flags: u32) -> RuntimeAgent {
-    RuntimeAgent(flags)
+    RuntimeAgent {
+        flags,
+        #[cfg(feature = "random")]
+        local_rng: rand::thread_rng(),
+    }
 }
