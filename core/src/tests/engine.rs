@@ -36,6 +36,22 @@ pub fn recursion() {
 }
 
 #[test]
+pub fn function_call() {
+    assert_eval_num!(
+        eval::<()>(
+            r#"
+        function x() {
+            return 1;
+        }
+        x();
+    "#,
+            None
+        ),
+        1
+    );
+}
+
+#[test]
 pub fn tree() {
     // Taken from https://github.com/boa-dev/boa/issues/1183 and modified a bit
     // This caught a strange bug that used to exist in this engine
@@ -257,6 +273,38 @@ pub fn generator() {
         None,
     )
     .unwrap();
+}
+
+#[test]
+pub fn for_of_generator() {
+    let (_, vm) = eval::<()>(
+        r#"
+        function assert(l, r) {
+            if (l !== r) {
+                throw new Error("FAIL");
+            }
+        }
+
+        function* counter() {
+            let i = 0;
+            while(i < 5) yield i++;
+        }
+
+        let x = [];
+        for (const num of counter()) x.push(num);
+
+        assert(x[0], 0);
+        assert(x[1], 1);
+        assert(x[2], 2);
+        assert(x[3], 3);
+        assert(x[4], 4);
+        assert(x.length, 5);
+    "#,
+        None,
+    )
+    .unwrap();
+
+    assert!(vm.stack.is_empty());
 }
 
 #[test]

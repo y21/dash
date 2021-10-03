@@ -23,7 +23,7 @@ struct Args {
 }
 
 fn create_agent() -> impl Agent {
-    runtime::agent(runtime::agent_flags::FS)
+    runtime::agent(runtime::agent_flags::FS | runtime::agent_flags::MEM)
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

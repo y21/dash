@@ -22,7 +22,7 @@ impl DispatchResult {
 }
 
 mod handlers {
-    use std::collections::HashMap;
+    use std::{borrow::Borrow, collections::HashMap};
 
     use crate::{
         gc::Handle,
@@ -951,6 +951,21 @@ mod handlers {
     pub fn debugger(vm: &mut VM) {
         vm.agent.debugger();
     }
+
+    pub fn get_symbol_iterator(vm: &mut VM) {
+        let value = vm.stack.pop();
+        let iterable = Value::unwrap_or_undefined(
+            Value::get_property(
+                vm,
+                &value,
+                &PropertyKey::Symbol(Handle::clone(&vm.statics.symbol_iterator)),
+                None,
+            ),
+            vm,
+        );
+
+        vm.stack.push(iterable);
+    }
 }
 
 /// Handles an instruction
@@ -1044,6 +1059,7 @@ pub fn handle(
         Opcode::In => handlers::in_(vm)?,
         Opcode::Instanceof => handlers::instanceof(vm),
         Opcode::Debugger => handlers::debugger(vm),
+        Opcode::GetSymbolIterator => handlers::get_symbol_iterator(vm),
 
         _ => unimplemented!("{:?}", opcode),
     }

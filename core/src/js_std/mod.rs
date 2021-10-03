@@ -1,3 +1,8 @@
+use crate::{
+    gc::Handle,
+    vm::value::{function::CallContext, Value},
+};
+
 /// Implements `Array`
 pub mod array;
 /// Implements `Boolean`
@@ -30,3 +35,10 @@ pub mod symbol;
 pub mod weakmap;
 /// Implements `WeakSet`
 pub mod weakset;
+
+/// The identify function
+///
+/// Returns its `this` value
+pub fn identity(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    Ok(Value::unwrap_or_undefined(ctx.receiver, ctx.vm))
+}

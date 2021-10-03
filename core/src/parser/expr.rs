@@ -1,6 +1,9 @@
-use crate::vm::value::{
-    object::{ExoticObject, Object},
-    Value, ValueKind,
+use crate::{
+    compiler::instruction::Instruction,
+    vm::value::{
+        object::{ExoticObject, Object},
+        Value, ValueKind,
+    },
 };
 
 use super::{statement::FunctionDeclaration, token::TokenType};
@@ -45,6 +48,10 @@ pub enum Expr<'a> {
     Array(ArrayLiteral<'a>),
     /// An object literal expression
     Object(ObjectLiteral<'a>),
+    /// A compiled expression
+    Compiled(Vec<Instruction>),
+    /// An empty expression
+    Empty,
 }
 
 impl<'a> Expr<'a> {

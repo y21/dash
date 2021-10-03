@@ -239,6 +239,11 @@ pub struct Statics {
     pub symbol_to_string_tag: Handle<Value>,
     /// Represents Symbol.unscopables
     pub symbol_unscopables: Handle<Value>,
+    /// Represents the identity function
+    ///
+    /// It is used for functions that return its `this` argument
+    /// For example GeneratorIterator[Symbol.iterator]
+    pub identity: Handle<Value>,
 }
 
 macro_rules! register_glob_method {
@@ -425,6 +430,8 @@ impl Statics {
             symbol_to_primitive: register_symbol(gc, "toPrimitive"),
             symbol_to_string_tag: register_symbol(gc, "toStringTag"),
             symbol_unscopables: register_symbol(gc, "unscopables"),
+            // Other
+            identity: register_glob_method!(gc, "identity", js_std::identity),
         }
     }
 }

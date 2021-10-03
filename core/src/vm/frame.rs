@@ -68,6 +68,10 @@ impl Frame {
 
     pub(crate) fn mark_visited(&self) {
         Value::mark(&self.func);
+
+        if let Some(iterator) = &self.iterator_caller {
+            Value::mark(iterator);
+        }
     }
 }
 

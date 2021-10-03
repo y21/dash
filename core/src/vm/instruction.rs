@@ -189,6 +189,8 @@ pub enum Opcode {
     In,
     /// `instanceof` keyword
     Instanceof,
+    /// Attempts to look up @@iterator on th last value on the stack
+    GetSymbolIterator,
     /// Invokes the debugger, if present
     Debugger,
 }

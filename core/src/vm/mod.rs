@@ -265,6 +265,13 @@ impl VM {
         self.stack.mark_visited();
         self.frames.mark_visited();
         self.async_frames.mark_visited();
+
+        // Generator iterator prototype is referenced nowhere else,
+        // so we must mark it explicitly here
+        // TODO: this is incorrect behavior
+        // (function*(){}).constructor !== Function
+        // GeneratorFunction.prototype should point to generator_iterator_proto
+        Value::mark(&self.statics.generator_iterator_proto);
     }
 
     /// Performs a GC cycle
@@ -437,6 +444,10 @@ impl VM {
         {
             let mut o = unsafe { self.statics.generator_iterator_proto.borrow_mut_unbounded() };
             o.detect_internal_properties(self);
+            o.set_property(
+                Handle::clone(&self.statics.symbol_iterator).into(),
+                Handle::clone(&self.statics.identity)
+            );
             o.set_property("next".into(), Handle::clone(&self.statics.generator_iterator_next));
             o.set_property("return".into(), Handle::clone(&self.statics.generator_iterator_return));
         }

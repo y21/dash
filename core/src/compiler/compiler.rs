@@ -203,6 +203,11 @@ impl<'a, A: Agent> Compiler<'a, A> {
         }
     }
 
+    fn add_local(&mut self, local: Local<'a>) -> u8 {
+        let idx = self.scope.push_local(local);
+        self.add_constant(Constant::Index(idx))
+    }
+
     /// Adds a constant and returns its index
     fn add_constant(&mut self, constant: Constant) -> u8 {
         self.constants.add(constant)
@@ -299,18 +304,22 @@ impl<'a, A: Agent> Compiler<'a, A> {
 
     fn compile_variable_declaration(
         &mut self,
-        var: &VariableDeclaration<'a>,
+        var: Option<&VariableDeclaration<'a>>,
         value: Vec<Instruction>,
-    ) -> Result<Vec<Instruction>, CompileError<'a>> {
-        let has_value = !value.is_empty() || var.value.is_some();
+    ) -> Result<(Vec<Instruction>, u8), CompileError<'a>> {
+        let has_value = !value.is_empty() || var.map(|x| x.value.is_some()).unwrap_or_default();
 
         let mut instructions = value;
 
         let (op_with_value, op_no_value) = (Opcode::SetLocal, Opcode::SetLocalNoValue);
 
-        let stack_idx = self
-            .scope
-            .push_local(Local::new(self.scope.depth, var.binding.clone().into()));
+        let stack_idx = self.add_local(Local::new(
+            self.scope.depth,
+            match var {
+                Some(decl) => decl.binding.clone().into(),
+                None => LocalBinding::Unnamed,
+            },
+        ));
 
         if has_value {
             instructions.push(Instruction::Op(op_with_value));
@@ -318,11 +327,9 @@ impl<'a, A: Agent> Compiler<'a, A> {
             instructions.push(Instruction::Op(op_no_value));
         }
 
-        instructions.push(Instruction::Operand(
-            self.add_constant(Constant::Index(stack_idx)),
-        ));
+        instructions.push(Instruction::Operand(stack_idx));
 
-        Ok(instructions)
+        Ok((instructions, stack_idx))
     }
 }
 
@@ -560,7 +567,8 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
             Vec::new()
         };
 
-        self.compile_variable_declaration(v, value)
+        self.compile_variable_declaration(Some(v), value)
+            .map(|(buf, _)| buf)
     }
 
     fn visit_if_statement(
@@ -750,7 +758,7 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
                 Constant::Identifier(std::str::from_utf8(f.name.unwrap()).unwrap().to_owned()),
             )));
         } else {
-            let stack_idx = self.scope.push_local(Local::new(
+            let stack_idx = self.add_local(Local::new(
                 self.scope.depth,
                 LocalBinding::Named {
                     ident: f.name.unwrap(),
@@ -758,9 +766,7 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
                 },
             ));
             instructions.push(Instruction::Op(Opcode::SetLocal));
-            instructions.push(Instruction::Operand(
-                self.add_constant(Constant::Index(stack_idx)),
-            ));
+            instructions.push(Instruction::Operand(stack_idx));
         }
 
         Ok(instructions)
@@ -988,7 +994,7 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         self.scope.enter_scope();
 
         if let Some(ident) = t.catch.ident {
-            let stack_idx = self.scope.push_local(Local::new(
+            let stack_idx = self.add_local(Local::new(
                 self.scope.depth,
                 LocalBinding::Named {
                     ident,
@@ -1003,8 +1009,7 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
                 Instruction::Op(Opcode::Nop)
             ));
 
-            *catch_stack_idx_instruction =
-                Instruction::Operand(self.add_constant(Constant::Index(stack_idx)));
+            *catch_stack_idx_instruction = Instruction::Operand(stack_idx);
         }
 
         let catch = self.accept(&t.catch.body)?;
@@ -1034,7 +1039,135 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         &mut self,
         f: &ForOfLoop<'a>,
     ) -> Result<Vec<Instruction>, CompileError<'a>> {
-        let data = self.accept_expr(&f.expr)?;
+        let mut data = self.accept_expr(&f.expr)?;
+
+        fn write_unnamed_variable<'a, A: Agent>(
+            compiler: &mut Compiler<'a, A>,
+            data: &mut Vec<Instruction>,
+        ) -> Result<u8, CompileError<'a>> {
+            let (buf, idx) = compiler.compile_variable_declaration(None, Vec::new())?;
+            data.extend(buf);
+            Ok(idx)
+        }
+
+        // Stores the `next` function of the iterator
+        let iter_next_idx = write_unnamed_variable(self, &mut data)?;
+        // Stores the return value of the `next` function
+        let iter_result_idx = write_unnamed_variable(self, &mut data)?;
+        // Stores the value of the iterator
+        let iter_value_idx = {
+            let (buf, idx) = self.compile_variable_declaration(
+                Some(&VariableDeclaration {
+                    binding: f.binding.clone(),
+                    value: None,
+                }),
+                Vec::new(),
+            )?;
+            data.extend(buf);
+            idx
+        };
+
+        let mut expr = self.accept_expr(&f.expr)?;
+        expr.push(Instruction::Op(Opcode::GetSymbolIterator));
+
+        // Call @@iterator
+        let iterator = self.visit_function_call(&FunctionCall {
+            arguments: Vec::new(),
+            constructor_call: false,
+            target: Box::new(Expr::Compiled(expr)),
+        })?;
+
+        // Take the `next` property of the returned object
+        let next = self.visit_property_access_expr(&PropertyAccessExpr {
+            computed: false,
+            property: Box::new(Expr::identifier(b"next")),
+            target: Box::new(Expr::Compiled(iterator)),
+        })?;
+
+        // Assign `next` to `iter_result_idx`
+        data.extend(self.visit_assignment_expression(&AssignmentExpr {
+            left: Box::new(Expr::Compiled(vec![
+                Instruction::Op(Opcode::GetLocal),
+                Instruction::Operand(iter_next_idx),
+            ])),
+            operator: TokenType::Assignment,
+            right: Box::new(Expr::Compiled(next)),
+        })?);
+
+        // We will jump back to this point after each iteration
+        let begin_idx = data.len();
+
+        // Pop result of assignment
+        data.push(Instruction::Op(Opcode::Pop));
+
+        // Call iterator.next
+        data.extend(self.visit_function_call(&FunctionCall {
+            arguments: Vec::new(),
+            constructor_call: false,
+            target: Box::new(Expr::Compiled(vec![
+                Instruction::Op(Opcode::GetLocal),
+                Instruction::Operand(iter_next_idx),
+            ])),
+        })?);
+
+        // Store result in `iter_result_idx`
+        data.extend([
+            Instruction::Op(Opcode::SetLocal),
+            Instruction::Operand(iter_result_idx),
+        ]);
+
+        // Get `done` property
+        data.extend(self.visit_property_access_expr(&PropertyAccessExpr {
+            computed: false,
+            property: Box::new(Expr::identifier(b"done")),
+            target: Box::new(Expr::Compiled(vec![
+                Instruction::Op(Opcode::GetLocal),
+                Instruction::Operand(iter_result_idx),
+            ])),
+        })?);
+
+        // Jump to end if `done` is true
+        data.push(Instruction::Op(Opcode::ShortJmpIfTrue));
+
+        let end_jmp_idx = data.len();
+
+        // Placeholder
+        data.push(Instruction::Op(Opcode::Nop));
+
+        // ShortJmpIfTrue leaves the value on the stack
+        data.push(Instruction::Op(Opcode::Pop));
+
+        // Get `value` property
+        data.extend(self.visit_property_access_expr(&PropertyAccessExpr {
+            computed: false,
+            property: Box::new(Expr::identifier(b"value")),
+            target: Box::new(Expr::Compiled(vec![
+                Instruction::Op(Opcode::GetLocal),
+                Instruction::Operand(iter_result_idx),
+            ])),
+        })?);
+
+        // Set value of user binding
+        data.extend([
+            Instruction::Op(Opcode::SetLocal),
+            Instruction::Operand(iter_value_idx),
+        ]);
+
+        // Execute loop body
+        data.extend(self.accept(&f.body)?);
+
+        // Jump back to the beginning of the loop
+        data.extend([
+            Instruction::Op(Opcode::BackJmp),
+            Instruction::Operand(self.add_constant(Constant::Index(data.len() - begin_idx + 2))),
+        ]);
+
+        data[end_jmp_idx] =
+            Instruction::Operand(self.add_constant(Constant::Index(data.len() - end_jmp_idx - 1)));
+
+        // Pop ShortJmpIfTrue result
+        data.push(Instruction::Op(Opcode::Pop));
+
         Ok(data)
     }
 
@@ -1172,16 +1305,18 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
             self.add_constant(Constant::JsValue(handle)),
         ));
 
-        let instructions = self.compile_variable_declaration(
-            &VariableDeclaration::new(
-                VariableBinding {
-                    name: i.get_specifier().and_then(SpecifierKind::as_ident).unwrap(),
-                    kind: VariableDeclarationKind::Var,
-                },
-                None,
-            ),
-            instructions,
-        )?;
+        let instructions = self
+            .compile_variable_declaration(
+                Some(&VariableDeclaration::new(
+                    VariableBinding {
+                        name: i.get_specifier().and_then(SpecifierKind::as_ident).unwrap(),
+                        kind: VariableDeclarationKind::Var,
+                    },
+                    None,
+                )),
+                instructions,
+            )?
+            .0;
 
         Ok(instructions)
     }
@@ -1204,5 +1339,16 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
 
     fn visit_debugger(&mut self) -> Result<Vec<Instruction>, CompileError<'a>> {
         Ok(vec![Instruction::Op(Opcode::Debugger)])
+    }
+
+    fn visit_empty_expr(&mut self) -> Result<Vec<Instruction>, CompileError<'a>> {
+        Ok(Vec::new())
+    }
+
+    fn visit_compiled_expr(
+        &mut self,
+        c: &[Instruction],
+    ) -> Result<Vec<Instruction>, CompileError<'a>> {
+        Ok(c.to_owned())
     }
 }

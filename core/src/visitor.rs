@@ -1,11 +1,14 @@
-use crate::parser::{
-    expr::{
-        ArrayLiteral, AssignmentExpr, BinaryExpr, ConditionalExpr, Expr, FunctionCall,
-        GroupingExpr, LiteralExpr, ObjectLiteral, Postfix, PropertyAccessExpr, Seq, UnaryExpr,
-    },
-    statement::{
-        BlockStatement, ExportKind, ForLoop, ForOfLoop, FunctionDeclaration, IfStatement,
-        ImportKind, Loop, ReturnStatement, Statement, TryCatch, VariableDeclaration, WhileLoop,
+use crate::{
+    compiler::instruction::Instruction,
+    parser::{
+        expr::{
+            ArrayLiteral, AssignmentExpr, BinaryExpr, ConditionalExpr, Expr, FunctionCall,
+            GroupingExpr, LiteralExpr, ObjectLiteral, Postfix, PropertyAccessExpr, Seq, UnaryExpr,
+        },
+        statement::{
+            BlockStatement, ExportKind, ForLoop, ForOfLoop, FunctionDeclaration, IfStatement,
+            ImportKind, Loop, ReturnStatement, Statement, TryCatch, VariableDeclaration, WhileLoop,
+        },
     },
 };
 
@@ -50,6 +53,8 @@ pub trait Visitor<'a, V> {
             Expr::Function(e) => self.visit_function_expr(e),
             Expr::Array(e) => self.visit_array_literal(e),
             Expr::Object(e) => self.visit_object_literal(e),
+            Expr::Empty => self.visit_empty_expr(),
+            Expr::Compiled(b) => self.visit_compiled_expr(b),
         }
     }
 
@@ -144,4 +149,10 @@ pub trait Visitor<'a, V> {
 
     /// Visits a debugger statement
     fn visit_debugger(&mut self) -> V;
+
+    /// Visits an empty expression
+    fn visit_empty_expr(&mut self) -> V;
+
+    /// Visits an already compiled expression
+    fn visit_compiled_expr(&mut self, c: &[Instruction]) -> V;
 }

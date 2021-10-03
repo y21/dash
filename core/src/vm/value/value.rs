@@ -196,7 +196,7 @@ impl Value {
                 .push(Value::new(ValueKind::Undefined).into_handle(vm));
         }
 
-        match vm.execute_frame(frame, true) {
+        match vm.execute_frame(frame, false) {
             Ok(DispatchResult::Return(Some(r)) | DispatchResult::Yield(Some(r))) => Ok(r),
             Ok(_) => Ok(Value::new(ValueKind::Undefined).into_handle(vm)),
             Err(e) => Err(e.into_value()),
@@ -442,7 +442,14 @@ impl Value {
                 Object::Exotic(ExoticObject::GeneratorIterator(gen)) => gen.mark(),
                 Object::Exotic(ExoticObject::Function(f)) => f.mark(),
                 Object::Exotic(ExoticObject::Promise(_)) => todo!(),
-                _ => {}
+                Object::Exotic(ExoticObject::Custom(_)) => {
+                    panic!("Custom GC marking is unsupported")
+                }
+                Object::Exotic(ExoticObject::Weak(_)) => todo!(), // weak objects don't exist yet
+                // Other object types that do not contain handles that need to be marked
+                Object::Exotic(ExoticObject::String(_)) => {}
+                Object::Exotic(ExoticObject::Symbol(_)) => {}
+                Object::Ordinary => {}
             },
             _ => {}
         };
