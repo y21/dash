@@ -2,8 +2,7 @@
 ![Tests](https://github.com/y21/dash/actions/workflows/test.yml/badge.svg)
 ![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/y21/dash)
 
-ECMA-262 implementation in Rust.
-This includes a source code lexer, parser, bytecode compiler and VM. 
+ECMA-262 implementation in pure Rust. 
 
 [Try it in your browser](http://dash.y21_.repl.co/)
 
@@ -23,17 +22,12 @@ This is a *WIP* and **not** yet production ready. It is actively being worked on
 ### Using the CLI
 ```js
 // example.js
-function* idGenerator() {
-    let index = 0;
-    while (true) {
-        yield index++;
-    }
+function* counter() {
+    let num = 0;
+    while (true) yield num++;
 }
 
-const generator = idGenerator();
-while (true) {
-    console.log(generator.next().value);
-}
+for (const number of counter()) console.log(number);
 ```
 ```sh
 # Install Rust

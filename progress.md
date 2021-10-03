@@ -111,7 +111,7 @@ This should just act as a short "cheat sheet" for contributors, and used to see 
   - [x] export
   - [ ] for await...of
   - [ ] for...in
-  - [ ] for...of
+  - [x] for...of
   - [x] for
   - [x] function*
   - [x] function
@@ -287,7 +287,7 @@ This should just act as a short "cheat sheet" for contributors, and used to see 
     - [x] max
     - [x] min
     - [x] pow
-    - [ ] random
+    - [x] random
     - [ ] round
     - [ ] sign
     - [ ] sin
@@ -427,14 +427,14 @@ This should just act as a short "cheat sheet" for contributors, and used to see 
     - [x] @@species
     - [x] @@toPrimitive
     - [x] @@unscopables
-  - [x] WeakMap
-    - [x] delete
-    - [x] get
-    - [x] has
-    - [x] set
+  - [ ] WeakMap
+    - [ ] delete
+    - [ ] get
+    - [ ] has
+    - [ ] set
     - [ ] @@toStringTag
-  - [x] WeakSet
-    - [x] delete
-    - [x] has
-    - [x] add
+  - [ ] WeakSet
+    - [ ] delete
+    - [ ] has
+    - [ ] add
     - [ ] @@toStringTag
