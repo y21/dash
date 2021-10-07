@@ -48,6 +48,7 @@ interface Exports {
     free_vm_interpret_result: (ptr: Pointer) => void,
     free_eval_result: (ptr: Pointer) => void,
     free_vm_eval: (ptr: Pointer) => void,
+    version(): Pointer,
     __data_end: WebAssembly.Global,
     __heap_base: WebAssembly.Global,
 }
@@ -349,6 +350,16 @@ export class Engine {
         if (this.internal) return this.internal;
         throw new Error("This Engine has not been initialized yet. " +
             "Call init on this instance first and wait for its promise to resolve");
+    }
+
+    /**
+     * Returns the version of the engine
+     */
+    public getVersion() {
+        const ptr = this.getInternal().wasm.version();
+        const version = this.getInternal().readString(ptr);
+        this.getInternal().wasm.free_c_string(ptr);
+        return version;
     }
 
     /**

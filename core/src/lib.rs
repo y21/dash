@@ -11,6 +11,9 @@ use gc::Handle;
 use parser::{lexer::Error as LexError, token::Error as ParseError};
 use vm::{value::Value, FromStrError, VMError, VM};
 
+/// The version of this crate
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 /// Allows embedders to control behavior
 pub mod agent;
 /// AST to bytecode compiler
