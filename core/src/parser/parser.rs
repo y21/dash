@@ -1,12 +1,16 @@
-use crate::parser::{expr::LiteralExpr, statement::ForOfLoop};
+use crate::parser::{
+    expr::LiteralExpr,
+    statement::{ClassProperty, ForOfLoop},
+};
 
 use super::{
     expr::{Expr, UnaryExpr},
     lexer::{self, Lexer},
     statement::{
-        BlockStatement, Catch, ExportKind, ForLoop, FunctionDeclaration, FunctionKind, IfStatement,
-        ImportKind, Loop, ReturnStatement, SpecifierKind, Statement, TryCatch, VariableBinding,
-        VariableDeclaration, VariableDeclarationKind, WhileLoop,
+        BlockStatement, Catch, Class, ClassMember, ClassMemberKind, ExportKind, ForLoop,
+        FunctionDeclaration, FunctionKind, IfStatement, ImportKind, Loop, ReturnStatement,
+        SpecifierKind, Statement, TryCatch, VariableBinding, VariableDeclaration,
+        VariableDeclarationKind, WhileLoop,
     },
     token::{Error, ErrorKind, Token, TokenType, ASSIGNMENT_TYPES, VARIABLE_TYPES},
 };
@@ -83,6 +87,7 @@ impl<'a> Parser<'a> {
             TokenType::For => self.for_loop().map(Statement::Loop),
             TokenType::Import => self.import().map(Statement::Import),
             TokenType::Export => self.export().map(Statement::Export),
+            TokenType::Class => self.class().map(Statement::Class),
             TokenType::Continue => Some(Statement::Continue),
             TokenType::Break => Some(Statement::Break),
             TokenType::Debugger => Some(Statement::Debugger),
@@ -97,6 +102,79 @@ impl<'a> Parser<'a> {
         self.expect_and_skip(&[TokenType::Semicolon], false);
 
         stmt
+    }
+
+    fn class(&mut self) -> Option<Class<'a>> {
+        let name = if self.expect_and_skip(&[TokenType::Identifier], false) {
+            self.previous().map(|x| x.full)
+        } else {
+            None
+        };
+
+        let extends = if self.expect_and_skip(&[TokenType::Extends], false) {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+
+        self.expect_and_skip(&[TokenType::LeftBrace], true);
+
+        let mut members = Vec::new();
+
+        // Start parsing class members
+        while !self.expect_and_skip(&[TokenType::RightBrace], false) {
+            let is_static = self.expect_and_skip(&[TokenType::Static], false);
+            let is_private = self.expect_and_skip(&[TokenType::Hash], false);
+
+            let name = self.next()?.full;
+
+            let is_method = self.expect_and_skip(&[TokenType::LeftParen], false);
+
+            if is_method {
+                let arguments = self.argument_list()?;
+                let body = self.statement()?;
+
+                let func = FunctionDeclaration::new(
+                    Some(name),
+                    arguments,
+                    vec![body],
+                    FunctionKind::Function,
+                );
+
+                members.push(ClassMember {
+                    private: is_private,
+                    static_: is_static,
+                    kind: ClassMemberKind::Method(func),
+                });
+            } else {
+                let kind = self.next()?.ty;
+
+                let value = match kind {
+                    TokenType::Assignment => Some(self.expression()?),
+                    TokenType::Semicolon => None,
+                    _ => {
+                        // We don't know what this token is, so we assume the user left out the semicolon and meant to declare a property
+                        // For this reason we need to go back so we don't throw away the token we just read
+                        self.advance_back();
+                        None
+                    }
+                };
+
+                self.expect_and_skip(&[TokenType::Semicolon], false);
+
+                members.push(ClassMember {
+                    private: is_private,
+                    static_: is_static,
+                    kind: ClassMemberKind::Property(ClassProperty { name, value }),
+                });
+            };
+        }
+
+        Some(Class {
+            name,
+            extends,
+            members,
+        })
     }
 
     fn export(&mut self) -> Option<ExportKind<'a>> {
