@@ -6,8 +6,9 @@ use crate::{
             GroupingExpr, LiteralExpr, ObjectLiteral, Postfix, PropertyAccessExpr, Seq, UnaryExpr,
         },
         statement::{
-            BlockStatement, ExportKind, ForLoop, ForOfLoop, FunctionDeclaration, IfStatement,
-            ImportKind, Loop, ReturnStatement, Statement, TryCatch, VariableDeclaration, WhileLoop,
+            BlockStatement, Class, ExportKind, ForLoop, ForOfLoop, FunctionDeclaration,
+            IfStatement, ImportKind, Loop, ReturnStatement, Statement, TryCatch,
+            VariableDeclaration, WhileLoop,
         },
     },
 };
@@ -30,6 +31,7 @@ pub trait Visitor<'a, V> {
             Statement::Throw(t) => self.visit_throw(t),
             Statement::Import(i) => self.visit_import_statement(i),
             Statement::Export(e) => self.visit_export_statement(e),
+            Statement::Class(c) => self.visit_class_declaration(c),
             Statement::Continue => self.visit_continue(),
             Statement::Break => self.visit_break(),
             Statement::Debugger => self.visit_debugger(),
@@ -155,4 +157,7 @@ pub trait Visitor<'a, V> {
 
     /// Visits an already compiled expression
     fn visit_compiled_expr(&mut self, c: &[Instruction]) -> V;
+
+    /// Visits a class declaration
+    fn visit_class_declaration(&mut self, c: &Class<'a>) -> V;
 }
