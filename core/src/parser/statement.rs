@@ -27,6 +27,8 @@ pub enum Statement<'a> {
     Import(ImportKind<'a>),
     /// Export statement
     Export(ExportKind<'a>),
+    /// Class declaration
+    Class(Class<'a>),
     /// Continue loop statement
     Continue,
     /// Break loop statement
@@ -349,4 +351,77 @@ impl<'a> VariableDeclaration<'a> {
     pub fn new(binding: VariableBinding<'a>, value: Option<Expr<'a>>) -> Self {
         Self { binding, value }
     }
+}
+
+/// A JavaScript class
+#[derive(Debug, Clone)]
+pub struct Class<'a> {
+    /// The name of this class, if present
+    ///
+    /// Class expressions don't necessarily need to have a name
+    pub name: Option<&'a [u8]>,
+    /// The superclass of this class, if present
+    pub extends: Option<Expr<'a>>,
+    /// Members of this class
+    pub members: Vec<ClassMember<'a>>,
+}
+
+impl<'a> Class<'a> {
+    /// Returns a reference to the constructor, if present
+    pub fn constructor(&self) -> Option<&FunctionDeclaration<'a>> {
+        self.members.iter().find_map(|cm| cm.as_constructor())
+    }
+}
+
+/// A JavaScript class member
+#[derive(Debug, Clone)]
+pub struct ClassMember<'a> {
+    /// Whether this class member is declared as static
+    pub static_: bool,
+    /// Whether this class member is declared as private
+    pub private: bool,
+    /// The type of class member
+    pub kind: ClassMemberKind<'a>,
+}
+
+impl<'a> ClassMember<'a> {
+    /// Returns the inner function if this member is the constructor
+    pub fn as_constructor(&self) -> Option<&FunctionDeclaration<'a>> {
+        // Constructor cannot be private or static
+        if self.private || self.static_ {
+            return None;
+        }
+
+        match &self.kind {
+            ClassMemberKind::Method(m) if m.name == Some(b"constructor") => Some(m),
+            _ => None,
+        }
+    }
+
+    /// Returns the identifier of this class member
+    pub fn name(&self) -> &'a [u8] {
+        match &self.kind {
+            ClassMemberKind::Property(p) => p.name,
+            // Methods *always* have names, so unwrapping is OK here
+            ClassMemberKind::Method(m) => m.name.unwrap(),
+        }
+    }
+}
+
+/// The type of class member
+#[derive(Debug, Clone)]
+pub enum ClassMemberKind<'a> {
+    /// A class method
+    Method(FunctionDeclaration<'a>),
+    /// A class property
+    Property(ClassProperty<'a>),
+}
+
+/// A class property
+#[derive(Debug, Clone)]
+pub struct ClassProperty<'a> {
+    /// The name of this property
+    pub name: &'a [u8],
+    /// The default value of this property, set when its constructor is called
+    pub value: Option<Expr<'a>>,
 }
