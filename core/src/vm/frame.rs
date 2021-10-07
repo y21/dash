@@ -22,20 +22,23 @@ pub struct Frame {
     pub sp: usize,
     /// Calling generator iterator, if present
     pub iterator_caller: Option<Handle<Value>>,
+    /// Whether this execution frame is a constructor call
+    pub is_constructor: bool,
 }
 
 impl Frame {
     /// Creates a frame from bytecode and a vm
-    pub fn from_buffer<B, C>(buffer: B, constants: C, vm: &VM) -> Self
+    pub fn from_buffer<B, C>(is_constructor: bool, buffer: B, constants: C, vm: &VM) -> Self
     where
         B: Into<Box<[Instruction]>>,
         C: Into<Box<[Constant]>>,
     {
-        Self::from_buffer_with_iterator(buffer, constants, vm, None)
+        Self::from_buffer_with_iterator(is_constructor, buffer, constants, vm, None)
     }
 
     /// Creates a frame from bytecode and a vm, given a generator iterator
     pub fn from_buffer_with_iterator<B, C>(
+        is_constructor: bool,
         buffer: B,
         constants: C,
         vm: &VM,
@@ -63,6 +66,7 @@ impl Frame {
             ip: 0,
             sp,
             iterator_caller,
+            is_constructor,
         }
     }
 

@@ -425,7 +425,7 @@ mod handlers {
         let func_cell = vm.stack.pop();
         let mut func_cell_ref = unsafe { func_cell.borrow_mut_unbounded() };
         let func_cell_kind = func_cell_ref.as_function_mut().unwrap();
-        let this = func_cell_kind.construct(&func_cell);
+        let this = func_cell_kind.construct(&func_cell, vm);
         let func = match func_cell_kind {
             FunctionKind::Native(f) => {
                 if !f.ctor.constructable() {
@@ -478,6 +478,7 @@ mod handlers {
             func: Handle::clone(&func_cell),
             sp: current_sp,
             iterator_caller: None,
+            is_constructor: true,
         };
 
         vm.frames.push(frame);
@@ -543,6 +544,7 @@ mod handlers {
             ip: 0,
             sp: current_sp,
             iterator_caller: None,
+            is_constructor: false,
         };
 
         vm.frames.push(frame);
@@ -638,12 +640,15 @@ mod handlers {
         }
 
         let func_ref = unsafe { this.func.borrow_unbounded() };
-        if let Some(this) = func_ref
-            .as_function()
-            .and_then(FunctionKind::as_closure)
-            .and_then(|c| c.func.receiver.as_ref())
-        {
-            vm.stack.push(Handle::clone(this.get()));
+        if this.is_constructor {
+            let this = func_ref
+                .as_function()
+                .and_then(FunctionKind::as_closure)
+                .and_then(|c| c.func.receiver.as_ref())
+                .map(Receiver::get);
+
+            // There should always be a `this` value set if we're in a constructor call
+            vm.stack.push(Handle::clone(this.unwrap()));
         } else {
             vm.stack.push(ret.unwrap());
         }
@@ -710,7 +715,7 @@ mod handlers {
                 vm,
                 &target_cell,
                 &PropertyKey::from(property.as_str()),
-                None,
+                Some(&target_cell),
             );
             maybe_value.unwrap_or_else(|| {
                 let mut target = unsafe { target_cell.borrow_mut_unbounded() };
@@ -724,7 +729,7 @@ mod handlers {
                     vm,
                     &target_cell,
                     &PropertyKey::from(property.as_str()),
-                    None,
+                    Some(&target_cell),
                 ),
                 vm,
             )
@@ -834,7 +839,8 @@ mod handlers {
         let property_s = property.to_property_key(Handle::clone(&property_cell));
 
         let value = if is_assignment {
-            let maybe_value = Value::get_property(vm, &target_cell, &property_s, None);
+            let maybe_value =
+                Value::get_property(vm, &target_cell, &property_s, Some(&target_cell));
             maybe_value.unwrap_or_else(|| {
                 let mut target = unsafe { target_cell.borrow_mut_unbounded() };
                 let value = Value::new(ValueKind::Undefined).into_handle(vm);
@@ -842,7 +848,10 @@ mod handlers {
                 value
             })
         } else {
-            Value::unwrap_or_undefined(Value::get_property(vm, &target_cell, &property_s, None), vm)
+            Value::unwrap_or_undefined(
+                Value::get_property(vm, &target_cell, &property_s, Some(&property_cell)),
+                vm,
+            )
         };
 
         vm.stack.push(value);

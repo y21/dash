@@ -56,6 +56,7 @@ pub fn next(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
             iterator_caller: Some(Handle::clone(&this)),
             func: Handle::clone(&this_gen_iter.function),
             ip,
+            is_constructor: false,
         }
     };
 

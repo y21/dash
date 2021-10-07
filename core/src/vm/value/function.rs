@@ -213,6 +213,17 @@ impl UserFunction {
     pub fn constructable(&self) -> bool {
         self.ctor.constructable() && !matches!(self.ty, FunctionType::Generator)
     }
+
+    /// Gets the prototype of this function, or sets it
+    pub fn get_or_set_prototype(&mut self, this: &Handle<Value>, vm: &VM) -> Handle<Value> {
+        self.prototype
+            .get_or_insert_with(|| {
+                let mut o = vm.create_object();
+                o.constructor = Some(Handle::clone(this));
+                o.into_handle(vm)
+            })
+            .clone()
+    }
 }
 
 /// A native function that can be called from JavaScript code
@@ -244,6 +255,17 @@ impl NativeFunction {
             receiver,
             prototype: None,
         }
+    }
+
+    /// Gets the prototype of this function, or sets it if not yet set
+    pub fn get_or_set_prototype(&mut self, this: &Handle<Value>, vm: &VM) -> Handle<Value> {
+        self.prototype
+            .get_or_insert_with(|| {
+                let mut o = vm.create_object();
+                o.constructor = Some(Handle::clone(this));
+                o.into_handle(vm)
+            })
+            .clone()
     }
 }
 
@@ -349,11 +371,11 @@ impl FunctionKind {
     }
 
     /// Returns a [Handle] to the prototype of this function, if it has one
-    pub fn prototype(&self) -> Option<&Handle<Value>> {
+    pub fn get_or_set_prototype(&mut self, this: &Handle<Value>, vm: &VM) -> Option<Handle<Value>> {
         match self {
-            Self::Closure(c) => c.func.prototype.as_ref(),
-            Self::User(u) => u.prototype.as_ref(),
-            Self::Native(n) => n.prototype.as_ref(),
+            Self::Closure(c) => Some(c.func.get_or_set_prototype(this, vm)),
+            Self::User(u) => Some(u.get_or_set_prototype(this, vm)),
+            Self::Native(n) => Some(n.get_or_set_prototype(this, vm)),
             _ => None,
         }
     }
@@ -412,9 +434,9 @@ impl FunctionKind {
 
     /// Attempts to create an object with its [[Prototype]] set to this
     /// functions prototype
-    pub fn construct(&self, this: &Handle<Value>) -> Value {
+    pub fn construct(&mut self, this: &Handle<Value>, vm: &VM) -> Value {
         let mut o = Value::from(Object::Ordinary);
-        o.proto = self.prototype().cloned();
+        o.proto = self.get_or_set_prototype(this, vm);
         o.constructor = Some(Handle::clone(this));
         o
     }

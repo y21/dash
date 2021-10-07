@@ -22,7 +22,7 @@ use std::{any::Any, borrow::Cow, cell::RefCell, collections::HashMap, fmt::Debug
 use instruction::{Instruction, Opcode};
 use value::Value;
 
-use crate::{EvalError, agent::Agent, compiler::{compiler::{self, CompileError, Compiler, FunctionKind as CompilerFunctionKind}, instruction::to_vm_instructions}, gc::{Gc, Handle}, parser::{lexer, token}, util::{unlikely, MaybeOwned}, vm::{dispatch::DispatchResult, frame::UnwindHandler, value::{ValueKind, array::Array, function::{CallContext, FunctionKind, UserFunction}, generator::GeneratorIterator}}};
+use crate::{EvalError, agent::Agent, compiler::{compiler::{self, CompileError, Compiler, FunctionKind as CompilerFunctionKind}, constants::ConstantPool, instruction::to_vm_instructions}, gc::{Gc, Handle}, parser::{lexer, token}, util::{unlikely, MaybeOwned}, vm::{dispatch::DispatchResult, frame::UnwindHandler, value::{ValueKind, array::Array, function::{CallContext, FunctionKind, UserFunction}, generator::GeneratorIterator}}};
 use crate::js_std;
 
 use self::{frame::{Frame, Loop}, instruction::Constant, stack::Stack, statics::Statics, value::{PropertyKey, object::Object}};
@@ -191,7 +191,7 @@ impl VM {
 
         vm.constants_gc.transfer(gc);
 
-        let frame = Frame::from_buffer(to_vm_instructions(buffer), constants, &vm);
+        let frame = Frame::from_buffer(false, to_vm_instructions(buffer), constants, &vm);
         vm.frames.push(frame);
 
         Ok(vm)
@@ -820,7 +820,8 @@ impl VM {
             ip: 0,
             func: func_cell.clone(),
             sp: current_sp,
-            iterator_caller: None
+            iterator_caller: None,
+            is_constructor: false
         };
         self.frames.push(frame);
 
@@ -910,13 +911,15 @@ impl VM {
 
         self.constants_gc.transfer(gc);
 
-        let frame = Frame::from_buffer(to_vm_instructions(buffer), constants, self);
+        let frame = Frame::from_buffer(false, to_vm_instructions(buffer), constants, self);
 
         self.execute_frame(frame, true)
             .map(DispatchResult::into_value)
             .map_err(EvalError::VMError)
     }
 
+    /// Sets internal properties ([[prototype]] and constructor) of every value in the provided GC
+    /// and marks constants, for example assigns a 
     fn mark_constants(&self, gc: &mut Gc<Value>) {
         for guard in gc.heap.iter() {
             let mut value = guard.borrow_mut();

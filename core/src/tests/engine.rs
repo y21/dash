@@ -428,7 +428,7 @@ pub fn async_task() {
 
     let buffer = to_vm_instructions(buffer);
 
-    let frame = Frame::from_buffer(buffer, constants, &vm);
+    let frame = Frame::from_buffer(false, buffer, constants, &vm);
 
     vm.queue_async_task(frame);
 

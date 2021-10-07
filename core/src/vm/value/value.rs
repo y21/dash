@@ -21,6 +21,7 @@ use crate::{
 use super::{
     function::{FunctionKind, Receiver},
     object::Object,
+    ops::logic::Typeof,
     weak::Weak as JsWeak,
     ValueKind,
 };
@@ -182,6 +183,7 @@ impl Value {
             buffer: func.buffer.clone(),
             sp,
             iterator_caller: None,
+            is_constructor: false,
         };
 
         let origin_param_count = func.params as usize;
@@ -283,6 +285,11 @@ impl Value {
         }
     }
 
+    /// Checks whether this value is strictly a function
+    pub fn is_function(&self) -> bool {
+        self._typeof() == Typeof::Function
+    }
+
     /// Returns a Rc to the [[Prototype]] of this value, if it has one
     pub fn strong_proto(&self) -> Option<Handle<Value>> {
         self.proto.clone()
@@ -343,8 +350,15 @@ impl Value {
             }
             Some("constructor") => return value.strong_constructor(),
             Some("prototype") => {
-                if let Some(func) = value.as_function() {
-                    return func.prototype().cloned();
+                let is_function = value.is_function();
+                if is_function {
+                    // Drop borrowed value because we need to re-borrow it mutably down here
+                    // to set the prototype
+                    drop(value);
+
+                    let mut value = unsafe { value_cell.borrow_mut_unbounded() };
+                    let func = value.as_function_mut().unwrap();
+                    return func.get_or_set_prototype(&value_cell, vm);
                 }
             }
             Some("length") => {
@@ -386,7 +400,7 @@ impl Value {
                                 }
                             }
                             _ => {}
-                        }
+                        };
                     }
                 }
                 return Some(Handle::clone(entry_cell));

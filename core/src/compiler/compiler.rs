@@ -12,10 +12,10 @@ use crate::{
         lexer,
         parser::Parser,
         statement::{
-            BlockStatement, ExportKind, ForLoop, ForOfLoop, FunctionDeclaration,
-            FunctionKind as ParserFunctionKind, IfStatement, ImportKind, ReturnStatement,
-            SpecifierKind, Statement, TryCatch, VariableBinding, VariableDeclaration,
-            VariableDeclarationKind, WhileLoop,
+            BlockStatement, Class, ClassMemberKind, ExportKind, ForLoop, ForOfLoop,
+            FunctionDeclaration, FunctionKind as ParserFunctionKind, IfStatement, ImportKind,
+            ReturnStatement, SpecifierKind, Statement, TryCatch, VariableBinding,
+            VariableDeclaration, VariableDeclarationKind, WhileLoop,
         },
         token::{self, TokenType},
     },
@@ -300,6 +300,15 @@ impl<'a, A: Agent> Compiler<'a, A> {
             upvalues: self.upvalues,
             constants: self.constants,
         })
+    }
+
+    fn write_unnamed_variable(
+        &mut self,
+        data: &mut Vec<Instruction>,
+    ) -> Result<u8, CompileError<'a>> {
+        let (buf, idx) = self.compile_variable_declaration(None, Vec::new())?;
+        data.extend(buf);
+        Ok(idx)
     }
 
     fn compile_variable_declaration(
@@ -679,7 +688,7 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
                 0,
                 LocalBinding::Named {
                     ident: argument,
-                    kind: VariableDeclarationKind::Const,
+                    kind: VariableDeclarationKind::Var,
                 },
             ));
         }
@@ -1041,19 +1050,10 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
     ) -> Result<Vec<Instruction>, CompileError<'a>> {
         let mut data = self.accept_expr(&f.expr)?;
 
-        fn write_unnamed_variable<'a, A: Agent>(
-            compiler: &mut Compiler<'a, A>,
-            data: &mut Vec<Instruction>,
-        ) -> Result<u8, CompileError<'a>> {
-            let (buf, idx) = compiler.compile_variable_declaration(None, Vec::new())?;
-            data.extend(buf);
-            Ok(idx)
-        }
-
         // Stores the `next` function of the iterator
-        let iter_next_idx = write_unnamed_variable(self, &mut data)?;
+        let iter_next_idx = self.write_unnamed_variable(&mut data)?;
         // Stores the return value of the `next` function
-        let iter_result_idx = write_unnamed_variable(self, &mut data)?;
+        let iter_result_idx = self.write_unnamed_variable(&mut data)?;
         // Stores the value of the iterator
         let iter_value_idx = {
             let (buf, idx) = self.compile_variable_declaration(
@@ -1350,5 +1350,68 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         c: &[Instruction],
     ) -> Result<Vec<Instruction>, CompileError<'a>> {
         Ok(c.to_owned())
+    }
+
+    fn visit_class_declaration(
+        &mut self,
+        c: &Class<'a>,
+    ) -> Result<Vec<Instruction>, CompileError<'a>> {
+        let mut data = Vec::new();
+
+        let mut constructor = None;
+
+        // Assign value to all fields prior to executing constructor body
+        for member in c.members.iter() {
+            if let Some(c) = member.as_constructor() {
+                constructor = Some(c);
+                continue;
+            }
+
+            let name = member.name();
+
+            let left = if member.static_ {
+                return Err(CompileError::NotImplemented(
+                    "static methods are not implemented.",
+                ));
+            } else {
+                Expr::PropertyAccess(PropertyAccessExpr {
+                    computed: false,
+                    property: Box::new(Expr::Literal(LiteralExpr::Identifier(name))),
+                    target: Box::new(Expr::Compiled(vec![Instruction::Op(Opcode::GetThis)])),
+                })
+            };
+
+            let op = TokenType::Assignment;
+
+            let right = match &member.kind {
+                ClassMemberKind::Method(m) => Expr::Function(m.clone()),
+                ClassMemberKind::Property(p) => {
+                    p.value.clone().unwrap_or_else(|| Expr::undefined_literal())
+                }
+            };
+
+            data.push(Statement::Expression(Expr::Assignment(
+                AssignmentExpr::new(left, right, op),
+            )));
+        }
+
+        // Get constructor method
+        let mut constructor = constructor.cloned().unwrap_or_else(|| {
+            FunctionDeclaration::new(
+                None,
+                Vec::new(),
+                vec![Statement::Block(BlockStatement(Vec::new()))],
+                ParserFunctionKind::Function,
+            )
+        });
+
+        // Temporarily take body
+        let body = std::mem::take(&mut constructor.statements);
+        data.extend(body);
+
+        constructor.statements = data;
+        constructor.name = c.name;
+
+        self.visit_function_declaration(&constructor)
     }
 }
