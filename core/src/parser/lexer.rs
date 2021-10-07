@@ -441,6 +441,7 @@ impl<'a> Lexer<'a> {
                     (b".", TokenType::OptionalChaining),
                 ],
             ),
+            b'#' => self.create_contextified_token(TokenType::Hash),
             b':' => self.create_contextified_token(TokenType::Colon),
             b';' => self.create_contextified_token(TokenType::Semicolon),
             b'=' => self.create_contextified_conditional_token(

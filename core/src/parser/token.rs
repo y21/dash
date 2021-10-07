@@ -141,6 +141,12 @@ pub enum TokenType {
     Else,
     /// Function: function
     Function,
+    /// Class: class
+    Class,
+    /// Extending class: extends
+    Extends,
+    /// Static class member: static
+    Static,
     /// Var: var
     Var,
     /// Let: let
@@ -209,6 +215,10 @@ pub enum TokenType {
     ///
     /// Used for arrow functions
     Arrow,
+    /// Hash: #
+    ///
+    /// Used for private class members
+    Hash,
 }
 
 /// Tokens that are used to assign
@@ -269,6 +279,9 @@ impl From<&[u8]> for TokenType {
             b"default" => Self::Default,
             b"debugger" => Self::Debugger,
             b"of" => Self::Of,
+            b"class" => Self::Class,
+            b"extends" => Self::Extends,
+            b"static" => Self::Static,
             _ => Self::Identifier,
         }
     }
