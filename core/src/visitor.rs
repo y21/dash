@@ -35,6 +35,7 @@ pub trait Visitor<'a, V> {
             Statement::Continue => self.visit_continue(),
             Statement::Break => self.visit_break(),
             Statement::Debugger => self.visit_debugger(),
+            Statement::Empty => self.visit_empty_statement(),
         }
     }
 
@@ -142,6 +143,9 @@ pub trait Visitor<'a, V> {
 
     /// Visits an export statement
     fn visit_export_statement(&mut self, e: &ExportKind<'a>) -> V;
+
+    /// Visits an empty statement
+    fn visit_empty_statement(&mut self) -> V;
 
     /// Visits a break statement
     fn visit_break(&mut self) -> V;

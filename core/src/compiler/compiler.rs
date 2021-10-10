@@ -156,7 +156,7 @@ impl<'a, A: Agent> Compiler<'a, A> {
     ) -> Result<Self, FromStrError<'a>> {
         let ast = Parser::from_str(input)
             .map_err(FromStrError::LexError)?
-            .parse_all()
+            .parse_all(true)
             .map_err(FromStrError::ParseError)?;
 
         Ok(Self::new(ast, agent, kind))
@@ -1413,5 +1413,9 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
         constructor.name = c.name;
 
         self.visit_function_declaration(&constructor)
+    }
+
+    fn visit_empty_statement(&mut self) -> Result<Vec<Instruction>, CompileError<'a>> {
+        Ok(Vec::new())
     }
 }

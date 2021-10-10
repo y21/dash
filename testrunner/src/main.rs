@@ -96,11 +96,11 @@ async fn run_test(path: OsString, mode: Mode, verbose: bool) -> RunResult {
             Mode::Lex => Lexer::new(&source).scan_all().is_ok(),
             Mode::Parse => Lexer::new(&source)
                 .scan_all()
-                .map(|tok| Parser::new(&source, tok).parse_all().is_ok())
+                .map(|tok| Parser::new(&source, tok).parse_all(true).is_ok())
                 .unwrap_or(false),
             Mode::Compile => {
                 if let Ok(tokens) = Lexer::new(&source).scan_all() {
-                    if let Ok(stmts) = Parser::new(&source, tokens).parse_all() {
+                    if let Ok(stmts) = Parser::new(&source, tokens).parse_all(true) {
                         Compiler::<()>::new(stmts, None, FunctionKind::Function)
                             .compile()
                             .is_ok()
@@ -276,7 +276,7 @@ async fn main() {
     let ignored = IGNORED_TESTS.len();
 
     println!(
-        "Stages: {}\n{}: {}\n{}: {}\n{}: {}\n{}: {}\n-------\nConformance: {:.2}%",
+        "Stages: {}\n{}: {}\n{}: {}\n{}: {}\n{}: {}\n--------\nConformance: {:.2}%",
         mode.to_stages().join(", "),
         style("Passed").green(),
         pass,

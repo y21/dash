@@ -104,7 +104,7 @@ impl Agent for RuntimeAgent {
                 let source = std::fs::read_to_string(module).ok()?;
 
                 let tok = Lexer::new(&source).scan_all().ok()?;
-                let ast = Parser::new(&source, tok).parse_all().ok()?;
+                let ast = Parser::new(&source, tok).parse_all(true).ok()?;
                 let (buffer, constants, module_gc) = Compiler::new(
                     ast,
                     Some(MaybeOwned::Borrowed(self as _)),

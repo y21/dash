@@ -4,6 +4,7 @@ use crate::parser::{
 };
 
 use super::{
+    consteval::Eval,
     expr::{Expr, UnaryExpr},
     lexer::{self, Lexer},
     statement::{
@@ -54,7 +55,9 @@ impl<'a> Parser<'a> {
     }
 
     /// Iteratively parses every token and returns an AST, or a vector of errors
-    pub fn parse_all(mut self) -> Result<Vec<Statement<'a>>, Vec<Error<'a>>> {
+    ///
+    /// The AST will be folded by passing true as the `fold` parameter.
+    pub fn parse_all(mut self, fold: bool) -> Result<Vec<Statement<'a>>, Vec<Error<'a>>> {
         let mut stmts = Vec::new();
 
         while !self.is_eof() {
@@ -66,6 +69,12 @@ impl<'a> Parser<'a> {
         if !self.errors.is_empty() {
             Err(self.errors)
         } else {
+            let len = stmts.len();
+
+            if fold && len > 1 {
+                stmts[..len - 1].fold();
+            }
+
             Ok(stmts)
         }
     }

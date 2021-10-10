@@ -1,3 +1,5 @@
+/// Trait for constant folding
+pub mod consteval;
 /// Parsed expressions
 pub mod expr;
 /// JS source code lexer

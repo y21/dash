@@ -35,6 +35,11 @@ pub enum Statement<'a> {
     Break,
     /// Debugger statement
     Debugger,
+    /// An empty statement
+    ///
+    /// This is impossible to occur in JavaScript code, however a statement may be folded to an empty statement
+    /// if it does not have any side effects.
+    Empty,
 }
 
 /// The type of a specifier
