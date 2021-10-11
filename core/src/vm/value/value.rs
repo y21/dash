@@ -190,7 +190,7 @@ impl Value {
         let param_count = args.len();
 
         for param in args.into_iter() {
-            vm.stack.push(param);
+            vm.try_push_stack(param)?;
         }
 
         for _ in 0..(origin_param_count.saturating_sub(param_count)) {

@@ -765,6 +765,28 @@ impl VM {
         stack
     }
 
+    /// Attempts to push a value onto the stack
+    pub(crate) fn try_push_stack(&mut self, value: Handle<Value>) -> Result<(), Handle<Value>> {
+        let ok = self.stack.try_push(value);
+
+        if !ok {
+            Err(js_std::error::create_error("Maximum stack size exceeded", self))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Attempts to push a value onto the stack
+    pub(crate) fn try_push_frame(&mut self, frame: Frame) -> Result<(), Handle<Value>> {
+        let ok = self.frames.try_push(frame);
+
+        if !ok {
+            Err(js_std::error::create_error("Maximum call stack size exceeded", self))
+        } else {
+            Ok(())
+        }
+    }
+
     fn begin_function_call(
         &mut self,
         func_cell: Handle<Value>,
@@ -783,7 +805,7 @@ impl VM {
                 };
 
                 let result = (f.func)(ctx)?;
-                self.stack.push(result);
+                self.try_push_stack(result)?;
 
                 return Ok(());
             }
@@ -809,7 +831,7 @@ impl VM {
         if closure.func.ty.is_generator() {
             let iterator = GeneratorIterator::new(Handle::clone(&func_cell), params);
             let value = self.create_js_value(iterator).into_handle(self);
-            self.stack.push(value);
+            self.try_push_stack(value)?;
             return Ok(());
         }
 
@@ -823,10 +845,10 @@ impl VM {
             iterator_caller: None,
             is_constructor: false
         };
-        self.frames.push(frame);
+        self.try_push_frame(frame)?;
 
         for param in params.into_iter() {
-            self.stack.push(param);
+            self.try_push_stack(param)?;
         }
 
         Ok(())
@@ -850,8 +872,8 @@ impl VM {
 
     /// Executes an execution frame
     pub fn execute_frame(&mut self, frame: Frame, can_gc: bool) -> Result<DispatchResult, VMError> {
-        let frame_idx = self.frames.len();
-        self.frames.push(frame);
+        let frame_idx = self.frames.len();  
+        self.try_push_frame(frame).map_err(VMError::UncaughtError)?;
 
         macro_rules! unwind_abort_if_uncaught {
             ($e:expr) => {

@@ -45,7 +45,7 @@ mod handlers {
 
     use super::DispatchResult;
 
-    pub fn constant(vm: &mut VM) {
+    pub fn constant(vm: &mut VM) -> Result<(), Handle<Value>> {
         let constant = vm.read_constant().and_then(|c| c.try_into_value()).unwrap();
 
         // We clone constants to avoid mutating the original constant.
@@ -56,10 +56,10 @@ mod handlers {
             .clone()
             .into_handle(vm);
 
-        vm.stack.push(constant);
+        vm.try_push_stack(constant)
     }
 
-    pub fn closure(vm: &mut VM) {
+    pub fn closure(vm: &mut VM) -> Result<(), Handle<Value>> {
         let func = vm.read_user_function().unwrap();
 
         let upvalue_count = func.upvalues as usize;
@@ -80,98 +80,95 @@ mod handlers {
             }
         }
 
-        vm.stack.push(
+        vm.try_push_stack(
             vm.create_js_value(FunctionKind::Closure(closure))
                 .into_handle(vm),
-        );
+        )
     }
 
-    pub fn negate(vm: &mut VM) {
+    pub fn negate(vm: &mut VM) -> Result<(), Handle<Value>> {
         let maybe_number = vm.read_number();
 
-        vm.stack
-            .push(vm.create_js_value(-maybe_number).into_handle(vm));
+        vm.try_push_stack(vm.create_js_value(-maybe_number).into_handle(vm))
     }
 
-    pub fn positive(vm: &mut VM) {
+    pub fn positive(vm: &mut VM) -> Result<(), Handle<Value>> {
         let maybe_number = vm.read_number();
 
-        vm.stack
-            .push(vm.create_js_value(maybe_number).into_handle(vm));
+        vm.try_push_stack(vm.create_js_value(maybe_number).into_handle(vm))
     }
 
-    pub fn logical_not(vm: &mut VM) {
+    pub fn logical_not(vm: &mut VM) -> Result<(), Handle<Value>> {
         let is_truthy = unsafe { vm.stack.pop().borrow_unbounded() }.is_truthy();
 
-        vm.stack
-            .push(vm.create_js_value(!is_truthy).into_handle(vm));
+        vm.try_push_stack(vm.create_js_value(!is_truthy).into_handle(vm))
     }
 
-    pub fn add(vm: &mut VM) {
+    pub fn add(vm: &mut VM) -> Result<(), Handle<Value>> {
         let result = vm.with_lhs_rhs_borrowed(Value::add).into_handle(vm);
-        vm.stack.push(result);
+        vm.try_push_stack(result)
     }
 
-    pub fn sub(vm: &mut VM) {
+    pub fn sub(vm: &mut VM) -> Result<(), Handle<Value>> {
         let result = vm.with_lhs_rhs_borrowed(Value::sub).into_handle(vm);
-        vm.stack.push(result);
+        vm.try_push_stack(result)
     }
 
-    pub fn mul(vm: &mut VM) {
+    pub fn mul(vm: &mut VM) -> Result<(), Handle<Value>> {
         let result = vm.with_lhs_rhs_borrowed(Value::mul).into_handle(vm);
-        vm.stack.push(result);
+        vm.try_push_stack(result)
     }
 
-    pub fn div(vm: &mut VM) {
+    pub fn div(vm: &mut VM) -> Result<(), Handle<Value>> {
         let result = vm.with_lhs_rhs_borrowed(Value::div).into_handle(vm);
-        vm.stack.push(result);
+        vm.try_push_stack(result)
     }
 
-    pub fn rem(vm: &mut VM) {
+    pub fn rem(vm: &mut VM) -> Result<(), Handle<Value>> {
         let result = vm.with_lhs_rhs_borrowed(Value::rem).into_handle(vm);
-        vm.stack.push(result);
+        vm.try_push_stack(result)
     }
 
-    pub fn exponentiation(vm: &mut VM) {
+    pub fn exponentiation(vm: &mut VM) -> Result<(), Handle<Value>> {
         let result = vm.with_lhs_rhs_borrowed(Value::pow).into_handle(vm);
-        vm.stack.push(result);
+        vm.try_push_stack(result)
     }
 
-    pub fn left_shift(vm: &mut VM) {
+    pub fn left_shift(vm: &mut VM) -> Result<(), Handle<Value>> {
         let result = vm.with_lhs_rhs_borrowed(Value::left_shift).into_handle(vm);
-        vm.stack.push(result);
+        vm.try_push_stack(result)
     }
 
-    pub fn right_shift(vm: &mut VM) {
+    pub fn right_shift(vm: &mut VM) -> Result<(), Handle<Value>> {
         let result = vm.with_lhs_rhs_borrowed(Value::right_shift).into_handle(vm);
-        vm.stack.push(result);
+        vm.try_push_stack(result)
     }
 
-    pub fn unsigned_right_shift(vm: &mut VM) {
+    pub fn unsigned_right_shift(vm: &mut VM) -> Result<(), Handle<Value>> {
         let result = vm
             .with_lhs_rhs_borrowed(Value::unsigned_right_shift)
             .into_handle(vm);
-        vm.stack.push(result);
+        vm.try_push_stack(result)
     }
 
-    pub fn bitwise_and(vm: &mut VM) {
+    pub fn bitwise_and(vm: &mut VM) -> Result<(), Handle<Value>> {
         let result = vm.with_lhs_rhs_borrowed(Value::bitwise_and).into_handle(vm);
-        vm.stack.push(result);
+        vm.try_push_stack(result)
     }
 
-    pub fn bitwise_or(vm: &mut VM) {
+    pub fn bitwise_or(vm: &mut VM) -> Result<(), Handle<Value>> {
         let result = vm.with_lhs_rhs_borrowed(Value::bitwise_or).into_handle(vm);
-        vm.stack.push(result);
+        vm.try_push_stack(result)
     }
 
-    pub fn bitwise_xor(vm: &mut VM) {
+    pub fn bitwise_xor(vm: &mut VM) -> Result<(), Handle<Value>> {
         let result = vm.with_lhs_rhs_borrowed(Value::bitwise_xor).into_handle(vm);
-        vm.stack.push(result);
+        vm.try_push_stack(result)
     }
 
-    pub fn bitwise_not(vm: &mut VM) {
+    pub fn bitwise_not(vm: &mut VM) -> Result<(), Handle<Value>> {
         let result = vm.with_lhs_borrowed(Value::bitwise_not).into_handle(vm);
-        vm.stack.push(result);
+        vm.try_push_stack(result)
     }
 
     pub fn set_global(vm: &mut VM) {
@@ -198,8 +195,7 @@ mod handlers {
         let value = Value::get_property(vm, &vm.global, &PropertyKey::from(name.as_str()), None)
             .ok_or_else(|| js_std::error::create_error(format!("{} is not defined", name), vm))?;
 
-        vm.stack.push(value);
-        Ok(())
+        vm.try_push_stack(value)
     }
 
     pub fn set_local(vm: &mut VM) {
@@ -217,19 +213,19 @@ mod handlers {
         );
     }
 
-    pub fn get_local(vm: &mut VM) {
+    pub fn get_local(vm: &mut VM) -> Result<(), Handle<Value>> {
         let stack_idx = vm.read_index().unwrap();
 
         unsafe {
-            vm.stack.push(
+            vm.try_push_stack(
                 vm.stack
                     .peek_relative_unchecked(vm.frame().sp, stack_idx)
                     .clone(),
             )
-        };
+        }
     }
 
-    pub fn get_upvalue(vm: &mut VM) {
+    pub fn get_upvalue(vm: &mut VM) -> Result<(), Handle<Value>> {
         let upvalue_idx = vm.read_index().unwrap();
 
         let value = {
@@ -241,7 +237,7 @@ mod handlers {
             closure.upvalues[upvalue_idx].0.clone()
         };
 
-        vm.stack.push(value);
+        vm.try_push_stack(value)
     }
 
     pub fn short_jmp_if_false(vm: &mut VM) {
@@ -295,124 +291,124 @@ mod handlers {
         vm.unwind_handlers.pop();
     }
 
-    pub fn addition_assignment(vm: &mut VM) {
+    pub fn addition_assignment(vm: &mut VM) -> Result<(), Handle<Value>> {
         let value_cell = vm.stack.pop();
         let target_cell = vm.stack.pop();
         let value = unsafe { value_cell.borrow_unbounded() };
         unsafe { target_cell.borrow_mut_unbounded() }.add_assign(&*value);
-        vm.stack.push(target_cell);
+        vm.try_push_stack(target_cell)
     }
 
-    pub fn subtraction_assignment(vm: &mut VM) {
+    pub fn subtraction_assignment(vm: &mut VM) -> Result<(), Handle<Value>> {
         let value_cell = vm.stack.pop();
         let target_cell = vm.stack.pop();
         let value = unsafe { value_cell.borrow_unbounded() };
         unsafe { target_cell.borrow_mut_unbounded() }.sub_assign(&*value);
-        vm.stack.push(target_cell);
+        vm.try_push_stack(target_cell)
     }
 
-    pub fn multiplication_assignment(vm: &mut VM) {
+    pub fn multiplication_assignment(vm: &mut VM) -> Result<(), Handle<Value>> {
         let value_cell = vm.stack.pop();
         let target_cell = vm.stack.pop();
         let value = unsafe { value_cell.borrow_unbounded() };
         unsafe { target_cell.borrow_mut_unbounded() }.mul_assign(&*value);
-        vm.stack.push(target_cell);
+        vm.try_push_stack(target_cell)
     }
 
-    pub fn division_assignment(vm: &mut VM) {
+    pub fn division_assignment(vm: &mut VM) -> Result<(), Handle<Value>> {
         let value_cell = vm.stack.pop();
         let target_cell = vm.stack.pop();
         let value = unsafe { value_cell.borrow_unbounded() };
         unsafe { target_cell.borrow_mut_unbounded() }.div_assign(&*value);
-        vm.stack.push(target_cell);
+        vm.try_push_stack(target_cell)
     }
 
-    pub fn remainder_assignment(vm: &mut VM) {
+    pub fn remainder_assignment(vm: &mut VM) -> Result<(), Handle<Value>> {
         let value_cell = vm.stack.pop();
         let target_cell = vm.stack.pop();
         let value = unsafe { value_cell.borrow_unbounded() };
         unsafe { target_cell.borrow_mut_unbounded() }.rem_assign(&*value);
-        vm.stack.push(target_cell);
+        vm.try_push_stack(target_cell)
     }
 
-    pub fn exponentiation_assignment(vm: &mut VM) {
+    pub fn exponentiation_assignment(vm: &mut VM) -> Result<(), Handle<Value>> {
         let value_cell = vm.stack.pop();
         let target_cell = vm.stack.pop();
         let value = unsafe { value_cell.borrow_unbounded() };
         unsafe { target_cell.borrow_mut_unbounded() }.pow_assign(&*value);
-        vm.stack.push(target_cell);
+        vm.try_push_stack(target_cell)
     }
 
-    pub fn left_shift_assignment(vm: &mut VM) {
+    pub fn left_shift_assignment(vm: &mut VM) -> Result<(), Handle<Value>> {
         let value_cell = vm.stack.pop();
         let target_cell = vm.stack.pop();
         let value = unsafe { value_cell.borrow_unbounded() };
         unsafe { target_cell.borrow_mut_unbounded() }.left_shift_assign(&*value);
-        vm.stack.push(target_cell);
+        vm.try_push_stack(target_cell)
     }
 
-    pub fn right_shift_assignment(vm: &mut VM) {
+    pub fn right_shift_assignment(vm: &mut VM) -> Result<(), Handle<Value>> {
         let value_cell = vm.stack.pop();
         let target_cell = vm.stack.pop();
         let value = unsafe { value_cell.borrow_unbounded() };
         unsafe { target_cell.borrow_mut_unbounded() }.right_shift_assign(&*value);
-        vm.stack.push(target_cell);
+        vm.try_push_stack(target_cell)
     }
 
-    pub fn unsigned_right_shift_assignment(vm: &mut VM) {
+    pub fn unsigned_right_shift_assignment(vm: &mut VM) -> Result<(), Handle<Value>> {
         let value_cell = vm.stack.pop();
         let target_cell = vm.stack.pop();
         let value = unsafe { value_cell.borrow_unbounded() };
         unsafe { target_cell.borrow_mut_unbounded() }.unsigned_right_shift_assign(&*value);
-        vm.stack.push(target_cell);
+        vm.try_push_stack(target_cell)
     }
 
-    pub fn bitwise_and_assignment(vm: &mut VM) {
+    pub fn bitwise_and_assignment(vm: &mut VM) -> Result<(), Handle<Value>> {
         let value_cell = vm.stack.pop();
         let target_cell = vm.stack.pop();
         let value = unsafe { value_cell.borrow_unbounded() };
         unsafe { target_cell.borrow_mut_unbounded() }.bitwise_and_assign(&*value);
-        vm.stack.push(target_cell);
+        vm.try_push_stack(target_cell)
     }
 
-    pub fn bitwise_or_assignment(vm: &mut VM) {
+    pub fn bitwise_or_assignment(vm: &mut VM) -> Result<(), Handle<Value>> {
         let value_cell = vm.stack.pop();
         let target_cell = vm.stack.pop();
         let value = unsafe { value_cell.borrow_unbounded() };
         unsafe { target_cell.borrow_mut_unbounded() }.bitwise_or_assign(&*value);
-        vm.stack.push(target_cell);
+        vm.try_push_stack(target_cell)
     }
 
-    pub fn bitwise_xor_assignment(vm: &mut VM) {
+    pub fn bitwise_xor_assignment(vm: &mut VM) -> Result<(), Handle<Value>> {
         let value_cell = vm.stack.pop();
         let target_cell = vm.stack.pop();
         let value = unsafe { value_cell.borrow_unbounded() };
         unsafe { target_cell.borrow_mut_unbounded() }.bitwise_xor_assign(&*value);
-        vm.stack.push(target_cell);
+        vm.try_push_stack(target_cell)
     }
 
-    pub fn logical_and_assignment(vm: &mut VM) {
+    pub fn logical_and_assignment(vm: &mut VM) -> Result<(), Handle<Value>> {
         let value_cell = vm.stack.pop();
         let target_cell = vm.stack.pop();
         let value = unsafe { value_cell.borrow_unbounded() };
         unsafe { target_cell.borrow_mut_unbounded() }.logical_and_assign(&*value);
-        vm.stack.push(target_cell);
+        vm.try_push_stack(target_cell)
     }
 
-    pub fn logical_or_assignment(vm: &mut VM) {
+    pub fn logical_or_assignment(vm: &mut VM) -> Result<(), Handle<Value>> {
         let value_cell = vm.stack.pop();
         let target_cell = vm.stack.pop();
         let value = unsafe { value_cell.borrow_unbounded() };
         unsafe { target_cell.borrow_mut_unbounded() }.logical_or_assign(&*value);
-        vm.stack.push(target_cell);
+        vm.try_push_stack(target_cell)
     }
 
-    pub fn logical_nullish_assignment(vm: &mut VM) {
+    pub fn logical_nullish_assignment(vm: &mut VM) -> Result<(), Handle<Value>> {
         let value_cell = vm.stack.pop();
         let target_cell = vm.stack.pop();
         let value = unsafe { value_cell.borrow_unbounded() };
         unsafe { target_cell.borrow_mut_unbounded() }.nullish_coalescing_assign(&*value);
-        vm.stack.push(target_cell);
+        vm.try_push_stack(target_cell)
     }
 
     pub fn constructor_call(vm: &mut VM) -> Result<(), Handle<Value>> {
@@ -445,7 +441,7 @@ mod handlers {
                 };
                 let result = (f.func)(ctx)?;
 
-                vm.stack.push(result);
+                vm.try_push_stack(result)?;
 
                 return Ok(());
             }
@@ -481,43 +477,42 @@ mod handlers {
             is_constructor: true,
         };
 
-        vm.frames.push(frame);
+        vm.try_push_frame(frame)?;
 
         let origin_param_count = func.func.params as usize;
         let param_count = params.len();
 
         for param in params.into_iter().rev() {
-            vm.stack.push(param);
+            vm.try_push_stack(param)?;
         }
 
         for _ in 0..(origin_param_count.saturating_sub(param_count)) {
-            vm.stack
-                .push(Value::new(ValueKind::Undefined).into_handle(vm));
+            vm.try_push_stack(Value::new(ValueKind::Undefined).into_handle(vm))?;
         }
 
         Ok(())
     }
 
-    pub fn get_this(vm: &mut VM) {
+    pub fn get_this(vm: &mut VM) -> Result<(), Handle<Value>> {
         let this = {
-            let frame = vm.frame();
-            let func = unsafe { frame.func.borrow_unbounded() };
-            let raw_func = func
-                .as_function()
-                .and_then(FunctionKind::as_closure)
-                .unwrap();
-
-            let receiver = raw_func.func.receiver.as_ref().unwrap();
-            receiver.get().clone()
+            if vm.frames.len() == 1 {
+                // If we're in the global scope, return the global object
+                vm.global.clone()
+            } else {
+                let frame = vm.frame();
+                let func = unsafe { frame.func.borrow_unbounded() };
+                func.as_function().and_then(|f| f.this(vm)).unwrap()
+            }
         };
-        vm.stack.push(this);
+
+        vm.try_push_stack(this)
     }
 
-    pub fn get_global_this(vm: &mut VM) {
-        vm.stack.push(Handle::clone(&vm.global));
+    pub fn get_global_this(vm: &mut VM) -> Result<(), Handle<Value>> {
+        vm.try_push_stack(Handle::clone(&vm.global))
     }
 
-    pub fn evaluate_module(vm: &mut VM) {
+    pub fn evaluate_module(vm: &mut VM) -> Result<(), Handle<Value>> {
         let (value_cell, buffer) = {
             let module = vm.read_constant().and_then(Constant::into_value).unwrap();
 
@@ -547,7 +542,7 @@ mod handlers {
             is_constructor: false,
         };
 
-        vm.frames.push(frame);
+        vm.try_push_frame(frame)
     }
 
     pub fn function_call(vm: &mut VM) -> Result<(), Handle<Value>> {
@@ -583,7 +578,7 @@ mod handlers {
         Err(value)
     }
 
-    pub fn return_module(vm: &mut VM) {
+    pub fn return_module(vm: &mut VM) -> Result<(), Handle<Value>> {
         let frame = vm.frames.pop();
         let func_ref = unsafe { frame.func.borrow_unbounded() };
         let func = func_ref
@@ -607,7 +602,7 @@ mod handlers {
         vm.stack.discard_multiple(vm.stack.len() - frame.sp);
 
         unsafe { vm.stack.set_stack_pointer(frame.sp) };
-        vm.stack.push(exports);
+        vm.try_push_stack(exports)
     }
 
     pub fn return_(vm: &mut VM, frame_idx: usize) -> Result<Option<DispatchResult>, Handle<Value>> {
@@ -648,25 +643,25 @@ mod handlers {
                 .map(Receiver::get);
 
             // There should always be a `this` value set if we're in a constructor call
-            vm.stack.push(Handle::clone(this.unwrap()));
+            vm.try_push_stack(Handle::clone(this.unwrap()))?;
         } else {
-            vm.stack.push(ret.unwrap());
+            vm.try_push_stack(ret.unwrap())?;
         }
 
         Ok(None)
     }
 
-    pub fn less(vm: &mut VM) {
+    pub fn less(vm: &mut VM) -> Result<(), Handle<Value>> {
         let rhs_cell = vm.stack.pop();
         let rhs = unsafe { rhs_cell.borrow_unbounded() };
         let lhs_cell = vm.stack.pop();
         let lhs = unsafe { lhs_cell.borrow_unbounded() };
 
         let is_less = matches!(lhs.compare(&rhs), Some(Compare::Less));
-        vm.stack.push(vm.create_js_value(is_less).into_handle(vm));
+        vm.try_push_stack(vm.create_js_value(is_less).into_handle(vm))
     }
 
-    pub fn less_equal(vm: &mut VM) {
+    pub fn less_equal(vm: &mut VM) -> Result<(), Handle<Value>> {
         let rhs_cell = vm.stack.pop();
         let rhs = unsafe { rhs_cell.borrow_unbounded() };
         let lhs_cell = vm.stack.pop();
@@ -676,22 +671,20 @@ mod handlers {
             lhs.compare(&rhs),
             Some(Compare::Less) | Some(Compare::Equal)
         );
-        vm.stack
-            .push(vm.create_js_value(is_less_eq).into_handle(vm));
+        vm.try_push_stack(vm.create_js_value(is_less_eq).into_handle(vm))
     }
 
-    pub fn greater(vm: &mut VM) {
+    pub fn greater(vm: &mut VM) -> Result<(), Handle<Value>> {
         let rhs_cell = vm.stack.pop();
         let rhs = unsafe { rhs_cell.borrow_unbounded() };
         let lhs_cell = vm.stack.pop();
         let lhs = unsafe { lhs_cell.borrow_unbounded() };
 
         let is_greater = matches!(lhs.compare(&rhs), Some(Compare::Greater));
-        vm.stack
-            .push(vm.create_js_value(is_greater).into_handle(vm));
+        vm.try_push_stack(vm.create_js_value(is_greater).into_handle(vm))
     }
 
-    pub fn greater_equal(vm: &mut VM) {
+    pub fn greater_equal(vm: &mut VM) -> Result<(), Handle<Value>> {
         let rhs_cell = vm.stack.pop();
         let rhs = unsafe { rhs_cell.borrow_unbounded() };
         let lhs_cell = vm.stack.pop();
@@ -701,11 +694,10 @@ mod handlers {
             lhs.compare(&rhs),
             Some(Compare::Greater) | Some(Compare::Equal)
         );
-        vm.stack
-            .push(vm.create_js_value(is_greater_eq).into_handle(vm));
+        vm.try_push_stack(vm.create_js_value(is_greater_eq).into_handle(vm))
     }
 
-    pub fn static_property_access(vm: &mut VM) {
+    pub fn static_property_access(vm: &mut VM) -> Result<(), Handle<Value>> {
         let property = vm.read_constant().and_then(Constant::into_ident).unwrap();
         let is_assignment = vm.read_index().unwrap() == 1;
         let target_cell = vm.stack.pop();
@@ -734,41 +726,41 @@ mod handlers {
                 vm,
             )
         };
-        vm.stack.push(value);
+        vm.try_push_stack(value)
     }
 
-    pub fn equality(vm: &mut VM) {
+    pub fn equality(vm: &mut VM) -> Result<(), Handle<Value>> {
         let eq = vm.with_lhs_rhs_borrowed(Value::lossy_equal);
-        vm.stack.push(vm.create_js_value(eq).into_handle(vm));
+        vm.try_push_stack(vm.create_js_value(eq).into_handle(vm))
     }
 
-    pub fn inequality(vm: &mut VM) {
+    pub fn inequality(vm: &mut VM) -> Result<(), Handle<Value>> {
         let eq = vm.with_lhs_rhs_borrowed(Value::lossy_equal);
-        vm.stack.push(vm.create_js_value(!eq).into_handle(vm));
+        vm.try_push_stack(vm.create_js_value(!eq).into_handle(vm))
     }
 
-    pub fn strict_equality(vm: &mut VM) {
+    pub fn strict_equality(vm: &mut VM) -> Result<(), Handle<Value>> {
         let eq = vm.with_lhs_rhs_borrowed(Value::strict_equal);
-        vm.stack.push(vm.create_js_value(eq).into_handle(vm));
+        vm.try_push_stack(vm.create_js_value(eq).into_handle(vm))
     }
 
-    pub fn strict_inequality(vm: &mut VM) {
+    pub fn strict_inequality(vm: &mut VM) -> Result<(), Handle<Value>> {
         let eq = vm.with_lhs_rhs_borrowed(Value::strict_equal);
-        vm.stack.push(vm.create_js_value(!eq).into_handle(vm));
+        vm.try_push_stack(vm.create_js_value(!eq).into_handle(vm))
     }
 
-    pub fn typeof_(vm: &mut VM) {
+    pub fn typeof_(vm: &mut VM) -> Result<(), Handle<Value>> {
         let value = unsafe { vm.stack.pop().borrow_unbounded() }
             ._typeof()
             .to_owned();
 
-        vm.stack.push(
+        vm.try_push_stack(
             vm.create_js_value(ExoticObject::String(value.as_str().into()))
                 .into_handle(vm),
-        );
+        )
     }
 
-    pub fn postfix_increment_decrement(vm: &mut VM, opcode: Opcode) {
+    pub fn postfix_increment_decrement(vm: &mut VM, opcode: Opcode) -> Result<(), Handle<Value>> {
         let value_cell = vm.stack.pop();
         let mut value = unsafe { value_cell.borrow_mut_unbounded() };
         let one = vm.create_js_value(1f64);
@@ -779,10 +771,10 @@ mod handlers {
             value.sub_assign(&one);
             value.add(&one)
         };
-        vm.stack.push(result.into_handle(vm));
+        vm.try_push_stack(result.into_handle(vm))
     }
 
-    pub fn assignment(vm: &mut VM) {
+    pub fn assignment(vm: &mut VM) -> Result<(), Handle<Value>> {
         let value_cell = vm.stack.pop();
         let target_cell = vm.stack.pop();
 
@@ -792,26 +784,24 @@ mod handlers {
 
         let mut target = unsafe { target_cell.borrow_mut_unbounded() };
         **target = value;
-        vm.stack.push(target_cell.clone());
+        vm.try_push_stack(target_cell.clone())
     }
 
-    pub fn void(vm: &mut VM) {
+    pub fn void(vm: &mut VM) -> Result<(), Handle<Value>> {
         vm.stack.pop();
-        vm.stack
-            .push(Value::new(ValueKind::Undefined).into_handle(vm));
+        vm.try_push_stack(Value::new(ValueKind::Undefined).into_handle(vm))
     }
 
-    pub fn array_literal(vm: &mut VM) {
+    pub fn array_literal(vm: &mut VM) -> Result<(), Handle<Value>> {
         let element_count = vm.read_index().unwrap();
         let mut elements = Vec::with_capacity(element_count);
         for _ in 0..element_count {
             elements.push(vm.stack.pop());
         }
-        vm.stack
-            .push(vm.create_array(Array::new(elements)).into_handle(vm));
+        vm.try_push_stack(vm.create_array(Array::new(elements)).into_handle(vm))
     }
 
-    pub fn object_literal(vm: &mut VM) {
+    pub fn object_literal(vm: &mut VM) -> Result<(), Handle<Value>> {
         let property_count = vm.read_index().unwrap();
 
         let mut fields = HashMap::new();
@@ -827,11 +817,10 @@ mod handlers {
             fields.insert(PropertyKey::from(key), value);
         }
 
-        vm.stack
-            .push(vm.create_object_with_fields(fields).into_handle(vm));
+        vm.try_push_stack(vm.create_object_with_fields(fields).into_handle(vm))
     }
 
-    pub fn computed_property_access(vm: &mut VM) {
+    pub fn computed_property_access(vm: &mut VM) -> Result<(), Handle<Value>> {
         let property_cell = vm.stack.pop();
         let is_assignment = vm.read_index().unwrap() == 1;
         let target_cell = vm.stack.pop();
@@ -854,11 +843,11 @@ mod handlers {
             )
         };
 
-        vm.stack.push(value);
+        vm.try_push_stack(value)
     }
 
     pub fn loop_continue(vm: &mut VM) -> Result<(), Handle<Value>> {
-        if let Some(this) = unsafe { vm.loops.get() } {
+        if let Some(this) = vm.loops.get() {
             vm.frame_mut().ip = this.condition_ip;
             Ok(())
         } else {
@@ -937,12 +926,10 @@ mod handlers {
 
         let has_key = target_ref.has_property(vm, PropertyKey::from(searcher_s));
 
-        vm.stack.push(vm.create_js_value(has_key).into_handle(vm));
-
-        Ok(())
+        vm.try_push_stack(vm.create_js_value(has_key).into_handle(vm))
     }
 
-    pub fn instanceof(vm: &mut VM) {
+    pub fn instanceof(vm: &mut VM) -> Result<(), Handle<Value>> {
         let ctor = vm.stack.pop();
         let test = vm.stack.pop();
 
@@ -953,15 +940,14 @@ mod handlers {
             .map(|x| std::ptr::eq(x.as_ptr(), ctor.as_ptr()))
             .unwrap_or_default();
 
-        vm.stack
-            .push(vm.create_js_value(is_instanceof).into_handle(vm));
+        vm.try_push_stack(vm.create_js_value(is_instanceof).into_handle(vm))
     }
 
     pub fn debugger(vm: &mut VM) {
         vm.agent.debugger();
     }
 
-    pub fn get_symbol_iterator(vm: &mut VM) {
+    pub fn get_symbol_iterator(vm: &mut VM) -> Result<(), Handle<Value>> {
         let value = vm.stack.pop();
         let iterable = Value::unwrap_or_undefined(
             Value::get_property(
@@ -973,7 +959,7 @@ mod handlers {
             vm,
         );
 
-        vm.stack.push(iterable);
+        vm.try_push_stack(iterable)
     }
 }
 
@@ -985,31 +971,31 @@ pub fn handle(
 ) -> Result<Option<DispatchResult>, Handle<Value>> {
     match opcode {
         Opcode::Eof => return Ok(Some(DispatchResult::Return(None))),
-        Opcode::Constant => handlers::constant(vm),
-        Opcode::Closure => handlers::closure(vm),
-        Opcode::Negate => handlers::negate(vm),
-        Opcode::Positive => handlers::positive(vm),
-        Opcode::LogicalNot => handlers::logical_not(vm),
-        Opcode::Add => handlers::add(vm),
-        Opcode::Sub => handlers::sub(vm),
-        Opcode::Mul => handlers::mul(vm),
-        Opcode::Div => handlers::div(vm),
-        Opcode::Rem => handlers::rem(vm),
-        Opcode::Exponentiation => handlers::exponentiation(vm),
-        Opcode::LeftShift => handlers::left_shift(vm),
-        Opcode::RightShift => handlers::right_shift(vm),
-        Opcode::UnsignedRightShift => handlers::unsigned_right_shift(vm),
-        Opcode::BitwiseAnd => handlers::bitwise_and(vm),
-        Opcode::BitwiseOr => handlers::bitwise_or(vm),
-        Opcode::BitwiseXor => handlers::bitwise_xor(vm),
-        Opcode::BitwiseNot => handlers::bitwise_not(vm),
+        Opcode::Constant => handlers::constant(vm)?,
+        Opcode::Closure => handlers::closure(vm)?,
+        Opcode::Negate => handlers::negate(vm)?,
+        Opcode::Positive => handlers::positive(vm)?,
+        Opcode::LogicalNot => handlers::logical_not(vm)?,
+        Opcode::Add => handlers::add(vm)?,
+        Opcode::Sub => handlers::sub(vm)?,
+        Opcode::Mul => handlers::mul(vm)?,
+        Opcode::Div => handlers::div(vm)?,
+        Opcode::Rem => handlers::rem(vm)?,
+        Opcode::Exponentiation => handlers::exponentiation(vm)?,
+        Opcode::LeftShift => handlers::left_shift(vm)?,
+        Opcode::RightShift => handlers::right_shift(vm)?,
+        Opcode::UnsignedRightShift => handlers::unsigned_right_shift(vm)?,
+        Opcode::BitwiseAnd => handlers::bitwise_and(vm)?,
+        Opcode::BitwiseOr => handlers::bitwise_or(vm)?,
+        Opcode::BitwiseXor => handlers::bitwise_xor(vm)?,
+        Opcode::BitwiseNot => handlers::bitwise_not(vm)?,
         Opcode::SetGlobal => handlers::set_global(vm),
         Opcode::SetGlobalNoValue => handlers::set_global_no_value(vm),
         Opcode::GetGlobal => handlers::get_global(vm)?,
         Opcode::SetLocal => handlers::set_local(vm),
         Opcode::SetLocalNoValue => handlers::set_local_no_value(vm),
-        Opcode::GetLocal => handlers::get_local(vm),
-        Opcode::GetUpvalue => handlers::get_upvalue(vm),
+        Opcode::GetLocal => handlers::get_local(vm)?,
+        Opcode::GetUpvalue => handlers::get_upvalue(vm)?,
         Opcode::ShortJmpIfFalse => handlers::short_jmp_if_false(vm),
         Opcode::ShortJmpIfTrue => handlers::short_jmp_if_true(vm),
         Opcode::ShortJmpIfNullish => handlers::short_jmp_if_nullish(vm),
@@ -1017,48 +1003,48 @@ pub fn handle(
         Opcode::BackJmp => handlers::back_jmp(vm),
         Opcode::Pop | Opcode::PopElide => handlers::pop(vm),
         Opcode::PopUnwindHandler => handlers::pop_unwind_handler(vm),
-        Opcode::AdditionAssignment => handlers::addition_assignment(vm),
-        Opcode::SubtractionAssignment => handlers::subtraction_assignment(vm),
-        Opcode::MultiplicationAssignment => handlers::multiplication_assignment(vm),
-        Opcode::DivisionAssignment => handlers::division_assignment(vm),
-        Opcode::RemainderAssignment => handlers::remainder_assignment(vm),
-        Opcode::ExponentiationAssignment => handlers::exponentiation_assignment(vm),
-        Opcode::LeftShiftAssignment => handlers::left_shift_assignment(vm),
-        Opcode::RightShiftAssignment => handlers::right_shift_assignment(vm),
-        Opcode::UnsignedRightShiftAssignment => handlers::unsigned_right_shift_assignment(vm),
-        Opcode::BitwiseAndAssignment => handlers::bitwise_and_assignment(vm),
-        Opcode::BitwiseOrAssignment => handlers::bitwise_or_assignment(vm),
-        Opcode::BitwiseXorAssignment => handlers::bitwise_xor_assignment(vm),
-        Opcode::LogicalAndAssignment => handlers::logical_and_assignment(vm),
-        Opcode::LogicalOrAssignment => handlers::logical_or_assignment(vm),
-        Opcode::LogicalNullishAssignment => handlers::logical_nullish_assignment(vm),
+        Opcode::AdditionAssignment => handlers::addition_assignment(vm)?,
+        Opcode::SubtractionAssignment => handlers::subtraction_assignment(vm)?,
+        Opcode::MultiplicationAssignment => handlers::multiplication_assignment(vm)?,
+        Opcode::DivisionAssignment => handlers::division_assignment(vm)?,
+        Opcode::RemainderAssignment => handlers::remainder_assignment(vm)?,
+        Opcode::ExponentiationAssignment => handlers::exponentiation_assignment(vm)?,
+        Opcode::LeftShiftAssignment => handlers::left_shift_assignment(vm)?,
+        Opcode::RightShiftAssignment => handlers::right_shift_assignment(vm)?,
+        Opcode::UnsignedRightShiftAssignment => handlers::unsigned_right_shift_assignment(vm)?,
+        Opcode::BitwiseAndAssignment => handlers::bitwise_and_assignment(vm)?,
+        Opcode::BitwiseOrAssignment => handlers::bitwise_or_assignment(vm)?,
+        Opcode::BitwiseXorAssignment => handlers::bitwise_xor_assignment(vm)?,
+        Opcode::LogicalAndAssignment => handlers::logical_and_assignment(vm)?,
+        Opcode::LogicalOrAssignment => handlers::logical_or_assignment(vm)?,
+        Opcode::LogicalNullishAssignment => handlers::logical_nullish_assignment(vm)?,
         Opcode::ConstructorCall => handlers::constructor_call(vm)?,
         Opcode::FunctionCall => handlers::function_call(vm)?,
-        Opcode::GetThis => handlers::get_this(vm),
-        Opcode::GetGlobalThis => handlers::get_global_this(vm),
-        Opcode::EvaluateModule => handlers::evaluate_module(vm),
+        Opcode::GetThis => handlers::get_this(vm)?,
+        Opcode::GetGlobalThis => handlers::get_global_this(vm)?,
+        Opcode::EvaluateModule => handlers::evaluate_module(vm)?,
         Opcode::Try => handlers::try_block(vm),
         Opcode::Throw => handlers::throw(vm)?,
-        Opcode::ReturnModule => handlers::return_module(vm),
+        Opcode::ReturnModule => handlers::return_module(vm)?,
         Opcode::Return => return handlers::return_(vm, frame_idx),
-        Opcode::Less => handlers::less(vm),
-        Opcode::LessEqual => handlers::less_equal(vm),
-        Opcode::Greater => handlers::greater(vm),
-        Opcode::GreaterEqual => handlers::greater_equal(vm),
-        Opcode::StaticPropertyAccess => handlers::static_property_access(vm),
-        Opcode::Equality => handlers::equality(vm),
-        Opcode::Inequality => handlers::inequality(vm),
-        Opcode::StrictEquality => handlers::strict_equality(vm),
-        Opcode::StrictInequality => handlers::strict_inequality(vm),
-        Opcode::Typeof => handlers::typeof_(vm),
+        Opcode::Less => handlers::less(vm)?,
+        Opcode::LessEqual => handlers::less_equal(vm)?,
+        Opcode::Greater => handlers::greater(vm)?,
+        Opcode::GreaterEqual => handlers::greater_equal(vm)?,
+        Opcode::StaticPropertyAccess => handlers::static_property_access(vm)?,
+        Opcode::Equality => handlers::equality(vm)?,
+        Opcode::Inequality => handlers::inequality(vm)?,
+        Opcode::StrictEquality => handlers::strict_equality(vm)?,
+        Opcode::StrictInequality => handlers::strict_inequality(vm)?,
+        Opcode::Typeof => handlers::typeof_(vm)?,
         Opcode::PostfixIncrement | Opcode::PostfixDecrement => {
-            handlers::postfix_increment_decrement(vm, opcode)
+            handlers::postfix_increment_decrement(vm, opcode)?
         }
-        Opcode::Assignment => handlers::assignment(vm),
-        Opcode::Void => handlers::void(vm),
-        Opcode::ArrayLiteral => handlers::array_literal(vm),
-        Opcode::ObjectLiteral => handlers::object_literal(vm),
-        Opcode::ComputedPropertyAccess => handlers::computed_property_access(vm),
+        Opcode::Assignment => handlers::assignment(vm)?,
+        Opcode::Void => handlers::void(vm)?,
+        Opcode::ArrayLiteral => handlers::array_literal(vm)?,
+        Opcode::ObjectLiteral => handlers::object_literal(vm)?,
+        Opcode::ComputedPropertyAccess => handlers::computed_property_access(vm)?,
         Opcode::Continue => handlers::loop_continue(vm)?,
         Opcode::Break => handlers::loop_break(vm)?,
         Opcode::LoopStart => handlers::loop_start(vm),
@@ -1066,9 +1052,9 @@ pub fn handle(
         Opcode::ExportDefault => handlers::export_default(vm)?,
         Opcode::Yield => return handlers::yield_(vm),
         Opcode::In => handlers::in_(vm)?,
-        Opcode::Instanceof => handlers::instanceof(vm),
+        Opcode::Instanceof => handlers::instanceof(vm)?,
         Opcode::Debugger => handlers::debugger(vm),
-        Opcode::GetSymbolIterator => handlers::get_symbol_iterator(vm),
+        Opcode::GetSymbolIterator => handlers::get_symbol_iterator(vm)?,
 
         _ => unimplemented!("{:?}", opcode),
     }

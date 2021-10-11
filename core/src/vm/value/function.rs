@@ -534,4 +534,14 @@ impl FunctionKind {
             _ => None,
         }
     }
+
+    /// Returns the inner `this` value of this function
+    pub fn this(&self, vm: &VM) -> Option<Handle<Value>> {
+        match self {
+            Self::User(u) => u.receiver.as_ref().map(Receiver::get).cloned(),
+            Self::Closure(c) => c.func.receiver.as_ref().map(Receiver::get).cloned(),
+            Self::Native(n) => n.receiver.as_ref().map(Receiver::get).cloned(),
+            Self::Module(_) => Some(vm.global.clone()),
+        }
+    }
 }

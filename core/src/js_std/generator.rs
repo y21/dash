@@ -47,7 +47,7 @@ pub fn next(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
         let current_sp = ctx.vm.stack.len();
 
         for value in stack {
-            ctx.vm.stack.push(value);
+            ctx.vm.try_push_stack(value)?;
         }
 
         Frame {

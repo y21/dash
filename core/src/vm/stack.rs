@@ -117,6 +117,25 @@ impl<T, const N: usize> Stack<T, N> {
         self.1 += 1;
     }
 
+    /// Pushes a value on the stack, without doing any boundary checks
+    pub unsafe fn push_unchecked(&mut self, v: T) {
+        assert!(N > self.1);
+
+        unsafe { self.0.get_unchecked_mut(self.1).write(v) };
+        self.1 += 1;
+    }
+
+    /// Attempts to push a value onto the stack, returning a bool indicating whether it succeeded
+    pub fn try_push(&mut self, value: T) -> bool {
+        if N > self.1 {
+            // SAFETY: we've made sure that the stack is not full
+            unsafe { self.push_unchecked(value) };
+            true
+        } else {
+            false
+        }
+    }
+
     /// Pops the last value that was pushed off the stack and returns it
     pub fn pop(&mut self) -> T {
         assert!(self.1 > 0);
