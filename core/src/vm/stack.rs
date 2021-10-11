@@ -119,8 +119,6 @@ impl<T, const N: usize> Stack<T, N> {
 
     /// Pushes a value on the stack, without doing any boundary checks
     pub unsafe fn push_unchecked(&mut self, v: T) {
-        assert!(N > self.1);
-
         unsafe { self.0.get_unchecked_mut(self.1).write(v) };
         self.1 += 1;
     }
