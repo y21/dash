@@ -746,7 +746,7 @@ impl VM {
         let mut stack = format!("Error: {}\n", message.unwrap_or(""));
 
         // Iterate over frames and add it to the stack string
-        for frame in self.frames.as_array_bottom() {
+        for frame in self.frames.as_array_bottom().take(10) {
             let frame = unsafe { &*frame.as_ptr() };
             stack.push_str("  at ");
 
