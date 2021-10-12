@@ -710,7 +710,7 @@ impl VM {
         }
 
         if let Some(handler) = unsafe { self.unwind_handlers.get() } {
-            if handler.frame_pointer < fp {
+            if handler.frame_pointer <= fp {
                 return Err(value);
             }
         } else {
@@ -872,21 +872,8 @@ impl VM {
 
     /// Executes an execution frame
     pub fn execute_frame(&mut self, frame: Frame, can_gc: bool) -> Result<DispatchResult, VMError> {
-        let frame_idx = self.frames.len();  
+        let frame_idx = self.frames.len();
         self.try_push_frame(frame).map_err(VMError::UncaughtError)?;
-
-        macro_rules! unwind_abort_if_uncaught {
-            ($e:expr) => {
-                if let Err(e) = self.unwind($e, frame_idx) {
-                    self.frames.reset();
-                    self.stack.reset();
-                    self.loops.reset();
-                    return Err(VMError::UncaughtError(e));
-                } else {
-                    continue;
-                }
-            };
-        }
 
         while self.frames.len() > frame_idx {
             unsafe {
@@ -902,7 +889,13 @@ impl VM {
             match dispatch::handle(self, opcode, frame_idx) {
                 Ok(Some(result)) => return Ok(result),
                 Ok(None) => {}
-                Err(e) => unwind_abort_if_uncaught!(e),
+                Err(err) => {
+                    if let Err(e) = self.unwind(err, frame_idx) {
+                        return Err(VMError::UncaughtError(e));
+                    } else {
+                        continue;
+                    }
+                }
             };
        }
 

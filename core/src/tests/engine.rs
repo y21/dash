@@ -405,6 +405,34 @@ pub fn generator_arg_mismatch() {
 }
 
 #[test]
+pub fn unwind_across_native() {
+    // https://github.com/y21/dash/issues/19
+    eval::<()>(
+        r#"
+        try {
+            (() => {
+                [1].map(() => { throw new Error('case 1') });
+            })();
+        } catch (e) {}
+        
+        try {
+            [1].map(() => { throw new Error('case 2') });
+        } catch (e) {}
+        
+        try {
+            throw new Error('case 3')
+        } catch (e) {}
+
+        try {
+            throw new Error(123)
+        } catch (e) {}
+    "#,
+        None,
+    )
+    .unwrap();
+}
+
+#[test]
 pub fn async_task() {
     let mut vm = VM::from_str::<()>(
         r#"
