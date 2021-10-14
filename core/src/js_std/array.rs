@@ -15,7 +15,10 @@ use crate::{
     },
 };
 
-use super::error::{self};
+use super::{
+    error::{self},
+    todo,
+};
 
 /// An array-like value
 pub enum ArrayLikeKind<'a> {
@@ -94,8 +97,8 @@ fn iterable_from_value<'a>(
 /// The array constructor
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array-constructor
-pub fn array_constructor(_args: CallContext) -> Result<Handle<Value>, Handle<Value>> {
-    todo!()
+pub fn array_constructor(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    todo("Array", ctx.vm)
 }
 
 /// This function implements Array.prototype.push
@@ -254,43 +257,43 @@ pub fn fill(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 /// This function implements Array.prototype.filter
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.filter
-pub fn filter(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
-    todo!()
+pub fn filter(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    todo("Array.prototype.filter", ctx.vm)
 }
 
 /// This function implements Array.prototype.find
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.find
-pub fn find(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
-    todo!()
+pub fn find(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    todo("Array.prototype.find", ctx.vm)
 }
 
 /// This function implements Array.prototype.find
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.findIndex
-pub fn find_index(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
-    todo!()
+pub fn find_index(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    todo("Array.prototype.findIndex", ctx.vm)
 }
 
 /// This function implements Array.prototype.flat
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.flat
-pub fn flat(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
-    todo!()
+pub fn flat(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    todo("Array.prototype.flat", ctx.vm)
 }
 
 /// This function implements Array.prototype.forEach
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.forEach
-pub fn for_each(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
-    todo!()
+pub fn for_each(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    todo("Array.prototype.forEach", ctx.vm)
 }
 
 /// This function implements Array.from
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.from
-pub fn from(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
-    todo!()
+pub fn from(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    todo("Array.from", ctx.vm)
 }
 
 /// This function implements Array.prototype.includes
@@ -483,76 +486,76 @@ pub fn last_index_of(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 /// This function implements Array.of
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.of
-pub fn of(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
-    todo!()
+pub fn of(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    todo("Array.of", ctx.vm)
 }
 
 /// This function implements Array.prototype.pop
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.pop
-pub fn pop(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
-    todo!()
+pub fn pop(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    todo("Array.prototype.pop", ctx.vm)
 }
 
 /// This function implements Array.prototype.reduce
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.reduce
-pub fn reduce(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
-    todo!()
+pub fn reduce(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    todo("Array.prototype.reduce", ctx.vm)
 }
 
 /// This function implements Array.prototype.reduceRight
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.reduceRight
-pub fn reduce_right(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
-    todo!()
+pub fn reduce_right(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    todo("Array.prototype.reduceRight", ctx.vm)
 }
 
 /// This function implements Array.prototype.reverse
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.reverse
-pub fn reverse(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
-    todo!()
+pub fn reverse(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    todo("Array.prototype.reverse", ctx.vm)
 }
 
 /// This function implements Array.prototype.shift
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.shift
-pub fn shift(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
-    todo!()
+pub fn shift(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    todo("Array.prototype.shift", ctx.vm)
 }
 
 /// This function implements Array.prototype.slice
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.slice
-pub fn slice(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
-    todo!()
+pub fn slice(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    todo("Array.prototype.slice", ctx.vm)
 }
 
 /// This function implements Array.prototype.some
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.some
-pub fn some(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
-    todo!()
+pub fn some(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    todo("Array.prototype.some", ctx.vm)
 }
 
 /// This function implements Array.prototype.sort
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.sort
-pub fn sort(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
-    todo!()
+pub fn sort(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    todo("Array.prototype.sort", ctx.vm)
 }
 
 /// This function implements Array.prototype.splice
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.splice
-pub fn splice(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
-    todo!()
+pub fn splice(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    todo("Array.prototype.splice", ctx.vm)
 }
 
 /// This function implements Array.prototype.unshift
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.unshift
-pub fn unshift(_ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
-    todo!()
+pub fn unshift(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    todo("Array.prototype.unshift", ctx.vm)
 }

@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 
+use super::todo;
 use crate::{
     gc::Handle,
     vm::value::{array::Array, function::CallContext, PropertyKey, Value, ValueKind},
@@ -8,8 +9,8 @@ use crate::{
 /// The object constructor
 ///
 /// https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-object-constructor
-pub fn object_constructor(_args: CallContext) -> Result<Handle<Value>, Handle<Value>> {
-    todo!()
+pub fn object_constructor(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    todo("Object", ctx.vm)
 }
 
 /// Implements Object.defineProperty

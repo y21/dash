@@ -1,3 +1,4 @@
+use super::todo;
 use crate::{
     gc::Handle,
     vm::value::{
@@ -11,8 +12,8 @@ use crate::{
 /// The promise constructor
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-promise-constructor
-pub fn promise_constructor(_args: CallContext) -> Result<Handle<Value>, Handle<Value>> {
-    todo!()
+pub fn promise_constructor(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    todo("Promise", ctx.vm)
 }
 
 /// Implements Promise.resolve

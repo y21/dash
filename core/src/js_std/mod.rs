@@ -1,6 +1,9 @@
 use crate::{
     gc::Handle,
-    vm::value::{function::CallContext, Value},
+    vm::{
+        value::{function::CallContext, Value},
+        VM,
+    },
 };
 
 /// Implements `Array`
@@ -41,4 +44,12 @@ pub mod weakset;
 /// Returns its `this` value
 pub fn identity(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     Ok(Value::unwrap_or_undefined(ctx.receiver, ctx.vm))
+}
+
+/// A function that always returns a generic "unimplemented" JS error
+pub fn todo(what: &str, vm: &VM) -> Result<Handle<Value>, Handle<Value>> {
+    Err(error::create_error(
+        format!("`{}` is not yet implemented", what),
+        vm,
+    ))
 }

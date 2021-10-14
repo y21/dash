@@ -1,15 +1,15 @@
 use std::borrow::Cow;
 
 use crate::gc::Handle;
-use crate::js_std::error;
+use crate::js_std::{error, todo};
 use crate::vm::abstractions;
 use crate::vm::value::{function::CallContext, Value};
 
 /// The string constructor
 ///
 /// https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-string-constructor
-pub fn string_constructor(_args: CallContext) -> Result<Handle<Value>, Handle<Value>> {
-    todo!()
+pub fn string_constructor(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    todo("String", ctx.vm)
 }
 
 /// Implements String.prototype.charAt
