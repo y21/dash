@@ -382,13 +382,13 @@ impl<'a> Parser<'a> {
             return None;
         }
 
-        let arguments = self.argument_list().unwrap();
+        let arguments = self.argument_list()?;
 
         if !self.expect_and_skip(&[TokenType::LeftBrace], true) {
             return None;
         }
 
-        let statements = self.block().unwrap().0;
+        let statements = self.block()?.0;
 
         Some(FunctionDeclaration::new(name, arguments, statements, ty))
     }
@@ -397,12 +397,15 @@ impl<'a> Parser<'a> {
         let mut arguments = Vec::new();
 
         while !self.expect_and_skip(&[TokenType::RightParen], false) {
-            let tok = self.next()?;
+            let tok = self.next().cloned()?;
 
             match tok.ty {
                 TokenType::Identifier => arguments.push(tok.full),
                 TokenType::Comma => continue,
-                _ => todo!(), // TODO: handle
+                _ => {
+                    self.create_error(ErrorKind::UnexpectedToken(tok.clone(), TokenType::Comma));
+                    return None;
+                }
             };
         }
 
@@ -663,7 +666,11 @@ impl<'a> Parser<'a> {
             if let Expr::Call(fc) = &mut rval {
                 fc.constructor_call = true;
             } else {
-                todo!()
+                self.create_error(ErrorKind::UnexpectedToken(
+                    self.previous()?.clone(),
+                    TokenType::New,
+                ));
+                return None;
             };
 
             return Some(rval);
