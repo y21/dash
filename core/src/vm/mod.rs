@@ -67,10 +67,13 @@ impl VMError {
         match self {
             Self::UncaughtError(err_cell) => {
                 let err = unsafe { err_cell.borrow_unbounded() };
-                let stack_cell = err.get_field(PropertyKey::from("stack")).unwrap();
-                let stack_ref = unsafe { stack_cell.borrow_unbounded() };
-                let stack_string = stack_ref.as_string().unwrap();
-                Cow::Owned(String::from(stack_string))
+                let message_cell = err.get_field(PropertyKey::from("stack"))
+                    .or_else(|| err.get_field(PropertyKey::from("message")))
+                    .unwrap_or_else(|| Handle::clone(&err_cell));
+
+                let message_ref = unsafe { message_cell.borrow_unbounded() };
+                let message_string = message_ref.to_string();
+                Cow::Owned(String::from(message_string))
             }
         }
     }
@@ -584,6 +587,7 @@ impl VM {
         patch_value(self, &self.statics.isnan);
         patch_value(self, &self.statics.object_define_property);
         patch_value(self, &self.statics.object_get_own_property_names);
+        patch_value(self, &self.statics.object_get_own_property_symbols);
         patch_value(self, &self.statics.object_to_string);
         patch_value(self, &self.statics.isnan);
         patch_value(self, &self.statics.console_log);
@@ -656,6 +660,7 @@ impl VM {
             let mut object_ctor = unsafe { self.statics.object_ctor.borrow_mut_unbounded() };
             object_ctor.set_property("defineProperty".into(), self.statics.object_define_property.clone());
             object_ctor.set_property("getOwnPropertyNames".into(), self.statics.object_get_own_property_names.clone());
+            object_ctor.set_property("getOwnPropertySymbols".into(), self.statics.object_get_own_property_symbols.clone());
             object_ctor.set_property("getPrototypeOf".into(), self.statics.object_get_prototype_of.clone());
             global.set_property("Object".into(), Handle::clone(&self.statics.object_ctor));
         }

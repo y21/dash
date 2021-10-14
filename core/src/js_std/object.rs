@@ -50,6 +50,23 @@ pub fn get_own_property_names(ctx: CallContext) -> Result<Handle<Value>, Handle<
     Ok(ctx.vm.create_js_value(Array::new(keys)).into_handle(ctx.vm))
 }
 
+/// Implements Object.getOwnPropertySymbols
+///
+/// https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-object.getownpropertysymbols
+pub fn get_own_property_symbols(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+    let obj_cell = ctx.args.first().unwrap();
+    let obj = unsafe { obj_cell.borrow_unbounded() };
+
+    let mut keys = Vec::with_capacity(obj.fields.len());
+    for key in obj.fields.keys() {
+        if let PropertyKey::Symbol(symbol) = key {
+            keys.push(Handle::clone(symbol));
+        }
+    }
+
+    Ok(ctx.vm.create_js_value(Array::new(keys)).into_handle(ctx.vm))
+}
+
 /// Implements Object.getPrototypeOf
 ///
 /// https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-object.getprototypeof

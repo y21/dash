@@ -186,6 +186,8 @@ pub struct Statics {
     pub object_define_property: Handle<Value>,
     /// Represents Object.getOwnPropertyNames
     pub object_get_own_property_names: Handle<Value>,
+    /// Represents Object.getOwnPropertySymbols
+    pub object_get_own_property_symbols: Handle<Value>,
     /// Represents Object.getPrototypeOf
     pub object_get_prototype_of: Handle<Value>,
     /// Represents Object.prototype.toString
@@ -398,6 +400,11 @@ impl Statics {
                 gc,
                 "getOwnPropertyNames",
                 js_std::object::get_own_property_names
+            ),
+            object_get_own_property_symbols: register_glob_method!(
+                gc,
+                "getOwnPropertySymbols",
+                js_std::object::get_own_property_symbols
             ),
             object_get_prototype_of: register_glob_method!(
                 gc,
