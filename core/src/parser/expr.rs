@@ -1,7 +1,7 @@
 use crate::{
     compiler::instruction::Instruction,
     vm::value::{
-        object::{ExoticObject, Object},
+        object::{ExoticObject, ObjectKind},
         Value, ValueKind,
     },
 };
@@ -262,7 +262,7 @@ impl<'a> LiteralExpr<'a> {
             Self::Boolean(b) => Value::from(*b),
             Self::Number(n) => Value::from(*n),
             Self::Identifier(_) => unreachable!(),
-            Self::String(s) => Object::Exotic(ExoticObject::String(
+            Self::String(s) => ObjectKind::Exotic(ExoticObject::String(
                 std::str::from_utf8(s).unwrap().to_owned(),
             ))
             .into(),

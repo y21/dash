@@ -560,7 +560,7 @@ impl<'a, A: Agent> Visitor<'a, Result<Vec<Instruction>, CompileError<'a>>> for C
             }
             // not yet implemented
             TokenType::Await => return Err(CompileError::UnexpectedAwait),
-            _ => todo!(),
+            _ => todo!("{:?}", e.operator),
         }
 
         Ok(instructions)

@@ -20,7 +20,7 @@ use crate::{
 
 use super::{
     function::{FunctionKind, Receiver},
-    object::Object,
+    object::{Object, ObjectKind},
     ops::logic::Typeof,
     weak::Weak as JsWeak,
     ValueKind,
@@ -122,27 +122,12 @@ impl<T> Eq for HashWeak<T> {}
 pub struct Value {
     /// The type of value
     pub kind: ValueKind,
-    /// The fields of this value
-    pub fields: HashMap<PropertyKey<'static>, Handle<Value>>,
-    /// [[Prototype]] of this value
-    pub proto: Option<Handle<Value>>,
-    /// Constructor of this value
-    pub constructor: Option<Handle<Value>>,
 }
 
 impl Value {
     /// Creates a new value
-    ///
-    /// It is recommended to only create values using this function
-    /// if it is not necessary to have a [[Prototype]] set, such as for
-    /// undefined and null values
     pub fn new(kind: ValueKind) -> Self {
-        Self {
-            kind,
-            fields: HashMap::new(),
-            constructor: None,
-            proto: None,
-        }
+        Self { kind }
     }
 
     /// Attempts to call a value
@@ -214,52 +199,52 @@ impl Value {
     /// Updates the internal properties ([[Prototype]] and constructor)
     /// of this JavaScript value
     pub fn update_internal_properties(&mut self, proto: &Handle<Value>, ctor: &Handle<Value>) {
-        self.proto = Some(Handle::clone(proto));
-        self.constructor = Some(Handle::clone(ctor));
+        if let ValueKind::Object(obj) = &mut self.kind {
+            obj.prototype = Some(Handle::clone(proto));
+            obj.constructor = Some(Handle::clone(ctor));
+        }
+    }
+
+    /// Updates the [[Prototype]] of this JavaScript value
+    pub fn set_prototype(&mut self, proto: Option<&Handle<Value>>) {
+        if let ValueKind::Object(obj) = &mut self.kind {
+            obj.prototype = proto.cloned();
+        }
     }
 
     /// Tries to detect the [[Prototype]] and constructor of this value given self.kind, and updates it
     pub fn detect_internal_properties(&mut self, vm: &VM) {
         let statics = &vm.statics;
-        match &self.kind {
-            ValueKind::Bool(_) => {
-                self.update_internal_properties(&statics.boolean_proto, &statics.boolean_ctor)
+
+        match self.as_object().map(|x| &x.kind) {
+            Some(ObjectKind::Exotic(ExoticObject::Promise(_))) => {
+                self.update_internal_properties(&statics.promise_proto, &statics.promise_ctor)
             }
-            ValueKind::Number(_) => {
-                self.update_internal_properties(&statics.number_proto, &statics.number_ctor)
+            Some(ObjectKind::Exotic(ExoticObject::String(_))) => {
+                self.update_internal_properties(&statics.string_proto, &statics.string_ctor)
             }
-            ValueKind::Object(o) => {
-                // can't pattern match box ;/
-                match &**o {
-                    Object::Exotic(ExoticObject::Promise(_)) => self
-                        .update_internal_properties(&statics.promise_proto, &statics.promise_ctor),
-                    Object::Exotic(ExoticObject::String(_)) => {
-                        self.update_internal_properties(&statics.string_proto, &statics.string_ctor)
-                    }
-                    Object::Exotic(ExoticObject::Function(_)) => self.update_internal_properties(
-                        &statics.function_proto,
-                        &statics.function_ctor,
-                    ),
-                    Object::Exotic(ExoticObject::Array(_)) => {
-                        self.update_internal_properties(&statics.array_proto, &statics.array_ctor)
-                    }
-                    Object::Exotic(ExoticObject::GeneratorIterator(_)) => {
-                        self.update_internal_properties(
-                            &statics.generator_iterator_proto,
-                            &statics.object_ctor, // TODO: generator iterator ctor
-                        )
-                    }
-                    Object::Exotic(ExoticObject::Symbol(_)) => {
-                        self.update_internal_properties(&statics.symbol_proto, &statics.symbol_ctor)
-                    }
-                    Object::Ordinary | Object::Exotic(ExoticObject::Custom(_)) => {
-                        self.update_internal_properties(&statics.object_proto, &statics.object_ctor)
-                    }
-                    Object::Exotic(ExoticObject::Weak(JsWeak::Set(_))) => self
-                        .update_internal_properties(&statics.weakset_proto, &statics.weakset_ctor),
-                    Object::Exotic(ExoticObject::Weak(JsWeak::Map(_))) => self
-                        .update_internal_properties(&statics.weakmap_proto, &statics.weakmap_ctor),
-                }
+            Some(ObjectKind::Exotic(ExoticObject::Function(_))) => {
+                self.update_internal_properties(&statics.function_proto, &statics.function_ctor)
+            }
+            Some(ObjectKind::Exotic(ExoticObject::Array(_))) => {
+                self.update_internal_properties(&statics.array_proto, &statics.array_ctor)
+            }
+            Some(ObjectKind::Exotic(ExoticObject::GeneratorIterator(_))) => self
+                .update_internal_properties(
+                    &statics.generator_iterator_proto,
+                    &statics.object_ctor, // TODO: generator iterator ctor
+                ),
+            Some(ObjectKind::Exotic(ExoticObject::Symbol(_))) => {
+                self.update_internal_properties(&statics.symbol_proto, &statics.symbol_ctor)
+            }
+            Some(ObjectKind::Ordinary | ObjectKind::Exotic(ExoticObject::Custom(_))) => {
+                self.update_internal_properties(&statics.object_proto, &statics.object_ctor)
+            }
+            Some(ObjectKind::Exotic(ExoticObject::Weak(JsWeak::Set(_)))) => {
+                self.update_internal_properties(&statics.weakset_proto, &statics.weakset_ctor)
+            }
+            Some(ObjectKind::Exotic(ExoticObject::Weak(JsWeak::Map(_)))) => {
+                self.update_internal_properties(&statics.weakmap_proto, &statics.weakmap_ctor)
             }
             _ => {}
         }
@@ -273,14 +258,16 @@ impl Value {
             ValueKind::Bool(_) => true,
             ValueKind::Null => true,
             ValueKind::Undefined => true,
-            ValueKind::Object(o) => matches!(&**o, Object::Exotic(ExoticObject::String(_))),
+            ValueKind::Object(o) => matches!(&o.kind, ObjectKind::Exotic(ExoticObject::String(_))),
         }
     }
 
     /// Returns whether this value is callable
     pub fn is_callable(&self) -> bool {
         match &self.kind {
-            ValueKind::Object(o) => matches!(&**o, Object::Exotic(ExoticObject::Function(_))),
+            ValueKind::Object(o) => {
+                matches!(&o.kind, ObjectKind::Exotic(ExoticObject::Function(_)))
+            }
             _ => false,
         }
     }
@@ -290,19 +277,41 @@ impl Value {
         self._typeof() == Typeof::Function
     }
 
-    /// Returns a Rc to the [[Prototype]] of this value, if it has one
-    pub fn strong_proto(&self) -> Option<Handle<Value>> {
-        self.proto.clone()
+    /// Returns a reference to the [[Prototype]] of this value, if it has one
+    pub fn prototype(&self, vm: &VM) -> Option<Handle<Value>> {
+        match &self.kind {
+            ValueKind::Bool(_) => Some(Handle::clone(&vm.statics.boolean_proto)),
+            ValueKind::Number(_) => Some(Handle::clone(&vm.statics.number_proto)),
+            ValueKind::Null | ValueKind::Undefined => None,
+            ValueKind::Object(o) => o.prototype.as_ref().cloned(),
+            _ => None,
+        }
     }
 
-    /// Returns a Rc to the constructor of this value, if it has one
-    pub fn strong_constructor(&self) -> Option<Handle<Value>> {
-        self.constructor.clone()
+    /// Returns a reference to the inner [[Prototype]] of this value if it is an object
+    ///
+    /// The prototype of primitive values never changes
+    pub fn object_prototype(&self) -> Option<Handle<Value>> {
+        self.as_object().and_then(|o| o.prototype.as_ref().cloned())
     }
 
-    /// Tries to unwrap a Handle<Value> into a Value
-    pub fn try_into_inner(value: Rc<RefCell<Self>>) -> Option<Self> {
-        Some(Rc::try_unwrap(value).ok()?.into_inner())
+    /// Returns a reference to the constructor of this value, if it has one
+    pub fn constructor(&self, vm: &VM) -> Option<Handle<Value>> {
+        match &self.kind {
+            ValueKind::Bool(_) => Some(Handle::clone(&vm.statics.boolean_ctor)),
+            ValueKind::Number(_) => Some(Handle::clone(&vm.statics.number_ctor)),
+            ValueKind::Null | ValueKind::Undefined => None,
+            ValueKind::Object(o) => o.constructor.as_ref().cloned(),
+            _ => None,
+        }
+    }
+
+    /// Returns a reference to the inner constructor of this value if it is an object
+    ///
+    /// The constructor of primitive values never changes
+    pub fn object_constructor(&self) -> Option<Handle<Value>> {
+        self.as_object()
+            .and_then(|o| o.constructor.as_ref().cloned())
     }
 
     /// Unwraps o, or returns undefined if it is None
@@ -310,22 +319,43 @@ impl Value {
         o.unwrap_or_else(|| Value::new(ValueKind::Undefined).into_handle(vm))
     }
 
-    /// Looks up a field directly
+    /// Looks up a field directly without going up the prototype chain
     pub fn get_field(&self, key: PropertyKey<'_>) -> Option<Handle<Value>> {
-        self.fields.get(&key).cloned()
+        self.fields().and_then(|x| x.get(&key).cloned())
+    }
+
+    /// Checks whether this value contains a particular key without walking the prototype chain
+    pub fn has_field(&self, key: PropertyKey<'_>) -> bool {
+        self.fields().map(|x| x.contains_key(&key)).unwrap_or(false)
     }
 
     /// Checks whether this value (or one of the values in its prototype chain) contains a field
     pub fn has_property(&self, vm: &VM, key: PropertyKey<'_>) -> bool {
-        if self.fields.contains_key(&key) {
+        if self.has_field(key.clone()) {
             return true;
         }
 
-        if let Some(proto) = self.proto.as_ref() {
+        if let Some(proto) = self.prototype(vm).as_ref() {
             let proto_ref = proto.borrow(vm);
             proto_ref.has_property(vm, key)
         } else {
             false
+        }
+    }
+
+    /// Returns a reference to the inner HashMap of JS values
+    pub fn fields(&self) -> Option<&HashMap<PropertyKey<'static>, Handle<Value>>> {
+        match &self.kind {
+            ValueKind::Object(o) => Some(&o.fields),
+            _ => None,
+        }
+    }
+
+    /// Returns a reference to the inner HashMap of JS values
+    pub fn fields_mut(&mut self) -> Option<&mut HashMap<PropertyKey<'static>, Handle<Value>>> {
+        match &mut self.kind {
+            ValueKind::Object(o) => Some(&mut o.fields),
+            _ => None,
         }
     }
 
@@ -340,15 +370,16 @@ impl Value {
     ) -> Option<Handle<Value>> {
         let value = unsafe { value_cell.borrow_unbounded() };
 
+        // TODO: refactor this with Exotic trait
         match key.as_str().map(|x| x.as_ref()) {
             Some("__proto__") => {
                 return Some(
                     value
-                        .strong_proto()
+                        .prototype(vm)
                         .unwrap_or_else(|| Value::new(ValueKind::Null).into_handle(vm)),
                 )
             }
-            Some("constructor") => return value.strong_constructor(),
+            Some("constructor") => return value.constructor(vm),
             Some("prototype") => {
                 let is_function = value.is_function();
                 if is_function {
@@ -362,11 +393,11 @@ impl Value {
                 }
             }
             Some("length") => {
-                match value.as_object() {
-                    Some(Object::Exotic(ExoticObject::Array(a))) => {
+                match value.as_object().map(|o| &o.kind) {
+                    Some(ObjectKind::Exotic(ExoticObject::Array(a))) => {
                         return Some(vm.create_js_value(a.elements.len() as f64).into_handle(vm))
                     }
-                    Some(Object::Exotic(ExoticObject::String(s))) => {
+                    Some(ObjectKind::Exotic(ExoticObject::String(s))) => {
                         return Some(vm.create_js_value(s.len() as f64).into_handle(vm))
                     }
                     _ => {}
@@ -382,32 +413,34 @@ impl Value {
             _ => {}
         };
 
-        if !value.fields.is_empty() {
-            if let Some(entry_cell) = value.fields.get(key) {
-                if let Some(override_this) = override_this {
-                    let mut entry = unsafe { entry_cell.borrow_mut_unbounded() };
+        if let Some(fields) = value.fields() {
+            if !fields.is_empty() {
+                if let Some(entry_cell) = fields.get(key) {
+                    if let Some(override_this) = override_this {
+                        let mut entry = unsafe { entry_cell.borrow_mut_unbounded() };
 
-                    if let Some(f) = entry.as_function_mut() {
-                        let receiver = Receiver::Bound(Handle::clone(&override_this));
+                        if let Some(f) = entry.as_function_mut() {
+                            let receiver = Receiver::Bound(Handle::clone(&override_this));
 
-                        match f {
-                            FunctionKind::Closure(c) => c.func.bind(receiver),
-                            FunctionKind::Native(n) => {
-                                if let Some(recv) = &mut n.receiver {
-                                    recv.bind(receiver);
-                                } else {
-                                    n.receiver = Some(receiver);
+                            match f {
+                                FunctionKind::Closure(c) => c.func.bind(receiver),
+                                FunctionKind::Native(n) => {
+                                    if let Some(recv) = &mut n.receiver {
+                                        recv.bind(receiver);
+                                    } else {
+                                        n.receiver = Some(receiver);
+                                    }
                                 }
-                            }
-                            _ => {}
-                        };
+                                _ => {}
+                            };
+                        }
                     }
+                    return Some(Handle::clone(entry_cell));
                 }
-                return Some(Handle::clone(entry_cell));
             }
         }
 
-        if let Some(proto_cell) = value.proto.as_ref() {
+        if let Some(proto_cell) = value.prototype(vm).as_ref() {
             Value::get_property(vm, proto_cell, key, override_this.or(Some(value_cell)))
         } else {
             None
@@ -416,7 +449,9 @@ impl Value {
 
     /// Adds a field
     pub fn set_property(&mut self, k: PropertyKey<'static>, v: Handle<Value>) {
-        self.fields.insert(k, v);
+        if let Some(fields) = self.fields_mut() {
+            fields.insert(k, v);
+        }
     }
 
     pub(crate) fn mark(this: &Handle<Value>) {
@@ -433,37 +468,39 @@ impl Value {
 
         this.mark_visited();
 
-        if let Some(proto) = &this.proto {
-            Value::mark(proto)
+        if let Some(proto) = this.object_prototype() {
+            Value::mark(&proto)
         }
 
-        if let Some(constructor) = &this.constructor {
-            Value::mark(constructor)
+        if let Some(constructor) = this.object_constructor() {
+            Value::mark(&constructor)
         }
 
-        for (key, value) in this.fields.iter() {
-            key.mark();
-            Value::mark(value)
+        if let Some(fields) = this.fields() {
+            for (key, value) in fields.iter() {
+                key.mark();
+                Value::mark(value)
+            }
         }
 
         match &this.kind {
-            ValueKind::Object(o) => match &**o {
-                Object::Exotic(ExoticObject::Array(a)) => {
+            ValueKind::Object(o) => match &o.kind {
+                ObjectKind::Exotic(ExoticObject::Array(a)) => {
                     for handle in &a.elements {
                         Value::mark(handle)
                     }
                 }
-                Object::Exotic(ExoticObject::GeneratorIterator(gen)) => gen.mark(),
-                Object::Exotic(ExoticObject::Function(f)) => f.mark(),
-                Object::Exotic(ExoticObject::Promise(_)) => todo!(),
-                Object::Exotic(ExoticObject::Custom(_)) => {
+                ObjectKind::Exotic(ExoticObject::GeneratorIterator(gen)) => gen.mark(),
+                ObjectKind::Exotic(ExoticObject::Function(f)) => f.mark(),
+                ObjectKind::Exotic(ExoticObject::Promise(_)) => todo!(),
+                ObjectKind::Exotic(ExoticObject::Custom(_)) => {
                     panic!("Custom GC marking is unsupported")
                 }
-                Object::Exotic(ExoticObject::Weak(_)) => todo!(), // weak objects don't exist yet
+                ObjectKind::Exotic(ExoticObject::Weak(_)) => todo!(), // weak objects don't exist yet
                 // Other object types that do not contain handles that need to be marked
-                Object::Exotic(ExoticObject::String(_)) => {}
-                Object::Exotic(ExoticObject::Symbol(_)) => {}
-                Object::Ordinary => {}
+                ObjectKind::Exotic(ExoticObject::String(_)) => {}
+                ObjectKind::Exotic(ExoticObject::Symbol(_)) => {}
+                ObjectKind::Ordinary => {}
             },
             _ => {}
         };

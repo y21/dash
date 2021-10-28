@@ -1,7 +1,7 @@
 use crate::gc::{Gc, Handle};
 use crate::js_std;
 use crate::vm::value::function::Constructor;
-use crate::vm::value::object::Object;
+use crate::vm::value::object::ObjectKind;
 
 use super::value::function::NativeFunction;
 use super::value::object::ExoticObject;
@@ -279,18 +279,18 @@ impl Statics {
     pub fn new(gc: &mut Gc<Value>) -> Self {
         Self {
             // Proto
-            boolean_proto: gc.register(Value::from(Object::Ordinary)),
-            number_proto: gc.register(Value::from(Object::Ordinary)),
-            string_proto: gc.register(Value::from(Object::Ordinary)),
-            function_proto: gc.register(Value::from(Object::Ordinary)),
-            array_proto: gc.register(Value::from(Object::Ordinary)),
-            weakset_proto: gc.register(Value::from(Object::Ordinary)),
-            weakmap_proto: gc.register(Value::from(Object::Ordinary)),
-            object_proto: gc.register(Value::from(Object::Ordinary)),
-            error_proto: gc.register(Value::from(Object::Ordinary)),
-            promise_proto: gc.register(Value::from(Object::Ordinary)),
-            symbol_proto: gc.register(Value::from(Object::Ordinary)),
-            generator_iterator_proto: gc.register(Value::from(Object::Ordinary)),
+            boolean_proto: gc.register(Value::from(ObjectKind::Ordinary)),
+            number_proto: gc.register(Value::from(ObjectKind::Ordinary)),
+            string_proto: gc.register(Value::from(ObjectKind::Ordinary)),
+            function_proto: gc.register(Value::from(ObjectKind::Ordinary)),
+            array_proto: gc.register(Value::from(ObjectKind::Ordinary)),
+            weakset_proto: gc.register(Value::from(ObjectKind::Ordinary)),
+            weakmap_proto: gc.register(Value::from(ObjectKind::Ordinary)),
+            object_proto: gc.register(Value::from(ObjectKind::Ordinary)),
+            error_proto: gc.register(Value::from(ObjectKind::Ordinary)),
+            promise_proto: gc.register(Value::from(ObjectKind::Ordinary)),
+            symbol_proto: gc.register(Value::from(ObjectKind::Ordinary)),
+            generator_iterator_proto: gc.register(Value::from(ObjectKind::Ordinary)),
             // Ctor
             error_ctor: register_ctor!(gc, "Error", js_std::error::error_constructor),
             weakset_ctor: register_ctor!(gc, "WeakSet", js_std::weakset::weakset_constructor),

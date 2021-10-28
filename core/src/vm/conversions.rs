@@ -2,7 +2,7 @@ use super::value::{
     array::Array,
     function::{Closure, FunctionKind, Module, NativeFunction, UserFunction},
     generator::GeneratorIterator,
-    object::{ExoticObject, Object},
+    object::{ExoticObject, Object, ObjectKind},
     promise::Promise,
     symbol::Symbol,
     weak::{Weak, WeakMap, WeakSet},
@@ -29,9 +29,15 @@ impl From<Object> for Value {
     }
 }
 
+impl From<ObjectKind> for Value {
+    fn from(o: ObjectKind) -> Self {
+        Object::new(o).into()
+    }
+}
+
 impl From<ExoticObject> for Value {
     fn from(o: ExoticObject) -> Self {
-        Object::Exotic(o).into()
+        ObjectKind::Exotic(o).into()
     }
 }
 

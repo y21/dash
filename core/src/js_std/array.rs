@@ -1,19 +1,6 @@
 use std::{borrow::Cow, str::Chars};
 
-use crate::{
-    gc::Handle,
-    js_std,
-    vm::{
-        abstractions,
-        value::{
-            array::Array,
-            function::CallContext,
-            object::{ExoticObject, Object},
-            PropertyKey, Value, ValueKind,
-        },
-        VM,
-    },
-};
+use crate::{gc::Handle, js_std, vm::{VM, abstractions, value::{PropertyKey, Value, ValueKind, array::Array, function::CallContext, object::{ExoticObject, Object, ObjectKind}}}};
 
 use super::{
     error::{self},
@@ -48,14 +35,14 @@ impl<'a> ArrayLikeIterable<'a> {
 
     /// Creates a new array like iterable given a Value by detecting its kind
     pub fn from_value(value: &'a Value, value_cell: &'a Handle<Value>) -> Self {
-        match value.as_object() {
-            Some(Object::Exotic(ExoticObject::String(s))) => {
+        match value.as_object().map(|x| &x.kind) {
+            Some(ObjectKind::Exotic(ExoticObject::String(s))) => {
                 Self::new(ArrayLikeKind::String(s.chars()))
             }
-            Some(Object::Exotic(ExoticObject::Array(a))) => {
+            Some(ObjectKind::Exotic(ExoticObject::Array(a))) => {
                 Self::new(ArrayLikeKind::Array(&a.elements))
             }
-            Some(Object::Ordinary) => Self::new(ArrayLikeKind::Object(value_cell)),
+            Some(ObjectKind::Ordinary) => Self::new(ArrayLikeKind::Object(value_cell)),
             _ => Self::new(ArrayLikeKind::Empty),
         }
     }

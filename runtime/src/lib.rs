@@ -7,7 +7,7 @@ use dash::{
     util::MaybeOwned,
     vm::value::{
         function::{CallContext, NativeFunction},
-        object::Object,
+        object::ObjectKind,
         Value,
     },
 };
@@ -74,7 +74,7 @@ impl Agent for RuntimeAgent {
     fn import(&mut self, module_name: &[u8], gc: &mut Gc<Value>) -> Option<ImportResult> {
         match module_name {
             b"fs" if self.allow_fs() => {
-                let mut obj = Value::from(Object::Ordinary);
+                let mut obj = Value::from(ObjectKind::Ordinary);
 
                 let read_file = Value::from(NativeFunction::new(
                     "readFile",
@@ -87,7 +87,7 @@ impl Agent for RuntimeAgent {
                 Some(ImportResult::Value(obj))
             }
             b"mem" if self.allow_mem() => {
-                let mut obj = Value::from(Object::Ordinary);
+                let mut obj = Value::from(ObjectKind::Ordinary);
 
                 let address_of = Value::from(NativeFunction::new(
                     "addressOf",

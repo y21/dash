@@ -40,13 +40,17 @@ pub fn get_own_property_names(ctx: CallContext) -> Result<Handle<Value>, Handle<
     let obj_cell = ctx.args.first().unwrap();
     let obj = unsafe { obj_cell.borrow_unbounded() };
 
-    let mut keys = Vec::with_capacity(obj.fields.len());
-    for key in obj.fields.keys() {
-        // We only want to collect string keys, not symbols
-        if let PropertyKey::String(s) = key {
-            keys.push(ctx.vm.create_js_value(s.to_string()).into_handle(ctx.vm));
+    let keys = if let Some(fields) = obj.fields() {
+        let mut keys = Vec::with_capacity(fields.len());
+        for key in fields.keys() {
+            if let PropertyKey::String(s) = key {
+                keys.push(ctx.vm.create_js_value(s.to_string()).into_handle(ctx.vm));
+            }
         }
-    }
+        keys
+    } else {
+        Vec::new()
+    };
 
     Ok(ctx.vm.create_js_value(Array::new(keys)).into_handle(ctx.vm))
 }
@@ -58,12 +62,17 @@ pub fn get_own_property_symbols(ctx: CallContext) -> Result<Handle<Value>, Handl
     let obj_cell = ctx.args.first().unwrap();
     let obj = unsafe { obj_cell.borrow_unbounded() };
 
-    let mut keys = Vec::with_capacity(obj.fields.len());
-    for key in obj.fields.keys() {
-        if let PropertyKey::Symbol(symbol) = key {
-            keys.push(Handle::clone(symbol));
+    let keys = if let Some(fields) = obj.fields() {
+        let mut keys = Vec::with_capacity(fields.len());
+        for key in fields.keys() {
+            if let PropertyKey::Symbol(symbol) = key {
+                keys.push(Handle::clone(&symbol));
+            }
         }
-    }
+        keys
+    } else {
+        Vec::new()
+    };
 
     Ok(ctx.vm.create_js_value(Array::new(keys)).into_handle(ctx.vm))
 }
@@ -74,9 +83,9 @@ pub fn get_own_property_symbols(ctx: CallContext) -> Result<Handle<Value>, Handl
 pub fn get_prototype_of(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
     let obj_cell = ctx.args.first().unwrap();
     let obj = unsafe { obj_cell.borrow_unbounded() };
+
     Ok(obj
-        .proto
-        .clone()
+        .prototype(ctx.vm)
         .unwrap_or_else(|| Value::new(ValueKind::Null).into_handle(ctx.vm)))
 }
 
@@ -99,7 +108,7 @@ pub fn to_string(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
         ValueKind::Null => Cow::Borrowed("[object Null]"),
         // 3. Let O be ! ToObject(this value).
         _ => {
-            if let Some(constructor_cell) = this_ref.constructor.as_ref() {
+            if let Some(constructor_cell) = this_ref.constructor(ctx.vm).as_ref() {
                 let constructor = unsafe { constructor_cell.borrow_unbounded() };
                 let constructor_func = constructor.as_function().unwrap();
                 Cow::Owned(format!(

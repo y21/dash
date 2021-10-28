@@ -5,7 +5,7 @@ use crate::{
     js_std,
     vm::{
         value::{
-            object::{ExoticObject, Object},
+            object::{ExoticObject, ObjectKind},
             PropertyKey, Value, ValueKind,
         },
         VM,
@@ -25,8 +25,8 @@ pub fn to_string(
         Some(ValueKind::Null) => Cow::Borrowed("null"),
         Some(ValueKind::Bool(b)) => Cow::Borrowed(if *b { "true" } else { "false" }),
         Some(ValueKind::Number(n)) => number_to_string(*n),
-        Some(ValueKind::Object(o)) => match &**o {
-            Object::Exotic(ExoticObject::String(s)) => Cow::Borrowed(&**s),
+        Some(ValueKind::Object(o)) => match &o.kind {
+            ObjectKind::Exotic(ExoticObject::String(s)) => Cow::Borrowed(&**s),
             _ => {
                 // 1. Let primValue be ? ToPrimitive(argument, string).
                 let prim_value = to_primitive(

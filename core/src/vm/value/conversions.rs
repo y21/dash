@@ -4,7 +4,7 @@ use super::{
     array::Array,
     function::FunctionKind,
     generator::GeneratorIterator,
-    object::{ExoticObject, Object},
+    object::{ExoticObject, Object, ObjectKind},
     promise::Promise,
     symbol::Symbol,
     weak::Weak,
@@ -60,11 +60,8 @@ impl Value {
 
     /// Attempts to return a reference to the inner exotic object if it is one
     pub fn as_exotic_object(&self) -> Option<&ExoticObject> {
-        match &self.kind {
-            ValueKind::Object(o) => match &**o {
-                Object::Exotic(o) => Some(o),
-                _ => None,
-            },
+        match self.as_object().map(|o| &o.kind) {
+            Some(ObjectKind::Exotic(e)) => Some(e),
             _ => None,
         }
     }
@@ -79,11 +76,8 @@ impl Value {
 
     /// Attempts to return a reference to the inner exotic object if it is one
     pub fn as_exotic_object_mut(&mut self) -> Option<&mut ExoticObject> {
-        match &mut self.kind {
-            ValueKind::Object(o) => match &mut **o {
-                Object::Exotic(o) => Some(o),
-                _ => None,
-            },
+        match self.as_object_mut().map(|o| &mut o.kind) {
+            Some(ObjectKind::Exotic(e)) => Some(e),
             _ => None,
         }
     }
@@ -117,9 +111,11 @@ impl Value {
 
     /// Converts a JavaScript value to a property key (string or symbol)
     pub fn to_property_key(&self, handle: Handle<Value>) -> PropertyKey<'static> {
-        match self.as_object() {
-            Some(Object::Exotic(ExoticObject::String(s))) => return PropertyKey::from(s.clone()),
-            Some(Object::Exotic(ExoticObject::Symbol(_))) => return PropertyKey::from(handle),
+        match self.as_object().map(|o| &o.kind) {
+            Some(ObjectKind::Exotic(ExoticObject::String(s))) => {
+                return PropertyKey::from(s.clone())
+            }
+            Some(ObjectKind::Exotic(ExoticObject::Symbol(_))) => return PropertyKey::from(handle),
             _ => {}
         };
 
@@ -134,7 +130,7 @@ impl Value {
             ValueKind::Null => Some(self.to_string()),
             ValueKind::Number(_) => Some(self.to_string()),
             ValueKind::Undefined => Some(self.to_string()),
-            ValueKind::Object(o) => o.to_json(self),
+            ValueKind::Object(o) => o.to_json(),
         }
     }
 
@@ -145,7 +141,7 @@ impl Value {
     /// returning "[object Object]"
     pub fn inspect(&self, depth: u32) -> Cow<str> {
         match &self.kind {
-            ValueKind::Object(o) => o.inspect(self, depth),
+            ValueKind::Object(o) => o.inspect(depth),
             _ => self.to_string(),
         }
     }
@@ -183,37 +179,37 @@ impl Object {
     /// This does not *convert* a value to a string. To get the effect of `"" + value`,
     /// use [Value::to_string]
     pub fn as_string(&self) -> Option<&str> {
-        match self {
-            Self::Exotic(ExoticObject::String(s)) => Some(s),
+        match &self.kind {
+            ObjectKind::Exotic(ExoticObject::String(s)) => Some(s),
             _ => None,
         }
     }
 
     /// Attempts to return self as a string if it is one
     pub fn into_string(self) -> Option<String> {
-        match self {
-            Self::Exotic(ExoticObject::String(s)) => Some(s),
+        match self.kind {
+            ObjectKind::Exotic(ExoticObject::String(s)) => Some(s),
             _ => None,
         }
     }
 
     /// Converts a JavaScript value to a string
     pub fn to_string(&self) -> Cow<str> {
-        match self {
-            Self::Exotic(ExoticObject::String(s)) => Cow::Borrowed(s),
-            Self::Exotic(ExoticObject::Function(f)) => Cow::Owned(f.to_string()),
-            Self::Exotic(ExoticObject::Array(_)) => Cow::Borrowed("[object Array]"),
-            Self::Exotic(ExoticObject::Weak(w)) => w.to_string(),
+        match &self.kind {
+            ObjectKind::Exotic(ExoticObject::String(s)) => Cow::Borrowed(s),
+            ObjectKind::Exotic(ExoticObject::Function(f)) => Cow::Owned(f.to_string()),
+            ObjectKind::Exotic(ExoticObject::Array(_)) => Cow::Borrowed("[object Array]"),
+            ObjectKind::Exotic(ExoticObject::Weak(w)) => w.to_string(),
             _ => Cow::Borrowed("[object Object]"), // TODO: look if there's a toString function
         }
     }
 
     /// Converts a JavaScript value to a JSON string
-    pub fn to_json(&self, this: &Value) -> Option<Cow<str>> {
-        match self {
-            Self::Exotic(ExoticObject::String(s)) => Some(Cow::Owned(format!("\"{}\"", s))),
-            Self::Exotic(ExoticObject::Function(_)) => None,
-            Self::Exotic(ExoticObject::Array(a)) => {
+    pub fn to_json(&self) -> Option<Cow<str>> {
+        match &self.kind {
+            ObjectKind::Exotic(ExoticObject::String(s)) => Some(Cow::Owned(format!("\"{}\"", s))),
+            ObjectKind::Exotic(ExoticObject::Function(_)) => None,
+            ObjectKind::Exotic(ExoticObject::Array(a)) => {
                 let mut s = String::from("[ ");
 
                 for (index, element_cell) in a.elements.iter().enumerate() {
@@ -231,10 +227,10 @@ impl Object {
                 s.push_str(" ]");
                 Some(Cow::Owned(s))
             }
-            Self::Ordinary => {
+            ObjectKind::Ordinary => {
                 let mut s = String::from("{ ");
 
-                for (index, (key, value_cell)) in this.fields.iter().enumerate() {
+                for (index, (key, value_cell)) in self.fields.iter().enumerate() {
                     let value = unsafe { value_cell.borrow_unbounded() };
                     if index > 0 {
                         s.push_str(", ");
@@ -256,13 +252,13 @@ impl Object {
     /// Inspects a JavaScript value
     ///
     /// See [Value::inspect] for the difference between to_string and inspect
-    pub fn inspect(&self, this: &Value, depth: u32) -> Cow<str> {
+    pub fn inspect(&self, depth: u32) -> Cow<str> {
         if depth > 5 {
             return Cow::Borrowed("…");
         }
 
-        match self {
-            Self::Exotic(ExoticObject::String(s)) => {
+        match &self.kind {
+            ObjectKind::Exotic(ExoticObject::String(s)) => {
                 if depth > 0 {
                     Cow::Owned(format!(
                         "\"{}\"",
@@ -272,11 +268,11 @@ impl Object {
                     Cow::Borrowed(s)
                 }
             }
-            Self::Exotic(ExoticObject::Symbol(s)) => {
+            ObjectKind::Exotic(ExoticObject::Symbol(s)) => {
                 Cow::Owned(format!("Symbol({})", s.0.as_deref().unwrap_or("undefined")))
             }
-            Self::Exotic(ExoticObject::Function(f)) => Cow::Owned(f.to_string()),
-            Self::Exotic(ExoticObject::Array(a)) => {
+            ObjectKind::Exotic(ExoticObject::Function(f)) => Cow::Owned(f.to_string()),
+            ObjectKind::Exotic(ExoticObject::Array(a)) => {
                 let mut s = String::from("[ ");
 
                 for (index, element_cell) in a.elements.iter().enumerate() {
@@ -289,8 +285,8 @@ impl Object {
                 s.push_str(" ]");
                 Cow::Owned(s)
             }
-            Self::Exotic(ExoticObject::Weak(w)) => w.inspect(),
-            Self::Exotic(ExoticObject::Promise(p)) => match &p.value {
+            ObjectKind::Exotic(ExoticObject::Weak(w)) => w.inspect(),
+            ObjectKind::Exotic(ExoticObject::Promise(p)) => match &p.value {
                 PromiseState::Resolved(value_cell) => {
                     let value = unsafe { value_cell.borrow_unbounded() };
                     Cow::Owned(format!(
@@ -307,14 +303,14 @@ impl Object {
                 }
                 PromiseState::Pending => Cow::Borrowed("Promise {<pending>}"),
             },
-            Self::Exotic(ExoticObject::GeneratorIterator(_)) => {
+            ObjectKind::Exotic(ExoticObject::GeneratorIterator(_)) => {
                 Cow::Borrowed("[GeneratorIterator]")
             }
-            Self::Exotic(ExoticObject::Custom(c)) => c.inspect(this, depth),
-            Self::Ordinary => {
+            ObjectKind::Exotic(ExoticObject::Custom(c)) => c.inspect(self, depth + 1),
+            ObjectKind::Ordinary => {
                 let mut s = String::from("{ ");
 
-                for (index, (key, value_cell)) in this.fields.iter().enumerate() {
+                for (index, (key, value_cell)) in self.fields.iter().enumerate() {
                     let value = unsafe { value_cell.borrow_unbounded() };
                     if index > 0 {
                         s.push_str(", ");
@@ -335,80 +331,80 @@ impl Object {
 
     /// Attempts to return self as a function if it is one
     pub fn into_function(self) -> Option<FunctionKind> {
-        match self {
-            Self::Exotic(ExoticObject::Function(kind)) => Some(kind),
+        match self.kind {
+            ObjectKind::Exotic(ExoticObject::Function(kind)) => Some(kind),
             _ => None,
         }
     }
 
     /// Attempts to return self as a reference to the function if it is one
     pub fn as_function(&self) -> Option<&FunctionKind> {
-        match self {
-            Self::Exotic(ExoticObject::Function(kind)) => Some(kind),
+        match &self.kind {
+            ObjectKind::Exotic(ExoticObject::Function(kind)) => Some(kind),
             _ => None,
         }
     }
 
     /// Attempts to return self as a mutable reference to the function if it is one
     pub fn as_function_mut(&mut self) -> Option<&mut FunctionKind> {
-        match self {
-            Self::Exotic(ExoticObject::Function(kind)) => Some(kind),
+        match &mut self.kind {
+            ObjectKind::Exotic(ExoticObject::Function(kind)) => Some(kind),
             _ => None,
         }
     }
 
     /// Attempts to return self as an array if it is one
     pub fn as_array(&self) -> Option<&Array> {
-        match self {
-            Self::Exotic(ExoticObject::Array(arr)) => Some(arr),
+        match &self.kind {
+            ObjectKind::Exotic(ExoticObject::Array(arr)) => Some(arr),
             _ => None,
         }
     }
 
     /// Attempts to return self as a reference to [Weak] if it is one
     pub fn as_weak(&self) -> Option<&Weak> {
-        match self {
-            Self::Exotic(ExoticObject::Weak(w)) => Some(w),
+        match &self.kind {
+            ObjectKind::Exotic(ExoticObject::Weak(w)) => Some(w),
             _ => None,
         }
     }
 
     /// Attempts to return self as a mutable reference to [Weak] if it is one
     pub fn as_weak_mut(&mut self) -> Option<&mut Weak> {
-        match self {
-            Self::Exotic(ExoticObject::Weak(w)) => Some(w),
+        match &mut self.kind {
+            ObjectKind::Exotic(ExoticObject::Weak(w)) => Some(w),
             _ => None,
         }
     }
 
     /// Attempts to return self as a reference to [Promise] if it is one
     pub fn as_promise(&self) -> Option<&Promise> {
-        match self {
-            Self::Exotic(ExoticObject::Promise(p)) => Some(p),
+        match &self.kind {
+            ObjectKind::Exotic(ExoticObject::Promise(p)) => Some(p),
             _ => None,
         }
     }
 
     /// Attempts to return self as a reference to [GeneratorIterator] if it is one
     pub fn as_generator_iterator(&self) -> Option<&GeneratorIterator> {
-        match self {
-            Self::Exotic(ExoticObject::GeneratorIterator(g)) => Some(g),
+        match &self.kind {
+            ObjectKind::Exotic(ExoticObject::GeneratorIterator(g)) => Some(g),
             _ => None,
         }
     }
 
     /// Attempts to return self as a mutable reference to [GeneratorIterator] if it is one
     pub fn as_generator_iterator_mut(&mut self) -> Option<&mut GeneratorIterator> {
-        match self {
-            Self::Exotic(ExoticObject::GeneratorIterator(g)) => Some(g),
+        match &mut self.kind {
+            ObjectKind::Exotic(ExoticObject::GeneratorIterator(g)) => Some(g),
             _ => None,
         }
     }
 
     /// Attempts to return self as a reference to [Symbol] if it is one
     pub fn as_symbol(&self) -> Option<&Symbol> {
-        match self {
-            Self::Exotic(ExoticObject::Symbol(s)) => Some(s),
+        match &self.kind {
+            ObjectKind::Exotic(ExoticObject::Symbol(s)) => Some(s),
             _ => None,
         }
     }

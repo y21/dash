@@ -935,7 +935,7 @@ mod handlers {
 
         let test = unsafe { test.borrow_unbounded() };
         let is_instanceof = test
-            .constructor
+            .constructor(vm)
             .as_ref()
             .map(|x| std::ptr::eq(x.as_ptr(), ctor.as_ptr()))
             .unwrap_or_default();

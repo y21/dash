@@ -2,7 +2,7 @@ use std::{borrow::Cow, fmt::Debug};
 
 use crate::{gc::Handle, js_std, vm::VM};
 
-use super::Value;
+use super::{object::Object, Value};
 
 fn not_implemented_error(vm: &VM) -> Handle<Value> {
     js_std::error::create_error("not yet implemented", vm)
@@ -32,7 +32,7 @@ impl Clone for Box<dyn Exotic> {
 /// Implements object behavior
 pub trait Exotic: Debug + ExoticClone {
     /// Inspects a JavaScript value
-    fn inspect(&self, this: &Value, depth: u32) -> Cow<str>;
+    fn inspect(&self, this: &Object, depth: u32) -> Cow<str>;
 
     /// Trap for function calls
     fn apply(

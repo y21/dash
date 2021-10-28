@@ -1,7 +1,7 @@
 use crate::{
     gc::Handle,
     vm::value::{
-        object::{ExoticObject, Object},
+        object::{ExoticObject, Object, ObjectKind},
         Value, ValueKind,
     },
 };
@@ -159,31 +159,31 @@ impl Typeof {
 impl Object {
     /// Implements the behavior of the typeof operator specifically on [Object]s
     pub fn _typeof(&self) -> Typeof {
-        match self {
-            Self::Ordinary
-            | Self::Exotic(ExoticObject::Array(_))
-            | Self::Exotic(ExoticObject::Weak(_))
-            | Self::Exotic(ExoticObject::Promise(_))
-            | Self::Exotic(ExoticObject::Custom(_))
-            | Self::Exotic(ExoticObject::GeneratorIterator(_)) => Typeof::Object,
-            Self::Exotic(ExoticObject::Function(_)) => Typeof::Function,
-            Self::Exotic(ExoticObject::Symbol(_)) => Typeof::Symbol,
-            Self::Exotic(ExoticObject::String(_)) => Typeof::String,
+        match self.kind {
+            ObjectKind::Ordinary
+            | ObjectKind::Exotic(ExoticObject::Array(_))
+            | ObjectKind::Exotic(ExoticObject::Weak(_))
+            | ObjectKind::Exotic(ExoticObject::Promise(_))
+            | ObjectKind::Exotic(ExoticObject::Custom(_))
+            | ObjectKind::Exotic(ExoticObject::GeneratorIterator(_)) => Typeof::Object,
+            ObjectKind::Exotic(ExoticObject::Function(_)) => Typeof::Function,
+            ObjectKind::Exotic(ExoticObject::Symbol(_)) => Typeof::Symbol,
+            ObjectKind::Exotic(ExoticObject::String(_)) => Typeof::String,
         }
     }
 
     /// Checks whether an object is considered to be truthy
     pub fn is_truthy(&self) -> bool {
-        match self {
-            Self::Exotic(ExoticObject::String(s)) => !s.is_empty(),
-            Self::Exotic(ExoticObject::Array(_)) => true,
-            Self::Exotic(ExoticObject::Function(..)) => true,
-            Self::Exotic(ExoticObject::Weak(_)) => true,
-            Self::Exotic(ExoticObject::Promise(_)) => true,
-            Self::Exotic(ExoticObject::Custom(_)) => true,
-            Self::Exotic(ExoticObject::GeneratorIterator(_)) => true,
-            Self::Exotic(ExoticObject::Symbol(_)) => true,
-            Self::Ordinary => true,
+        match &self.kind {
+            ObjectKind::Exotic(ExoticObject::String(s)) => !s.is_empty(),
+            ObjectKind::Exotic(ExoticObject::Array(_)) => true,
+            ObjectKind::Exotic(ExoticObject::Function(..)) => true,
+            ObjectKind::Exotic(ExoticObject::Weak(_)) => true,
+            ObjectKind::Exotic(ExoticObject::Promise(_)) => true,
+            ObjectKind::Exotic(ExoticObject::Custom(_)) => true,
+            ObjectKind::Exotic(ExoticObject::GeneratorIterator(_)) => true,
+            ObjectKind::Exotic(ExoticObject::Symbol(_)) => true,
+            ObjectKind::Ordinary => true,
         }
     }
 
@@ -194,11 +194,11 @@ impl Object {
 
     /// Implements the === operator on objects
     pub fn strict_equal(&self, other: &Value) -> bool {
-        match self {
-            Self::Exotic(ExoticObject::String(s)) => {
+        match &self.kind {
+            ObjectKind::Exotic(ExoticObject::String(s)) => {
                 let other = match &other.kind {
-                    ValueKind::Object(o) => match &**o {
-                        Self::Exotic(ExoticObject::String(s)) => s,
+                    ValueKind::Object(o) => match &o.kind {
+                        ObjectKind::Exotic(ExoticObject::String(s)) => s,
                         _ => return false,
                     },
                     _ => return false,

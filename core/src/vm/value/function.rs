@@ -5,7 +5,7 @@ use crate::vm::{instruction::Instruction, upvalue::Upvalue, VM};
 use core::fmt::{self, Debug, Formatter};
 use std::collections::HashMap;
 
-use super::object::Object;
+use super::object::{Object, ObjectKind};
 use super::Value;
 
 /// A native function that can be called from JavaScript code
@@ -218,9 +218,9 @@ impl UserFunction {
     pub fn get_or_set_prototype(&mut self, this: &Handle<Value>, vm: &VM) -> Handle<Value> {
         self.prototype
             .get_or_insert_with(|| {
-                let mut o = vm.create_object();
+                let mut o = Object::new(ObjectKind::Ordinary);
                 o.constructor = Some(Handle::clone(this));
-                o.into_handle(vm)
+                Value::from(o).into_handle(vm)
             })
             .clone()
     }
@@ -261,9 +261,9 @@ impl NativeFunction {
     pub fn get_or_set_prototype(&mut self, this: &Handle<Value>, vm: &VM) -> Handle<Value> {
         self.prototype
             .get_or_insert_with(|| {
-                let mut o = vm.create_object();
+                let mut o = Object::new(ObjectKind::Ordinary);
                 o.constructor = Some(Handle::clone(this));
-                o.into_handle(vm)
+                Value::from(o).into_handle(vm)
             })
             .clone()
     }
@@ -435,10 +435,10 @@ impl FunctionKind {
     /// Attempts to create an object with its [[Prototype]] set to this
     /// functions prototype
     pub fn construct(&mut self, this: &Handle<Value>, vm: &VM) -> Value {
-        let mut o = Value::from(Object::Ordinary);
-        o.proto = self.get_or_set_prototype(this, vm);
+        let mut o = Object::new(ObjectKind::Ordinary);
+        o.prototype = self.get_or_set_prototype(this, vm);
         o.constructor = Some(Handle::clone(this));
-        o
+        o.into()
     }
 
     /// Sets the prototype of this function

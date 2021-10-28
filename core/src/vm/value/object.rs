@@ -1,4 +1,7 @@
+use std::collections::HashMap;
 use std::fmt::Debug;
+
+use crate::gc::Handle;
 
 use super::exotic::Exotic;
 use super::generator::GeneratorIterator;
@@ -6,6 +9,7 @@ use super::promise::Promise;
 use super::symbol::Symbol;
 use super::weak::Weak;
 use super::{array::Array, function::FunctionKind};
+use super::{PropertyKey, Value};
 
 /// A JavaScript exotic object
 ///
@@ -31,11 +35,36 @@ pub enum ExoticObject {
     Custom(Box<dyn Exotic>),
 }
 
-/// A JavaScript object
+/// A JavaScript object type
 #[derive(Debug, Clone)]
-pub enum Object {
+pub enum ObjectKind {
     /// Exotic object
     Exotic(ExoticObject),
     /// Ordinary, regular object
     Ordinary,
+}
+
+/// A JavaScript object
+#[derive(Debug, Clone)]
+pub struct Object {
+    /// The object's type
+    pub kind: ObjectKind,
+    /// The fields of this value
+    pub fields: HashMap<PropertyKey<'static>, Handle<Value>>,
+    /// This value's constructor
+    pub constructor: Option<Handle<Value>>,
+    /// This value's [[Prototype]]
+    pub prototype: Option<Handle<Value>>,
+}
+
+impl Object {
+    /// Creates a new object with no prototype and constructor set
+    pub fn new(kind: ObjectKind) -> Self {
+        Self {
+            kind,
+            fields: HashMap::new(),
+            constructor: None,
+            prototype: None,
+        }
+    }
 }

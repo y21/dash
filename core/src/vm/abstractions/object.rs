@@ -3,7 +3,7 @@ use crate::{
     vm::{
         abstractions::conversions::to_string,
         value::{
-            object::{ExoticObject, Object},
+            object::{ExoticObject, ObjectKind},
             PropertyKey, Value, ValueKind,
         },
         VM,
@@ -84,8 +84,8 @@ pub fn to_number(argument: Option<&Value>) -> Result<f64, Handle<Value>> {
         Some(ValueKind::Null) => Ok(0f64),
         Some(ValueKind::Bool(b)) => Ok(*b as u8 as f64),
         Some(ValueKind::Number(n)) => Ok(*n),
-        Some(ValueKind::Object(o)) => match &**o {
-            Object::Exotic(ExoticObject::String(s)) => Ok(to_number_from_string(s)),
+        Some(ValueKind::Object(o)) => match &o.kind {
+            ObjectKind::Exotic(ExoticObject::String(s)) => Ok(to_number_from_string(s)),
             _ => todo!(),
         },
         None => Ok(f64::NAN),

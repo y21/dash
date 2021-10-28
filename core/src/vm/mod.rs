@@ -25,7 +25,7 @@ use value::Value;
 use crate::{EvalError, agent::Agent, compiler::{compiler::{self, CompileError, Compiler, FunctionKind as CompilerFunctionKind}, instruction::to_vm_instructions}, gc::{Gc, Handle}, parser::{lexer, token}, util::{unlikely, MaybeOwned}, vm::{dispatch::DispatchResult, frame::UnwindHandler, value::{ValueKind, array::Array, function::{CallContext, FunctionKind, UserFunction}, generator::GeneratorIterator}}};
 use crate::js_std;
 
-use self::{frame::{Frame, Loop}, instruction::Constant, stack::Stack, statics::Statics, value::{PropertyKey, object::Object}};
+use self::{frame::{Frame, Loop}, instruction::Constant, stack::Stack, statics::Statics, value::{PropertyKey, object::{Object, ObjectKind}}};
 
 // Force garbage collection at 10000 objects by default
 const DEFAULT_GC_OBJECT_COUNT_THRESHOLD: usize = 10000;
@@ -143,7 +143,7 @@ impl VM {
         let mut gc = Gc::new();
         let gc_marker = gc.marker.get();
         let statics = Statics::new(&mut gc);
-        let global = gc.register(Value::from(Object::Ordinary));
+        let global = gc.register(Value::from(ObjectKind::Ordinary));
 
         let mut vm = Self {
             frames: Stack::new(),
@@ -382,15 +382,15 @@ impl VM {
 
     /// Creates a JavaScript object
     pub fn create_object(&self) -> Value {
-        self.create_js_value(Object::Ordinary)
+        self.create_js_value(ObjectKind::Ordinary)
     }
 
     /// Creates a JavaScript object with its [[Prototype]] set to null
     pub fn create_null_object(&self) -> Value {
-        let mut o = Value::from(Object::Ordinary);
+        let mut o = Value::from(ObjectKind::Ordinary);
         o.detect_internal_properties(self);
         // Override [[Prototype]]
-        o.proto = None;
+        o.set_prototype(None);
         o
     }
 
@@ -399,8 +399,9 @@ impl VM {
         &self,
         fields: impl Into<HashMap<PropertyKey<'static>, Handle<Value>>>,
     ) -> Value {
-        let mut o = self.create_object();
+        let mut o = Object::new(ObjectKind::Ordinary);
         o.fields = fields.into();
+        let mut o = self.create_js_value(o);
         o
     }
 
@@ -414,8 +415,7 @@ impl VM {
     /// Creates a JavaScript array
     pub fn create_array(&self, arr: Array) -> Value {
         let mut o = Value::from(arr);
-        o.proto = Some(Handle::clone(&self.statics.array_proto));
-        o.constructor = Some(Handle::clone(&self.statics.array_ctor));
+        o.detect_internal_properties(self);
         o
     }
 
@@ -566,8 +566,9 @@ impl VM {
 
         {
             let mut object_proto = unsafe { self.statics.object_proto.borrow_mut_unbounded() };
-            object_proto.constructor = Some(Handle::clone(&self.statics.object_ctor));
-            object_proto.proto = Some(Value::new(ValueKind::Null).into_handle(self));
+            let mut obj = object_proto.as_object_mut().unwrap();
+            obj.constructor = Some(Handle::clone(&self.statics.object_ctor));
+            obj.prototype = Some(Value::new(ValueKind::Null).into_handle(self));
             object_proto.set_property("toString".into(), Handle::clone(&self.statics.object_to_string));
         }
 
