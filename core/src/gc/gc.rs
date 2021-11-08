@@ -97,7 +97,7 @@ impl<T> Gc<T> {
     /// If not marked as visited, the returned [Handle] will dangle when sweep is called.
     pub fn register<H>(&mut self, value: H) -> Handle<T>
     where
-        H: Into<InnerHandleGuard<T>> + Debug,
+        H: Into<InnerHandleGuard<T>>,
     {
         let ptr = self.heap.add(value.into());
 
