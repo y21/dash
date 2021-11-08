@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 
 use crate::gc::Handle;
+use crate::vm::VM;
 
 use super::exotic::Exotic;
 use super::generator::GeneratorIterator;
@@ -50,11 +51,11 @@ pub struct Object {
     /// The object's type
     pub kind: ObjectKind,
     /// The fields of this value
-    pub fields: HashMap<PropertyKey<'static>, Handle<Value>>,
+    pub fields: HashMap<PropertyKey<'static>, Value>,
     /// This value's constructor
-    pub constructor: Option<Handle<Value>>,
+    pub constructor: Option<Handle<Object>>,
     /// This value's [[Prototype]]
-    pub prototype: Option<Handle<Value>>,
+    pub prototype: Option<Handle<Object>>,
 }
 
 impl Object {
@@ -66,5 +67,11 @@ impl Object {
             constructor: None,
             prototype: None,
         }
+    }
+
+    /// Registers this object for garbage collection and returns a handle to it
+    // TODO: re-think whether this is fine to not be unsafe?
+    pub fn into_handle(self, vm: &VM) -> Handle<Self> {
+        vm.gc.borrow_mut().register(self)
     }
 }

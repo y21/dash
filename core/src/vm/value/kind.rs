@@ -1,3 +1,5 @@
+use crate::gc::Handle;
+
 use super::object::Object;
 
 /// The type of value
@@ -7,8 +9,8 @@ pub enum ValueKind {
     Number(f64),
     /// A JavaScript bool
     Bool(bool),
-    /// An object that owns a heap allocation
-    Object(Box<Object>),
+    /// A garbage collected object
+    Object(Handle<Object>),
     /// JavaScript undefined value
     Undefined,
     /// JavaScript null value

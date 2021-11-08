@@ -1,3 +1,5 @@
+use crate::gc::Handle;
+
 use super::value::{
     array::Array,
     function::{Closure, FunctionKind, Module, NativeFunction, UserFunction},
@@ -23,40 +25,40 @@ impl From<bool> for Value {
     }
 }
 
-impl From<Object> for Value {
-    fn from(o: Object) -> Self {
-        Self::new(ValueKind::Object(Box::new(o)))
+impl From<Handle<Object>> for Value {
+    fn from(o: Handle<Object>) -> Self {
+        Self::new(ValueKind::Object(o))
     }
 }
 
-impl From<ObjectKind> for Value {
+impl From<ObjectKind> for Object {
     fn from(o: ObjectKind) -> Self {
-        Object::new(o).into()
+        Object::new(o)
     }
 }
 
-impl From<ExoticObject> for Value {
+impl From<ExoticObject> for Object {
     fn from(o: ExoticObject) -> Self {
         ObjectKind::Exotic(o).into()
     }
 }
 
-impl From<&'static str> for Value {
+impl From<&'static str> for Object {
     fn from(s: &'static str) -> Self {
         ExoticObject::String(s.to_owned()).into()
     }
 }
 
-impl From<String> for Value {
+impl From<String> for Object {
     fn from(s: String) -> Self {
         ExoticObject::String(s).into()
     }
 }
 
-impl TryFrom<&[u8]> for Value {
+impl TryFrom<&[u8]> for Object {
     type Error = Utf8Error;
 
-    fn try_from(s: &[u8]) -> Result<Value, Self::Error> {
+    fn try_from(s: &[u8]) -> Result<Self, Self::Error> {
         std::str::from_utf8(s)
             .map(ToOwned::to_owned)
             .map(ExoticObject::String)
@@ -64,73 +66,73 @@ impl TryFrom<&[u8]> for Value {
     }
 }
 
-impl From<FunctionKind> for Value {
+impl From<FunctionKind> for Object {
     fn from(f: FunctionKind) -> Self {
         ExoticObject::Function(f).into()
     }
 }
 
-impl From<Array> for Value {
+impl From<Array> for Object {
     fn from(a: Array) -> Self {
         ExoticObject::Array(a).into()
     }
 }
 
-impl From<Closure> for Value {
+impl From<Closure> for Object {
     fn from(c: Closure) -> Self {
         FunctionKind::Closure(c).into()
     }
 }
 
-impl From<UserFunction> for Value {
+impl From<UserFunction> for Object {
     fn from(u: UserFunction) -> Self {
         FunctionKind::User(u).into()
     }
 }
 
-impl From<NativeFunction> for Value {
+impl From<NativeFunction> for Object {
     fn from(f: NativeFunction) -> Self {
         FunctionKind::Native(f).into()
     }
 }
 
-impl From<Module> for Value {
+impl From<Module> for Object {
     fn from(f: Module) -> Self {
         FunctionKind::Module(f).into()
     }
 }
 
-impl From<Weak> for Value {
+impl From<Weak> for Object {
     fn from(s: Weak) -> Self {
         ExoticObject::Weak(s).into()
     }
 }
 
-impl From<Symbol> for Value {
+impl From<Symbol> for Object {
     fn from(s: Symbol) -> Self {
         ExoticObject::Symbol(s).into()
     }
 }
 
-impl From<GeneratorIterator> for Value {
+impl From<GeneratorIterator> for Object {
     fn from(g: GeneratorIterator) -> Self {
         ExoticObject::GeneratorIterator(g).into()
     }
 }
 
-impl From<WeakSet<RefCell<Value>>> for Value {
+impl From<WeakSet<RefCell<Value>>> for Object {
     fn from(s: WeakSet<RefCell<Value>>) -> Self {
         Weak::Set(s).into()
     }
 }
 
-impl From<WeakMap<RefCell<Value>, RefCell<Value>>> for Value {
+impl From<WeakMap<RefCell<Value>, RefCell<Value>>> for Object {
     fn from(m: WeakMap<RefCell<Value>, RefCell<Value>>) -> Self {
         Weak::Map(m).into()
     }
 }
 
-impl From<Promise> for Value {
+impl From<Promise> for Object {
     fn from(p: Promise) -> Self {
         ExoticObject::Promise(p).into()
     }
