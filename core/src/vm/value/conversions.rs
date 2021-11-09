@@ -12,31 +12,34 @@ use super::{
 };
 use crate::{
     gc::Handle,
-    vm::value::{promise::PromiseState, PropertyKey},
+    vm::{
+        value::{promise::PromiseState, PropertyKey},
+        VM,
+    },
 };
 
 impl Value {
     /// Converts a JavaScript value to a number
     ///
     /// If the value is not a number, [f64::NAN] is returned
-    pub fn as_number(&self) -> f64 {
+    pub fn as_number(&self, vm: &VM) -> f64 {
         match &self.kind {
             ValueKind::Number(n) => *n,
             ValueKind::Bool(f) => *f as u8 as f64,
-            ValueKind::Object(o) => o.as_number(),
+            ValueKind::Object(o) => o.borrow(vm).as_number(),
             ValueKind::Null => 0f64,
             _ => f64::NAN,
         }
     }
 
     /// Converts a JavaScript value to a whole number (i64)
-    pub fn as_whole_number(&self) -> i64 {
-        self.as_number().floor() as i64
+    pub fn as_whole_number(&self, vm: &VM) -> i64 {
+        self.as_number(vm).floor() as i64
     }
 
     /// Converts a JavaScript value to a whole number (i32)
-    pub fn as_32bit_number(&self) -> i32 {
-        self.as_number().floor() as i32
+    pub fn as_32bit_number(&self, vm: &VM) -> i32 {
+        self.as_number(vm).floor() as i32
     }
 
     /// Attempts to return self as a boolean
@@ -51,86 +54,44 @@ impl Value {
     }
 
     /// Attempts to return a reference to the inner object if it is one
-    pub fn as_object(&self) -> Option<&Object> {
+    pub fn as_object(&self) -> Option<&Handle<Object>> {
         match &self.kind {
             ValueKind::Object(o) => Some(o),
-            _ => None,
-        }
-    }
-
-    /// Attempts to return a reference to the inner exotic object if it is one
-    pub fn as_exotic_object(&self) -> Option<&ExoticObject> {
-        match self.as_object().map(|o| &o.kind) {
-            Some(ObjectKind::Exotic(e)) => Some(e),
-            _ => None,
-        }
-    }
-
-    /// Attempts to return a mutable reference to the inner object if it is one
-    pub fn as_object_mut(&mut self) -> Option<&mut Object> {
-        match &mut self.kind {
-            ValueKind::Object(o) => Some(o),
-            _ => None,
-        }
-    }
-
-    /// Attempts to return a reference to the inner exotic object if it is one
-    pub fn as_exotic_object_mut(&mut self) -> Option<&mut ExoticObject> {
-        match self.as_object_mut().map(|o| &mut o.kind) {
-            Some(ObjectKind::Exotic(e)) => Some(e),
-            _ => None,
-        }
-    }
-
-    /// Attempts to return a reference to the inner function kind if it is one
-    pub fn as_function(&self) -> Option<&FunctionKind> {
-        match &self.kind {
-            ValueKind::Object(o) => o.as_function(),
-            _ => None,
-        }
-    }
-
-    /// Attempts to return a mutable reference to the inner function kind if it is one
-    pub fn as_function_mut(&mut self) -> Option<&mut FunctionKind> {
-        match &mut self.kind {
-            ValueKind::Object(o) => o.as_function_mut(),
             _ => None,
         }
     }
 
     /// Converts a JavaScript value to a string
-    pub fn to_string(&self) -> Cow<str> {
+    pub fn to_string(&self, vm: &VM) -> Cow<str> {
         match &self.kind {
             ValueKind::Bool(b) => Cow::Borrowed(if *b { "true" } else { "false" }),
             ValueKind::Null => Cow::Borrowed("null"),
             ValueKind::Number(n) => Cow::Owned(n.to_string()),
-            ValueKind::Object(o) => o.to_string(),
+            ValueKind::Object(o) => Cow::Owned(o.borrow(vm).to_string().to_string()),
             ValueKind::Undefined => Cow::Borrowed("undefined"),
         }
     }
 
     /// Converts a JavaScript value to a property key (string or symbol)
-    pub fn to_property_key(&self, handle: Handle<Value>) -> PropertyKey<'static> {
-        match self.as_object().map(|o| &o.kind) {
-            Some(ObjectKind::Exotic(ExoticObject::String(s))) => {
-                return PropertyKey::from(s.clone())
+    pub fn to_property_key(&self, vm: &VM) -> PropertyKey<'static> {
+        if let Some(handle) = self.as_object() {
+            let object = handle.borrow(vm);
+            if let ObjectKind::Exotic(ExoticObject::Symbol(_)) = object.kind {
+                return PropertyKey::Symbol(Handle::clone(handle));
             }
-            Some(ObjectKind::Exotic(ExoticObject::Symbol(_))) => return PropertyKey::from(handle),
-            _ => {}
-        };
+        }
 
-        // For all other types, fall back to converting to string
-        PropertyKey::from(self.to_string().into_owned())
+        PropertyKey::from(self.to_string(vm).into_owned())
     }
 
     /// Converts a JavaScript value to a JSON string
-    pub fn to_json(&self) -> Option<Cow<str>> {
+    pub fn to_json(&self, vm: &VM) -> Option<Cow<str>> {
         match &self.kind {
-            ValueKind::Bool(_) => Some(self.to_string()),
-            ValueKind::Null => Some(self.to_string()),
-            ValueKind::Number(_) => Some(self.to_string()),
-            ValueKind::Undefined => Some(self.to_string()),
-            ValueKind::Object(o) => o.to_json(),
+            ValueKind::Bool(_) => Some(self.to_string(vm)),
+            ValueKind::Null => Some(self.to_string(vm)),
+            ValueKind::Number(_) => Some(self.to_string(vm)),
+            ValueKind::Undefined => Some(self.to_string(vm)),
+            ValueKind::Object(o) => o.borrow(vm).to_json(vm).map(|x| x.into_owned().into()),
         }
     }
 
@@ -139,32 +100,19 @@ impl Value {
     ///
     /// In particular, this actually returns all entries of an object instead of
     /// returning "[object Object]"
-    pub fn inspect(&self, depth: u32) -> Cow<str> {
+    pub fn inspect(&self, vm: &VM, depth: u32) -> Cow<str> {
         match &self.kind {
-            ValueKind::Object(o) => o.inspect(depth),
-            _ => self.to_string(),
+            ValueKind::Object(o) => o.borrow(vm).inspect(vm, depth).into_owned().into(),
+            _ => self.to_string(vm),
         }
-    }
-
-    /// Attempts to return self as a string
-    ///
-    /// This does not *convert* a value to a string. To get the effect of `"" + value`,
-    /// use [Value::to_string]
-    pub fn as_string(&self) -> Option<&str> {
-        self.as_object().and_then(|o| o.as_string())
     }
 
     /// Attempts to return the inner object if it is one
-    pub fn into_object(self) -> Option<Object> {
+    pub fn into_object(self) -> Option<Handle<Object>> {
         match self.kind {
-            ValueKind::Object(o) => Some(*o),
+            ValueKind::Object(o) => Some(o),
             _ => None,
         }
-    }
-
-    /// Attempts to return the inner string if it is one
-    pub fn into_string(self) -> Option<String> {
-        self.into_object().and_then(|c| c.into_string())
     }
 }
 
@@ -193,6 +141,22 @@ impl Object {
         }
     }
 
+    /// Attempts to return a reference to the inner exotic object if it is one
+    pub fn as_exotic_object(&self) -> Option<&ExoticObject> {
+        match &self.kind {
+            ObjectKind::Exotic(e) => Some(e),
+            _ => None,
+        }
+    }
+
+    /// Attempts to return a reference to the inner exotic object if it is one
+    pub fn as_exotic_object_mut(&mut self) -> Option<&mut ExoticObject> {
+        match &mut self.kind {
+            ObjectKind::Exotic(e) => Some(e),
+            _ => None,
+        }
+    }
+
     /// Converts a JavaScript value to a string
     pub fn to_string(&self) -> Cow<str> {
         match &self.kind {
@@ -205,7 +169,7 @@ impl Object {
     }
 
     /// Converts a JavaScript value to a JSON string
-    pub fn to_json(&self) -> Option<Cow<str>> {
+    pub fn to_json(&self, vm: &VM) -> Option<Cow<str>> {
         match &self.kind {
             ObjectKind::Exotic(ExoticObject::String(s)) => Some(Cow::Owned(format!("\"{}\"", s))),
             ObjectKind::Exotic(ExoticObject::Function(_)) => None,
@@ -217,9 +181,9 @@ impl Object {
                         s.push_str(", ");
                     }
 
-                    let element = unsafe { element_cell.borrow_unbounded() };
+                    let element = element_cell.borrow(vm);
 
-                    if let Some(element) = element.to_json() {
+                    if let Some(element) = element.to_json(vm) {
                         s.push_str(&element);
                     }
                 }
@@ -230,14 +194,13 @@ impl Object {
             ObjectKind::Ordinary => {
                 let mut s = String::from("{ ");
 
-                for (index, (key, value_cell)) in self.fields.iter().enumerate() {
-                    let value = unsafe { value_cell.borrow_unbounded() };
+                for (index, (key, value)) in self.fields.iter().enumerate() {
                     if index > 0 {
                         s.push_str(", ");
                     }
 
                     // Symbols are not JSON serialized
-                    if let (PropertyKey::String(key), Some(value)) = (key, value.to_json()) {
+                    if let (PropertyKey::String(key), Some(value)) = (key, value.to_json(vm)) {
                         s.push_str(&format!(r#""{}": {}"#, key, &value));
                     }
                 }
@@ -252,7 +215,7 @@ impl Object {
     /// Inspects a JavaScript value
     ///
     /// See [Value::inspect] for the difference between to_string and inspect
-    pub fn inspect(&self, depth: u32) -> Cow<str> {
+    pub fn inspect(&self, vm: &VM, depth: u32) -> Cow<str> {
         if depth > 5 {
             return Cow::Borrowed("…");
         }
@@ -276,11 +239,11 @@ impl Object {
                 let mut s = String::from("[ ");
 
                 for (index, element_cell) in a.elements.iter().enumerate() {
-                    let element = unsafe { element_cell.borrow_unbounded() };
+                    let element = element_cell.borrow(vm);
                     if index > 0 {
                         s.push_str(", ");
                     }
-                    s.push_str(&*element.inspect(depth + 1));
+                    s.push_str(&*element.inspect(vm, depth + 1));
                 }
                 s.push_str(" ]");
                 Cow::Owned(s)
@@ -288,17 +251,17 @@ impl Object {
             ObjectKind::Exotic(ExoticObject::Weak(w)) => w.inspect(),
             ObjectKind::Exotic(ExoticObject::Promise(p)) => match &p.value {
                 PromiseState::Resolved(value_cell) => {
-                    let value = unsafe { value_cell.borrow_unbounded() };
+                    let value = value_cell.borrow(vm);
                     Cow::Owned(format!(
                         "Promise {{ <resolved> {} }}",
-                        value.inspect(depth + 1)
+                        value.inspect(vm, depth + 1)
                     ))
                 }
                 PromiseState::Rejected(value_cell) => {
-                    let value = unsafe { value_cell.borrow_unbounded() };
+                    let value = value_cell.borrow(vm);
                     Cow::Owned(format!(
                         "Promise {{ <rejected> {} }}",
-                        value.inspect(depth + 1)
+                        value.inspect(vm, depth + 1)
                     ))
                 }
                 PromiseState::Pending => Cow::Borrowed("Promise {<pending>}"),
@@ -310,8 +273,7 @@ impl Object {
             ObjectKind::Ordinary => {
                 let mut s = String::from("{ ");
 
-                for (index, (key, value_cell)) in self.fields.iter().enumerate() {
-                    let value = unsafe { value_cell.borrow_unbounded() };
+                for (index, (key, value)) in self.fields.iter().enumerate() {
                     if index > 0 {
                         s.push_str(", ");
                     }
@@ -319,7 +281,7 @@ impl Object {
                     s.push_str(&format!(
                         r#""{}": {}"#,
                         key.inspect(depth + 1),
-                        value.inspect(depth + 1)
+                        value.inspect(vm, depth + 1)
                     ));
                 }
 

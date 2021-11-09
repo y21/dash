@@ -74,4 +74,51 @@ impl Object {
     pub fn into_handle(self, vm: &VM) -> Handle<Self> {
         vm.gc.borrow_mut().register(self)
     }
+
+    pub(crate) fn mark(this: &Handle<Object>) {
+        let mut this = if let Ok(this) = unsafe { this.get_unchecked().try_borrow_mut() } {
+            this
+        } else {
+            return;
+        };
+
+        if this.is_marked() {
+            // We're already marked as visited. Don't get stuck in an infinite loop
+            return;
+        }
+
+        this.mark_visited();
+
+        if let Some(proto) = &this.prototype {
+            Self::mark(&proto)
+        }
+
+        if let Some(constructor) = &this.constructor {
+            Self::mark(&constructor)
+        }
+
+        for (key, value) in this.fields.iter() {
+            key.mark();
+            value.mark();
+        }
+
+        match &this.kind {
+            ObjectKind::Exotic(ExoticObject::Array(a)) => {
+                for handle in &a.elements {
+                    Value::mark(handle)
+                }
+            }
+            ObjectKind::Exotic(ExoticObject::GeneratorIterator(gen)) => gen.mark(),
+            ObjectKind::Exotic(ExoticObject::Function(f)) => f.mark(),
+            ObjectKind::Exotic(ExoticObject::Promise(_)) => todo!(),
+            ObjectKind::Exotic(ExoticObject::Custom(_)) => {
+                panic!("Custom GC marking is unsupported")
+            }
+            ObjectKind::Exotic(ExoticObject::Weak(_)) => todo!(), // weak objects don't exist yet
+            // Other object types that do not contain handles that need to be marked
+            ObjectKind::Exotic(ExoticObject::String(_)) => {}
+            ObjectKind::Exotic(ExoticObject::Symbol(_)) => {}
+            ObjectKind::Ordinary => {}
+        };
+    }
 }
