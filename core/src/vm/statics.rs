@@ -4,7 +4,7 @@ use crate::vm::value::function::Constructor;
 use crate::vm::value::object::ObjectKind;
 
 use super::value::function::NativeFunction;
-use super::value::object::ExoticObject;
+use super::value::object::{ExoticObject, Object};
 use super::value::symbol::Symbol;
 use super::value::Value;
 
@@ -276,7 +276,7 @@ fn register_symbol<S: Into<Box<str>>>(gc: &mut Gc<Value>, name: S) -> Handle<Val
 
 impl Statics {
     /// Creates a new global data object
-    pub fn new(gc: &mut Gc<Value>) -> Self {
+    pub fn new(gc: &mut Gc<Object>) -> Self {
         Self {
             // Proto
             boolean_proto: gc.register(Value::from(ObjectKind::Ordinary)),

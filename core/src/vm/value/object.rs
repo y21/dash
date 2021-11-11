@@ -121,4 +121,59 @@ impl Object {
             ObjectKind::Ordinary => {}
         };
     }
+
+    /// Updates the internal properties ([[Prototype]] and constructor)
+    /// of this JavaScript value
+    pub fn update_internal_properties(&mut self, proto: &Handle<Object>, ctor: &Handle<Object>) {
+        self.prototype = Some(Handle::clone(proto));
+        self.constructor = Some(Handle::clone(ctor));
+    }
+
+    /// Tries to detect the [[Prototype]] and constructor of this object, and updates it
+    pub fn detect_internal_properties(&mut self, vm: &VM) {
+        let statics = &vm.statics;
+
+        match &self.kind {
+            ObjectKind::Exotic(ExoticObject::Promise(_)) => {
+                self.update_internal_properties(&statics.promise_proto, &statics.promise_ctor)
+            }
+            ObjectKind::Exotic(ExoticObject::String(_)) => {
+                self.update_internal_properties(&statics.string_proto, &statics.string_ctor)
+            }
+            ObjectKind::Exotic(ExoticObject::Function(_)) => {
+                self.update_internal_properties(&statics.function_proto, &statics.function_ctor)
+            }
+            ObjectKind::Exotic(ExoticObject::Array(_)) => {
+                self.update_internal_properties(&statics.array_proto, &statics.array_ctor)
+            }
+            ObjectKind::Exotic(ExoticObject::GeneratorIterator(_)) => self
+                .update_internal_properties(
+                    &statics.generator_iterator_proto,
+                    &statics.object_ctor, // TODO: generator iterator ctor
+                ),
+            ObjectKind::Exotic(ExoticObject::Symbol(_)) => {
+                self.update_internal_properties(&statics.symbol_proto, &statics.symbol_ctor)
+            }
+            ObjectKind::Ordinary | ObjectKind::Exotic(ExoticObject::Custom(_)) => {
+                self.update_internal_properties(&statics.object_proto, &statics.object_ctor)
+            }
+            ObjectKind::Exotic(ExoticObject::Weak(Weak::Set(_))) => {
+                self.update_internal_properties(&statics.weakset_proto, &statics.weakset_ctor)
+            }
+            ObjectKind::Exotic(ExoticObject::Weak(Weak::Map(_))) => {
+                self.update_internal_properties(&statics.weakmap_proto, &statics.weakmap_ctor)
+            }
+            _ => {}
+        }
+    }
+
+    /// Returns whether this value is a primitive
+    pub fn is_primitive(&self) -> bool {
+        matches!(self.kind, ObjectKind::Exotic(ExoticObject::String(_)))
+    }
+
+    /// Returns whether this value is callable
+    pub fn is_callable(&self) -> bool {
+        matches!(self.kind, ObjectKind::Exotic(ExoticObject::Function(_)))
+    }
 }

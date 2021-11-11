@@ -1,6 +1,6 @@
 use crate::gc::Handle;
 
-use super::Value;
+use super::{object::Object, Value};
 
 /// The state of a generator execution
 #[derive(Debug, Clone)]
@@ -12,7 +12,7 @@ pub enum GeneratorState {
         /// The current instruction pointer
         ip: usize,
         /// Function stack
-        stack: Vec<Handle<Value>>,
+        stack: Vec<Value>,
     },
 }
 
@@ -23,14 +23,14 @@ pub enum GeneratorState {
 #[derive(Debug, Clone)]
 pub struct GeneratorIterator {
     /// The generator function
-    pub function: Handle<Value>,
+    pub function: Handle<Object>,
     /// The state of the generator
     pub state: GeneratorState,
 }
 
 impl GeneratorIterator {
     /// Creates a new generator iterator given a generator value
-    pub fn new(function: Handle<Value>, stack: Vec<Handle<Value>>) -> Self {
+    pub fn new(function: Handle<Object>, stack: Vec<Value>) -> Self {
         Self {
             function,
             state: GeneratorState::Running { ip: 0, stack },
@@ -38,13 +38,13 @@ impl GeneratorIterator {
     }
 
     pub(crate) fn mark(&self) {
-        Value::mark(&self.function);
+        Object::mark(&self.function);
 
         match &self.state {
             GeneratorState::Finished => {}
             GeneratorState::Running { stack, .. } => {
-                for handle in stack {
-                    Value::mark(handle);
+                for value in stack {
+                    value.mark();
                 }
             }
         }

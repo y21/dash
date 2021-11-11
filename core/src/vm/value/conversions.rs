@@ -176,12 +176,10 @@ impl Object {
             ObjectKind::Exotic(ExoticObject::Array(a)) => {
                 let mut s = String::from("[ ");
 
-                for (index, element_cell) in a.elements.iter().enumerate() {
+                for (index, element) in a.elements.iter().enumerate() {
                     if index > 0 {
                         s.push_str(", ");
                     }
-
-                    let element = element_cell.borrow(vm);
 
                     if let Some(element) = element.to_json(vm) {
                         s.push_str(&element);
@@ -238,8 +236,7 @@ impl Object {
             ObjectKind::Exotic(ExoticObject::Array(a)) => {
                 let mut s = String::from("[ ");
 
-                for (index, element_cell) in a.elements.iter().enumerate() {
-                    let element = element_cell.borrow(vm);
+                for (index, element) in a.elements.iter().enumerate() {
                     if index > 0 {
                         s.push_str(", ");
                     }
@@ -280,7 +277,7 @@ impl Object {
 
                     s.push_str(&format!(
                         r#""{}": {}"#,
-                        key.inspect(depth + 1),
+                        key.inspect(vm, depth + 1),
                         value.inspect(vm, depth + 1)
                     ));
                 }

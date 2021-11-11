@@ -9,8 +9,7 @@ use super::object::{Object, ObjectKind};
 use super::Value;
 
 /// A native function that can be called from JavaScript code
-pub type NativeFunctionCallback =
-    for<'a> fn(CallContext<'a>) -> Result<Handle<Value>, Handle<Value>>;
+pub type NativeFunctionCallback = for<'a> fn(CallContext<'a>) -> Result<Value, Value>;
 
 /// Represents whether a function can be invoked as a constructor
 #[derive(Debug, Clone, Copy)]
@@ -39,16 +38,16 @@ pub struct CallContext<'a> {
     /// Note that the order of arguments is last to first,
     /// i.e. the first argument is the last item of the vec
     /// due to the nature of a stack
-    pub args: &'a mut Vec<Handle<Value>>,
+    pub args: &'a mut Vec<Value>,
     /// The receiver (`this`) value
-    pub receiver: Option<Handle<Value>>,
+    pub receiver: Option<Handle<Object>>,
     /// Whether this function call is invoked as a constructor call
     pub ctor: bool,
 }
 
 impl<'a> CallContext<'a> {
     /// An iterator over arguments in fixed order
-    pub fn arguments(&self) -> impl Iterator<Item = &Handle<Value>> {
+    pub fn arguments(&self) -> impl Iterator<Item = &Value> {
         self.args.iter()
     }
 }
@@ -94,14 +93,14 @@ impl From<CompilerFunctionKind> for FunctionType {
 #[derive(Debug, Clone)]
 pub enum Receiver {
     /// Receiver is pinned and may not be changed
-    Pinned(Handle<Value>),
+    Pinned(Handle<Object>),
     /// Receiver is bound to a specific value
-    Bound(Handle<Value>),
+    Bound(Handle<Object>),
 }
 
 impl Receiver {
     /// Returns the inner `this` value
-    pub fn get(&self) -> &Handle<Value> {
+    pub fn get(&self) -> &Handle<Object> {
         match self {
             Self::Pinned(p) => p,
             Self::Bound(b) => b,
@@ -150,7 +149,7 @@ pub struct UserFunction {
     /// Whether this function is constructable
     pub ctor: Constructor,
     /// The prototype of this function
-    pub prototype: Option<Handle<Value>>,
+    pub prototype: Option<Handle<Object>>,
     /// Number of parameters this function takes
     pub params: u32,
     /// The receiver of this function
@@ -215,12 +214,12 @@ impl UserFunction {
     }
 
     /// Gets the prototype of this function, or sets it
-    pub fn get_or_set_prototype(&mut self, this: &Handle<Value>, vm: &VM) -> Handle<Value> {
+    pub fn get_or_set_prototype(&mut self, this: &Handle<Object>, vm: &VM) -> Handle<Object> {
         self.prototype
             .get_or_insert_with(|| {
                 let mut o = Object::new(ObjectKind::Ordinary);
                 o.constructor = Some(Handle::clone(this));
-                Value::from(o).into_handle(vm)
+                vm.register_object(o)
             })
             .clone()
     }
@@ -237,7 +236,7 @@ pub struct NativeFunction {
     /// The receiver of this function
     pub receiver: Option<Receiver>,
     /// The prototype of this function
-    pub prototype: Option<Handle<Value>>,
+    pub prototype: Option<Handle<Object>>,
 }
 
 impl NativeFunction {
@@ -258,12 +257,12 @@ impl NativeFunction {
     }
 
     /// Gets the prototype of this function, or sets it if not yet set
-    pub fn get_or_set_prototype(&mut self, this: &Handle<Value>, vm: &VM) -> Handle<Value> {
+    pub fn get_or_set_prototype(&mut self, this: &Handle<Object>, vm: &VM) -> Handle<Object> {
         self.prototype
             .get_or_insert_with(|| {
                 let mut o = Object::new(ObjectKind::Ordinary);
                 o.constructor = Some(Handle::clone(this));
-                Value::from(o).into_handle(vm)
+                vm.register_object(o)
             })
             .clone()
     }
@@ -318,9 +317,9 @@ impl Module {
 #[derive(Debug, Clone, Default)]
 pub struct Exports {
     /// The default export, if set
-    pub default: Option<Handle<Value>>,
+    pub default: Option<Value>,
     /// Named exports
-    pub named: HashMap<Box<str>, Handle<Value>>,
+    pub named: HashMap<Box<str>, Value>,
 }
 
 /// The kind of this function
@@ -371,7 +370,11 @@ impl FunctionKind {
     }
 
     /// Returns a [Handle] to the prototype of this function, if it has one
-    pub fn get_or_set_prototype(&mut self, this: &Handle<Value>, vm: &VM) -> Option<Handle<Value>> {
+    pub fn get_or_set_prototype(
+        &mut self,
+        this: &Handle<Object>,
+        vm: &VM,
+    ) -> Option<Handle<Object>> {
         match self {
             Self::Closure(c) => Some(c.func.get_or_set_prototype(this, vm)),
             Self::User(u) => Some(u.get_or_set_prototype(this, vm)),
@@ -384,45 +387,47 @@ impl FunctionKind {
         match self {
             FunctionKind::Module(module) => {
                 if let Some(handle) = &module.exports.default {
-                    Value::mark(handle)
+                    handle.mark();
                 }
 
                 for handle in module.exports.named.values() {
-                    Value::mark(handle)
+                    handle.mark();
                 }
             }
             FunctionKind::Native(native) => {
                 if let Some(handle) = &native.receiver {
-                    Value::mark(handle.get())
+                    Object::mark(handle.get())
                 }
 
                 if let Some(handle) = &native.prototype {
-                    Value::mark(handle)
+                    Object::mark(handle)
                 }
             }
             FunctionKind::User(func) => {
                 // Constants need to be marked, otherwise constants_gc will GC these
                 for constant in func.constants.iter() {
-                    if let Constant::JsValue(handle) = constant {
-                        Value::mark(handle);
+                    if let Constant::JsValue(value) = constant {
+                        if let Some(handle) = value.as_object() {
+                            Object::mark(handle);
+                        }
                     }
                 }
 
                 if let Some(handle) = &func.receiver {
-                    Value::mark(handle.get())
+                    Object::mark(handle.get())
                 }
 
                 if let Some(handle) = &func.prototype {
-                    Value::mark(handle)
+                    Object::mark(handle)
                 }
             }
             FunctionKind::Closure(closure) => {
                 if let Some(handle) = &closure.func.receiver {
-                    Value::mark(handle.get())
+                    Object::mark(handle.get())
                 }
 
                 if let Some(handle) = &closure.func.prototype {
-                    Value::mark(handle)
+                    Object::mark(handle)
                 }
 
                 for upvalue in &closure.upvalues {
@@ -434,15 +439,15 @@ impl FunctionKind {
 
     /// Attempts to create an object with its [[Prototype]] set to this
     /// functions prototype
-    pub fn construct(&mut self, this: &Handle<Value>, vm: &VM) -> Value {
+    pub fn construct(&mut self, this: &Handle<Object>, vm: &VM) -> Value {
         let mut o = Object::new(ObjectKind::Ordinary);
         o.prototype = self.get_or_set_prototype(this, vm);
         o.constructor = Some(Handle::clone(this));
-        o.into()
+        vm.register_object(o).into()
     }
 
     /// Sets the prototype of this function
-    pub fn set_prototype(&mut self, proto: Handle<Value>) {
+    pub fn set_prototype(&mut self, proto: Handle<Object>) {
         match self {
             Self::Closure(c) => c.func.prototype = Some(proto),
             Self::User(u) => u.prototype = Some(proto),
@@ -536,12 +541,12 @@ impl FunctionKind {
     }
 
     /// Returns the inner `this` value of this function
-    pub fn this(&self, vm: &VM) -> Option<Handle<Value>> {
+    pub fn this(&self, vm: &VM) -> Option<Handle<Object>> {
         match self {
             Self::User(u) => u.receiver.as_ref().map(Receiver::get).cloned(),
             Self::Closure(c) => c.func.receiver.as_ref().map(Receiver::get).cloned(),
             Self::Native(n) => n.receiver.as_ref().map(Receiver::get).cloned(),
-            Self::Module(_) => Some(vm.global.clone()),
+            Self::Module(_) => vm.global.as_object().cloned(),
         }
     }
 }

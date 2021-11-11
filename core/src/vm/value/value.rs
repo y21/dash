@@ -1,7 +1,6 @@
 use core::fmt::Debug;
 use std::{
-    borrow::Cow,
-    cell::RefCell,
+    borrow::{BorrowMut, Cow},
     collections::HashMap,
     hash::{Hash, Hasher},
     rc::{Rc, Weak},
@@ -56,7 +55,7 @@ pub enum PropertyKey<'a> {
     /// String
     String(Cow<'a, str>),
     /// Symbol
-    Symbol(Handle<Value>),
+    Symbol(Handle<Object>),
 }
 
 impl<'a> PropertyKey<'a> {
@@ -69,12 +68,12 @@ impl<'a> PropertyKey<'a> {
     }
 
     /// Inspects this property key
-    pub fn inspect(&self, depth: u32) -> String {
+    pub fn inspect(&self, vm: &VM, depth: u32) -> String {
         match self {
             PropertyKey::String(s) => s.to_string(),
             PropertyKey::Symbol(s) => {
                 let s = unsafe { s.borrow_unbounded() };
-                s.inspect(depth).to_string()
+                s.inspect(vm, depth).to_string()
             }
         }
     }
@@ -99,8 +98,8 @@ impl<'a> From<&'a str> for PropertyKey<'a> {
     }
 }
 
-impl From<Handle<Value>> for PropertyKey<'_> {
-    fn from(h: Handle<Value>) -> Self {
+impl From<Handle<Object>> for PropertyKey<'_> {
+    fn from(h: Handle<Object>) -> Self {
         Self::Symbol(h)
     }
 }
@@ -131,12 +130,14 @@ impl Value {
     }
 
     /// Attempts to call a value
-    pub fn call(
-        this: &Handle<Value>,
-        mut args: Vec<Handle<Value>>,
-        vm: &mut VM,
-    ) -> Result<Handle<Value>, Handle<Value>> {
-        let value = unsafe { this.borrow_unbounded() };
+    pub fn call(&self, mut args: Vec<Value>, vm: &mut VM) -> Result<Value, Value> {
+        let obj = self
+            .as_object()
+            .ok_or_else(|| js_std::error::create_error("Value is not a function", vm))?;
+
+        assert!(obj.check_marker(vm));
+
+        let value = unsafe { obj.borrow_unbounded() };
 
         let func = match value.as_function() {
             Some(FunctionKind::Native(func)) => {
@@ -179,97 +180,65 @@ impl Value {
         }
 
         for _ in 0..(origin_param_count.saturating_sub(param_count)) {
-            vm.stack
-                .push(Value::new(ValueKind::Undefined).into_handle(vm));
+            vm.stack.push(Value::new(ValueKind::Undefined));
         }
 
         match vm.execute_frame(frame, false) {
             Ok(DispatchResult::Return(Some(r)) | DispatchResult::Yield(Some(r))) => Ok(r),
-            Ok(_) => Ok(Value::new(ValueKind::Undefined).into_handle(vm)),
+            Ok(_) => Ok(Value::new(ValueKind::Undefined)),
             Err(e) => Err(e.into_value()),
         }
     }
 
-    /// Registers this value for garbage collection and returns a handle to it
-    // TODO: re-think whether this is fine to not be unsafe?
-    pub fn into_handle(self, vm: &VM) -> Handle<Self> {
-        vm.gc.borrow_mut().register(self)
-    }
+    // /// Registers this value for garbage collection and returns a handle to it
+    // // TODO: re-think whether this is fine to not be unsafe?
+    // pub fn into_handle(self, vm: &VM) -> Handle<Self> {
+    //     vm.gc.borrow_mut().register(self)
+    // }
 
     /// Updates the internal properties ([[Prototype]] and constructor)
     /// of this JavaScript value
-    pub fn update_internal_properties(&mut self, proto: &Handle<Value>, ctor: &Handle<Value>) {
-        if let ValueKind::Object(obj) = &mut self.kind {
-            obj.prototype = Some(Handle::clone(proto));
-            obj.constructor = Some(Handle::clone(ctor));
-        }
+    pub fn update_internal_properties(
+        &self,
+        vm: &VM,
+        proto: &Handle<Object>,
+        ctor: &Handle<Object>,
+    ) {
+        self.as_object()
+            .map(|x| x.borrow_mut(vm).update_internal_properties(proto, ctor));
     }
 
     /// Updates the [[Prototype]] of this JavaScript value
-    pub fn set_prototype(&mut self, proto: Option<&Handle<Value>>) {
-        if let ValueKind::Object(obj) = &mut self.kind {
-            obj.prototype = proto.cloned();
+    pub fn set_prototype(&self, vm: &VM, proto: Option<&Handle<Object>>) {
+        if let ValueKind::Object(obj) = &self.kind {
+            obj.borrow_mut(vm).prototype = proto.cloned();
         }
     }
 
     /// Tries to detect the [[Prototype]] and constructor of this value given self.kind, and updates it
-    pub fn detect_internal_properties(&mut self, vm: &VM) {
-        let statics = &vm.statics;
-
-        match self.as_object().map(|x| &x.kind) {
-            Some(ObjectKind::Exotic(ExoticObject::Promise(_))) => {
-                self.update_internal_properties(&statics.promise_proto, &statics.promise_ctor)
-            }
-            Some(ObjectKind::Exotic(ExoticObject::String(_))) => {
-                self.update_internal_properties(&statics.string_proto, &statics.string_ctor)
-            }
-            Some(ObjectKind::Exotic(ExoticObject::Function(_))) => {
-                self.update_internal_properties(&statics.function_proto, &statics.function_ctor)
-            }
-            Some(ObjectKind::Exotic(ExoticObject::Array(_))) => {
-                self.update_internal_properties(&statics.array_proto, &statics.array_ctor)
-            }
-            Some(ObjectKind::Exotic(ExoticObject::GeneratorIterator(_))) => self
-                .update_internal_properties(
-                    &statics.generator_iterator_proto,
-                    &statics.object_ctor, // TODO: generator iterator ctor
-                ),
-            Some(ObjectKind::Exotic(ExoticObject::Symbol(_))) => {
-                self.update_internal_properties(&statics.symbol_proto, &statics.symbol_ctor)
-            }
-            Some(ObjectKind::Ordinary | ObjectKind::Exotic(ExoticObject::Custom(_))) => {
-                self.update_internal_properties(&statics.object_proto, &statics.object_ctor)
-            }
-            Some(ObjectKind::Exotic(ExoticObject::Weak(JsWeak::Set(_)))) => {
-                self.update_internal_properties(&statics.weakset_proto, &statics.weakset_ctor)
-            }
-            Some(ObjectKind::Exotic(ExoticObject::Weak(JsWeak::Map(_)))) => {
-                self.update_internal_properties(&statics.weakmap_proto, &statics.weakmap_ctor)
-            }
-            _ => {}
+    pub fn detect_internal_properties(&self, vm: &VM) {
+        if let Some(object) = self.as_object().map(|x| x.borrow_mut(vm)) {
+            object.detect_internal_properties(vm);
         }
     }
 
     /// Returns whether this value is a primitive
-    pub fn is_primitive(&self) -> bool {
+    pub fn is_primitive(&self, vm: &VM) -> bool {
         // https://262.ecma-international.org/6.0/#sec-toprimitive
         match &self.kind {
             ValueKind::Number(_) => true,
             ValueKind::Bool(_) => true,
             ValueKind::Null => true,
             ValueKind::Undefined => true,
-            ValueKind::Object(o) => matches!(&o.kind, ObjectKind::Exotic(ExoticObject::String(_))),
+            ValueKind::Object(o) => o.borrow(vm).is_primitive(),
         }
     }
 
     /// Returns whether this value is callable
-    pub fn is_callable(&self) -> bool {
-        match &self.kind {
-            ValueKind::Object(o) => {
-                matches!(&o.kind, ObjectKind::Exotic(ExoticObject::Function(_)))
-            }
-            _ => false,
-        }
+    pub fn is_callable(&self, vm: &VM) -> bool {
+        self.as_object()
+            .map(|x| x.borrow(vm).is_callable())
+            .unwrap_or(false)
     }
 
     /// Checks whether this value is strictly a function
@@ -278,30 +247,30 @@ impl Value {
     }
 
     /// Returns a reference to the [[Prototype]] of this value, if it has one
-    pub fn prototype(&self, vm: &VM) -> Option<Handle<Value>> {
+    pub fn prototype(&self, vm: &VM) -> Option<Handle<Object>> {
         match &self.kind {
             ValueKind::Bool(_) => Some(Handle::clone(&vm.statics.boolean_proto)),
             ValueKind::Number(_) => Some(Handle::clone(&vm.statics.number_proto)),
             ValueKind::Null | ValueKind::Undefined => None,
-            ValueKind::Object(o) => o.prototype.as_ref().cloned(),
-            _ => None,
+            ValueKind::Object(o) => o.borrow(vm).prototype.as_ref().cloned(),
         }
     }
 
     /// Returns a reference to the inner [[Prototype]] of this value if it is an object
     ///
     /// The prototype of primitive values never changes
-    pub fn object_prototype(&self) -> Option<Handle<Value>> {
-        self.as_object().and_then(|o| o.prototype.as_ref().cloned())
+    pub fn object_prototype(&self, vm: &VM) -> Option<Handle<Object>> {
+        self.as_object()
+            .and_then(|o| o.borrow(vm).prototype.as_ref().cloned())
     }
 
     /// Returns a reference to the constructor of this value, if it has one
-    pub fn constructor(&self, vm: &VM) -> Option<Handle<Value>> {
+    pub fn constructor(&self, vm: &VM) -> Option<Handle<Object>> {
         match &self.kind {
             ValueKind::Bool(_) => Some(Handle::clone(&vm.statics.boolean_ctor)),
             ValueKind::Number(_) => Some(Handle::clone(&vm.statics.number_ctor)),
             ValueKind::Null | ValueKind::Undefined => None,
-            ValueKind::Object(o) => o.constructor.as_ref().cloned(),
+            ValueKind::Object(o) => o.borrow(vm).constructor.as_ref().cloned(),
             _ => None,
         }
     }
@@ -309,14 +278,14 @@ impl Value {
     /// Returns a reference to the inner constructor of this value if it is an object
     ///
     /// The constructor of primitive values never changes
-    pub fn object_constructor(&self) -> Option<Handle<Value>> {
+    pub fn object_constructor(&self, vm: &VM) -> Option<Handle<Object>> {
         self.as_object()
-            .and_then(|o| o.constructor.as_ref().cloned())
+            .and_then(|o| o.borrow(vm).constructor.as_ref().cloned())
     }
 
     /// Unwraps o, or returns undefined if it is None
-    pub fn unwrap_or_undefined(o: Option<Handle<Self>>, vm: &VM) -> Handle<Self> {
-        o.unwrap_or_else(|| Value::new(ValueKind::Undefined).into_handle(vm))
+    pub fn unwrap_or_undefined(o: Option<Self>, vm: &VM) -> Self {
+        o.unwrap_or_else(|| Value::new(ValueKind::Undefined))
     }
 
     /// Looks up a field directly without going up the prototype chain
@@ -454,55 +423,9 @@ impl Value {
         }
     }
 
-    pub(crate) fn mark(this: &Handle<Value>) {
-        let mut this = if let Ok(this) = unsafe { this.get_unchecked().try_borrow_mut() } {
-            this
-        } else {
-            return;
-        };
-
-        if this.is_marked() {
-            // We're already marked as visited. Don't get stuck in an infinite loop
-            return;
+    pub(crate) fn mark(&self) {
+        if let Some(handle) = self.as_object() {
+            Object::mark(handle)
         }
-
-        this.mark_visited();
-
-        if let Some(proto) = this.object_prototype() {
-            Value::mark(&proto)
-        }
-
-        if let Some(constructor) = this.object_constructor() {
-            Value::mark(&constructor)
-        }
-
-        if let Some(fields) = this.fields() {
-            for (key, value) in fields.iter() {
-                key.mark();
-                Value::mark(value)
-            }
-        }
-
-        match &this.kind {
-            ValueKind::Object(o) => match &o.kind {
-                ObjectKind::Exotic(ExoticObject::Array(a)) => {
-                    for handle in &a.elements {
-                        Value::mark(handle)
-                    }
-                }
-                ObjectKind::Exotic(ExoticObject::GeneratorIterator(gen)) => gen.mark(),
-                ObjectKind::Exotic(ExoticObject::Function(f)) => f.mark(),
-                ObjectKind::Exotic(ExoticObject::Promise(_)) => todo!(),
-                ObjectKind::Exotic(ExoticObject::Custom(_)) => {
-                    panic!("Custom GC marking is unsupported")
-                }
-                ObjectKind::Exotic(ExoticObject::Weak(_)) => todo!(), // weak objects don't exist yet
-                // Other object types that do not contain handles that need to be marked
-                ObjectKind::Exotic(ExoticObject::String(_)) => {}
-                ObjectKind::Exotic(ExoticObject::Symbol(_)) => {}
-                ObjectKind::Ordinary => {}
-            },
-            _ => {}
-        };
     }
 }

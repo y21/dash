@@ -261,7 +261,7 @@ impl From<TokenType> for Opcode {
 #[derive(Debug, Clone)]
 pub enum Constant {
     /// A JavaScript value
-    JsValue(Handle<Value>),
+    JsValue(Value),
     /// An identifier
     Identifier(String),
     /// An index

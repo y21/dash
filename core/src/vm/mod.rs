@@ -25,7 +25,7 @@ use value::Value;
 use crate::{EvalError, agent::Agent, compiler::{compiler::{self, CompileError, Compiler, FunctionKind as CompilerFunctionKind}, instruction::to_vm_instructions}, gc::{Gc, Handle}, parser::{lexer, token}, util::{unlikely, MaybeOwned}, vm::{dispatch::DispatchResult, frame::UnwindHandler, value::{ValueKind, array::Array, function::{CallContext, FunctionKind, UserFunction}, generator::GeneratorIterator}}};
 use crate::js_std;
 
-use self::{frame::{Frame, Loop}, instruction::Constant, stack::Stack, statics::Statics, value::{PropertyKey, object::{Object, ObjectKind}}};
+use self::{frame::{Frame, Loop}, instruction::Constant, stack::Stack, statics::Statics, value::{PropertyKey, object::{ExoticObject, Object, ObjectKind}}};
 
 // Force garbage collection at 10000 objects by default
 const DEFAULT_GC_OBJECT_COUNT_THRESHOLD: usize = 10000;
@@ -63,16 +63,16 @@ impl VMError {
     }
 
     /// Formats this error by taking the `stack` property of the error object
-    pub fn to_string(&self) -> Cow<str> {
+    pub fn to_string(&self, vm: &VM) -> Cow<str> {
         match self {
             Self::UncaughtError(err_cell) => {
-                let err = unsafe { err_cell.borrow_unbounded() };
+                let err = err_cell.borrow(vm);
                 let message_cell = err.get_field(PropertyKey::from("stack"))
                     .or_else(|| err.get_field(PropertyKey::from("message")))
                     .unwrap_or_else(|| Handle::clone(&err_cell));
 
-                let message_ref = unsafe { message_cell.borrow_unbounded() };
-                let message_string = message_ref.to_string();
+                let message_ref = message_cell.borrow(vm);
+                let message_string = message_ref.to_string(vm);
                 Cow::Owned(String::from(message_string))
             }
         }
@@ -102,17 +102,17 @@ impl<'a> From<compiler::FromStrError<'a>> for FromStrError<'a> {
 /// A JavaScript bytecode VM
 pub struct VM {
     /// Garbage collector that manages the heap of this VM
-    pub(crate) gc: RefCell<Gc<Value>>,
-    /// Garbage collector specifically for constant values produced by the compiler
-    pub(crate) constants_gc: Gc<Value>,
+    pub(crate) gc: RefCell<Gc<Object>>,
+    /// Garbage collector specifically for constant objects produced by the compiler
+    pub(crate) constants_gc: Gc<Object>,
     /// Call stack
     pub(crate) frames: Stack<Frame, 256>,
     /// Async task queue. Processed when execution has finished
     pub(crate) async_frames: Stack<Frame, 256>,
     /// Stack
-    pub(crate) stack: Stack<Handle<Value>, 512>,
+    pub(crate) stack: Stack<Value, 512>,
     /// Global namespace
-    pub(crate) global: Handle<Value>,
+    pub(crate) global: Value,
     /// Static values created once when the VM is initialized
     pub(crate) statics: Statics,
     /// Embedder specific slot data
@@ -125,7 +125,7 @@ pub struct VM {
     pub(crate) agent: Box<dyn Agent>,
     /// This realms symbol registry
     // TODO: weak references
-    pub(crate) symbols: HashMap<Box<str>, Handle<Value>>,
+    pub(crate) symbols: HashMap<Box<str>, Value>,
     /// A copy of the garbage collector's unique marker
     gc_marker: *const (),
     gc_object_threshold: usize,
@@ -143,7 +143,7 @@ impl VM {
         let mut gc = Gc::new();
         let gc_marker = gc.marker.get();
         let statics = Statics::new(&mut gc);
-        let global = gc.register(Value::from(ObjectKind::Ordinary));
+        let global = Value::new(ValueKind::Object(gc.register(Object::new(ObjectKind::Ordinary))));
 
         let mut vm = Self {
             frames: Stack::new(),
@@ -381,42 +381,38 @@ impl VM {
     }
 
     /// Creates a JavaScript object
-    pub fn create_object(&self) -> Value {
-        self.create_js_value(ObjectKind::Ordinary)
+    pub fn create_ordinary_object(&self) -> Handle<Object> {
+        let mut o = Object::new(ObjectKind::Ordinary);
+        o.constructor = Some(Handle::clone(&self.statics.object_ctor));
+        o.prototype = Some(Handle::clone(&self.statics.object_proto));
+        self.register_object(o)
     }
 
-    /// Creates a JavaScript object with its [[Prototype]] set to null
-    pub fn create_null_object(&self) -> Value {
-        let mut o = Value::from(ObjectKind::Ordinary);
-        o.detect_internal_properties(self);
-        // Override [[Prototype]]
-        o.set_prototype(None);
-        o
+    /// Creates a JavaScript object
+    pub fn create_null_object(&self) -> Handle<Object> {
+        let mut o = Object::new(ObjectKind::Ordinary);
+        self.register_object(Object::new(ObjectKind::Ordinary))
     }
 
     /// Creates a JavaScript object with provided fields
     pub fn create_object_with_fields(
         &self,
-        fields: impl Into<HashMap<PropertyKey<'static>, Handle<Value>>>,
-    ) -> Value {
+        fields: impl Into<HashMap<PropertyKey<'static>, Value>>,
+    ) -> Handle<Object> {
         let mut o = Object::new(ObjectKind::Ordinary);
         o.fields = fields.into();
-        let mut o = self.create_js_value(o);
-        o
+        self.register_object(o)
     }
 
-    /// Creates a JavaScript value
-    pub fn create_js_value(&self, value: impl Into<Value>) -> Value {
-        let mut value = value.into();
-        value.detect_internal_properties(self);
-        value
+    /// Registers an unboxed JavaScript array for garbage collection
+    pub fn register_array(&self, array: Array) -> Handle<Object> {
+        // todo: detect_internal_properties
+        self.register_object(Object::new(ObjectKind::Exotic(ExoticObject::Array(array))))
     }
 
-    /// Creates a JavaScript array
-    pub fn create_array(&self, arr: Array) -> Value {
-        let mut o = Value::from(arr);
-        o.detect_internal_properties(self);
-        o
+    /// Registers an unboxed JavaScript object for garbage collection
+    pub fn register_object(&self, object: Object) -> Handle<Object> {
+        self.gc.borrow_mut().register(object)
     }
 
     #[rustfmt::skip]
