@@ -52,7 +52,7 @@ pub enum EvalError<'a> {
 
 impl<'a> EvalError<'a> {
     /// Formats this error by calling to_string on the underlying error
-    pub fn to_string(&self) -> Cow<str> {
+    pub fn to_string(&self, vm: &VM) -> Cow<str> {
         match self {
             Self::LexError(l) => Cow::Owned(
                 l.iter()
@@ -67,7 +67,7 @@ impl<'a> EvalError<'a> {
                     .join("\n"),
             ),
             Self::CompileError(c) => c.to_string(),
-            Self::VMError(e) => e.to_string(),
+            Self::VMError(e) => e.to_string(vm),
         }
     }
 }

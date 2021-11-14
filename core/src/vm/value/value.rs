@@ -78,10 +78,30 @@ impl<'a> PropertyKey<'a> {
         }
     }
 
+    /// Checks whether this property key refers to the constructor of a value
+    pub fn is_constructor(&self) -> bool {
+        self.as_str()
+            .map(|x| x.as_ref().eq("constructor"))
+            .unwrap_or(false)
+    }
+
+    /// Checks whether this property key refers to the prototype of a value
+    pub fn is_prototype(&self) -> bool {
+        self.as_str()
+            .map(|x| x.as_ref().eq("__proto__"))
+            .unwrap_or(false)
+    }
+
+    /// Checks whether this property key refers to the prototype of a function
+    pub fn is_function_prototype(&self) -> bool {
+        self.as_str()
+            .map(|x| x.as_ref().eq("prototype"))
+            .unwrap_or(false)
+    }
+
     pub(crate) fn mark(&self) {
         if let PropertyKey::Symbol(handle) = self {
-            let mut handle = unsafe { handle.get_unchecked().borrow_mut() };
-            handle.mark_visited();
+            Object::mark(handle);
         }
     }
 }
@@ -133,7 +153,7 @@ impl Value {
     pub fn call(&self, mut args: Vec<Value>, vm: &mut VM) -> Result<Value, Value> {
         let obj = self
             .as_object()
-            .ok_or_else(|| js_std::error::create_error("Value is not a function", vm))?;
+            .ok_or_else(|| js_std::error::create_error("Attempted to call non-object", vm))?;
 
         assert!(obj.check_marker(vm));
 
@@ -153,10 +173,9 @@ impl Value {
             }
             Some(FunctionKind::Closure(closure)) => &closure.func,
             None => {
-                return Err(js_std::error::create_error(
-                    "Invoked value is not a function",
-                    vm,
-                ))
+                return Err(
+                    js_std::error::create_error("Invoked value is not a function", vm).into(),
+                )
             }
             _ => unreachable!(),
         };
@@ -165,7 +184,7 @@ impl Value {
 
         let frame = Frame {
             ip: 0,
-            func: Handle::clone(this),
+            func: Handle::clone(obj),
             buffer: func.buffer.clone(),
             sp,
             iterator_caller: None,
@@ -189,12 +208,6 @@ impl Value {
             Err(e) => Err(e.into_value()),
         }
     }
-
-    // /// Registers this value for garbage collection and returns a handle to it
-    // // TODO: re-think whether this is fine to not be unsafe?
-    // pub fn into_handle(self, vm: &VM) -> Handle<Self> {
-    //     vm.gc.borrow_mut().register(self)
-    // }
 
     /// Updates the internal properties ([[Prototype]] and constructor)
     /// of this JavaScript value
@@ -289,137 +302,54 @@ impl Value {
     }
 
     /// Looks up a field directly without going up the prototype chain
-    pub fn get_field(&self, key: PropertyKey<'_>) -> Option<Handle<Value>> {
-        self.fields().and_then(|x| x.get(&key).cloned())
+    pub fn get_field(&self, vm: &VM, key: PropertyKey<'_>) -> Option<Value> {
+        self.as_object()
+            .and_then(|o| o.borrow(vm).fields.get(&key))
+            .cloned()
     }
 
     /// Checks whether this value contains a particular key without walking the prototype chain
-    pub fn has_field(&self, key: PropertyKey<'_>) -> bool {
-        self.fields().map(|x| x.contains_key(&key)).unwrap_or(false)
+    pub fn has_field(&self, vm: &VM, key: PropertyKey<'_>) -> bool {
+        self.as_object()
+            .map(|o| o.borrow(vm).fields.contains_key(&key))
+            .unwrap_or(false)
     }
 
     /// Checks whether this value (or one of the values in its prototype chain) contains a field
     pub fn has_property(&self, vm: &VM, key: PropertyKey<'_>) -> bool {
-        if self.has_field(key.clone()) {
-            return true;
-        }
-
-        if let Some(proto) = self.prototype(vm).as_ref() {
-            let proto_ref = proto.borrow(vm);
-            proto_ref.has_property(vm, key)
+        if let Some(object) = self.as_object() {
+            object.borrow(vm).has_property(vm, key)
         } else {
-            false
-        }
-    }
-
-    /// Returns a reference to the inner HashMap of JS values
-    pub fn fields(&self) -> Option<&HashMap<PropertyKey<'static>, Handle<Value>>> {
-        match &self.kind {
-            ValueKind::Object(o) => Some(&o.fields),
-            _ => None,
-        }
-    }
-
-    /// Returns a reference to the inner HashMap of JS values
-    pub fn fields_mut(&mut self) -> Option<&mut HashMap<PropertyKey<'static>, Handle<Value>>> {
-        match &mut self.kind {
-            ValueKind::Object(o) => Some(&mut o.fields),
-            _ => None,
+            self.prototype(vm)
+                .map(|x| x.borrow(vm).has_property(vm, key))
+                .unwrap_or(false)
         }
     }
 
     /// Looks up a property and goes through exotic property matching
     ///
     /// For a direct field lookup, use [Value::get_field]
-    pub fn get_property(
-        vm: &VM,
-        value_cell: &Handle<Value>,
-        key: &PropertyKey<'_>,
-        override_this: Option<&Handle<Value>>,
-    ) -> Option<Handle<Value>> {
-        let value = unsafe { value_cell.borrow_unbounded() };
-
-        // TODO: refactor this with Exotic trait
+    pub fn get_property(&self, vm: &VM, key: PropertyKey<'_>) -> Option<Value> {
         match key.as_str().map(|x| x.as_ref()) {
-            Some("__proto__") => {
-                return Some(
-                    value
-                        .prototype(vm)
-                        .unwrap_or_else(|| Value::new(ValueKind::Null).into_handle(vm)),
-                )
-            }
-            Some("constructor") => return value.constructor(vm),
-            Some("prototype") => {
-                let is_function = value.is_function();
-                if is_function {
-                    // Drop borrowed value because we need to re-borrow it mutably down here
-                    // to set the prototype
-                    drop(value);
-
-                    let mut value = unsafe { value_cell.borrow_mut_unbounded() };
-                    let func = value.as_function_mut().unwrap();
-                    return func.get_or_set_prototype(&value_cell, vm);
-                }
-            }
-            Some("length") => {
-                match value.as_object().map(|o| &o.kind) {
-                    Some(ObjectKind::Exotic(ExoticObject::Array(a))) => {
-                        return Some(vm.create_js_value(a.elements.len() as f64).into_handle(vm))
-                    }
-                    Some(ObjectKind::Exotic(ExoticObject::String(s))) => {
-                        return Some(vm.create_js_value(s.len() as f64).into_handle(vm))
-                    }
-                    _ => {}
-                };
-            }
-            Some(key) => {
-                if let Ok(idx) = key.parse::<usize>() {
-                    if let Some(a) = value.as_object().and_then(Object::as_array) {
-                        return a.elements.get(idx).cloned();
-                    }
-                }
-            }
+            Some("__proto__") => return self.prototype(vm).map(Into::into),
+            Some("constructor") => return self.constructor(vm).map(Into::into),
             _ => {}
         };
 
-        if let Some(fields) = value.fields() {
-            if !fields.is_empty() {
-                if let Some(entry_cell) = fields.get(key) {
-                    if let Some(override_this) = override_this {
-                        let mut entry = unsafe { entry_cell.borrow_mut_unbounded() };
-
-                        if let Some(f) = entry.as_function_mut() {
-                            let receiver = Receiver::Bound(Handle::clone(&override_this));
-
-                            match f {
-                                FunctionKind::Closure(c) => c.func.bind(receiver),
-                                FunctionKind::Native(n) => {
-                                    if let Some(recv) = &mut n.receiver {
-                                        recv.bind(receiver);
-                                    } else {
-                                        n.receiver = Some(receiver);
-                                    }
-                                }
-                                _ => {}
-                            };
-                        }
-                    }
-                    return Some(Handle::clone(entry_cell));
-                }
-            }
-        }
-
-        if let Some(proto_cell) = value.prototype(vm).as_ref() {
-            Value::get_property(vm, proto_cell, key, override_this.or(Some(value_cell)))
-        } else {
-            None
-        }
+        self.as_object()
+            .cloned()
+            .or_else(|| self.prototype(vm))
+            .and_then(|x| x.borrow(vm).get_property(vm, key))
     }
 
     /// Adds a field
-    pub fn set_property(&mut self, k: PropertyKey<'static>, v: Handle<Value>) {
-        if let Some(fields) = self.fields_mut() {
-            fields.insert(k, v);
+    pub fn set_property<K, V>(&self, vm: &VM, key: K, value: V)
+    where
+        K: Into<PropertyKey<'static>>,
+        V: Into<Value>,
+    {
+        if let Some(object) = self.as_object() {
+            object.borrow_mut(vm).set_property(key, value);
         }
     }
 

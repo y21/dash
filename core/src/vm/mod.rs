@@ -34,46 +34,44 @@ const DEFAULT_GC_OBJECT_COUNT_THRESHOLD: usize = 10000;
 #[derive(Debug)]
 pub enum VMError {
     /// An error was thrown and user code did not catch it
-    UncaughtError(Handle<Value>),
+    UncaughtError(Value),
 }
 
 /// An owned error that may occur during bytecode execution
 ///
 /// The contained value is cloned.
+// TODO: this is unused, remove
 #[derive(Debug)]
 pub enum OwnedVMError {
     /// An error was thrown and user code did not catch it
-    UncaughtError(Value), // TODO: not static
+    UncaughtError(Value),
 }
 
 impl From<VMError> for OwnedVMError {
     fn from(e: VMError) -> Self {
         match e {
-            VMError::UncaughtError(e) => Self::UncaughtError(unsafe { e.borrow_unbounded() }.clone())
+            VMError::UncaughtError(e) => Self::UncaughtError(e.clone())
         }
     }
 }
 
 impl VMError {
     /// Returns the inner value of the error
-    pub fn into_value(self) -> Handle<Value> {
+    pub fn into_value(self) -> Value {
         match self {
             Self::UncaughtError(err) => err
         }
     }
 
     /// Formats this error by taking the `stack` property of the error object
-    pub fn to_string(&self, vm: &VM) -> Cow<str> {
+    pub fn to_string(&self, vm: &VM) -> Cow<'static, str> {
         match self {
-            Self::UncaughtError(err_cell) => {
-                let err = err_cell.borrow(vm);
-                let message_cell = err.get_field(PropertyKey::from("stack"))
-                    .or_else(|| err.get_field(PropertyKey::from("message")))
-                    .unwrap_or_else(|| Handle::clone(&err_cell));
+            Self::UncaughtError(err) => {
+                let stack = err.get_field(vm, PropertyKey::from("stack"))
+                    .or_else(|| err.get_field(vm, PropertyKey::from("message")))
+                    .unwrap_or_else(|| err.clone());
 
-                let message_ref = message_cell.borrow(vm);
-                let message_string = message_ref.to_string(vm);
-                Cow::Owned(String::from(message_string))
+                stack.to_string(vm)
             }
         }
     }
@@ -206,7 +204,7 @@ impl VM {
     }
 
     /// Returns a reference to the global object
-    pub fn global(&self) -> &Handle<Value> {
+    pub fn global(&self) -> &Value {
         &self.global
     }
 
@@ -274,7 +272,7 @@ impl VM {
         // TODO: this is incorrect behavior
         // (function*(){}).constructor !== Function
         // GeneratorFunction.prototype should point to generator_iterator_proto
-        Value::mark(&self.statics.generator_iterator_proto);
+        Object::mark(&self.statics.generator_iterator_proto);
     }
 
     /// Performs a GC cycle
@@ -346,7 +344,7 @@ impl VM {
 
     /// Reads a number
     fn read_number(&mut self) -> f64 {
-        unsafe { self.stack.pop().borrow_unbounded() }.as_number()
+        self.stack.pop().as_number(self)
     }
 
     /// Reads an index
@@ -355,29 +353,10 @@ impl VM {
             .and_then(Constant::into_index)
     }
 
-    fn read_lhs_rhs(&mut self) -> (Handle<Value>, Handle<Value>) {
+    fn read_lhs_rhs(&mut self) -> (Value, Value) {
         let rhs = self.stack.pop();
         let lhs = self.stack.pop();
         (lhs, rhs)
-    }
-
-    fn with_lhs_borrowed<F, T>(&mut self, func: F) -> T
-    where
-        F: Fn(&Value) -> T,
-    {
-        let lhs_cell = self.stack.pop();
-        let lhs = unsafe { lhs_cell.borrow_unbounded() };
-        func(&*lhs)
-    }
-
-    fn with_lhs_rhs_borrowed<F, T>(&mut self, func: F) -> T
-    where
-        F: Fn(&Value, &Value) -> T,
-    {
-        let (lhs_cell, rhs_cell) = self.read_lhs_rhs();
-        let lhs = unsafe { lhs_cell.borrow_unbounded() };
-        let rhs = unsafe { rhs_cell.borrow_unbounded() };
-        func(&*lhs, &*rhs)
     }
 
     /// Creates a JavaScript object
@@ -416,23 +395,23 @@ impl VM {
     }
 
     #[rustfmt::skip]
-    fn prepare_stdlib(&mut self) {
+    fn prepare_stdlib(&self) {
         // All values that live in self.statics do not have a [[Prototype]] set
         // so we do it here
-        fn patch_value(this: &VM, value: &Handle<Value>) {
-            unsafe { value.borrow_mut_unbounded() }.detect_internal_properties(this);
+        fn patch_value(this: &VM, value: &Handle<Object>) {
+            value.borrow_mut(this).detect_internal_properties(this);
         }
         
-        fn patch_constructor(this: &VM, func: &Handle<Value>, prototype: &Handle<Value>) {
-            let mut func_ref = unsafe { func.borrow_mut_unbounded() };
+        fn patch_constructor(this: &VM, func: &Handle<Object>, prototype: &Handle<Object>) {
+            let func_ref = func.borrow_mut(this);
             let real_func = func_ref.as_function_mut().unwrap();
             real_func.set_prototype(Handle::clone(prototype));
             func_ref.detect_internal_properties(this);
         }
 
-        let mut global = unsafe { self.global.borrow_mut_unbounded() };
+        let mut global = &self.global;
         global.detect_internal_properties(self);
-        global.set_property("globalThis".into(), Handle::clone(&self.global));
+        global.set_property(self, "globalThis", global.clone());
 
         patch_value(self, &self.statics.error_proto);
         patch_value(self, &self.statics.function_proto);
@@ -441,131 +420,130 @@ impl VM {
         patch_value(self, &self.statics.number_proto);
 
         {
-            let mut o = unsafe { self.statics.generator_iterator_proto.borrow_mut_unbounded() };
+            let mut o = self.statics.generator_iterator_proto.borrow_mut(self);
             o.detect_internal_properties(self);
             o.set_property(
-                Handle::clone(&self.statics.symbol_iterator).into(),
+                Handle::clone(&self.statics.symbol_iterator),
                 Handle::clone(&self.statics.identity)
             );
-            o.set_property("next".into(), Handle::clone(&self.statics.generator_iterator_next));
-            o.set_property("return".into(), Handle::clone(&self.statics.generator_iterator_return));
+            o.set_property("next", Handle::clone(&self.statics.generator_iterator_next));
+            o.set_property("return", Handle::clone(&self.statics.generator_iterator_return));
         }
 
         {
-            let mut o = unsafe { self.statics.symbol_ctor.borrow_mut_unbounded() };
+            let mut o = self.statics.symbol_ctor.borrow_mut(self);
             o.detect_internal_properties(self);
-            o.set_property("for".into(), Handle::clone(&self.statics.symbol_for));
-            o.set_property("keyFor".into(), Handle::clone(&self.statics.symbol_key_for));
-            o.set_property("iterator".into(), Handle::clone(&self.statics.symbol_iterator));
-            o.set_property("asyncIterator".into(), Handle::clone(&self.statics.symbol_async_iterator));
-            o.set_property("hasInstance".into(), Handle::clone(&self.statics.symbol_has_instance));
-            o.set_property("isConcatSpreadable".into(), Handle::clone(&self.statics.symbol_is_concat_spreadable));
-            o.set_property("match".into(), Handle::clone(&self.statics.symbol_match));
-            o.set_property("matchAll".into(), Handle::clone(&self.statics.symbol_match_all));
-            o.set_property("replace".into(), Handle::clone(&self.statics.symbol_replace));
-            o.set_property("search".into(), Handle::clone(&self.statics.symbol_search));
-            o.set_property("species".into(), Handle::clone(&self.statics.symbol_species));
-            o.set_property("split".into(), Handle::clone(&self.statics.symbol_split));
-            o.set_property("toPrimitive".into(), Handle::clone(&self.statics.symbol_to_primitive));
-            o.set_property("toStringTag".into(), Handle::clone(&self.statics.symbol_to_string_tag));
-            o.set_property("unscopables".into(), Handle::clone(&self.statics.symbol_unscopables));
-            global.set_property("Symbol".into(), Handle::clone(&self.statics.symbol_ctor));
+            o.set_property("for", Handle::clone(&self.statics.symbol_for));
+            o.set_property("keyFor", Handle::clone(&self.statics.symbol_key_for));
+            o.set_property("iterator", Handle::clone(&self.statics.symbol_iterator));
+            o.set_property("asyncIterator", Handle::clone(&self.statics.symbol_async_iterator));
+            o.set_property("hasInstance", Handle::clone(&self.statics.symbol_has_instance));
+            o.set_property("isConcatSpreadable", Handle::clone(&self.statics.symbol_is_concat_spreadable));
+            o.set_property("match", Handle::clone(&self.statics.symbol_match));
+            o.set_property("matchAll", Handle::clone(&self.statics.symbol_match_all));
+            o.set_property("replace", Handle::clone(&self.statics.symbol_replace));
+            o.set_property("search", Handle::clone(&self.statics.symbol_search));
+            o.set_property("species", Handle::clone(&self.statics.symbol_species));
+            o.set_property("split", Handle::clone(&self.statics.symbol_split));
+            o.set_property("toPrimitive", Handle::clone(&self.statics.symbol_to_primitive));
+            o.set_property("toStringTag", Handle::clone(&self.statics.symbol_to_string_tag));
+            o.set_property("unscopables", Handle::clone(&self.statics.symbol_unscopables));
+            global.set_property(self, "Symbol", Handle::clone(&self.statics.symbol_ctor));
         }
         
         {
-            let mut o = unsafe { self.statics.string_proto.borrow_mut_unbounded() };
+            let mut o = self.statics.string_proto.borrow_mut(self);
             o.detect_internal_properties(self);
-            o.set_property("charAt".into(), Handle::clone(&self.statics.string_char_at));
-            o.set_property("charCodeAt".into(), Handle::clone(&self.statics.string_char_code_at));
-            o.set_property("endsWith".into(), Handle::clone(&self.statics.string_ends_with));
-            o.set_property("anchor".into(), Handle::clone(&self.statics.string_anchor));
-            o.set_property("big".into(), Handle::clone(&self.statics.string_big));
-            o.set_property("blink".into(), Handle::clone(&self.statics.string_blink));
-            o.set_property("bold".into(), Handle::clone(&self.statics.string_bold));
-            o.set_property("fixed".into(), Handle::clone(&self.statics.string_fixed));
-            o.set_property("fontcolor".into(), Handle::clone(&self.statics.string_fontcolor));
-            o.set_property("fontsize".into(), Handle::clone(&self.statics.string_fontsize));
-            o.set_property("italics".into(), Handle::clone(&self.statics.string_italics));
-            o.set_property("link".into(), Handle::clone(&self.statics.string_link));
-            o.set_property("small".into(), Handle::clone(&self.statics.string_small));
-            o.set_property("strike".into(), Handle::clone(&self.statics.string_strike));
-            o.set_property("sub".into(), Handle::clone(&self.statics.string_sub));
-            o.set_property("sup".into(), Handle::clone(&self.statics.string_sup));
-            o.set_property("includes".into(), Handle::clone(&self.statics.string_includes));
-            o.set_property("indexOf".into(), Handle::clone(&self.statics.string_index_of));
-            o.set_property("padStart".into(), Handle::clone(&self.statics.string_pad_start));
-            o.set_property("padEnd".into(), Handle::clone(&self.statics.string_pad_end));
-            o.set_property("repeat".into(), Handle::clone(&self.statics.string_repeat));
-            o.set_property("toLowerCase".into(), Handle::clone(&self.statics.string_to_lowercase));
-            o.set_property("toUpperCase".into(), Handle::clone(&self.statics.string_to_uppercase));
-            o.set_property("replace".into(), Handle::clone(&self.statics.string_replace));
+            o.set_property("charAt", Handle::clone(&self.statics.string_char_at));
+            o.set_property("charCodeAt", Handle::clone(&self.statics.string_char_code_at));
+            o.set_property("endsWith", Handle::clone(&self.statics.string_ends_with));
+            o.set_property("anchor", Handle::clone(&self.statics.string_anchor));
+            o.set_property("big", Handle::clone(&self.statics.string_big));
+            o.set_property("blink", Handle::clone(&self.statics.string_blink));
+            o.set_property("bold", Handle::clone(&self.statics.string_bold));
+            o.set_property("fixed", Handle::clone(&self.statics.string_fixed));
+            o.set_property("fontcolor", Handle::clone(&self.statics.string_fontcolor));
+            o.set_property("fontsize", Handle::clone(&self.statics.string_fontsize));
+            o.set_property("italics", Handle::clone(&self.statics.string_italics));
+            o.set_property("link", Handle::clone(&self.statics.string_link));
+            o.set_property("small", Handle::clone(&self.statics.string_small));
+            o.set_property("strike", Handle::clone(&self.statics.string_strike));
+            o.set_property("sub", Handle::clone(&self.statics.string_sub));
+            o.set_property("sup", Handle::clone(&self.statics.string_sup));
+            o.set_property("includes", Handle::clone(&self.statics.string_includes));
+            o.set_property("indexOf", Handle::clone(&self.statics.string_index_of));
+            o.set_property("padStart", Handle::clone(&self.statics.string_pad_start));
+            o.set_property("padEnd", Handle::clone(&self.statics.string_pad_end));
+            o.set_property("repeat", Handle::clone(&self.statics.string_repeat));
+            o.set_property("toLowerCase", Handle::clone(&self.statics.string_to_lowercase));
+            o.set_property("toUpperCase", Handle::clone(&self.statics.string_to_uppercase));
+            o.set_property("replace", Handle::clone(&self.statics.string_replace));
         }
-
+        
         {
-            let mut o = unsafe { self.statics.array_proto.borrow_mut_unbounded() };
+            let mut o = self.statics.array_proto.borrow_mut(self);
             o.detect_internal_properties(self);
-            o.set_property("push".into(), Handle::clone(&self.statics.array_push));
-            o.set_property("concat".into(), Handle::clone(&self.statics.array_concat));
-            o.set_property("map".into(), Handle::clone(&self.statics.array_map));
-            o.set_property("every".into(), Handle::clone(&self.statics.array_every));
-            o.set_property("fill".into(), Handle::clone(&self.statics.array_fill));
-            o.set_property("filter".into(), Handle::clone(&self.statics.array_filter));
-            o.set_property("find".into(), Handle::clone(&self.statics.array_find));
-            o.set_property("findIndex".into(), Handle::clone(&self.statics.array_find_index));
-            o.set_property("flat".into(), Handle::clone(&self.statics.array_flat));
-            o.set_property("forEach".into(), Handle::clone(&self.statics.array_for_each));
-            o.set_property("from".into(), Handle::clone(&self.statics.array_from));
-            o.set_property("includes".into(), Handle::clone(&self.statics.array_includes));
-            o.set_property("indexOf".into(), Handle::clone(&self.statics.array_index_of));
-            o.set_property("join".into(), Handle::clone(&self.statics.array_join));
-            o.set_property("lastIndexOf".into(), Handle::clone(&self.statics.array_last_index_of));
-            o.set_property("of".into(), Handle::clone(&self.statics.array_of));
-            o.set_property("pop".into(), Handle::clone(&self.statics.array_pop));
-            o.set_property("reduce".into(), Handle::clone(&self.statics.array_reduce));
-            o.set_property("reduceRight".into(), Handle::clone(&self.statics.array_reduce_right));
-            o.set_property("reverse".into(), Handle::clone(&self.statics.array_reverse));
-            o.set_property("shift".into(), Handle::clone(&self.statics.array_shift));
-            o.set_property("slice".into(), Handle::clone(&self.statics.array_slice));
-            o.set_property("some".into(), Handle::clone(&self.statics.array_some));
-            o.set_property("sort".into(), Handle::clone(&self.statics.array_sort));
-            o.set_property("splice".into(), Handle::clone(&self.statics.array_splice));
-            o.set_property("unshift".into(), Handle::clone(&self.statics.array_unshift));
+            o.set_property("push", Handle::clone(&self.statics.array_push));
+            o.set_property("concat", Handle::clone(&self.statics.array_concat));
+            o.set_property("map", Handle::clone(&self.statics.array_map));
+            o.set_property("every", Handle::clone(&self.statics.array_every));
+            o.set_property("fill", Handle::clone(&self.statics.array_fill));
+            o.set_property("filter", Handle::clone(&self.statics.array_filter));
+            o.set_property("find", Handle::clone(&self.statics.array_find));
+            o.set_property("findIndex", Handle::clone(&self.statics.array_find_index));
+            o.set_property("flat", Handle::clone(&self.statics.array_flat));
+            o.set_property("forEach", Handle::clone(&self.statics.array_for_each));
+            o.set_property("from", Handle::clone(&self.statics.array_from));
+            o.set_property("includes", Handle::clone(&self.statics.array_includes));
+            o.set_property("indexOf", Handle::clone(&self.statics.array_index_of));
+            o.set_property("join", Handle::clone(&self.statics.array_join));
+            o.set_property("lastIndexOf", Handle::clone(&self.statics.array_last_index_of));
+            o.set_property("of", Handle::clone(&self.statics.array_of));
+            o.set_property("pop", Handle::clone(&self.statics.array_pop));
+            o.set_property("reduce", Handle::clone(&self.statics.array_reduce));
+            o.set_property("reduceRight", Handle::clone(&self.statics.array_reduce_right));
+            o.set_property("reverse", Handle::clone(&self.statics.array_reverse));
+            o.set_property("shift", Handle::clone(&self.statics.array_shift));
+            o.set_property("slice", Handle::clone(&self.statics.array_slice));
+            o.set_property("some", Handle::clone(&self.statics.array_some));
+            o.set_property("sort", Handle::clone(&self.statics.array_sort));
+            o.set_property("splice", Handle::clone(&self.statics.array_splice));
+            o.set_property("unshift", Handle::clone(&self.statics.array_unshift));
         }
-
+        
         {
-            let mut array_ctor = unsafe { self.statics.array_ctor.borrow_mut_unbounded() };
-            array_ctor.set_property("isArray".into(), Handle::clone(&self.statics.array_is_array));
+            let mut array_ctor = self.statics.array_ctor.borrow_mut(self);
+            array_ctor.set_property("isArray", Handle::clone(&self.statics.array_is_array));
         }
-
+        
         {
-            let mut promise_ctor = unsafe { self.statics.promise_ctor.borrow_mut_unbounded() };
-            promise_ctor.set_property("resolve".into(), Handle::clone(&self.statics.promise_resolve));
-            promise_ctor.set_property("reject".into(), Handle::clone(&self.statics.promise_reject));
+            let mut promise_ctor = self.statics.promise_ctor.borrow_mut(self);
+            promise_ctor.set_property("resolve", Handle::clone(&self.statics.promise_resolve));
+            promise_ctor.set_property("reject", Handle::clone(&self.statics.promise_reject));
         }
-
+        
         {
-            let mut o = unsafe { self.statics.weakset_proto.borrow_mut_unbounded() };
+            let mut o = self.statics.weakset_proto.borrow_mut(self);
             o.detect_internal_properties(self);
-            o.set_property("has".into(), Handle::clone(&self.statics.weakset_has));
-            o.set_property("add".into(), Handle::clone(&self.statics.weakset_add));
-            o.set_property("delete".into(), Handle::clone(&self.statics.weakset_delete));
+            o.set_property("has", Handle::clone(&self.statics.weakset_has));
+            o.set_property("add", Handle::clone(&self.statics.weakset_add));
+            o.set_property("delete", Handle::clone(&self.statics.weakset_delete));
         }
-
+        
         {
-            let mut o = unsafe { self.statics.weakmap_proto.borrow_mut_unbounded() };
+            let mut o = self.statics.weakmap_proto.borrow_mut(self);
             o.detect_internal_properties(self);
-            o.set_property("has".into(), Handle::clone(&self.statics.weakmap_has));
-            o.set_property("add".into(), Handle::clone(&self.statics.weakmap_add));
-            o.set_property("get".into(), Handle::clone(&self.statics.weakmap_get));
-            o.set_property("delete".into(), Handle::clone(&self.statics.weakmap_delete));
+            o.set_property("has", Handle::clone(&self.statics.weakmap_has));
+            o.set_property("add", Handle::clone(&self.statics.weakmap_add));
+            o.set_property("get", Handle::clone(&self.statics.weakmap_get));
+            o.set_property("delete", Handle::clone(&self.statics.weakmap_delete));
         }
 
         {
-            let mut object_proto = unsafe { self.statics.object_proto.borrow_mut_unbounded() };
-            let mut obj = object_proto.as_object_mut().unwrap();
-            obj.constructor = Some(Handle::clone(&self.statics.object_ctor));
-            obj.prototype = Some(Value::new(ValueKind::Null).into_handle(self));
-            object_proto.set_property("toString".into(), Handle::clone(&self.statics.object_to_string));
+            let mut o = self.statics.object_proto.borrow_mut(self);
+            o.constructor = Some(Handle::clone(&self.statics.object_ctor));
+            o.prototype = None;
+            o.set_property("toString", Handle::clone(&self.statics.object_to_string));
         }
 
         // Constructors
@@ -649,69 +627,69 @@ impl VM {
         patch_value(self, &self.statics.symbol_key_for);
         
 
-        global.set_property("NaN".into(), self.create_js_value(f64::NAN).into_handle(self));
-        global.set_property("Infinity".into(), self.create_js_value(f64::INFINITY).into_handle(self));
-        global.set_property("isNaN".into(), self.statics.isnan.clone());
+        global.set_property(self, "NaN", f64::NAN);
+        global.set_property(self, "Infinity", f64::INFINITY);
+        global.set_property(self, "isNaN", Handle::clone(&self.statics.isnan));
 
         {
-            let mut object_ctor = unsafe { self.statics.object_ctor.borrow_mut_unbounded() };
-            object_ctor.set_property("defineProperty".into(), self.statics.object_define_property.clone());
-            object_ctor.set_property("getOwnPropertyNames".into(), self.statics.object_get_own_property_names.clone());
-            object_ctor.set_property("getOwnPropertySymbols".into(), self.statics.object_get_own_property_symbols.clone());
-            object_ctor.set_property("getPrototypeOf".into(), self.statics.object_get_prototype_of.clone());
-            global.set_property("Object".into(), Handle::clone(&self.statics.object_ctor));
+            let mut o = self.statics.object_ctor.borrow_mut(self);
+            o.set_property("defineProperty", Handle::clone(&self.statics.object_define_property));
+            o.set_property("getOwnPropertyNames", Handle::clone(&self.statics.object_get_own_property_names));
+            o.set_property("getOwnPropertySymbols", Handle::clone(&self.statics.object_get_own_property_symbols));
+            o.set_property("getPrototypeOf", Handle::clone(&self.statics.object_get_prototype_of));
+            global.set_property(self, "Object", Handle::clone(&self.statics.object_ctor));
         }
 
         {
-            let mut math_obj = self.create_object();
-            math_obj.set_property("pow".into(), Handle::clone(&self.statics.math_pow));
-            math_obj.set_property("abs".into(), Handle::clone(&self.statics.math_abs));
-            math_obj.set_property("ceil".into(), Handle::clone(&self.statics.math_ceil));
-            math_obj.set_property("floor".into(), Handle::clone(&self.statics.math_floor));
-            math_obj.set_property("max".into(), Handle::clone(&self.statics.math_max));
-            math_obj.set_property("random".into(), Handle::clone(&self.statics.math_random));
-
-            math_obj.set_property("PI".into(), self.create_js_value(std::f64::consts::PI).into_handle(self));
-            math_obj.set_property("E".into(), self.create_js_value(std::f64::consts::E).into_handle(self));
-            math_obj.set_property("LN10".into(), self.create_js_value(std::f64::consts::LN_10).into_handle(self));
-            math_obj.set_property("LN2".into(), self.create_js_value(std::f64::consts::LN_2).into_handle(self));
-            math_obj.set_property("LOG10E".into(), self.create_js_value(std::f64::consts::LOG10_E).into_handle(self));
-            math_obj.set_property("LOG2E".into(), self.create_js_value(std::f64::consts::LOG2_E).into_handle(self));
-            math_obj.set_property("SQRT2".into(),self.create_js_value(std::f64::consts::SQRT_2).into_handle(self));
-            global.set_property("Math".into(), math_obj.into_handle(self));
+            let mut math_obj = Object::new(ObjectKind::Ordinary);
+            math_obj.set_property("pow", Handle::clone(&self.statics.math_pow));
+            math_obj.set_property("abs", Handle::clone(&self.statics.math_abs));
+            math_obj.set_property("ceil", Handle::clone(&self.statics.math_ceil));
+            math_obj.set_property("floor", Handle::clone(&self.statics.math_floor));
+            math_obj.set_property("max", Handle::clone(&self.statics.math_max));
+            math_obj.set_property("random", Handle::clone(&self.statics.math_random));
+        
+            math_obj.set_property("PI", std::f64::consts::PI);
+            math_obj.set_property("E", std::f64::consts::E);
+            math_obj.set_property("LN10", std::f64::consts::LN_10);
+            math_obj.set_property("LN2", std::f64::consts::LN_2);
+            math_obj.set_property("LOG10E", std::f64::consts::LOG10_E);
+            math_obj.set_property("LOG2E", std::f64::consts::LOG2_E);
+            math_obj.set_property("SQRT2",std::f64::consts::SQRT_2);
+            global.set_property(self, "Math", self.register_object(math_obj));
         }
 
         {
-            let mut json_obj = self.create_object();
-            json_obj.set_property("parse".into(), Handle::clone(&self.statics.json_parse));
-            json_obj.set_property("stringify".into(), Handle::clone(&self.statics.json_stringify));
-            global.set_property("JSON".into(), json_obj.into_handle(self));
+            let mut json_obj = Object::new(ObjectKind::Ordinary);
+            json_obj.set_property("parse", Handle::clone(&self.statics.json_parse));
+            json_obj.set_property("stringify", Handle::clone(&self.statics.json_stringify));
+            global.set_property(self, "JSON", self.register_object(json_obj));
         }
 
         {
-            let mut console_obj = self.create_object();
-            console_obj.set_property("log".into(), Handle::clone(&self.statics.console_log));
-            global.set_property("console".into(), console_obj.into_handle(self));
+            let mut console_obj = Object::new(ObjectKind::Ordinary);
+            console_obj.set_property("log", Handle::clone(&self.statics.console_log));
+            global.set_property(self, "console", self.register_object(console_obj));
         }
 
-        global.set_property("Error".into(), self.statics.error_ctor.clone());
-        global.set_property("Boolean".into(), self.statics.boolean_ctor.clone());
-        global.set_property("Number".into(), self.statics.number_ctor.clone());
-        global.set_property("String".into(), self.statics.string_ctor.clone());
-        global.set_property("Function".into(), self.statics.function_ctor.clone());
-        global.set_property("Array".into(), self.statics.array_ctor.clone());
-        global.set_property("WeakSet".into(), self.statics.weakset_ctor.clone());
-        global.set_property("WeakMap".into(), self.statics.weakmap_ctor.clone());
-        global.set_property("Promise".into(), self.statics.promise_ctor.clone());
+        global.set_property(self, "Error", self.statics.error_ctor.clone());
+        global.set_property(self, "Boolean", self.statics.boolean_ctor.clone());
+        global.set_property(self, "Number", self.statics.number_ctor.clone());
+        global.set_property(self, "String", self.statics.string_ctor.clone());
+        global.set_property(self, "Function", self.statics.function_ctor.clone());
+        global.set_property(self, "Array", self.statics.array_ctor.clone());
+        global.set_property(self, "WeakSet", self.statics.weakset_ctor.clone());
+        global.set_property(self, "WeakMap", self.statics.weakmap_ctor.clone());
+        global.set_property(self, "Promise", self.statics.promise_ctor.clone());
     }
 
-    fn unwind(&mut self, value: Handle<Value>, fp: usize) -> Result<(), Handle<Value>> {
+    fn unwind(&mut self, value: Value, fp: usize) -> Result<(), Value> {
         // TODO: clean up resources caused by this unwind
         if self.unwind_handlers.is_empty() {
             return Err(value);
         }
 
-        if let Some(handler) = unsafe { self.unwind_handlers.get() } {
+        if let Some(handler) = self.unwind_handlers.get() {
             if handler.frame_pointer <= fp {
                 return Err(value);
             }
@@ -768,22 +746,22 @@ impl VM {
     }
 
     /// Attempts to push a value onto the stack
-    pub(crate) fn try_push_stack(&mut self, value: Handle<Value>) -> Result<(), Handle<Value>> {
+    pub(crate) fn try_push_stack(&mut self, value: Value) -> Result<(), Value> {
         let ok = self.stack.try_push(value);
 
         if !ok {
-            Err(js_std::error::create_error("Maximum stack size exceeded", self))
+            Err(js_std::error::create_error("Maximum stack size exceeded", self).into())
         } else {
             Ok(())
         }
     }
 
     /// Attempts to push a value onto the stack
-    pub(crate) fn try_push_frame(&mut self, frame: Frame) -> Result<(), Handle<Value>> {
+    pub(crate) fn try_push_frame(&mut self, frame: Frame) -> Result<(), Value> {
         let ok = self.frames.try_push(frame);
 
         if !ok {
-            Err(js_std::error::create_error("Maximum call stack size exceeded", self))
+            Err(js_std::error::create_error("Maximum call stack size exceeded", self).into())
         } else {
             Ok(())
         }
@@ -791,12 +769,13 @@ impl VM {
 
     fn begin_function_call(
         &mut self,
-        func_cell: Handle<Value>,
-        mut params: Vec<Handle<Value>>,
-    ) -> Result<(), Handle<Value>> {
-        let func_cell_ref = unsafe { func_cell.borrow_unbounded() };
+        func_cell: Value,
+        mut params: Vec<Value>,
+    ) -> Result<(), Value> {
+        let object = func_cell.as_object();
+        let object_cell = func_cell.as_object().map(|x| x.borrow(self));
 
-        let closure = match func_cell_ref.as_function() {
+        let closure = match object_cell.and_then(|x| x.as_function_mut()) {
             Some(FunctionKind::Native(f)) => {
                 let receiver = f.receiver.as_ref().map(|rx| rx.get().clone());
                 let ctx = CallContext {
@@ -812,7 +791,7 @@ impl VM {
                 return Ok(());
             }
             Some(FunctionKind::Closure(u)) => u,
-            None => return Err(js_std::error::create_error("Invoked value is not a function", self)),
+            None => return Err(js_std::error::create_error("Invoked value is not a function", self).into()),
             // There should never be raw user functions
             _ => unreachable!(),
         };
@@ -827,12 +806,16 @@ impl VM {
 
         for _ in 0..(origin_param_count.saturating_sub(param_count)) {
             // add dummy undefined values for remaining, missing arguments
-            params.push(Value::new(ValueKind::Undefined).into_handle(self));
+            params.push(Value::new(ValueKind::Undefined));
         }
 
+        let object = func_cell.as_object().unwrap();
+
         if closure.func.ty.is_generator() {
-            let iterator = GeneratorIterator::new(Handle::clone(&func_cell), params);
-            let value = self.create_js_value(iterator).into_handle(self);
+            // it's ok to unwrap as_object()
+            // at this point we know it's an object (specifically a function)
+            let iterator = GeneratorIterator::new(Handle::clone(object), params);
+            let value = Value::from(self.register_object(iterator.into()));
             self.try_push_stack(value)?;
             return Ok(());
         }
@@ -842,7 +825,7 @@ impl VM {
         let frame = Frame {
             buffer: closure.func.buffer.clone(),
             ip: 0,
-            func: func_cell.clone(),
+            func: Handle::clone(object),
             sp: current_sp,
             iterator_caller: None,
             is_constructor: false
@@ -906,7 +889,7 @@ impl VM {
     }
 
     /// Starts interpreting bytecode
-    pub fn interpret(&mut self) -> Result<Option<Handle<Value>>, VMError> {
+    pub fn interpret(&mut self) -> Result<Option<Value>, VMError> {
         let frame = if !self.frames.is_empty() {
             self.frames.pop()
         } else {
@@ -917,7 +900,7 @@ impl VM {
     }
 
     /// Evaluates a JavaScript source string in this VM
-    pub fn eval<'a>(&mut self, source: &'a str) -> Result<Option<Handle<Value>>, EvalError<'a>> {
+    pub fn eval<'a>(&mut self, source: &'a str) -> Result<Option<Value>, EvalError<'a>> {
         let (buffer, constants, mut gc) = Compiler::<()>::from_str(source, None, CompilerFunctionKind::Function)
             .map_err(FromStrError::from)
             .map_err(EvalError::from)?
@@ -937,7 +920,7 @@ impl VM {
 
     /// Sets internal properties ([[prototype]] and constructor) of every value in the provided GC
     /// and marks constants, for example assigns a 
-    fn mark_constants(&self, gc: &mut Gc<Value>) {
+    fn mark_constants(&self, gc: &mut Gc<Object>) {
         for guard in gc.heap.iter() {
             let mut value = guard.borrow_mut();
             value.detect_internal_properties(self);

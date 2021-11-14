@@ -3,20 +3,24 @@ use std::borrow::Cow;
 use super::todo;
 use crate::{
     gc::Handle,
-    vm::value::{array::Array, function::CallContext, PropertyKey, Value, ValueKind},
+    vm::value::{
+        array::Array,
+        function::{CallContext, NativeFunctionCallbackResult},
+        PropertyKey, Value, ValueKind,
+    },
 };
 
 /// The object constructor
 ///
 /// https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-object-constructor
-pub fn object_constructor(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn object_constructor(ctx: CallContext) -> NativeFunctionCallbackResult {
     todo("Object", ctx.vm)
 }
 
 /// Implements Object.defineProperty
 ///
 /// https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-object.defineproperty
-pub fn define_property(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn define_property(ctx: CallContext) -> NativeFunctionCallbackResult {
     let mut arguments = ctx.arguments();
 
     let obj_cell = arguments.next().unwrap();
@@ -36,7 +40,7 @@ pub fn define_property(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>>
 /// Implements Object.getOwnPropertyNames
 ///
 /// https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-object.getownpropertynames
-pub fn get_own_property_names(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn get_own_property_names(ctx: CallContext) -> NativeFunctionCallbackResult {
     let obj_cell = ctx.args.first().unwrap();
     let obj = unsafe { obj_cell.borrow_unbounded() };
 
@@ -58,7 +62,7 @@ pub fn get_own_property_names(ctx: CallContext) -> Result<Handle<Value>, Handle<
 /// Implements Object.getOwnPropertySymbols
 ///
 /// https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-object.getownpropertysymbols
-pub fn get_own_property_symbols(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn get_own_property_symbols(ctx: CallContext) -> NativeFunctionCallbackResult {
     let obj_cell = ctx.args.first().unwrap();
     let obj = unsafe { obj_cell.borrow_unbounded() };
 
@@ -80,7 +84,7 @@ pub fn get_own_property_symbols(ctx: CallContext) -> Result<Handle<Value>, Handl
 /// Implements Object.getPrototypeOf
 ///
 /// https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-object.getprototypeof
-pub fn get_prototype_of(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn get_prototype_of(ctx: CallContext) -> NativeFunctionCallbackResult {
     let obj_cell = ctx.args.first().unwrap();
     let obj = unsafe { obj_cell.borrow_unbounded() };
 
@@ -92,7 +96,7 @@ pub fn get_prototype_of(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>
 /// Implements Object.prototype.toString
 ///
 /// https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-object.prototype.tostring
-pub fn to_string(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn to_string(ctx: CallContext) -> NativeFunctionCallbackResult {
     let this_cell = ctx
         .receiver
         .as_ref()

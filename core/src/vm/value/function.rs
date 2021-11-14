@@ -8,8 +8,11 @@ use std::collections::HashMap;
 use super::object::{Object, ObjectKind};
 use super::Value;
 
+/// The return type of a native JavaScript function
+pub type NativeFunctionCallbackResult = Result<Value, Value>;
+
 /// A native function that can be called from JavaScript code
-pub type NativeFunctionCallback = for<'a> fn(CallContext<'a>) -> Result<Value, Value>;
+pub type NativeFunctionCallback = for<'a> fn(CallContext<'a>) -> NativeFunctionCallbackResult;
 
 /// Represents whether a function can be invoked as a constructor
 #[derive(Debug, Clone, Copy)]

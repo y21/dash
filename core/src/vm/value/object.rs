@@ -176,4 +176,52 @@ impl Object {
     pub fn is_callable(&self) -> bool {
         matches!(self.kind, ObjectKind::Exotic(ExoticObject::Function(_)))
     }
+
+    /// Checks whether this value (or one of the values in its prototype chain) contains a field
+    pub fn has_property(&self, vm: &VM, key: PropertyKey<'_>) -> bool {
+        if self.fields.contains_key(&key) {
+            return true;
+        }
+
+        self.prototype
+            .as_ref()
+            .map(|x| x.borrow(vm).has_property(vm, key))
+            .unwrap_or(false)
+    }
+
+    /// Sets a property on this object
+    pub fn set_property<K, V>(&self, key: K, value: V)
+    where
+        K: Into<PropertyKey<'static>>,
+        V: Into<Value>,
+    {
+        self.fields.insert(key.into(), value.into());
+    }
+
+    /// Looks up a property and goes through exotic property matching
+    ///
+    /// For a direct field lookup, use [Value::get_field]
+    pub fn get_property(&self, vm: &VM, key: PropertyKey<'_>) -> Option<Value> {
+        if key.is_constructor() {
+            return self.constructor.clone().map(Into::into);
+        }
+
+        if key.is_prototype() {
+            return self.prototype.clone().map(Into::into);
+        }
+
+        if key.is_function_prototype() && self.is_callable() {
+            if let Some((func, prototype)) = self.as_function().zip(self.prototype.as_ref()) {
+                return func.get_or_set_prototype(prototype, vm).map(Into::into);
+            }
+        }
+
+        if let Some(value) = self.fields.get(&key) {
+            return Some(value.clone());
+        }
+
+        self.prototype
+            .as_ref()
+            .and_then(|x| x.borrow(vm).get_property(vm, key))
+    }
 }

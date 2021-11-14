@@ -62,7 +62,7 @@ impl Value {
     }
 
     /// Converts a JavaScript value to a string
-    pub fn to_string(&self, vm: &VM) -> Cow<str> {
+    pub fn to_string(&self, vm: &VM) -> Cow<'static, str> {
         match &self.kind {
             ValueKind::Bool(b) => Cow::Borrowed(if *b { "true" } else { "false" }),
             ValueKind::Null => Cow::Borrowed("null"),

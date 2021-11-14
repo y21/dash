@@ -26,6 +26,7 @@ use crate::{
         stack::{IteratorOrder, Stack},
         value::{
             function::{Constructor, Module, UserFunction},
+            object::Object,
             Value, ValueKind,
         },
     },
@@ -115,7 +116,7 @@ pub struct Compiler<'a, A> {
     scope: ScopeGuard<Local<'a>, 1024>,
     agent: Option<MaybeOwned<A>>,
     ctx: MaybeOwned<Context>,
-    gc: Option<MaybeOwned<Gc<Value>>>,
+    gc: Option<MaybeOwned<Gc<Object>>>,
     constants: ConstantPool,
     kind: FunctionKind,
 }
@@ -130,7 +131,7 @@ pub struct CompileResult {
     /// The garbage collector associated to this function compiler
     ///
     /// NOTE: This will only be [Some] if this is the topmost frame
-    pub gc: Option<Gc<Value>>,
+    pub gc: Option<Gc<Object>>,
     /// A pool of constants
     ///
     /// Operands in bytecode will be indexes into this pool
@@ -187,7 +188,7 @@ impl<'a, A: Agent> Compiler<'a, A> {
         agent: Option<MaybeOwned<A>>,
         caller: Option<NonNull<Compiler<'a, A>>>,
         ctx: NonNull<Context>,
-        gc: NonNull<Gc<Value>>,
+        gc: NonNull<Gc<Object>>,
         kind: FunctionKind,
     ) -> Self {
         Self {
@@ -254,7 +255,7 @@ impl<'a, A: Agent> Compiler<'a, A> {
     }
 
     /// Compiles this AST to bytecode
-    pub fn compile(self) -> Result<(Vec<Instruction>, ConstantPool, Gc<Value>), CompileError<'a>> {
+    pub fn compile(self) -> Result<(Vec<Instruction>, ConstantPool, Gc<Object>), CompileError<'a>> {
         let is_top = self.top.is_none();
         let is_module = matches!(self.kind, FunctionKind::Module);
         let CompileResult {

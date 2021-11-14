@@ -5,6 +5,8 @@ use std::str::Utf8Error;
 
 use crate::util;
 use crate::vm::value::array::Array;
+use crate::vm::value::object::Object;
+use crate::vm::value::object::ObjectKind;
 use crate::vm::value::Value as JsValue;
 use crate::vm::value::ValueKind;
 use crate::vm::VM;
@@ -87,31 +89,32 @@ impl<'a> Value<'a> {
         match self {
             Self::String(s) => std::str::from_utf8(s)
                 .map(String::from)
-                .map(|s| vm.create_js_value(s))
+                .map(Object::from)
+                .map(|o| vm.register_object(o))
+                .map(Into::into)
                 .map_err(Into::into),
-            Self::Number(n) => Ok(vm.create_js_value(n)),
-            Self::Bool(b) => Ok(vm.create_js_value(b)),
-            Self::Array(arr) => Ok(vm.create_js_value(Array::new({
-                let mut js_arr = Vec::with_capacity(arr.len());
+            Self::Number(n) => Ok(n.into()),
+            Self::Bool(b) => Ok(b.into()),
+            Self::Array(arr) => Ok(vm
+                .register_array(Array::new({
+                    let mut js_arr = Vec::with_capacity(arr.len());
 
-                for value in arr {
-                    js_arr.push(value.into_js_value(vm).map(|v| v.into_handle(vm))?);
-                }
+                    for value in arr {
+                        js_arr.push(value.into_js_value(vm)?);
+                    }
 
-                js_arr
-            }))),
+                    js_arr
+                }))
+                .into()),
             Self::Object(obj) => {
-                let mut js_obj = vm.create_object();
+                let mut js_obj = Object::new(ObjectKind::Ordinary);
 
                 for (key, value) in obj {
                     let key = std::str::from_utf8(key)?;
-                    js_obj.set_property(
-                        String::from(key).into(),
-                        value.into_js_value(vm)?.into_handle(vm),
-                    );
+                    js_obj.set_property(String::from(key), value.into_js_value(vm)?);
                 }
 
-                Ok(js_obj)
+                Ok(vm.register_object(js_obj).into())
             }
             Self::Null => Ok(JsValue::new(ValueKind::Null)),
         }

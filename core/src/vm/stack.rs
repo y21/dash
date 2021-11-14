@@ -47,7 +47,7 @@ impl<T, const N: usize> Drop for OwnedStack<T, N> {
 #[derive(Debug)]
 pub struct Stack<T, const N: usize>([MaybeUninit<T>; N], usize);
 
-impl<const N: usize> Stack<Handle<Value>, N> {
+impl<const N: usize> Stack<Value, N> {
     /// Marks every handle in the stack as visited
     pub fn mark_visited(&self) {
         for handle in self.as_array() {

@@ -1,9 +1,9 @@
-use crate::{
-    gc::Handle,
-    vm::{
-        value::{function::CallContext, Value},
-        VM,
+use crate::vm::{
+    value::{
+        function::{CallContext, NativeFunctionCallbackResult},
+        Value,
     },
+    VM,
 };
 
 /// Implements `Array`
@@ -42,14 +42,14 @@ pub mod weakset;
 /// The identify function
 ///
 /// Returns its `this` value
-pub fn identity(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
-    Ok(Value::unwrap_or_undefined(ctx.receiver, ctx.vm))
+pub fn identity(ctx: CallContext) -> NativeFunctionCallbackResult {
+    Ok(Value::unwrap_or_undefined(
+        ctx.receiver.map(Into::into),
+        ctx.vm,
+    ))
 }
 
 /// A function that always returns a generic "unimplemented" JS error
-pub fn todo(what: &str, vm: &VM) -> Result<Handle<Value>, Handle<Value>> {
-    Err(error::create_error(
-        format!("`{}` is not yet implemented", what),
-        vm,
-    ))
+pub fn todo(what: &str, vm: &VM) -> NativeFunctionCallbackResult {
+    Err(error::create_error(format!("`{}` is not yet implemented", what), vm).into())
 }

@@ -4,8 +4,8 @@ use crate::{gc::Handle, js_std, vm::VM};
 
 use super::{object::Object, Value};
 
-fn not_implemented_error(vm: &VM) -> Handle<Value> {
-    js_std::error::create_error("not yet implemented", vm)
+fn not_implemented_error(vm: &VM) -> Value {
+    js_std::error::create_error("not yet implemented", vm).into()
 }
 
 /// Clonable exotic object
@@ -35,71 +35,66 @@ pub trait Exotic: Debug + ExoticClone {
     fn inspect(&self, this: &Object, depth: u32) -> Cow<str>;
 
     /// Trap for function calls
-    fn apply(
-        &self,
-        _this: Handle<VM>,
-        _args: Vec<Handle<Value>>,
-        vm: &mut VM,
-    ) -> Result<Handle<Value>, Handle<Value>> {
+    fn apply(&self, _this: Handle<VM>, _args: Vec<Value>, vm: &mut VM) -> Result<Value, Value> {
         Err(not_implemented_error(vm))
     }
 
     /// Trap for the `new` operator
-    fn construct(&self, vm: &VM) -> Result<Handle<Value>, Handle<Value>> {
+    fn construct(&self, vm: &VM) -> Result<Value, Value> {
         Err(not_implemented_error(vm))
     }
 
     /// Trap for defining a new property
-    fn define_property(&mut self, vm: &VM) -> Result<Handle<Value>, Handle<Value>> {
+    fn define_property(&mut self, vm: &VM) -> Result<Value, Value> {
         Err(not_implemented_error(vm))
     }
 
     /// Trap for deleting a property
-    fn delete_property(&mut self, vm: &VM) -> Result<Handle<Value>, Handle<Value>> {
+    fn delete_property(&mut self, vm: &VM) -> Result<Value, Value> {
         Err(not_implemented_error(vm))
     }
     /// Trap for getting a property
-    fn get(&self, vm: &VM) -> Result<Handle<Value>, Handle<Value>> {
+    fn get(&self, vm: &VM) -> Result<Value, Value> {
         Err(not_implemented_error(vm))
     }
 
     /// Trap for Object.getOwnPropertyDescriptor
-    fn get_own_property_descriptor(&self, vm: &VM) -> Result<Handle<Value>, Handle<Value>> {
+    fn get_own_property_descriptor(&self, vm: &VM) -> Result<Value, Value> {
         Err(not_implemented_error(vm))
     }
 
     /// Trap for the [[GetPrototypeOf]] internal method
-    fn get_prototype_of(&self, vm: &VM) -> Result<Handle<Value>, Handle<Value>> {
+    fn get_prototype_of(&self, vm: &VM) -> Result<Value, Value> {
         Err(not_implemented_error(vm))
     }
 
     /// Trap for the `in` operator
-    fn has(&self, vm: &VM) -> Result<Handle<Value>, Handle<Value>> {
+    fn has(&self, vm: &VM) -> Result<Value, Value> {
         Err(not_implemented_error(vm))
     }
 
     /// Trap for Object.isExtensible
-    fn is_extensible(&self, vm: &VM) -> Result<Handle<Value>, Handle<Value>> {
+    fn is_extensible(&self, vm: &VM) -> Result<Value, Value> {
         Err(not_implemented_error(vm))
     }
 
     /// Trap for Reflect.ownKeys
-    fn own_keys(&self, vm: &VM) -> Result<Handle<Value>, Handle<Value>> {
+    fn own_keys(&self, vm: &VM) -> Result<Value, Value> {
         Err(not_implemented_error(vm))
     }
 
     /// Trap for Object.preventExtensions
-    fn prevent_extensions(&mut self, vm: &VM) -> Result<Handle<Value>, Handle<Value>> {
+    fn prevent_extensions(&mut self, vm: &VM) -> Result<Value, Value> {
         Err(not_implemented_error(vm))
     }
 
     /// Trap for the `set` operator
-    fn set(&mut self, vm: &VM) -> Result<Handle<Value>, Handle<Value>> {
+    fn set(&mut self, vm: &VM) -> Result<Value, Value> {
         Err(not_implemented_error(vm))
     }
 
     /// Trap for Object.setPrototypeOf
-    fn set_prototype_of(&mut self, vm: &VM) -> Result<Handle<Value>, Handle<Value>> {
+    fn set_prototype_of(&mut self, vm: &VM) -> Result<Value, Value> {
         Err(not_implemented_error(vm))
     }
 }

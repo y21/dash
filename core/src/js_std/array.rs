@@ -1,6 +1,19 @@
 use std::{borrow::Cow, str::Chars};
 
-use crate::{gc::Handle, js_std, vm::{VM, abstractions, value::{PropertyKey, Value, ValueKind, array::Array, function::CallContext, object::{ExoticObject, Object, ObjectKind}}}};
+use crate::{
+    gc::Handle,
+    js_std,
+    vm::{
+        abstractions,
+        value::{
+            array::Array,
+            function::{CallContext, NativeFunctionCallbackResult},
+            object::{ExoticObject, Object, ObjectKind},
+            PropertyKey, Value, ValueKind,
+        },
+        VM,
+    },
+};
 
 use super::{
     error::{self},
@@ -12,9 +25,9 @@ pub enum ArrayLikeKind<'a> {
     /// Iterator over characters of a string
     String(Chars<'a>),
     /// Array of JS Values
-    Array(&'a [Handle<Value>]),
+    Array(&'a [Value]),
     /// Javascript object
-    Object(&'a Handle<Value>),
+    Object(&'a Handle<Object>),
     /// No value
     Empty,
 }
@@ -84,14 +97,14 @@ fn iterable_from_value<'a>(
 /// The array constructor
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array-constructor
-pub fn array_constructor(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn array_constructor(ctx: CallContext) -> NativeFunctionCallbackResult {
     todo("Array", ctx.vm)
 }
 
 /// This function implements Array.prototype.push
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.push
-pub fn push(value: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn push(value: CallContext) -> NativeFunctionCallbackResult {
     let this_cell = value.receiver.unwrap();
 
     let mut this = unsafe { this_cell.borrow_mut_unbounded() };
@@ -118,7 +131,7 @@ pub fn push(value: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 /// This function implements Array.prototype.concat
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.concat
-pub fn concat(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn concat(ctx: CallContext) -> NativeFunctionCallbackResult {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this = unsafe { this_cell.borrow_mut_unbounded() };
     let this_arr = match this.as_exotic_object_mut() {
@@ -142,7 +155,7 @@ pub fn concat(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 /// This function implements Array.prototype.map
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.map
-pub fn map(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn map(ctx: CallContext) -> NativeFunctionCallbackResult {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let this_ref = unsafe { this_cell.borrow_unbounded() };
     let this_arr = match this_ref.as_exotic_object() {
@@ -172,7 +185,7 @@ pub fn map(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 /// This function implements Array.prototype.every
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.every
-pub fn every(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn every(ctx: CallContext) -> NativeFunctionCallbackResult {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this_ref = unsafe { this_cell.borrow_mut_unbounded() };
     let this_arr = match this_ref.as_exotic_object_mut() {
@@ -202,7 +215,7 @@ pub fn every(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 /// This function implements Array.prototype.fill
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.fill
-pub fn fill(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn fill(ctx: CallContext) -> NativeFunctionCallbackResult {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this_ref = unsafe { this_cell.borrow_mut_unbounded() };
     let this_arr = match this_ref.as_exotic_object_mut() {
@@ -244,49 +257,49 @@ pub fn fill(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 /// This function implements Array.prototype.filter
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.filter
-pub fn filter(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn filter(ctx: CallContext) -> NativeFunctionCallbackResult {
     todo("Array.prototype.filter", ctx.vm)
 }
 
 /// This function implements Array.prototype.find
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.find
-pub fn find(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn find(ctx: CallContext) -> NativeFunctionCallbackResult {
     todo("Array.prototype.find", ctx.vm)
 }
 
 /// This function implements Array.prototype.find
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.findIndex
-pub fn find_index(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn find_index(ctx: CallContext) -> NativeFunctionCallbackResult {
     todo("Array.prototype.findIndex", ctx.vm)
 }
 
 /// This function implements Array.prototype.flat
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.flat
-pub fn flat(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn flat(ctx: CallContext) -> NativeFunctionCallbackResult {
     todo("Array.prototype.flat", ctx.vm)
 }
 
 /// This function implements Array.prototype.forEach
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.forEach
-pub fn for_each(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn for_each(ctx: CallContext) -> NativeFunctionCallbackResult {
     todo("Array.prototype.forEach", ctx.vm)
 }
 
 /// This function implements Array.from
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.from
-pub fn from(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn from(ctx: CallContext) -> NativeFunctionCallbackResult {
     todo("Array.from", ctx.vm)
 }
 
 /// This function implements Array.prototype.includes
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.includes
-pub fn includes(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn includes(ctx: CallContext) -> NativeFunctionCallbackResult {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this_ref = unsafe { this_cell.borrow_mut_unbounded() };
     let this_arr = match this_ref.as_exotic_object_mut() {
@@ -323,7 +336,7 @@ pub fn includes(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 /// This function implements Array.prototype.indexOf
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.indexOf
-pub fn index_of(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn index_of(ctx: CallContext) -> NativeFunctionCallbackResult {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this_ref = unsafe { this_cell.borrow_mut_unbounded() };
     let this_arr = match this_ref.as_exotic_object_mut() {
@@ -362,7 +375,7 @@ pub fn index_of(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 /// This function implements Array.isArray
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.isArray
-pub fn is_array(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn is_array(ctx: CallContext) -> NativeFunctionCallbackResult {
     let mut arguments = ctx.arguments();
     let value_cell = arguments
         .next()
@@ -378,7 +391,7 @@ pub fn is_array(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 /// This function implements Array.prototype.join
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.join
-pub fn join(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn join(ctx: CallContext) -> NativeFunctionCallbackResult {
     let this_cell = ctx.receiver.as_ref();
     let this_ref = this_cell.map(|x| unsafe { x.borrow_unbounded() });
     let (len, mut this) = iterable_from_value(
@@ -427,7 +440,7 @@ pub fn join(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 /// This function implements Array.prototype.lastIndexOf
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.lastIndexOf
-pub fn last_index_of(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn last_index_of(ctx: CallContext) -> NativeFunctionCallbackResult {
     let this_cell = ctx.receiver.as_ref().unwrap();
     let mut this_ref = unsafe { this_cell.borrow_mut_unbounded() };
     let this_arr = match this_ref.as_exotic_object_mut() {
@@ -473,76 +486,76 @@ pub fn last_index_of(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 /// This function implements Array.of
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.of
-pub fn of(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn of(ctx: CallContext) -> NativeFunctionCallbackResult {
     todo("Array.of", ctx.vm)
 }
 
 /// This function implements Array.prototype.pop
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.pop
-pub fn pop(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn pop(ctx: CallContext) -> NativeFunctionCallbackResult {
     todo("Array.prototype.pop", ctx.vm)
 }
 
 /// This function implements Array.prototype.reduce
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.reduce
-pub fn reduce(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn reduce(ctx: CallContext) -> NativeFunctionCallbackResult {
     todo("Array.prototype.reduce", ctx.vm)
 }
 
 /// This function implements Array.prototype.reduceRight
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.reduceRight
-pub fn reduce_right(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn reduce_right(ctx: CallContext) -> NativeFunctionCallbackResult {
     todo("Array.prototype.reduceRight", ctx.vm)
 }
 
 /// This function implements Array.prototype.reverse
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.reverse
-pub fn reverse(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn reverse(ctx: CallContext) -> NativeFunctionCallbackResult {
     todo("Array.prototype.reverse", ctx.vm)
 }
 
 /// This function implements Array.prototype.shift
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.shift
-pub fn shift(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn shift(ctx: CallContext) -> NativeFunctionCallbackResult {
     todo("Array.prototype.shift", ctx.vm)
 }
 
 /// This function implements Array.prototype.slice
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.slice
-pub fn slice(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn slice(ctx: CallContext) -> NativeFunctionCallbackResult {
     todo("Array.prototype.slice", ctx.vm)
 }
 
 /// This function implements Array.prototype.some
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.some
-pub fn some(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn some(ctx: CallContext) -> NativeFunctionCallbackResult {
     todo("Array.prototype.some", ctx.vm)
 }
 
 /// This function implements Array.prototype.sort
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.sort
-pub fn sort(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn sort(ctx: CallContext) -> NativeFunctionCallbackResult {
     todo("Array.prototype.sort", ctx.vm)
 }
 
 /// This function implements Array.prototype.splice
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.splice
-pub fn splice(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn splice(ctx: CallContext) -> NativeFunctionCallbackResult {
     todo("Array.prototype.splice", ctx.vm)
 }
 
 /// This function implements Array.prototype.unshift
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.unshift
-pub fn unshift(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn unshift(ctx: CallContext) -> NativeFunctionCallbackResult {
     todo("Array.prototype.unshift", ctx.vm)
 }

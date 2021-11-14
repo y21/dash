@@ -271,16 +271,8 @@ pub enum Constant {
 }
 
 impl Constant {
-    /// Returns self as an owned JavaScript value, if it one
-    pub fn into_value(self) -> Option<Handle<Value>> {
-        match self {
-            Self::JsValue(v) => Some(v),
-            _ => None,
-        }
-    }
-
     /// Returns self as an owned JavaScript value
-    pub fn try_into_value(self) -> Option<Handle<Value>> {
+    pub fn try_into_value(self) -> Option<Value> {
         match self {
             Self::JsValue(v) => Some(v),
             _ => None,

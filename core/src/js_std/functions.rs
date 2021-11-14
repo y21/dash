@@ -1,16 +1,14 @@
-use crate::gc::Handle;
-use crate::vm::value::{function::CallContext, Value};
+use crate::vm::value::function::CallContext;
+use crate::vm::value::function::NativeFunctionCallbackResult;
 
 /// Implements isNaN
 ///
 /// https://tc39.es/ecma262/multipage/global-object.html#sec-isnan-number
-pub fn is_nan(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn is_nan(ctx: CallContext) -> NativeFunctionCallbackResult {
     let value = match ctx.args.first() {
         Some(v) => v,
-        None => return Ok(ctx.vm.create_js_value(true).into_handle(ctx.vm)),
+        None => return Ok(true.into()),
     };
 
-    let value = unsafe { value.borrow_unbounded() }.as_number();
-
-    Ok(ctx.vm.create_js_value(value.is_nan()).into_handle(ctx.vm))
+    Ok(value.as_number(ctx.vm).is_nan().into())
 }

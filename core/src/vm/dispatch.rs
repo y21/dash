@@ -6,14 +6,14 @@ use super::{instruction::Opcode, value::Value, VM};
 #[derive(Debug, Clone)]
 pub enum DispatchResult {
     /// Return a value
-    Return(Option<Handle<Value>>),
+    Return(Option<Value>),
     /// Suspend ("yield" a value) the current frame
-    Yield(Option<Handle<Value>>),
+    Yield(Option<Value>),
 }
 
 impl DispatchResult {
     /// Returns the inner value of this result
-    pub fn into_value(self) -> Option<Handle<Value>> {
+    pub fn into_value(self) -> Option<Value> {
         match self {
             Self::Return(r) => r,
             Self::Yield(y) => y,
@@ -514,7 +514,10 @@ mod handlers {
 
     pub fn evaluate_module(vm: &mut VM) -> Result<(), Handle<Value>> {
         let (value_cell, buffer) = {
-            let module = vm.read_constant().and_then(Constant::into_value).unwrap();
+            let module = vm
+                .read_constant()
+                .and_then(Constant::try_into_value)
+                .unwrap();
 
             let buffer = unsafe {
                 module
@@ -968,7 +971,7 @@ pub fn handle(
     vm: &mut VM,
     opcode: Opcode,
     frame_idx: usize,
-) -> Result<Option<DispatchResult>, Handle<Value>> {
+) -> Result<Option<DispatchResult>, Value> {
     match opcode {
         Opcode::Eof => return Ok(Some(DispatchResult::Return(None))),
         Opcode::Constant => handlers::constant(vm)?,

@@ -1,120 +1,105 @@
 use super::error;
-use crate::{
-    gc::Handle,
-    vm::value::{function::CallContext, Value},
-};
+use crate::vm::value::function::{CallContext, NativeFunctionCallbackResult};
 
 /// Implements Math.abs
 ///
 /// https://tc39.es/ecma262/multipage/numbers-and-dates.html#sec-math.abs
-pub fn abs(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn abs(ctx: CallContext) -> NativeFunctionCallbackResult {
     let num = ctx
         .args
         .first()
-        .map(|c| unsafe { c.borrow_unbounded() }.as_number())
+        .map(|v| v.as_number(ctx.vm))
         .unwrap_or(f64::NAN);
 
-    Ok(ctx.vm.create_js_value(num.abs()).into_handle(ctx.vm))
+    Ok(num.abs().into())
 }
 
 /// Implements Math.ceil
 ///
 /// https://tc39.es/ecma262/multipage/numbers-and-dates.html#sec-ceil.abs
-pub fn ceil(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn ceil(ctx: CallContext) -> NativeFunctionCallbackResult {
     let num = ctx
         .args
         .first()
-        .map(|c| unsafe { c.borrow_unbounded() }.as_number())
+        .map(|v| v.as_number(ctx.vm))
         .unwrap_or(f64::NAN);
 
-    Ok(ctx.vm.create_js_value(num.ceil()).into_handle(ctx.vm))
+    Ok(num.ceil().into())
 }
 
 /// Implements Math.floor
 ///
 /// https://tc39.es/ecma262/multipage/numbers-and-dates.html#sec-floor.abs
-pub fn floor(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn floor(ctx: CallContext) -> NativeFunctionCallbackResult {
     let num = ctx
         .args
         .first()
-        .map(|c| unsafe { c.borrow_unbounded() }.as_number())
+        .map(|v| v.as_number(ctx.vm))
         .unwrap_or(f64::NAN);
 
-    Ok(ctx.vm.create_js_value(num.floor()).into_handle(ctx.vm))
+    Ok(num.floor().into())
 }
 
 /// Implements Math.max
 ///
 /// https://tc39.es/ecma262/multipage/numbers-and-dates.html#sec-math.max
-pub fn max(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn max(ctx: CallContext) -> NativeFunctionCallbackResult {
     let mut arguments = ctx.arguments();
     let mut max = match arguments.next().cloned() {
-        Some(value) => value,
-        None => return Ok(ctx.vm.create_js_value(-f64::INFINITY).into_handle(ctx.vm)),
+        Some(value) => value.as_number(ctx.vm),
+        None => return Ok((-f64::INFINITY).into()),
     };
-    let mut max_num = unsafe { max.borrow_unbounded() }.as_number();
 
-    for arg_cell in arguments {
-        let arg = unsafe { arg_cell.borrow_unbounded() }.as_number();
-        if arg > max_num {
-            max_num = arg;
-            max = Handle::clone(&arg_cell);
+    for arg in arguments {
+        let arg = arg.as_number(ctx.vm);
+        if arg > max {
+            max = arg;
         }
     }
-    Ok(max)
+
+    Ok(max.into())
 }
 
 /// Implements Math.min
 ///
 /// https://tc39.es/ecma262/multipage/numbers-and-dates.html#sec-math.min
-pub fn min(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn min(ctx: CallContext) -> NativeFunctionCallbackResult {
     let mut arguments = ctx.arguments();
-    let mut max = match arguments.next().cloned() {
-        Some(value) => value,
-        None => return Ok(ctx.vm.create_js_value(f64::INFINITY).into_handle(ctx.vm)),
+    let mut min = match arguments.next().cloned() {
+        Some(value) => value.as_number(ctx.vm),
+        None => return Ok(f64::INFINITY.into()),
     };
-    let mut max_num = unsafe { max.borrow_unbounded() }.as_number();
 
-    for arg_cell in arguments {
-        let arg = unsafe { arg_cell.borrow_unbounded() }.as_number();
-        if arg < max_num {
-            max_num = arg;
-            max = Handle::clone(&arg_cell);
+    for arg in arguments {
+        let arg = arg.as_number(ctx.vm);
+        if arg < min {
+            min = arg;
         }
     }
-    Ok(max)
+
+    Ok(min.into())
 }
 
 /// Implements Math.pow
 ///
 /// https://tc39.es/ecma262/multipage/numbers-and-dates.html#sec-math.pow
-pub fn pow(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
-    let mut args = ctx.arguments();
+pub fn pow(ctx: CallContext) -> NativeFunctionCallbackResult {
+    let mut args = ctx.arguments().map(|n| n.as_number(ctx.vm));
 
-    let lhs = args
-        .next()
-        .map(|n| unsafe { n.borrow_unbounded() }.as_number())
-        .unwrap_or(f64::NAN);
+    let lhs = args.next().unwrap_or(f64::NAN);
+    let rhs = args.next().unwrap_or(f64::NAN);
 
-    let rhs = args
-        .next()
-        .map(|n| unsafe { n.borrow_unbounded() }.as_number())
-        .unwrap_or(f64::NAN);
-
-    Ok(ctx.vm.create_js_value(lhs.powf(rhs)).into_handle(ctx.vm))
+    Ok(lhs.powf(rhs).into())
 }
 
 /// Implements Math.random
 ///
 /// https://tc39.es/ecma262/multipage/numbers-and-dates.html#sec-math.random
-pub fn random(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn random(ctx: CallContext) -> NativeFunctionCallbackResult {
     let maybe_random = ctx.vm.agent.random();
 
     match maybe_random {
-        Some(rand) => Ok(ctx.vm.create_js_value(rand).into_handle(ctx.vm)),
-        None => Err(error::create_error(
-            "Random number generation failed",
-            ctx.vm,
-        )),
+        Some(rand) => Ok(rand.into()),
+        None => Err(error::create_error("Random number generation failed", ctx.vm).into()),
     }
 }

@@ -4,7 +4,7 @@ use super::{
     instruction::{Constant, Instruction},
     value::{
         function::{Constructor, FunctionType, UserFunction},
-        Value,
+        object::Object,
     },
     VM,
 };
@@ -13,7 +13,7 @@ use super::{
 #[derive(Debug)]
 pub struct Frame {
     /// JavaScript function
-    pub func: Handle<Value>,
+    pub func: Handle<Object>,
     /// This frames bytecode
     pub buffer: Box<[Instruction]>,
     /// Instruction pointer
@@ -21,7 +21,7 @@ pub struct Frame {
     /// Stack pointer
     pub sp: usize,
     /// Calling generator iterator, if present
-    pub iterator_caller: Option<Handle<Value>>,
+    pub iterator_caller: Option<Handle<Object>>,
     /// Whether this execution frame is a constructor call
     pub is_constructor: bool,
 }
@@ -42,7 +42,7 @@ impl Frame {
         buffer: B,
         constants: C,
         vm: &VM,
-        iterator_caller: Option<Handle<Value>>,
+        iterator_caller: Option<Handle<Object>>,
     ) -> Self
     where
         B: Into<Box<[Instruction]>>,
@@ -61,7 +61,7 @@ impl Frame {
         );
 
         Self {
-            func: Value::from(func).into_handle(vm),
+            func: vm.register_object(func.into()),
             buffer,
             ip: 0,
             sp,
@@ -71,10 +71,10 @@ impl Frame {
     }
 
     pub(crate) fn mark_visited(&self) {
-        Value::mark(&self.func);
+        Object::mark(&self.func);
 
         if let Some(iterator) = &self.iterator_caller {
-            Value::mark(iterator);
+            Object::mark(iterator);
         }
     }
 }
