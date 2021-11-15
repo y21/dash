@@ -7,7 +7,6 @@ use std::borrow::Cow;
 
 use agent::Agent;
 use compiler::compiler::CompileError;
-use gc::Handle;
 use parser::{lexer::Error as LexError, token::Error as ParseError};
 use vm::{value::Value, FromStrError, VMError, VM};
 
@@ -93,7 +92,7 @@ impl<'a> From<VMError> for EvalError<'a> {
 pub fn eval<'a, A: Agent + 'static>(
     code: &'a str,
     agent: Option<A>,
-) -> Result<(Option<Handle<Value>>, VM), (EvalError<'a>, Option<VM>)> {
+) -> Result<(Option<Value>, VM), (EvalError<'a>, Option<VM>)> {
     let mut vm = VM::from_str(code, agent).map_err(|e| (e.into(), None))?;
 
     match vm.interpret() {

@@ -216,6 +216,8 @@ impl Object {
             }
         }
 
+        // TODO: check if key is a number, a valid index/.length and self is an indexable exotic type, i.e. string, array
+
         if let Some(value) = self.fields.get(&key) {
             return Some(value.clone());
         }

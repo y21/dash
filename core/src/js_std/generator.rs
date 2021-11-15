@@ -9,7 +9,7 @@ use crate::vm::value::{function::CallContext, Value};
 use crate::vm::VMError;
 
 /// Implements the next function on generator iterators
-pub fn next(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn next(ctx: CallContext) -> NativeFunctionCallbackResult {
     let this = ctx.receiver.unwrap();
 
     let frame = {
@@ -100,7 +100,7 @@ pub fn next(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 }
 
 /// Implements the return function on generator iterators
-pub fn return_(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn return_(ctx: CallContext) -> NativeFunctionCallbackResult {
     let this = ctx.receiver.unwrap();
 
     let mut this_ref = unsafe { this.borrow_mut_unbounded() };

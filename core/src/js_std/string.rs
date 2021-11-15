@@ -3,19 +3,20 @@ use std::borrow::Cow;
 use crate::gc::Handle;
 use crate::js_std::{error, todo};
 use crate::vm::abstractions;
+use crate::vm::value::function::NativeFunctionCallbackResult;
 use crate::vm::value::{function::CallContext, Value};
 
 /// The string constructor
 ///
 /// https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-string-constructor
-pub fn string_constructor(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn string_constructor(ctx: CallContext) -> NativeFunctionCallbackResult {
     todo("String", ctx.vm)
 }
 
 /// Implements String.prototype.charAt
 ///
 /// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.charat
-pub fn char_at(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn char_at(ctx: CallContext) -> NativeFunctionCallbackResult {
     // 2. Let S be ? ToString(O).
     let this = abstractions::conversions::to_string(ctx.vm, ctx.receiver.as_ref())?;
     let this_ref = unsafe { this.borrow_unbounded() };
@@ -45,7 +46,7 @@ pub fn char_at(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 /// Implements String.prototype.charCodeAt
 ///
 /// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.charcodeat
-pub fn char_code_at(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn char_code_at(ctx: CallContext) -> NativeFunctionCallbackResult {
     // 2. Let S be ? ToString(O).
     let this = abstractions::conversions::to_string(ctx.vm, ctx.receiver.as_ref())?;
     let this_ref = unsafe { this.borrow_unbounded() };
@@ -74,7 +75,7 @@ pub fn char_code_at(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 /// Implements String.prototype.endsWith
 ///
 /// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.endswith
-pub fn ends_with(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn ends_with(ctx: CallContext) -> NativeFunctionCallbackResult {
     let this = abstractions::conversions::to_string(ctx.vm, ctx.receiver.as_ref())?;
     let this_ref = unsafe { this.borrow_unbounded() };
     let this_s = this_ref.as_string().unwrap();
@@ -105,7 +106,7 @@ fn create_html(
     ctx: CallContext,
     tag: &str,
     attribute: Option<&str>,
-) -> Result<Handle<Value>, Handle<Value>> {
+) -> NativeFunctionCallbackResult {
     let this = abstractions::conversions::to_string(ctx.vm, ctx.receiver.as_ref())?;
     let this_ref = unsafe { this.borrow_unbounded() };
     let this_str = this_ref.as_string().unwrap();
@@ -135,98 +136,98 @@ fn create_html(
 /// Implements String.prototype.anchor
 ///
 /// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.anchor
-pub fn anchor(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn anchor(ctx: CallContext) -> NativeFunctionCallbackResult {
     create_html(ctx, "a", Some("name"))
 }
 
 /// Implements String.prototype.big
 ///
 /// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.big
-pub fn big(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn big(ctx: CallContext) -> NativeFunctionCallbackResult {
     create_html(ctx, "big", None)
 }
 
 /// Implements String.prototype.blink
 ///
 /// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.blink
-pub fn blink(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn blink(ctx: CallContext) -> NativeFunctionCallbackResult {
     create_html(ctx, "blink", None)
 }
 
 /// Implements String.prototype.bold
 ///
 /// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.bold
-pub fn bold(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn bold(ctx: CallContext) -> NativeFunctionCallbackResult {
     create_html(ctx, "b", None)
 }
 
 /// Implements String.prototype.fixed
 ///
 /// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.fixed
-pub fn fixed(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn fixed(ctx: CallContext) -> NativeFunctionCallbackResult {
     create_html(ctx, "tt", None)
 }
 
 /// Implements String.prototype.fontcolor
 ///
 /// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.fontcolor
-pub fn fontcolor(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn fontcolor(ctx: CallContext) -> NativeFunctionCallbackResult {
     create_html(ctx, "font", Some("color"))
 }
 
 /// Implements String.prototype.fontsize
 ///
 /// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.fontsize
-pub fn fontsize(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn fontsize(ctx: CallContext) -> NativeFunctionCallbackResult {
     create_html(ctx, "font", Some("size"))
 }
 
 /// Implements String.prototype.italics
 ///
 /// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.italics
-pub fn italics(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn italics(ctx: CallContext) -> NativeFunctionCallbackResult {
     create_html(ctx, "i", None)
 }
 
 /// Implements String.prototype.link
 ///
 /// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.link
-pub fn link(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn link(ctx: CallContext) -> NativeFunctionCallbackResult {
     create_html(ctx, "a", Some("href"))
 }
 
 /// Implements String.prototype.small
 ///
 /// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.small
-pub fn small(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn small(ctx: CallContext) -> NativeFunctionCallbackResult {
     create_html(ctx, "small", None)
 }
 
 /// Implements String.prototype.strike
 ///
 /// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.strike
-pub fn strike(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn strike(ctx: CallContext) -> NativeFunctionCallbackResult {
     create_html(ctx, "strike", None)
 }
 
 /// Implements String.prototype.sub
 ///
 /// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.sub
-pub fn sub(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn sub(ctx: CallContext) -> NativeFunctionCallbackResult {
     create_html(ctx, "sub", None)
 }
 
 /// Implements String.prototype.sup
 ///
 /// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.sup
-pub fn sup(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn sup(ctx: CallContext) -> NativeFunctionCallbackResult {
     create_html(ctx, "sup", None)
 }
 
 /// Implements String.prototype.indexOf
 ///
 /// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.indexof
-pub fn index_of(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn index_of(ctx: CallContext) -> NativeFunctionCallbackResult {
     let hay = ctx.receiver.as_ref();
     let (needle, pos) = {
         let mut iter = ctx.arguments();
@@ -242,7 +243,7 @@ pub fn index_of(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 /// Implements String.prototype.includes
 ///
 /// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.includes
-pub fn includes(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn includes(ctx: CallContext) -> NativeFunctionCallbackResult {
     let hay = ctx.receiver.as_ref();
     let (needle, pos) = {
         let mut iter = ctx.arguments();
@@ -260,7 +261,7 @@ enum StringPadKind {
     End,   // String.prototype.padEnd
 }
 
-fn string_pad(ctx: CallContext, pad_kind: StringPadKind) -> Result<Handle<Value>, Handle<Value>> {
+fn string_pad(ctx: CallContext, pad_kind: StringPadKind) -> NativeFunctionCallbackResult {
     // 1. Let S be ? ToString(O).
     let this = abstractions::conversions::to_string(ctx.vm, ctx.receiver.as_ref())?;
     let this_ref = unsafe { this.borrow_unbounded() };
@@ -337,21 +338,21 @@ fn string_pad(ctx: CallContext, pad_kind: StringPadKind) -> Result<Handle<Value>
 /// Implements String.prototype.padStart
 ///
 /// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.padstart
-pub fn pad_start(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn pad_start(ctx: CallContext) -> NativeFunctionCallbackResult {
     string_pad(ctx, StringPadKind::Start)
 }
 
 /// Implements String.prototype.padEnd
 ///
 /// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.padend
-pub fn pad_end(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn pad_end(ctx: CallContext) -> NativeFunctionCallbackResult {
     string_pad(ctx, StringPadKind::End)
 }
 
 /// Implements String.prototype.repeat
 ///
 /// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.repeat
-pub fn repeat(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn repeat(ctx: CallContext) -> NativeFunctionCallbackResult {
     // 2. Let S be ? ToString(O).
     let this = abstractions::conversions::to_string(ctx.vm, ctx.receiver.as_ref())?;
     let this_ref = unsafe { this.borrow_unbounded() };
@@ -382,7 +383,7 @@ pub fn repeat(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 /// Implements String.prototype.toLowerCase
 ///
 /// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.tolowercase
-pub fn to_lowercase(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn to_lowercase(ctx: CallContext) -> NativeFunctionCallbackResult {
     // 2. Let S be ? ToString(O).
     let this = abstractions::conversions::to_string(ctx.vm, ctx.receiver.as_ref())?;
     let this_ref = unsafe { this.borrow_unbounded() };
@@ -396,7 +397,7 @@ pub fn to_lowercase(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 /// Implements String.prototype.toUpperCase
 ///
 /// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.touppercase
-pub fn to_uppercase(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn to_uppercase(ctx: CallContext) -> NativeFunctionCallbackResult {
     // 2. Let S be ? ToString(O).
     let this = abstractions::conversions::to_string(ctx.vm, ctx.receiver.as_ref())?;
     let this_ref = unsafe { this.borrow_unbounded() };
@@ -410,7 +411,7 @@ pub fn to_uppercase(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 /// Implements String.prototype.replace
 ///
 /// https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.replace
-pub fn replace(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn replace(ctx: CallContext) -> NativeFunctionCallbackResult {
     let this = abstractions::conversions::to_string(ctx.vm, ctx.receiver.as_ref())?;
     let this_ref = unsafe { this.borrow_unbounded() };
     let this_s = this_ref.as_string().unwrap();

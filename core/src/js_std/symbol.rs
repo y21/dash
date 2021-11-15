@@ -3,12 +3,16 @@ use crate::{
     js_std,
     vm::{
         abstractions,
-        value::{function::CallContext, symbol::Symbol, Value, ValueKind},
+        value::{
+            function::{CallContext, NativeFunctionCallbackResult},
+            symbol::Symbol,
+            Value, ValueKind,
+        },
     },
 };
 
 /// The Symbol constructor
-pub fn symbol_constructor(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn symbol_constructor(ctx: CallContext) -> NativeFunctionCallbackResult {
     let description = match ctx.args.first() {
         Some(handle) => Some(abstractions::conversions::to_string(ctx.vm, Some(handle))?),
         None => None,
@@ -29,7 +33,7 @@ pub fn symbol_constructor(ctx: CallContext) -> Result<Handle<Value>, Handle<Valu
 }
 
 /// Implements Symbol.for
-pub fn symbol_for(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn symbol_for(ctx: CallContext) -> NativeFunctionCallbackResult {
     let description = abstractions::conversions::to_string(ctx.vm, ctx.args.first())?;
 
     let description_ref = unsafe { description.borrow_unbounded() };
@@ -56,7 +60,7 @@ pub fn symbol_for(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
 }
 
 /// Implements Symbol.keyFor
-pub fn symbol_key_for(ctx: CallContext) -> Result<Handle<Value>, Handle<Value>> {
+pub fn symbol_key_for(ctx: CallContext) -> NativeFunctionCallbackResult {
     let param = ctx.args.first();
     let param_ref = param.map(|x| unsafe { x.borrow_unbounded() });
 

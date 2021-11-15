@@ -1,4 +1,4 @@
-use std::{borrow::Cow, str::Chars};
+use std::borrow::Cow;
 
 use crate::{
     gc::Handle,
@@ -8,8 +8,8 @@ use crate::{
         value::{
             array::Array,
             function::{CallContext, NativeFunctionCallbackResult},
-            object::{ExoticObject, Object, ObjectKind},
-            PropertyKey, Value, ValueKind,
+            object::{ExoticObject, Object},
+            Value, ValueKind,
         },
         VM,
     },
@@ -20,78 +20,26 @@ use super::{
     todo,
 };
 
-/// An array-like value
-pub enum ArrayLikeKind<'a> {
-    /// Iterator over characters of a string
-    String(Chars<'a>),
-    /// Array of JS Values
-    Array(&'a [Value]),
-    /// Javascript object
-    Object(&'a Handle<Object>),
-    /// No value
-    Empty,
-}
-
 /// An array-like value that can be iterated over
-pub struct ArrayLikeIterable<'a> {
-    /// What kind of array
-    pub kind: ArrayLikeKind<'a>,
+pub struct ArrayLikeIterable {
+    /// The iterable value
+    pub value: Value,
     /// Current index
     pub index: usize,
 }
 
-impl<'a> ArrayLikeIterable<'a> {
+impl ArrayLikeIterable {
     /// Creates a new array like iterable given an [ArrayLikeKind]
-    pub fn new(kind: ArrayLikeKind<'a>) -> Self {
-        Self { kind, index: 0 }
-    }
-
-    /// Creates a new array like iterable given a Value by detecting its kind
-    pub fn from_value(value: &'a Value, value_cell: &'a Handle<Value>) -> Self {
-        match value.as_object().map(|x| &x.kind) {
-            Some(ObjectKind::Exotic(ExoticObject::String(s))) => {
-                Self::new(ArrayLikeKind::String(s.chars()))
-            }
-            Some(ObjectKind::Exotic(ExoticObject::Array(a))) => {
-                Self::new(ArrayLikeKind::Array(&a.elements))
-            }
-            Some(ObjectKind::Ordinary) => Self::new(ArrayLikeKind::Object(value_cell)),
-            _ => Self::new(ArrayLikeKind::Empty),
-        }
+    pub fn new(value: Value) -> Self {
+        Self { value, index: 0 }
     }
 
     /// Yields the next value
-    pub fn next(&mut self, vm: &mut VM) -> Option<Handle<Value>> {
+    pub fn next(&mut self, vm: &VM) -> Option<Value> {
         self.index += 1;
-        match &mut self.kind {
-            ArrayLikeKind::String(s) => s
-                .next()
-                .map(String::from)
-                .map(Value::from)
-                .map(|v| v.into_handle(vm)),
-            ArrayLikeKind::Array(source) => source.get(self.index - 1).cloned(),
-            ArrayLikeKind::Object(source_cell) => {
-                let pk = (self.index - 1).to_string();
-                Value::get_property(vm, source_cell, &PropertyKey::from(pk.as_str()), None)
-            }
-            ArrayLikeKind::Empty => None,
-        }
+        let pk = (self.index - 1).to_string();
+        self.value.get_property(vm, pk.into())
     }
-}
-
-fn iterable_from_value<'a>(
-    vm: &VM,
-    value_cell: Option<&'a Handle<Value>>,
-    value: Option<&'a Value>,
-    error: &str,
-) -> Result<(usize, ArrayLikeIterable<'a>), Handle<Value>> {
-    let value_cell = value_cell.ok_or_else(|| js_std::error::create_error(error, vm))?;
-    let value = value.unwrap();
-
-    let len = abstractions::object::length_of_array_like(vm, value_cell)?;
-    let iterable = ArrayLikeIterable::from_value(value, value_cell);
-
-    Ok((len as usize, iterable))
 }
 
 /// The array constructor
@@ -104,28 +52,24 @@ pub fn array_constructor(ctx: CallContext) -> NativeFunctionCallbackResult {
 /// This function implements Array.prototype.push
 ///
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.push
-pub fn push(value: CallContext) -> NativeFunctionCallbackResult {
-    let this_cell = value.receiver.unwrap();
+pub fn push(ctx: CallContext) -> NativeFunctionCallbackResult {
+    let this_cell = ctx.receiver.unwrap();
 
-    let mut this = unsafe { this_cell.borrow_mut_unbounded() };
+    let mut this = this_cell.borrow_mut(ctx.vm);
     let this_arr = match this.as_exotic_object_mut() {
         Some(ExoticObject::Array(a)) => a,
         _ => {
-            return Err(error::create_error(
-                "Array.prototype.push called on non-array",
-                value.vm,
-            ))
+            return Err(
+                error::create_error("Array.prototype.push called on non-array", ctx.vm).into(),
+            )
         }
     };
 
-    for value in value.args.iter_mut().rev() {
-        this_arr.elements.push(Handle::clone(&value));
+    for value in ctx.args.iter().rev() {
+        this_arr.elements.push(value.clone());
     }
 
-    Ok(value
-        .vm
-        .create_js_value(this_arr.elements.len() as f64)
-        .into_handle(value.vm))
+    Ok((this_arr.elements.len() as f64).into())
 }
 
 /// This function implements Array.prototype.concat
@@ -133,23 +77,22 @@ pub fn push(value: CallContext) -> NativeFunctionCallbackResult {
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.concat
 pub fn concat(ctx: CallContext) -> NativeFunctionCallbackResult {
     let this_cell = ctx.receiver.as_ref().unwrap();
-    let mut this = unsafe { this_cell.borrow_mut_unbounded() };
-    let this_arr = match this.as_exotic_object_mut() {
+    let this = this_cell.borrow(ctx.vm);
+    let this_arr = match this.as_exotic_object() {
         Some(ExoticObject::Array(a)) => a,
         _ => {
-            return Err(error::create_error(
-                "Array.prototype.concat called on non-array",
-                ctx.vm,
-            ))
+            return Err(
+                error::create_error("Array.prototype.concat called on non-array", ctx.vm).into(),
+            );
         }
     };
 
     let mut arr = this_arr.clone();
     for arg in ctx.arguments() {
-        arr.elements.push(Handle::clone(arg));
+        arr.elements.push(arg.clone());
     }
 
-    Ok(Value::from(arr).into_handle(ctx.vm))
+    Ok(ctx.vm.register_array(arr).into())
 }
 
 /// This function implements Array.prototype.map
@@ -157,14 +100,13 @@ pub fn concat(ctx: CallContext) -> NativeFunctionCallbackResult {
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.map
 pub fn map(ctx: CallContext) -> NativeFunctionCallbackResult {
     let this_cell = ctx.receiver.as_ref().unwrap();
-    let this_ref = unsafe { this_cell.borrow_unbounded() };
+    let this_ref = this_cell.borrow(ctx.vm);
     let this_arr = match this_ref.as_exotic_object() {
         Some(ExoticObject::Array(a)) => a,
         _ => {
-            return Err(error::create_error(
-                "Array.prototype.map called on non-array",
-                ctx.vm,
-            ))
+            return Err(
+                error::create_error("Array.prototype.map called on non-array", ctx.vm).into(),
+            );
         }
     };
 
@@ -173,13 +115,13 @@ pub fn map(ctx: CallContext) -> NativeFunctionCallbackResult {
     let mut arr = Vec::new();
 
     for (idx, value) in this_arr.elements.iter().enumerate() {
-        let idx = ctx.vm.create_js_value(idx as f64).into_handle(ctx.vm);
-        let value = Handle::clone(&value);
+        let idx = Value::from(idx as f64);
+        let value = value.clone();
 
         arr.push(Value::call(cb, vec![value, idx], ctx.vm)?);
     }
 
-    Ok(ctx.vm.create_js_value(Array::new(arr)).into_handle(ctx.vm))
+    Ok(ctx.vm.register_array(Array::new(arr)).into())
 }
 
 /// This function implements Array.prototype.every
@@ -187,29 +129,28 @@ pub fn map(ctx: CallContext) -> NativeFunctionCallbackResult {
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.every
 pub fn every(ctx: CallContext) -> NativeFunctionCallbackResult {
     let this_cell = ctx.receiver.as_ref().unwrap();
-    let mut this_ref = unsafe { this_cell.borrow_mut_unbounded() };
-    let this_arr = match this_ref.as_exotic_object_mut() {
+    let mut this_ref = this_cell.borrow(ctx.vm);
+    let this_arr = match this_ref.as_exotic_object() {
         Some(ExoticObject::Array(a)) => a,
         _ => {
-            return Err(error::create_error(
-                "Array.prototype.every called on non-array",
-                ctx.vm,
-            ))
+            return Err(
+                error::create_error("Array.prototype.every called on non-array", ctx.vm).into(),
+            )
         }
     };
 
     let cb = ctx.args.first().unwrap();
 
     for value in &this_arr.elements {
-        let value = Value::call(cb, vec![Handle::clone(value)], ctx.vm)?;
-        let is_truthy = unsafe { value.borrow_unbounded() }.is_truthy();
+        let value = cb.call(vec![value.clone()], ctx.vm)?;
+        let is_truthy = value.is_truthy();
 
         if !is_truthy {
-            return Ok(ctx.vm.create_js_value(false).into_handle(ctx.vm));
+            return Ok(false.into());
         }
     }
 
-    Ok(ctx.vm.create_js_value(true).into_handle(ctx.vm))
+    Ok(true.into())
 }
 
 /// This function implements Array.prototype.fill
@@ -217,41 +158,38 @@ pub fn every(ctx: CallContext) -> NativeFunctionCallbackResult {
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.fill
 pub fn fill(ctx: CallContext) -> NativeFunctionCallbackResult {
     let this_cell = ctx.receiver.as_ref().unwrap();
-    let mut this_ref = unsafe { this_cell.borrow_mut_unbounded() };
+    let mut this_ref = this_cell.borrow_mut(ctx.vm);
     let this_arr = match this_ref.as_exotic_object_mut() {
         Some(ExoticObject::Array(a)) => a,
         _ => {
-            return Err(error::create_error(
-                "Array.prototype.fill called on non-array",
-                ctx.vm,
-            ))
+            return Err(
+                error::create_error("Array.prototype.fill called on non-array", ctx.vm).into(),
+            )
         }
     };
 
     let length = this_arr.elements.len();
 
     let mut args = ctx.arguments();
-    let value = args
-        .next()
-        .cloned()
-        .unwrap_or_else(|| Value::new(ValueKind::Undefined).into_handle(ctx.vm));
+    let value = Value::unwrap_or_undefined(args.next().cloned(), ctx.vm);
 
     let start = args
         .next()
-        .map(|c| unsafe { c.borrow_unbounded() }.as_number() as usize)
+        .map(|c| c.as_number(ctx.vm) as usize)
         .map(|c| c.max(length))
         .unwrap_or(0);
+
     let end = args
         .next()
-        .map(|c| unsafe { c.borrow_unbounded() }.as_number() as usize)
+        .map(|c| c.as_number(ctx.vm) as usize)
         .map(|c| c.min(length))
         .unwrap_or_else(|| this_arr.elements.len());
 
     for idx in start..end {
-        this_arr.elements[idx] = Handle::clone(&value);
+        this_arr.elements[idx] = value.clone();
     }
 
-    Ok(Handle::clone(this_cell))
+    Ok(Handle::clone(this_cell).into())
 }
 
 /// This function implements Array.prototype.filter
@@ -301,36 +239,30 @@ pub fn from(ctx: CallContext) -> NativeFunctionCallbackResult {
 /// https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.includes
 pub fn includes(ctx: CallContext) -> NativeFunctionCallbackResult {
     let this_cell = ctx.receiver.as_ref().unwrap();
-    let mut this_ref = unsafe { this_cell.borrow_mut_unbounded() };
-    let this_arr = match this_ref.as_exotic_object_mut() {
+    let mut this_ref = this_cell.borrow(ctx.vm);
+    let this_arr = match this_ref.as_exotic_object() {
         Some(ExoticObject::Array(a)) => a,
         _ => {
-            return Err(error::create_error(
-                "Array.prototype.includes called on non-array",
-                ctx.vm,
-            ))
+            return Err(
+                error::create_error("Array.prototype.includes called on non-array", ctx.vm).into(),
+            )
         }
     };
 
     let mut args = ctx.arguments();
-    let search_element_cell = args
-        .next()
-        .cloned()
-        .unwrap_or_else(|| Value::new(ValueKind::Undefined).into_handle(ctx.vm));
-    let search_element = unsafe { search_element_cell.borrow_mut_unbounded() };
+    let search_element = Value::unwrap_or_undefined(args.next().cloned(), ctx.vm);
     let from_index = args
         .next()
-        .map(|c| unsafe { c.borrow_unbounded() }.as_number())
-        .map(|c| c as usize)
+        .map(|c| c.as_number(ctx.vm) as usize)
         .unwrap_or(0);
 
     let found = this_arr
         .elements
         .iter()
         .skip(from_index)
-        .any(|c| unsafe { c.borrow_unbounded() }.strict_equal(&search_element));
+        .any(|c| c.strict_equal(&search_element));
 
-    Ok(ctx.vm.create_js_value(found).into_handle(ctx.vm))
+    Ok(found.into())
 }
 
 /// This function implements Array.prototype.indexOf
@@ -342,22 +274,17 @@ pub fn index_of(ctx: CallContext) -> NativeFunctionCallbackResult {
     let this_arr = match this_ref.as_exotic_object_mut() {
         Some(ExoticObject::Array(a)) => a,
         _ => {
-            return Err(error::create_error(
-                "Array.prototype.indexOf called on non-array",
-                ctx.vm,
-            ))
+            return Err(
+                error::create_error("Array.prototype.indexOf called on non-array", ctx.vm).into(),
+            )
         }
     };
 
     let mut args = ctx.arguments();
-    let search_element_cell = args
-        .next()
-        .cloned()
-        .unwrap_or_else(|| Value::new(ValueKind::Undefined).into_handle(ctx.vm));
-    let search_element = unsafe { search_element_cell.borrow_unbounded() };
+    let search_element = Value::unwrap_or_undefined(args.next().cloned(), ctx.vm);
     let from_index = args
         .next()
-        .map(|c| unsafe { c.borrow_unbounded() }.as_number())
+        .map(|c| c.as_number(ctx.vm) as usize)
         .map(|c| c as usize)
         .unwrap_or(0);
 
@@ -365,11 +292,11 @@ pub fn index_of(ctx: CallContext) -> NativeFunctionCallbackResult {
         .elements
         .iter()
         .skip(from_index)
-        .position(|cell| unsafe { cell.borrow_unbounded() }.strict_equal(&search_element))
+        .position(|c| c.strict_equal(&search_element))
         .map(|v| v as f64)
         .unwrap_or(-1f64);
 
-    Ok(ctx.vm.create_js_value(index).into_handle(ctx.vm))
+    Ok(index.into())
 }
 
 /// This function implements Array.isArray
@@ -446,10 +373,9 @@ pub fn last_index_of(ctx: CallContext) -> NativeFunctionCallbackResult {
     let this_arr = match this_ref.as_exotic_object_mut() {
         Some(ExoticObject::Array(a)) => a,
         _ => {
-            return Err(error::create_error(
-                "Array.prototype.indexOf called on non-array",
-                ctx.vm,
-            ))
+            return Err(
+                error::create_error("Array.prototype.indexOf called on non-array", ctx.vm).into(),
+            )
         }
     };
 

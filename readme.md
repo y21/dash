@@ -61,8 +61,7 @@ fn main() {
     
     let result: f64 = result
         .unwrap() // unwrap, we know there *is* a value
-        .borrow(&vm)
-        .as_number();
+        .as_number(&vm);
 
     // Result: 1764.0
     println!("Result: {:?}", result);
