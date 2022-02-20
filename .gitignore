@@ -8,3 +8,4 @@ wasm/frontend/dist
 target
 *.json
 *.sh
+cli/tests
