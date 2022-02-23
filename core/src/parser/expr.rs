@@ -1,11 +1,3 @@
-use crate::{
-    compiler::instruction::Instruction,
-    vm::value::{
-        object::{ExoticObject, Object},
-        Value, ValueKind,
-    },
-};
-
 use super::{statement::FunctionDeclaration, token::TokenType};
 
 /// The sequence operator (`expr, expr`)
@@ -48,8 +40,6 @@ pub enum Expr<'a> {
     Array(ArrayLiteral<'a>),
     /// An object literal expression
     Object(ObjectLiteral<'a>),
-    /// A compiled expression
-    Compiled(Vec<Instruction>),
     /// An empty expression
     Empty,
 }
@@ -256,21 +246,6 @@ pub enum LiteralExpr<'a> {
 }
 
 impl<'a> LiteralExpr<'a> {
-    /// Converts a literal expression to a value
-    pub fn to_value(&self) -> Value {
-        match self {
-            Self::Boolean(b) => Value::from(*b),
-            Self::Number(n) => Value::from(*n),
-            Self::Identifier(_) => unreachable!(),
-            Self::String(s) => Object::Exotic(ExoticObject::String(
-                std::str::from_utf8(s).unwrap().to_owned(),
-            ))
-            .into(),
-            Self::Undefined => Value::new(ValueKind::Undefined),
-            Self::Null => Value::new(ValueKind::Null),
-        }
-    }
-
     /// Tries to get the identifier of a literal, if present
     pub fn to_identifier(&self) -> Option<&'a [u8]> {
         match self {

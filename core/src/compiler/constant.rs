@@ -4,7 +4,7 @@ use crate::parser::expr::LiteralExpr;
 
 use super::builder::force_utf8;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Constant {
     Number(f64),
     String(String),
@@ -12,6 +12,36 @@ pub enum Constant {
     Boolean(bool),
     Null,
     Undefined,
+}
+
+impl Constant {
+    pub fn as_number(&self) -> Option<f64> {
+        match self {
+            Constant::Number(n) => Some(*n),
+            _ => None,
+        }
+    }
+
+    pub fn as_string(&self) -> Option<&str> {
+        match self {
+            Constant::String(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    pub fn as_identifier(&self) -> Option<&str> {
+        match self {
+            Constant::Identifier(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    pub fn as_boolean(&self) -> Option<bool> {
+        match self {
+            Constant::Boolean(b) => Some(*b),
+            _ => None,
+        }
+    }
 }
 
 impl<'a> From<&LiteralExpr<'a>> for Constant {
@@ -48,6 +78,10 @@ impl ConstantPool {
             self.constants.push(constant);
             Ok(id)
         }
+    }
+
+    pub fn into_vec(self) -> Vec<Constant> {
+        self.constants
     }
 }
 

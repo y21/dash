@@ -163,7 +163,6 @@ impl<L, R> Either<L, R> {
     }
 }
 
-#[inline(never)]
 #[cold]
 fn unlikely_inner() {}
 

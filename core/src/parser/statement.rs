@@ -148,6 +148,12 @@ impl<'a> TryCatch<'a> {
 #[derive(Debug, Clone)]
 pub struct ReturnStatement<'a>(pub Expr<'a>);
 
+impl<'a> Default for ReturnStatement<'a> {
+    fn default() -> Self {
+        Self(Expr::undefined_literal())
+    }
+}
+
 /// A loop statement
 #[derive(Debug, Clone)]
 pub enum Loop<'a> {

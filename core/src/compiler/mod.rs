@@ -1,3 +1,5 @@
+use std::convert::TryInto;
+
 use crate::{
     compiler::builder::InstructionBuilder,
     parser::{
@@ -20,9 +22,9 @@ use self::{
 };
 
 mod builder;
-mod constant;
+pub mod constant;
 mod error;
-mod instruction;
+pub mod instruction;
 mod scope;
 /// Visitor trait, used to walk the AST
 mod visitor;
@@ -33,7 +35,7 @@ macro_rules! unimplementedc {
     };
 }
 
-pub struct Compiler<'a> {
+pub struct FunctionCompiler<'a> {
     cp: ConstantPool,
     scope: Scope<'a>,
 }
@@ -44,7 +46,7 @@ pub struct CompileResult {
     pub cp: ConstantPool,
 }
 
-impl<'a> Compiler<'a> {
+impl<'a> FunctionCompiler<'a> {
     fn new() -> Self {
         Self {
             cp: ConstantPool::new(),
@@ -53,11 +55,17 @@ impl<'a> Compiler<'a> {
     }
 
     pub fn compile_ast(stmts: Vec<Statement<'a>>) -> Result<CompileResult, CompileError> {
-        let mut compiler = Compiler::new();
+        let mut compiler = Self::new();
         let mut insts = Vec::new();
 
         for stmt in stmts {
             insts.append(&mut compiler.accept(&stmt)?);
+        }
+
+        if !matches!(insts.last(), Some(&instruction::RET)) {
+            // if there is no explicit return already, we must add one
+            let mut ret = compiler.visit_return_statement(&Default::default())?;
+            insts.append(&mut ret);
         }
 
         Ok(CompileResult {
@@ -77,7 +85,7 @@ impl<'a> Compiler<'a> {
     }
 }
 
-impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for Compiler<'a> {
+impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
     fn visit_binary_expression(&mut self, e: &BinaryExpr<'a>) -> Result<Vec<u8>, CompileError> {
         let mut ib = InstructionBuilder::new();
         ib.append(&mut self.accept_expr(&e.left)?);
@@ -201,11 +209,28 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for Compiler<'a> {
     }
 
     fn visit_function_call(&mut self, c: &FunctionCall<'a>) -> Result<Vec<u8>, CompileError> {
-        unimplementedc!("Function call")
+        let mut ib = InstructionBuilder::new();
+
+        ib.append(&mut self.accept_expr(&c.target)?);
+        for a in &c.arguments {
+            ib.append(&mut self.accept_expr(a)?);
+        }
+        let argc = c
+            .arguments
+            .len()
+            .try_into()
+            .map_err(|_| CompileError::ParameterLimitExceeded)?;
+
+        ib.build_call(argc, c.constructor_call);
+
+        Ok(ib.build())
     }
 
     fn visit_return_statement(&mut self, s: &ReturnStatement<'a>) -> Result<Vec<u8>, CompileError> {
-        unimplementedc!("Return statement")
+        let mut ib = InstructionBuilder::new();
+        ib.append(&mut self.accept_expr(&s.0)?);
+        ib.build_ret();
+        Ok(ib.build())
     }
 
     fn visit_conditional_expr(&mut self, c: &ConditionalExpr<'a>) -> Result<Vec<u8>, CompileError> {

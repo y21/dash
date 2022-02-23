@@ -1,11 +1,11 @@
-use std::marker::PhantomData;
+use std::{marker::PhantomData, ptr::NonNull};
 
 /// A heap allocated heap node
-pub struct Node<T> {
+pub struct Node<T: ?Sized> {
+    /// A pointer to the next node in the heap
+    pub next: Option<NonNull<Node<T>>>,
     /// The value of this node
     pub value: T,
-    /// A pointer to the next node in the heap
-    pub next: Option<*mut Node<T>>,
 }
 
 impl<T> From<T> for Node<T> {
@@ -16,11 +16,11 @@ impl<T> From<T> for Node<T> {
 
 /// A datastructure similar to a linked list which allows efficiently removing nodes
 #[derive(Clone, Debug)]
-pub struct Heap<T> {
+pub struct Heap<T: ?Sized> {
     /// Top of the heap (value that was added last)
-    pub head: Option<*mut Node<T>>,
+    pub head: Option<NonNull<Node<T>>>,
     /// Bottom of the heap (value that was added first)
-    pub tail: Option<*mut Node<T>>,
+    pub tail: Option<NonNull<Node<T>>>,
     /// The length of the heap
     pub len: usize,
 }
@@ -36,12 +36,15 @@ impl<T> Heap<T> {
     }
 
     /// Adds a new value to this heap
-    pub fn add<N: Into<Node<T>>>(&mut self, value: N) -> *mut T {
-        let node = Box::into_raw(Box::new(value.into()));
+    pub fn add(&mut self, value: T) -> *mut T {
+        let node = Box::into_raw(Box::new(Node::from(value)));
+        // SAFETY: the pointer returned by Box::into_raw is guaranteed to be non null
+        let node = unsafe { NonNull::new_unchecked(node) };
 
-        if let Some(head) = self.head {
+        if let Some(mut head) = self.head {
             unsafe {
-                (*head).next = Some(node);
+                // SAFETY: if self.head is some, then the contained pointer is valid
+                head.as_mut().next = Some(node);
             }
         }
 
@@ -52,7 +55,7 @@ impl<T> Heap<T> {
         self.head = Some(node);
         self.len += 1;
 
-        unsafe { &mut (*node).value as *mut T }
+        unsafe { (&mut (*node.as_ptr()).value) as *mut T }
     }
 
     /// Returns an iterator over the heap
@@ -64,14 +67,16 @@ impl<T> Heap<T> {
     }
 }
 
-impl<T> Drop for Heap<T> {
+impl<T: ?Sized> Drop for Heap<T> {
     fn drop(&mut self) {
         let mut next = self.tail;
 
         while let Some(ptr) = next {
+            let ptr = ptr.as_ptr();
+
             unsafe {
                 next = (*ptr).next;
-                Box::from_raw(ptr)
+                Box::from_raw(ptr);
             };
         }
     }
@@ -80,7 +85,7 @@ impl<T> Drop for Heap<T> {
 /// An iterator over the values in a heap
 pub struct HeapIter<'a, T> {
     /// The next node to be returned
-    next: Option<*mut Node<T>>,
+    next: Option<NonNull<Node<T>>>,
     /// PhantomData to ensure that HeapIter does not outlive its Heap
     _heap: PhantomData<&'a ()>,
 }
@@ -92,6 +97,8 @@ impl<'a, T: 'a> Iterator for HeapIter<'a, T> {
         let next = self.next;
 
         if let Some(ptr) = next {
+            let ptr = ptr.as_ptr();
+
             unsafe {
                 self.next = (*ptr).next;
                 Some(&(*ptr).value)

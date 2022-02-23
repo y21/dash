@@ -6,6 +6,7 @@ pub enum CompileError {
     ConstantPoolLimitExceeded,
     LocalLimitExceeded,
     Unimplemented(String),
+    ParameterLimitExceeded,
 }
 
 impl From<ConstantLimitExceededError> for CompileError {

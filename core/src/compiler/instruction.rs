@@ -35,6 +35,8 @@ pub const STORELOCAL: u8 = 0x19;
 pub const STORELOCALW: u8 = 0x1A;
 pub const STOREGLOBAL: u8 = 0x1B;
 pub const STOREGLOBALW: u8 = 0x1C;
+pub const RET: u8 = 0x1D;
+pub const CALL: u8 = 0x1E;
 
 pub trait InstructionWriter {
     fn build_add(&mut self);
@@ -50,6 +52,8 @@ pub trait InstructionWriter {
     fn build_eq(&mut self);
     fn build_ne(&mut self);
     fn build_pop(&mut self);
+    fn build_ret(&mut self);
+    fn build_call(&mut self, argc: u8, is_constructor: bool);
     fn build_constant(
         &mut self,
         cp: &mut ConstantPool,
@@ -103,7 +107,8 @@ impl InstructionWriter for InstructionBuilder {
         build_neg NEG,
         build_typeof TYPEOF,
         build_bitnot BITNOT,
-        build_not NOT
+        build_not NOT,
+        build_ret RET
     }
 
     fn build_constant(
@@ -141,5 +146,9 @@ impl InstructionWriter for InstructionBuilder {
 
     fn build_local_store(&mut self, id: u16) {
         self.write_wide_instr(STORELOCAL, STORELOCALW, id);
+    }
+
+    fn build_call(&mut self, argc: u8, is_constructor: bool) {
+        self.write_arr([CALL, argc, is_constructor as u8]);
     }
 }

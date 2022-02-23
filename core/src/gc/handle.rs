@@ -5,16 +5,14 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use crate::vm::VM;
-
 /// An inner garbage collected value
 ///
 /// If an [InnerHandle] does not get marked as visited by the next GC cycle,
 /// it will get garbage collected
 #[derive(Debug)]
-pub struct InnerHandle<T> {
-    value: T,
+pub struct InnerHandle<T: ?Sized> {
     marked: bool,
+    value: T,
 }
 
 impl<T> InnerHandle<T> {
@@ -62,7 +60,7 @@ impl<T> DerefMut for InnerHandle<T> {
 ///
 /// It uses [RefCell] to ensure that no aliasing happens
 #[derive(Debug)]
-pub struct InnerHandleGuard<T>(RefCell<InnerHandle<T>>);
+pub struct InnerHandleGuard<T: ?Sized>(RefCell<InnerHandle<T>>);
 
 impl<T> InnerHandleGuard<T> {
     /// Returns a mutable reference to the underlying [InnerHandle]
@@ -95,12 +93,18 @@ impl<T> Deref for InnerHandleGuard<T> {
 }
 
 /// A handle that
-#[derive(Debug, Clone)]
-pub struct Handle<T>(*mut InnerHandleGuard<T>, *const ());
+#[derive(Debug)]
+pub struct Handle<T: ?Sized>(*mut InnerHandleGuard<T>);
+
+impl<T> Clone for Handle<T> {
+    fn clone(&self) -> Self {
+        Self(self.0)
+    }
+}
 
 impl<T> PartialEq for Handle<T> {
     fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0 && self.1 == other.1
+        self.0 == other.0
     }
 }
 
@@ -111,8 +115,8 @@ impl<T> Handle<T> {
     ///
     /// # Safety
     /// This operation is unsafe because its [Deref] implementation dereferences it
-    pub unsafe fn new(ptr: *mut InnerHandleGuard<T>, marker: *const ()) -> Self {
-        Self(ptr, marker)
+    pub unsafe fn new(ptr: *mut InnerHandleGuard<T>) -> Self {
+        Self(ptr)
     }
 
     /// Returns a raw pointer to the underlying [InnerHandle]
@@ -138,8 +142,7 @@ impl<T> Handle<T> {
     ///
     /// ## Panics
     /// This function causes a panic if this handle is not managed by the given VM
-    pub fn get<'h>(&self, vm: &'h VM) -> &'h InnerHandleGuard<T> {
-        assert!(self.check_marker(vm));
+    pub fn get<'h>(&self) -> &'h InnerHandleGuard<T> {
         unsafe { &*self.0 }
     }
 
@@ -155,8 +158,7 @@ impl<T> Handle<T> {
     ///
     /// ## Panics
     /// This function causes a panic if this handle is not managed by the given VM or if RefCell::borrow() panics
-    pub fn borrow<'v>(&self, vm: &'v VM) -> Ref<'v, InnerHandle<T>> {
-        assert!(self.check_marker(vm));
+    pub fn borrow<'v>(&self) -> Ref<'v, InnerHandle<T>> {
         unsafe { (&*self.0).borrow() }
     }
 
@@ -164,8 +166,7 @@ impl<T> Handle<T> {
     ///
     /// ## Panics
     /// This function causes a panic if this handle is not managed by the given VM or if RefCell::borrow() panics mutably
-    pub fn borrow_mut<'v>(&self, vm: &'v VM) -> RefMut<'v, InnerHandle<T>> {
-        assert!(self.check_marker(vm));
+    pub fn borrow_mut<'v>(&self) -> RefMut<'v, InnerHandle<T>> {
         unsafe { (&*self.0).borrow_mut() }
     }
 
@@ -186,25 +187,10 @@ impl<T> Handle<T> {
     pub unsafe fn borrow_mut_unbounded(&self) -> RefMut<InnerHandle<T>> {
         unsafe { (&*self.0).borrow_mut() }
     }
-
-    /// Checks whether this handle is managed by a given VM
-    pub fn check_marker(&self, vm: &VM) -> bool {
-        self.1 == vm.get_gc_marker()
-    }
-
-    /// Updates the inner marker that is used to ensure that calls to `borrow`
-    /// only succeed for the same GC
-    ///
-    /// ## Safety
-    /// This function is unsafe because it allows setting the inner marker
-    pub unsafe fn set_marker(&mut self, marker: *const ()) {
-        self.1 = marker;
-    }
 }
 
 impl<T> Hash for Handle<T> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.0.hash(state);
-        self.1.hash(state);
     }
 }
