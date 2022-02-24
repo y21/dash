@@ -1,196 +1,39 @@
-use std::{
-    cell::{Ref, RefCell, RefMut},
-    fmt::Debug,
-    hash::{Hash, Hasher},
-    ops::{Deref, DerefMut},
-};
+use std::{cell::Cell, ops::Deref, ptr::NonNull};
 
-/// An inner garbage collected value
-///
-/// If an [InnerHandle] does not get marked as visited by the next GC cycle,
-/// it will get garbage collected
-#[derive(Debug)]
 pub struct InnerHandle<T: ?Sized> {
-    marked: bool,
-    value: T,
+    pub(crate) marked: Cell<bool>,
+    pub(crate) value: Box<T>,
 }
 
-impl<T> InnerHandle<T> {
-    pub(crate) fn new(value: T) -> Self {
-        Self {
-            value,
-            marked: false,
-        }
+impl<T: ?Sized> InnerHandle<T> {
+    pub fn mark(&self) {
+        self.marked.set(true);
     }
 
-    pub(crate) fn mark_visited(&mut self) {
-        self.marked = true;
-    }
-
-    pub(crate) fn unmark_visited(&mut self) {
-        self.marked = false;
-    }
-
-    pub(crate) fn is_marked(&self) -> bool {
-        self.marked
+    pub unsafe fn unmark(&self) {
+        self.marked.set(false);
     }
 }
 
-impl<T> From<T> for InnerHandle<T> {
-    fn from(t: T) -> Self {
-        Self::new(t)
-    }
-}
-
-impl<T> Deref for InnerHandle<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.value
-    }
-}
-
-impl<T> DerefMut for InnerHandle<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.value
-    }
-}
-
-/// A guarded handle to a garbage collected handle
-///
-/// It uses [RefCell] to ensure that no aliasing happens
 #[derive(Debug)]
-pub struct InnerHandleGuard<T: ?Sized>(RefCell<InnerHandle<T>>);
+pub struct Handle<T: ?Sized>(NonNull<InnerHandle<T>>);
 
-impl<T> InnerHandleGuard<T> {
-    /// Returns a mutable reference to the underlying [InnerHandle]
-    ///
-    /// This does **not** check if it's already borrowed
-    pub unsafe fn get_mut_unchecked(&self) -> &mut InnerHandle<T> {
-        &mut *self.0.as_ptr()
-    }
-
-    /// Returns a reference to the underlying [InnerHandle]
-    ///
-    /// This does **not** check if it's already borrowed
-    pub unsafe fn get_unchecked(&self) -> &InnerHandle<T> {
-        &*self.0.as_ptr()
-    }
-}
-
-impl<T> From<T> for InnerHandleGuard<T> {
-    fn from(t: T) -> Self {
-        Self(RefCell::new(t.into()))
-    }
-}
-
-impl<T> Deref for InnerHandleGuard<T> {
-    type Target = RefCell<InnerHandle<T>>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-/// A handle that
-#[derive(Debug)]
-pub struct Handle<T: ?Sized>(*mut InnerHandleGuard<T>);
-
-impl<T> Clone for Handle<T> {
+impl<T: ?Sized> Clone for Handle<T> {
     fn clone(&self) -> Self {
         Self(self.0)
     }
 }
 
-impl<T> PartialEq for Handle<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
+impl<T: ?Sized> Handle<T> {
+    pub unsafe fn new(ptr: NonNull<InnerHandle<T>>) -> Self {
+        Handle(ptr)
     }
 }
 
-impl<T> Eq for Handle<T> {}
+impl<T: ?Sized> Deref for Handle<T> {
+    type Target = T;
 
-impl<T> Handle<T> {
-    /// Creates a new [Handle]
-    ///
-    /// # Safety
-    /// This operation is unsafe because its [Deref] implementation dereferences it
-    pub unsafe fn new(ptr: *mut InnerHandleGuard<T>) -> Self {
-        Self(ptr)
-    }
-
-    /// Returns a raw pointer to the underlying [InnerHandle]
-    pub fn as_ptr(&self) -> *mut InnerHandleGuard<T> {
-        self.0
-    }
-
-    /// Drops the inner data in place.
-    ///
-    /// # Safety
-    /// It is very unlikely for a user to want to call this function,
-    /// as it is almost impossible to do this operation safely.
-    /// Explicitly dropping a handle that is registered by a GC by calling this function
-    /// will lead to undefined behavior in the next GC cycle as it needs to be dereferenced
-    /// to know whether the inner handle was visited.
-    /// After a call to this function, it is also UB to attempt to do
-    /// nearly everything with a handle, such as attempting to borrow the inner handle.
-    pub unsafe fn drop_in_place(&self) {
-        drop(Box::from_raw(self.0));
-    }
-
-    /// Returns a reference to the underlying [InnerHandleGuard]
-    ///
-    /// ## Panics
-    /// This function causes a panic if this handle is not managed by the given VM
-    pub fn get<'h>(&self) -> &'h InnerHandleGuard<T> {
-        unsafe { &*self.0 }
-    }
-
-    /// Returns a reference to the underlying [InnerHandleGuard] without checking if it's managed by the given VM
-    ///
-    /// ## Safety
-    /// If the garbage collector has deallocated this handle, it is undefined behavior to call this function
-    pub unsafe fn get_unchecked(&self) -> &InnerHandleGuard<T> {
-        unsafe { &*self.0 }
-    }
-
-    /// Borrows the inner handle
-    ///
-    /// ## Panics
-    /// This function causes a panic if this handle is not managed by the given VM or if RefCell::borrow() panics
-    pub fn borrow<'v>(&self) -> Ref<'v, InnerHandle<T>> {
-        unsafe { (&*self.0).borrow() }
-    }
-
-    /// Borrows the inner handle mutably
-    ///
-    /// ## Panics
-    /// This function causes a panic if this handle is not managed by the given VM or if RefCell::borrow() panics mutably
-    pub fn borrow_mut<'v>(&self) -> RefMut<'v, InnerHandle<T>> {
-        unsafe { (&*self.0).borrow_mut() }
-    }
-
-    /// Borrows the inner handle without checking if it's managed by the given VM, and with no lifetime constraints
-    ///
-    /// ## Safety
-    /// This function effectively allows the caller to outlive a VM because there are no lifetime constraints
-    /// Doing so is undefined behavior
-    pub unsafe fn borrow_unbounded(&self) -> Ref<InnerHandle<T>> {
-        unsafe { (&*self.0).borrow() }
-    }
-
-    /// Borrows the inner handle mutably without checking if it's managed by the given VM, and with no lifetime constraints
-    ///
-    /// ## Safety
-    /// This function effectively allows the caller to outlive a VM because there are no lifetime constraints
-    /// Doing so is undefined behavior
-    pub unsafe fn borrow_mut_unbounded(&self) -> RefMut<InnerHandle<T>> {
-        unsafe { (&*self.0).borrow_mut() }
-    }
-}
-
-impl<T> Hash for Handle<T> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.hash(state);
+    fn deref(&self) -> &Self::Target {
+        unsafe { &self.0.as_ref().value }
     }
 }

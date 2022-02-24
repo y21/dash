@@ -11,3 +11,8 @@ pub fn is_nan(cx: CallContext) -> Result<Value, Value> {
     // 3. Otherwise, return false.
     Ok(Value::Boolean(num.is_nan()))
 }
+
+pub fn log(cx: CallContext) -> Result<Value, Value> {
+    println!("{:?}", cx.args);
+    Ok(Value::Undefined)
+}

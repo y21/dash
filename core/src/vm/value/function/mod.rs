@@ -29,11 +29,7 @@ impl Object for Function {
         todo!()
     }
 
-    fn set_property(
-        &mut self,
-        key: &str,
-        value: super::Value,
-    ) -> Result<super::Value, super::Value> {
+    fn set_property(&self, key: &str, value: super::Value) -> Result<super::Value, super::Value> {
         todo!()
     }
 

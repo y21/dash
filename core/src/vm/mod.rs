@@ -2,7 +2,7 @@ use std::convert::TryInto;
 
 use crate::{
     compiler::instruction as opcode,
-    gc::{Gc, Handle},
+    gc::{handle::Handle, Gc},
     js_std,
 };
 
@@ -23,19 +23,21 @@ pub const MAX_STACK_SIZE: usize = 8196;
 pub struct Vm {
     frames: Vec<Frame>,
     stack: Vec<Value>,
-    gc: Gc<Box<dyn Object>>,
-    global: Handle<Box<dyn Object>>,
+    gc: Gc<dyn Object>,
+    global: Handle<dyn Object>,
 }
 
 impl Vm {
     pub fn new() -> Self {
         let mut gc = Gc::new();
-        let mut global = Box::new(AnonymousObject::new()) as Box<dyn Object>;
+        let global = AnonymousObject::new();
+
         {
             let log = Function::new("log".into(), FunctionKind::Native(js_std::global::log));
-            let log = gc.register(Box::new(log) as Box<dyn Object>);
+            let log = gc.register(log);
             global.set_property("log", Value::Object(log)).unwrap();
         }
+
         let global = gc.register(global);
 
         Self {
@@ -130,7 +132,7 @@ impl Vm {
                         .as_identifier()
                         .expect("Referenced constant is not an identifier");
 
-                    let value = self.global.get().borrow().get_property(name)?;
+                    let value = self.global.get_property(name)?;
                     self.stack.push(value);
                 }
                 opcode::LDGLOBALW => {}
@@ -149,5 +151,31 @@ impl Vm {
                 _ => unimplemented!("{}", instruction),
             }
         }
+    }
+}
+#[cfg(test)]
+mod testing {
+    use crate::{compiler::FunctionCompiler, parser::parser::Parser};
+
+    use super::*;
+
+    #[test]
+    fn vm() {
+        let mut vm = Vm::new();
+
+        let ast = Parser::from_str("log(12+34)")
+            .unwrap()
+            .parse_all(true)
+            .unwrap();
+
+        let compiled = FunctionCompiler::compile_ast(ast).unwrap();
+
+        let frame = Frame {
+            buffer: compiled.instructions.into_boxed_slice(),
+            ip: 0,
+            constants: compiled.cp.into_vec().into_boxed_slice(),
+        };
+
+        println!("{:?}", vm.execute_frame(frame));
     }
 }

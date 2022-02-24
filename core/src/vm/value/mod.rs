@@ -4,7 +4,7 @@ pub mod ops;
 
 use std::rc::Rc;
 
-use crate::{compiler::constant::Constant, gc::Handle};
+use crate::{compiler::constant::Constant, gc::handle::Handle};
 
 use self::object::Object;
 #[derive(Debug, Clone)]
@@ -31,7 +31,7 @@ impl Value {
 
     pub fn apply(&self, this: Value, args: Vec<Value>) -> Result<Value, Value> {
         match self {
-            Value::Object(object) => object.get().borrow().apply(this, args),
+            Value::Object(object) => object.apply(this, args),
             _ => unimplemented!(),
         }
     }
