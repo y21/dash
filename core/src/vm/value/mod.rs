@@ -1,3 +1,4 @@
+pub mod conversions;
 pub mod function;
 pub mod object;
 pub mod ops;

@@ -1,12 +1,12 @@
 use std::convert::TryInto;
 
 use crate::{
-    compiler::instruction as opcode,
     gc::{handle::Handle, Gc},
     js_std,
 };
 
 use self::{
+    dispatch::HandleResult,
     frame::Frame,
     value::{
         function::{Function, FunctionKind},
@@ -15,6 +15,7 @@ use self::{
     },
 };
 
+pub mod dispatch;
 mod frame;
 pub mod value;
 
@@ -30,27 +31,34 @@ pub struct Vm {
 impl Vm {
     pub fn new() -> Self {
         let mut gc = Gc::new();
-        let global = AnonymousObject::new();
+        let global = gc.register(AnonymousObject::new());
 
-        {
-            let log = Function::new("log".into(), FunctionKind::Native(js_std::global::log));
-            let log = gc.register(log);
-            global.set_property("log", Value::Object(log)).unwrap();
-        }
-
-        let global = gc.register(global);
-
-        Self {
+        let mut vm = Self {
             frames: Vec::new(),
             stack: Vec::with_capacity(512),
             gc,
             global,
-        }
+        };
+        vm.prepare();
+        vm
+    }
+
+    /// Prepare the VM for execution.
+    #[rustfmt::skip]
+    fn prepare(&mut self) {
+        let global = self
+            .global
+            .as_any()
+            .downcast_ref::<AnonymousObject>()
+            .expect("global is not an object");
+
+        let log = Function::new("log".into(), FunctionKind::Native(js_std::global::log));
+        global.set_property("log", self.gc.register(log).into()).unwrap();
     }
 
     /// Fetches the current instruction/value in the currently executing frame
     /// and increments the instruction pointer
-    fn fetch_and_inc_ip(&mut self) -> u8 {
+    pub(crate) fn fetch_and_inc_ip(&mut self) -> u8 {
         let frame = self.frames.last_mut().expect("No frame");
         let ip = frame.ip;
         frame.ip += 1;
@@ -59,7 +67,7 @@ impl Vm {
 
     /// Fetches a wide value (16-bit) in the currently executing frame
     /// and increments the instruction pointer
-    fn fetchw_and_inc_ip(&mut self) -> u16 {
+    pub(crate) fn fetchw_and_inc_ip(&mut self) -> u16 {
         let frame = self.frames.last_mut().expect("No frame");
         let value: [u8; 2] = frame.buffer[frame.ip..frame.ip + 2]
             .try_into()
@@ -70,14 +78,14 @@ impl Vm {
     }
 
     /// Pushes a constant at the given index in the current frame on the top of the stack
-    fn push_constant(&mut self, idx: usize) -> Result<(), Value> {
+    pub(crate) fn push_constant(&mut self, idx: usize) -> Result<(), Value> {
         let frame = self.frames.last_mut().expect("No frame");
         let value = Value::from_constant(frame.constants[idx].clone());
         self.try_push_stack(value)?;
         Ok(())
     }
 
-    fn try_push_stack(&mut self, value: Value) -> Result<(), Value> {
+    pub(crate) fn try_push_stack(&mut self, value: Value) -> Result<(), Value> {
         if self.stack.len() > MAX_STACK_SIZE {
             panic!("Stack overflow"); // todo: return result
         }
@@ -92,63 +100,10 @@ impl Vm {
         loop {
             let instruction = self.fetch_and_inc_ip();
 
-            match instruction {
-                opcode::CONSTANT => {
-                    let id = self.fetch_and_inc_ip();
-                    self.push_constant(id as usize)?;
-                }
-                opcode::CONSTANTW => {
-                    let id = self.fetchw_and_inc_ip();
-                    self.push_constant(id as usize)?;
-                }
-                opcode::ADD => {
-                    let right = self.stack.pop().expect("No right operand");
-                    let left = self.stack.pop().expect("No left operand");
-                    self.try_push_stack(left.add(&right))?;
-                }
-                opcode::POP => {
-                    self.stack.pop();
-                }
-                opcode::RET => {
-                    let value = self.stack.pop().expect("No return value");
-                    let this = self.frames.pop().expect("No frame");
-
-                    if self.frames.is_empty() {
-                        // returning from the last frame means we are done
-                        return Ok(value);
-                    }
-                }
-                opcode::LDGLOBAL => {
-                    let id = self.fetch_and_inc_ip();
-                    let constant = self
-                        .frames
-                        .last()
-                        .expect("No frame")
-                        .constants
-                        .get(id as usize)
-                        .expect("Invalid constant reference in bytecode");
-
-                    let name = constant
-                        .as_identifier()
-                        .expect("Referenced constant is not an identifier");
-
-                    let value = self.global.get_property(name)?;
-                    self.stack.push(value);
-                }
-                opcode::LDGLOBALW => {}
-                opcode::CALL => {
-                    let argc = self.fetch_and_inc_ip();
-                    let is_constructor = self.fetch_and_inc_ip();
-
-                    let mut args = Vec::with_capacity(argc.into());
-                    for _ in 0..argc {
-                        args.push(self.stack.pop().expect("Missing argument"));
-                    }
-
-                    let callee = self.stack.pop().expect("Missing callee");
-                    self.stack.push(callee.apply(Value::Undefined, args)?);
-                }
-                _ => unimplemented!("{}", instruction),
+            match dispatch::handle(self, instruction) {
+                Ok(HandleResult::Return(value)) => return Ok(value),
+                Ok(HandleResult::Continue) => continue,
+                Err(e) => return Err(e),
             }
         }
     }
