@@ -83,11 +83,19 @@ impl InstructionBuilder {
         let mut iter = self.buf.into_iter();
 
         while let Some(byte) = iter.next() {
-            if byte == instruction::JMPFALSEP {
-                let id = iter.next().expect("Missing jump label index");
-                let label = &self.jumps[id as usize];
-                let position = self.labels[label] as isize;
+            if byte == instruction::JMPFALSEP || byte == instruction::JMPFALSEWP {
+                let id = if byte == instruction::JMPFALSEP {
+                    iter.next().map(|i| i as usize)
+                } else {
+                    let p1 = iter.next();
+                    let p2 = iter.next();
+                    p1.zip(p2).map(|(a, b)| u16::from_ne_bytes([a, b]) as usize)
+                };
 
+                let id = id.expect("Missing jump label index");
+
+                let label = &self.jumps[id];
+                let position = self.labels[label] as isize;
                 let jmpct = position - buf.len() as isize - 2;
 
                 match jmpct {
@@ -102,7 +110,6 @@ impl InstructionBuilder {
                     _ => unreachable!("Jump offset out of range"),
                 }
             } else {
-                // TODO: handle JMPFALSEWP
                 buf.push(byte);
             }
         }
