@@ -86,10 +86,23 @@ mod handlers {
             let frame = vm.frames.last_mut().expect("No frame");
 
             if offset.is_negative() {
-                frame.ip -= offset as usize;
+                frame.ip -= -offset as usize;
             } else {
                 frame.ip += offset as usize;
             }
+        }
+
+        Ok(HandleResult::Continue)
+    }
+
+    pub fn jmp(vm: &mut Vm) -> Result<HandleResult, Value> {
+        let offset = vm.fetch_and_inc_ip() as i8;
+        let frame = vm.frames.last_mut().expect("No frame");
+
+        if offset.is_negative() {
+            frame.ip -= -offset as usize;
+        } else {
+            frame.ip += offset as usize;
         }
 
         Ok(HandleResult::Continue)
@@ -106,6 +119,7 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<HandleResult, Value> {
         opcode::LDGLOBAL => handlers::ldglobal(vm),
         opcode::CALL => handlers::call(vm),
         opcode::JMPFALSEP => handlers::jmpfalsep(vm),
+        opcode::JMP => handlers::jmp(vm),
         _ => unimplemented!("{}", instruction),
     }
 }

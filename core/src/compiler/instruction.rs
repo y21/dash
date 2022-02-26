@@ -38,8 +38,14 @@ pub const STOREGLOBALW: u8 = 0x1C;
 pub const RET: u8 = 0x1D;
 pub const CALL: u8 = 0x1E;
 /// Jumps to the given label
+pub const CJMPFALSEP: u8 = 0x1F;
 pub const JMPFALSEP: u8 = 0x1F;
+pub const CJMPFALSEWP: u8 = 0x20;
 pub const JMPFALSEWP: u8 = 0x20;
+pub const CJMP: u8 = 0x21;
+pub const JMP: u8 = 0x21;
+pub const CJMPW: u8 = 0x22;
+pub const JMPW: u8 = 0x22;
 
 pub trait InstructionWriter {
     /// Builds the [ADD] instruction
@@ -72,6 +78,8 @@ pub trait InstructionWriter {
     fn build_ret(&mut self);
     /// Builds the [JMPFALSEP] and [JMPFALSEWP] instructions
     fn build_jmpfalsep(&mut self, label: Label) -> Result<(), LimitExceededError>;
+    /// Builds the [JMP] and [JMPW] instructions
+    fn build_jmp(&mut self, label: Label) -> Result<(), LimitExceededError>;
     fn build_call(&mut self, argc: u8, is_constructor: bool);
     fn build_constant(
         &mut self,
@@ -173,7 +181,14 @@ impl InstructionWriter for InstructionBuilder {
 
     fn build_jmpfalsep(&mut self, label: Label) -> Result<(), LimitExceededError> {
         let id = self.add_jump(label)?;
-        self.write_wide_instr(JMPFALSEP, JMPFALSEWP, id);
+        self.write_wide_instr(CJMPFALSEP, CJMPFALSEWP, id);
+
+        Ok(())
+    }
+
+    fn build_jmp(&mut self, label: Label) -> Result<(), LimitExceededError> {
+        let id = self.add_jump(label)?;
+        self.write_wide_instr(JMP, JMPW, id);
 
         Ok(())
     }

@@ -246,7 +246,17 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
     }
 
     fn visit_while_loop(&mut self, l: &WhileLoop<'a>) -> Result<Vec<u8>, CompileError> {
-        unimplementedc!("While loop")
+        let mut ib = InstructionBuilder::new();
+
+        ib.add_label(Label::LoopCondition);
+        ib.append(&mut self.accept_expr(&l.condition)?);
+        ib.build_jmpfalsep(Label::LoopEnd)?;
+
+        ib.append(&mut self.accept(&l.body)?);
+        ib.build_jmp(Label::LoopCondition)?;
+
+        ib.add_label(Label::LoopEnd);
+        Ok(ib.build())
     }
 
     fn visit_assignment_expression(

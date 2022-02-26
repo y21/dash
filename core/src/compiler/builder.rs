@@ -74,6 +74,8 @@ impl InstructionBuilder {
     }
 
     pub fn build(self) -> Vec<u8> {
+        use instruction::*;
+
         if self.jumps.is_empty() {
             return self.buf;
         }
@@ -83,13 +85,16 @@ impl InstructionBuilder {
         let mut iter = self.buf.into_iter();
 
         while let Some(byte) = iter.next() {
-            if byte == instruction::JMPFALSEP || byte == instruction::JMPFALSEWP {
-                let id = if byte == instruction::JMPFALSEP {
-                    iter.next().map(|i| i as usize)
-                } else {
+            const JUMPS: &[u8] = &[JMP, JMPW, JMPFALSEP, JMPFALSEWP];
+            const JUMPS_W: &[u8] = &[JMPW, JMPFALSEWP];
+
+            if JUMPS.contains(&byte) {
+                let id = if JUMPS_W.contains(&byte) {
                     let p1 = iter.next();
                     let p2 = iter.next();
                     p1.zip(p2).map(|(a, b)| u16::from_ne_bytes([a, b]) as usize)
+                } else {
+                    iter.next().map(|i| i as usize)
                 };
 
                 let id = id.expect("Missing jump label index");
@@ -98,13 +103,19 @@ impl InstructionBuilder {
                 let position = self.labels[label] as isize;
                 let jmpct = position - buf.len() as isize - 2;
 
+                let (thin, wide) = match byte {
+                    JMP | JMPW => (JMP, JMPW),
+                    JMPFALSEP | JMPFALSEWP => (JMPFALSEP, JMPFALSEWP),
+                    _ => unreachable!(),
+                };
+
                 match jmpct {
                     -128..=127 => {
-                        buf.push(instruction::JMPFALSEP);
+                        buf.push(thin);
                         buf.push(jmpct as u8);
                     }
                     -32768..=32767 => {
-                        buf.push(instruction::JMPFALSEWP);
+                        buf.push(wide);
                         buf.extend((jmpct as u16).to_ne_bytes());
                     }
                     _ => unreachable!("Jump offset out of range"),
@@ -123,6 +134,8 @@ pub enum Label {
     IfEnd,
     /// A branch of an if statement
     IfBranch(u16),
+    LoopCondition,
+    LoopEnd,
 }
 
 impl From<Vec<u8>> for InstructionBuilder {
