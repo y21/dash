@@ -1,7 +1,7 @@
 use std::convert::TryInto;
 
 use crate::{
-    compiler::builder::InstructionBuilder,
+    compiler::builder::{InstructionBuilder, Label},
     parser::{
         expr::{
             ArrayLiteral, AssignmentExpr, BinaryExpr, ConditionalExpr, Expr, FunctionCall,
@@ -180,7 +180,55 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
     }
 
     fn visit_if_statement(&mut self, i: &IfStatement<'a>) -> Result<Vec<u8>, CompileError> {
-        unimplementedc!("If statement")
+        let mut ib = InstructionBuilder::new();
+
+        // Desugar last `else` block into `else if(true)` for simplicity
+        if let Some(then) = &i.el {
+            let then = &**then;
+            let mut branches = i.branches.borrow_mut();
+
+            branches.push(IfStatement::new(
+                Expr::bool_literal(true),
+                then.clone(),
+                Vec::new(),
+                None,
+            ));
+        }
+
+        let branches = i.branches.borrow();
+        let len: u16 = branches
+            .len()
+            .try_into()
+            .map_err(|_| CompileError::IfBranchLimitExceeded)?;
+
+        ib.append(&mut self.accept_expr(&i.condition)?);
+        if branches.is_empty() {
+            ib.build_jmpfalsep(Label::IfEnd)?;
+        } else {
+            ib.build_jmpfalsep(Label::IfBranch(0))?;
+        }
+        ib.append(&mut self.accept(&i.then)?);
+
+        for (id, branch) in branches.iter().enumerate() {
+            let id = (id as u16) + 1;
+
+            ib.add_label(Label::IfBranch(id));
+            ib.append(&mut self.accept_expr(&branch.condition)?);
+            if id == len - 1 {
+                ib.build_jmpfalsep(Label::IfEnd)?;
+
+                ib.append(&mut self.accept(&branch.then)?);
+            } else {
+                ib.build_jmpfalsep(Label::IfBranch(id + 1))?;
+
+                ib.append(&mut self.accept(&branch.then)?);
+
+                ib.build_jmpfalsep(Label::IfEnd)?;
+            }
+        }
+
+        ib.add_label(Label::IfEnd);
+        Ok(ib.build())
     }
 
     fn visit_block_statement(&mut self, b: &BlockStatement<'a>) -> Result<Vec<u8>, CompileError> {
@@ -308,7 +356,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
     }
 
     fn visit_empty_expr(&mut self) -> Result<Vec<u8>, CompileError> {
-        unimplementedc!("Empty expression")
+        Ok(Vec::new())
     }
 
     fn visit_class_declaration(&mut self, c: &Class<'a>) -> Result<Vec<u8>, CompileError> {

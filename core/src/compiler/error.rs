@@ -5,6 +5,7 @@ use super::scope::LimitExceededError as LocalLimitExceededError;
 pub enum CompileError {
     ConstantPoolLimitExceeded,
     LocalLimitExceeded,
+    IfBranchLimitExceeded,
     Unimplemented(String),
     ParameterLimitExceeded,
 }

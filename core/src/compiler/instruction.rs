@@ -1,5 +1,5 @@
 use super::{
-    builder::{force_utf8, InstructionBuilder},
+    builder::{force_utf8, InstructionBuilder, Label},
     constant::{Constant, ConstantPool, LimitExceededError},
 };
 
@@ -37,22 +37,41 @@ pub const STOREGLOBAL: u8 = 0x1B;
 pub const STOREGLOBALW: u8 = 0x1C;
 pub const RET: u8 = 0x1D;
 pub const CALL: u8 = 0x1E;
+/// Jumps to the given label
+pub const JMPFALSEP: u8 = 0x1F;
+pub const JMPFALSEWP: u8 = 0x20;
 
 pub trait InstructionWriter {
+    /// Builds the [ADD] instruction
     fn build_add(&mut self);
+    /// Builds the [SUB] instruction
     fn build_sub(&mut self);
+    /// Builds the [MUL] instruction
     fn build_mul(&mut self);
+    /// Builds the [DIV] instruction
     fn build_div(&mut self);
+    /// Builds the [REM] instruction
     fn build_rem(&mut self);
+    /// Builds the [POW] instruction
     fn build_pow(&mut self);
+    /// Builds the [GT] instruction
     fn build_gt(&mut self);
+    /// Builds the [GE] instruction
     fn build_ge(&mut self);
+    /// Builds the [LT] instruction
     fn build_lt(&mut self);
+    /// Builds the [LE] instruction
     fn build_le(&mut self);
+    /// Builds the [EQ] instruction
     fn build_eq(&mut self);
+    /// Builds the [NE] instruction
     fn build_ne(&mut self);
+    /// Builds the [POP] instruction
     fn build_pop(&mut self);
+    /// Builds the [RET] instruction
     fn build_ret(&mut self);
+    /// Builds the [JMPFALSEP] and [JMPFALSEWP] instructions
+    fn build_jmpfalsep(&mut self, label: Label) -> Result<(), LimitExceededError>;
     fn build_call(&mut self, argc: u8, is_constructor: bool);
     fn build_constant(
         &mut self,
@@ -150,5 +169,12 @@ impl InstructionWriter for InstructionBuilder {
 
     fn build_call(&mut self, argc: u8, is_constructor: bool) {
         self.write_arr([CALL, argc, is_constructor as u8]);
+    }
+
+    fn build_jmpfalsep(&mut self, label: Label) -> Result<(), LimitExceededError> {
+        let id = self.add_jump(label)?;
+        self.write_wide_instr(JMPFALSEP, JMPFALSEWP, id);
+
+        Ok(())
     }
 }

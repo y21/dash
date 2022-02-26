@@ -36,6 +36,13 @@ impl Value {
             _ => unimplemented!(),
         }
     }
+
+    pub fn is_truthy(&self) -> bool {
+        match self {
+            Value::Boolean(b) => *b,
+            _ => unimplemented!(),
+        }
+    }
 }
 
 pub trait ValueContext {
