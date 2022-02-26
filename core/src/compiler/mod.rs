@@ -210,7 +210,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
         ib.append(&mut self.accept(&i.then)?);
 
         for (id, branch) in branches.iter().enumerate() {
-            let id = (id as u16) + 1;
+            let id = id as u16;
 
             ib.add_label(Label::IfBranch(id));
             ib.append(&mut self.accept_expr(&branch.condition)?);

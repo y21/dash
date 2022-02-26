@@ -90,8 +90,6 @@ mod handlers {
             } else {
                 frame.ip += offset as usize;
             }
-
-            println!("Jumped to {}", frame.buffer[frame.ip]);
         }
 
         Ok(HandleResult::Continue)
