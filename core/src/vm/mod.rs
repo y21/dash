@@ -108,29 +108,3 @@ impl Vm {
         }
     }
 }
-#[cfg(test)]
-mod testing {
-    use crate::{compiler::FunctionCompiler, parser::parser::Parser};
-
-    use super::*;
-
-    #[test]
-    fn vm() {
-        let mut vm = Vm::new();
-
-        let ast = Parser::from_str("for(;;) ;")
-            .unwrap()
-            .parse_all(true)
-            .unwrap();
-
-        let compiled = FunctionCompiler::compile_ast(ast).unwrap();
-
-        let frame = Frame {
-            buffer: compiled.instructions.into_boxed_slice(),
-            ip: 0,
-            constants: compiled.cp.into_vec().into_boxed_slice(),
-        };
-
-        println!("{:?}", vm.execute_frame(frame));
-    }
-}

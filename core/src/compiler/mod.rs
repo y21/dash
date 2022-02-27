@@ -23,6 +23,7 @@ use self::{
 
 mod builder;
 pub mod constant;
+#[cfg(feature = "decompile")]
 pub mod decompiler;
 pub mod error;
 pub mod instruction;

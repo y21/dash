@@ -128,6 +128,16 @@ impl fmt::Display for StackId {
     }
 }
 
+fn handle_arithmetic(stack: &mut usize, output: &mut Output, instruction: &str) {
+    *stack -= 2;
+    output.write_instruction(
+        Unit::Main,
+        instruction,
+        &[StackId(*stack + 1), StackId(*stack + 2)],
+    );
+    *stack += 1;
+}
+
 pub fn decompile(
     CompileResult { cp, instructions }: CompileResult,
 ) -> Result<String, DecompileError> {
@@ -135,33 +145,16 @@ pub fn decompile(
     let mut stack = 0;
     let mut output = Output::new();
 
-    fn handle_arithmetic(
-        stack: &mut Vec<StackValue>,
-        output: &mut Output,
-        instruction: &str,
-    ) -> Result<(), DecompileError> {
-        let (a, b) = stack
-            .pop()
-            .zip(stack.pop())
-            .ok_or(DecompileError::AbruptEof)?;
-
-        output.write_instruction(Unit::Main, instruction, &[a, b]);
-        Ok(())
-    }
-
     loop {
         let instr = reader.read().ok_or(DecompileError::AbruptEof)?;
 
         match instr {
-            instruction::ADD => {
-                stack -= 2;
-                output.write_instruction(
-                    Unit::Main,
-                    "ADD",
-                    &[StackId(stack + 1), StackId(stack + 2)],
-                );
-                stack += 1;
-            }
+            instruction::ADD => handle_arithmetic(&mut stack, &mut output, "ADD"),
+            instruction::SUB => handle_arithmetic(&mut stack, &mut output, "SUB"),
+            instruction::MUL => handle_arithmetic(&mut stack, &mut output, "MUL"),
+            instruction::DIV => handle_arithmetic(&mut stack, &mut output, "DIV"),
+            instruction::REM => handle_arithmetic(&mut stack, &mut output, "REM"),
+            instruction::POW => handle_arithmetic(&mut stack, &mut output, "POW"),
             instruction::CONSTANT | instruction::CONSTANTW => {
                 let constant = if instr == instruction::CONSTANT {
                     let id = reader.read().ok_or(DecompileError::AbruptEof)?;
