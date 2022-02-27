@@ -1,3 +1,7 @@
+use std::borrow::Cow;
+
+use crate::compiler::builder::force_utf8_borrowed;
+
 use super::{statement::FunctionDeclaration, token::TokenType};
 
 /// The sequence operator (`expr, expr`)
@@ -129,7 +133,7 @@ impl<'a> Expr<'a> {
             Self::Grouping(g) => {
                 let mut list = Vec::with_capacity(g.0.len());
                 for expr in &g.0 {
-                    list.push(expr.to_identifier()?);
+                    list.push(expr.as_identifier()?);
                 }
                 Some(list)
             }
@@ -139,7 +143,7 @@ impl<'a> Expr<'a> {
     }
 
     /// Tries to return the identifier that is associated to this expression
-    pub fn to_identifier(&self) -> Option<&'a [u8]> {
+    pub fn as_identifier(&self) -> Option<&'a [u8]> {
         match self {
             Self::Literal(lit) => lit.as_identifier(),
             _ => None,
@@ -251,8 +255,22 @@ impl<'a> LiteralExpr<'a> {
         match self {
             Self::Boolean(b) => Some(b.then(|| b"true" as &[u8]).unwrap_or(b"false" as &[u8])),
             Self::Identifier(ident) => Some(ident),
-            Self::Undefined => Some(b"undefined"),
+            Self::Undefined => Some(b"undefined" as &[u8]),
+            Self::Null => Some(b"null" as &[u8]),
+            Self::String(s) => Some(s),
             _ => None,
+        }
+    }
+
+    /// Converts the identifier of a literal
+    pub fn to_identifier(&self) -> Cow<'a, str> {
+        match self {
+            Self::Boolean(b) => Cow::Borrowed(b.then(|| "true").unwrap_or("false")),
+            Self::Identifier(ident) => Cow::Borrowed(force_utf8_borrowed(ident)),
+            Self::Undefined => Cow::Borrowed("undefined"),
+            Self::Null => Cow::Borrowed("null"),
+            Self::Number(n) => Cow::Owned(n.to_string()),
+            Self::String(s) => Cow::Borrowed(force_utf8_borrowed(s)),
         }
     }
 }

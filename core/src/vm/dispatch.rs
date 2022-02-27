@@ -7,6 +7,8 @@ pub enum HandleResult {
 }
 
 mod handlers {
+    use crate::vm::value::array::Array;
+
     use super::*;
 
     pub fn constant(vm: &mut Vm) -> Result<HandleResult, Value> {
@@ -132,6 +134,36 @@ mod handlers {
         vm.try_push_stack(left.lt(&right))?;
         Ok(HandleResult::Continue)
     }
+
+    pub fn arraylit(vm: &mut Vm) -> Result<HandleResult, Value> {
+        let len = vm.fetch_and_inc_ip() as usize;
+
+        let elements = vm.stack.drain(vm.stack.len() - len..).collect::<Vec<_>>();
+        let array = Array::from(elements);
+        let handle = vm.gc.register(array);
+        vm.try_push_stack(Value::Object(handle))?;
+        Ok(HandleResult::Continue)
+    }
+
+    pub fn staticpropertyaccess(vm: &mut Vm) -> Result<HandleResult, Value> {
+        let id = vm.fetch_and_inc_ip();
+        let constant = vm
+            .frames
+            .last()
+            .expect("No frame")
+            .constants
+            .get(id as usize)
+            .expect("Invalid constant reference in bytecode");
+
+        let ident = constant
+            .as_identifier()
+            .expect("Referenced constant is not an identifier");
+
+        let target = vm.stack.pop().expect("No value");
+        let value = target.get_property(ident)?;
+        vm.try_push_stack(value)?;
+        Ok(HandleResult::Continue)
+    }
 }
 
 pub fn handle(vm: &mut Vm, instruction: u8) -> Result<HandleResult, Value> {
@@ -148,6 +180,8 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<HandleResult, Value> {
         opcode::STORELOCAL => handlers::storelocal(vm),
         opcode::LDLOCAL => handlers::ldlocal(vm),
         opcode::LT => handlers::lt(vm),
+        opcode::ARRAYLIT => handlers::arraylit(vm),
+        opcode::STATICPROPACCESS => handlers::staticpropertyaccess(vm),
         _ => unimplemented!("{}", instruction),
     }
 }

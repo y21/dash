@@ -831,7 +831,7 @@ impl<'a> Parser<'a> {
 
         // If it is arrow function, we need to convert everything to their arrow func equivalents
         for expr in parameter_list {
-            list.push(expr.to_identifier()?);
+            list.push(expr.as_identifier()?);
         }
 
         let body = match self.statement()? {

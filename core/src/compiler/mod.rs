@@ -21,7 +21,7 @@ use self::{
     visitor::Visitor,
 };
 
-mod builder;
+pub mod builder;
 pub mod constant;
 #[cfg(feature = "decompile")]
 pub mod decompiler;
@@ -272,7 +272,8 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
 
         match &*e.left {
             Expr::Literal(lit) => {
-                let ident = lit.as_identifier().expect("Literal was not an identifier");
+                let ident = lit.to_identifier();
+                let ident = ident.as_bytes();
 
                 if let Some((id, local)) = self.scope.find_local(ident) {
                     if matches!(local.binding().kind, VariableDeclarationKind::Const) {
@@ -342,10 +343,8 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
         ib.append(&mut self.accept_expr(&e.target)?);
         match &*e.property {
             Expr::Literal(lit) => {
-                let ident = lit
-                    .as_identifier()
-                    .expect("Literal expression was not an identifier");
-                ib.build_static_prop_access(&mut self.cp, ident)?;
+                let ident = lit.to_identifier();
+                ib.build_static_prop_access(&mut self.cp, ident.as_bytes())?;
             }
             e => {
                 ib.append(&mut self.accept_expr(e)?);
@@ -378,7 +377,18 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
     }
 
     fn visit_array_literal(&mut self, a: &ArrayLiteral<'a>) -> Result<Vec<u8>, CompileError> {
-        unimplementedc!("Array literal")
+        let mut ib = InstructionBuilder::new();
+        let len = a
+            .len()
+            .try_into()
+            .map_err(|_| CompileError::ArrayLitLimitExceeded)?;
+
+        for e in a.iter() {
+            ib.append(&mut self.accept_expr(e)?);
+        }
+
+        ib.build_arraylit(len);
+        Ok(ib.build())
     }
 
     fn visit_object_literal(&mut self, o: &ObjectLiteral<'a>) -> Result<Vec<u8>, CompileError> {

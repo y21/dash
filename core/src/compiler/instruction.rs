@@ -49,6 +49,8 @@ pub const JMPW: u8 = 0x22;
 pub const STATICPROPACCESS: u8 = 0x23;
 pub const STATICPROPACCESSW: u8 = 0x24;
 pub const DYNAMICPROPACCESS: u8 = 0x25;
+pub const ARRAYLIT: u8 = 0x26;
+pub const ARRAYLITW: u8 = 0x27;
 
 #[rustfmt::skip]
 pub trait InstructionWriter {
@@ -92,6 +94,8 @@ pub trait InstructionWriter {
     fn build_ret(&mut self);
     /// Builds the [JMPFALSEP] and [JMPFALSEWP] instructions
     fn build_jmpfalsep(&mut self, label: Label) -> Result<(), LimitExceededError>;
+    /// Builds the [ARRAYLIT] and [ARRAYLITW] instructions
+    fn build_arraylit(&mut self, len: u16);
     /// Builds the [JMP] and [JMPW] instructions
     fn build_jmp(&mut self, label: Label) -> Result<(), LimitExceededError>;
     fn build_call(&mut self, argc: u8, is_constructor: bool);
@@ -205,5 +209,9 @@ impl InstructionWriter for InstructionBuilder {
 
     fn build_dynamic_prop_access(&mut self) {
         self.write(DYNAMICPROPACCESS);
+    }
+
+    fn build_arraylit(&mut self, len: u16) {
+        self.write_wide_instr(ARRAYLIT, ARRAYLITW, len);
     }
 }

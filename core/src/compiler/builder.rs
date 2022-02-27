@@ -9,6 +9,10 @@ pub fn force_utf8(s: &[u8]) -> String {
     std::str::from_utf8(s).expect("Invalid UTF8").into()
 }
 
+pub fn force_utf8_borrowed(s: &[u8]) -> &str {
+    std::str::from_utf8(s).expect("Invalid UTF8")
+}
+
 pub struct InstructionBuilder {
     buf: Vec<u8>,
     labels: HashMap<Label, usize>,

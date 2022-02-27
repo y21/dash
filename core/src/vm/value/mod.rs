@@ -1,3 +1,4 @@
+pub mod array;
 pub mod conversions;
 pub mod function;
 pub mod object;
@@ -26,6 +27,13 @@ impl Value {
             Constant::String(s) => Value::String(s.into()),
             Constant::Undefined => Value::Undefined,
             Constant::Null => Value::Null,
+            _ => unimplemented!(),
+        }
+    }
+
+    pub fn get_property(&self, key: &str) -> Result<Value, Value> {
+        match self {
+            Self::Object(o) => o.get_property(key),
             _ => unimplemented!(),
         }
     }
