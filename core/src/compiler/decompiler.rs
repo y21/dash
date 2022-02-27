@@ -5,9 +5,8 @@ use std::fmt::Display;
 use std::fmt::Write;
 use std::io::Read;
 
-use crate::compiler::instruction;
-
 use super::constant::Constant;
+use super::instruction::*;
 use super::CompileResult;
 
 #[derive(Hash, Eq, PartialEq, Debug, Clone)]
@@ -138,8 +137,40 @@ fn handle_arithmetic(stack: &mut usize, output: &mut Output, instruction: &str) 
     *stack += 1;
 }
 
+fn read_wide<'a, R: Read>(
+    actual: u8,
+    thin: (&'a str, u8),
+    wide: (&'a str, u8),
+    reader: &mut Reader<R>,
+) -> Result<(&'a str, u16), DecompileError> {
+    if actual == thin.1 {
+        let id = reader.read().ok_or(DecompileError::AbruptEof)?;
+        Ok((thin.0, id as u16))
+    } else {
+        let id = reader.read_u16_ne().ok_or(DecompileError::AbruptEof)?;
+        Ok((wide.0, id))
+    }
+}
+
+fn read_wide_signed<'a, R: Read>(
+    actual: u8,
+    thin: (&'a str, u8),
+    wide: (&'a str, u8),
+    reader: &mut Reader<R>,
+) -> Result<(&'a str, i16), DecompileError> {
+    if actual == thin.1 {
+        let id = reader.read().ok_or(DecompileError::AbruptEof)?;
+        Ok((thin.0, id as i8 as i16))
+    } else {
+        let id = reader.read_u16_ne().ok_or(DecompileError::AbruptEof)?;
+        Ok((wide.0, id as i16))
+    }
+}
+
 pub fn decompile(
-    CompileResult { cp, instructions }: CompileResult,
+    CompileResult {
+        cp, instructions, ..
+    }: CompileResult,
 ) -> Result<String, DecompileError> {
     let mut reader = Reader(instructions.as_slice(), 0);
     let mut stack = 0;
@@ -149,31 +180,99 @@ pub fn decompile(
         let instr = reader.read().ok_or(DecompileError::AbruptEof)?;
 
         match instr {
-            instruction::ADD => handle_arithmetic(&mut stack, &mut output, "ADD"),
-            instruction::SUB => handle_arithmetic(&mut stack, &mut output, "SUB"),
-            instruction::MUL => handle_arithmetic(&mut stack, &mut output, "MUL"),
-            instruction::DIV => handle_arithmetic(&mut stack, &mut output, "DIV"),
-            instruction::REM => handle_arithmetic(&mut stack, &mut output, "REM"),
-            instruction::POW => handle_arithmetic(&mut stack, &mut output, "POW"),
-            instruction::CONSTANT | instruction::CONSTANTW => {
-                let constant = if instr == instruction::CONSTANT {
-                    let id = reader.read().ok_or(DecompileError::AbruptEof)?;
-                    cp[id as usize].clone()
-                } else {
-                    let id = reader.read_u16_ne().ok_or(DecompileError::AbruptEof)?;
-                    cp[id as usize].clone()
-                };
-
-                let constant = StackValue::from(constant);
-
-                stack += 1;
-                let args: &[&dyn Display] = &[&StackId(stack), &constant];
-                output.write_instruction(Unit::Main, "CONSTANT", args);
-            }
-            instruction::POP => {
+            ADD => handle_arithmetic(&mut stack, &mut output, "ADD"),
+            SUB => handle_arithmetic(&mut stack, &mut output, "SUB"),
+            MUL => handle_arithmetic(&mut stack, &mut output, "MUL"),
+            DIV => handle_arithmetic(&mut stack, &mut output, "DIV"),
+            REM => handle_arithmetic(&mut stack, &mut output, "REM"),
+            POW => handle_arithmetic(&mut stack, &mut output, "POW"),
+            GT => handle_arithmetic(&mut stack, &mut output, "GT"),
+            GE => handle_arithmetic(&mut stack, &mut output, "GE"),
+            LT => handle_arithmetic(&mut stack, &mut output, "LT"),
+            LE => handle_arithmetic(&mut stack, &mut output, "LE"),
+            EQ => handle_arithmetic(&mut stack, &mut output, "EQ"),
+            NE => handle_arithmetic(&mut stack, &mut output, "NE"),
+            POP => {
+                output.write_instruction::<u8>(Unit::Main, "POP", &[]);
                 stack -= 1;
             }
-            instruction::RET => {
+            CONSTANT | CONSTANTW => {
+                let (name, id) = read_wide(
+                    instr,
+                    ("CONSTANT", CONSTANT),
+                    ("CONSTANTW", CONSTANTW),
+                    &mut reader,
+                )?;
+                let constant = StackValue::from(cp[id as usize].clone());
+
+                let args: &[&dyn Display] = &[&StackId(stack), &constant];
+                output.write_instruction(Unit::Main, name, args);
+                stack += 1;
+            }
+            LDLOCAL | LDLOCALW => {
+                let (name, id) = read_wide(
+                    instr,
+                    ("LDLOCAL", LDLOCAL),
+                    ("LDLOCALW", LDLOCALW),
+                    &mut reader,
+                )?;
+                stack += 1;
+                output.write_instruction(Unit::Main, name, &[StackId(id.into())]);
+            }
+            JMP | JMPW => {
+                let (name, id) =
+                    read_wide_signed(instr, ("JMP", JMP), ("JMPW", JMPW), &mut reader)?;
+                output.write_instruction(Unit::Main, name, &[id]);
+            }
+            JMPFALSEP | JMPFALSEWP => {
+                let (name, id) = read_wide_signed(
+                    instr,
+                    ("JMPFALSEP", JMPFALSEP),
+                    ("JMPFALSEWP", JMPFALSEWP),
+                    &mut reader,
+                )?;
+                output.write_instruction(Unit::Main, name, &[id]);
+            }
+            LDGLOBAL | LDGLOBALW => {
+                let (name, id) = read_wide(
+                    instr,
+                    ("LDGLOBAL", LDGLOBAL),
+                    ("LDGLOBALW", LDGLOBALW),
+                    &mut reader,
+                )?;
+                let constant = StackValue::from(cp[id as usize].clone());
+
+                let args: &[&dyn Display] = &[&StackId(stack), &constant];
+                output.write_instruction(Unit::Main, name, args);
+                stack += 1;
+            }
+            STORELOCAL | STORELOCALW => {
+                let (name, id) = read_wide(
+                    instr,
+                    ("STORELOCAL", STORELOCAL),
+                    ("STORELOCALW", STORELOCALW),
+                    &mut reader,
+                )?;
+
+                let args: &[&dyn Display] = &[&StackId(id.into())];
+                output.write_instruction(Unit::Main, name, args);
+                stack += 1;
+            }
+            CALL => {
+                let argc = reader.read().ok_or(DecompileError::AbruptEof)?;
+                let is_constructor = reader.read().ok_or(DecompileError::AbruptEof)?;
+
+                stack -= argc as usize + 1;
+                let args: &[&dyn Display] = &[
+                    &StackId(stack),
+                    &format!("argc={argc}"),
+                    &format!("is_constructor={is_constructor}"),
+                ];
+
+                output.write_instruction(Unit::Main, "CALL", args);
+                stack += 1;
+            }
+            RET => {
                 output.write_instruction(Unit::Main, "RET", &[StackId(stack)]);
                 break;
             }

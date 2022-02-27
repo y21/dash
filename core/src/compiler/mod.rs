@@ -10,7 +10,7 @@ use crate::{
         statement::{
             BlockStatement, Class, ExportKind, ForLoop, ForOfLoop, FunctionDeclaration,
             IfStatement, ImportKind, ReturnStatement, Statement, TryCatch, VariableDeclaration,
-            WhileLoop,
+            VariableDeclarationKind, WhileLoop,
         },
         token::TokenType,
     },
@@ -46,6 +46,7 @@ pub struct FunctionCompiler<'a> {
 pub struct CompileResult {
     pub instructions: Vec<u8>,
     pub cp: ConstantPool,
+    pub locals: usize,
 }
 
 impl<'a> FunctionCompiler<'a> {
@@ -73,6 +74,7 @@ impl<'a> FunctionCompiler<'a> {
         Ok(CompileResult {
             instructions: insts,
             cp: compiler.cp,
+            locals: compiler.scope.locals().len(),
         })
     }
 
@@ -266,7 +268,28 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
         &mut self,
         e: &AssignmentExpr<'a>,
     ) -> Result<Vec<u8>, CompileError> {
-        unimplementedc!("Assignment expression")
+        let mut ib = InstructionBuilder::new();
+
+        match &*e.left {
+            Expr::Literal(lit) => {
+                let ident = lit.as_identifier().expect("Literal was not an identifier");
+
+                if let Some((id, local)) = self.scope.find_local(ident) {
+                    if matches!(local.binding().kind, VariableDeclarationKind::Const) {
+                        return Err(CompileError::ConstAssignment);
+                    }
+
+                    ib.append(&mut self.accept_expr(&e.right)?);
+                    ib.build_local_store(id);
+                } else {
+                    ib.append(&mut self.accept_expr(&e.right)?);
+                    ib.build_global_store(&mut self.cp, ident)?;
+                }
+            }
+            _ => unimplementedc!("Assignment to non-identifier"),
+        }
+
+        Ok(ib.build())
     }
 
     fn visit_function_call(&mut self, c: &FunctionCall<'a>) -> Result<Vec<u8>, CompileError> {
@@ -393,6 +416,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
         // Increment
         if let Some(finalizer) = &f.finalizer {
             ib.append(&mut self.accept_expr(&finalizer)?);
+            ib.build_pop();
         }
         ib.build_jmp(Label::LoopCondition)?;
 

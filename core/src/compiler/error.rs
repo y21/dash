@@ -6,6 +6,7 @@ pub enum CompileError {
     ConstantPoolLimitExceeded,
     LocalLimitExceeded,
     IfBranchLimitExceeded,
+    ConstAssignment,
     Unimplemented(String),
     ParameterLimitExceeded,
 }

@@ -5,6 +5,12 @@ pub struct ScopeLocal<'a> {
     binding: VariableBinding<'a>,
 }
 
+impl<'a> ScopeLocal<'a> {
+    pub fn binding(&self) -> &VariableBinding<'a> {
+        &self.binding
+    }
+}
+
 pub struct LimitExceededError;
 
 pub struct Scope<'a> {
@@ -40,5 +46,9 @@ impl<'a> Scope<'a> {
 
     pub fn exit(&mut self) {
         self.depth -= 1;
+    }
+
+    pub fn locals(&self) -> &[ScopeLocal] {
+        self.locals.as_ref()
     }
 }

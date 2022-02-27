@@ -63,6 +63,13 @@ impl<'a> Eval for Expr<'a> {
                     _ => {}
                 }
             }
+            Grouping(e) => {
+                e.0.fold();
+            }
+            Sequence((a, b)) => {
+                a.fold();
+                b.fold();
+            }
             _ => {}
         }
     }
@@ -98,6 +105,14 @@ impl<'a> Eval for Statement<'a> {
 }
 
 impl<'a> Eval for [Statement<'a>] {
+    fn fold(&mut self) {
+        for stmt in self.iter_mut() {
+            stmt.fold();
+        }
+    }
+}
+
+impl<'a> Eval for [Expr<'a>] {
     fn fold(&mut self) {
         for stmt in self.iter_mut() {
             stmt.fold();

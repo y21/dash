@@ -107,6 +107,31 @@ mod handlers {
 
         Ok(HandleResult::Continue)
     }
+
+    pub fn storelocal(vm: &mut Vm) -> Result<HandleResult, Value> {
+        let id = vm.fetch_and_inc_ip() as usize;
+        let value = vm.stack.pop().expect("No value");
+
+        vm.stack[id] = value.clone();
+        vm.try_push_stack(value)?;
+
+        Ok(HandleResult::Continue)
+    }
+
+    pub fn ldlocal(vm: &mut Vm) -> Result<HandleResult, Value> {
+        let id = vm.fetch_and_inc_ip();
+        let value = vm.stack[id as usize].clone();
+
+        vm.try_push_stack(value)?;
+        Ok(HandleResult::Continue)
+    }
+
+    pub fn lt(vm: &mut Vm) -> Result<HandleResult, Value> {
+        let right = vm.stack.pop().expect("No right operand");
+        let left = vm.stack.pop().expect("No left operand");
+        vm.try_push_stack(left.lt(&right))?;
+        Ok(HandleResult::Continue)
+    }
 }
 
 pub fn handle(vm: &mut Vm, instruction: u8) -> Result<HandleResult, Value> {
@@ -120,6 +145,9 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<HandleResult, Value> {
         opcode::CALL => handlers::call(vm),
         opcode::JMPFALSEP => handlers::jmpfalsep(vm),
         opcode::JMP => handlers::jmp(vm),
+        opcode::STORELOCAL => handlers::storelocal(vm),
+        opcode::LDLOCAL => handlers::ldlocal(vm),
+        opcode::LT => handlers::lt(vm),
         _ => unimplemented!("{}", instruction),
     }
 }
