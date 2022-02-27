@@ -71,8 +71,8 @@ impl<'a> Parser<'a> {
         } else {
             let len = stmts.len();
 
-            if fold && len > 1 {
-                stmts[..len - 1].fold();
+            if fold && len >= 1 {
+                stmts[..len].fold();
             }
 
             Ok(stmts)

@@ -80,6 +80,7 @@ impl<'a> Eval for Statement<'a> {
     fn fold(&mut self) {
         match self {
             Self::Expression(e) => e.fold(),
+            Self::Return(r) => r.0.fold(),
             _ => {}
         };
 

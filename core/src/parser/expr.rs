@@ -133,7 +133,7 @@ impl<'a> Expr<'a> {
                 }
                 Some(list)
             }
-            Self::Literal(lit) => Some(vec![lit.to_identifier()?]),
+            Self::Literal(lit) => Some(vec![lit.as_identifier()?]),
             _ => None,
         }
     }
@@ -141,7 +141,7 @@ impl<'a> Expr<'a> {
     /// Tries to return the identifier that is associated to this expression
     pub fn to_identifier(&self) -> Option<&'a [u8]> {
         match self {
-            Self::Literal(lit) => lit.to_identifier(),
+            Self::Literal(lit) => lit.as_identifier(),
             _ => None,
         }
     }
@@ -247,8 +247,9 @@ pub enum LiteralExpr<'a> {
 
 impl<'a> LiteralExpr<'a> {
     /// Tries to get the identifier of a literal, if present
-    pub fn to_identifier(&self) -> Option<&'a [u8]> {
+    pub fn as_identifier(&self) -> Option<&'a [u8]> {
         match self {
+            Self::Boolean(b) => Some(b.then(|| b"true" as &[u8]).unwrap_or(b"false" as &[u8])),
             Self::Identifier(ident) => Some(ident),
             Self::Undefined => Some(b"undefined"),
             _ => None,

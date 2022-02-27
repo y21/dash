@@ -46,7 +46,11 @@ pub const CJMP: u8 = 0x21;
 pub const JMP: u8 = 0x21;
 pub const CJMPW: u8 = 0x22;
 pub const JMPW: u8 = 0x22;
+pub const STATICPROPACCESS: u8 = 0x23;
+pub const STATICPROPACCESSW: u8 = 0x24;
+pub const DYNAMICPROPACCESS: u8 = 0x25;
 
+#[rustfmt::skip]
 pub trait InstructionWriter {
     /// Builds the [ADD] instruction
     fn build_add(&mut self);
@@ -72,6 +76,16 @@ pub trait InstructionWriter {
     fn build_eq(&mut self);
     /// Builds the [NE] instruction
     fn build_ne(&mut self);
+    /// Builds the [POS] instruction
+    fn build_pos(&mut self);
+    /// Builds the [NEG] instruction
+    fn build_neg(&mut self);
+    /// Builds the [TYPEOF] instruction
+    fn build_typeof(&mut self);
+    /// Builds the [BITNOT] instruction
+    fn build_bitnot(&mut self);
+    /// Builds the [NOT] instruction
+    fn build_not(&mut self);
     /// Builds the [POP] instruction
     fn build_pop(&mut self);
     /// Builds the [RET] instruction
@@ -81,27 +95,12 @@ pub trait InstructionWriter {
     /// Builds the [JMP] and [JMPW] instructions
     fn build_jmp(&mut self, label: Label) -> Result<(), LimitExceededError>;
     fn build_call(&mut self, argc: u8, is_constructor: bool);
-    fn build_constant(
-        &mut self,
-        cp: &mut ConstantPool,
-        constant: Constant,
-    ) -> Result<(), LimitExceededError>;
+    fn build_static_prop_access(&mut self, cp: &mut ConstantPool, ident: &[u8]) -> Result<(), LimitExceededError>;
+    fn build_dynamic_prop_access(&mut self);
+    fn build_constant(&mut self, cp: &mut ConstantPool, constant: Constant) -> Result<(), LimitExceededError>;
     fn build_local_load(&mut self, index: u16);
-    fn build_global_load(
-        &mut self,
-        cp: &mut ConstantPool,
-        ident: &[u8],
-    ) -> Result<(), LimitExceededError>;
-    fn build_pos(&mut self);
-    fn build_neg(&mut self);
-    fn build_typeof(&mut self);
-    fn build_bitnot(&mut self);
-    fn build_not(&mut self);
-    fn build_global_store(
-        &mut self,
-        cp: &mut ConstantPool,
-        ident: &[u8],
-    ) -> Result<(), LimitExceededError>;
+    fn build_global_load(&mut self, cp: &mut ConstantPool, ident: &[u8]) -> Result<(), LimitExceededError>;
+    fn build_global_store(&mut self, cp: &mut ConstantPool, ident: &[u8]) -> Result<(), LimitExceededError>;
     fn build_local_store(&mut self, id: u16);
 }
 
@@ -191,5 +190,20 @@ impl InstructionWriter for InstructionBuilder {
         self.write_wide_instr(JMP, JMPW, id);
 
         Ok(())
+    }
+
+    fn build_static_prop_access(
+        &mut self,
+        cp: &mut ConstantPool,
+        ident: &[u8],
+    ) -> Result<(), LimitExceededError> {
+        let id = cp.add(Constant::Identifier(force_utf8(ident)))?;
+        self.write_wide_instr(STATICPROPACCESS, STATICPROPACCESSW, id);
+
+        Ok(())
+    }
+
+    fn build_dynamic_prop_access(&mut self) {
+        self.write(DYNAMICPROPACCESS);
     }
 }

@@ -23,7 +23,8 @@ use self::{
 
 mod builder;
 pub mod constant;
-mod error;
+pub mod decompiler;
+pub mod error;
 pub mod instruction;
 mod scope;
 /// Visitor trait, used to walk the AST
@@ -208,6 +209,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
             ib.build_jmpfalsep(Label::IfBranch(0))?;
         }
         ib.append(&mut self.accept(&i.then)?);
+        ib.build_jmp(Label::IfEnd)?;
 
         for (id, branch) in branches.iter().enumerate() {
             let id = id as u16;
@@ -223,7 +225,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
 
                 ib.append(&mut self.accept(&branch.then)?);
 
-                ib.build_jmpfalsep(Label::IfEnd)?;
+                ib.build_jmp(Label::IfEnd)?;
             }
         }
 
@@ -292,18 +294,52 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
     }
 
     fn visit_conditional_expr(&mut self, c: &ConditionalExpr<'a>) -> Result<Vec<u8>, CompileError> {
-        unimplementedc!("Conditional expression")
+        let mut ib = InstructionBuilder::new();
+
+        ib.append(&mut self.accept_expr(&c.condition)?);
+        ib.build_jmpfalsep(Label::IfBranch(0))?;
+
+        ib.append(&mut self.accept_expr(&c.then)?);
+        ib.build_jmp(Label::IfEnd)?;
+
+        ib.add_label(Label::IfBranch(0));
+        ib.append(&mut self.accept_expr(&c.el)?);
+
+        ib.add_label(Label::IfEnd);
+        Ok(ib.build())
     }
 
     fn visit_property_access_expr(
         &mut self,
         e: &PropertyAccessExpr<'a>,
     ) -> Result<Vec<u8>, CompileError> {
-        unimplementedc!("Property access expression")
+        let mut ib = InstructionBuilder::new();
+
+        ib.append(&mut self.accept_expr(&e.target)?);
+        match &*e.property {
+            Expr::Literal(lit) => {
+                let ident = lit
+                    .as_identifier()
+                    .expect("Literal expression was not an identifier");
+                ib.build_static_prop_access(&mut self.cp, ident)?;
+            }
+            e => {
+                ib.append(&mut self.accept_expr(e)?);
+                ib.build_dynamic_prop_access();
+            }
+        }
+
+        Ok(ib.build())
     }
 
     fn visit_sequence_expr(&mut self, s: &Seq<'a>) -> Result<Vec<u8>, CompileError> {
-        unimplementedc!("Sequence expression")
+        let mut ib = InstructionBuilder::new();
+
+        ib.append(&mut self.accept_expr(&s.0)?);
+        ib.build_pop();
+        ib.append(&mut self.accept_expr(&s.1)?);
+
+        Ok(ib.build())
     }
 
     fn visit_postfix_expr(&mut self, p: &Postfix<'a>) -> Result<Vec<u8>, CompileError> {
@@ -334,7 +370,35 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
     }
 
     fn visit_for_loop(&mut self, f: &ForLoop<'a>) -> Result<Vec<u8>, CompileError> {
-        unimplementedc!("For loop")
+        let mut ib = InstructionBuilder::new();
+
+        self.scope.enter();
+
+        // Initialization
+        if let Some(init) = &f.init {
+            ib.append(&mut self.accept(&init)?);
+        }
+
+        // Condition
+        ib.add_label(Label::LoopCondition);
+        if let Some(condition) = &f.condition {
+            ib.append(&mut self.accept_expr(&condition)?);
+            ib.build_jmpfalsep(Label::LoopEnd)?;
+        }
+
+        // Body
+        ib.append(&mut self.accept(&f.body)?);
+
+        // Increment
+        if let Some(finalizer) = &f.finalizer {
+            ib.append(&mut self.accept_expr(&finalizer)?);
+        }
+        ib.build_jmp(Label::LoopCondition)?;
+
+        ib.add_label(Label::LoopEnd);
+        self.scope.exit();
+
+        Ok(ib.build())
     }
 
     fn visit_for_of_loop(&mut self, f: &ForOfLoop<'a>) -> Result<Vec<u8>, CompileError> {

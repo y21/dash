@@ -16,7 +16,7 @@ use self::{
 };
 
 pub mod dispatch;
-mod frame;
+pub mod frame;
 pub mod value;
 
 pub const MAX_STACK_SIZE: usize = 8196;
@@ -118,7 +118,7 @@ mod testing {
     fn vm() {
         let mut vm = Vm::new();
 
-        let ast = Parser::from_str("log(12+34)")
+        let ast = Parser::from_str("for(;;) ;")
             .unwrap()
             .parse_all(true)
             .unwrap();
