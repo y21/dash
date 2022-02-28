@@ -1,5 +1,8 @@
 use std::cell::RefCell;
 
+use crate::gc::trace::Trace;
+use crate::vm::Vm;
+
 use super::object::Object;
 use super::Value;
 
@@ -24,18 +27,27 @@ impl From<Vec<Value>> for Array {
     }
 }
 
+unsafe impl Trace for Array {
+    fn trace(&self) {
+        let items = self.items.borrow();
+        for item in items.iter() {
+            item.trace();
+        }
+    }
+}
+
 impl Object for Array {
-    fn get_property(&self, key: &str) -> Result<Value, Value> {
+    fn get_property(&self, vm: &mut Vm, key: &str) -> Result<Value, Value> {
         let items = self.items.borrow();
         let index = key.parse::<usize>().unwrap();
         Ok(items.get(index).cloned().unwrap_or(Value::Null))
     }
 
-    fn set_property(&self, key: &str, value: Value) -> Result<Value, Value> {
+    fn set_property(&self, vm: &mut Vm, key: &str, value: Value) -> Result<Value, Value> {
         Ok(Value::Undefined)
     }
 
-    fn apply(&self, this: Value, args: Vec<Value>) -> Result<Value, Value> {
+    fn apply(&self, vm: &mut Vm, this: Value, args: Vec<Value>) -> Result<Value, Value> {
         todo!()
     }
 

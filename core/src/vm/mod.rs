@@ -1,4 +1,4 @@
-use std::convert::TryInto;
+use std::{convert::TryInto, fmt};
 
 use crate::{
     gc::{handle::Handle, Gc},
@@ -17,6 +17,7 @@ use self::{
 
 pub mod dispatch;
 pub mod frame;
+pub mod local;
 pub mod value;
 
 pub const MAX_STACK_SIZE: usize = 8196;
@@ -46,14 +47,12 @@ impl Vm {
     /// Prepare the VM for execution.
     #[rustfmt::skip]
     fn prepare(&mut self) {
-        let global = self
-            .global
-            .as_any()
-            .downcast_ref::<AnonymousObject>()
-            .expect("global is not an object");
+        let global = self.global.clone();
 
         let log = Function::new("log".into(), FunctionKind::Native(js_std::global::log));
-        global.set_property("log", self.gc.register(log).into()).unwrap();
+        let log = Value::Object(self.gc.register(log));
+        
+        global.set_property(self, "log", log).unwrap();
     }
 
     /// Fetches the current instruction/value in the currently executing frame
@@ -109,5 +108,11 @@ impl Vm {
                 Err(e) => return Err(e),
             }
         }
+    }
+}
+
+impl fmt::Debug for Vm {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("Vm")
     }
 }

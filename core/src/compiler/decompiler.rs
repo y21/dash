@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::fmt::Write;
 use std::io::Read;
+use std::rc::Rc;
 
 use super::constant::Constant;
 use super::instruction::*;
@@ -89,7 +90,7 @@ pub enum DecompileError {
 enum StackValue {
     Number(f64),
     String(String),
-    Identifier(String),
+    Identifier(Rc<str>),
     Boolean(bool),
     Null,
     Undefined,

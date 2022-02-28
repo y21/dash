@@ -1,4 +1,9 @@
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
+
+use crate::{
+    gc::trace::Trace,
+    vm::{local::LocalScope, Vm},
+};
 
 use self::native::{CallContext, NativeFunction};
 
@@ -6,10 +11,18 @@ use super::object::Object;
 
 pub mod native;
 
-#[derive(Debug)]
 pub enum FunctionKind {
     Native(NativeFunction),
     User,
+}
+
+impl fmt::Debug for FunctionKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Native(_) => f.write_str("NativeFunction"),
+            Self::User => f.write_str("UserFunction"),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -24,23 +37,34 @@ impl Function {
     }
 }
 
+unsafe impl Trace for Function {
+    fn trace(&self) {}
+}
+
 impl Object for Function {
-    fn get_property(&self, key: &str) -> Result<super::Value, super::Value> {
+    fn get_property(&self, vm: &mut Vm, key: &str) -> Result<super::Value, super::Value> {
         todo!()
     }
 
-    fn set_property(&self, key: &str, value: super::Value) -> Result<super::Value, super::Value> {
+    fn set_property(
+        &self,
+        vm: &mut Vm,
+        key: &str,
+        value: super::Value,
+    ) -> Result<super::Value, super::Value> {
         todo!()
     }
 
     fn apply(
         &self,
+        vm: &mut Vm,
         this: super::Value,
         args: Vec<super::Value>,
     ) -> Result<super::Value, super::Value> {
         match self.kind {
             FunctionKind::Native(native) => {
-                let cx = CallContext { args };
+                let scope = LocalScope::new(vm);
+                let cx = CallContext { args, scope };
                 let result = native(cx);
                 result
             }

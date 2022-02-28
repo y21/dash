@@ -1,5 +1,7 @@
 use std::{cell::Cell, ops::Deref, ptr::NonNull};
 
+use super::trace::Trace;
+
 pub struct InnerHandle<T: ?Sized> {
     pub(crate) marked: Cell<bool>,
     pub(crate) value: Box<T>,
@@ -27,6 +29,12 @@ impl<T: ?Sized> Clone for Handle<T> {
 impl<T: ?Sized> Handle<T> {
     pub unsafe fn new(ptr: NonNull<InnerHandle<T>>) -> Self {
         Handle(ptr)
+    }
+}
+
+unsafe impl<T: ?Sized> Trace for Handle<T> {
+    fn trace(&self) {
+        unsafe { self.0.as_ref().mark() };
     }
 }
 

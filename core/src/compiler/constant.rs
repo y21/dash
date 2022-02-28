@@ -1,14 +1,16 @@
 use std::ops::Deref;
+use std::rc::Rc;
 
 use crate::parser::expr::LiteralExpr;
 
 use super::builder::force_utf8;
+use super::builder::force_utf8_borrowed;
 
 #[derive(Debug, Clone)]
 pub enum Constant {
     Number(f64),
     String(String),
-    Identifier(String),
+    Identifier(Rc<str>),
     Boolean(bool),
     Null,
     Undefined,
@@ -29,7 +31,7 @@ impl Constant {
         }
     }
 
-    pub fn as_identifier(&self) -> Option<&str> {
+    pub fn as_identifier(&self) -> Option<&Rc<str>> {
         match self {
             Constant::Identifier(s) => Some(s),
             _ => None,
@@ -48,7 +50,7 @@ impl<'a> From<&LiteralExpr<'a>> for Constant {
     fn from(expr: &LiteralExpr<'a>) -> Self {
         match expr {
             LiteralExpr::Number(n) => Constant::Number(*n),
-            LiteralExpr::Identifier(s) => Constant::Identifier(force_utf8(s)),
+            LiteralExpr::Identifier(s) => Constant::Identifier(force_utf8_borrowed(s).into()),
             LiteralExpr::String(s) => Constant::String(force_utf8(s)),
             LiteralExpr::Boolean(b) => Constant::Boolean(*b),
             LiteralExpr::Null => Constant::Null,

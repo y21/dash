@@ -1,6 +1,9 @@
+use std::convert::TryInto;
+
 use super::{
-    builder::{force_utf8, InstructionBuilder, Label},
+    builder::{force_utf8_borrowed, InstructionBuilder, Label},
     constant::{Constant, ConstantPool, LimitExceededError},
+    error::CompileError,
 };
 
 /// Adds two values together
@@ -51,6 +54,8 @@ pub const STATICPROPACCESSW: u8 = 0x24;
 pub const DYNAMICPROPACCESS: u8 = 0x25;
 pub const ARRAYLIT: u8 = 0x26;
 pub const ARRAYLITW: u8 = 0x27;
+pub const OBJLIT: u8 = 0x28;
+pub const OBJLITW: u8 = 0x29;
 
 #[rustfmt::skip]
 pub trait InstructionWriter {
@@ -96,6 +101,12 @@ pub trait InstructionWriter {
     fn build_jmpfalsep(&mut self, label: Label) -> Result<(), LimitExceededError>;
     /// Builds the [ARRAYLIT] and [ARRAYLITW] instructions
     fn build_arraylit(&mut self, len: u16);
+    /// Builds the [OBJLIT] and [OBJLITW] instructions
+    fn build_objlit(
+        &mut self,
+        cp: &mut ConstantPool,
+        constants: Vec<Constant>,
+    ) -> Result<(), CompileError>;
     /// Builds the [JMP] and [JMPW] instructions
     fn build_jmp(&mut self, label: Label) -> Result<(), LimitExceededError>;
     fn build_call(&mut self, argc: u8, is_constructor: bool);
@@ -159,7 +170,7 @@ impl InstructionWriter for InstructionBuilder {
         cp: &mut ConstantPool,
         ident: &[u8],
     ) -> Result<(), LimitExceededError> {
-        let id = cp.add(Constant::Identifier(force_utf8(ident)))?;
+        let id = cp.add(Constant::Identifier(force_utf8_borrowed(ident).into()))?;
         self.write_wide_instr(LDGLOBAL, LDGLOBALW, id);
         Ok(())
     }
@@ -169,7 +180,7 @@ impl InstructionWriter for InstructionBuilder {
         cp: &mut ConstantPool,
         ident: &[u8],
     ) -> Result<(), LimitExceededError> {
-        let id = cp.add(Constant::Identifier(force_utf8(ident)))?;
+        let id = cp.add(Constant::Identifier(force_utf8_borrowed(ident).into()))?;
         self.write_wide_instr(STOREGLOBAL, STOREGLOBALW, id);
         Ok(())
     }
@@ -201,7 +212,7 @@ impl InstructionWriter for InstructionBuilder {
         cp: &mut ConstantPool,
         ident: &[u8],
     ) -> Result<(), LimitExceededError> {
-        let id = cp.add(Constant::Identifier(force_utf8(ident)))?;
+        let id = cp.add(Constant::Identifier(force_utf8_borrowed(ident).into()))?;
         self.write_wide_instr(STATICPROPACCESS, STATICPROPACCESSW, id);
 
         Ok(())
@@ -213,5 +224,31 @@ impl InstructionWriter for InstructionBuilder {
 
     fn build_arraylit(&mut self, len: u16) {
         self.write_wide_instr(ARRAYLIT, ARRAYLITW, len);
+    }
+
+    fn build_objlit(
+        &mut self,
+        cp: &mut ConstantPool,
+        constants: Vec<Constant>,
+    ) -> Result<(), CompileError> {
+        let len = constants
+            .len()
+            .try_into()
+            .map_err(|_| CompileError::ObjectLitLimitExceeded)?;
+
+        self.write_wide_instr(OBJLIT, OBJLITW, len);
+
+        for constant in constants {
+            // For now, we only support object literals in functions with <256 constants,
+            // otherwise we would need to emit 2-byte wide instructions for every constant.
+            let id = cp
+                .add(constant)?
+                .try_into()
+                .map_err(|_| CompileError::ConstantPoolLimitExceeded)?;
+
+            self.write(id);
+        }
+
+        Ok(())
     }
 }

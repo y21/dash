@@ -6,9 +6,14 @@ pub mod ops;
 
 use std::rc::Rc;
 
-use crate::{compiler::constant::Constant, gc::handle::Handle};
+use crate::{
+    compiler::constant::Constant,
+    gc::{handle::Handle, trace::Trace},
+};
 
 use self::object::Object;
+
+use super::Vm;
 #[derive(Debug, Clone)]
 pub enum Value {
     Number(f64),
@@ -17,6 +22,14 @@ pub enum Value {
     Undefined,
     Null,
     Object(Handle<dyn Object>),
+}
+
+unsafe impl Trace for Value {
+    fn trace(&self) {
+        if let Value::Object(handle) = self {
+            handle.trace();
+        }
+    }
 }
 
 impl Value {
@@ -31,16 +44,16 @@ impl Value {
         }
     }
 
-    pub fn get_property(&self, key: &str) -> Result<Value, Value> {
+    pub fn get_property(&self, vm: &mut Vm, key: &str) -> Result<Value, Value> {
         match self {
-            Self::Object(o) => o.get_property(key),
+            Self::Object(o) => o.get_property(vm, key),
             _ => unimplemented!(),
         }
     }
 
-    pub fn apply(&self, this: Value, args: Vec<Value>) -> Result<Value, Value> {
+    pub fn apply(&self, vm: &mut Vm, this: Value, args: Vec<Value>) -> Result<Value, Value> {
         match self {
-            Value::Object(object) => object.apply(this, args),
+            Value::Object(object) => object.apply(vm, this, args),
             _ => unimplemented!(),
         }
     }

@@ -17,7 +17,11 @@ use crate::{
 };
 
 use self::{
-    constant::ConstantPool, error::CompileError, instruction::InstructionWriter, scope::Scope,
+    builder::force_utf8_borrowed,
+    constant::{Constant, ConstantPool},
+    error::CompileError,
+    instruction::InstructionWriter,
+    scope::Scope,
     visitor::Visitor,
 };
 
@@ -392,7 +396,17 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
     }
 
     fn visit_object_literal(&mut self, o: &ObjectLiteral<'a>) -> Result<Vec<u8>, CompileError> {
-        unimplementedc!("Object literal")
+        let mut ib = InstructionBuilder::new();
+
+        let mut idents = Vec::with_capacity(o.len());
+        for (ident, value) in o {
+            ib.append(&mut self.accept_expr(value)?);
+            let ident = Constant::Identifier(force_utf8_borrowed(ident).into());
+            idents.push(ident);
+        }
+
+        ib.build_objlit(&mut self.cp, idents)?;
+        Ok(ib.build())
     }
 
     fn visit_try_catch(&mut self, t: &TryCatch<'a>) -> Result<Vec<u8>, CompileError> {

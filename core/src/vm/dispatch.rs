@@ -8,6 +8,8 @@ pub enum HandleResult {
 
 mod handlers {
     use crate::vm::value::array::Array;
+    use crate::vm::value::object::AnonymousObject;
+    use crate::vm::value::object::Object;
 
     use super::*;
 
@@ -59,9 +61,10 @@ mod handlers {
 
         let name = constant
             .as_identifier()
-            .expect("Referenced constant is not an identifier");
+            .expect("Referenced constant is not an identifier")
+            .clone();
 
-        let value = vm.global.get_property(name)?;
+        let value = vm.global.clone().get_property(vm, &name)?;
         vm.stack.push(value);
         Ok(HandleResult::Continue)
     }
@@ -76,7 +79,8 @@ mod handlers {
         }
 
         let callee = vm.stack.pop().expect("Missing callee");
-        vm.stack.push(callee.apply(Value::Undefined, args)?);
+        let ret = callee.apply(vm, Value::Undefined, args)?;
+        vm.try_push_stack(ret)?;
         Ok(HandleResult::Continue)
     }
 
@@ -145,6 +149,36 @@ mod handlers {
         Ok(HandleResult::Continue)
     }
 
+    pub fn objlit(vm: &mut Vm) -> Result<HandleResult, Value> {
+        let len = vm.fetch_and_inc_ip() as usize;
+
+        let elements = vm.stack.drain(vm.stack.len() - len..).collect::<Vec<_>>();
+
+        let obj = AnonymousObject::new();
+        for element in elements.into_iter() {
+            // Object literal constant indices are guaranteed to be 1-byte wide, for now...
+            let id = vm.fetch_and_inc_ip();
+            let constant = {
+                let frame = vm.frames.last().expect("No frame");
+
+                let identifier = frame
+                    .constants
+                    .get(id as usize)
+                    .expect("Invalid constant reference in bytecode")
+                    .as_identifier()
+                    .expect("Invalid constant reference in bytecode");
+
+                String::from(&**identifier)
+            };
+            obj.set_property(vm, &constant, element).unwrap();
+        }
+
+        let handle = vm.gc.register(obj);
+        vm.try_push_stack(handle.into())?;
+
+        Ok(HandleResult::Continue)
+    }
+
     pub fn staticpropertyaccess(vm: &mut Vm) -> Result<HandleResult, Value> {
         let id = vm.fetch_and_inc_ip();
         let constant = vm
@@ -157,10 +191,11 @@ mod handlers {
 
         let ident = constant
             .as_identifier()
-            .expect("Referenced constant is not an identifier");
+            .expect("Referenced constant is not an identifier")
+            .clone();
 
         let target = vm.stack.pop().expect("No value");
-        let value = target.get_property(ident)?;
+        let value = target.get_property(vm, &ident)?;
         vm.try_push_stack(value)?;
         Ok(HandleResult::Continue)
     }
@@ -181,6 +216,7 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<HandleResult, Value> {
         opcode::LDLOCAL => handlers::ldlocal(vm),
         opcode::LT => handlers::lt(vm),
         opcode::ARRAYLIT => handlers::arraylit(vm),
+        opcode::OBJLIT => handlers::objlit(vm),
         opcode::STATICPROPACCESS => handlers::staticpropertyaccess(vm),
         _ => unimplemented!("{}", instruction),
     }

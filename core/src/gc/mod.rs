@@ -5,16 +5,18 @@ use crate::{gc::handle::InnerHandle, vm::value::object::Object};
 use self::{
     handle::Handle,
     linkedlist::{LinkedList, Node},
+    trace::Trace,
 };
 
 pub mod handle;
 pub mod linkedlist;
+pub mod trace;
 
 pub struct Gc<T: ?Sized> {
     list: LinkedList<InnerHandle<T>>,
 }
 
-impl<T: ?Sized> Gc<T> {
+impl<T: ?Sized + Trace> Gc<T> {
     pub fn new() -> Self {
         Self {
             list: LinkedList::new(),
