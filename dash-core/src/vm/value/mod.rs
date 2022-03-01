@@ -13,7 +13,7 @@ use crate::{
 
 use self::object::Object;
 
-use super::Vm;
+use super::local::LocalScope;
 #[derive(Debug, Clone)]
 pub enum Value {
     Number(f64),
@@ -44,16 +44,21 @@ impl Value {
         }
     }
 
-    pub fn get_property(&self, vm: &mut Vm, key: &str) -> Result<Value, Value> {
+    pub fn get_property(&self, sc: &mut LocalScope, key: &str) -> Result<Value, Value> {
         match self {
-            Self::Object(o) => o.get_property(vm, key),
+            Self::Object(o) => o.get_property(sc, key),
             _ => unimplemented!(),
         }
     }
 
-    pub fn apply(&self, vm: &mut Vm, this: Value, args: Vec<Value>) -> Result<Value, Value> {
+    pub fn apply(
+        &self,
+        sc: &mut LocalScope,
+        this: Value,
+        args: Vec<Value>,
+    ) -> Result<Value, Value> {
         match self {
-            Value::Object(object) => object.apply(vm, this, args),
+            Value::Object(object) => object.apply(sc, this, args),
             _ => unimplemented!(),
         }
     }

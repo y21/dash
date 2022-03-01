@@ -61,18 +61,29 @@ impl<'a> FunctionCompiler<'a> {
         }
     }
 
-    pub fn compile_ast(stmts: Vec<Statement<'a>>) -> Result<CompileResult, CompileError> {
+    pub fn compile_ast(mut stmts: Vec<Statement<'a>>) -> Result<CompileResult, CompileError> {
+        match stmts.pop() {
+            Some(Statement::Return(r)) => {
+                // add removed return back
+                stmts.push(Statement::Return(r));
+            }
+            Some(Statement::Expression(e)) => {
+                // if it's an expression, we'll turn it into a return statement
+                stmts.push(Statement::Return(ReturnStatement(e)));
+            }
+            _ => {
+                // otherwise we'll add `return undefined`
+                stmts.push(Statement::Return(
+                    ReturnStatement(Expr::undefined_literal()),
+                ));
+            }
+        }
+
         let mut compiler = Self::new();
         let mut insts = Vec::new();
 
         for stmt in stmts {
             insts.append(&mut compiler.accept(&stmt)?);
-        }
-
-        if !matches!(insts.last(), Some(&instruction::RET)) {
-            // if there is no explicit return already, we must add one
-            let mut ret = compiler.visit_return_statement(&Default::default())?;
-            insts.append(&mut ret);
         }
 
         Ok(CompileResult {

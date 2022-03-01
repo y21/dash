@@ -1,9 +1,6 @@
 use std::fmt::{self, Debug};
 
-use crate::{
-    gc::trace::Trace,
-    vm::{local::LocalScope, Vm},
-};
+use crate::{gc::trace::Trace, vm::local::LocalScope};
 
 use self::native::{CallContext, NativeFunction};
 
@@ -42,13 +39,13 @@ unsafe impl Trace for Function {
 }
 
 impl Object for Function {
-    fn get_property(&self, vm: &mut Vm, key: &str) -> Result<super::Value, super::Value> {
+    fn get_property(&self, sc: &mut LocalScope, key: &str) -> Result<super::Value, super::Value> {
         todo!()
     }
 
     fn set_property(
         &self,
-        vm: &mut Vm,
+        sc: &mut LocalScope,
         key: &str,
         value: super::Value,
     ) -> Result<super::Value, super::Value> {
@@ -57,13 +54,12 @@ impl Object for Function {
 
     fn apply(
         &self,
-        vm: &mut Vm,
+        scope: &mut LocalScope,
         this: super::Value,
         args: Vec<super::Value>,
     ) -> Result<super::Value, super::Value> {
         match self.kind {
             FunctionKind::Native(native) => {
-                let scope = LocalScope::new(vm);
                 let cx = CallContext { args, scope };
                 let result = native(cx);
                 result

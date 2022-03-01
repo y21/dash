@@ -7,6 +7,7 @@ pub enum HandleResult {
 }
 
 mod handlers {
+    use crate::vm::local::LocalScope;
     use crate::vm::value::array::Array;
     use crate::vm::value::object::AnonymousObject;
     use crate::vm::value::object::Object;
@@ -64,7 +65,8 @@ mod handlers {
             .expect("Referenced constant is not an identifier")
             .clone();
 
-        let value = vm.global.clone().get_property(vm, &name)?;
+        let mut scope = LocalScope::new(vm);
+        let value = scope.global.clone().get_property(&mut scope, &name)?;
         vm.stack.push(value);
         Ok(HandleResult::Continue)
     }
@@ -74,12 +76,22 @@ mod handlers {
         let is_constructor = vm.fetch_and_inc_ip();
 
         let mut args = Vec::with_capacity(argc.into());
+        let mut refs = Vec::new();
         for _ in 0..argc {
-            args.push(vm.stack.pop().expect("Missing argument"));
+            let value = vm.stack.pop().expect("Missing argument");
+            if let Value::Object(handle) = &value {
+                refs.push(handle.clone());
+            }
+
+            args.push(value);
         }
 
         let callee = vm.stack.pop().expect("Missing callee");
-        let ret = callee.apply(vm, Value::Undefined, args)?;
+        let mut scope = LocalScope::new(vm);
+        let scoper = &scope as *const LocalScope;
+        unsafe { scope.externals.add(scoper, refs) };
+        let ret = callee.apply(&mut scope, Value::Undefined, args)?;
+
         vm.try_push_stack(ret)?;
         Ok(HandleResult::Continue)
     }
@@ -154,12 +166,13 @@ mod handlers {
 
         let elements = vm.stack.drain(vm.stack.len() - len..).collect::<Vec<_>>();
 
+        let mut scope = LocalScope::new(vm);
         let obj = AnonymousObject::new();
         for element in elements.into_iter() {
             // Object literal constant indices are guaranteed to be 1-byte wide, for now...
-            let id = vm.fetch_and_inc_ip();
+            let id = scope.fetch_and_inc_ip();
             let constant = {
-                let frame = vm.frames.last().expect("No frame");
+                let frame = scope.frames.last().expect("No frame");
 
                 let identifier = frame
                     .constants
@@ -170,7 +183,7 @@ mod handlers {
 
                 String::from(&**identifier)
             };
-            obj.set_property(vm, &constant, element).unwrap();
+            obj.set_property(&mut scope, &constant, element).unwrap();
         }
 
         let handle = vm.gc.register(obj);
@@ -194,8 +207,9 @@ mod handlers {
             .expect("Referenced constant is not an identifier")
             .clone();
 
-        let target = vm.stack.pop().expect("No value");
-        let value = target.get_property(vm, &ident)?;
+        let mut scope = LocalScope::new(vm);
+        let target = scope.stack.pop().expect("No value");
+        let value = target.get_property(&mut scope, &ident)?;
         vm.try_push_stack(value)?;
         Ok(HandleResult::Continue)
     }

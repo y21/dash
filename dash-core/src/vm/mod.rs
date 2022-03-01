@@ -1,4 +1,4 @@
-use std::{convert::TryInto, fmt};
+use std::{convert::TryInto, fmt, };
 
 use crate::{
     gc::{handle::Handle, Gc},
@@ -12,12 +12,13 @@ use self::{
         function::{Function, FunctionKind},
         object::{AnonymousObject, Object},
         Value,
-    },
+    }, external::Externals, local::LocalScope,
 };
 
 pub mod dispatch;
 pub mod frame;
 pub mod local;
+pub mod external;
 pub mod value;
 
 pub const MAX_STACK_SIZE: usize = 8196;
@@ -27,6 +28,7 @@ pub struct Vm {
     stack: Vec<Value>,
     gc: Gc<dyn Object>,
     global: Handle<dyn Object>,
+    externals: Externals
 }
 
 impl Vm {
@@ -39,6 +41,7 @@ impl Vm {
             stack: Vec::with_capacity(512),
             gc,
             global,
+            externals: Externals::new()
         };
         vm.prepare();
         vm
@@ -49,10 +52,12 @@ impl Vm {
     fn prepare(&mut self) {
         let global = self.global.clone();
 
+        let mut scope = LocalScope::new(self);
+
         let log = Function::new("log".into(), FunctionKind::Native(js_std::global::log));
-        let log = Value::Object(self.gc.register(log));
+        let log = Value::Object(scope.gc.register(log));
         
-        global.set_property(self, "log", log).unwrap();
+        global.set_property(&mut scope, "log", log).unwrap();
     }
 
     /// Fetches the current instruction/value in the currently executing frame

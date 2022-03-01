@@ -7,7 +7,7 @@ use super::{
 /// A trait for evaluating constant expressions.
 pub trait Eval {
     /// Attempts to fold an expression or statement prior to execution
-    fn fold(&mut self);
+    fn fold(&mut self, can_remove: bool);
     /// Whether this item has side effects
     ///
     /// If this function returns true, it may be entirely removed when folded
@@ -17,7 +17,7 @@ pub trait Eval {
 }
 
 impl<'a> Eval for LiteralExpr<'a> {
-    fn fold(&mut self) {}
+    fn fold(&mut self, can_remove: bool) {}
     fn has_side_effect(&self) -> bool {
         // identifier might invoke a global getter
         matches!(self, Self::Identifier(_))
@@ -25,9 +25,9 @@ impl<'a> Eval for LiteralExpr<'a> {
 }
 
 impl<'a> Eval for BinaryExpr<'a> {
-    fn fold(&mut self) {
-        self.left.fold();
-        self.right.fold();
+    fn fold(&mut self, can_remove: bool) {
+        self.left.fold(can_remove);
+        self.right.fold(can_remove);
     }
 
     fn has_side_effect(&self) -> bool {
@@ -36,13 +36,13 @@ impl<'a> Eval for BinaryExpr<'a> {
 }
 
 impl<'a> Eval for Expr<'a> {
-    fn fold(&mut self) {
+    fn fold(&mut self, can_remove: bool) {
         use Expr::*;
         use LiteralExpr::*;
 
         match self {
             Self::Binary(expr) => {
-                expr.fold();
+                expr.fold(can_remove);
 
                 match (&*expr.left, &*expr.right) {
                     (Literal(Number(l)), Literal(Number(r))) => match expr.operator {
@@ -64,11 +64,11 @@ impl<'a> Eval for Expr<'a> {
                 }
             }
             Grouping(e) => {
-                e.0.fold();
+                e.0.fold(can_remove);
             }
             Sequence((a, b)) => {
-                a.fold();
-                b.fold();
+                a.fold(can_remove);
+                b.fold(can_remove);
             }
             _ => {}
         }
@@ -84,14 +84,14 @@ impl<'a> Eval for Expr<'a> {
 }
 
 impl<'a> Eval for Statement<'a> {
-    fn fold(&mut self) {
+    fn fold(&mut self, can_remove: bool) {
         match self {
-            Self::Expression(e) => e.fold(),
-            Self::Return(r) => r.0.fold(),
+            Self::Expression(e) => e.fold(can_remove),
+            Self::Return(r) => r.0.fold(can_remove),
             _ => {}
         };
 
-        if !self.has_side_effect() {
+        if can_remove && !self.has_side_effect() {
             *self = Statement::Empty;
         }
     }
@@ -105,17 +105,20 @@ impl<'a> Eval for Statement<'a> {
 }
 
 impl<'a> Eval for [Statement<'a>] {
-    fn fold(&mut self) {
-        for stmt in self.iter_mut() {
-            stmt.fold();
+    fn fold(&mut self, can_remove: bool) {
+        let len = self.len();
+        for (id, stmt) in self.iter_mut().enumerate() {
+            let is_last = id == len - 1;
+
+            stmt.fold(can_remove && !is_last);
         }
     }
 }
 
 impl<'a> Eval for [Expr<'a>] {
-    fn fold(&mut self) {
+    fn fold(&mut self, can_remove: bool) {
         for stmt in self.iter_mut() {
-            stmt.fold();
+            stmt.fold(can_remove);
         }
     }
 }

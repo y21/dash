@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 
 use crate::gc::trace::Trace;
-use crate::vm::Vm;
+use crate::vm::local::LocalScope;
 
 use super::object::Object;
 use super::Value;
@@ -37,17 +37,17 @@ unsafe impl Trace for Array {
 }
 
 impl Object for Array {
-    fn get_property(&self, vm: &mut Vm, key: &str) -> Result<Value, Value> {
+    fn get_property(&self, sc: &mut LocalScope, key: &str) -> Result<Value, Value> {
         let items = self.items.borrow();
         let index = key.parse::<usize>().unwrap();
         Ok(items.get(index).cloned().unwrap_or(Value::Null))
     }
 
-    fn set_property(&self, vm: &mut Vm, key: &str, value: Value) -> Result<Value, Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: &str, value: Value) -> Result<Value, Value> {
         Ok(Value::Undefined)
     }
 
-    fn apply(&self, vm: &mut Vm, this: Value, args: Vec<Value>) -> Result<Value, Value> {
+    fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
         todo!()
     }
 

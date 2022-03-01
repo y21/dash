@@ -4,7 +4,7 @@ use crate::vm::value::Value;
 pub type NativeFunction = fn(cx: CallContext) -> Result<Value, Value>;
 
 #[derive(Debug)]
-pub struct CallContext<'s> {
+pub struct CallContext<'s, 'c> {
     pub args: Vec<Value>,
-    pub scope: LocalScope<'s>,
+    pub scope: &'c mut LocalScope<'s>,
 }
