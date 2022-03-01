@@ -1,24 +1,24 @@
-use std::{convert::TryInto, fmt, };
+use std::{convert::TryInto, fmt};
 
-use crate::{
-    gc::{handle::Handle, Gc},
-    js_std,
-};
+use crate::gc::{handle::Handle, Gc};
 
 use self::{
     dispatch::HandleResult,
+    external::Externals,
     frame::Frame,
+    local::LocalScope,
+    statics::Statics,
     value::{
-        function::{Function, FunctionKind},
         object::{AnonymousObject, Object},
         Value,
-    }, external::Externals, local::LocalScope,
+    },
 };
 
 pub mod dispatch;
+pub mod external;
 pub mod frame;
 pub mod local;
-pub mod external;
+pub mod statics;
 pub mod value;
 
 pub const MAX_STACK_SIZE: usize = 8196;
@@ -28,12 +28,14 @@ pub struct Vm {
     stack: Vec<Value>,
     gc: Gc<dyn Object>,
     global: Handle<dyn Object>,
-    externals: Externals
+    externals: Externals,
+    statics: Statics,
 }
 
 impl Vm {
     pub fn new() -> Self {
         let mut gc = Gc::new();
+        let statics = Statics::new(&mut gc);
         let global = gc.register(AnonymousObject::new());
 
         let mut vm = Self {
@@ -41,7 +43,8 @@ impl Vm {
             stack: Vec::with_capacity(512),
             gc,
             global,
-            externals: Externals::new()
+            externals: Externals::new(),
+            statics,
         };
         vm.prepare();
         vm
@@ -50,14 +53,15 @@ impl Vm {
     /// Prepare the VM for execution.
     #[rustfmt::skip]
     fn prepare(&mut self) {
-        let global = self.global.clone();
-
         let mut scope = LocalScope::new(self);
 
-        let log = Function::new("log".into(), FunctionKind::Native(js_std::global::log));
-        let log = Value::Object(scope.gc.register(log));
-        
-        global.set_property(&mut scope, "log", log).unwrap();
+        let global = scope.global.clone();
+        let console = scope.statics.console.clone();
+
+        let log = scope.statics.log.clone();
+        console.set_property(&mut scope, "log", log.into()).unwrap();
+
+        global.set_property(&mut scope, "console", console.into()).unwrap();
     }
 
     /// Fetches the current instruction/value in the currently executing frame
