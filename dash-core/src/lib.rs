@@ -6,7 +6,7 @@
 use std::borrow::Cow;
 
 use compiler::error::CompileError;
-use parser::{lexer::Error as LexError, token::Error as ParseError};
+use parser::{consteval::OptLevel, lexer::Error as LexError, token::Error as ParseError};
 use vm::{value::Value, Vm};
 
 use crate::{compiler::FunctionCompiler, parser::parser::Parser, vm::frame::Frame};
@@ -66,7 +66,7 @@ pub fn eval(input: &str) -> Result<(Vm, Value), EvalError> {
     let mut vm = Vm::new();
     let tokens = Parser::from_str(input).map_err(|e| EvalError::LexError(e))?;
     let ast = tokens
-        .parse_all(true)
+        .parse_all(OptLevel::Aggressive)
         .map_err(|e| EvalError::ParseError(e))?;
     let compiled = FunctionCompiler::compile_ast(ast).map_err(|e| EvalError::CompileError(e))?;
     let frame = Frame {

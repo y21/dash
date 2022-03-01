@@ -56,12 +56,23 @@ impl Vm {
         let mut scope = LocalScope::new(self);
 
         let global = scope.global.clone();
-        let console = scope.statics.console.clone();
 
-        let log = scope.statics.log.clone();
-        console.set_property(&mut scope, "log", log.into()).unwrap();
+        let console = {
+            let console = scope.statics.console.clone();
+            let log = scope.statics.log.clone();
+            console.set_property(&mut scope, "log", log.into()).unwrap();
+            console
+        };
+
+        let math = {
+            let math = scope.statics.math.clone();
+            let floor = scope.statics.floor.clone();
+            math.set_property(&mut scope, "floor", floor.into()).unwrap();
+            math
+        };
 
         global.set_property(&mut scope, "console", console.into()).unwrap();
+        global.set_property(&mut scope, "Math", math.into()).unwrap();
     }
 
     /// Fetches the current instruction/value in the currently executing frame

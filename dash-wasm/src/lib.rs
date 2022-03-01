@@ -12,9 +12,26 @@ pub fn eval(s: &str) -> String {
 }
 
 #[wasm_bindgen]
-pub fn decompile(s: &str, o: bool) -> String {
+pub enum OptLevel {
+    None,
+    Basic,
+    Aggressive,
+}
+
+impl From<OptLevel> for dash::parser::consteval::OptLevel {
+    fn from(opt_level: OptLevel) -> Self {
+        match opt_level {
+            OptLevel::None => dash::parser::consteval::OptLevel::None,
+            OptLevel::Basic => dash::parser::consteval::OptLevel::Basic,
+            OptLevel::Aggressive => dash::parser::consteval::OptLevel::Aggressive,
+        }
+    }
+}
+
+#[wasm_bindgen]
+pub fn decompile(s: &str, o: OptLevel) -> String {
     let parser = Parser::from_str(s).unwrap();
-    let ast = parser.parse_all(o).unwrap();
+    let ast = parser.parse_all(o.into()).unwrap();
     let cmp = FunctionCompiler::compile_ast(ast).unwrap();
     decompiler::decompile(cmp).unwrap_or_else(|e| match e {
         decompiler::DecompileError::AbruptEof => String::from("Error: Abrupt end of file"),

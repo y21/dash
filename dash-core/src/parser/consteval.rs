@@ -1,8 +1,14 @@
 use super::{
-    expr::{BinaryExpr, Expr, LiteralExpr},
+    expr::{BinaryExpr, Expr, GroupingExpr, LiteralExpr},
     statement::Statement,
     token::TokenType,
 };
+
+pub enum OptLevel {
+    None,
+    Basic,
+    Aggressive,
+}
 
 /// A trait for evaluating constant expressions.
 pub trait Eval {
@@ -70,6 +76,21 @@ impl<'a> Eval for Expr<'a> {
                 a.fold(can_remove);
                 b.fold(can_remove);
             }
+            Conditional(c) => {
+                c.condition.fold(can_remove);
+                c.el.fold(can_remove);
+                c.then.fold(can_remove);
+
+                match c.condition.is_truthy() {
+                    Some(true) => {
+                        *self = (*c.then).clone();
+                    }
+                    Some(false) => {
+                        *self = (*c.el).clone();
+                    }
+                    _ => {}
+                };
+            }
             _ => {}
         }
     }
@@ -78,6 +99,7 @@ impl<'a> Eval for Expr<'a> {
         match self {
             Self::Binary(b) => b.has_side_effect(),
             Self::Literal(l) => l.has_side_effect(),
+            Self::Grouping(GroupingExpr(ve)) => ve.has_side_effect(),
             _ => true, // assume it does to prevent dead code elimination
         }
     }
@@ -88,6 +110,21 @@ impl<'a> Eval for Statement<'a> {
         match self {
             Self::Expression(e) => e.fold(can_remove),
             Self::Return(r) => r.0.fold(can_remove),
+            Self::If(i) => {
+                match i.condition.is_truthy() {
+                    Some(true) => {
+                        *self = (*i.then).clone();
+                    }
+                    Some(false) => {
+                        if let Some(el) = &i.el {
+                            *self = (**el).clone();
+                        } else {
+                            *self = Statement::Empty;
+                        }
+                    }
+                    _ => {}
+                };
+            }
             _ => {}
         };
 
@@ -113,6 +150,10 @@ impl<'a> Eval for [Statement<'a>] {
             stmt.fold(can_remove && !is_last);
         }
     }
+
+    fn has_side_effect(&self) -> bool {
+        self.iter().any(|e| e.has_side_effect())
+    }
 }
 
 impl<'a> Eval for [Expr<'a>] {
@@ -120,5 +161,9 @@ impl<'a> Eval for [Expr<'a>] {
         for stmt in self.iter_mut() {
             stmt.fold(can_remove);
         }
+    }
+
+    fn has_side_effect(&self) -> bool {
+        self.iter().any(|e| e.has_side_effect())
     }
 }

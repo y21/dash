@@ -149,6 +149,15 @@ impl<'a> Expr<'a> {
             _ => None,
         }
     }
+
+    pub fn is_truthy(&self) -> Option<bool> {
+        match self {
+            Self::Literal(lit) => lit.is_truthy(),
+            Self::Assignment(ass) => ass.right.is_truthy(),
+            Self::Grouping(GroupingExpr(group)) => group.last().and_then(|e| e.is_truthy()),
+            _ => None,
+        }
+    }
 }
 
 /// A property access expression
@@ -271,6 +280,20 @@ impl<'a> LiteralExpr<'a> {
             Self::Null => Cow::Borrowed("null"),
             Self::Number(n) => Cow::Owned(n.to_string()),
             Self::String(s) => Cow::Borrowed(force_utf8_borrowed(s)),
+        }
+    }
+
+    /// Checks whether this literal is always a truthy value
+    ///
+    /// The optimizer may use this for optimizing potential branches
+    pub fn is_truthy(&self) -> Option<bool> {
+        match self {
+            Self::Boolean(b) => Some(*b),
+            Self::Identifier(_) => None,
+            Self::Number(n) => Some(*n != 0.0),
+            Self::String(s) => Some(!s.is_empty()),
+            Self::Null => Some(false),
+            Self::Undefined => Some(false),
         }
     }
 }

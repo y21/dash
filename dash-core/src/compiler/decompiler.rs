@@ -273,6 +273,19 @@ pub fn decompile(
                 output.write_instruction(Unit::Main, "CALL", args);
                 stack += 1;
             }
+            STATICPROPACCESS | STATICPROPACCESSW => {
+                let (name, id) = read_wide(
+                    instr,
+                    ("STATICPROPACCESS", STATICPROPACCESS),
+                    ("STATICPROPACCESSW", STATICPROPACCESSW),
+                    &mut reader,
+                )?;
+                let constant = StackValue::from(cp[id as usize].clone());
+
+                let args: &[&dyn Display] = &[&StackId(stack), &constant];
+                output.write_instruction(Unit::Main, name, args);
+                stack += 1;
+            }
             RET => {
                 output.write_instruction(Unit::Main, "RET", &[StackId(stack)]);
                 break;
@@ -282,4 +295,18 @@ pub fn decompile(
     }
 
     Ok(output.finish())
+}
+
+#[cfg(test)]
+#[test]
+fn test_decompile() {
+    use super::FunctionCompiler;
+    use crate::parser::consteval::OptLevel;
+    use crate::parser::parser::Parser;
+
+    let p = Parser::from_str("a + ((6 * 7 + 8, true) ? 15 ** 6 : 4 + useless)").unwrap();
+    let ast = p.parse_all(OptLevel::Basic).unwrap();
+    let cmp = FunctionCompiler::compile_ast(ast).unwrap();
+    let dec = decompile(cmp).unwrap();
+    println!("{}", dec);
 }
