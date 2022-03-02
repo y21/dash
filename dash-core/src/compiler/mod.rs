@@ -17,8 +17,8 @@ use crate::{
 };
 
 use self::{
-    builder::force_utf8_borrowed,
-    constant::{Constant, ConstantPool},
+    builder::{force_utf8, force_utf8_borrowed},
+    constant::{Constant, ConstantPool, Function},
     error::CompileError,
     instruction::InstructionWriter,
     scope::Scope,
@@ -41,9 +41,23 @@ macro_rules! unimplementedc {
     };
 }
 
-pub struct FunctionCompiler<'a> {
+pub struct SharedCompilerState<'a> {
     cp: ConstantPool,
     scope: Scope<'a>,
+}
+
+impl<'a> SharedCompilerState<'a> {
+    pub fn new() -> Self {
+        Self {
+            cp: ConstantPool::new(),
+            scope: Scope::new(),
+        }
+    }
+}
+
+pub struct FunctionCompiler<'a, 's> {
+    state: SharedCompilerState<'a>,
+    caller: Option<&'s mut SharedCompilerState<'a>>,
 }
 
 #[derive(Debug)]
@@ -53,15 +67,29 @@ pub struct CompileResult {
     pub locals: usize,
 }
 
-impl<'a> FunctionCompiler<'a> {
+impl<'a, 's> FunctionCompiler<'a, 's> {
     fn new() -> Self {
         Self {
-            cp: ConstantPool::new(),
-            scope: Scope::new(),
+            state: SharedCompilerState::new(),
+            caller: None,
         }
     }
 
-    pub fn compile_ast(mut stmts: Vec<Statement<'a>>) -> Result<CompileResult, CompileError> {
+    fn with_caller(caller: &'s mut SharedCompilerState<'a>) -> Self {
+        Self {
+            state: SharedCompilerState::new(),
+            caller: Some(caller),
+        }
+    }
+
+    pub fn compile_ast(stmts: Vec<Statement<'a>>) -> Result<CompileResult, CompileError> {
+        FunctionCompiler::compile_ast_with_state(None, stmts)
+    }
+
+    pub fn compile_ast_with_state(
+        state: Option<&'s mut SharedCompilerState<'a>>,
+        mut stmts: Vec<Statement<'a>>,
+    ) -> Result<CompileResult, CompileError> {
         match stmts.pop() {
             Some(Statement::Return(r)) => {
                 // add removed return back
@@ -79,7 +107,10 @@ impl<'a> FunctionCompiler<'a> {
             }
         }
 
-        let mut compiler = Self::new();
+        let mut compiler = FunctionCompiler::new();
+        if let Some(state) = state {
+            compiler.caller = Some(state);
+        }
         let mut insts = Vec::new();
 
         for stmt in stmts {
@@ -88,8 +119,8 @@ impl<'a> FunctionCompiler<'a> {
 
         Ok(CompileResult {
             instructions: insts,
-            cp: compiler.cp,
-            locals: compiler.scope.locals().len(),
+            cp: compiler.state.cp.clone(),
+            locals: compiler.state.scope.locals().len(),
         })
     }
 
@@ -104,7 +135,7 @@ impl<'a> FunctionCompiler<'a> {
     }
 }
 
-impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
+impl<'a, 's> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a, 's> {
     fn visit_binary_expression(&mut self, e: &BinaryExpr<'a>) -> Result<Vec<u8>, CompileError> {
         let mut ib = InstructionBuilder::new();
         ib.append(&mut self.accept_expr(&e.left)?);
@@ -150,17 +181,17 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
 
     fn visit_literal_expression(&mut self, e: &LiteralExpr<'a>) -> Result<Vec<u8>, CompileError> {
         let mut ib = InstructionBuilder::new();
-        ib.build_constant(&mut self.cp, e.into())?;
+        ib.build_constant(&mut self.state.cp, e.into())?;
         Ok(ib.build())
     }
 
     fn visit_identifier_expression(&mut self, i: &'a [u8]) -> Result<Vec<u8>, CompileError> {
         let mut ib = InstructionBuilder::new();
 
-        if let Some((index, _)) = self.scope.find_local(i) {
+        if let Some((index, _)) = self.state.scope.find_local(i) {
             ib.build_local_load(index);
         } else {
-            ib.build_global_load(&mut self.cp, i)?;
+            ib.build_global_load(&mut self.state.cp, i)?;
         }
 
         Ok(ib.build())
@@ -188,7 +219,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
         v: &VariableDeclaration<'a>,
     ) -> Result<Vec<u8>, CompileError> {
         let mut ib = InstructionBuilder::new();
-        let id = self.scope.add_local(v.binding.clone())?;
+        let id = self.state.scope.add_local(v.binding.clone())?;
 
         if let Some(expr) = &v.value {
             ib.append(&mut self.accept_expr(expr)?);
@@ -252,9 +283,9 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
     }
 
     fn visit_block_statement(&mut self, b: &BlockStatement<'a>) -> Result<Vec<u8>, CompileError> {
-        self.scope.enter();
+        self.state.scope.enter();
         let re = self.accept_multiple(&b.0);
-        self.scope.exit();
+        self.state.scope.exit();
         re
     }
 
@@ -262,7 +293,9 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
         &mut self,
         f: &FunctionDeclaration<'a>,
     ) -> Result<Vec<u8>, CompileError> {
-        unimplementedc!("Function declaration")
+        let ib = InstructionBuilder::new();
+
+        Ok(ib.build())
     }
 
     fn visit_while_loop(&mut self, l: &WhileLoop<'a>) -> Result<Vec<u8>, CompileError> {
@@ -290,7 +323,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
                 let ident = lit.to_identifier();
                 let ident = ident.as_bytes();
 
-                if let Some((id, local)) = self.scope.find_local(ident) {
+                if let Some((id, local)) = self.state.scope.find_local(ident) {
                     if matches!(local.binding().kind, VariableDeclarationKind::Const) {
                         return Err(CompileError::ConstAssignment);
                     }
@@ -299,7 +332,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
                     ib.build_local_store(id);
                 } else {
                     ib.append(&mut self.accept_expr(&e.right)?);
-                    ib.build_global_store(&mut self.cp, ident)?;
+                    ib.build_global_store(&mut self.state.cp, ident)?;
                 }
             }
             _ => unimplementedc!("Assignment to non-identifier"),
@@ -359,7 +392,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
         match &*e.property {
             Expr::Literal(lit) => {
                 let ident = lit.to_identifier();
-                ib.build_static_prop_access(&mut self.cp, ident.as_bytes())?;
+                ib.build_static_prop_access(&mut self.state.cp, ident.as_bytes())?;
             }
             e => {
                 ib.append(&mut self.accept_expr(e)?);
@@ -388,7 +421,21 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
         &mut self,
         f: &FunctionDeclaration<'a>,
     ) -> Result<Vec<u8>, CompileError> {
-        unimplementedc!("Function expression")
+        let mut ib = InstructionBuilder::new();
+        let compiler =
+            FunctionCompiler::compile_ast_with_state(Some(&mut self.state), f.statements.clone())?;
+
+        let function = Function {
+            buffer: compiler.instructions.into(),
+            constants: compiler.cp.into_vec().into(),
+            locals: compiler.locals,
+            name: f.name.map(force_utf8),
+            ty: f.ty,
+        };
+
+        ib.build_constant(&mut self.state.cp, Constant::Function(function))?;
+
+        Ok(ib.build())
     }
 
     fn visit_array_literal(&mut self, a: &ArrayLiteral<'a>) -> Result<Vec<u8>, CompileError> {
@@ -416,7 +463,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
             idents.push(ident);
         }
 
-        ib.build_objlit(&mut self.cp, idents)?;
+        ib.build_objlit(&mut self.state.cp, idents)?;
         Ok(ib.build())
     }
 
@@ -431,7 +478,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
     fn visit_for_loop(&mut self, f: &ForLoop<'a>) -> Result<Vec<u8>, CompileError> {
         let mut ib = InstructionBuilder::new();
 
-        self.scope.enter();
+        self.state.scope.enter();
 
         // Initialization
         if let Some(init) = &f.init {
@@ -456,7 +503,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
         ib.build_jmp(Label::LoopCondition)?;
 
         ib.add_label(Label::LoopEnd);
-        self.scope.exit();
+        self.state.scope.exit();
 
         Ok(ib.build())
     }

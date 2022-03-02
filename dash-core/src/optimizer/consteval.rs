@@ -1,13 +1,20 @@
-use super::{
-    expr::{BinaryExpr, Expr, GroupingExpr, LiteralExpr},
-    statement::Statement,
-    token::TokenType,
-};
+use crate::parser::expr::BinaryExpr;
+use crate::parser::expr::Expr;
+use crate::parser::expr::GroupingExpr;
+use crate::parser::expr::LiteralExpr;
+use crate::parser::statement::Statement;
+use crate::parser::token::TokenType;
 
 pub enum OptLevel {
     None,
     Basic,
     Aggressive,
+}
+
+impl Default for OptLevel {
+    fn default() -> Self {
+        Self::Basic
+    }
 }
 
 /// A trait for evaluating constant expressions.

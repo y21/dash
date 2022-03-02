@@ -9,7 +9,7 @@ use self::{
     local::LocalScope,
     statics::Statics,
     value::{
-        object::{AnonymousObject, Object},
+        object::{NamedObject, Object},
         Value,
     },
 };
@@ -36,7 +36,7 @@ impl Vm {
     pub fn new() -> Self {
         let mut gc = Gc::new();
         let statics = Statics::new(&mut gc);
-        let global = gc.register(AnonymousObject::new());
+        let global = gc.register(NamedObject::new());
 
         let mut vm = Self {
             frames: Vec::new(),
@@ -98,8 +98,8 @@ impl Vm {
 
     /// Pushes a constant at the given index in the current frame on the top of the stack
     pub(crate) fn push_constant(&mut self, idx: usize) -> Result<(), Value> {
-        let frame = self.frames.last_mut().expect("No frame");
-        let value = Value::from_constant(frame.constants[idx].clone());
+        let frame = self.frames.last().expect("No frame");
+        let value = Value::from_constant(frame.constants[idx].clone(), self);
         self.try_push_stack(value)?;
         Ok(())
     }

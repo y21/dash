@@ -102,6 +102,7 @@ impl From<Constant> for StackValue {
             Constant::String(s) => StackValue::String(s),
             Constant::Identifier(i) => StackValue::Identifier(i),
             Constant::Boolean(b) => StackValue::Boolean(b),
+            Constant::Function(_) => todo!(),
             Constant::Null => StackValue::Null,
             Constant::Undefined => StackValue::Undefined,
         }
@@ -301,11 +302,13 @@ pub fn decompile(
 #[test]
 fn test_decompile() {
     use super::FunctionCompiler;
-    use crate::parser::consteval::OptLevel;
+    use crate::optimizer;
+    use crate::optimizer::consteval::OptLevel;
     use crate::parser::parser::Parser;
 
-    let p = Parser::from_str("a + ((6 * 7 + 8, true) ? 15 ** 6 : 4 + useless)").unwrap();
-    let ast = p.parse_all(OptLevel::Basic).unwrap();
+    let parser = Parser::from_str("a + ((6 * 7 + 8, true) ? 15 ** 6 : 4 + useless)").unwrap();
+    let mut ast = parser.parse_all().unwrap();
+    optimizer::optimize_ast(&mut ast, OptLevel::Aggressive);
     let cmp = FunctionCompiler::compile_ast(ast).unwrap();
     let dec = decompile(cmp).unwrap();
     println!("{}", dec);

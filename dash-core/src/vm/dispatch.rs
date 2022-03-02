@@ -9,7 +9,7 @@ pub enum HandleResult {
 mod handlers {
     use crate::vm::local::LocalScope;
     use crate::vm::value::array::Array;
-    use crate::vm::value::object::AnonymousObject;
+    use crate::vm::value::object::NamedObject;
     use crate::vm::value::object::Object;
 
     use super::*;
@@ -42,12 +42,7 @@ mod handlers {
         let value = vm.stack.pop().expect("No return value");
         let this = vm.frames.pop().expect("No frame");
 
-        if vm.frames.is_empty() {
-            // returning from the last frame means we are done
-            Ok(HandleResult::Return(value))
-        } else {
-            todo!()
-        }
+        Ok(HandleResult::Return(value))
     }
 
     pub fn ldglobal(vm: &mut Vm) -> Result<HandleResult, Value> {
@@ -167,7 +162,7 @@ mod handlers {
         let elements = vm.stack.drain(vm.stack.len() - len..).collect::<Vec<_>>();
 
         let mut scope = LocalScope::new(vm);
-        let obj = AnonymousObject::new();
+        let obj = NamedObject::new();
         for element in elements.into_iter() {
             // Object literal constant indices are guaranteed to be 1-byte wide, for now...
             let id = scope.fetch_and_inc_ip();

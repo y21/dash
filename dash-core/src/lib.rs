@@ -6,7 +6,8 @@
 use std::borrow::Cow;
 
 use compiler::error::CompileError;
-use parser::{consteval::OptLevel, lexer::Error as LexError, token::Error as ParseError};
+use optimizer::consteval::OptLevel;
+use parser::{lexer::Error as LexError, token::Error as ParseError};
 use vm::{value::Value, Vm};
 
 use crate::{compiler::FunctionCompiler, parser::parser::Parser, vm::frame::Frame};
@@ -20,6 +21,7 @@ pub mod compiler;
 pub mod gc;
 /// JavaScript standard library
 pub mod js_std;
+pub mod optimizer;
 /// JavaScript lexer and parser
 pub mod parser;
 /// Utility types and functions used in this implementation
@@ -65,14 +67,13 @@ impl<'a> EvalError<'a> {
 pub fn eval(input: &str) -> Result<(Vm, Value), EvalError> {
     let mut vm = Vm::new();
     let tokens = Parser::from_str(input).map_err(|e| EvalError::LexError(e))?;
-    let ast = tokens
-        .parse_all(OptLevel::Aggressive)
-        .map_err(|e| EvalError::ParseError(e))?;
+    let mut ast = tokens.parse_all().map_err(|e| EvalError::ParseError(e))?;
+    optimizer::optimize_ast(&mut ast, OptLevel::Aggressive);
     let compiled = FunctionCompiler::compile_ast(ast).map_err(|e| EvalError::CompileError(e))?;
     let frame = Frame {
         local_count: compiled.locals,
-        buffer: compiled.instructions.into_boxed_slice(),
-        constants: compiled.cp.into_vec().into_boxed_slice(),
+        buffer: compiled.instructions.into(),
+        constants: compiled.cp.into_vec().into(),
         ip: 0,
     };
     let val = vm.execute_frame(frame).map_err(|e| EvalError::VmError(e))?;

@@ -2,9 +2,19 @@ use std::ops::Deref;
 use std::rc::Rc;
 
 use crate::parser::expr::LiteralExpr;
+use crate::parser::statement::FunctionKind;
 
 use super::builder::force_utf8;
 use super::builder::force_utf8_borrowed;
+
+#[derive(Debug, Clone)]
+pub struct Function {
+    pub name: Option<String>,
+    pub buffer: Rc<[u8]>,
+    pub ty: FunctionKind,
+    pub locals: usize,
+    pub constants: Rc<[Constant]>,
+}
 
 #[derive(Debug, Clone)]
 pub enum Constant {
@@ -12,6 +22,7 @@ pub enum Constant {
     String(String),
     Identifier(Rc<str>),
     Boolean(bool),
+    Function(Function),
     Null,
     Undefined,
 }
@@ -59,7 +70,7 @@ impl<'a> From<&LiteralExpr<'a>> for Constant {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ConstantPool {
     constants: Vec<Constant>,
 }

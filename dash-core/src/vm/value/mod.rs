@@ -9,11 +9,15 @@ use std::rc::Rc;
 use crate::{
     compiler::constant::Constant,
     gc::{handle::Handle, trace::Trace},
+    vm::value::function::FunctionKind,
 };
 
-use self::object::Object;
+use self::{
+    function::{user::UserFunction, Function},
+    object::Object,
+};
 
-use super::local::LocalScope;
+use super::{local::LocalScope, Vm};
 #[derive(Debug, Clone)]
 pub enum Value {
     Number(f64),
@@ -33,14 +37,19 @@ unsafe impl Trace for Value {
 }
 
 impl Value {
-    pub fn from_constant(constant: Constant) -> Self {
+    pub fn from_constant(constant: Constant, vm: &mut Vm) -> Self {
         match constant {
             Constant::Number(n) => Value::Number(n),
             Constant::Boolean(b) => Value::Boolean(b),
             Constant::String(s) => Value::String(s.into()),
             Constant::Undefined => Value::Undefined,
             Constant::Null => Value::Null,
-            _ => unimplemented!(),
+            Constant::Function(f) => {
+                let uf = UserFunction::new(f.buffer, f.constants, f.locals);
+                let function = Function::new(f.name, FunctionKind::User(uf));
+                vm.gc.register(function).into()
+            }
+            Constant::Identifier(_) => unreachable!(),
         }
     }
 

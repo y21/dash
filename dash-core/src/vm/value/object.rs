@@ -20,11 +20,11 @@ pub trait Object: Debug + Trace {
 }
 
 #[derive(Debug)]
-pub struct AnonymousObject {
+pub struct NamedObject {
     values: RefCell<HashMap<String, Value>>,
 }
 
-impl AnonymousObject {
+impl NamedObject {
     pub fn new() -> Self {
         Self {
             values: RefCell::new(HashMap::new()),
@@ -32,7 +32,7 @@ impl AnonymousObject {
     }
 }
 
-unsafe impl Trace for AnonymousObject {
+unsafe impl Trace for NamedObject {
     fn trace(&self) {
         let values = self.values.borrow();
         for value in values.values() {
@@ -41,7 +41,7 @@ unsafe impl Trace for AnonymousObject {
     }
 }
 
-impl Object for AnonymousObject {
+impl Object for NamedObject {
     fn get_property(&self, sc: &mut LocalScope, key: &str) -> Result<Value, Value> {
         let map = self.values.borrow();
         map.get(key).cloned().ok_or(Value::Undefined)

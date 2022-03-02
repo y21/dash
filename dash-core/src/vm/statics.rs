@@ -5,7 +5,7 @@ use crate::vm::value::function::Function;
 use crate::vm::value::function::FunctionKind;
 
 use super::value::function::native::NativeFunction;
-use super::value::object::AnonymousObject;
+use super::value::object::NamedObject;
 use super::value::object::Object;
 
 pub struct Statics {
@@ -16,11 +16,11 @@ pub struct Statics {
 }
 
 fn object(gc: &mut Gc<dyn Object>) -> Handle<dyn Object> {
-    gc.register(AnonymousObject::new())
+    gc.register(NamedObject::new())
 }
 
 fn function(gc: &mut Gc<dyn Object>, name: &str, cb: NativeFunction) -> Handle<dyn Object> {
-    let f = Function::new(name.into(), FunctionKind::Native(cb));
+    let f = Function::new(Some(name.into()), FunctionKind::Native(cb));
     gc.register(f)
 }
 

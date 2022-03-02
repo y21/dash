@@ -1,5 +1,6 @@
 use dash::compiler::decompiler;
 use dash::compiler::FunctionCompiler;
+use dash::optimizer;
 use dash::parser::parser::Parser;
 use wasm_bindgen::prelude::*;
 
@@ -18,12 +19,12 @@ pub enum OptLevel {
     Aggressive,
 }
 
-impl From<OptLevel> for dash::parser::consteval::OptLevel {
+impl From<OptLevel> for dash::optimizer::consteval::OptLevel {
     fn from(opt_level: OptLevel) -> Self {
         match opt_level {
-            OptLevel::None => dash::parser::consteval::OptLevel::None,
-            OptLevel::Basic => dash::parser::consteval::OptLevel::Basic,
-            OptLevel::Aggressive => dash::parser::consteval::OptLevel::Aggressive,
+            OptLevel::None => dash::optimizer::consteval::OptLevel::None,
+            OptLevel::Basic => dash::optimizer::consteval::OptLevel::Basic,
+            OptLevel::Aggressive => dash::optimizer::consteval::OptLevel::Aggressive,
         }
     }
 }
@@ -31,7 +32,8 @@ impl From<OptLevel> for dash::parser::consteval::OptLevel {
 #[wasm_bindgen]
 pub fn decompile(s: &str, o: OptLevel) -> String {
     let parser = Parser::from_str(s).unwrap();
-    let ast = parser.parse_all(o.into()).unwrap();
+    let mut ast = parser.parse_all().unwrap();
+    optimizer::optimize_ast(&mut ast, o.into());
     let cmp = FunctionCompiler::compile_ast(ast).unwrap();
     decompiler::decompile(cmp).unwrap_or_else(|e| match e {
         decompiler::DecompileError::AbruptEof => String::from("Error: Abrupt end of file"),
