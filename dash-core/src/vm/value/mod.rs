@@ -1,5 +1,6 @@
 pub mod array;
 pub mod conversions;
+pub mod error;
 pub mod function;
 pub mod object;
 pub mod ops;

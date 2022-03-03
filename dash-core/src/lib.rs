@@ -3,7 +3,8 @@
 // #![deny(missing_docs)]
 #![allow(unused_unsafe, dead_code, unused_variables)]
 
-use std::borrow::Cow;
+use core::fmt;
+use std::error::Error;
 
 use compiler::error::CompileError;
 use optimizer::consteval::OptLevel;
@@ -42,27 +43,28 @@ pub enum EvalError<'a> {
     VmError(Value),
 }
 
-impl<'a> EvalError<'a> {
-    /// Formats this error by calling to_string on the underlying error
-    pub fn to_string(&self) -> Cow<str> {
+impl<'a> fmt::Display for EvalError<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::LexError(l) => Cow::Owned(
-                l.iter()
-                    .map(|e| e.to_string().to_string())
-                    .collect::<Vec<String>>()
-                    .join("\n"),
-            ),
-            Self::ParseError(p) => Cow::Owned(
-                p.iter()
-                    .map(|e| e.to_string())
-                    .collect::<Vec<String>>()
-                    .join("\n"),
-            ),
-            Self::CompileError(c) => Cow::Owned(format!("{:?}", c)),
-            Self::VmError(v) => Cow::Owned(format!("{:?}", v)),
+            Self::CompileError(c) => write!(f, "{:?}", c),
+            Self::LexError(l) => {
+                for e in l {
+                    write!(f, "{}\n", e.to_string())?;
+                }
+                Ok(())
+            }
+            Self::ParseError(p) => {
+                for e in p {
+                    write!(f, "{}\n", e.to_string())?;
+                }
+                Ok(())
+            }
+            Self::VmError(v) => write!(f, "{:?}", v),
         }
     }
 }
+
+impl<'a> Error for EvalError<'a> {}
 
 pub fn eval(input: &str) -> Result<(Vm, Value), EvalError> {
     let mut vm = Vm::new();

@@ -6,7 +6,6 @@ edition = "2018"
 
 [dependencies]
 dash = { path = "../dash-core" }
-runtime = { path = "../dash-rt", features = ["random"] }
-structopt = "0.3"
-console = "0.14.1"
-backtrace = "0.3.61"
+anyhow = "1.0"
+clap = "3.0.0"
+rustyline = "9.1.2"
