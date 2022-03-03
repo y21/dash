@@ -42,10 +42,9 @@ mod handlers {
         let value = vm.stack.pop().expect("No return value");
         let this = vm.frames.pop().expect("No frame");
 
-        if let Some(caller) = vm.frames.last() {
-            let sp = caller.sp;
-            unsafe { vm.stack.set_len(sp) };
-        }
+        unsafe {
+            vm.stack.set_len(this.sp);
+        };
 
         Ok(HandleResult::Return(value))
     }
@@ -130,7 +129,7 @@ mod handlers {
         let id = vm.fetch_and_inc_ip() as usize;
         let value = vm.stack.pop().expect("No value");
 
-        vm.stack[id] = value.clone();
+        vm.set_local(id, value.clone());
         vm.try_push_stack(value)?;
 
         Ok(HandleResult::Continue)
@@ -138,7 +137,7 @@ mod handlers {
 
     pub fn ldlocal(vm: &mut Vm) -> Result<HandleResult, Value> {
         let id = vm.fetch_and_inc_ip();
-        let value = vm.stack[id as usize].clone();
+        let value = vm.get_local(id as usize).expect("Invalid local reference");
 
         vm.try_push_stack(value)?;
         Ok(HandleResult::Continue)

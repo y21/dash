@@ -66,19 +66,13 @@ impl<'a> EvalError<'a> {
 
 pub fn eval(input: &str) -> Result<(Vm, Value), EvalError> {
     let mut vm = Vm::new();
-    let tokens = Parser::from_str(input).map_err(|e| EvalError::LexError(e))?;
-    let mut ast = tokens.parse_all().map_err(|e| EvalError::ParseError(e))?;
+    let tokens = Parser::from_str(input).map_err(EvalError::LexError)?;
+    let mut ast = tokens.parse_all().map_err(EvalError::ParseError)?;
     optimizer::optimize_ast(&mut ast, OptLevel::Aggressive);
     let compiled = FunctionCompiler::new()
         .compile_ast(ast)
-        .map_err(|e| EvalError::CompileError(e))?;
-    let frame = Frame {
-        local_count: compiled.locals,
-        buffer: compiled.instructions.into(),
-        constants: compiled.cp.into_vec().into(),
-        ip: 0,
-        sp: 0,
-    };
+        .map_err(EvalError::CompileError)?;
+    let frame = Frame::from(compiled);
     let val = vm.execute_frame(frame).map_err(|e| EvalError::VmError(e))?;
     Ok((vm, val))
 }

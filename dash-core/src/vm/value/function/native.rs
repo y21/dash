@@ -7,4 +7,5 @@ pub type NativeFunction = fn(cx: CallContext) -> Result<Value, Value>;
 pub struct CallContext<'s, 'c> {
     pub args: Vec<Value>,
     pub scope: &'c mut LocalScope<'s>,
+    pub this: Value,
 }

@@ -212,6 +212,7 @@ impl<'a, 's> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a,
         if let Some(expr) = &v.value {
             ib.append(&mut self.accept_expr(expr)?);
             ib.build_local_store(id);
+            ib.build_pop();
         }
 
         Ok(ib.build())
@@ -281,8 +282,14 @@ impl<'a, 's> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a,
         &mut self,
         f: &FunctionDeclaration<'a>,
     ) -> Result<Vec<u8>, CompileError> {
-        let ib = InstructionBuilder::new();
-
+        let mut ib = InstructionBuilder::new();
+        let id = self.state.scope.add_local(VariableBinding {
+            name: f.name.expect("Function declaration did not have a name"),
+            kind: VariableDeclarationKind::Var,
+        })?;
+        ib.append(&mut self.visit_function_expr(f)?);
+        ib.build_local_store(id);
+        ib.build_pop();
         Ok(ib.build())
     }
 

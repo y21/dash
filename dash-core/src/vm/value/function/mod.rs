@@ -67,25 +67,20 @@ impl Object for Function {
     ) -> Result<super::Value, super::Value> {
         match &self.kind {
             FunctionKind::Native(native) => {
-                let cx = CallContext { args, scope };
+                let cx = CallContext { args, scope, this };
                 let result = native(cx);
                 result
             }
             FunctionKind::User(uf) => {
                 let sp = scope.stack.len();
-                scope.frames.last_mut().expect("No frame").sp = sp;
 
                 let argc = std::cmp::min(uf.params(), args.len());
 
                 scope.stack.extend(args.into_iter().rev().take(argc));
 
-                let frame = Frame {
-                    buffer: uf.buffer().clone(),
-                    constants: uf.constants().clone(),
-                    ip: 0,
-                    sp: 0,
-                    local_count: uf.locals(),
-                };
+                let mut frame = Frame::from(uf);
+                frame.sp = sp;
+
                 scope.vm.execute_frame(frame)
             }
         }

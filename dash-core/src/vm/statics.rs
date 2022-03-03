@@ -8,7 +8,11 @@ use super::value::function::native::NativeFunction;
 use super::value::object::NamedObject;
 use super::value::object::Object;
 
+use std::rc::Rc;
+
 pub struct Statics {
+    pub true_lit: Rc<str>,
+    pub false_lit: Rc<str>,
     pub console: Handle<dyn Object>,
     pub math: Handle<dyn Object>,
     pub log: Handle<dyn Object>,
@@ -27,10 +31,20 @@ fn function(gc: &mut Gc<dyn Object>, name: &str, cb: NativeFunction) -> Handle<d
 impl Statics {
     pub fn new(gc: &mut Gc<dyn Object>) -> Self {
         Self {
+            true_lit: "true".into(),
+            false_lit: "false".into(),
             console: object(gc),
             math: object(gc),
             log: function(gc, "log", js_std::global::log),
             floor: function(gc, "floor", js_std::math::floor),
         }
+    }
+
+    pub fn get_true(&self) -> Rc<str> {
+        self.true_lit.clone()
+    }
+
+    pub fn get_false(&self) -> Rc<str> {
+        self.false_lit.clone()
     }
 }

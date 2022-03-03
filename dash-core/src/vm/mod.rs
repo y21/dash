@@ -19,6 +19,7 @@ pub mod external;
 pub mod frame;
 pub mod local;
 pub mod statics;
+pub mod util;
 pub mod value;
 
 pub const MAX_STACK_SIZE: usize = 8196;
@@ -104,6 +105,19 @@ impl Vm {
         Ok(())
     }
 
+    pub(crate) fn get_frame_sp(&self) -> usize {
+        self.frames.last().map(|frame| frame.sp).expect("No frame")
+    }
+
+    pub(crate) fn get_local(&self, id: usize) -> Option<Value> {
+        self.stack.get(self.get_frame_sp() + id).cloned()
+    }
+
+    pub(crate) fn set_local(&mut self, id: usize, value: Value) {
+        let sp = self.get_frame_sp();
+        self.stack[sp + id] = value;
+    }
+
     pub(crate) fn try_push_stack(&mut self, value: Value) -> Result<(), Value> {
         if self.stack.len() > MAX_STACK_SIZE {
             panic!("Stack overflow"); // todo: return result
@@ -129,6 +143,10 @@ impl Vm {
             }
         }
     }
+
+    pub fn statics(&self) -> &Statics {
+        &self.statics
+    }
 }
 
 impl fmt::Debug for Vm {
@@ -139,12 +157,20 @@ impl fmt::Debug for Vm {
 
 #[test]
 fn test_eval() {
-    let (vm, value) = crate::eval("((a,b) => a+b+9)(4,5)").unwrap();
+    let (vm, value) = crate::eval(
+        r#"
+        function add(a,b) {
+            return a +b
+        }
+        add(10, 7) + 1
+    "#,
+    )
+    .unwrap();
 
     assert_eq!(vm.stack.len(), 0);
     assert_eq!(vm.frames.len(), 0);
     match value {
         Value::Number(n) => assert_eq!(n, 18.0),
-        _ => unreachable!(),
+        _ => unreachable!("{:?}", value),
     }
 }

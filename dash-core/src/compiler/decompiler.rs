@@ -92,6 +92,7 @@ enum StackValue {
     String(String),
     Identifier(Rc<str>),
     Boolean(bool),
+    Function(Option<String>),
     Null,
     Undefined,
 }
@@ -102,7 +103,7 @@ impl From<Constant> for StackValue {
             Constant::String(s) => StackValue::String(s),
             Constant::Identifier(i) => StackValue::Identifier(i),
             Constant::Boolean(b) => StackValue::Boolean(b),
-            Constant::Function(_) => todo!(),
+            Constant::Function(f) => StackValue::Function(f.name),
             Constant::Null => StackValue::Null,
             Constant::Undefined => StackValue::Undefined,
         }
@@ -117,6 +118,9 @@ impl fmt::Display for StackValue {
             StackValue::Boolean(b) => write!(f, "{}", b),
             StackValue::Null => write!(f, "null"),
             StackValue::Undefined => write!(f, "undefined"),
+            StackValue::Function(n) => {
+                write!(f, "function {}", n.as_deref().unwrap_or("{{unnamed}}"))
+            }
         }
     }
 }
@@ -306,7 +310,16 @@ fn test_decompile() {
     use crate::optimizer::consteval::OptLevel;
     use crate::parser::parser::Parser;
 
-    let parser = Parser::from_str("a + ((6 * 7 + 8, true) ? 15 ** 6 : 4 + useless)").unwrap();
+    let parser = Parser::from_str(
+        r#"
+    function add(a, b) {
+        return a + b + 65 + 8;
+    }
+    
+    add(5) + 1
+    "#,
+    )
+    .unwrap();
     let mut ast = parser.parse_all().unwrap();
     optimizer::optimize_ast(&mut ast, OptLevel::Aggressive);
     let cmp = FunctionCompiler::new().compile_ast(ast).unwrap();

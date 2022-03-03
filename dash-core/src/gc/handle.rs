@@ -30,6 +30,10 @@ impl<T: ?Sized> Handle<T> {
     pub unsafe fn new(ptr: NonNull<InnerHandle<T>>) -> Self {
         Handle(ptr)
     }
+
+    pub fn as_ptr(&self) -> *mut InnerHandle<T> {
+        self.0.as_ptr()
+    }
 }
 
 unsafe impl<T: ?Sized> Trace for Handle<T> {
