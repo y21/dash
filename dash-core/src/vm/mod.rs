@@ -136,3 +136,15 @@ impl fmt::Debug for Vm {
         f.write_str("Vm")
     }
 }
+
+#[test]
+fn test_eval() {
+    let (vm, value) = crate::eval("((a,b) => a+b+9)(4,5)").unwrap();
+
+    assert_eq!(vm.stack.len(), 0);
+    assert_eq!(vm.frames.len(), 0);
+    match value {
+        Value::Number(n) => assert_eq!(n, 18.0),
+        _ => unreachable!(),
+    }
+}

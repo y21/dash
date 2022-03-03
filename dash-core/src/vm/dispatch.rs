@@ -42,6 +42,11 @@ mod handlers {
         let value = vm.stack.pop().expect("No return value");
         let this = vm.frames.pop().expect("No frame");
 
+        if let Some(caller) = vm.frames.last() {
+            let sp = caller.sp;
+            unsafe { vm.stack.set_len(sp) };
+        }
+
         Ok(HandleResult::Return(value))
     }
 

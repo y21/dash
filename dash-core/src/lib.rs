@@ -69,12 +69,15 @@ pub fn eval(input: &str) -> Result<(Vm, Value), EvalError> {
     let tokens = Parser::from_str(input).map_err(|e| EvalError::LexError(e))?;
     let mut ast = tokens.parse_all().map_err(|e| EvalError::ParseError(e))?;
     optimizer::optimize_ast(&mut ast, OptLevel::Aggressive);
-    let compiled = FunctionCompiler::compile_ast(ast).map_err(|e| EvalError::CompileError(e))?;
+    let compiled = FunctionCompiler::new()
+        .compile_ast(ast)
+        .map_err(|e| EvalError::CompileError(e))?;
     let frame = Frame {
         local_count: compiled.locals,
         buffer: compiled.instructions.into(),
         constants: compiled.cp.into_vec().into(),
         ip: 0,
+        sp: 0,
     };
     let val = vm.execute_frame(frame).map_err(|e| EvalError::VmError(e))?;
     Ok((vm, val))

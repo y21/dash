@@ -8,4 +8,5 @@ pub struct Frame {
     pub local_count: usize,
     pub constants: Rc<[Constant]>,
     pub buffer: Rc<[u8]>,
+    pub sp: usize,
 }

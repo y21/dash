@@ -34,7 +34,7 @@ pub fn decompile(s: &str, o: OptLevel) -> String {
     let parser = Parser::from_str(s).unwrap();
     let mut ast = parser.parse_all().unwrap();
     optimizer::optimize_ast(&mut ast, o.into());
-    let cmp = FunctionCompiler::compile_ast(ast).unwrap();
+    let cmp = FunctionCompiler::new().compile_ast(ast).unwrap();
     decompiler::decompile(cmp).unwrap_or_else(|e| match e {
         decompiler::DecompileError::AbruptEof => String::from("Error: Abrupt end of file"),
         decompiler::DecompileError::UnknownInstruction(u) => {

@@ -6,14 +6,16 @@ pub struct UserFunction {
     buffer: Rc<[u8]>,
     constants: Rc<[Constant]>,
     locals: usize,
+    params: usize,
 }
 
 impl UserFunction {
-    pub fn new(buffer: Rc<[u8]>, constants: Rc<[Constant]>, locals: usize) -> Self {
+    pub fn new(buffer: Rc<[u8]>, constants: Rc<[Constant]>, locals: usize, params: usize) -> Self {
         Self {
             buffer,
             constants,
             locals,
+            params,
         }
     }
 
@@ -27,5 +29,9 @@ impl UserFunction {
 
     pub fn locals(&self) -> usize {
         self.locals
+    }
+
+    pub fn params(&self) -> usize {
+        self.params
     }
 }

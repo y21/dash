@@ -309,7 +309,7 @@ fn test_decompile() {
     let parser = Parser::from_str("a + ((6 * 7 + 8, true) ? 15 ** 6 : 4 + useless)").unwrap();
     let mut ast = parser.parse_all().unwrap();
     optimizer::optimize_ast(&mut ast, OptLevel::Aggressive);
-    let cmp = FunctionCompiler::compile_ast(ast).unwrap();
+    let cmp = FunctionCompiler::new().compile_ast(ast).unwrap();
     let dec = decompile(cmp).unwrap();
     println!("{}", dec);
 }

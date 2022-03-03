@@ -13,6 +13,7 @@ pub struct Function {
     pub buffer: Rc<[u8]>,
     pub ty: FunctionKind,
     pub locals: usize,
+    pub params: usize,
     pub constants: Rc<[Constant]>,
 }
 

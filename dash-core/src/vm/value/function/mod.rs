@@ -72,10 +72,18 @@ impl Object for Function {
                 result
             }
             FunctionKind::User(uf) => {
+                let sp = scope.stack.len();
+                scope.frames.last_mut().expect("No frame").sp = sp;
+
+                let argc = std::cmp::min(uf.params(), args.len());
+
+                scope.stack.extend(args.into_iter().rev().take(argc));
+
                 let frame = Frame {
                     buffer: uf.buffer().clone(),
                     constants: uf.constants().clone(),
                     ip: 0,
+                    sp: 0,
                     local_count: uf.locals(),
                 };
                 scope.vm.execute_frame(frame)

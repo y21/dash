@@ -9,8 +9,8 @@ use crate::{
         },
         statement::{
             BlockStatement, Class, ExportKind, ForLoop, ForOfLoop, FunctionDeclaration,
-            IfStatement, ImportKind, ReturnStatement, Statement, TryCatch, VariableDeclaration,
-            VariableDeclarationKind, WhileLoop,
+            IfStatement, ImportKind, ReturnStatement, Statement, TryCatch, VariableBinding,
+            VariableDeclaration, VariableDeclarationKind, WhileLoop,
         },
         token::TokenType,
     },
@@ -67,64 +67,52 @@ pub struct CompileResult {
     pub locals: usize,
 }
 
+fn ast_insert_return<'a>(ast: &mut Vec<Statement<'a>>) {
+    match ast.last_mut() {
+        Some(Statement::Return(..)) => {}
+        Some(Statement::Expression(_)) => {
+            let expr = if let Statement::Expression(expr) = ast.pop().unwrap() {
+                expr
+            } else {
+                unreachable!()
+            };
+
+            ast.push(Statement::Return(ReturnStatement(expr)));
+        }
+        Some(Statement::Block(b)) => ast_insert_return(&mut b.0),
+        _ => ast.push(Statement::Return(ReturnStatement::default())),
+    }
+}
+
 impl<'a, 's> FunctionCompiler<'a, 's> {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             state: SharedCompilerState::new(),
             caller: None,
         }
     }
 
-    fn with_caller(caller: &'s mut SharedCompilerState<'a>) -> Self {
+    pub fn with_caller(caller: &'s mut SharedCompilerState<'a>) -> Self {
         Self {
             state: SharedCompilerState::new(),
             caller: Some(caller),
         }
     }
 
-    pub fn compile_ast(stmts: Vec<Statement<'a>>) -> Result<CompileResult, CompileError> {
-        FunctionCompiler::compile_ast_with_state(None, stmts)
-    }
-
-    pub fn compile_ast_with_state(
-        state: Option<&'s mut SharedCompilerState<'a>>,
-        mut stmts: Vec<Statement<'a>>,
+    pub fn compile_ast(
+        mut self,
+        mut ast: Vec<Statement<'a>>,
     ) -> Result<CompileResult, CompileError> {
-        match stmts.pop() {
-            Some(Statement::Return(r)) => {
-                // add removed return back
-                stmts.push(Statement::Return(r));
-            }
-            Some(Statement::Expression(e)) => {
-                // if it's an expression, we'll turn it into a return statement
-                stmts.push(Statement::Return(ReturnStatement(e)));
-            }
-            _ => {
-                // otherwise we'll add `return undefined`
-                stmts.push(Statement::Return(
-                    ReturnStatement(Expr::undefined_literal()),
-                ));
-            }
-        }
-
-        let mut compiler = FunctionCompiler::new();
-        if let Some(state) = state {
-            compiler.caller = Some(state);
-        }
-        let mut insts = Vec::new();
-
-        for stmt in stmts {
-            insts.append(&mut compiler.accept(&stmt)?);
-        }
-
+        ast_insert_return(&mut ast);
+        let instructions = self.accept_multiple(&ast)?;
         Ok(CompileResult {
-            instructions: insts,
-            cp: compiler.state.cp.clone(),
-            locals: compiler.state.scope.locals().len(),
+            instructions,
+            cp: self.state.cp,
+            locals: self.state.scope.locals().len(),
         })
     }
 
-    fn accept_multiple(&mut self, v: &[Statement<'a>]) -> Result<Vec<u8>, CompileError> {
+    pub fn accept_multiple(&mut self, v: &[Statement<'a>]) -> Result<Vec<u8>, CompileError> {
         let mut insts = Vec::new();
 
         for stmt in v {
@@ -422,17 +410,26 @@ impl<'a, 's> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a,
         f: &FunctionDeclaration<'a>,
     ) -> Result<Vec<u8>, CompileError> {
         let mut ib = InstructionBuilder::new();
-        let compiler =
-            FunctionCompiler::compile_ast_with_state(Some(&mut self.state), f.statements.clone())?;
+        let mut compiler = FunctionCompiler::with_caller(&mut self.state);
+        let scope = &mut compiler.state.scope;
+
+        for name in &f.arguments {
+            scope.add_local(VariableBinding {
+                kind: VariableDeclarationKind::Var,
+                name,
+            })?;
+        }
+
+        let cmp = compiler.compile_ast(f.statements.clone())?;
 
         let function = Function {
-            buffer: compiler.instructions.into(),
-            constants: compiler.cp.into_vec().into(),
-            locals: compiler.locals,
+            buffer: cmp.instructions.into(),
+            constants: cmp.cp.into_vec().into(),
+            locals: cmp.locals,
             name: f.name.map(force_utf8),
             ty: f.ty,
+            params: f.arguments.len(),
         };
-
         ib.build_constant(&mut self.state.cp, Constant::Function(function))?;
 
         Ok(ib.build())
