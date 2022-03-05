@@ -16,7 +16,7 @@ pub fn eval(s: &str) -> String {
             Value::Undefined => String::from("undefined"),
             Value::Object(o) => format!("{:?}", o.as_ptr()),
         },
-        Err(e) => e.to_string().into_owned(),
+        Err(e) => e.to_string(),
     }
 }
 

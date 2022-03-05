@@ -4,6 +4,7 @@ use super::{
     builder::{force_utf8_borrowed, InstructionBuilder, Label},
     constant::{Constant, ConstantPool, LimitExceededError},
     error::CompileError,
+    FunctionCallMetadata,
 };
 
 /// Adds two values together
@@ -56,6 +57,7 @@ pub const ARRAYLIT: u8 = 0x26;
 pub const ARRAYLITW: u8 = 0x27;
 pub const OBJLIT: u8 = 0x28;
 pub const OBJLITW: u8 = 0x29;
+pub const THIS: u8 = 0x30;
 
 #[rustfmt::skip]
 pub trait InstructionWriter {
@@ -97,6 +99,8 @@ pub trait InstructionWriter {
     fn build_pop(&mut self);
     /// Builds the [RET] instruction
     fn build_ret(&mut self);
+    /// Builds the [THIS] instruction
+    fn build_this(&mut self);
     /// Builds the [JMPFALSEP] and [JMPFALSEWP] instructions
     fn build_jmpfalsep(&mut self, label: Label) -> Result<(), LimitExceededError>;
     /// Builds the [ARRAYLIT] and [ARRAYLITW] instructions
@@ -109,9 +113,9 @@ pub trait InstructionWriter {
     ) -> Result<(), CompileError>;
     /// Builds the [JMP] and [JMPW] instructions
     fn build_jmp(&mut self, label: Label) -> Result<(), LimitExceededError>;
-    fn build_call(&mut self, argc: u8, is_constructor: bool);
-    fn build_static_prop_access(&mut self, cp: &mut ConstantPool, ident: &[u8]) -> Result<(), LimitExceededError>;
-    fn build_dynamic_prop_access(&mut self);
+    fn build_call(&mut self, meta: FunctionCallMetadata);
+    fn build_static_prop_access(&mut self, cp: &mut ConstantPool, ident: &[u8], preserve_this: bool) -> Result<(), LimitExceededError>;
+    fn build_dynamic_prop_access(&mut self, preserve_this: bool);
     fn build_constant(&mut self, cp: &mut ConstantPool, constant: Constant) -> Result<(), LimitExceededError>;
     fn build_local_load(&mut self, index: u16);
     fn build_global_load(&mut self, cp: &mut ConstantPool, ident: &[u8]) -> Result<(), LimitExceededError>;
@@ -149,7 +153,8 @@ impl InstructionWriter for InstructionBuilder {
         build_typeof TYPEOF,
         build_bitnot BITNOT,
         build_not NOT,
-        build_ret RET
+        build_ret RET,
+        build_this THIS
     }
 
     fn build_constant(
@@ -189,8 +194,8 @@ impl InstructionWriter for InstructionBuilder {
         self.write_wide_instr(STORELOCAL, STORELOCALW, id);
     }
 
-    fn build_call(&mut self, argc: u8, is_constructor: bool) {
-        self.write_arr([CALL, argc, is_constructor as u8]);
+    fn build_call(&mut self, meta: FunctionCallMetadata) {
+        self.write_arr([CALL, meta.into()]);
     }
 
     fn build_jmpfalsep(&mut self, label: Label) -> Result<(), LimitExceededError> {
@@ -211,15 +216,17 @@ impl InstructionWriter for InstructionBuilder {
         &mut self,
         cp: &mut ConstantPool,
         ident: &[u8],
+        preserve_this: bool,
     ) -> Result<(), LimitExceededError> {
         let id = cp.add(Constant::Identifier(force_utf8_borrowed(ident).into()))?;
         self.write_wide_instr(STATICPROPACCESS, STATICPROPACCESSW, id);
+        self.write(preserve_this.into());
 
         Ok(())
     }
 
-    fn build_dynamic_prop_access(&mut self) {
-        self.write(DYNAMICPROPACCESS);
+    fn build_dynamic_prop_access(&mut self, preserve_this: bool) {
+        self.write_arr([DYNAMICPROPACCESS, preserve_this.into()]);
     }
 
     fn build_arraylit(&mut self, len: u16) {

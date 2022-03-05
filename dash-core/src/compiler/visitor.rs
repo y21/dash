@@ -46,7 +46,7 @@ pub trait Visitor<'a, V> {
             Expr::Unary(e) => self.visit_unary_expression(e),
             Expr::Call(e) => self.visit_function_call(e),
             Expr::Conditional(e) => self.visit_conditional_expr(e),
-            Expr::PropertyAccess(e) => self.visit_property_access_expr(e),
+            Expr::PropertyAccess(e) => self.visit_property_access_expr(e, false),
             Expr::Sequence(e) => self.visit_sequence_expr(e),
             Expr::Postfix(e) => self.visit_postfix_expr(e),
             Expr::Function(e) => self.visit_function_expr(e),
@@ -104,7 +104,7 @@ pub trait Visitor<'a, V> {
     /// Visits a property access expression
     ///
     /// This includes both computed access and static access
-    fn visit_property_access_expr(&mut self, e: &PropertyAccessExpr<'a>) -> V;
+    fn visit_property_access_expr(&mut self, e: &PropertyAccessExpr<'a>, preserve_this: bool) -> V;
 
     /// Visits a sequence expression
     fn visit_sequence_expr(&mut self, s: &Seq<'a>) -> V;

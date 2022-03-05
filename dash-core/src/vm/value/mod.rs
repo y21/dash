@@ -9,11 +9,12 @@ use std::rc::Rc;
 
 use crate::{
     compiler::constant::Constant,
-    gc::{handle::Handle, trace::Trace},
+    gc::{handle::Handle, trace::Trace, Gc},
     vm::value::function::FunctionKind,
 };
 
 use self::{
+    error::Error,
     function::{user::UserFunction, Function},
     object::Object,
 };
@@ -83,6 +84,7 @@ impl Value {
 
 pub trait ValueContext {
     fn unwrap_or_undefined(self) -> Value;
+    fn context<S: Into<String>>(self, gc: &mut Gc<dyn Object>, message: S) -> Result<Value, Value>;
 }
 
 impl ValueContext for Option<Value> {
@@ -92,6 +94,16 @@ impl ValueContext for Option<Value> {
             None => Value::Undefined,
         }
     }
+
+    fn context<S: Into<String>>(self, gc: &mut Gc<dyn Object>, message: S) -> Result<Value, Value> {
+        match self {
+            Some(x) => Ok(x),
+            None => Err({
+                let error = Error::new(message);
+                gc.register(error).into()
+            }),
+        }
+    }
 }
 
 impl ValueContext for Option<&Value> {
@@ -99,6 +111,16 @@ impl ValueContext for Option<&Value> {
         match self {
             Some(x) => x.clone(), // Values are cheap to clone
             None => Value::Undefined,
+        }
+    }
+
+    fn context<S: Into<String>>(self, gc: &mut Gc<dyn Object>, message: S) -> Result<Value, Value> {
+        match self {
+            Some(x) => Ok(x.clone()),
+            None => Err({
+                let error = Error::new(message);
+                gc.register(error).into()
+            }),
         }
     }
 }

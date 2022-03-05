@@ -7,6 +7,7 @@ pub enum HandleResult {
 }
 
 mod handlers {
+    use crate::compiler::FunctionCallMetadata;
     use crate::vm::local::LocalScope;
     use crate::vm::value::array::Array;
     use crate::vm::value::object::NamedObject;
@@ -71,8 +72,10 @@ mod handlers {
     }
 
     pub fn call(vm: &mut Vm) -> Result<HandleResult, Value> {
-        let argc = vm.fetch_and_inc_ip();
-        let is_constructor = vm.fetch_and_inc_ip();
+        let meta = FunctionCallMetadata::from(vm.fetch_and_inc_ip());
+        let argc = meta.value();
+        let is_constructor = meta.is_constructor_call();
+        let has_this = meta.is_object_call();
 
         let mut args = Vec::with_capacity(argc.into());
         let mut refs = Vec::new();
@@ -86,10 +89,17 @@ mod handlers {
         }
 
         let callee = vm.stack.pop().expect("Missing callee");
+
+        let this = if has_this {
+            vm.stack.pop().expect("Missing this")
+        } else {
+            Value::Undefined
+        };
+
         let mut scope = LocalScope::new(vm);
         let scoper = &scope as *const LocalScope;
         unsafe { scope.externals.add(scoper, refs) };
-        let ret = callee.apply(&mut scope, Value::Undefined, args)?;
+        let ret = callee.apply(&mut scope, this, args)?;
 
         vm.try_push_stack(ret)?;
         Ok(HandleResult::Continue)
@@ -206,8 +216,19 @@ mod handlers {
             .expect("Referenced constant is not an identifier")
             .clone();
 
+        let preserve_this = vm.fetch_and_inc_ip() == 1;
+
         let mut scope = LocalScope::new(vm);
-        let target = scope.stack.pop().expect("No value");
+        // TODO: add scope to externals because calling get_property can invoke getters
+
+        let target = if preserve_this {
+            scope.stack.last().cloned()
+        } else {
+            scope.stack.pop()
+        };
+
+        let target = target.expect("Missing target");
+
         let value = target.get_property(&mut scope, &ident)?;
         vm.try_push_stack(value)?;
         Ok(HandleResult::Continue)

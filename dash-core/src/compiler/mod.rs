@@ -339,7 +339,15 @@ impl<'a, 's> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a,
     fn visit_function_call(&mut self, c: &FunctionCall<'a>) -> Result<Vec<u8>, CompileError> {
         let mut ib = InstructionBuilder::new();
 
-        ib.append(&mut self.accept_expr(&c.target)?);
+        // specialize property access
+        let has_this = if let Expr::PropertyAccess(p) = &*c.target {
+            ib.append(&mut self.visit_property_access_expr(p, true)?);
+            true
+        } else {
+            ib.append(&mut self.accept_expr(&c.target)?);
+            false
+        };
+
         for a in &c.arguments {
             ib.append(&mut self.accept_expr(a)?);
         }
@@ -349,7 +357,10 @@ impl<'a, 's> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a,
             .try_into()
             .map_err(|_| CompileError::ParameterLimitExceeded)?;
 
-        ib.build_call(argc, c.constructor_call);
+        let meta = FunctionCallMetadata::new_checked(argc, c.constructor_call, has_this)
+            .ok_or(CompileError::ParameterLimitExceeded)?;
+
+        ib.build_call(meta);
 
         Ok(ib.build())
     }
@@ -380,6 +391,7 @@ impl<'a, 's> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a,
     fn visit_property_access_expr(
         &mut self,
         e: &PropertyAccessExpr<'a>,
+        preserve_this: bool,
     ) -> Result<Vec<u8>, CompileError> {
         let mut ib = InstructionBuilder::new();
 
@@ -387,11 +399,11 @@ impl<'a, 's> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a,
         match &*e.property {
             Expr::Literal(lit) => {
                 let ident = lit.to_identifier();
-                ib.build_static_prop_access(&mut self.state.cp, ident.as_bytes())?;
+                ib.build_static_prop_access(&mut self.state.cp, ident.as_bytes(), preserve_this)?;
             }
             e => {
                 ib.append(&mut self.accept_expr(e)?);
-                ib.build_dynamic_prop_access();
+                ib.build_dynamic_prop_access(preserve_this);
             }
         }
 
@@ -546,5 +558,55 @@ impl<'a, 's> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a,
 
     fn visit_class_declaration(&mut self, c: &Class<'a>) -> Result<Vec<u8>, CompileError> {
         unimplementedc!("Class declaration")
+    }
+}
+
+/// Function call metadata
+///
+/// Highest bit = set if constructor call
+/// 2nd highest bit = set if object call
+/// remaining 6 bits = number of arguments
+#[repr(transparent)]
+pub struct FunctionCallMetadata(u8);
+
+impl From<u8> for FunctionCallMetadata {
+    fn from(value: u8) -> Self {
+        Self(value)
+    }
+}
+
+impl From<FunctionCallMetadata> for u8 {
+    fn from(value: FunctionCallMetadata) -> Self {
+        value.0
+    }
+}
+
+impl FunctionCallMetadata {
+    pub fn new_checked(mut value: u8, constructor: bool, object: bool) -> Option<Self> {
+        if value & 0b11000000 == 0 {
+            if constructor {
+                value |= 0b10000000;
+            }
+
+            if object {
+                value |= 0b01000000;
+            }
+
+            Some(Self(value))
+        } else {
+            None
+        }
+    }
+
+    pub fn value(&self) -> u8 {
+        self.0 & !0b11000000
+    }
+
+    pub fn is_constructor_call(&self) -> bool {
+        self.0 & (1 << 7) != 0
+    }
+
+    pub fn is_object_call(&self) -> bool {
+        self.0 & (1 << 6) != 0
     }
 }
