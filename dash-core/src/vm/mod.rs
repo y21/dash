@@ -37,7 +37,7 @@ impl Vm {
     pub fn new() -> Self {
         let mut gc = Gc::new();
         let statics = Statics::new(&mut gc);
-        let global = gc.register(NamedObject::new());
+        let global = gc.register(NamedObject::null()); // TODO: set its __proto__ and constructor
 
         let mut vm = Self {
             frames: Vec::new(),
@@ -58,6 +58,13 @@ impl Vm {
 
         let global = scope.global.clone();
 
+        let object = {
+            let object = scope.statics.object_ctor.clone();
+            let object_proto = scope.statics.object_prototype.clone();
+            object.set_prototype(&mut scope, object_proto.into()).unwrap();
+            object
+        };
+
         let console = {
             let console = scope.statics.console.clone();
             let log = scope.statics.log.clone();
@@ -72,8 +79,24 @@ impl Vm {
             math
         };
 
+        let number = {
+            let number = scope.statics.number_ctor.clone();
+            let number_prototype = scope.statics.number_prototype.clone();
+            number.set_prototype(&mut scope, number_prototype.into()).unwrap();
+            number
+        };
+
+        let number_proto = {
+            let number = scope.statics.number_prototype.clone();
+            let tostring = scope.statics.number_tostring.clone();
+            number.set_property(&mut scope, "toString", tostring.into()).unwrap();
+            number
+        };
+
+        global.set_property(&mut scope, "Object", object.into()).unwrap();
         global.set_property(&mut scope, "console", console.into()).unwrap();
         global.set_property(&mut scope, "Math", math.into()).unwrap();
+        global.set_property(&mut scope, "Number", number.into()).unwrap();
     }
 
     /// Fetches the current instruction/value in the currently executing frame
@@ -147,6 +170,10 @@ impl Vm {
     pub fn statics(&self) -> &Statics {
         &self.statics
     }
+
+    pub fn gc_mut(&mut self) -> &mut Gc<dyn Object> {
+        &mut self.gc
+    }
 }
 
 impl fmt::Debug for Vm {
@@ -159,6 +186,7 @@ impl fmt::Debug for Vm {
 fn test_eval() {
     let (vm, value) = crate::eval(
         r#"
+        // console.log(1337); 18
         function add(a,b) {
             return a +b
         }

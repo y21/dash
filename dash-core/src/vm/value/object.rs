@@ -1,6 +1,10 @@
 use std::{any::Any, cell::RefCell, collections::HashMap, fmt::Debug};
 
-use crate::{gc::trace::Trace, vm::local::LocalScope};
+use crate::{
+    gc::{handle::Handle, trace::Trace},
+    throw,
+    vm::{local::LocalScope, Vm},
+};
 
 use super::Value;
 
@@ -10,6 +14,8 @@ fn __assert_trait_object_safety(_: Box<dyn Object>) {}
 pub trait Object: Debug + Trace {
     fn get_property(&self, sc: &mut LocalScope, key: &str) -> Result<Value, Value>;
     fn set_property(&self, sc: &mut LocalScope, key: &str, value: Value) -> Result<Value, Value>;
+    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value>;
+    fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value>;
     fn apply<'s>(
         &self,
         scope: &mut LocalScope,
@@ -19,14 +25,41 @@ pub trait Object: Debug + Trace {
     fn as_any(&self) -> &dyn Any;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct NamedObject {
+    prototype: RefCell<Option<Handle<dyn Object>>>,
+    constructor: RefCell<Option<Handle<dyn Object>>>,
     values: RefCell<HashMap<String, Value>>,
 }
 
 impl NamedObject {
-    pub fn new() -> Self {
+    pub fn new(vm: &mut Vm) -> Self {
+        let objp = vm.statics.object_prototype.clone();
+        let objc = vm.statics.object_ctor.clone(); // TODO: function_ctor instead
+
         Self {
+            prototype: RefCell::new(Some(objp)),
+            constructor: RefCell::new(Some(objc)),
+            values: RefCell::new(HashMap::new()),
+        }
+    }
+
+    /// Creates an empty object with a null prototype
+    pub fn null() -> Self {
+        Self {
+            prototype: RefCell::new(None),
+            constructor: RefCell::new(None),
+            values: RefCell::new(HashMap::new()),
+        }
+    }
+
+    pub fn with_prototype_and_constructor(
+        prototype: Handle<dyn Object>,
+        ctor: Handle<dyn Object>,
+    ) -> Self {
+        Self {
+            constructor: RefCell::new(Some(ctor)),
+            prototype: RefCell::new(Some(prototype)),
             values: RefCell::new(HashMap::new()),
         }
     }
@@ -43,8 +76,15 @@ unsafe impl Trace for NamedObject {
 
 impl Object for NamedObject {
     fn get_property(&self, sc: &mut LocalScope, key: &str) -> Result<Value, Value> {
-        let map = self.values.borrow();
-        map.get(key).cloned().ok_or(Value::Undefined)
+        match key {
+            "__proto__" => self.get_prototype(sc),
+            "constructor" => throw!(sc, "unimplemented"),
+            _ => {
+                let values = self.values.borrow();
+                let value = values.get(key).cloned().unwrap_or(Value::Null);
+                Ok(value)
+            }
+        }
     }
 
     fn set_property(&self, sc: &mut LocalScope, key: &str, value: Value) -> Result<Value, Value> {
@@ -59,5 +99,23 @@ impl Object for NamedObject {
 
     fn as_any(&self) -> &dyn Any {
         self
+    }
+
+    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
+        match value {
+            Value::Null => self.prototype.replace(None),
+            Value::Object(handle) => self.prototype.replace(Some(handle)),
+            _ => throw!(sc, "prototype must be an object"),
+        };
+
+        Ok(())
+    }
+
+    fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
+        let prototype = self.prototype.borrow();
+        match prototype.as_ref() {
+            Some(handle) => Ok(Value::Object(handle.clone())),
+            None => Ok(Value::Null),
+        }
     }
 }

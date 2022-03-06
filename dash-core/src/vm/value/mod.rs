@@ -1,20 +1,42 @@
 pub mod array;
+pub mod boxed;
 pub mod conversions;
 pub mod error;
 pub mod function;
 pub mod object;
 pub mod ops;
 
+#[macro_export]
+macro_rules! throw {
+    ($vm:expr) => {
+        return Err({
+            let err = $crate::vm::value::error::Error::new($vm, "Unnamed error");
+            $vm.gc_mut().register(err).into()
+        })
+    };
+    ($vm:expr, $msg:expr) => {
+        return Err({
+            let err = $crate::vm::value::error::Error::new($vm, $msg);
+            $vm.gc_mut().register(err).into()
+        })
+    };
+    ($vm:expr, $msg:expr, $($arg:expr),*) => {
+        return Err({
+            let err = $crate::vm::value::error::Error::new($vm, format!($msg, $($arg),*));
+            $vm.gc_mut().register(err).into()
+        })
+    };
+}
+
 use std::rc::Rc;
 
 use crate::{
     compiler::constant::Constant,
-    gc::{handle::Handle, trace::Trace, Gc},
+    gc::{handle::Handle, trace::Trace},
     vm::value::function::FunctionKind,
 };
 
 use self::{
-    error::Error,
     function::{user::UserFunction, Function},
     object::Object,
 };
@@ -48,7 +70,7 @@ impl Value {
             Constant::Null => Value::Null,
             Constant::Function(f) => {
                 let uf = UserFunction::new(f.buffer, f.constants, f.locals, f.params);
-                let function = Function::new(f.name, FunctionKind::User(uf));
+                let function = Function::new(vm, f.name, FunctionKind::User(uf));
                 vm.gc.register(function).into()
             }
             Constant::Identifier(_) => unreachable!(),
@@ -58,6 +80,7 @@ impl Value {
     pub fn get_property(&self, sc: &mut LocalScope, key: &str) -> Result<Value, Value> {
         match self {
             Self::Object(o) => o.get_property(sc, key),
+            Self::Number(_) => sc.statics.number_prototype.clone().get_property(sc, key),
             _ => unimplemented!(),
         }
     }
@@ -84,7 +107,8 @@ impl Value {
 
 pub trait ValueContext {
     fn unwrap_or_undefined(self) -> Value;
-    fn context<S: Into<String>>(self, gc: &mut Gc<dyn Object>, message: S) -> Result<Value, Value>;
+    fn unwrap_or_null(self) -> Value;
+    fn context<S: Into<Rc<str>>>(self, vm: &mut Vm, message: S) -> Result<Value, Value>;
 }
 
 impl ValueContext for Option<Value> {
@@ -95,13 +119,17 @@ impl ValueContext for Option<Value> {
         }
     }
 
-    fn context<S: Into<String>>(self, gc: &mut Gc<dyn Object>, message: S) -> Result<Value, Value> {
+    fn unwrap_or_null(self) -> Value {
+        match self {
+            Some(x) => x,
+            None => Value::Null,
+        }
+    }
+
+    fn context<S: Into<Rc<str>>>(self, vm: &mut Vm, message: S) -> Result<Value, Value> {
         match self {
             Some(x) => Ok(x),
-            None => Err({
-                let error = Error::new(message);
-                gc.register(error).into()
-            }),
+            None => throw!(vm, message),
         }
     }
 }
@@ -114,13 +142,17 @@ impl ValueContext for Option<&Value> {
         }
     }
 
-    fn context<S: Into<String>>(self, gc: &mut Gc<dyn Object>, message: S) -> Result<Value, Value> {
+    fn unwrap_or_null(self) -> Value {
+        match self {
+            Some(x) => x.clone(),
+            None => Value::Null,
+        }
+    }
+
+    fn context<S: Into<Rc<str>>>(self, vm: &mut Vm, message: S) -> Result<Value, Value> {
         match self {
             Some(x) => Ok(x.clone()),
-            None => Err({
-                let error = Error::new(message);
-                gc.register(error).into()
-            }),
+            None => throw!(vm, message),
         }
     }
 }

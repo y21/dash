@@ -2,7 +2,7 @@ use std::fmt::{self, Debug};
 
 use crate::{
     gc::trace::Trace,
-    vm::{frame::Frame, local::LocalScope},
+    vm::{frame::Frame, local::LocalScope, Vm},
 };
 
 use self::{
@@ -10,7 +10,10 @@ use self::{
     user::UserFunction,
 };
 
-use super::object::Object;
+use super::{
+    object::{NamedObject, Object},
+    Value,
+};
 
 pub mod native;
 pub mod user;
@@ -33,11 +36,20 @@ impl fmt::Debug for FunctionKind {
 pub struct Function {
     name: Option<String>,
     kind: FunctionKind,
+    obj: NamedObject,
 }
 
 impl Function {
-    pub fn new(name: Option<String>, kind: FunctionKind) -> Self {
-        Self { name, kind }
+    pub fn new(vm: &mut Vm, name: Option<String>, kind: FunctionKind) -> Self {
+        Self {
+            name,
+            kind,
+            obj: NamedObject::new(vm),
+        }
+    }
+
+    pub fn with_obj(name: Option<String>, kind: FunctionKind, obj: NamedObject) -> Self {
+        Self { name, kind, obj }
     }
 }
 
@@ -56,7 +68,7 @@ impl Object for Function {
         key: &str,
         value: super::Value,
     ) -> Result<super::Value, super::Value> {
-        todo!()
+        self.obj.set_property(sc, key, value)
     }
 
     fn apply(
@@ -88,5 +100,13 @@ impl Object for Function {
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
+    }
+
+    fn set_prototype(&self, sc: &mut LocalScope, value: super::Value) -> Result<(), Value> {
+        self.obj.set_prototype(sc, value)
+    }
+
+    fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
+        self.obj.get_prototype(sc)
     }
 }

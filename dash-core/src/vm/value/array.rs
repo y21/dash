@@ -2,27 +2,30 @@ use std::cell::RefCell;
 
 use crate::gc::trace::Trace;
 use crate::vm::local::LocalScope;
+use crate::vm::Vm;
 
+use super::object::NamedObject;
 use super::object::Object;
 use super::Value;
 
 #[derive(Debug)]
 pub struct Array {
     items: RefCell<Vec<Value>>,
+    obj: NamedObject,
 }
 
 impl Array {
-    pub fn new() -> Self {
+    pub fn new(vm: &mut Vm) -> Self {
         Array {
             items: RefCell::new(Vec::new()),
+            obj: NamedObject::new(vm),
         }
     }
-}
 
-impl From<Vec<Value>> for Array {
-    fn from(values: Vec<Value>) -> Self {
+    pub fn from_vec(vm: &mut Vm, values: Vec<Value>) -> Self {
         Array {
             items: RefCell::new(values),
+            obj: NamedObject::new(vm),
         }
     }
 }
@@ -52,6 +55,14 @@ impl Object for Array {
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
-        todo!()
+        self
+    }
+
+    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
+        self.obj.set_prototype(sc, value)
+    }
+
+    fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
+        self.obj.get_prototype(sc)
     }
 }

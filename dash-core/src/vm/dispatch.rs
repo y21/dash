@@ -164,7 +164,7 @@ mod handlers {
         let len = vm.fetch_and_inc_ip() as usize;
 
         let elements = vm.stack.drain(vm.stack.len() - len..).collect::<Vec<_>>();
-        let array = Array::from(elements);
+        let array = Array::from_vec(vm, elements);
         let handle = vm.gc.register(array);
         vm.try_push_stack(Value::Object(handle))?;
         Ok(HandleResult::Continue)
@@ -176,7 +176,7 @@ mod handlers {
         let elements = vm.stack.drain(vm.stack.len() - len..).collect::<Vec<_>>();
 
         let mut scope = LocalScope::new(vm);
-        let obj = NamedObject::new();
+        let obj = NamedObject::new(&mut scope);
         for element in elements.into_iter() {
             // Object literal constant indices are guaranteed to be 1-byte wide, for now...
             let id = scope.fetch_and_inc_ip();
