@@ -1,4 +1,4 @@
-use std::convert::TryInto;
+use std::{convert::TryInto, ptr::NonNull};
 
 use crate::{
     compiler::builder::{InstructionBuilder, Label},
@@ -21,7 +21,7 @@ use self::{
     constant::{Constant, ConstantPool, Function},
     error::CompileError,
     instruction::InstructionWriter,
-    scope::Scope,
+    scope::{Scope, ScopeLocal},
     visitor::Visitor,
 };
 
@@ -55,9 +55,9 @@ impl<'a> SharedCompilerState<'a> {
     }
 }
 
-pub struct FunctionCompiler<'a, 's> {
+pub struct FunctionCompiler<'a> {
     state: SharedCompilerState<'a>,
-    caller: Option<&'s mut SharedCompilerState<'a>>,
+    caller: Option<NonNull<FunctionCompiler<'a>>>,
 }
 
 #[derive(Debug)]
@@ -84,7 +84,7 @@ fn ast_insert_return<'a>(ast: &mut Vec<Statement<'a>>) {
     }
 }
 
-impl<'a, 's> FunctionCompiler<'a, 's> {
+impl<'a> FunctionCompiler<'a> {
     pub fn new() -> Self {
         Self {
             state: SharedCompilerState::new(),
@@ -92,10 +92,13 @@ impl<'a, 's> FunctionCompiler<'a, 's> {
         }
     }
 
-    pub fn with_caller(caller: &'s mut SharedCompilerState<'a>) -> Self {
+    ///
+    /// # Safety
+    /// - Requires `caller` to not be invalid (i.e. due to moving) during calls
+    pub unsafe fn with_caller<'s>(caller: &'s mut FunctionCompiler<'a>) -> Self {
         Self {
             state: SharedCompilerState::new(),
-            caller: Some(caller),
+            caller: Some(unsafe { NonNull::new_unchecked(caller) }),
         }
     }
 
@@ -121,9 +124,34 @@ impl<'a, 's> FunctionCompiler<'a, 's> {
 
         Ok(insts)
     }
+
+    /// Tries to find a local in the current or surrounding scopes
+    ///
+    /// If a local variable is found in a parent scope, it is marked as an extern local
+    pub fn find_local(&self, ident: &[u8]) -> Option<(u16, &ScopeLocal<'a>)> {
+        if let Some(local) = self.state.scope.find_local(ident) {
+            Some(local)
+        } else {
+            let mut caller = self.caller.as_ref();
+
+            while let Some(up) = caller {
+                let this = unsafe { up.as_ref() };
+
+                if let Some(local) = this.find_local(ident) {
+                    // Extern values need to be marked as such
+                    local.1.set_extern();
+                    return Some(local);
+                }
+
+                caller = this.caller.as_ref();
+            }
+
+            None
+        }
+    }
 }
 
-impl<'a, 's> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a, 's> {
+impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
     fn visit_binary_expression(&mut self, e: &BinaryExpr<'a>) -> Result<Vec<u8>, CompileError> {
         let mut ib = InstructionBuilder::new();
         ib.append(&mut self.accept_expr(&e.left)?);
@@ -176,8 +204,8 @@ impl<'a, 's> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a,
     fn visit_identifier_expression(&mut self, i: &'a [u8]) -> Result<Vec<u8>, CompileError> {
         let mut ib = InstructionBuilder::new();
 
-        if let Some((index, _)) = self.state.scope.find_local(i) {
-            ib.build_local_load(index);
+        if let Some((index, local)) = self.find_local(i) {
+            ib.build_local_load(index, local.is_extern());
         } else {
             ib.build_global_load(&mut self.state.cp, i)?;
         }
@@ -207,11 +235,11 @@ impl<'a, 's> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a,
         v: &VariableDeclaration<'a>,
     ) -> Result<Vec<u8>, CompileError> {
         let mut ib = InstructionBuilder::new();
-        let id = self.state.scope.add_local(v.binding.clone())?;
+        let id = self.state.scope.add_local(v.binding.clone(), false)?;
 
         if let Some(expr) = &v.value {
             ib.append(&mut self.accept_expr(expr)?);
-            ib.build_local_store(id);
+            ib.build_local_store(id, false);
             ib.build_pop();
         }
 
@@ -283,12 +311,15 @@ impl<'a, 's> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a,
         f: &FunctionDeclaration<'a>,
     ) -> Result<Vec<u8>, CompileError> {
         let mut ib = InstructionBuilder::new();
-        let id = self.state.scope.add_local(VariableBinding {
-            name: f.name.expect("Function declaration did not have a name"),
-            kind: VariableDeclarationKind::Var,
-        })?;
+        let id = self.state.scope.add_local(
+            VariableBinding {
+                name: f.name.expect("Function declaration did not have a name"),
+                kind: VariableDeclarationKind::Var,
+            },
+            false,
+        )?;
         ib.append(&mut self.visit_function_expr(f)?);
-        ib.build_local_store(id);
+        ib.build_local_store(id, false);
         ib.build_pop();
         Ok(ib.build())
     }
@@ -322,13 +353,15 @@ impl<'a, 's> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a,
                 let ident = lit.to_identifier();
                 let ident = ident.as_bytes();
 
-                if let Some((id, local)) = self.state.scope.find_local(ident) {
+                if let Some((id, local)) = self.find_local(ident) {
                     if matches!(local.binding().kind, VariableDeclarationKind::Const) {
                         return Err(CompileError::ConstAssignment);
                     }
 
+                    let is_extern = local.is_extern();
+
                     ib.append(&mut self.accept_expr(&e.right)?);
-                    ib.build_local_store(id);
+                    ib.build_local_store(id, is_extern);
                 } else {
                     ib.append(&mut self.accept_expr(&e.right)?);
                     ib.build_global_store(&mut self.state.cp, ident)?;
@@ -449,14 +482,17 @@ impl<'a, 's> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a,
         f: &FunctionDeclaration<'a>,
     ) -> Result<Vec<u8>, CompileError> {
         let mut ib = InstructionBuilder::new();
-        let mut compiler = FunctionCompiler::with_caller(&mut self.state);
+        let mut compiler = unsafe { FunctionCompiler::with_caller(self) };
         let scope = &mut compiler.state.scope;
 
         for name in &f.arguments {
-            scope.add_local(VariableBinding {
-                kind: VariableDeclarationKind::Var,
-                name,
-            })?;
+            scope.add_local(
+                VariableBinding {
+                    kind: VariableDeclarationKind::Var,
+                    name,
+                },
+                false,
+            )?;
         }
 
         let cmp = compiler.compile_ast(f.statements.clone())?;

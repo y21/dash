@@ -1,13 +1,26 @@
 use crate::parser::statement::VariableBinding;
+use std::cell::Cell;
 use std::convert::TryFrom;
 
 pub struct ScopeLocal<'a> {
     binding: VariableBinding<'a>,
+    /// Whether this local variable is used by inner functions and as such may outlive the frame when returned
+    is_extern: Cell<bool>,
 }
 
 impl<'a> ScopeLocal<'a> {
     pub fn binding(&self) -> &VariableBinding<'a> {
         &self.binding
+    }
+
+    /// Marks this local variable as "extern"
+    pub fn set_extern(&self) {
+        self.is_extern.set(true);
+    }
+
+    /// Checks whether this local variable is marked extern
+    pub fn is_extern(&self) -> bool {
+        self.is_extern.get()
     }
 }
 
@@ -35,8 +48,15 @@ impl<'a> Scope<'a> {
             .map(|(i, l)| (i as u16, l))
     }
 
-    pub fn add_local(&mut self, binding: VariableBinding<'a>) -> Result<u16, LimitExceededError> {
-        self.locals.push(ScopeLocal { binding });
+    pub fn add_local(
+        &mut self,
+        binding: VariableBinding<'a>,
+        is_extern: bool,
+    ) -> Result<u16, LimitExceededError> {
+        self.locals.push(ScopeLocal {
+            binding,
+            is_extern: Cell::new(is_extern),
+        });
         u16::try_from(self.locals.len() - 1).map_err(|_| LimitExceededError)
     }
 

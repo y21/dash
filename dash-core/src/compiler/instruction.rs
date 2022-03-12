@@ -57,10 +57,15 @@ pub const ARRAYLIT: u8 = 0x26;
 pub const ARRAYLITW: u8 = 0x27;
 pub const OBJLIT: u8 = 0x28;
 pub const OBJLITW: u8 = 0x29;
-pub const THIS: u8 = 0x30;
-pub const STATICPROPSET: u8 = 0x31;
-pub const STATICPROPSETW: u8 = 0x32;
-pub const DYNAMICPROPSET: u8 = 0x33;
+pub const THIS: u8 = 0x2A;
+pub const STATICPROPSET: u8 = 0x2B;
+pub const STATICPROPSETW: u8 = 0x2C;
+pub const DYNAMICPROPSET: u8 = 0x2D;
+/// Loads an "extern" local variable, existing in a parent scope
+pub const LDLOCALEXT: u8 = 0x2E;
+pub const LDLOCALEXTW: u8 = 0x2F;
+pub const STORELOCALEXT: u8 = 0x30;
+pub const STORELOCALEXTW: u8 = 0x31;
 
 #[rustfmt::skip]
 pub trait InstructionWriter {
@@ -118,10 +123,10 @@ pub trait InstructionWriter {
     fn build_static_prop_set(&mut self, cp: &mut ConstantPool, ident: &[u8]) -> Result<(), LimitExceededError>;
     fn build_dynamic_prop_set(&mut self);
     fn build_constant(&mut self, cp: &mut ConstantPool, constant: Constant) -> Result<(), LimitExceededError>;
-    fn build_local_load(&mut self, index: u16);
+    fn build_local_load(&mut self, index: u16, is_extern: bool);
     fn build_global_load(&mut self, cp: &mut ConstantPool, ident: &[u8]) -> Result<(), LimitExceededError>;
     fn build_global_store(&mut self, cp: &mut ConstantPool, ident: &[u8]) -> Result<(), LimitExceededError>;
-    fn build_local_store(&mut self, id: u16);
+    fn build_local_store(&mut self, id: u16, is_extern: bool);
 }
 
 macro_rules! impl_instruction_writer {
@@ -167,8 +172,12 @@ impl InstructionWriter for InstructionBuilder {
         Ok(())
     }
 
-    fn build_local_load(&mut self, index: u16) {
-        self.write_wide_instr(LDLOCAL, LDLOCALW, index);
+    fn build_local_load(&mut self, index: u16, is_extern: bool) {
+        let (thin, wide) = is_extern
+            .then(|| (LDLOCALEXT, LDLOCALEXTW))
+            .unwrap_or((LDLOCAL, LDLOCALW));
+
+        self.write_wide_instr(thin, wide, index);
     }
 
     fn build_global_load(
@@ -191,8 +200,12 @@ impl InstructionWriter for InstructionBuilder {
         Ok(())
     }
 
-    fn build_local_store(&mut self, id: u16) {
-        self.write_wide_instr(STORELOCAL, STORELOCALW, id);
+    fn build_local_store(&mut self, id: u16, is_extern: bool) {
+        let (thin, wide) = is_extern
+            .then(|| (STORELOCALEXT, STORELOCALEXTW))
+            .unwrap_or((STORELOCAL, STORELOCALW));
+
+        self.write_wide_instr(thin, wide, id);
     }
 
     fn build_call(&mut self, meta: FunctionCallMetadata) {
