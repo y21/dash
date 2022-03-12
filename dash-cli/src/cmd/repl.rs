@@ -1,5 +1,3 @@
-use clap::ArgMatches;
-use dash::vm::Vm;
 use rustyline::Editor;
 
 pub fn repl() -> anyhow::Result<()> {
@@ -7,7 +5,7 @@ pub fn repl() -> anyhow::Result<()> {
 
     while let Ok(input) = rl.readline("> ") {
         if input.is_empty() {
-            break;
+            continue;
         }
 
         rl.add_history_entry(&input);
