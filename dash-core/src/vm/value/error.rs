@@ -58,7 +58,7 @@ impl Object for Error {
         sc: &mut crate::vm::local::LocalScope,
         key: &str,
         value: super::Value,
-    ) -> Result<super::Value, super::Value> {
+    ) -> Result<(), super::Value> {
         todo!()
     }
 

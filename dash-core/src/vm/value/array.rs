@@ -46,8 +46,8 @@ impl Object for Array {
         Ok(items.get(index).cloned().unwrap_or(Value::Null))
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: &str, value: Value) -> Result<Value, Value> {
-        Ok(Value::Undefined)
+    fn set_property(&self, sc: &mut LocalScope, key: &str, value: Value) -> Result<(), Value> {
+        Ok(())
     }
 
     fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {

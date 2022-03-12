@@ -313,6 +313,10 @@ impl<'a, 's> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a,
     ) -> Result<Vec<u8>, CompileError> {
         let mut ib = InstructionBuilder::new();
 
+        if !matches!(e.operator, TokenType::Assignment) {
+            unimplementedc!("Assignment operator {:?}", e.operator);
+        }
+
         match &*e.left {
             Expr::Literal(lit) => {
                 let ident = lit.to_identifier();
@@ -330,6 +334,21 @@ impl<'a, 's> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a,
                     ib.build_global_store(&mut self.state.cp, ident)?;
                 }
             }
+            Expr::PropertyAccess(prop) => {
+                ib.append(&mut self.accept_expr(&prop.target)?);
+                ib.append(&mut self.accept_expr(&e.right)?);
+
+                match &*prop.property {
+                    Expr::Literal(lit) => {
+                        let ident = lit.to_identifier();
+                        ib.build_static_prop_set(&mut self.state.cp, ident.as_bytes())?;
+                    }
+                    e => {
+                        ib.append(&mut self.accept_expr(&e)?);
+                        ib.build_dynamic_prop_set();
+                    }
+                }
+            }
             _ => unimplementedc!("Assignment to non-identifier"),
         }
 
@@ -340,6 +359,7 @@ impl<'a, 's> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a,
         let mut ib = InstructionBuilder::new();
 
         // specialize property access
+        // TODO: this also needs to be specialized for assignment expressions with property access as target
         let has_this = if let Expr::PropertyAccess(p) = &*c.target {
             ib.append(&mut self.visit_property_access_expr(p, true)?);
             true

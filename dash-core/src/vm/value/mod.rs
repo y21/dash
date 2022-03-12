@@ -77,6 +77,13 @@ impl Value {
         }
     }
 
+    pub fn set_property(&self, sc: &mut LocalScope, key: &str, value: Value) -> Result<(), Value> {
+        match self {
+            Value::Object(handle) => handle.set_property(sc, key, value),
+            _ => Ok(()),
+        }
+    }
+
     pub fn get_property(&self, sc: &mut LocalScope, key: &str) -> Result<Value, Value> {
         match self {
             Self::Object(o) => o.get_property(sc, key),

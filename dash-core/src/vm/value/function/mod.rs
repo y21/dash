@@ -67,7 +67,7 @@ impl Object for Function {
         sc: &mut LocalScope,
         key: &str,
         value: super::Value,
-    ) -> Result<super::Value, super::Value> {
+    ) -> Result<(), super::Value> {
         self.obj.set_property(sc, key, value)
     }
 

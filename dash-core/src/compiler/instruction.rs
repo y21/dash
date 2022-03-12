@@ -58,6 +58,9 @@ pub const ARRAYLITW: u8 = 0x27;
 pub const OBJLIT: u8 = 0x28;
 pub const OBJLITW: u8 = 0x29;
 pub const THIS: u8 = 0x30;
+pub const STATICPROPSET: u8 = 0x31;
+pub const STATICPROPSETW: u8 = 0x32;
+pub const DYNAMICPROPSET: u8 = 0x33;
 
 #[rustfmt::skip]
 pub trait InstructionWriter {
@@ -106,16 +109,14 @@ pub trait InstructionWriter {
     /// Builds the [ARRAYLIT] and [ARRAYLITW] instructions
     fn build_arraylit(&mut self, len: u16);
     /// Builds the [OBJLIT] and [OBJLITW] instructions
-    fn build_objlit(
-        &mut self,
-        cp: &mut ConstantPool,
-        constants: Vec<Constant>,
-    ) -> Result<(), CompileError>;
+    fn build_objlit(&mut self, cp: &mut ConstantPool, constants: Vec<Constant>) -> Result<(), CompileError>;
     /// Builds the [JMP] and [JMPW] instructions
     fn build_jmp(&mut self, label: Label) -> Result<(), LimitExceededError>;
     fn build_call(&mut self, meta: FunctionCallMetadata);
     fn build_static_prop_access(&mut self, cp: &mut ConstantPool, ident: &[u8], preserve_this: bool) -> Result<(), LimitExceededError>;
     fn build_dynamic_prop_access(&mut self, preserve_this: bool);
+    fn build_static_prop_set(&mut self, cp: &mut ConstantPool, ident: &[u8]) -> Result<(), LimitExceededError>;
+    fn build_dynamic_prop_set(&mut self);
     fn build_constant(&mut self, cp: &mut ConstantPool, constant: Constant) -> Result<(), LimitExceededError>;
     fn build_local_load(&mut self, index: u16);
     fn build_global_load(&mut self, cp: &mut ConstantPool, ident: &[u8]) -> Result<(), LimitExceededError>;
@@ -227,6 +228,21 @@ impl InstructionWriter for InstructionBuilder {
 
     fn build_dynamic_prop_access(&mut self, preserve_this: bool) {
         self.write_arr([DYNAMICPROPACCESS, preserve_this.into()]);
+    }
+
+    fn build_static_prop_set(
+        &mut self,
+        cp: &mut ConstantPool,
+        ident: &[u8],
+    ) -> Result<(), LimitExceededError> {
+        let id = cp.add(Constant::Identifier(force_utf8_borrowed(ident).into()))?;
+        self.write_wide_instr(STATICPROPSET, STATICPROPSETW, id);
+
+        Ok(())
+    }
+
+    fn build_dynamic_prop_set(&mut self) {
+        self.write(DYNAMICPROPSET);
     }
 
     fn build_arraylit(&mut self, len: u16) {

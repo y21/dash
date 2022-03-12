@@ -52,13 +52,7 @@ mod handlers {
 
     pub fn ldglobal(vm: &mut Vm) -> Result<HandleResult, Value> {
         let id = vm.fetch_and_inc_ip();
-        let constant = vm
-            .frames
-            .last()
-            .expect("No frame")
-            .constants
-            .get(id as usize)
-            .expect("Invalid constant reference in bytecode");
+        let constant = &vm.frames.last().expect("No frame").constants[id as usize];
 
         let name = constant
             .as_identifier()
@@ -183,10 +177,7 @@ mod handlers {
             let constant = {
                 let frame = scope.frames.last().expect("No frame");
 
-                let identifier = frame
-                    .constants
-                    .get(id as usize)
-                    .expect("Invalid constant reference in bytecode")
+                let identifier = frame.constants[id as usize]
                     .as_identifier()
                     .expect("Invalid constant reference in bytecode");
 
@@ -203,13 +194,7 @@ mod handlers {
 
     pub fn staticpropertyaccess(vm: &mut Vm) -> Result<HandleResult, Value> {
         let id = vm.fetch_and_inc_ip();
-        let constant = vm
-            .frames
-            .last()
-            .expect("No frame")
-            .constants
-            .get(id as usize)
-            .expect("Invalid constant reference in bytecode");
+        let constant = &vm.frames.last().expect("No frame").constants[id as usize];
 
         let ident = constant
             .as_identifier()
@@ -233,6 +218,58 @@ mod handlers {
         vm.try_push_stack(value)?;
         Ok(HandleResult::Continue)
     }
+
+    pub fn staticpropertyset(vm: &mut Vm) -> Result<HandleResult, Value> {
+        let id = vm.fetch_and_inc_ip();
+        let key = vm.frames.last().expect("No frame").constants[id as usize]
+            .as_identifier()
+            .unwrap()
+            .clone();
+
+        let value = vm.stack.pop().expect("No value");
+        let target = vm.stack.pop().expect("No target");
+
+        let mut scope = LocalScope::new(vm);
+        target.set_property(&mut scope, &key, value.clone())?;
+
+        vm.try_push_stack(value)?;
+        Ok(HandleResult::Continue)
+    }
+
+    pub fn staticpropertysetw(vm: &mut Vm) -> Result<HandleResult, Value> {
+        let id = vm.fetchw_and_inc_ip();
+        let key = vm.frames.last().expect("No frame").constants[id as usize]
+            .as_identifier()
+            .unwrap()
+            .clone();
+
+        let value = vm.stack.pop().expect("No value");
+        let target = vm.stack.pop().expect("No target");
+
+        let mut scope = LocalScope::new(vm);
+        target.set_property(&mut scope, &key, value.clone())?;
+
+        vm.try_push_stack(value)?;
+        Ok(HandleResult::Continue)
+    }
+
+    pub fn dynamicpropertyset(vm: &mut Vm) -> Result<HandleResult, Value> {
+        let key = vm.stack.pop().expect("No key");
+        let value = vm.stack.pop().expect("No value");
+        let target = vm.stack.pop().expect("No target");
+
+        let key = if let Value::String(s) = key {
+            s
+        } else {
+            todo!()
+        };
+
+        let mut scope = LocalScope::new(vm);
+        target.set_property(&mut scope, &key, value.clone())?;
+
+        vm.try_push_stack(value)?;
+        Ok(HandleResult::Continue)
+    }
 }
 
 pub fn handle(vm: &mut Vm, instruction: u8) -> Result<HandleResult, Value> {
@@ -252,6 +289,9 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<HandleResult, Value> {
         opcode::ARRAYLIT => handlers::arraylit(vm),
         opcode::OBJLIT => handlers::objlit(vm),
         opcode::STATICPROPACCESS => handlers::staticpropertyaccess(vm),
+        opcode::STATICPROPSET => handlers::staticpropertyset(vm),
+        opcode::STATICPROPSETW => handlers::staticpropertysetw(vm),
+        opcode::DYNAMICPROPSET => handlers::dynamicpropertyset(vm),
         _ => unimplemented!("{}", instruction),
     }
 }

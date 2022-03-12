@@ -13,7 +13,7 @@ fn __assert_trait_object_safety(_: Box<dyn Object>) {}
 
 pub trait Object: Debug + Trace {
     fn get_property(&self, sc: &mut LocalScope, key: &str) -> Result<Value, Value>;
-    fn set_property(&self, sc: &mut LocalScope, key: &str, value: Value) -> Result<Value, Value>;
+    fn set_property(&self, sc: &mut LocalScope, key: &str, value: Value) -> Result<(), Value>;
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value>;
     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value>;
     fn apply<'s>(
@@ -87,10 +87,10 @@ impl Object for NamedObject {
         }
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: &str, value: Value) -> Result<Value, Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: &str, value: Value) -> Result<(), Value> {
         let mut map = self.values.borrow_mut();
         map.insert(key.into(), value);
-        Ok(Value::Undefined)
+        Ok(())
     }
 
     fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {

@@ -32,7 +32,7 @@ impl Object for Number {
         self.1.apply(sc, this, args)
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: &str, value: Value) -> Result<Value, Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: &str, value: Value) -> Result<(), Value> {
         self.1.set_property(sc, key, value)
     }
 
