@@ -93,10 +93,25 @@ impl Vm {
             number
         };
 
+        let boolean = {
+            let boolean = scope.statics.boolean_ctor.clone();
+            let boolean_prototype = scope.statics.boolean_prototype.clone();
+            boolean.set_prototype(&mut scope, boolean_prototype.into()).unwrap();
+            boolean
+        };
+
+        let boolean_proto = {
+            let boolean = scope.statics.boolean_prototype.clone();
+            let tostring = scope.statics.boolean_tostring.clone();
+            boolean.set_property(&mut scope, "toString", tostring.into()).unwrap();
+            boolean
+        };
+
         global.set_property(&mut scope, "Object", object.into()).unwrap();
         global.set_property(&mut scope, "console", console.into()).unwrap();
         global.set_property(&mut scope, "Math", math.into()).unwrap();
         global.set_property(&mut scope, "Number", number.into()).unwrap();
+        global.set_property(&mut scope, "Boolean", boolean.into()).unwrap();
     }
 
     /// Fetches the current instruction/value in the currently executing frame
