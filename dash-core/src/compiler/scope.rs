@@ -2,6 +2,7 @@ use crate::parser::statement::VariableBinding;
 use std::cell::Cell;
 use std::convert::TryFrom;
 
+#[derive(Clone)]
 pub struct ScopeLocal<'a> {
     binding: VariableBinding<'a>,
     /// Whether this local variable is used by inner functions and as such may outlive the frame when returned

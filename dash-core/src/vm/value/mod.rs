@@ -69,7 +69,7 @@ impl Value {
             Constant::Undefined => Value::Undefined,
             Constant::Null => Value::Null,
             Constant::Function(f) => {
-                let uf = UserFunction::new(f.buffer, f.constants, f.locals, f.params);
+                let uf = UserFunction::new(f.buffer, f.constants, f.externals, f.locals, f.params);
                 let function = Function::new(vm, f.name, FunctionKind::User(uf));
                 vm.gc.register(function).into()
             }

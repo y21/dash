@@ -1,4 +1,4 @@
-use std::{convert::TryInto, ptr::NonNull};
+use std::{convert::TryInto, ptr::NonNull, usize};
 
 use crate::{
     compiler::builder::{InstructionBuilder, Label},
@@ -44,6 +44,7 @@ macro_rules! unimplementedc {
 pub struct SharedCompilerState<'a> {
     cp: ConstantPool,
     scope: Scope<'a>,
+    externals: Vec<u16>,
 }
 
 impl<'a> SharedCompilerState<'a> {
@@ -51,6 +52,7 @@ impl<'a> SharedCompilerState<'a> {
         Self {
             cp: ConstantPool::new(),
             scope: Scope::new(),
+            externals: Vec::new(),
         }
     }
 }
@@ -65,6 +67,7 @@ pub struct CompileResult {
     pub instructions: Vec<u8>,
     pub cp: ConstantPool,
     pub locals: usize,
+    pub externals: Vec<u16>,
 }
 
 fn ast_insert_return<'a>(ast: &mut Vec<Statement<'a>>) {
@@ -112,6 +115,7 @@ impl<'a> FunctionCompiler<'a> {
             instructions,
             cp: self.state.cp,
             locals: self.state.scope.locals().len(),
+            externals: self.state.externals,
         })
     }
 
@@ -125,25 +129,42 @@ impl<'a> FunctionCompiler<'a> {
         Ok(insts)
     }
 
+    fn add_external(&mut self, external_id: u16) -> usize {
+        let id = self.state.externals.iter().position(|&x| x == external_id);
+
+        if let Some(id) = id {
+            id
+        } else {
+            self.state.externals.push(external_id);
+            self.state.externals.len() - 1
+        }
+    }
+
     /// Tries to find a local in the current or surrounding scopes
     ///
     /// If a local variable is found in a parent scope, it is marked as an extern local
-    pub fn find_local(&self, ident: &[u8]) -> Option<(u16, &ScopeLocal<'a>)> {
-        if let Some(local) = self.state.scope.find_local(ident) {
-            Some(local)
+    pub fn find_local(&mut self, ident: &[u8]) -> Option<(u16, ScopeLocal<'a>)> {
+        if let Some((id, local)) = self.state.scope.find_local(ident) {
+            Some((id, local.clone()))
         } else {
-            let mut caller = self.caller.as_ref();
+            let mut caller = self.caller;
 
-            while let Some(up) = caller {
-                let this = unsafe { up.as_ref() };
+            while let Some(mut up) = caller {
+                let this = unsafe { up.as_mut() };
 
-                if let Some(local) = this.find_local(ident) {
+                if let Some((id, local)) = this.find_local(ident) {
+                    // TODO: handle this case
+                    assert!(!local.is_extern());
+
                     // Extern values need to be marked as such
-                    local.1.set_extern();
-                    return Some(local);
+                    local.set_extern();
+
+                    // TODO: don't hardcast
+                    let id = self.add_external(id) as u16;
+                    return Some((id, local.clone()));
                 }
 
-                caller = this.caller.as_ref();
+                caller = this.caller;
             }
 
             None
@@ -504,6 +525,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
             name: f.name.map(force_utf8),
             ty: f.ty,
             params: f.arguments.len(),
+            externals: cmp.externals.into(),
         };
         ib.build_constant(&mut self.state.cp, Constant::Function(function))?;
 

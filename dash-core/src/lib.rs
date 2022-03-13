@@ -74,7 +74,7 @@ pub fn eval(input: &str) -> Result<(Vm, Value), EvalError> {
     let compiled = FunctionCompiler::new()
         .compile_ast(ast)
         .map_err(EvalError::CompileError)?;
-    let frame = Frame::from(compiled);
+    let frame = Frame::from_compile_result(compiled);
     let val = vm.execute_frame(frame).map_err(|e| EvalError::VmError(e))?;
     Ok((vm, val))
 }

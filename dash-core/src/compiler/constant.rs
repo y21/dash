@@ -15,6 +15,7 @@ pub struct Function {
     pub locals: usize,
     pub params: usize,
     pub constants: Rc<[Constant]>,
+    pub externals: Box<[u16]>,
 }
 
 #[derive(Debug, Clone)]

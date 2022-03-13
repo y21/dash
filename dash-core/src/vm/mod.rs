@@ -136,6 +136,10 @@ impl Vm {
         self.stack.get(self.get_frame_sp() + id).cloned()
     }
 
+    pub(crate) fn get_external(&self, id: usize) -> Option<&Handle<dyn Object>> {
+        self.frames.last()?.externals.get(id)
+    }
+
     pub(crate) fn set_local(&mut self, id: usize, value: Value) {
         let sp = self.get_frame_sp();
         self.stack[sp + id] = value;

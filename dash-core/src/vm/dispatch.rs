@@ -270,6 +270,17 @@ mod handlers {
         vm.try_push_stack(value)?;
         Ok(HandleResult::Continue)
     }
+
+    pub fn ldlocalext(vm: &mut Vm) -> Result<HandleResult, Value> {
+        let id = vm.fetch_and_inc_ip();
+        let value = vm
+            .get_external(id as usize)
+            .expect("Invalid local reference")
+            .clone();
+
+        vm.try_push_stack(value.into())?;
+        Ok(HandleResult::Continue)
+    }
 }
 
 pub fn handle(vm: &mut Vm, instruction: u8) -> Result<HandleResult, Value> {
@@ -292,6 +303,7 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<HandleResult, Value> {
         opcode::STATICPROPSET => handlers::staticpropertyset(vm),
         opcode::STATICPROPSETW => handlers::staticpropertysetw(vm),
         opcode::DYNAMICPROPSET => handlers::dynamicpropertyset(vm),
+        opcode::LDLOCALEXT => handlers::ldlocalext(vm),
         _ => unimplemented!("{}", instruction),
     }
 }

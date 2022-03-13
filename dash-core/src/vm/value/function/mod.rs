@@ -90,7 +90,7 @@ impl Object for Function {
 
                 scope.stack.extend(args.into_iter().rev().take(argc));
 
-                let mut frame = Frame::from(uf);
+                let mut frame = Frame::from_function(uf, scope);
                 frame.sp = sp;
 
                 scope.vm.execute_frame(frame)
