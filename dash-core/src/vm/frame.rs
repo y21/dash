@@ -30,6 +30,11 @@ impl Frame {
 
             let obj = match val {
                 Value::Object(o) => o,
+                // primitive types need to be put on the heap and GCd
+                // TODO: we need to update the locals in this current frame too
+                Value::Number(n) => vm.gc.register(n),
+                Value::Boolean(b) => vm.gc.register(b),
+                Value::String(s) => vm.gc.register(s),
                 _ => panic!("Expected object"),
             };
 

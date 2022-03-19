@@ -42,6 +42,10 @@ impl Object for f64 {
     fn as_any(&self) -> &dyn Any {
         self
     }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
 }
 
 unsafe impl Trace for bool {
@@ -78,6 +82,10 @@ impl Object for bool {
     fn as_any(&self) -> &dyn Any {
         self
     }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
 }
 
 unsafe impl Trace for Rc<str> {
@@ -112,6 +120,10 @@ impl Object for Rc<str> {
     }
 
     fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 }

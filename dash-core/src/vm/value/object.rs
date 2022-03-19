@@ -23,6 +23,7 @@ pub trait Object: Debug + Trace {
         args: Vec<Value>,
     ) -> Result<Value, Value>;
     fn as_any(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
 #[derive(Debug, Clone)]
@@ -81,7 +82,7 @@ impl Object for NamedObject {
             "constructor" => throw!(sc, "unimplemented"),
             _ => {
                 let values = self.values.borrow();
-                let value = values.get(key).cloned().unwrap_or(Value::Null);
+                let value = values.get(key).cloned().unwrap_or(Value::Undefined);
                 Ok(value)
             }
         }
@@ -98,6 +99,10 @@ impl Object for NamedObject {
     }
 
     fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 

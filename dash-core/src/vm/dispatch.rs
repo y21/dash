@@ -15,6 +15,17 @@ mod handlers {
 
     use super::*;
 
+    fn evaluate_binary_expr<F: Fn(Value, Value, &mut Vm) -> Value>(
+        vm: &mut Vm,
+        fun: F,
+    ) -> Result<HandleResult, Value> {
+        let right = vm.stack.pop().expect("No right operand");
+        let left = vm.stack.pop().expect("No left operand");
+        let result = fun(left, right, vm);
+        vm.try_push_stack(result)?;
+        Ok(HandleResult::Continue)
+    }
+
     pub fn constant(vm: &mut Vm) -> Result<HandleResult, Value> {
         let id = vm.fetch_and_inc_ip();
         vm.push_constant(id as usize)?;
@@ -28,10 +39,55 @@ mod handlers {
     }
 
     pub fn add(vm: &mut Vm) -> Result<HandleResult, Value> {
-        let right = vm.stack.pop().expect("No right operand");
-        let left = vm.stack.pop().expect("No left operand");
-        vm.try_push_stack(left.add(&right))?;
-        Ok(HandleResult::Continue)
+        evaluate_binary_expr(vm, |l, r, _| l.add(&r))
+    }
+
+    pub fn sub(vm: &mut Vm) -> Result<HandleResult, Value> {
+        evaluate_binary_expr(vm, |l, r, _| l.sub(&r))
+    }
+
+    pub fn mul(vm: &mut Vm) -> Result<HandleResult, Value> {
+        evaluate_binary_expr(vm, |l, r, _| l.mul(&r))
+    }
+
+    pub fn div(vm: &mut Vm) -> Result<HandleResult, Value> {
+        evaluate_binary_expr(vm, |l, r, _| l.div(&r))
+    }
+
+    pub fn rem(vm: &mut Vm) -> Result<HandleResult, Value> {
+        evaluate_binary_expr(vm, |l, r, _| l.rem(&r))
+    }
+
+    pub fn pow(vm: &mut Vm) -> Result<HandleResult, Value> {
+        evaluate_binary_expr(vm, |l, r, _| l.pow(&r))
+    }
+
+    pub fn lt(vm: &mut Vm) -> Result<HandleResult, Value> {
+        evaluate_binary_expr(vm, |l, r, _| l.lt(&r))
+    }
+
+    pub fn le(vm: &mut Vm) -> Result<HandleResult, Value> {
+        evaluate_binary_expr(vm, |l, r, _| l.le(&r))
+    }
+
+    pub fn gt(vm: &mut Vm) -> Result<HandleResult, Value> {
+        evaluate_binary_expr(vm, |l, r, _| l.gt(&r))
+    }
+
+    pub fn ge(vm: &mut Vm) -> Result<HandleResult, Value> {
+        evaluate_binary_expr(vm, |l, r, _| l.ge(&r))
+    }
+
+    pub fn eq(vm: &mut Vm) -> Result<HandleResult, Value> {
+        evaluate_binary_expr(vm, |l, r, _| l.eq(&r))
+    }
+
+    pub fn ne(vm: &mut Vm) -> Result<HandleResult, Value> {
+        evaluate_binary_expr(vm, |l, r, _| l.ne(&r))
+    }
+
+    pub fn strict_eq(vm: &mut Vm) -> Result<HandleResult, Value> {
+        evaluate_binary_expr(vm, |l, r, _| l.strict_eq(&r))
     }
 
     pub fn pop(vm: &mut Vm) -> Result<HandleResult, Value> {
@@ -144,13 +200,6 @@ mod handlers {
         let value = vm.get_local(id as usize).expect("Invalid local reference");
 
         vm.try_push_stack(value)?;
-        Ok(HandleResult::Continue)
-    }
-
-    pub fn lt(vm: &mut Vm) -> Result<HandleResult, Value> {
-        let right = vm.stack.pop().expect("No right operand");
-        let left = vm.stack.pop().expect("No left operand");
-        vm.try_push_stack(left.lt(&right))?;
         Ok(HandleResult::Continue)
     }
 
@@ -288,6 +337,18 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<HandleResult, Value> {
         opcode::CONSTANT => handlers::constant(vm),
         opcode::CONSTANTW => handlers::constantw(vm),
         opcode::ADD => handlers::add(vm),
+        opcode::SUB => handlers::sub(vm),
+        opcode::MUL => handlers::mul(vm),
+        opcode::DIV => handlers::div(vm),
+        opcode::REM => handlers::rem(vm),
+        opcode::POW => handlers::pow(vm),
+        opcode::GT => handlers::gt(vm),
+        opcode::GE => handlers::ge(vm),
+        opcode::LT => handlers::lt(vm),
+        opcode::LE => handlers::le(vm),
+        opcode::EQ => handlers::eq(vm),
+        opcode::NE => handlers::ne(vm),
+        opcode::STRICTEQ => handlers::strict_eq(vm),
         opcode::POP => handlers::pop(vm),
         opcode::RET => handlers::ret(vm),
         opcode::LDGLOBAL => handlers::ldglobal(vm),
@@ -296,7 +357,6 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<HandleResult, Value> {
         opcode::JMP => handlers::jmp(vm),
         opcode::STORELOCAL => handlers::storelocal(vm),
         opcode::LDLOCAL => handlers::ldlocal(vm),
-        opcode::LT => handlers::lt(vm),
         opcode::ARRAYLIT => handlers::arraylit(vm),
         opcode::OBJLIT => handlers::objlit(vm),
         opcode::STATICPROPACCESS => handlers::staticpropertyaccess(vm),

@@ -191,6 +191,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
             TokenType::LessEqual => ib.build_le(),
             TokenType::Equality => ib.build_eq(),
             TokenType::Inequality => ib.build_ne(),
+            TokenType::StrictEquality => ib.build_strict_eq(),
             other => unreachable!("Binary token is never emitted: {:?}", other),
         }
         Ok(ib.build())

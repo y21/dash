@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::cell::RefCell;
 
 use crate::gc::trace::Trace;
@@ -54,7 +55,11 @@ impl Object for Array {
         todo!()
     }
 
-    fn as_any(&self) -> &dyn std::any::Any {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 

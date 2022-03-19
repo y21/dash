@@ -180,3 +180,26 @@ impl ValueContext for Option<&Value> {
         }
     }
 }
+
+impl<E> ValueContext for Result<Value, E> {
+    fn unwrap_or_undefined(self) -> Value {
+        match self {
+            Ok(x) => x,
+            Err(_) => Value::Undefined,
+        }
+    }
+
+    fn unwrap_or_null(self) -> Value {
+        match self {
+            Ok(x) => x,
+            Err(_) => Value::Null,
+        }
+    }
+
+    fn context<S: Into<Rc<str>>>(self, vm: &mut Vm, message: S) -> Result<Value, Value> {
+        match self {
+            Ok(x) => Ok(x),
+            Err(_) => throw!(vm, message),
+        }
+    }
+}

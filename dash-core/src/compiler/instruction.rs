@@ -66,6 +66,7 @@ pub const LDLOCALEXT: u8 = 0x2E;
 pub const LDLOCALEXTW: u8 = 0x2F;
 pub const STORELOCALEXT: u8 = 0x30;
 pub const STORELOCALEXTW: u8 = 0x31;
+pub const STRICTEQ: u8 = 0x32;
 
 #[rustfmt::skip]
 pub trait InstructionWriter {
@@ -91,6 +92,8 @@ pub trait InstructionWriter {
     fn build_le(&mut self);
     /// Builds the [EQ] instruction
     fn build_eq(&mut self);
+    /// Builds the [STRICTEQ] instruction
+    fn build_strict_eq(&mut self);
     /// Builds the [NE] instruction
     fn build_ne(&mut self);
     /// Builds the [POS] instruction
@@ -160,7 +163,8 @@ impl InstructionWriter for InstructionBuilder {
         build_bitnot BITNOT,
         build_not NOT,
         build_ret RET,
-        build_this THIS
+        build_this THIS,
+        build_strict_eq STRICTEQ
     }
 
     fn build_constant(
