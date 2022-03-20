@@ -7,6 +7,9 @@ use crate::vm::local::LocalScope;
 use super::object::Object;
 use super::Value;
 
+pub const MAX_SAFE_INTEGER: u64 = 9007199254740991u64;
+pub const MAX_SAFE_INTEGERF: f64 = 9007199254740991f64;
+
 unsafe impl Trace for f64 {
     fn trace(&self) {}
 }
