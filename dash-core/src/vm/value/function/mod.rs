@@ -62,7 +62,7 @@ unsafe impl Trace for Function {
 
 impl Object for Function {
     fn get_property(&self, sc: &mut LocalScope, key: &str) -> Result<super::Value, super::Value> {
-        todo!()
+        self.obj.get_property(sc, key)
     }
 
     fn set_property(

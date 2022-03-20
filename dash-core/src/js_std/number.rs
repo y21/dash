@@ -31,8 +31,8 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn is_finite(cx: CallContext) -> Result<Value, Value> {
-    let num = match cx.this {
-        Value::Number(n) => n,
+    let num = match cx.args.first() {
+        Some(Value::Number(n)) => n,
         _ => return Ok(Value::Boolean(false)),
     };
 
@@ -40,8 +40,8 @@ pub fn is_finite(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn is_nan(cx: CallContext) -> Result<Value, Value> {
-    let num = match cx.this {
-        Value::Number(n) => n,
+    let num = match cx.args.first() {
+        Some(Value::Number(n)) => n,
         _ => return Ok(Value::Boolean(false)),
     };
 
@@ -49,8 +49,8 @@ pub fn is_nan(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn is_safe_integer(cx: CallContext) -> Result<Value, Value> {
-    let num = match cx.this {
-        Value::Number(n) => n,
+    let num = match cx.args.first() {
+        Some(Value::Number(n)) => *n,
         _ => return Ok(Value::Boolean(false)),
     };
 
