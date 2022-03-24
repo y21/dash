@@ -1,11 +1,14 @@
 use std::rc::Rc;
 
 use crate::compiler::constant::Constant;
+use crate::gc::handle::Handle;
+use crate::vm::value::object::Object;
 
+#[derive(Debug)]
 pub struct UserFunction {
     buffer: Rc<[u8]>,
     constants: Rc<[Constant]>,
-    externals: Box<[u16]>,
+    externals: Rc<[Handle<dyn Object>]>,
     locals: usize,
     params: usize,
 }
@@ -14,7 +17,7 @@ impl UserFunction {
     pub fn new(
         buffer: Rc<[u8]>,
         constants: Rc<[Constant]>,
-        externals: Box<[u16]>,
+        externals: Rc<[Handle<dyn Object>]>,
         locals: usize,
         params: usize,
     ) -> Self {
@@ -27,7 +30,7 @@ impl UserFunction {
         }
     }
 
-    pub fn externals(&self) -> &[u16] {
+    pub fn externals(&self) -> &Rc<[Handle<dyn Object>]> {
         &self.externals
     }
 

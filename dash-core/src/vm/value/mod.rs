@@ -76,7 +76,28 @@ impl Value {
             Constant::Undefined => Value::Undefined,
             Constant::Null => Value::Null,
             Constant::Function(f) => {
-                let uf = UserFunction::new(f.buffer, f.constants, f.externals, f.locals, f.params);
+                let mut externals = Vec::new();
+
+                for idx in f.externals.iter() {
+                    let val = vm
+                        .get_local(*idx as usize)
+                        .expect("Referenced local not found");
+
+                    let obj = match val {
+                        Value::Object(o) => o,
+                        // primitive types need to be put on the heap and GCd
+                        // TODO: we need to update the locals in this current frame too
+                        Value::Number(n) => vm.gc.register(n),
+                        Value::Boolean(b) => vm.gc.register(b),
+                        Value::String(s) => vm.gc.register(s),
+                        _ => panic!("Expected object"),
+                    };
+
+                    externals.push(obj);
+                }
+
+                let uf =
+                    UserFunction::new(f.buffer, f.constants, externals.into(), f.locals, f.params);
                 let function = Function::new(vm, f.name, FunctionKind::User(uf));
                 vm.gc.register(function).into()
             }
