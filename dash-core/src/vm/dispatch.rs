@@ -330,6 +330,19 @@ mod handlers {
         vm.try_push_stack(value.into())?;
         Ok(HandleResult::Continue)
     }
+
+    pub fn storelocalext(vm: &mut Vm) -> Result<HandleResult, Value> {
+        let id = vm.fetch_and_inc_ip();
+        let value = vm.stack.pop().expect("No value");
+
+        let external = vm.frames.last_mut().expect("No frame").externals[id as usize].as_ptr();
+        // TODO: make sure that nothing really aliases this &mut
+        unsafe { (*external).value = value.clone().into_boxed() };
+
+        vm.try_push_stack(value)?;
+
+        Ok(HandleResult::Continue)
+    }
 }
 
 pub fn handle(vm: &mut Vm, instruction: u8) -> Result<HandleResult, Value> {
@@ -364,6 +377,7 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<HandleResult, Value> {
         opcode::STATICPROPSETW => handlers::staticpropertysetw(vm),
         opcode::DYNAMICPROPSET => handlers::dynamicpropertyset(vm),
         opcode::LDLOCALEXT => handlers::ldlocalext(vm),
+        opcode::STORELOCALEXT => handlers::storelocalext(vm),
         _ => unimplemented!("{}", instruction),
     }
 }

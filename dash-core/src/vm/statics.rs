@@ -15,6 +15,8 @@ use std::rc::Rc;
 
 pub struct Statics {
     pub empty_str: Rc<str>,
+    pub undefined_str: Rc<str>,
+    pub null_str: Rc<str>,
     pub true_lit: Rc<str>,
     pub false_lit: Rc<str>,
     pub is_nan: Handle<dyn Object>,
@@ -90,6 +92,8 @@ impl Statics {
             true_lit: "true".into(),
             false_lit: "false".into(),
             empty_str: empty_str.clone(),
+            null_str: "null".into(),
+            undefined_str: "undefined".into(),
             console: object(gc),
             console_log: function(gc, "log", js_std::global::log),
             math: object(gc),
@@ -153,5 +157,13 @@ impl Statics {
 
     pub fn empty_str(&self) -> Rc<str> {
         self.empty_str.clone()
+    }
+
+    pub fn null_str(&self) -> Rc<str> {
+        self.null_str.clone()
+    }
+
+    pub fn undefined_str(&self) -> Rc<str> {
+        self.undefined_str.clone()
     }
 }

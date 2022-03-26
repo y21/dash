@@ -2,20 +2,25 @@ use dash::compiler::decompiler;
 use dash::compiler::FunctionCompiler;
 use dash::optimizer;
 use dash::parser::parser::Parser;
+use dash::vm::local::LocalScope;
+use dash::vm::value::ops::abstractions::conversions::ValueConversion;
 use dash::vm::value::Value;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 pub fn eval(s: &str) -> String {
     match dash::eval(s) {
-        Ok((_vm, value)) => match value {
-            Value::Number(n) => n.to_string(),
-            Value::Boolean(b) => b.to_string(),
-            Value::String(s) => s.to_string(),
-            Value::Null(_) => String::from("null"),
-            Value::Undefined(_) => String::from("undefined"),
-            Value::Object(o) => format!("[object@{:?}]", o.as_ptr()),
+        Ok((mut vm, value)) => match value {
             Value::External(e) => format!("[external@{:?}]", e.as_ptr()),
+            other => {
+                let mut scope = LocalScope::new(&mut vm);
+
+                // TODO: add value to scope
+                other
+                    .to_string(&mut scope)
+                    .map(|x| x.to_string())
+                    .unwrap_or_else(|_| "<exception>".into())
+            }
         },
         Err(e) => e.to_string(),
     }

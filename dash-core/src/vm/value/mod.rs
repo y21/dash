@@ -177,6 +177,21 @@ impl Value {
     pub fn null() -> Value {
         Value::Undefined(Undefined)
     }
+
+    /// Boxes this value
+    ///
+    /// If this value already is an object, then this will wrap it in a new allocation
+    pub fn into_boxed(self) -> Box<dyn Object> {
+        match self {
+            Value::Boolean(b) => Box::new(b),
+            Value::Number(n) => Box::new(n),
+            Value::String(s) => Box::new(s),
+            Value::Null(n) => Box::new(n),
+            Value::Undefined(u) => Box::new(u),
+            Value::Object(o) => Box::new(o),
+            Value::External(o) => Box::new(o), // TODO: is this correct?
+        }
+    }
 }
 
 pub trait ValueContext {

@@ -255,15 +255,7 @@ impl Vm {
         let idx = sp + id;
 
         if let Value::External(o) = &mut self.stack[idx] {
-            o.replace(match value {
-                Value::Boolean(b) => Box::new(b),
-                Value::Number(n) => Box::new(n),
-                Value::String(s) => Box::new(s),
-                Value::Null(n) => Box::new(n),
-                Value::Undefined(u) => Box::new(u),
-                Value::Object(o) => Box::new(o),
-                Value::External(o) => Box::new(o), // TODO: is this correct?
-            });
+            o.replace(value.into_boxed());
         } else {
             self.stack[idx] = value;
         }
