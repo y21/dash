@@ -44,7 +44,7 @@ impl Object for Array {
     fn get_property(&self, sc: &mut LocalScope, key: &str) -> Result<Value, Value> {
         let items = self.items.borrow();
         let index = key.parse::<usize>().unwrap();
-        Ok(items.get(index).cloned().unwrap_or(Value::Null))
+        Ok(items.get(index).cloned().unwrap_or(Value::null()))
     }
 
     fn set_property(&self, sc: &mut LocalScope, key: &str, value: Value) -> Result<(), Value> {

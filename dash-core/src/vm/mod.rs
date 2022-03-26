@@ -252,7 +252,21 @@ impl Vm {
 
     pub(crate) fn set_local(&mut self, id: usize, value: Value) {
         let sp = self.get_frame_sp();
-        self.stack[sp + id] = value;
+        let idx = sp + id;
+
+        if let Value::External(o) = &mut self.stack[idx] {
+            o.replace(match value {
+                Value::Boolean(b) => Box::new(b),
+                Value::Number(n) => Box::new(n),
+                Value::String(s) => Box::new(s),
+                Value::Null(n) => Box::new(n),
+                Value::Undefined(u) => Box::new(u),
+                Value::Object(o) => Box::new(o),
+                Value::External(o) => Box::new(o), // TODO: is this correct?
+            });
+        } else {
+            self.stack[idx] = value;
+        }
     }
 
     pub(crate) fn try_push_stack(&mut self, value: Value) -> Result<(), Value> {
@@ -266,7 +280,7 @@ impl Vm {
     /// Executes a frame in this VM
     pub fn execute_frame(&mut self, frame: Frame) -> Result<Value, Value> {
         self.stack
-            .resize(self.stack.len() + frame.local_count, Value::Undefined);
+            .resize(self.stack.len() + frame.local_count, Value::undefined());
 
         self.frames.push(frame);
 

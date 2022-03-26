@@ -34,6 +34,11 @@ impl<T: ?Sized> Handle<T> {
     pub fn as_ptr(&self) -> *mut InnerHandle<T> {
         self.0.as_ptr()
     }
+
+    pub fn replace(&mut self, new: Box<T>) {
+        let t = unsafe { self.0.as_mut() };
+        t.value = new;
+    }
 }
 
 unsafe impl<T: ?Sized> Trace for Handle<T> {

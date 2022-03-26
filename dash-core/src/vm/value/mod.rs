@@ -34,7 +34,10 @@ use std::rc::Rc;
 use crate::{
     compiler::constant::Constant,
     gc::{handle::Handle, trace::Trace},
-    vm::value::function::FunctionKind,
+    vm::value::{
+        function::FunctionKind,
+        primitive::{Null, Undefined},
+    },
 };
 
 use self::{
@@ -52,16 +55,18 @@ pub enum Value {
     /// The string type
     String(Rc<str>),
     /// The undefined type
-    Undefined,
+    Undefined(Undefined),
     /// The null type
-    Null,
+    Null(Null),
     /// The object type
     Object(Handle<dyn Object>),
+    /// An "external" value that is being used by other functions.
+    External(Handle<dyn Object>),
 }
 
 unsafe impl Trace for Value {
     fn trace(&self) {
-        if let Value::Object(handle) = self {
+        if let Value::External(handle) | Value::Object(handle) = self {
             handle.trace();
         }
     }
@@ -73,24 +78,37 @@ impl Value {
             Constant::Number(n) => Value::Number(n),
             Constant::Boolean(b) => Value::Boolean(b),
             Constant::String(s) => Value::String(s.into()),
-            Constant::Undefined => Value::Undefined,
-            Constant::Null => Value::Null,
+            Constant::Undefined => Value::undefined(),
+            Constant::Null => Value::null(),
             Constant::Function(f) => {
                 let mut externals = Vec::new();
 
-                for idx in f.externals.iter() {
-                    let val = vm
-                        .get_local(*idx as usize)
-                        .expect("Referenced local not found");
+                for &idx in f.externals.iter() {
+                    let idx = usize::from(idx);
+
+                    let val = vm.get_local(idx).expect("Referenced local not found");
+
+                    fn register<O: Object + 'static>(
+                        vm: &mut Vm,
+                        idx: usize,
+                        o: O,
+                    ) -> Handle<dyn Object> {
+                        let handle = vm.gc.register(o);
+                        vm.set_local(idx, Value::External(handle.clone()));
+                        handle
+                    }
 
                     let obj = match val {
-                        Value::Object(o) => o,
-                        // primitive types need to be put on the heap and GCd
-                        // TODO: we need to update the locals in this current frame too
-                        Value::Number(n) => vm.gc.register(n),
-                        Value::Boolean(b) => vm.gc.register(b),
-                        Value::String(s) => vm.gc.register(s),
-                        _ => panic!("Expected object"),
+                        Value::Number(n) => register(vm, idx, n),
+                        Value::Boolean(b) => register(vm, idx, b),
+                        Value::String(s) => register(vm, idx, s),
+                        Value::Undefined(u) => register(vm, idx, u),
+                        Value::Null(n) => register(vm, idx, n),
+                        Value::External(e) => e,
+                        Value::Object(o) => {
+                            vm.set_local(idx, Value::External(o.clone()));
+                            o
+                        }
                     };
 
                     externals.push(obj);
@@ -107,10 +125,11 @@ impl Value {
 
     pub fn set_property(&self, sc: &mut LocalScope, key: &str, value: Value) -> Result<(), Value> {
         match self {
-            Value::Object(handle) => handle.set_property(sc, key, value),
+            Value::Object(h) => h.set_property(sc, key, value),
             Self::Number(n) => n.set_property(sc, key, value),
             Self::Boolean(b) => b.set_property(sc, key, value),
             Self::String(s) => s.set_property(sc, key, value),
+            Self::External(h) => h.set_property(sc, key, value),
             _ => unimplemented!(),
         }
     }
@@ -121,6 +140,7 @@ impl Value {
             Self::Number(n) => n.get_property(sc, key),
             Self::Boolean(b) => b.get_property(sc, key),
             Self::String(s) => s.get_property(sc, key),
+            Self::External(o) => o.get_property(sc, key),
             _ => unimplemented!(),
         }
     }
@@ -132,7 +152,8 @@ impl Value {
         args: Vec<Value>,
     ) -> Result<Value, Value> {
         match self {
-            Value::Object(object) => object.apply(sc, this, args),
+            Self::Object(o) => o.apply(sc, this, args),
+            Self::External(o) => o.apply(sc, this, args),
             Self::Number(n) => n.apply(sc, this, args),
             Self::Boolean(b) => b.apply(sc, this, args),
             Self::String(s) => s.apply(sc, this, args),
@@ -148,6 +169,14 @@ impl Value {
             _ => unimplemented!(),
         }
     }
+
+    pub fn undefined() -> Value {
+        Value::Undefined(Undefined)
+    }
+
+    pub fn null() -> Value {
+        Value::Undefined(Undefined)
+    }
 }
 
 pub trait ValueContext {
@@ -160,14 +189,14 @@ impl ValueContext for Option<Value> {
     fn unwrap_or_undefined(self) -> Value {
         match self {
             Some(x) => x,
-            None => Value::Undefined,
+            None => Value::undefined(),
         }
     }
 
     fn unwrap_or_null(self) -> Value {
         match self {
             Some(x) => x,
-            None => Value::Null,
+            None => Value::null(),
         }
     }
 
@@ -183,14 +212,14 @@ impl ValueContext for Option<&Value> {
     fn unwrap_or_undefined(self) -> Value {
         match self {
             Some(x) => x.clone(), // Values are cheap to clone
-            None => Value::Undefined,
+            None => Value::undefined(),
         }
     }
 
     fn unwrap_or_null(self) -> Value {
         match self {
             Some(x) => x.clone(),
-            None => Value::Null,
+            None => Value::null(),
         }
     }
 
@@ -206,14 +235,14 @@ impl<E> ValueContext for Result<Value, E> {
     fn unwrap_or_undefined(self) -> Value {
         match self {
             Ok(x) => x,
-            Err(_) => Value::Undefined,
+            Err(_) => Value::undefined(),
         }
     }
 
     fn unwrap_or_null(self) -> Value {
         match self {
             Ok(x) => x,
-            Err(_) => Value::Null,
+            Err(_) => Value::null(),
         }
     }
 

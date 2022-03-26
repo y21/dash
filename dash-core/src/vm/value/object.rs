@@ -82,7 +82,7 @@ impl Object for NamedObject {
             "constructor" => throw!(sc, "unimplemented"),
             _ => {
                 let values = self.values.borrow();
-                let value = values.get(key).cloned().unwrap_or(Value::Undefined);
+                let value = values.get(key).cloned().unwrap_or(Value::undefined());
                 Ok(value)
             }
         }
@@ -95,7 +95,7 @@ impl Object for NamedObject {
     }
 
     fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
-        Ok(Value::Undefined)
+        Ok(Value::undefined())
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -108,7 +108,7 @@ impl Object for NamedObject {
 
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
         match value {
-            Value::Null => self.prototype.replace(None),
+            Value::Null(_) => self.prototype.replace(None),
             Value::Object(handle) => self.prototype.replace(Some(handle)),
             _ => throw!(sc, "prototype must be an object"),
         };
@@ -120,7 +120,42 @@ impl Object for NamedObject {
         let prototype = self.prototype.borrow();
         match prototype.as_ref() {
             Some(handle) => Ok(Value::Object(handle.clone())),
-            None => Ok(Value::Null),
+            None => Ok(Value::null()),
         }
+    }
+}
+
+impl Object for Handle<dyn Object> {
+    fn get_property(&self, sc: &mut LocalScope, key: &str) -> Result<Value, Value> {
+        (**self).get_property(sc, key)
+    }
+
+    fn set_property(&self, sc: &mut LocalScope, key: &str, value: Value) -> Result<(), Value> {
+        (**self).set_property(sc, key, value)
+    }
+
+    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
+        (**self).set_prototype(sc, value)
+    }
+
+    fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
+        (**self).get_prototype(sc)
+    }
+
+    fn apply<'s>(
+        &self,
+        scope: &mut LocalScope,
+        this: Value,
+        args: Vec<Value>,
+    ) -> Result<Value, Value> {
+        (**self).apply(scope, this, args)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }

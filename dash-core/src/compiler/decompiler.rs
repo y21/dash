@@ -312,11 +312,14 @@ fn test_decompile() {
 
     let parser = Parser::from_str(
         r#"
-    function add(a, b) {
-        return a + b + 65 + 8;
-    }
-    
-    add(5) + 1
+        function fib(n) {
+            if (n < 2) {
+                return n;
+            }
+            return fib(n - 1) + fib(n - 2);
+        }
+        fib(20);
+
     "#,
     )
     .unwrap();

@@ -12,9 +12,10 @@ pub fn eval(s: &str) -> String {
             Value::Number(n) => n.to_string(),
             Value::Boolean(b) => b.to_string(),
             Value::String(s) => s.to_string(),
-            Value::Null => String::from("null"),
-            Value::Undefined => String::from("undefined"),
-            Value::Object(o) => format!("{:?}", o.as_ptr()),
+            Value::Null(_) => String::from("null"),
+            Value::Undefined(_) => String::from("undefined"),
+            Value::Object(o) => format!("[object@{:?}]", o.as_ptr()),
+            Value::External(e) => format!("[external@{:?}]", e.as_ptr()),
         },
         Err(e) => e.to_string(),
     }

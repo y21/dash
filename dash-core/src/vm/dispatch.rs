@@ -143,7 +143,7 @@ mod handlers {
         let this = if has_this {
             vm.stack.pop().expect("Missing this")
         } else {
-            Value::Undefined
+            Value::undefined()
         };
 
         let mut scope = LocalScope::new(vm);

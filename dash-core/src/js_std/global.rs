@@ -14,7 +14,7 @@ pub fn is_nan(cx: CallContext) -> Result<Value, Value> {
 
 pub fn log(cx: CallContext) -> Result<Value, Value> {
     println!("{:?}", cx.args);
-    Ok(Value::Undefined)
+    Ok(Value::undefined())
 }
 
 pub fn is_finite(cx: CallContext) -> Result<Value, Value> {

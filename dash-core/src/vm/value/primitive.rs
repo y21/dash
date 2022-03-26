@@ -2,6 +2,7 @@ use std::any::Any;
 use std::rc::Rc;
 
 use crate::gc::trace::Trace;
+use crate::throw;
 use crate::vm::local::LocalScope;
 
 use super::object::Object;
@@ -39,7 +40,7 @@ impl Object for f64 {
         args: Vec<Value>,
     ) -> Result<Value, Value> {
         // TODO: error
-        Ok(Value::Undefined)
+        Ok(Value::undefined())
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -79,7 +80,7 @@ impl Object for bool {
         args: Vec<Value>,
     ) -> Result<Value, Value> {
         // TODO: throw
-        Ok(Value::Undefined)
+        Ok(Value::undefined())
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -119,7 +120,89 @@ impl Object for Rc<str> {
         args: Vec<Value>,
     ) -> Result<Value, Value> {
         // TODO: throw
-        Ok(Value::Undefined)
+        Ok(Value::undefined())
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Undefined;
+unsafe impl Trace for Undefined {
+    fn trace(&self) {}
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Null;
+unsafe impl Trace for Null {
+    fn trace(&self) {}
+}
+
+impl Object for Undefined {
+    fn get_property(&self, sc: &mut LocalScope, key: &str) -> Result<Value, Value> {
+        throw!(sc, "Cannot read property '{}' of undefined", key)
+    }
+
+    fn set_property(&self, sc: &mut LocalScope, key: &str, value: Value) -> Result<(), Value> {
+        throw!(sc, "Cannot set property '{}' of undefined", key)
+    }
+
+    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
+        throw!(sc, "Cannot set prototype of undefined")
+    }
+
+    fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
+        throw!(sc, "Cannot get prototype of undefined")
+    }
+
+    fn apply<'s>(
+        &self,
+        sc: &mut LocalScope,
+        this: Value,
+        args: Vec<Value>,
+    ) -> Result<Value, Value> {
+        throw!(sc, "undefined is not a function")
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+}
+
+impl Object for Null {
+    fn get_property(&self, sc: &mut LocalScope, key: &str) -> Result<Value, Value> {
+        throw!(sc, "Cannot read property '{}' of null", key)
+    }
+
+    fn set_property(&self, sc: &mut LocalScope, key: &str, value: Value) -> Result<(), Value> {
+        throw!(sc, "Cannot set property '{}' of null", key)
+    }
+
+    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
+        throw!(sc, "Cannot set prototype of null")
+    }
+
+    fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
+        throw!(sc, "Cannot get prototype of null")
+    }
+
+    fn apply<'s>(
+        &self,
+        sc: &mut LocalScope,
+        this: Value,
+        args: Vec<Value>,
+    ) -> Result<Value, Value> {
+        throw!(sc, "null is not a function")
     }
 
     fn as_any(&self) -> &dyn Any {
