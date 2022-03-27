@@ -192,6 +192,13 @@ impl Value {
             Value::External(o) => Box::new(o), // TODO: is this correct?
         }
     }
+
+    pub fn into_option(self) -> Option<Self> {
+        match self {
+            Value::Undefined(_) => None,
+            _ => Some(self),
+        }
+    }
 }
 
 pub trait ValueContext {

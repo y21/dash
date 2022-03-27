@@ -16,7 +16,13 @@ fn main() -> anyhow::Result<()> {
         .subcommand(
             Command::new("run")
                 .override_help("Run a JavaScript file")
-                .arg(Arg::new("file").required(true)),
+                .arg(Arg::new("file").required(true))
+                .arg(
+                    Arg::new("timing")
+                        .short('t')
+                        .long("timing")
+                        .takes_value(false),
+                ),
         )
         .subcommand(Command::new("repl").override_help("Enter a JavaScript REPL"));
 

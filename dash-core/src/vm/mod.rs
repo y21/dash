@@ -185,6 +185,40 @@ impl Vm {
             let string = scope.statics.string_prototype.clone();
             let tostring = scope.statics.string_tostring.clone();
             string.set_property(&mut scope, "toString", tostring.into()).unwrap();
+            let charat = scope.statics.string_char_at.clone();
+            string.set_property(&mut scope, "charAt", charat.into()).unwrap();
+            let charcodeat = scope.statics.string_char_code_at.clone();
+            string.set_property(&mut scope, "charCodeAt", charcodeat.into()).unwrap();
+            let concat = scope.statics.string_concat.clone();
+            string.set_property(&mut scope, "concat", concat.into()).unwrap();
+            let endswith = scope.statics.string_ends_with.clone();
+            string.set_property(&mut scope, "endsWith", endswith.into()).unwrap();
+            let startswith = scope.statics.string_starts_with.clone();
+            string.set_property(&mut scope, "startsWith", startswith.into()).unwrap();
+            let includes = scope.statics.string_includes.clone();
+            string.set_property(&mut scope, "includes", includes.into()).unwrap();
+            let indexof = scope.statics.string_index_of.clone();
+            string.set_property(&mut scope, "indexOf", indexof.into()).unwrap();
+            let lastindexof = scope.statics.string_last_index_of.clone();
+            string.set_property(&mut scope, "lastIndexOf", lastindexof.into()).unwrap();
+            let padend = scope.statics.string_pad_end.clone();
+            string.set_property(&mut scope, "padEnd", padend.into()).unwrap();
+            let padstart = scope.statics.string_pad_start.clone();
+            string.set_property(&mut scope, "padStart", padstart.into()).unwrap();
+            let repeat = scope.statics.string_repeat.clone();
+            string.set_property(&mut scope, "repeat", repeat.into()).unwrap();
+            let replace = scope.statics.string_replace.clone();
+            string.set_property(&mut scope, "replace", replace.into()).unwrap();
+            let replaceall = scope.statics.string_replace_all.clone();
+            string.set_property(&mut scope, "replaceAll", replaceall.into()).unwrap();
+            let split = scope.statics.string_split.clone();
+            string.set_property(&mut scope, "split", split.into()).unwrap();
+            let to_lowercase = scope.statics.string_to_lowercase.clone();
+            string.set_property(&mut scope, "toLowerCase", to_lowercase.into()).unwrap();
+            let to_uppercase = scope.statics.string_to_uppercase.clone();
+            string.set_property(&mut scope, "toUpperCase", to_uppercase.into()).unwrap();
+
+
             string
         };
 

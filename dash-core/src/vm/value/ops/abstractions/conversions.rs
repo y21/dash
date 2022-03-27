@@ -2,6 +2,7 @@ use std::rc::Rc;
 
 use crate::throw;
 use crate::vm::local::LocalScope;
+use crate::vm::value::primitive::MAX_SAFE_INTEGERF;
 use crate::vm::value::Value;
 
 pub trait ValueConversion {
@@ -11,6 +12,9 @@ pub trait ValueConversion {
         preferred_type: Option<PreferredType>,
     ) -> Result<Value, Value>;
     fn to_number(&self) -> Result<f64, Value>;
+    fn to_length(&self) -> Result<f64, Value>;
+    fn to_length_u(&self) -> Result<usize, Value>;
+    fn to_integer_or_infinity(&self) -> Result<f64, Value>;
     fn to_boolean(&self) -> Result<bool, Value>;
     fn to_string(&self, sc: &mut LocalScope) -> Result<Rc<str>, Value>;
 }
@@ -74,6 +78,47 @@ impl ValueConversion for Value {
         } else {
             Ok(self.clone())
         }
+    }
+
+    fn to_length(&self) -> Result<f64, Value> {
+        // Let len be ? ToIntegerOrInfinity(argument).
+        let len = self.to_integer_or_infinity()?;
+        // 2. If len ≤ 0, return +0𝔽.
+        if len <= 0.0 {
+            return Ok(0.0);
+        }
+
+        // Return 𝔽(min(len, 253 - 1)).
+        Ok(len.min(MAX_SAFE_INTEGERF))
+    }
+
+    fn to_integer_or_infinity(&self) -> Result<f64, Value> {
+        // Let number be ? ToNumber(argument).
+        let number = self.to_number()?;
+        // 2. If number is NaN, +0𝔽, or -0𝔽, return 0.
+        if number.is_nan() || number == 0.0 {
+            return Ok(0.0);
+        }
+
+        // 3. If number is +∞𝔽, return +∞.
+        // 4. If number is -∞𝔽, return -∞.
+        if number == f64::INFINITY || number == f64::NEG_INFINITY {
+            return Ok(number);
+        }
+
+        // 5. Let integer be floor(abs(ℝ(number))).
+        let integer = number.abs().floor();
+
+        // 6. If number < -0𝔽, set integer to -integer.
+        if number < 0.0 {
+            Ok(-integer)
+        } else {
+            Ok(integer)
+        }
+    }
+
+    fn to_length_u(&self) -> Result<usize, Value> {
+        self.to_length().map(|x| x as usize)
     }
 }
 

@@ -98,6 +98,10 @@ unsafe impl Trace for Rc<str> {
 
 impl Object for Rc<str> {
     fn get_property(&self, sc: &mut LocalScope, key: &str) -> Result<Value, Value> {
+        if let Some(value) = str::get_property(self, sc, key)?.into_option() {
+            return Ok(value);
+        }
+
         sc.statics.string_prototype.clone().get_property(sc, key)
     }
 
@@ -119,8 +123,7 @@ impl Object for Rc<str> {
         this: Value,
         args: Vec<Value>,
     ) -> Result<Value, Value> {
-        // TODO: throw
-        Ok(Value::undefined())
+        throw!(scope, "string is not a function")
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -211,5 +214,55 @@ impl Object for Null {
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+}
+
+unsafe impl Trace for str {
+    fn trace(&self) {}
+}
+
+impl Object for str {
+    fn get_property(&self, sc: &mut LocalScope, key: &str) -> Result<Value, Value> {
+        if key == "length" {
+            return Ok(Value::Number(self.len() as f64));
+        }
+
+        if let Ok(index) = key.parse::<usize>() {
+            let bytes = self.as_bytes();
+            if let Some(&byte) = bytes.get(index) {
+                return Ok(Value::String((byte as char).to_string().into()));
+            }
+        }
+
+        Ok(Value::undefined())
+    }
+
+    fn set_property(&self, sc: &mut LocalScope, key: &str, value: Value) -> Result<(), Value> {
+        Ok(())
+    }
+
+    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
+        Ok(())
+    }
+
+    fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
+        Ok(sc.statics.string_prototype.clone().into())
+    }
+
+    fn apply<'s>(
+        &self,
+        scope: &mut LocalScope,
+        this: Value,
+        args: Vec<Value>,
+    ) -> Result<Value, Value> {
+        throw!(scope, "string is not a function")
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        panic!("cannot convert string to any")
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        panic!("cannot convert string to any")
     }
 }
