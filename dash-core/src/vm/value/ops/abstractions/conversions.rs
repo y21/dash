@@ -17,6 +17,7 @@ pub trait ValueConversion {
     fn to_integer_or_infinity(&self) -> Result<f64, Value>;
     fn to_boolean(&self) -> Result<bool, Value>;
     fn to_string(&self, sc: &mut LocalScope) -> Result<Rc<str>, Value>;
+    fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value>;
 }
 
 impl ValueConversion for Value {
@@ -119,6 +120,10 @@ impl ValueConversion for Value {
 
     fn to_length_u(&self) -> Result<usize, Value> {
         self.to_length().map(|x| x as usize)
+    }
+
+    fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value> {
+        self.get_property(sc, "length")?.to_length_u()
     }
 }
 

@@ -82,8 +82,15 @@ impl Object for NamedObject {
             "constructor" => throw!(sc, "unimplemented"),
             _ => {
                 let values = self.values.borrow();
-                let value = values.get(key).cloned().unwrap_or(Value::undefined());
-                Ok(value)
+                if let Some(value) = values.get(key) {
+                    return Ok(value.clone());
+                }
+
+                if let Some(prototype) = self.prototype.borrow().as_ref() {
+                    return prototype.get_property(sc, key);
+                }
+
+                Ok(Value::undefined())
             }
         }
     }

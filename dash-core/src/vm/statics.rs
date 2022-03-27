@@ -4,6 +4,7 @@ use crate::js_std;
 use crate::vm::value::function::Function;
 use crate::vm::value::function::FunctionKind;
 
+use super::value::array::Array;
 use super::value::boxed::Boolean;
 use super::value::boxed::Number;
 use super::value::boxed::String;
@@ -85,6 +86,10 @@ pub struct Statics {
     pub string_split: Handle<dyn Object>,
     pub string_to_uppercase: Handle<dyn Object>,
     pub string_to_lowercase: Handle<dyn Object>,
+    pub array_ctor: Handle<dyn Object>,
+    pub array_tostring: Handle<dyn Object>,
+    pub array_prototype: Handle<dyn Object>,
+    pub array_join: Handle<dyn Object>,
 }
 
 fn object(gc: &mut Gc<dyn Object>) -> Handle<dyn Object> {
@@ -176,6 +181,10 @@ impl Statics {
             string_split: function(gc, "split", js_std::string::split),
             string_to_uppercase: function(gc, "toUpperCase", js_std::string::to_uppercase),
             string_to_lowercase: function(gc, "toLowerCase", js_std::string::to_lowercase),
+            array_ctor: function(gc, "Array", js_std::array::constructor),
+            array_tostring: function(gc, "toString", js_std::array::to_string),
+            array_prototype: gc.register(Array::with_obj(NamedObject::null())),
+            array_join: function(gc, "join", js_std::array::join),
         }
     }
 

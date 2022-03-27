@@ -141,7 +141,8 @@ impl Value {
             Self::Boolean(b) => b.get_property(sc, key),
             Self::String(s) => s.get_property(sc, key),
             Self::External(o) => o.get_property(sc, key),
-            _ => unimplemented!(),
+            Self::Undefined(u) => u.get_property(sc, key),
+            Self::Null(n) => n.get_property(sc, key),
         }
     }
 
@@ -157,7 +158,8 @@ impl Value {
             Self::Number(n) => n.apply(sc, this, args),
             Self::Boolean(b) => b.apply(sc, this, args),
             Self::String(s) => s.apply(sc, this, args),
-            _ => unimplemented!(),
+            Self::Undefined(u) => u.apply(sc, this, args),
+            Self::Null(n) => n.apply(sc, this, args),
         }
     }
 

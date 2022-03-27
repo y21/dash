@@ -222,6 +222,24 @@ impl Vm {
             string
         };
 
+        let array = {
+            let array = scope.statics.array_ctor.clone();
+            let array_prototype = scope.statics.array_prototype.clone();
+
+            array.set_prototype(&mut scope, array_prototype.into()).unwrap();
+            array
+        };
+
+        let array_proto = {
+            let array = scope.statics.array_prototype.clone();
+            let tostring = scope.statics.array_tostring.clone();
+            let join = scope.statics.array_join.clone();
+            array.set_property(&mut scope, "toString", tostring.into()).unwrap();
+            array.set_property(&mut scope, "join", join.into()).unwrap();
+
+            array
+        };
+
         let global = {
             let is_nan = scope.statics.is_nan.clone();
             let is_finite = scope.statics.is_finite.clone();
@@ -235,6 +253,7 @@ impl Vm {
             global
         };
 
+        global.set_property(&mut scope, "Array", array.into()).unwrap();
         global.set_property(&mut scope, "String", string.into()).unwrap();
         global.set_property(&mut scope, "Object", object.into()).unwrap();
         global.set_property(&mut scope, "console", console.into()).unwrap();
