@@ -366,9 +366,11 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
     ) -> Result<Vec<u8>, CompileError> {
         let mut ib = InstructionBuilder::new();
 
-        if !matches!(e.operator, TokenType::Assignment) {
-            unimplementedc!("Assignment operator {:?}", e.operator);
+        if let Expr::PropertyAccess(prop) = &*e.left {
+            ib.append(&mut self.accept_expr(&prop.target)?);
         }
+
+        ib.append(&mut self.accept_expr(&e.right)?);
 
         match &*e.left {
             Expr::Literal(lit) => {
@@ -382,16 +384,41 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
 
                     let is_extern = local.is_extern();
 
-                    ib.append(&mut self.accept_expr(&e.right)?);
+                    match e.operator {
+                        TokenType::Assignment => {}
+                        TokenType::AdditionAssignment => {
+                            ib.build_local_load(id, is_extern);
+                            ib.build_add();
+                        }
+                        TokenType::SubtractionAssignment => {
+                            ib.build_local_load(id, is_extern);
+                            ib.build_sub();
+                        }
+                        _ => unimplementedc!("Unknown operator"),
+                    }
+
                     ib.build_local_store(id, is_extern);
                 } else {
-                    ib.append(&mut self.accept_expr(&e.right)?);
+                    match e.operator {
+                        TokenType::Assignment => {}
+                        TokenType::AdditionAssignment => {
+                            ib.build_global_load(&mut self.state.cp, ident)?;
+                            ib.build_add();
+                        }
+                        TokenType::SubtractionAssignment => {
+                            ib.build_global_load(&mut self.state.cp, ident)?;
+                            ib.build_sub();
+                        }
+                        _ => unimplementedc!("Unknown operator"),
+                    }
+
                     ib.build_global_store(&mut self.state.cp, ident)?;
                 }
             }
             Expr::PropertyAccess(prop) => {
-                ib.append(&mut self.accept_expr(&prop.target)?);
-                ib.append(&mut self.accept_expr(&e.right)?);
+                if !matches!(e.operator, TokenType::Assignment) {
+                    unimplementedc!("Assignment operator {:?}", e.operator);
+                }
 
                 match &*prop.property {
                     Expr::Literal(lit) => {
@@ -496,7 +523,34 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
     }
 
     fn visit_postfix_expr(&mut self, p: &Postfix<'a>) -> Result<Vec<u8>, CompileError> {
-        unimplementedc!("Postfix expression {:?}", p.0)
+        let mut ib = InstructionBuilder::new();
+
+        match &*p.1 {
+            Expr::Literal(lit) => {
+                let ident = lit.to_identifier();
+                if let Some((id, loc)) = self.find_local(ident.as_bytes()) {
+                    ib.build_local_load(id, loc.is_extern());
+                } else {
+                    unimplementedc!("Global postfix expression");
+                }
+            }
+            _ => unimplementedc!("Non-identifier postfix expression"),
+        }
+
+        let mut desugar = self.visit_assignment_expression(&AssignmentExpr {
+            left: p.1.clone(),
+            operator: match p.0 {
+                TokenType::Increment => TokenType::AdditionAssignment,
+                TokenType::Decrement => TokenType::SubtractionAssignment,
+                _ => unreachable!("Token never emitted"),
+            },
+            right: Box::new(Expr::number_literal(1.0)),
+        })?;
+
+        ib.append(&mut desugar);
+        ib.build_pop();
+
+        Ok(ib.build())
     }
 
     fn visit_function_expr(

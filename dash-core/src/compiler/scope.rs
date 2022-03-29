@@ -1,4 +1,5 @@
 use crate::parser::statement::VariableBinding;
+use crate::parser::statement::VariableDeclarationKind;
 use std::cell::Cell;
 use std::convert::TryFrom;
 
@@ -45,7 +46,10 @@ impl<'a> Scope<'a> {
         self.locals
             .iter()
             .enumerate()
-            .find(|(_, l)| l.binding.name == identifier)
+            .find(|(_, l)| {
+                l.binding.name == identifier
+                    && !matches!(l.binding.kind, VariableDeclarationKind::Unnameable)
+            })
             .map(|(i, l)| (i as u16, l))
     }
 

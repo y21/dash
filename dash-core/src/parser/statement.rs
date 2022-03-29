@@ -326,6 +326,8 @@ pub enum VariableDeclarationKind {
     Let,
     /// Const: lifetime limited to block scope and no reassigns allowed
     Const,
+    /// Unnameable variables cannot be referred to by JavaScript code directly and are created by the compiler
+    Unnameable,
 }
 
 impl From<TokenType> for VariableDeclarationKind {

@@ -631,9 +631,9 @@ impl<'a> Parser<'a> {
 
             if [TokenType::Increment, TokenType::Decrement].contains(&operator) {
                 let operator = if operator == TokenType::Increment {
-                    TokenType::PrefixIncrement
+                    TokenType::AdditionAssignment
                 } else {
-                    TokenType::PrefixDecrement
+                    TokenType::SubtractionAssignment
                 };
                 Some(Expr::assignment(rval, Expr::number_literal(1f64), operator))
             } else {
