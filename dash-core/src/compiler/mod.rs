@@ -45,6 +45,7 @@ pub struct SharedCompilerState<'a> {
     cp: ConstantPool,
     scope: Scope<'a>,
     externals: Vec<u16>,
+    in_try_block: bool,
 }
 
 impl<'a> SharedCompilerState<'a> {
@@ -53,6 +54,7 @@ impl<'a> SharedCompilerState<'a> {
             cp: ConstantPool::new(),
             scope: Scope::new(),
             externals: Vec::new(),
+            in_try_block: false,
         }
     }
 }
@@ -292,12 +294,12 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
 
         ib.append(&mut self.accept_expr(&i.condition)?);
         if branches.is_empty() {
-            ib.build_jmpfalsep(Label::IfEnd)?;
+            ib.build_jmpfalsep(Label::IfEnd);
         } else {
-            ib.build_jmpfalsep(Label::IfBranch(0))?;
+            ib.build_jmpfalsep(Label::IfBranch(0));
         }
         ib.append(&mut self.accept(&i.then)?);
-        ib.build_jmp(Label::IfEnd)?;
+        ib.build_jmp(Label::IfEnd);
 
         for (id, branch) in branches.iter().enumerate() {
             let id = id as u16;
@@ -305,15 +307,15 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
             ib.add_label(Label::IfBranch(id));
             ib.append(&mut self.accept_expr(&branch.condition)?);
             if id == len - 1 {
-                ib.build_jmpfalsep(Label::IfEnd)?;
+                ib.build_jmpfalsep(Label::IfEnd);
 
                 ib.append(&mut self.accept(&branch.then)?);
             } else {
-                ib.build_jmpfalsep(Label::IfBranch(id + 1))?;
+                ib.build_jmpfalsep(Label::IfBranch(id + 1));
 
                 ib.append(&mut self.accept(&branch.then)?);
 
-                ib.build_jmp(Label::IfEnd)?;
+                ib.build_jmp(Label::IfEnd);
             }
         }
 
@@ -351,10 +353,10 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
 
         ib.add_label(Label::LoopCondition);
         ib.append(&mut self.accept_expr(&l.condition)?);
-        ib.build_jmpfalsep(Label::LoopEnd)?;
+        ib.build_jmpfalsep(Label::LoopEnd);
 
         ib.append(&mut self.accept(&l.body)?);
-        ib.build_jmp(Label::LoopCondition)?;
+        ib.build_jmp(Label::LoopCondition);
 
         ib.add_label(Label::LoopEnd);
         Ok(ib.build())
@@ -478,10 +480,10 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
         let mut ib = InstructionBuilder::new();
 
         ib.append(&mut self.accept_expr(&c.condition)?);
-        ib.build_jmpfalsep(Label::IfBranch(0))?;
+        ib.build_jmpfalsep(Label::IfBranch(0));
 
         ib.append(&mut self.accept_expr(&c.then)?);
-        ib.build_jmp(Label::IfEnd)?;
+        ib.build_jmp(Label::IfEnd);
 
         ib.add_label(Label::IfBranch(0));
         ib.append(&mut self.accept_expr(&c.el)?);
@@ -617,7 +619,20 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
     }
 
     fn visit_try_catch(&mut self, t: &TryCatch<'a>) -> Result<Vec<u8>, CompileError> {
-        unimplementedc!("Try catch")
+        let mut ib = InstructionBuilder::new();
+
+        ib.build_try_block();
+        ib.append(&mut self.accept(&t.try_)?);
+
+        ib.build_jmp(Label::TryEnd);
+
+        ib.add_label(Label::Catch);
+        // // TODO: do something with t.catch.ident
+        ib.append(&mut self.accept(&t.catch.body)?);
+
+        ib.add_label(Label::TryEnd);
+
+        Ok(ib.build())
     }
 
     fn visit_throw(&mut self, e: &Expr<'a>) -> Result<Vec<u8>, CompileError> {
@@ -638,7 +653,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
         ib.add_label(Label::LoopCondition);
         if let Some(condition) = &f.condition {
             ib.append(&mut self.accept_expr(&condition)?);
-            ib.build_jmpfalsep(Label::LoopEnd)?;
+            ib.build_jmpfalsep(Label::LoopEnd);
         }
 
         // Body
@@ -649,7 +664,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
             ib.append(&mut self.accept_expr(&finalizer)?);
             ib.build_pop();
         }
-        ib.build_jmp(Label::LoopCondition)?;
+        ib.build_jmp(Label::LoopCondition);
 
         ib.add_label(Label::LoopEnd);
         self.state.scope.exit();

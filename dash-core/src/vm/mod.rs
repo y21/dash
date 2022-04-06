@@ -5,7 +5,7 @@ use crate::gc::{handle::Handle, Gc};
 use self::{
     dispatch::HandleResult,
     external::Externals,
-    frame::Frame,
+    frame::{Frame, TryBlock},
     local::LocalScope,
     statics::Statics,
     value::{
@@ -31,6 +31,7 @@ pub struct Vm {
     global: Handle<dyn Object>,
     externals: Externals,
     statics: Statics,
+    try_blocks: Vec<TryBlock>,
 }
 
 impl Vm {
@@ -46,6 +47,7 @@ impl Vm {
             global,
             externals: Externals::new(),
             statics,
+            try_blocks: Vec::new(),
         };
         vm.prepare();
         vm
@@ -365,6 +367,7 @@ fn test_eval() {
         }
         add(10, 7) + 1
     "#,
+        Default::default(),
     )
     .unwrap();
 

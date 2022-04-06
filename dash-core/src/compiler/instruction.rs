@@ -42,14 +42,8 @@ pub const STOREGLOBALW: u8 = 0x1C;
 pub const RET: u8 = 0x1D;
 pub const CALL: u8 = 0x1E;
 /// Jumps to the given label
-pub const CJMPFALSEP: u8 = 0x1F;
 pub const JMPFALSEP: u8 = 0x1F;
-pub const CJMPFALSEWP: u8 = 0x20;
-pub const JMPFALSEWP: u8 = 0x20;
-pub const CJMP: u8 = 0x21;
 pub const JMP: u8 = 0x21;
-pub const CJMPW: u8 = 0x22;
-pub const JMPW: u8 = 0x22;
 pub const STATICPROPACCESS: u8 = 0x23;
 pub const STATICPROPACCESSW: u8 = 0x24;
 pub const DYNAMICPROPACCESS: u8 = 0x25;
@@ -67,6 +61,8 @@ pub const LDLOCALEXTW: u8 = 0x2F;
 pub const STORELOCALEXT: u8 = 0x30;
 pub const STORELOCALEXTW: u8 = 0x31;
 pub const STRICTEQ: u8 = 0x32;
+pub const TRY: u8 = 0x33;
+pub const TRYW: u8 = 0x34;
 
 #[rustfmt::skip]
 pub trait InstructionWriter {
@@ -112,14 +108,14 @@ pub trait InstructionWriter {
     fn build_ret(&mut self);
     /// Builds the [THIS] instruction
     fn build_this(&mut self);
-    /// Builds the [JMPFALSEP] and [JMPFALSEWP] instructions
-    fn build_jmpfalsep(&mut self, label: Label) -> Result<(), LimitExceededError>;
+    /// Builds the [JMPFALSEP] instructions
+    fn build_jmpfalsep(&mut self, label: Label);
     /// Builds the [ARRAYLIT] and [ARRAYLITW] instructions
     fn build_arraylit(&mut self, len: u16);
     /// Builds the [OBJLIT] and [OBJLITW] instructions
     fn build_objlit(&mut self, cp: &mut ConstantPool, constants: Vec<Constant>) -> Result<(), CompileError>;
-    /// Builds the [JMP] and [JMPW] instructions
-    fn build_jmp(&mut self, label: Label) -> Result<(), LimitExceededError>;
+    /// Builds the [JMP] instructions
+    fn build_jmp(&mut self, label: Label);
     fn build_call(&mut self, meta: FunctionCallMetadata);
     fn build_static_prop_access(&mut self, cp: &mut ConstantPool, ident: &[u8], preserve_this: bool) -> Result<(), LimitExceededError>;
     fn build_dynamic_prop_access(&mut self, preserve_this: bool);
@@ -130,6 +126,8 @@ pub trait InstructionWriter {
     fn build_global_load(&mut self, cp: &mut ConstantPool, ident: &[u8]) -> Result<(), LimitExceededError>;
     fn build_global_store(&mut self, cp: &mut ConstantPool, ident: &[u8]) -> Result<(), LimitExceededError>;
     fn build_local_store(&mut self, id: u16, is_extern: bool);
+    fn build_try_block(&mut self);
+    // fn build_catch_block(&mut self);
 }
 
 macro_rules! impl_instruction_writer {
@@ -176,6 +174,11 @@ impl InstructionWriter for InstructionBuilder {
         Ok(())
     }
 
+    fn build_try_block(&mut self) {
+        self.write_all(&[TRY, 0, 0]);
+        self.add_jump(Label::Catch);
+    }
+
     fn build_local_load(&mut self, index: u16, is_extern: bool) {
         let (thin, wide) = is_extern
             .then(|| (LDLOCALEXT, LDLOCALEXTW))
@@ -213,21 +216,19 @@ impl InstructionWriter for InstructionBuilder {
     }
 
     fn build_call(&mut self, meta: FunctionCallMetadata) {
-        self.write_arr([CALL, meta.into()]);
+        self.write_all(&[CALL, meta.into()]);
     }
 
-    fn build_jmpfalsep(&mut self, label: Label) -> Result<(), LimitExceededError> {
-        let id = self.add_jump(label)?;
-        self.write_wide_instr(CJMPFALSEP, CJMPFALSEWP, id);
-
-        Ok(())
+    fn build_jmpfalsep(&mut self, label: Label) {
+        self.write(JMPFALSEP);
+        self.write_all(&[0, 0]);
+        self.add_jump(label);
     }
 
-    fn build_jmp(&mut self, label: Label) -> Result<(), LimitExceededError> {
-        let id = self.add_jump(label)?;
-        self.write_wide_instr(JMP, JMPW, id);
-
-        Ok(())
+    fn build_jmp(&mut self, label: Label) {
+        self.write(JMP);
+        self.write_all(&[0, 0]);
+        self.add_jump(label);
     }
 
     fn build_static_prop_access(
@@ -244,7 +245,7 @@ impl InstructionWriter for InstructionBuilder {
     }
 
     fn build_dynamic_prop_access(&mut self, preserve_this: bool) {
-        self.write_arr([DYNAMICPROPACCESS, preserve_this.into()]);
+        self.write_all(&[DYNAMICPROPACCESS, preserve_this.into()]);
     }
 
     fn build_static_prop_set(

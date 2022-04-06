@@ -79,6 +79,10 @@ impl<R: Read> Reader<R> {
     pub fn read_u16_ne(&mut self) -> Option<u16> {
         self.read_bytes().map(u16::from_ne_bytes)
     }
+
+    pub fn read_i16_ne(&mut self) -> Option<i16> {
+        self.read_bytes().map(i16::from_ne_bytes)
+    }
 }
 
 #[derive(Debug)]
@@ -225,19 +229,13 @@ pub fn decompile(
                 stack += 1;
                 output.write_instruction(Unit::Main, name, &[StackId(id.into())]);
             }
-            JMP | JMPW => {
-                let (name, id) =
-                    read_wide_signed(instr, ("JMP", JMP), ("JMPW", JMPW), &mut reader)?;
-                output.write_instruction(Unit::Main, name, &[id]);
+            JMP => {
+                let id = reader.read_i16_ne().ok_or(DecompileError::AbruptEof)?;
+                output.write_instruction(Unit::Main, "JMP", &[id]);
             }
-            JMPFALSEP | JMPFALSEWP => {
-                let (name, id) = read_wide_signed(
-                    instr,
-                    ("JMPFALSEP", JMPFALSEP),
-                    ("JMPFALSEWP", JMPFALSEWP),
-                    &mut reader,
-                )?;
-                output.write_instruction(Unit::Main, name, &[id]);
+            JMPFALSEP => {
+                let id = reader.read_i16_ne().ok_or(DecompileError::AbruptEof)?;
+                output.write_instruction(Unit::Main, "JMPFALSEP", &[id]);
             }
             LDGLOBAL | LDGLOBALW => {
                 let (name, id) = read_wide(

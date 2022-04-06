@@ -17,6 +17,18 @@ impl Default for OptLevel {
     }
 }
 
+impl OptLevel {
+    pub fn from_level(s: &str) -> Option<Self> {
+        let l = s.parse::<u8>().ok()?;
+        match l {
+            0 => Some(Self::None),
+            1 => Some(Self::Basic),
+            2 => Some(Self::Aggressive),
+            _ => None,
+        }
+    }
+}
+
 /// A trait for evaluating constant expressions.
 pub trait Eval {
     /// Attempts to fold an expression or statement prior to execution

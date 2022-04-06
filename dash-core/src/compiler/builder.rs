@@ -1,8 +1,7 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::hash::Hash;
 
-use super::constant::LimitExceededError;
 use super::instruction;
 
 pub fn force_utf8(s: &[u8]) -> String {
@@ -15,16 +14,16 @@ pub fn force_utf8_borrowed(s: &[u8]) -> &str {
 
 pub struct InstructionBuilder {
     buf: Vec<u8>,
-    labels: HashMap<Label, usize>,
-    jumps: Vec<Label>,
+    jumps: BTreeMap<Label, Vec<usize>>,
+    labels: BTreeMap<Label, usize>,
 }
 
 impl InstructionBuilder {
     pub fn new() -> Self {
         Self {
             buf: Vec::new(),
-            labels: HashMap::new(),
-            jumps: Vec::new(),
+            labels: BTreeMap::new(),
+            jumps: BTreeMap::new(),
         }
     }
 
@@ -44,13 +43,9 @@ impl InstructionBuilder {
         self.buf.extend(instruction)
     }
 
-    pub fn write_arr<const N: usize>(&mut self, instruction: [u8; N]) {
-        self.buf.extend(instruction)
-    }
-
     pub fn write_wide_instr(&mut self, instr: u8, instrw: u8, value: u16) {
         if let Ok(value) = value.try_into() {
-            self.write_arr([instr, value]);
+            self.write_all(&[instr, value]);
         } else {
             self.write(instrw);
             self.writew(value);
@@ -65,89 +60,63 @@ impl InstructionBuilder {
 
     /// Adds a label at the current instruction pointer, which can be jumped to
     pub fn add_label(&mut self, label: Label) {
-        self.labels.insert(label, self.buf.len());
-    }
+        let ip = self.buf.len();
 
-    pub fn add_jump(&mut self, label: Label) -> Result<u16, LimitExceededError> {
-        self.jumps.push(label);
-        self.jumps
-            .len()
-            .try_into()
-            .map_err(|_| LimitExceededError)
-            .map(|x: u16| x - 1)
-    }
+        // get vector of existing jumps to this label
+        if let Some(assoc_jumps) = self.jumps.remove(&label) {
+            for jump in assoc_jumps {
+                let offset = (ip - jump - 2) as u16; // TODO: don't hardcast..? and use i16
 
-    pub fn build(self) -> Vec<u8> {
-        use instruction::*;
-
-        if self.jumps.is_empty() {
-            return self.buf;
-        }
-
-        let mut buf = Vec::with_capacity(self.jumps.len());
-
-        let mut iter = self.buf.into_iter();
-
-        while let Some(byte) = iter.next() {
-            const JUMPS: &[u8] = &[JMP, JMPW, JMPFALSEP, JMPFALSEWP];
-            const JUMPS_W: &[u8] = &[JMPW, JMPFALSEWP];
-
-            if JUMPS.contains(&byte) {
-                let id = if JUMPS_W.contains(&byte) {
-                    let p1 = iter.next();
-                    let p2 = iter.next();
-                    p1.zip(p2).map(|(a, b)| u16::from_ne_bytes([a, b]) as usize)
-                } else {
-                    iter.next().map(|i| i as usize)
-                };
-
-                let id = id.expect("Missing jump label index");
-
-                let label = &self.jumps[id];
-                let position = self.labels[label] as isize;
-                let jmpct = position - buf.len() as isize - 2;
-
-                let (thin, wide) = match byte {
-                    JMP | JMPW => (JMP, JMPW),
-                    JMPFALSEP | JMPFALSEWP => (JMPFALSEP, JMPFALSEWP),
-                    _ => unreachable!(),
-                };
-
-                match jmpct {
-                    -128..=127 => {
-                        buf.push(thin);
-                        buf.push(jmpct as u8);
-                    }
-                    -32768..=32767 => {
-                        buf.push(wide);
-                        buf.extend((jmpct as u16).to_ne_bytes());
-                    }
-                    _ => unreachable!("Jump offset out of range"),
-                }
-            } else {
-                buf.push(byte);
+                // write jump offset
+                let pt = &mut self.buf[jump..jump + 2];
+                pt.copy_from_slice(&u16::to_ne_bytes(offset));
             }
         }
 
-        buf
+        self.labels.insert(label, ip);
+    }
+
+    /// Requirement for calling this function: there must be two bytes in the buffer, reserved for this jump
+    pub fn add_jump(&mut self, label: Label) {
+        if let Some(&ip) = self.labels.get(&label) {
+            let ip = ip as isize;
+            let len = self.buf.len() as isize;
+            let offset = (ip - len) as i16; // TODO: don't hardcast..?
+
+            let pt = &mut self.buf[len as usize - 2..];
+            pt.copy_from_slice(&i16::to_ne_bytes(offset));
+        } else {
+            self.jumps
+                .entry(label)
+                .or_insert_with(Vec::new)
+                .push(self.buf.len() - 2);
+        }
+    }
+
+    pub fn build(self) -> Vec<u8> {
+        debug_assert!(self.jumps.is_empty(), "Unresolved jumps");
+
+        self.buf
     }
 }
 
-#[derive(Hash, Eq, PartialEq, Debug, Clone)]
+#[derive(PartialOrd, Ord, Hash, Eq, PartialEq, Debug, Clone)]
 pub enum Label {
     IfEnd,
     /// A branch of an if statement
     IfBranch(u16),
     LoopCondition,
     LoopEnd,
+    Catch,
+    TryEnd,
 }
 
 impl From<Vec<u8>> for InstructionBuilder {
     fn from(buf: Vec<u8>) -> Self {
         Self {
             buf,
-            labels: HashMap::new(),
-            jumps: Vec::new(),
+            labels: BTreeMap::new(),
+            jumps: BTreeMap::new(),
         }
     }
 }

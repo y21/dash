@@ -8,6 +8,7 @@ pub enum HandleResult {
 
 mod handlers {
     use crate::compiler::FunctionCallMetadata;
+    use crate::vm::frame::TryBlock;
     use crate::vm::local::LocalScope;
     use crate::vm::value::array::Array;
     use crate::vm::value::object::NamedObject;
@@ -156,7 +157,7 @@ mod handlers {
     }
 
     pub fn jmpfalsep(vm: &mut Vm) -> Result<HandleResult, Value> {
-        let offset = vm.fetch_and_inc_ip() as i8;
+        let offset = vm.fetchw_and_inc_ip() as i16;
         let value = vm.stack.pop().expect("No value");
 
         if !value.is_truthy() {
@@ -169,11 +170,16 @@ mod handlers {
             }
         }
 
+        println!(
+            "After jump [{offset}] {:?}",
+            vm.frames.last().unwrap().buffer[vm.frames.last().unwrap().ip]
+        );
+
         Ok(HandleResult::Continue)
     }
 
     pub fn jmp(vm: &mut Vm) -> Result<HandleResult, Value> {
-        let offset = vm.fetch_and_inc_ip() as i8;
+        let offset = vm.fetchw_and_inc_ip() as i16;
         let frame = vm.frames.last_mut().expect("No frame");
 
         if offset.is_negative() {
@@ -181,6 +187,11 @@ mod handlers {
         } else {
             frame.ip += offset as usize;
         }
+        println!(
+            "After jump [{offset}] {:?} {}",
+            vm.frames.last().unwrap().buffer[vm.frames.last().unwrap().ip],
+            vm.frames.last().unwrap().ip
+        );
 
         Ok(HandleResult::Continue)
     }
@@ -343,6 +354,19 @@ mod handlers {
 
         Ok(HandleResult::Continue)
     }
+
+    pub fn try_block(vm: &mut Vm) -> Result<HandleResult, Value> {
+        let ip = vm.frames.last().unwrap().ip;
+        let catch_offset = vm.fetchw_and_inc_ip() as usize;
+        let catch_ip = ip + catch_offset;
+
+        vm.try_blocks.push(TryBlock {
+            catch_ip,
+            frame_ip: vm.frames.len(),
+        });
+
+        Ok(HandleResult::Continue)
+    }
 }
 
 pub fn handle(vm: &mut Vm, instruction: u8) -> Result<HandleResult, Value> {
@@ -378,6 +402,7 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<HandleResult, Value> {
         opcode::DYNAMICPROPSET => handlers::dynamicpropertyset(vm),
         opcode::LDLOCALEXT => handlers::ldlocalext(vm),
         opcode::STORELOCALEXT => handlers::storelocalext(vm),
+        opcode::TRY => handlers::try_block(vm),
         _ => unimplemented!("{}", instruction),
     }
 }

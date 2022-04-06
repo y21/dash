@@ -66,12 +66,12 @@ impl<'a> fmt::Display for EvalError<'a> {
 
 impl<'a> Error for EvalError<'a> {}
 
-pub fn eval(input: &str) -> Result<(Vm, Value), EvalError> {
+pub fn eval(input: &str, opt: OptLevel) -> Result<(Vm, Value), EvalError> {
     // TODO: EvalError might carry a js value, which is useless without a VM
     let mut vm = Vm::new();
     let tokens = Parser::from_str(input).map_err(EvalError::LexError)?;
     let mut ast = tokens.parse_all().map_err(EvalError::ParseError)?;
-    optimizer::optimize_ast(&mut ast, OptLevel::Aggressive);
+    optimizer::optimize_ast(&mut ast, opt);
     let compiled = FunctionCompiler::new()
         .compile_ast(ast)
         .map_err(EvalError::CompileError)?;

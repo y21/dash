@@ -9,6 +9,12 @@ use super::value::object::Object;
 use super::Vm;
 
 #[derive(Debug, Clone)]
+pub struct TryBlock {
+    pub catch_ip: usize,
+    pub frame_ip: usize,
+}
+
+#[derive(Debug, Clone)]
 pub struct Frame {
     pub ip: usize,
     pub local_count: usize,

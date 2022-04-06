@@ -10,7 +10,7 @@ pub fn repl() -> anyhow::Result<()> {
 
         rl.add_history_entry(&input);
 
-        match dash::eval(&input) {
+        match dash::eval(&input, Default::default()) {
             Ok((_vm, value)) => {
                 println!("{:?}", value);
             }

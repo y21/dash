@@ -3,15 +3,23 @@ use clap::Arg;
 use clap::Command;
 
 mod cmd;
+mod util;
 
 fn main() -> anyhow::Result<()> {
+    let opt_level = Arg::new("opt")
+        .short('o')
+        .long("opt")
+        .default_value("1")
+        .possible_values(["0", "1", "2"]);
+
     let app = Command::new("dash")
         .about("Execute JavaScript code using the dash JavaScript engine")
         .arg_required_else_help(true)
         .subcommand(
             Command::new("eval")
                 .override_help("Evaluate a JavaScript source string")
-                .arg(Arg::new("source").required(true)),
+                .arg(Arg::new("source").required(true))
+                .arg(opt_level.clone()),
         )
         .subcommand(
             Command::new("run")
@@ -22,7 +30,8 @@ fn main() -> anyhow::Result<()> {
                         .short('t')
                         .long("timing")
                         .takes_value(false),
-                ),
+                )
+                .arg(opt_level),
         )
         .subcommand(Command::new("repl").override_help("Enter a JavaScript REPL"));
 
