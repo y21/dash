@@ -170,11 +170,6 @@ mod handlers {
             }
         }
 
-        println!(
-            "After jump [{offset}] {:?}",
-            vm.frames.last().unwrap().buffer[vm.frames.last().unwrap().ip]
-        );
-
         Ok(HandleResult::Continue)
     }
 
@@ -187,11 +182,6 @@ mod handlers {
         } else {
             frame.ip += offset as usize;
         }
-        println!(
-            "After jump [{offset}] {:?} {}",
-            vm.frames.last().unwrap().buffer[vm.frames.last().unwrap().ip],
-            vm.frames.last().unwrap().ip
-        );
 
         Ok(HandleResult::Continue)
     }
@@ -358,7 +348,7 @@ mod handlers {
     pub fn try_block(vm: &mut Vm) -> Result<HandleResult, Value> {
         let ip = vm.frames.last().unwrap().ip;
         let catch_offset = vm.fetchw_and_inc_ip() as usize;
-        let catch_ip = ip + catch_offset;
+        let catch_ip = ip + catch_offset + 2;
 
         vm.try_blocks.push(TryBlock {
             catch_ip,
@@ -366,6 +356,15 @@ mod handlers {
         });
 
         Ok(HandleResult::Continue)
+    }
+
+    pub fn try_end(vm: &mut Vm) -> Result<HandleResult, Value> {
+        vm.try_blocks.pop();
+        Ok(HandleResult::Continue)
+    }
+
+    pub fn throw(vm: &mut Vm) -> Result<HandleResult, Value> {
+        Err(vm.stack.pop().expect("Missing value"))
     }
 }
 
@@ -403,6 +402,8 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<HandleResult, Value> {
         opcode::LDLOCALEXT => handlers::ldlocalext(vm),
         opcode::STORELOCALEXT => handlers::storelocalext(vm),
         opcode::TRY => handlers::try_block(vm),
+        opcode::TRYEND => handlers::try_end(vm),
+        opcode::THROW => handlers::throw(vm),
         _ => unimplemented!("{}", instruction),
     }
 }

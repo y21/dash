@@ -62,7 +62,8 @@ pub const STORELOCALEXT: u8 = 0x30;
 pub const STORELOCALEXTW: u8 = 0x31;
 pub const STRICTEQ: u8 = 0x32;
 pub const TRY: u8 = 0x33;
-pub const TRYW: u8 = 0x34;
+pub const TRYEND: u8 = 0x34;
+pub const THROW: u8 = 0x35;
 
 #[rustfmt::skip]
 pub trait InstructionWriter {
@@ -127,7 +128,8 @@ pub trait InstructionWriter {
     fn build_global_store(&mut self, cp: &mut ConstantPool, ident: &[u8]) -> Result<(), LimitExceededError>;
     fn build_local_store(&mut self, id: u16, is_extern: bool);
     fn build_try_block(&mut self);
-    // fn build_catch_block(&mut self);
+    fn build_try_end(&mut self);
+    fn build_throw(&mut self);
 }
 
 macro_rules! impl_instruction_writer {
@@ -162,7 +164,9 @@ impl InstructionWriter for InstructionBuilder {
         build_not NOT,
         build_ret RET,
         build_this THIS,
-        build_strict_eq STRICTEQ
+        build_strict_eq STRICTEQ,
+        build_try_end TRYEND,
+        build_throw THROW
     }
 
     fn build_constant(

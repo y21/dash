@@ -337,7 +337,22 @@ impl Vm {
             match dispatch::handle(self, instruction) {
                 Ok(HandleResult::Return(value)) => return Ok(value),
                 Ok(HandleResult::Continue) => continue,
-                Err(e) => return Err(e),
+                Err(e) => {
+                    if let Some(last) = self.try_blocks.last() {
+                        // if we're in a try-catch block, we need to jump to it
+                        let try_fp = last.frame_ip;
+                        let catch_ip = last.catch_ip;
+                        let frame_ip = self.frames.len();
+
+                        // Unwind frames
+                        self.frames.drain(try_fp..);
+
+                        let frame = self.frames.last_mut().expect("No frame");
+                        frame.ip = catch_ip;
+                    } else {
+                        return Err(e);
+                    }
+                }
             }
         }
     }

@@ -8,25 +8,6 @@ use dash::vm::value::Value;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
-pub fn eval(s: &str) -> String {
-    match dash::eval(s) {
-        Ok((mut vm, value)) => match value {
-            Value::External(e) => format!("[external@{:?}]", e.as_ptr()),
-            other => {
-                let mut scope = LocalScope::new(&mut vm);
-
-                // TODO: add value to scope
-                other
-                    .to_string(&mut scope)
-                    .map(|x| x.to_string())
-                    .unwrap_or_else(|_| "<exception>".into())
-            }
-        },
-        Err(e) => e.to_string(),
-    }
-}
-
-#[wasm_bindgen]
 pub enum OptLevel {
     None,
     Basic,
@@ -40,6 +21,25 @@ impl From<OptLevel> for dash::optimizer::consteval::OptLevel {
             OptLevel::Basic => dash::optimizer::consteval::OptLevel::Basic,
             OptLevel::Aggressive => dash::optimizer::consteval::OptLevel::Aggressive,
         }
+    }
+}
+
+#[wasm_bindgen]
+pub fn eval(s: &str, opt: OptLevel) -> String {
+    match dash::eval(s, opt.into()) {
+        Ok((mut vm, value)) => match value {
+            Value::External(e) => format!("[external@{:?}]", e.as_ptr()),
+            other => {
+                let mut scope = LocalScope::new(&mut vm);
+
+                // TODO: add value to scope
+                other
+                    .to_string(&mut scope)
+                    .map(|x| x.to_string())
+                    .unwrap_or_else(|_| "<exception>".into())
+            }
+        },
+        Err(e) => e.to_string(),
     }
 }
 

@@ -631,12 +631,16 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
         ib.append(&mut self.accept(&t.catch.body)?);
 
         ib.add_label(Label::TryEnd);
+        ib.build_try_end();
 
         Ok(ib.build())
     }
 
     fn visit_throw(&mut self, e: &Expr<'a>) -> Result<Vec<u8>, CompileError> {
-        unimplementedc!("Throw statement")
+        let mut ib = InstructionBuilder::new();
+        ib.append(&mut self.accept_expr(e)?);
+        ib.build_throw();
+        Ok(ib.build())
     }
 
     fn visit_for_loop(&mut self, f: &ForLoop<'a>) -> Result<Vec<u8>, CompileError> {
