@@ -349,6 +349,12 @@ impl Vm {
 
                         let frame = self.frames.last_mut().expect("No frame");
                         frame.ip = catch_ip;
+
+                        let catch_ip = self.fetchw_and_inc_ip();
+                        if catch_ip != u16::MAX {
+                            // u16::MAX is used to indicate that there is no variable binding in the catch block
+                            self.set_local(catch_ip as usize, e);
+                        }
                     } else {
                         return Err(e);
                     }

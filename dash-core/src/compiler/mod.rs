@@ -622,13 +622,38 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
         let mut ib = InstructionBuilder::new();
 
         ib.build_try_block();
+
+        self.state.scope.enter();
         ib.append(&mut self.accept(&t.try_)?);
+        self.state.scope.exit();
 
         ib.build_jmp(Label::TryEnd);
 
         ib.add_label(Label::Catch);
-        // // TODO: do something with t.catch.ident
+
+        self.state.scope.enter();
+
+        if let Some(ident) = t.catch.ident {
+            let id = self.state.scope.add_local(
+                VariableBinding {
+                    kind: VariableDeclarationKind::Var,
+                    name: ident,
+                },
+                false,
+            )?;
+
+            if id == u16::MAX {
+                // Max u16 value is reserved for "no binding"
+                return Err(CompileError::LocalLimitExceeded);
+            }
+
+            ib.writew(id);
+        } else {
+            ib.writew(u16::MAX);
+        }
+
         ib.append(&mut self.accept(&t.catch.body)?);
+        self.state.scope.exit();
 
         ib.add_label(Label::TryEnd);
         ib.build_try_end();
