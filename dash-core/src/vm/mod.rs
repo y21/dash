@@ -323,6 +323,36 @@ impl Vm {
         self.stack.push(value);
         Ok(())
     }
+    fn handle_rt_error(&mut self, err: Value, max_fp: usize) -> Result<(), Value> {
+        if let Some(last) = self.try_blocks.last() {
+            // if we're in a try-catch block, we need to jump to it
+            let try_fp = last.frame_ip;
+            let catch_ip = last.catch_ip;
+            let frame_ip = self.frames.len();
+
+            // Do not unwind further than we are allowed to. If the last try block is "outside" of
+            // the frame that this execution context was instantiated in, then we can't jump there.
+            if try_fp < max_fp {
+                return Err(err);
+            }
+
+            // Unwind frames
+            drop(self.frames.drain(try_fp..));
+
+            let frame = self.frames.last_mut().expect("No frame");
+            frame.ip = catch_ip;
+
+            let catch_ip = self.fetchw_and_inc_ip();
+            if catch_ip != u16::MAX {
+                // u16::MAX is used to indicate that there is no variable binding in the catch block
+                self.set_local(catch_ip as usize, err);
+            }
+
+            Ok(())
+        } else {
+            Err(err)
+        }
+    }
 
     /// Executes a frame in this VM
     pub fn execute_frame(&mut self, frame: Frame) -> Result<Value, Value> {
@@ -331,34 +361,15 @@ impl Vm {
 
         self.frames.push(frame);
 
+        let fp = self.frames.len();
+
         loop {
             let instruction = self.fetch_and_inc_ip();
 
             match dispatch::handle(self, instruction) {
                 Ok(HandleResult::Return(value)) => return Ok(value),
                 Ok(HandleResult::Continue) => continue,
-                Err(e) => {
-                    if let Some(last) = self.try_blocks.last() {
-                        // if we're in a try-catch block, we need to jump to it
-                        let try_fp = last.frame_ip;
-                        let catch_ip = last.catch_ip;
-                        let frame_ip = self.frames.len();
-
-                        // Unwind frames
-                        self.frames.drain(try_fp..);
-
-                        let frame = self.frames.last_mut().expect("No frame");
-                        frame.ip = catch_ip;
-
-                        let catch_ip = self.fetchw_and_inc_ip();
-                        if catch_ip != u16::MAX {
-                            // u16::MAX is used to indicate that there is no variable binding in the catch block
-                            self.set_local(catch_ip as usize, e);
-                        }
-                    } else {
-                        return Err(e);
-                    }
-                }
+                Err(e) => self.handle_rt_error(e, fp)?,
             }
         }
     }
