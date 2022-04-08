@@ -81,6 +81,7 @@ impl Value {
     pub fn strict_eq(&self, other: &Self) -> Value {
         match (self, other) {
             (Value::Number(a), Value::Number(b)) => Value::Boolean(*a == *b),
+            (Value::Boolean(a), Value::Boolean(b)) => Value::Boolean(*a == *b),
             _ => unimplemented!(),
         }
     }

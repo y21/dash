@@ -59,6 +59,10 @@ macro_rules! boxed_primitive {
                 fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
                     self.1.get_prototype(sc)
                 }
+
+                fn own_keys(&self) -> Result<Vec<Value>, Value> {
+                    self.1.own_keys()
+                }
             }
         )*
     }

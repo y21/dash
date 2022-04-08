@@ -1,7 +1,8 @@
-use std::{cell::Cell, ops::Deref, ptr::NonNull};
+use std::{cell::Cell, fmt::Debug, ops::Deref, ptr::NonNull};
 
 use super::trace::Trace;
 
+#[derive(Debug)]
 pub struct InnerHandle<T: ?Sized> {
     pub(crate) marked: Cell<bool>,
     pub(crate) value: Box<T>,
@@ -50,6 +51,8 @@ unsafe impl<T: ?Sized> Trace for Handle<T> {
     }
 }
 
+// FIXME: this is severly unsound and hard to fix: this Handle can be smuggled because it's not tied to any reference
+// and later, when its GC goes out of scope, it will be freed, even though it's still alive
 impl<T: ?Sized> Deref for Handle<T> {
     type Target = T;
 

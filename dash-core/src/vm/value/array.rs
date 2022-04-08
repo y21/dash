@@ -7,6 +7,7 @@ use crate::vm::Vm;
 
 use super::object::NamedObject;
 use super::object::Object;
+use super::primitive::array_like_keys;
 use super::Value;
 
 #[derive(Debug)]
@@ -108,5 +109,10 @@ impl Object for Array {
 
     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
         self.obj.get_prototype(sc)
+    }
+
+    fn own_keys(&self) -> Result<Vec<Value>, Value> {
+        let items = self.items.borrow();
+        Ok(array_like_keys(items.len()).collect())
     }
 }

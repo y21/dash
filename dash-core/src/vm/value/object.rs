@@ -24,6 +24,7 @@ pub trait Object: Debug + Trace {
     ) -> Result<Value, Value>;
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
+    fn own_keys(&self) -> Result<Vec<Value>, Value>;
 }
 
 #[derive(Debug, Clone)]
@@ -130,6 +131,14 @@ impl Object for NamedObject {
             None => Ok(Value::null()),
         }
     }
+
+    fn own_keys(&self) -> Result<Vec<Value>, Value> {
+        let values = self.values.borrow();
+        Ok(values
+            .keys()
+            .map(|key| Value::String(key.as_str().into()))
+            .collect())
+    }
 }
 
 impl Object for Handle<dyn Object> {
@@ -164,5 +173,9 @@ impl Object for Handle<dyn Object> {
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+
+    fn own_keys(&self) -> Result<Vec<Value>, Value> {
+        (**self).own_keys()
     }
 }

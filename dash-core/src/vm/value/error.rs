@@ -91,4 +91,8 @@ impl Object for Error {
     fn get_prototype(&self, sc: &mut crate::vm::local::LocalScope) -> Result<Value, Value> {
         self.obj.get_prototype(sc)
     }
+
+    fn own_keys(&self) -> Result<Vec<Value>, Value> {
+        self.obj.own_keys()
+    }
 }

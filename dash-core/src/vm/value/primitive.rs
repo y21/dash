@@ -1,4 +1,5 @@
 use std::any::Any;
+use std::iter;
 use std::rc::Rc;
 
 use crate::gc::trace::Trace;
@@ -50,6 +51,10 @@ impl Object for f64 {
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
+
+    fn own_keys(&self) -> Result<Vec<Value>, Value> {
+        Ok(Vec::new())
+    }
 }
 
 unsafe impl Trace for bool {
@@ -89,6 +94,10 @@ impl Object for bool {
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+
+    fn own_keys(&self) -> Result<Vec<Value>, Value> {
+        Ok(Vec::new())
     }
 }
 
@@ -133,6 +142,17 @@ impl Object for Rc<str> {
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
+
+    fn own_keys(&self) -> Result<Vec<Value>, Value> {
+        str::own_keys(&self)
+    }
+}
+
+pub fn array_like_keys(len: usize) -> impl Iterator<Item = Value> {
+    (0..len)
+        .map(|i| i.to_string())
+        .chain(iter::once_with(|| "length".to_string()))
+        .map(|x| Value::String(x.as_str().into()))
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -180,6 +200,10 @@ impl Object for Undefined {
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
+
+    fn own_keys(&self) -> Result<Vec<Value>, Value> {
+        Ok(Vec::new())
+    }
 }
 
 impl Object for Null {
@@ -214,6 +238,10 @@ impl Object for Null {
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+
+    fn own_keys(&self) -> Result<Vec<Value>, Value> {
+        Ok(Vec::new())
     }
 }
 
@@ -264,5 +292,9 @@ impl Object for str {
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         panic!("cannot convert string to any")
+    }
+
+    fn own_keys(&self) -> Result<Vec<Value>, Value> {
+        Ok(array_like_keys(self.len()).collect())
     }
 }

@@ -63,7 +63,12 @@ impl Vm {
         let object = {
             let object = scope.statics.object_ctor.clone();
             let object_proto = scope.statics.object_prototype.clone();
+            let create = scope.statics.object_create.clone();
+            let keys = scope.statics.object_keys.clone();
+
             object.set_prototype(&mut scope, object_proto.into()).unwrap();
+            object.set_property(&mut scope, "create", create.into()).unwrap();
+            object.set_property(&mut scope, "keys", keys.into()).unwrap();
             object
         };
 
@@ -323,6 +328,7 @@ impl Vm {
         self.stack.push(value);
         Ok(())
     }
+
     fn handle_rt_error(&mut self, err: Value, max_fp: usize) -> Result<(), Value> {
         if let Some(last) = self.try_blocks.last() {
             // if we're in a try-catch block, we need to jump to it
@@ -380,6 +386,10 @@ impl Vm {
 
     pub fn gc_mut(&mut self) -> &mut Gc<dyn Object> {
         &mut self.gc
+    }
+
+    pub fn register<O: Object + 'static>(&mut self, obj: O) -> Handle<dyn Object> {
+        self.gc.register(obj)
     }
 }
 

@@ -1,7 +1,12 @@
 use std::rc::Rc;
 
+use crate::gc::handle::Handle;
 use crate::throw;
 use crate::vm::local::LocalScope;
+use crate::vm::value::boxed::Boolean;
+use crate::vm::value::boxed::Number;
+use crate::vm::value::boxed::String as BoxedString;
+use crate::vm::value::object::Object;
 use crate::vm::value::primitive::MAX_SAFE_INTEGERF;
 use crate::vm::value::Value;
 
@@ -18,6 +23,7 @@ pub trait ValueConversion {
     fn to_boolean(&self) -> Result<bool, Value>;
     fn to_string(&self, sc: &mut LocalScope) -> Result<Rc<str>, Value>;
     fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value>;
+    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value>;
 }
 
 impl ValueConversion for Value {
@@ -124,6 +130,26 @@ impl ValueConversion for Value {
 
     fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value> {
         self.get_property(sc, "length")?.to_length_u()
+    }
+
+    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value> {
+        fn register_dyn<O: Object + 'static, F: Fn(&mut LocalScope) -> O>(
+            sc: &mut LocalScope,
+            fun: F,
+        ) -> Result<Handle<dyn Object>, Value> {
+            let obj = fun(sc);
+            Ok(sc.register(obj))
+        }
+
+        match self {
+            Value::Object(o) => Ok(o.clone()),
+            Value::Undefined(_) => throw!(sc, "Cannot convert undefined to object"),
+            Value::Null(_) => throw!(sc, "Cannot convert null to object"),
+            Value::Boolean(b) => register_dyn(sc, |sc| Boolean::new(sc, *b)),
+            Value::Number(n) => register_dyn(sc, |sc| Number::new(sc, *n)),
+            Value::String(s) => register_dyn(sc, |sc| BoxedString::new(sc, s.clone())),
+            Value::External(e) => Ok(e.clone()), // TODO: is this correct?
+        }
     }
 }
 

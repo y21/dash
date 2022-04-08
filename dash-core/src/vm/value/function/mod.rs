@@ -116,4 +116,11 @@ impl Object for Function {
     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
         self.obj.get_prototype(sc)
     }
+
+    fn own_keys(&self) -> Result<Vec<Value>, Value> {
+        Ok(["length", "name"]
+            .iter()
+            .map(|&s| Value::String(s.into()))
+            .collect())
+    }
 }
