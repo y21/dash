@@ -366,6 +366,12 @@ mod handlers {
     pub fn throw(vm: &mut Vm) -> Result<HandleResult, Value> {
         Err(vm.stack.pop().expect("Missing value"))
     }
+
+    pub fn type_of(vm: &mut Vm) -> Result<HandleResult, Value> {
+        let value = vm.stack.pop().expect("Missing value");
+        vm.try_push_stack(value.type_of().as_value(vm))?;
+        Ok(HandleResult::Continue)
+    }
 }
 
 pub fn handle(vm: &mut Vm, instruction: u8) -> Result<HandleResult, Value> {
@@ -404,6 +410,7 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<HandleResult, Value> {
         opcode::TRY => handlers::try_block(vm),
         opcode::TRYEND => handlers::try_end(vm),
         opcode::THROW => handlers::throw(vm),
+        opcode::TYPEOF => handlers::type_of(vm),
         _ => unimplemented!("{}", instruction),
     }
 }

@@ -201,6 +201,43 @@ impl Value {
             _ => Some(self),
         }
     }
+
+    pub fn type_of(&self) -> Typeof {
+        match self {
+            Self::Boolean(_) => Typeof::Boolean,
+            Self::External(_) => todo!(),
+            Self::Number(_) => Typeof::Number,
+            Self::String(_) => Typeof::String,
+            Self::Undefined(_) => Typeof::Undefined,
+            Self::Object(_) | Self::Null(_) => Typeof::Object,
+        }
+    }
+}
+
+pub enum Typeof {
+    Undefined,
+    Object,
+    Boolean,
+    Number,
+    Bigint,
+    String,
+    Symbol,
+    Function,
+}
+
+impl Typeof {
+    pub fn as_value(&self, vm: &Vm) -> Value {
+        match self {
+            Self::Undefined => Value::String("undefined".into()),
+            Self::Object => Value::String("object".into()),
+            Self::Boolean => Value::String("boolean".into()),
+            Self::Number => Value::String("number".into()),
+            Self::Bigint => Value::String("bigint".into()),
+            Self::String => Value::String("string".into()),
+            Self::Symbol => Value::String("symbol".into()),
+            Self::Function => Value::String("function".into()),
+        }
+    }
 }
 
 pub trait ValueContext {
