@@ -96,6 +96,19 @@ pub struct Statics {
     pub array_join: Handle<dyn Object>,
     pub symbol_ctor: Handle<dyn Object>,
     pub symbol_prototype: Handle<dyn Object>,
+    pub symbol_async_iterator: Symbol,
+    pub symbol_has_instance: Symbol,
+    pub symbol_is_concat_spreadable: Symbol,
+    pub symbol_iterator: Symbol,
+    pub symbol_match: Symbol,
+    pub symbol_match_all: Symbol,
+    pub symbol_replace: Symbol,
+    pub symbol_search: Symbol,
+    pub symbol_species: Symbol,
+    pub symbol_split: Symbol,
+    pub symbol_to_primitive: Symbol,
+    pub symbol_to_string_tag: Symbol,
+    pub symbol_unscopables: Symbol,
 }
 
 fn object(gc: &mut Gc<dyn Object>) -> Handle<dyn Object> {
@@ -201,6 +214,19 @@ impl Statics {
                 Symbol::new(empty_str),
                 NamedObject::null(),
             )),
+            symbol_async_iterator: Symbol::new("Symbol.asyncIterator".into()),
+            symbol_has_instance: Symbol::new("Symbol.hasInstance".into()),
+            symbol_is_concat_spreadable: Symbol::new("Symbol.isConcatSpreadable".into()),
+            symbol_iterator: Symbol::new("Symbol.iterator".into()),
+            symbol_match: Symbol::new("Symbol.match".into()),
+            symbol_match_all: Symbol::new("Symbol.matchAll".into()),
+            symbol_replace: Symbol::new("Symbol.replace".into()),
+            symbol_search: Symbol::new("Symbol.search".into()),
+            symbol_species: Symbol::new("Symbol.species".into()),
+            symbol_split: Symbol::new("Symbol.split".into()),
+            symbol_to_primitive: Symbol::new("SymboltoPrimitive".into()),
+            symbol_to_string_tag: Symbol::new("Symbol.toStringTag".into()),
+            symbol_unscopables: Symbol::new("Symbol.unscopables".into()),
         }
     }
 

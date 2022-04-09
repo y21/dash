@@ -247,7 +247,37 @@ impl Vm {
             array
         };
 
-        let symbol = scope.statics.symbol_ctor.clone();
+        let symbol = {
+            let symbol = scope.statics.symbol_ctor.clone();
+
+            let async_iterator = scope.statics.symbol_async_iterator.clone();
+            let has_instance = scope.statics.symbol_has_instance.clone();
+            let iterator = scope.statics.symbol_iterator.clone();
+            let match_ = scope.statics.symbol_match.clone();
+            let match_all = scope.statics.symbol_match_all.clone();
+            let replace = scope.statics.symbol_replace.clone();
+            let search = scope.statics.symbol_search.clone();
+            let species = scope.statics.symbol_species.clone();
+            let split = scope.statics.symbol_split.clone();
+            let to_primitive = scope.statics.symbol_to_primitive.clone();
+            let to_string_tag = scope.statics.symbol_to_string_tag.clone();
+            let unscopables = scope.statics.symbol_unscopables.clone();
+
+            symbol.set_property(&mut scope, "asyncIterator", async_iterator.into()).unwrap();
+            symbol.set_property(&mut scope, "hasInstance", has_instance.into()).unwrap();
+            symbol.set_property(&mut scope, "iterator", iterator.into()).unwrap();
+            symbol.set_property(&mut scope, "match", match_.into()).unwrap();
+            symbol.set_property(&mut scope, "matchAll", match_all.into()).unwrap();
+            symbol.set_property(&mut scope, "replace", replace.into()).unwrap();
+            symbol.set_property(&mut scope, "search", search.into()).unwrap();
+            symbol.set_property(&mut scope, "species", species.into()).unwrap();
+            symbol.set_property(&mut scope, "split", split.into()).unwrap();
+            symbol.set_property(&mut scope, "toPrimitive", to_primitive.into()).unwrap();
+            symbol.set_property(&mut scope, "toStringTag", to_string_tag.into()).unwrap();
+            symbol.set_property(&mut scope, "unscopables", unscopables.into()).unwrap();
+
+            symbol
+        };
 
         let global = {
             let is_nan = scope.statics.is_nan.clone();
