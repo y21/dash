@@ -43,6 +43,7 @@ use crate::{
 use self::{
     function::{user::UserFunction, Function},
     object::Object,
+    primitive::Symbol,
 };
 
 use super::{local::LocalScope, Vm};
@@ -58,6 +59,8 @@ pub enum Value {
     Undefined(Undefined),
     /// The null type
     Null(Null),
+    /// The symbol type
+    Symbol(Symbol),
     /// The object type
     Object(Handle<dyn Object>),
     /// An "external" value that is being used by other functions.
@@ -104,6 +107,7 @@ impl Value {
                         Value::String(s) => register(vm, idx, s),
                         Value::Undefined(u) => register(vm, idx, u),
                         Value::Null(n) => register(vm, idx, n),
+                        Value::Symbol(s) => register(vm, idx, s),
                         Value::External(e) => e,
                         Value::Object(o) => {
                             vm.set_local(idx, Value::External(o.clone()));
@@ -125,12 +129,14 @@ impl Value {
 
     pub fn set_property(&self, sc: &mut LocalScope, key: &str, value: Value) -> Result<(), Value> {
         match self {
-            Value::Object(h) => h.set_property(sc, key, value),
+            Self::Object(h) => h.set_property(sc, key, value),
             Self::Number(n) => n.set_property(sc, key, value),
             Self::Boolean(b) => b.set_property(sc, key, value),
             Self::String(s) => s.set_property(sc, key, value),
             Self::External(h) => h.set_property(sc, key, value),
-            _ => unimplemented!(),
+            Self::Undefined(u) => u.set_property(sc, key, value),
+            Self::Null(n) => n.set_property(sc, key, value),
+            Self::Symbol(s) => s.set_property(sc, key, value),
         }
     }
 
@@ -143,6 +149,7 @@ impl Value {
             Self::External(o) => o.get_property(sc, key),
             Self::Undefined(u) => u.get_property(sc, key),
             Self::Null(n) => n.get_property(sc, key),
+            Self::Symbol(s) => s.get_property(sc, key),
         }
     }
 
@@ -160,6 +167,7 @@ impl Value {
             Self::String(s) => s.apply(sc, this, args),
             Self::Undefined(u) => u.apply(sc, this, args),
             Self::Null(n) => n.apply(sc, this, args),
+            Self::Symbol(s) => s.apply(sc, this, args),
         }
     }
 
@@ -168,6 +176,8 @@ impl Value {
             Value::Boolean(b) => *b,
             Value::String(s) => !s.is_empty(),
             Value::Number(n) => *n != 0.0 && !n.is_nan(),
+            Value::Symbol(_) => true,
+            Value::Object(_) => true,
             _ => unimplemented!(),
         }
     }
@@ -192,6 +202,7 @@ impl Value {
             Value::Undefined(u) => Box::new(u),
             Value::Object(o) => Box::new(o),
             Value::External(o) => Box::new(o), // TODO: is this correct?
+            Value::Symbol(s) => Box::new(s),
         }
     }
 
@@ -211,6 +222,7 @@ impl Value {
             Self::Undefined(_) => Typeof::Undefined,
             Self::Object(o) => o.type_of(),
             Self::Null(_) => Typeof::Object,
+            Self::Symbol(_) => Typeof::Symbol,
         }
     }
 }

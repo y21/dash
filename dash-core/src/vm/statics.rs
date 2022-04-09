@@ -5,12 +5,14 @@ use crate::vm::value::function::Function;
 use crate::vm::value::function::FunctionKind;
 
 use super::value::array::Array;
-use super::value::boxed::Boolean;
-use super::value::boxed::Number;
-use super::value::boxed::String;
+use super::value::boxed::Boolean as BoxedBoolean;
+use super::value::boxed::Number as BoxedNumber;
+use super::value::boxed::String as BoxedString;
+use super::value::boxed::Symbol as BoxedSymbol;
 use super::value::function::native::NativeFunction;
 use super::value::object::NamedObject;
 use super::value::object::Object;
+use super::value::primitive::Symbol;
 
 use std::rc::Rc;
 
@@ -92,6 +94,8 @@ pub struct Statics {
     pub array_tostring: Handle<dyn Object>,
     pub array_prototype: Handle<dyn Object>,
     pub array_join: Handle<dyn Object>,
+    pub symbol_ctor: Handle<dyn Object>,
+    pub symbol_prototype: Handle<dyn Object>,
 }
 
 fn object(gc: &mut Gc<dyn Object>) -> Handle<dyn Object> {
@@ -126,13 +130,16 @@ impl Statics {
             object_keys: function(gc, "keys", js_std::object::keys),
             object_prototype: object(gc),
             number_ctor: function(gc, "Number", js_std::number::constructor),
-            number_prototype: gc.register(Number::with_obj(0.0, NamedObject::null())),
+            number_prototype: gc.register(BoxedNumber::with_obj(0.0, NamedObject::null())),
             number_tostring: function(gc, "toString", js_std::number::to_string),
             boolean_ctor: function(gc, "Boolean", js_std::boolean::constructor),
             boolean_tostring: function(gc, "toString", js_std::boolean::to_string),
-            boolean_prototype: gc.register(Boolean::with_obj(false, NamedObject::null())),
+            boolean_prototype: gc.register(BoxedBoolean::with_obj(false, NamedObject::null())),
             string_ctor: function(gc, "Boolean", js_std::string::constructor),
-            string_prototype: gc.register(String::with_obj(empty_str, NamedObject::null())),
+            string_prototype: gc.register(BoxedString::with_obj(
+                empty_str.clone(),
+                NamedObject::null(),
+            )),
             is_nan: function(gc, "isNaN", js_std::global::is_nan),
             is_finite: function(gc, "isFinite", js_std::global::is_finite),
             parse_float: function(gc, "parseFloat", js_std::global::parse_float),
@@ -189,6 +196,11 @@ impl Statics {
             array_tostring: function(gc, "toString", js_std::array::to_string),
             array_prototype: gc.register(Array::with_obj(NamedObject::null())),
             array_join: function(gc, "join", js_std::array::join),
+            symbol_ctor: function(gc, "Symbol", js_std::symbol::constructor),
+            symbol_prototype: gc.register(BoxedSymbol::with_obj(
+                Symbol::new(empty_str),
+                NamedObject::null(),
+            )),
         }
     }
 

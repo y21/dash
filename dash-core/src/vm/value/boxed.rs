@@ -7,6 +7,7 @@ use crate::vm::Vm;
 
 use super::object::NamedObject;
 use super::object::Object;
+use super::primitive::Symbol as PrimitiveSymbol;
 use super::Value;
 
 macro_rules! boxed_primitive {
@@ -71,5 +72,6 @@ macro_rules! boxed_primitive {
 boxed_primitive! {
     Number: f64,
     Boolean: bool,
-    String: Rc<str>
+    String: Rc<str>,
+    Symbol: PrimitiveSymbol
 }

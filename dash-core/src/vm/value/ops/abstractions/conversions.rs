@@ -6,6 +6,7 @@ use crate::vm::local::LocalScope;
 use crate::vm::value::boxed::Boolean;
 use crate::vm::value::boxed::Number;
 use crate::vm::value::boxed::String as BoxedString;
+use crate::vm::value::boxed::Symbol as BoxedSymbol;
 use crate::vm::value::object::Object;
 use crate::vm::value::primitive::MAX_SAFE_INTEGERF;
 use crate::vm::value::Value;
@@ -50,14 +51,12 @@ impl ValueConversion for Value {
             Value::Null(_) => Ok(sc.statics.null_str()),
             Value::Undefined(_) => Ok(sc.statics.undefined_str()),
             Value::Number(n) => Ok(n.to_string().into()), // TODO: we can do better
-            Value::External(e) => {
-                // ???
-                todo!()
-            }
+            Value::External(e) => todo!(),                // ??
             Value::Object(_) => {
                 let prim_value = self.to_primitive(sc, Some(PreferredType::String))?;
                 prim_value.to_string(sc)
             }
+            Value::Symbol(s) => throw!(sc, "Cannot convert symbol to a string"),
         }
     }
 
@@ -146,6 +145,7 @@ impl ValueConversion for Value {
             Value::Undefined(_) => throw!(sc, "Cannot convert undefined to object"),
             Value::Null(_) => throw!(sc, "Cannot convert null to object"),
             Value::Boolean(b) => register_dyn(sc, |sc| Boolean::new(sc, *b)),
+            Value::Symbol(s) => register_dyn(sc, |sc| BoxedSymbol::new(sc, s.clone())),
             Value::Number(n) => register_dyn(sc, |sc| Number::new(sc, *n)),
             Value::String(s) => register_dyn(sc, |sc| BoxedString::new(sc, s.clone())),
             Value::External(e) => Ok(e.clone()), // TODO: is this correct?

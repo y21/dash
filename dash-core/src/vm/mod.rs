@@ -247,6 +247,8 @@ impl Vm {
             array
         };
 
+        let symbol = scope.statics.symbol_ctor.clone();
+
         let global = {
             let is_nan = scope.statics.is_nan.clone();
             let is_finite = scope.statics.is_finite.clone();
@@ -260,6 +262,7 @@ impl Vm {
             global
         };
 
+        global.set_property(&mut scope, "Symbol", symbol.into()).unwrap();
         global.set_property(&mut scope, "Array", array.into()).unwrap();
         global.set_property(&mut scope, "String", string.into()).unwrap();
         global.set_property(&mut scope, "Object", object.into()).unwrap();

@@ -320,3 +320,63 @@ impl Object for str {
         Typeof::String
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct Symbol(Rc<str>);
+
+impl Symbol {
+    pub fn new(description: Rc<str>) -> Self {
+        Symbol(description)
+    }
+}
+
+unsafe impl Trace for Symbol {
+    fn trace(&self) {}
+}
+
+impl Object for Symbol {
+    fn get_property(&self, sc: &mut LocalScope, key: &str) -> Result<Value, Value> {
+        sc.statics.symbol_prototype.clone().get_property(sc, key)
+    }
+
+    fn set_property(&self, sc: &mut LocalScope, key: &str, value: Value) -> Result<(), Value> {
+        Ok(())
+    }
+
+    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
+        Ok(())
+    }
+
+    fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
+        Ok(sc.statics.symbol_prototype.clone().into())
+    }
+
+    fn apply<'s>(
+        &self,
+        scope: &mut LocalScope,
+        this: Value,
+        args: Vec<Value>,
+    ) -> Result<Value, Value> {
+        scope
+            .statics
+            .symbol_prototype
+            .clone()
+            .apply(scope, this, args)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn own_keys(&self) -> Result<Vec<Value>, Value> {
+        Ok(Vec::new())
+    }
+
+    fn type_of(&self) -> Typeof {
+        Typeof::Symbol
+    }
+}
