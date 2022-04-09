@@ -13,6 +13,7 @@ mod handlers {
     use crate::vm::value::array::Array;
     use crate::vm::value::object::NamedObject;
     use crate::vm::value::object::Object;
+    use crate::vm::value::ops::abstractions::conversions::ValueConversion;
 
     use super::*;
 
@@ -308,13 +309,8 @@ mod handlers {
         let value = vm.stack.pop().expect("No value");
         let target = vm.stack.pop().expect("No target");
 
-        let key = if let Value::String(s) = key {
-            s
-        } else {
-            todo!()
-        };
-
         let mut scope = LocalScope::new(vm);
+        let key = key.to_string(&mut scope)?;
         target.set_property(&mut scope, &key, value.clone())?;
 
         vm.try_push_stack(value)?;
