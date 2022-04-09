@@ -15,7 +15,7 @@ use self::{
 
 use super::{
     object::{NamedObject, Object},
-    Value,
+    Typeof, Value,
 };
 
 pub mod native;
@@ -122,5 +122,9 @@ impl Object for Function {
             .iter()
             .map(|&s| Value::String(s.into()))
             .collect())
+    }
+
+    fn type_of(&self) -> Typeof {
+        Typeof::Function
     }
 }

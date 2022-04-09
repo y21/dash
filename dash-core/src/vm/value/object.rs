@@ -6,7 +6,7 @@ use crate::{
     vm::{local::LocalScope, Vm},
 };
 
-use super::Value;
+use super::{Typeof, Value};
 
 // only here for the time being, will be removed later
 fn __assert_trait_object_safety(_: Box<dyn Object>) {}
@@ -25,6 +25,9 @@ pub trait Object: Debug + Trace {
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
     fn own_keys(&self) -> Result<Vec<Value>, Value>;
+    fn type_of(&self) -> Typeof {
+        Typeof::Object
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -177,5 +180,9 @@ impl Object for Handle<dyn Object> {
 
     fn own_keys(&self) -> Result<Vec<Value>, Value> {
         (**self).own_keys()
+    }
+
+    fn type_of(&self) -> Typeof {
+        (**self).type_of()
     }
 }

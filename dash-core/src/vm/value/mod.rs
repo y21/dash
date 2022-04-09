@@ -205,15 +205,17 @@ impl Value {
     pub fn type_of(&self) -> Typeof {
         match self {
             Self::Boolean(_) => Typeof::Boolean,
-            Self::External(_) => todo!(),
+            Self::External(e) => e.type_of(),
             Self::Number(_) => Typeof::Number,
             Self::String(_) => Typeof::String,
             Self::Undefined(_) => Typeof::Undefined,
-            Self::Object(_) | Self::Null(_) => Typeof::Object,
+            Self::Object(o) => o.type_of(),
+            Self::Null(_) => Typeof::Object,
         }
     }
 }
 
+#[derive(Debug)]
 pub enum Typeof {
     Undefined,
     Object,

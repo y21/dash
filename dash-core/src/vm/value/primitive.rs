@@ -7,6 +7,7 @@ use crate::throw;
 use crate::vm::local::LocalScope;
 
 use super::object::Object;
+use super::Typeof;
 use super::Value;
 
 pub const MAX_SAFE_INTEGER: u64 = 9007199254740991u64;
@@ -55,6 +56,10 @@ impl Object for f64 {
     fn own_keys(&self) -> Result<Vec<Value>, Value> {
         Ok(Vec::new())
     }
+
+    fn type_of(&self) -> Typeof {
+        Typeof::Number
+    }
 }
 
 unsafe impl Trace for bool {
@@ -99,12 +104,17 @@ impl Object for bool {
     fn own_keys(&self) -> Result<Vec<Value>, Value> {
         Ok(Vec::new())
     }
+
+    fn type_of(&self) -> Typeof {
+        Typeof::Boolean
+    }
 }
 
 unsafe impl Trace for Rc<str> {
     fn trace(&self) {}
 }
 
+// TODO: impl<T: Deref<Target=O>, O: Object> Object for T  possible?
 impl Object for Rc<str> {
     fn get_property(&self, sc: &mut LocalScope, key: &str) -> Result<Value, Value> {
         if let Some(value) = str::get_property(self, sc, key)?.into_option() {
@@ -144,7 +154,11 @@ impl Object for Rc<str> {
     }
 
     fn own_keys(&self) -> Result<Vec<Value>, Value> {
-        str::own_keys(&self)
+        str::own_keys(self)
+    }
+
+    fn type_of(&self) -> Typeof {
+        str::type_of(self)
     }
 }
 
@@ -203,6 +217,10 @@ impl Object for Undefined {
 
     fn own_keys(&self) -> Result<Vec<Value>, Value> {
         Ok(Vec::new())
+    }
+
+    fn type_of(&self) -> Typeof {
+        Typeof::Undefined
     }
 }
 
@@ -296,5 +314,9 @@ impl Object for str {
 
     fn own_keys(&self) -> Result<Vec<Value>, Value> {
         Ok(array_like_keys(self.len()).collect())
+    }
+
+    fn type_of(&self) -> Typeof {
+        Typeof::String
     }
 }
