@@ -1,5 +1,6 @@
 use crate::vm::local::LocalScope;
 use crate::vm::value::array::Array;
+use crate::vm::value::array::ArrayIterator;
 use crate::vm::value::function::native::CallContext;
 use crate::vm::value::ops::abstractions::conversions::ValueConversion;
 use crate::vm::value::Value;
@@ -36,4 +37,9 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
 pub fn join(cx: CallContext) -> Result<Value, Value> {
     let sep = cx.args.first().unwrap_or_undefined().to_string(cx.scope)?;
     join_inner(cx.scope, cx.this, &sep)
+}
+
+pub fn values(cx: CallContext) -> Result<Value, Value> {
+    let iter = ArrayIterator::new(cx.scope, cx.this)?;
+    Ok(cx.scope.register(iter).into())
 }

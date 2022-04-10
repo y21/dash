@@ -1,7 +1,7 @@
 use std::any::Any;
+use std::cell::Cell;
 use std::cell::RefCell;
 
-use crate::gc::handle::Handle;
 use crate::gc::trace::Trace;
 use crate::vm::local::LocalScope;
 use crate::vm::Vm;
@@ -9,6 +9,7 @@ use crate::vm::Vm;
 use super::object::NamedObject;
 use super::object::Object;
 use super::object::PropertyKey;
+use super::ops::abstractions::conversions::ValueConversion;
 use super::primitive::array_like_keys;
 use super::Value;
 
@@ -129,10 +130,97 @@ impl Object for Array {
 }
 
 #[derive(Debug)]
-pub struct ArrayIterator(Handle<dyn Object>);
+pub struct ArrayIterator {
+    index: Cell<usize>,
+    length: usize,
+    value: Value,
+    obj: NamedObject,
+}
 
 unsafe impl Trace for ArrayIterator {
     fn trace(&self) {
-        self.0.trace();
+        self.value.trace();
+    }
+}
+
+impl Object for ArrayIterator {
+    fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        self.obj.get_property(sc, key)
+    }
+
+    fn set_property(
+        &self,
+        sc: &mut LocalScope,
+        key: PropertyKey<'static>,
+        value: Value,
+    ) -> Result<(), Value> {
+        self.obj.set_property(sc, key, value)
+    }
+
+    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
+        todo!()
+    }
+
+    fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
+        todo!()
+    }
+
+    fn apply<'s>(
+        &self,
+        scope: &mut LocalScope,
+        this: Value,
+        args: Vec<Value>,
+    ) -> Result<Value, Value> {
+        todo!()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn own_keys(&self) -> Result<Vec<Value>, Value> {
+        todo!()
+    }
+}
+
+impl ArrayIterator {
+    pub fn new(sc: &mut LocalScope, value: Value) -> Result<Self, Value> {
+        let length = value.length_of_array_like(sc)?;
+
+        Ok(ArrayIterator {
+            index: Cell::new(0),
+            length,
+            value,
+            obj: NamedObject::with_prototype_and_constructor(
+                sc.statics.array_iterator_prototype.clone(),
+                sc.statics.object_ctor.clone(),
+            ),
+        })
+    }
+
+    pub fn empty() -> Self {
+        Self {
+            index: Cell::new(0),
+            length: 0,
+            value: Value::null(),
+            obj: NamedObject::null(),
+        }
+    }
+
+    pub fn next(&self, sc: &mut LocalScope) -> Result<Option<Value>, Value> {
+        let index = self.index.get();
+
+        if index < self.length {
+            self.index.set(index + 1);
+            self.value
+                .get_property(sc, index.to_string().into())
+                .map(Some)
+        } else {
+            Ok(None)
+        }
     }
 }

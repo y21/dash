@@ -92,6 +92,17 @@ mod handlers {
         evaluate_binary_expr(vm, |l, r, _| l.strict_eq(&r))
     }
 
+    pub fn strict_ne(vm: &mut Vm) -> Result<HandleResult, Value> {
+        evaluate_binary_expr(vm, |l, r, _| l.strict_ne(&r))
+    }
+
+    pub fn not(vm: &mut Vm) -> Result<HandleResult, Value> {
+        let value = vm.stack.pop().expect("No operand");
+        let result = value.not();
+        vm.try_push_stack(result)?;
+        Ok(HandleResult::Continue)
+    }
+
     pub fn pop(vm: &mut Vm) -> Result<HandleResult, Value> {
         vm.stack.pop();
         Ok(HandleResult::Continue)
@@ -416,6 +427,8 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<HandleResult, Value> {
         opcode::EQ => handlers::eq(vm),
         opcode::NE => handlers::ne(vm),
         opcode::STRICTEQ => handlers::strict_eq(vm),
+        opcode::STRICTNE => handlers::strict_ne(vm),
+        opcode::NOT => handlers::not(vm),
         opcode::POP => handlers::pop(vm),
         opcode::RET => handlers::ret(vm),
         opcode::LDGLOBAL => handlers::ldglobal(vm),

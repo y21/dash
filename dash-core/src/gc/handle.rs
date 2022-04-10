@@ -21,6 +21,12 @@ impl<T: ?Sized> InnerHandle<T> {
 #[derive(Debug)]
 pub struct Handle<T: ?Sized>(NonNull<InnerHandle<T>>);
 
+impl<T: ?Sized> PartialEq for Handle<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
 impl<T: ?Sized> Clone for Handle<T> {
     fn clone(&self) -> Self {
         Self(self.0)

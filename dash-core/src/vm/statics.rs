@@ -5,6 +5,7 @@ use crate::vm::value::function::Function;
 use crate::vm::value::function::FunctionKind;
 
 use super::value::array::Array;
+use super::value::array::ArrayIterator;
 use super::value::boxed::Boolean as BoxedBoolean;
 use super::value::boxed::Number as BoxedNumber;
 use super::value::boxed::String as BoxedString;
@@ -94,6 +95,7 @@ pub struct Statics {
     pub array_tostring: Handle<dyn Object>,
     pub array_prototype: Handle<dyn Object>,
     pub array_join: Handle<dyn Object>,
+    pub array_values: Handle<dyn Object>,
     pub symbol_ctor: Handle<dyn Object>,
     pub symbol_prototype: Handle<dyn Object>,
     pub symbol_async_iterator: Symbol,
@@ -109,6 +111,8 @@ pub struct Statics {
     pub symbol_to_primitive: Symbol,
     pub symbol_to_string_tag: Symbol,
     pub symbol_unscopables: Symbol,
+    pub array_iterator_prototype: Handle<dyn Object>,
+    pub array_iterator_next: Handle<dyn Object>,
 }
 
 fn object(gc: &mut Gc<dyn Object>) -> Handle<dyn Object> {
@@ -209,6 +213,7 @@ impl Statics {
             array_tostring: function(gc, "toString", js_std::array::to_string),
             array_prototype: gc.register(Array::with_obj(NamedObject::null())),
             array_join: function(gc, "join", js_std::array::join),
+            array_values: function(gc, "values", js_std::array::values),
             symbol_ctor: function(gc, "Symbol", js_std::symbol::constructor),
             symbol_prototype: gc.register(BoxedSymbol::with_obj(
                 Symbol::new(empty_str),
@@ -227,6 +232,8 @@ impl Statics {
             symbol_to_primitive: Symbol::new("SymboltoPrimitive".into()),
             symbol_to_string_tag: Symbol::new("Symbol.toStringTag".into()),
             symbol_unscopables: Symbol::new("Symbol.unscopables".into()),
+            array_iterator_prototype: gc.register(ArrayIterator::empty()),
+            array_iterator_next: function(gc, "next", js_std::array_iterator::next),
         }
     }
 

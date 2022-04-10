@@ -185,13 +185,13 @@ pub fn array_like_keys(len: usize) -> impl Iterator<Item = Value> {
         .map(|x| Value::String(x.as_str().into()))
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Undefined;
 unsafe impl Trace for Undefined {
     fn trace(&self) {}
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Null;
 unsafe impl Trace for Null {
     fn trace(&self) {}

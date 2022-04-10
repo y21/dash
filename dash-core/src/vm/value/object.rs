@@ -228,11 +228,11 @@ impl Object for Handle<dyn Object> {
     }
 
     fn as_any(&self) -> &dyn Any {
-        self
+        (**self).as_any()
     }
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
+        panic!("as_any_mut not implemented for Handle<dyn Object>");
     }
 
     fn own_keys(&self) -> Result<Vec<Value>, Value> {

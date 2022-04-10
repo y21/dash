@@ -92,4 +92,12 @@ impl Value {
             _ => unimplemented!(),
         }
     }
+
+    pub fn strict_ne(&self, other: &Self) -> Value {
+        Value::Boolean(self == other)
+    }
+
+    pub fn not(&self) -> Value {
+        Value::Boolean(!self.is_truthy())
+    }
 }

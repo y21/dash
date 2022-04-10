@@ -241,10 +241,19 @@ impl Vm {
             let array = scope.statics.array_prototype.clone();
             let tostring = scope.statics.array_tostring.clone();
             let join = scope.statics.array_join.clone();
+            let values = scope.statics.array_values.clone();
             array.set_property(&mut scope, "toString".into(), tostring.into()).unwrap();
             array.set_property(&mut scope, "join".into(), join.into()).unwrap();
+            array.set_property(&mut scope, "values".into(), values.into()).unwrap();
 
             array
+        };
+
+        let array_iterator_proto = {
+            let array_iterator_proto = scope.statics.array_iterator_prototype.clone();
+            let next = scope.statics.array_iterator_next.clone();
+            array_iterator_proto.set_property(&mut scope, "next".into(), next.into()).unwrap();
+            array_iterator_proto
         };
 
         let symbol = {

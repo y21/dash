@@ -1,4 +1,5 @@
 pub mod array;
+pub mod array_iterator;
 pub mod boolean;
 pub mod global;
 pub mod math;

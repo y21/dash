@@ -74,9 +74,15 @@ impl Object for Function {
         self.obj.set_property(sc, key, value)
     }
 
-    fn apply(&self, scope: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
+    fn apply(
+        &self,
+        scope: &mut LocalScope,
+        this: Value,
+        mut args: Vec<Value>,
+    ) -> Result<Value, Value> {
         match &self.kind {
             FunctionKind::Native(native) => {
+                args.reverse();
                 let cx = CallContext { args, scope, this };
                 let result = native(cx);
                 result

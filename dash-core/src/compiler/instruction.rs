@@ -61,9 +61,10 @@ pub const LDLOCALEXTW: u8 = 0x2F;
 pub const STORELOCALEXT: u8 = 0x30;
 pub const STORELOCALEXTW: u8 = 0x31;
 pub const STRICTEQ: u8 = 0x32;
-pub const TRY: u8 = 0x33;
-pub const TRYEND: u8 = 0x34;
-pub const THROW: u8 = 0x35;
+pub const STRICTNE: u8 = 0x33;
+pub const TRY: u8 = 0x34;
+pub const TRYEND: u8 = 0x35;
+pub const THROW: u8 = 0x36;
 
 #[rustfmt::skip]
 pub trait InstructionWriter {
@@ -91,6 +92,8 @@ pub trait InstructionWriter {
     fn build_eq(&mut self);
     /// Builds the [STRICTEQ] instruction
     fn build_strict_eq(&mut self);
+    /// Builds the [STRICTNE] instruction
+    fn build_strict_ne(&mut self);
     /// Builds the [NE] instruction
     fn build_ne(&mut self);
     /// Builds the [POS] instruction
@@ -165,6 +168,7 @@ impl InstructionWriter for InstructionBuilder {
         build_ret RET,
         build_this THIS,
         build_strict_eq STRICTEQ,
+        build_strict_ne STRICTNE,
         build_try_end TRYEND,
         build_throw THROW
     }
