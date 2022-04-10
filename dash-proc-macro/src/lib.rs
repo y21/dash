@@ -8,7 +8,7 @@ use syn::Fields;
 
 macro_rules! error {
     ($msg:expr) => {
-        return quote!(compile_error!($msg)).into()
+        return quote! { compile_error!($msg); }.into()
     };
 }
 
