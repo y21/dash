@@ -7,6 +7,7 @@ use crate::vm::Vm;
 
 use super::object::NamedObject;
 use super::object::Object;
+use super::object::PropertyKey;
 use super::primitive::Symbol as PrimitiveSymbol;
 use super::Value;
 
@@ -33,7 +34,7 @@ macro_rules! boxed_primitive {
             }
 
             impl Object for $name {
-                fn get_property(&self, sc: &mut LocalScope, key: &str) -> Result<Value, Value> {
+                fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
                     self.1.get_property(sc, key)
                 }
 
@@ -41,7 +42,7 @@ macro_rules! boxed_primitive {
                     self.1.apply(sc, this, args)
                 }
 
-                fn set_property(&self, sc: &mut LocalScope, key: &str, value: Value) -> Result<(), Value> {
+                fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
                     self.1.set_property(sc, key, value)
                 }
 

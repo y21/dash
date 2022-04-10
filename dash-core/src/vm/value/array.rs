@@ -1,12 +1,14 @@
 use std::any::Any;
 use std::cell::RefCell;
 
+use crate::gc::handle::Handle;
 use crate::gc::trace::Trace;
 use crate::vm::local::LocalScope;
 use crate::vm::Vm;
 
 use super::object::NamedObject;
 use super::object::Object;
+use super::object::PropertyKey;
 use super::primitive::array_like_keys;
 use super::Value;
 
@@ -56,36 +58,45 @@ unsafe impl Trace for Array {
 }
 
 impl Object for Array {
-    fn get_property(&self, sc: &mut LocalScope, key: &str) -> Result<Value, Value> {
+    fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
         let items = self.items.borrow();
 
-        if key == "length" {
-            return Ok(Value::Number(items.len() as f64));
-        }
+        if let PropertyKey::String(key) = &key {
+            if key == "length" {
+                return Ok(Value::Number(items.len() as f64));
+            }
 
-        if let Ok(index) = key.parse::<usize>() {
-            if let Some(element) = items.get(index) {
-                return Ok(element.clone());
+            if let Ok(index) = key.parse::<usize>() {
+                if let Some(element) = items.get(index) {
+                    return Ok(element.clone());
+                }
             }
         }
 
         self.obj.get_property(sc, key)
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: &str, value: Value) -> Result<(), Value> {
-        if key == "length" {
-            // swallow it
-            // TODO: once we support defining non configurable properties, we can stop special casing this
-            return Ok(());
-        }
-
-        if let Ok(index) = key.parse::<usize>() {
-            let mut items = self.items.borrow_mut();
-            if index >= items.len() {
-                items.resize(index + 1, Value::undefined());
+    fn set_property(
+        &self,
+        sc: &mut LocalScope,
+        key: PropertyKey<'static>,
+        value: Value,
+    ) -> Result<(), Value> {
+        if let PropertyKey::String(key) = &key {
+            if key == "length" {
+                // swallow it
+                // TODO: once we support defining non configurable properties, we can stop special casing this
+                return Ok(());
             }
-            items[index] = value;
-            return Ok(());
+
+            if let Ok(index) = key.parse::<usize>() {
+                let mut items = self.items.borrow_mut();
+                if index >= items.len() {
+                    items.resize(index + 1, Value::undefined());
+                }
+                items[index] = value;
+                return Ok(());
+            }
         }
 
         self.obj.set_property(sc, key, value)
@@ -114,5 +125,14 @@ impl Object for Array {
     fn own_keys(&self) -> Result<Vec<Value>, Value> {
         let items = self.items.borrow();
         Ok(array_like_keys(items.len()).collect())
+    }
+}
+
+#[derive(Debug)]
+pub struct ArrayIterator(Handle<dyn Object>);
+
+unsafe impl Trace for ArrayIterator {
+    fn trace(&self) {
+        self.0.trace();
     }
 }

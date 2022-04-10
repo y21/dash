@@ -6,6 +6,7 @@ use crate::vm::Vm;
 
 use super::object::NamedObject;
 use super::object::Object;
+use super::object::PropertyKey;
 use super::Value;
 
 #[derive(Debug)]
@@ -45,11 +46,11 @@ impl Object for Error {
     fn get_property(
         &self,
         sc: &mut crate::vm::local::LocalScope,
-        key: &str,
+        key: PropertyKey,
     ) -> Result<super::Value, super::Value> {
         match key {
-            "name" => Ok(Value::String(self.name.clone())),
-            "message" => Ok(Value::String(self.message.clone())),
+            PropertyKey::String(s) if s == "name" => Ok(Value::String(self.name.clone())),
+            PropertyKey::String(s) if s == "message" => Ok(Value::String(self.message.clone())),
             _ => self.obj.get_property(sc, key),
         }
     }
@@ -57,7 +58,7 @@ impl Object for Error {
     fn set_property(
         &self,
         sc: &mut crate::vm::local::LocalScope,
-        key: &str,
+        key: PropertyKey<'static>,
         value: super::Value,
     ) -> Result<(), super::Value> {
         todo!()

@@ -67,15 +67,15 @@ impl Vm {
             let keys = scope.statics.object_keys.clone();
 
             object.set_prototype(&mut scope, object_proto.into()).unwrap();
-            object.set_property(&mut scope, "create", create.into()).unwrap();
-            object.set_property(&mut scope, "keys", keys.into()).unwrap();
+            object.set_property(&mut scope, "create".into(), create.into()).unwrap();
+            object.set_property(&mut scope, "keys".into(), keys.into()).unwrap();
             object
         };
 
         let console = {
             let console = scope.statics.console.clone();
             let log = scope.statics.console_log.clone();
-            console.set_property(&mut scope, "log", log.into()).unwrap();
+            console.set_property(&mut scope, "log".into(), log.into()).unwrap();
             console
         };
 
@@ -109,33 +109,33 @@ impl Vm {
             let tanh = scope.statics.math_tanh.clone();
             let trunc = scope.statics.math_trunc.clone();
 
-            math.set_property(&mut scope, "floor", floor.into()).unwrap();
-            math.set_property(&mut scope, "abs", abs.into()).unwrap();
-            math.set_property(&mut scope, "acos", acos.into()).unwrap();
-            math.set_property(&mut scope, "acosh", acosh.into()).unwrap();
-            math.set_property(&mut scope, "asin", asin.into()).unwrap();
-            math.set_property(&mut scope, "asinh", asinh.into()).unwrap();
-            math.set_property(&mut scope, "atan", atan.into()).unwrap();
-            math.set_property(&mut scope, "atanh", atanh.into()).unwrap();
-            math.set_property(&mut scope, "atan2", atan2.into()).unwrap();
-            math.set_property(&mut scope, "cbrt", cbrt.into()).unwrap();
-            math.set_property(&mut scope, "ceil", ceil.into()).unwrap();
-            math.set_property(&mut scope, "clz32", clz32.into()).unwrap();
-            math.set_property(&mut scope, "cos", cos.into()).unwrap();
-            math.set_property(&mut scope, "cosh", cosh.into()).unwrap();
-            math.set_property(&mut scope, "exp", exp.into()).unwrap();
-            math.set_property(&mut scope, "expm1", expm1.into()).unwrap();
-            math.set_property(&mut scope, "log", log.into()).unwrap();
-            math.set_property(&mut scope, "log1p", log1p.into()).unwrap();
-            math.set_property(&mut scope, "log10", log10.into()).unwrap();
-            math.set_property(&mut scope, "log2", log2.into()).unwrap();
-            math.set_property(&mut scope, "round", round.into()).unwrap();
-            math.set_property(&mut scope, "sin", sin.into()).unwrap();
-            math.set_property(&mut scope, "sinh", sinh.into()).unwrap();
-            math.set_property(&mut scope, "sqrt", sqrt.into()).unwrap();
-            math.set_property(&mut scope, "tan", tan.into()).unwrap();
-            math.set_property(&mut scope, "tanh", tanh.into()).unwrap();
-            math.set_property(&mut scope, "trunc", trunc.into()).unwrap();
+            math.set_property(&mut scope, "floor".into(), floor.into()).unwrap();
+            math.set_property(&mut scope, "abs".into(), abs.into()).unwrap();
+            math.set_property(&mut scope, "acos".into(), acos.into()).unwrap();
+            math.set_property(&mut scope, "acosh".into(), acosh.into()).unwrap();
+            math.set_property(&mut scope, "asin".into(), asin.into()).unwrap();
+            math.set_property(&mut scope, "asinh".into(), asinh.into()).unwrap();
+            math.set_property(&mut scope, "atan".into(), atan.into()).unwrap();
+            math.set_property(&mut scope, "atanh".into(), atanh.into()).unwrap();
+            math.set_property(&mut scope, "atan2".into(), atan2.into()).unwrap();
+            math.set_property(&mut scope, "cbrt".into(), cbrt.into()).unwrap();
+            math.set_property(&mut scope, "ceil".into(), ceil.into()).unwrap();
+            math.set_property(&mut scope, "clz32".into(), clz32.into()).unwrap();
+            math.set_property(&mut scope, "cos".into(), cos.into()).unwrap();
+            math.set_property(&mut scope, "cosh".into(), cosh.into()).unwrap();
+            math.set_property(&mut scope, "exp".into(), exp.into()).unwrap();
+            math.set_property(&mut scope, "expm1".into(), expm1.into()).unwrap();
+            math.set_property(&mut scope, "log".into(), log.into()).unwrap();
+            math.set_property(&mut scope, "log1p".into(), log1p.into()).unwrap();
+            math.set_property(&mut scope, "log10".into(), log10.into()).unwrap();
+            math.set_property(&mut scope, "log2".into(), log2.into()).unwrap();
+            math.set_property(&mut scope, "round".into(), round.into()).unwrap();
+            math.set_property(&mut scope, "sin".into(), sin.into()).unwrap();
+            math.set_property(&mut scope, "sinh".into(), sinh.into()).unwrap();
+            math.set_property(&mut scope, "sqrt".into(), sqrt.into()).unwrap();
+            math.set_property(&mut scope, "tan".into(), tan.into()).unwrap();
+            math.set_property(&mut scope, "tanh".into(), tanh.into()).unwrap();
+            math.set_property(&mut scope, "trunc".into(), trunc.into()).unwrap();
 
             math
         };
@@ -147,9 +147,9 @@ impl Vm {
             let is_nan = scope.statics.number_is_nan.clone();
             let is_safe_integer = scope.statics.number_is_safe_integer.clone();
 
-            number.set_property(&mut scope, "isFinite", is_finite.into()).unwrap();
-            number.set_property(&mut scope, "isNaN", is_nan.into()).unwrap();
-            number.set_property(&mut scope, "isSafeInteger", is_safe_integer.into()).unwrap();
+            number.set_property(&mut scope, "isFinite".into(), is_finite.into()).unwrap();
+            number.set_property(&mut scope, "isNaN".into(), is_nan.into()).unwrap();
+            number.set_property(&mut scope, "isSafeInteger".into(), is_safe_integer.into()).unwrap();
             number.set_prototype(&mut scope, number_prototype.into()).unwrap();
 
             number
@@ -159,8 +159,8 @@ impl Vm {
             let number = scope.statics.number_prototype.clone();
             let tostring = scope.statics.number_tostring.clone();
             let to_fixed = scope.statics.number_to_fixed.clone();
-            number.set_property(&mut scope, "toString", tostring.into()).unwrap();
-            number.set_property(&mut scope, "toFixed", to_fixed.into()).unwrap();
+            number.set_property(&mut scope, "toString".into(), tostring.into()).unwrap();
+            number.set_property(&mut scope, "toFixed".into(), to_fixed.into()).unwrap();
             number
         };
 
@@ -175,8 +175,8 @@ impl Vm {
             let boolean = scope.statics.boolean_prototype.clone();
             let tostring = scope.statics.boolean_tostring.clone();
             let valueof = scope.statics.boolean_valueof.clone();
-            boolean.set_property(&mut scope, "toString", tostring.into()).unwrap();
-            boolean.set_property(&mut scope, "valueOf", valueof.into()).unwrap();
+            boolean.set_property(&mut scope, "toString".into(), tostring.into()).unwrap();
+            boolean.set_property(&mut scope, "valueOf".into(), valueof.into()).unwrap();
             boolean
         };
 
@@ -191,39 +191,39 @@ impl Vm {
         let string_prototype = {
             let string = scope.statics.string_prototype.clone();
             let tostring = scope.statics.string_tostring.clone();
-            string.set_property(&mut scope, "toString", tostring.into()).unwrap();
+            string.set_property(&mut scope, "toString".into(), tostring.into()).unwrap();
             let charat = scope.statics.string_char_at.clone();
-            string.set_property(&mut scope, "charAt", charat.into()).unwrap();
+            string.set_property(&mut scope, "charAt".into(), charat.into()).unwrap();
             let charcodeat = scope.statics.string_char_code_at.clone();
-            string.set_property(&mut scope, "charCodeAt", charcodeat.into()).unwrap();
+            string.set_property(&mut scope, "charCodeAt".into(), charcodeat.into()).unwrap();
             let concat = scope.statics.string_concat.clone();
-            string.set_property(&mut scope, "concat", concat.into()).unwrap();
+            string.set_property(&mut scope, "concat".into(), concat.into()).unwrap();
             let endswith = scope.statics.string_ends_with.clone();
-            string.set_property(&mut scope, "endsWith", endswith.into()).unwrap();
+            string.set_property(&mut scope, "endsWith".into(), endswith.into()).unwrap();
             let startswith = scope.statics.string_starts_with.clone();
-            string.set_property(&mut scope, "startsWith", startswith.into()).unwrap();
+            string.set_property(&mut scope, "startsWith".into(), startswith.into()).unwrap();
             let includes = scope.statics.string_includes.clone();
-            string.set_property(&mut scope, "includes", includes.into()).unwrap();
+            string.set_property(&mut scope, "includes".into(), includes.into()).unwrap();
             let indexof = scope.statics.string_index_of.clone();
-            string.set_property(&mut scope, "indexOf", indexof.into()).unwrap();
+            string.set_property(&mut scope, "indexOf".into(), indexof.into()).unwrap();
             let lastindexof = scope.statics.string_last_index_of.clone();
-            string.set_property(&mut scope, "lastIndexOf", lastindexof.into()).unwrap();
+            string.set_property(&mut scope, "lastIndexOf".into(), lastindexof.into()).unwrap();
             let padend = scope.statics.string_pad_end.clone();
-            string.set_property(&mut scope, "padEnd", padend.into()).unwrap();
+            string.set_property(&mut scope, "padEnd".into(), padend.into()).unwrap();
             let padstart = scope.statics.string_pad_start.clone();
-            string.set_property(&mut scope, "padStart", padstart.into()).unwrap();
+            string.set_property(&mut scope, "padStart".into(), padstart.into()).unwrap();
             let repeat = scope.statics.string_repeat.clone();
-            string.set_property(&mut scope, "repeat", repeat.into()).unwrap();
+            string.set_property(&mut scope, "repeat".into(), repeat.into()).unwrap();
             let replace = scope.statics.string_replace.clone();
-            string.set_property(&mut scope, "replace", replace.into()).unwrap();
+            string.set_property(&mut scope, "replace".into(), replace.into()).unwrap();
             let replaceall = scope.statics.string_replace_all.clone();
-            string.set_property(&mut scope, "replaceAll", replaceall.into()).unwrap();
+            string.set_property(&mut scope, "replaceAll".into(), replaceall.into()).unwrap();
             let split = scope.statics.string_split.clone();
-            string.set_property(&mut scope, "split", split.into()).unwrap();
+            string.set_property(&mut scope, "split".into(), split.into()).unwrap();
             let to_lowercase = scope.statics.string_to_lowercase.clone();
-            string.set_property(&mut scope, "toLowerCase", to_lowercase.into()).unwrap();
+            string.set_property(&mut scope, "toLowerCase".into(), to_lowercase.into()).unwrap();
             let to_uppercase = scope.statics.string_to_uppercase.clone();
-            string.set_property(&mut scope, "toUpperCase", to_uppercase.into()).unwrap();
+            string.set_property(&mut scope, "toUpperCase".into(), to_uppercase.into()).unwrap();
 
 
             string
@@ -241,8 +241,8 @@ impl Vm {
             let array = scope.statics.array_prototype.clone();
             let tostring = scope.statics.array_tostring.clone();
             let join = scope.statics.array_join.clone();
-            array.set_property(&mut scope, "toString", tostring.into()).unwrap();
-            array.set_property(&mut scope, "join", join.into()).unwrap();
+            array.set_property(&mut scope, "toString".into(), tostring.into()).unwrap();
+            array.set_property(&mut scope, "join".into(), join.into()).unwrap();
 
             array
         };
@@ -263,18 +263,18 @@ impl Vm {
             let to_string_tag = scope.statics.symbol_to_string_tag.clone();
             let unscopables = scope.statics.symbol_unscopables.clone();
 
-            symbol.set_property(&mut scope, "asyncIterator", async_iterator.into()).unwrap();
-            symbol.set_property(&mut scope, "hasInstance", has_instance.into()).unwrap();
-            symbol.set_property(&mut scope, "iterator", iterator.into()).unwrap();
-            symbol.set_property(&mut scope, "match", match_.into()).unwrap();
-            symbol.set_property(&mut scope, "matchAll", match_all.into()).unwrap();
-            symbol.set_property(&mut scope, "replace", replace.into()).unwrap();
-            symbol.set_property(&mut scope, "search", search.into()).unwrap();
-            symbol.set_property(&mut scope, "species", species.into()).unwrap();
-            symbol.set_property(&mut scope, "split", split.into()).unwrap();
-            symbol.set_property(&mut scope, "toPrimitive", to_primitive.into()).unwrap();
-            symbol.set_property(&mut scope, "toStringTag", to_string_tag.into()).unwrap();
-            symbol.set_property(&mut scope, "unscopables", unscopables.into()).unwrap();
+            symbol.set_property(&mut scope, "asyncIterator".into(), async_iterator.into()).unwrap();
+            symbol.set_property(&mut scope, "hasInstance".into(), has_instance.into()).unwrap();
+            symbol.set_property(&mut scope, "iterator".into(), iterator.into()).unwrap();
+            symbol.set_property(&mut scope, "match".into(), match_.into()).unwrap();
+            symbol.set_property(&mut scope, "matchAll".into(), match_all.into()).unwrap();
+            symbol.set_property(&mut scope, "replace".into(), replace.into()).unwrap();
+            symbol.set_property(&mut scope, "search".into(), search.into()).unwrap();
+            symbol.set_property(&mut scope, "species".into(), species.into()).unwrap();
+            symbol.set_property(&mut scope, "split".into(), split.into()).unwrap();
+            symbol.set_property(&mut scope, "toPrimitive".into(), to_primitive.into()).unwrap();
+            symbol.set_property(&mut scope, "toStringTag".into(), to_string_tag.into()).unwrap();
+            symbol.set_property(&mut scope, "unscopables".into(), unscopables.into()).unwrap();
 
             symbol
         };
@@ -284,22 +284,22 @@ impl Vm {
             let is_finite = scope.statics.is_finite.clone();
             let parse_float = scope.statics.parse_float.clone();
             let parse_int = scope.statics.parse_int.clone();
-            global.set_property(&mut scope, "isNaN", is_nan.into()).unwrap();
-            global.set_property(&mut scope, "isFinite", is_finite.into()).unwrap();
-            global.set_property(&mut scope, "parseFloat", parse_float.into()).unwrap();
-            global.set_property(&mut scope, "parseInt", parse_int.into()).unwrap();
+            global.set_property(&mut scope, "isNaN".into(), is_nan.into()).unwrap();
+            global.set_property(&mut scope, "isFinite".into(), is_finite.into()).unwrap();
+            global.set_property(&mut scope, "parseFloat".into(), parse_float.into()).unwrap();
+            global.set_property(&mut scope, "parseInt".into(), parse_int.into()).unwrap();
 
             global
         };
 
-        global.set_property(&mut scope, "Symbol", symbol.into()).unwrap();
-        global.set_property(&mut scope, "Array", array.into()).unwrap();
-        global.set_property(&mut scope, "String", string.into()).unwrap();
-        global.set_property(&mut scope, "Object", object.into()).unwrap();
-        global.set_property(&mut scope, "console", console.into()).unwrap();
-        global.set_property(&mut scope, "Math", math.into()).unwrap();
-        global.set_property(&mut scope, "Number", number.into()).unwrap();
-        global.set_property(&mut scope, "Boolean", boolean.into()).unwrap();
+        global.set_property(&mut scope, "Symbol".into(), symbol.into()).unwrap();
+        global.set_property(&mut scope, "Array".into(), array.into()).unwrap();
+        global.set_property(&mut scope, "String".into(), string.into()).unwrap();
+        global.set_property(&mut scope, "Object".into(), object.into()).unwrap();
+        global.set_property(&mut scope, "console".into(), console.into()).unwrap();
+        global.set_property(&mut scope, "Math".into(), math.into()).unwrap();
+        global.set_property(&mut scope, "Number".into(), number.into()).unwrap();
+        global.set_property(&mut scope, "Boolean".into(), boolean.into()).unwrap();
     }
 
     /// Fetches the current instruction/value in the currently executing frame

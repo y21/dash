@@ -1,4 +1,4 @@
-use std::{any::Any, cell::RefCell, collections::HashMap, fmt::Debug};
+use std::{any::Any, borrow::Cow, cell::RefCell, collections::HashMap, fmt::Debug};
 
 use crate::{
     gc::{handle::Handle, trace::Trace},
@@ -6,14 +6,19 @@ use crate::{
     vm::{local::LocalScope, Vm},
 };
 
-use super::{Typeof, Value};
+use super::{primitive::Symbol, Typeof, Value};
 
 // only here for the time being, will be removed later
 fn __assert_trait_object_safety(_: Box<dyn Object>) {}
 
 pub trait Object: Debug + Trace {
-    fn get_property(&self, sc: &mut LocalScope, key: &str) -> Result<Value, Value>;
-    fn set_property(&self, sc: &mut LocalScope, key: &str, value: Value) -> Result<(), Value>;
+    fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value>;
+    fn set_property(
+        &self,
+        sc: &mut LocalScope,
+        key: PropertyKey<'static>,
+        value: Value,
+    ) -> Result<(), Value>;
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value>;
     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value>;
     fn apply<'s>(
@@ -34,7 +39,40 @@ pub trait Object: Debug + Trace {
 pub struct NamedObject {
     prototype: RefCell<Option<Handle<dyn Object>>>,
     constructor: RefCell<Option<Handle<dyn Object>>>,
-    values: RefCell<HashMap<String, Value>>,
+    values: RefCell<HashMap<PropertyKey<'static>, Value>>,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum PropertyKey<'a> {
+    String(Cow<'a, str>),
+    Symbol(Symbol),
+}
+
+impl<'a> From<&'a str> for PropertyKey<'a> {
+    fn from(s: &'a str) -> Self {
+        PropertyKey::String(Cow::Borrowed(s))
+    }
+}
+
+impl From<String> for PropertyKey<'static> {
+    fn from(s: String) -> Self {
+        PropertyKey::String(Cow::Owned(s))
+    }
+}
+
+impl From<Symbol> for PropertyKey<'static> {
+    fn from(s: Symbol) -> Self {
+        PropertyKey::Symbol(s)
+    }
+}
+
+impl<'a> PropertyKey<'a> {
+    pub fn as_value(&self) -> Value {
+        match self {
+            PropertyKey::String(s) => Value::String(s.as_ref().into()),
+            PropertyKey::Symbol(s) => Value::Symbol(s.clone()),
+        }
+    }
 }
 
 impl NamedObject {
@@ -80,28 +118,35 @@ unsafe impl Trace for NamedObject {
 }
 
 impl Object for NamedObject {
-    fn get_property(&self, sc: &mut LocalScope, key: &str) -> Result<Value, Value> {
-        match key {
-            "__proto__" => self.get_prototype(sc),
-            "constructor" => throw!(sc, "unimplemented"),
-            _ => {
-                let values = self.values.borrow();
-                if let Some(value) = values.get(key) {
-                    return Ok(value.clone());
-                }
-
-                if let Some(prototype) = self.prototype.borrow().as_ref() {
-                    return prototype.get_property(sc, key);
-                }
-
-                Ok(Value::undefined())
+    fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        if let PropertyKey::String(st) = &key {
+            match st.as_ref() {
+                "__proto__" => return self.get_prototype(sc),
+                "constructor" => throw!(sc, "unimplemented"),
+                _ => {}
             }
+        };
+
+        let values = self.values.borrow();
+        if let Some(value) = values.get(&key) {
+            return Ok(value.clone());
         }
+
+        if let Some(prototype) = self.prototype.borrow().as_ref() {
+            return prototype.get_property(sc, key);
+        }
+
+        Ok(Value::undefined())
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: &str, value: Value) -> Result<(), Value> {
+    fn set_property(
+        &self,
+        sc: &mut LocalScope,
+        key: PropertyKey<'static>,
+        value: Value,
+    ) -> Result<(), Value> {
         let mut map = self.values.borrow_mut();
-        map.insert(key.into(), value);
+        map.insert(key, value);
         Ok(())
     }
 
@@ -137,19 +182,21 @@ impl Object for NamedObject {
 
     fn own_keys(&self) -> Result<Vec<Value>, Value> {
         let values = self.values.borrow();
-        Ok(values
-            .keys()
-            .map(|key| Value::String(key.as_str().into()))
-            .collect())
+        Ok(values.keys().map(PropertyKey::as_value).collect())
     }
 }
 
 impl Object for Handle<dyn Object> {
-    fn get_property(&self, sc: &mut LocalScope, key: &str) -> Result<Value, Value> {
+    fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
         (**self).get_property(sc, key)
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: &str, value: Value) -> Result<(), Value> {
+    fn set_property(
+        &self,
+        sc: &mut LocalScope,
+        key: PropertyKey<'static>,
+        value: Value,
+    ) -> Result<(), Value> {
         (**self).set_property(sc, key, value)
     }
 

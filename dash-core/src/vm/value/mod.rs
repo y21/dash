@@ -42,7 +42,7 @@ use crate::{
 
 use self::{
     function::{user::UserFunction, Function},
-    object::Object,
+    object::{Object, PropertyKey},
     primitive::Symbol,
 };
 
@@ -127,7 +127,12 @@ impl Value {
         }
     }
 
-    pub fn set_property(&self, sc: &mut LocalScope, key: &str, value: Value) -> Result<(), Value> {
+    pub fn set_property(
+        &self,
+        sc: &mut LocalScope,
+        key: PropertyKey<'static>,
+        value: Value,
+    ) -> Result<(), Value> {
         match self {
             Self::Object(h) => h.set_property(sc, key, value),
             Self::Number(n) => n.set_property(sc, key, value),
@@ -140,7 +145,7 @@ impl Value {
         }
     }
 
-    pub fn get_property(&self, sc: &mut LocalScope, key: &str) -> Result<Value, Value> {
+    pub fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
         match self {
             Self::Object(o) => o.get_property(sc, key),
             Self::Number(n) => n.get_property(sc, key),

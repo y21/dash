@@ -1,4 +1,4 @@
-use std::{cell::Cell, fmt::Debug, ops::Deref, ptr::NonNull};
+use std::{cell::Cell, fmt::Debug, hash::Hash, ops::Deref, ptr::NonNull};
 
 use super::trace::Trace;
 
@@ -58,5 +58,11 @@ impl<T: ?Sized> Deref for Handle<T> {
 
     fn deref(&self) -> &Self::Target {
         unsafe { &self.0.as_ref().value }
+    }
+}
+
+impl<T: ?Sized> Hash for Handle<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.as_ptr().hash(state);
     }
 }

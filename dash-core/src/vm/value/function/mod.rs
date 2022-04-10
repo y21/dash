@@ -14,7 +14,7 @@ use self::{
 };
 
 use super::{
-    object::{NamedObject, Object},
+    object::{NamedObject, Object, PropertyKey},
     Typeof, Value,
 };
 
@@ -61,25 +61,20 @@ unsafe impl Trace for Function {
 }
 
 impl Object for Function {
-    fn get_property(&self, sc: &mut LocalScope, key: &str) -> Result<super::Value, super::Value> {
+    fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
         self.obj.get_property(sc, key)
     }
 
     fn set_property(
         &self,
         sc: &mut LocalScope,
-        key: &str,
-        value: super::Value,
-    ) -> Result<(), super::Value> {
+        key: PropertyKey<'static>,
+        value: Value,
+    ) -> Result<(), Value> {
         self.obj.set_property(sc, key, value)
     }
 
-    fn apply(
-        &self,
-        scope: &mut LocalScope,
-        this: super::Value,
-        args: Vec<super::Value>,
-    ) -> Result<super::Value, super::Value> {
+    fn apply(&self, scope: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
         match &self.kind {
             FunctionKind::Native(native) => {
                 let cx = CallContext { args, scope, this };
@@ -109,7 +104,7 @@ impl Object for Function {
         self
     }
 
-    fn set_prototype(&self, sc: &mut LocalScope, value: super::Value) -> Result<(), Value> {
+    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
         self.obj.set_prototype(sc, value)
     }
 

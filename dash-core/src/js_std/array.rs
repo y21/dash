@@ -21,7 +21,7 @@ fn join_inner(sc: &mut LocalScope, array: Value, separator: &str) -> Result<Valu
         }
 
         let i = i.to_string();
-        let element = array.get_property(sc, &i)?;
+        let element = array.get_property(sc, i.as_str().into())?;
         let s = element.to_string(sc)?;
         result.push_str(&s);
     }

@@ -118,7 +118,10 @@ mod handlers {
             .clone();
 
         let mut scope = LocalScope::new(vm);
-        let value = scope.global.clone().get_property(&mut scope, &name)?;
+        let value = scope
+            .global
+            .clone()
+            .get_property(&mut scope, name.as_ref().into())?;
         vm.stack.push(value);
         Ok(HandleResult::Continue)
     }
@@ -234,7 +237,9 @@ mod handlers {
 
                 String::from(&**identifier)
             };
-            obj.set_property(&mut scope, &constant, element).unwrap();
+
+            obj.set_property(&mut scope, constant.into(), element)
+                .unwrap();
         }
 
         let handle = vm.gc.register(obj);
@@ -265,7 +270,7 @@ mod handlers {
 
         let target = target.expect("Missing target");
 
-        let value = target.get_property(&mut scope, &ident)?;
+        let value = target.get_property(&mut scope, ident.as_ref().into())?;
         vm.try_push_stack(value)?;
         Ok(HandleResult::Continue)
     }
@@ -281,7 +286,7 @@ mod handlers {
         let target = vm.stack.pop().expect("No target");
 
         let mut scope = LocalScope::new(vm);
-        target.set_property(&mut scope, &key, value.clone())?;
+        target.set_property(&mut scope, key.to_string().into(), value.clone())?;
 
         vm.try_push_stack(value)?;
         Ok(HandleResult::Continue)
@@ -298,7 +303,7 @@ mod handlers {
         let target = vm.stack.pop().expect("No target");
 
         let mut scope = LocalScope::new(vm);
-        target.set_property(&mut scope, &key, value.clone())?;
+        target.set_property(&mut scope, key.to_string().into(), value.clone())?;
 
         vm.try_push_stack(value)?;
         Ok(HandleResult::Continue)
@@ -310,8 +315,9 @@ mod handlers {
         let target = vm.stack.pop().expect("No target");
 
         let mut scope = LocalScope::new(vm);
+        // TODO: don't call to_string if key is symbol
         let key = key.to_string(&mut scope)?;
-        target.set_property(&mut scope, &key, value.clone())?;
+        target.set_property(&mut scope, key.to_string().into(), value.clone())?;
 
         vm.try_push_stack(value)?;
         Ok(HandleResult::Continue)

@@ -67,7 +67,7 @@ impl ValueConversion for Value {
     ) -> Result<Value, Value> {
         if let Value::Object(obj) = self {
             // TODO: Call @@toPrimitive instead of toString once we have symbols
-            let exotic_to_prim = self.get_property(sc, "toString")?;
+            let exotic_to_prim = self.get_property(sc, "toString".into())?;
 
             if let Value::Undefined(_) = exotic_to_prim {
                 // TODO: d. Return ? OrdinaryToPrimitive(input, preferredType).
@@ -128,7 +128,7 @@ impl ValueConversion for Value {
     }
 
     fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value> {
-        self.get_property(sc, "length")?.to_length_u()
+        self.get_property(sc, "length".into())?.to_length_u()
     }
 
     fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value> {
