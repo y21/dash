@@ -13,6 +13,7 @@ mod handlers {
     use crate::vm::value::array::Array;
     use crate::vm::value::object::NamedObject;
     use crate::vm::value::object::Object;
+    use crate::vm::value::object::PropertyKey;
     use crate::vm::value::ops::abstractions::conversions::ValueConversion;
 
     use super::*;
@@ -315,10 +316,46 @@ mod handlers {
         let target = vm.stack.pop().expect("No target");
 
         let mut scope = LocalScope::new(vm);
-        // TODO: don't call to_string if key is symbol
-        let key = key.to_string(&mut scope)?;
-        target.set_property(&mut scope, key.to_string().into(), value.clone())?;
 
+        let key = match key {
+            Value::Symbol(s) => PropertyKey::Symbol(s.into()),
+            other => {
+                let key = other.to_string(&mut scope)?;
+                PropertyKey::String(key.to_string().into())
+            }
+        };
+
+        target.set_property(&mut scope, key, value.clone())?;
+
+        vm.try_push_stack(value)?;
+        Ok(HandleResult::Continue)
+    }
+
+    pub fn dynamicpropertyaccess(vm: &mut Vm) -> Result<HandleResult, Value> {
+        let key = vm.stack.pop().expect("No key");
+
+        let preserve_this = vm.fetch_and_inc_ip() == 1;
+
+        let mut scope = LocalScope::new(vm);
+        // TODO: add scope to externals because calling get_property can invoke getters
+
+        let target = if preserve_this {
+            scope.stack.last().cloned()
+        } else {
+            scope.stack.pop()
+        };
+
+        let target = target.expect("Missing target");
+
+        let key = match key {
+            Value::Symbol(s) => PropertyKey::Symbol(s.into()),
+            other => {
+                let key = other.to_string(&mut scope)?;
+                PropertyKey::String(key.to_string().into())
+            }
+        };
+
+        let value = target.get_property(&mut scope, key)?;
         vm.try_push_stack(value)?;
         Ok(HandleResult::Continue)
     }
@@ -407,6 +444,7 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<HandleResult, Value> {
         opcode::STATICPROPSET => handlers::staticpropertyset(vm),
         opcode::STATICPROPSETW => handlers::staticpropertysetw(vm),
         opcode::DYNAMICPROPSET => handlers::dynamicpropertyset(vm),
+        opcode::DYNAMICPROPACCESS => handlers::dynamicpropertyaccess(vm),
         opcode::LDLOCALEXT => handlers::ldlocalext(vm),
         opcode::STORELOCALEXT => handlers::storelocalext(vm),
         opcode::TRY => handlers::try_block(vm),
