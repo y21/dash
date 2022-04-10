@@ -47,7 +47,7 @@ use self::{
 };
 
 use super::{local::LocalScope, Vm};
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     /// The number type
     Number(f64),
