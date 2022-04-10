@@ -6,7 +6,7 @@ use crate::{
     vm::{local::LocalScope, Vm},
 };
 
-use super::{primitive::Symbol, Typeof, Value};
+use super::{ops::abstractions::conversions::ValueConversion, primitive::Symbol, Typeof, Value};
 
 // only here for the time being, will be removed later
 fn __assert_trait_object_safety(_: Box<dyn Object>) {}
@@ -71,6 +71,16 @@ impl<'a> PropertyKey<'a> {
         match self {
             PropertyKey::String(s) => Value::String(s.as_ref().into()),
             PropertyKey::Symbol(s) => Value::Symbol(s.clone()),
+        }
+    }
+
+    pub fn from_value(sc: &mut LocalScope, value: Value) -> Result<Self, Value> {
+        match value {
+            Value::Symbol(s) => Ok(Self::Symbol(s.into())),
+            other => {
+                let key = other.to_string(sc)?;
+                Ok(PropertyKey::String(key.to_string().into()))
+            }
         }
     }
 }

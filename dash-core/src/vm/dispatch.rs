@@ -14,7 +14,6 @@ mod handlers {
     use crate::vm::value::object::NamedObject;
     use crate::vm::value::object::Object;
     use crate::vm::value::object::PropertyKey;
-    use crate::vm::value::ops::abstractions::conversions::ValueConversion;
 
     use super::*;
 
@@ -317,14 +316,7 @@ mod handlers {
 
         let mut scope = LocalScope::new(vm);
 
-        let key = match key {
-            Value::Symbol(s) => PropertyKey::Symbol(s.into()),
-            other => {
-                let key = other.to_string(&mut scope)?;
-                PropertyKey::String(key.to_string().into())
-            }
-        };
-
+        let key = PropertyKey::from_value(&mut scope, key)?;
         target.set_property(&mut scope, key, value.clone())?;
 
         vm.try_push_stack(value)?;
@@ -347,13 +339,7 @@ mod handlers {
 
         let target = target.expect("Missing target");
 
-        let key = match key {
-            Value::Symbol(s) => PropertyKey::Symbol(s.into()),
-            other => {
-                let key = other.to_string(&mut scope)?;
-                PropertyKey::String(key.to_string().into())
-            }
-        };
+        let key = PropertyKey::from_value(&mut scope, key)?;
 
         let value = target.get_property(&mut scope, key)?;
         vm.try_push_stack(value)?;
