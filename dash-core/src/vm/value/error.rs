@@ -77,10 +77,6 @@ impl Object for Error {
         self
     }
 
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
-
     fn set_prototype(
         &self,
         sc: &mut crate::vm::local::LocalScope,

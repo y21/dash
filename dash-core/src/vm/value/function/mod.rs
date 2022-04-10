@@ -106,10 +106,6 @@ impl Object for Function {
         self
     }
 
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
-
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
         self.obj.set_prototype(sc, value)
     }

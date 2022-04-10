@@ -111,10 +111,6 @@ impl Object for Array {
         self
     }
 
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
-
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
         self.obj.set_prototype(sc, value)
     }
@@ -158,11 +154,11 @@ impl Object for ArrayIterator {
     }
 
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
-        todo!()
+        self.obj.set_prototype(sc, value)
     }
 
     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
-        todo!()
+        self.obj.get_prototype(sc)
     }
 
     fn apply<'s>(
@@ -171,19 +167,15 @@ impl Object for ArrayIterator {
         this: Value,
         args: Vec<Value>,
     ) -> Result<Value, Value> {
-        todo!()
+        self.obj.apply(scope, this, args)
     }
 
     fn as_any(&self) -> &dyn Any {
         self
     }
 
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
-
     fn own_keys(&self) -> Result<Vec<Value>, Value> {
-        todo!()
+        Ok(Vec::new())
     }
 }
 

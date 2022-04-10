@@ -55,10 +55,6 @@ impl Object for f64 {
         self
     }
 
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
-
     fn own_keys(&self) -> Result<Vec<Value>, Value> {
         Ok(Vec::new())
     }
@@ -105,10 +101,6 @@ impl Object for bool {
     }
 
     fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 
@@ -162,10 +154,6 @@ impl Object for Rc<str> {
     }
 
     fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 
@@ -232,10 +220,6 @@ impl Object for Undefined {
         self
     }
 
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
-
     fn own_keys(&self) -> Result<Vec<Value>, Value> {
         Ok(Vec::new())
     }
@@ -277,10 +261,6 @@ impl Object for Null {
     }
 
     fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 
@@ -338,10 +318,6 @@ impl Object for str {
     }
 
     fn as_any(&self) -> &dyn Any {
-        panic!("cannot convert string to any")
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any {
         panic!("cannot convert string to any")
     }
 
@@ -403,10 +379,6 @@ impl Object for Symbol {
     }
 
     fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 

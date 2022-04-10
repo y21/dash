@@ -28,7 +28,6 @@ pub trait Object: Debug + Trace {
         args: Vec<Value>,
     ) -> Result<Value, Value>;
     fn as_any(&self) -> &dyn Any;
-    fn as_any_mut(&mut self) -> &mut dyn Any;
     fn own_keys(&self) -> Result<Vec<Value>, Value>;
     fn type_of(&self) -> Typeof {
         Typeof::Object
@@ -168,10 +167,6 @@ impl Object for NamedObject {
         self
     }
 
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
-
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
         match value {
             Value::Null(_) => self.prototype.replace(None),
@@ -229,10 +224,6 @@ impl Object for Handle<dyn Object> {
 
     fn as_any(&self) -> &dyn Any {
         (**self).as_any()
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        panic!("as_any_mut not implemented for Handle<dyn Object>");
     }
 
     fn own_keys(&self) -> Result<Vec<Value>, Value> {
