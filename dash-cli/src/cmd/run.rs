@@ -1,3 +1,4 @@
+use dash_core as dash;
 use std::fs;
 use std::time::Instant;
 

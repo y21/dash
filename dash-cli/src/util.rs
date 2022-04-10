@@ -1,3 +1,5 @@
+use dash_core as dash;
+
 use anyhow::Context;
 use clap::ArgMatches;
 use dash::optimizer::consteval::OptLevel;

@@ -1,5 +1,11 @@
 [workspace]
-members = ["dash-core", "dash-cli", "testrunner", "dash-wasm"]
+members = [
+    "dash-core",
+    "dash-cli",
+    "testrunner",
+    "dash-wasm",
+    "dash-proc-macro",
+]
 
 [profile.release]
 lto = "fat"

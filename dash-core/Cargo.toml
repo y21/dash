@@ -1,5 +1,5 @@
 [package]
-name = "dash"
+name = "dash-core"
 version = "0.1.2"
 authors = ["y21"]
 edition = "2018"
@@ -9,3 +9,4 @@ license = "MIT"
 decompile = []
 
 [dependencies]
+dash-proc-macro = { path = "../dash-proc-macro" }

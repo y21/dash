@@ -5,7 +5,7 @@ edition = "2018"
 
 
 [dependencies]
-dash = { path = "../dash-core" }
+dash-core = { path = "../dash-core" }
 anyhow = "1.0"
 clap = "3.0.0"
 rustyline = "9.1.2"

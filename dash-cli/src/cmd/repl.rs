@@ -1,4 +1,6 @@
 use rustyline::Editor;
+use dash_core as dash;
+
 
 pub fn repl() -> anyhow::Result<()> {
     let mut rl = Editor::<()>::new();

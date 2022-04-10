@@ -1,3 +1,5 @@
+use dash_core as dash;
+
 use anyhow::bail;
 use anyhow::Context;
 use clap::ArgMatches;

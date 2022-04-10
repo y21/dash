@@ -1,3 +1,5 @@
+use dash_proc_macro::Trace;
+
 use crate::gc::handle::Handle;
 use crate::gc::Gc;
 use crate::js_std;
@@ -17,6 +19,7 @@ use super::value::primitive::Symbol;
 
 use std::rc::Rc;
 
+#[derive(Trace)]
 pub struct Statics {
     pub empty_str: Rc<str>,
     pub undefined_str: Rc<str>,

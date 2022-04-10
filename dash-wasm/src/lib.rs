@@ -1,3 +1,5 @@
+use dash_core as dash;
+
 use dash::compiler::decompiler;
 use dash::compiler::FunctionCompiler;
 use dash::optimizer;
