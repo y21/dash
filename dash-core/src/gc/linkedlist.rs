@@ -9,7 +9,9 @@ pub struct Node<T: ?Sized> {
 /// An implementation of a linked list that's actually useful
 /// as opposed to `std::collections::LinkedList`...
 pub struct LinkedList<T: ?Sized> {
+    /// The node that was most recently inserted
     head: Option<NonNull<Node<T>>>,
+    /// The node that was least recently inserted
     tail: Option<NonNull<Node<T>>>,
     len: usize,
 }
@@ -44,6 +46,26 @@ impl<T: ?Sized> LinkedList<T> {
         self.len += 1;
 
         unsafe { addr_of_mut!((*ptr).value) }
+    }
+
+    pub fn tail(&self) -> Option<NonNull<Node<T>>> {
+        self.tail
+    }
+
+    pub fn head(&self) -> Option<NonNull<Node<T>>> {
+        self.head
+    }
+
+    pub fn tail_mut(&mut self) -> &mut Option<NonNull<Node<T>>> {
+        &mut self.tail
+    }
+
+    pub fn head_mut(&mut self) -> &mut Option<NonNull<Node<T>>> {
+        &mut self.head
+    }
+
+    pub unsafe fn dec_len(&mut self) {
+        self.len -= 1;
     }
 }
 

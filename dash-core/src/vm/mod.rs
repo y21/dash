@@ -422,6 +422,13 @@ impl Vm {
         }
     }
 
+    pub fn perform_gc(&mut self) {
+        self.trace_roots();
+
+        // All reachable roots are marked.
+        unsafe { self.gc.sweep() };
+    }
+
     fn trace_roots(&mut self) {
         self.frames.trace();
         self.stack.trace();

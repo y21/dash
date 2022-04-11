@@ -23,6 +23,52 @@ impl<T: ?Sized + Trace> Gc<T> {
         }
     }
 
+    pub unsafe fn sweep(&mut self) {
+        let mut previous = None;
+        let mut node = self.list.tail();
+
+        loop {
+            if let Some(ptr) = node {
+                let (marked, next) = unsafe {
+                    let node = ptr.as_ref();
+
+                    (&node.value.marked, node.next)
+                };
+
+                node = next;
+
+                if !marked.get() {
+                    // Reference did not get marked during GC trace. Deallocate.
+
+                    // If this node is the tail (i.e. oldest/first node) or there is no tail,
+                    // set it to the next node.
+                    let tail = self.list.tail_mut();
+                    if tail.map_or(true, |p| p == ptr) {
+                        *tail = next;
+                    }
+
+                    // If this node is the head (i.e. newest/last node) or there is no head,
+                    // set it to the previous node.
+                    let head = self.list.head_mut();
+                    if head.map_or(true, |p| p == ptr) {
+                        *head = previous;
+                    }
+
+                    // Finally, deallocate the node.
+                    drop(unsafe { Box::from_raw(ptr.as_ptr()) });
+
+                    // There's one less node now, so decrement length.
+                    self.list.dec_len();
+                } else {
+                    marked.set(true);
+                    previous = Some(ptr);
+                }
+            } else {
+                break;
+            }
+        }
+    }
+
     pub fn register<V>(&mut self, value: V) -> Handle<T>
     where
         V: IntoHandle<T, InnerHandle<T>>,
