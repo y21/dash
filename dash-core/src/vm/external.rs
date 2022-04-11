@@ -2,12 +2,21 @@ use std::collections::HashMap;
 use std::mem;
 
 use crate::gc::handle::Handle;
+use crate::gc::trace::Trace;
 
 use super::local::LocalScope;
 use super::value::object::Object;
 
 #[derive(Debug)]
 pub struct Externals(HashMap<*const LocalScope<'static>, Vec<Handle<dyn Object>>>);
+
+unsafe impl Trace for Externals {
+    fn trace(&self) {
+        for ext in self.0.values() {
+            ext.trace();
+        }
+    }
+}
 
 impl Externals {
     pub fn new() -> Self {

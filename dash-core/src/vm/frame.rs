@@ -3,6 +3,7 @@ use std::rc::Rc;
 use crate::compiler::constant::Constant;
 use crate::compiler::CompileResult;
 use crate::gc::handle::Handle;
+use crate::gc::trace::Trace;
 
 use super::value::function::user::UserFunction;
 use super::value::object::Object;
@@ -22,6 +23,12 @@ pub struct Frame {
     pub externals: Rc<[Handle<dyn Object>]>,
     pub buffer: Rc<[u8]>,
     pub sp: usize,
+}
+
+unsafe impl Trace for Frame {
+    fn trace(&self) {
+        self.externals.trace();
+    }
 }
 
 impl Frame {

@@ -48,12 +48,14 @@ impl<T: ?Sized> Handle<T> {
     }
 }
 
-unsafe impl<T: ?Sized> Trace for Handle<T> {
+unsafe impl<T: ?Sized + Trace> Trace for Handle<T> {
     fn trace(&self) {
         unsafe {
             let this = self.0.as_ref();
             this.mark();
         };
+
+        T::trace(self);
     }
 }
 
