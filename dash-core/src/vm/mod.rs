@@ -1,6 +1,6 @@
 use std::{convert::TryInto, fmt};
 
-use crate::gc::{handle::Handle, Gc};
+use crate::gc::{handle::Handle, trace::Trace, Gc};
 
 use self::{
     dispatch::HandleResult,
@@ -420,6 +420,14 @@ impl Vm {
                 Err(e) => self.handle_rt_error(e, fp)?,
             }
         }
+    }
+
+    fn trace_roots(&mut self) {
+        self.frames.trace();
+        self.stack.trace();
+        self.global.trace();
+        self.externals.trace();
+        self.statics.trace();
     }
 
     pub fn statics(&self) -> &Statics {
