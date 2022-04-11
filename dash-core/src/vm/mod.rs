@@ -242,9 +242,12 @@ impl Vm {
             let tostring = scope.statics.array_tostring.clone();
             let join = scope.statics.array_join.clone();
             let values = scope.statics.array_values.clone();
+            let symbol_iterator = scope.statics.symbol_iterator.clone();
+
             array.set_property(&mut scope, "toString".into(), tostring.into()).unwrap();
             array.set_property(&mut scope, "join".into(), join.into()).unwrap();
-            array.set_property(&mut scope, "values".into(), values.into()).unwrap();
+            array.set_property(&mut scope, "values".into(), values.clone().into()).unwrap();
+            array.set_property(&mut scope, symbol_iterator.into(), values.into()).unwrap();
 
             array
         };
