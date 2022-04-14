@@ -61,14 +61,14 @@ pub struct GeneratorIterator {
 }
 
 impl GeneratorIterator {
-    pub fn new(function: Handle<dyn Object>, vm: &Vm) -> Self {
+    pub fn new(function: Handle<dyn Object>, vm: &Vm, stack: Vec<Value>) -> Self {
         let proto = vm.statics.generator_iterator_prototype.clone();
         let ctor = function.clone();
 
         Self {
             function,
             obj: NamedObject::with_prototype_and_constructor(proto, ctor),
-            state: RefCell::new(GeneratorState::default()),
+            state: RefCell::new(GeneratorState::Running { ip: 0, stack }),
         }
     }
 

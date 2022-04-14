@@ -130,7 +130,7 @@ impl Object for Function {
                 })
             }
             FunctionKind::Generator(gen) => {
-                let iter = GeneratorIterator::new(callee, scope);
+                let iter = GeneratorIterator::new(callee, scope, args);
                 Ok(scope.register(iter).into())
             }
         }
