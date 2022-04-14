@@ -1,3 +1,4 @@
 /target
-dash
+dashv2
 tests
+*.js

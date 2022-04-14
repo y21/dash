@@ -32,12 +32,12 @@ impl<'a> Error<'a> {
     /// Formats this error
     pub fn to_string(&self) -> Cow<str> {
         match &self.kind {
-            ErrorKind::UnknownCharacter(c) => Cow::Owned(self.loc.to_string(
-                self.source,
-                Either::Right(*c as char),
-                "unknown character",
-                true,
-            )),
+            ErrorKind::UnknownCharacter(c) => {
+                Cow::Owned(
+                    self.loc
+                        .to_string(self.source, Either::Right(*c as char), "unknown character", true),
+                )
+            }
             ErrorKind::UnexpectedEof => Cow::Borrowed("Unexpected end of input"),
         }
     }
@@ -163,11 +163,7 @@ impl<'a> Lexer<'a> {
     }
 
     /// Creates a token based on the current location and a given lexeme
-    fn create_contextified_token_with_lexeme(
-        &mut self,
-        ty: TokenType,
-        lexeme: &'a [u8],
-    ) -> Token<'a> {
+    fn create_contextified_token_with_lexeme(&mut self, ty: TokenType, lexeme: &'a [u8]) -> Token<'a> {
         Token {
             ty,
             loc: Location {
@@ -359,17 +355,11 @@ impl<'a> Lexer<'a> {
             b'.' => self.create_contextified_token(TokenType::Dot),
             b'-' => self.create_contextified_conditional_token(
                 Some(TokenType::Minus),
-                &[
-                    (b"-", TokenType::Decrement),
-                    (b"=", TokenType::SubtractionAssignment),
-                ],
+                &[(b"-", TokenType::Decrement), (b"=", TokenType::SubtractionAssignment)],
             ),
             b'+' => self.create_contextified_conditional_token(
                 Some(TokenType::Plus),
-                &[
-                    (b"+", TokenType::Increment),
-                    (b"=", TokenType::AdditionAssignment),
-                ],
+                &[(b"+", TokenType::Increment), (b"=", TokenType::AdditionAssignment)],
             ),
             b'*' => self.create_contextified_conditional_token(
                 Some(TokenType::Star),
@@ -427,10 +417,7 @@ impl<'a> Lexer<'a> {
             ),
             b'!' => self.create_contextified_conditional_token(
                 Some(TokenType::LogicalNot),
-                &[
-                    (b"==", TokenType::StrictInequality),
-                    (b"=", TokenType::Inequality),
-                ],
+                &[(b"==", TokenType::StrictInequality), (b"=", TokenType::Inequality)],
             ),
             b'~' => self.create_contextified_token(TokenType::BitwiseNot),
             b'?' => self.create_contextified_conditional_token(

@@ -47,17 +47,12 @@ impl<'a> Scope<'a> {
             .iter()
             .enumerate()
             .find(|(_, l)| {
-                l.binding.name == identifier
-                    && !matches!(l.binding.kind, VariableDeclarationKind::Unnameable)
+                l.binding.name == identifier && !matches!(l.binding.kind, VariableDeclarationKind::Unnameable)
             })
             .map(|(i, l)| (i as u16, l))
     }
 
-    pub fn add_local(
-        &mut self,
-        binding: VariableBinding<'a>,
-        is_extern: bool,
-    ) -> Result<u16, LimitExceededError> {
+    pub fn add_local(&mut self, binding: VariableBinding<'a>, is_extern: bool) -> Result<u16, LimitExceededError> {
         self.locals.push(ScopeLocal {
             binding,
             is_extern: Cell::new(is_extern),

@@ -1,4 +1,4 @@
-use std::{convert::TryInto, fmt};
+use std::{convert::TryInto, fmt, ops::RangeBounds, vec::Drain};
 
 use crate::gc::{handle::Handle, trace::Trace, Gc};
 
@@ -259,6 +259,13 @@ impl Vm {
             array_iterator_proto
         };
 
+        let generator_iterator_proto = {
+            let it = scope.statics.generator_iterator_prototype.clone();
+            let next = scope.statics.generator_iterator_next.clone();
+            it.set_property(&mut scope, "next".into(), next.into()).unwrap();
+            it
+        };
+
         let symbol = {
             let symbol = scope.statics.symbol_ctor.clone();
 
@@ -374,6 +381,35 @@ impl Vm {
         Ok(())
     }
 
+    pub(crate) fn try_extend_stack<I>(&mut self, other: I) -> Result<(), Value>
+    where
+        I: IntoIterator<Item = Value>,
+        <I as IntoIterator>::IntoIter: ExactSizeIterator,
+    {
+        let it = other.into_iter();
+        let len = it.len();
+        if self.stack.len() + len > MAX_STACK_SIZE {
+            panic!("Stack overflow"); // todo: return result
+        }
+        self.stack.extend(it);
+        Ok(())
+    }
+
+    pub(crate) fn stack_size(&self) -> usize {
+        self.stack.len()
+    }
+
+    pub(crate) fn pop_frame(&mut self) -> Option<Frame> {
+        self.frames.pop()
+    }
+
+    pub(crate) fn drain_stack<R>(&mut self, range: R) -> Drain<'_, Value>
+    where
+        R: RangeBounds<usize>,
+    {
+        self.stack.drain(range)
+    }
+
     fn handle_rt_error(&mut self, err: Value, max_fp: usize) -> Result<(), Value> {
         if let Some(last) = self.try_blocks.last() {
             // if we're in a try-catch block, we need to jump to it
@@ -406,7 +442,7 @@ impl Vm {
     }
 
     /// Executes a frame in this VM
-    pub fn execute_frame(&mut self, frame: Frame) -> Result<Value, Value> {
+    pub fn execute_frame(&mut self, frame: Frame) -> Result<HandleResult, Value> {
         self.stack
             .resize(self.stack.len() + frame.local_count, Value::undefined());
 
@@ -418,8 +454,8 @@ impl Vm {
             let instruction = self.fetch_and_inc_ip();
 
             match dispatch::handle(self, instruction) {
-                Ok(HandleResult::Return(value)) => return Ok(value),
-                Ok(HandleResult::Continue) => continue,
+                Ok(Some(hr)) => return Ok(hr),
+                Ok(None) => continue,
                 Err(e) => self.handle_rt_error(e, fp)?,
             }
         }

@@ -13,3 +13,9 @@ impl From<Symbol> for Value {
         Value::Symbol(symbol)
     }
 }
+
+impl From<bool> for Value {
+    fn from(b: bool) -> Self {
+        Value::Boolean(b)
+    }
+}

@@ -2,6 +2,7 @@ use std::any::Any;
 use std::cell::Cell;
 use std::cell::RefCell;
 
+use crate::gc::handle::Handle;
 use crate::gc::trace::Trace;
 use crate::vm::local::LocalScope;
 use crate::vm::Vm;
@@ -20,10 +21,7 @@ pub struct Array {
 }
 
 fn get_named_object(vm: &mut Vm) -> NamedObject {
-    NamedObject::with_prototype_and_constructor(
-        vm.statics.array_prototype.clone(),
-        vm.statics.array_ctor.clone(),
-    )
+    NamedObject::with_prototype_and_constructor(vm.statics.array_prototype.clone(), vm.statics.array_ctor.clone())
 }
 
 impl Array {
@@ -77,12 +75,7 @@ impl Object for Array {
         self.obj.get_property(sc, key)
     }
 
-    fn set_property(
-        &self,
-        sc: &mut LocalScope,
-        key: PropertyKey<'static>,
-        value: Value,
-    ) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
         if let PropertyKey::String(key) = &key {
             if key == "length" {
                 // swallow it
@@ -103,8 +96,14 @@ impl Object for Array {
         self.obj.set_property(sc, key, value)
     }
 
-    fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
-        todo!()
+    fn apply(
+        &self,
+        scope: &mut LocalScope,
+        callee: Handle<dyn Object>,
+        this: Value,
+        args: Vec<Value>,
+    ) -> Result<Value, Value> {
+        self.obj.apply(scope, callee, this, args)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -144,12 +143,7 @@ impl Object for ArrayIterator {
         self.obj.get_property(sc, key)
     }
 
-    fn set_property(
-        &self,
-        sc: &mut LocalScope,
-        key: PropertyKey<'static>,
-        value: Value,
-    ) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
         self.obj.set_property(sc, key, value)
     }
 
@@ -164,10 +158,11 @@ impl Object for ArrayIterator {
     fn apply<'s>(
         &self,
         scope: &mut LocalScope,
+        callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Value, Value> {
-        self.obj.apply(scope, this, args)
+        self.obj.apply(scope, callee, this, args)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -208,9 +203,7 @@ impl ArrayIterator {
 
         if index < self.length {
             self.index.set(index + 1);
-            self.value
-                .get_property(sc, index.to_string().into())
-                .map(Some)
+            self.value.get_property(sc, index.to_string().into()).map(Some)
         } else {
             Ok(None)
         }

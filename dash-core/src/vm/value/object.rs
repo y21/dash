@@ -13,17 +13,13 @@ fn __assert_trait_object_safety(_: Box<dyn Object>) {}
 
 pub trait Object: Debug + Trace {
     fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value>;
-    fn set_property(
-        &self,
-        sc: &mut LocalScope,
-        key: PropertyKey<'static>,
-        value: Value,
-    ) -> Result<(), Value>;
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value>;
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value>;
     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value>;
     fn apply<'s>(
         &self,
         scope: &mut LocalScope,
+        callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Value, Value>;
@@ -105,10 +101,7 @@ impl NamedObject {
         }
     }
 
-    pub fn with_prototype_and_constructor(
-        prototype: Handle<dyn Object>,
-        ctor: Handle<dyn Object>,
-    ) -> Self {
+    pub fn with_prototype_and_constructor(prototype: Handle<dyn Object>, ctor: Handle<dyn Object>) -> Self {
         Self {
             constructor: RefCell::new(Some(ctor)),
             prototype: RefCell::new(Some(prototype)),
@@ -148,18 +141,19 @@ impl Object for NamedObject {
         Ok(Value::undefined())
     }
 
-    fn set_property(
-        &self,
-        sc: &mut LocalScope,
-        key: PropertyKey<'static>,
-        value: Value,
-    ) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
         let mut map = self.values.borrow_mut();
         map.insert(key, value);
         Ok(())
     }
 
-    fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
+    fn apply(
+        &self,
+        sc: &mut LocalScope,
+        handle: Handle<dyn Object>,
+        this: Value,
+        args: Vec<Value>,
+    ) -> Result<Value, Value> {
         Ok(Value::undefined())
     }
 
@@ -196,12 +190,7 @@ impl Object for Handle<dyn Object> {
         (**self).get_property(sc, key)
     }
 
-    fn set_property(
-        &self,
-        sc: &mut LocalScope,
-        key: PropertyKey<'static>,
-        value: Value,
-    ) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
         (**self).set_property(sc, key, value)
     }
 
@@ -216,10 +205,11 @@ impl Object for Handle<dyn Object> {
     fn apply<'s>(
         &self,
         scope: &mut LocalScope,
+        callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Value, Value> {
-        (**self).apply(scope, this, args)
+        (**self).apply(scope, callee, this, args)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -232,5 +222,12 @@ impl Object for Handle<dyn Object> {
 
     fn type_of(&self) -> Typeof {
         (**self).type_of()
+    }
+}
+
+impl Handle<dyn Object> {
+    pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
+        let callee = self.clone();
+        (**self).apply(sc, callee, this, args)
     }
 }

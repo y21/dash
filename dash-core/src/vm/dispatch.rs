@@ -2,8 +2,17 @@ use super::{value::Value, Vm};
 use crate::compiler::instruction as opcode;
 
 pub enum HandleResult {
-    Continue,
     Return(Value),
+    Yield(Value),
+}
+
+impl HandleResult {
+    pub fn into_value(self) -> Value {
+        match self {
+            HandleResult::Return(v) => v,
+            HandleResult::Yield(v) => v,
+        }
+    }
 }
 
 mod handlers {
@@ -20,106 +29,104 @@ mod handlers {
     fn evaluate_binary_expr<F: Fn(Value, Value, &mut Vm) -> Value>(
         vm: &mut Vm,
         fun: F,
-    ) -> Result<HandleResult, Value> {
+    ) -> Result<Option<HandleResult>, Value> {
         let right = vm.stack.pop().expect("No right operand");
         let left = vm.stack.pop().expect("No left operand");
         let result = fun(left, right, vm);
         vm.try_push_stack(result)?;
-        Ok(HandleResult::Continue)
+        Ok(None)
     }
 
-    pub fn constant(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn constant(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let id = vm.fetch_and_inc_ip();
         vm.push_constant(id as usize)?;
-        Ok(HandleResult::Continue)
+        Ok(None)
     }
 
-    pub fn constantw(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn constantw(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let id = vm.fetchw_and_inc_ip();
         vm.push_constant(id as usize)?;
-        Ok(HandleResult::Continue)
+        Ok(None)
     }
 
-    pub fn add(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn add(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         evaluate_binary_expr(vm, |l, r, _| l.add(&r))
     }
 
-    pub fn sub(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn sub(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         evaluate_binary_expr(vm, |l, r, _| l.sub(&r))
     }
 
-    pub fn mul(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn mul(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         evaluate_binary_expr(vm, |l, r, _| l.mul(&r))
     }
 
-    pub fn div(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn div(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         evaluate_binary_expr(vm, |l, r, _| l.div(&r))
     }
 
-    pub fn rem(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn rem(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         evaluate_binary_expr(vm, |l, r, _| l.rem(&r))
     }
 
-    pub fn pow(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn pow(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         evaluate_binary_expr(vm, |l, r, _| l.pow(&r))
     }
 
-    pub fn lt(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn lt(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         evaluate_binary_expr(vm, |l, r, _| l.lt(&r))
     }
 
-    pub fn le(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn le(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         evaluate_binary_expr(vm, |l, r, _| l.le(&r))
     }
 
-    pub fn gt(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn gt(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         evaluate_binary_expr(vm, |l, r, _| l.gt(&r))
     }
 
-    pub fn ge(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn ge(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         evaluate_binary_expr(vm, |l, r, _| l.ge(&r))
     }
 
-    pub fn eq(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn eq(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         evaluate_binary_expr(vm, |l, r, _| l.eq(&r))
     }
 
-    pub fn ne(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn ne(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         evaluate_binary_expr(vm, |l, r, _| l.ne(&r))
     }
 
-    pub fn strict_eq(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn strict_eq(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         evaluate_binary_expr(vm, |l, r, _| l.strict_eq(&r))
     }
 
-    pub fn strict_ne(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn strict_ne(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         evaluate_binary_expr(vm, |l, r, _| l.strict_ne(&r))
     }
 
-    pub fn not(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn not(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let value = vm.stack.pop().expect("No operand");
         let result = value.not();
         vm.try_push_stack(result)?;
-        Ok(HandleResult::Continue)
+        Ok(None)
     }
 
-    pub fn pop(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn pop(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         vm.stack.pop();
-        Ok(HandleResult::Continue)
+        Ok(None)
     }
 
-    pub fn ret(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn ret(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let value = vm.stack.pop().expect("No return value");
         let this = vm.frames.pop().expect("No frame");
 
-        unsafe {
-            vm.stack.set_len(this.sp);
-        };
+        drop(vm.stack.drain(this.sp..));
 
-        Ok(HandleResult::Return(value))
+        Ok(Some(HandleResult::Return(value)))
     }
 
-    pub fn ldglobal(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn ldglobal(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let id = vm.fetch_and_inc_ip();
         let constant = &vm.frames.last().expect("No frame").constants[id as usize];
 
@@ -129,15 +136,12 @@ mod handlers {
             .clone();
 
         let mut scope = LocalScope::new(vm);
-        let value = scope
-            .global
-            .clone()
-            .get_property(&mut scope, name.as_ref().into())?;
+        let value = scope.global.clone().get_property(&mut scope, name.as_ref().into())?;
         vm.stack.push(value);
-        Ok(HandleResult::Continue)
+        Ok(None)
     }
 
-    pub fn call(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn call(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let meta = FunctionCallMetadata::from(vm.fetch_and_inc_ip());
         let argc = meta.value();
         let is_constructor = meta.is_constructor_call();
@@ -168,10 +172,10 @@ mod handlers {
         let ret = callee.apply(&mut scope, this, args)?;
 
         vm.try_push_stack(ret)?;
-        Ok(HandleResult::Continue)
+        Ok(None)
     }
 
-    pub fn jmpfalsep(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn jmpfalsep(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let offset = vm.fetchw_and_inc_ip() as i16;
         let value = vm.stack.pop().expect("No value");
 
@@ -185,10 +189,10 @@ mod handlers {
             }
         }
 
-        Ok(HandleResult::Continue)
+        Ok(None)
     }
 
-    pub fn jmp(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn jmp(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let offset = vm.fetchw_and_inc_ip() as i16;
         let frame = vm.frames.last_mut().expect("No frame");
 
@@ -198,38 +202,38 @@ mod handlers {
             frame.ip += offset as usize;
         }
 
-        Ok(HandleResult::Continue)
+        Ok(None)
     }
 
-    pub fn storelocal(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn storelocal(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let id = vm.fetch_and_inc_ip() as usize;
         let value = vm.stack.pop().expect("No value");
 
         vm.set_local(id, value.clone());
         vm.try_push_stack(value)?;
 
-        Ok(HandleResult::Continue)
+        Ok(None)
     }
 
-    pub fn ldlocal(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn ldlocal(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let id = vm.fetch_and_inc_ip();
         let value = vm.get_local(id as usize).expect("Invalid local reference");
 
         vm.try_push_stack(value)?;
-        Ok(HandleResult::Continue)
+        Ok(None)
     }
 
-    pub fn arraylit(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn arraylit(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let len = vm.fetch_and_inc_ip() as usize;
 
         let elements = vm.stack.drain(vm.stack.len() - len..).collect::<Vec<_>>();
         let array = Array::from_vec(vm, elements);
         let handle = vm.gc.register(array);
         vm.try_push_stack(Value::Object(handle))?;
-        Ok(HandleResult::Continue)
+        Ok(None)
     }
 
-    pub fn objlit(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn objlit(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let len = vm.fetch_and_inc_ip() as usize;
 
         let elements = vm.stack.drain(vm.stack.len() - len..).collect::<Vec<_>>();
@@ -249,17 +253,16 @@ mod handlers {
                 String::from(&**identifier)
             };
 
-            obj.set_property(&mut scope, constant.into(), element)
-                .unwrap();
+            obj.set_property(&mut scope, constant.into(), element).unwrap();
         }
 
         let handle = vm.gc.register(obj);
         vm.try_push_stack(handle.into())?;
 
-        Ok(HandleResult::Continue)
+        Ok(None)
     }
 
-    pub fn staticpropertyaccess(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn staticpropertyaccess(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let id = vm.fetch_and_inc_ip();
         let constant = &vm.frames.last().expect("No frame").constants[id as usize];
 
@@ -283,10 +286,10 @@ mod handlers {
 
         let value = target.get_property(&mut scope, ident.as_ref().into())?;
         vm.try_push_stack(value)?;
-        Ok(HandleResult::Continue)
+        Ok(None)
     }
 
-    pub fn staticpropertyset(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn staticpropertyset(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let id = vm.fetch_and_inc_ip();
         let key = vm.frames.last().expect("No frame").constants[id as usize]
             .as_identifier()
@@ -300,10 +303,10 @@ mod handlers {
         target.set_property(&mut scope, key.to_string().into(), value.clone())?;
 
         vm.try_push_stack(value)?;
-        Ok(HandleResult::Continue)
+        Ok(None)
     }
 
-    pub fn staticpropertysetw(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn staticpropertysetw(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let id = vm.fetchw_and_inc_ip();
         let key = vm.frames.last().expect("No frame").constants[id as usize]
             .as_identifier()
@@ -317,10 +320,10 @@ mod handlers {
         target.set_property(&mut scope, key.to_string().into(), value.clone())?;
 
         vm.try_push_stack(value)?;
-        Ok(HandleResult::Continue)
+        Ok(None)
     }
 
-    pub fn dynamicpropertyset(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn dynamicpropertyset(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let key = vm.stack.pop().expect("No key");
         let value = vm.stack.pop().expect("No value");
         let target = vm.stack.pop().expect("No target");
@@ -331,10 +334,10 @@ mod handlers {
         target.set_property(&mut scope, key, value.clone())?;
 
         vm.try_push_stack(value)?;
-        Ok(HandleResult::Continue)
+        Ok(None)
     }
 
-    pub fn dynamicpropertyaccess(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn dynamicpropertyaccess(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let key = vm.stack.pop().expect("No key");
 
         let preserve_this = vm.fetch_and_inc_ip() == 1;
@@ -354,21 +357,18 @@ mod handlers {
 
         let value = target.get_property(&mut scope, key)?;
         vm.try_push_stack(value)?;
-        Ok(HandleResult::Continue)
+        Ok(None)
     }
 
-    pub fn ldlocalext(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn ldlocalext(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let id = vm.fetch_and_inc_ip();
-        let value = vm
-            .get_external(id as usize)
-            .expect("Invalid local reference")
-            .clone();
+        let value = vm.get_external(id as usize).expect("Invalid local reference").clone();
 
         vm.try_push_stack(value.into())?;
-        Ok(HandleResult::Continue)
+        Ok(None)
     }
 
-    pub fn storelocalext(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn storelocalext(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let id = vm.fetch_and_inc_ip();
         let value = vm.stack.pop().expect("No value");
 
@@ -378,10 +378,10 @@ mod handlers {
 
         vm.try_push_stack(value)?;
 
-        Ok(HandleResult::Continue)
+        Ok(None)
     }
 
-    pub fn try_block(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn try_block(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let ip = vm.frames.last().unwrap().ip;
         let catch_offset = vm.fetchw_and_inc_ip() as usize;
         let catch_ip = ip + catch_offset + 2;
@@ -391,26 +391,31 @@ mod handlers {
             frame_ip: vm.frames.len(),
         });
 
-        Ok(HandleResult::Continue)
+        Ok(None)
     }
 
-    pub fn try_end(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn try_end(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         vm.try_blocks.pop();
-        Ok(HandleResult::Continue)
+        Ok(None)
     }
 
-    pub fn throw(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn throw(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         Err(vm.stack.pop().expect("Missing value"))
     }
 
-    pub fn type_of(vm: &mut Vm) -> Result<HandleResult, Value> {
+    pub fn type_of(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let value = vm.stack.pop().expect("Missing value");
         vm.try_push_stack(value.type_of().as_value(vm))?;
-        Ok(HandleResult::Continue)
+        Ok(None)
+    }
+
+    pub fn yield_(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        let value = vm.stack.pop().expect("Missing value");
+        Ok(Some(HandleResult::Yield(value)))
     }
 }
 
-pub fn handle(vm: &mut Vm, instruction: u8) -> Result<HandleResult, Value> {
+pub fn handle(vm: &mut Vm, instruction: u8) -> Result<Option<HandleResult>, Value> {
     match instruction {
         opcode::CONSTANT => handlers::constant(vm),
         opcode::CONSTANTW => handlers::constantw(vm),
@@ -450,6 +455,7 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<HandleResult, Value> {
         opcode::TRYEND => handlers::try_end(vm),
         opcode::THROW => handlers::throw(vm),
         opcode::TYPEOF => handlers::type_of(vm),
+        opcode::YIELD => handlers::yield_(vm),
         _ => unimplemented!("{}", instruction),
     }
 }

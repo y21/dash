@@ -34,6 +34,7 @@ use std::rc::Rc;
 use crate::{
     compiler::constant::Constant,
     gc::{handle::Handle, trace::Trace},
+    parser::statement::FunctionKind as ParserFunctionKind,
     vm::value::{
         function::FunctionKind,
         primitive::{Null, Undefined},
@@ -41,7 +42,7 @@ use crate::{
 };
 
 use self::{
-    function::{user::UserFunction, Function},
+    function::{generator::GeneratorFunction, user::UserFunction, Function},
     object::{Object, PropertyKey},
     primitive::Symbol,
 };
@@ -91,11 +92,7 @@ impl Value {
 
                     let val = vm.get_local(idx).expect("Referenced local not found");
 
-                    fn register<O: Object + 'static>(
-                        vm: &mut Vm,
-                        idx: usize,
-                        o: O,
-                    ) -> Handle<dyn Object> {
+                    fn register<O: Object + 'static>(vm: &mut Vm, idx: usize, o: O) -> Handle<dyn Object> {
                         let handle = vm.gc.register(o);
                         vm.set_local(idx, Value::External(handle.clone()));
                         handle
@@ -118,21 +115,24 @@ impl Value {
                     externals.push(obj);
                 }
 
-                let uf =
-                    UserFunction::new(f.buffer, f.constants, externals.into(), f.locals, f.params);
-                let function = Function::new(vm, f.name, FunctionKind::User(uf));
+                let uf = UserFunction::new(f.buffer, f.constants, externals.into(), f.locals, f.params);
+
+                let function = match f.ty {
+                    ParserFunctionKind::Function | ParserFunctionKind::Arrow => {
+                        Function::new(vm, f.name, FunctionKind::User(uf))
+                    }
+                    ParserFunctionKind::Generator => {
+                        Function::new(vm, f.name, FunctionKind::Generator(GeneratorFunction::new(uf)))
+                    }
+                };
+
                 vm.gc.register(function).into()
             }
             Constant::Identifier(_) => unreachable!(),
         }
     }
 
-    pub fn set_property(
-        &self,
-        sc: &mut LocalScope,
-        key: PropertyKey<'static>,
-        value: Value,
-    ) -> Result<(), Value> {
+    pub fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
         match self {
             Self::Object(h) => h.set_property(sc, key, value),
             Self::Number(n) => n.set_property(sc, key, value),
@@ -158,21 +158,16 @@ impl Value {
         }
     }
 
-    pub fn apply(
-        &self,
-        sc: &mut LocalScope,
-        this: Value,
-        args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
         match self {
             Self::Object(o) => o.apply(sc, this, args),
             Self::External(o) => o.apply(sc, this, args),
-            Self::Number(n) => n.apply(sc, this, args),
-            Self::Boolean(b) => b.apply(sc, this, args),
-            Self::String(s) => s.apply(sc, this, args),
-            Self::Undefined(u) => u.apply(sc, this, args),
-            Self::Null(n) => n.apply(sc, this, args),
-            Self::Symbol(s) => s.apply(sc, this, args),
+            Self::Number(n) => throw!(sc, "{} is not a function", n),
+            Self::Boolean(b) => throw!(sc, "{} is not a function", b),
+            Self::String(s) => throw!(sc, "{} is not a function", s),
+            Self::Undefined(u) => throw!(sc, "undefined is not a function"),
+            Self::Null(n) => throw!(sc, "null is not a function"),
+            Self::Symbol(s) => throw!(sc, "{:?} is not a function", s),
         }
     }
 

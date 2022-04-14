@@ -7,10 +7,9 @@ use super::{
     expr::{Expr, UnaryExpr},
     lexer::{self, Lexer},
     statement::{
-        BlockStatement, Catch, Class, ClassMember, ClassMemberKind, ExportKind, ForLoop,
-        FunctionDeclaration, FunctionKind, IfStatement, ImportKind, Loop, ReturnStatement,
-        SpecifierKind, Statement, TryCatch, VariableBinding, VariableDeclaration,
-        VariableDeclarationKind, WhileLoop,
+        BlockStatement, Catch, Class, ClassMember, ClassMemberKind, ExportKind, ForLoop, FunctionDeclaration,
+        FunctionKind, IfStatement, ImportKind, Loop, ReturnStatement, SpecifierKind, Statement, TryCatch,
+        VariableBinding, VariableDeclaration, VariableDeclarationKind, WhileLoop,
     },
     token::{Error, ErrorKind, Token, TokenType, ASSIGNMENT_TYPES, VARIABLE_TYPES},
 };
@@ -76,9 +75,7 @@ impl<'a> Parser<'a> {
     fn statement(&mut self) -> Option<Statement<'a>> {
         self.error_sync = false;
         let stmt = match self.next()?.ty {
-            TokenType::Let | TokenType::Const | TokenType::Var => {
-                self.variable().map(Statement::Variable)
-            }
+            TokenType::Let | TokenType::Const | TokenType::Var => self.variable().map(Statement::Variable),
             TokenType::If => self.if_statement(true).map(Statement::If),
             TokenType::Function => self.function().map(Statement::Function),
             TokenType::LeftBrace => self.block().map(Statement::Block),
@@ -136,12 +133,7 @@ impl<'a> Parser<'a> {
                 let arguments = self.argument_list()?;
                 let body = self.statement()?;
 
-                let func = FunctionDeclaration::new(
-                    Some(name),
-                    arguments,
-                    vec![body],
-                    FunctionKind::Function,
-                );
+                let func = FunctionDeclaration::new(Some(name), arguments, vec![body], FunctionKind::Function);
 
                 members.push(ClassMember {
                     private: is_private,
@@ -172,11 +164,7 @@ impl<'a> Parser<'a> {
             };
         }
 
-        Some(Class {
-            name,
-            extends,
-            members,
-        })
+        Some(Class { name, extends, members })
     }
 
     fn export(&mut self) -> Option<ExportKind<'a>> {
@@ -297,19 +285,13 @@ impl<'a> Parser<'a> {
 
                     let body = Box::new(self.statement()?);
 
-                    return Some(Loop::ForOf(ForOfLoop {
-                        binding,
-                        expr,
-                        body,
-                    }));
+                    return Some(Loop::ForOf(ForOfLoop { binding, expr, body }));
                 } else {
                     let value = self.variable_value();
 
                     self.expect_and_skip(&[TokenType::Semicolon], false);
 
-                    Some(Statement::Variable(VariableDeclaration::new(
-                        binding, value,
-                    )))
+                    Some(Statement::Variable(VariableDeclaration::new(binding, value)))
                 }
             } else {
                 self.statement()
@@ -498,10 +480,7 @@ impl<'a> Parser<'a> {
 
     fn _yield(&mut self) -> Option<Expr<'a>> {
         if self.expect_and_skip(&[TokenType::Yield], false) {
-            return Some(Expr::Unary(UnaryExpr::new(
-                TokenType::Yield,
-                self._yield()?,
-            )));
+            return Some(Expr::Unary(UnaryExpr::new(TokenType::Yield, self._yield()?)));
         }
 
         self.assignment()
@@ -659,10 +638,7 @@ impl<'a> Parser<'a> {
             if let Expr::Call(fc) = &mut rval {
                 fc.constructor_call = true;
             } else {
-                self.create_error(ErrorKind::UnexpectedToken(
-                    self.previous()?.clone(),
-                    TokenType::New,
-                ));
+                self.create_error(ErrorKind::UnexpectedToken(self.previous()?.clone(), TokenType::New));
                 return None;
             };
 
@@ -672,11 +648,7 @@ impl<'a> Parser<'a> {
         let mut expr = self.primary()?;
 
         while self.expect_and_skip(
-            &[
-                TokenType::LeftParen,
-                TokenType::Dot,
-                TokenType::LeftSquareBrace,
-            ],
+            &[TokenType::LeftParen, TokenType::Dot, TokenType::LeftSquareBrace],
             false,
         ) {
             let previous = self.previous()?.ty;
@@ -753,18 +725,10 @@ impl<'a> Parser<'a> {
                 }
                 Expr::Object(items)
             }
-            TokenType::NumberDec => {
-                Expr::number_literal(std::str::from_utf8(full).unwrap().parse::<f64>().unwrap())
-            }
-            TokenType::NumberHex => self
-                .parse_prefixed_number_literal(full, 16)
-                .map(Expr::number_literal)?,
-            TokenType::NumberBin => self
-                .parse_prefixed_number_literal(full, 2)
-                .map(Expr::number_literal)?,
-            TokenType::NumberOct => self
-                .parse_prefixed_number_literal(full, 8)
-                .map(Expr::number_literal)?,
+            TokenType::NumberDec => Expr::number_literal(std::str::from_utf8(full).unwrap().parse::<f64>().unwrap()),
+            TokenType::NumberHex => self.parse_prefixed_number_literal(full, 16).map(Expr::number_literal)?,
+            TokenType::NumberBin => self.parse_prefixed_number_literal(full, 2).map(Expr::number_literal)?,
+            TokenType::NumberOct => self.parse_prefixed_number_literal(full, 8).map(Expr::number_literal)?,
             TokenType::LeftParen => {
                 if self.expect_and_skip(&[TokenType::RightParen], false) {
                     // () MUST be followed by an arrow. Empty groups are not valid syntax
@@ -837,19 +801,10 @@ impl<'a> Parser<'a> {
             self.advance_back();
         }
 
-        Some(FunctionDeclaration::new(
-            None,
-            list,
-            vec![body],
-            FunctionKind::Arrow,
-        ))
+        Some(FunctionDeclaration::new(None, list, vec![body], FunctionKind::Arrow))
     }
 
-    fn read_infix_expression<F>(
-        &mut self,
-        lower: F,
-        tokens: &'static [TokenType],
-    ) -> Option<Expr<'a>>
+    fn read_infix_expression<F>(&mut self, lower: F, tokens: &'static [TokenType]) -> Option<Expr<'a>>
     where
         F: Fn(&mut Self) -> Option<Expr<'a>>,
     {

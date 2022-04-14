@@ -1,6 +1,5 @@
 use crate::vm::value::{
-    function::native::CallContext, ops::abstractions::conversions::ValueConversion, Value,
-    ValueContext,
+    function::native::CallContext, ops::abstractions::conversions::ValueConversion, Value, ValueContext,
 };
 
 #[rustfmt::skip]
@@ -13,7 +12,11 @@ pub fn is_nan(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn log(cx: CallContext) -> Result<Value, Value> {
-    println!("{:?}", cx.args);
+    for arg in cx.args {
+        let tstr = arg.to_string(cx.scope)?;
+        println!("{tstr} ");
+    }
+
     Ok(Value::undefined())
 }
 

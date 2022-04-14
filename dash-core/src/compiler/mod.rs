@@ -4,13 +4,13 @@ use crate::{
     compiler::builder::{InstructionBuilder, Label},
     parser::{
         expr::{
-            ArrayLiteral, AssignmentExpr, BinaryExpr, ConditionalExpr, Expr, FunctionCall,
-            GroupingExpr, LiteralExpr, ObjectLiteral, Postfix, PropertyAccessExpr, Seq, UnaryExpr,
+            ArrayLiteral, AssignmentExpr, BinaryExpr, ConditionalExpr, Expr, FunctionCall, GroupingExpr, LiteralExpr,
+            ObjectLiteral, Postfix, PropertyAccessExpr, Seq, UnaryExpr,
         },
         statement::{
-            BlockStatement, Class, ExportKind, ForLoop, ForOfLoop, FunctionDeclaration,
-            IfStatement, ImportKind, ReturnStatement, Statement, TryCatch, VariableBinding,
-            VariableDeclaration, VariableDeclarationKind, WhileLoop,
+            BlockStatement, Class, ExportKind, ForLoop, ForOfLoop, FunctionDeclaration, FunctionKind, IfStatement,
+            ImportKind, ReturnStatement, Statement, TryCatch, VariableBinding, VariableDeclaration,
+            VariableDeclarationKind, WhileLoop,
         },
         token::TokenType,
     },
@@ -46,15 +46,17 @@ pub struct SharedCompilerState<'a> {
     scope: Scope<'a>,
     externals: Vec<u16>,
     in_try_block: bool,
+    ty: FunctionKind,
 }
 
 impl<'a> SharedCompilerState<'a> {
-    pub fn new() -> Self {
+    pub fn new(ty: FunctionKind) -> Self {
         Self {
             cp: ConstantPool::new(),
             scope: Scope::new(),
             externals: Vec::new(),
             in_try_block: false,
+            ty,
         }
     }
 }
@@ -92,25 +94,21 @@ fn ast_insert_return<'a>(ast: &mut Vec<Statement<'a>>) {
 impl<'a> FunctionCompiler<'a> {
     pub fn new() -> Self {
         Self {
-            state: SharedCompilerState::new(),
+            state: SharedCompilerState::new(FunctionKind::Function),
             caller: None,
         }
     }
 
-    ///
     /// # Safety
-    /// - Requires `caller` to not be invalid (i.e. due to moving) during calls
-    pub unsafe fn with_caller<'s>(caller: &'s mut FunctionCompiler<'a>) -> Self {
+    /// * Requires `caller` to not be invalid (i.e. due to moving) during calls
+    pub unsafe fn with_caller<'s>(caller: &'s mut FunctionCompiler<'a>, ty: FunctionKind) -> Self {
         Self {
-            state: SharedCompilerState::new(),
+            state: SharedCompilerState::new(ty),
             caller: Some(unsafe { NonNull::new_unchecked(caller) }),
         }
     }
 
-    pub fn compile_ast(
-        mut self,
-        mut ast: Vec<Statement<'a>>,
-    ) -> Result<CompileResult, CompileError> {
+    pub fn compile_ast(mut self, mut ast: Vec<Statement<'a>>) -> Result<CompileResult, CompileError> {
         ast_insert_return(&mut ast);
         let instructions = self.accept_multiple(&ast)?;
         Ok(CompileResult {
@@ -249,16 +247,20 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
             TokenType::BitwiseNot => ib.build_bitnot(),
             TokenType::LogicalNot => ib.build_not(),
             TokenType::Void => ib.build_pop(),
+            TokenType::Yield => {
+                if !matches!(self.state.ty, FunctionKind::Generator) {
+                    return Err(CompileError::YieldOutsideGenerator);
+                }
+
+                ib.build_yield();
+            }
             _ => unimplementedc!("Unary operator {:?}", e.operator),
         }
 
         Ok(ib.build())
     }
 
-    fn visit_variable_declaration(
-        &mut self,
-        v: &VariableDeclaration<'a>,
-    ) -> Result<Vec<u8>, CompileError> {
+    fn visit_variable_declaration(&mut self, v: &VariableDeclaration<'a>) -> Result<Vec<u8>, CompileError> {
         let mut ib = InstructionBuilder::new();
         let id = self.state.scope.add_local(v.binding.clone(), false)?;
 
@@ -331,10 +333,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
         re
     }
 
-    fn visit_function_declaration(
-        &mut self,
-        f: &FunctionDeclaration<'a>,
-    ) -> Result<Vec<u8>, CompileError> {
+    fn visit_function_declaration(&mut self, f: &FunctionDeclaration<'a>) -> Result<Vec<u8>, CompileError> {
         let mut ib = InstructionBuilder::new();
         let id = self.state.scope.add_local(
             VariableBinding {
@@ -363,10 +362,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
         Ok(ib.build())
     }
 
-    fn visit_assignment_expression(
-        &mut self,
-        e: &AssignmentExpr<'a>,
-    ) -> Result<Vec<u8>, CompileError> {
+    fn visit_assignment_expression(&mut self, e: &AssignmentExpr<'a>) -> Result<Vec<u8>, CompileError> {
         let mut ib = InstructionBuilder::new();
 
         if let Expr::PropertyAccess(prop) = &*e.left {
@@ -556,12 +552,9 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
         Ok(ib.build())
     }
 
-    fn visit_function_expr(
-        &mut self,
-        f: &FunctionDeclaration<'a>,
-    ) -> Result<Vec<u8>, CompileError> {
+    fn visit_function_expr(&mut self, f: &FunctionDeclaration<'a>) -> Result<Vec<u8>, CompileError> {
         let mut ib = InstructionBuilder::new();
-        let mut compiler = unsafe { FunctionCompiler::with_caller(self) };
+        let mut compiler = unsafe { FunctionCompiler::with_caller(self, f.ty) };
         let scope = &mut compiler.state.scope;
 
         for name in &f.arguments {
@@ -592,10 +585,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
 
     fn visit_array_literal(&mut self, a: &ArrayLiteral<'a>) -> Result<Vec<u8>, CompileError> {
         let mut ib = InstructionBuilder::new();
-        let len = a
-            .len()
-            .try_into()
-            .map_err(|_| CompileError::ArrayLitLimitExceeded)?;
+        let len = a.len().try_into().map_err(|_| CompileError::ArrayLitLimitExceeded)?;
 
         for e in a.iter() {
             ib.append(&mut self.accept_expr(e)?);

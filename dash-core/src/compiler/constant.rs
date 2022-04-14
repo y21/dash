@@ -80,9 +80,7 @@ pub struct ConstantPool {
 pub struct LimitExceededError;
 impl ConstantPool {
     pub fn new() -> Self {
-        Self {
-            constants: Vec::new(),
-        }
+        Self { constants: Vec::new() }
     }
 
     pub fn add(&mut self, constant: Constant) -> Result<u16, LimitExceededError> {

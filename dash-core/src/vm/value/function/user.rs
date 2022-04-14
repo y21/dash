@@ -4,7 +4,7 @@ use crate::compiler::constant::Constant;
 use crate::gc::handle::Handle;
 use crate::vm::value::object::Object;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UserFunction {
     buffer: Rc<[u8]>,
     constants: Rc<[Constant]>,

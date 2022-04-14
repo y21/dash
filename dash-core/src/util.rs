@@ -34,10 +34,7 @@ pub fn is_alpha(c: u8) -> bool {
 
 /// Checks if `c` is a valid character for the start of an identifier
 pub fn is_identifier_start(c: u8) -> bool {
-    IDENTIFIER_START_LOWERCASE.contains(&c)
-        || IDENTIFIER_START_UPPERCASE.contains(&c)
-        || c == b'_'
-        || c == b'$'
+    IDENTIFIER_START_LOWERCASE.contains(&c) || IDENTIFIER_START_UPPERCASE.contains(&c) || c == b'_' || c == b'$'
 }
 
 /// Checks if `c` is numeric

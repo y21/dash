@@ -95,11 +95,7 @@ impl<'a> Expr<'a> {
     }
 
     /// Creates a function call expression
-    pub fn function_call(
-        target: Expr<'a>,
-        arguments: Vec<Expr<'a>>,
-        constructor_call: bool,
-    ) -> Self {
+    pub fn function_call(target: Expr<'a>, arguments: Vec<Expr<'a>>, constructor_call: bool) -> Self {
         Self::Call(FunctionCall {
             constructor_call,
             target: Box::new(target),

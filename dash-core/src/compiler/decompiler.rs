@@ -31,9 +31,7 @@ impl Unit {
 
 impl Output {
     pub fn new() -> Self {
-        Output {
-            units: HashMap::new(),
-        }
+        Output { units: HashMap::new() }
     }
 
     pub fn write_instruction<D: Display>(&mut self, unit: Unit, instruction: &str, args: &[D]) {
@@ -139,11 +137,7 @@ impl fmt::Display for StackId {
 
 fn handle_arithmetic(stack: &mut usize, output: &mut Output, instruction: &str) {
     *stack -= 2;
-    output.write_instruction(
-        Unit::Main,
-        instruction,
-        &[StackId(*stack + 1), StackId(*stack + 2)],
-    );
+    output.write_instruction(Unit::Main, instruction, &[StackId(*stack + 1), StackId(*stack + 2)]);
     *stack += 1;
 }
 
@@ -177,11 +171,7 @@ fn read_wide_signed<'a, R: Read>(
     }
 }
 
-pub fn decompile(
-    CompileResult {
-        cp, instructions, ..
-    }: CompileResult,
-) -> Result<String, DecompileError> {
+pub fn decompile(CompileResult { cp, instructions, .. }: CompileResult) -> Result<String, DecompileError> {
     let mut reader = Reader(instructions.as_slice(), 0);
     let mut stack = 0;
     let mut output = Output::new();
@@ -207,12 +197,7 @@ pub fn decompile(
                 stack -= 1;
             }
             CONSTANT | CONSTANTW => {
-                let (name, id) = read_wide(
-                    instr,
-                    ("CONSTANT", CONSTANT),
-                    ("CONSTANTW", CONSTANTW),
-                    &mut reader,
-                )?;
+                let (name, id) = read_wide(instr, ("CONSTANT", CONSTANT), ("CONSTANTW", CONSTANTW), &mut reader)?;
                 let constant = StackValue::from(cp[id as usize].clone());
 
                 let args: &[&dyn Display] = &[&StackId(stack), &constant];
@@ -220,12 +205,7 @@ pub fn decompile(
                 stack += 1;
             }
             LDLOCAL | LDLOCALW => {
-                let (name, id) = read_wide(
-                    instr,
-                    ("LDLOCAL", LDLOCAL),
-                    ("LDLOCALW", LDLOCALW),
-                    &mut reader,
-                )?;
+                let (name, id) = read_wide(instr, ("LDLOCAL", LDLOCAL), ("LDLOCALW", LDLOCALW), &mut reader)?;
                 stack += 1;
                 output.write_instruction(Unit::Main, name, &[StackId(id.into())]);
             }
@@ -238,12 +218,7 @@ pub fn decompile(
                 output.write_instruction(Unit::Main, "JMPFALSEP", &[id]);
             }
             LDGLOBAL | LDGLOBALW => {
-                let (name, id) = read_wide(
-                    instr,
-                    ("LDGLOBAL", LDGLOBAL),
-                    ("LDGLOBALW", LDGLOBALW),
-                    &mut reader,
-                )?;
+                let (name, id) = read_wide(instr, ("LDGLOBAL", LDGLOBAL), ("LDGLOBALW", LDGLOBALW), &mut reader)?;
                 let constant = StackValue::from(cp[id as usize].clone());
 
                 let args: &[&dyn Display] = &[&StackId(stack), &constant];

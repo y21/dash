@@ -4,11 +4,12 @@ use std::{
 };
 
 use crate::{
-    gc::trace::Trace,
-    vm::{frame::Frame, local::LocalScope, Vm},
+    gc::{handle::Handle, trace::Trace},
+    vm::{dispatch::HandleResult, frame::Frame, local::LocalScope, Vm},
 };
 
 use self::{
+    generator::{GeneratorFunction, GeneratorIterator},
     native::{CallContext, NativeFunction},
     user::UserFunction,
 };
@@ -18,12 +19,37 @@ use super::{
     Typeof, Value,
 };
 
+pub mod generator;
 pub mod native;
 pub mod user;
 
 pub enum FunctionKind {
     Native(NativeFunction),
     User(UserFunction),
+    Generator(GeneratorFunction),
+}
+
+impl FunctionKind {
+    pub fn as_native(&self) -> Option<&NativeFunction> {
+        match self {
+            Self::Native(f) => Some(f),
+            _ => None,
+        }
+    }
+
+    pub fn as_user(&self) -> Option<&UserFunction> {
+        match self {
+            Self::User(f) => Some(f),
+            _ => None,
+        }
+    }
+
+    pub fn as_generator(&self) -> Option<&GeneratorFunction> {
+        match self {
+            Self::Generator(f) => Some(f),
+            _ => None,
+        }
+    }
 }
 
 impl fmt::Debug for FunctionKind {
@@ -31,6 +57,7 @@ impl fmt::Debug for FunctionKind {
         match self {
             Self::Native(_) => f.write_str("NativeFunction"),
             Self::User(_) => f.write_str("UserFunction"),
+            Self::Generator(_) => f.write_str("GeneratorFunction"),
         }
     }
 }
@@ -54,6 +81,10 @@ impl Function {
     pub fn with_obj(name: Option<String>, kind: FunctionKind, obj: NamedObject) -> Self {
         Self { name, kind, obj }
     }
+
+    pub fn kind(&self) -> &FunctionKind {
+        &self.kind
+    }
 }
 
 unsafe impl Trace for Function {
@@ -65,18 +96,14 @@ impl Object for Function {
         self.obj.get_property(sc, key)
     }
 
-    fn set_property(
-        &self,
-        sc: &mut LocalScope,
-        key: PropertyKey<'static>,
-        value: Value,
-    ) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
         self.obj.set_property(sc, key, value)
     }
 
     fn apply(
         &self,
         scope: &mut LocalScope,
+        callee: Handle<dyn Object>,
         this: Value,
         mut args: Vec<Value>,
     ) -> Result<Value, Value> {
@@ -97,7 +124,14 @@ impl Object for Function {
                 let mut frame = Frame::from_function(uf, scope);
                 frame.sp = sp;
 
-                scope.vm.execute_frame(frame)
+                scope.vm.execute_frame(frame).map(|v| match v {
+                    HandleResult::Return(v) => v,
+                    HandleResult::Yield(_) => unreachable!(), // UserFunction cannot `yield`
+                })
+            }
+            FunctionKind::Generator(gen) => {
+                let iter = GeneratorIterator::new(callee, scope);
+                Ok(scope.register(iter).into())
             }
         }
     }
@@ -115,10 +149,7 @@ impl Object for Function {
     }
 
     fn own_keys(&self) -> Result<Vec<Value>, Value> {
-        Ok(["length", "name"]
-            .iter()
-            .map(|&s| Value::String(s.into()))
-            .collect())
+        Ok(["length", "name"].iter().map(|&s| Value::String(s.into())).collect())
     }
 
     fn type_of(&self) -> Typeof {

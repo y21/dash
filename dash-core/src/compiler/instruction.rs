@@ -65,6 +65,7 @@ pub const STRICTNE: u8 = 0x33;
 pub const TRY: u8 = 0x34;
 pub const TRYEND: u8 = 0x35;
 pub const THROW: u8 = 0x36;
+pub const YIELD: u8 = 0x37;
 
 #[rustfmt::skip]
 pub trait InstructionWriter {
@@ -133,6 +134,7 @@ pub trait InstructionWriter {
     fn build_try_block(&mut self);
     fn build_try_end(&mut self);
     fn build_throw(&mut self);
+    fn build_yield(&mut self);
 }
 
 macro_rules! impl_instruction_writer {
@@ -170,14 +172,11 @@ impl InstructionWriter for InstructionBuilder {
         build_strict_eq STRICTEQ,
         build_strict_ne STRICTNE,
         build_try_end TRYEND,
-        build_throw THROW
+        build_throw THROW,
+        build_yield YIELD
     }
 
-    fn build_constant(
-        &mut self,
-        cp: &mut ConstantPool,
-        constant: Constant,
-    ) -> Result<(), LimitExceededError> {
+    fn build_constant(&mut self, cp: &mut ConstantPool, constant: Constant) -> Result<(), LimitExceededError> {
         self.write_wide_instr(CONSTANT, CONSTANTW, cp.add(constant)?);
         Ok(())
     }
@@ -195,21 +194,13 @@ impl InstructionWriter for InstructionBuilder {
         self.write_wide_instr(thin, wide, index);
     }
 
-    fn build_global_load(
-        &mut self,
-        cp: &mut ConstantPool,
-        ident: &[u8],
-    ) -> Result<(), LimitExceededError> {
+    fn build_global_load(&mut self, cp: &mut ConstantPool, ident: &[u8]) -> Result<(), LimitExceededError> {
         let id = cp.add(Constant::Identifier(force_utf8_borrowed(ident).into()))?;
         self.write_wide_instr(LDGLOBAL, LDGLOBALW, id);
         Ok(())
     }
 
-    fn build_global_store(
-        &mut self,
-        cp: &mut ConstantPool,
-        ident: &[u8],
-    ) -> Result<(), LimitExceededError> {
+    fn build_global_store(&mut self, cp: &mut ConstantPool, ident: &[u8]) -> Result<(), LimitExceededError> {
         let id = cp.add(Constant::Identifier(force_utf8_borrowed(ident).into()))?;
         self.write_wide_instr(STOREGLOBAL, STOREGLOBALW, id);
         Ok(())
@@ -256,11 +247,7 @@ impl InstructionWriter for InstructionBuilder {
         self.write_all(&[DYNAMICPROPACCESS, preserve_this.into()]);
     }
 
-    fn build_static_prop_set(
-        &mut self,
-        cp: &mut ConstantPool,
-        ident: &[u8],
-    ) -> Result<(), LimitExceededError> {
+    fn build_static_prop_set(&mut self, cp: &mut ConstantPool, ident: &[u8]) -> Result<(), LimitExceededError> {
         let id = cp.add(Constant::Identifier(force_utf8_borrowed(ident).into()))?;
         self.write_wide_instr(STATICPROPSET, STATICPROPSETW, id);
 
@@ -275,11 +262,7 @@ impl InstructionWriter for InstructionBuilder {
         self.write_wide_instr(ARRAYLIT, ARRAYLITW, len);
     }
 
-    fn build_objlit(
-        &mut self,
-        cp: &mut ConstantPool,
-        constants: Vec<Constant>,
-    ) -> Result<(), CompileError> {
+    fn build_objlit(&mut self, cp: &mut ConstantPool, constants: Vec<Constant>) -> Result<(), CompileError> {
         let len = constants
             .len()
             .try_into()

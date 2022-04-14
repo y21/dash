@@ -12,11 +12,7 @@ use crate::vm::value::primitive::MAX_SAFE_INTEGERF;
 use crate::vm::value::Value;
 
 pub trait ValueConversion {
-    fn to_primitive(
-        &self,
-        sc: &mut LocalScope,
-        preferred_type: Option<PreferredType>,
-    ) -> Result<Value, Value>;
+    fn to_primitive(&self, sc: &mut LocalScope, preferred_type: Option<PreferredType>) -> Result<Value, Value>;
     fn to_number(&self) -> Result<f64, Value>;
     fn to_length(&self) -> Result<f64, Value>;
     fn to_length_u(&self) -> Result<usize, Value>;
@@ -60,11 +56,7 @@ impl ValueConversion for Value {
         }
     }
 
-    fn to_primitive(
-        &self,
-        sc: &mut LocalScope,
-        preferred_type: Option<PreferredType>,
-    ) -> Result<Value, Value> {
+    fn to_primitive(&self, sc: &mut LocalScope, preferred_type: Option<PreferredType>) -> Result<Value, Value> {
         if let Value::Object(obj) = self {
             // TODO: Call @@toPrimitive instead of toString once we have symbols
             let exotic_to_prim = self.get_property(sc, "toString".into())?;

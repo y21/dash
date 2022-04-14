@@ -1,6 +1,7 @@
 use std::any::Any;
 use std::rc::Rc;
 
+use crate::gc::handle::Handle;
 use crate::gc::trace::Trace;
 use crate::vm::local::LocalScope;
 use crate::vm::Vm;
@@ -38,8 +39,9 @@ macro_rules! boxed_primitive {
                     self.1.get_property(sc, key)
                 }
 
-                fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
-                    self.1.apply(sc, this, args)
+                fn apply(&self, sc: &mut LocalScope,
+                    callee: Handle<dyn Object>,this: Value, args: Vec<Value>) -> Result<Value, Value> {
+                    self.1.apply(sc, callee, this, args)
                 }
 
                 fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {

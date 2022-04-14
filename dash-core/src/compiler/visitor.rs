@@ -1,11 +1,11 @@
 use crate::parser::{
     expr::{
-        ArrayLiteral, AssignmentExpr, BinaryExpr, ConditionalExpr, Expr, FunctionCall,
-        GroupingExpr, LiteralExpr, ObjectLiteral, Postfix, PropertyAccessExpr, Seq, UnaryExpr,
+        ArrayLiteral, AssignmentExpr, BinaryExpr, ConditionalExpr, Expr, FunctionCall, GroupingExpr, LiteralExpr,
+        ObjectLiteral, Postfix, PropertyAccessExpr, Seq, UnaryExpr,
     },
     statement::{
-        BlockStatement, Class, ExportKind, ForLoop, ForOfLoop, FunctionDeclaration, IfStatement,
-        ImportKind, Loop, ReturnStatement, Statement, TryCatch, VariableDeclaration, WhileLoop,
+        BlockStatement, Class, ExportKind, ForLoop, ForOfLoop, FunctionDeclaration, IfStatement, ImportKind, Loop,
+        ReturnStatement, Statement, TryCatch, VariableDeclaration, WhileLoop,
     },
 };
 

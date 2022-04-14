@@ -12,6 +12,7 @@ use super::value::boxed::Boolean as BoxedBoolean;
 use super::value::boxed::Number as BoxedNumber;
 use super::value::boxed::String as BoxedString;
 use super::value::boxed::Symbol as BoxedSymbol;
+use super::value::function::generator::GeneratorIterator;
 use super::value::function::native::NativeFunction;
 use super::value::object::NamedObject;
 use super::value::object::Object;
@@ -116,6 +117,8 @@ pub struct Statics {
     pub symbol_unscopables: Symbol,
     pub array_iterator_prototype: Handle<dyn Object>,
     pub array_iterator_next: Handle<dyn Object>,
+    pub generator_iterator_prototype: Handle<dyn Object>,
+    pub generator_iterator_next: Handle<dyn Object>,
 }
 
 fn object(gc: &mut Gc<dyn Object>) -> Handle<dyn Object> {
@@ -123,11 +126,7 @@ fn object(gc: &mut Gc<dyn Object>) -> Handle<dyn Object> {
 }
 
 fn function(gc: &mut Gc<dyn Object>, name: &str, cb: NativeFunction) -> Handle<dyn Object> {
-    let f = Function::with_obj(
-        Some(name.into()),
-        FunctionKind::Native(cb),
-        NamedObject::null(),
-    );
+    let f = Function::with_obj(Some(name.into()), FunctionKind::Native(cb), NamedObject::null());
     gc.register(f)
 }
 
@@ -156,10 +155,7 @@ impl Statics {
             boolean_tostring: function(gc, "toString", js_std::boolean::to_string),
             boolean_prototype: gc.register(BoxedBoolean::with_obj(false, NamedObject::null())),
             string_ctor: function(gc, "Boolean", js_std::string::constructor),
-            string_prototype: gc.register(BoxedString::with_obj(
-                empty_str.clone(),
-                NamedObject::null(),
-            )),
+            string_prototype: gc.register(BoxedString::with_obj(empty_str.clone(), NamedObject::null())),
             is_nan: function(gc, "isNaN", js_std::global::is_nan),
             is_finite: function(gc, "isFinite", js_std::global::is_finite),
             parse_float: function(gc, "parseFloat", js_std::global::parse_float),
@@ -218,10 +214,7 @@ impl Statics {
             array_join: function(gc, "join", js_std::array::join),
             array_values: function(gc, "values", js_std::array::values),
             symbol_ctor: function(gc, "Symbol", js_std::symbol::constructor),
-            symbol_prototype: gc.register(BoxedSymbol::with_obj(
-                Symbol::new(empty_str),
-                NamedObject::null(),
-            )),
+            symbol_prototype: gc.register(BoxedSymbol::with_obj(Symbol::new(empty_str), NamedObject::null())),
             symbol_async_iterator: Symbol::new("Symbol.asyncIterator".into()),
             symbol_has_instance: Symbol::new("Symbol.hasInstance".into()),
             symbol_is_concat_spreadable: Symbol::new("Symbol.isConcatSpreadable".into()),
@@ -237,6 +230,11 @@ impl Statics {
             symbol_unscopables: Symbol::new("Symbol.unscopables".into()),
             array_iterator_prototype: gc.register(ArrayIterator::empty()),
             array_iterator_next: function(gc, "next", js_std::array_iterator::next),
+            generator_iterator_prototype: {
+                let obj = object(gc);
+                gc.register(GeneratorIterator::empty(obj))
+            },
+            generator_iterator_next: function(gc, "next", js_std::generator::next),
         }
     }
 

@@ -1,4 +1,10 @@
-use std::{cell::Cell, fmt::Debug, hash::Hash, ops::Deref, ptr::NonNull};
+use std::{
+    cell::{Cell, RefCell},
+    fmt::Debug,
+    hash::Hash,
+    ops::Deref,
+    ptr::NonNull,
+};
 
 use super::trace::Trace;
 
@@ -56,6 +62,12 @@ unsafe impl<T: ?Sized + Trace> Trace for Handle<T> {
         };
 
         T::trace(self);
+    }
+}
+
+unsafe impl<T: ?Sized + Trace> Trace for RefCell<T> {
+    fn trace(&self) {
+        T::trace(&RefCell::borrow(self));
     }
 }
 

@@ -67,7 +67,7 @@ impl<'a> fmt::Display for EvalError<'a> {
 impl<'a> Error for EvalError<'a> {}
 
 pub fn eval(input: &str, opt: OptLevel) -> Result<(Vm, Value), EvalError> {
-    // TODO: EvalError might carry a js value, which is useless without a VM
+    // TODO: EvalError might carry a js value, which is useless [and possibly unsound] without a VM
     let mut vm = Vm::new();
     let tokens = Parser::from_str(input).map_err(EvalError::LexError)?;
     let mut ast = tokens.parse_all().map_err(EvalError::ParseError)?;
@@ -77,5 +77,5 @@ pub fn eval(input: &str, opt: OptLevel) -> Result<(Vm, Value), EvalError> {
         .map_err(EvalError::CompileError)?;
     let frame = Frame::from_compile_result(compiled);
     let val = vm.execute_frame(frame).map_err(|e| EvalError::VmError(e))?;
-    Ok((vm, val))
+    Ok((vm, val.into_value()))
 }

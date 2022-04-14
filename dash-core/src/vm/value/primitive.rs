@@ -2,6 +2,7 @@ use std::any::Any;
 use std::iter;
 use std::rc::Rc;
 
+use crate::gc::handle::Handle;
 use crate::gc::trace::Trace;
 use crate::throw;
 use crate::vm::local::LocalScope;
@@ -23,12 +24,7 @@ impl Object for f64 {
         sc.statics.number_prototype.clone().get_property(sc, key)
     }
 
-    fn set_property(
-        &self,
-        sc: &mut LocalScope,
-        key: PropertyKey<'static>,
-        value: Value,
-    ) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
         Ok(())
     }
 
@@ -44,11 +40,11 @@ impl Object for f64 {
     fn apply<'s>(
         &self,
         scope: &mut LocalScope,
+        callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Value, Value> {
-        // TODO: error
-        Ok(Value::undefined())
+        throw!(scope, "number is not a function")
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -73,12 +69,7 @@ impl Object for bool {
         sc.statics.boolean_prototype.clone().get_property(sc, key)
     }
 
-    fn set_property(
-        &self,
-        sc: &mut LocalScope,
-        key: PropertyKey<'static>,
-        value: Value,
-    ) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
         Ok(())
     }
 
@@ -93,11 +84,11 @@ impl Object for bool {
     fn apply<'s>(
         &self,
         scope: &mut LocalScope,
+        callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Value, Value> {
-        // TODO: throw
-        Ok(Value::undefined())
+        throw!(scope, "boolean is not a function")
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -127,12 +118,7 @@ impl Object for Rc<str> {
         sc.statics.string_prototype.clone().get_property(sc, key)
     }
 
-    fn set_property(
-        &self,
-        sc: &mut LocalScope,
-        key: PropertyKey<'static>,
-        value: Value,
-    ) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
         Ok(())
     }
 
@@ -147,6 +133,7 @@ impl Object for Rc<str> {
     fn apply<'s>(
         &self,
         scope: &mut LocalScope,
+        callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Value, Value> {
@@ -190,12 +177,7 @@ impl Object for Undefined {
         throw!(sc, "Cannot read property {:?} of undefined", key)
     }
 
-    fn set_property(
-        &self,
-        sc: &mut LocalScope,
-        key: PropertyKey<'static>,
-        value: Value,
-    ) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
         throw!(sc, "Cannot set property {:?} of undefined", key)
     }
 
@@ -210,6 +192,7 @@ impl Object for Undefined {
     fn apply<'s>(
         &self,
         sc: &mut LocalScope,
+        callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Value, Value> {
@@ -234,12 +217,7 @@ impl Object for Null {
         throw!(sc, "Cannot read property {:?} of null", key)
     }
 
-    fn set_property(
-        &self,
-        sc: &mut LocalScope,
-        key: PropertyKey<'static>,
-        value: Value,
-    ) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
         throw!(sc, "Cannot set property {:?} of null", key)
     }
 
@@ -254,6 +232,7 @@ impl Object for Null {
     fn apply<'s>(
         &self,
         sc: &mut LocalScope,
+        callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Value, Value> {
@@ -291,12 +270,7 @@ impl Object for str {
         Ok(Value::undefined())
     }
 
-    fn set_property(
-        &self,
-        sc: &mut LocalScope,
-        key: PropertyKey<'static>,
-        value: Value,
-    ) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
         Ok(())
     }
 
@@ -311,6 +285,7 @@ impl Object for str {
     fn apply<'s>(
         &self,
         scope: &mut LocalScope,
+        callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Value, Value> {
@@ -348,12 +323,7 @@ impl Object for Symbol {
         sc.statics.symbol_prototype.clone().get_property(sc, key)
     }
 
-    fn set_property(
-        &self,
-        sc: &mut LocalScope,
-        key: PropertyKey<'static>,
-        value: Value,
-    ) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
         Ok(())
     }
 
@@ -368,14 +338,11 @@ impl Object for Symbol {
     fn apply<'s>(
         &self,
         scope: &mut LocalScope,
+        callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Value, Value> {
-        scope
-            .statics
-            .symbol_prototype
-            .clone()
-            .apply(scope, this, args)
+        throw!(scope, "symbol is not a function")
     }
 
     fn as_any(&self) -> &dyn Any {

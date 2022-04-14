@@ -324,13 +324,7 @@ impl Location {
     ///
     /// The caller is supposed to pass in the same input string.
     /// This function is used to format errors
-    pub fn to_string(
-        &self,
-        source: &[u8],
-        full: Either<&str, char>,
-        message: &str,
-        display_token: bool,
-    ) -> String {
+    pub fn to_string(&self, source: &[u8], full: Either<&str, char>, message: &str, display_token: bool) -> String {
         let offset = if self.line <= 1 {
             self.line_offset
         } else {

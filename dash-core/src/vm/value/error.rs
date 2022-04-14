@@ -1,7 +1,9 @@
 use std::any::Any;
 use std::rc::Rc;
 
+use crate::gc::handle::Handle;
 use crate::gc::trace::Trace;
+use crate::vm::local::LocalScope;
 use crate::vm::Vm;
 
 use super::object::NamedObject;
@@ -25,11 +27,7 @@ impl Error {
         }
     }
 
-    pub fn with_name<S1: Into<Rc<str>>, S2: Into<Rc<str>>>(
-        vm: &mut Vm,
-        name: S1,
-        message: S2,
-    ) -> Self {
+    pub fn with_name<S1: Into<Rc<str>>, S2: Into<Rc<str>>>(vm: &mut Vm, name: S1, message: S2) -> Self {
         Self {
             name: name.into(),
             message: message.into(),
@@ -66,22 +64,19 @@ impl Object for Error {
 
     fn apply<'s>(
         &self,
-        scope: &mut crate::vm::local::LocalScope,
+        scope: &mut LocalScope,
+        callee: Handle<dyn Object>,
         this: super::Value,
         args: Vec<super::Value>,
     ) -> Result<super::Value, super::Value> {
-        self.obj.apply(scope, this, args)
+        self.obj.apply(scope, callee, this, args)
     }
 
     fn as_any(&self) -> &dyn Any {
         self
     }
 
-    fn set_prototype(
-        &self,
-        sc: &mut crate::vm::local::LocalScope,
-        value: super::Value,
-    ) -> Result<(), Value> {
+    fn set_prototype(&self, sc: &mut crate::vm::local::LocalScope, value: super::Value) -> Result<(), Value> {
         self.obj.set_prototype(sc, value)
     }
 
