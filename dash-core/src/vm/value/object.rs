@@ -6,7 +6,7 @@ use crate::{
     vm::{local::LocalScope, Vm},
 };
 
-use super::{ops::abstractions::conversions::ValueConversion, primitive::Symbol, Typeof, Value};
+use super::{ops::abstractions::conversions::ValueConversion, primitive::Symbol, Typeof, Value, ValueContext};
 
 // only here for the time being, will be removed later
 fn __assert_trait_object_safety(_: Box<dyn Object>) {}
@@ -124,7 +124,14 @@ impl Object for NamedObject {
         if let PropertyKey::String(st) = &key {
             match st.as_ref() {
                 "__proto__" => return self.get_prototype(sc),
-                "constructor" => throw!(sc, "unimplemented"),
+                "constructor" => {
+                    return Ok(self
+                        .constructor
+                        .borrow()
+                        .as_ref()
+                        .map(|x| Value::from(x.clone()))
+                        .unwrap_or_undefined())
+                }
                 _ => {}
             }
         };

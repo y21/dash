@@ -72,6 +72,13 @@ impl Vm {
             object
         };
 
+        let object_proto = {
+            let object_proto = scope.statics.object_prototype.clone();
+            let to_string = scope.statics.object_to_string.clone();
+
+            object_proto.set_property(&mut scope, "toString".into(), to_string.into()).unwrap();
+        };
+
         let console = {
             let console = scope.statics.console.clone();
             let log = scope.statics.console_log.clone();
