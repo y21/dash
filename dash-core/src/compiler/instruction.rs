@@ -66,6 +66,10 @@ pub const TRY: u8 = 0x34;
 pub const TRYEND: u8 = 0x35;
 pub const THROW: u8 = 0x36;
 pub const YIELD: u8 = 0x37;
+/// Jumps to a given label if the last value on the stack is false, but does **not** actually pop the value
+pub const JMPFALSENP: u8 = 0x38;
+pub const JMPTRUEP: u8 = 0x39;
+pub const JMPTRUENP: u8 = 0x3A;
 
 #[rustfmt::skip]
 pub trait InstructionWriter {
@@ -115,6 +119,12 @@ pub trait InstructionWriter {
     fn build_this(&mut self);
     /// Builds the [JMPFALSEP] instructions
     fn build_jmpfalsep(&mut self, label: Label);
+    /// Builds the [JMPFALSENP] instructions
+    fn build_jmpfalsenp(&mut self, label: Label);
+    /// Builds the [JMPTRUEP] instructions
+    fn build_jmptruep(&mut self, label: Label);
+    /// Builds the [JMPTRUENP] instructions
+    fn build_jmptruenp(&mut self, label: Label);
     /// Builds the [ARRAYLIT] and [ARRAYLITW] instructions
     fn build_arraylit(&mut self, len: u16);
     /// Builds the [OBJLIT] and [OBJLITW] instructions
@@ -220,6 +230,24 @@ impl InstructionWriter for InstructionBuilder {
 
     fn build_jmpfalsep(&mut self, label: Label) {
         self.write(JMPFALSEP);
+        self.write_all(&[0, 0]);
+        self.add_jump(label);
+    }
+
+    fn build_jmpfalsenp(&mut self, label: Label) {
+        self.write(JMPFALSENP);
+        self.write_all(&[0, 0]);
+        self.add_jump(label);
+    }
+
+    fn build_jmptruep(&mut self, label: Label) {
+        self.write(JMPTRUEP);
+        self.write_all(&[0, 0]);
+        self.add_jump(label);
+    }
+
+    fn build_jmptruenp(&mut self, label: Label) {
+        self.write(JMPTRUENP);
         self.write_all(&[0, 0]);
         self.add_jump(label);
     }

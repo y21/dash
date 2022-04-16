@@ -192,6 +192,57 @@ mod handlers {
         Ok(None)
     }
 
+    pub fn jmpfalsenp(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        let offset = vm.fetchw_and_inc_ip() as i16;
+        let value = vm.stack.last().expect("No value");
+
+        if !value.is_truthy() {
+            let frame = vm.frames.last_mut().expect("No frame");
+
+            if offset.is_negative() {
+                frame.ip -= -offset as usize;
+            } else {
+                frame.ip += offset as usize;
+            }
+        }
+
+        Ok(None)
+    }
+
+    pub fn jmptruep(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        let offset = vm.fetchw_and_inc_ip() as i16;
+        let value = vm.stack.pop().expect("No value");
+
+        if value.is_truthy() {
+            let frame = vm.frames.last_mut().expect("No frame");
+
+            if offset.is_negative() {
+                frame.ip -= -offset as usize;
+            } else {
+                frame.ip += offset as usize;
+            }
+        }
+
+        Ok(None)
+    }
+
+    pub fn jmptruenp(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        let offset = vm.fetchw_and_inc_ip() as i16;
+        let value = vm.stack.last().expect("No value");
+
+        if value.is_truthy() {
+            let frame = vm.frames.last_mut().expect("No frame");
+
+            if offset.is_negative() {
+                frame.ip -= -offset as usize;
+            } else {
+                frame.ip += offset as usize;
+            }
+        }
+
+        Ok(None)
+    }
+
     pub fn jmp(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let offset = vm.fetchw_and_inc_ip() as i16;
         let frame = vm.frames.last_mut().expect("No frame");
@@ -456,6 +507,9 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<Option<HandleResult>, Valu
         opcode::THROW => handlers::throw(vm),
         opcode::TYPEOF => handlers::type_of(vm),
         opcode::YIELD => handlers::yield_(vm),
+        opcode::JMPFALSENP => handlers::jmpfalsenp(vm),
+        opcode::JMPTRUEP => handlers::jmptruep(vm),
+        opcode::JMPTRUENP => handlers::jmptruenp(vm),
         _ => unimplemented!("{}", instruction),
     }
 }

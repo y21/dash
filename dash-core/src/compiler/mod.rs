@@ -176,25 +176,44 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
     fn visit_binary_expression(&mut self, e: &BinaryExpr<'a>) -> Result<Vec<u8>, CompileError> {
         let mut ib = InstructionBuilder::new();
         ib.append(&mut self.accept_expr(&e.left)?);
-        ib.append(&mut self.accept_expr(&e.right)?);
+
+        macro_rules! trivial_case {
+            ($k:expr) => {{
+                ib.append(&mut self.accept_expr(&e.right)?);
+                $k(&mut ib)
+            }};
+        }
 
         match e.operator {
-            TokenType::Plus => ib.build_add(),
-            TokenType::Minus => ib.build_sub(),
-            TokenType::Star => ib.build_mul(),
-            TokenType::Slash => ib.build_div(),
-            TokenType::Remainder => ib.build_rem(),
-            TokenType::Exponentiation => ib.build_pow(),
-            TokenType::Greater => ib.build_gt(),
-            TokenType::GreaterEqual => ib.build_ge(),
-            TokenType::Less => ib.build_lt(),
-            TokenType::LessEqual => ib.build_le(),
-            TokenType::Equality => ib.build_eq(),
-            TokenType::Inequality => ib.build_ne(),
-            TokenType::StrictEquality => ib.build_strict_eq(),
-            TokenType::StrictInequality => ib.build_strict_ne(),
-            other => unreachable!("Binary token is never emitted: {:?}", other),
+            TokenType::Plus => trivial_case!(InstructionBuilder::build_add),
+            TokenType::Minus => trivial_case!(InstructionBuilder::build_sub),
+            TokenType::Star => trivial_case!(InstructionBuilder::build_mul),
+            TokenType::Slash => trivial_case!(InstructionBuilder::build_div),
+            TokenType::Remainder => trivial_case!(InstructionBuilder::build_rem),
+            TokenType::Exponentiation => trivial_case!(InstructionBuilder::build_pow),
+            TokenType::Greater => trivial_case!(InstructionBuilder::build_gt),
+            TokenType::GreaterEqual => trivial_case!(InstructionBuilder::build_ge),
+            TokenType::Less => trivial_case!(InstructionBuilder::build_lt),
+            TokenType::LessEqual => trivial_case!(InstructionBuilder::build_le),
+            TokenType::Equality => trivial_case!(InstructionBuilder::build_eq),
+            TokenType::Inequality => trivial_case!(InstructionBuilder::build_ne),
+            TokenType::StrictEquality => trivial_case!(InstructionBuilder::build_strict_eq),
+            TokenType::StrictInequality => trivial_case!(InstructionBuilder::build_strict_ne),
+            TokenType::LogicalOr => {
+                ib.build_jmptruenp(Label::IfEnd);
+                ib.build_pop(); // Only pop LHS if it is false
+                ib.append(&mut self.accept_expr(&e.right)?);
+                ib.add_label(Label::IfEnd);
+            }
+            TokenType::LogicalAnd => {
+                ib.build_jmpfalsenp(Label::IfEnd);
+                ib.build_pop(); // Only pop LHS if it is true
+                ib.append(&mut self.accept_expr(&e.right)?);
+                ib.add_label(Label::IfEnd);
+            }
+            _ => todo!(),
         }
+
         Ok(ib.build())
     }
 
