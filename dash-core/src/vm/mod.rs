@@ -451,7 +451,7 @@ impl Vm {
     /// Executes a frame in this VM
     pub fn execute_frame(&mut self, frame: Frame) -> Result<HandleResult, Value> {
         self.stack
-            .resize(self.stack.len() + frame.local_count, Value::undefined());
+            .resize(self.stack.len() + frame.reserved_stack_size, Value::undefined());
 
         self.frames.push(frame);
 

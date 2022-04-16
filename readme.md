@@ -24,7 +24,12 @@ function* counter() {
     while (true) yield num++;
 }
 
-for (const number of counter()) console.log(number);
+const numbers = counter();
+let current;
+while (!(current = numbers.next()).done) {
+    console.log(current.value);
+}
+
 ```
 ```sh
 # Install Rust

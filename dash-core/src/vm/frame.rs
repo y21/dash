@@ -18,7 +18,7 @@ pub struct TryBlock {
 #[derive(Debug, Clone)]
 pub struct Frame {
     pub ip: usize,
-    pub local_count: usize,
+    pub reserved_stack_size: usize,
     pub constants: Rc<[Constant]>,
     pub externals: Rc<[Handle<dyn Object>]>,
     pub buffer: Rc<[u8]>,
@@ -39,7 +39,7 @@ impl Frame {
             externals: uf.externals().clone(),
             ip: 0,
             sp: 0,
-            local_count: uf.locals(),
+            reserved_stack_size: uf.locals(),
         }
     }
 
@@ -54,7 +54,19 @@ impl Frame {
             externals: Vec::new().into(),
             ip: 0,
             sp: 0,
-            local_count: cr.locals,
+            reserved_stack_size: cr.locals,
         }
+    }
+
+    pub fn set_reserved_stack_size(&mut self, size: usize) {
+        self.reserved_stack_size = size;
+    }
+
+    pub fn set_ip(&mut self, ip: usize) {
+        self.ip = ip;
+    }
+
+    pub fn set_sp(&mut self, sp: usize) {
+        self.sp = sp;
     }
 }

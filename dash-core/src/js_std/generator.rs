@@ -50,8 +50,14 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
         cx.scope.try_extend_stack(old_stack)?;
 
         let mut frame = Frame::from_function(function, cx.scope);
-        frame.ip = ip;
-        frame.sp = current_sp;
+        frame.set_ip(ip);
+        frame.set_sp(current_sp);
+
+        // If this generator did run before, we do not want to reserve stack space for all locals *again*,
+        // because they are already in `old_stack`
+        if generator.did_run() {
+            frame.set_reserved_stack_size(0);
+        }
 
         frame
     };
@@ -67,7 +73,7 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
         }
         HandleResult::Yield(value) => {
             let frame = cx.scope.pop_frame().expect("Generator frame is missing");
-            let stack = cx.scope.drain_stack(frame.sp..).collect();
+            let stack = cx.scope.drain_stack(frame.sp..).collect::<Vec<_>>();
 
             generator.state().replace(GeneratorState::Running {
                 ip: frame.ip + 1,

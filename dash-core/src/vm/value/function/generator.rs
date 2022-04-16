@@ -36,6 +36,15 @@ pub enum GeneratorState {
     Running { ip: usize, stack: Vec<Value> },
 }
 
+impl GeneratorState {
+    pub fn did_run(&self) -> bool {
+        match self {
+            Self::Finished => true,
+            Self::Running { ip, .. } => *ip != 0,
+        }
+    }
+}
+
 impl Default for GeneratorState {
     fn default() -> Self {
         Self::Running {
@@ -86,6 +95,10 @@ impl GeneratorIterator {
 
     pub fn function(&self) -> &Handle<dyn Object> {
         &self.function
+    }
+
+    pub fn did_run(&self) -> bool {
+        self.state.borrow().did_run()
     }
 }
 
