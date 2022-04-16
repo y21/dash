@@ -21,6 +21,7 @@ pub trait ValueConversion {
     fn to_string(&self, sc: &mut LocalScope) -> Result<Rc<str>, Value>;
     fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value>;
     fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value>;
+    fn to_int32(&self) -> Result<i32, Value>;
 }
 
 impl ValueConversion for Value {
@@ -142,6 +143,11 @@ impl ValueConversion for Value {
             Value::String(s) => register_dyn(sc, |sc| BoxedString::new(sc, s.clone())),
             Value::External(e) => Ok(e.clone()), // TODO: is this correct?
         }
+    }
+
+    fn to_int32(&self) -> Result<i32, Value> {
+        let n = self.to_number()?;
+        Ok(n as i32)
     }
 }
 

@@ -182,6 +182,15 @@ impl Value {
         }
     }
 
+    pub fn is_nullish(&self) -> bool {
+        match self {
+            Value::Null(_) => true,
+            Value::Undefined(_) => true,
+            Value::External(e) => todo!(),
+            _ => false,
+        }
+    }
+
     pub fn undefined() -> Value {
         Value::Undefined(Undefined)
     }

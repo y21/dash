@@ -1,5 +1,7 @@
 use crate::vm::value::Value;
 
+use super::abstractions::conversions::ValueConversion;
+
 impl Value {
     pub fn add(&self, other: &Self) -> Value {
         match (self, other) {
@@ -99,5 +101,42 @@ impl Value {
 
     pub fn not(&self) -> Value {
         Value::Boolean(!self.is_truthy())
+    }
+
+    pub fn bitor(&self, other: &Self) -> Result<Value, Value> {
+        let this = self.to_int32()?;
+        let that = other.to_int32()?;
+        Ok(Value::Number((this | that) as f64))
+    }
+
+    pub fn bitxor(&self, other: &Self) -> Result<Value, Value> {
+        let this = self.to_int32()?;
+        let that = other.to_int32()?;
+        Ok(Value::Number((this ^ that) as f64))
+    }
+
+    pub fn bitand(&self, other: &Self) -> Result<Value, Value> {
+        let this = self.to_int32()?;
+        let that = other.to_int32()?;
+        Ok(Value::Number((this & that) as f64))
+    }
+
+    pub fn bitshl(&self, other: &Self) -> Result<Value, Value> {
+        let this = self.to_int32()?;
+        let that = other.to_int32()?;
+        Ok(Value::Number((this << that) as f64))
+    }
+
+    pub fn bitshr(&self, other: &Self) -> Result<Value, Value> {
+        let this = self.to_int32()?;
+        let that = other.to_int32()?;
+        Ok(Value::Number((this >> that) as f64))
+    }
+
+    pub fn bitushr(&self, other: &Self) -> Result<Value, Value> {
+        let this = self.to_int32()?;
+        let that = other.to_int32()?;
+        // TODO: >>>
+        Ok(Value::Number((this >> that) as f64))
     }
 }

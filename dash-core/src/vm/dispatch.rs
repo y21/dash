@@ -26,13 +26,13 @@ mod handlers {
 
     use super::*;
 
-    fn evaluate_binary_expr<F: Fn(Value, Value, &mut Vm) -> Value>(
-        vm: &mut Vm,
-        fun: F,
-    ) -> Result<Option<HandleResult>, Value> {
+    fn evaluate_binary_expr<F>(vm: &mut Vm, fun: F) -> Result<Option<HandleResult>, Value>
+    where
+        F: Fn(Value, Value, &mut Vm) -> Result<Value, Value>,
+    {
         let right = vm.stack.pop().expect("No right operand");
         let left = vm.stack.pop().expect("No left operand");
-        let result = fun(left, right, vm);
+        let result = fun(left, right, vm)?;
         vm.try_push_stack(result)?;
         Ok(None)
     }
@@ -50,59 +50,91 @@ mod handlers {
     }
 
     pub fn add(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| l.add(&r))
+        evaluate_binary_expr(vm, |l, r, _| Ok(l.add(&r)))
     }
 
     pub fn sub(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| l.sub(&r))
+        evaluate_binary_expr(vm, |l, r, _| Ok(l.sub(&r)))
     }
 
     pub fn mul(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| l.mul(&r))
+        evaluate_binary_expr(vm, |l, r, _| Ok(l.mul(&r)))
     }
 
     pub fn div(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| l.div(&r))
+        evaluate_binary_expr(vm, |l, r, _| Ok(l.div(&r)))
     }
 
     pub fn rem(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| l.rem(&r))
+        evaluate_binary_expr(vm, |l, r, _| Ok(l.rem(&r)))
     }
 
     pub fn pow(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| l.pow(&r))
+        evaluate_binary_expr(vm, |l, r, _| Ok(l.pow(&r)))
+    }
+
+    pub fn bitor(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        evaluate_binary_expr(vm, |l, r, _| l.bitor(&r))
+    }
+
+    pub fn bitxor(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        evaluate_binary_expr(vm, |l, r, _| l.bitxor(&r))
+    }
+
+    pub fn bitand(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        evaluate_binary_expr(vm, |l, r, _| l.bitand(&r))
+    }
+
+    pub fn bitshl(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        evaluate_binary_expr(vm, |l, r, _| l.bitshl(&r))
+    }
+
+    pub fn bitshr(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        evaluate_binary_expr(vm, |l, r, _| l.bitshr(&r))
+    }
+
+    pub fn bitushr(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        evaluate_binary_expr(vm, |l, r, _| l.bitushr(&r))
+    }
+
+    pub fn objin(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        todo!()
+    }
+
+    pub fn instanceof(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        todo!()
     }
 
     pub fn lt(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| l.lt(&r))
+        evaluate_binary_expr(vm, |l, r, _| Ok(l.lt(&r)))
     }
 
     pub fn le(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| l.le(&r))
+        evaluate_binary_expr(vm, |l, r, _| Ok(l.le(&r)))
     }
 
     pub fn gt(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| l.gt(&r))
+        evaluate_binary_expr(vm, |l, r, _| Ok(l.gt(&r)))
     }
 
     pub fn ge(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| l.ge(&r))
+        evaluate_binary_expr(vm, |l, r, _| Ok(l.ge(&r)))
     }
 
     pub fn eq(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| l.eq(&r))
+        evaluate_binary_expr(vm, |l, r, _| Ok(l.eq(&r)))
     }
 
     pub fn ne(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| l.ne(&r))
+        evaluate_binary_expr(vm, |l, r, _| Ok(l.ne(&r)))
     }
 
     pub fn strict_eq(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| l.strict_eq(&r))
+        evaluate_binary_expr(vm, |l, r, _| Ok(l.strict_eq(&r)))
     }
 
     pub fn strict_ne(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| l.strict_ne(&r))
+        evaluate_binary_expr(vm, |l, r, _| Ok(l.strict_ne(&r)))
     }
 
     pub fn not(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
@@ -231,6 +263,40 @@ mod handlers {
         let value = vm.stack.last().expect("No value");
 
         if value.is_truthy() {
+            let frame = vm.frames.last_mut().expect("No frame");
+
+            if offset.is_negative() {
+                frame.ip -= -offset as usize;
+            } else {
+                frame.ip += offset as usize;
+            }
+        }
+
+        Ok(None)
+    }
+
+    pub fn jmpnullishp(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        let offset = vm.fetchw_and_inc_ip() as i16;
+        let value = vm.stack.pop().expect("No value");
+
+        if value.is_nullish() {
+            let frame = vm.frames.last_mut().expect("No frame");
+
+            if offset.is_negative() {
+                frame.ip -= -offset as usize;
+            } else {
+                frame.ip += offset as usize;
+            }
+        }
+
+        Ok(None)
+    }
+
+    pub fn jmpnullishnp(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        let offset = vm.fetchw_and_inc_ip() as i16;
+        let value = vm.stack.last().expect("No value");
+
+        if value.is_nullish() {
             let frame = vm.frames.last_mut().expect("No frame");
 
             if offset.is_negative() {
@@ -476,6 +542,14 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<Option<HandleResult>, Valu
         opcode::DIV => handlers::div(vm),
         opcode::REM => handlers::rem(vm),
         opcode::POW => handlers::pow(vm),
+        opcode::BITOR => handlers::bitor(vm),
+        opcode::BITXOR => handlers::bitxor(vm),
+        opcode::BITAND => handlers::bitand(vm),
+        opcode::BITSHL => handlers::bitshl(vm),
+        opcode::BITSHR => handlers::bitshr(vm),
+        opcode::BITUSHR => handlers::bitushr(vm),
+        opcode::OBJIN => handlers::objin(vm),
+        opcode::INSTANCEOF => handlers::instanceof(vm),
         opcode::GT => handlers::gt(vm),
         opcode::GE => handlers::ge(vm),
         opcode::LT => handlers::lt(vm),
@@ -510,6 +584,8 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<Option<HandleResult>, Valu
         opcode::JMPFALSENP => handlers::jmpfalsenp(vm),
         opcode::JMPTRUEP => handlers::jmptruep(vm),
         opcode::JMPTRUENP => handlers::jmptruenp(vm),
+        opcode::JMPNULLISHP => handlers::jmpnullishp(vm),
+        opcode::JMPNULLISHNP => handlers::jmpnullishnp(vm),
         _ => unimplemented!("{}", instruction),
     }
 }

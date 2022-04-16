@@ -199,6 +199,14 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
             TokenType::Inequality => trivial_case!(InstructionBuilder::build_ne),
             TokenType::StrictEquality => trivial_case!(InstructionBuilder::build_strict_eq),
             TokenType::StrictInequality => trivial_case!(InstructionBuilder::build_strict_ne),
+            TokenType::BitwiseOr => trivial_case!(InstructionBuilder::build_bitor),
+            TokenType::BitwiseXor => trivial_case!(InstructionBuilder::build_bitxor),
+            TokenType::BitwiseAnd => trivial_case!(InstructionBuilder::build_bitand),
+            TokenType::LeftShift => trivial_case!(InstructionBuilder::build_bitshl),
+            TokenType::RightShift => trivial_case!(InstructionBuilder::build_bitshr),
+            TokenType::UnsignedRightShift => trivial_case!(InstructionBuilder::build_bitushr),
+            TokenType::In => trivial_case!(InstructionBuilder::build_objin),
+            TokenType::Instanceof => trivial_case!(InstructionBuilder::build_instanceof),
             TokenType::LogicalOr => {
                 ib.build_jmptruenp(Label::IfEnd);
                 ib.build_pop(); // Only pop LHS if it is false
@@ -211,7 +219,16 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
                 ib.append(&mut self.accept_expr(&e.right)?);
                 ib.add_label(Label::IfEnd);
             }
-            _ => todo!(),
+            TokenType::NullishCoalescing => {
+                ib.build_jmpnullishnp(Label::IfBranch(0));
+                ib.build_jmp(Label::IfEnd);
+
+                ib.add_label(Label::IfBranch(0));
+                ib.build_pop();
+                ib.append(&mut self.accept_expr(&e.right)?);
+                ib.add_label(Label::IfEnd);
+            }
+            other => unimplementedc!("Binary operator {:?}", other),
         }
 
         Ok(ib.build())

@@ -70,6 +70,16 @@ pub const YIELD: u8 = 0x37;
 pub const JMPFALSENP: u8 = 0x38;
 pub const JMPTRUEP: u8 = 0x39;
 pub const JMPTRUENP: u8 = 0x3A;
+pub const JMPNULLISHP: u8 = 0x3B;
+pub const JMPNULLISHNP: u8 = 0x3C;
+pub const BITOR: u8 = 0x3D;
+pub const BITXOR: u8 = 0x3E;
+pub const BITAND: u8 = 0x3F;
+pub const BITSHL: u8 = 0x40;
+pub const BITSHR: u8 = 0x41;
+pub const BITUSHR: u8 = 0x42;
+pub const OBJIN: u8 = 0x43;
+pub const INSTANCEOF: u8 = 0x44;
 
 #[rustfmt::skip]
 pub trait InstructionWriter {
@@ -125,6 +135,10 @@ pub trait InstructionWriter {
     fn build_jmptruep(&mut self, label: Label);
     /// Builds the [JMPTRUENP] instructions
     fn build_jmptruenp(&mut self, label: Label);
+    /// Builds the [JMPNULLISHP] instructions
+    fn build_jmpnullishp(&mut self, label: Label);
+    /// Builds the [JMPNULLISHNP] instructions
+    fn build_jmpnullishnp(&mut self, label: Label);
     /// Builds the [ARRAYLIT] and [ARRAYLITW] instructions
     fn build_arraylit(&mut self, len: u16);
     /// Builds the [OBJLIT] and [OBJLITW] instructions
@@ -145,6 +159,14 @@ pub trait InstructionWriter {
     fn build_try_end(&mut self);
     fn build_throw(&mut self);
     fn build_yield(&mut self);
+    fn build_bitor(&mut self);
+    fn build_bitxor(&mut self);
+    fn build_bitand(&mut self);
+    fn build_bitshl(&mut self);
+    fn build_bitshr(&mut self);
+    fn build_bitushr(&mut self);
+    fn build_objin(&mut self);
+    fn build_instanceof(&mut self);
 }
 
 macro_rules! impl_instruction_writer {
@@ -183,7 +205,15 @@ impl InstructionWriter for InstructionBuilder {
         build_strict_ne STRICTNE,
         build_try_end TRYEND,
         build_throw THROW,
-        build_yield YIELD
+        build_yield YIELD,
+        build_bitor BITOR,
+        build_bitxor BITXOR,
+        build_bitand BITAND,
+        build_bitshl BITSHL,
+        build_bitshr BITSHR,
+        build_bitushr BITUSHR,
+        build_objin OBJIN,
+        build_instanceof INSTANCEOF
     }
 
     fn build_constant(&mut self, cp: &mut ConstantPool, constant: Constant) -> Result<(), LimitExceededError> {
@@ -248,6 +278,18 @@ impl InstructionWriter for InstructionBuilder {
 
     fn build_jmptruenp(&mut self, label: Label) {
         self.write(JMPTRUENP);
+        self.write_all(&[0, 0]);
+        self.add_jump(label);
+    }
+
+    fn build_jmpnullishp(&mut self, label: Label) {
+        self.write(JMPNULLISHP);
+        self.write_all(&[0, 0]);
+        self.add_jump(label);
+    }
+
+    fn build_jmpnullishnp(&mut self, label: Label) {
+        self.write(JMPNULLISHNP);
         self.write_all(&[0, 0]);
         self.add_jump(label);
     }
