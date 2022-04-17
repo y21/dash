@@ -28,4 +28,10 @@ impl Externals {
         let sc = mem::transmute::<_, *const LocalScope<'static>>(sc);
         self.0.insert(sc, refs);
     }
+
+    pub unsafe fn add_single<'a>(&mut self, sc: *const LocalScope<'a>, re: Handle<dyn Object>) {
+        // lifetime transmute
+        let sc = mem::transmute::<_, *const LocalScope<'static>>(sc);
+        self.0.entry(sc).or_insert_with(Vec::new).push(re)
+    }
 }

@@ -105,11 +105,10 @@ impl Object for Function {
         scope: &mut LocalScope,
         callee: Handle<dyn Object>,
         this: Value,
-        mut args: Vec<Value>,
+        args: Vec<Value>,
     ) -> Result<Value, Value> {
         match &self.kind {
             FunctionKind::Native(native) => {
-                args.reverse();
                 let cx = CallContext { args, scope, this };
                 let result = native(cx);
                 result
@@ -119,7 +118,7 @@ impl Object for Function {
 
                 let argc = std::cmp::min(uf.params(), args.len());
 
-                scope.stack.extend(args.into_iter().rev().take(argc));
+                scope.stack.extend(args.into_iter().take(argc));
 
                 let mut frame = Frame::from_function(uf, scope);
                 frame.sp = sp;

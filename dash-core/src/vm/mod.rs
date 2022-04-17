@@ -250,11 +250,41 @@ impl Vm {
             let join = scope.statics.array_join.clone();
             let values = scope.statics.array_values.clone();
             let symbol_iterator = scope.statics.symbol_iterator.clone();
+            let at = scope.statics.array_at.clone();
+            let concat = scope.statics.array_concat.clone();
+            let entries = scope.statics.array_entries.clone();
+            let keys = scope.statics.array_keys.clone();
+            let every = scope.statics.array_every.clone();
+            let fill = scope.statics.array_fill.clone();
+            let filter = scope.statics.array_filter.clone();
+            let find = scope.statics.array_find.clone();
+            let find_index = scope.statics.array_find_index.clone();
+            let flat = scope.statics.array_flat.clone();
+            let for_each = scope.statics.array_for_each.clone();
+            let includes = scope.statics.array_includes.clone();
+            let index_of = scope.statics.array_index_of.clone();
+            let map = scope.statics.array_map.clone();
+            let pop = scope.statics.array_pop.clone();
 
             array.set_property(&mut scope, "toString".into(), tostring.into()).unwrap();
             array.set_property(&mut scope, "join".into(), join.into()).unwrap();
             array.set_property(&mut scope, "values".into(), values.clone().into()).unwrap();
             array.set_property(&mut scope, symbol_iterator.into(), values.into()).unwrap();
+            array.set_property(&mut scope, "at".into(), at.into()).unwrap();
+            array.set_property(&mut scope, "concat".into(), concat.into()).unwrap();
+            array.set_property(&mut scope, "entries".into(), entries.into()).unwrap();
+            array.set_property(&mut scope, "keys".into(), keys.into()).unwrap();
+            array.set_property(&mut scope, "every".into(), every.into()).unwrap();
+            array.set_property(&mut scope, "fill".into(), fill.into()).unwrap();
+            array.set_property(&mut scope, "filter".into(), filter.into()).unwrap();
+            array.set_property(&mut scope, "find".into(), find.into()).unwrap();
+            array.set_property(&mut scope, "findIndex".into(), find_index.into()).unwrap();
+            array.set_property(&mut scope, "flat".into(), flat.into()).unwrap();
+            array.set_property(&mut scope, "forEach".into(), for_each.into()).unwrap();
+            array.set_property(&mut scope, "includes".into(), includes.into()).unwrap();
+            array.set_property(&mut scope, "indexOf".into(), index_of.into()).unwrap();
+            array.set_property(&mut scope, "map".into(), map.into()).unwrap();
+            array.set_property(&mut scope, "pop".into(), pop.into()).unwrap();
 
             array
         };

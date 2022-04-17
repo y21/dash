@@ -37,6 +37,7 @@ pub struct NamedObject {
     values: RefCell<HashMap<PropertyKey<'static>, Value>>,
 }
 
+// TODO: some kind of Number variant for faster indexing without .to_string()
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum PropertyKey<'a> {
     String(Cow<'a, str>),

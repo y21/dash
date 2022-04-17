@@ -190,6 +190,7 @@ mod handlers {
 
             args.push(value);
         }
+        args.reverse(); // TODO: we can do better
 
         let callee = vm.stack.pop().expect("Missing callee");
 
