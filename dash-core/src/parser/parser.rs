@@ -1,7 +1,4 @@
-use crate::parser::{
-    expr::LiteralExpr,
-    statement::{ClassProperty, ForOfLoop},
-};
+use crate::parser::statement::{ClassProperty, ForOfLoop};
 
 use super::{
     expr::{Expr, UnaryExpr},
@@ -368,7 +365,7 @@ impl<'a> Parser<'a> {
         Some(FunctionDeclaration::new(name, arguments, statements, ty))
     }
 
-    fn argument_list(&mut self) -> Option<Vec<&'a [u8]>> {
+    fn argument_list(&mut self) -> Option<Vec<&'a str>> {
         let mut arguments = Vec::new();
 
         while !self.expect_and_skip(&[TokenType::RightParen], false) {
@@ -664,7 +661,7 @@ impl<'a> Parser<'a> {
                     expr = Expr::function_call(expr, arguments, false);
                 }
                 TokenType::Dot => {
-                    let property = Expr::Literal(LiteralExpr::Identifier(self.next()?.full));
+                    let property = Expr::identifier(self.next()?.full);
                     expr = Expr::property_access(false, expr, property);
                 }
                 TokenType::LeftSquareBrace => {
@@ -725,7 +722,7 @@ impl<'a> Parser<'a> {
                 }
                 Expr::Object(items)
             }
-            TokenType::NumberDec => Expr::number_literal(std::str::from_utf8(full).unwrap().parse::<f64>().unwrap()),
+            TokenType::NumberDec => Expr::number_literal(full.parse::<f64>().unwrap()),
             TokenType::NumberHex => self.parse_prefixed_number_literal(full, 16).map(Expr::number_literal)?,
             TokenType::NumberBin => self.parse_prefixed_number_literal(full, 2).map(Expr::number_literal)?,
             TokenType::NumberOct => self.parse_prefixed_number_literal(full, 8).map(Expr::number_literal)?,
@@ -766,8 +763,8 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses a prefixed number literal (0x, 0o, 0b) and returns the number
-    pub fn parse_prefixed_number_literal(&mut self, full: &[u8], radix: u32) -> Option<f64> {
-        let src = std::str::from_utf8(&full[2..]).unwrap();
+    pub fn parse_prefixed_number_literal(&mut self, full: &str, radix: u32) -> Option<f64> {
+        let src = &full[2..];
         match u64::from_str_radix(src, radix).map(|x| x as f64) {
             Ok(f) => Some(f),
             Err(e) => {

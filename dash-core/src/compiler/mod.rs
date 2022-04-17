@@ -17,7 +17,6 @@ use crate::{
 };
 
 use self::{
-    builder::{force_utf8, force_utf8_borrowed},
     constant::{Constant, ConstantPool, Function},
     error::CompileError,
     instruction::InstructionWriter,
@@ -143,7 +142,7 @@ impl<'a> FunctionCompiler<'a> {
     /// Tries to find a local in the current or surrounding scopes
     ///
     /// If a local variable is found in a parent scope, it is marked as an extern local
-    pub fn find_local(&mut self, ident: &[u8]) -> Option<(u16, ScopeLocal<'a>)> {
+    pub fn find_local(&mut self, ident: &str) -> Option<(u16, ScopeLocal<'a>)> {
         if let Some((id, local)) = self.state.scope.find_local(ident) {
             Some((id, local.clone()))
         } else {
@@ -260,7 +259,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
         Ok(ib.build())
     }
 
-    fn visit_identifier_expression(&mut self, i: &'a [u8]) -> Result<Vec<u8>, CompileError> {
+    fn visit_identifier_expression(&mut self, i: &str) -> Result<Vec<u8>, CompileError> {
         let mut ib = InstructionBuilder::new();
 
         if let Some((index, local)) = self.find_local(i) {
@@ -410,9 +409,8 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
         match &*e.left {
             Expr::Literal(lit) => {
                 let ident = lit.to_identifier();
-                let ident = ident.as_bytes();
 
-                if let Some((id, local)) = self.find_local(ident) {
+                if let Some((id, local)) = self.find_local(&ident) {
                     if matches!(local.binding().kind, VariableDeclarationKind::Const) {
                         return Err(CompileError::ConstAssignment);
                     }
@@ -437,17 +435,17 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
                     match e.operator {
                         TokenType::Assignment => {}
                         TokenType::AdditionAssignment => {
-                            ib.build_global_load(&mut self.state.cp, ident)?;
+                            ib.build_global_load(&mut self.state.cp, &ident)?;
                             ib.build_add();
                         }
                         TokenType::SubtractionAssignment => {
-                            ib.build_global_load(&mut self.state.cp, ident)?;
+                            ib.build_global_load(&mut self.state.cp, &ident)?;
                             ib.build_sub();
                         }
                         _ => unimplementedc!("Unknown operator"),
                     }
 
-                    ib.build_global_store(&mut self.state.cp, ident)?;
+                    ib.build_global_store(&mut self.state.cp, &ident)?;
                 }
             }
             Expr::PropertyAccess(prop) => {
@@ -458,7 +456,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
                 match &*prop.property {
                     Expr::Literal(lit) => {
                         let ident = lit.to_identifier();
-                        ib.build_static_prop_set(&mut self.state.cp, ident.as_bytes())?;
+                        ib.build_static_prop_set(&mut self.state.cp, &ident)?;
                     }
                     e => {
                         ib.append(&mut self.accept_expr(&e)?);
@@ -536,7 +534,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
         match &*e.property {
             Expr::Literal(lit) => {
                 let ident = lit.to_identifier();
-                ib.build_static_prop_access(&mut self.state.cp, ident.as_bytes(), preserve_this)?;
+                ib.build_static_prop_access(&mut self.state.cp, &ident, preserve_this)?;
             }
             e => {
                 ib.append(&mut self.accept_expr(e)?);
@@ -563,7 +561,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
         match &*p.1 {
             Expr::Literal(lit) => {
                 let ident = lit.to_identifier();
-                if let Some((id, loc)) = self.find_local(ident.as_bytes()) {
+                if let Some((id, loc)) = self.find_local(&ident) {
                     ib.build_local_load(id, loc.is_extern());
                 } else {
                     unimplementedc!("Global postfix expression");
@@ -609,7 +607,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
             buffer: cmp.instructions.into(),
             constants: cmp.cp.into_vec().into(),
             locals: cmp.locals,
-            name: f.name.map(force_utf8),
+            name: f.name.map(ToOwned::to_owned),
             ty: f.ty,
             params: f.arguments.len(),
             externals: cmp.externals.into(),
@@ -637,7 +635,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
         let mut idents = Vec::with_capacity(o.len());
         for (ident, value) in o {
             ib.append(&mut self.accept_expr(value)?);
-            let ident = Constant::Identifier(force_utf8_borrowed(ident).into());
+            let ident = Constant::Identifier((*ident).into());
             idents.push(ident);
         }
 

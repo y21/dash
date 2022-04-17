@@ -303,7 +303,7 @@ pub struct Token<'a> {
     /// The type of token
     pub ty: TokenType,
     /// The full string representation of this token
-    pub full: &'a [u8],
+    pub full: &'a str,
     /// Location of this token in the input string
     pub loc: Location,
 }
@@ -393,25 +393,17 @@ impl<'a> ErrorKind<'a> {
     /// Formats the error by calling to_string on the underlying Location
     pub fn to_string(&self, source: &[u8]) -> String {
         match self {
-            Self::UnknownToken(tok) => {
-                let full_utf8 = std::str::from_utf8(tok.full).unwrap();
-                tok.loc
-                    .to_string(source, Either::Left(full_utf8), "unknown token", true)
-            }
+            Self::UnknownToken(tok) => tok.loc.to_string(source, Either::Left(tok.full), "unknown token", true),
             Self::UnexpectedToken(tok, _) | Self::UnexpectedTokenMultiple(tok, _) => {
-                let full_utf8 = std::str::from_utf8(tok.full).unwrap();
                 tok.loc
-                    .to_string(source, Either::Left(full_utf8), "unexpected token", true)
+                    .to_string(source, Either::Left(tok.full), "unexpected token", true)
             }
-            Self::ParseIntError(tok, err) => {
-                let full_utf8 = std::str::from_utf8(tok.full).unwrap();
-                tok.loc.to_string(
-                    source,
-                    Either::Left(full_utf8),
-                    &format!("int parsing failed: {}", err),
-                    false,
-                )
-            }
+            Self::ParseIntError(tok, err) => tok.loc.to_string(
+                source,
+                Either::Left(tok.full),
+                &format!("int parsing failed: {}", err),
+                false,
+            ),
             Self::UnexpectedEof => String::from("unexpected end of input"),
         }
     }

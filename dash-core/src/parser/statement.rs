@@ -49,12 +49,12 @@ pub enum Statement<'a> {
 #[derive(Debug, Clone)]
 pub enum SpecifierKind<'a> {
     /// A raw identifier
-    Ident(&'a [u8]),
+    Ident(&'a str),
 }
 
 impl<'a> SpecifierKind<'a> {
     /// Attempts to return self as an identifier
-    pub fn as_ident(&self) -> Option<&'a [u8]> {
+    pub fn as_ident(&self) -> Option<&'a str> {
         match self {
             Self::Ident(i) => Some(i),
         }
@@ -67,9 +67,9 @@ pub enum ImportKind<'a> {
     /// import("foo")
     Dynamic(Expr<'a>),
     /// import foo from "bar"
-    DefaultAs(SpecifierKind<'a>, &'a [u8]),
+    DefaultAs(SpecifierKind<'a>, &'a str),
     /// import * as foo from "bar"
-    AllAs(SpecifierKind<'a>, &'a [u8]),
+    AllAs(SpecifierKind<'a>, &'a str),
 }
 
 /// Type of export statement
@@ -78,7 +78,7 @@ pub enum ExportKind<'a> {
     /// export default foo
     Default(Expr<'a>),
     /// export { foo, bar }
-    Named(Vec<&'a [u8]>),
+    Named(Vec<&'a str>),
     /// export let foo = "bar"
     NamedVar(Vec<VariableDeclaration<'a>>),
 }
@@ -94,7 +94,7 @@ impl<'a> ImportKind<'a> {
     }
 
     /// Attempts to return the underlying module target, if present
-    pub fn get_module_target(&self) -> Option<&'a [u8]> {
+    pub fn get_module_target(&self) -> Option<&'a str> {
         match self {
             Self::Dynamic(_) => None,
             Self::DefaultAs(_, i) => Some(i),
@@ -109,12 +109,12 @@ pub struct Catch<'a> {
     /// The body of a catch statement
     pub body: Box<Statement<'a>>,
     /// The identifier of the variable that receives the thrown error
-    pub ident: Option<&'a [u8]>,
+    pub ident: Option<&'a str>,
 }
 
 impl<'a> Catch<'a> {
     /// Creates a new catch statement
-    pub fn new(body: Statement<'a>, ident: Option<&'a [u8]>) -> Self {
+    pub fn new(body: Statement<'a>, ident: Option<&'a str>) -> Self {
         Self {
             body: Box::new(body),
             ident,
@@ -252,9 +252,9 @@ pub enum FunctionKind {
 #[derive(Debug, Clone)]
 pub struct FunctionDeclaration<'a> {
     /// The name of this function, if present
-    pub name: Option<&'a [u8]>,
+    pub name: Option<&'a str>,
     /// Function parameter names
-    pub arguments: Vec<&'a [u8]>,
+    pub arguments: Vec<&'a str>,
     /// Function body
     pub statements: Vec<Statement<'a>>,
     /// The type of function
@@ -264,8 +264,8 @@ pub struct FunctionDeclaration<'a> {
 impl<'a> FunctionDeclaration<'a> {
     /// Creates a new function declaration
     pub fn new(
-        name: Option<&'a [u8]>,
-        arguments: Vec<&'a [u8]>,
+        name: Option<&'a str>,
+        arguments: Vec<&'a str>,
         statements: Vec<Statement<'a>>,
         ty: FunctionKind,
     ) -> Self {
@@ -345,7 +345,7 @@ impl From<TokenType> for VariableDeclarationKind {
 #[derive(Debug, Clone)]
 pub struct VariableBinding<'a> {
     /// The name/identifier of this variable
-    pub name: &'a [u8],
+    pub name: &'a str,
     /// The type of this variable
     pub kind: VariableDeclarationKind,
 }
@@ -372,7 +372,7 @@ pub struct Class<'a> {
     /// The name of this class, if present
     ///
     /// Class expressions don't necessarily need to have a name
-    pub name: Option<&'a [u8]>,
+    pub name: Option<&'a str>,
     /// The superclass of this class, if present
     pub extends: Option<Expr<'a>>,
     /// Members of this class
@@ -406,13 +406,13 @@ impl<'a> ClassMember<'a> {
         }
 
         match &self.kind {
-            ClassMemberKind::Method(m) if m.name == Some(b"constructor") => Some(m),
+            ClassMemberKind::Method(m) if m.name == Some("constructor") => Some(m),
             _ => None,
         }
     }
 
     /// Returns the identifier of this class member
-    pub fn name(&self) -> &'a [u8] {
+    pub fn name(&self) -> &'a str {
         match &self.kind {
             ClassMemberKind::Property(p) => p.name,
             // Methods *always* have names, so unwrapping is OK here
@@ -434,7 +434,7 @@ pub enum ClassMemberKind<'a> {
 #[derive(Debug, Clone)]
 pub struct ClassProperty<'a> {
     /// The name of this property
-    pub name: &'a [u8],
+    pub name: &'a str,
     /// The default value of this property, set when its constructor is called
     pub value: Option<Expr<'a>>,
 }

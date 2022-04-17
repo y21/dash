@@ -42,7 +42,7 @@ impl<'a> Scope<'a> {
         }
     }
 
-    pub fn find_local(&self, identifier: &[u8]) -> Option<(u16, &ScopeLocal<'a>)> {
+    pub fn find_local(&self, identifier: &str) -> Option<(u16, &ScopeLocal<'a>)> {
         self.locals
             .iter()
             .enumerate()

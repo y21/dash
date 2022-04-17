@@ -1,7 +1,5 @@
 use std::borrow::Cow;
 
-use crate::compiler::builder::force_utf8_borrowed;
-
 use super::{statement::FunctionDeclaration, token::TokenType};
 
 /// The sequence operator (`expr, expr`)
@@ -11,7 +9,7 @@ pub type Postfix<'a> = (TokenType, Box<Expr<'a>>);
 /// An array literal expression (`[expr, expr]`)
 pub type ArrayLiteral<'a> = Vec<Expr<'a>>;
 /// An object literal expression (`{ k: "v" }`)
-pub type ObjectLiteral<'a> = Vec<(/*(Expr<'a>*/ &'a [u8], Expr<'a>)>;
+pub type ObjectLiteral<'a> = Vec<(/*(Expr<'a>*/ &'a str, Expr<'a>)>;
 
 /// A parsed expression
 #[derive(Debug, Clone)]
@@ -75,13 +73,13 @@ impl<'a> Expr<'a> {
     }
 
     /// Creates a string literal expression
-    pub fn string_literal(s: &'a [u8]) -> Self {
-        Self::Literal(LiteralExpr::String(s))
+    pub fn string_literal(s: &'a str) -> Self {
+        Self::Literal(LiteralExpr::String(Cow::Borrowed(s)))
     }
 
     /// Creates an identifier literal expression
-    pub fn identifier(s: &'a [u8]) -> Self {
-        Self::Literal(LiteralExpr::Identifier(s))
+    pub fn identifier(s: &'a str) -> Self {
+        Self::Literal(LiteralExpr::Identifier(Cow::Borrowed(s)))
     }
 
     /// Creates a null literal expression
@@ -124,7 +122,7 @@ impl<'a> Expr<'a> {
     /// Tries to convert an expression into a list of arrow function parameters
     ///
     /// We only know whether a value is an arrow function after parsing
-    pub fn to_arrow_function_parameter_list(&self) -> Option<Vec<&'a [u8]>> {
+    pub fn to_arrow_function_parameter_list(&self) -> Option<Vec<&'a str>> {
         match self {
             Self::Grouping(g) => {
                 let mut list = Vec::with_capacity(g.0.len());
@@ -133,15 +131,15 @@ impl<'a> Expr<'a> {
                 }
                 Some(list)
             }
-            Self::Literal(lit) => Some(vec![lit.as_identifier()?]),
+            Self::Literal(lit) => Some(vec![lit.as_identifier_borrowed()?]),
             _ => None,
         }
     }
 
     /// Tries to return the identifier that is associated to this expression
-    pub fn as_identifier(&self) -> Option<&'a [u8]> {
+    pub fn as_identifier(&self) -> Option<&'a str> {
         match self {
-            Self::Literal(lit) => lit.as_identifier(),
+            Self::Literal(lit) => lit.as_identifier_borrowed(),
             _ => None,
         }
     }
@@ -243,11 +241,11 @@ pub enum LiteralExpr<'a> {
     /// Boolean literal
     Boolean(bool),
     /// Identifier literal (variable lookup)
-    Identifier(&'a [u8]),
+    Identifier(Cow<'a, str>),
     /// Number literal
     Number(f64),
     /// String literal, borrowed from input string
-    String(&'a [u8]),
+    String(Cow<'a, str>),
     /// Null literal
     Null,
     /// Undefined literal
@@ -256,13 +254,19 @@ pub enum LiteralExpr<'a> {
 
 impl<'a> LiteralExpr<'a> {
     /// Tries to get the identifier of a literal, if present
-    pub fn as_identifier(&self) -> Option<&'a [u8]> {
+    pub fn as_identifier_borrowed(&self) -> Option<&'a str> {
         match self {
-            Self::Boolean(b) => Some(b.then(|| b"true" as &[u8]).unwrap_or(b"false" as &[u8])),
-            Self::Identifier(ident) => Some(ident),
-            Self::Undefined => Some(b"undefined" as &[u8]),
-            Self::Null => Some(b"null" as &[u8]),
-            Self::String(s) => Some(s),
+            Self::Boolean(b) => Some(b.then(|| "true").unwrap_or("false")),
+            Self::Identifier(ident) => match ident {
+                Cow::Borrowed(i) => Some(i),
+                _ => None,
+            },
+            Self::Undefined => Some("undefined"),
+            Self::Null => Some("null"),
+            Self::String(s) => match s {
+                Cow::Borrowed(s) => Some(s),
+                _ => None,
+            },
             _ => None,
         }
     }
@@ -271,11 +275,11 @@ impl<'a> LiteralExpr<'a> {
     pub fn to_identifier(&self) -> Cow<'a, str> {
         match self {
             Self::Boolean(b) => Cow::Borrowed(b.then(|| "true").unwrap_or("false")),
-            Self::Identifier(ident) => Cow::Borrowed(force_utf8_borrowed(ident)),
+            Self::Identifier(ident) => ident.clone(),
             Self::Undefined => Cow::Borrowed("undefined"),
             Self::Null => Cow::Borrowed("null"),
             Self::Number(n) => Cow::Owned(n.to_string()),
-            Self::String(s) => Cow::Borrowed(force_utf8_borrowed(s)),
+            Self::String(s) => s.clone(),
         }
     }
 

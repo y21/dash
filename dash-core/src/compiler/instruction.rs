@@ -1,7 +1,7 @@
 use std::convert::TryInto;
 
 use super::{
-    builder::{force_utf8_borrowed, InstructionBuilder, Label},
+    builder::{InstructionBuilder, Label},
     constant::{Constant, ConstantPool, LimitExceededError},
     error::CompileError,
     FunctionCallMetadata,
@@ -146,14 +146,14 @@ pub trait InstructionWriter {
     /// Builds the [JMP] instructions
     fn build_jmp(&mut self, label: Label);
     fn build_call(&mut self, meta: FunctionCallMetadata);
-    fn build_static_prop_access(&mut self, cp: &mut ConstantPool, ident: &[u8], preserve_this: bool) -> Result<(), LimitExceededError>;
+    fn build_static_prop_access(&mut self, cp: &mut ConstantPool, ident: &str, preserve_this: bool) -> Result<(), LimitExceededError>;
     fn build_dynamic_prop_access(&mut self, preserve_this: bool);
-    fn build_static_prop_set(&mut self, cp: &mut ConstantPool, ident: &[u8]) -> Result<(), LimitExceededError>;
+    fn build_static_prop_set(&mut self, cp: &mut ConstantPool, ident: &str) -> Result<(), LimitExceededError>;
     fn build_dynamic_prop_set(&mut self);
     fn build_constant(&mut self, cp: &mut ConstantPool, constant: Constant) -> Result<(), LimitExceededError>;
     fn build_local_load(&mut self, index: u16, is_extern: bool);
-    fn build_global_load(&mut self, cp: &mut ConstantPool, ident: &[u8]) -> Result<(), LimitExceededError>;
-    fn build_global_store(&mut self, cp: &mut ConstantPool, ident: &[u8]) -> Result<(), LimitExceededError>;
+    fn build_global_load(&mut self, cp: &mut ConstantPool, ident: &str) -> Result<(), LimitExceededError>;
+    fn build_global_store(&mut self, cp: &mut ConstantPool, ident: &str) -> Result<(), LimitExceededError>;
     fn build_local_store(&mut self, id: u16, is_extern: bool);
     fn build_try_block(&mut self);
     fn build_try_end(&mut self);
@@ -234,14 +234,14 @@ impl InstructionWriter for InstructionBuilder {
         self.write_wide_instr(thin, wide, index);
     }
 
-    fn build_global_load(&mut self, cp: &mut ConstantPool, ident: &[u8]) -> Result<(), LimitExceededError> {
-        let id = cp.add(Constant::Identifier(force_utf8_borrowed(ident).into()))?;
+    fn build_global_load(&mut self, cp: &mut ConstantPool, ident: &str) -> Result<(), LimitExceededError> {
+        let id = cp.add(Constant::Identifier(ident.into()))?;
         self.write_wide_instr(LDGLOBAL, LDGLOBALW, id);
         Ok(())
     }
 
-    fn build_global_store(&mut self, cp: &mut ConstantPool, ident: &[u8]) -> Result<(), LimitExceededError> {
-        let id = cp.add(Constant::Identifier(force_utf8_borrowed(ident).into()))?;
+    fn build_global_store(&mut self, cp: &mut ConstantPool, ident: &str) -> Result<(), LimitExceededError> {
+        let id = cp.add(Constant::Identifier(ident.into()))?;
         self.write_wide_instr(STOREGLOBAL, STOREGLOBALW, id);
         Ok(())
     }
@@ -303,10 +303,10 @@ impl InstructionWriter for InstructionBuilder {
     fn build_static_prop_access(
         &mut self,
         cp: &mut ConstantPool,
-        ident: &[u8],
+        ident: &str,
         preserve_this: bool,
     ) -> Result<(), LimitExceededError> {
-        let id = cp.add(Constant::Identifier(force_utf8_borrowed(ident).into()))?;
+        let id = cp.add(Constant::Identifier(ident.into()))?;
         self.write_wide_instr(STATICPROPACCESS, STATICPROPACCESSW, id);
         self.write(preserve_this.into());
 
@@ -317,8 +317,8 @@ impl InstructionWriter for InstructionBuilder {
         self.write_all(&[DYNAMICPROPACCESS, preserve_this.into()]);
     }
 
-    fn build_static_prop_set(&mut self, cp: &mut ConstantPool, ident: &[u8]) -> Result<(), LimitExceededError> {
-        let id = cp.add(Constant::Identifier(force_utf8_borrowed(ident).into()))?;
+    fn build_static_prop_set(&mut self, cp: &mut ConstantPool, ident: &str) -> Result<(), LimitExceededError> {
+        let id = cp.add(Constant::Identifier(ident.into()))?;
         self.write_wide_instr(STATICPROPSET, STATICPROPSETW, id);
 
         Ok(())

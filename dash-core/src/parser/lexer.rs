@@ -3,6 +3,14 @@ use std::{borrow::Cow, ops::Range};
 use super::token::{Location, Token, TokenType};
 use crate::util::{self, Either};
 
+fn force_utf8(s: &[u8]) -> String {
+    std::str::from_utf8(s).expect("Invalid UTF8").into()
+}
+
+fn force_utf8_borrowed(s: &[u8]) -> &str {
+    std::str::from_utf8(s).expect("Invalid UTF8")
+}
+
 /// A JavaScript source code lexer
 #[derive(Debug)]
 pub struct Lexer<'a> {
@@ -117,7 +125,7 @@ impl<'a> Lexer<'a> {
                 offset: self.start,
                 line_offset: self.line_idx,
             },
-            full: self.get_lexeme(),
+            full: force_utf8_borrowed(self.get_lexeme()),
         })
     }
 
@@ -171,7 +179,7 @@ impl<'a> Lexer<'a> {
                 offset: lexeme.as_ptr() as usize - self.input.as_ptr() as usize,
                 line_offset: self.line_idx,
             },
-            full: lexeme,
+            full: force_utf8_borrowed(lexeme),
         }
     }
 

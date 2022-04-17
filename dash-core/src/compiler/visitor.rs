@@ -69,7 +69,7 @@ pub trait Visitor<'a, V> {
     fn visit_literal_expression(&mut self, e: &LiteralExpr<'a>) -> V;
 
     /// Visits an identifier
-    fn visit_identifier_expression(&mut self, i: &'a [u8]) -> V;
+    fn visit_identifier_expression(&mut self, i: &str) -> V;
 
     /// Visits an unary expression
     fn visit_unary_expression(&mut self, e: &UnaryExpr<'a>) -> V;

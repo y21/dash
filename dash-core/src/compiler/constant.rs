@@ -4,9 +4,6 @@ use std::rc::Rc;
 use crate::parser::expr::LiteralExpr;
 use crate::parser::statement::FunctionKind;
 
-use super::builder::force_utf8;
-use super::builder::force_utf8_borrowed;
-
 #[derive(Debug, Clone)]
 pub struct Function {
     pub name: Option<String>,
@@ -63,8 +60,8 @@ impl<'a> From<&LiteralExpr<'a>> for Constant {
     fn from(expr: &LiteralExpr<'a>) -> Self {
         match expr {
             LiteralExpr::Number(n) => Constant::Number(*n),
-            LiteralExpr::Identifier(s) => Constant::Identifier(force_utf8_borrowed(s).into()),
-            LiteralExpr::String(s) => Constant::String(force_utf8(s)),
+            LiteralExpr::Identifier(s) => Constant::Identifier(s.as_ref().into()),
+            LiteralExpr::String(s) => Constant::String(s.as_ref().into()),
             LiteralExpr::Boolean(b) => Constant::Boolean(*b),
             LiteralExpr::Null => Constant::Null,
             LiteralExpr::Undefined => Constant::Undefined,
