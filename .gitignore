@@ -1,10 +1,7 @@
 */target/*
 .idea
-dash
-wasm/frontend/node_modules
-wasm/frontend/*.js
-wasm/frontend/test.ts
-wasm/frontend/dist
+dash-wasm/target
 target
 *.json
 *.sh
+dash-cli/tests

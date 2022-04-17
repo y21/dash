@@ -1,0 +1,13 @@
+[workspace]
+members = [
+    "dash-core",
+    "dash-cli",
+    "testrunner",
+    "dash-wasm",
+    "dash-proc-macro",
+]
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"

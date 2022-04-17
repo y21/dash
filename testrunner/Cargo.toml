@@ -7,7 +7,7 @@ edition = "2018"
 
 [dependencies]
 console = "0.14.1"
-dash = { path="../core/" }
+dash-core = { path = "../dash-core" }
 structopt = "0.3"
-tokio = { version="1.7.0", features=["full"] }
+tokio = { version = "1.7.0", features = ["full"] }
 futures = "0.3"

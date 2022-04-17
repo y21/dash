@@ -1,8 +1,0 @@
-[package]
-name = "dash"
-version = "0.1.2"
-authors = ["y21"]
-edition = "2018"
-license = "MIT"
-
-[dependencies]
