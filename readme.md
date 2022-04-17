@@ -60,14 +60,10 @@ fn main() {
     let source = "const x = 42; x * x";
     let (result, vm) = dash::eval(source, Default::default()).unwrap();
 
-    println!("Result: {:?}", result);
+    println!("Result: {}", match result {
+        Value::Number(n) => n,
+        _ => unreachable!()
+    });
 }
 ```
 <sub>See `dash-cli/` for a more detailed example</sub>
-
-## Project structure
-- `dash-cli/`: A command line program that embeds the core engine and runtime, used to run JavaScript code. End users will use this. 
-- `dash-core/`: A JavaScript engine (lexer, parser, compiler, VM) that can be embedded into any application to run JavaScript code.
-- `dash-rt/`: A runtime that adds additional features that are often used by JavaScript applications, such as access to the file system.
-- `testrunner/` and `test262/`: ECMAScript spec compliance testing. Not used yet because of lack of features required for running tests.
-- `dash-wasm/`: WebAssembly back- and frontend. Provides bindings to core project and makes it possible to embed the engine in the browser.
