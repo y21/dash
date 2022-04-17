@@ -28,11 +28,12 @@ mod handlers {
 
     fn evaluate_binary_expr<F>(vm: &mut Vm, fun: F) -> Result<Option<HandleResult>, Value>
     where
-        F: Fn(Value, Value, &mut Vm) -> Result<Value, Value>,
+        F: Fn(&Value, &Value, &mut LocalScope) -> Result<Value, Value>,
     {
         let right = vm.stack.pop().expect("No right operand");
         let left = vm.stack.pop().expect("No left operand");
-        let result = fun(left, right, vm)?;
+        let mut scope = LocalScope::new(vm);
+        let result = fun(&left, &right, &mut scope)?;
         vm.try_push_stack(result)?;
         Ok(None)
     }
@@ -50,51 +51,51 @@ mod handlers {
     }
 
     pub fn add(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| Ok(l.add(&r)))
+        evaluate_binary_expr(vm, Value::add)
     }
 
     pub fn sub(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| Ok(l.sub(&r)))
+        evaluate_binary_expr(vm, Value::sub)
     }
 
     pub fn mul(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| Ok(l.mul(&r)))
+        evaluate_binary_expr(vm, Value::mul)
     }
 
     pub fn div(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| Ok(l.div(&r)))
+        evaluate_binary_expr(vm, Value::div)
     }
 
     pub fn rem(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| Ok(l.rem(&r)))
+        evaluate_binary_expr(vm, Value::rem)
     }
 
     pub fn pow(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| Ok(l.pow(&r)))
+        evaluate_binary_expr(vm, Value::pow)
     }
 
     pub fn bitor(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| l.bitor(&r))
+        evaluate_binary_expr(vm, Value::bitor)
     }
 
     pub fn bitxor(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| l.bitxor(&r))
+        evaluate_binary_expr(vm, Value::bitxor)
     }
 
     pub fn bitand(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| l.bitand(&r))
+        evaluate_binary_expr(vm, Value::bitand)
     }
 
     pub fn bitshl(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| l.bitshl(&r))
+        evaluate_binary_expr(vm, Value::bitshl)
     }
 
     pub fn bitshr(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| l.bitshr(&r))
+        evaluate_binary_expr(vm, Value::bitshr)
     }
 
     pub fn bitushr(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| l.bitushr(&r))
+        evaluate_binary_expr(vm, Value::bitushr)
     }
 
     pub fn objin(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {

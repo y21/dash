@@ -5,7 +5,7 @@ use crate::vm::value::{
 #[rustfmt::skip]
 pub fn is_nan(cx: CallContext) -> Result<Value, Value> {
     // 1. Let num be ? ToNumber(number).
-    let num = cx.args.first().unwrap_or_undefined().to_number()?;
+    let num = cx.args.first().unwrap_or_undefined().to_number(cx.scope)?;
     // 2. If num is NaN, return true.
     // 3. Otherwise, return false.
     Ok(Value::Boolean(num.is_nan()))
@@ -22,7 +22,7 @@ pub fn log(cx: CallContext) -> Result<Value, Value> {
 
 pub fn is_finite(cx: CallContext) -> Result<Value, Value> {
     // 1. Let num be ? ToNumber(number).
-    let num = cx.args.first().unwrap_or_undefined().to_number()?;
+    let num = cx.args.first().unwrap_or_undefined().to_number(cx.scope)?;
     // 2. If num is NaN, +∞, or -∞, return false.
     // 3. Otherwise, return true.
     Ok(Value::Boolean(num.is_finite()))
@@ -49,7 +49,8 @@ pub fn parse_int(cx: CallContext) -> Result<Value, Value> {
     let radix = cx
         .args
         .get(1)
-        .map(|v| v.to_number())
+        .cloned()
+        .map(|v| v.to_number(cx.scope))
         .transpose()?
         .map(|r| r as u32)
         .unwrap_or(10);

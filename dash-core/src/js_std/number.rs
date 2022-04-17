@@ -5,7 +5,7 @@ use crate::vm::value::Value;
 use crate::vm::value::ValueContext;
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
-    let value = cx.args.get(0).unwrap_or_undefined().to_number()?;
+    let value = cx.args.get(0).unwrap_or_undefined().to_number(cx.scope)?;
     Ok(Value::Number(value))
 }
 
@@ -13,12 +13,13 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
     let radix = cx
         .args
         .first()
-        .map(|v| v.to_number())
+        .cloned()
+        .map(|v| v.to_number(cx.scope))
         .transpose()?
         .map(|n| n as u8)
         .unwrap_or(10);
 
-    let num = cx.this.to_number()? as u64;
+    let num = cx.this.to_number(cx.scope)? as u64;
 
     let re = match radix {
         2 => format!("{:b}", num),
@@ -58,11 +59,12 @@ pub fn is_safe_integer(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn to_fixed(cx: CallContext) -> Result<Value, Value> {
-    let num = cx.this.to_number()?;
+    let num = cx.this.to_number(cx.scope)?;
     let decimals = cx
         .args
         .first()
-        .map(|v| v.to_number())
+        .cloned()
+        .map(|v| v.to_number(cx.scope))
         .transpose()?
         .map(|n| n as usize)
         .unwrap_or(0);

@@ -13,19 +13,19 @@ use crate::vm::value::Value;
 
 pub trait ValueConversion {
     fn to_primitive(&self, sc: &mut LocalScope, preferred_type: Option<PreferredType>) -> Result<Value, Value>;
-    fn to_number(&self) -> Result<f64, Value>;
-    fn to_length(&self) -> Result<f64, Value>;
-    fn to_length_u(&self) -> Result<usize, Value>;
-    fn to_integer_or_infinity(&self) -> Result<f64, Value>;
+    fn to_number(&self, sc: &mut LocalScope) -> Result<f64, Value>;
+    fn to_length(&self, sc: &mut LocalScope) -> Result<f64, Value>;
+    fn to_length_u(&self, sc: &mut LocalScope) -> Result<usize, Value>;
+    fn to_integer_or_infinity(&self, sc: &mut LocalScope) -> Result<f64, Value>;
     fn to_boolean(&self) -> Result<bool, Value>;
     fn to_string(&self, sc: &mut LocalScope) -> Result<Rc<str>, Value>;
     fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value>;
     fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value>;
-    fn to_int32(&self) -> Result<i32, Value>;
+    fn to_int32(&self, sc: &mut LocalScope) -> Result<i32, Value>;
 }
 
 impl ValueConversion for Value {
-    fn to_number(&self) -> Result<f64, Value> {
+    fn to_number(&self, sc: &mut LocalScope) -> Result<f64, Value> {
         match self {
             Value::Number(n) => Ok(*n),
             _ => todo!(), // TODO: implement other cases
@@ -79,9 +79,9 @@ impl ValueConversion for Value {
         }
     }
 
-    fn to_length(&self) -> Result<f64, Value> {
+    fn to_length(&self, sc: &mut LocalScope) -> Result<f64, Value> {
         // Let len be ? ToIntegerOrInfinity(argument).
-        let len = self.to_integer_or_infinity()?;
+        let len = self.to_integer_or_infinity(sc)?;
         // 2. If len ≤ 0, return +0𝔽.
         if len <= 0.0 {
             return Ok(0.0);
@@ -91,9 +91,9 @@ impl ValueConversion for Value {
         Ok(len.min(MAX_SAFE_INTEGERF))
     }
 
-    fn to_integer_or_infinity(&self) -> Result<f64, Value> {
+    fn to_integer_or_infinity(&self, sc: &mut LocalScope) -> Result<f64, Value> {
         // Let number be ? ToNumber(argument).
-        let number = self.to_number()?;
+        let number = self.to_number(sc)?;
         // 2. If number is NaN, +0𝔽, or -0𝔽, return 0.
         if number.is_nan() || number == 0.0 {
             return Ok(0.0);
@@ -116,12 +116,12 @@ impl ValueConversion for Value {
         }
     }
 
-    fn to_length_u(&self) -> Result<usize, Value> {
-        self.to_length().map(|x| x as usize)
+    fn to_length_u(&self, sc: &mut LocalScope) -> Result<usize, Value> {
+        self.to_length(sc).map(|x| x as usize)
     }
 
     fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value> {
-        self.get_property(sc, "length".into())?.to_length_u()
+        self.get_property(sc, "length".into())?.to_length_u(sc)
     }
 
     fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value> {
@@ -145,8 +145,8 @@ impl ValueConversion for Value {
         }
     }
 
-    fn to_int32(&self) -> Result<i32, Value> {
-        let n = self.to_number()?;
+    fn to_int32(&self, sc: &mut LocalScope) -> Result<i32, Value> {
+        let n = self.to_number(sc)?;
         Ok(n as i32)
     }
 }

@@ -89,7 +89,7 @@ define_html_methods_with_attribute! {
 }
 
 pub fn char_at(cx: CallContext) -> Result<Value, Value> {
-    let index = cx.args.first().unwrap_or_undefined().to_number()? as usize;
+    let index = cx.args.first().unwrap_or_undefined().to_number(cx.scope)? as usize;
     let this = cx.this.to_string(cx.scope)?;
     // TODO: this isn't right, but it is what it is
     let c = this.as_bytes()[index] as char;
@@ -97,7 +97,7 @@ pub fn char_at(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn char_code_at(cx: CallContext) -> Result<Value, Value> {
-    let index = cx.args.first().unwrap_or_undefined().to_number()? as usize;
+    let index = cx.args.first().unwrap_or_undefined().to_number(cx.scope)? as usize;
     let this = cx.this.to_string(cx.scope)?;
     // TODO: this isn't right, but it is what it is
     let c = this.as_bytes()[index];
@@ -153,7 +153,7 @@ fn string_pad(cx: CallContext, placement: PadPlacement) -> Result<Value, Value> 
     let s = cx.this.to_string(cx.scope)?;
 
     // 2. Let intMaxLength be ℝ(? ToLength(maxLength)).
-    let int_max_length = cx.args.get(1).unwrap_or_undefined().to_length_u()?;
+    let int_max_length = cx.args.get(1).unwrap_or_undefined().to_length_u(cx.scope)?;
 
     // 3. Let stringLength be the length of S.
     let string_length = s.len();
@@ -207,7 +207,7 @@ pub fn repeat(cx: CallContext) -> Result<Value, Value> {
     let o = cx.this.to_string(cx.scope)?;
 
     // 2. Let n be ? ToInteger(times).
-    let n = cx.args.first().unwrap_or_undefined().to_integer_or_infinity()?;
+    let n = cx.args.first().unwrap_or_undefined().to_integer_or_infinity(cx.scope)?;
 
     // 3. If n < 0, throw a RangeError exception.
     if n < 0.0 {
