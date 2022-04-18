@@ -482,12 +482,14 @@ impl<'a> Lexer<'a> {
                 return;
             };
 
-            if ch == b'\n' {
-                self.line += 1;
-                self.line_idx = self.idx;
-            } else if ch != b' ' {
-                return;
-            }
+            match ch {
+                b'\n' => {
+                    self.line += 1;
+                    self.line_idx = self.idx;
+                }
+                b'\r' | b'\t' | b' ' => {}
+                _ => return,
+            };
 
             self.advance();
         }
