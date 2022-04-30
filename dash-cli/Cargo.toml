@@ -5,7 +5,12 @@ edition = "2018"
 
 
 [dependencies]
-dash-core = { path = "../dash-core" }
 anyhow = "1.0"
 clap = "3.0.0"
 rustyline = "9.1.2"
+
+[dependencies.dash-core]
+path = "../dash-core"
+features = [
+    "s1-type-annotations"
+]

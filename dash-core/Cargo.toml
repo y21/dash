@@ -7,6 +7,8 @@ license = "MIT"
 
 [features]
 decompile = []
+s1-type-annotations = []
 
 [dependencies]
 dash-proc-macro = { path = "../dash-proc-macro" }
+derive_more = "0.99.17"

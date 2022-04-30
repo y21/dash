@@ -1,9 +1,11 @@
-use std::cell::RefCell;
+use std::{cell::RefCell, fmt};
+
+use derive_more::Display;
 
 use super::{expr::Expr, token::TokenType};
 
 /// A JavaScript statement
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
 pub enum Statement<'a> {
     /// Expression statement
     Expression(Expr<'a>),
@@ -30,15 +32,19 @@ pub enum Statement<'a> {
     /// Class declaration
     Class(Class<'a>),
     /// Continue loop statement
+    #[display(fmt = "continue;")]
     Continue,
     /// Break loop statement
+    #[display(fmt = "break;")]
     Break,
     /// Debugger statement
+    #[display(fmt = "debugger;")]
     Debugger,
     /// An empty statement
     ///
     /// This is impossible to occur in JavaScript code, however a statement may be folded to an empty statement
     /// if it does not have any side effects.
+    #[display(fmt = ";")]
     Empty,
 }
 
@@ -46,9 +52,10 @@ pub enum Statement<'a> {
 ///
 /// This is used in import/export statements, as well as variable declaration
 /// in the future. When destructuring is implemented, this enum will make more sense.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
 pub enum SpecifierKind<'a> {
     /// A raw identifier
+    #[display(fmt = "{_0}")]
     Ident(&'a str),
 }
 
@@ -62,13 +69,15 @@ impl<'a> SpecifierKind<'a> {
 }
 
 /// Type of import statement
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
 pub enum ImportKind<'a> {
-    /// import("foo")
+    #[display(fmt = "import({_0})")]
     Dynamic(Expr<'a>),
     /// import foo from "bar"
+    #[display(fmt = "import {_0} from \"{_1}\"")]
     DefaultAs(SpecifierKind<'a>, &'a str),
     /// import * as foo from "bar"
+    #[display(fmt = "import * as {_0} from \"{_1}\"")]
     AllAs(SpecifierKind<'a>, &'a str),
 }
 
@@ -81,6 +90,24 @@ pub enum ExportKind<'a> {
     Named(Vec<&'a str>),
     /// export let foo = "bar"
     NamedVar(Vec<VariableDeclaration<'a>>),
+}
+
+impl<'a> fmt::Display for ExportKind<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Default(e) => write!(f, "export default {e}"),
+            Self::Named(es) => {
+                write!(f, "export {{ ")?;
+                fmt_list(f, es, ",")?;
+                write!(f, " }}")
+            }
+            Self::NamedVar(nv) => {
+                write!(f, "export {{ ")?;
+                fmt_list(f, nv, ",")?;
+                write!(f, " }}")
+            }
+        }
+    }
 }
 
 impl<'a> ImportKind<'a> {
@@ -104,7 +131,8 @@ impl<'a> ImportKind<'a> {
 }
 
 /// A catch statement
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
+#[display(fmt = "catch ({}) {{ {} }}", "ident.unwrap_or(\"_\")", "body")]
 pub struct Catch<'a> {
     /// The body of a catch statement
     pub body: Box<Statement<'a>>,
@@ -128,9 +156,22 @@ pub struct TryCatch<'a> {
     /// The body of the try statement
     pub try_: Box<Statement<'a>>,
     /// Catch statement
+    // TODO: make this optional. a try can exist without catch (try finally)
     pub catch: Catch<'a>,
     /// Optional finally block
     pub finally: Option<Box<Statement<'a>>>,
+}
+
+impl<'a> fmt::Display for TryCatch<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "try {{ {} }} {}", self.try_, self.catch)?;
+
+        if let Some(finally) = &self.finally {
+            write!(f, " finally {{ {} }}", finally)?;
+        }
+
+        Ok(())
+    }
 }
 
 impl<'a> TryCatch<'a> {
@@ -145,7 +186,8 @@ impl<'a> TryCatch<'a> {
 }
 
 /// A return statement
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
+#[display(fmt = "return {}", _0)]
 pub struct ReturnStatement<'a>(pub Expr<'a>);
 
 impl<'a> Default for ReturnStatement<'a> {
@@ -155,7 +197,7 @@ impl<'a> Default for ReturnStatement<'a> {
 }
 
 /// A loop statement
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
 pub enum Loop<'a> {
     /// A for loop
     For(ForLoop<'a>),
@@ -178,7 +220,8 @@ impl<'a> From<WhileLoop<'a>> for Loop<'a> {
 }
 
 /// A for..of loop
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
+#[display(fmt = "for ({} of {}) {{ {} }}", binding, expr, body)]
 pub struct ForOfLoop<'a> {
     /// The binding of this loop
     pub binding: VariableBinding<'a>,
@@ -201,6 +244,30 @@ pub struct ForLoop<'a> {
     pub body: Box<Statement<'a>>,
 }
 
+impl<'a> fmt::Display for ForLoop<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "for(")?;
+
+        if let Some(init) = &self.init {
+            write!(f, "{}", init)?;
+        }
+
+        write!(f, ";")?;
+
+        if let Some(condition) = &self.condition {
+            write!(f, "{}", condition)?;
+        }
+
+        write!(f, ";")?;
+
+        if let Some(finalizer) = &self.finalizer {
+            write!(f, "{}", finalizer)?;
+        }
+
+        write!(f, ") {{ {} }}", self.body)
+    }
+}
+
 impl<'a> ForLoop<'a> {
     /// Creates a new for loop
     pub fn new(
@@ -219,7 +286,8 @@ impl<'a> ForLoop<'a> {
 }
 
 /// A while loop
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
+#[display(fmt = "while ({}) {{ {} }}", condition, body)]
 pub struct WhileLoop<'a> {
     /// The condition of this while loop, used to determine when to stop iterating
     pub condition: Expr<'a>,
@@ -261,6 +329,42 @@ pub struct FunctionDeclaration<'a> {
     pub ty: FunctionKind,
 }
 
+impl<'a> fmt::Display for FunctionDeclaration<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // TODO: ty
+
+        write!(f, "function")?;
+
+        if let Some(name) = self.name {
+            write!(f, " {name}")?;
+        }
+
+        write!(f, "(")?;
+
+        fmt_list(f, &self.arguments, ",")?;
+
+        write!(f, ") {{")?;
+
+        fmt_list(f, &self.statements, ";")?;
+
+        Ok(())
+    }
+}
+
+pub fn fmt_list<'a, D>(f: &mut fmt::Formatter<'a>, it: &[D], delim: &str) -> fmt::Result
+where
+    D: fmt::Display,
+{
+    for (i, expr) in it.iter().enumerate() {
+        if i > 0 {
+            write!(f, "{delim} ")?;
+        }
+        write!(f, "{}", expr)?;
+    }
+
+    Ok(())
+}
+
 impl<'a> FunctionDeclaration<'a> {
     /// Creates a new function declaration
     pub fn new(
@@ -282,6 +386,18 @@ impl<'a> FunctionDeclaration<'a> {
 #[derive(Debug, Clone)]
 pub struct BlockStatement<'a>(pub Vec<Statement<'a>>);
 
+impl<'a> fmt::Display for BlockStatement<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{{")?;
+
+        fmt_list(f, &self.0, ";")?;
+
+        write!(f, "}}")?;
+
+        Ok(())
+    }
+}
+
 /// An if statement
 #[derive(Debug, Clone)]
 pub struct IfStatement<'a> {
@@ -298,6 +414,23 @@ pub struct IfStatement<'a> {
     pub branches: RefCell<Vec<IfStatement<'a>>>,
     /// Last else branch that executes if no other branch matches, if present
     pub el: Option<Box<Statement<'a>>>,
+}
+
+impl<'a> fmt::Display for IfStatement<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "if ({}) {{ {} }} ", self.condition, self.then)?;
+
+        let branches = self.branches.borrow();
+        for IfStatement { condition, then, .. } in branches.iter() {
+            write!(f, " else if ({condition}) {{ {then} }} ")?;
+        }
+
+        if let Some(el) = &self.el {
+            write!(f, " else {{ {el} }}")?;
+        }
+
+        Ok(())
+    }
 }
 
 impl<'a> IfStatement<'a> {
@@ -318,15 +451,22 @@ impl<'a> IfStatement<'a> {
 }
 
 /// The type of a variable declaration
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Display)]
 pub enum VariableDeclarationKind {
     /// Var: lifetime extends to function scope
+    #[display(fmt = "var")]
     Var,
+
     /// Let: lifetime limited to block scope
+    #[display(fmt = "let")]
     Let,
+
     /// Const: lifetime limited to block scope and no reassigns allowed
+    #[display(fmt = "const")]
     Const,
+
     /// Unnameable variables cannot be referred to by JavaScript code directly and are created by the compiler
+    #[display(fmt = "__intrinsic_var")]
     Unnameable,
 }
 
@@ -342,7 +482,8 @@ impl From<TokenType> for VariableDeclarationKind {
 }
 
 /// A variable binding
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
+#[display(fmt = "{} {}", kind, name)]
 pub struct VariableBinding<'a> {
     /// The name/identifier of this variable
     pub name: &'a str,
@@ -357,6 +498,18 @@ pub struct VariableDeclaration<'a> {
     pub binding: VariableBinding<'a>,
     /// The value of this variable, if it was initialized
     pub value: Option<Expr<'a>>,
+}
+
+impl<'a> fmt::Display for VariableDeclaration<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.binding)?;
+
+        if let Some(value) = &self.value {
+            write!(f, " = {}", value)?;
+        }
+
+        write!(f, ";")
+    }
 }
 
 impl<'a> VariableDeclaration<'a> {
@@ -379,6 +532,22 @@ pub struct Class<'a> {
     pub members: Vec<ClassMember<'a>>,
 }
 
+impl<'a> fmt::Display for Class<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "class {}", self.name.unwrap_or_default())?;
+
+        if let Some(extends) = &self.extends {
+            write!(f, " extends {}", extends)?;
+        }
+
+        write!(f, " {{\n")?;
+
+        fmt_list(f, &self.members, ";")?;
+
+        write!(f, "}}")
+    }
+}
+
 impl<'a> Class<'a> {
     /// Returns a reference to the constructor, if present
     pub fn constructor(&self) -> Option<&FunctionDeclaration<'a>> {
@@ -395,6 +564,20 @@ pub struct ClassMember<'a> {
     pub private: bool,
     /// The type of class member
     pub kind: ClassMemberKind<'a>,
+}
+
+impl<'a> fmt::Display for ClassMember<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.static_ {
+            write!(f, "static ")?;
+        }
+
+        if self.private {
+            write!(f, "private ")?;
+        }
+
+        write!(f, "{}", self.kind)
+    }
 }
 
 impl<'a> ClassMember<'a> {
@@ -422,7 +605,7 @@ impl<'a> ClassMember<'a> {
 }
 
 /// The type of class member
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
 pub enum ClassMemberKind<'a> {
     /// A class method
     Method(FunctionDeclaration<'a>),
@@ -437,4 +620,16 @@ pub struct ClassProperty<'a> {
     pub name: &'a str,
     /// The default value of this property, set when its constructor is called
     pub value: Option<Expr<'a>>,
+}
+
+impl<'a> fmt::Display for ClassProperty<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name)?;
+
+        if let Some(value) = &self.value {
+            write!(f, " = {}", value)?;
+        }
+
+        write!(f, ";")
+    }
 }

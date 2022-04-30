@@ -7,6 +7,7 @@ use dash::parser::parser::Parser;
 use dash::vm::local::LocalScope;
 use dash::vm::value::ops::abstractions::conversions::ValueConversion;
 use dash::vm::value::Value;
+use std::fmt::Write;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -14,6 +15,12 @@ pub enum OptLevel {
     None,
     Basic,
     Aggressive,
+}
+
+#[wasm_bindgen]
+pub enum Emit {
+    Bytecode,
+    JavaScript,
 }
 
 impl From<OptLevel> for dash::optimizer::consteval::OptLevel {
@@ -46,15 +53,27 @@ pub fn eval(s: &str, opt: OptLevel) -> String {
 }
 
 #[wasm_bindgen]
-pub fn decompile(s: &str, o: OptLevel) -> String {
+pub fn decompile(s: &str, o: OptLevel, em: Emit) -> String {
     let parser = Parser::from_str(s).unwrap();
     let mut ast = parser.parse_all().unwrap();
     optimizer::optimize_ast(&mut ast, o.into());
-    let cmp = FunctionCompiler::new().compile_ast(ast).unwrap();
-    decompiler::decompile(cmp).unwrap_or_else(|e| match e {
-        decompiler::DecompileError::AbruptEof => String::from("Error: Abrupt end of file"),
-        decompiler::DecompileError::UnknownInstruction(u) => {
-            format!("Error: Unknown or unimplemented instruction 0x{:x}", u)
+
+    match em {
+        Emit::Bytecode => {
+            let cmp = FunctionCompiler::new().compile_ast(ast).unwrap();
+            decompiler::decompile(cmp).unwrap_or_else(|e| match e {
+                decompiler::DecompileError::AbruptEof => String::from("Error: Abrupt end of file"),
+                decompiler::DecompileError::UnknownInstruction(u) => {
+                    format!("Error: Unknown or unimplemented instruction 0x{:x}", u)
+                }
+            })
         }
-    })
+        Emit::JavaScript => {
+            let mut output = String::new();
+            for node in ast {
+                let _ = write!(output, "{node}; ");
+            }
+            output
+        }
+    }
 }

@@ -77,10 +77,9 @@ fn ast_insert_return<'a>(ast: &mut Vec<Statement<'a>>) {
     match ast.last_mut() {
         Some(Statement::Return(..)) => {}
         Some(Statement::Expression(_)) => {
-            let expr = if let Statement::Expression(expr) = ast.pop().unwrap() {
-                expr
-            } else {
-                unreachable!()
+            let expr = match ast.pop() {
+                Some(Statement::Expression(expr)) => expr,
+                _ => unreachable!(),
             };
 
             ast.push(Statement::Return(ReturnStatement(expr)));
@@ -131,11 +130,12 @@ impl<'a> FunctionCompiler<'a> {
     fn add_external(&mut self, external_id: u16) -> usize {
         let id = self.state.externals.iter().position(|&x| x == external_id);
 
-        if let Some(id) = id {
-            id
-        } else {
-            self.state.externals.push(external_id);
-            self.state.externals.len() - 1
+        match id {
+            Some(id) => id,
+            None => {
+                self.state.externals.push(external_id);
+                self.state.externals.len() - 1
+            }
         }
     }
 
@@ -262,11 +262,10 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
     fn visit_identifier_expression(&mut self, i: &str) -> Result<Vec<u8>, CompileError> {
         let mut ib = InstructionBuilder::new();
 
-        if let Some((index, local)) = self.find_local(i) {
-            ib.build_local_load(index, local.is_extern());
-        } else {
-            ib.build_global_load(&mut self.state.cp, i)?;
-        }
+        match self.find_local(i) {
+            Some((index, local)) => ib.build_local_load(index, local.is_extern()),
+            _ => ib.build_global_load(&mut self.state.cp, i)?,
+        };
 
         Ok(ib.build())
     }
@@ -617,7 +616,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
         Ok(ib.build())
     }
 
-    fn visit_array_literal(&mut self, a: &ArrayLiteral<'a>) -> Result<Vec<u8>, CompileError> {
+    fn visit_array_literal(&mut self, ArrayLiteral(a): &ArrayLiteral<'a>) -> Result<Vec<u8>, CompileError> {
         let mut ib = InstructionBuilder::new();
         let len = a.len().try_into().map_err(|_| CompileError::ArrayLitLimitExceeded)?;
 
@@ -629,7 +628,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
         Ok(ib.build())
     }
 
-    fn visit_object_literal(&mut self, o: &ObjectLiteral<'a>) -> Result<Vec<u8>, CompileError> {
+    fn visit_object_literal(&mut self, ObjectLiteral(o): &ObjectLiteral<'a>) -> Result<Vec<u8>, CompileError> {
         let mut ib = InstructionBuilder::new();
 
         let mut idents = Vec::with_capacity(o.len());

@@ -110,6 +110,10 @@ impl<'a> Eval for Expr<'a> {
                     _ => {}
                 };
             }
+            Self::Call(fc) => {
+                fc.target.fold(can_remove);
+                fc.arguments.fold(can_remove);
+            }
             _ => {}
         }
     }
@@ -129,7 +133,23 @@ impl<'a> Eval for Statement<'a> {
         match self {
             Self::Expression(e) => e.fold(can_remove),
             Self::Return(r) => r.0.fold(can_remove),
+            Self::Block(b) => b.0.fold(can_remove),
             Self::If(i) => {
+                i.condition.fold(can_remove);
+                i.then.fold(can_remove);
+
+                {
+                    let mut branches = i.branches.borrow_mut();
+                    for branch in branches.iter_mut() {
+                        branch.condition.fold(can_remove);
+                        branch.then.fold(can_remove);
+                    }
+                }
+
+                if let Some(el) = &mut i.el {
+                    el.fold(can_remove);
+                }
+
                 match i.condition.is_truthy() {
                     Some(true) => {
                         *self = (*i.then).clone();
@@ -143,6 +163,11 @@ impl<'a> Eval for Statement<'a> {
                     }
                     _ => {}
                 };
+            }
+            Self::Variable(v) => {
+                if let Some(value) = &mut v.value {
+                    value.fold(can_remove);
+                }
             }
             _ => {}
         };

@@ -1,20 +1,21 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, fmt};
 
-use super::{statement::FunctionDeclaration, token::TokenType};
+use derive_more::Display;
+
+use super::{
+    statement::{fmt_list, FunctionDeclaration},
+    token::TokenType,
+};
 
 /// The sequence operator (`expr, expr`)
 pub type Seq<'a> = (Box<Expr<'a>>, Box<Expr<'a>>);
 /// Any postfix expression, i.e. `foo++`
 pub type Postfix<'a> = (TokenType, Box<Expr<'a>>);
-/// An array literal expression (`[expr, expr]`)
-pub type ArrayLiteral<'a> = Vec<Expr<'a>>;
-/// An object literal expression (`{ k: "v" }`)
-pub type ObjectLiteral<'a> = Vec<(/*(Expr<'a>*/ &'a str, Expr<'a>)>;
 
 /// A parsed expression
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
 pub enum Expr<'a> {
-    /// Represents any binary expression, i.e. `foo + bar`
+    /// Represents a binary expression
     Binary(BinaryExpr<'a>),
     /// Represents a grouping expression
     Grouping(GroupingExpr<'a>),
@@ -31,8 +32,10 @@ pub enum Expr<'a> {
     /// A property access expression, i.e. `foo.bar`
     PropertyAccess(PropertyAccessExpr<'a>),
     /// A sequence expression, i.e. `foo, bar`
+    #[display(fmt = "{}, {}", "_0.0", "_0.1")]
     Sequence(Seq<'a>),
     /// Any postfix expression, i.e. `foo++`
+    #[display(fmt = "{}{}", "_0.1", "_0.0")]
     Postfix(Postfix<'a>),
     /// An expression that evaluates to a function object
     ///
@@ -153,6 +156,37 @@ impl<'a> Expr<'a> {
         }
     }
 }
+/// An array literal expression (`[expr, expr]`)
+#[derive(Debug, Clone)]
+pub struct ArrayLiteral<'a>(pub Vec<Expr<'a>>);
+
+impl<'a> fmt::Display for ArrayLiteral<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[")?;
+        fmt_list(f, &self.0, ",")?;
+        write!(f, "]")
+    }
+}
+
+/// An object literal expression (`{ k: "v" }`)
+#[derive(Debug, Clone)]
+pub struct ObjectLiteral<'a>(pub Vec<(/*(Expr<'a>*/ &'a str, Expr<'a>)>);
+
+impl<'a> fmt::Display for ObjectLiteral<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{{")?;
+
+        for (i, (k, v)) in self.0.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}: ", k)?;
+            write!(f, "{}", v)?;
+        }
+
+        write!(f, "}}")
+    }
+}
 
 /// A property access expression
 #[derive(Debug, Clone)]
@@ -165,8 +199,23 @@ pub struct PropertyAccessExpr<'a> {
     pub property: Box<Expr<'a>>,
 }
 
+impl<'a> fmt::Display for PropertyAccessExpr<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.target)?;
+
+        if self.computed {
+            write!(f, "[{}]", self.property)?;
+        } else {
+            write!(f, ".{}", self.property)?;
+        }
+
+        Ok(())
+    }
+}
+
 /// A conditional expression
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
+#[display(fmt = "{} ? {} : {}", condition, then, el)]
 pub struct ConditionalExpr<'a> {
     /// The first part of a conditional expression, the condition
     pub condition: Box<Expr<'a>>,
@@ -187,8 +236,17 @@ pub struct FunctionCall<'a> {
     pub arguments: Vec<Expr<'a>>,
 }
 
+impl<'a> fmt::Display for FunctionCall<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}(", self.target)?;
+        fmt_list(f, &self.arguments, ",")?;
+        write!(f, ")")
+    }
+}
+
 /// An assignment expression
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
+#[display(fmt = "{} {} {}", left, operator, right)]
 pub struct AssignmentExpr<'a> {
     /// The lefthand side (target)
     pub left: Box<Expr<'a>>,
@@ -210,7 +268,8 @@ impl<'a> AssignmentExpr<'a> {
 }
 
 /// Any binary expression
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
+#[display(fmt = "{} {} {}", left, operator, right)]
 pub struct BinaryExpr<'a> {
     /// Lefthand side
     pub left: Box<Expr<'a>>,
@@ -235,8 +294,16 @@ impl<'a> BinaryExpr<'a> {
 #[derive(Debug, Clone)]
 pub struct GroupingExpr<'a>(pub Vec<Expr<'a>>);
 
+impl<'a> fmt::Display for GroupingExpr<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "(")?;
+        fmt_list(f, &self.0, ",")?;
+        write!(f, ")")
+    }
+}
+
 /// A literal expression
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
 pub enum LiteralExpr<'a> {
     /// Boolean literal
     Boolean(bool),
@@ -246,9 +313,11 @@ pub enum LiteralExpr<'a> {
     Number(f64),
     /// String literal, borrowed from input string
     String(Cow<'a, str>),
-    /// Null literal
+
+    #[display(fmt = "null")]
     Null,
-    /// Undefined literal
+
+    #[display(fmt = "undefined")]
     Undefined,
 }
 
@@ -299,7 +368,8 @@ impl<'a> LiteralExpr<'a> {
 }
 
 /// Unary expression
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
+#[display(fmt = "{}{}", operator, expr)]
 pub struct UnaryExpr<'a> {
     /// The operator that was used
     pub operator: TokenType,

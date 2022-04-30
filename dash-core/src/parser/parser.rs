@@ -1,7 +1,7 @@
 use crate::parser::statement::{ClassProperty, ForOfLoop};
 
 use super::{
-    expr::{Expr, UnaryExpr},
+    expr::{ArrayLiteral, Expr, ObjectLiteral, UnaryExpr},
     lexer::{self, Lexer},
     statement::{
         BlockStatement, Catch, Class, ClassMember, ClassMemberKind, ExportKind, ForLoop, FunctionDeclaration,
@@ -403,7 +403,17 @@ impl<'a> Parser<'a> {
 
         let name = self.next()?.full;
 
+        #[cfg(feature = "s1-type-annotations")]
+        if self.expect_and_skip(&[TokenType::Colon], false) {
+            self.parse_type_annotation();
+        }
+
         Some(VariableBinding { kind, name })
+    }
+
+    #[cfg(feature = "s1-type-annotations")]
+    fn parse_type_annotation(&mut self) -> Option<()> {
+        Some(())
     }
 
     fn variable_value(&mut self) -> Option<Expr<'a>> {
@@ -707,7 +717,7 @@ impl<'a> Parser<'a> {
                     self.expect_and_skip(&[TokenType::Comma], false);
                     items.push(self.expression()?);
                 }
-                Expr::Array(items)
+                Expr::Array(ArrayLiteral(items))
             }
             TokenType::LeftBrace => {
                 let mut items = Vec::new();
@@ -720,7 +730,7 @@ impl<'a> Parser<'a> {
                     let value = self.expression()?;
                     items.push((key, value));
                 }
-                Expr::Object(items)
+                Expr::Object(ObjectLiteral(items))
             }
             TokenType::NumberDec => Expr::number_literal(full.parse::<f64>().unwrap()),
             TokenType::NumberHex => self.parse_prefixed_number_literal(full, 16).map(Expr::number_literal)?,

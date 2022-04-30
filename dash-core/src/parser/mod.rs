@@ -8,5 +8,7 @@ pub mod parser;
 pub mod statement;
 /// Lexed token
 pub mod token;
+/// A type annotation parser
+pub mod types;
 /// Parsed value
 pub mod value;
