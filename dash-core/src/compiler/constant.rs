@@ -18,7 +18,7 @@ pub struct Function {
 #[derive(Debug, Clone)]
 pub enum Constant {
     Number(f64),
-    String(String),
+    String(Rc<str>),
     Identifier(Rc<str>),
     Boolean(bool),
     Function(Function),
@@ -34,7 +34,7 @@ impl Constant {
         }
     }
 
-    pub fn as_string(&self) -> Option<&str> {
+    pub fn as_string(&self) -> Option<&Rc<str>> {
         match self {
             Constant::String(s) => Some(s),
             _ => None,

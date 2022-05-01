@@ -11,3 +11,6 @@ members = [
 lto = "fat"
 codegen-units = 1
 panic = "abort"
+
+[profile.dev]
+debug = true

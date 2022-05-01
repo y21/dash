@@ -1,3 +1,5 @@
+use dash::vm::params::VmParams;
+use dash::vm::Vm;
 use dash_core as dash;
 
 use dash::compiler::decompiler;
@@ -35,7 +37,13 @@ impl From<OptLevel> for dash::optimizer::consteval::OptLevel {
 
 #[wasm_bindgen]
 pub fn eval(s: &str, opt: OptLevel) -> String {
-    match dash::eval(s, opt.into()) {
+    fn import_callback(vm: &mut Vm, ty: u8, path: &str) -> Result<Value, Value> {
+        Ok(Value::String(format!("Hello from module {path}").into()))
+    }
+
+    let params = VmParams::new().set_import_callback(import_callback);
+
+    match dash::eval(s, opt.into(), params) {
         Ok((mut vm, value)) => match value {
             Value::External(e) => format!("[external@{:?}]", e.as_ptr()),
             other => {

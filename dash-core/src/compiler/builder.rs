@@ -28,11 +28,11 @@ impl InstructionBuilder {
     }
 
     pub fn writew(&mut self, instruction: u16) {
-        self.buf.extend(instruction.to_ne_bytes());
+        self.buf.extend_from_slice(&instruction.to_ne_bytes());
     }
 
     pub fn write_all(&mut self, instruction: &[u8]) {
-        self.buf.extend(instruction)
+        self.buf.extend_from_slice(instruction)
     }
 
     pub fn write_wide_instr(&mut self, instr: u8, instrw: u8, value: u16) {

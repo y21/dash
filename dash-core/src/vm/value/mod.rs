@@ -81,7 +81,7 @@ impl Value {
         match constant {
             Constant::Number(n) => Value::Number(n),
             Constant::Boolean(b) => Value::Boolean(b),
-            Constant::String(s) => Value::String(s.into()),
+            Constant::String(s) => Value::String(s),
             Constant::Undefined => Value::undefined(),
             Constant::Null => Value::null(),
             Constant::Function(f) => {

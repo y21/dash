@@ -9,7 +9,7 @@ use crate::{
         },
         statement::{
             BlockStatement, Class, ExportKind, ForLoop, ForOfLoop, FunctionDeclaration, FunctionKind, IfStatement,
-            ImportKind, ReturnStatement, Statement, TryCatch, VariableBinding, VariableDeclaration,
+            ImportKind, ReturnStatement, SpecifierKind, Statement, TryCatch, VariableBinding, VariableDeclaration,
             VariableDeclarationKind, WhileLoop,
         },
         token::TokenType,
@@ -729,8 +729,34 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
         unimplementedc!("For of loop")
     }
 
-    fn visit_import_statement(&mut self, i: &ImportKind<'a>) -> Result<Vec<u8>, CompileError> {
-        unimplementedc!("Import statement")
+    fn visit_import_statement(&mut self, import: &ImportKind<'a>) -> Result<Vec<u8>, CompileError> {
+        let mut ib = InstructionBuilder::new();
+
+        match import {
+            ImportKind::Dynamic(ex) => {
+                ib.append(&mut self.accept_expr(ex)?);
+                ib.build_dynamic_import();
+            }
+            ImportKind::DefaultAs(spec, path) | ImportKind::AllAs(spec, path) => {
+                let ident = match spec {
+                    SpecifierKind::Ident(id) => id,
+                };
+
+                let local_id = self.state.scope.add_local(
+                    VariableBinding {
+                        kind: VariableDeclarationKind::Var,
+                        name: ident,
+                    },
+                    false,
+                )?;
+
+                let path_id = self.state.cp.add(Constant::String((*path).into()))?;
+
+                ib.build_static_import(import, local_id, path_id);
+            }
+        }
+
+        Ok(ib.build())
     }
 
     fn visit_export_statement(&mut self, e: &ExportKind<'a>) -> Result<Vec<u8>, CompileError> {

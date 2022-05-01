@@ -1,5 +1,7 @@
 use std::convert::TryInto;
 
+use crate::parser::statement::ImportKind;
+
 use super::{
     builder::{InstructionBuilder, Label},
     constant::{Constant, ConstantPool, LimitExceededError},
@@ -80,6 +82,11 @@ pub const BITSHR: u8 = 0x41;
 pub const BITUSHR: u8 = 0x42;
 pub const OBJIN: u8 = 0x43;
 pub const INSTANCEOF: u8 = 0x44;
+/// ImportKind::Dynamic
+pub const IMPORTDYN: u8 = 0x45;
+/// ImportKind::DefaultAs
+/// ImportKind::AllAs
+pub const IMPORTSTATIC: u8 = 0x46;
 
 #[rustfmt::skip]
 pub trait InstructionWriter {
@@ -167,6 +174,8 @@ pub trait InstructionWriter {
     fn build_bitushr(&mut self);
     fn build_objin(&mut self);
     fn build_instanceof(&mut self);
+    fn build_dynamic_import(&mut self);
+    fn build_static_import(&mut self, import: &ImportKind, local_id: u16, path_id: u16);
 }
 
 macro_rules! impl_instruction_writer {
@@ -353,4 +362,22 @@ impl InstructionWriter for InstructionBuilder {
 
         Ok(())
     }
+
+    fn build_static_import(&mut self, import: &ImportKind, local_id: u16, path_id: u16) {
+        self.write(IMPORTSTATIC);
+        self.write(match import {
+            ImportKind::AllAs(_, _) => IMPORT_ALL,
+            ImportKind::DefaultAs(_, _) => IMPORT_DEFAULT,
+            ImportKind::Dynamic(_) => unreachable!(),
+        });
+        self.writew(local_id);
+        self.writew(path_id);
+    }
+
+    fn build_dynamic_import(&mut self) {
+        self.write(IMPORTDYN);
+    }
 }
+
+pub const IMPORT_ALL: u8 = 0;
+pub const IMPORT_DEFAULT: u8 = 1;

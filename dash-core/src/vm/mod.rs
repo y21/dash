@@ -1,4 +1,4 @@
-use std::{convert::TryInto, fmt, ops::RangeBounds, vec::Drain};
+use std::{any::Any, convert::TryInto, fmt, ops::RangeBounds, vec::Drain};
 
 use crate::gc::{handle::Handle, trace::Trace, Gc};
 
@@ -7,6 +7,7 @@ use self::{
     external::Externals,
     frame::{Frame, TryBlock},
     local::LocalScope,
+    params::VmParams,
     statics::Statics,
     value::{
         object::{NamedObject, Object},
@@ -18,6 +19,7 @@ pub mod dispatch;
 pub mod external;
 pub mod frame;
 pub mod local;
+pub mod params;
 pub mod statics;
 pub mod util;
 pub mod value;
@@ -32,10 +34,12 @@ pub struct Vm {
     externals: Externals,
     statics: Statics,
     try_blocks: Vec<TryBlock>,
+    state: Option<Box<dyn Any>>,
+    params: VmParams,
 }
 
 impl Vm {
-    pub fn new() -> Self {
+    pub fn new(params: VmParams) -> Self {
         let mut gc = Gc::new();
         let statics = Statics::new(&mut gc);
         let global = gc.register(NamedObject::null()); // TODO: set its __proto__ and constructor
@@ -48,6 +52,8 @@ impl Vm {
             externals: Externals::new(),
             statics,
             try_blocks: Vec::new(),
+            params,
+            state: None,
         };
         vm.prepare();
         vm
@@ -524,6 +530,14 @@ impl Vm {
     pub fn register<O: Object + 'static>(&mut self, obj: O) -> Handle<dyn Object> {
         self.gc.register(obj)
     }
+
+    pub fn set_state(&mut self, state: Box<dyn Any>) {
+        self.state = Some(state);
+    }
+
+    pub fn state<T: 'static>(&self) -> Option<&T> {
+        self.state.as_ref().and_then(|s| s.downcast_ref::<T>())
+    }
 }
 
 impl fmt::Debug for Vm {
@@ -542,6 +556,7 @@ fn test_eval() {
         }
         add(10, 7) + 1
     "#,
+        Default::default(),
         Default::default(),
     )
     .unwrap();

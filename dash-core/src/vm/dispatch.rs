@@ -17,6 +17,7 @@ impl HandleResult {
 
 mod handlers {
     use crate::compiler::FunctionCallMetadata;
+    use crate::throw;
     use crate::vm::frame::TryBlock;
     use crate::vm::local::LocalScope;
     use crate::vm::value::array::Array;
@@ -532,6 +533,30 @@ mod handlers {
         let value = vm.stack.pop().expect("Missing value");
         Ok(Some(HandleResult::Yield(value)))
     }
+
+    pub fn import_dyn(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        todo!()
+    }
+
+    pub fn import_static(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        let ty = vm.fetch_and_inc_ip();
+        let local_id = vm.fetchw_and_inc_ip();
+        let path_id = vm.fetchw_and_inc_ip();
+
+        let path = vm.frames.last().expect("No frame").constants[path_id as usize]
+            .as_string()
+            .expect("Referenced invalid constant")
+            .clone();
+
+        let value = match vm.params.import_callback() {
+            Some(cb) => cb(vm, ty, &path)?,
+            None => throw!(vm, "Imports are disabled for this context."),
+        };
+
+        vm.set_local(local_id.into(), value);
+
+        Ok(None)
+    }
 }
 
 pub fn handle(vm: &mut Vm, instruction: u8) -> Result<Option<HandleResult>, Value> {
@@ -588,6 +613,8 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<Option<HandleResult>, Valu
         opcode::JMPTRUENP => handlers::jmptruenp(vm),
         opcode::JMPNULLISHP => handlers::jmpnullishp(vm),
         opcode::JMPNULLISHNP => handlers::jmpnullishnp(vm),
+        opcode::IMPORTDYN => handlers::import_dyn(vm),
+        opcode::IMPORTSTATIC => handlers::import_static(vm),
         _ => unimplemented!("{}", instruction),
     }
 }

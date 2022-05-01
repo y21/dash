@@ -1,3 +1,6 @@
+use dash::vm::params::VmParams;
+use dash::vm::value::Value;
+use dash::vm::Vm;
 use dash_core as dash;
 use std::fs;
 use std::time::Instant;
@@ -10,6 +13,10 @@ use dash::vm::value::ops::abstractions::conversions::ValueConversion;
 
 use crate::util;
 
+fn import_callback(_vm: &mut Vm, _ty: u8, path: &str) -> Result<Value, Value> {
+    Ok(Value::String(format!("Hi module {path}").into()))
+}
+
 pub fn run(args: &ArgMatches) -> anyhow::Result<()> {
     let path = args.value_of("file").context("Missing source")?;
     let source = fs::read_to_string(path).context("Failed to read source")?;
@@ -17,7 +24,9 @@ pub fn run(args: &ArgMatches) -> anyhow::Result<()> {
 
     let before = args.is_present("timing").then(|| Instant::now());
 
-    match dash::eval(&source, opt) {
+    let params = VmParams::new().set_import_callback(import_callback);
+
+    match dash::eval(&source, opt, params) {
         Ok((mut vm, value)) => {
             let mut sc = LocalScope::new(&mut vm);
             println!("{}", value.to_string(&mut sc).unwrap());

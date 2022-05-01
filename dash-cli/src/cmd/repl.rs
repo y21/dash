@@ -13,7 +13,7 @@ pub fn repl() -> anyhow::Result<()> {
 
         rl.add_history_entry(&input);
 
-        match dash::eval(&input, Default::default()) {
+        match dash::eval(&input, Default::default(), Default::default()) {
             Ok((mut vm, value)) => {
                 let mut scope = LocalScope::new(&mut vm);
                 println!("{}", value.to_string(&mut scope).unwrap());

@@ -91,7 +91,7 @@ pub enum DecompileError {
 
 enum StackValue {
     Number(f64),
-    String(String),
+    String(Rc<str>),
     Identifier(Rc<str>),
     Boolean(bool),
     Function(Option<String>),

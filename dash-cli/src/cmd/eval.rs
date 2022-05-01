@@ -12,7 +12,7 @@ pub fn eval(args: &ArgMatches) -> anyhow::Result<()> {
     let source = args.value_of("source").context("Missing source")?;
     let opt = util::opt_level_from_matches(args)?;
 
-    match dash::eval(source, opt) {
+    match dash::eval(source, opt, Default::default()) {
         Ok((mut vm, value)) => {
             let mut scope = LocalScope::new(&mut vm);
             println!("{}", value.to_string(&mut scope).unwrap());

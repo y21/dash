@@ -140,6 +140,7 @@ dependencies = [
 name = "dash-core"
 version = "0.1.2"
 dependencies = [
+ "bitflags",
  "dash-proc-macro",
  "derive_more",
 ]

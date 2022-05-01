@@ -9,7 +9,7 @@ use std::error::Error;
 use compiler::error::CompileError;
 use optimizer::consteval::OptLevel;
 use parser::{lexer::Error as LexError, token::Error as ParseError};
-use vm::{value::Value, Vm};
+use vm::{params::VmParams, value::Value, Vm};
 
 use crate::{compiler::FunctionCompiler, parser::parser::Parser, vm::frame::Frame};
 
@@ -66,9 +66,10 @@ impl<'a> fmt::Display for EvalError<'a> {
 
 impl<'a> Error for EvalError<'a> {}
 
-pub fn eval(input: &str, opt: OptLevel) -> Result<(Vm, Value), EvalError> {
+pub fn eval(input: &str, opt: OptLevel, params: VmParams) -> Result<(Vm, Value), EvalError> {
     // TODO: EvalError might carry a js value, which is useless [and possibly unsound] without a VM
-    let mut vm = Vm::new();
+    let mut vm = Vm::new(params);
+
     let tokens = Parser::from_str(input).map_err(EvalError::LexError)?;
     let mut ast = tokens.parse_all().map_err(EvalError::ParseError)?;
     optimizer::optimize_ast(&mut ast, opt);
