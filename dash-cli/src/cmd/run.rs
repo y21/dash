@@ -1,3 +1,4 @@
+use dash::compiler::StaticImportKind;
 use dash::vm::params::VmParams;
 use dash::vm::value::Value;
 use dash::vm::Vm;
@@ -13,7 +14,7 @@ use dash::vm::value::ops::abstractions::conversions::ValueConversion;
 
 use crate::util;
 
-fn import_callback(_vm: &mut Vm, _ty: u8, path: &str) -> Result<Value, Value> {
+fn import_callback(_vm: &mut Vm, _ty: StaticImportKind, path: &str) -> Result<Value, Value> {
     Ok(Value::String(format!("Hi module {path}").into()))
 }
 
@@ -24,7 +25,7 @@ pub fn run(args: &ArgMatches) -> anyhow::Result<()> {
 
     let before = args.is_present("timing").then(|| Instant::now());
 
-    let params = VmParams::new().set_import_callback(import_callback);
+    let params = VmParams::new().set_static_import_callback(import_callback);
 
     match dash::eval(&source, opt, params) {
         Ok((mut vm, value)) => {

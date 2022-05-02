@@ -1,3 +1,4 @@
+use dash::compiler::StaticImportKind;
 use dash::vm::params::VmParams;
 use dash::vm::Vm;
 use dash_core as dash;
@@ -37,11 +38,11 @@ impl From<OptLevel> for dash::optimizer::consteval::OptLevel {
 
 #[wasm_bindgen]
 pub fn eval(s: &str, opt: OptLevel) -> String {
-    fn import_callback(vm: &mut Vm, ty: u8, path: &str) -> Result<Value, Value> {
+    fn import_callback(vm: &mut Vm, ty: StaticImportKind, path: &str) -> Result<Value, Value> {
         Ok(Value::String(format!("Hello from module {path}").into()))
     }
 
-    let params = VmParams::new().set_import_callback(import_callback);
+    let params = VmParams::new().set_static_import_callback(import_callback);
 
     match dash::eval(s, opt.into(), params) {
         Ok((mut vm, value)) => match value {

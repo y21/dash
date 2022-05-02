@@ -6,7 +6,7 @@ use super::{
     builder::{InstructionBuilder, Label},
     constant::{Constant, ConstantPool, LimitExceededError},
     error::CompileError,
-    FunctionCallMetadata,
+    FunctionCallMetadata, StaticImportKind,
 };
 
 /// Adds two values together
@@ -366,8 +366,8 @@ impl InstructionWriter for InstructionBuilder {
     fn build_static_import(&mut self, import: &ImportKind, local_id: u16, path_id: u16) {
         self.write(IMPORTSTATIC);
         self.write(match import {
-            ImportKind::AllAs(_, _) => IMPORT_ALL,
-            ImportKind::DefaultAs(_, _) => IMPORT_DEFAULT,
+            ImportKind::AllAs(_, _) => StaticImportKind::All as u8,
+            ImportKind::DefaultAs(_, _) => StaticImportKind::Default as u8,
             ImportKind::Dynamic(_) => unreachable!(),
         });
         self.writew(local_id);
@@ -378,6 +378,3 @@ impl InstructionWriter for InstructionBuilder {
         self.write(IMPORTDYN);
     }
 }
-
-pub const IMPORT_ALL: u8 = 0;
-pub const IMPORT_DEFAULT: u8 = 1;

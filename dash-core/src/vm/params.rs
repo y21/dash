@@ -1,11 +1,15 @@
+use crate::compiler::StaticImportKind;
+
 use super::value::Value;
 use super::Vm;
 
-pub type ImportCallback = fn(vm: &mut Vm, ty: u8, path: &str) -> Result<Value, Value>;
+pub type StaticImportCallback = fn(vm: &mut Vm, ty: StaticImportKind, path: &str) -> Result<Value, Value>;
+pub type DynamicImportCallback = fn(vm: &mut Vm, val: Value) -> Result<Value, Value>;
 
 #[derive(Default)]
 pub struct VmParams {
-    import_callback: Option<ImportCallback>,
+    static_import_callback: Option<StaticImportCallback>,
+    dynamic_import_callback: Option<DynamicImportCallback>,
 }
 
 impl VmParams {
@@ -13,12 +17,21 @@ impl VmParams {
         VmParams::default()
     }
 
-    pub fn set_import_callback(mut self, callback: ImportCallback) -> Self {
-        self.import_callback = Some(callback);
+    pub fn set_static_import_callback(mut self, callback: StaticImportCallback) -> Self {
+        self.static_import_callback = Some(callback);
         self
     }
 
-    pub fn import_callback(&self) -> Option<ImportCallback> {
-        self.import_callback
+    pub fn set_dynamic_import_callback(mut self, callback: DynamicImportCallback) -> Self {
+        self.dynamic_import_callback = Some(callback);
+        self
+    }
+
+    pub fn static_import_callback(&self) -> Option<StaticImportCallback> {
+        self.static_import_callback
+    }
+
+    pub fn dynamic_import_callback(&self) -> Option<DynamicImportCallback> {
+        self.dynamic_import_callback
     }
 }

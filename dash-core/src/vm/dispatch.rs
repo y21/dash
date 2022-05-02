@@ -17,6 +17,7 @@ impl HandleResult {
 
 mod handlers {
     use crate::compiler::FunctionCallMetadata;
+    use crate::compiler::StaticImportKind;
     use crate::throw;
     use crate::vm::frame::TryBlock;
     use crate::vm::local::LocalScope;
@@ -535,11 +536,21 @@ mod handlers {
     }
 
     pub fn import_dyn(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        todo!()
+        let value = vm.stack.pop().expect("Missing value");
+
+        let ret = match vm.params.dynamic_import_callback() {
+            Some(cb) => cb(vm, value)?,
+            None => throw!(vm, "Dynamic imports are disabled for this context"),
+        };
+
+        // TODO: dynamic imports are currently statements, making them useless
+        // TODO: make them an expression and push ret on stack
+
+        Ok(None)
     }
 
     pub fn import_static(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let ty = vm.fetch_and_inc_ip();
+        let ty = StaticImportKind::from_repr(vm.fetch_and_inc_ip()).expect("Invalid import kind");
         let local_id = vm.fetchw_and_inc_ip();
         let path_id = vm.fetchw_and_inc_ip();
 
@@ -548,9 +559,9 @@ mod handlers {
             .expect("Referenced invalid constant")
             .clone();
 
-        let value = match vm.params.import_callback() {
+        let value = match vm.params.static_import_callback() {
             Some(cb) => cb(vm, ty, &path)?,
-            None => throw!(vm, "Imports are disabled for this context."),
+            None => throw!(vm, "Static imports are disabled for this context."),
         };
 
         vm.set_local(local_id.into(), value);

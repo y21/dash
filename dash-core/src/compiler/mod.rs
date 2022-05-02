@@ -1,5 +1,7 @@
 use std::{convert::TryInto, ptr::NonNull, usize};
 
+use strum_macros::FromRepr;
+
 use crate::{
     compiler::builder::{InstructionBuilder, Label},
     parser::{
@@ -836,4 +838,11 @@ impl FunctionCallMetadata {
     pub fn is_object_call(&self) -> bool {
         self.0 & (1 << 6) != 0
     }
+}
+
+#[repr(u8)]
+#[derive(FromRepr)]
+pub enum StaticImportKind {
+    All,
+    Default,
 }
