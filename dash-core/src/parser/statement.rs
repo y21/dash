@@ -306,7 +306,7 @@ impl<'a> WhileLoop<'a> {
 }
 
 /// The type of function
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum FunctionKind {
     /// A normal function
     Function,

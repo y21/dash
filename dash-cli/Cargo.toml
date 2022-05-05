@@ -6,11 +6,8 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1.0"
-clap = "3.0.0"
+clap = { version = "3.0.0", features = ["std"], default-features = false }
 rustyline = "9.1.2"
-
-[dependencies.dash-core]
-path = "../dash-core"
-features = [
-    "s1-type-annotations"
-]
+tokio = { version = "1", features = ["full"] }
+dash-core = { path = "../dash-core", features = ["s1-type-annotations"] }
+dash-rt = { path = "../dash-rt" }

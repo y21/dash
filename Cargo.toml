@@ -5,6 +5,7 @@ members = [
     "testrunner",
     "dash-wasm",
     "dash-proc-macro",
+    "dash-rt",
 ]
 
 [profile.release]

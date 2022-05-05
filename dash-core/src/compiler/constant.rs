@@ -4,7 +4,7 @@ use std::rc::Rc;
 use crate::parser::expr::LiteralExpr;
 use crate::parser::statement::FunctionKind;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Function {
     pub name: Option<String>,
     pub buffer: Rc<[u8]>,
@@ -15,7 +15,7 @@ pub struct Function {
     pub externals: Box<[u16]>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Constant {
     Number(f64),
     String(Rc<str>),

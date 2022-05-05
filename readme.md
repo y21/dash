@@ -19,17 +19,23 @@ This is a *WIP* and **not** yet production ready. It is actively being worked on
 ### Using the CLI
 ```js
 // example.js
+
+import * as http from '@std/http';
+
 function* counter() {
     let num = 0;
     while (true) yield num++;
 }
 
 const numbers = counter();
-let current;
-while (!(current = numbers.next()).done) {
-    console.log(current.value);
-}
+const port = 3030;
 
+http.listen(port, (ctx) => {
+    const next = numbers.next();
+    ctx.respond('Request count: ' + next.value);
+});
+
+console.log('Listening on port: ' + port);
 ```
 ```sh
 # Install Rust
@@ -43,6 +49,7 @@ $ mv ~/.cargo/bin/dash-cli ~/.cargo/bin/dashjs
 # Run the program (run with --help for help)
 $ dashjs run example.js
 ```
+Now open up your browser, navigate to http://localhost:3030, refresh a bunch of times and see the numbers go up.
 
 ### Embedding into a Rust application
 Note that the API is not stable. Things are constantly changing, so your code may break at any time when bumping the version, which is why it is highly recommended to lock in to a specific revision for now.

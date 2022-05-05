@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::mem;
 
 use crate::gc::handle::Handle;
 use crate::gc::trace::Trace;
@@ -8,7 +7,7 @@ use super::local::LocalScope;
 use super::value::object::Object;
 
 #[derive(Debug)]
-pub struct Externals(HashMap<*const LocalScope<'static>, Vec<Handle<dyn Object>>>);
+pub struct Externals(HashMap<*const (), Vec<Handle<dyn Object>>>);
 
 unsafe impl Trace for Externals {
     fn trace(&self) {
@@ -24,14 +23,10 @@ impl Externals {
     }
 
     pub unsafe fn add<'a>(&mut self, sc: *const LocalScope<'a>, refs: Vec<Handle<dyn Object>>) {
-        // lifetime transmute
-        let sc = mem::transmute::<_, *const LocalScope<'static>>(sc);
-        self.0.insert(sc, refs);
+        self.0.insert(sc.cast(), refs);
     }
 
     pub unsafe fn add_single<'a>(&mut self, sc: *const LocalScope<'a>, re: Handle<dyn Object>) {
-        // lifetime transmute
-        let sc = mem::transmute::<_, *const LocalScope<'static>>(sc);
-        self.0.entry(sc).or_insert_with(Vec::new).push(re)
+        self.0.entry(sc.cast()).or_insert_with(Vec::new).push(re)
     }
 }

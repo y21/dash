@@ -1,4 +1,4 @@
-use std::{any::Any, convert::TryInto, fmt, ops::RangeBounds, vec::Drain};
+use std::{convert::TryInto, fmt, ops::RangeBounds, vec::Drain};
 
 use crate::gc::{handle::Handle, trace::Trace, Gc};
 
@@ -34,7 +34,6 @@ pub struct Vm {
     externals: Externals,
     statics: Statics,
     try_blocks: Vec<TryBlock>,
-    state: Option<Box<dyn Any>>,
     params: VmParams,
 }
 
@@ -53,7 +52,6 @@ impl Vm {
             statics,
             try_blocks: Vec::new(),
             params,
-            state: None,
         };
         vm.prepare();
         vm
@@ -149,6 +147,7 @@ impl Vm {
             math.set_property(&mut scope, "tan".into(), tan.into()).unwrap();
             math.set_property(&mut scope, "tanh".into(), tanh.into()).unwrap();
             math.set_property(&mut scope, "trunc".into(), trunc.into()).unwrap();
+            math.set_property(&mut scope, "PI".into(), Value::Number(std::f64::consts::PI)).unwrap();
 
             math
         };
@@ -531,12 +530,8 @@ impl Vm {
         self.gc.register(obj)
     }
 
-    pub fn set_state(&mut self, state: Box<dyn Any>) {
-        self.state = Some(state);
-    }
-
-    pub fn state<T: 'static>(&self) -> Option<&T> {
-        self.state.as_ref().and_then(|s| s.downcast_ref::<T>())
+    pub fn params(&self) -> &VmParams {
+        &self.params
     }
 }
 

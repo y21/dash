@@ -33,6 +33,8 @@ pub mod decompiler;
 pub mod error;
 pub mod instruction;
 mod scope;
+#[cfg(test)]
+mod test;
 /// Visitor trait, used to walk the AST
 mod visitor;
 

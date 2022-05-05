@@ -1,3 +1,5 @@
+use std::any::Any;
+
 use crate::compiler::StaticImportKind;
 
 use super::value::Value;
@@ -10,6 +12,7 @@ pub type DynamicImportCallback = fn(vm: &mut Vm, val: Value) -> Result<Value, Va
 pub struct VmParams {
     static_import_callback: Option<StaticImportCallback>,
     dynamic_import_callback: Option<DynamicImportCallback>,
+    state: Option<Box<dyn Any>>,
 }
 
 impl VmParams {
@@ -33,5 +36,14 @@ impl VmParams {
 
     pub fn dynamic_import_callback(&self) -> Option<DynamicImportCallback> {
         self.dynamic_import_callback
+    }
+
+    pub fn set_state(mut self, state: Box<dyn Any>) -> Self {
+        self.state = Some(state);
+        self
+    }
+
+    pub fn state<T: 'static>(&self) -> Option<&T> {
+        self.state.as_ref().and_then(|s| s.downcast_ref::<T>())
     }
 }

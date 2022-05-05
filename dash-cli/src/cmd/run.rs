@@ -1,22 +1,15 @@
-use dash::compiler::StaticImportKind;
-use dash::vm::params::VmParams;
-use dash::vm::value::Value;
-use dash::vm::Vm;
 use dash_core as dash;
+use dash_rt::runtime::Runtime;
+use dash_rt::state::State;
 use std::fs;
 use std::time::Instant;
 
-use anyhow::bail;
 use anyhow::Context;
 use clap::ArgMatches;
 use dash::vm::local::LocalScope;
 use dash::vm::value::ops::abstractions::conversions::ValueConversion;
 
 use crate::util;
-
-fn import_callback(_vm: &mut Vm, _ty: StaticImportKind, path: &str) -> Result<Value, Value> {
-    Ok(Value::String(format!("Hi module {path}").into()))
-}
 
 pub fn run(args: &ArgMatches) -> anyhow::Result<()> {
     let path = args.value_of("file").context("Missing source")?;
@@ -25,19 +18,23 @@ pub fn run(args: &ArgMatches) -> anyhow::Result<()> {
 
     let before = args.is_present("timing").then(|| Instant::now());
 
-    let params = VmParams::new().set_static_import_callback(import_callback);
+    let async_rt = tokio::runtime::Runtime::new()?;
+    async_rt.block_on(async move {
+        let mut rt = Runtime::new().await;
 
-    match dash::eval(&source, opt, params) {
-        Ok((mut vm, value)) => {
-            let mut sc = LocalScope::new(&mut vm);
-            println!("{}", value.to_string(&mut sc).unwrap());
+        let value = rt.eval(&source, opt).unwrap();
+        let mut sc = LocalScope::new(rt.vm_mut());
+        println!("{}", value.to_string(&mut sc).unwrap());
+
+        if let Some(before) = before {
+            println!("{:?}", before.elapsed());
         }
-        Err(err) => bail!("{}", err),
-    }
 
-    if let Some(before) = before {
-        println!("{:?}", before.elapsed());
-    }
+        let state = State::try_from_vm(rt.vm()).unwrap();
+        if state.needs_event_loop() {
+            rt.run_event_loop().await;
+        }
+    });
 
     Ok(())
 }

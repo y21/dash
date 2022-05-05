@@ -1,13 +1,11 @@
 [package]
-name = "runtime"
+name = "dash-rt"
 version = "0.1.0"
 edition = "2018"
 license = "MIT"
 
-[features]
-# Implements `Math.random()` using the rand crate
-random = ["rand"]
-
 [dependencies]
-dash = { path = "../dash-core/" }
+dash-core = { path = "../dash-core/" }
 rand = { version = "0.8.4", optional = true }
+tokio = { version = "1", features = ["full"] }
+hyper = { version = "0.14.18", features = ["server", "tcp", "http1"] }
