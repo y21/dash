@@ -1,6 +1,9 @@
 use std::{convert::TryInto, fmt, ops::RangeBounds, vec::Drain};
 
-use crate::gc::{handle::Handle, trace::Trace, Gc};
+use crate::{
+    gc::{handle::Handle, trace::Trace, Gc},
+    vm::value::function::Function,
+};
 
 use self::{
     dispatch::HandleResult,
@@ -60,19 +63,32 @@ impl Vm {
     /// Prepare the VM for execution.
     #[rustfmt::skip]
     fn prepare(&mut self) {
+        fn set_fn_prototype(v: &dyn Object, proto: &Handle<dyn Object>) {
+            let fun = v.as_any().downcast_ref::<Function>().unwrap();
+            fun.set_fn_prototype(proto.clone());
+        }
+
         let mut scope = LocalScope::new(self);
 
         let global = scope.global.clone();
 
+        let function_proto = {
+            let function = scope.statics.function_proto.clone();
+            let object_proto = scope.statics.object_prototype.clone();
+
+            function.set_prototype(&mut scope, object_proto.into()).unwrap();
+            function
+        };
+
         let object = {
             let object = scope.statics.object_ctor.clone();
-            let object_proto = scope.statics.object_prototype.clone();
             let create = scope.statics.object_create.clone();
             let keys = scope.statics.object_keys.clone();
 
-            object.set_prototype(&mut scope, object_proto.into()).unwrap();
+            object.set_prototype(&mut scope, function_proto.clone().into()).unwrap();
             object.set_property(&mut scope, "create".into(), create.into()).unwrap();
             object.set_property(&mut scope, "keys".into(), keys.into()).unwrap();
+            set_fn_prototype(&object, &scope.statics.object_prototype);
             object
         };
 
@@ -156,7 +172,6 @@ impl Vm {
 
         let number = {
             let number = scope.statics.number_ctor.clone();
-            let number_prototype = scope.statics.number_prototype.clone();
             let is_finite = scope.statics.number_is_finite.clone();
             let is_nan = scope.statics.number_is_nan.clone();
             let is_safe_integer = scope.statics.number_is_safe_integer.clone();
@@ -164,7 +179,8 @@ impl Vm {
             number.set_property(&mut scope, "isFinite".into(), is_finite.into()).unwrap();
             number.set_property(&mut scope, "isNaN".into(), is_nan.into()).unwrap();
             number.set_property(&mut scope, "isSafeInteger".into(), is_safe_integer.into()).unwrap();
-            number.set_prototype(&mut scope, number_prototype.into()).unwrap();
+            number.set_prototype(&mut scope, function_proto.clone().into()).unwrap();
+            set_fn_prototype(&number, &scope.statics.number_prototype);
 
             number
         };
@@ -180,8 +196,8 @@ impl Vm {
 
         let boolean = {
             let boolean = scope.statics.boolean_ctor.clone();
-            let boolean_prototype = scope.statics.boolean_prototype.clone();
-            boolean.set_prototype(&mut scope, boolean_prototype.into()).unwrap();
+            boolean.set_prototype(&mut scope, function_proto.clone().into()).unwrap();
+            set_fn_prototype(&boolean, &scope.statics.boolean_prototype);
             boolean
         };
 
@@ -196,9 +212,9 @@ impl Vm {
 
         let string = {
             let string = scope.statics.string_ctor.clone();
-            let string_prototype = scope.statics.string_prototype.clone();
 
-            string.set_prototype(&mut scope, string_prototype.into()).unwrap();
+            string.set_prototype(&mut scope, function_proto.clone().into()).unwrap();
+            set_fn_prototype(&string, &scope.statics.string_prototype);
             string
         };
 
@@ -245,9 +261,9 @@ impl Vm {
 
         let array = {
             let array = scope.statics.array_ctor.clone();
-            let array_prototype = scope.statics.array_prototype.clone();
 
-            array.set_prototype(&mut scope, array_prototype.into()).unwrap();
+            array.set_prototype(&mut scope, function_proto.clone().into()).unwrap();
+            set_fn_prototype(&array, &scope.statics.array_prototype);
             array
         };
 

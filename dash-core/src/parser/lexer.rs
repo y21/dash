@@ -476,10 +476,9 @@ impl<'a> Lexer<'a> {
     /// Skips any meaningless whitespaces
     fn skip_whitespaces(&mut self) {
         while !self.is_eof() {
-            let ch = if let Some(c) = self.current() {
-                c
-            } else {
-                return;
+            let ch = match self.current() {
+                Some(c) => c,
+                None => return,
             };
 
             match ch {
@@ -497,10 +496,9 @@ impl<'a> Lexer<'a> {
 
     /// Skips any comments
     fn skip_comments(&mut self) {
-        let cur = if let Some(c) = self.current() {
-            c
-        } else {
-            return;
+        let cur = match self.current() {
+            Some(c) => c,
+            None => return,
         };
 
         if cur == b'/' {
@@ -515,10 +513,9 @@ impl<'a> Lexer<'a> {
     /// Skips a single line comment
     fn skip_single_line_comment(&mut self) {
         while !self.is_eof() {
-            let ch = if let Some(c) = self.current() {
-                c
-            } else {
-                return;
+            let ch = match self.current() {
+                Some(c) => c,
+                None => return,
             };
 
             if ch == b'\n' {
@@ -536,10 +533,9 @@ impl<'a> Lexer<'a> {
         self.expect_and_skip(b'/');
         self.expect_and_skip(b'*');
         while !self.is_eof() {
-            let ch = if let Some(c) = self.current() {
-                c
-            } else {
-                return;
+            let ch = match self.current() {
+                Some(c) => c,
+                None => return,
             };
 
             if ch == b'\n' {

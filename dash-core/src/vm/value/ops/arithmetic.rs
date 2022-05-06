@@ -92,6 +92,7 @@ impl Value {
         match (self, other) {
             (Value::Number(a), Value::Number(b)) => Value::Boolean(*a == *b),
             (Value::Boolean(a), Value::Boolean(b)) => Value::Boolean(*a == *b),
+            (Value::Object(a), Value::Object(b)) => Value::Boolean(a.as_ptr() == b.as_ptr()),
             _ => unimplemented!(),
         }
     }

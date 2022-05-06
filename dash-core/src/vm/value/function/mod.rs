@@ -1,5 +1,6 @@
 use std::{
     any::Any,
+    cell::RefCell,
     fmt::{self, Debug},
 };
 
@@ -67,6 +68,7 @@ pub struct Function {
     name: Option<String>,
     kind: FunctionKind,
     obj: NamedObject,
+    prototype: RefCell<Option<Handle<dyn Object>>>,
 }
 
 impl Function {
@@ -75,15 +77,25 @@ impl Function {
             name,
             kind,
             obj: NamedObject::new(vm),
+            prototype: RefCell::new(None),
         }
     }
 
     pub fn with_obj(name: Option<String>, kind: FunctionKind, obj: NamedObject) -> Self {
-        Self { name, kind, obj }
+        Self {
+            name,
+            kind,
+            obj,
+            prototype: RefCell::new(None),
+        }
     }
 
     pub fn kind(&self) -> &FunctionKind {
         &self.kind
+    }
+
+    pub fn set_fn_prototype(&self, prototype: Handle<dyn Object>) {
+        self.prototype.replace(Some(prototype));
     }
 }
 
