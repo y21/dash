@@ -5,11 +5,13 @@ use crate::compiler::StaticImportKind;
 use super::value::Value;
 use super::Vm;
 
+pub type MathRandomCallback = fn(vm: &mut Vm) -> Result<f64, Value>;
 pub type StaticImportCallback = fn(vm: &mut Vm, ty: StaticImportKind, path: &str) -> Result<Value, Value>;
 pub type DynamicImportCallback = fn(vm: &mut Vm, val: Value) -> Result<Value, Value>;
 
 #[derive(Default)]
 pub struct VmParams {
+    math_random_callback: Option<MathRandomCallback>,
     static_import_callback: Option<StaticImportCallback>,
     dynamic_import_callback: Option<DynamicImportCallback>,
     state: Option<Box<dyn Any>>,
@@ -45,5 +47,14 @@ impl VmParams {
 
     pub fn state<T: 'static>(&self) -> Option<&T> {
         self.state.as_ref().and_then(|s| s.downcast_ref::<T>())
+    }
+
+    pub fn set_math_random_callback(mut self, callback: MathRandomCallback) -> Self {
+        self.math_random_callback = Some(callback);
+        self
+    }
+
+    pub fn math_random_callback(&self) -> Option<MathRandomCallback> {
+        self.math_random_callback
     }
 }

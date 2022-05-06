@@ -119,6 +119,7 @@ impl Vm {
             let tan = scope.statics.math_tan.clone();
             let tanh = scope.statics.math_tanh.clone();
             let trunc = scope.statics.math_trunc.clone();
+            let random = scope.statics.math_random.clone();
 
             math.set_property(&mut scope, "floor".into(), floor.into()).unwrap();
             math.set_property(&mut scope, "abs".into(), abs.into()).unwrap();
@@ -147,6 +148,7 @@ impl Vm {
             math.set_property(&mut scope, "tan".into(), tan.into()).unwrap();
             math.set_property(&mut scope, "tanh".into(), tanh.into()).unwrap();
             math.set_property(&mut scope, "trunc".into(), trunc.into()).unwrap();
+            math.set_property(&mut scope, "random".into(), random.into()).unwrap();
             math.set_property(&mut scope, "PI".into(), Value::Number(std::f64::consts::PI)).unwrap();
 
             math

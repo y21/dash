@@ -1,3 +1,4 @@
+use crate::throw;
 use crate::vm::value::function::native::CallContext;
 use crate::vm::value::ops::abstractions::conversions::ValueConversion;
 use crate::vm::value::Value;
@@ -206,4 +207,13 @@ pub fn floor(cx: CallContext) -> Result<Value, Value> {
     }
 
     Ok(Value::Number(n.floor()))
+}
+
+pub fn random(mut cx: CallContext) -> Result<Value, Value> {
+    let num = match cx.scope.params().math_random_callback() {
+        Some(cb) => cb(&mut cx.scope)?,
+        None => throw!(cx.scope, "Math.random is disabled for this context"),
+    };
+
+    Ok(Value::Number(num))
 }

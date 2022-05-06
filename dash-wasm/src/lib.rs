@@ -38,11 +38,17 @@ impl From<OptLevel> for dash::optimizer::consteval::OptLevel {
 
 #[wasm_bindgen]
 pub fn eval(s: &str, opt: OptLevel) -> String {
-    fn import_callback(vm: &mut Vm, ty: StaticImportKind, path: &str) -> Result<Value, Value> {
+    fn import_callback(_: &mut Vm, _: StaticImportKind, path: &str) -> Result<Value, Value> {
         Ok(Value::String(format!("Hello from module {path}").into()))
     }
 
-    let params = VmParams::new().set_static_import_callback(import_callback);
+    fn random_callback(_: &mut Vm) -> Result<f64, Value> {
+        Ok(js_sys::Math::random())
+    }
+
+    let params = VmParams::new()
+        .set_static_import_callback(import_callback)
+        .set_math_random_callback(random_callback);
 
     match dash::eval(s, opt.into(), params) {
         Ok((mut vm, value)) => match value {

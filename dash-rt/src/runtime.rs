@@ -14,6 +14,7 @@ use dash_core::vm::value::object::Object;
 use dash_core::vm::value::Value;
 use dash_core::vm::Vm;
 use dash_core::EvalError;
+use rand::Rng;
 use tokio::sync::mpsc;
 
 use crate::event::EventMessage;
@@ -35,6 +36,7 @@ impl Runtime {
 
         let params = VmParams::new()
             .set_static_import_callback(import_callback)
+            .set_math_random_callback(random_callback)
             .set_state(Box::new(State::new(rt, etx)));
 
         Self {
@@ -94,6 +96,11 @@ impl Runtime {
             }
         }
     }
+}
+
+fn random_callback(_: &mut Vm) -> Result<f64, Value> {
+    let mut rng = rand::thread_rng();
+    Ok(rng.gen())
 }
 
 fn import_callback(vm: &mut Vm, _ty: StaticImportKind, path: &str) -> Result<Value, Value> {
