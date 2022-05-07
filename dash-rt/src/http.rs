@@ -93,7 +93,9 @@ pub fn ctx_respond(mut cx: CallContext) -> Result<Value, Value> {
 
     let message = cx.args.first().unwrap_or_undefined().to_string(&mut cx.scope)?;
 
-    sender.send(Body::from(message.to_string())).unwrap();
+    if let Err(_) = sender.send(Body::from(message.to_string())) {
+        eprintln!("Failed to respond to HTTP event.");
+    }
 
     Ok(Value::undefined())
 }
