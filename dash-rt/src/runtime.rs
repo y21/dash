@@ -1,10 +1,6 @@
-use dash_core::compiler::FunctionCompiler;
 use dash_core::compiler::StaticImportKind;
-use dash_core::optimizer;
 use dash_core::optimizer::consteval::OptLevel;
-use dash_core::parser::parser::Parser;
 use dash_core::throw;
-use dash_core::vm::frame::Frame;
 use dash_core::vm::local::LocalScope;
 use dash_core::vm::params::VmParams;
 use dash_core::vm::value::function::Function;
@@ -46,18 +42,7 @@ impl Runtime {
     }
 
     pub fn eval<'i>(&mut self, code: &'i str, opt: OptLevel) -> Result<Value, EvalError<'i>> {
-        // TODO(y21): create Vm::eval
-        let tokens = Parser::from_str(code).map_err(EvalError::LexError)?;
-        let mut ast = tokens.parse_all().map_err(EvalError::ParseError)?;
-        optimizer::optimize_ast(&mut ast, opt);
-
-        let compiled = FunctionCompiler::new()
-            .compile_ast(ast)
-            .map_err(EvalError::CompileError)?;
-
-        let frame = Frame::from_compile_result(compiled);
-        let val = self.vm.execute_frame(frame).map_err(EvalError::VmError)?;
-        Ok(val.into_value())
+        self.vm.eval(code, opt)
     }
 
     pub fn vm(&self) -> &Vm {

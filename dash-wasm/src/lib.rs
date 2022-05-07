@@ -50,8 +50,10 @@ pub fn eval(s: &str, opt: OptLevel) -> String {
         .set_static_import_callback(import_callback)
         .set_math_random_callback(random_callback);
 
-    match dash::eval(s, opt.into(), params) {
-        Ok((mut vm, value)) => match value {
+    let mut vm = Vm::new(params);
+
+    match vm.eval(s, opt.into()) {
+        Ok(value) => match value {
             Value::External(e) => format!("[external@{:?}]", e.as_ptr()),
             other => {
                 let mut scope = LocalScope::new(&mut vm);

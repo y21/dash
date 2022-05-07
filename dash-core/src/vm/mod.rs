@@ -1,8 +1,12 @@
 use std::{convert::TryInto, fmt, ops::RangeBounds, vec::Drain};
 
 use crate::{
+    compiler::FunctionCompiler,
     gc::{handle::Handle, trace::Trace, Gc},
+    optimizer::{self, consteval::OptLevel},
+    parser::parser::Parser,
     vm::value::function::Function,
+    EvalError,
 };
 
 use self::{
@@ -58,6 +62,18 @@ impl Vm {
         };
         vm.prepare();
         vm
+    }
+
+    pub fn eval<'a>(&mut self, input: &'a str, opt: OptLevel) -> Result<Value, EvalError<'a>> {
+        let tokens = Parser::from_str(input).map_err(EvalError::LexError)?;
+        let mut ast = tokens.parse_all().map_err(EvalError::ParseError)?;
+        optimizer::optimize_ast(&mut ast, opt);
+        let compiled = FunctionCompiler::new()
+            .compile_ast(ast)
+            .map_err(EvalError::CompileError)?;
+        let frame = Frame::from_compile_result(compiled);
+        let val = self.execute_frame(frame).map_err(EvalError::VmError)?;
+        Ok(val.into_value())
     }
 
     /// Prepare the VM for execution.
@@ -561,18 +577,19 @@ impl fmt::Debug for Vm {
 
 #[test]
 fn test_eval() {
-    let (vm, value) = crate::eval(
-        r#"
+    let mut vm = Vm::new(Default::default());
+    let value = vm
+        .eval(
+            r#"
         // console.log(1337); 18
         function add(a,b) {
             return a +b
         }
         add(10, 7) + 1
     "#,
-        Default::default(),
-        Default::default(),
-    )
-    .unwrap();
+            Default::default(),
+        )
+        .unwrap();
 
     assert_eq!(vm.stack.len(), 0);
     assert_eq!(vm.frames.len(), 0);
