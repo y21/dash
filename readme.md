@@ -18,8 +18,6 @@ This is a *WIP* and **not** yet production ready. It is actively being worked on
 ## Usage
 ### Using the CLI
 ```js
-// example.js
-
 import * as http from '@std/http';
 
 function* counter() {
