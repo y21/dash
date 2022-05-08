@@ -19,6 +19,7 @@ mod handlers {
     use crate::compiler::FunctionCallMetadata;
     use crate::compiler::StaticImportKind;
     use crate::throw;
+    use crate::vm::frame::FrameState;
     use crate::vm::frame::TryBlock;
     use crate::vm::local::LocalScope;
     use crate::vm::value::array::Array;
@@ -578,11 +579,11 @@ mod handlers {
         let value = vm.stack.pop().expect("Missing value");
         let frame = vm.frames.last_mut().expect("Missing frame");
 
-        match &mut frame.exports {
-            Some(exports) => {
-                exports.default = Some(value);
+        match &mut frame.state {
+            FrameState::Module(module) => {
+                module.default = Some(value);
             }
-            None => throw!(vm, "Export is only available in modules"),
+            _ => throw!(vm, "Export is only available at the top level in modules"),
         }
 
         Ok(None)

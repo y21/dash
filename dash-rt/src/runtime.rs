@@ -1,8 +1,12 @@
 use std::fs;
 
+use dash_core::compiler::FunctionCompiler;
 use dash_core::compiler::StaticImportKind;
+use dash_core::optimizer;
 use dash_core::optimizer::consteval::OptLevel;
+use dash_core::parser::parser::Parser;
 use dash_core::throw;
+use dash_core::vm::frame::Frame;
 use dash_core::vm::local::LocalScope;
 use dash_core::vm::params::VmParams;
 use dash_core::vm::value::function::Function;
@@ -90,7 +94,7 @@ fn random_callback(_: &mut Vm) -> Result<f64, Value> {
     Ok(rng.gen())
 }
 
-fn import_callback(vm: &mut Vm, _ty: StaticImportKind, path: &str) -> Result<Value, Value> {
+fn import_callback(vm: &mut Vm, import_ty: StaticImportKind, path: &str) -> Result<Value, Value> {
     let mut sc = LocalScope::new(vm);
 
     match path {
@@ -109,8 +113,55 @@ fn import_callback(vm: &mut Vm, _ty: StaticImportKind, path: &str) -> Result<Val
                 Err(e) => throw!(&mut sc, "{}", e),
             };
 
-            // TODO(y21): execute module
-            todo!()
+            let tokens = match Parser::from_str(&contents) {
+                Ok(tok) => tok,
+                Err(e) => throw!(&mut sc, "Module lex error: {:?}", e),
+            };
+
+            let mut ast = match tokens.parse_all() {
+                Ok(ast) => ast,
+                Err(e) => throw!(&mut sc, "Module parse error: {:?}", e),
+            };
+
+            optimizer::optimize_ast(&mut ast, OptLevel::Aggressive);
+
+            let re = match FunctionCompiler::new().compile_ast(ast) {
+                Ok(re) => re,
+                Err(e) => throw!(&mut sc, "Module compile error: {:?}", e),
+            };
+
+            let frame = Frame::from_compile_result(re);
+
+            let exports = sc.execute_module(frame)?;
+
+            let export_obj = match import_ty {
+                StaticImportKind::Default => {
+                    let export_obj = match exports.default {
+                        Some(obj) => obj,
+                        None => {
+                            let o = NamedObject::new(&mut sc);
+                            Value::Object(sc.register(o))
+                        }
+                    };
+
+                    export_obj
+                }
+                StaticImportKind::All => {
+                    let export_obj = NamedObject::new(&mut sc);
+
+                    if let Some(default) = exports.default {
+                        export_obj.set_property(&mut sc, "default".into(), default)?;
+                    }
+
+                    Value::Object(sc.register(export_obj))
+                }
+            };
+
+            for (k, v) in exports.named {
+                export_obj.set_property(&mut sc, String::from(k.as_ref()).into(), v)?;
+            }
+
+            Ok(export_obj)
         }
     }
 }

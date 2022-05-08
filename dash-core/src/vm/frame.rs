@@ -23,6 +23,14 @@ pub struct Exports {
 }
 
 #[derive(Debug, Clone)]
+pub enum FrameState {
+    /// Regular function
+    Function,
+    /// Top level frame of a module
+    Module(Exports),
+}
+
+#[derive(Debug, Clone)]
 pub struct Frame {
     pub ip: usize,
     pub reserved_stack_size: usize,
@@ -30,7 +38,7 @@ pub struct Frame {
     pub externals: Rc<[Handle<dyn Object>]>,
     pub buffer: Rc<[u8]>,
     pub sp: usize,
-    pub exports: Option<Exports>,
+    pub state: FrameState,
 }
 
 unsafe impl Trace for Frame {
@@ -48,18 +56,18 @@ impl Frame {
             ip: 0,
             sp: 0,
             reserved_stack_size: uf.locals(),
-            exports: None,
+            state: FrameState::Function,
         }
     }
 
     pub fn from_module(uf: &UserFunction, vm: &mut Vm) -> Self {
         let mut f = Self::from_function(uf, vm);
-        f.exports = Some(Exports::default());
+        f.state = FrameState::Module(Exports::default());
         f
     }
 
     pub fn is_module(&self) -> bool {
-        self.exports.is_some()
+        matches!(self.state, FrameState::Module(_))
     }
 
     pub fn from_compile_result(cr: CompileResult) -> Self {
@@ -74,7 +82,7 @@ impl Frame {
             ip: 0,
             sp: 0,
             reserved_stack_size: cr.locals,
-            exports: None,
+            state: FrameState::Function,
         }
     }
 

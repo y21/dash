@@ -12,12 +12,11 @@ use crate::{
 use self::{
     dispatch::HandleResult,
     external::Externals,
-    frame::{Exports, Frame, TryBlock},
+    frame::{Exports, Frame, FrameState, TryBlock},
     local::LocalScope,
     params::VmParams,
     statics::Statics,
     value::{
-        function::user::UserFunction,
         object::{NamedObject, Object},
         Value,
     },
@@ -543,12 +542,16 @@ impl Vm {
         }
     }
 
-    pub fn execute_module(&mut self, fun: UserFunction) -> Result<Exports, Value> {
-        let frame = Frame::from_module(&fun, self);
+    pub fn execute_module(&mut self, mut frame: Frame) -> Result<Exports, Value> {
+        frame.state = FrameState::Module(Exports::default());
+        frame.sp = self.stack.len();
         self.execute_frame(frame)?;
 
         let frame = self.frames.pop().expect("Missing module frame");
-        Ok(frame.exports.unwrap())
+        Ok(match frame.state {
+            FrameState::Module(exports) => exports,
+            _ => unreachable!(),
+        })
     }
 
     pub fn perform_gc(&mut self) {
