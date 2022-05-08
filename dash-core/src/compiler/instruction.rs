@@ -179,6 +179,7 @@ pub trait InstructionWriter {
     fn build_dynamic_import(&mut self);
     fn build_static_import(&mut self, import: &ImportKind, local_id: u16, path_id: u16);
     fn build_default_export(&mut self);
+    fn build_named_export(&mut self, it: &[NamedExportKind]) -> Result<(), CompileError>;
 }
 
 macro_rules! impl_instruction_writer {
@@ -381,4 +382,37 @@ impl InstructionWriter for InstructionBuilder {
     fn build_dynamic_import(&mut self) {
         self.write(IMPORTDYN);
     }
+
+    fn build_named_export(&mut self, it: &[NamedExportKind]) -> Result<(), CompileError> {
+        self.write(EXPORTNAMED);
+
+        let len = it
+            .len()
+            .try_into()
+            .map_err(|_| CompileError::ExportNameListLimitExceeded)?;
+
+        self.writew(len);
+
+        for kind in it.iter().copied() {
+            match kind {
+                NamedExportKind::Local { loc_id, ident_id } => {
+                    self.write(0);
+                    self.writew(loc_id);
+                    self.writew(ident_id);
+                }
+                NamedExportKind::Global { ident_id } => {
+                    self.write(1);
+                    self.writew(ident_id);
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Copy, Clone)]
+pub enum NamedExportKind {
+    Local { loc_id: u16, ident_id: u16 },
+    Global { ident_id: u16 },
 }

@@ -21,7 +21,7 @@ use crate::{
 use self::{
     constant::{Constant, ConstantPool, Function},
     error::CompileError,
-    instruction::InstructionWriter,
+    instruction::{InstructionWriter, NamedExportKind},
     scope::{Scope, ScopeLocal},
     visitor::Visitor,
 };
@@ -765,12 +765,34 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
 
     fn visit_export_statement(&mut self, e: &ExportKind<'a>) -> Result<Vec<u8>, CompileError> {
         let mut ib = InstructionBuilder::new();
+
         match e {
-            ExportKind::Default(e) => {
-                ib.append(&mut self.accept_expr(e)?);
+            ExportKind::Default(expr) => {
+                ib.append(&mut self.accept_expr(expr)?);
                 ib.build_default_export();
             }
-            other => unimplementedc!("Export {other:?}"),
+            ExportKind::Named(names) => {
+                let mut it = Vec::with_capacity(names.len());
+
+                for name in names.iter().copied() {
+                    let ident_id = self.state.cp.add(Constant::Identifier(name.into()))?;
+
+                    match self.find_local(name) {
+                        Some((loc_id, loc)) => {
+                            // Top level exports shouldn't be able to refer to extern locals
+                            assert!(!loc.is_extern());
+
+                            it.push(NamedExportKind::Local { loc_id, ident_id });
+                        }
+                        None => {
+                            it.push(NamedExportKind::Global { ident_id });
+                        }
+                    }
+                }
+
+                ib.build_named_export(&it)?;
+            }
+            ExportKind::NamedVar(n) => {}
         };
         Ok(ib.build())
     }

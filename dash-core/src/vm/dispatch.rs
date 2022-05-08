@@ -588,6 +588,52 @@ mod handlers {
 
         Ok(None)
     }
+
+    pub fn export_named(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        let mut sc = LocalScope::new(vm);
+        let count = sc.fetchw_and_inc_ip();
+
+        for _ in 0..count {
+            let (value, ident) = match sc.fetch_and_inc_ip() {
+                0 => {
+                    // Local variable
+                    let loc_id = sc.fetchw_and_inc_ip();
+                    let ident_id = sc.fetchw_and_inc_ip();
+
+                    let value = sc.get_local(loc_id.into()).expect("Invalid local reference");
+                    let ident = sc.frames.last().expect("No frame").constants[ident_id as usize]
+                        .as_identifier()
+                        .cloned()
+                        .expect("Referenced invalid constant");
+
+                    (value, ident)
+                }
+                1 => {
+                    // Global variable
+                    let ident_id = sc.fetchw_and_inc_ip();
+
+                    let ident = sc.frames.last().expect("No frame").constants[ident_id as usize]
+                        .as_identifier()
+                        .cloned()
+                        .expect("Referenced invalid constant");
+
+                    let global = sc.global.clone();
+                    let value = global.get_property(&mut sc, ident.as_ref().into())?;
+
+                    (value, ident)
+                }
+                _ => unreachable!(),
+            };
+
+            let frame = sc.frames.last_mut().expect("Missing frame");
+            match &mut frame.state {
+                FrameState::Module(exports) => exports.named.push((ident, value)),
+                _ => throw!(&mut sc, "Export is only available at the top level in modules"),
+            }
+        }
+
+        Ok(None)
+    }
 }
 
 pub fn handle(vm: &mut Vm, instruction: u8) -> Result<Option<HandleResult>, Value> {
@@ -647,6 +693,7 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<Option<HandleResult>, Valu
         opcode::IMPORTDYN => handlers::import_dyn(vm),
         opcode::IMPORTSTATIC => handlers::import_static(vm),
         opcode::EXPORTDEFAULT => handlers::export_default(vm),
+        opcode::EXPORTNAMED => handlers::export_named(vm),
         _ => unimplemented!("{}", instruction),
     }
 }

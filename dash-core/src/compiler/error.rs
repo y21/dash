@@ -10,6 +10,7 @@ pub enum CompileError {
     IfBranchLimitExceeded,
     ArrayLitLimitExceeded,
     ObjectLitLimitExceeded,
+    ExportNameListLimitExceeded,
     ConstAssignment,
     Unimplemented(String),
     ParameterLimitExceeded,
@@ -41,6 +42,7 @@ impl fmt::Display for CompileError {
             Self::Unimplemented(s) => write!(f, "Unimplemented: {}", s),
             Self::ParameterLimitExceeded => f.write_str("Maximum number of function parameters exceedeed"),
             Self::YieldOutsideGenerator => f.write_str("`yield` is only available in generator functions"),
+            Self::ExportNameListLimitExceeded => f.write_str("Maximum number of export names exceedeed"),
         }
     }
 }
