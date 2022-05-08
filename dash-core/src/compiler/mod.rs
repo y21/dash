@@ -792,7 +792,18 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
 
                 ib.build_named_export(&it)?;
             }
-            ExportKind::NamedVar(n) => {}
+            ExportKind::NamedVar(vars) => {
+                for var in vars.iter() {
+                    ib.append(&mut self.visit_variable_declaration(var)?);
+                }
+
+                let mut it = Vec::with_capacity(vars.len());
+                for var in vars.iter() {
+                    it.push(var.binding.name);
+                }
+
+                ib.append(&mut self.visit_export_statement(&ExportKind::Named(it))?);
+            }
         };
         Ok(ib.build())
     }
