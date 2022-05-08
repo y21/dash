@@ -764,7 +764,15 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
     }
 
     fn visit_export_statement(&mut self, e: &ExportKind<'a>) -> Result<Vec<u8>, CompileError> {
-        unimplementedc!("Export statement")
+        let mut ib = InstructionBuilder::new();
+        match e {
+            ExportKind::Default(e) => {
+                ib.append(&mut self.accept_expr(e)?);
+                ib.build_default_export();
+            }
+            other => unimplementedc!("Export {other:?}"),
+        };
+        Ok(ib.build())
     }
 
     fn visit_empty_statement(&mut self) -> Result<Vec<u8>, CompileError> {

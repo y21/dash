@@ -5,6 +5,7 @@ use crate::parser::expr::LiteralExpr;
 use crate::parser::statement::Statement;
 use crate::parser::token::TokenType;
 
+#[derive(Debug, Copy, Clone)]
 pub enum OptLevel {
     None,
     Basic,

@@ -19,6 +19,7 @@ mod handlers {
     use crate::compiler::FunctionCallMetadata;
     use crate::compiler::StaticImportKind;
     use crate::throw;
+    use crate::vm::frame::FrameState;
     use crate::vm::frame::TryBlock;
     use crate::vm::local::LocalScope;
     use crate::vm::value::array::Array;
@@ -157,6 +158,11 @@ mod handlers {
         let this = vm.frames.pop().expect("No frame");
 
         drop(vm.stack.drain(this.sp..));
+
+        if this.is_module() {
+            // Put it back on the frame stack, because we'll need it in Vm::execute_module
+            vm.frames.push(this);
+        }
 
         Ok(Some(HandleResult::Return(value)))
     }
@@ -568,6 +574,20 @@ mod handlers {
 
         Ok(None)
     }
+
+    pub fn export_default(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        let value = vm.stack.pop().expect("Missing value");
+        let frame = vm.frames.last_mut().expect("Missing frame");
+
+        match &mut frame.state {
+            FrameState::Module(module) => {
+                module.default = Some(value);
+            }
+            _ => throw!(vm, "Export is only available at the top level in modules"),
+        }
+
+        Ok(None)
+    }
 }
 
 pub fn handle(vm: &mut Vm, instruction: u8) -> Result<Option<HandleResult>, Value> {
@@ -626,6 +646,7 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<Option<HandleResult>, Valu
         opcode::JMPNULLISHNP => handlers::jmpnullishnp(vm),
         opcode::IMPORTDYN => handlers::import_dyn(vm),
         opcode::IMPORTSTATIC => handlers::import_static(vm),
+        opcode::EXPORTDEFAULT => handlers::export_default(vm),
         _ => unimplemented!("{}", instruction),
     }
 }
