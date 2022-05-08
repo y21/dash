@@ -1,3 +1,5 @@
+use std::fs;
+
 use dash_core::compiler::StaticImportKind;
 use dash_core::optimizer::consteval::OptLevel;
 use dash_core::throw;
@@ -101,6 +103,14 @@ fn import_callback(vm: &mut Vm, _ty: StaticImportKind, path: &str) -> Result<Val
             let module = sc.register(module);
             Ok(module.into())
         }
-        other => throw!(&mut sc, "Module not found: {}", other),
+        _ => {
+            let contents = match fs::read_to_string(path) {
+                Ok(c) => c,
+                Err(e) => throw!(&mut sc, "{}", e),
+            };
+
+            // TODO(y21): execute module
+            todo!()
+        }
     }
 }

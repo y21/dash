@@ -12,11 +12,12 @@ use crate::{
 use self::{
     dispatch::HandleResult,
     external::Externals,
-    frame::{Frame, TryBlock},
+    frame::{Exports, Frame, TryBlock},
     local::LocalScope,
     params::VmParams,
     statics::Statics,
     value::{
+        function::user::UserFunction,
         object::{NamedObject, Object},
         Value,
     },
@@ -65,12 +66,17 @@ impl Vm {
     }
 
     pub fn eval<'a>(&mut self, input: &'a str, opt: OptLevel) -> Result<Value, EvalError<'a>> {
-        let tokens = Parser::from_str(input).map_err(EvalError::LexError)?;
-        let mut ast = tokens.parse_all().map_err(EvalError::ParseError)?;
+        let mut ast = Parser::from_str(input)
+            .map_err(EvalError::LexError)?
+            .parse_all()
+            .map_err(EvalError::ParseError)?;
+
         optimizer::optimize_ast(&mut ast, opt);
+
         let compiled = FunctionCompiler::new()
             .compile_ast(ast)
             .map_err(EvalError::CompileError)?;
+
         let frame = Frame::from_compile_result(compiled);
         let val = self.execute_frame(frame).map_err(EvalError::VmError)?;
         Ok(val.into_value())
@@ -535,6 +541,14 @@ impl Vm {
                 Err(e) => self.handle_rt_error(e, fp)?,
             }
         }
+    }
+
+    pub fn execute_module(&mut self, fun: UserFunction) -> Result<Exports, Value> {
+        let frame = Frame::from_module(&fun, self);
+        self.execute_frame(frame)?;
+
+        let frame = self.frames.pop().expect("Missing module frame");
+        Ok(frame.exports.unwrap())
     }
 
     pub fn perform_gc(&mut self) {

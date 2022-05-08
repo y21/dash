@@ -158,6 +158,11 @@ mod handlers {
 
         drop(vm.stack.drain(this.sp..));
 
+        if this.is_module() {
+            // Put it back on the frame stack, because we'll need it in Vm::execute_module
+            vm.frames.push(this);
+        }
+
         Ok(Some(HandleResult::Return(value)))
     }
 
@@ -568,6 +573,20 @@ mod handlers {
 
         Ok(None)
     }
+
+    pub fn export_default(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        let value = vm.stack.pop().expect("Missing value");
+        let frame = vm.frames.last_mut().expect("Missing frame");
+
+        match &mut frame.exports {
+            Some(exports) => {
+                exports.default = Some(value);
+            }
+            None => throw!(vm, "Export is only available in modules"),
+        }
+
+        Ok(None)
+    }
 }
 
 pub fn handle(vm: &mut Vm, instruction: u8) -> Result<Option<HandleResult>, Value> {
@@ -626,6 +645,7 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<Option<HandleResult>, Valu
         opcode::JMPNULLISHNP => handlers::jmpnullishnp(vm),
         opcode::IMPORTDYN => handlers::import_dyn(vm),
         opcode::IMPORTSTATIC => handlers::import_static(vm),
+        opcode::EXPORTDEFAULT => handlers::export_default(vm),
         _ => unimplemented!("{}", instruction),
     }
 }

@@ -7,12 +7,19 @@ use crate::gc::trace::Trace;
 
 use super::value::function::user::UserFunction;
 use super::value::object::Object;
+use super::value::Value;
 use super::Vm;
 
 #[derive(Debug, Clone)]
 pub struct TryBlock {
     pub catch_ip: usize,
     pub frame_ip: usize,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct Exports {
+    pub default: Option<Value>,
+    pub named: Vec<(Rc<str>, Value)>,
 }
 
 #[derive(Debug, Clone)]
@@ -23,6 +30,7 @@ pub struct Frame {
     pub externals: Rc<[Handle<dyn Object>]>,
     pub buffer: Rc<[u8]>,
     pub sp: usize,
+    pub exports: Option<Exports>,
 }
 
 unsafe impl Trace for Frame {
@@ -40,7 +48,18 @@ impl Frame {
             ip: 0,
             sp: 0,
             reserved_stack_size: uf.locals(),
+            exports: None,
         }
+    }
+
+    pub fn from_module(uf: &UserFunction, vm: &mut Vm) -> Self {
+        let mut f = Self::from_function(uf, vm);
+        f.exports = Some(Exports::default());
+        f
+    }
+
+    pub fn is_module(&self) -> bool {
+        self.exports.is_some()
     }
 
     pub fn from_compile_result(cr: CompileResult) -> Self {
@@ -55,6 +74,7 @@ impl Frame {
             ip: 0,
             sp: 0,
             reserved_stack_size: cr.locals,
+            exports: None,
         }
     }
 
