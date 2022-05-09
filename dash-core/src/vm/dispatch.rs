@@ -16,6 +16,9 @@ impl HandleResult {
 }
 
 mod handlers {
+    use std::rc::Rc;
+
+    use crate::compiler::constant::Constant;
     use crate::compiler::FunctionCallMetadata;
     use crate::compiler::StaticImportKind;
     use crate::throw;
@@ -28,6 +31,17 @@ mod handlers {
     use crate::vm::value::object::PropertyKey;
 
     use super::*;
+
+    fn force_get_constant(vm: &Vm, index: usize) -> &Constant {
+        &vm.frames.last().expect("Missing frame").constants[index]
+    }
+
+    fn force_get_identifier(vm: &Vm, index: usize) -> Rc<str> {
+        force_get_constant(vm, index)
+            .as_identifier()
+            .cloned()
+            .expect("Invalid constant referenced")
+    }
 
     fn evaluate_binary_expr<F>(vm: &mut Vm, fun: F) -> Result<Option<HandleResult>, Value>
     where
@@ -169,12 +183,7 @@ mod handlers {
 
     pub fn ldglobal(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let id = vm.fetch_and_inc_ip();
-        let constant = &vm.frames.last().expect("No frame").constants[id as usize];
-
-        let name = constant
-            .as_identifier()
-            .expect("Referenced constant is not an identifier")
-            .clone();
+        let name = force_get_identifier(vm, id.into());
 
         let mut scope = LocalScope::new(vm);
         let value = scope.global.clone().get_property(&mut scope, name.as_ref().into())?;
@@ -371,13 +380,9 @@ mod handlers {
             // Object literal constant indices are guaranteed to be 1-byte wide, for now...
             let id = scope.fetch_and_inc_ip();
             let constant = {
-                let frame = scope.frames.last().expect("No frame");
+                let identifier = force_get_identifier(&scope, id.into());
 
-                let identifier = frame.constants[id as usize]
-                    .as_identifier()
-                    .expect("Invalid constant reference in bytecode");
-
-                String::from(&**identifier)
+                String::from(&*identifier)
             };
 
             obj.set_property(&mut scope, constant.into(), element).unwrap();
@@ -391,12 +396,7 @@ mod handlers {
 
     pub fn staticpropertyaccess(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let id = vm.fetch_and_inc_ip();
-        let constant = &vm.frames.last().expect("No frame").constants[id as usize];
-
-        let ident = constant
-            .as_identifier()
-            .expect("Referenced constant is not an identifier")
-            .clone();
+        let ident = force_get_identifier(vm, id.into());
 
         let preserve_this = vm.fetch_and_inc_ip() == 1;
 
@@ -418,10 +418,7 @@ mod handlers {
 
     pub fn staticpropertyset(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let id = vm.fetch_and_inc_ip();
-        let key = vm.frames.last().expect("No frame").constants[id as usize]
-            .as_identifier()
-            .unwrap()
-            .clone();
+        let key = force_get_identifier(vm, id.into());
 
         let value = vm.stack.pop().expect("No value");
         let target = vm.stack.pop().expect("No target");
@@ -435,10 +432,7 @@ mod handlers {
 
     pub fn staticpropertysetw(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let id = vm.fetchw_and_inc_ip();
-        let key = vm.frames.last().expect("No frame").constants[id as usize]
-            .as_identifier()
-            .unwrap()
-            .clone();
+        let key = force_get_identifier(vm, id.into());
 
         let value = vm.stack.pop().expect("No value");
         let target = vm.stack.pop().expect("No target");
@@ -601,10 +595,7 @@ mod handlers {
                     let ident_id = sc.fetchw_and_inc_ip();
 
                     let value = sc.get_local(loc_id.into()).expect("Invalid local reference");
-                    let ident = sc.frames.last().expect("No frame").constants[ident_id as usize]
-                        .as_identifier()
-                        .cloned()
-                        .expect("Referenced invalid constant");
+                    let ident = force_get_identifier(&sc, ident_id.into());
 
                     (value, ident)
                 }
@@ -612,10 +603,7 @@ mod handlers {
                     // Global variable
                     let ident_id = sc.fetchw_and_inc_ip();
 
-                    let ident = sc.frames.last().expect("No frame").constants[ident_id as usize]
-                        .as_identifier()
-                        .cloned()
-                        .expect("Referenced invalid constant");
+                    let ident = force_get_identifier(&sc, ident_id.into());
 
                     let global = sc.global.clone();
                     let value = global.get_property(&mut sc, ident.as_ref().into())?;
@@ -630,6 +618,14 @@ mod handlers {
                 FrameState::Module(exports) => exports.named.push((ident, value)),
                 _ => throw!(&mut sc, "Export is only available at the top level in modules"),
             }
+        }
+
+        Ok(None)
+    }
+
+    pub fn debugger(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        if let Some(cb) = vm.params().debugger_callback() {
+            cb(vm)?;
         }
 
         Ok(None)

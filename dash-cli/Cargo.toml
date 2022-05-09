@@ -9,5 +9,5 @@ anyhow = "1.0"
 clap = { version = "3.0.0", features = ["std"], default-features = false }
 rustyline = "9.1.2"
 tokio = { version = "1", features = ["full"] }
-dash-core = { path = "../dash-core", features = ["s1-type-annotations"] }
+dash-core = { path = "../dash-core", features = ["type-annotations"] }
 dash-rt = { path = "../dash-rt" }

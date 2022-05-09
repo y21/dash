@@ -42,58 +42,6 @@ pub fn is_numeric(c: impl AsRef<str>) -> bool {
     c.as_ref().chars().all(|c| c.is_numeric())
 }
 
-/// A T that may be either owned or borrowed
-#[derive(Debug, Clone)]
-pub enum MaybeOwned<T> {
-    /// Owned T
-    Owned(T),
-    /// Borrowed T
-    Borrowed(*mut T),
-}
-
-impl<T> MaybeOwned<T> {
-    /// Returns a mutable pointer to T
-    pub fn as_ptr(&mut self) -> *mut T {
-        match self {
-            Self::Owned(v) => v as *mut T,
-            Self::Borrowed(v) => *v,
-        }
-    }
-
-    /// Returns self as a pointer
-    pub fn as_borrowed(&mut self) -> Self {
-        Self::Borrowed(self.as_ptr())
-    }
-
-    /// Attempts to return self as an owned T
-    pub fn into_owned(self) -> Option<T> {
-        match self {
-            Self::Owned(v) => Some(v),
-            _ => None,
-        }
-    }
-
-    /// Returns a reference to the T
-    ///
-    /// This operation is unsafe because the pointer may be invalid
-    pub unsafe fn as_ref(&self) -> &T {
-        match self {
-            Self::Borrowed(b) => &**b,
-            Self::Owned(b) => b,
-        }
-    }
-
-    /// Returns a mutable reference to the T
-    ///
-    /// This operation is unsafe because the pointer may be invalid
-    pub unsafe fn as_mut(&mut self) -> &mut T {
-        match self {
-            Self::Borrowed(b) => &mut **b,
-            Self::Owned(b) => b,
-        }
-    }
-}
-
 /// An enum that can be either L or R
 pub enum Either<L, R> {
     /// Left variant

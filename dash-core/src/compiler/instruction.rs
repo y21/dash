@@ -89,6 +89,7 @@ pub const IMPORTDYN: u8 = 0x45;
 pub const IMPORTSTATIC: u8 = 0x46;
 pub const EXPORTDEFAULT: u8 = 0x47;
 pub const EXPORTNAMED: u8 = 0x48;
+pub const DEBUGGER: u8 = 0x49;
 
 #[rustfmt::skip]
 pub trait InstructionWriter {
@@ -180,6 +181,7 @@ pub trait InstructionWriter {
     fn build_static_import(&mut self, import: &ImportKind, local_id: u16, path_id: u16);
     fn build_default_export(&mut self);
     fn build_named_export(&mut self, it: &[NamedExportKind]) -> Result<(), CompileError>;
+    fn build_debugger(&mut self);
 }
 
 macro_rules! impl_instruction_writer {
@@ -227,7 +229,8 @@ impl InstructionWriter for InstructionBuilder {
         build_bitushr BITUSHR,
         build_objin OBJIN,
         build_instanceof INSTANCEOF,
-        build_default_export EXPORTDEFAULT
+        build_default_export EXPORTDEFAULT,
+        build_debugger DEBUGGER
     }
 
     fn build_constant(&mut self, cp: &mut ConstantPool, constant: Constant) -> Result<(), LimitExceededError> {

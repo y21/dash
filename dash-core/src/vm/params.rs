@@ -8,12 +8,14 @@ use super::Vm;
 pub type MathRandomCallback = fn(vm: &mut Vm) -> Result<f64, Value>;
 pub type StaticImportCallback = fn(vm: &mut Vm, ty: StaticImportKind, path: &str) -> Result<Value, Value>;
 pub type DynamicImportCallback = fn(vm: &mut Vm, val: Value) -> Result<Value, Value>;
+pub type DebuggerCallback = fn(vm: &mut Vm) -> Result<(), Value>;
 
 #[derive(Default)]
 pub struct VmParams {
     math_random_callback: Option<MathRandomCallback>,
     static_import_callback: Option<StaticImportCallback>,
     dynamic_import_callback: Option<DynamicImportCallback>,
+    debugger_callback: Option<DebuggerCallback>,
     state: Option<Box<dyn Any>>,
 }
 
@@ -56,5 +58,14 @@ impl VmParams {
 
     pub fn math_random_callback(&self) -> Option<MathRandomCallback> {
         self.math_random_callback
+    }
+
+    pub fn set_debugger_callback(mut self, callback: DebuggerCallback) -> Self {
+        self.debugger_callback = Some(callback);
+        self
+    }
+
+    pub fn debugger_callback(&self) -> Option<DebuggerCallback> {
+        self.debugger_callback
     }
 }

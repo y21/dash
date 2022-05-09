@@ -456,12 +456,12 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
                     unimplementedc!("Assignment operator {:?}", e.operator);
                 }
 
-                match &*prop.property {
-                    Expr::Literal(lit) => {
+                match (&*prop.property, prop.computed) {
+                    (Expr::Literal(lit), false) => {
                         let ident = lit.to_identifier();
                         ib.build_static_prop_set(&mut self.state.cp, &ident)?;
                     }
-                    e => {
+                    (e, _) => {
                         ib.append(&mut self.accept_expr(&e)?);
                         ib.build_dynamic_prop_set();
                     }
@@ -534,12 +534,12 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
         let mut ib = InstructionBuilder::new();
 
         ib.append(&mut self.accept_expr(&e.target)?);
-        match &*e.property {
-            Expr::Literal(lit) => {
+        match (&*e.property, e.computed) {
+            (Expr::Literal(lit), false) => {
                 let ident = lit.to_identifier();
                 ib.build_static_prop_access(&mut self.state.cp, &ident, preserve_this)?;
             }
-            e => {
+            (e, _) => {
                 ib.append(&mut self.accept_expr(e)?);
                 ib.build_dynamic_prop_access(preserve_this);
             }
@@ -797,10 +797,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
                     ib.append(&mut self.visit_variable_declaration(var)?);
                 }
 
-                let mut it = Vec::with_capacity(vars.len());
-                for var in vars.iter() {
-                    it.push(var.binding.name);
-                }
+                let it = vars.iter().map(|var| var.binding.name).collect::<Vec<_>>();
 
                 ib.append(&mut self.visit_export_statement(&ExportKind::Named(it))?);
             }
