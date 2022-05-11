@@ -62,6 +62,11 @@ impl Object for Error {
         todo!()
     }
 
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        // TODO: delete/clear property
+        Ok(Value::undefined())
+    }
+
     fn apply<'s>(
         &self,
         scope: &mut LocalScope,

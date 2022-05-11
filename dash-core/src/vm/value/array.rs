@@ -77,23 +77,46 @@ impl Object for Array {
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
         if let PropertyKey::String(key) = &key {
+            let mut items = self.items.borrow_mut();
+
             if key == "length" {
-                // swallow it
-                // TODO: once we support defining non configurable properties, we can stop special casing this
+                let len = items.len();
+                let new_len = value.to_int32(sc)? as usize;
+
+                items.resize(new_len, Value::undefined());
                 return Ok(());
             }
 
             if let Ok(index) = key.parse::<usize>() {
-                let mut items = self.items.borrow_mut();
                 if index >= items.len() {
                     items.resize(index + 1, Value::undefined());
                 }
+
                 items[index] = value;
                 return Ok(());
             }
         }
 
         self.obj.set_property(sc, key, value)
+    }
+
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        if let PropertyKey::String(key) = &key {
+            if key == "length" {
+                return Ok(Value::undefined());
+            }
+
+            if let Ok(index) = key.parse::<usize>() {
+                let mut items = self.items.borrow_mut();
+
+                if let Some(item) = items.get_mut(index) {
+                    let old = std::mem::replace(item, Value::null());
+                    return Ok(old);
+                }
+            }
+        }
+
+        self.obj.delete_property(sc, key)
     }
 
     fn apply(
@@ -145,6 +168,10 @@ impl Object for ArrayIterator {
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
         self.obj.set_property(sc, key, value)
+    }
+
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        self.obj.delete_property(sc, key)
     }
 
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {

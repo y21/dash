@@ -135,6 +135,7 @@ pub struct Statics {
     pub array_index_of: Handle<dyn Object>,
     pub array_map: Handle<dyn Object>,
     pub array_pop: Handle<dyn Object>,
+    pub array_push: Handle<dyn Object>,
     pub generator_iterator_prototype: Handle<dyn Object>,
     pub generator_iterator_next: Handle<dyn Object>,
 }
@@ -266,6 +267,7 @@ impl Statics {
             array_index_of: function(gc, "indexOf", js_std::array::index_of),
             array_map: function(gc, "map", js_std::array::map),
             array_pop: function(gc, "pop", js_std::array::pop),
+            array_push: function(gc, "push", js_std::array::push),
             generator_iterator_prototype: {
                 let obj = object(gc);
                 gc.register(GeneratorIterator::empty(obj))

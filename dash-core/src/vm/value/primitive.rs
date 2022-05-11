@@ -28,6 +28,10 @@ impl Object for f64 {
         Ok(())
     }
 
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        Ok(Value::undefined())
+    }
+
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
         // TODO: Reflect.setPrototypeOf(this, value); should throw
         Ok(())
@@ -71,6 +75,10 @@ impl Object for bool {
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
         Ok(())
+    }
+
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        Ok(Value::undefined())
     }
 
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
@@ -120,6 +128,10 @@ impl Object for Rc<str> {
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
         Ok(())
+    }
+
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        Ok(Value::undefined())
     }
 
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
@@ -181,6 +193,10 @@ impl Object for Undefined {
         throw!(sc, "Cannot set property {:?} of undefined", key)
     }
 
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        Ok(Value::undefined())
+    }
+
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
         throw!(sc, "Cannot set prototype of undefined")
     }
@@ -219,6 +235,10 @@ impl Object for Null {
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
         throw!(sc, "Cannot set property {:?} of null", key)
+    }
+
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        Ok(Value::undefined())
     }
 
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
@@ -274,6 +294,10 @@ impl Object for str {
         Ok(())
     }
 
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        Ok(Value::undefined())
+    }
+
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
         Ok(())
     }
@@ -325,6 +349,10 @@ impl Object for Symbol {
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
         Ok(())
+    }
+
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        Ok(Value::undefined())
     }
 
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {

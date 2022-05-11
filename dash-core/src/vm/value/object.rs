@@ -1,4 +1,4 @@
-use std::{any::Any, borrow::Cow, cell::RefCell, collections::HashMap, fmt::Debug};
+use std::{any::Any, borrow::Cow, cell::RefCell, collections::HashMap, fmt::Debug, ptr::addr_of};
 
 use crate::{
     gc::{handle::Handle, trace::Trace},
@@ -14,6 +14,7 @@ fn __assert_trait_object_safety(_: Box<dyn Object>) {}
 pub trait Object: Debug + Trace {
     fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value>;
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value>;
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value>;
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value>;
     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value>;
     fn apply<'s>(
@@ -155,6 +156,19 @@ impl Object for NamedObject {
         Ok(())
     }
 
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        let key = unsafe { &*addr_of!(key).cast::<PropertyKey<'static>>() };
+
+        let mut values = self.values.borrow_mut();
+        let value = values.remove(key);
+
+        if let Some(Value::Object(o) | Value::External(o)) = &value {
+            sc.add_ref(o.clone());
+        }
+
+        Ok(value.unwrap_or_undefined())
+    }
+
     fn apply(
         &self,
         sc: &mut LocalScope,
@@ -200,6 +214,10 @@ impl Object for Handle<dyn Object> {
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
         (**self).set_property(sc, key, value)
+    }
+
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        (**self).delete_property(sc, key)
     }
 
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {

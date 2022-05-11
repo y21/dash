@@ -48,6 +48,10 @@ macro_rules! boxed_primitive {
                     self.1.set_property(sc, key, value)
                 }
 
+                fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+                    self.1.delete_property(sc, key)
+                }
+
                 fn as_any(&self) -> &dyn Any {
                     self
                 }

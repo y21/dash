@@ -112,6 +112,10 @@ impl Object for Function {
         self.obj.set_property(sc, key, value)
     }
 
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        self.obj.delete_property(sc, key)
+    }
+
     fn apply(
         &self,
         scope: &mut LocalScope,

@@ -50,6 +50,10 @@ impl Object for HttpContext {
         self.obj.set_property(sc, key, value)
     }
 
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        self.obj.delete_property(sc, key)
+    }
+
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
         self.obj.set_prototype(sc, value)
     }

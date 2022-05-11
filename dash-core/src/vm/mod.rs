@@ -309,6 +309,7 @@ impl Vm {
             let index_of = scope.statics.array_index_of.clone();
             let map = scope.statics.array_map.clone();
             let pop = scope.statics.array_pop.clone();
+            let push = scope.statics.array_push.clone();
 
             array.set_property(&mut scope, "toString".into(), tostring.into()).unwrap();
             array.set_property(&mut scope, "join".into(), join.into()).unwrap();
@@ -329,6 +330,7 @@ impl Vm {
             array.set_property(&mut scope, "indexOf".into(), index_of.into()).unwrap();
             array.set_property(&mut scope, "map".into(), map.into()).unwrap();
             array.set_property(&mut scope, "pop".into(), pop.into()).unwrap();
+            array.set_property(&mut scope, "push".into(), push.into()).unwrap();
 
             array
         };

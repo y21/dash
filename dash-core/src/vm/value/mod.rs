@@ -158,6 +158,19 @@ impl Value {
         }
     }
 
+    pub fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        match self {
+            Self::Object(o) => o.delete_property(sc, key),
+            Self::Number(n) => n.delete_property(sc, key),
+            Self::Boolean(b) => b.delete_property(sc, key),
+            Self::String(s) => s.delete_property(sc, key),
+            Self::External(o) => o.delete_property(sc, key),
+            Self::Undefined(u) => u.delete_property(sc, key),
+            Self::Null(n) => n.delete_property(sc, key),
+            Self::Symbol(s) => s.delete_property(sc, key),
+        }
+    }
+
     pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
         match self {
             Self::Object(o) => o.apply(sc, this, args),
@@ -196,7 +209,7 @@ impl Value {
     }
 
     pub fn null() -> Value {
-        Value::Undefined(Undefined)
+        Value::Null(Null)
     }
 
     /// Boxes this value

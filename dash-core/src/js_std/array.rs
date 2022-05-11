@@ -253,6 +253,36 @@ pub fn map(cx: CallContext) -> Result<Value, Value> {
     Ok(cx.scope.register(values).into())
 }
 
-pub fn pop(cx: CallContext) -> Result<Value, Value> {
-    throw!(cx.scope, "Not implemented")
+pub fn pop(mut cx: CallContext) -> Result<Value, Value> {
+    let this = Value::Object(cx.this.to_object(cx.scope)?);
+    let len = this.length_of_array_like(cx.scope)?;
+
+    if len == 0 {
+        return Ok(Value::undefined());
+    }
+
+    let new_len = len - 1;
+    let value = this.delete_property(&mut cx.scope, new_len.to_string().into())?;
+    this.set_property(&mut cx.scope, "length".into(), Value::Number(new_len as f64))?;
+
+    Ok(value)
+}
+
+pub fn push(mut cx: CallContext) -> Result<Value, Value> {
+    let this = Value::Object(cx.this.to_object(cx.scope)?);
+    let len = this.length_of_array_like(cx.scope)?;
+
+    let mut last = Value::undefined();
+
+    if cx.args.is_empty() {
+        this.set_property(&mut cx.scope, len.to_string().into(), Value::undefined())?;
+    }
+
+    for (idx, arg) in cx.args.into_iter().enumerate() {
+        let pk = (idx + len).to_string();
+        last = arg.clone();
+        this.set_property(&mut cx.scope, pk.into(), arg)?;
+    }
+
+    Ok(last)
 }
