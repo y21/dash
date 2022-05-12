@@ -32,6 +32,7 @@ pub enum FrameState {
 
 #[derive(Debug, Clone)]
 pub struct Frame {
+    pub name: Option<Rc<str>>,
     pub ip: usize,
     pub reserved_stack_size: usize,
     pub constants: Rc<[Constant]>,
@@ -48,8 +49,9 @@ unsafe impl Trace for Frame {
 }
 
 impl Frame {
-    pub fn from_function(uf: &UserFunction, vm: &mut Vm) -> Self {
+    pub fn from_function(name: Option<Rc<str>>, uf: &UserFunction, vm: &mut Vm) -> Self {
         Self {
+            name,
             buffer: uf.buffer().clone(),
             constants: uf.constants().clone(),
             externals: uf.externals().clone(),
@@ -60,8 +62,8 @@ impl Frame {
         }
     }
 
-    pub fn from_module(uf: &UserFunction, vm: &mut Vm) -> Self {
-        let mut f = Self::from_function(uf, vm);
+    pub fn from_module(name: Option<Rc<str>>, uf: &UserFunction, vm: &mut Vm) -> Self {
+        let mut f = Self::from_function(name, uf, vm);
         f.state = FrameState::Module(Exports::default());
         f
     }
@@ -76,6 +78,7 @@ impl Frame {
         debug_assert!(cr.externals.is_empty());
 
         Self {
+            name: None,
             buffer: cr.instructions.into(),
             constants: cr.cp.into_vec().into(),
             externals: Vec::new().into(),

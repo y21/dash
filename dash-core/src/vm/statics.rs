@@ -12,6 +12,7 @@ use super::value::boxed::Boolean as BoxedBoolean;
 use super::value::boxed::Number as BoxedNumber;
 use super::value::boxed::String as BoxedString;
 use super::value::boxed::Symbol as BoxedSymbol;
+use super::value::error::Error;
 use super::value::function::generator::GeneratorIterator;
 use super::value::function::native::NativeFunction;
 use super::value::object::NamedObject;
@@ -138,6 +139,9 @@ pub struct Statics {
     pub array_push: Handle<dyn Object>,
     pub generator_iterator_prototype: Handle<dyn Object>,
     pub generator_iterator_next: Handle<dyn Object>,
+    pub error_ctor: Handle<dyn Object>,
+    pub error_prototype: Handle<dyn Object>,
+    pub error_to_string: Handle<dyn Object>,
 }
 
 fn object(gc: &mut Gc<dyn Object>) -> Handle<dyn Object> {
@@ -273,6 +277,9 @@ impl Statics {
                 gc.register(GeneratorIterator::empty(obj))
             },
             generator_iterator_next: function(gc, "next", js_std::generator::next),
+            error_ctor: function(gc, "Error", js_std::error::constructor),
+            error_prototype: gc.register(Error::empty()),
+            error_to_string: function(gc, "toString", js_std::error::to_string),
         }
     }
 

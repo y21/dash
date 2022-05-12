@@ -1,4 +1,5 @@
 use std::any::Any;
+use std::fmt::Write;
 use std::rc::Rc;
 
 use crate::gc::handle::Handle;
@@ -15,23 +16,48 @@ use super::Value;
 pub struct Error {
     pub name: Rc<str>,
     pub message: Rc<str>,
+    pub stack: Rc<str>,
     pub obj: NamedObject,
+}
+
+fn get_stack_trace(name: &str, message: &str, vm: &Vm) -> Rc<str> {
+    let mut stack = format!("{name}: {message}");
+
+    for frame in vm.frames.iter() {
+        let name = frame.name.as_deref().unwrap_or("<anonymous>");
+        let _ = write!(stack, "\n  at {name}");
+    }
+
+    stack.into()
 }
 
 impl Error {
     pub fn new<S: Into<Rc<str>>>(vm: &mut Vm, message: S) -> Self {
-        Self {
-            name: "Error".into(),
-            message: message.into(),
-            obj: NamedObject::new(vm),
-        }
+        Self::with_name(vm, "Error", message)
     }
 
     pub fn with_name<S1: Into<Rc<str>>, S2: Into<Rc<str>>>(vm: &mut Vm, name: S1, message: S2) -> Self {
+        let name = name.into();
+        let message = message.into();
+        let stack = get_stack_trace(&name, &message, vm);
+
         Self {
-            name: name.into(),
-            message: message.into(),
-            obj: NamedObject::new(vm),
+            name,
+            message,
+            stack,
+            obj: NamedObject::with_prototype_and_constructor(
+                vm.statics.error_prototype.clone(),
+                vm.statics.error_ctor.clone(),
+            ),
+        }
+    }
+
+    pub fn empty() -> Self {
+        Self {
+            name: "Error".into(),
+            message: "".into(),
+            stack: "".into(),
+            obj: NamedObject::null(),
         }
     }
 }
@@ -49,6 +75,7 @@ impl Object for Error {
         match key {
             PropertyKey::String(s) if s == "name" => Ok(Value::String(self.name.clone())),
             PropertyKey::String(s) if s == "message" => Ok(Value::String(self.message.clone())),
+            PropertyKey::String(s) if s == "stack" => Ok(Value::String(self.stack.clone())),
             _ => self.obj.get_property(sc, key),
         }
     }
@@ -59,12 +86,13 @@ impl Object for Error {
         key: PropertyKey<'static>,
         value: super::Value,
     ) -> Result<(), super::Value> {
-        todo!()
+        // TODO: this should special case name/stack
+        self.obj.set_property(sc, key, value)
     }
 
     fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
         // TODO: delete/clear property
-        Ok(Value::undefined())
+        self.obj.delete_property(sc, key)
     }
 
     fn apply<'s>(

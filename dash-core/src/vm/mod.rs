@@ -39,7 +39,7 @@ pub struct Vm {
     gc: Gc<dyn Object>,
     global: Handle<dyn Object>,
     externals: Externals,
-    statics: Statics,
+    statics: Statics, // TODO: we should box this... maybe?
     try_blocks: Vec<TryBlock>,
     params: VmParams,
 }
@@ -93,6 +93,12 @@ impl Vm {
 
         let global = scope.global.clone();
 
+        /// #[prototype] - Internal [[Prototype]] field for this value
+        /// #[fn_prototype] - Only valid on function values
+        ///                   This will set the [[Prototype]] field of the function
+        /// #[properties] - "Reference" properties (i.e. object of some kind)
+        /// #[symbols] - Symbol properties (e.g. @@iterator)
+        /// #[fields] - Primitive fields (e.g. PI: 3.1415)
         macro_rules! register_builtin_type {
             (
                 $base:expr, {
@@ -336,6 +342,17 @@ impl Vm {
             toPrimitive: scope.statics.symbol_to_primitive;
             toStringTag: scope.statics.symbol_to_string_tag;
             unscopables: scope.statics.symbol_unscopables;
+        });
+
+        let error_ctor = register_builtin_type!(scope.statics.error_ctor, {
+            #[prototype] scope.statics.function_proto;
+            #[fn_prototype] scope.statics.error_prototype;
+        });
+
+        let error_proto = register_builtin_type!(scope.statics.error_prototype, {
+            #[prototype] scope.statics.object_prototype;
+            #[properties]
+            toString: scope.statics.error_to_string;
         });
 
         let global = register_builtin_type!(global, {

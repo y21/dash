@@ -117,12 +117,14 @@ impl Value {
 
                 let uf = UserFunction::new(f.buffer, f.constants, externals.into(), f.locals, f.params);
 
+                let name: Option<Rc<str>> = f.name.map(Into::into);
+
                 let function = match f.ty {
                     ParserFunctionKind::Function | ParserFunctionKind::Arrow => {
-                        Function::new(vm, f.name, FunctionKind::User(uf))
+                        Function::new(vm, name, FunctionKind::User(uf))
                     }
                     ParserFunctionKind::Generator => {
-                        Function::new(vm, f.name, FunctionKind::Generator(GeneratorFunction::new(uf)))
+                        Function::new(vm, name, FunctionKind::Generator(GeneratorFunction::new(uf)))
                     }
                 };
 

@@ -1,4 +1,6 @@
+use anyhow::bail;
 use dash::optimizer::consteval::OptLevel;
+use dash::EvalError;
 use dash_core as dash;
 use dash_rt::runtime::Runtime;
 use dash_rt::state::State;
@@ -32,7 +34,13 @@ pub fn run(args: &ArgMatches) -> anyhow::Result<()> {
 async fn inner(source: String, opt: OptLevel) -> anyhow::Result<()> {
     let mut rt = Runtime::new().await;
 
-    let value = rt.eval(&source, opt).map_err(|e| anyhow::anyhow!("{e}"))?;
+    let value = match rt.eval(&source, opt) {
+        Ok(val) | Err(EvalError::VmError(val)) => val,
+        Err(e) => bail!("{e}"),
+    };
+
+    // TODO: EvalError::VmError should probably bail too?
+
     let mut sc = LocalScope::new(rt.vm_mut());
     println!("{}", value.to_string(&mut sc).unwrap());
 

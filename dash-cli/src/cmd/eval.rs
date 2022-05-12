@@ -1,5 +1,3 @@
-use dash::vm::local::LocalScope;
-use dash::vm::value::ops::abstractions::conversions::ValueConversion;
 use dash::vm::Vm;
 use dash_core as dash;
 
@@ -16,12 +14,9 @@ pub fn eval(args: &ArgMatches) -> anyhow::Result<()> {
     let mut vm = Vm::new(Default::default());
 
     match vm.eval(source, opt) {
-        Ok(value) => {
-            let mut scope = LocalScope::new(&mut vm);
-            println!("{}", value.to_string(&mut scope).unwrap());
-        }
-        Err(err) => bail!("Error: {}", err),
-    }
+        Ok(value) | Err(dash::EvalError::VmError(value)) => util::print_value(value, &mut vm).unwrap(),
+        Err(e) => bail!("{e}"),
+    };
 
     Ok(())
 }

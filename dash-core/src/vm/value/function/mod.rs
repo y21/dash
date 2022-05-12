@@ -2,6 +2,7 @@ use std::{
     any::Any,
     cell::RefCell,
     fmt::{self, Debug},
+    rc::Rc,
 };
 
 use crate::{
@@ -65,14 +66,14 @@ impl fmt::Debug for FunctionKind {
 
 #[derive(Debug)]
 pub struct Function {
-    name: Option<String>,
+    name: Option<Rc<str>>,
     kind: FunctionKind,
     obj: NamedObject,
     prototype: RefCell<Option<Handle<dyn Object>>>,
 }
 
 impl Function {
-    pub fn new(vm: &mut Vm, name: Option<String>, kind: FunctionKind) -> Self {
+    pub fn new(vm: &mut Vm, name: Option<Rc<str>>, kind: FunctionKind) -> Self {
         Self {
             name,
             kind,
@@ -81,7 +82,7 @@ impl Function {
         }
     }
 
-    pub fn with_obj(name: Option<String>, kind: FunctionKind, obj: NamedObject) -> Self {
+    pub fn with_obj(name: Option<Rc<str>>, kind: FunctionKind, obj: NamedObject) -> Self {
         Self {
             name,
             kind,
@@ -92,6 +93,10 @@ impl Function {
 
     pub fn kind(&self) -> &FunctionKind {
         &self.kind
+    }
+
+    pub fn name(&self) -> Option<&Rc<str>> {
+        self.name.as_ref()
     }
 
     pub fn set_fn_prototype(&self, prototype: Handle<dyn Object>) {
@@ -136,7 +141,7 @@ impl Object for Function {
 
                 scope.stack.extend(args.into_iter().take(argc));
 
-                let mut frame = Frame::from_function(uf, scope);
+                let mut frame = Frame::from_function(self.name.clone(), uf, scope);
                 frame.sp = sp;
 
                 scope.vm.execute_frame(frame).map(|v| match v {
