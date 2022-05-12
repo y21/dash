@@ -367,6 +367,7 @@ impl Vm {
 
             Symbol: symbol_ctor;
             Array: array_ctor;
+            Error: error_ctor;
             String: string_ctor;
             Object: object_ctor;
             console: console;
@@ -521,7 +522,7 @@ impl Vm {
             match dispatch::handle(self, instruction) {
                 Ok(Some(hr)) => return Ok(hr),
                 Ok(None) => continue,
-                Err(e) => self.handle_rt_error(e, fp)?,
+                Err(e) => self.handle_rt_error(e, fp)?, // TODO: pop frame
             }
         }
     }

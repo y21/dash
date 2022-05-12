@@ -26,6 +26,10 @@ macro_rules! boxed_primitive {
                 pub fn with_obj(value: $t, obj: NamedObject) -> Self {
                     Self(value, obj)
                 }
+
+                pub fn value(&self) -> &$t {
+                    &self.0
+                }
             }
 
             unsafe impl Trace for $name {

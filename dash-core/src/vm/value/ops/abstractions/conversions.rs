@@ -4,7 +4,7 @@ use crate::gc::handle::Handle;
 use crate::throw;
 use crate::vm::local::LocalScope;
 use crate::vm::value::boxed::Boolean;
-use crate::vm::value::boxed::Number;
+use crate::vm::value::boxed::Number as BoxedNumber;
 use crate::vm::value::boxed::String as BoxedString;
 use crate::vm::value::boxed::Symbol as BoxedSymbol;
 use crate::vm::value::object::Object;
@@ -26,6 +26,19 @@ pub trait ValueConversion {
 
 impl ValueConversion for Value {
     fn to_number(&self, sc: &mut LocalScope) -> Result<f64, Value> {
+        fn object_to_number(this: &Value, obj: &dyn Object, sc: &mut LocalScope) -> Result<f64, Value> {
+            let any = obj.as_any();
+
+            if let Some(&n) = any.downcast_ref::<f64>() {
+                Ok(n)
+            } else if let Some(n) = any.downcast_ref::<BoxedNumber>() {
+                Ok(*n.value())
+            } else {
+                let prim = this.to_primitive(sc, Some(PreferredType::Number))?;
+                prim.to_number(sc)
+            }
+        }
+
         match self {
             Value::Number(n) => Ok(*n),
             Value::Undefined(_) => Ok(f64::NAN),
@@ -33,11 +46,7 @@ impl ValueConversion for Value {
             Value::Boolean(b) => Ok(*b as i8 as f64),
             Value::String(s) => s.parse().or_else(|e| throw!(sc, "{}", e)),
             Value::Symbol(_) => throw!(sc, "Cannot convert symbol to number"),
-            Value::Object(o) => {
-                let prim = self.to_primitive(sc, Some(PreferredType::Number))?;
-                prim.to_number(sc)
-            }
-            _ => todo!(),
+            Value::Object(o) | Value::External(o) => object_to_number(self, o, sc),
         }
     }
 
@@ -154,7 +163,7 @@ impl ValueConversion for Value {
             Value::Null(_) => throw!(sc, "Cannot convert null to object"),
             Value::Boolean(b) => register_dyn(sc, |sc| Boolean::new(sc, *b)),
             Value::Symbol(s) => register_dyn(sc, |sc| BoxedSymbol::new(sc, s.clone())),
-            Value::Number(n) => register_dyn(sc, |sc| Number::new(sc, *n)),
+            Value::Number(n) => register_dyn(sc, |sc| BoxedNumber::new(sc, *n)),
             Value::String(s) => register_dyn(sc, |sc| BoxedString::new(sc, s.clone())),
             Value::External(e) => Ok(e.clone()), // TODO: is this correct?
         }

@@ -1,6 +1,7 @@
 use dash::compiler::StaticImportKind;
 use dash::vm::params::VmParams;
 use dash::vm::Vm;
+use dash::EvalError;
 use dash_core as dash;
 
 use dash::compiler::decompiler;
@@ -11,6 +12,7 @@ use dash::vm::local::LocalScope;
 use dash::vm::value::ops::abstractions::conversions::ValueConversion;
 use dash::vm::value::Value;
 use std::fmt::Write;
+use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -53,20 +55,15 @@ pub fn eval(s: &str, opt: OptLevel) -> String {
     let mut vm = Vm::new(params);
 
     match vm.eval(s, opt.into()) {
-        Ok(value) => match value {
-            Value::External(e) => format!("[external@{:?}]", e.as_ptr()),
-            other => {
-                let mut scope = LocalScope::new(&mut vm);
-
-                // TODO: add value to scope
-                other
-                    .to_string(&mut scope)
-                    .map(|x| x.to_string())
-                    .unwrap_or_else(|_| "<exception>".into())
-            }
-        },
+        Ok(Value::External(e)) => format!("[external@{:?}]", e.as_ptr()),
+        Ok(val) | Err(EvalError::VmError(val)) => fmt_value(val, &mut vm).unwrap_or_else(|_| "<exception>".into()),
         Err(e) => e.to_string(),
     }
+}
+
+fn fmt_value(value: Value, vm: &mut Vm) -> Result<String, Value> {
+    let mut scope = LocalScope::new(vm);
+    value.to_string(&mut scope).map(|s| s.to_string())
 }
 
 #[wasm_bindgen]

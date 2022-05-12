@@ -15,7 +15,7 @@ use crate::vm::value::ValueContext;
 
 fn as_generator<'a>(scope: &mut LocalScope, value: &'a Value) -> Result<&'a GeneratorIterator, Value> {
     let generator = match value {
-        Value::Object(o) => o.as_any().downcast_ref::<GeneratorIterator>(),
+        Value::Object(o) | Value::External(o) => o.as_any().downcast_ref::<GeneratorIterator>(),
         _ => None,
     };
 

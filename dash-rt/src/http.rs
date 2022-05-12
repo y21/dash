@@ -83,7 +83,7 @@ impl Object for HttpContext {
 
 pub fn ctx_respond(mut cx: CallContext) -> Result<Value, Value> {
     let this = match &cx.this {
-        Value::Object(this) => match this.as_any().downcast_ref::<HttpContext>() {
+        Value::Object(this) | Value::External(this) => match this.as_any().downcast_ref::<HttpContext>() {
             Some(ctx) => ctx,
             None => throw!(cx.scope, "Incompatible receiver"),
         },

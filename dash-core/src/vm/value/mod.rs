@@ -3,6 +3,7 @@ pub mod boxed;
 pub mod conversions;
 pub mod error;
 pub mod function;
+pub mod inspect;
 pub mod object;
 pub mod ops;
 pub mod primitive;
@@ -193,7 +194,9 @@ impl Value {
             Value::Number(n) => *n != 0.0 && !n.is_nan(),
             Value::Symbol(_) => true,
             Value::Object(_) => true,
-            _ => unimplemented!(),
+            Value::Undefined(_) => false,
+            Value::Null(_) => false,
+            Value::External(_) => todo!(),
         }
     }
 

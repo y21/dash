@@ -8,7 +8,7 @@ use crate::vm::value::ValueContext;
 
 pub fn next(cx: CallContext) -> Result<Value, Value> {
     let iterator = match &cx.this {
-        Value::Object(o) => o.as_any().downcast_ref::<ArrayIterator>(),
+        Value::Object(o) | Value::External(o) => o.as_any().downcast_ref::<ArrayIterator>(),
         _ => None,
     };
 

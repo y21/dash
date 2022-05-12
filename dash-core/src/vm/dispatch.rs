@@ -485,7 +485,7 @@ mod handlers {
         let id = vm.fetch_and_inc_ip();
         let value = vm.get_external(id as usize).expect("Invalid local reference").clone();
 
-        vm.try_push_stack(value.into())?;
+        vm.try_push_stack(Value::External(value))?;
         Ok(None)
     }
 
