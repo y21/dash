@@ -187,7 +187,7 @@ mod handlers {
 
         let mut scope = LocalScope::new(vm);
         let value = scope.global.clone().get_property(&mut scope, name.as_ref().into())?;
-        vm.stack.push(value);
+        vm.try_push_stack(value)?;
         Ok(None)
     }
 

@@ -6,7 +6,7 @@ use crate::{
     optimizer::{self, consteval::OptLevel},
     parser::parser::Parser,
     vm::value::function::Function,
-    EvalError,
+    EvalError, throw,
 };
 
 use self::{
@@ -31,6 +31,7 @@ pub mod statics;
 pub mod util;
 pub mod value;
 
+pub const MAX_FRAME_STACK_SIZE: usize = 1024;
 pub const MAX_STACK_SIZE: usize = 8196;
 
 pub struct Vm {
@@ -427,10 +428,20 @@ impl Vm {
         }
     }
 
+    pub(crate) fn try_push_frame(&mut self, frame: Frame) -> Result<(), Value> {
+        if self.frames.len() > MAX_FRAME_STACK_SIZE {
+            throw!(self, "Maximum call stack size exceeded");
+        }
+
+        self.frames.push(frame);
+        Ok(())
+    }
+
     pub(crate) fn try_push_stack(&mut self, value: Value) -> Result<(), Value> {
         if self.stack.len() > MAX_STACK_SIZE {
-            panic!("Stack overflow"); // todo: return result
+            throw!(self, "Maximum stack size exceeded");
         }
+        
         self.stack.push(value);
         Ok(())
     }
@@ -443,7 +454,7 @@ impl Vm {
         let it = other.into_iter();
         let len = it.len();
         if self.stack.len() + len > MAX_STACK_SIZE {
-            panic!("Stack overflow"); // todo: return result
+            throw!(self, "Maximum stack size exceeded");
         }
         self.stack.extend(it);
         Ok(())
@@ -500,7 +511,7 @@ impl Vm {
         self.stack
             .resize(self.stack.len() + frame.reserved_stack_size, Value::undefined());
 
-        self.frames.push(frame);
+        self.try_push_frame(frame)?;
 
         let fp = self.frames.len();
 
