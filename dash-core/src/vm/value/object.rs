@@ -187,6 +187,7 @@ impl Object for NamedObject {
         match value {
             Value::Null(_) => self.prototype.replace(None),
             Value::Object(handle) => self.prototype.replace(Some(handle)),
+            Value::External(handle) => self.prototype.replace(Some(handle)), // TODO: check that handle is an object
             _ => throw!(sc, "prototype must be an object"),
         };
 

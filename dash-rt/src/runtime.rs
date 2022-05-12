@@ -107,61 +107,69 @@ fn import_callback(vm: &mut Vm, import_ty: StaticImportKind, path: &str) -> Resu
             let module = sc.register(module);
             Ok(module.into())
         }
+        "@std/iter" => {
+            let module = include_str!("../js/iter.js");
+            compile_module(&mut sc, module, import_ty)
+        }
         _ => {
             let contents = match fs::read_to_string(path) {
                 Ok(c) => c,
                 Err(e) => throw!(&mut sc, "{}", e),
             };
 
-            let tokens = match Parser::from_str(&contents) {
-                Ok(tok) => tok,
-                Err(e) => throw!(&mut sc, "Module lex error: {:?}", e),
-            };
-
-            let mut ast = match tokens.parse_all() {
-                Ok(ast) => ast,
-                Err(e) => throw!(&mut sc, "Module parse error: {:?}", e),
-            };
-
-            optimizer::optimize_ast(&mut ast, OptLevel::Aggressive);
-
-            let re = match FunctionCompiler::new().compile_ast(ast) {
-                Ok(re) => re,
-                Err(e) => throw!(&mut sc, "Module compile error: {:?}", e),
-            };
-
-            let frame = Frame::from_compile_result(re);
-
-            let exports = sc.execute_module(frame)?;
-
-            let export_obj = match import_ty {
-                StaticImportKind::Default => {
-                    let export_obj = match exports.default {
-                        Some(obj) => obj,
-                        None => {
-                            let o = NamedObject::new(&mut sc);
-                            Value::Object(sc.register(o))
-                        }
-                    };
-
-                    export_obj
-                }
-                StaticImportKind::All => {
-                    let export_obj = NamedObject::new(&mut sc);
-
-                    if let Some(default) = exports.default {
-                        export_obj.set_property(&mut sc, "default".into(), default)?;
-                    }
-
-                    Value::Object(sc.register(export_obj))
-                }
-            };
-
-            for (k, v) in exports.named {
-                export_obj.set_property(&mut sc, String::from(k.as_ref()).into(), v)?;
-            }
-
-            Ok(export_obj)
+            compile_module(&mut sc, &contents, import_ty)
         }
     }
+}
+
+fn compile_module(sc: &mut LocalScope, source: &str, import_ty: StaticImportKind) -> Result<Value, Value> {
+    let tokens = match Parser::from_str(&source) {
+        Ok(tok) => tok,
+        Err(e) => throw!(sc, "Module lex error: {:?}", e),
+    };
+
+    let mut ast = match tokens.parse_all() {
+        Ok(ast) => ast,
+        Err(e) => throw!(sc, "Module parse error: {:?}", e),
+    };
+
+    optimizer::optimize_ast(&mut ast, OptLevel::Aggressive);
+
+    let re = match FunctionCompiler::new().compile_ast(ast) {
+        Ok(re) => re,
+        Err(e) => throw!(sc, "Module compile error: {:?}", e),
+    };
+
+    let frame = Frame::from_compile_result(re);
+
+    let exports = sc.execute_module(frame)?;
+
+    let export_obj = match import_ty {
+        StaticImportKind::Default => {
+            let export_obj = match exports.default {
+                Some(obj) => obj,
+                None => {
+                    let o = NamedObject::new(sc);
+                    Value::Object(sc.register(o))
+                }
+            };
+
+            export_obj
+        }
+        StaticImportKind::All => {
+            let export_obj = NamedObject::new(sc);
+
+            if let Some(default) = exports.default {
+                export_obj.set_property(sc, "default".into(), default)?;
+            }
+
+            Value::Object(sc.register(export_obj))
+        }
+    };
+
+    for (k, v) in exports.named {
+        export_obj.set_property(sc, String::from(k.as_ref()).into(), v)?;
+    }
+
+    Ok(export_obj)
 }

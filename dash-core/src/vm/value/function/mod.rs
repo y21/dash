@@ -141,8 +141,8 @@ impl Object for Function {
 
                 scope.stack.extend(args.into_iter().take(argc));
 
-                let mut frame = Frame::from_function(self.name.clone(), uf, scope);
-                frame.sp = sp;
+                let mut frame = Frame::from_function(self.name.clone(), Some(this), uf, scope);
+                frame.set_sp(sp);
 
                 scope.vm.execute_frame(frame).map(|v| match v {
                     HandleResult::Return(v) => v,

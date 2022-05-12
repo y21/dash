@@ -90,6 +90,8 @@ pub const IMPORTSTATIC: u8 = 0x46;
 pub const EXPORTDEFAULT: u8 = 0x47;
 pub const EXPORTNAMED: u8 = 0x48;
 pub const DEBUGGER: u8 = 0x49;
+pub const GLOBAL: u8 = 0x4A;
+pub const SUPER: u8 = 0x4C;
 
 #[rustfmt::skip]
 pub trait InstructionWriter {
@@ -137,6 +139,10 @@ pub trait InstructionWriter {
     fn build_ret(&mut self);
     /// Builds the [THIS] instruction
     fn build_this(&mut self);
+    /// Builds the [SUPER] instruction
+    fn build_super(&mut self);
+    /// Builds the [GLOBAL] instruction
+    fn build_global(&mut self);
     /// Builds the [JMPFALSEP] instructions
     fn build_jmpfalsep(&mut self, label: Label);
     /// Builds the [JMPFALSENP] instructions
@@ -230,7 +236,9 @@ impl InstructionWriter for InstructionBuilder {
         build_objin OBJIN,
         build_instanceof INSTANCEOF,
         build_default_export EXPORTDEFAULT,
-        build_debugger DEBUGGER
+        build_debugger DEBUGGER,
+        build_super SUPER,
+        build_global GLOBAL
     }
 
     fn build_constant(&mut self, cp: &mut ConstantPool, constant: Constant) -> Result<(), LimitExceededError> {

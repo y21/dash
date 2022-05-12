@@ -630,6 +630,27 @@ mod handlers {
 
         Ok(None)
     }
+
+    pub fn this(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        let this = vm
+            .frames
+            .iter()
+            .rev()
+            .find_map(|f| f.this.clone())
+            .unwrap_or_else(|| Value::Object(vm.global.clone()));
+
+        vm.try_push_stack(this)?;
+        Ok(None)
+    }
+
+    pub fn global_this(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        vm.try_push_stack(Value::Object(vm.global.clone()))?;
+        Ok(None)
+    }
+
+    pub fn super_(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        throw!(vm, "`super` keyword unexpected in this context");
+    }
 }
 
 pub fn handle(vm: &mut Vm, instruction: u8) -> Result<Option<HandleResult>, Value> {
@@ -690,6 +711,9 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<Option<HandleResult>, Valu
         opcode::IMPORTSTATIC => handlers::import_static(vm),
         opcode::EXPORTDEFAULT => handlers::export_default(vm),
         opcode::EXPORTNAMED => handlers::export_named(vm),
+        opcode::THIS => handlers::this(vm),
+        opcode::GLOBAL => handlers::global_this(vm),
+        opcode::SUPER => handlers::super_(vm),
         _ => unimplemented!("{}", instruction),
     }
 }

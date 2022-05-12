@@ -12,7 +12,6 @@ use dash::vm::local::LocalScope;
 use dash::vm::value::ops::abstractions::conversions::ValueConversion;
 use dash::vm::value::Value;
 use std::fmt::Write;
-use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]

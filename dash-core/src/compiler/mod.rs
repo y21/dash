@@ -263,12 +263,17 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
         Ok(ib.build())
     }
 
-    fn visit_identifier_expression(&mut self, i: &str) -> Result<Vec<u8>, CompileError> {
+    fn visit_identifier_expression(&mut self, ident: &str) -> Result<Vec<u8>, CompileError> {
         let mut ib = InstructionBuilder::new();
 
-        match self.find_local(i) {
-            Some((index, local)) => ib.build_local_load(index, local.is_extern()),
-            _ => ib.build_global_load(&mut self.state.cp, i)?,
+        match ident {
+            "this" => ib.build_this(),
+            "super" => ib.build_super(),
+            "globalThis" => ib.build_global(),
+            ident => match self.find_local(ident) {
+                Some((index, local)) => ib.build_local_load(index, local.is_extern()),
+                _ => ib.build_global_load(&mut self.state.cp, ident)?,
+            },
         };
 
         Ok(ib.build())

@@ -37,6 +37,7 @@ pub struct Frame {
     pub reserved_stack_size: usize,
     pub constants: Rc<[Constant]>,
     pub externals: Rc<[Handle<dyn Object>]>,
+    pub this: Option<Value>,
     pub buffer: Rc<[u8]>,
     pub sp: usize,
     pub state: FrameState,
@@ -49,9 +50,10 @@ unsafe impl Trace for Frame {
 }
 
 impl Frame {
-    pub fn from_function(name: Option<Rc<str>>, uf: &UserFunction, vm: &mut Vm) -> Self {
+    pub fn from_function(name: Option<Rc<str>>, this: Option<Value>, uf: &UserFunction, vm: &mut Vm) -> Self {
         Self {
             name,
+            this,
             buffer: uf.buffer().clone(),
             constants: uf.constants().clone(),
             externals: uf.externals().clone(),
@@ -62,8 +64,8 @@ impl Frame {
         }
     }
 
-    pub fn from_module(name: Option<Rc<str>>, uf: &UserFunction, vm: &mut Vm) -> Self {
-        let mut f = Self::from_function(name, uf, vm);
+    pub fn from_module(name: Option<Rc<str>>, this: Option<Value>, uf: &UserFunction, vm: &mut Vm) -> Self {
+        let mut f = Self::from_function(name, this, uf, vm);
         f.state = FrameState::Module(Exports::default());
         f
     }
@@ -79,6 +81,7 @@ impl Frame {
 
         Self {
             name: None,
+            this: None,
             buffer: cr.instructions.into(),
             constants: cr.cp.into_vec().into(),
             externals: Vec::new().into(),
