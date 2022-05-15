@@ -14,6 +14,27 @@ const iteratorProto = {
         return o;
     },
 
+    zip: function (iterable) {
+        const o = Object.create(this);
+        const _this = this;
+
+        o[Symbol.iterator] = function* () {
+            const it1 = _this[Symbol.iterator]();
+            const it2 = iterable[Symbol.iterator]();
+
+            let item1;
+            let item2;
+            while (
+                !(item1 = it1.next()).done &&
+                !(item2 = it2.next()).done
+            ) {
+                yield [item1.value, item2.value];
+            }
+        }
+
+        return o;
+    },
+
     forEach: function (cb) {
         const it = this[Symbol.iterator]();
 
@@ -29,7 +50,33 @@ const iteratorProto = {
 
         // TODO: get rid of this hack
         // local values remain boxed even after returning
-        return sum + 0;
+        return sum;
+    },
+
+    min: function () {
+        let min = null;
+        this.forEach((i) => {
+            if (min === null || i < min) {
+                min = i;
+            }
+        });
+        return min;
+    },
+
+    max: function () {
+        let max = null;
+        this.forEach((i) => {
+            if (max === null || i > max) {
+                max = i;
+            }
+        });
+        return max;
+    },
+
+    toArray: function () {
+        let x = [];
+        this.forEach((i) => x.push(i));
+        return x;
     }
 };
 

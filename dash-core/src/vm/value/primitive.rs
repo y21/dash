@@ -7,8 +7,14 @@ use crate::gc::trace::Trace;
 use crate::throw;
 use crate::vm::local::LocalScope;
 
+use super::boxed::Boolean as BoxedBoolean;
+use super::boxed::Number as BoxedNumber;
+use super::boxed::String as BoxedString;
+use super::boxed::Symbol as BoxedSymbol;
 use super::object::Object;
 use super::object::PropertyKey;
+use super::ops::abstractions::conversions::PreferredType;
+use super::ops::abstractions::conversions::ValueConversion;
 use super::Typeof;
 use super::Value;
 
@@ -62,6 +68,10 @@ impl Object for f64 {
     fn type_of(&self) -> Typeof {
         Typeof::Number
     }
+
+    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
+        Some(self)
+    }
 }
 
 unsafe impl Trace for bool {
@@ -109,6 +119,10 @@ impl Object for bool {
 
     fn type_of(&self) -> Typeof {
         Typeof::Boolean
+    }
+
+    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
+        Some(self)
     }
 }
 
@@ -162,6 +176,10 @@ impl Object for Rc<str> {
 
     fn type_of(&self) -> Typeof {
         str::type_of(self)
+    }
+
+    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
+        Some(self)
     }
 }
 
@@ -226,6 +244,10 @@ impl Object for Undefined {
     fn type_of(&self) -> Typeof {
         Typeof::Undefined
     }
+
+    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
+        Some(self)
+    }
 }
 
 impl Object for Null {
@@ -265,6 +287,10 @@ impl Object for Null {
 
     fn own_keys(&self) -> Result<Vec<Value>, Value> {
         Ok(Vec::new())
+    }
+
+    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
+        Some(self)
     }
 }
 
@@ -383,5 +409,210 @@ impl Object for Symbol {
 
     fn type_of(&self) -> Typeof {
         Typeof::Symbol
+    }
+
+    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
+        Some(self)
+    }
+}
+
+pub trait PrimitiveCapabilities: ValueConversion {
+    fn as_string(&self) -> Option<Rc<str>> {
+        None
+    }
+    fn as_number(&self) -> Option<f64> {
+        None
+    }
+    fn as_bool(&self) -> Option<bool> {
+        None
+    }
+}
+
+impl PrimitiveCapabilities for f64 {
+    fn as_number(&self) -> Option<f64> {
+        Some(*self)
+    }
+}
+
+impl ValueConversion for f64 {
+    fn to_primitive(&self, sc: &mut LocalScope, preferred_type: Option<PreferredType>) -> Result<Value, Value> {
+        Ok(Value::Number(*self))
+    }
+
+    fn to_number(&self, sc: &mut LocalScope) -> Result<f64, Value> {
+        Ok(*self)
+    }
+
+    fn to_boolean(&self) -> Result<bool, Value> {
+        Ok(*self != 0.0 && !self.is_nan())
+    }
+
+    fn to_string(&self, sc: &mut LocalScope) -> Result<Rc<str>, Value> {
+        // TODO: optimize
+        Ok(ToString::to_string(self).into())
+    }
+
+    fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value> {
+        todo!() // TODO
+    }
+
+    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value> {
+        let num = BoxedNumber::new(sc, *self);
+        Ok(sc.register(num))
+    }
+}
+
+impl PrimitiveCapabilities for bool {
+    fn as_bool(&self) -> Option<bool> {
+        Some(*self)
+    }
+}
+
+impl ValueConversion for bool {
+    fn to_primitive(&self, sc: &mut LocalScope, preferred_type: Option<PreferredType>) -> Result<Value, Value> {
+        Ok(Value::Boolean(*self))
+    }
+
+    fn to_number(&self, sc: &mut LocalScope) -> Result<f64, Value> {
+        Ok(*self as u8 as f64)
+    }
+
+    fn to_boolean(&self) -> Result<bool, Value> {
+        Ok(*self)
+    }
+
+    fn to_string(&self, sc: &mut LocalScope) -> Result<Rc<str>, Value> {
+        Ok(if *self {
+            sc.statics().get_true()
+        } else {
+            sc.statics().get_false()
+        })
+    }
+
+    fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value> {
+        todo!() // TODO
+    }
+
+    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value> {
+        let bool = BoxedBoolean::new(sc, *self);
+        Ok(sc.register(bool))
+    }
+}
+
+impl PrimitiveCapabilities for Rc<str> {
+    fn as_string(&self) -> Option<Rc<str>> {
+        Some(self.clone())
+    }
+}
+
+impl ValueConversion for Rc<str> {
+    fn to_primitive(&self, sc: &mut LocalScope, preferred_type: Option<PreferredType>) -> Result<Value, Value> {
+        Ok(Value::String(Rc::clone(self)))
+    }
+
+    fn to_number(&self, sc: &mut LocalScope) -> Result<f64, Value> {
+        self.parse().or_else(|e| throw!(sc, "{}", e))
+    }
+
+    fn to_boolean(&self) -> Result<bool, Value> {
+        Ok(!self.is_empty())
+    }
+
+    fn to_string(&self, sc: &mut LocalScope) -> Result<Rc<str>, Value> {
+        Ok(Rc::clone(self))
+    }
+
+    fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value> {
+        Ok(self.len())
+    }
+
+    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value> {
+        let bool = BoxedString::new(sc, self.clone());
+        Ok(sc.register(bool))
+    }
+}
+
+impl PrimitiveCapabilities for Undefined {}
+
+impl ValueConversion for Undefined {
+    fn to_primitive(&self, sc: &mut LocalScope, preferred_type: Option<PreferredType>) -> Result<Value, Value> {
+        Ok(Value::undefined())
+    }
+
+    fn to_number(&self, sc: &mut LocalScope) -> Result<f64, Value> {
+        Ok(f64::NAN)
+    }
+
+    fn to_boolean(&self) -> Result<bool, Value> {
+        Ok(false)
+    }
+
+    fn to_string(&self, sc: &mut LocalScope) -> Result<Rc<str>, Value> {
+        Ok(sc.statics().undefined_str())
+    }
+
+    fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value> {
+        todo!() // TODO: throw?
+    }
+
+    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value> {
+        throw!(sc, "Cannot convert undefined to object")
+    }
+}
+
+impl PrimitiveCapabilities for Null {}
+
+impl ValueConversion for Null {
+    fn to_primitive(&self, sc: &mut LocalScope, preferred_type: Option<PreferredType>) -> Result<Value, Value> {
+        Ok(Value::null())
+    }
+
+    fn to_number(&self, sc: &mut LocalScope) -> Result<f64, Value> {
+        Ok(0.0)
+    }
+
+    fn to_boolean(&self) -> Result<bool, Value> {
+        Ok(false)
+    }
+
+    fn to_string(&self, sc: &mut LocalScope) -> Result<Rc<str>, Value> {
+        Ok(sc.statics().null_str())
+    }
+
+    fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value> {
+        todo!() // TODO: throw?
+    }
+
+    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value> {
+        throw!(sc, "Cannot convert null to object");
+    }
+}
+
+impl PrimitiveCapabilities for Symbol {}
+
+impl ValueConversion for Symbol {
+    fn to_primitive(&self, sc: &mut LocalScope, preferred_type: Option<PreferredType>) -> Result<Value, Value> {
+        Ok(Value::Symbol(self.clone()))
+    }
+
+    fn to_number(&self, sc: &mut LocalScope) -> Result<f64, Value> {
+        throw!(sc, "Cannot convert symbol to number");
+    }
+
+    fn to_boolean(&self) -> Result<bool, Value> {
+        Ok(true)
+    }
+
+    fn to_string(&self, sc: &mut LocalScope) -> Result<Rc<str>, Value> {
+        throw!(sc, "Cannot convert symbol to string");
+    }
+
+    fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value> {
+        todo!() // TODO: throw?
+    }
+
+    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value> {
+        let sym = BoxedSymbol::new(sc, self.clone());
+        Ok(sc.register(sym))
     }
 }

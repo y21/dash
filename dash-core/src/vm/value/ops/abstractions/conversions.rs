@@ -14,25 +14,59 @@ use crate::vm::value::Value;
 pub trait ValueConversion {
     fn to_primitive(&self, sc: &mut LocalScope, preferred_type: Option<PreferredType>) -> Result<Value, Value>;
     fn to_number(&self, sc: &mut LocalScope) -> Result<f64, Value>;
-    fn to_length(&self, sc: &mut LocalScope) -> Result<f64, Value>;
-    fn to_length_u(&self, sc: &mut LocalScope) -> Result<usize, Value>;
-    fn to_integer_or_infinity(&self, sc: &mut LocalScope) -> Result<f64, Value>;
+    fn to_length(&self, sc: &mut LocalScope) -> Result<f64, Value> {
+        // Let len be ? ToIntegerOrInfinity(argument).
+        let len = self.to_integer_or_infinity(sc)?;
+        // 2. If len ≤ 0, return +0𝔽.
+        if len <= 0.0 {
+            return Ok(0.0);
+        }
+
+        // Return 𝔽(min(len, 253 - 1)).
+        Ok(len.min(MAX_SAFE_INTEGERF))
+    }
+    fn to_length_u(&self, sc: &mut LocalScope) -> Result<usize, Value> {
+        self.to_length(sc).map(|x| x as usize)
+    }
+    fn to_integer_or_infinity(&self, sc: &mut LocalScope) -> Result<f64, Value> {
+        // Let number be ? ToNumber(argument).
+        let number = self.to_number(sc)?;
+        // 2. If number is NaN, +0𝔽, or -0𝔽, return 0.
+        if number.is_nan() || number == 0.0 {
+            return Ok(0.0);
+        }
+
+        // 3. If number is +∞𝔽, return +∞.
+        // 4. If number is -∞𝔽, return -∞.
+        if number == f64::INFINITY || number == f64::NEG_INFINITY {
+            return Ok(number);
+        }
+
+        // 5. Let integer be floor(abs(ℝ(number))).
+        let integer = number.abs().floor();
+
+        // 6. If number < -0𝔽, set integer to -integer.
+        if number < 0.0 {
+            Ok(-integer)
+        } else {
+            Ok(integer)
+        }
+    }
     fn to_boolean(&self) -> Result<bool, Value>;
     fn to_string(&self, sc: &mut LocalScope) -> Result<Rc<str>, Value>;
     fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value>;
     fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value>;
-    fn to_int32(&self, sc: &mut LocalScope) -> Result<i32, Value>;
+    fn to_int32(&self, sc: &mut LocalScope) -> Result<i32, Value> {
+        let n = self.to_number(sc)?;
+        Ok(n as i32)
+    }
 }
 
 impl ValueConversion for Value {
     fn to_number(&self, sc: &mut LocalScope) -> Result<f64, Value> {
         fn object_to_number(this: &Value, obj: &dyn Object, sc: &mut LocalScope) -> Result<f64, Value> {
-            let any = obj.as_any();
-
-            if let Some(&n) = any.downcast_ref::<f64>() {
-                Ok(n)
-            } else if let Some(n) = any.downcast_ref::<BoxedNumber>() {
-                Ok(*n.value())
+            if let Some(prim) = obj.as_primitive_capable() {
+                ValueConversion::to_number(prim, sc)
             } else {
                 let prim = this.to_primitive(sc, Some(PreferredType::Number))?;
                 prim.to_number(sc)
@@ -64,25 +98,32 @@ impl ValueConversion for Value {
     }
 
     fn to_string(&self, sc: &mut LocalScope) -> Result<Rc<str>, Value> {
-        match self {
-            Value::String(s) => Ok(s.clone()),
-            Value::Boolean(b) => Ok(b
-                .then(|| sc.statics.get_true())
-                .unwrap_or_else(|| sc.statics.get_false())),
-            Value::Null(_) => Ok(sc.statics.null_str()),
-            Value::Undefined(_) => Ok(sc.statics.undefined_str()),
-            Value::Number(n) => Ok(n.to_string().into()), // TODO: we can do better
-            Value::External(e) => todo!(),                // ??
-            Value::Object(_) => {
-                let prim_value = self.to_primitive(sc, Some(PreferredType::String))?;
+        fn object_to_string(this: &Value, obj: &dyn Object, sc: &mut LocalScope) -> Result<Rc<str>, Value> {
+            if let Some(prim) = obj.as_primitive_capable() {
+                ValueConversion::to_string(prim, sc)
+            } else {
+                let prim_value = this.to_primitive(sc, Some(PreferredType::String))?;
                 prim_value.to_string(sc)
             }
+        }
+
+        match self {
+            Value::String(s) => ValueConversion::to_string(s, sc),
+            Value::Boolean(b) => ValueConversion::to_string(b, sc),
+            Value::Null(n) => ValueConversion::to_string(n, sc),
+            Value::Undefined(u) => ValueConversion::to_string(u, sc),
+            Value::Number(n) => ValueConversion::to_string(n, sc),
+            Value::External(o) | Value::Object(o) => object_to_string(self, o, sc),
             Value::Symbol(s) => throw!(sc, "Cannot convert symbol to a string"),
         }
     }
 
     fn to_primitive(&self, sc: &mut LocalScope, preferred_type: Option<PreferredType>) -> Result<Value, Value> {
-        if let Value::Object(obj) = self {
+        if let Value::Object(obj) | Value::External(obj) = self {
+            if let Some(prim) = obj.as_primitive_capable() {
+                return prim.to_primitive(sc, preferred_type);
+            }
+
             // TODO: Call @@toPrimitive instead of toString once we have symbols
             let exotic_to_prim = self.get_property(sc, "toString".into())?;
 
@@ -101,47 +142,6 @@ impl ValueConversion for Value {
         } else {
             Ok(self.clone())
         }
-    }
-
-    fn to_length(&self, sc: &mut LocalScope) -> Result<f64, Value> {
-        // Let len be ? ToIntegerOrInfinity(argument).
-        let len = self.to_integer_or_infinity(sc)?;
-        // 2. If len ≤ 0, return +0𝔽.
-        if len <= 0.0 {
-            return Ok(0.0);
-        }
-
-        // Return 𝔽(min(len, 253 - 1)).
-        Ok(len.min(MAX_SAFE_INTEGERF))
-    }
-
-    fn to_integer_or_infinity(&self, sc: &mut LocalScope) -> Result<f64, Value> {
-        // Let number be ? ToNumber(argument).
-        let number = self.to_number(sc)?;
-        // 2. If number is NaN, +0𝔽, or -0𝔽, return 0.
-        if number.is_nan() || number == 0.0 {
-            return Ok(0.0);
-        }
-
-        // 3. If number is +∞𝔽, return +∞.
-        // 4. If number is -∞𝔽, return -∞.
-        if number == f64::INFINITY || number == f64::NEG_INFINITY {
-            return Ok(number);
-        }
-
-        // 5. Let integer be floor(abs(ℝ(number))).
-        let integer = number.abs().floor();
-
-        // 6. If number < -0𝔽, set integer to -integer.
-        if number < 0.0 {
-            Ok(-integer)
-        } else {
-            Ok(integer)
-        }
-    }
-
-    fn to_length_u(&self, sc: &mut LocalScope) -> Result<usize, Value> {
-        self.to_length(sc).map(|x| x as usize)
     }
 
     fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value> {
@@ -167,11 +167,6 @@ impl ValueConversion for Value {
             Value::String(s) => register_dyn(sc, |sc| BoxedString::new(sc, s.clone())),
             Value::External(e) => Ok(e.clone()), // TODO: is this correct?
         }
-    }
-
-    fn to_int32(&self, sc: &mut LocalScope) -> Result<i32, Value> {
-        let n = self.to_number(sc)?;
-        Ok(n as i32)
     }
 }
 

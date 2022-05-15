@@ -1,6 +1,8 @@
 use std::any::Any;
 use std::rc::Rc;
 
+use super::ops::abstractions::conversions::PreferredType;
+use super::ops::abstractions::conversions::ValueConversion;
 use crate::gc::handle::Handle;
 use crate::gc::trace::Trace;
 use crate::vm::local::LocalScope;
@@ -9,6 +11,7 @@ use crate::vm::Vm;
 use super::object::NamedObject;
 use super::object::Object;
 use super::object::PropertyKey;
+use super::primitive::PrimitiveCapabilities;
 use super::primitive::Symbol as PrimitiveSymbol;
 use super::Value;
 
@@ -71,6 +74,36 @@ macro_rules! boxed_primitive {
                 fn own_keys(&self) -> Result<Vec<Value>, Value> {
                     self.1.own_keys()
                 }
+
+                fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
+                    Some(self)
+                }
+            }
+
+            impl ValueConversion for $name {
+                fn to_primitive(&self, sc: &mut LocalScope, preferred_type: Option<PreferredType>) -> Result<Value, Value> {
+                    ValueConversion::to_primitive(&self.0, sc, preferred_type)
+                }
+
+                fn to_number(&self, sc: &mut LocalScope) -> Result<f64, Value> {
+                    ValueConversion::to_number(&self.0, sc)
+                }
+
+                fn to_boolean(&self) -> Result<bool, Value> {
+                    ValueConversion::to_boolean(&self.0)
+                }
+
+                fn to_string(&self, sc: &mut LocalScope) -> Result<Rc<str>, Value> {
+                    ValueConversion::to_string(&self.0, sc)
+                }
+
+                fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value> {
+                    ValueConversion::length_of_array_like(&self.0, sc)
+                }
+
+                fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value> {
+                    ValueConversion::to_object(&self.0, sc)
+                }
             }
         )*
     }
@@ -82,3 +115,23 @@ boxed_primitive! {
     String: Rc<str>,
     Symbol: PrimitiveSymbol
 }
+
+impl PrimitiveCapabilities for Number {
+    fn as_number(&self) -> Option<f64> {
+        Some(self.0)
+    }
+}
+
+impl PrimitiveCapabilities for Boolean {
+    fn as_bool(&self) -> Option<bool> {
+        Some(self.0)
+    }
+}
+
+impl PrimitiveCapabilities for String {
+    fn as_string(&self) -> Option<Rc<str>> {
+        Some(self.0.clone())
+    }
+}
+
+impl PrimitiveCapabilities for Symbol {}

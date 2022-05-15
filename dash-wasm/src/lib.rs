@@ -11,6 +11,7 @@ use dash::parser::parser::Parser;
 use dash::vm::local::LocalScope;
 use dash::vm::value::ops::abstractions::conversions::ValueConversion;
 use dash::vm::value::Value;
+use js_sys::Object;
 use std::fmt::Write;
 use wasm_bindgen::prelude::*;
 
@@ -38,7 +39,7 @@ impl From<OptLevel> for dash::optimizer::consteval::OptLevel {
 }
 
 #[wasm_bindgen]
-pub fn eval(s: &str, opt: OptLevel) -> String {
+pub fn eval(s: &str, opt: OptLevel, _context: Option<Object>) -> Result<String, JsValue> {
     fn import_callback(_: &mut Vm, _: StaticImportKind, path: &str) -> Result<Value, Value> {
         Ok(Value::String(format!("Hello from module {path}").into()))
     }
@@ -53,16 +54,17 @@ pub fn eval(s: &str, opt: OptLevel) -> String {
 
     let mut vm = Vm::new(params);
 
-    match vm.eval(s, opt.into()) {
+    let s = match vm.eval(s, opt.into()) {
         Ok(Value::External(e)) => format!("[external@{:?}]", e.as_ptr()),
         Ok(val) | Err(EvalError::VmError(val)) => fmt_value(val, &mut vm).unwrap_or_else(|_| "<exception>".into()),
         Err(e) => e.to_string(),
-    }
+    };
+    Ok(s)
 }
 
 fn fmt_value(value: Value, vm: &mut Vm) -> Result<String, Value> {
     let mut scope = LocalScope::new(vm);
-    value.to_string(&mut scope).map(|s| s.to_string())
+    value.to_string(&mut scope).map(|s| ToString::to_string(&s))
 }
 
 #[wasm_bindgen]

@@ -65,6 +65,10 @@ impl Vm {
         vm
     }
 
+    pub fn global(&self) -> Handle<dyn Object> {
+        self.global.clone()
+    }
+
     pub fn eval<'a>(&mut self, input: &'a str, opt: OptLevel) -> Result<Value, EvalError<'a>> {
         let mut ast = Parser::from_str(input)
             .map_err(EvalError::LexError)?

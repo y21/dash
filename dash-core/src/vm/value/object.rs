@@ -6,7 +6,11 @@ use crate::{
     vm::{local::LocalScope, Vm},
 };
 
-use super::{ops::abstractions::conversions::ValueConversion, primitive::Symbol, Typeof, Value, ValueContext};
+use super::{
+    ops::abstractions::conversions::ValueConversion,
+    primitive::{PrimitiveCapabilities, Symbol},
+    Typeof, Value, ValueContext,
+};
 
 // only here for the time being, will be removed later
 fn __assert_trait_object_safety(_: Box<dyn Object>) {}
@@ -25,6 +29,9 @@ pub trait Object: Debug + Trace {
         args: Vec<Value>,
     ) -> Result<Value, Value>;
     fn as_any(&self) -> &dyn Any;
+    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
+        None
+    }
     fn own_keys(&self) -> Result<Vec<Value>, Value>;
     fn type_of(&self) -> Typeof {
         Typeof::Object
@@ -76,7 +83,7 @@ impl<'a> PropertyKey<'a> {
             Value::Symbol(s) => Ok(Self::Symbol(s.into())),
             other => {
                 let key = other.to_string(sc)?;
-                Ok(PropertyKey::String(key.to_string().into()))
+                Ok(PropertyKey::String(ToString::to_string(&key).into()))
             }
         }
     }
@@ -249,6 +256,10 @@ impl Object for Handle<dyn Object> {
 
     fn type_of(&self) -> Typeof {
         (**self).type_of()
+    }
+
+    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
+        (**self).as_primitive_capable()
     }
 }
 
