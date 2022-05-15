@@ -60,10 +60,13 @@ dash-core = { git = "https://github.com/y21/dash" }
 - main.rs
 ```rs
 use dash_core as dash;
+use dash::vm::Vm;
 
 fn main() {
     let source = "const x = 42; x * x";
-    let (result, vm) = dash::eval(source, Default::default()).unwrap();
+
+    let mut vm = Vm::new(Default::default());
+    let result = vm.eval(source, Default::default()).expect("JS Exception");
 
     println!("Result: {}", match result {
         Value::Number(n) => n,
