@@ -2,6 +2,7 @@ use crate::parser::expr::BinaryExpr;
 use crate::parser::expr::Expr;
 use crate::parser::expr::GroupingExpr;
 use crate::parser::expr::LiteralExpr;
+use crate::parser::statement::Loop;
 use crate::parser::statement::Statement;
 use crate::parser::token::TokenType;
 
@@ -135,6 +136,21 @@ impl<'a> Eval for Statement<'a> {
             Self::Expression(e) => e.fold(can_remove),
             Self::Return(r) => r.0.fold(can_remove),
             Self::Block(b) => b.0.fold(can_remove),
+            Statement::Loop(l) => {
+                let condition = match l {
+                    Loop::For(f) => f.condition.as_mut(),
+                    Loop::While(w) => Some(&mut w.condition),
+                    _ => None,
+                };
+
+                if let Some(condition) = condition {
+                    condition.fold(can_remove);
+
+                    if let Some(false) = condition.is_truthy() {
+                        *self = Statement::Empty;
+                    }
+                }
+            }
             Self::If(i) => {
                 i.condition.fold(can_remove);
                 i.then.fold(can_remove);
