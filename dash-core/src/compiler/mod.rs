@@ -111,7 +111,9 @@ impl<'a> FunctionCompiler<'a> {
     }
 
     pub fn compile_ast(mut self, mut ast: Vec<Statement<'a>>) -> Result<CompileResult, CompileError> {
+        // TODO: don't do this for nested functions
         ast_insert_return(&mut ast);
+
         let instructions = self.accept_multiple(&ast)?;
         Ok(CompileResult {
             instructions,

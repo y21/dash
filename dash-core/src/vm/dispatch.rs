@@ -29,6 +29,7 @@ mod handlers {
     use crate::vm::value::object::NamedObject;
     use crate::vm::value::object::Object;
     use crate::vm::value::object::PropertyKey;
+    use crate::vm::value::ops::equality::ValueEquality;
 
     use super::*;
 
@@ -124,35 +125,35 @@ mod handlers {
     }
 
     pub fn lt(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| Ok(l.lt(&r)))
+        evaluate_binary_expr(vm, ValueEquality::lt)
     }
 
     pub fn le(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| Ok(l.le(&r)))
+        evaluate_binary_expr(vm, ValueEquality::le)
     }
 
     pub fn gt(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| Ok(l.gt(&r)))
+        evaluate_binary_expr(vm, ValueEquality::gt)
     }
 
     pub fn ge(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| Ok(l.ge(&r)))
+        evaluate_binary_expr(vm, ValueEquality::ge)
     }
 
     pub fn eq(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| Ok(l.eq(&r)))
+        evaluate_binary_expr(vm, ValueEquality::eq)
     }
 
     pub fn ne(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| Ok(l.ne(&r)))
+        evaluate_binary_expr(vm, ValueEquality::ne)
     }
 
     pub fn strict_eq(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| Ok(l.strict_eq(&r)))
+        evaluate_binary_expr(vm, ValueEquality::strict_eq)
     }
 
     pub fn strict_ne(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, |l, r, _| Ok(l.strict_ne(&r)))
+        evaluate_binary_expr(vm, ValueEquality::strict_ne)
     }
 
     pub fn not(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {

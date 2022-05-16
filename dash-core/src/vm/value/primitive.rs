@@ -15,6 +15,7 @@ use super::object::Object;
 use super::object::PropertyKey;
 use super::ops::abstractions::conversions::PreferredType;
 use super::ops::abstractions::conversions::ValueConversion;
+use super::ops::equality::ValueEquality;
 use super::Typeof;
 use super::Value;
 
@@ -416,7 +417,7 @@ impl Object for Symbol {
     }
 }
 
-pub trait PrimitiveCapabilities: ValueConversion {
+pub trait PrimitiveCapabilities: ValueConversion + ValueEquality {
     fn as_string(&self) -> Option<Rc<str>> {
         None
     }
@@ -426,11 +427,46 @@ pub trait PrimitiveCapabilities: ValueConversion {
     fn as_bool(&self) -> Option<bool> {
         None
     }
+    fn is_undefined(&self) -> bool {
+        // TODO!
+        // false
+        todo!()
+    }
+    fn is_null(&self) -> bool {
+        // false
+        todo!()
+    }
 }
 
 impl PrimitiveCapabilities for f64 {
     fn as_number(&self) -> Option<f64> {
         Some(*self)
+    }
+}
+
+impl ValueEquality for f64 {
+    fn lt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        other.to_number(sc).map(|other| Value::Boolean(*self < other))
+    }
+
+    fn le(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        other.to_number(sc).map(|other| Value::Boolean(*self <= other))
+    }
+
+    fn gt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        other.to_number(sc).map(|other| Value::Boolean(*self > other))
+    }
+
+    fn ge(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        other.to_number(sc).map(|other| Value::Boolean(*self >= other))
+    }
+
+    fn eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        other.to_number(sc).map(|other| Value::Boolean(*self == other))
+    }
+
+    fn strict_eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        ValueEquality::eq(self, other, sc)
     }
 }
 
@@ -465,6 +501,40 @@ impl ValueConversion for f64 {
 impl PrimitiveCapabilities for bool {
     fn as_bool(&self) -> Option<bool> {
         Some(*self)
+    }
+}
+
+impl ValueEquality for bool {
+    fn lt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        other
+            .to_boolean()
+            .map(|other| Value::Boolean((*self as u8) < other as u8))
+    }
+
+    fn le(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        other
+            .to_boolean()
+            .map(|other| Value::Boolean((*self as u8) <= other as u8))
+    }
+
+    fn gt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        other
+            .to_boolean()
+            .map(|other| Value::Boolean((*self as u8) > other as u8))
+    }
+
+    fn ge(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        other
+            .to_boolean()
+            .map(|other| Value::Boolean((*self as u8) >= other as u8))
+    }
+
+    fn eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        other.to_boolean().map(|other| Value::Boolean(*self == other))
+    }
+
+    fn strict_eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        ValueEquality::eq(self, other, sc)
     }
 }
 
@@ -505,6 +575,32 @@ impl PrimitiveCapabilities for Rc<str> {
     }
 }
 
+impl ValueEquality for Rc<str> {
+    fn lt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        other.to_string(sc).map(|other| Value::Boolean(self < &other))
+    }
+
+    fn le(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        other.to_string(sc).map(|other| Value::Boolean(self <= &other))
+    }
+
+    fn gt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        other.to_string(sc).map(|other| Value::Boolean(self > &other))
+    }
+
+    fn ge(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        other.to_string(sc).map(|other| Value::Boolean(self >= &other))
+    }
+
+    fn eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        other.to_string(sc).map(|other| Value::Boolean(self == &other))
+    }
+
+    fn strict_eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        ValueEquality::eq(self, other, sc)
+    }
+}
+
 impl ValueConversion for Rc<str> {
     fn to_primitive(&self, sc: &mut LocalScope, preferred_type: Option<PreferredType>) -> Result<Value, Value> {
         Ok(Value::String(Rc::clone(self)))
@@ -534,6 +630,39 @@ impl ValueConversion for Rc<str> {
 
 impl PrimitiveCapabilities for Undefined {}
 
+impl ValueEquality for Undefined {
+    fn lt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        // TODO: invoke toString
+        Ok(Value::Boolean(false))
+    }
+
+    fn le(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        Ok(Value::Boolean(false))
+    }
+
+    fn gt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        Ok(Value::Boolean(false))
+    }
+
+    fn ge(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        Ok(Value::Boolean(false))
+    }
+
+    fn eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        match other {
+            Value::Undefined(_) => Ok(Value::Boolean(true)),
+            Value::Object(o) | Value::External(o) => Ok(Value::Boolean(
+                o.as_primitive_capable().map_or(false, |p| p.is_undefined()),
+            )),
+            _ => Ok(Value::Boolean(false)),
+        }
+    }
+
+    fn strict_eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        ValueEquality::eq(self, other, sc)
+    }
+}
+
 impl ValueConversion for Undefined {
     fn to_primitive(&self, sc: &mut LocalScope, preferred_type: Option<PreferredType>) -> Result<Value, Value> {
         Ok(Value::undefined())
@@ -562,6 +691,32 @@ impl ValueConversion for Undefined {
 
 impl PrimitiveCapabilities for Null {}
 
+impl ValueEquality for Null {
+    fn lt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        other.to_number(sc).map(|other| Value::Boolean(0.0 < other))
+    }
+
+    fn le(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        other.to_number(sc).map(|other| Value::Boolean(0.0 <= other))
+    }
+
+    fn gt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        other.to_number(sc).map(|other| Value::Boolean(0.0 > other))
+    }
+
+    fn ge(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        other.to_number(sc).map(|other| Value::Boolean(0.0 >= other))
+    }
+
+    fn eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        other.to_number(sc).map(|other| Value::Boolean(0.0 == other))
+    }
+
+    fn strict_eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        ValueEquality::eq(self, other, sc)
+    }
+}
+
 impl ValueConversion for Null {
     fn to_primitive(&self, sc: &mut LocalScope, preferred_type: Option<PreferredType>) -> Result<Value, Value> {
         Ok(Value::null())
@@ -589,6 +744,32 @@ impl ValueConversion for Null {
 }
 
 impl PrimitiveCapabilities for Symbol {}
+
+impl ValueEquality for Symbol {
+    fn lt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        throw!(sc, "Cannot convert a Symbol value to a number")
+    }
+
+    fn le(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        throw!(sc, "Cannot convert a Symbol value to a number")
+    }
+
+    fn gt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        throw!(sc, "Cannot convert a Symbol value to a number")
+    }
+
+    fn ge(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        throw!(sc, "Cannot convert a Symbol value to a number")
+    }
+
+    fn eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        other.to_number(sc).map(|other| Value::Boolean(0.0 == other))
+    }
+
+    fn strict_eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        ValueEquality::eq(self, other, sc)
+    }
+}
 
 impl ValueConversion for Symbol {
     fn to_primitive(&self, sc: &mut LocalScope, preferred_type: Option<PreferredType>) -> Result<Value, Value> {

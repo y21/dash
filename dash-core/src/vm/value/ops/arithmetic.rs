@@ -3,6 +3,7 @@ use crate::vm::value::Typeof;
 use crate::vm::value::Value;
 
 use super::abstractions::conversions::ValueConversion;
+use super::equality::ValueEquality;
 
 impl Value {
     pub fn add(&self, other: &Self, scope: &mut LocalScope) -> Result<Value, Value> {
@@ -53,61 +54,6 @@ impl Value {
         Ok(Value::Number(lnum.powf(rnum)))
     }
 
-    pub fn lt(&self, other: &Self) -> Value {
-        match (self, other) {
-            (Value::Number(a), Value::Number(b)) => Value::Boolean(*a < *b),
-            _ => unimplemented!(),
-        }
-    }
-
-    pub fn le(&self, other: &Self) -> Value {
-        match (self, other) {
-            (Value::Number(a), Value::Number(b)) => Value::Boolean(*a <= *b),
-            _ => unimplemented!(),
-        }
-    }
-
-    pub fn gt(&self, other: &Self) -> Value {
-        match (self, other) {
-            (Value::Number(a), Value::Number(b)) => Value::Boolean(*a > *b),
-            _ => unimplemented!(),
-        }
-    }
-
-    pub fn ge(&self, other: &Self) -> Value {
-        match (self, other) {
-            (Value::Number(a), Value::Number(b)) => Value::Boolean(*a >= *b),
-            _ => unimplemented!(),
-        }
-    }
-
-    pub fn eq(&self, other: &Self) -> Value {
-        match (self, other) {
-            (Value::Number(a), Value::Number(b)) => Value::Boolean(*a == *b),
-            _ => unimplemented!(),
-        }
-    }
-
-    pub fn strict_eq(&self, other: &Self) -> Value {
-        match (self, other) {
-            (Value::Number(a), Value::Number(b)) => Value::Boolean(*a == *b),
-            (Value::Boolean(a), Value::Boolean(b)) => Value::Boolean(*a == *b),
-            (Value::Object(a), Value::Object(b)) => Value::Boolean(a.as_ptr() == b.as_ptr()),
-            _ => unimplemented!(),
-        }
-    }
-
-    pub fn ne(&self, other: &Self) -> Value {
-        match (self, other) {
-            (Value::Number(a), Value::Number(b)) => Value::Boolean(*a != *b),
-            _ => unimplemented!(),
-        }
-    }
-
-    pub fn strict_ne(&self, other: &Self) -> Value {
-        Value::Boolean(self == other)
-    }
-
     pub fn not(&self) -> Value {
         Value::Boolean(!self.is_truthy())
     }
@@ -147,5 +93,51 @@ impl Value {
         let that = other.to_int32(scope)?;
         // TODO: >>>
         Ok(Value::Number((this >> that) as f64))
+    }
+}
+
+macro_rules! delegate {
+    ($self:expr, $other:expr, $sc:expr, $func:expr) => {
+        match $self {
+            Self::Number(n) => $func(n, $other, $sc),
+            Self::Boolean(b) => $func(b, $other, $sc),
+            Self::String(s) => $func(s, $other, $sc),
+            Self::Undefined(u) => $func(u, $other, $sc),
+            Self::Null(n) => $func(n, $other, $sc),
+            Self::Symbol(s) => $func(s, $other, $sc),
+            Self::Object(o) | Self::External(o) => {
+                if let Some(prim) = o.as_primitive_capable() {
+                    $func(prim, $other, $sc)
+                } else {
+                    Ok(Value::Boolean(std::ptr::eq($self, $other)))
+                }
+            }
+        }
+    };
+}
+
+impl ValueEquality for Value {
+    fn lt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        delegate!(self, other, sc, ValueEquality::lt)
+    }
+
+    fn le(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        delegate!(self, other, sc, ValueEquality::le)
+    }
+
+    fn gt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        delegate!(self, other, sc, ValueEquality::gt)
+    }
+
+    fn ge(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        delegate!(self, other, sc, ValueEquality::ge)
+    }
+
+    fn eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        delegate!(self, other, sc, ValueEquality::eq)
+    }
+
+    fn strict_eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        delegate!(self, other, sc, ValueEquality::strict_eq)
     }
 }

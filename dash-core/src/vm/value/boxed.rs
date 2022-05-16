@@ -3,6 +3,7 @@ use std::rc::Rc;
 
 use super::ops::abstractions::conversions::PreferredType;
 use super::ops::abstractions::conversions::ValueConversion;
+use super::ops::equality::ValueEquality;
 use crate::gc::handle::Handle;
 use crate::gc::trace::Trace;
 use crate::vm::local::LocalScope;
@@ -77,6 +78,41 @@ macro_rules! boxed_primitive {
 
                 fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
                     Some(self)
+                }
+            }
+
+            impl ValueEquality for $name {
+                fn lt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+                    ValueEquality::lt(&self.0, other, sc)
+                }
+
+                fn le(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+                    ValueEquality::le(&self.0, other, sc)
+                }
+
+                fn gt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+                    ValueEquality::gt(&self.0, other, sc)
+                }
+
+                fn ge(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+                    ValueEquality::ge(&self.0, other, sc)
+                }
+
+                fn eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+                    ValueEquality::eq(&self.0, other, sc)
+                }
+
+                fn strict_eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+                    // TODO: compare pointers
+                    ValueEquality::strict_eq(&self.0, other, sc)
+                }
+
+                fn ne(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+                    ValueEquality::ne(&self.0, other, sc)
+                }
+
+                fn strict_ne(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+                    ValueEquality::strict_ne(&self.0, other, sc)
                 }
             }
 

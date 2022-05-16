@@ -4,6 +4,7 @@ use crate::vm::value::array::Array;
 use crate::vm::value::array::ArrayIterator;
 use crate::vm::value::function::native::CallContext;
 use crate::vm::value::ops::abstractions::conversions::ValueConversion;
+use crate::vm::value::ops::equality::ValueEquality;
 use crate::vm::value::Value;
 use crate::vm::value::ValueContext;
 
@@ -208,7 +209,7 @@ pub fn includes(cx: CallContext) -> Result<Value, Value> {
     for k in 0..len {
         let pk = k.to_string();
         let pkv = this.get_property(cx.scope, pk.as_str().into())?;
-        if pkv.strict_eq(&search_element).is_truthy() {
+        if pkv.strict_eq(&search_element, cx.scope)?.is_truthy() {
             return Ok(true.into());
         }
     }
@@ -224,7 +225,7 @@ pub fn index_of(cx: CallContext) -> Result<Value, Value> {
     for k in 0..len {
         let pk = k.to_string();
         let pkv = this.get_property(cx.scope, pk.as_str().into())?;
-        if pkv.strict_eq(&search_element).is_truthy() {
+        if pkv.strict_eq(&search_element, cx.scope)?.is_truthy() {
             return Ok(Value::Number(k as f64));
         }
     }
