@@ -33,7 +33,7 @@ macro_rules! throw {
 use std::rc::Rc;
 
 use crate::{
-    compiler::constant::Constant,
+    compiler::{constant::Constant, External},
     gc::{handle::Handle, trace::Trace},
     parser::statement::FunctionKind as ParserFunctionKind,
     vm::value::{
@@ -88,10 +88,14 @@ impl Value {
             Constant::Function(f) => {
                 let mut externals = Vec::new();
 
-                for &idx in f.externals.iter() {
-                    let idx = usize::from(idx);
+                for External { id, is_external } in f.externals.iter().copied() {
+                    let id = usize::from(id);
 
-                    let val = vm.get_local(idx).expect("Referenced local not found");
+                    let val = if is_external {
+                        Value::External(vm.get_external(id).expect("Referenced local not found").clone())
+                    } else {
+                        vm.get_local(id).expect("Referenced local not found")
+                    };
 
                     fn register<O: Object + 'static>(vm: &mut Vm, idx: usize, o: O) -> Handle<dyn Object> {
                         let handle = vm.gc.register(o);
@@ -100,15 +104,15 @@ impl Value {
                     }
 
                     let obj = match val {
-                        Value::Number(n) => register(vm, idx, n),
-                        Value::Boolean(b) => register(vm, idx, b),
-                        Value::String(s) => register(vm, idx, s),
-                        Value::Undefined(u) => register(vm, idx, u),
-                        Value::Null(n) => register(vm, idx, n),
-                        Value::Symbol(s) => register(vm, idx, s),
+                        Value::Number(n) => register(vm, id, n),
+                        Value::Boolean(b) => register(vm, id, b),
+                        Value::String(s) => register(vm, id, s),
+                        Value::Undefined(u) => register(vm, id, u),
+                        Value::Null(n) => register(vm, id, n),
+                        Value::Symbol(s) => register(vm, id, s),
                         Value::External(e) => e,
                         Value::Object(o) => {
-                            vm.set_local(idx, Value::External(o.clone()));
+                            vm.set_local(id, Value::External(o.clone()));
                             o
                         }
                     };

@@ -4,6 +4,8 @@ use std::rc::Rc;
 use crate::parser::expr::LiteralExpr;
 use crate::parser::statement::FunctionKind;
 
+use super::External;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Function {
     pub name: Option<String>,
@@ -12,7 +14,7 @@ pub struct Function {
     pub locals: usize,
     pub params: usize,
     pub constants: Rc<[Constant]>,
-    pub externals: Box<[u16]>,
+    pub externals: Box<[External]>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

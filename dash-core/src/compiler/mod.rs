@@ -44,10 +44,18 @@ macro_rules! unimplementedc {
     };
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct External {
+    /// The id of the referenced local in the upper scope
+    pub id: u16,
+    /// Whether the referenced value is an external itself (i.e. from 2 or more upper scopes)
+    pub is_external: bool,
+}
+
 pub struct SharedCompilerState<'a> {
     cp: ConstantPool,
     scope: Scope<'a>,
-    externals: Vec<u16>,
+    externals: Vec<External>,
     in_try_block: bool,
     ty: FunctionKind,
 }
@@ -74,7 +82,7 @@ pub struct CompileResult {
     pub instructions: Vec<u8>,
     pub cp: ConstantPool,
     pub locals: usize,
-    pub externals: Vec<u16>,
+    pub externals: Vec<External>,
 }
 
 fn ast_insert_return<'a>(ast: &mut Vec<Statement<'a>>) {
@@ -133,13 +141,20 @@ impl<'a> FunctionCompiler<'a> {
         Ok(insts)
     }
 
-    fn add_external(&mut self, external_id: u16) -> usize {
-        let id = self.state.externals.iter().position(|&x| x == external_id);
+    fn add_external(&mut self, external_id: u16, is_nested_external: bool) -> usize {
+        let id = self
+            .state
+            .externals
+            .iter()
+            .position(|External { id, .. }| *id == external_id);
 
         match id {
             Some(id) => id,
             None => {
-                self.state.externals.push(external_id);
+                self.state.externals.push(External {
+                    id: external_id,
+                    is_external: is_nested_external,
+                });
                 self.state.externals.len() - 1
             }
         }
@@ -158,14 +173,15 @@ impl<'a> FunctionCompiler<'a> {
                 let this = unsafe { up.as_mut() };
 
                 if let Some((id, local)) = this.find_local(ident) {
-                    // TODO: handle this case
-                    assert!(!local.is_extern());
+                    // If the local found in a parent scope is already an external,
+                    // it needs to be resolved differently at runtime
+                    let is_nested_extern = local.is_extern();
 
-                    // Extern values need to be marked as such
+                    // If it's not already marked external, mark it as such
                     local.set_extern();
 
                     // TODO: don't hardcast
-                    let id = self.add_external(id) as u16;
+                    let id = self.add_external(id, is_nested_extern) as u16;
                     return Some((id, local.clone()));
                 }
 
