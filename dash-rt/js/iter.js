@@ -48,8 +48,6 @@ const iteratorProto = {
         let sum = 0;
         this.forEach((i) => sum += i);
 
-        // TODO: get rid of this hack
-        // local values remain boxed even after returning
         return sum;
     },
 

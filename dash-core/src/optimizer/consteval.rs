@@ -1,9 +1,25 @@
+use crate::parser::expr::ArrayLiteral;
+use crate::parser::expr::AssignmentExpr;
 use crate::parser::expr::BinaryExpr;
+use crate::parser::expr::ConditionalExpr;
 use crate::parser::expr::Expr;
+use crate::parser::expr::FunctionCall;
 use crate::parser::expr::GroupingExpr;
 use crate::parser::expr::LiteralExpr;
+use crate::parser::expr::ObjectLiteral;
+use crate::parser::expr::PropertyAccessExpr;
+use crate::parser::expr::UnaryExpr;
+use crate::parser::statement::BlockStatement;
+use crate::parser::statement::Catch;
+use crate::parser::statement::ForLoop;
+use crate::parser::statement::FunctionDeclaration;
+use crate::parser::statement::IfStatement;
 use crate::parser::statement::Loop;
+use crate::parser::statement::ReturnStatement;
 use crate::parser::statement::Statement;
+use crate::parser::statement::TryCatch;
+use crate::parser::statement::VariableDeclaration;
+use crate::parser::statement::WhileLoop;
 use crate::parser::token::TokenType;
 
 #[derive(Debug, Copy, Clone)]
@@ -67,54 +83,121 @@ impl<'a> Eval for Expr<'a> {
         use Expr::*;
         use LiteralExpr::*;
 
+        macro_rules! u64op {
+            ($l:ident $tok:tt $r:ident) => {
+                Literal(Number(((*$l as u64) $tok (*$r as u64)) as f64))
+            };
+        }
+
+        fn truthy_f64(n: f64) -> bool {
+            !n.is_nan() && n != 0.0
+        }
+
         match self {
-            Self::Binary(expr) => {
+            Binary(expr) => {
                 expr.fold(can_remove);
 
                 match (&*expr.left, &*expr.right) {
-                    (Literal(Number(l)), Literal(Number(r))) => match expr.operator {
-                        TokenType::Plus => *self = Literal(Number(l + r)),
-                        TokenType::Minus => *self = Literal(Number(l - r)),
-                        TokenType::Star => *self = Literal(Number(l * r)),
-                        TokenType::Slash => *self = Literal(Number(l / r)),
-                        TokenType::Remainder => *self = Literal(Number(l % r)),
-                        TokenType::Exponentiation => *self = Literal(Number(l.powf(*r))),
-                        TokenType::Greater => *self = Literal(Boolean(l > r)),
-                        TokenType::GreaterEqual => *self = Literal(Boolean(l >= r)),
-                        TokenType::Less => *self = Literal(Boolean(l < r)),
-                        TokenType::LessEqual => *self = Literal(Boolean(l <= r)),
-                        TokenType::Equality => *self = Literal(Boolean(l == r)),
-                        TokenType::Inequality => *self = Literal(Boolean(l != r)),
+                    (Literal(Number(left)), Literal(Number(right))) => match expr.operator {
+                        TokenType::Plus => *self = Literal(Number(left + right)),
+                        TokenType::Minus => *self = Literal(Number(left - right)),
+                        TokenType::Star => *self = Literal(Number(left * right)),
+                        TokenType::Slash => *self = Literal(Number(left / right)),
+                        TokenType::Remainder => *self = Literal(Number(left % right)),
+                        TokenType::Exponentiation => *self = Literal(Number(left.powf(*right))),
+                        TokenType::Greater => *self = Literal(Boolean(left > right)),
+                        TokenType::GreaterEqual => *self = Literal(Boolean(left >= right)),
+                        TokenType::Less => *self = Literal(Boolean(left < right)),
+                        TokenType::LessEqual => *self = Literal(Boolean(left <= right)),
+                        TokenType::Equality => *self = Literal(Boolean(left == right)),
+                        TokenType::Inequality => *self = Literal(Boolean(left != right)),
+                        TokenType::StrictEquality => *self = Literal(Boolean(left == right)),
+                        TokenType::StrictInequality => *self = Literal(Boolean(left != right)),
+                        TokenType::BitwiseOr => *self = u64op!(left | right),
+                        TokenType::BitwiseAnd => *self = u64op!(left & right),
+                        TokenType::BitwiseXor => *self = u64op!(left ^ right),
+                        TokenType::LeftShift => *self = u64op!(left << right),
+                        TokenType::RightShift => *self = u64op!(left >> right),
+                        TokenType::LogicalOr => *self = Literal(Boolean(truthy_f64(*left) || truthy_f64(*right))),
+                        TokenType::LogicalAnd => *self = Literal(Boolean(truthy_f64(*left) && truthy_f64(*right))),
                         _ => {}
                     },
                     _ => {}
                 }
             }
-            Grouping(e) => {
-                e.0.fold(can_remove);
+            Grouping(GroupingExpr(expr)) => {
+                expr.fold(can_remove);
             }
-            Sequence((a, b)) => {
-                a.fold(can_remove);
-                b.fold(can_remove);
-            }
-            Conditional(c) => {
-                c.condition.fold(can_remove);
-                c.el.fold(can_remove);
-                c.then.fold(can_remove);
+            Unary(UnaryExpr { operator, expr }) => {
+                expr.fold(can_remove);
 
-                match c.condition.is_truthy() {
+                match (operator, &**expr) {
+                    (TokenType::LogicalNot, Literal(lit)) => match lit {
+                        LiteralExpr::Number(n) => *self = Literal(Boolean(!truthy_f64(*n))),
+                        LiteralExpr::Boolean(b) => *self = Literal(Boolean(!*b)),
+                        LiteralExpr::String(s) => *self = Literal(Boolean(s.is_empty())),
+                        LiteralExpr::Null | LiteralExpr::Undefined => *self = Literal(Boolean(true)),
+                        _ => {}
+                    },
+                    (TokenType::Minus, Literal(lit)) => match lit {
+                        LiteralExpr::Number(n) => *self = Literal(Number(-n)),
+                        LiteralExpr::Boolean(b) => *self = Literal(Number(-(*b as u64 as f64))),
+                        _ => {}
+                    },
+                    (TokenType::Plus, Literal(lit)) => match lit {
+                        LiteralExpr::Number(n) => *self = Literal(Number(*n)),
+                        LiteralExpr::Boolean(b) => *self = Literal(Number(*b as u64 as f64)),
+                        _ => {}
+                    },
+                    _ => {}
+                }
+            }
+            Assignment(AssignmentExpr { left, right, .. }) => {
+                left.fold(can_remove);
+                right.fold(can_remove);
+            }
+            Sequence((left, right)) => {
+                left.fold(can_remove);
+                right.fold(can_remove);
+            }
+            PropertyAccess(PropertyAccessExpr { property, target, .. }) => {
+                property.fold(can_remove);
+                target.fold(can_remove);
+            }
+            Postfix((_, expr)) => {
+                expr.fold(can_remove);
+            }
+            Function(FunctionDeclaration { statements, .. }) => {
+                statements.fold(can_remove);
+            }
+            Array(ArrayLiteral(lit)) => {
+                lit.fold(can_remove);
+            }
+            Object(ObjectLiteral(lit)) => {
+                let it = lit.iter_mut().map(|(_, expr)| expr);
+
+                for expr in it {
+                    expr.fold(can_remove);
+                }
+            }
+            Conditional(ConditionalExpr { condition, el, then }) => {
+                condition.fold(can_remove);
+                el.fold(can_remove);
+                then.fold(can_remove);
+
+                match condition.is_truthy() {
                     Some(true) => {
-                        *self = (*c.then).clone();
+                        *self = (**then).clone();
                     }
                     Some(false) => {
-                        *self = (*c.el).clone();
+                        *self = (**el).clone();
                     }
                     _ => {}
                 };
             }
-            Self::Call(fc) => {
-                fc.target.fold(can_remove);
-                fc.arguments.fold(can_remove);
+            Call(FunctionCall { target, arguments, .. }) => {
+                target.fold(can_remove);
+                arguments.fold(can_remove);
             }
             _ => {}
         }
@@ -122,24 +205,38 @@ impl<'a> Eval for Expr<'a> {
 
     fn has_side_effect(&self) -> bool {
         match self {
-            Self::Binary(b) => b.has_side_effect(),
-            Self::Literal(l) => l.has_side_effect(),
-            Self::Grouping(GroupingExpr(ve)) => ve.has_side_effect(),
+            Self::Binary(expr) => expr.has_side_effect(),
+            Self::Literal(expr) => expr.has_side_effect(),
+            Self::Grouping(GroupingExpr(exprs)) => exprs.has_side_effect(),
             _ => true, // assume it does to prevent dead code elimination
         }
+    }
+}
+
+impl<T: Eval> Eval for Option<T> {
+    fn fold(&mut self, can_remove: bool) {
+        if let Some(expr) = self {
+            expr.fold(can_remove);
+        }
+    }
+
+    fn has_side_effect(&self) -> bool {
+        self.as_ref().map_or(false, |expr| expr.has_side_effect())
     }
 }
 
 impl<'a> Eval for Statement<'a> {
     fn fold(&mut self, can_remove: bool) {
         match self {
-            Self::Expression(e) => e.fold(can_remove),
-            Self::Return(r) => r.0.fold(can_remove),
-            Self::Block(b) => b.0.fold(can_remove),
-            Statement::Loop(l) => {
-                let condition = match l {
-                    Loop::For(f) => f.condition.as_mut(),
-                    Loop::While(w) => Some(&mut w.condition),
+            Self::Expression(expr) => expr.fold(can_remove),
+            Self::Variable(VariableDeclaration { value, .. }) => value.fold(can_remove),
+            Self::Return(ReturnStatement(expr)) => expr.fold(can_remove),
+            Self::Block(BlockStatement(expr)) => expr.fold(can_remove),
+            Self::Function(FunctionDeclaration { statements, .. }) => statements.fold(can_remove),
+            Self::Loop(r#loop) => {
+                let condition = match r#loop {
+                    Loop::For(ForLoop { condition, .. }) => condition.as_mut(),
+                    Loop::While(WhileLoop { condition, .. }) => Some(condition),
                     _ => None,
                 };
 
@@ -151,28 +248,33 @@ impl<'a> Eval for Statement<'a> {
                     }
                 }
             }
-            Self::If(i) => {
-                i.condition.fold(can_remove);
-                i.then.fold(can_remove);
+            Self::If(IfStatement {
+                condition,
+                then,
+                branches,
+                el,
+            }) => {
+                condition.fold(can_remove);
+                then.fold(can_remove);
 
                 {
-                    let mut branches = i.branches.borrow_mut();
+                    let mut branches = branches.borrow_mut();
                     for branch in branches.iter_mut() {
                         branch.condition.fold(can_remove);
                         branch.then.fold(can_remove);
                     }
                 }
 
-                if let Some(el) = &mut i.el {
+                if let Some(el) = el {
                     el.fold(can_remove);
                 }
 
-                match i.condition.is_truthy() {
+                match condition.is_truthy() {
                     Some(true) => {
-                        *self = (*i.then).clone();
+                        *self = (**then).clone();
                     }
                     Some(false) => {
-                        if let Some(el) = &i.el {
+                        if let Some(el) = &el {
                             *self = (**el).clone();
                         } else {
                             *self = Statement::Empty;
@@ -181,11 +283,18 @@ impl<'a> Eval for Statement<'a> {
                     _ => {}
                 };
             }
-            Self::Variable(v) => {
-                if let Some(value) = &mut v.value {
-                    value.fold(can_remove);
+            Self::Try(TryCatch {
+                try_,
+                catch: Catch { body, .. },
+                finally,
+            }) => {
+                try_.fold(can_remove);
+                body.fold(can_remove);
+                if let Some(finally) = finally {
+                    finally.fold(can_remove);
                 }
             }
+            Self::Throw(expr) => expr.fold(can_remove),
             _ => {}
         };
 
