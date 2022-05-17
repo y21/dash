@@ -9,8 +9,6 @@ use std::time::Instant;
 
 use anyhow::Context;
 use clap::ArgMatches;
-use dash::vm::local::LocalScope;
-use dash::vm::value::ops::abstractions::conversions::ValueConversion;
 
 use crate::util;
 
@@ -41,8 +39,7 @@ async fn inner(source: String, opt: OptLevel) -> anyhow::Result<()> {
 
     // TODO: EvalError::VmError should probably bail too?
 
-    let mut sc = LocalScope::new(rt.vm_mut());
-    println!("{}", value.to_string(&mut sc).unwrap());
+    util::print_value(value, rt.vm_mut()).unwrap();
 
     let state = State::try_from_vm(rt.vm()).unwrap();
     if state.needs_event_loop() {

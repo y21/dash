@@ -841,7 +841,9 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
     }
 
     fn visit_debugger(&mut self) -> Result<Vec<u8>, CompileError> {
-        unimplementedc!("Debugger statement")
+        let mut ib = InstructionBuilder::new();
+        ib.build_debugger();
+        Ok(ib.build())
     }
 
     fn visit_empty_expr(&mut self) -> Result<Vec<u8>, CompileError> {

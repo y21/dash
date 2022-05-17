@@ -67,6 +67,10 @@ impl<T: ?Sized> LinkedList<T> {
     pub unsafe fn dec_len(&mut self) {
         self.len -= 1;
     }
+
+    pub fn len(&self) -> usize {
+        self.len
+    }
 }
 
 impl<T: ?Sized> Drop for LinkedList<T> {

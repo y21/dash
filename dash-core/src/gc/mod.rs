@@ -67,7 +67,7 @@ impl<T: ?Sized + Trace> Gc<T> {
                     // There's one less node now, so decrement length.
                     self.list.dec_len();
                 } else {
-                    marked.set(true);
+                    marked.set(false);
                     previous = Some(ptr);
                 }
             } else {

@@ -715,6 +715,7 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<Option<HandleResult>, Valu
         opcode::THIS => handlers::this(vm),
         opcode::GLOBAL => handlers::global_this(vm),
         opcode::SUPER => handlers::super_(vm),
+        opcode::DEBUGGER => handlers::debugger(vm),
         _ => unimplemented!("{}", instruction),
     }
 }
