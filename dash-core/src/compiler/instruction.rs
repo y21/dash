@@ -91,7 +91,7 @@ pub const EXPORTDEFAULT: u8 = 0x47;
 pub const EXPORTNAMED: u8 = 0x48;
 pub const DEBUGGER: u8 = 0x49;
 pub const GLOBAL: u8 = 0x4A;
-pub const SUPER: u8 = 0x4C;
+pub const SUPER: u8 = 0x4B;
 
 #[rustfmt::skip]
 pub trait InstructionWriter {

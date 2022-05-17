@@ -19,10 +19,8 @@ impl<'a> LocalScope<'a> {
     }
 
     pub fn add_ref(&mut self, obj: Handle<dyn Object>) {
-        unsafe {
-            let _self = self as *const LocalScope;
-            self.vm.externals.add_single(_self, obj);
-        }
+        let this = self as *const LocalScope;
+        self.vm.externals.add_single(this, obj);
     }
 
     pub fn add_value(&mut self, value: Value) {
@@ -38,7 +36,12 @@ impl<'a> LocalScope<'a> {
     }
 }
 
-// TODO: drop?
+impl<'a> Drop for LocalScope<'a> {
+    fn drop(&mut self) {
+        let this = self as *const LocalScope;
+        self.vm.externals.remove(this);
+    }
+}
 
 impl<'a> Deref for LocalScope<'a> {
     type Target = Vm;

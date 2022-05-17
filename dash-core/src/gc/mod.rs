@@ -57,6 +57,13 @@ impl<T: ?Sized + Trace> Gc<T> {
                     // Finally, deallocate the node.
                     drop(unsafe { Box::from_raw(ptr.as_ptr()) });
 
+                    // Update previous node's next ptr to the next pointer
+                    if let Some(previous) = previous {
+                        unsafe {
+                            (*previous.as_ptr()).next = next;
+                        };
+                    }
+
                     // There's one less node now, so decrement length.
                     self.list.dec_len();
                 } else {

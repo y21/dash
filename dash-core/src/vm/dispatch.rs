@@ -52,7 +52,7 @@ mod handlers {
         let left = vm.stack.pop().expect("No left operand");
         let mut scope = LocalScope::new(vm);
         let result = fun(&left, &right, &mut scope)?;
-        vm.try_push_stack(result)?;
+        scope.try_push_stack(result)?;
         Ok(None)
     }
 
@@ -188,7 +188,7 @@ mod handlers {
 
         let mut scope = LocalScope::new(vm);
         let value = scope.global.clone().get_property(&mut scope, name.as_ref().into())?;
-        vm.try_push_stack(value)?;
+        scope.try_push_stack(value)?;
         Ok(None)
     }
 
@@ -223,7 +223,7 @@ mod handlers {
         unsafe { scope.externals.add(scoper, refs) };
         let ret = callee.apply(&mut scope, this, args)?;
 
-        vm.try_push_stack(ret)?;
+        scope.try_push_stack(ret)?;
         Ok(None)
     }
 
@@ -389,8 +389,8 @@ mod handlers {
             obj.set_property(&mut scope, constant.into(), element).unwrap();
         }
 
-        let handle = vm.gc.register(obj);
-        vm.try_push_stack(handle.into())?;
+        let handle = scope.gc.register(obj);
+        scope.try_push_stack(handle.into())?;
 
         Ok(None)
     }
@@ -413,7 +413,7 @@ mod handlers {
         let target = target.expect("Missing target");
 
         let value = target.get_property(&mut scope, ident.as_ref().into())?;
-        vm.try_push_stack(value)?;
+        scope.try_push_stack(value)?;
         Ok(None)
     }
 
@@ -427,7 +427,7 @@ mod handlers {
         let mut scope = LocalScope::new(vm);
         target.set_property(&mut scope, key.to_string().into(), value.clone())?;
 
-        vm.try_push_stack(value)?;
+        scope.try_push_stack(value)?;
         Ok(None)
     }
 
@@ -441,7 +441,7 @@ mod handlers {
         let mut scope = LocalScope::new(vm);
         target.set_property(&mut scope, key.to_string().into(), value.clone())?;
 
-        vm.try_push_stack(value)?;
+        scope.try_push_stack(value)?;
         Ok(None)
     }
 
@@ -455,7 +455,7 @@ mod handlers {
         let key = PropertyKey::from_value(&mut scope, key)?;
         target.set_property(&mut scope, key, value.clone())?;
 
-        vm.try_push_stack(value)?;
+        scope.try_push_stack(value)?;
         Ok(None)
     }
 
@@ -478,7 +478,7 @@ mod handlers {
         let key = PropertyKey::from_value(&mut scope, key)?;
 
         let value = target.get_property(&mut scope, key)?;
-        vm.try_push_stack(value)?;
+        scope.try_push_stack(value)?;
         Ok(None)
     }
 
