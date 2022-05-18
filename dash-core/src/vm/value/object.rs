@@ -52,6 +52,15 @@ pub enum PropertyKey<'a> {
     Symbol(Symbol),
 }
 
+impl<'a> PropertyKey<'a> {
+    pub fn as_string(&self) -> Option<&str> {
+        match self {
+            PropertyKey::String(s) => Some(s.as_ref()),
+            _ => None,
+        }
+    }
+}
+
 impl<'a> From<&'a str> for PropertyKey<'a> {
     fn from(s: &'a str) -> Self {
         PropertyKey::String(Cow::Borrowed(s))
@@ -124,6 +133,16 @@ unsafe impl Trace for NamedObject {
         let values = self.values.borrow();
         for value in values.values() {
             value.trace();
+        }
+
+        let prototype = self.prototype.borrow();
+        if let Some(prototype) = &*prototype {
+            prototype.trace();
+        }
+
+        let constructor = self.constructor.borrow();
+        if let Some(constructor) = &*constructor {
+            constructor.trace();
         }
     }
 }

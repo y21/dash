@@ -8,6 +8,7 @@ use crate::vm::value::function::FunctionKind;
 
 use super::value::array::Array;
 use super::value::array::ArrayIterator;
+use super::value::arraybuffer::ArrayBuffer;
 use super::value::boxed::Boolean as BoxedBoolean;
 use super::value::boxed::Number as BoxedNumber;
 use super::value::boxed::String as BoxedString;
@@ -142,6 +143,24 @@ pub struct Statics {
     pub error_ctor: Handle<dyn Object>,
     pub error_prototype: Handle<dyn Object>,
     pub error_to_string: Handle<dyn Object>,
+    pub arraybuffer_ctor: Handle<dyn Object>,
+    pub arraybuffer_prototype: Handle<dyn Object>,
+    pub uint8array_ctor: Handle<dyn Object>,
+    pub uint8array_prototype: Handle<dyn Object>,
+    pub int8array_ctor: Handle<dyn Object>,
+    pub int8array_prototype: Handle<dyn Object>,
+    pub uint16array_ctor: Handle<dyn Object>,
+    pub uint16array_prototype: Handle<dyn Object>,
+    pub int16array_ctor: Handle<dyn Object>,
+    pub int16array_prototype: Handle<dyn Object>,
+    pub uint32array_ctor: Handle<dyn Object>,
+    pub uint32array_prototype: Handle<dyn Object>,
+    pub int32array_ctor: Handle<dyn Object>,
+    pub int32array_prototype: Handle<dyn Object>,
+    pub float32array_ctor: Handle<dyn Object>,
+    pub float32array_prototype: Handle<dyn Object>,
+    pub float64array_ctor: Handle<dyn Object>,
+    pub float64array_prototype: Handle<dyn Object>,
 }
 
 fn object(gc: &mut Gc<dyn Object>) -> Handle<dyn Object> {
@@ -280,6 +299,24 @@ impl Statics {
             error_ctor: function(gc, "Error", js_std::error::constructor),
             error_prototype: gc.register(Error::empty()),
             error_to_string: function(gc, "toString", js_std::error::to_string),
+            arraybuffer_ctor: function(gc, "ArrayBuffer", js_std::arraybuffer::constructor),
+            arraybuffer_prototype: gc.register(ArrayBuffer::empty()),
+            uint8array_ctor: function(gc, "Uint8Array", js_std::typedarray::u8array::constructor),
+            uint8array_prototype: gc.register(NamedObject::null()),
+            int8array_ctor: function(gc, "Int8Array", js_std::typedarray::i8array::constructor),
+            int8array_prototype: gc.register(NamedObject::null()),
+            uint16array_ctor: function(gc, "Uint16Array", js_std::typedarray::u16array::constructor),
+            uint16array_prototype: gc.register(NamedObject::null()),
+            int16array_ctor: function(gc, "Int16Array", js_std::typedarray::i16array::constructor),
+            int16array_prototype: gc.register(NamedObject::null()),
+            uint32array_ctor: function(gc, "Uint32Array", js_std::typedarray::u32array::constructor),
+            uint32array_prototype: gc.register(NamedObject::null()),
+            int32array_ctor: function(gc, "Int32Array", js_std::typedarray::i32array::constructor),
+            int32array_prototype: gc.register(NamedObject::null()),
+            float32array_ctor: function(gc, "Float32Array", js_std::typedarray::f32array::constructor),
+            float32array_prototype: gc.register(NamedObject::null()),
+            float64array_ctor: function(gc, "Float64Array", js_std::typedarray::f64array::constructor),
+            float64array_prototype: gc.register(NamedObject::null()),
         }
     }
 

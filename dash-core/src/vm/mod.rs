@@ -360,6 +360,87 @@ impl Vm {
             toString: scope.statics.error_to_string;
         });
 
+        let arraybuffer_ctor = register_builtin_type!(scope.statics.arraybuffer_ctor, {
+            #[prototype] scope.statics.function_proto;
+            #[fn_prototype] scope.statics.arraybuffer_prototype;
+        });
+
+        let arraybuffer_proto = register_builtin_type!(scope.statics.arraybuffer_prototype, {
+            #[prototype] scope.statics.object_prototype;
+        });
+
+        let u8array_ctor = register_builtin_type!(scope.statics.uint8array_ctor, {
+            #[prototype] scope.statics.function_proto;
+            #[fn_prototype] scope.statics.uint8array_prototype;
+        });
+
+        let u8array_prototype = register_builtin_type!(scope.statics.uint8array_prototype, {
+            #[prototype] scope.statics.object_prototype;
+        });
+
+        let i8array_ctor = register_builtin_type!(scope.statics.int8array_ctor, {
+            #[prototype] scope.statics.function_proto;
+            #[fn_prototype] scope.statics.int8array_prototype;
+        });
+
+        let i8array_prototype = register_builtin_type!(scope.statics.int8array_prototype, {
+            #[prototype] scope.statics.object_prototype;
+        });
+
+        let u16array_ctor = register_builtin_type!(scope.statics.uint16array_ctor, {
+            #[prototype] scope.statics.function_proto;
+            #[fn_prototype] scope.statics.uint16array_prototype;
+        });
+
+        let u16array_prototype = register_builtin_type!(scope.statics.uint16array_prototype, {
+            #[prototype] scope.statics.object_prototype;
+        });
+
+        let i16array_ctor = register_builtin_type!(scope.statics.int16array_ctor, {
+            #[prototype] scope.statics.function_proto;
+            #[fn_prototype] scope.statics.int16array_prototype;
+        });
+
+        let i16array_prototype = register_builtin_type!(scope.statics.int16array_prototype, {
+            #[prototype] scope.statics.object_prototype;
+        });
+
+        let u32array_ctor = register_builtin_type!(scope.statics.uint32array_ctor, {
+            #[prototype] scope.statics.function_proto;
+            #[fn_prototype] scope.statics.uint32array_prototype;
+        });
+
+        let u32array_prototype = register_builtin_type!(scope.statics.uint32array_prototype, {
+            #[prototype] scope.statics.object_prototype;
+        });
+
+        let i32array_ctor = register_builtin_type!(scope.statics.int32array_ctor, {
+            #[prototype] scope.statics.function_proto;
+            #[fn_prototype] scope.statics.int32array_prototype;
+        });
+
+        let i32array_prototype = register_builtin_type!(scope.statics.int32array_prototype, {
+            #[prototype] scope.statics.object_prototype;
+        });
+
+        let f32array_ctor = register_builtin_type!(scope.statics.float32array_ctor, {
+            #[prototype] scope.statics.function_proto;
+            #[fn_prototype] scope.statics.float32array_prototype;
+        });
+
+        let f32array_prototype = register_builtin_type!(scope.statics.float32array_prototype, {
+            #[prototype] scope.statics.object_prototype;
+        });
+
+        let f64array_ctor = register_builtin_type!(scope.statics.float64array_ctor, {
+            #[prototype] scope.statics.function_proto;
+            #[fn_prototype] scope.statics.float64array_prototype;
+        });
+
+        let f64array_prototype = register_builtin_type!(scope.statics.float64array_prototype, {
+            #[prototype] scope.statics.object_prototype;
+        });
+
         let global = register_builtin_type!(global, {
             #[prototype] scope.statics.object_prototype;
 
@@ -370,6 +451,13 @@ impl Vm {
             parseInt: scope.statics.parse_int;
 
             Symbol: symbol_ctor;
+            ArrayBuffer: arraybuffer_ctor;
+            Uint8Array: u8array_ctor;
+            Int8Array: i8array_ctor;
+            Uint16Array: u16array_ctor;
+            Int16Array: i16array_ctor;
+            Uint32Array: u32array_ctor;
+            Int32Array: i32array_ctor;
             Array: array_ctor;
             Error: error_ctor;
             String: string_ctor;

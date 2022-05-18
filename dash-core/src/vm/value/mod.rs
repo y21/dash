@@ -1,4 +1,5 @@
 pub mod array;
+pub mod arraybuffer;
 pub mod boxed;
 pub mod conversions;
 pub mod error;
@@ -7,6 +8,7 @@ pub mod inspect;
 pub mod object;
 pub mod ops;
 pub mod primitive;
+pub mod typedarray;
 
 #[macro_export]
 macro_rules! throw {
