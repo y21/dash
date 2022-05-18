@@ -53,6 +53,11 @@ impl<'a> Scope<'a> {
     }
 
     pub fn add_local(&mut self, binding: VariableBinding<'a>, is_extern: bool) -> Result<u16, LimitExceededError> {
+        // if there's already a local with the same name, we should use that
+        if let Some((id, _)) = self.find_local(&binding.name) {
+            return Ok(id);
+        }
+
         self.locals.push(ScopeLocal {
             binding,
             is_extern: Cell::new(is_extern),

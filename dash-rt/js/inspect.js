@@ -15,9 +15,13 @@ const is = {
     }
 };
 
-function inner(value, indentation) {
+function inner(value, depth) {
     if (is.string(value)) {
-        return value;
+        if (depth > 0) {
+            return '"' + value + '"';
+        } else {
+            return value;
+        }
     }
 
     if (is.error(value)) {
@@ -43,7 +47,7 @@ function inner(value, indentation) {
             }
 
             const key = keys[i];
-            repr += key + ': ' + inner(value[key]);
+            repr += key + ': ' + inner(value[key], depth + 1);
         }
 
         if (hasElements) repr += ' ';
@@ -63,7 +67,7 @@ function inner(value, indentation) {
                 repr += ', ';
             }
 
-            repr += inner(value[i], indentation);
+            repr += inner(value[i], depth + 1);
         }
 
         repr += ']';
