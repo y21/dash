@@ -57,10 +57,22 @@ unsafe impl Trace for TypedArray {
 
 impl TypedArray {
     pub fn new(vm: &mut Vm, arraybuffer: Handle<dyn Object>, kind: TypedArrayKind) -> Self {
+        let (proto, ctor) = match kind {
+            TypedArrayKind::Uint8Array => (&vm.statics.uint8array_prototype, &vm.statics.uint8array_ctor),
+            TypedArrayKind::Uint8ClampedArray => (&vm.statics.uint8array_prototype, &vm.statics.uint8array_ctor),
+            TypedArrayKind::Int8Array => (&vm.statics.int8array_prototype, &vm.statics.int8array_ctor),
+            TypedArrayKind::Int16Array => (&vm.statics.int16array_prototype, &vm.statics.int16array_ctor),
+            TypedArrayKind::Uint16Array => (&vm.statics.uint16array_prototype, &vm.statics.uint16array_ctor),
+            TypedArrayKind::Int32Array => (&vm.statics.int32array_prototype, &vm.statics.int32array_ctor),
+            TypedArrayKind::Uint32Array => (&vm.statics.uint32array_prototype, &vm.statics.uint32array_ctor),
+            TypedArrayKind::Float32Array => (&vm.statics.float32array_prototype, &vm.statics.float32array_ctor),
+            TypedArrayKind::Float64Array => (&vm.statics.float64array_prototype, &vm.statics.float64array_ctor),
+        };
+
         Self {
             arraybuffer,
             kind,
-            obj: NamedObject::new(vm),
+            obj: NamedObject::with_prototype_and_constructor(proto.clone(), ctor.clone()),
         }
     }
 }

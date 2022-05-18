@@ -258,6 +258,19 @@ impl Value {
             Self::Symbol(_) => Typeof::Symbol,
         }
     }
+
+    pub fn instanceof(&self, ctor: &Self, sc: &mut LocalScope) -> Result<bool, Value> {
+        let obj = match self {
+            Self::Object(obj) | Self::External(obj) => obj,
+            _ => return Ok(false),
+        };
+
+        // TODO: repeat for all objects in prototype chain
+        let target_proto = ctor.get_property(sc, "prototype".into())?;
+        let this_proto = obj.get_prototype(sc)?;
+
+        Ok(this_proto == target_proto)
+    }
 }
 
 #[derive(Debug)]

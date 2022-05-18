@@ -109,7 +109,12 @@ macro_rules! delegate {
                 if let Some(prim) = o.as_primitive_capable() {
                     $func(prim, $other, $sc)
                 } else {
-                    Ok(Value::Boolean(std::ptr::eq($self, $other)))
+                    let is_eq = match $other {
+                        Self::Object(o2) | Self::External(o2) => std::ptr::eq(o.as_ptr(), o2.as_ptr()),
+                        _ => false,
+                    };
+
+                    Ok(Value::Boolean(is_eq))
                 }
             }
         }

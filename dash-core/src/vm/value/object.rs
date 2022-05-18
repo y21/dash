@@ -158,7 +158,7 @@ impl Object for NamedObject {
                         .borrow()
                         .as_ref()
                         .map(|x| Value::from(x.clone()))
-                        .unwrap_or_undefined())
+                        .unwrap_or_undefined());
                 }
                 _ => {}
             }
@@ -177,6 +177,20 @@ impl Object for NamedObject {
     }
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
+        match key.as_string() {
+            Some("__proto__") => return self.set_prototype(sc, value),
+            Some("constructor") => {
+                match value {
+                    Value::Object(obj) | Value::External(obj) => {
+                        self.constructor.replace(Some(obj));
+                        return Ok(());
+                    }
+                    _ => throw!(sc, "constructor is not an object"), // TODO: it doesn't need to be
+                }
+            }
+            _ => {}
+        };
+
         let mut map = self.values.borrow_mut();
         map.insert(key, value);
         Ok(())

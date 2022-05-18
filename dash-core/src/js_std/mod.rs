@@ -3,6 +3,7 @@ pub mod array_iterator;
 pub mod arraybuffer;
 pub mod boolean;
 pub mod error;
+pub mod function;
 pub mod generator;
 pub mod global;
 pub mod math;

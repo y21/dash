@@ -66,7 +66,7 @@ impl fmt::Debug for FunctionKind {
 
 #[derive(Debug)]
 pub struct Function {
-    name: Option<Rc<str>>,
+    name: RefCell<Option<Rc<str>>>,
     kind: FunctionKind,
     obj: NamedObject,
     prototype: RefCell<Option<Handle<dyn Object>>>,
@@ -75,7 +75,7 @@ pub struct Function {
 impl Function {
     pub fn new(vm: &mut Vm, name: Option<Rc<str>>, kind: FunctionKind) -> Self {
         Self {
-            name,
+            name: RefCell::new(name),
             kind,
             obj: NamedObject::new(vm),
             prototype: RefCell::new(None),
@@ -84,7 +84,7 @@ impl Function {
 
     pub fn with_obj(name: Option<Rc<str>>, kind: FunctionKind, obj: NamedObject) -> Self {
         Self {
-            name,
+            name: RefCell::new(name),
             kind,
             obj,
             prototype: RefCell::new(None),
@@ -95,8 +95,12 @@ impl Function {
         &self.kind
     }
 
-    pub fn name(&self) -> Option<&Rc<str>> {
-        self.name.as_ref()
+    pub fn set_name(&self, name: Rc<str>) -> Option<Rc<str>> {
+        self.name.borrow_mut().replace(name)
+    }
+
+    pub fn name(&self) -> Option<Rc<str>> {
+        self.name.borrow().clone()
     }
 
     pub fn set_fn_prototype(&self, prototype: Handle<dyn Object>) {
@@ -110,6 +114,24 @@ unsafe impl Trace for Function {
 
 impl Object for Function {
     fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        if let Some(key) = key.as_string() {
+            match key {
+                "name" => {
+                    let name = self.name().unwrap_or_else(|| sc.statics.empty_str());
+
+                    return Ok(Value::String(name));
+                }
+                "prototype" => {
+                    let prototype = self.prototype.borrow();
+
+                    if let Some(prototype) = &*prototype {
+                        return Ok(Value::Object(prototype.clone()));
+                    }
+                }
+                _ => {}
+            }
+        }
+
         self.obj.get_property(sc, key)
     }
 
@@ -141,7 +163,7 @@ impl Object for Function {
 
                 scope.stack.extend(args.into_iter().take(argc));
 
-                let mut frame = Frame::from_function(self.name.clone(), Some(this), uf, scope);
+                let mut frame = Frame::from_function(self.name(), Some(this), uf, scope);
                 frame.set_sp(sp);
 
                 scope.vm.execute_frame(frame).map(|v| match v {

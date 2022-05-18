@@ -121,7 +121,16 @@ mod handlers {
     }
 
     pub fn instanceof(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        todo!()
+        let target = vm.stack.pop().expect("Missing target");
+        let source = vm.stack.pop().expect("Missing source");
+
+        let mut sc = LocalScope::new(vm);
+        sc.add_value(target.clone());
+        sc.add_value(source.clone());
+
+        let is_instanceof = source.instanceof(&target, &mut sc).map(Value::Boolean)?;
+        sc.try_push_stack(is_instanceof)?;
+        Ok(None)
     }
 
     pub fn lt(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
@@ -652,6 +661,16 @@ mod handlers {
     pub fn super_(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         throw!(vm, "`super` keyword unexpected in this context");
     }
+
+    pub fn revstck(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        let count = vm.fetch_and_inc_ip();
+
+        let len = vm.stack.len();
+        let elements = &mut vm.stack[len - count as usize..];
+        elements.reverse();
+
+        Ok(None)
+    }
 }
 
 pub fn handle(vm: &mut Vm, instruction: u8) -> Result<Option<HandleResult>, Value> {
@@ -716,6 +735,7 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<Option<HandleResult>, Valu
         opcode::GLOBAL => handlers::global_this(vm),
         opcode::SUPER => handlers::super_(vm),
         opcode::DEBUGGER => handlers::debugger(vm),
+        opcode::REVSTCK => handlers::revstck(vm),
         _ => unimplemented!("{}", instruction),
     }
 }

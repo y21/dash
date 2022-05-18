@@ -23,9 +23,11 @@ impl ArrayBuffer {
     }
 
     pub fn with_capacity(vm: &mut Vm, capacity: usize) -> Self {
+        let (proto, ctor) = (&vm.statics.arraybuffer_prototype, &vm.statics.arraybuffer_ctor);
+
         Self {
             storage: vec![Cell::new(0); capacity],
-            obj: NamedObject::new(vm),
+            obj: NamedObject::with_prototype_and_constructor(proto.clone(), ctor.clone()),
         }
     }
 

@@ -111,6 +111,10 @@ fn import_callback(vm: &mut Vm, import_ty: StaticImportKind, path: &str) -> Resu
             let module = include_str!("../js/iter.js");
             compile_module(&mut sc, module, import_ty)
         }
+        "@std/inspect" => {
+            let module = include_str!("../js/inspect.js");
+            compile_module(&mut sc, module, import_ty)
+        }
         _ => {
             let contents = match fs::read_to_string(path) {
                 Ok(c) => c,

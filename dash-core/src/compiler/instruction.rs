@@ -92,6 +92,9 @@ pub const EXPORTNAMED: u8 = 0x48;
 pub const DEBUGGER: u8 = 0x49;
 pub const GLOBAL: u8 = 0x4A;
 pub const SUPER: u8 = 0x4B;
+/// "Reverses" the last N stack values
+/// (e.g. REVSTACK 3: `[0, 1, 2, 3]` becomes `[0, 3, 2, 1]`)
+pub const REVSTCK: u8 = 0x4C;
 
 #[rustfmt::skip]
 pub trait InstructionWriter {
@@ -188,6 +191,7 @@ pub trait InstructionWriter {
     fn build_default_export(&mut self);
     fn build_named_export(&mut self, it: &[NamedExportKind]) -> Result<(), CompileError>;
     fn build_debugger(&mut self);
+    fn build_revstck(&mut self, n: u8);
 }
 
 macro_rules! impl_instruction_writer {
@@ -392,6 +396,10 @@ impl InstructionWriter for InstructionBuilder {
 
     fn build_dynamic_import(&mut self) {
         self.write(IMPORTDYN);
+    }
+
+    fn build_revstck(&mut self, n: u8) {
+        self.write_all(&[REVSTCK, n]);
     }
 
     fn build_named_export(&mut self, it: &[NamedExportKind]) -> Result<(), CompileError> {

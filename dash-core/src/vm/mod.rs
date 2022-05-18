@@ -89,8 +89,9 @@ impl Vm {
     /// Prepare the VM for execution.
     #[rustfmt::skip]
     fn prepare(&mut self) {
-        fn set_fn_prototype(v: &dyn Object, proto: &Handle<dyn Object>) {
+        fn set_fn_prototype(v: &dyn Object, proto: &Handle<dyn Object>, name: &str) {
             let fun = v.as_any().downcast_ref::<Function>().unwrap();
+            fun.set_name(name.into());
             fun.set_fn_prototype(proto.clone());
         }
 
@@ -108,7 +109,11 @@ impl Vm {
             (
                 $base:expr, {
                     #[prototype] $prototype:expr;
-                    $( #[fn_prototype] $fnprototype:expr; )?
+                    #[constructor] $constructor:expr;
+                    $(
+                        #[fn_prototype] $fnprototype:expr;
+                        #[fn_name] $fnname:ident;
+                    )?
                     $( #[properties] $( $prop:ident: $prop_path:expr; )+ )?
                     $( #[symbols] $( $symbol:expr => $symbol_path:expr; )+ )?
                     $( #[fields] $( $field:ident: $value:expr; )+ )?
@@ -119,6 +124,8 @@ impl Vm {
                 // Prototype
                 {
                     let proto = $prototype.clone();
+                    let constructor = $constructor.clone();
+                    base.set_property(&mut scope, "constructor".into(), constructor.into()).unwrap();
                     base.set_prototype(&mut scope, proto.into()).unwrap();
                 }
 
@@ -127,7 +134,10 @@ impl Vm {
                     $({
                         let method = stringify!($prop);
                         let path = $prop_path.clone();
-                        register_builtin_type!(path, { #[prototype] scope.statics.function_proto; });
+                        register_builtin_type!(path, {
+                            #[prototype] scope.statics.function_proto;
+                            #[constructor] scope.statics.function_ctor;
+                        });
                         base.set_property(&mut scope, method.into(), path.into()).unwrap();
                     })+
                 )?
@@ -137,7 +147,10 @@ impl Vm {
                     $({
                         let method = $symbol.clone();
                         let path = $symbol_path.clone();
-                        register_builtin_type!(path, { #[prototype] scope.statics.function_proto; });
+                        register_builtin_type!(path, {
+                            #[prototype] scope.statics.function_proto;
+                            #[constructor] scope.statics.function_ctor;
+                        });
                         base.set_property(&mut scope, method.into(), path.into()).unwrap();
                     })+
                 )?
@@ -153,20 +166,30 @@ impl Vm {
 
                 // Function prototype
                 $(
-                    set_fn_prototype(&base, &$fnprototype);
+                    set_fn_prototype(&base, &$fnprototype, stringify!($fnname));
                 )?
 
                 base
             }}            
         }
 
-        register_builtin_type!(scope.statics.function_proto, {
-            #[prototype] scope.statics.object_prototype.clone();
+        let function_ctor = register_builtin_type!(scope.statics.function_ctor, {
+            #[prototype] scope.statics.function_proto;
+            #[constructor] scope.statics.function_ctor;
+            #[fn_prototype] scope.statics.function_proto;
+            #[fn_name] Function;
+        });
+
+        let function_proto = register_builtin_type!(scope.statics.function_proto, {
+            #[prototype] scope.statics.object_prototype;
+            #[constructor] function_ctor;
         });
 
         let object_ctor = register_builtin_type!(scope.statics.object_ctor, {
-            #[prototype] scope.statics.function_proto;
+            #[prototype] function_proto;
+            #[constructor] function_ctor;
             #[fn_prototype] scope.statics.object_prototype;
+            #[fn_name] Object;
 
             #[properties]
             create: scope.statics.object_create;
@@ -175,6 +198,7 @@ impl Vm {
 
         let object_proto = register_builtin_type!(scope.statics.object_prototype, {
             #[prototype] Value::null();
+            #[constructor] object_ctor;
 
             #[properties]
             toString: scope.statics.object_to_string;
@@ -182,6 +206,7 @@ impl Vm {
 
         let console = register_builtin_type!(scope.statics.console, {
             #[prototype] scope.statics.object_prototype;
+            #[constructor] object_ctor;
 
             #[properties]
             log: scope.statics.console_log;
@@ -189,6 +214,7 @@ impl Vm {
 
         let math = register_builtin_type!(scope.statics.math, {
             #[prototype] scope.statics.object_prototype;
+            #[constructor] object_ctor;
 
             #[properties]
             floor: scope.statics.math_floor;
@@ -225,8 +251,10 @@ impl Vm {
         });
 
         let number_ctor = register_builtin_type!(scope.statics.number_ctor, {
-            #[prototype] scope.statics.function_proto;
+            #[prototype] function_proto;
+            #[constructor] function_ctor;
             #[fn_prototype] scope.statics.number_prototype;
+            #[fn_name] Number;
 
             #[properties]
             isFinite: scope.statics.number_is_finite;
@@ -235,7 +263,8 @@ impl Vm {
         });
 
         let number_proto = register_builtin_type!(scope.statics.number_prototype, {
-            #[prototype] scope.statics.object_prototype;
+            #[prototype] object_proto;
+            #[constructor] number_ctor;
             
             #[properties]
             toString: scope.statics.number_tostring;
@@ -243,12 +272,15 @@ impl Vm {
         });
 
         let boolean_ctor = register_builtin_type!(scope.statics.boolean_ctor, {
-            #[prototype] scope.statics.function_proto;
+            #[prototype] function_proto;
+            #[constructor] function_ctor;
             #[fn_prototype] scope.statics.boolean_prototype;
+            #[fn_name] Boolean;
         });
 
         let boolean_proto = register_builtin_type!(scope.statics.boolean_prototype, {
-            #[prototype] scope.statics.object_prototype;
+            #[prototype] object_proto;
+            #[constructor] boolean_ctor;
 
             #[properties]
             toString: scope.statics.boolean_tostring;
@@ -256,12 +288,15 @@ impl Vm {
         });
 
         let string_ctor = register_builtin_type!(scope.statics.string_ctor, {
-            #[prototype] scope.statics.function_proto;
+            #[prototype] function_proto;
+            #[constructor] function_ctor;
             #[fn_prototype] scope.statics.string_prototype;
+            #[fn_name] String;
         });
         
         let string_prototype = register_builtin_type!(scope.statics.string_prototype, {
-            #[prototype] scope.statics.object_prototype;
+            #[prototype] object_proto;
+            #[constructor] string_ctor;
 
             #[properties]
             toString: scope.statics.string_tostring;
@@ -284,12 +319,15 @@ impl Vm {
         });
 
         let array_ctor = register_builtin_type!(scope.statics.array_ctor, {
-            #[prototype] scope.statics.function_proto;
+            #[prototype] function_proto;
+            #[constructor] function_ctor;
             #[fn_prototype] scope.statics.array_prototype;
+            #[fn_name] Array;
         });
         
         let array_proto = register_builtin_type!(scope.statics.array_prototype, {
-            #[prototype] scope.statics.object_prototype;
+            #[prototype] object_proto;
+            #[constructor] array_ctor;
 
             #[properties]
             toString: scope.statics.array_tostring;
@@ -317,22 +355,26 @@ impl Vm {
         });
 
         let array_iterator_proto = register_builtin_type!(scope.statics.array_iterator_prototype, {
-            #[prototype] scope.statics.object_prototype; // TODO: this is incorrect
+            #[prototype] object_proto; // TODO: this is incorrect
+            #[constructor] function_ctor; // TODO: ^
 
             #[properties]
             next: scope.statics.array_iterator_next;
         });
 
         let generator_iterator_proto = register_builtin_type!(scope.statics.generator_iterator_prototype, {
-            #[prototype] scope.statics.object_prototype; // TODO: this is incorrect
+            #[prototype] object_proto; // TODO: this is incorrect
+            #[constructor] function_ctor; // TODO: ^
 
             #[properties]
             next: scope.statics.generator_iterator_next;
         });
 
         let symbol_ctor = register_builtin_type!(scope.statics.symbol_ctor, {
-            #[prototype] scope.statics.function_proto;
+            #[prototype] function_proto;
+            #[constructor] function_ctor;
             #[fn_prototype] scope.statics.symbol_prototype;
+            #[fn_name] Symbol;
 
             #[properties]
             asyncIterator: scope.statics.symbol_async_iterator;
@@ -350,99 +392,130 @@ impl Vm {
         });
 
         let error_ctor = register_builtin_type!(scope.statics.error_ctor, {
-            #[prototype] scope.statics.function_proto;
+            #[prototype] function_proto;
+            #[constructor] function_ctor;
             #[fn_prototype] scope.statics.error_prototype;
+            #[fn_name] Error;
         });
 
         let error_proto = register_builtin_type!(scope.statics.error_prototype, {
-            #[prototype] scope.statics.object_prototype;
+            #[prototype] object_proto;
+            #[constructor] error_ctor;
             #[properties]
             toString: scope.statics.error_to_string;
         });
 
         let arraybuffer_ctor = register_builtin_type!(scope.statics.arraybuffer_ctor, {
-            #[prototype] scope.statics.function_proto;
+            #[prototype] function_proto;
+            #[constructor] function_ctor;
             #[fn_prototype] scope.statics.arraybuffer_prototype;
+            #[fn_name] ArrayBuffer;
         });
 
         let arraybuffer_proto = register_builtin_type!(scope.statics.arraybuffer_prototype, {
-            #[prototype] scope.statics.object_prototype;
+            #[prototype] object_proto;
+            #[constructor] arraybuffer_ctor;
         });
 
         let u8array_ctor = register_builtin_type!(scope.statics.uint8array_ctor, {
-            #[prototype] scope.statics.function_proto;
+            #[prototype] function_proto;
+            #[constructor] function_ctor;
             #[fn_prototype] scope.statics.uint8array_prototype;
+            #[fn_name] Uint8Array;
         });
 
         let u8array_prototype = register_builtin_type!(scope.statics.uint8array_prototype, {
-            #[prototype] scope.statics.object_prototype;
+            #[prototype] object_proto;
+            #[constructor] u8array_ctor;
         });
 
         let i8array_ctor = register_builtin_type!(scope.statics.int8array_ctor, {
-            #[prototype] scope.statics.function_proto;
+            #[prototype] function_proto;
+            #[constructor] function_ctor;
             #[fn_prototype] scope.statics.int8array_prototype;
+            #[fn_name] Int8Array;
         });
 
         let i8array_prototype = register_builtin_type!(scope.statics.int8array_prototype, {
-            #[prototype] scope.statics.object_prototype;
+            #[prototype] object_proto;
+            #[constructor] i8array_ctor;
         });
 
         let u16array_ctor = register_builtin_type!(scope.statics.uint16array_ctor, {
-            #[prototype] scope.statics.function_proto;
+            #[prototype] function_proto;
+            #[constructor] function_ctor;
             #[fn_prototype] scope.statics.uint16array_prototype;
+            #[fn_name] Uint16Array;
         });
 
         let u16array_prototype = register_builtin_type!(scope.statics.uint16array_prototype, {
-            #[prototype] scope.statics.object_prototype;
+            #[prototype] object_proto;
+            #[constructor] u16array_ctor;
         });
 
         let i16array_ctor = register_builtin_type!(scope.statics.int16array_ctor, {
-            #[prototype] scope.statics.function_proto;
+            #[prototype] function_proto;
+            #[constructor] function_ctor;
             #[fn_prototype] scope.statics.int16array_prototype;
+            #[fn_name] Int16Array;
         });
 
         let i16array_prototype = register_builtin_type!(scope.statics.int16array_prototype, {
-            #[prototype] scope.statics.object_prototype;
+            #[prototype] object_proto;
+            #[constructor] i16array_ctor;
         });
 
         let u32array_ctor = register_builtin_type!(scope.statics.uint32array_ctor, {
-            #[prototype] scope.statics.function_proto;
+            #[prototype] function_proto;
+            #[constructor] function_ctor;
             #[fn_prototype] scope.statics.uint32array_prototype;
+            #[fn_name] Uint32Array;
         });
 
         let u32array_prototype = register_builtin_type!(scope.statics.uint32array_prototype, {
-            #[prototype] scope.statics.object_prototype;
+            #[prototype] object_proto;
+            #[constructor] u32array_ctor;
         });
 
         let i32array_ctor = register_builtin_type!(scope.statics.int32array_ctor, {
-            #[prototype] scope.statics.function_proto;
+            #[prototype] function_proto;
+            #[constructor] function_ctor;
             #[fn_prototype] scope.statics.int32array_prototype;
+            #[fn_name] Int32Array;
         });
 
         let i32array_prototype = register_builtin_type!(scope.statics.int32array_prototype, {
-            #[prototype] scope.statics.object_prototype;
+            #[prototype] object_proto;
+            #[constructor] i32array_ctor;
         });
 
         let f32array_ctor = register_builtin_type!(scope.statics.float32array_ctor, {
-            #[prototype] scope.statics.function_proto;
+            #[prototype] function_proto;
+            #[constructor] function_ctor;
             #[fn_prototype] scope.statics.float32array_prototype;
+            #[fn_name] Float32Array;
         });
 
         let f32array_prototype = register_builtin_type!(scope.statics.float32array_prototype, {
-            #[prototype] scope.statics.object_prototype;
+            #[prototype] object_proto;
+            #[constructor] f32array_ctor;
         });
 
         let f64array_ctor = register_builtin_type!(scope.statics.float64array_ctor, {
-            #[prototype] scope.statics.function_proto;
+            #[prototype] function_proto;
+            #[constructor] function_ctor;
             #[fn_prototype] scope.statics.float64array_prototype;
+            #[fn_name] Float64Array;
         });
 
         let f64array_prototype = register_builtin_type!(scope.statics.float64array_prototype, {
-            #[prototype] scope.statics.object_prototype;
+            #[prototype] object_proto;
+            #[constructor] f64array_ctor;
         });
 
         let global = register_builtin_type!(global, {
-            #[prototype] scope.statics.object_prototype;
+            #[prototype] object_proto;
+            #[constructor] object_ctor;
 
             #[properties]
             isNaN: scope.statics.is_nan;

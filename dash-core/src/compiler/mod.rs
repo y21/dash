@@ -447,10 +447,17 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
                         TokenType::Assignment => {}
                         TokenType::AdditionAssignment => {
                             ib.build_local_load(id, is_extern);
+                            // += requires reversing (right, left)
+                            // we effectively need to rewrite it from
+                            // left = right + left
+                            // to
+                            // left = left + right
+                            ib.build_revstck(2);
                             ib.build_add();
                         }
                         TokenType::SubtractionAssignment => {
                             ib.build_local_load(id, is_extern);
+                            ib.build_revstck(2);
                             ib.build_sub();
                         }
                         _ => unimplementedc!("Unknown operator"),
