@@ -25,7 +25,10 @@ pub struct Exports {
 #[derive(Debug, Clone)]
 pub enum FrameState {
     /// Regular function
-    Function,
+    Function {
+        /// Whether the currently executing function is a constructor call
+        is_constructor_call: bool,
+    },
     /// Top level frame of a module
     Module(Exports),
 }
@@ -50,7 +53,13 @@ unsafe impl Trace for Frame {
 }
 
 impl Frame {
-    pub fn from_function(name: Option<Rc<str>>, this: Option<Value>, uf: &UserFunction, vm: &mut Vm) -> Self {
+    pub fn from_function(
+        name: Option<Rc<str>>,
+        this: Option<Value>,
+        uf: &UserFunction,
+        is_constructor_call: bool,
+        vm: &mut Vm,
+    ) -> Self {
         Self {
             name,
             this,
@@ -60,14 +69,22 @@ impl Frame {
             ip: 0,
             sp: 0,
             reserved_stack_size: uf.locals(),
-            state: FrameState::Function,
+            state: FrameState::Function { is_constructor_call },
         }
     }
 
     pub fn from_module(name: Option<Rc<str>>, this: Option<Value>, uf: &UserFunction, vm: &mut Vm) -> Self {
-        let mut f = Self::from_function(name, this, uf, vm);
-        f.state = FrameState::Module(Exports::default());
-        f
+        Self {
+            name,
+            this,
+            buffer: uf.buffer().clone(),
+            constants: uf.constants().clone(),
+            externals: uf.externals().clone(),
+            ip: 0,
+            sp: 0,
+            reserved_stack_size: uf.locals(),
+            state: FrameState::Module(Exports::default()),
+        }
     }
 
     pub fn is_module(&self) -> bool {
@@ -88,7 +105,9 @@ impl Frame {
             ip: 0,
             sp: 0,
             reserved_stack_size: cr.locals,
-            state: FrameState::Function,
+            state: FrameState::Function {
+                is_constructor_call: false,
+            },
         }
     }
 

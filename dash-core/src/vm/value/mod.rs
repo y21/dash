@@ -193,6 +193,19 @@ impl Value {
         }
     }
 
+    pub fn construct(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
+        match self {
+            Self::Object(o) => o.construct(sc, this, args),
+            Self::External(o) => o.construct(sc, this, args),
+            Self::Number(n) => throw!(sc, "{} is not a constructor", n),
+            Self::Boolean(b) => throw!(sc, "{} is not a constructor", b),
+            Self::String(s) => throw!(sc, "{} is not a constructor", s),
+            Self::Undefined(u) => throw!(sc, "undefined is not a constructor"),
+            Self::Null(n) => throw!(sc, "null is not a constructor"),
+            Self::Symbol(s) => throw!(sc, "{:?} is not a constructor", s),
+        }
+    }
+
     pub fn is_truthy(&self) -> bool {
         match self {
             Value::Boolean(b) => *b,

@@ -48,7 +48,7 @@ impl Object for f64 {
         Ok(sc.statics.number_prototype.clone().into())
     }
 
-    fn apply<'s>(
+    fn apply(
         &self,
         scope: &mut LocalScope,
         callee: Handle<dyn Object>,
@@ -100,7 +100,7 @@ impl Object for bool {
         Ok(sc.statics.boolean_prototype.clone().into())
     }
 
-    fn apply<'s>(
+    fn apply(
         &self,
         scope: &mut LocalScope,
         callee: Handle<dyn Object>,
@@ -157,7 +157,7 @@ impl Object for Rc<str> {
         Ok(sc.statics.string_prototype.clone().into())
     }
 
-    fn apply<'s>(
+    fn apply(
         &self,
         scope: &mut LocalScope,
         callee: Handle<dyn Object>,
@@ -224,7 +224,7 @@ impl Object for Undefined {
         throw!(sc, "Cannot get prototype of undefined")
     }
 
-    fn apply<'s>(
+    fn apply(
         &self,
         sc: &mut LocalScope,
         callee: Handle<dyn Object>,
@@ -272,7 +272,7 @@ impl Object for Null {
         throw!(sc, "Cannot get prototype of null")
     }
 
-    fn apply<'s>(
+    fn apply(
         &self,
         sc: &mut LocalScope,
         callee: Handle<dyn Object>,
@@ -333,7 +333,7 @@ impl Object for str {
         Ok(sc.statics.string_prototype.clone().into())
     }
 
-    fn apply<'s>(
+    fn apply(
         &self,
         scope: &mut LocalScope,
         callee: Handle<dyn Object>,
@@ -390,7 +390,7 @@ impl Object for Symbol {
         Ok(sc.statics.symbol_prototype.clone().into())
     }
 
-    fn apply<'s>(
+    fn apply(
         &self,
         scope: &mut LocalScope,
         callee: Handle<dyn Object>,

@@ -7,6 +7,7 @@ use std::{
 
 use crate::{
     gc::{handle::Handle, trace::Trace},
+    throw,
     vm::{dispatch::HandleResult, frame::Frame, local::LocalScope, Vm},
 };
 
@@ -112,6 +113,44 @@ unsafe impl Trace for Function {
     fn trace(&self) {}
 }
 
+fn handle_call(
+    fun: &Function,
+    scope: &mut LocalScope,
+    callee: Handle<dyn Object>,
+    this: Value,
+    args: Vec<Value>,
+    is_constructor_call: bool,
+) -> Result<Value, Value> {
+    match &fun.kind {
+        FunctionKind::Native(native) => {
+            let cx = match is_constructor_call {
+                true => CallContext::constructor(args, scope, this),
+                false => CallContext::call(args, scope, this),
+            };
+            native(cx)
+        }
+        FunctionKind::User(uf) => {
+            let sp = scope.stack.len();
+
+            let argc = std::cmp::min(uf.params(), args.len());
+
+            scope.stack.extend(args.into_iter().take(argc));
+
+            let mut frame = Frame::from_function(fun.name(), Some(this), uf, is_constructor_call, scope);
+            frame.set_sp(sp);
+
+            scope.vm.execute_frame(frame).map(|v| match v {
+                HandleResult::Return(v) => v,
+                HandleResult::Yield(_) => unreachable!(), // UserFunction cannot `yield`
+            })
+        }
+        FunctionKind::Generator(gen) => {
+            let iter = GeneratorIterator::new(callee, scope, args);
+            Ok(scope.register(iter).into())
+        }
+    }
+}
+
 impl Object for Function {
     fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
         if let Some(key) = key.as_string() {
@@ -150,32 +189,28 @@ impl Object for Function {
         this: Value,
         args: Vec<Value>,
     ) -> Result<Value, Value> {
-        match &self.kind {
-            FunctionKind::Native(native) => {
-                let cx = CallContext { args, scope, this };
-                let result = native(cx);
-                result
+        handle_call(self, scope, callee, this, args, false)
+    }
+
+    fn construct(
+        &self,
+        scope: &mut LocalScope,
+        callee: Handle<dyn Object>,
+        this: Value,
+        args: Vec<Value>,
+    ) -> Result<Value, Value> {
+        let prototype = match self.get_property(scope, "prototype".into())? {
+            Value::Undefined(_) => {
+                let prototype = NamedObject::new(scope);
+                scope.register(prototype)
             }
-            FunctionKind::User(uf) => {
-                let sp = scope.stack.len();
+            Value::Object(o) | Value::External(o) => o,
+            _ => throw!(scope, "prototype is not an object"),
+        };
 
-                let argc = std::cmp::min(uf.params(), args.len());
+        let this = scope.register(NamedObject::with_prototype_and_constructor(prototype, callee.clone()));
 
-                scope.stack.extend(args.into_iter().take(argc));
-
-                let mut frame = Frame::from_function(self.name(), Some(this), uf, scope);
-                frame.set_sp(sp);
-
-                scope.vm.execute_frame(frame).map(|v| match v {
-                    HandleResult::Return(v) => v,
-                    HandleResult::Yield(_) => unreachable!(), // UserFunction cannot `yield`
-                })
-            }
-            FunctionKind::Generator(gen) => {
-                let iter = GeneratorIterator::new(callee, scope, args);
-                Ok(scope.register(iter).into())
-            }
-        }
+        handle_call(self, scope, callee, Value::Object(this), args, true)
     }
 
     fn as_any(&self) -> &dyn Any {

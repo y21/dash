@@ -22,6 +22,7 @@ mod handlers {
     use crate::compiler::FunctionCallMetadata;
     use crate::compiler::StaticImportKind;
     use crate::throw;
+    use crate::vm::frame::Frame;
     use crate::vm::frame::FrameState;
     use crate::vm::frame::TryBlock;
     use crate::vm::local::LocalScope;
@@ -183,9 +184,20 @@ mod handlers {
 
         drop(vm.stack.drain(this.sp..));
 
-        if this.is_module() {
-            // Put it back on the frame stack, because we'll need it in Vm::execute_module
-            vm.frames.push(this);
+        match this.state {
+            FrameState::Module(_) => {
+                // Put it back on the frame stack, because we'll need it in Vm::execute_module
+                vm.frames.push(this)
+            }
+            FrameState::Function { is_constructor_call } => {
+                // If this is a constructor call and the return value is not an object,
+                // return `this`
+                if is_constructor_call && !matches!(value, Value::Object(_) | Value::External(_)) {
+                    if let Frame { this: Some(this), .. } = this {
+                        return Ok(Some(HandleResult::Return(this)));
+                    }
+                }
+            }
         }
 
         Ok(Some(HandleResult::Return(value)))
@@ -230,7 +242,12 @@ mod handlers {
         let mut scope = LocalScope::new(vm);
         let scoper = &scope as *const LocalScope;
         unsafe { scope.externals.add(scoper, refs) };
-        let ret = callee.apply(&mut scope, this, args)?;
+
+        let ret = if is_constructor {
+            callee.construct(&mut scope, this, args)?
+        } else {
+            callee.apply(&mut scope, this, args)?
+        };
 
         scope.try_push_stack(ret)?;
         Ok(None)

@@ -17,7 +17,7 @@ use super::user::UserFunction;
 
 #[derive(Debug)]
 pub struct GeneratorFunction {
-    function: UserFunction,
+    pub function: UserFunction,
 }
 
 impl GeneratorFunction {
@@ -123,7 +123,7 @@ impl Object for GeneratorIterator {
         self.obj.get_prototype(sc)
     }
 
-    fn apply<'s>(
+    fn apply(
         &self,
         scope: &mut LocalScope,
         callee: Handle<dyn Object>,

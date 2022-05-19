@@ -95,7 +95,7 @@ impl Object for Error {
         self.obj.delete_property(sc, key)
     }
 
-    fn apply<'s>(
+    fn apply(
         &self,
         scope: &mut LocalScope,
         callee: Handle<dyn Object>,

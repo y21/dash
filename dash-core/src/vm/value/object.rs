@@ -17,22 +17,41 @@ fn __assert_trait_object_safety(_: Box<dyn Object>) {}
 
 pub trait Object: Debug + Trace {
     fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value>;
+
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value>;
+
     fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value>;
+
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value>;
+
     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value>;
-    fn apply<'s>(
+
+    fn apply(
         &self,
         scope: &mut LocalScope,
         callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Value, Value>;
+
+    fn construct(
+        &self,
+        scope: &mut LocalScope,
+        callee: Handle<dyn Object>,
+        this: Value,
+        args: Vec<Value>,
+    ) -> Result<Value, Value> {
+        self.apply(scope, callee, this, args)
+    }
+
     fn as_any(&self) -> &dyn Any;
+
     fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
         None
     }
+
     fn own_keys(&self) -> Result<Vec<Value>, Value>;
+
     fn type_of(&self) -> Typeof {
         Typeof::Object
     }
@@ -269,7 +288,7 @@ impl Object for Handle<dyn Object> {
         (**self).get_prototype(sc)
     }
 
-    fn apply<'s>(
+    fn apply(
         &self,
         scope: &mut LocalScope,
         callee: Handle<dyn Object>,
@@ -300,5 +319,10 @@ impl Handle<dyn Object> {
     pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
         let callee = self.clone();
         (**self).apply(sc, callee, this, args)
+    }
+
+    pub fn construct(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
+        let callee = self.clone();
+        (**self).construct(sc, callee, this, args)
     }
 }

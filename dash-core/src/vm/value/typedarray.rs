@@ -179,7 +179,7 @@ impl Object for TypedArray {
         self.obj.get_prototype(sc)
     }
 
-    fn apply<'s>(
+    fn apply(
         &self,
         scope: &mut LocalScope,
         callee: Handle<dyn Object>,
