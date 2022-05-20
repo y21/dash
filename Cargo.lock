@@ -926,7 +926,6 @@ version = "0.2.0"
 dependencies = [
  "dash-core",
  "js-sys",
- "once_cell",
  "wasm-bindgen",
 ]
 

@@ -1,4 +1,5 @@
 use dash::compiler::StaticImportKind;
+use dash::vm::frame::Frame;
 use dash::vm::params::VmParams;
 use dash::vm::Vm;
 use dash::EvalError;
@@ -54,17 +55,36 @@ pub fn eval(s: &str, opt: OptLevel, _context: Option<Object>) -> Result<String, 
 
     let mut vm = Vm::new(params);
 
-    let s = match vm.eval(s, opt.into()) {
-        Ok(Value::External(e)) => format!("[external@{:?}]", e.as_ptr()),
-        Ok(val) | Err(EvalError::VmError(val)) => fmt_value(val, &mut vm).unwrap_or_else(|_| "<exception>".into()),
-        Err(e) => e.to_string(),
+    let result = match vm.eval(s, opt.into()) {
+        Ok(value) => {
+            let mut scope = LocalScope::new(&mut vm);
+            let inspect = compile_inspect(&mut scope);
+
+            let value = inspect
+                .apply(&mut scope, Value::undefined(), vec![value])
+                .map(|x| match x {
+                    Value::String(s) => String::from(s.as_ref()),
+                    _ => unreachable!(),
+                });
+
+            match value {
+                Ok(value) => value,
+                Err(e) => fmt_value(e, &mut scope),
+            }
+        }
+        Err(EvalError::VmError(val)) => fmt_value(val, &mut vm),
+        Err(e) => e.to_string().into(),
     };
-    Ok(s)
+
+    Ok(result)
 }
 
-fn fmt_value(value: Value, vm: &mut Vm) -> Result<String, Value> {
+fn fmt_value(value: Value, vm: &mut Vm) -> String {
     let mut scope = LocalScope::new(vm);
-    value.to_string(&mut scope).map(|s| ToString::to_string(&s))
+    value
+        .to_string(&mut scope)
+        .map(|s| ToString::to_string(&s))
+        .unwrap_or_else(|_| "<exception>".into())
 }
 
 #[wasm_bindgen]
@@ -91,4 +111,13 @@ pub fn decompile(s: &str, o: OptLevel, em: Emit) -> String {
             output
         }
     }
+}
+
+fn compile_inspect(vm: &mut Vm) -> Value {
+    let source = include_str!("../../dash-rt/js/inspect.js");
+    let ast = Parser::from_str(source).unwrap().parse_all().unwrap();
+    let re = FunctionCompiler::new().compile_ast(ast).unwrap();
+
+    let f = Frame::from_compile_result(re);
+    vm.execute_module(f).unwrap().default.unwrap()
 }

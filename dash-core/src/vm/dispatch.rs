@@ -30,6 +30,7 @@ mod handlers {
     use crate::vm::value::object::NamedObject;
     use crate::vm::value::object::Object;
     use crate::vm::value::object::PropertyKey;
+    use crate::vm::value::ops::abstractions::conversions::ValueConversion;
     use crate::vm::value::ops::equality::ValueEquality;
 
     use super::*;
@@ -166,6 +167,14 @@ mod handlers {
         evaluate_binary_expr(vm, ValueEquality::strict_ne)
     }
 
+    pub fn neg(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        let value = vm.stack.pop().expect("Missing operand");
+        let mut scope = LocalScope::new(vm);
+        let result = value.to_number(&mut scope)?;
+        scope.try_push_stack(Value::Number(-result))?;
+        Ok(None)
+    }
+
     pub fn not(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let value = vm.stack.pop().expect("No operand");
         let result = value.not();
@@ -180,7 +189,24 @@ mod handlers {
 
     pub fn ret(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let value = vm.stack.pop().expect("No return value");
+
+        let fp = vm.frames.len();
         let this = vm.frames.pop().expect("No frame");
+
+        // TODO: optimize this at the compiler level
+
+        // From the end of the try catch stack, find the first block that no longer lives in the
+        // frame we are currently returning from. Drain all the blocks that start here.
+        // Would be great if there was something like a reverse drain filter.
+        let lower_tcp = vm
+            .try_blocks
+            .iter()
+            .rev()
+            .position(|TryBlock { frame_ip, .. }| fp <= *frame_ip);
+
+        if let Some(lower_tcp) = lower_tcp {
+            drop(vm.try_blocks.drain(lower_tcp..));
+        }
 
         drop(vm.stack.drain(this.sp..));
 
@@ -451,7 +477,7 @@ mod handlers {
         let target = vm.stack.pop().expect("No target");
 
         let mut scope = LocalScope::new(vm);
-        target.set_property(&mut scope, key.to_string().into(), value.clone())?;
+        target.set_property(&mut scope, ToString::to_string(&key).into(), value.clone())?;
 
         scope.try_push_stack(value)?;
         Ok(None)
@@ -465,7 +491,7 @@ mod handlers {
         let target = vm.stack.pop().expect("No target");
 
         let mut scope = LocalScope::new(vm);
-        target.set_property(&mut scope, key.to_string().into(), value.clone())?;
+        target.set_property(&mut scope, ToString::to_string(&key).into(), value.clone())?;
 
         scope.try_push_stack(value)?;
         Ok(None)
@@ -753,6 +779,7 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<Option<HandleResult>, Valu
         opcode::SUPER => handlers::super_(vm),
         opcode::DEBUGGER => handlers::debugger(vm),
         opcode::REVSTCK => handlers::revstck(vm),
+        opcode::NEG => handlers::neg(vm),
         _ => unimplemented!("{}", instruction),
     }
 }

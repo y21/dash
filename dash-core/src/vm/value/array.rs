@@ -4,6 +4,7 @@ use std::cell::RefCell;
 
 use crate::gc::handle::Handle;
 use crate::gc::trace::Trace;
+use crate::throw;
 use crate::vm::local::LocalScope;
 use crate::vm::Vm;
 
@@ -13,6 +14,8 @@ use super::object::PropertyKey;
 use super::ops::abstractions::conversions::ValueConversion;
 use super::primitive::array_like_keys;
 use super::Value;
+
+pub const MAX_LENGTH: usize = 4294967295;
 
 #[derive(Debug)]
 pub struct Array {
@@ -66,8 +69,10 @@ impl Object for Array {
             }
 
             if let Ok(index) = key.parse::<usize>() {
-                if let Some(element) = items.get(index) {
-                    return Ok(element.clone());
+                if index < MAX_LENGTH {
+                    if let Some(element) = items.get(index) {
+                        return Ok(element.clone());
+                    }
                 }
             }
         }
@@ -81,19 +86,25 @@ impl Object for Array {
 
             if key == "length" {
                 let len = items.len();
-                let new_len = value.to_int32(sc)? as usize;
+                let new_len = value.to_number(sc)? as usize;
 
-                items.resize(new_len, Value::undefined());
+                if new_len > MAX_LENGTH {
+                    throw!(sc, "Invalid array length");
+                }
+
+                items.resize(new_len as usize, Value::undefined());
                 return Ok(());
             }
 
             if let Ok(index) = key.parse::<usize>() {
-                if index >= items.len() {
-                    items.resize(index + 1, Value::undefined());
-                }
+                if index < MAX_LENGTH {
+                    if index >= items.len() {
+                        items.resize(index + 1, Value::undefined());
+                    }
 
-                items[index] = value;
-                return Ok(());
+                    items[index] = value;
+                    return Ok(());
+                }
             }
         }
 
