@@ -286,12 +286,15 @@ impl<'a> Parser<'a> {
                 } else {
                     let value = self.variable_value();
 
-                    self.expect_and_skip(&[TokenType::Semicolon], false);
+                    self.expect_and_skip(&[TokenType::Semicolon], true);
 
                     Some(Statement::Variable(VariableDeclaration::new(binding, value)))
                 }
             } else {
-                self.statement()
+                let stmt = self.statement();
+                // The call to statement must have skipped a semicolon
+                self.expect_previous(&[TokenType::Semicolon], true);
+                stmt
             }
         };
 
@@ -299,7 +302,7 @@ impl<'a> Parser<'a> {
             None
         } else {
             let expr = self.expression();
-            self.expect_and_skip(&[TokenType::Semicolon], false);
+            self.expect_and_skip(&[TokenType::Semicolon], true);
             expr
         };
 
@@ -307,7 +310,7 @@ impl<'a> Parser<'a> {
             None
         } else {
             let expr = self.expression();
-            self.expect_and_skip(&[TokenType::RightParen], false);
+            self.expect_and_skip(&[TokenType::RightParen], true);
             expr
         };
 
@@ -828,6 +831,26 @@ impl<'a> Parser<'a> {
 
     fn is_eof(&self) -> bool {
         self.idx >= self.tokens.len()
+    }
+
+    fn expect_previous(&mut self, ty: &'static [TokenType], emit_error: bool) -> bool {
+        let current = match self.previous() {
+            Some(k) => *k,
+            None => {
+                if emit_error {
+                    self.create_error(ErrorKind::UnexpectedEof);
+                }
+                return false;
+            }
+        };
+
+        let ok = ty.iter().any(|ty| ty.eq(&current.ty));
+
+        if !ok && emit_error {
+            self.create_error(ErrorKind::UnexpectedTokenMultiple(current, ty));
+        }
+
+        ok
     }
 
     fn expect_and_skip(&mut self, ty: &'static [TokenType], emit_error: bool) -> bool {
