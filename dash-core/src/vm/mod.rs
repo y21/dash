@@ -642,7 +642,9 @@ impl Vm {
     }
 
     fn handle_rt_error(&mut self, err: Value, max_fp: usize) -> Result<(), Value> {
-        if let Some(last) = self.try_blocks.pop() {
+        // Using .last() here instead of .pop() because there is a possibility that we
+        // can't use this block (read the comment above the if statement try_fp < max_fp)
+        if let Some(last) = self.try_blocks.last() {
             // if we're in a try-catch block, we need to jump to it
             let try_fp = last.frame_ip;
             let catch_ip = last.catch_ip;
@@ -653,6 +655,9 @@ impl Vm {
             if try_fp < max_fp {
                 return Err(err);
             }
+
+            // If we've found a suitable try block, actually remove it.
+            self.try_blocks.pop();
 
             // Unwind frames
             drop(self.frames.drain(try_fp..));
