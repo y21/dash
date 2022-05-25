@@ -175,6 +175,14 @@ mod handlers {
         Ok(None)
     }
 
+    pub fn pos(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        let value = vm.stack.pop().expect("Missing operand");
+        let mut scope = LocalScope::new(vm);
+        let result = value.to_number(&mut scope)?;
+        scope.try_push_stack(Value::Number(result))?;
+        Ok(None)
+    }
+
     pub fn not(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let value = vm.stack.pop().expect("No operand");
         let result = value.not();
@@ -438,7 +446,7 @@ mod handlers {
                 String::from(&*identifier)
             };
 
-            obj.set_property(&mut scope, constant.into(), element).unwrap();
+            obj.set_property(&mut scope, constant.into(), element)?;
         }
 
         let handle = scope.gc.register(obj);
@@ -780,6 +788,7 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<Option<HandleResult>, Valu
         opcode::DEBUGGER => handlers::debugger(vm),
         opcode::REVSTCK => handlers::revstck(vm),
         opcode::NEG => handlers::neg(vm),
+        opcode::POS => handlers::pos(vm),
         _ => unimplemented!("{}", instruction),
     }
 }
