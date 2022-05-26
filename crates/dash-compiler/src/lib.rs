@@ -49,7 +49,7 @@ pub mod builder;
 pub mod decompiler;
 pub mod error;
 #[cfg(feature = "from_string")]
-mod from_string;
+pub mod from_string;
 pub mod instruction;
 mod scope;
 // #[cfg(test)]

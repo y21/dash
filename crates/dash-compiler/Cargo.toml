@@ -14,3 +14,4 @@ strum = "0.24.0"
 strum_macros = "0.24.0"
 dash-parser = { path = "../dash-parser", optional = true }
 dash_lexer = { path = "../dash-lexer", optional = true }
+dash-optimizer = { path = "../dash-optimizer", optional = true }

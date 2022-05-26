@@ -1,21 +1,20 @@
 use std::fs;
 
-use dash_core::compiler::FunctionCompiler;
-use dash_core::compiler::StaticImportKind;
-use dash_core::optimizer;
-use dash_core::optimizer::consteval::OptLevel;
-use dash_core::parser::parser::Parser;
-use dash_core::throw;
-use dash_core::vm::frame::Frame;
-use dash_core::vm::local::LocalScope;
-use dash_core::vm::params::VmParams;
-use dash_core::vm::value::function::Function;
-use dash_core::vm::value::function::FunctionKind;
-use dash_core::vm::value::object::NamedObject;
-use dash_core::vm::value::object::Object;
-use dash_core::vm::value::Value;
-use dash_core::vm::Vm;
-use dash_core::EvalError;
+use dash_compiler::from_string::CompileStrError;
+use dash_compiler::FunctionCompiler;
+use dash_middle::compiler::StaticImportKind;
+use dash_optimizer::consteval::OptLevel;
+use dash_vm::eval::EvalError;
+use dash_vm::frame::Frame;
+use dash_vm::local::LocalScope;
+use dash_vm::params::VmParams;
+use dash_vm::throw;
+use dash_vm::value::function::Function;
+use dash_vm::value::function::FunctionKind;
+use dash_vm::value::object::NamedObject;
+use dash_vm::value::object::Object;
+use dash_vm::value::Value;
+use dash_vm::Vm;
 use rand::Rng;
 use tokio::sync::mpsc;
 
@@ -127,21 +126,11 @@ fn import_callback(vm: &mut Vm, import_ty: StaticImportKind, path: &str) -> Resu
 }
 
 fn compile_module(sc: &mut LocalScope, source: &str, import_ty: StaticImportKind) -> Result<Value, Value> {
-    let tokens = match Parser::from_str(&source) {
-        Ok(tok) => tok,
-        Err(e) => throw!(sc, "Module lex error: {:?}", e),
-    };
-
-    let mut ast = match tokens.parse_all() {
-        Ok(ast) => ast,
-        Err(e) => throw!(sc, "Module parse error: {:?}", e),
-    };
-
-    optimizer::optimize_ast(&mut ast, OptLevel::Aggressive);
-
-    let re = match FunctionCompiler::new().compile_ast(ast) {
+    let re = match FunctionCompiler::compile_str(source, OptLevel::Aggressive) {
         Ok(re) => re,
-        Err(e) => throw!(sc, "Module compile error: {:?}", e),
+        Err(CompileStrError::Compiler(ce)) => throw!(sc, "Compile error: {:?}", ce),
+        Err(CompileStrError::Parser(pe)) => throw!(sc, "Parse error: {:?}", pe),
+        Err(CompileStrError::Lexer(le)) => throw!(sc, "Lex error: {:?}", le),
     };
 
     let frame = Frame::from_compile_result(re);

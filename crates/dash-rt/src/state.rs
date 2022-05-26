@@ -1,10 +1,10 @@
 use std::cell::RefCell;
 use std::ptr::NonNull;
 
-use dash_core::gc::handle::Handle;
-use dash_core::gc::handle::InnerHandle;
-use dash_core::vm::value::object::Object;
-use dash_core::vm::Vm;
+use dash_vm::gc::handle::Handle;
+use dash_vm::gc::handle::InnerHandle;
+use dash_vm::value::object::Object;
+use dash_vm::Vm;
 use tokio::sync::mpsc;
 
 use crate::event::EventMessage;
