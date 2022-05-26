@@ -41,7 +41,7 @@ $ curl -sSf https://sh.rustup.rs | sh
 # Clone repo
 $ git clone https://github.com/y21/dash
 # Build cli
-$ cd dash && cargo install --path dash-cli
+$ cd dash/crates/dash-cli && cargo install --path .
 # Optional: rename binary to `dashjs`
 $ mv ~/.cargo/bin/dash-cli ~/.cargo/bin/dashjs
 # Run the program (run with --help for help)

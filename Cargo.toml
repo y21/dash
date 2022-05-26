@@ -1,11 +1,11 @@
 [workspace]
 members = [
-    "dash-core",
-    "dash-cli",
-    "testrunner",
-    "dash-wasm",
-    "dash-proc-macro",
-    "dash-rt",
+    "crates/dash-core",
+    "crates/dash-cli",
+    "crates/testrunner",
+    "crates/dash-wasm",
+    "crates/dash-proc-macro",
+    "crates/dash-rt",
 ]
 
 [profile.release]
