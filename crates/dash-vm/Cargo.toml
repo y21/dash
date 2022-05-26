@@ -1,0 +1,17 @@
+[package]
+name = "dash-vm"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+eval = ["dash-compiler", "dash-parser", "dash_lexer", "dash-optimizer"]
+
+[dependencies]
+dash_middle = { path = "../dash-middle" }
+dash-proc-macro = { path = "../dash-proc-macro" }
+dash_lexer = { path = "../dash-lexer", optional = true }
+dash-parser = { path = "../dash-parser", optional = true }
+dash-compiler = { path = "../dash-compiler", optional = true }
+dash-optimizer = { path = "../dash-optimizer", optional = true }

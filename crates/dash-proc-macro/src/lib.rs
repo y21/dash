@@ -29,7 +29,7 @@ pub fn trace(tt: TokenStream) -> TokenStream {
         _ => error!("#[derive(Trace)] can only be used on structs"),
     };
 
-    let found_crate = match crate_name("dash-core").unwrap() {
+    let found_crate = match crate_name("dash-vm").unwrap() {
         FoundCrate::Itself => quote!(crate::gc::trace::Trace),
         FoundCrate::Name(crate_name) => quote!(::#crate_name::gc::trace::Trace),
     };
