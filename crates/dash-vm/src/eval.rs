@@ -10,6 +10,7 @@ use crate::frame::Frame;
 use crate::value::Value;
 use crate::Vm;
 
+#[derive(Debug)]
 pub enum EvalError<'a> {
     Lexer(Vec<lexer::error::Error<'a>>),
     Parser(Vec<parser::error::Error<'a>>),

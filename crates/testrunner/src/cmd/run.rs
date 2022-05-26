@@ -6,8 +6,8 @@ use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
 
 use clap::ArgMatches;
-use dash_core::vm::params::VmParams;
-use dash_core::vm::Vm;
+use dash_vm::params::VmParams;
+use dash_vm::Vm;
 use futures_util::future;
 use futures_util::stream::FuturesUnordered;
 use futures_util::StreamExt;

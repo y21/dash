@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-from_string = ["dash-parser", "dash_lexer"]
+from_string = ["dash-parser", "dash_lexer", "dash-optimizer"]
 
 [dependencies]
 dash_middle = { path = "../dash-middle" }

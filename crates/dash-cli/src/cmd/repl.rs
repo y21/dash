@@ -1,7 +1,6 @@
 use anyhow::bail;
-use dash::vm::Vm;
-use dash::EvalError;
-use dash_core as dash;
+use dash_vm::eval::EvalError;
+use dash_vm::Vm;
 use rustyline::Editor;
 
 use crate::util;
@@ -19,8 +18,8 @@ pub fn repl() -> anyhow::Result<()> {
         rl.add_history_entry(&input);
 
         match vm.eval(&input, Default::default()) {
-            Ok(value) | Err(EvalError::VmError(value)) => util::print_value(value, &mut vm).unwrap(),
-            Err(e) => bail!("{e}"),
+            Ok(value) | Err(EvalError::Exception(value)) => util::print_value(value, &mut vm).unwrap(),
+            Err(e) => bail!("{e:?}"),
         }
     }
 

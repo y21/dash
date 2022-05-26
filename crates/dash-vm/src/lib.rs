@@ -29,7 +29,7 @@ pub mod util;
 pub mod value;
 pub mod js_std;
 #[cfg(feature = "eval")]
-mod eval;
+pub mod eval;
 
 pub const MAX_FRAME_STACK_SIZE: usize = 1024;
 pub const MAX_STACK_SIZE: usize = 8196;

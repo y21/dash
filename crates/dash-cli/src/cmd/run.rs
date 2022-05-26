@@ -1,9 +1,8 @@
 use anyhow::bail;
-use dash::optimizer::consteval::OptLevel;
-use dash::EvalError;
-use dash_core as dash;
+use dash_optimizer::consteval::OptLevel;
 use dash_rt::runtime::Runtime;
 use dash_rt::state::State;
+use dash_vm::eval::EvalError;
 use std::fs;
 use std::time::Instant;
 
@@ -33,8 +32,8 @@ async fn inner(source: String, opt: OptLevel) -> anyhow::Result<()> {
     let mut rt = Runtime::new().await;
 
     let value = match rt.eval(&source, opt) {
-        Ok(val) | Err(EvalError::VmError(val)) => val,
-        Err(e) => bail!("{e}"),
+        Ok(val) | Err(EvalError::Exception(val)) => val,
+        Err(e) => bail!("{e:?}"),
     };
 
     // TODO: EvalError::VmError should probably bail too?
