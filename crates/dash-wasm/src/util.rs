@@ -1,7 +1,7 @@
-use dash_core::vm::local::LocalScope;
-use dash_core::vm::value::error::Error;
-use dash_core::vm::value::object::NamedObject;
-use dash_core::vm::value::Value as DashValue;
+use dash_vm::local::LocalScope;
+use dash_vm::value::error::Error;
+use dash_vm::value::object::NamedObject;
+use dash_vm::value::Value as DashValue;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue as WasmValue;
 

@@ -1,7 +1,7 @@
-use dash_core::vm::local::LocalScope;
-use dash_core::vm::params::VmParams;
-use dash_core::vm::value::Value as DashValue;
-use dash_core::vm::Vm;
+use dash_vm::local::LocalScope;
+use dash_vm::params::VmParams;
+use dash_vm::value::Value as DashValue;
+use dash_vm::Vm;
 use wasm_bindgen::prelude::wasm_bindgen;
 
 use crate::jsvalue::JsValue;
@@ -13,12 +13,12 @@ pub enum OptLevel {
     Aggressive,
 }
 
-impl From<OptLevel> for dash_core::optimizer::consteval::OptLevel {
+impl From<OptLevel> for dash_optimizer::consteval::OptLevel {
     fn from(opt_level: OptLevel) -> Self {
         match opt_level {
-            OptLevel::None => dash_core::optimizer::consteval::OptLevel::None,
-            OptLevel::Basic => dash_core::optimizer::consteval::OptLevel::Basic,
-            OptLevel::Aggressive => dash_core::optimizer::consteval::OptLevel::Aggressive,
+            OptLevel::None => dash_optimizer::consteval::OptLevel::None,
+            OptLevel::Basic => dash_optimizer::consteval::OptLevel::Basic,
+            OptLevel::Aggressive => dash_optimizer::consteval::OptLevel::Aggressive,
         }
     }
 }
@@ -55,7 +55,7 @@ impl ExternalVm {
     pub fn eval(&mut self, code: &str, opt: OptLevel) -> Result<JsValue, String> {
         match self.0.eval(code, opt.into()) {
             Ok(value) => Ok(JsValue::from(value)),
-            Err(e) => Err(format!("{}", e)), // TODO: use inspect?
+            Err(e) => Err(format!("{:?}", e)), // TODO: use inspect?
         }
     }
 }

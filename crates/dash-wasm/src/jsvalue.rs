@@ -1,5 +1,5 @@
-use dash_core::vm::value::ops::abstractions::conversions::ValueConversion;
-use dash_core::vm::value::Value as DashValue;
+use dash_vm::value::Value as DashValue;
+use dash_vm::value::ops::abstractions::conversions::ValueConversion;
 use wasm_bindgen::prelude::wasm_bindgen;
 
 use crate::externalvm::ExternalVm;

@@ -1,10 +1,10 @@
-use dash_core::gc::handle::Handle;
-use dash_core::gc::trace::Trace;
-use dash_core::vm::local::LocalScope;
-use dash_core::vm::value::object::NamedObject;
-use dash_core::vm::value::object::Object;
-use dash_core::vm::value::object::PropertyKey;
-use dash_core::vm::value::Value;
+use dash_vm::gc::handle::Handle;
+use dash_vm::gc::trace::Trace;
+use dash_vm::local::LocalScope;
+use dash_vm::value::object::NamedObject;
+use dash_vm::value::object::Object;
+use dash_vm::value::object::PropertyKey;
+use dash_vm::value::Value;
 
 use crate::util::dash_value_from_wasm_value;
 use crate::util::wasm_value_from_dash_value;
