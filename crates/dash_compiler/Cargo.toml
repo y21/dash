@@ -1,0 +1,18 @@
+[package]
+name = "dash_compiler"
+version = "0.3.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+from_string = ["dash_parser", "dash_lexer", "dash_optimizer"]
+decompile = []
+
+[dependencies]
+dash_middle = { path = "../dash_middle" }
+strum = "0.24.0"
+strum_macros = "0.24.0"
+dash_parser = { path = "../dash_parser", optional = true }
+dash_lexer = { path = "../dash_lexer", optional = true }
+dash_optimizer = { path = "../dash_optimizer", optional = true }

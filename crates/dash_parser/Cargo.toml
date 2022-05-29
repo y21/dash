@@ -1,5 +1,5 @@
 [package]
-name = "dash-parser"
+name = "dash_parser"
 version = "0.3.0"
 edition = "2021"
 
@@ -9,5 +9,5 @@ edition = "2021"
 from_string = ["dash_lexer"]
 
 [dependencies]
-dash_middle = { path = "../dash-middle" }
-dash_lexer = { path = "../dash-lexer", optional = true }
+dash_middle = { path = "../dash_middle" }
+dash_lexer = { path = "../dash_lexer", optional = true }

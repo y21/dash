@@ -1,9 +1,9 @@
 [package]
-name = "dash-optimizer"
+name = "dash_optimizer"
 version = "0.3.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-dash_middle = { path = "../dash-middle" }
+dash_middle = { path = "../dash_middle" }
