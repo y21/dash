@@ -1,3 +1,4 @@
+use std::fmt;
 use std::ops::RangeInclusive;
 
 const DIGIT: RangeInclusive<u8> = b'0'..=b'9';
@@ -58,4 +59,15 @@ pub fn force_utf8(s: &[u8]) -> String {
 
 pub fn force_utf8_borrowed(s: &[u8]) -> &str {
     std::str::from_utf8(s).expect("Invalid UTF8")
+}
+
+pub fn fmt_group<D: fmt::Display>(formatter: &mut fmt::Formatter<'_>, items: &[D], delim: &str) -> fmt::Result {
+    for (index, item) in items.iter().enumerate() {
+        if index > 0 {
+            write!(formatter, "{}", delim)?;
+        }
+
+        write!(formatter, "{}", item)?;
+    }
+    Ok(())
 }

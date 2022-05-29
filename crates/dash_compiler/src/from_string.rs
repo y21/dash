@@ -23,6 +23,6 @@ impl<'a> FunctionCompiler<'a> {
 
         dash_optimizer::optimize_ast(&mut ast, opt);
 
-        Self::new().compile_ast(ast).map_err(CompileStrError::Compiler)
+        Self::new().compile_ast(ast, true).map_err(CompileStrError::Compiler)
     }
 }

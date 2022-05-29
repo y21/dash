@@ -75,29 +75,75 @@ checksum = "6245d59a3e82a7fc217c5828a6692dbc6dfb63a0c8c90495621f7b9d79704a0e"
 
 [[package]]
 name = "dash-cli"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "clap",
- "dash-core",
- "dash-rt",
+ "dash_optimizer",
+ "dash_rt",
+ "dash_vm",
  "rustyline",
  "tokio",
 ]
 
 [[package]]
-name = "dash-core"
-version = "0.2.0"
+name = "dash_compiler"
+version = "0.3.0"
+dependencies = [
+ "dash_lexer",
+ "dash_middle",
+ "dash_optimizer",
+ "dash_parser",
+ "strum",
+ "strum_macros",
+]
+
+[[package]]
+name = "dash_core"
+version = "0.3.0"
 dependencies = [
  "bitflags",
- "dash-proc-macro",
+ "dash_proc_macro",
  "derive_more",
  "strum",
  "strum_macros",
 ]
 
 [[package]]
-name = "dash-proc-macro"
+name = "dash_lexer"
+version = "0.3.0"
+dependencies = [
+ "dash_middle",
+ "either",
+]
+
+[[package]]
+name = "dash_middle"
+version = "0.3.0"
+dependencies = [
+ "derive_more",
+ "either",
+ "strum",
+ "strum_macros",
+]
+
+[[package]]
+name = "dash_optimizer"
+version = "0.3.0"
+dependencies = [
+ "dash_middle",
+]
+
+[[package]]
+name = "dash_parser"
+version = "0.3.0"
+dependencies = [
+ "dash_lexer",
+ "dash_middle",
+]
+
+[[package]]
+name = "dash_proc_macro"
 version = "0.1.0"
 dependencies = [
  "proc-macro-crate",
@@ -106,13 +152,29 @@ dependencies = [
 ]
 
 [[package]]
-name = "dash-rt"
-version = "0.2.0"
+name = "dash_rt"
+version = "0.3.0"
 dependencies = [
- "dash-core",
+ "dash_compiler",
+ "dash_core",
+ "dash_middle",
+ "dash_optimizer",
+ "dash_vm",
  "hyper",
  "rand",
  "tokio",
+]
+
+[[package]]
+name = "dash_vm"
+version = "0.3.0"
+dependencies = [
+ "dash_compiler",
+ "dash_lexer",
+ "dash_middle",
+ "dash_optimizer",
+ "dash_parser",
+ "dash_proc_macro",
 ]
 
 [[package]]
@@ -148,6 +210,12 @@ dependencies = [
  "redox_users",
  "winapi",
 ]
+
+[[package]]
+name = "either"
+version = "1.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e78d4f1cc4ae33bbfc157ed5d5a5ef3bc29227303d595861deb238fcec4e9457"
 
 [[package]]
 name = "endian-type"
@@ -771,7 +839,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
- "dash-core",
+ "dash_core",
+ "dash_optimizer",
+ "dash_vm",
  "futures-util",
  "tokio",
 ]
@@ -922,9 +992,13 @@ checksum = "9c8d87e72b64a3b4db28d11ce29237c246188f4f51057d65a7eab63b7987e423"
 
 [[package]]
 name = "wasm"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
- "dash-core",
+ "dash_compiler",
+ "dash_middle",
+ "dash_optimizer",
+ "dash_parser",
+ "dash_vm",
  "js-sys",
  "wasm-bindgen",
 ]

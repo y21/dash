@@ -1,4 +1,3 @@
-use anyhow::bail;
 use anyhow::Context;
 use clap::ArgMatches;
 use dash_vm::eval::EvalError;
@@ -14,7 +13,7 @@ pub fn eval(args: &ArgMatches) -> anyhow::Result<()> {
 
     match vm.eval(source, opt) {
         Ok(value) | Err(EvalError::Exception(value)) => util::print_value(value, &mut vm).unwrap(),
-        Err(e) => bail!("{e:?}"),
+        Err(e) => println!("{e}"),
     };
 
     Ok(())

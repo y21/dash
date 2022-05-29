@@ -57,7 +57,7 @@ pub trait InstructionWriter {
     /// Builds the [POP] instruction
     fn build_pop(&mut self);
     /// Builds the [RET] instruction
-    fn build_ret(&mut self);
+    fn build_ret(&mut self, tc_depth: u16);
     /// Builds the [THIS] instruction
     fn build_this(&mut self);
     /// Builds the [SUPER] instruction
@@ -142,7 +142,6 @@ impl InstructionWriter for InstructionBuilder {
         build_typeof inst::TYPEOF,
         build_bitnot inst::BITNOT,
         build_not inst::NOT,
-        build_ret inst::RET,
         build_this inst::THIS,
         build_strict_eq inst::STRICTEQ,
         build_strict_ne inst::STRICTNE,
@@ -161,6 +160,11 @@ impl InstructionWriter for InstructionBuilder {
         build_debugger inst::DEBUGGER,
         build_super inst::SUPER,
         build_global inst::GLOBAL
+    }
+
+    fn build_ret(&mut self, tc_depth: u16) {
+        self.write(inst::RET);
+        self.writew(tc_depth);
     }
 
     fn build_constant(&mut self, cp: &mut ConstantPool, constant: Constant) -> Result<(), LimitExceededError> {

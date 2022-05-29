@@ -197,26 +197,16 @@ mod handlers {
     }
 
     pub fn ret(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        let tc_depth = vm.fetchw_and_inc_ip();
         let value = vm.stack.pop().expect("No return value");
 
-        let fp = vm.frames.len();
         let this = vm.frames.pop().expect("No frame");
 
-        // TODO: optimize this at the compiler level
+        // Drain all try catch blocks that are in this frame.
+        let lower_tcp = vm.try_blocks.len() - usize::from(tc_depth);
+        drop(vm.try_blocks.drain(lower_tcp..));
 
-        // From the end of the try catch stack, find the first block that no longer lives in the
-        // frame we are currently returning from. Drain all the blocks that start here.
-        // Would be great if there was something like a reverse drain filter.
-        let lower_tcp = vm
-            .try_blocks
-            .iter()
-            .rev()
-            .position(|TryBlock { frame_ip, .. }| fp <= *frame_ip);
-
-        if let Some(lower_tcp) = lower_tcp {
-            drop(vm.try_blocks.drain(lower_tcp..));
-        }
-
+        // Drain all the stack space from this frame
         drop(vm.stack.drain(this.sp..));
 
         match this.state {

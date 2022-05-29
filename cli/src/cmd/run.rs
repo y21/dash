@@ -1,4 +1,3 @@
-use anyhow::bail;
 use dash_optimizer::consteval::OptLevel;
 use dash_rt::runtime::Runtime;
 use dash_rt::state::State;
@@ -33,7 +32,10 @@ async fn inner(source: String, opt: OptLevel) -> anyhow::Result<()> {
 
     let value = match rt.eval(&source, opt) {
         Ok(val) | Err(EvalError::Exception(val)) => val,
-        Err(e) => bail!("{e:?}"),
+        Err(e) => {
+            println!("{e}");
+            return Ok(());
+        }
     };
 
     // TODO: EvalError::VmError should probably bail too?

@@ -1,4 +1,3 @@
-use anyhow::bail;
 use dash_vm::eval::EvalError;
 use dash_vm::Vm;
 use rustyline::Editor;
@@ -19,7 +18,7 @@ pub fn repl() -> anyhow::Result<()> {
 
         match vm.eval(&input, Default::default()) {
             Ok(value) | Err(EvalError::Exception(value)) => util::print_value(value, &mut vm).unwrap(),
-            Err(e) => bail!("{e:?}"),
+            Err(e) => println!("{e}"),
         }
     }
 

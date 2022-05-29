@@ -1,3 +1,5 @@
+use std::fmt;
+
 use derive_more::Display;
 use either::Either;
 
@@ -312,6 +314,9 @@ pub enum TokenType {
 
     #[display(fmt = "#")]
     Hash,
+
+    #[display(fmt = "EOF")]
+    Eof,
 }
 
 /// Tokens that are used to assign
@@ -418,46 +423,49 @@ pub struct Location {
     pub line_offset: usize,
 }
 
-impl Location {
-    /// Formats this location.
-    ///
-    /// The caller is supposed to pass in the same input string.
-    /// This function is used to format errors
-    pub fn to_string(&self, source: &[u8], full: Either<&str, char>, message: &str, display_token: bool) -> String {
-        let offset = if self.line <= 1 {
-            self.line_offset
+pub struct FormattableError<'a> {
+    pub loc: &'a Location,
+    pub source: &'a [u8],
+    pub tok: Either<&'a str, char>,
+    pub message: &'a str,
+    pub display_token: bool,
+    pub help: Option<Box<dyn fmt::Display + 'a>>,
+}
+
+impl fmt::Display for FormattableError<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let offset = if self.loc.line <= 1 {
+            self.loc.line_offset
         } else {
-            self.line_offset + 1
+            self.loc.line_offset + 1
         };
 
-        let line_partial = &source[offset..];
-        let end = line_partial
-            .iter()
-            .position(|&c| c == b'\n')
-            .unwrap_or(line_partial.len());
-        let line = &line_partial[..end];
+        let column = self.loc.offset - offset;
 
-        let col = self.offset - offset;
+        write!(f, "error: {}\n", self.message)?;
+        write!(f, "--> script.js:{}:{}\n\n", self.loc.line, column)?;
 
-        let full_len = full.left().map(|s| s.len()).unwrap_or(1);
-        let full = match &full {
-            Either::Left(l) => l as &dyn std::fmt::Display,
-            Either::Right(r) => r as &dyn std::fmt::Display,
+        let line = {
+            let partial = &self.source[offset..];
+            let end = partial.iter().position(|&c| c == b'\n').unwrap_or(partial.len());
+            &partial[..end]
         };
 
-        let mut s = std::str::from_utf8(line).unwrap().to_owned();
-        s.push('\n');
-        s.push_str(&" ".repeat((self.offset - self.line_offset).saturating_sub(1)));
-        s.push_str(&"^".repeat(full_len));
-        s.push(' ');
-        s.push_str(message);
+        let token_len = match self.tok {
+            Either::Left(s) => s.len(),
+            Either::Right(c) => c.len_utf8(),
+        };
 
-        if display_token {
-            s.push_str(&format!(": {}", full));
+        let pointer_start = self.loc.offset - self.loc.line_offset;
+
+        write!(f, "{}\n", String::from_utf8_lossy(line))?;
+        write!(f, "{}", " ".repeat(pointer_start))?;
+        write!(f, "{}", "^".repeat(token_len))?;
+
+        if let Some(help) = &self.help {
+            write!(f, "\n= help: {}", help)?;
         }
 
-        s.push_str(&format!("\n    at script.js:{}:{}", self.line, col));
-
-        s
+        Ok(())
     }
 }

@@ -82,7 +82,7 @@ pub fn decompile(s: &str, o: OptLevel, em: Emit) -> String {
 
     match em {
         Emit::Bytecode => {
-            let cmp = FunctionCompiler::new().compile_ast(ast).unwrap();
+            let cmp = FunctionCompiler::new().compile_ast(ast, true).unwrap();
             decompiler::decompile(cmp).unwrap_or_else(|e| match e {
                 DecompileError::AbruptEof => String::from("Error: Abrupt end of file"),
                 DecompileError::UnknownInstruction(u) => {
@@ -101,9 +101,9 @@ pub fn decompile(s: &str, o: OptLevel, em: Emit) -> String {
 }
 
 fn compile_inspect(vm: &mut Vm) -> Value {
-    let source = include_str!("../../dash-rt/js/inspect.js");
+    let source = include_str!("../../dash_rt/js/inspect.js");
     let ast = Parser::from_str(source).unwrap().parse_all().unwrap();
-    let re = FunctionCompiler::new().compile_ast(ast).unwrap();
+    let re = FunctionCompiler::new().compile_ast(ast, true).unwrap();
 
     let f = Frame::from_compile_result(re);
     vm.execute_module(f).unwrap().default.unwrap()

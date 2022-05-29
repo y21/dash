@@ -1,7 +1,8 @@
-use std::borrow::Cow;
+use std::fmt;
 
 use either::Either;
 
+use super::token::FormattableError;
 use super::token::Location;
 
 /// An error that may occur during lexing
@@ -19,17 +20,21 @@ pub struct Error<'a> {
     pub source: &'a [u8],
 }
 
-impl<'a> Error<'a> {
-    /// Formats this error
-    pub fn to_string(&self) -> Cow<str> {
+impl fmt::Display for Error<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.kind {
             ErrorKind::UnknownCharacter(c) => {
-                Cow::Owned(
-                    self.loc
-                        .to_string(self.source, Either::Right(*c as char), "unknown character", true),
-                )
+                let format_err = FormattableError {
+                    source: self.source,
+                    loc: &self.loc,
+                    display_token: true,
+                    message: "unknown character",
+                    tok: Either::Right(*c as char),
+                    help: None,
+                };
+                format_err.fmt(f)
             }
-            ErrorKind::UnexpectedEof => Cow::Borrowed("Unexpected end of input"),
+            ErrorKind::UnexpectedEof => f.write_str("unexpected end of input"),
         }
     }
 }

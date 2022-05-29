@@ -67,8 +67,7 @@ pub struct SharedCompilerState<'a> {
     cp: ConstantPool,
     scope: Scope<'a>,
     externals: Vec<External>,
-    #[allow(unused)]
-    in_try_block: bool,
+    try_catch_depth: u16,
     ty: FunctionKind,
 }
 
@@ -78,7 +77,7 @@ impl<'a> SharedCompilerState<'a> {
             cp: ConstantPool::new(),
             scope: Scope::new(),
             externals: Vec::new(),
-            in_try_block: false,
+            try_catch_depth: 0,
             ty,
         }
     }
@@ -89,10 +88,11 @@ pub struct FunctionCompiler<'a> {
     caller: Option<NonNull<FunctionCompiler<'a>>>,
 }
 
+/// Implicitly inserts a `return` statement for the last expression
 fn ast_insert_return<'a>(ast: &mut Vec<Statement<'a>>) {
     match ast.last_mut() {
         Some(Statement::Return(..)) => {}
-        Some(Statement::Expression(_)) => {
+        Some(Statement::Expression(..)) => {
             let expr = match ast.pop() {
                 Some(Statement::Expression(expr)) => expr,
                 _ => unreachable!(),
@@ -100,7 +100,7 @@ fn ast_insert_return<'a>(ast: &mut Vec<Statement<'a>>) {
 
             ast.push(Statement::Return(ReturnStatement(expr)));
         }
-        Some(Statement::Block(b)) => ast_insert_return(&mut b.0),
+        Some(Statement::Block(BlockStatement(block))) => ast_insert_return(block),
         _ => ast.push(Statement::Return(ReturnStatement::default())),
     }
 }
@@ -118,14 +118,21 @@ impl<'a> FunctionCompiler<'a> {
     pub unsafe fn with_caller<'s>(caller: &'s mut FunctionCompiler<'a>, ty: FunctionKind) -> Self {
         Self {
             state: SharedCompilerState::new(ty),
-            /// SAFETY: references are always non-null
-            caller: Some(NonNull::new_unchecked(caller)),
+            caller: Some(NonNull::new(caller).unwrap()),
         }
     }
 
-    pub fn compile_ast(mut self, mut ast: Vec<Statement<'a>>) -> Result<CompileResult, CompileError> {
-        // TODO: don't do this for nested functions
-        ast_insert_return(&mut ast);
+    pub fn compile_ast(
+        mut self,
+        mut ast: Vec<Statement<'a>>,
+        implicit_return: bool,
+    ) -> Result<CompileResult, CompileError> {
+        if implicit_return {
+            ast_insert_return(&mut ast);
+        } else {
+            // Push an implicit `return undefined;` statement at the end in case there is not already an explicit one
+            ast.push(Statement::Return(Default::default()));
+        }
 
         let instructions = self.accept_multiple(&ast)?;
         Ok(CompileResult {
@@ -541,7 +548,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
     fn visit_return_statement(&mut self, s: &ReturnStatement<'a>) -> Result<Vec<u8>, CompileError> {
         let mut ib = InstructionBuilder::new();
         ib.append(&mut self.accept_expr(&s.0)?);
-        ib.build_ret();
+        ib.build_ret(self.state.try_catch_depth);
         Ok(ib.build())
     }
 
@@ -639,7 +646,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
             )?;
         }
 
-        let cmp = compiler.compile_ast(f.statements.clone())?;
+        let cmp = compiler.compile_ast(f.statements.clone(), false)?;
 
         let function = Function {
             buffer: cmp.instructions.into(),
@@ -686,9 +693,11 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
 
         ib.build_try_block();
 
+        self.state.try_catch_depth += 1;
         self.state.scope.enter();
         ib.append(&mut self.accept(&t.try_)?);
         self.state.scope.exit();
+        self.state.try_catch_depth -= 1;
 
         ib.build_jmp(Label::TryEnd);
 
