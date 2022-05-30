@@ -748,25 +748,23 @@ impl fmt::Debug for Vm {
 
 #[test]
 fn test_eval() {
-    todo!()
-    // let mut vm = Vm::new(Default::default());
-    // let value = vm
-    //     .eval(
-    //         r#"
-    //     // console.log(1337); 18
-    //     function add(a,b) {
-    //         return a +b
-    //     }
-    //     add(10, 7) + 1
-    // "#,
-    //         Default::default(),
-    //     )
-    //     .unwrap();
+    let mut vm = Vm::new(Default::default());
+    let value = vm
+        .eval(
+            r#"
+        function add(a,b) {
+            return a +b
+        }
+        add(10, 7) + 1
+    "#,
+            Default::default(),
+        )
+        .unwrap();
 
-    // assert_eq!(vm.stack.len(), 0);
-    // assert_eq!(vm.frames.len(), 0);
-    // match value {
-    //     Value::Number(n) => assert_eq!(n, 18.0),
-    //     _ => unreachable!("{:?}", value),
-    // }
+    assert_eq!(vm.stack.len(), 0);
+    assert_eq!(vm.frames.len(), 0);
+    match value {
+        Value::Number(n) => assert_eq!(n, 18.0),
+        _ => unreachable!("{:?}", value),
+    }
 }
