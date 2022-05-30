@@ -92,16 +92,20 @@ pub fn char_at(cx: CallContext) -> Result<Value, Value> {
     let index = cx.args.first().unwrap_or_undefined().to_number(cx.scope)? as usize;
     let this = cx.this.to_string(cx.scope)?;
     // TODO: this isn't right, but it is what it is
-    let c = this.as_bytes()[index] as char;
-    Ok(Value::String(c.to_string().into()))
+    match this.as_bytes().get(index) {
+        Some(&c) => Ok(Value::String((c as char).to_string().into())),
+        None => Ok(Value::undefined()),
+    }
 }
 
 pub fn char_code_at(cx: CallContext) -> Result<Value, Value> {
     let index = cx.args.first().unwrap_or_undefined().to_number(cx.scope)? as usize;
     let this = cx.this.to_string(cx.scope)?;
     // TODO: this isn't right, but it is what it is
-    let c = this.as_bytes()[index];
-    Ok(Value::Number(c as f64))
+    match this.as_bytes().get(index) {
+        Some(&c) => Ok(Value::Number(c as f64)),
+        None => Ok(Value::undefined()),
+    }
 }
 
 pub fn concat(cx: CallContext) -> Result<Value, Value> {

@@ -319,7 +319,10 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
             TokenType::Typeof => ib.build_typeof(),
             TokenType::BitwiseNot => ib.build_bitnot(),
             TokenType::LogicalNot => ib.build_not(),
-            TokenType::Void => ib.build_pop(),
+            TokenType::Void => {
+                ib.build_pop();
+                ib.build_undef();
+            }
             TokenType::Yield => {
                 if !matches!(self.state.ty, FunctionKind::Generator) {
                     return Err(CompileError::YieldOutsideGenerator);

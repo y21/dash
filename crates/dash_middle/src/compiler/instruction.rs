@@ -84,3 +84,5 @@ pub const SUPER: u8 = 0x4B;
 /// "Reverses" the last N stack values
 /// (e.g. REVSTACK 3: `[0, 1, 2, 3]` becomes `[0, 3, 2, 1]`)
 pub const REVSTCK: u8 = 0x4C;
+/// Pushes undefined on the stack
+pub const UNDEF: u8 = 0x4D;

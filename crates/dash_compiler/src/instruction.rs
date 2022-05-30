@@ -56,6 +56,8 @@ pub trait InstructionWriter {
     fn build_not(&mut self);
     /// Builds the [POP] instruction
     fn build_pop(&mut self);
+    /// Builds the [UNDEF] instruction
+    fn build_undef(&mut self);
     /// Builds the [RET] instruction
     fn build_ret(&mut self, tc_depth: u16);
     /// Builds the [THIS] instruction
@@ -159,7 +161,8 @@ impl InstructionWriter for InstructionBuilder {
         build_default_export inst::EXPORTDEFAULT,
         build_debugger inst::DEBUGGER,
         build_super inst::SUPER,
-        build_global inst::GLOBAL
+        build_global inst::GLOBAL,
+        build_undef inst::UNDEF
     }
 
     fn build_ret(&mut self, tc_depth: u16) {

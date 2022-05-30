@@ -238,6 +238,20 @@ mod handlers {
         Ok(None)
     }
 
+    pub fn storeglobal(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        let id = vm.fetch_and_inc_ip();
+        let name = force_get_identifier(vm, id.into());
+        let value = vm.stack.pop().expect("No value");
+
+        let mut scope = LocalScope::new(vm);
+        scope
+            .global
+            .clone()
+            .set_property(&mut scope, ToString::to_string(&name).into(), value.clone())?;
+        scope.try_push_stack(value)?;
+        Ok(None)
+    }
+
     pub fn call(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let meta = FunctionCallMetadata::from(vm.fetch_and_inc_ip());
         let argc = meta.value();
@@ -713,6 +727,11 @@ mod handlers {
 
         Ok(None)
     }
+
+    pub fn undef(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        vm.try_push_stack(Value::undefined())?;
+        Ok(None)
+    }
 }
 
 pub fn handle(vm: &mut Vm, instruction: u8) -> Result<Option<HandleResult>, Value> {
@@ -745,6 +764,7 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<Option<HandleResult>, Valu
         inst::POP => handlers::pop(vm),
         inst::RET => handlers::ret(vm),
         inst::LDGLOBAL => handlers::ldglobal(vm),
+        inst::STOREGLOBAL => handlers::storeglobal(vm),
         inst::CALL => handlers::call(vm),
         inst::JMPFALSEP => handlers::jmpfalsep(vm),
         inst::JMP => handlers::jmp(vm),
@@ -780,6 +800,7 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<Option<HandleResult>, Valu
         inst::REVSTCK => handlers::revstck(vm),
         inst::NEG => handlers::neg(vm),
         inst::POS => handlers::pos(vm),
+        inst::UNDEF => handlers::undef(vm),
         _ => unimplemented!("{}", instruction),
     }
 }
