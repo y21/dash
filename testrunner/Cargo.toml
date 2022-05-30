@@ -11,5 +11,5 @@ anyhow = "1.0"
 dash_core = { path = "../crates/dash_core" }
 tokio = { version = "1", features = ["full"] }
 futures-util = "0.3.21"
-dash_vm = { path = "../crates/dash_vm" }
+dash_vm = { path = "../crates/dash_vm", features = ["eval"] }
 dash_optimizer = { path = "../crates/dash_optimizer" }
