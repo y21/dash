@@ -1,0 +1,1 @@
+//! JavaScript implementation in Rust

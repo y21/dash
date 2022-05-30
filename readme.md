@@ -41,7 +41,7 @@ $ curl -sSf https://sh.rustup.rs | sh
 # Clone repo
 $ git clone https://github.com/y21/dash
 # Build cli
-$ cd dash/crates/dash-cli && cargo install --path .
+$ cd dash/cli && cargo install --path .
 # Optional: rename binary to `dashjs`
 $ mv ~/.cargo/bin/dash-cli ~/.cargo/bin/dashjs
 # Run the program (run with --help for help)
@@ -55,12 +55,14 @@ Note that the API is not stable. Things are constantly changing, so your code ma
 - Cargo.toml
 ```toml
 [dependencies]
-dash-core = { git = "https://github.com/y21/dash" }
+dash_vm = { git = "https://github.com/y21/dash", features = ["eval"] }
 ```
+> The `eval` feature exposes a convenience `eval()` method on the `Vm` struct
+> that lets you specify a JavaScript source string directly.
+
 - main.rs
 ```rs
-use dash_core as dash;
-use dash::vm::Vm;
+use dash_vm::Vm;
 
 fn main() {
     let source = "const x = 42; x * x";

@@ -1,0 +1,13 @@
+[package]
+name = "dash_parser"
+version = "0.3.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+from_string = ["dash_lexer"]
+
+[dependencies]
+dash_middle = { path = "../dash_middle" }
+dash_lexer = { path = "../dash_lexer", optional = true }

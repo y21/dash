@@ -1,0 +1,10 @@
+[package]
+name = "dash_lexer"
+version = "0.3.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+either = "1.6.1"
+dash_middle = { path = "../dash_middle" }

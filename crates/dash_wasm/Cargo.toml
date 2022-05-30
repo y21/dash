@@ -1,0 +1,21 @@
+[package]
+name = "wasm"
+version = "0.3.0"
+authors = ["y21"]
+edition = "2018"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+
+[dependencies]
+wasm-bindgen = "0.2.63"
+dash_vm = { path = "../dash_vm" }
+dash_optimizer = { path = "../dash_optimizer" }
+dash_compiler = { path = "../dash_compiler", features = [
+    "from_string",
+    "decompile",
+] }
+dash_parser = { path = "../dash_parser", features = ["from_string"] }
+dash_middle = { path = "../dash_middle" }
+js-sys = "0.3.57"

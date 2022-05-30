@@ -17,8 +17,33 @@ jobs:
           toolchain: stable
           override: true
 
-      - name: Test
+      - name: Test compiler
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --manifest-path crates/dash-core/Cargo.toml
+          args: --manifest-path crates/dash_compiler/Cargo.toml
+
+      - name: Test lexer
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --manifest-path crates/dash_lexer/Cargo.toml
+
+      - name: Test parser
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --manifest-path crates/dash_parser/Cargo.toml
+
+      - name: Test VM
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --manifest-path crates/dash_vm/Cargo.toml --all-features
+
+
+      - name: Test RT
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --manifest-path crates/dash_rt/Cargo.toml
