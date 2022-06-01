@@ -64,6 +64,7 @@ macro_rules! unimplementedc {
 }
 
 pub struct FunctionCompiler<'a> {
+    ib: InstructionBuilder,
     cp: ConstantPool,
     scope: Scope<'a>,
     externals: Vec<External>,
@@ -92,6 +93,7 @@ fn ast_insert_return<'a>(ast: &mut Vec<Statement<'a>>) {
 impl<'a> FunctionCompiler<'a> {
     pub fn new() -> Self {
         Self {
+            ib: InstructionBuilder::new(),
             cp: ConstantPool::new(),
             scope: Scope::new(),
             externals: Vec::new(),
@@ -105,6 +107,7 @@ impl<'a> FunctionCompiler<'a> {
     /// * Requires `caller` to not be invalid (i.e. due to moving) during calls
     pub unsafe fn with_caller<'s>(caller: &'s mut FunctionCompiler<'a>, ty: FunctionKind) -> Self {
         Self {
+            ib: InstructionBuilder::new(),
             cp: ConstantPool::new(),
             scope: Scope::new(),
             externals: Vec::new(),
@@ -126,23 +129,22 @@ impl<'a> FunctionCompiler<'a> {
             ast.push(Statement::Return(Default::default()));
         }
 
-        let instructions = self.accept_multiple(&ast)?;
+        println!("{:?}", ast);
+
+        self.accept_multiple(&ast)?;
         Ok(CompileResult {
-            instructions,
+            instructions: self.ib.build(),
             cp: self.cp,
             locals: self.scope.locals().len(),
             externals: self.externals,
         })
     }
 
-    pub fn accept_multiple(&mut self, v: &[Statement<'a>]) -> Result<Vec<u8>, CompileError> {
-        let mut insts = Vec::new();
-
+    pub fn accept_multiple(&mut self, v: &[Statement<'a>]) -> Result<(), CompileError> {
         for stmt in v {
-            insts.append(&mut self.accept(stmt)?);
+            self.accept(stmt)?;
         }
-
-        Ok(insts)
+        Ok(())
     }
 
     fn add_external(&mut self, external_id: u16, is_nested_external: bool) -> usize {
@@ -193,15 +195,14 @@ impl<'a> FunctionCompiler<'a> {
     }
 }
 
-impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
-    fn visit_binary_expression(&mut self, e: &BinaryExpr<'a>) -> Result<Vec<u8>, CompileError> {
-        let mut ib = InstructionBuilder::new();
-        ib.append(&mut self.accept_expr(&e.left)?);
+impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
+    fn visit_binary_expression(&mut self, e: &BinaryExpr<'a>) -> Result<(), CompileError> {
+        self.accept_expr(&e.left)?;
 
         macro_rules! trivial_case {
             ($k:expr) => {{
-                ib.append(&mut self.accept_expr(&e.right)?);
-                $k(&mut ib)
+                self.accept_expr(&e.right)?;
+                $k(&mut self.ib)
             }};
         }
 
@@ -229,117 +230,107 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
             TokenType::In => trivial_case!(InstructionBuilder::build_objin),
             TokenType::Instanceof => trivial_case!(InstructionBuilder::build_instanceof),
             TokenType::LogicalOr => {
-                ib.build_jmptruenp(Label::IfEnd);
-                ib.build_pop(); // Only pop LHS if it is false
-                ib.append(&mut self.accept_expr(&e.right)?);
-                ib.add_label(Label::IfEnd);
+                self.ib.build_jmptruenp(Label::IfEnd);
+                self.ib.build_pop(); // Only pop LHS if it is false
+                self.accept_expr(&e.right)?;
+                self.ib.add_label(Label::IfEnd);
             }
             TokenType::LogicalAnd => {
-                ib.build_jmpfalsenp(Label::IfEnd);
-                ib.build_pop(); // Only pop LHS if it is true
-                ib.append(&mut self.accept_expr(&e.right)?);
-                ib.add_label(Label::IfEnd);
+                self.ib.build_jmpfalsenp(Label::IfEnd);
+                self.ib.build_pop(); // Only pop LHS if it is true
+                self.accept_expr(&e.right)?;
+                self.ib.add_label(Label::IfEnd);
             }
             TokenType::NullishCoalescing => {
-                ib.build_jmpnullishnp(Label::IfBranch(0));
-                ib.build_jmp(Label::IfEnd);
+                self.ib.build_jmpnullishnp(Label::IfBranch(0));
+                self.ib.build_jmp(Label::IfEnd);
 
-                ib.add_label(Label::IfBranch(0));
-                ib.build_pop();
-                ib.append(&mut self.accept_expr(&e.right)?);
-                ib.add_label(Label::IfEnd);
+                self.ib.add_label(Label::IfBranch(0));
+                self.ib.build_pop();
+                self.accept_expr(&e.right)?;
+                self.ib.add_label(Label::IfEnd);
             }
             other => unimplementedc!("Binary operator {:?}", other),
         }
 
-        Ok(ib.build())
+        Ok(())
     }
 
-    fn visit_expression_statement(&mut self, e: &Expr<'a>) -> Result<Vec<u8>, CompileError> {
-        let expr = self.accept_expr(e)?;
-        let mut ib = InstructionBuilder::from(expr);
-        ib.build_pop();
-        Ok(ib.build())
+    fn visit_expression_statement(&mut self, e: &Expr<'a>) -> Result<(), CompileError> {
+        self.accept_expr(e)?;
+        self.ib.build_pop();
+        Ok(())
     }
 
-    fn visit_grouping_expression(&mut self, e: &GroupingExpr<'a>) -> Result<Vec<u8>, CompileError> {
-        let mut ib = InstructionBuilder::new();
-
+    fn visit_grouping_expression(&mut self, e: &GroupingExpr<'a>) -> Result<(), CompileError> {
         for expr in &e.0 {
-            ib.append(&mut self.accept_expr(expr)?);
-            ib.build_pop();
+            self.accept_expr(expr)?;
+            self.ib.build_pop();
         }
 
-        ib.remove_pop_end();
+        self.ib.remove_pop_end();
 
-        Ok(ib.build())
+        Ok(())
     }
 
-    fn visit_literal_expression(&mut self, e: &LiteralExpr<'a>) -> Result<Vec<u8>, CompileError> {
-        let mut ib = InstructionBuilder::new();
-        ib.build_constant(&mut self.cp, Constant::from_literal(e))?;
-        Ok(ib.build())
+    fn visit_literal_expression(&mut self, e: &LiteralExpr<'a>) -> Result<(), CompileError> {
+        self.ib.build_constant(&mut self.cp, Constant::from_literal(e))?;
+        Ok(())
     }
 
-    fn visit_identifier_expression(&mut self, ident: &str) -> Result<Vec<u8>, CompileError> {
-        let mut ib = InstructionBuilder::new();
-
+    fn visit_identifier_expression(&mut self, ident: &str) -> Result<(), CompileError> {
         match ident {
-            "this" => ib.build_this(),
-            "super" => ib.build_super(),
-            "globalThis" => ib.build_global(),
+            "this" => self.ib.build_this(),
+            "super" => self.ib.build_super(),
+            "globalThis" => self.ib.build_global(),
             ident => match self.find_local(ident) {
-                Some((index, local)) => ib.build_local_load(index, local.is_extern()),
-                _ => ib.build_global_load(&mut self.cp, ident)?,
+                Some((index, local)) => self.ib.build_local_load(index, local.is_extern()),
+                _ => self.ib.build_global_load(&mut self.cp, ident)?,
             },
         };
 
-        Ok(ib.build())
+        Ok(())
     }
 
-    fn visit_unary_expression(&mut self, e: &UnaryExpr<'a>) -> Result<Vec<u8>, CompileError> {
-        let mut ib = InstructionBuilder::new();
-        ib.append(&mut self.accept_expr(&e.expr)?);
+    fn visit_unary_expression(&mut self, e: &UnaryExpr<'a>) -> Result<(), CompileError> {
+        self.accept_expr(&e.expr)?;
 
         match e.operator {
-            TokenType::Plus => ib.build_pos(),
-            TokenType::Minus => ib.build_neg(),
-            TokenType::Typeof => ib.build_typeof(),
-            TokenType::BitwiseNot => ib.build_bitnot(),
-            TokenType::LogicalNot => ib.build_not(),
+            TokenType::Plus => self.ib.build_pos(),
+            TokenType::Minus => self.ib.build_neg(),
+            TokenType::Typeof => self.ib.build_typeof(),
+            TokenType::BitwiseNot => self.ib.build_bitnot(),
+            TokenType::LogicalNot => self.ib.build_not(),
             TokenType::Void => {
-                ib.build_pop();
-                ib.build_undef();
+                self.ib.build_pop();
+                self.ib.build_undef();
             }
             TokenType::Yield => {
                 if !matches!(self.ty, FunctionKind::Generator) {
                     return Err(CompileError::YieldOutsideGenerator);
                 }
 
-                ib.build_yield();
+                self.ib.build_yield();
             }
             _ => unimplementedc!("Unary operator {:?}", e.operator),
         }
 
-        Ok(ib.build())
+        Ok(())
     }
 
-    fn visit_variable_declaration(&mut self, v: &VariableDeclaration<'a>) -> Result<Vec<u8>, CompileError> {
-        let mut ib = InstructionBuilder::new();
+    fn visit_variable_declaration(&mut self, v: &VariableDeclaration<'a>) -> Result<(), CompileError> {
         let id = self.scope.add_local(v.binding.clone(), false)?;
 
         if let Some(expr) = &v.value {
-            ib.append(&mut self.accept_expr(expr)?);
-            ib.build_local_store(id, false);
-            ib.build_pop();
+            self.accept_expr(expr)?;
+            self.ib.build_local_store(id, false);
+            self.ib.build_pop();
         }
 
-        Ok(ib.build())
+        Ok(())
     }
 
-    fn visit_if_statement(&mut self, i: &IfStatement<'a>) -> Result<Vec<u8>, CompileError> {
-        let mut ib = InstructionBuilder::new();
-
+    fn visit_if_statement(&mut self, i: &IfStatement<'a>) -> Result<(), CompileError> {
         // Desugar last `else` block into `else if(true)` for simplicity
         if let Some(then) = &i.el {
             let then = &**then;
@@ -359,46 +350,45 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
             .try_into()
             .map_err(|_| CompileError::IfBranchLimitExceeded)?;
 
-        ib.append(&mut self.accept_expr(&i.condition)?);
+        self.accept_expr(&i.condition)?;
         if branches.is_empty() {
-            ib.build_jmpfalsep(Label::IfEnd);
+            self.ib.build_jmpfalsep(Label::IfEnd);
         } else {
-            ib.build_jmpfalsep(Label::IfBranch(0));
+            self.ib.build_jmpfalsep(Label::IfBranch(0));
         }
-        ib.append(&mut self.accept(&i.then)?);
-        ib.build_jmp(Label::IfEnd);
+        self.accept(&i.then)?;
+        self.ib.build_jmp(Label::IfEnd);
 
         for (id, branch) in branches.iter().enumerate() {
             let id = id as u16;
 
-            ib.add_label(Label::IfBranch(id));
-            ib.append(&mut self.accept_expr(&branch.condition)?);
+            self.ib.add_label(Label::IfBranch(id));
+            self.accept_expr(&branch.condition)?;
             if id == len - 1 {
-                ib.build_jmpfalsep(Label::IfEnd);
+                self.ib.build_jmpfalsep(Label::IfEnd);
 
-                ib.append(&mut self.accept(&branch.then)?);
+                self.accept(&branch.then)?;
             } else {
-                ib.build_jmpfalsep(Label::IfBranch(id + 1));
+                self.ib.build_jmpfalsep(Label::IfBranch(id + 1));
 
-                ib.append(&mut self.accept(&branch.then)?);
+                self.accept(&branch.then)?;
 
-                ib.build_jmp(Label::IfEnd);
+                self.ib.build_jmp(Label::IfEnd);
             }
         }
 
-        ib.add_label(Label::IfEnd);
-        Ok(ib.build())
+        self.ib.add_label(Label::IfEnd);
+        Ok(())
     }
 
-    fn visit_block_statement(&mut self, b: &BlockStatement<'a>) -> Result<Vec<u8>, CompileError> {
+    fn visit_block_statement(&mut self, b: &BlockStatement<'a>) -> Result<(), CompileError> {
         self.scope.enter();
         let re = self.accept_multiple(&b.0);
         self.scope.exit();
         re
     }
 
-    fn visit_function_declaration(&mut self, f: &FunctionDeclaration<'a>) -> Result<Vec<u8>, CompileError> {
-        let mut ib = InstructionBuilder::new();
+    fn visit_function_declaration(&mut self, f: &FunctionDeclaration<'a>) -> Result<(), CompileError> {
         let id = self.scope.add_local(
             VariableBinding {
                 name: f.name.expect("Function declaration did not have a name"),
@@ -406,34 +396,30 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
             },
             false,
         )?;
-        ib.append(&mut self.visit_function_expr(f)?);
-        ib.build_local_store(id, false);
-        ib.build_pop();
-        Ok(ib.build())
+        self.visit_function_expr(f)?;
+        self.ib.build_local_store(id, false);
+        self.ib.build_pop();
+        Ok(())
     }
 
-    fn visit_while_loop(&mut self, l: &WhileLoop<'a>) -> Result<Vec<u8>, CompileError> {
-        let mut ib = InstructionBuilder::new();
+    fn visit_while_loop(&mut self, l: &WhileLoop<'a>) -> Result<(), CompileError> {
+        self.ib.add_label(Label::LoopCondition);
+        self.accept_expr(&l.condition)?;
+        self.ib.build_jmpfalsep(Label::LoopEnd);
 
-        ib.add_label(Label::LoopCondition);
-        ib.append(&mut self.accept_expr(&l.condition)?);
-        ib.build_jmpfalsep(Label::LoopEnd);
+        self.accept(&l.body)?;
+        self.ib.build_jmp(Label::LoopCondition);
 
-        ib.append(&mut self.accept(&l.body)?);
-        ib.build_jmp(Label::LoopCondition);
-
-        ib.add_label(Label::LoopEnd);
-        Ok(ib.build())
+        self.ib.add_label(Label::LoopEnd);
+        Ok(())
     }
 
-    fn visit_assignment_expression(&mut self, e: &AssignmentExpr<'a>) -> Result<Vec<u8>, CompileError> {
-        let mut ib = InstructionBuilder::new();
-
+    fn visit_assignment_expression(&mut self, e: &AssignmentExpr<'a>) -> Result<(), CompileError> {
         if let Expr::PropertyAccess(prop) = &*e.left {
-            ib.append(&mut self.accept_expr(&prop.target)?);
+            self.accept_expr(&prop.target)?;
         }
 
-        ib.append(&mut self.accept_expr(&e.right)?);
+        self.accept_expr(&e.right)?;
 
         match &*e.left {
             Expr::Literal(lit) => {
@@ -449,39 +435,39 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
                     match e.operator {
                         TokenType::Assignment => {}
                         TokenType::AdditionAssignment => {
-                            ib.build_local_load(id, is_extern);
+                            self.ib.build_local_load(id, is_extern);
                             // += requires reversing (right, left)
                             // we effectively need to rewrite it from
                             // left = right + left
                             // to
                             // left = left + right
-                            ib.build_revstck(2);
-                            ib.build_add();
+                            self.ib.build_revstck(2);
+                            self.ib.build_add();
                         }
                         TokenType::SubtractionAssignment => {
-                            ib.build_local_load(id, is_extern);
-                            ib.build_revstck(2);
-                            ib.build_sub();
+                            self.ib.build_local_load(id, is_extern);
+                            self.ib.build_revstck(2);
+                            self.ib.build_sub();
                         }
                         _ => unimplementedc!("Unknown operator"),
                     }
 
-                    ib.build_local_store(id, is_extern);
+                    self.ib.build_local_store(id, is_extern);
                 } else {
                     match e.operator {
                         TokenType::Assignment => {}
                         TokenType::AdditionAssignment => {
-                            ib.build_global_load(&mut self.cp, &ident)?;
-                            ib.build_add();
+                            self.ib.build_global_load(&mut self.cp, &ident)?;
+                            self.ib.build_add();
                         }
                         TokenType::SubtractionAssignment => {
-                            ib.build_global_load(&mut self.cp, &ident)?;
-                            ib.build_sub();
+                            self.ib.build_global_load(&mut self.cp, &ident)?;
+                            self.ib.build_sub();
                         }
                         _ => unimplementedc!("Unknown operator"),
                     }
 
-                    ib.build_global_store(&mut self.cp, &ident)?;
+                    self.ib.build_global_store(&mut self.cp, &ident)?;
                 }
             }
             Expr::PropertyAccess(prop) => {
@@ -492,35 +478,33 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
                 match (&*prop.property, prop.computed) {
                     (Expr::Literal(lit), false) => {
                         let ident = lit.to_identifier();
-                        ib.build_static_prop_set(&mut self.cp, &ident)?;
+                        self.ib.build_static_prop_set(&mut self.cp, &ident)?;
                     }
                     (e, _) => {
-                        ib.append(&mut self.accept_expr(&e)?);
-                        ib.build_dynamic_prop_set();
+                        self.accept_expr(&e)?;
+                        self.ib.build_dynamic_prop_set();
                     }
                 }
             }
             _ => unimplementedc!("Assignment to non-identifier"),
         }
 
-        Ok(ib.build())
+        Ok(())
     }
 
-    fn visit_function_call(&mut self, c: &FunctionCall<'a>) -> Result<Vec<u8>, CompileError> {
-        let mut ib = InstructionBuilder::new();
-
+    fn visit_function_call(&mut self, c: &FunctionCall<'a>) -> Result<(), CompileError> {
         // specialize property access
         // TODO: this also needs to be specialized for assignment expressions with property access as target
         let has_this = if let Expr::PropertyAccess(p) = &*c.target {
-            ib.append(&mut self.visit_property_access_expr(p, true)?);
+            self.visit_property_access_expr(p, true)?;
             true
         } else {
-            ib.append(&mut self.accept_expr(&c.target)?);
+            self.accept_expr(&c.target)?;
             false
         };
 
         for a in &c.arguments {
-            ib.append(&mut self.accept_expr(a)?);
+            self.accept_expr(a)?;
         }
         let argc = c
             .arguments
@@ -531,74 +515,67 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
         let meta = FunctionCallMetadata::new_checked(argc, c.constructor_call, has_this)
             .ok_or(CompileError::ParameterLimitExceeded)?;
 
-        ib.build_call(meta);
+        self.ib.build_call(meta);
 
-        Ok(ib.build())
+        Ok(())
     }
 
-    fn visit_return_statement(&mut self, s: &ReturnStatement<'a>) -> Result<Vec<u8>, CompileError> {
-        let mut ib = InstructionBuilder::new();
-        ib.append(&mut self.accept_expr(&s.0)?);
-        ib.build_ret(self.try_catch_depth);
-        Ok(ib.build())
+    fn visit_return_statement(&mut self, s: &ReturnStatement<'a>) -> Result<(), CompileError> {
+        self.accept_expr(&s.0)?;
+        self.ib.build_ret(self.try_catch_depth);
+        Ok(())
     }
 
-    fn visit_conditional_expr(&mut self, c: &ConditionalExpr<'a>) -> Result<Vec<u8>, CompileError> {
-        let mut ib = InstructionBuilder::new();
+    fn visit_conditional_expr(&mut self, c: &ConditionalExpr<'a>) -> Result<(), CompileError> {
+        self.accept_expr(&c.condition)?;
+        self.ib.build_jmpfalsep(Label::IfBranch(0));
 
-        ib.append(&mut self.accept_expr(&c.condition)?);
-        ib.build_jmpfalsep(Label::IfBranch(0));
+        self.accept_expr(&c.then)?;
+        self.ib.build_jmp(Label::IfEnd);
 
-        ib.append(&mut self.accept_expr(&c.then)?);
-        ib.build_jmp(Label::IfEnd);
+        self.ib.add_label(Label::IfBranch(0));
+        self.accept_expr(&c.el)?;
 
-        ib.add_label(Label::IfBranch(0));
-        ib.append(&mut self.accept_expr(&c.el)?);
-
-        ib.add_label(Label::IfEnd);
-        Ok(ib.build())
+        self.ib.add_label(Label::IfEnd);
+        Ok(())
     }
 
     fn visit_property_access_expr(
         &mut self,
         e: &PropertyAccessExpr<'a>,
         preserve_this: bool,
-    ) -> Result<Vec<u8>, CompileError> {
-        let mut ib = InstructionBuilder::new();
+    ) -> Result<(), CompileError> {
+        self.accept_expr(&e.target)?;
 
-        ib.append(&mut self.accept_expr(&e.target)?);
         match (&*e.property, e.computed) {
             (Expr::Literal(lit), false) => {
                 let ident = lit.to_identifier();
-                ib.build_static_prop_access(&mut self.cp, &ident, preserve_this)?;
+                self.ib.build_static_prop_access(&mut self.cp, &ident, preserve_this)?;
             }
             (e, _) => {
-                ib.append(&mut self.accept_expr(e)?);
-                ib.build_dynamic_prop_access(preserve_this);
+                self.accept_expr(e)?;
+                self.ib.build_dynamic_prop_access(preserve_this);
             }
         }
 
-        Ok(ib.build())
+        Ok(())
     }
 
-    fn visit_sequence_expr(&mut self, s: &Seq<'a>) -> Result<Vec<u8>, CompileError> {
-        let mut ib = InstructionBuilder::new();
+    fn visit_sequence_expr(&mut self, s: &Seq<'a>) -> Result<(), CompileError> {
+        self.accept_expr(&s.0)?;
+        self.ib.build_pop();
+        self.accept_expr(&s.1)?;
 
-        ib.append(&mut self.accept_expr(&s.0)?);
-        ib.build_pop();
-        ib.append(&mut self.accept_expr(&s.1)?);
-
-        Ok(ib.build())
+        Ok(())
     }
 
-    fn visit_postfix_expr(&mut self, p: &Postfix<'a>) -> Result<Vec<u8>, CompileError> {
-        let mut ib = InstructionBuilder::new();
-
+    fn visit_postfix_expr(&mut self, p: &Postfix<'a>) -> Result<(), CompileError> {
         match &*p.1 {
             Expr::Literal(lit) => {
                 let ident = lit.to_identifier();
+
                 if let Some((id, loc)) = self.find_local(&ident) {
-                    ib.build_local_load(id, loc.is_extern());
+                    self.ib.build_local_load(id, loc.is_extern());
                 } else {
                     unimplementedc!("Global postfix expression");
                 }
@@ -606,7 +583,7 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
             _ => unimplementedc!("Non-identifier postfix expression"),
         }
 
-        let mut desugar = self.visit_assignment_expression(&AssignmentExpr {
+        self.visit_assignment_expression(&AssignmentExpr {
             left: p.1.clone(),
             operator: match p.0 {
                 TokenType::Increment => TokenType::AdditionAssignment,
@@ -615,15 +592,12 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
             },
             right: Box::new(Expr::number_literal(1.0)),
         })?;
+        self.ib.build_pop();
 
-        ib.append(&mut desugar);
-        ib.build_pop();
-
-        Ok(ib.build())
+        Ok(())
     }
 
-    fn visit_function_expr(&mut self, f: &FunctionDeclaration<'a>) -> Result<Vec<u8>, CompileError> {
-        let mut ib = InstructionBuilder::new();
+    fn visit_function_expr(&mut self, f: &FunctionDeclaration<'a>) -> Result<(), CompileError> {
         let mut compiler = unsafe { FunctionCompiler::with_caller(self, f.ty) };
         let scope = &mut compiler.scope;
 
@@ -648,51 +622,46 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
             params: f.arguments.len(),
             externals: cmp.externals.into(),
         };
-        ib.build_constant(&mut self.cp, Constant::Function(function))?;
+        self.ib.build_constant(&mut self.cp, Constant::Function(function))?;
 
-        Ok(ib.build())
+        Ok(())
     }
 
-    fn visit_array_literal(&mut self, ArrayLiteral(a): &ArrayLiteral<'a>) -> Result<Vec<u8>, CompileError> {
-        let mut ib = InstructionBuilder::new();
+    fn visit_array_literal(&mut self, ArrayLiteral(a): &ArrayLiteral<'a>) -> Result<(), CompileError> {
         let len = a.len().try_into().map_err(|_| CompileError::ArrayLitLimitExceeded)?;
 
         for e in a.iter() {
-            ib.append(&mut self.accept_expr(e)?);
+            self.accept_expr(e)?;
         }
 
-        ib.build_arraylit(len);
-        Ok(ib.build())
+        self.ib.build_arraylit(len);
+        Ok(())
     }
 
-    fn visit_object_literal(&mut self, ObjectLiteral(o): &ObjectLiteral<'a>) -> Result<Vec<u8>, CompileError> {
-        let mut ib = InstructionBuilder::new();
-
+    fn visit_object_literal(&mut self, ObjectLiteral(o): &ObjectLiteral<'a>) -> Result<(), CompileError> {
         let mut idents = Vec::with_capacity(o.len());
         for (ident, value) in o {
-            ib.append(&mut self.accept_expr(value)?);
+            self.accept_expr(value)?;
             let ident = Constant::Identifier((*ident).into());
             idents.push(ident);
         }
 
-        ib.build_objlit(&mut self.cp, idents)?;
-        Ok(ib.build())
+        self.ib.build_objlit(&mut self.cp, idents)?;
+        Ok(())
     }
 
-    fn visit_try_catch(&mut self, t: &TryCatch<'a>) -> Result<Vec<u8>, CompileError> {
-        let mut ib = InstructionBuilder::new();
-
-        ib.build_try_block();
+    fn visit_try_catch(&mut self, t: &TryCatch<'a>) -> Result<(), CompileError> {
+        self.ib.build_try_block();
 
         self.try_catch_depth += 1;
         self.scope.enter();
-        ib.append(&mut self.accept(&t.try_)?);
+        self.accept(&t.try_)?;
         self.scope.exit();
         self.try_catch_depth -= 1;
 
-        ib.build_jmp(Label::TryEnd);
+        self.ib.build_jmp(Label::TryEnd);
 
-        ib.add_label(Label::Catch);
+        self.ib.add_label(Label::Catch);
 
         self.scope.enter();
 
@@ -710,71 +679,66 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
                 return Err(CompileError::LocalLimitExceeded);
             }
 
-            ib.writew(id);
+            self.ib.writew(id);
         } else {
-            ib.writew(u16::MAX);
+            self.ib.writew(u16::MAX);
         }
 
-        ib.append(&mut self.accept(&t.catch.body)?);
+        self.accept(&t.catch.body)?;
         self.scope.exit();
 
-        ib.add_label(Label::TryEnd);
-        ib.build_try_end();
+        self.ib.add_label(Label::TryEnd);
+        self.ib.build_try_end();
 
-        Ok(ib.build())
+        Ok(())
     }
 
-    fn visit_throw(&mut self, e: &Expr<'a>) -> Result<Vec<u8>, CompileError> {
-        let mut ib = InstructionBuilder::new();
-        ib.append(&mut self.accept_expr(e)?);
-        ib.build_throw();
-        Ok(ib.build())
+    fn visit_throw(&mut self, e: &Expr<'a>) -> Result<(), CompileError> {
+        self.accept_expr(e)?;
+        self.ib.build_throw();
+        Ok(())
     }
 
-    fn visit_for_loop(&mut self, f: &ForLoop<'a>) -> Result<Vec<u8>, CompileError> {
-        let mut ib = InstructionBuilder::new();
-
+    fn visit_for_loop(&mut self, f: &ForLoop<'a>) -> Result<(), CompileError> {
         self.scope.enter();
 
         // Initialization
         if let Some(init) = &f.init {
-            ib.append(&mut self.accept(&init)?);
+            self.accept(&init)?;
         }
 
         // Condition
-        ib.add_label(Label::LoopCondition);
+        self.ib.add_label(Label::LoopCondition);
         if let Some(condition) = &f.condition {
-            ib.append(&mut self.accept_expr(&condition)?);
-            ib.build_jmpfalsep(Label::LoopEnd);
+            self.accept_expr(&condition)?;
+            self.ib.build_jmpfalsep(Label::LoopEnd);
         }
 
         // Body
-        ib.append(&mut self.accept(&f.body)?);
+        self.accept(&f.body)?;
 
         // Increment
         if let Some(finalizer) = &f.finalizer {
-            ib.append(&mut self.accept_expr(&finalizer)?);
-            ib.build_pop();
+            self.accept_expr(&finalizer)?;
+            self.ib.build_pop();
         }
-        ib.build_jmp(Label::LoopCondition);
+        self.ib.build_jmp(Label::LoopCondition);
 
-        ib.add_label(Label::LoopEnd);
+        self.ib.add_label(Label::LoopEnd);
         self.scope.exit();
 
-        Ok(ib.build())
+        Ok(())
     }
 
-    fn visit_for_of_loop(&mut self, _f: &ForOfLoop<'a>) -> Result<Vec<u8>, CompileError> {
+    fn visit_for_of_loop(&mut self, _f: &ForOfLoop<'a>) -> Result<(), CompileError> {
         unimplementedc!("For of loop")
     }
 
-    fn visit_import_statement(&mut self, import: &ImportKind<'a>) -> Result<Vec<u8>, CompileError> {
-        let mut ib = InstructionBuilder::new();
-
+    fn visit_import_statement(&mut self, import: &ImportKind<'a>) -> Result<(), CompileError> {
         match import {
             ImportKind::Dynamic(ex) => {
-                ib.append(&mut self.accept_expr(ex)?);
-                ib.build_dynamic_import();
+                self.accept_expr(ex)?;
+                self.ib.build_dynamic_import();
             }
             ImportKind::DefaultAs(spec, path) | ImportKind::AllAs(spec, path) => {
                 let ident = match spec {
@@ -791,20 +755,18 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
 
                 let path_id = self.cp.add(Constant::String((*path).into()))?;
 
-                ib.build_static_import(import, local_id, path_id);
+                self.ib.build_static_import(import, local_id, path_id);
             }
         }
 
-        Ok(ib.build())
+        Ok(())
     }
 
-    fn visit_export_statement(&mut self, e: &ExportKind<'a>) -> Result<Vec<u8>, CompileError> {
-        let mut ib = InstructionBuilder::new();
-
+    fn visit_export_statement(&mut self, e: &ExportKind<'a>) -> Result<(), CompileError> {
         match e {
             ExportKind::Default(expr) => {
-                ib.append(&mut self.accept_expr(expr)?);
-                ib.build_default_export();
+                self.accept_expr(expr)?;
+                self.ib.build_default_export();
             }
             ExportKind::Named(names) => {
                 let mut it = Vec::with_capacity(names.len());
@@ -825,44 +787,43 @@ impl<'a> Visitor<'a, Result<Vec<u8>, CompileError>> for FunctionCompiler<'a> {
                     }
                 }
 
-                ib.build_named_export(&it)?;
+                self.ib.build_named_export(&it)?;
             }
             ExportKind::NamedVar(vars) => {
                 for var in vars.iter() {
-                    ib.append(&mut self.visit_variable_declaration(var)?);
+                    self.visit_variable_declaration(var)?;
                 }
 
                 let it = vars.iter().map(|var| var.binding.name).collect::<Vec<_>>();
 
-                ib.append(&mut self.visit_export_statement(&ExportKind::Named(it))?);
+                self.visit_export_statement(&ExportKind::Named(it))?;
             }
         };
-        Ok(ib.build())
+        Ok(())
     }
 
-    fn visit_empty_statement(&mut self) -> Result<Vec<u8>, CompileError> {
-        Ok(Vec::new())
+    fn visit_empty_statement(&mut self) -> Result<(), CompileError> {
+        Ok(())
     }
 
-    fn visit_break(&mut self) -> Result<Vec<u8>, CompileError> {
+    fn visit_break(&mut self) -> Result<(), CompileError> {
         unimplementedc!("Break statement")
     }
 
-    fn visit_continue(&mut self) -> Result<Vec<u8>, CompileError> {
+    fn visit_continue(&mut self) -> Result<(), CompileError> {
         unimplementedc!("Continue statement")
     }
 
-    fn visit_debugger(&mut self) -> Result<Vec<u8>, CompileError> {
-        let mut ib = InstructionBuilder::new();
-        ib.build_debugger();
-        Ok(ib.build())
+    fn visit_debugger(&mut self) -> Result<(), CompileError> {
+        self.ib.build_debugger();
+        Ok(())
     }
 
-    fn visit_empty_expr(&mut self) -> Result<Vec<u8>, CompileError> {
-        Ok(Vec::new())
+    fn visit_empty_expr(&mut self) -> Result<(), CompileError> {
+        Ok(())
     }
 
-    fn visit_class_declaration(&mut self, _c: &Class<'a>) -> Result<Vec<u8>, CompileError> {
+    fn visit_class_declaration(&mut self, _c: &Class<'a>) -> Result<(), CompileError> {
         unimplementedc!("Class declaration")
     }
 }
