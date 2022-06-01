@@ -8,6 +8,5 @@ edition = "2021"
 [dependencies]
 derive_more = { version = "0.99.17", features = ["display"] }
 either = "1.6.1"
-
 strum = "0.24.0"
 strum_macros = "0.24.0"

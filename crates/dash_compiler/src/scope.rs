@@ -6,6 +6,7 @@ use dash_middle::parser::statement::VariableDeclarationKind;
 
 #[derive(Clone)]
 pub struct ScopeLocal<'a> {
+    /// The binding of this variable
     binding: VariableBinding<'a>,
     /// Whether this local variable is used by inner functions and as such may outlive the frame when returned
     is_extern: Cell<bool>,
