@@ -129,8 +129,6 @@ impl<'a> FunctionCompiler<'a> {
             ast.push(Statement::Return(Default::default()));
         }
 
-        println!("{:?}", ast);
-
         self.accept_multiple(&ast)?;
         Ok(CompileResult {
             instructions: self.ib.build(),
