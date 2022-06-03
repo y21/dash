@@ -472,6 +472,12 @@ pub enum VariableDeclarationKind {
     Unnameable,
 }
 
+impl VariableDeclarationKind {
+    pub fn is_nameable(&self) -> bool {
+        !matches!(self, VariableDeclarationKind::Unnameable)
+    }
+}
+
 impl From<TokenType> for VariableDeclarationKind {
     fn from(tok: TokenType) -> Self {
         match tok {

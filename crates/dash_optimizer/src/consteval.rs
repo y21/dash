@@ -12,6 +12,7 @@ use dash_middle::parser::expr::PropertyAccessExpr;
 use dash_middle::parser::expr::UnaryExpr;
 use dash_middle::parser::statement::BlockStatement;
 use dash_middle::parser::statement::Catch;
+use dash_middle::parser::statement::ExportKind;
 use dash_middle::parser::statement::ForLoop;
 use dash_middle::parser::statement::FunctionDeclaration;
 use dash_middle::parser::statement::IfStatement;
@@ -174,7 +175,8 @@ impl<'a> Eval for Expr<'a> {
                 target.fold(can_remove);
                 arguments.fold(can_remove);
             }
-            _ => {}
+            Literal(..) => {}
+            Empty => {}
         }
     }
 
@@ -218,6 +220,8 @@ impl<'a> Eval for Statement<'a> {
                 if let Some(condition) = condition {
                     condition.fold(can_remove);
 
+                    // if the condition is known to always be false,
+                    // we can remove the loop entirely
                     if let Some(false) = condition.is_truthy() {
                         *self = Statement::Empty;
                     }
@@ -232,13 +236,12 @@ impl<'a> Eval for Statement<'a> {
                 condition.fold(can_remove);
                 then.fold(can_remove);
 
-                {
-                    let mut branches = branches.borrow_mut();
-                    for branch in branches.iter_mut() {
-                        branch.condition.fold(can_remove);
-                        branch.then.fold(can_remove);
-                    }
+                let mut branches = branches.borrow_mut();
+                for branch in branches.iter_mut() {
+                    branch.condition.fold(can_remove);
+                    branch.then.fold(can_remove);
                 }
+                drop(branches);
 
                 if let Some(el) = el {
                     el.fold(can_remove);
@@ -246,14 +249,16 @@ impl<'a> Eval for Statement<'a> {
 
                 match condition.is_truthy() {
                     Some(true) => {
+                        // if the condition is always true, replace the if statement with the `then` branch statements
                         *self = (**then).clone();
                     }
                     Some(false) => {
-                        if let Some(el) = &el {
-                            *self = (**el).clone();
-                        } else {
-                            *self = Statement::Empty;
-                        }
+                        // if the condition is always false, replace it with the else branch
+                        // or if there is no else branch, remove it
+                        *self = match el {
+                            Some(el) => (**el).clone(),
+                            None => Statement::Empty,
+                        };
                     }
                     _ => {}
                 };
@@ -270,7 +275,16 @@ impl<'a> Eval for Statement<'a> {
                 }
             }
             Self::Throw(expr) => expr.fold(can_remove),
-            _ => {}
+            Self::Import(..) => {}
+            Statement::Export(export) => match export {
+                ExportKind::Default(expr) => expr.fold(can_remove),
+                _ => {}
+            },
+            Statement::Class(..) => {}
+            Statement::Continue => {}
+            Statement::Break => {}
+            Statement::Debugger => {}
+            Statement::Empty => {}
         };
 
         if can_remove && !self.has_side_effect() {

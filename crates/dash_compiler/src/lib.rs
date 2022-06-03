@@ -375,7 +375,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         &mut self,
         VariableDeclaration { binding, value }: VariableDeclaration<'a>,
     ) -> Result<(), CompileError> {
-        let id = self.scope.add_local(binding, false)?;
+        let id = self.scope.add_local(binding, false, None)?;
 
         if let Some(expr) = value {
             self.accept_expr(expr)?;
@@ -459,6 +459,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 kind: VariableDeclarationKind::Var,
             },
             false,
+            None,
         )?;
         self.visit_function_expr(fun)?;
         self.ib.build_local_store(id, false);
@@ -698,6 +699,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                     name,
                 },
                 false,
+                None,
             )?;
         }
 
@@ -765,6 +767,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                     name: ident,
                 },
                 false,
+                None,
             )?;
 
             if id == u16::MAX {
@@ -850,6 +853,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                         },
                     },
                     false,
+                    None,
                 )?;
 
                 let path_id = self.cp.add(Constant::String((*path).into()))?;

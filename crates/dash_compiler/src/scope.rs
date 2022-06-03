@@ -1,8 +1,17 @@
 use std::cell::Cell;
 use std::convert::TryFrom;
 
+use dash_middle::parser::expr::Expr;
 use dash_middle::parser::statement::VariableBinding;
-use dash_middle::parser::statement::VariableDeclarationKind;
+
+#[derive(Clone)]
+pub enum TypeHint {}
+
+#[derive(Clone)]
+pub struct LocalHint<'a> {
+    pub ty: TypeHint,
+    pub value: Option<Expr<'a>>,
+}
 
 #[derive(Clone)]
 pub struct ScopeLocal<'a> {
@@ -10,6 +19,8 @@ pub struct ScopeLocal<'a> {
     binding: VariableBinding<'a>,
     /// Whether this local variable is used by inner functions and as such may outlive the frame when returned
     is_extern: Cell<bool>,
+    /// Type hint for this local variable for fastpath generation in the happy case, if available
+    hint: Option<LocalHint<'a>>,
 }
 
 impl<'a> ScopeLocal<'a> {
@@ -48,13 +59,24 @@ impl<'a> Scope<'a> {
         self.locals
             .iter()
             .enumerate()
-            .find(|(_, l)| {
-                l.binding.name == identifier && !matches!(l.binding.kind, VariableDeclarationKind::Unnameable)
-            })
+            .find(|(_, l)| l.binding.name == identifier && l.binding.kind.is_nameable())
             .map(|(i, l)| (i as u16, l))
     }
 
-    pub fn add_local(&mut self, binding: VariableBinding<'a>, is_extern: bool) -> Result<u16, LimitExceededError> {
+    pub fn find_local_mut(&mut self, identifier: &str) -> Option<(u16, &mut ScopeLocal<'a>)> {
+        self.locals
+            .iter_mut()
+            .enumerate()
+            .find(|(_, l)| l.binding.name == identifier && l.binding.kind.is_nameable())
+            .map(|(i, l)| (i as u16, l))
+    }
+
+    pub fn add_local(
+        &mut self,
+        binding: VariableBinding<'a>,
+        is_extern: bool,
+        hint: Option<LocalHint<'a>>,
+    ) -> Result<u16, LimitExceededError> {
         // if there's already a local with the same name, we should use that
         if let Some((id, _)) = self.find_local(&binding.name) {
             return Ok(id);
@@ -63,7 +85,9 @@ impl<'a> Scope<'a> {
         self.locals.push(ScopeLocal {
             binding,
             is_extern: Cell::new(is_extern),
+            hint,
         });
+
         u16::try_from(self.locals.len() - 1).map_err(|_| LimitExceededError)
     }
 
@@ -75,7 +99,7 @@ impl<'a> Scope<'a> {
         self.depth -= 1;
     }
 
-    pub fn locals(&self) -> &[ScopeLocal] {
+    pub fn locals(&self) -> &[ScopeLocal<'a>] {
         self.locals.as_ref()
     }
 }
