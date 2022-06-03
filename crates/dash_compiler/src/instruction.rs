@@ -1,11 +1,8 @@
 use std::convert::TryInto;
 
-use dash_middle::{
-    compiler::{
-        constant::{Constant, ConstantPool, LimitExceededError},
-        FunctionCallMetadata, StaticImportKind,
-    },
-    parser::statement::ImportKind,
+use dash_middle::compiler::{
+    constant::{Constant, ConstantPool, LimitExceededError},
+    FunctionCallMetadata, StaticImportKind,
 };
 
 use super::{
@@ -107,7 +104,7 @@ pub trait InstructionWriter {
     fn build_objin(&mut self);
     fn build_instanceof(&mut self);
     fn build_dynamic_import(&mut self);
-    fn build_static_import(&mut self, import: &ImportKind, local_id: u16, path_id: u16);
+    fn build_static_import(&mut self, import: StaticImportKind, local_id: u16, path_id: u16);
     fn build_default_export(&mut self);
     fn build_named_export(&mut self, it: &[NamedExportKind]) -> Result<(), CompileError>;
     fn build_debugger(&mut self);
@@ -308,13 +305,9 @@ impl InstructionWriter for InstructionBuilder {
         Ok(())
     }
 
-    fn build_static_import(&mut self, import: &ImportKind, local_id: u16, path_id: u16) {
+    fn build_static_import(&mut self, import: StaticImportKind, local_id: u16, path_id: u16) {
         self.write(inst::IMPORTSTATIC);
-        self.write(match import {
-            ImportKind::AllAs(_, _) => StaticImportKind::All as u8,
-            ImportKind::DefaultAs(_, _) => StaticImportKind::Default as u8,
-            ImportKind::Dynamic(_) => unreachable!(),
-        });
+        self.write(import as u8);
         self.writew(local_id);
         self.writew(path_id);
     }

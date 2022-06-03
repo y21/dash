@@ -145,6 +145,10 @@ impl NamedObject {
             values: RefCell::new(HashMap::new()),
         }
     }
+
+    pub fn get_raw_property(&self, pk: PropertyKey) -> Option<Value> {
+        self.values.borrow().get(&pk).cloned()
+    }
 }
 
 unsafe impl Trace for NamedObject {

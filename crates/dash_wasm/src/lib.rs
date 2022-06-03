@@ -78,11 +78,10 @@ fn fmt_value(value: Value, vm: &mut Vm) -> String {
 pub fn decompile(s: &str, o: OptLevel, em: Emit) -> String {
     let parser = Parser::from_str(s).unwrap();
     let mut ast = parser.parse_all().unwrap();
-    dash_optimizer::optimize_ast(&mut ast, o.into());
 
     match em {
         Emit::Bytecode => {
-            let cmp = FunctionCompiler::new().compile_ast(ast, true).unwrap();
+            let cmp = FunctionCompiler::new(o.into()).compile_ast(ast, true).unwrap();
             decompiler::decompile(cmp).unwrap_or_else(|e| match e {
                 DecompileError::AbruptEof => String::from("Error: Abrupt end of file"),
                 DecompileError::UnknownInstruction(u) => {
@@ -91,6 +90,7 @@ pub fn decompile(s: &str, o: OptLevel, em: Emit) -> String {
             })
         }
         Emit::JavaScript => {
+            dash_optimizer::optimize_ast(&mut ast, o.into());
             let mut output = String::new();
             for node in ast {
                 let _ = write!(output, "{node}; ");
@@ -103,7 +103,9 @@ pub fn decompile(s: &str, o: OptLevel, em: Emit) -> String {
 fn compile_inspect(vm: &mut Vm) -> Value {
     let source = include_str!("../../dash_rt/js/inspect.js");
     let ast = Parser::from_str(source).unwrap().parse_all().unwrap();
-    let re = FunctionCompiler::new().compile_ast(ast, true).unwrap();
+    let re = FunctionCompiler::new(Default::default())
+        .compile_ast(ast, true)
+        .unwrap();
 
     let f = Frame::from_compile_result(re);
     vm.execute_module(f).unwrap().default.unwrap()

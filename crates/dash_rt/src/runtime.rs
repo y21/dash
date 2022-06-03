@@ -3,7 +3,7 @@ use std::fs;
 use dash_compiler::from_string::CompileStrError;
 use dash_compiler::FunctionCompiler;
 use dash_middle::compiler::StaticImportKind;
-use dash_optimizer::consteval::OptLevel;
+use dash_optimizer::OptLevel;
 use dash_vm::eval::EvalError;
 use dash_vm::frame::Frame;
 use dash_vm::local::LocalScope;

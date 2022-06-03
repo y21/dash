@@ -233,7 +233,15 @@ mod handlers {
         let name = force_get_identifier(vm, id.into());
 
         let mut scope = LocalScope::new(vm);
-        let value = scope.global.clone().get_property(&mut scope, name.as_ref().into())?;
+
+        let value = match scope.global.as_any().downcast_ref::<NamedObject>() {
+            Some(value) => match value.get_raw_property(name.as_ref().into()) {
+                Some(value) => value,
+                None => throw!(&mut scope, "{} is not defined", name),
+            },
+            None => scope.global.clone().get_property(&mut scope, name.as_ref().into())?,
+        };
+
         scope.try_push_stack(value)?;
         Ok(None)
     }

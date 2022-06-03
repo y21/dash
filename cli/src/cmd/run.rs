@@ -1,4 +1,4 @@
-use dash_optimizer::consteval::OptLevel;
+use dash_optimizer::OptLevel;
 use dash_rt::runtime::Runtime;
 use dash_rt::state::State;
 use dash_vm::eval::EvalError;
