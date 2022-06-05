@@ -12,6 +12,7 @@ members = [
     "crates/dash_wasm",
     "crates/dash_proc_macro",
     "crates/dash_rt",
+    "crates/dash_dlloader",
 ]
 
 [profile.release]

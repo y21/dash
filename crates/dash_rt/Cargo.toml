@@ -4,6 +4,9 @@ version = "0.3.0"
 edition = "2018"
 license = "MIT"
 
+[features]
+dlopen = ["dash_dlloader"]
+
 [dependencies]
 dash_core = { path = "../dash_core" }
 rand = { version = "0.8.4" }
@@ -13,3 +16,4 @@ dash_vm = { path = "../dash_vm", features = ["eval"] }
 dash_optimizer = { path = "../dash_optimizer" }
 dash_middle = { path = "../dash_middle" }
 dash_compiler = { path = "../dash_compiler", features = ["from_string"] }
+dash_dlloader = { path = "../dash_dlloader", optional = true }
