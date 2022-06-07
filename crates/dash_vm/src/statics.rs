@@ -27,8 +27,13 @@ pub struct Statics {
     pub empty_str: Rc<str>,
     pub undefined_str: Rc<str>,
     pub null_str: Rc<str>,
+    // Boolean strings
     pub true_lit: Rc<str>,
     pub false_lit: Rc<str>,
+    // PreferredType strings
+    pub number_str: Rc<str>,
+    pub string_str: Rc<str>,
+    pub default_str: Rc<str>,
     pub function_proto: Handle<dyn Object>,
     pub function_ctor: Handle<dyn Object>,
     pub is_nan: Handle<dyn Object>,
@@ -183,6 +188,9 @@ impl Statics {
             empty_str: empty_str.clone(),
             null_str: "null".into(),
             undefined_str: "undefined".into(),
+            default_str: "default".into(),
+            number_str: "number".into(),
+            string_str: "string".into(),
             function_proto: object(gc),
             function_ctor: function(gc, "Function", js_std::function::constructor),
             console: object(gc),

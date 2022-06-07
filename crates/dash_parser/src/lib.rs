@@ -519,9 +519,9 @@ impl<'a> Parser<'a> {
     fn assignment(&mut self) -> Option<Expr<'a>> {
         let mut expr = self.ternary()?;
 
-        while self.expect_and_skip(ASSIGNMENT_TYPES, false) {
+        if self.expect_and_skip(ASSIGNMENT_TYPES, false) {
             let operator = self.previous()?.ty;
-            let rval = self.ternary()?;
+            let rval = self.assignment()?;
             expr = Expr::assignment(expr, rval, operator);
         }
 

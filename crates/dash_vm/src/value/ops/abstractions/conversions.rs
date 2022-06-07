@@ -1,8 +1,10 @@
 use std::rc::Rc;
 
+use crate::Vm;
 use crate::gc::handle::Handle;
 use crate::local::LocalScope;
 use crate::throw;
+use crate::value::Typeof;
 use crate::value::boxed::Boolean;
 use crate::value::boxed::Number as BoxedNumber;
 use crate::value::boxed::String as BoxedString;
@@ -13,7 +15,9 @@ use crate::value::Value;
 
 pub trait ValueConversion {
     fn to_primitive(&self, sc: &mut LocalScope, preferred_type: Option<PreferredType>) -> Result<Value, Value>;
+
     fn to_number(&self, sc: &mut LocalScope) -> Result<f64, Value>;
+
     fn to_length(&self, sc: &mut LocalScope) -> Result<f64, Value> {
         // Let len be ? ToIntegerOrInfinity(argument).
         let len = self.to_integer_or_infinity(sc)?;
@@ -25,9 +29,11 @@ pub trait ValueConversion {
         // Return 𝔽(min(len, 253 - 1)).
         Ok(len.min(MAX_SAFE_INTEGERF))
     }
+
     fn to_length_u(&self, sc: &mut LocalScope) -> Result<usize, Value> {
         self.to_length(sc).map(|x| x as usize)
     }
+
     fn to_integer_or_infinity(&self, sc: &mut LocalScope) -> Result<f64, Value> {
         // Let number be ? ToNumber(argument).
         let number = self.to_number(sc)?;
@@ -52,10 +58,15 @@ pub trait ValueConversion {
             Ok(integer)
         }
     }
+
     fn to_boolean(&self) -> Result<bool, Value>;
+
     fn to_string(&self, sc: &mut LocalScope) -> Result<Rc<str>, Value>;
+
     fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value>;
+
     fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value>;
+
     fn to_int32(&self, sc: &mut LocalScope) -> Result<i32, Value> {
         let n = self.to_number(sc)?;
         Ok(n as i32)
@@ -119,26 +130,37 @@ impl ValueConversion for Value {
     }
 
     fn to_primitive(&self, sc: &mut LocalScope, preferred_type: Option<PreferredType>) -> Result<Value, Value> {
+        // 1. If Type(input) is Object, then
         if let Value::Object(obj) | Value::External(obj) = self {
             if let Some(prim) = obj.as_primitive_capable() {
                 return prim.to_primitive(sc, preferred_type);
             }
 
-            // TODO: Call @@toPrimitive instead of toString once we have symbols
-            let exotic_to_prim = self.get_property(sc, "toString".into())?;
+            // a. Let exoticToPrim be ? GetMethod(input, @@toPrimitive).
+            let to_primitive = sc.statics.symbol_to_primitive.clone();
+            let exotic_to_prim = self.get_property(sc, to_primitive.into())?.into_option();
 
-            if let Value::Undefined(_) = exotic_to_prim {
-                // TODO: d. Return ? OrdinaryToPrimitive(input, preferredType).
+            // i. If preferredType is not present, let hint be "default".
+            let preferred_type = preferred_type.unwrap_or(PreferredType::Default);
+
+            // b. If exoticToPrim is not undefined, then
+            if let Some(exotic_to_prim) = exotic_to_prim {
+                let preferred_type = preferred_type.to_value(sc);
+    
+                // iv. Let result be ? Call(exoticToPrim, input, « hint »).
+                let result = exotic_to_prim.apply(sc, self.clone(), vec![preferred_type])?;
+    
+                // If Type(result) is not Object, return result.
+                // TODO: this can still be an object if Value::External
+                if !matches!(result, Value::Object(_)) {
+                    return Ok(result);
+                }
+                
+                // vi. Throw a TypeError exception.
                 throw!(sc, "Failed to convert to primitive");
             }
 
-            let result = exotic_to_prim.apply(sc, self.clone(), Vec::new())?;
-
-            if let Value::Object(_) = result {
-                throw!(sc, "Failed to convert to primitive");
-            }
-
-            Ok(result)
+            self.ordinary_to_primitive(sc, preferred_type)
         } else {
             Ok(self.clone())
         }
@@ -171,6 +193,41 @@ impl ValueConversion for Value {
 }
 
 pub enum PreferredType {
+    Default,
     String,
     Number,
+}
+
+impl PreferredType {
+    pub fn to_value(&self, vm: &Vm) -> Value {
+        let st = match self {
+            PreferredType::Default => vm.statics.default_str.clone(),
+            PreferredType::String => vm.statics.string_str.clone(),
+            PreferredType::Number => vm.statics.number_str.clone(),
+        };
+
+        Value::String(st)
+    }
+}
+
+impl Value {
+    pub fn ordinary_to_primitive(&self, sc: &mut LocalScope, preferred_type: PreferredType) -> Result<Value, Value> {
+        let method_names = match preferred_type {
+            PreferredType::String => ["toString", "valueOf"],
+            PreferredType::Number | PreferredType::Default => ["valueOf", "toString"]
+        };
+    
+        for name in method_names {
+            let method = self.get_property(sc, name.into())?;
+            if matches!(method.type_of(), Typeof::Function) {
+                let this = self.clone();
+                let result = method.apply(sc, this, Vec::new())?;
+                if !matches!(result, Value::Object(_)) {
+                    return Ok(result);
+                }
+            }
+        }
+
+        throw!(sc, "Failed to convert to primitive")
+    }
 }

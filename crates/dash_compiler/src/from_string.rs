@@ -8,6 +8,7 @@ use dash_parser::Parser;
 use crate::error::CompileError;
 use crate::FunctionCompiler;
 
+#[derive(Debug)]
 pub enum CompileStrError<'a> {
     Lexer(Vec<lexer::error::Error<'a>>),
     Parser(Vec<parser::error::Error<'a>>),
