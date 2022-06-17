@@ -1,0 +1,11 @@
+[package]
+name = "dash_jit"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+llvm-sys = "140.0.2"
+cstr = "0.2.10"
+dash_middle = { path = "../dash_middle" }

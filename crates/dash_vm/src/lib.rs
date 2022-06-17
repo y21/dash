@@ -18,6 +18,8 @@ use self::{
     },
 };
 
+use dash_jit::trace::Trace as JitTrace;
+
 pub mod dispatch;
 #[cfg(feature = "eval")]
 pub mod eval;
@@ -43,10 +45,17 @@ pub struct Vm {
     statics: Statics, // TODO: we should box this... maybe?
     try_blocks: Vec<TryBlock>,
     params: VmParams,
+
+    /// If we are currently recording a trace for a loop iteration,
+    /// this will contain the pc of the loop header and its end
+    recording_trace: Option<JitTrace>,
 }
+
 
 impl Vm {
     pub fn new(params: VmParams) -> Self {
+        dash_jit::init();
+
         let mut gc = Gc::new();
         let statics = Statics::new(&mut gc);
         let global = gc.register(NamedObject::null()); // TODO: set its __proto__ and constructor
@@ -60,6 +69,7 @@ impl Vm {
             statics,
             try_blocks: Vec::new(),
             params,
+            recording_trace: None
         };
         vm.prepare();
         vm
@@ -68,23 +78,6 @@ impl Vm {
     pub fn global(&self) -> Handle<dyn Object> {
         self.global.clone()
     }
-
-    // pub fn eval<'a>(&mut self, input: &'a str, opt: OptLevel) -> Result<Value, ()> {
-    // let mut ast = Parser::from_str(input)
-    //     .map_err(EvalError::LexError)?
-    //     .parse_all()
-    //     .map_err(EvalError::ParseError)?;
-
-    // optimizer::optimize_ast(&mut ast, opt);
-
-    // let compiled = FunctionCompiler::new()
-    //     .compile_ast(ast)
-    //     .map_err(EvalError::CompileError)?;
-
-    // let frame = Frame::from_compile_result(compiled);
-    // let val = self.execute_frame(frame).map_err(EvalError::VmError)?;
-    // Ok(val.into_value())
-    // }
 
     /// Prepare the VM for execution.
     #[rustfmt::skip]
@@ -737,6 +730,12 @@ impl Vm {
 
     pub fn params(&self) -> &VmParams {
         &self.params
+    }
+
+    pub fn record_conditional_jump(&mut self, did_jump: bool) {
+        if let Some(trace) = &mut self.recording_trace {
+            trace.record_conditional_jump(did_jump);
+        }
     }
 }
 

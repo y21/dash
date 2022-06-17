@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use dash_middle::compiler::constant::Constant;
@@ -33,6 +34,19 @@ pub enum FrameState {
     Module(Exports),
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct LoopCounter(u32);
+
+impl LoopCounter {
+    pub fn inc(&mut self) {
+        self.0 += 1;
+    }
+
+    pub fn is_hot(&self) -> bool {
+        self.0 > 5
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Frame {
     pub name: Option<Rc<str>>,
@@ -44,6 +58,9 @@ pub struct Frame {
     pub buffer: Rc<[u8]>,
     pub sp: usize,
     pub state: FrameState,
+
+    /// Counts the number of backjumps to a particular loop header, to find hot loops
+    pub loop_counter: BTreeMap<usize, LoopCounter>
 }
 
 unsafe impl Trace for Frame {
@@ -69,6 +86,7 @@ impl Frame {
             sp: 0,
             reserved_stack_size: uf.locals(),
             state: FrameState::Function { is_constructor_call },
+            loop_counter: BTreeMap::new(),
         }
     }
 
@@ -83,6 +101,7 @@ impl Frame {
             sp: 0,
             reserved_stack_size: uf.locals(),
             state: FrameState::Module(Exports::default()),
+            loop_counter: BTreeMap::new(),
         }
     }
 
@@ -107,6 +126,7 @@ impl Frame {
             state: FrameState::Function {
                 is_constructor_call: false,
             },
+            loop_counter: BTreeMap::new(),
         }
     }
 

@@ -18,6 +18,8 @@ impl HandleResult {
 mod handlers {
     use std::rc::Rc;
 
+    use dash_jit::assembler::Assembler;
+    use dash_jit::assembler::AssemblerQuery;
     use dash_middle::compiler::constant::Constant;
     use dash_middle::compiler::FunctionCallMetadata;
     use dash_middle::compiler::StaticImportKind;
@@ -33,6 +35,7 @@ mod handlers {
     use crate::value::object::PropertyKey;
     use crate::value::ops::abstractions::conversions::ValueConversion;
     use crate::value::ops::equality::ValueEquality;
+    use crate::JitTrace;
 
     use super::*;
 
@@ -304,13 +307,23 @@ mod handlers {
         let offset = vm.fetchw_and_inc_ip() as i16;
         let value = vm.stack.pop().expect("No value");
 
-        if !value.is_truthy() {
+        let jump = !value.is_truthy();
+        vm.record_conditional_jump(jump);
+
+        if jump {
             let frame = vm.frames.last_mut().expect("No frame");
 
             if offset.is_negative() {
                 frame.ip -= -offset as usize;
             } else {
                 frame.ip += offset as usize;
+
+                let is_trace = vm.recording_trace.as_ref().map_or(false, |t| t.end() == frame.ip);
+
+                if is_trace {
+                    let _trace = vm.recording_trace.take().expect("Trace must exist");
+                    // println!("end of trace, ip {:?}", trace);
+                }
             }
         }
 
@@ -321,7 +334,10 @@ mod handlers {
         let offset = vm.fetchw_and_inc_ip() as i16;
         let value = vm.stack.last().expect("No value");
 
-        if !value.is_truthy() {
+        let jump = !value.is_truthy();
+        vm.record_conditional_jump(jump);
+
+        if jump {
             let frame = vm.frames.last_mut().expect("No frame");
 
             if offset.is_negative() {
@@ -338,7 +354,10 @@ mod handlers {
         let offset = vm.fetchw_and_inc_ip() as i16;
         let value = vm.stack.pop().expect("No value");
 
-        if value.is_truthy() {
+        let jump = value.is_truthy();
+        vm.record_conditional_jump(jump);
+
+        if jump {
             let frame = vm.frames.last_mut().expect("No frame");
 
             if offset.is_negative() {
@@ -355,7 +374,10 @@ mod handlers {
         let offset = vm.fetchw_and_inc_ip() as i16;
         let value = vm.stack.last().expect("No value");
 
-        if value.is_truthy() {
+        let jump = value.is_truthy();
+        vm.record_conditional_jump(jump);
+
+        if jump {
             let frame = vm.frames.last_mut().expect("No frame");
 
             if offset.is_negative() {
@@ -372,7 +394,10 @@ mod handlers {
         let offset = vm.fetchw_and_inc_ip() as i16;
         let value = vm.stack.pop().expect("No value");
 
-        if value.is_nullish() {
+        let jump = value.is_nullish();
+        vm.record_conditional_jump(jump);
+
+        if jump {
             let frame = vm.frames.last_mut().expect("No frame");
 
             if offset.is_negative() {
@@ -389,7 +414,10 @@ mod handlers {
         let offset = vm.fetchw_and_inc_ip() as i16;
         let value = vm.stack.last().expect("No value");
 
-        if value.is_nullish() {
+        let jump = value.is_nullish();
+        vm.record_conditional_jump(jump);
+
+        if jump {
             let frame = vm.frames.last_mut().expect("No frame");
 
             if offset.is_negative() {
@@ -406,8 +434,58 @@ mod handlers {
         let offset = vm.fetchw_and_inc_ip() as i16;
         let frame = vm.frames.last_mut().expect("No frame");
 
+        // Note: this is an unconditional jump, so we don't push this into the trace
+
         if offset.is_negative() {
+            let old_ip = frame.ip;
             frame.ip -= -offset as usize;
+
+            let is_trace = vm.recording_trace.as_ref().map_or(false, |t| t.start() == frame.ip);
+
+            if is_trace {
+                let trace = vm.recording_trace.take().expect("Trace must exist");
+                // println!("end of trace: {:?}", trace);
+
+                // Compile to machine code here?
+
+                struct VmQuery<'a>(&'a Vm);
+
+                impl AssemblerQuery for VmQuery<'_> {
+                    fn get_local(&self, local: u16) -> i64 {
+                        match self.0.get_local(local as usize) {
+                            Some(Value::Number(num)) => num as i64,
+                            value => todo!("Unhandled JIT value: {value:?}")
+                        }
+                    }
+
+                    fn get_constant(&self, id: u16) -> i64 {
+                        match self.0.frames.last().and_then(|f| f.constants.get(id as usize)) {
+                            Some(Constant::Number(num)) => *num as i64,
+                            value => todo!("Unhandled JIT value: {value:?}")
+                        }
+                    }
+                }
+
+                let asm = Assembler::new();
+                let bytecode = frame.buffer[trace.start()..trace.end()].to_vec();
+                asm.compile_trace(trace, bytecode, VmQuery(&vm));
+
+                std::process::exit(0);
+            } else {
+                // We are jumping back to a loop header
+                let counter = frame.loop_counter.entry(frame.ip).or_insert(Default::default());
+
+                counter.inc();
+                if counter.is_hot() {
+                    // Hot loop detected
+                    // Start recording a trace (i.e. every opcode) for the next loop iteration
+                    // The trace will go on until either:
+                    // - The loop is exited
+                    // - The iteration has ended (i.e. we are here again)
+                    let trace = JitTrace::new(frame.ip, old_ip);
+                    vm.recording_trace = Some(trace);
+                }
+            }
         } else {
             frame.ip += offset as usize;
         }

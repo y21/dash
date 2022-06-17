@@ -196,6 +196,10 @@ pub fn decompile(CompileResult { cp, instructions, .. }: CompileResult) -> Resul
                 output.write_instruction::<u8>(Unit::Main, "POP", &[]);
                 stack -= 1;
             }
+            inst::REVSTCK => {
+                let n = reader.read().ok_or(DecompileError::AbruptEof)?;
+                output.write_instruction(Unit::Main, "REVSTCK", &[n]);
+            }
             inst::CONSTANT | inst::CONSTANTW => {
                 let (name, id) = read_wide(
                     instr,
