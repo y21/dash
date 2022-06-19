@@ -448,7 +448,7 @@ mod handlers {
 
                 // Compile to machine code here?
 
-                struct VmQuery<'a>(&'a Vm);
+                struct VmQuery<'a>(&'a mut Vm);
 
                 impl AssemblerQuery for VmQuery<'_> {
                     fn get_local(&self, local: u16) -> i64 {
@@ -464,13 +464,17 @@ mod handlers {
                             value => todo!("Unhandled JIT value: {value:?}")
                         }
                     }
+
+                    fn update_ip(&mut self, ip: usize) {
+                        self.0.frames.last_mut().unwrap().ip = ip;
+                    }
                 }
 
                 let asm = Assembler::new();
                 let bytecode = frame.buffer[trace.start()..trace.end()].to_vec();
-                asm.compile_trace(trace, bytecode, VmQuery(&vm));
+                asm.compile_trace(trace, bytecode, VmQuery(vm));
 
-                std::process::exit(0);
+                // std::process::exit(0);
             } else {
                 // We are jumping back to a loop header
                 let counter = frame.loop_counter.entry(frame.ip).or_insert(Default::default());

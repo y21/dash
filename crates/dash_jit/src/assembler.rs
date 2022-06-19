@@ -17,10 +17,14 @@ use dash_middle::compiler::instruction::JMPTRUEP;
 use dash_middle::compiler::instruction::LDLOCAL;
 use dash_middle::compiler::instruction::LDLOCALW;
 use dash_middle::compiler::instruction::LT;
+use dash_middle::compiler::instruction::MUL;
 use dash_middle::compiler::instruction::POP;
 use dash_middle::compiler::instruction::REVSTCK;
 use dash_middle::compiler::instruction::STORELOCAL;
+use llvm_sys::analysis::LLVMVerifierFailureAction;
+use llvm_sys::analysis::LLVMVerifyFunction;
 use llvm_sys::core::LLVMAddFunction;
+use llvm_sys::core::LLVMAddIncoming;
 use llvm_sys::core::LLVMAppendBasicBlock;
 use llvm_sys::core::LLVMBuildAdd;
 use llvm_sys::core::LLVMBuildAlloca;
@@ -29,11 +33,14 @@ use llvm_sys::core::LLVMBuildCondBr;
 use llvm_sys::core::LLVMBuildGEP2;
 use llvm_sys::core::LLVMBuildICmp;
 use llvm_sys::core::LLVMBuildLoad2;
+use llvm_sys::core::LLVMBuildMul;
+use llvm_sys::core::LLVMBuildPhi;
 use llvm_sys::core::LLVMBuildRet;
 use llvm_sys::core::LLVMBuildRetVoid;
 use llvm_sys::core::LLVMBuildStore;
 use llvm_sys::core::LLVMConstInt;
 use llvm_sys::core::LLVMCreateBuilder;
+use llvm_sys::core::LLVMCreatePassManager;
 use llvm_sys::core::LLVMDisposeModule;
 use llvm_sys::core::LLVMFunctionType;
 use llvm_sys::core::LLVMGetParam;
@@ -42,13 +49,21 @@ use llvm_sys::core::LLVMModuleCreateWithName;
 use llvm_sys::core::LLVMPointerType;
 use llvm_sys::core::LLVMPositionBuilderAtEnd;
 use llvm_sys::core::LLVMPrintModuleToString;
+use llvm_sys::core::LLVMRunFunctionPassManager;
+use llvm_sys::core::LLVMRunPassManager;
 use llvm_sys::core::LLVMVoidType;
 use llvm_sys::execution_engine::LLVMCreateExecutionEngineForModule;
 use llvm_sys::execution_engine::LLVMGetFunctionAddress;
 use llvm_sys::prelude::*;
 use llvm_sys::LLVMIntPredicate;
+use llvm_sys::transforms::pass_manager_builder::LLVMPassManagerBuilderCreate;
+use llvm_sys::transforms::pass_manager_builder::LLVMPassManagerBuilderPopulateFunctionPassManager;
+use llvm_sys::transforms::pass_manager_builder::LLVMPassManagerBuilderPopulateModulePassManager;
+use llvm_sys::transforms::pass_manager_builder::LLVMPassManagerBuilderSetOptLevel;
 
-type JitFunction = extern "C" fn(*mut i64);
+type JitFunction = unsafe extern "C" fn(*mut i64) -> i64;
+
+const EMPTY: *const i8 = cstr!("").as_ptr();
 
 use crate::trace::Trace;
 
@@ -62,6 +77,7 @@ pub struct Assembler {
 pub trait AssemblerQuery {
     fn get_local(&self, id: u16) -> i64;
     fn get_constant(&self, id: u16) -> i64;
+    fn update_ip(&mut self, ip: usize);
 }
 
 impl Assembler {
@@ -70,9 +86,7 @@ impl Assembler {
         Self { module }
     }
 
-    pub fn compile_trace<A: AssemblerQuery>(&self, trace: Trace, bytecode: Vec<u8>, query: A) {
-        // println!("[assembler] compiling bytecode: {:?}", bytecode);
-
+    pub fn compile_trace<A: AssemblerQuery>(&self, trace: Trace, bytecode: Vec<u8>, mut query: A) {
         // The idea for jitted function is simple:
         //
         // Functions will always have the signature: void jit(i64*);
@@ -93,7 +107,7 @@ impl Assembler {
 
         let fun = unsafe {
             let mut params = [int64ptr];
-            let funty = LLVMFunctionType(LLVMVoidType(), params.as_mut_ptr(), 1, 0);
+            let funty = LLVMFunctionType(int64, params.as_mut_ptr(), 1, 0);
 
             LLVMAddFunction(self.module, cstr!("jit").as_ptr(), funty)
         };
@@ -113,6 +127,12 @@ impl Assembler {
         let mut local_values: Vec<(u16, i64)> = Vec::new();
 
         let mut labels = HashMap::new();
+
+        // A vector of (target_ip_of_jump, pred_basic_block) that have an exit guard in them.
+        // This is later used in the exit block to build a phi to tell the interpreter where it needs to resume
+        // executing bytecode
+        let (mut exit_ips, mut exit_pred_blocks) = (Vec::new(), Vec::new());
+
         let mut current_block;
         let mut current_builder;
 
@@ -127,7 +147,7 @@ impl Assembler {
 
         unsafe {
             // The entry/setup block is the block in which all of the local variables are allocated.
-            entry_block = LLVMAppendBasicBlock(fun, cstr!("setup").as_ptr());
+            entry_block = LLVMAppendBasicBlock(fun, cstr!("empty").as_ptr());
             entry_builder = LLVMCreateBuilder();
             LLVMPositionBuilderAtEnd(entry_builder, entry_block);
             
@@ -187,7 +207,7 @@ impl Assembler {
                     let target = (bytecode_index as isize + count as isize + 3) as usize;
                     let (target_block, target_builder) = *labels.entry(target)
                         .or_insert_with(|| unsafe {
-                            let block = LLVMAppendBasicBlock(fun, cstr!("label").as_ptr());
+                            let block = LLVMAppendBasicBlock(fun, EMPTY);
                             let builder = LLVMCreateBuilder();
                             LLVMPositionBuilderAtEnd(builder, block);
                             (block, builder)
@@ -203,7 +223,12 @@ impl Assembler {
                         };
                         
                         LLVMBuildCondBr(current_builder, condition, then, or);
+                        
+                        let ip = target + trace.start;
+                        exit_ips.push(LLVMConstInt(int64, ip as u64, 0));
+                        exit_pred_blocks.push(current_block);
                     }
+
                     current_block = target_block;
                     current_builder = target_builder;
                 }
@@ -216,7 +241,7 @@ impl Assembler {
                         // and need to do the necessary things to make space for it.
 
                         // Alloca stack space for local variable in entry block
-                        let space = LLVMBuildAlloca(entry_builder, int64, cstr!("local").as_ptr());
+                        let space = LLVMBuildAlloca(entry_builder, int64, EMPTY);
 
                         // Copy from parameter pointer into this allocated stack space
                         let param = LLVMGetParam(fun, 0);
@@ -239,10 +264,10 @@ impl Assembler {
                             param,
                             indices.as_mut_ptr(),
                             1,
-                            cstr!("local").as_ptr(),
+                            EMPTY,
                         );
 
-                        let gep_value = LLVMBuildLoad2(entry_builder, int64, gep, cstr!("gep").as_ptr());
+                        let gep_value = LLVMBuildLoad2(entry_builder, int64, gep, EMPTY);
 
                         // Finally, with this GEP result we can do the actual copy from parameter into the stack space
                         LLVMBuildStore(entry_builder, gep_value, space);
@@ -251,7 +276,7 @@ impl Assembler {
                     });
 
                     let load = unsafe {
-                        LLVMBuildLoad2(current_builder, int64, value, cstr!("local").as_ptr())
+                        LLVMBuildLoad2(current_builder, int64, value, EMPTY)
                     };
 
                     stack.push(load);
@@ -265,7 +290,7 @@ impl Assembler {
                         // and need to do the necessary things to make space for it.
 
                         // Alloca stack space for local variable in entry block
-                        let space = LLVMBuildAlloca(entry_builder, int64, cstr!("local").as_ptr());
+                        let space = LLVMBuildAlloca(entry_builder, int64, EMPTY);
 
                         // Copy from parameter pointer into this allocated stack space
                         let param = LLVMGetParam(fun, 0);
@@ -288,7 +313,7 @@ impl Assembler {
                             param,
                             indices.as_mut_ptr(),
                             1,
-                            cstr!("local").as_ptr(),
+                            EMPTY,
                         );
 
                         // Finally, with this GEP result we can do the actual copy from parameter into the stack space
@@ -319,7 +344,7 @@ impl Assembler {
                             LLVMIntPredicate::LLVMIntSLT,
                             lhs,
                             rhs,
-                            cstr!("cmp").as_ptr(),
+                            EMPTY,
                         )
                     });
                 }
@@ -333,7 +358,14 @@ impl Assembler {
                     let rhs = stack.pop().unwrap();
                     let lhs = stack.pop().unwrap();
 
-                    let result = unsafe { LLVMBuildAdd(current_builder, lhs, rhs, cstr!("add").as_ptr()) };
+                    let result = unsafe { LLVMBuildAdd(current_builder, lhs, rhs, EMPTY) };
+                    stack.push(result);
+                }
+                MUL => {
+                    let rhs = stack.pop().unwrap();
+                    let lhs = stack.pop().unwrap();
+
+                    let result = unsafe { LLVMBuildMul(current_builder, lhs, rhs, EMPTY) };
                     stack.push(result);
                 }
                 POP => {
@@ -350,25 +382,40 @@ impl Assembler {
             // we keep adding new alloca/load instructions to the entry block.
             LLVMBuildBr(entry_builder, trace_start_block);
 
-            
+            // Exit code here.
+            let pred_phi = LLVMBuildPhi(exit_builder, int64, EMPTY);
+
+            debug_assert!(exit_ips.len() == exit_pred_blocks.len());
+            LLVMAddIncoming(pred_phi, exit_ips.as_mut_ptr(), exit_pred_blocks.as_mut_ptr(), exit_ips.len() as u32);
+
             // Copy all of the locals into the function's parameter pointer
             for (index, _) in local_values.iter() {
                 let index = (*index) as usize;
                 let value = locals[&index];
 
-                let loaded = LLVMBuildLoad2(exit_builder, int64, value, cstr!("ext").as_ptr());
+                let loaded = LLVMBuildLoad2(exit_builder, int64, value, EMPTY);
 
                 let mut indices = [LLVMConstInt(int64, index as u64, 0)];
 
                 let param = LLVMGetParam(fun, 0);
-                let gep = LLVMBuildGEP2(exit_builder, int64, param, indices.as_mut_ptr(), 1, cstr!("gep").as_ptr());
+                let gep = LLVMBuildGEP2(exit_builder, int64, param, indices.as_mut_ptr(), 1, EMPTY);
                 LLVMBuildStore(exit_builder, loaded, gep);
             }
             
-            LLVMBuildRetVoid(exit_builder);
+            LLVMBuildRet(exit_builder, pred_phi);
+
+            let pm = LLVMCreatePassManager();
+            let pmb = LLVMPassManagerBuilderCreate();
+            LLVMPassManagerBuilderSetOptLevel(pmb, 3);
+            LLVMPassManagerBuilderPopulateFunctionPassManager(pmb, pm);
+            LLVMPassManagerBuilderPopulateModulePassManager(pmb, pm);
+            LLVMRunPassManager(pm, self.module);
         }
 
-        unsafe {
+        let func = unsafe {
+            #[cfg(debug_assertions)]
+            LLVMVerifyFunction(fun, LLVMVerifierFailureAction::LLVMAbortProcessAction);
+
             let mut engine = ptr::null_mut();
             let mut error = ptr::null_mut();
             LLVMCreateExecutionEngineForModule(&mut engine, self.module, &mut error);
@@ -376,18 +423,20 @@ impl Assembler {
 
             let addr = LLVMGetFunctionAddress(engine, cstr!("jit").as_ptr());
 
-            let jit = mem::transmute::<u64, JitFunction>(addr);
-
-            let mut values = local_values.iter().map(|(_, v)| *v).collect::<Vec<_>>();
-            println!("value of `x` before: {}", values[0]);
-            jit(values.as_mut_ptr());
-            println!("value of `x` after: {}", values[0]);
+            mem::transmute::<u64, JitFunction>(addr)
         };
+        
+        let mut values = local_values.iter().map(|(_, v)| *v).collect::<Vec<_>>();
+        println!("=================");
+        println!("JIT State");
+        let target_ip = unsafe { func(values.as_mut_ptr()) };
+        println!("<x = {}>\n", values[0]);
+
+        query.update_ip(target_ip as usize);
+
+        std::process::abort();
 
         // TODO: synchronize `values` with interpreter here
-        // and set the instruction pointer where it needs to be
-        // the jitted function should return some exit id that identifies which guard failed
-        std::process::abort();
     }
 }
 
