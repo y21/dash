@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 use std::ffi::CStr;
 use std::fmt;
+use std::hash::Hash;
 use std::mem;
 use std::ptr;
 
 use cstr::cstr;
+use dash_middle::compiler::constant::Function;
 use dash_middle::compiler::instruction::ADD;
 use dash_middle::compiler::instruction::CONSTANT;
 use dash_middle::compiler::instruction::JMP;
@@ -55,11 +57,11 @@ use llvm_sys::core::LLVMVoidType;
 use llvm_sys::execution_engine::LLVMCreateExecutionEngineForModule;
 use llvm_sys::execution_engine::LLVMGetFunctionAddress;
 use llvm_sys::prelude::*;
-use llvm_sys::LLVMIntPredicate;
 use llvm_sys::transforms::pass_manager_builder::LLVMPassManagerBuilderCreate;
 use llvm_sys::transforms::pass_manager_builder::LLVMPassManagerBuilderPopulateFunctionPassManager;
 use llvm_sys::transforms::pass_manager_builder::LLVMPassManagerBuilderPopulateModulePassManager;
 use llvm_sys::transforms::pass_manager_builder::LLVMPassManagerBuilderSetOptLevel;
+use llvm_sys::LLVMIntPredicate;
 
 type JitFunction = unsafe extern "C" fn(*mut i64) -> i64;
 
@@ -67,26 +69,41 @@ const EMPTY: *const i8 = cstr!("").as_ptr();
 
 use crate::trace::Trace;
 
-pub struct Assembler {
-    module: LLVMModuleRef,
+pub struct JitResult {
+    /// Instruction pointer that the interpreter should continue executing bytecode.
+    pub ip: usize
 }
 
-/// Trait that users of the assembler must use.
-///
-/// Currently, only integers are supported.
-pub trait AssemblerQuery {
-    fn get_local(&self, id: u16) -> i64;
-    fn get_constant(&self, id: u16) -> i64;
-    fn update_ip(&mut self, ip: usize);
+#[derive(Hash)]
+struct JitCacheKey {
+    function: *const Function,
+    ip: usize,
+}
+
+impl From<&Trace> for JitCacheKey {
+    fn from(trace: &Trace) -> Self {
+        Self {
+            function: trace.origin,
+            ip: trace.start,
+        }
+    }
+}
+
+pub struct Assembler {
+    module: LLVMModuleRef,
+    cache: HashMap<JitCacheKey, JitFunction>,
 }
 
 impl Assembler {
     pub fn new() -> Self {
         let module = unsafe { LLVMModuleCreateWithName(cstr!("dash_jit").as_ptr()) };
-        Self { module }
+        Self {
+            module,
+            cache: HashMap::new(),
+        }
     }
 
-    pub fn compile_trace<A: AssemblerQuery>(&self, trace: Trace, bytecode: Vec<u8>, mut query: A) {
+    pub fn compile_trace(&self, trace: Trace, bytecode: Vec<u8>) -> JitResult {
         // The idea for jitted function is simple:
         //
         // Functions will always have the signature: void jit(i64*);
@@ -119,12 +136,15 @@ impl Assembler {
         // A stack of LLVM values, for building instructions that depend on temporaries
         let mut stack = Vec::new();
 
-        // This HashMap maps the LDLOCAL index to a LLVM value, which can be used for building instructions
+        let trace_locals = trace.locals;
+        let trace_constants = trace.constants;
+
+        // This maps the LDLOCAL index to a LLVM value, which can be used for building instructions
         // The LLVM value refers to alloca'd stack space in the entry block.
-        let mut locals: HashMap<usize, LLVMValueRef> = HashMap::new();
+        let mut locals = HashMap::new();
 
         // This vector stores all referenced locals, in the exact order as they appeared.
-        let mut local_values: Vec<(u16, i64)> = Vec::new();
+        let local_values = trace_locals.values().copied().collect::<Vec<_>>();
 
         let mut labels = HashMap::new();
 
@@ -147,10 +167,10 @@ impl Assembler {
 
         unsafe {
             // The entry/setup block is the block in which all of the local variables are allocated.
-            entry_block = LLVMAppendBasicBlock(fun, cstr!("empty").as_ptr());
+            entry_block = LLVMAppendBasicBlock(fun, cstr!("setup").as_ptr());
             entry_builder = LLVMCreateBuilder();
             LLVMPositionBuilderAtEnd(entry_builder, entry_block);
-            
+
             trace_start_block = LLVMAppendBasicBlock(fun, cstr!("trace_start").as_ptr());
             trace_start_builder = LLVMCreateBuilder();
             LLVMPositionBuilderAtEnd(trace_start_builder, trace_start_block);
@@ -236,7 +256,7 @@ impl Assembler {
                     let (_, operand) = bytecode.next().unwrap();
                     let idx = operand as u16;
 
-                    let value = *locals.entry(idx as usize).or_insert_with(|| unsafe {
+                    let value = *locals.entry(idx).or_insert_with(|| unsafe {
                         // Assert: this is the first time we are referencing this local,
                         // and need to do the necessary things to make space for it.
 
@@ -248,14 +268,7 @@ impl Assembler {
 
                         // This stores the "offset" of the loaded local variable in the parameter pointer.
                         // This will be used by LLVM's GEP instruction.
-                        // We're about to insert this local variable into local_values, so the index will be correct
-                        // at the point of building the GEP instruction.
-                        let gep_idx = local_values.len() as u64;
-
-                        // If this is the first time we've encountered a reference to this local variable,
-                        // we need to store it in the local_values vector.
-                        let val = query.get_local(idx);
-                        local_values.push((idx, val));
+                        let gep_idx = trace_locals.get_index_of(&idx).unwrap() as u64;
 
                         let mut indices = [LLVMConstInt(int64, gep_idx, 0)];
                         let gep = LLVMBuildGEP2(
@@ -285,7 +298,7 @@ impl Assembler {
                     let (_, operand) = bytecode.next().unwrap();
                     let idx = operand as u16;
 
-                    let place = *locals.entry(idx as usize).or_insert_with(|| unsafe {
+                    let place = *locals.entry(idx).or_insert_with(|| unsafe {
                         // Assert: this is the first time we are referencing this local,
                         // and need to do the necessary things to make space for it.
 
@@ -297,14 +310,7 @@ impl Assembler {
 
                         // This stores the "offset" of the loaded local variable in the parameter pointer.
                         // This will be used by LLVM's GEP instruction.
-                        // We're about to insert this local variable into local_values, so the index will be correct
-                        // at the point of building the GEP instruction.
-                        let gep_idx = local_values.len() as u64;
-
-                        // If this is the first time we've encountered a reference to this local variable,
-                        // we need to store it in the local_values vector.
-                        let val = query.get_local(idx);
-                        local_values.push((idx, val));
+                        let gep_idx = trace_locals.get_index_of(&idx).unwrap() as u64;
 
                         let mut indices = [LLVMConstInt(int64, gep_idx, 0)];
                         let gep = LLVMBuildGEP2(
@@ -316,8 +322,10 @@ impl Assembler {
                             EMPTY,
                         );
 
+                        let gep_value = LLVMBuildLoad2(entry_builder, int64, gep, EMPTY);
+
                         // Finally, with this GEP result we can do the actual copy from parameter into the stack space
-                        LLVMBuildStore(entry_builder, gep, space);
+                        LLVMBuildStore(entry_builder, gep_value, space);
 
                         space
                     });
@@ -330,7 +338,7 @@ impl Assembler {
                     let (_, operand) = bytecode.next().unwrap();
                     let idx = operand as u16;
 
-                    let num = query.get_constant(idx);
+                    let num = trace_constants[&idx];
                     let value = unsafe { LLVMConstInt(int64, num as u64, 0) };
                     stack.push(value);
                 }
@@ -382,26 +390,31 @@ impl Assembler {
             // we keep adding new alloca/load instructions to the entry block.
             LLVMBuildBr(entry_builder, trace_start_block);
 
-            // Exit code here.
+            // JIT exit code
             let pred_phi = LLVMBuildPhi(exit_builder, int64, EMPTY);
 
             debug_assert!(exit_ips.len() == exit_pred_blocks.len());
-            LLVMAddIncoming(pred_phi, exit_ips.as_mut_ptr(), exit_pred_blocks.as_mut_ptr(), exit_ips.len() as u32);
+            LLVMAddIncoming(
+                pred_phi,
+                exit_ips.as_mut_ptr(),
+                exit_pred_blocks.as_mut_ptr(),
+                exit_ips.len() as u32,
+            );
 
             // Copy all of the locals into the function's parameter pointer
-            for (index, _) in local_values.iter() {
-                let index = (*index) as usize;
-                let value = locals[&index];
+            // Interpreter can synchronize the jitted values
+            for (llvm_index, local_index) in trace_locals.keys().enumerate() {
+                let value = locals[local_index];
 
                 let loaded = LLVMBuildLoad2(exit_builder, int64, value, EMPTY);
 
-                let mut indices = [LLVMConstInt(int64, index as u64, 0)];
+                let mut indices = [LLVMConstInt(int64, llvm_index as u64, 0)];
 
                 let param = LLVMGetParam(fun, 0);
                 let gep = LLVMBuildGEP2(exit_builder, int64, param, indices.as_mut_ptr(), 1, EMPTY);
                 LLVMBuildStore(exit_builder, loaded, gep);
             }
-            
+
             LLVMBuildRet(exit_builder, pred_phi);
 
             let pm = LLVMCreatePassManager();
@@ -425,18 +438,19 @@ impl Assembler {
 
             mem::transmute::<u64, JitFunction>(addr)
         };
-        
-        let mut values = local_values.iter().map(|(_, v)| *v).collect::<Vec<_>>();
+
+        let mut values = local_values;
         println!("=================");
         println!("JIT State");
+        println!("<before: {:?}>", values);
         let target_ip = unsafe { func(values.as_mut_ptr()) };
-        println!("<x = {}>\n", values[0]);
+        println!("<after: {:?}>", values);
+        
+        std::process::exit(0);
 
-        query.update_ip(target_ip as usize);
-
-        std::process::abort();
-
-        // TODO: synchronize `values` with interpreter here
+        JitResult {
+            ip: target_ip as usize
+        }
     }
 }
 

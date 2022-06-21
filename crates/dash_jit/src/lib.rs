@@ -5,8 +5,8 @@ use llvm_sys::target::LLVM_InitializeNativeAsmParser;
 use llvm_sys::target::LLVM_InitializeNativeAsmPrinter;
 use llvm_sys::target::LLVM_InitializeNativeTarget;
 
-pub mod trace;
 pub mod assembler;
+pub mod trace;
 
 pub fn init() {
     unsafe {

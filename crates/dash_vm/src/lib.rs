@@ -1,4 +1,4 @@
-use std::{convert::TryInto, fmt, ops::RangeBounds, vec::Drain};
+use std::{fmt, ops::RangeBounds, vec::Drain};
 
 use crate::{
     gc::{handle::Handle, trace::Trace, Gc},
@@ -18,7 +18,8 @@ use self::{
     },
 };
 
-use dash_jit::trace::Trace as JitTrace;
+use dash_jit::{trace::Trace as JitTrace, assembler::Assembler};
+use dash_middle::compiler::constant::Constant;
 
 pub mod dispatch;
 #[cfg(feature = "eval")]
@@ -49,6 +50,8 @@ pub struct Vm {
     /// If we are currently recording a trace for a loop iteration,
     /// this will contain the pc of the loop header and its end
     recording_trace: Option<JitTrace>,
+
+    assembler: Assembler
 }
 
 
@@ -69,7 +72,8 @@ impl Vm {
             statics,
             try_blocks: Vec::new(),
             params,
-            recording_trace: None
+            recording_trace: None,
+            assembler: Assembler::new()
         };
         vm.prepare();
         vm
@@ -541,27 +545,19 @@ impl Vm {
         let frame = self.frames.last_mut().expect("No frame");
         let ip = frame.ip;
         frame.ip += 1;
-        frame.buffer[ip]
+        frame.function.buffer[ip]
     }
 
     /// Fetches a wide value (16-bit) in the currently executing frame
     /// and increments the instruction pointer
     pub(crate) fn fetchw_and_inc_ip(&mut self) -> u16 {
         let frame = self.frames.last_mut().expect("No frame");
-        let value: [u8; 2] = frame.buffer[frame.ip..frame.ip + 2]
+        let value: [u8; 2] = frame.function.buffer[frame.ip..frame.ip + 2]
             .try_into()
             .expect("Failed to get wide instruction");
 
         frame.ip += 2;
         u16::from_ne_bytes(value)
-    }
-
-    /// Pushes a constant at the given index in the current frame on the top of the stack
-    pub(crate) fn push_constant(&mut self, idx: usize) -> Result<(), Value> {
-        let frame = self.frames.last().expect("No frame");
-        let value = Value::from_constant(frame.constants[idx].clone(), self);
-        self.try_push_stack(value)?;
-        Ok(())
     }
 
     pub(crate) fn get_frame_sp(&self) -> usize {
@@ -732,9 +728,27 @@ impl Vm {
         &self.params
     }
 
-    pub fn record_conditional_jump(&mut self, did_jump: bool) {
+    pub(crate) fn record_conditional_jump(&mut self, did_jump: bool) {
         if let Some(trace) = &mut self.recording_trace {
             trace.record_conditional_jump(did_jump);
+        }
+    }
+
+    pub(crate) fn record_local(&mut self, index: u16, value: &Value) {
+        if let Some(trace) = &mut self.recording_trace {
+            match value {
+                Value::Number(n) => trace.record_local(index, *n as i64),
+                _ => panic!("Unhandled JIT value: {:?}", value)
+            }
+        }
+    }
+
+    pub(crate) fn record_constant(&mut self, index: u16, value: &Constant) {
+        if let Some(trace) = &mut self.recording_trace {
+            match value {
+                Constant::Number(n) => trace.record_constant(index, *n as i64),
+                _ => panic!("Unhandled JIT value: {:?}", value)
+            }
         }
     }
 }

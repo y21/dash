@@ -24,7 +24,7 @@ fn get_stack_trace(name: &str, message: &str, vm: &Vm) -> Rc<str> {
     let mut stack = format!("{name}: {message}");
 
     for frame in vm.frames.iter().rev().take(10) {
-        let name = frame.name.as_deref().unwrap_or("<anonymous>");
+        let name = frame.function.name.as_deref().unwrap_or("<anonymous>");
         let _ = write!(stack, "\n  at {name}");
     }
 

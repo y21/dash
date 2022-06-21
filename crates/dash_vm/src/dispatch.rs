@@ -18,8 +18,6 @@ impl HandleResult {
 mod handlers {
     use std::rc::Rc;
 
-    use dash_jit::assembler::Assembler;
-    use dash_jit::assembler::AssemblerQuery;
     use dash_middle::compiler::constant::Constant;
     use dash_middle::compiler::FunctionCallMetadata;
     use dash_middle::compiler::StaticImportKind;
@@ -40,7 +38,7 @@ mod handlers {
     use super::*;
 
     fn force_get_constant(vm: &Vm, index: usize) -> &Constant {
-        &vm.frames.last().expect("Missing frame").constants[index]
+        &vm.frames.last().expect("Missing frame").function.constants[index]
     }
 
     fn force_get_identifier(vm: &Vm, index: usize) -> Rc<str> {
@@ -62,15 +60,25 @@ mod handlers {
         Ok(None)
     }
 
+    
+    fn constant_instruction(vm: &mut Vm, idx: usize) -> Result<(), Value> {
+        let frame = vm.frames.last().expect("No frame");
+        let constant = frame.function.constants[idx].clone();
+        vm.record_constant(idx as u16, &constant);
+        let value = Value::from_constant(constant, vm);
+        vm.try_push_stack(value)?;
+        Ok(())
+    }
+
     pub fn constant(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let id = vm.fetch_and_inc_ip();
-        vm.push_constant(id as usize)?;
+        constant_instruction(vm, id as usize)?;
         Ok(None)
     }
 
     pub fn constantw(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let id = vm.fetchw_and_inc_ip();
-        vm.push_constant(id as usize)?;
+        constant_instruction(vm, id as usize)?;
         Ok(None)
     }
 
@@ -440,41 +448,14 @@ mod handlers {
             let old_ip = frame.ip;
             frame.ip -= -offset as usize;
 
+            let origin = Rc::as_ptr(&frame.function);
             let is_trace = vm.recording_trace.as_ref().map_or(false, |t| t.start() == frame.ip);
 
             if is_trace {
                 let trace = vm.recording_trace.take().expect("Trace must exist");
-                // println!("end of trace: {:?}", trace);
-
-                // Compile to machine code here?
-
-                struct VmQuery<'a>(&'a mut Vm);
-
-                impl AssemblerQuery for VmQuery<'_> {
-                    fn get_local(&self, local: u16) -> i64 {
-                        match self.0.get_local(local as usize) {
-                            Some(Value::Number(num)) => num as i64,
-                            value => todo!("Unhandled JIT value: {value:?}")
-                        }
-                    }
-
-                    fn get_constant(&self, id: u16) -> i64 {
-                        match self.0.frames.last().and_then(|f| f.constants.get(id as usize)) {
-                            Some(Constant::Number(num)) => *num as i64,
-                            value => todo!("Unhandled JIT value: {value:?}")
-                        }
-                    }
-
-                    fn update_ip(&mut self, ip: usize) {
-                        self.0.frames.last_mut().unwrap().ip = ip;
-                    }
-                }
-
-                let asm = Assembler::new();
-                let bytecode = frame.buffer[trace.start()..trace.end()].to_vec();
-                asm.compile_trace(trace, bytecode, VmQuery(vm));
-
-                // std::process::exit(0);
+                
+                let bytecode = frame.function.buffer[trace.start()..trace.end()].to_vec();
+                vm.assembler.compile_trace(trace, bytecode);
             } else {
                 // We are jumping back to a loop header
                 let counter = frame.loop_counter.entry(frame.ip).or_insert(Default::default());
@@ -486,7 +467,7 @@ mod handlers {
                     // The trace will go on until either:
                     // - The loop is exited
                     // - The iteration has ended (i.e. we are here again)
-                    let trace = JitTrace::new(frame.ip, old_ip);
+                    let trace = JitTrace::new(origin, frame.ip, old_ip);
                     vm.recording_trace = Some(trace);
                 }
             }
@@ -501,6 +482,8 @@ mod handlers {
         let id = vm.fetch_and_inc_ip() as usize;
         let value = vm.stack.pop().expect("No value");
 
+        vm.record_local(id as u16, &value);
+
         vm.set_local(id, value.clone());
         vm.try_push_stack(value)?;
 
@@ -510,6 +493,8 @@ mod handlers {
     pub fn ldlocal(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let id = vm.fetch_and_inc_ip();
         let value = vm.get_local(id as usize).expect("Invalid local reference");
+
+        vm.record_local(id as u16, &value);
 
         vm.try_push_stack(value)?;
         Ok(None)
@@ -710,7 +695,7 @@ mod handlers {
         let local_id = vm.fetchw_and_inc_ip();
         let path_id = vm.fetchw_and_inc_ip();
 
-        let path = vm.frames.last().expect("No frame").constants[path_id as usize]
+        let path = vm.frames.last().expect("No frame").function.constants[path_id as usize]
             .as_string()
             .expect("Referenced invalid constant")
             .clone();

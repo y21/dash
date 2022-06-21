@@ -134,11 +134,11 @@ fn handle_call(
         FunctionKind::User(uf) => {
             let sp = scope.stack.len();
 
-            let argc = std::cmp::min(uf.params(), args.len());
+            let argc = std::cmp::min(uf.inner().params, args.len());
 
             scope.stack.extend(args.into_iter().take(argc));
 
-            let mut frame = Frame::from_function(fun.name(), Some(this), uf, is_constructor_call);
+            let mut frame = Frame::from_function(Some(this), uf, is_constructor_call);
             frame.set_sp(sp);
 
             scope.vm.execute_frame(frame).map(|v| match v {

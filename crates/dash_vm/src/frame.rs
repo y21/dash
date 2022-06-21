@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
-use dash_middle::compiler::constant::Constant;
 use dash_middle::compiler::CompileResult;
+use dash_middle::compiler::constant::Function;
+use dash_middle::parser::statement::FunctionKind;
 
 use crate::gc::handle::Handle;
 use crate::gc::trace::Trace;
@@ -49,13 +50,11 @@ impl LoopCounter {
 
 #[derive(Debug, Clone)]
 pub struct Frame {
-    pub name: Option<Rc<str>>,
+    pub function: Rc<Function>,
     pub ip: usize,
     pub reserved_stack_size: usize,
-    pub constants: Rc<[Constant]>,
     pub externals: Rc<[Handle<dyn Object>]>,
     pub this: Option<Value>,
-    pub buffer: Rc<[u8]>,
     pub sp: usize,
     pub state: FrameState,
 
@@ -71,35 +70,32 @@ unsafe impl Trace for Frame {
 
 impl Frame {
     pub fn from_function(
-        name: Option<Rc<str>>,
         this: Option<Value>,
         uf: &UserFunction,
         is_constructor_call: bool,
     ) -> Self {
+        let inner = uf.inner();
         Self {
-            name,
             this,
-            buffer: uf.buffer().clone(),
-            constants: uf.constants().clone(),
+            function: inner.clone(),
             externals: uf.externals().clone(),
             ip: 0,
             sp: 0,
-            reserved_stack_size: uf.locals(),
+            reserved_stack_size: inner.locals, // TODO: do we need to add the param count to this number?
             state: FrameState::Function { is_constructor_call },
             loop_counter: BTreeMap::new(),
         }
     }
 
-    pub fn from_module(name: Option<Rc<str>>, this: Option<Value>, uf: &UserFunction) -> Self {
+    pub fn from_module(this: Option<Value>, uf: &UserFunction) -> Self {
+        let inner = uf.inner();
         Self {
-            name,
             this,
-            buffer: uf.buffer().clone(),
-            constants: uf.constants().clone(),
+            function: inner.clone(),
             externals: uf.externals().clone(),
             ip: 0,
             sp: 0,
-            reserved_stack_size: uf.locals(),
+            reserved_stack_size: inner.locals,
             state: FrameState::Module(Exports::default()),
             loop_counter: BTreeMap::new(),
         }
@@ -114,11 +110,19 @@ impl Frame {
         // there's likely a bug somewhere if this assertion fails and will be *really* confusing if this invariant doesn't get caught
         debug_assert!(cr.externals.is_empty());
 
-        Self {
-            name: None,
-            this: None,
+        let fun = Function {
             buffer: cr.instructions.into(),
             constants: cr.cp.into_vec().into(),
+            externals: Vec::new().into(),
+            locals: cr.locals,
+            name: None,
+            params: 0,
+            ty: FunctionKind::Function
+        };
+
+        Self {
+            this: None,
+            function: Rc::new(fun),
             externals: Vec::new().into(),
             ip: 0,
             sp: 0,

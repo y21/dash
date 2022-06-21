@@ -123,16 +123,17 @@ impl Value {
                     externals.push(obj);
                 }
 
-                let uf = UserFunction::new(f.buffer, f.constants, externals.into(), f.locals, f.params);
+                let name: Option<Rc<str>> = f.name.as_deref().map(Into::into);
+                let ty = f.ty;
 
-                let name: Option<Rc<str>> = f.name.map(Into::into);
+                let fun = UserFunction::new(f, externals.into());
 
-                let function = match f.ty {
+                let function = match ty {
                     ParserFunctionKind::Function | ParserFunctionKind::Arrow => {
-                        Function::new(vm, name, FunctionKind::User(uf))
+                        Function::new(vm, name, FunctionKind::User(fun))
                     }
                     ParserFunctionKind::Generator => {
-                        Function::new(vm, name, FunctionKind::Generator(GeneratorFunction::new(uf)))
+                        Function::new(vm, name, FunctionKind::Generator(GeneratorFunction::new(fun)))
                     }
                 };
 

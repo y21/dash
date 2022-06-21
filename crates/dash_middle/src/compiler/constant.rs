@@ -9,11 +9,11 @@ use super::external::External;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Function {
     pub name: Option<String>,
-    pub buffer: Rc<[u8]>,
+    pub buffer: Box<[u8]>,
     pub ty: FunctionKind,
     pub locals: usize,
     pub params: usize,
-    pub constants: Rc<[Constant]>,
+    pub constants: Box<[Constant]>,
     pub externals: Box<[External]>,
 }
 
@@ -23,7 +23,7 @@ pub enum Constant {
     String(Rc<str>),
     Identifier(Rc<str>),
     Boolean(bool),
-    Function(Function),
+    Function(Rc<Function>),
     Null,
     Undefined,
 }
