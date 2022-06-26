@@ -1,7 +1,11 @@
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
 use std::ffi::CStr;
+use std::ffi::CString;
 use std::fmt;
+use std::fmt::format;
 use std::hash::Hash;
+use std::hash::Hasher;
 use std::mem;
 use std::ptr;
 
@@ -47,6 +51,7 @@ use llvm_sys::core::LLVMDisposeModule;
 use llvm_sys::core::LLVMFunctionType;
 use llvm_sys::core::LLVMGetParam;
 use llvm_sys::core::LLVMInt64Type;
+use llvm_sys::core::LLVMIntType;
 use llvm_sys::core::LLVMModuleCreateWithName;
 use llvm_sys::core::LLVMPointerType;
 use llvm_sys::core::LLVMPositionBuilderAtEnd;
@@ -74,10 +79,15 @@ pub struct JitResult {
     pub ip: usize
 }
 
-#[derive(Hash)]
+#[derive(Hash, PartialEq, Eq)]
 struct JitCacheKey {
     function: *const Function,
     ip: usize,
+}
+
+struct JitCacheValue {
+    function: JitFunction,
+    arguments: Box<[i64]>
 }
 
 impl From<&Trace> for JitCacheKey {
@@ -91,7 +101,7 @@ impl From<&Trace> for JitCacheKey {
 
 pub struct Assembler {
     module: LLVMModuleRef,
-    cache: HashMap<JitCacheKey, JitFunction>,
+    cache: HashMap<JitCacheKey, JitCacheValue>,
 }
 
 impl Assembler {
@@ -103,7 +113,7 @@ impl Assembler {
         }
     }
 
-    pub fn compile_trace(&self, trace: Trace, bytecode: Vec<u8>) -> JitResult {
+    pub fn compile_trace(&mut self, trace: Trace, bytecode: Vec<u8>) -> JitResult {
         // The idea for jitted function is simple:
         //
         // Functions will always have the signature: void jit(i64*);
@@ -120,13 +130,23 @@ impl Assembler {
         // back to the parameter pointer.
         // In Rust we can then see the changes in the passed array and simply update the VM stack with all of the new values.
 
+        let cache_key = JitCacheKey {
+            function: trace.origin,
+            ip: trace.start
+        };
+        let cache_key_hash = {
+            let mut hasher = DefaultHasher::new();
+            cache_key.hash(&mut hasher);
+            CString::new(format!("jit{:x}", hasher.finish())).unwrap()
+        };
+
         let (int64, int64ptr) = unsafe { (LLVMInt64Type(), LLVMPointerType(LLVMInt64Type(), 0)) };
 
         let fun = unsafe {
             let mut params = [int64ptr];
             let funty = LLVMFunctionType(int64, params.as_mut_ptr(), 1, 0);
 
-            LLVMAddFunction(self.module, cstr!("jit").as_ptr(), funty)
+            LLVMAddFunction(self.module, cache_key_hash.as_ptr(), funty)
         };
 
         let mut bytecode = bytecode.into_iter().enumerate();
@@ -184,12 +204,7 @@ impl Assembler {
             LLVMPositionBuilderAtEnd(exit_builder, exit_block);
         }
 
-        let mut ssa_bytecode = Vec::with_capacity(bytecode.len());
-
         while let Some((bytecode_index, inst)) = bytecode.next() {
-            // Every instruction is always copied into the SSA-form bytecode
-            ssa_bytecode.push(inst);
-
             match inst {
                 JMP => {
                     let operands = [bytecode.next().unwrap().1, bytecode.next().unwrap().1];
@@ -425,7 +440,7 @@ impl Assembler {
             LLVMRunPassManager(pm, self.module);
         }
 
-        let func = unsafe {
+        let function = unsafe {
             #[cfg(debug_assertions)]
             LLVMVerifyFunction(fun, LLVMVerifierFailureAction::LLVMAbortProcessAction);
 
@@ -434,7 +449,7 @@ impl Assembler {
             LLVMCreateExecutionEngineForModule(&mut engine, self.module, &mut error);
             assert!(!engine.is_null());
 
-            let addr = LLVMGetFunctionAddress(engine, cstr!("jit").as_ptr());
+            let addr = LLVMGetFunctionAddress(engine, cache_key_hash.as_ptr());
 
             mem::transmute::<u64, JitFunction>(addr)
         };
@@ -443,9 +458,15 @@ impl Assembler {
         println!("=================");
         println!("JIT State");
         println!("<before: {:?}>", values);
-        let target_ip = unsafe { func(values.as_mut_ptr()) };
+        let target_ip = unsafe { function(values.as_mut_ptr()) };
         println!("<after: {:?}>", values);
         
+
+        self.cache.insert(cache_key, JitCacheValue {
+            function: function,
+            arguments: values.into_boxed_slice()
+        });
+
         std::process::exit(0);
 
         JitResult {
