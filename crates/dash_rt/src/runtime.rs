@@ -119,7 +119,8 @@ fn import_callback(vm: &mut Vm, import_ty: StaticImportKind, path: &str) -> Resu
             {
                 dash_dlloader::import_dl(&mut sc)
             }
-            #[cfg(not(feature = "dlopen"))] {
+            #[cfg(not(feature = "dlopen"))]
+            {
                 throw!(&mut sc, "Dynamic library loading is disabled")
             }
         }

@@ -310,7 +310,7 @@ pub enum TokenType {
     Of,
 
     #[display(fmt = "=>")]
-    Arrow,
+    FatArrow,
 
     #[display(fmt = "#")]
     Hash,

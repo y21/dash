@@ -1,4 +1,3 @@
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct External {
     /// The id of the referenced local in the upper scope

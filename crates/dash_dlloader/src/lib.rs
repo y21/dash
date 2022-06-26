@@ -1,17 +1,15 @@
-
 #[macro_use]
 extern crate dlopen_derive;
 
-
 use dash_vm::local::LocalScope;
 use dash_vm::throw;
-use dash_vm::value::Value;
+use dash_vm::value::function::native::CallContext;
 use dash_vm::value::function::Function;
 use dash_vm::value::function::FunctionKind;
-use dash_vm::value::function::native::CallContext;
 use dash_vm::value::object::NamedObject;
 use dash_vm::value::object::Object;
 use dash_vm::value::ops::abstractions::conversions::ValueConversion;
+use dash_vm::value::Value;
 use dlopen::wrapper::Container;
 use dlopen::wrapper::WrapperApi;
 
@@ -21,7 +19,7 @@ macro_rules! dashdl {
         #[no_mangle]
         pub unsafe extern "C" fn dashjs_init_module(
             cx: *mut ::dash_vm::value::function::native::CallContext,
-            ret: *mut Result<::dash_vm::value::Value, ::dash_vm::value::Value>
+            ret: *mut Result<::dash_vm::value::Value, ::dash_vm::value::Value>,
         ) {
             ret.write($fun(&mut *cx));
         }
@@ -30,13 +28,13 @@ macro_rules! dashdl {
 
 #[derive(WrapperApi)]
 pub struct Library {
-    dashjs_init_module: unsafe fn(cx: *mut CallContext, ret: *mut Result<Value, Value>)
+    dashjs_init_module: unsafe fn(cx: *mut CallContext, ret: *mut Result<Value, Value>),
 }
 
 pub fn load_sync(mut cx: CallContext) -> Result<Value, Value> {
     let path = match cx.args.first() {
         Some(first) => first,
-        None => throw!(cx.scope, "Missing path to dynamic library")
+        None => throw!(cx.scope, "Missing path to dynamic library"),
     };
 
     let path = ValueConversion::to_string(path, cx.scope)?;

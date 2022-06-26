@@ -1,17 +1,17 @@
 use std::rc::Rc;
 
-use crate::Vm;
 use crate::gc::handle::Handle;
 use crate::local::LocalScope;
 use crate::throw;
-use crate::value::Typeof;
 use crate::value::boxed::Boolean;
 use crate::value::boxed::Number as BoxedNumber;
 use crate::value::boxed::String as BoxedString;
 use crate::value::boxed::Symbol as BoxedSymbol;
 use crate::value::object::Object;
 use crate::value::primitive::MAX_SAFE_INTEGERF;
+use crate::value::Typeof;
 use crate::value::Value;
+use crate::Vm;
 
 pub trait ValueConversion {
     fn to_primitive(&self, sc: &mut LocalScope, preferred_type: Option<PreferredType>) -> Result<Value, Value>;
@@ -146,16 +146,16 @@ impl ValueConversion for Value {
             // b. If exoticToPrim is not undefined, then
             if let Some(exotic_to_prim) = exotic_to_prim {
                 let preferred_type = preferred_type.to_value(sc);
-    
+
                 // iv. Let result be ? Call(exoticToPrim, input, « hint »).
                 let result = exotic_to_prim.apply(sc, self.clone(), vec![preferred_type])?;
-    
+
                 // If Type(result) is not Object, return result.
                 // TODO: this can still be an object if Value::External
                 if !matches!(result, Value::Object(_)) {
                     return Ok(result);
                 }
-                
+
                 // vi. Throw a TypeError exception.
                 throw!(sc, "Failed to convert to primitive");
             }
@@ -214,9 +214,9 @@ impl Value {
     pub fn ordinary_to_primitive(&self, sc: &mut LocalScope, preferred_type: PreferredType) -> Result<Value, Value> {
         let method_names = match preferred_type {
             PreferredType::String => ["toString", "valueOf"],
-            PreferredType::Number | PreferredType::Default => ["valueOf", "toString"]
+            PreferredType::Number | PreferredType::Default => ["valueOf", "toString"],
         };
-    
+
         for name in method_names {
             let method = self.get_property(sc, name.into())?;
             if matches!(method.type_of(), Typeof::Function) {

@@ -18,18 +18,18 @@ use self::{
     },
 };
 
-pub mod gc;
 pub mod dispatch;
+#[cfg(feature = "eval")]
+pub mod eval;
 pub mod external;
 pub mod frame;
+pub mod gc;
+pub mod js_std;
 pub mod local;
 pub mod params;
 pub mod statics;
 pub mod util;
 pub mod value;
-pub mod js_std;
-#[cfg(feature = "eval")]
-pub mod eval;
 
 pub const MAX_FRAME_STACK_SIZE: usize = 1024;
 pub const MAX_STACK_SIZE: usize = 8196;
@@ -70,20 +70,20 @@ impl Vm {
     }
 
     // pub fn eval<'a>(&mut self, input: &'a str, opt: OptLevel) -> Result<Value, ()> {
-        // let mut ast = Parser::from_str(input)
-        //     .map_err(EvalError::LexError)?
-        //     .parse_all()
-        //     .map_err(EvalError::ParseError)?;
+    // let mut ast = Parser::from_str(input)
+    //     .map_err(EvalError::LexError)?
+    //     .parse_all()
+    //     .map_err(EvalError::ParseError)?;
 
-        // optimizer::optimize_ast(&mut ast, opt);
+    // optimizer::optimize_ast(&mut ast, opt);
 
-        // let compiled = FunctionCompiler::new()
-        //     .compile_ast(ast)
-        //     .map_err(EvalError::CompileError)?;
+    // let compiled = FunctionCompiler::new()
+    //     .compile_ast(ast)
+    //     .map_err(EvalError::CompileError)?;
 
-        // let frame = Frame::from_compile_result(compiled);
-        // let val = self.execute_frame(frame).map_err(EvalError::VmError)?;
-        // Ok(val.into_value())
+    // let frame = Frame::from_compile_result(compiled);
+    // let val = self.execute_frame(frame).map_err(EvalError::VmError)?;
+    // Ok(val.into_value())
     // }
 
     /// Prepare the VM for execution.
@@ -607,7 +607,7 @@ impl Vm {
         if self.stack.len() > MAX_STACK_SIZE {
             throw!(self, "Maximum stack size exceeded");
         }
-        
+
         self.stack.push(value);
         Ok(())
     }
