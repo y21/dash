@@ -66,7 +66,7 @@ macro_rules! unimplementedc {
 }
 
 pub struct FunctionCompiler<'a> {
-    ib: InstructionBuilder,
+    buf: Vec<u8>,
     cp: ConstantPool,
     scope: Scope<'a>,
     externals: Vec<External>,
@@ -96,7 +96,7 @@ fn ast_insert_return<'a>(ast: &mut Vec<Statement<'a>>) {
 impl<'a> FunctionCompiler<'a> {
     pub fn new(opt_level: OptLevel) -> Self {
         Self {
-            ib: InstructionBuilder::new(),
+            buf: Vec::new(),
             cp: ConstantPool::new(),
             scope: Scope::new(),
             externals: Vec::new(),
@@ -111,7 +111,7 @@ impl<'a> FunctionCompiler<'a> {
     /// * Requires `caller` to not be invalid (i.e. due to moving) during calls
     pub unsafe fn with_caller<'s>(caller: &'s mut FunctionCompiler<'a>, ty: FunctionKind) -> Self {
         Self {
-            ib: InstructionBuilder::new(),
+            buf: Vec::new(),
             cp: ConstantPool::new(),
             scope: Scope::new(),
             externals: Vec::new(),
@@ -136,7 +136,7 @@ impl<'a> FunctionCompiler<'a> {
 
         self.accept_multiple(ast)?;
         Ok(CompileResult {
-            instructions: self.ib.build(),
+            instructions: self.buf,
             cp: self.cp,
             locals: self.scope.locals().len(),
             externals: self.externals,
@@ -250,12 +250,13 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         &mut self,
         BinaryExpr { left, right, operator }: BinaryExpr<'a>,
     ) -> Result<(), CompileError> {
-        self.accept_expr(*left)?;
+        let mut ib = InstructionBuilder::new(self);
+        ib.accept_expr(*left)?;
 
         macro_rules! trivial_case {
             ($k:expr) => {{
-                self.accept_expr(*right)?;
-                $k(&mut self.ib)
+                ib.accept_expr(*right)?;
+                $k(&mut ib)
             }};
         }
 
@@ -283,25 +284,25 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             TokenType::In => trivial_case!(InstructionBuilder::build_objin),
             TokenType::Instanceof => trivial_case!(InstructionBuilder::build_instanceof),
             TokenType::LogicalOr => {
-                self.ib.build_jmptruenp(Label::IfEnd);
-                self.ib.build_pop(); // Only pop LHS if it is false
-                self.accept_expr(*right)?;
-                self.ib.add_label(Label::IfEnd);
+                ib.build_jmptruenp(Label::IfEnd);
+                ib.build_pop(); // Only pop LHS if it is false
+                ib.accept_expr(*right)?;
+                ib.add_local_label(Label::IfEnd);
             }
             TokenType::LogicalAnd => {
-                self.ib.build_jmpfalsenp(Label::IfEnd);
-                self.ib.build_pop(); // Only pop LHS if it is true
-                self.accept_expr(*right)?;
-                self.ib.add_label(Label::IfEnd);
+                ib.build_jmpfalsenp(Label::IfEnd);
+                ib.build_pop(); // Only pop LHS if it is true
+                ib.accept_expr(*right)?;
+                ib.add_local_label(Label::IfEnd);
             }
             TokenType::NullishCoalescing => {
-                self.ib.build_jmpnullishnp(Label::IfBranch(0));
-                self.ib.build_jmp(Label::IfEnd);
+                ib.build_jmpnullishnp(Label::IfBranch(0));
+                ib.build_jmp(Label::IfEnd);
 
-                self.ib.add_label(Label::IfBranch(0));
-                self.ib.build_pop();
-                self.accept_expr(*right)?;
-                self.ib.add_label(Label::IfEnd);
+                ib.add_local_label(Label::IfBranch(0));
+                ib.build_pop();
+                ib.accept_expr(*right)?;
+                ib.add_local_label(Label::IfEnd);
             }
             other => unimplementedc!("Binary operator {:?}", other),
         }
@@ -311,34 +312,38 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_expression_statement(&mut self, expr: Expr<'a>) -> Result<(), CompileError> {
         self.accept_expr(expr)?;
-        self.ib.build_pop();
+        InstructionBuilder::new(self).build_pop();
         Ok(())
     }
 
     fn visit_grouping_expression(&mut self, GroupingExpr(exprs): GroupingExpr<'a>) -> Result<(), CompileError> {
+        let mut ib = InstructionBuilder::new(self);
+
         for expr in exprs {
-            self.accept_expr(expr)?;
-            self.ib.build_pop();
+            ib.accept_expr(expr)?;
+            ib.build_pop();
         }
 
-        self.ib.remove_pop_end();
+        ib.remove_pop_end();
 
         Ok(())
     }
 
     fn visit_literal_expression(&mut self, expr: LiteralExpr<'a>) -> Result<(), CompileError> {
-        self.ib.build_constant(&mut self.cp, Constant::from_literal(&expr))?;
+        InstructionBuilder::new(self).build_constant(Constant::from_literal(&expr))?;
         Ok(())
     }
 
     fn visit_identifier_expression(&mut self, ident: &str) -> Result<(), CompileError> {
+        let mut ib = InstructionBuilder::new(self);
+
         match ident {
-            "this" => self.ib.build_this(),
-            "super" => self.ib.build_super(),
-            "globalThis" => self.ib.build_global(),
-            ident => match self.find_local(ident) {
-                Some((index, local)) => self.ib.build_local_load(index, local.is_extern()),
-                _ => self.ib.build_global_load(&mut self.cp, ident)?,
+            "this" => ib.build_this(),
+            "super" => ib.build_super(),
+            "globalThis" => ib.build_global(),
+            ident => match ib.find_local(ident) {
+                Some((index, local)) => ib.build_local_load(index, local.is_extern()),
+                _ => ib.build_global_load(ident)?,
             },
         };
 
@@ -346,24 +351,25 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
     }
 
     fn visit_unary_expression(&mut self, UnaryExpr { operator, expr }: UnaryExpr<'a>) -> Result<(), CompileError> {
-        self.accept_expr(*expr)?;
+        let mut ib = InstructionBuilder::new(self);
+        ib.accept_expr(*expr)?;
 
         match operator {
-            TokenType::Plus => self.ib.build_pos(),
-            TokenType::Minus => self.ib.build_neg(),
-            TokenType::Typeof => self.ib.build_typeof(),
-            TokenType::BitwiseNot => self.ib.build_bitnot(),
-            TokenType::LogicalNot => self.ib.build_not(),
+            TokenType::Plus => ib.build_pos(),
+            TokenType::Minus => ib.build_neg(),
+            TokenType::Typeof => ib.build_typeof(),
+            TokenType::BitwiseNot => ib.build_bitnot(),
+            TokenType::LogicalNot => ib.build_not(),
             TokenType::Void => {
-                self.ib.build_pop();
-                self.ib.build_undef();
+                ib.build_pop();
+                ib.build_undef();
             }
             TokenType::Yield => {
-                if !matches!(self.ty, FunctionKind::Generator) {
+                if !matches!(ib.ty, FunctionKind::Generator) {
                     return Err(CompileError::YieldOutsideGenerator);
                 }
 
-                self.ib.build_yield();
+                ib.build_yield();
             }
             _ => unimplementedc!("Unary operator {:?}", operator),
         }
@@ -375,12 +381,13 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         &mut self,
         VariableDeclaration { binding, value }: VariableDeclaration<'a>,
     ) -> Result<(), CompileError> {
-        let id = self.scope.add_local(binding, false)?;
+        let mut ib = InstructionBuilder::new(self);
+        let id = ib.scope.add_local(binding, false)?;
 
         if let Some(expr) = value {
-            self.accept_expr(expr)?;
-            self.ib.build_local_store(id, false);
-            self.ib.build_pop();
+            ib.accept_expr(expr)?;
+            ib.build_local_store(id, false);
+            ib.build_pop();
         }
 
         Ok(())
@@ -395,6 +402,8 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             el,
         }: IfStatement<'a>,
     ) -> Result<(), CompileError> {
+        let mut ib = InstructionBuilder::new(self);
+        
         // Desugar last `else` block into `else if(true)` for simplicity
         if let Some(then) = &el {
             let then = &**then;
@@ -414,34 +423,34 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             .try_into()
             .map_err(|_| CompileError::IfBranchLimitExceeded)?;
 
-        self.accept_expr(condition)?;
+            ib.accept_expr(condition)?;
         if branches.is_empty() {
-            self.ib.build_jmpfalsep(Label::IfEnd);
+            ib.build_jmpfalsep(Label::IfEnd);
         } else {
-            self.ib.build_jmpfalsep(Label::IfBranch(0));
+            ib.build_jmpfalsep(Label::IfBranch(0));
         }
-        self.accept(*then)?;
-        self.ib.build_jmp(Label::IfEnd);
+        ib.accept(*then)?;
+        ib.build_jmp(Label::IfEnd);
 
         for (id, branch) in branches.into_iter().enumerate() {
             let id = id as u16;
 
-            self.ib.add_label(Label::IfBranch(id));
-            self.accept_expr(branch.condition)?;
+            ib.add_local_label(Label::IfBranch(id));
+            ib.accept_expr(branch.condition)?;
             if id == len - 1 {
-                self.ib.build_jmpfalsep(Label::IfEnd);
+                ib.build_jmpfalsep(Label::IfEnd);
 
-                self.accept(*branch.then)?;
+                ib.accept(*branch.then)?;
             } else {
-                self.ib.build_jmpfalsep(Label::IfBranch(id + 1));
+                ib.build_jmpfalsep(Label::IfBranch(id + 1));
 
-                self.accept(*branch.then)?;
+                ib.accept(*branch.then)?;
 
-                self.ib.build_jmp(Label::IfEnd);
+                ib.build_jmp(Label::IfEnd);
             }
         }
 
-        self.ib.add_label(Label::IfEnd);
+        ib.add_local_label(Label::IfEnd);
         Ok(())
     }
 
@@ -453,28 +462,31 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
     }
 
     fn visit_function_declaration(&mut self, fun: FunctionDeclaration<'a>) -> Result<(), CompileError> {
-        let id = self.scope.add_local(
+        let mut ib = InstructionBuilder::new(self);
+        let id = ib.scope.add_local(
             VariableBinding {
                 name: fun.name.expect("Function declaration did not have a name"),
                 kind: VariableDeclarationKind::Var,
             },
             false,
         )?;
-        self.visit_function_expr(fun)?;
-        self.ib.build_local_store(id, false);
-        self.ib.build_pop();
+        ib.visit_function_expr(fun)?;
+        ib.build_local_store(id, false);
+        ib.build_pop();
         Ok(())
     }
 
     fn visit_while_loop(&mut self, WhileLoop { condition, body }: WhileLoop<'a>) -> Result<(), CompileError> {
-        self.ib.add_label(Label::LoopCondition);
-        self.accept_expr(condition)?;
-        self.ib.build_jmpfalsep(Label::LoopEnd);
+        let mut ib = InstructionBuilder::new(self);
 
-        self.accept(*body)?;
-        self.ib.build_jmp(Label::LoopCondition);
+        ib.add_local_label(Label::LoopCondition);
+        ib.accept_expr(condition)?;
+        ib.build_jmpfalsep(Label::LoopEnd);
 
-        self.ib.add_label(Label::LoopEnd);
+        ib.accept(*body)?;
+        ib.build_jmp(Label::LoopCondition);
+
+        ib.add_local_label(Label::LoopEnd);
         Ok(())
     }
 
@@ -482,17 +494,19 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         &mut self,
         AssignmentExpr { left, right, operator }: AssignmentExpr<'a>,
     ) -> Result<(), CompileError> {
+        let mut ib = InstructionBuilder::new(self);
+
         if let Expr::PropertyAccess(prop) = &*left {
-            self.accept_expr((*prop.target).clone())?;
+            ib.accept_expr((*prop.target).clone())?;
         }
 
-        self.accept_expr(*right)?;
+        ib.accept_expr(*right)?;
 
         match *left {
             Expr::Literal(lit) => {
                 let ident = lit.to_identifier();
 
-                if let Some((id, local)) = self.find_local(&ident) {
+                if let Some((id, local)) = ib.find_local(&ident) {
                     if matches!(local.binding().kind, VariableDeclarationKind::Const) {
                         return Err(CompileError::ConstAssignment);
                     }
@@ -502,39 +516,39 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                     match operator {
                         TokenType::Assignment => {}
                         TokenType::AdditionAssignment => {
-                            self.ib.build_local_load(id, is_extern);
+                            ib.build_local_load(id, is_extern);
                             // += requires reversing (right, left)
                             // we effectively need to rewrite it from
                             // left = right + left
                             // to
                             // left = left + right
-                            self.ib.build_revstck(2);
-                            self.ib.build_add();
+                            ib.build_revstck(2);
+                            ib.build_add();
                         }
                         TokenType::SubtractionAssignment => {
-                            self.ib.build_local_load(id, is_extern);
-                            self.ib.build_revstck(2);
-                            self.ib.build_sub();
+                            ib.build_local_load(id, is_extern);
+                            ib.build_revstck(2);
+                            ib.build_sub();
                         }
                         _ => unimplementedc!("Unknown operator"),
                     }
 
-                    self.ib.build_local_store(id, is_extern);
+                    ib.build_local_store(id, is_extern);
                 } else {
                     match operator {
                         TokenType::Assignment => {}
                         TokenType::AdditionAssignment => {
-                            self.ib.build_global_load(&mut self.cp, &ident)?;
-                            self.ib.build_add();
+                            ib.build_global_load(&ident)?;
+                            ib.build_add();
                         }
                         TokenType::SubtractionAssignment => {
-                            self.ib.build_global_load(&mut self.cp, &ident)?;
-                            self.ib.build_sub();
+                            ib.build_global_load(&ident)?;
+                            ib.build_sub();
                         }
                         _ => unimplementedc!("Unknown operator"),
                     }
 
-                    self.ib.build_global_store(&mut self.cp, &ident)?;
+                    ib.build_global_store(&ident)?;
                 }
             }
             Expr::PropertyAccess(PropertyAccessExpr { computed, property, .. }) => {
@@ -545,11 +559,11 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 match (*property, computed) {
                     (Expr::Literal(lit), false) => {
                         let ident = lit.to_identifier();
-                        self.ib.build_static_prop_set(&mut self.cp, &ident)?;
+                        ib.build_static_prop_set(&ident)?;
                     }
                     (e, _) => {
-                        self.accept_expr(e)?;
-                        self.ib.build_dynamic_prop_set();
+                        ib.accept_expr(e)?;
+                        ib.build_dynamic_prop_set();
                     }
                 }
             }
@@ -590,14 +604,15 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         let meta = FunctionCallMetadata::new_checked(argc, constructor_call, has_this)
             .ok_or(CompileError::ParameterLimitExceeded)?;
 
-        self.ib.build_call(meta);
+        InstructionBuilder::new(self).build_call(meta);
 
         Ok(())
     }
 
     fn visit_return_statement(&mut self, ReturnStatement(stmt): ReturnStatement<'a>) -> Result<(), CompileError> {
+        let tc_depth = self.try_catch_depth;
         self.accept_expr(stmt)?;
-        self.ib.build_ret(self.try_catch_depth);
+        InstructionBuilder::new(self).build_ret(tc_depth);
         Ok(())
     }
 
@@ -605,16 +620,18 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         &mut self,
         ConditionalExpr { condition, then, el }: ConditionalExpr<'a>,
     ) -> Result<(), CompileError> {
-        self.accept_expr(*condition)?;
-        self.ib.build_jmpfalsep(Label::IfBranch(0));
+        let mut ib = InstructionBuilder::new(self);
 
-        self.accept_expr(*then)?;
-        self.ib.build_jmp(Label::IfEnd);
+        ib.accept_expr(*condition)?;
+        ib.build_jmpfalsep(Label::IfBranch(0));
 
-        self.ib.add_label(Label::IfBranch(0));
-        self.accept_expr(*el)?;
+        ib.accept_expr(*then)?;
+        ib.build_jmp(Label::IfEnd);
 
-        self.ib.add_label(Label::IfEnd);
+        ib.add_local_label(Label::IfBranch(0));
+        ib.accept_expr(*el)?;
+
+        ib.add_local_label(Label::IfEnd);
         Ok(())
     }
 
@@ -627,16 +644,18 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         }: PropertyAccessExpr<'a>,
         preserve_this: bool,
     ) -> Result<(), CompileError> {
-        self.accept_expr(*target)?;
+        let mut ib = InstructionBuilder::new(self);
+
+        ib.accept_expr(*target)?;
 
         match (*property, computed) {
             (Expr::Literal(lit), false) => {
                 let ident = lit.to_identifier();
-                self.ib.build_static_prop_access(&mut self.cp, &ident, preserve_this)?;
+                ib.build_static_prop_access(&ident, preserve_this)?;
             }
             (e, _) => {
-                self.accept_expr(e)?;
-                self.ib.build_dynamic_prop_access(preserve_this);
+                ib.accept_expr(e)?;
+                ib.build_dynamic_prop_access(preserve_this);
             }
         }
 
@@ -645,19 +664,21 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_sequence_expr(&mut self, (expr1, expr2): Seq<'a>) -> Result<(), CompileError> {
         self.accept_expr(*expr1)?;
-        self.ib.build_pop();
+        InstructionBuilder::new(self).build_pop();
         self.accept_expr(*expr2)?;
 
         Ok(())
     }
 
     fn visit_postfix_expr(&mut self, (tt, expr): Postfix<'a>) -> Result<(), CompileError> {
+        let mut ib = InstructionBuilder::new(self);
+
         match &*expr {
             Expr::Literal(lit) => {
                 let ident = lit.to_identifier();
 
-                if let Some((id, loc)) = self.find_local(&ident) {
-                    self.ib.build_local_load(id, loc.is_extern());
+                if let Some((id, loc)) = ib.find_local(&ident) {
+                    ib.build_local_load(id, loc.is_extern());
                 } else {
                     unimplementedc!("Global postfix expression");
                 }
@@ -665,7 +686,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             _ => unimplementedc!("Non-identifier postfix expression"),
         }
 
-        self.visit_assignment_expression(AssignmentExpr {
+        ib.visit_assignment_expression(AssignmentExpr {
             left: expr.clone(),
             operator: match tt {
                 TokenType::Increment => TokenType::AdditionAssignment,
@@ -674,7 +695,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             },
             right: Box::new(Expr::number_literal(1.0)),
         })?;
-        self.ib.build_pop();
+        ib.build_pop();
 
         Ok(())
     }
@@ -688,7 +709,8 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             ty,
         }: FunctionDeclaration<'a>,
     ) -> Result<(), CompileError> {
-        let mut compiler = unsafe { FunctionCompiler::with_caller(self, ty) };
+        let mut ib = InstructionBuilder::new(self);
+        let mut compiler = unsafe { FunctionCompiler::with_caller(&mut ib, ty) };
         let scope = &mut compiler.scope;
 
         for name in &arguments {
@@ -712,54 +734,60 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             params: arguments.len(),
             externals: cmp.externals.into(),
         };
-        self.ib.build_constant(&mut self.cp, Constant::Function(function))?;
+        ib.build_constant(Constant::Function(function))?;
 
         Ok(())
     }
 
     fn visit_array_literal(&mut self, ArrayLiteral(exprs): ArrayLiteral<'a>) -> Result<(), CompileError> {
+        let mut ib = InstructionBuilder::new(self);
+
         let len = exprs
             .len()
             .try_into()
             .map_err(|_| CompileError::ArrayLitLimitExceeded)?;
 
         for expr in exprs {
-            self.accept_expr(expr)?;
+            ib.accept_expr(expr)?;
         }
 
-        self.ib.build_arraylit(len);
+        ib.build_arraylit(len);
         Ok(())
     }
 
     fn visit_object_literal(&mut self, ObjectLiteral(exprs): ObjectLiteral<'a>) -> Result<(), CompileError> {
+        let mut ib = InstructionBuilder::new(self);
+
         let mut idents = Vec::with_capacity(exprs.len());
         for (ident, value) in exprs {
-            self.accept_expr(value)?;
+            ib.accept_expr(value)?;
             let ident = Constant::Identifier((*ident).into());
             idents.push(ident);
         }
 
-        self.ib.build_objlit(&mut self.cp, idents)?;
+        ib.build_objlit(idents)?;
         Ok(())
     }
 
     fn visit_try_catch(&mut self, TryCatch { try_, catch, .. }: TryCatch<'a>) -> Result<(), CompileError> {
-        self.ib.build_try_block();
+        let mut ib = InstructionBuilder::new(self);
 
-        self.try_catch_depth += 1;
-        self.scope.enter();
-        self.accept(*try_)?;
-        self.scope.exit();
-        self.try_catch_depth -= 1;
+        ib.build_try_block();
 
-        self.ib.build_jmp(Label::TryEnd);
+        ib.try_catch_depth += 1;
+        ib.scope.enter();
+        ib.accept(*try_)?;
+        ib.scope.exit();
+        ib.try_catch_depth -= 1;
 
-        self.ib.add_label(Label::Catch);
+        ib.build_jmp(Label::TryEnd);
 
-        self.scope.enter();
+        ib.add_local_label(Label::Catch);
+
+        ib.scope.enter();
 
         if let Some(ident) = catch.ident {
-            let id = self.scope.add_local(
+            let id = ib.scope.add_local(
                 VariableBinding {
                     kind: VariableDeclarationKind::Var,
                     name: ident,
@@ -772,23 +800,24 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 return Err(CompileError::LocalLimitExceeded);
             }
 
-            self.ib.writew(id);
+            ib.writew(id);
         } else {
-            self.ib.writew(u16::MAX);
+            ib.writew(u16::MAX);
         }
 
-        self.accept(*catch.body)?;
-        self.scope.exit();
+        ib.accept(*catch.body)?;
+        ib.scope.exit();
 
-        self.ib.add_label(Label::TryEnd);
-        self.ib.build_try_end();
+        ib.add_local_label(Label::TryEnd);
+        ib.build_try_end();
 
         Ok(())
     }
 
     fn visit_throw(&mut self, expr: Expr<'a>) -> Result<(), CompileError> {
-        self.accept_expr(expr)?;
-        self.ib.build_throw();
+        let mut ib = InstructionBuilder::new(self);
+        ib.accept_expr(expr)?;
+        ib.build_throw();
         Ok(())
     }
 
@@ -801,31 +830,32 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             body,
         }: ForLoop<'a>,
     ) -> Result<(), CompileError> {
-        self.scope.enter();
+        let mut ib = InstructionBuilder::new(self);
+        ib.scope.enter();
 
         // Initialization
         if let Some(init) = init {
-            self.accept(*init)?;
+            ib.accept(*init)?;
         }
 
         // Condition
-        self.ib.add_label(Label::LoopCondition);
+        ib.add_local_label(Label::LoopCondition);
         if let Some(condition) = condition {
-            self.accept_expr(condition)?;
-            self.ib.build_jmpfalsep(Label::LoopEnd);
+            ib.accept_expr(condition)?;
+            ib.build_jmpfalsep(Label::LoopEnd);
         }
 
         // Body
-        self.accept(*body)?;
+        ib.accept(*body)?;
 
         // Increment
         if let Some(finalizer) = finalizer {
-            self.accept_expr(finalizer)?;
-            self.ib.build_pop();
+            ib.accept_expr(finalizer)?;
+            ib.build_pop();
         }
-        self.ib.build_jmp(Label::LoopCondition);
+        ib.build_jmp(Label::LoopCondition);
 
-        self.ib.add_label(Label::LoopEnd);
+        ib.add_local_label(Label::LoopEnd);
         self.scope.exit();
 
         Ok(())
@@ -836,13 +866,15 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
     }
 
     fn visit_import_statement(&mut self, import: ImportKind<'a>) -> Result<(), CompileError> {
+        let mut ib = InstructionBuilder::new(self);
+
         match import {
             ImportKind::Dynamic(ex) => {
-                self.accept_expr(ex)?;
-                self.ib.build_dynamic_import();
+                ib.accept_expr(ex)?;
+                ib.build_dynamic_import();
             }
             ref kind @ (ImportKind::DefaultAs(ref spec, path) | ImportKind::AllAs(ref spec, path)) => {
-                let local_id = self.scope.add_local(
+                let local_id = ib.scope.add_local(
                     VariableBinding {
                         kind: VariableDeclarationKind::Var,
                         name: match spec {
@@ -852,9 +884,9 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                     false,
                 )?;
 
-                let path_id = self.cp.add(Constant::String((*path).into()))?;
+                let path_id = ib.cp.add(Constant::String((*path).into()))?;
 
-                self.ib.build_static_import(
+                ib.build_static_import(
                     match kind {
                         ImportKind::DefaultAs(..) => StaticImportKind::Default,
                         ImportKind::AllAs(..) => StaticImportKind::All,
@@ -870,18 +902,20 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
     }
 
     fn visit_export_statement(&mut self, export: ExportKind<'a>) -> Result<(), CompileError> {
+        let mut ib = InstructionBuilder::new(self);
+
         match export {
             ExportKind::Default(expr) => {
-                self.accept_expr(expr)?;
-                self.ib.build_default_export();
+                ib.accept_expr(expr)?;
+                ib.build_default_export();
             }
             ExportKind::Named(names) => {
                 let mut it = Vec::with_capacity(names.len());
 
                 for name in names.iter().copied() {
-                    let ident_id = self.cp.add(Constant::Identifier(name.into()))?;
+                    let ident_id = ib.cp.add(Constant::Identifier(name.into()))?;
 
-                    match self.find_local(name) {
+                    match ib.find_local(name) {
                         Some((loc_id, loc)) => {
                             // Top level exports shouldn't be able to refer to extern locals
                             assert!(!loc.is_extern());
@@ -894,7 +928,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                     }
                 }
 
-                self.ib.build_named_export(&it)?;
+                ib.build_named_export(&it)?;
             }
             ExportKind::NamedVar(vars) => {
                 let it = vars.iter().map(|var| var.binding.name).collect::<Vec<_>>();
@@ -922,7 +956,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
     }
 
     fn visit_debugger(&mut self) -> Result<(), CompileError> {
-        self.ib.build_debugger();
+        InstructionBuilder::new(self).build_debugger();
         Ok(())
     }
 

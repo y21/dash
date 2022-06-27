@@ -1,21 +1,36 @@
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::hash::Hash;
+use std::ops::Deref;
+use std::ops::DerefMut;
 
 use dash_middle::compiler::instruction as inst;
 
-pub struct InstructionBuilder {
-    buf: Vec<u8>,
+use crate::FunctionCompiler;
+
+#[derive(PartialOrd, Ord, Hash, Eq, PartialEq, Debug, Clone)]
+pub enum Label {
+    IfEnd,
+    /// A branch of an if statement
+    IfBranch(u16),
+    LoopCondition,
+    LoopEnd,
+    Catch,
+    TryEnd,
+}
+
+pub struct InstructionBuilder<'cx, 'inp> {
+    inner: &'cx mut FunctionCompiler<'inp>,
     jumps: BTreeMap<Label, Vec<usize>>,
     labels: BTreeMap<Label, usize>,
 }
 
-impl InstructionBuilder {
-    pub fn new() -> Self {
+impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
+    pub fn new(fc: &'cx mut FunctionCompiler<'inp>) -> Self {
         Self {
-            buf: Vec::new(),
-            labels: BTreeMap::new(),
+            inner: fc,
             jumps: BTreeMap::new(),
+            labels: BTreeMap::new()
         }
     }
 
@@ -50,9 +65,9 @@ impl InstructionBuilder {
         }
     }
 
-    /// Adds a label at the current instruction pointer, which can be jumped to
-    pub fn add_label(&mut self, label: Label) {
-        let ip = self.buf.len();
+    /// Adds a **local** label at the current instruction pointer, which can be jumped to using add_local_jump
+    pub fn add_local_label(&mut self, label: Label) {
+        let ip = self.inner.buf.len();
 
         // get vector of existing jumps to this label
         if let Some(assoc_jumps) = self.jumps.remove(&label) {
@@ -60,7 +75,7 @@ impl InstructionBuilder {
                 let offset = (ip - jump - 2) as u16; // TODO: don't hardcast..? and use i16
 
                 // write jump offset
-                let pt = &mut self.buf[jump..jump + 2];
+                let pt = &mut self.inner.buf[jump..jump + 2];
                 pt.copy_from_slice(&u16::to_ne_bytes(offset));
             }
         }
@@ -68,47 +83,35 @@ impl InstructionBuilder {
         self.labels.insert(label, ip);
     }
 
+    /// Emits a jump instruction to a local label
+    /// 
     /// Requirement for calling this function: there must be two bytes in the buffer, reserved for this jump
-    pub fn add_jump(&mut self, label: Label) {
+    pub fn add_local_jump(&mut self, label: Label) {
         if let Some(&ip) = self.labels.get(&label) {
             let ip = ip as isize;
-            let len = self.buf.len() as isize;
+            let len = self.inner.buf.len() as isize;
             let offset = (ip - len) as i16; // TODO: don't hardcast..?
 
-            let pt = &mut self.buf[len as usize - 2..];
+            let pt = &mut self.inner.buf[len as usize - 2..];
             pt.copy_from_slice(&i16::to_ne_bytes(offset));
         } else {
             self.jumps
                 .entry(label)
                 .or_insert_with(Vec::new)
-                .push(self.buf.len() - 2);
+                .push(self.inner.buf.len() - 2);
         }
-    }
-
-    pub fn build(self) -> Vec<u8> {
-        debug_assert!(self.jumps.is_empty(), "Unresolved jumps");
-
-        self.buf
     }
 }
 
-#[derive(PartialOrd, Ord, Hash, Eq, PartialEq, Debug, Clone)]
-pub enum Label {
-    IfEnd,
-    /// A branch of an if statement
-    IfBranch(u16),
-    LoopCondition,
-    LoopEnd,
-    Catch,
-    TryEnd,
+impl<'cx, 'inp> Deref for InstructionBuilder<'cx, 'inp> {
+    type Target = FunctionCompiler<'inp>;
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
 }
 
-impl From<Vec<u8>> for InstructionBuilder {
-    fn from(buf: Vec<u8>) -> Self {
-        Self {
-            buf,
-            labels: BTreeMap::new(),
-            jumps: BTreeMap::new(),
-        }
+impl<'cx, 'inp> DerefMut for InstructionBuilder<'cx, 'inp> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
     }
 }
