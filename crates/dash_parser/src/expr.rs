@@ -488,7 +488,19 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
             list.push(expr.as_identifier()?);
         }
 
-        let body = Statement::Return(ReturnStatement(self.parse_expression()?));
+        let is_statement = self.expect_and_skip(&[TokenType::LeftBrace], false);
+
+        let body = if is_statement {
+            let stmt = self.parse_statement()?;
+
+            if !self.expect_and_skip(&[TokenType::RightBrace], true) {
+                return None;
+            }
+            
+            stmt
+        } else {
+            Statement::Return(ReturnStatement(self.parse_expression()?))
+        };
 
         Some(FunctionDeclaration::new(None, list, vec![body], FunctionKind::Arrow))
     }
