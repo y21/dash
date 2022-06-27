@@ -1,1 +1,4 @@
 
+pub trait TypeParser<'a> {
+    
+}

@@ -7,6 +7,7 @@ use stmt::StatementParser;
 
 mod expr;
 mod stmt;
+#[cfg(feature = "parse-type-annotations")]
 mod types;
 
 /// A JavaScript source code parser
