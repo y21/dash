@@ -27,6 +27,9 @@ pub enum TokenType {
     #[display(fmt = "]")]
     RightSquareBrace,
 
+    #[display(fmt = "[]")]
+    EmptySquareBrace,
+
     #[display(fmt = ",")]
     Comma,
 

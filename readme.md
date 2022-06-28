@@ -8,7 +8,7 @@ ECMA-262 implementation in pure Rust.
 This is a *WIP* and **not** yet production ready. It is actively being worked on and the API is constantly changing.
 
 ## Goals
-- Target ECMAScript 2015
+- Target ECMAScript 2015 and some of the newer features
 - Heap/Bytecode snapshot support
 - Compatibility
 - Easily embeddable into any Rust application
@@ -20,12 +20,14 @@ This is a *WIP* and **not** yet production ready. It is actively being worked on
 ```js
 import * as http from '@std/http';
 
-function* counter() {
-    let num = 0;
+// We already implement Optional Typing, so you can directly annotate parameters and variables with types
+// without having to use a third tool such as tsc
+function* counter(start: number) {
+    let num = start;
     while (true) yield num++;
 }
 
-const numbers = counter();
+const numbers = counter(0);
 const port = 3030;
 
 http.listen(port, (ctx) => {

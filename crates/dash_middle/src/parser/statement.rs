@@ -4,7 +4,7 @@ use derive_more::Display;
 
 use crate::lexer::token::TokenType;
 
-use super::expr::Expr;
+use super::{expr::Expr, types::TypeSegment};
 
 /// A JavaScript statement
 #[derive(Debug, Clone, Display)]
@@ -324,7 +324,7 @@ pub struct FunctionDeclaration<'a> {
     /// The name of this function, if present
     pub name: Option<&'a str>,
     /// Function parameter names
-    pub arguments: Vec<&'a str>,
+    pub parameters: Vec<(&'a str, Option<TypeSegment<'a>>)>,
     /// Function body
     pub statements: Vec<Statement<'a>>,
     /// The type of function
@@ -343,7 +343,17 @@ impl<'a> fmt::Display for FunctionDeclaration<'a> {
 
         write!(f, "(")?;
 
-        fmt_list(f, &self.arguments, ",")?;
+        for (id, (param, ty)) in self.parameters.iter().enumerate() {
+            if id > 0 {
+                write!(f,  ",")?;
+            }
+
+            write!(f, "{param}")?;
+
+            if let Some(ty) = ty {
+                write!(f, ": {ty}")?;
+            }
+        }
 
         write!(f, ") {{")?;
 
@@ -371,13 +381,13 @@ impl<'a> FunctionDeclaration<'a> {
     /// Creates a new function declaration
     pub fn new(
         name: Option<&'a str>,
-        arguments: Vec<&'a str>,
+        parameters: Vec<(&'a str, Option<TypeSegment<'a>>)>,
         statements: Vec<Statement<'a>>,
         ty: FunctionKind,
     ) -> Self {
         Self {
             name,
-            arguments,
+            parameters,
             statements,
             ty,
         }
@@ -497,6 +507,8 @@ pub struct VariableBinding<'a> {
     pub name: &'a str,
     /// The type of this variable
     pub kind: VariableDeclarationKind,
+    /// The type of a variable, if present
+    pub ty: Option<TypeSegment<'a>>,
 }
 
 /// A variable declaration

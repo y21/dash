@@ -36,7 +36,7 @@ pub trait ExpressionParser<'a> {
     fn parse_unary(&mut self) -> Option<Expr<'a>>;
     fn parse_postfix(&mut self) -> Option<Expr<'a>>;
     fn parse_field_access(&mut self) -> Option<Expr<'a>>;
-    fn parse_primary(&mut self) -> Option<Expr<'a>>;
+    fn parse_primary_expr(&mut self) -> Option<Expr<'a>>;
     /// Parses the end of an arrow functio, i.e. the expression, and transforms the preceding list of expressions
     /// into the arrow function equivalent.
     ///
@@ -323,7 +323,7 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
             return Some(rval);
         }
 
-        let mut expr = self.parse_primary()?;
+        let mut expr = self.parse_primary_expr()?;
 
         while self.expect_and_skip(
             &[TokenType::LeftParen, TokenType::Dot, TokenType::LeftSquareBrace],
@@ -359,7 +359,7 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
         Some(expr)
     }
 
-    fn parse_primary(&mut self) -> Option<Expr<'a>> {
+    fn parse_primary_expr(&mut self) -> Option<Expr<'a>> {
         let (ty, full) = {
             let cur = self.current()?;
             (cur.ty, cur.full)
@@ -469,7 +469,7 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
             return None;
         }
 
-        let arguments = self.parse_ident_list()?;
+        let arguments = self.parse_parameter_list()?;
 
         if !self.expect_and_skip(&[TokenType::LeftBrace], true) {
             return None;
@@ -485,19 +485,20 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
 
         // If it is arrow function, we need to convert everything to their arrow func equivalents
         for expr in prec {
-            list.push(expr.as_identifier()?);
+
+            // TODO: this currently breaks with types in arrow functions
+            // e.g. (a: number) => {}
+            // we need to properly convert types here too
+            list.push((expr.as_identifier()?, None));
         }
 
         let is_statement = self.expect_and_skip(&[TokenType::LeftBrace], false);
 
         let body = if is_statement {
-            let stmt = self.parse_statement()?;
+            // Go one back ( to the `{` ), so that the next statement is parsed as a block containing all statements
+            self.advance_back();
 
-            if !self.expect_and_skip(&[TokenType::RightBrace], true) {
-                return None;
-            }
-            
-            stmt
+            self.parse_statement()?
         } else {
             Statement::Return(ReturnStatement(self.parse_expression()?))
         };

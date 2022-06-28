@@ -24,9 +24,11 @@ use dash_middle::parser::statement::VariableBinding;
 use dash_middle::parser::statement::VariableDeclaration;
 use dash_middle::parser::statement::VariableDeclarationKind;
 use dash_middle::parser::statement::WhileLoop;
+use dash_middle::parser::types::TypeSegment;
 
 use crate::expr::ExpressionParser;
 use crate::Parser;
+use crate::types::TypeParser;
 
 pub trait StatementParser<'a> {
     fn parse_statement(&mut self) -> Option<Statement<'a>>;
@@ -45,8 +47,9 @@ pub trait StatementParser<'a> {
     /// Parses the definition segment of a variable declaration statement, i.e. `= 5`
     fn parse_variable_definition(&mut self) -> Option<Expr<'a>>;
     fn parse_if(&mut self, parse_else: bool) -> Option<IfStatement<'a>>;
-    /// Parses a list of identifiers delimited by comma, assuming that the ( has already been consumed
-    fn parse_ident_list(&mut self) -> Option<Vec<&'a str>>;
+    /// Parses a list of parameters (identifier, followed by optional type segment) delimited by comma,
+    /// assuming that the ( has already been consumed
+    fn parse_parameter_list(&mut self) -> Option<Vec<(&'a str, Option<TypeSegment<'a>>)>>;
 }
 
 impl<'a> StatementParser<'a> for Parser<'a> {
@@ -108,7 +111,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
             let is_method = self.expect_and_skip(&[TokenType::LeftParen], false);
 
             if is_method {
-                let arguments = self.parse_ident_list()?;
+                let arguments = self.parse_parameter_list()?;
                 let body = self.parse_statement()?;
 
                 let func = FunctionDeclaration::new(Some(name), arguments, vec![body], FunctionKind::Function);
@@ -371,23 +374,31 @@ impl<'a> StatementParser<'a> for Parser<'a> {
         Some(IfStatement::new(condition, then, branches, el))
     }
 
-    fn parse_ident_list(&mut self) -> Option<Vec<&'a str>> {
-        let mut arguments = Vec::new();
+    fn parse_parameter_list(&mut self) -> Option<Vec<(&'a str, Option<TypeSegment<'a>>)>> {
+        let mut parameters = Vec::new();
 
         while !self.expect_and_skip(&[TokenType::RightParen], false) {
             let tok = self.next().cloned()?;
 
-            match tok.ty {
-                TokenType::Identifier => arguments.push(tok.full),
+            let ident = match tok.ty {
+                TokenType::Identifier => tok.full,
                 TokenType::Comma => continue,
                 _ => {
                     self.create_error(ErrorKind::UnexpectedToken(tok.clone(), TokenType::Comma));
                     return None;
                 }
             };
+
+            let ty = if self.expect_and_skip(&[TokenType::Colon], false) {
+                Some(self.parse_type_segment()?)
+            } else {
+                None
+            };
+
+            parameters.push((ident, ty));
         }
 
-        Some(arguments)
+        Some(parameters)
     }
 
     fn parse_variable_binding(&mut self) -> Option<VariableBinding<'a>> {
@@ -395,12 +406,13 @@ impl<'a> StatementParser<'a> for Parser<'a> {
 
         let name = self.next()?.full;
 
-        #[cfg(feature = "s1-type-annotations")]
-        if self.expect_and_skip(&[TokenType::Colon], false) {
-            self.parse_type_annotation();
-        }
+        let ty = if self.expect_and_skip(&[TokenType::Colon], false) {
+            Some(self.parse_type_segment()?)
+        } else {
+            None
+        };
 
-        Some(VariableBinding { kind, name })
+        Some(VariableBinding { kind, name, ty })
     }
 
     fn parse_variable_definition(&mut self) -> Option<Expr<'a>> {

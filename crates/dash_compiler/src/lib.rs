@@ -467,6 +467,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             VariableBinding {
                 name: fun.name.expect("Function declaration did not have a name"),
                 kind: VariableDeclarationKind::Var,
+                ty: None
             },
             false,
         )?;
@@ -704,7 +705,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         &mut self,
         FunctionDeclaration {
             name,
-            arguments,
+            parameters: arguments,
             statements,
             ty,
         }: FunctionDeclaration<'a>,
@@ -713,11 +714,12 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         let mut compiler = unsafe { FunctionCompiler::with_caller(&mut ib, ty) };
         let scope = &mut compiler.scope;
 
-        for name in &arguments {
+        for (name, _ty) in &arguments {
             scope.add_local(
                 VariableBinding {
                     kind: VariableDeclarationKind::Var,
                     name,
+                    ty: None
                 },
                 false,
             )?;
@@ -791,6 +793,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 VariableBinding {
                     kind: VariableDeclarationKind::Var,
                     name: ident,
+                    ty: None
                 },
                 false,
             )?;
@@ -880,6 +883,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                         name: match spec {
                             SpecifierKind::Ident(id) => id,
                         },
+                        ty: None
                     },
                     false,
                 )?;

@@ -311,7 +311,9 @@ impl<'a> Lexer<'a> {
             b')' => self.create_contextified_token(TokenType::RightParen),
             b'{' => self.create_contextified_token(TokenType::LeftBrace),
             b'}' => self.create_contextified_token(TokenType::RightBrace),
-            b'[' => self.create_contextified_token(TokenType::LeftSquareBrace),
+            b'[' => self.create_contextified_conditional_token(Some(TokenType::LeftSquareBrace), &[
+                (b"]", TokenType::EmptySquareBrace)
+            ]),
             b']' => self.create_contextified_token(TokenType::RightSquareBrace),
             b',' => self.create_contextified_token(TokenType::Comma),
             b'.' => self.create_contextified_token(TokenType::Dot),
