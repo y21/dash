@@ -12,6 +12,7 @@ use std::ptr;
 use cstr::cstr;
 use dash_middle::compiler::constant::Function;
 use dash_middle::compiler::instruction::ADD;
+use dash_middle::compiler::instruction::BITXOR;
 use dash_middle::compiler::instruction::CONSTANT;
 use dash_middle::compiler::instruction::JMP;
 use dash_middle::compiler::instruction::JMPFALSENP;
@@ -24,9 +25,11 @@ use dash_middle::compiler::instruction::LDLOCAL;
 use dash_middle::compiler::instruction::LDLOCALW;
 use dash_middle::compiler::instruction::LT;
 use dash_middle::compiler::instruction::MUL;
+use dash_middle::compiler::instruction::NE;
 use dash_middle::compiler::instruction::POP;
 use dash_middle::compiler::instruction::REVSTCK;
 use dash_middle::compiler::instruction::STORELOCAL;
+use dash_middle::compiler::instruction::SUB;
 use llvm_sys::analysis::LLVMVerifierFailureAction;
 use llvm_sys::analysis::LLVMVerifyFunction;
 use llvm_sys::core::LLVMAddFunction;
@@ -44,6 +47,8 @@ use llvm_sys::core::LLVMBuildPhi;
 use llvm_sys::core::LLVMBuildRet;
 use llvm_sys::core::LLVMBuildRetVoid;
 use llvm_sys::core::LLVMBuildStore;
+use llvm_sys::core::LLVMBuildSub;
+use llvm_sys::core::LLVMBuildXor;
 use llvm_sys::core::LLVMConstInt;
 use llvm_sys::core::LLVMCreateBuilder;
 use llvm_sys::core::LLVMCreatePassManager;
@@ -76,10 +81,12 @@ use crate::trace::Trace;
 
 pub struct JitResult {
     /// Instruction pointer that the interpreter should continue executing bytecode.
-    pub ip: usize
+    pub ip: usize,
+    pub values: Box<[i64]>,
+    pub locals: Box<[u16]>
 }
 
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Hash, PartialEq, Eq, Clone)]
 struct JitCacheKey {
     function: *const Function,
     ip: usize,
@@ -87,7 +94,10 @@ struct JitCacheKey {
 
 struct JitCacheValue {
     function: JitFunction,
-    arguments: Box<[i64]>
+    /// The values of the previous JIT execution. They are cached so that the allocation can be reused.
+    arguments: Box<[i64]>,
+    /// Captured locals in the same order as `arguments`
+    locals: Box<[u16]>
 }
 
 impl From<&Trace> for JitCacheKey {
@@ -391,6 +401,34 @@ impl Assembler {
                     let result = unsafe { LLVMBuildMul(current_builder, lhs, rhs, EMPTY) };
                     stack.push(result);
                 }
+                SUB => {
+                    let rhs = stack.pop().unwrap();
+                    let lhs = stack.pop().unwrap();
+
+                    let result = unsafe { LLVMBuildSub(current_builder, lhs, rhs, EMPTY) };
+                    stack.push(result);
+                }
+                BITXOR => {
+                    let rhs = stack.pop().unwrap();
+                    let lhs = stack.pop().unwrap();
+
+                    let result = unsafe { LLVMBuildXor(current_builder, lhs, rhs, EMPTY) };
+                    stack.push(result);
+                }
+                NE => {
+                    let rhs = stack.pop().unwrap();
+                    let lhs = stack.pop().unwrap();
+
+                    stack.push(unsafe {
+                        LLVMBuildICmp(
+                            current_builder,
+                            LLVMIntPredicate::LLVMIntNE,
+                            lhs,
+                            rhs,
+                            EMPTY,
+                        )
+                    });
+                }
                 POP => {
                     stack.pop().expect("Pop instruction has no target");
                 }
@@ -454,23 +492,20 @@ impl Assembler {
             mem::transmute::<u64, JitFunction>(addr)
         };
 
-        let mut values = local_values;
-        println!("=================");
-        println!("JIT State");
-        println!("<before: {:?}>", values);
+        let mut values = local_values.into_boxed_slice();
         let target_ip = unsafe { function(values.as_mut_ptr()) };
-        println!("<after: {:?}>", values);
-        
+        let locals = trace_locals.keys().copied().collect::<Box<[_]>>();
 
-        self.cache.insert(cache_key, JitCacheValue {
+        self.cache.insert(cache_key.clone(), JitCacheValue {
             function: function,
-            arguments: values.into_boxed_slice()
+            arguments: values.clone(),
+            locals: locals.clone()
         });
 
-        std::process::exit(0);
-
         JitResult {
-            ip: target_ip as usize
+            ip: target_ip as usize,
+            values,
+            locals
         }
     }
 }

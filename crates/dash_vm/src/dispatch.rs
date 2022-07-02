@@ -18,6 +18,7 @@ impl HandleResult {
 mod handlers {
     use std::rc::Rc;
 
+    use dash_jit::assembler::JitResult;
     use dash_middle::compiler::constant::Constant;
     use dash_middle::compiler::FunctionCallMetadata;
     use dash_middle::compiler::StaticImportKind;
@@ -455,7 +456,12 @@ mod handlers {
                 let trace = vm.recording_trace.take().expect("Trace must exist");
                 
                 let bytecode = frame.function.buffer[trace.start()..trace.end()].to_vec();
-                vm.assembler.compile_trace(trace, bytecode);
+                let JitResult { ip, values, locals } = vm.assembler.compile_trace(trace, bytecode);
+                vm.frames.last_mut().unwrap().ip = ip;
+
+                for (&value, &local) in values.into_iter().zip(locals.into_iter()) {
+                    vm.set_local(local.into(), Value::Number(value as f64));
+                }
             } else {
                 // We are jumping back to a loop header
                 let counter = frame.loop_counter.entry(frame.ip).or_insert(Default::default());
