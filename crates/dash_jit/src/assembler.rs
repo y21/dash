@@ -14,6 +14,7 @@ use dash_middle::compiler::constant::Function;
 use dash_middle::compiler::instruction::ADD;
 use dash_middle::compiler::instruction::BITXOR;
 use dash_middle::compiler::instruction::CONSTANT;
+use dash_middle::compiler::instruction::GT;
 use dash_middle::compiler::instruction::JMP;
 use dash_middle::compiler::instruction::JMPFALSENP;
 use dash_middle::compiler::instruction::JMPFALSEP;
@@ -375,6 +376,20 @@ impl Assembler {
                         LLVMBuildICmp(
                             current_builder,
                             LLVMIntPredicate::LLVMIntSLT,
+                            lhs,
+                            rhs,
+                            EMPTY,
+                        )
+                    });
+                }
+                GT => {
+                    let rhs = stack.pop().unwrap();
+                    let lhs = stack.pop().unwrap();
+
+                    stack.push(unsafe {
+                        LLVMBuildICmp(
+                            current_builder,
+                            LLVMIntPredicate::LLVMIntSGT,
                             lhs,
                             rhs,
                             EMPTY,
