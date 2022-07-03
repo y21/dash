@@ -8,14 +8,17 @@ use crate::Parser;
 
 pub trait TypeParser<'a> {
     fn parse_type_segment(&mut self) -> Option<TypeSegment<'a>>;
+
     /// Parses a union type: foo | bar
     fn parse_union_type(&mut self) -> Option<TypeSegment<'a>>;
+
     /// Parses an intersection type: foo & bar
     fn parse_intersection_type(&mut self) -> Option<TypeSegment<'a>>;
+
     /// Parse postfix array notation: foo[], foo[][], foo[][][], ...
     fn parse_postfix_array(&mut self) -> Option<TypeSegment<'a>>;
-    // fn parse_object_type(&mut self) -> Option<TypeSegment<'a>>;
-    // fn parse_generic_type(&mut self) -> Option<TypeSegment<'a>>;
+    
+    /// Parses a primary type: literals (true, false, Uint8Array)
     fn parse_primary_type(&mut self) -> Option<TypeSegment<'a>>;
 }
 

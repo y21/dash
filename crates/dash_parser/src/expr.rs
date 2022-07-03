@@ -385,7 +385,7 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
                 expr
             }
             TokenType::String => Expr::string_literal(full),
-            TokenType::LeftSquareBrace => {
+            TokenType::LeftSquareBrace | TokenType::EmptySquareBrace => {
                 let mut items = Vec::new();
                 while !self.expect_and_skip(&[TokenType::RightSquareBrace], false) {
                     self.expect_and_skip(&[TokenType::Comma], false);
