@@ -485,7 +485,6 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
 
         // If it is arrow function, we need to convert everything to their arrow func equivalents
         for expr in prec {
-
             // TODO: this currently breaks with types in arrow functions
             // e.g. (a: number) => {}
             // we need to properly convert types here too

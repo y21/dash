@@ -345,7 +345,7 @@ impl<'a> fmt::Display for FunctionDeclaration<'a> {
 
         for (id, (param, ty)) in self.parameters.iter().enumerate() {
             if id > 0 {
-                write!(f,  ",")?;
+                write!(f, ",")?;
             }
 
             write!(f, "{param}")?;

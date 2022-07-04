@@ -27,8 +27,8 @@ use dash_middle::parser::statement::WhileLoop;
 use dash_middle::parser::types::TypeSegment;
 
 use crate::expr::ExpressionParser;
-use crate::Parser;
 use crate::types::TypeParser;
+use crate::Parser;
 
 pub trait StatementParser<'a> {
     fn parse_statement(&mut self) -> Option<Statement<'a>>;

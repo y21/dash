@@ -19,6 +19,7 @@ mod handlers {
     use std::rc::Rc;
 
     use dash_jit::assembler::JitResult;
+    use dash_jit::value::Value as JitValue;
     use dash_middle::compiler::constant::Constant;
     use dash_middle::compiler::FunctionCallMetadata;
     use dash_middle::compiler::StaticImportKind;
@@ -61,7 +62,6 @@ mod handlers {
         Ok(None)
     }
 
-    
     fn constant_instruction(vm: &mut Vm, idx: usize) -> Result<(), Value> {
         let frame = vm.frames.last().expect("No frame");
         let constant = frame.function.constants[idx].clone();
@@ -129,6 +129,14 @@ mod handlers {
 
     pub fn bitushr(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         evaluate_binary_expr(vm, Value::bitushr)
+    }
+
+    pub fn bitnot(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        let value = vm.stack.pop().expect("Missing value");
+        let mut sc = LocalScope::new(vm);
+        let result = value.bitnot(&mut sc)?;
+        sc.try_push_stack(result)?;
+        Ok(None)
     }
 
     pub fn objin(_vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
@@ -454,13 +462,20 @@ mod handlers {
 
             if is_trace {
                 let trace = vm.recording_trace.take().expect("Trace must exist");
-                
+
                 let bytecode = frame.function.buffer[trace.start()..trace.end()].to_vec();
                 let JitResult { ip, values, locals } = vm.assembler.compile_trace(trace, bytecode);
                 vm.frames.last_mut().unwrap().ip = ip;
 
                 for (&value, &local) in values.into_iter().zip(locals.into_iter()) {
-                    vm.set_local(local.into(), Value::Number(value as f64));
+                    vm.set_local(
+                        local.into(),
+                        match value {
+                            JitValue::Boolean(b) => Value::Boolean(b),
+                            JitValue::Number(n) => Value::Number(n),
+                            JitValue::Integer(i) => Value::Number(i as f64),
+                        },
+                    );
                 }
             } else {
                 // We are jumping back to a loop header
@@ -831,6 +846,7 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<Option<HandleResult>, Valu
         inst::BITSHL => handlers::bitshl(vm),
         inst::BITSHR => handlers::bitshr(vm),
         inst::BITUSHR => handlers::bitushr(vm),
+        inst::BITNOT => handlers::bitnot(vm),
         inst::OBJIN => handlers::objin(vm),
         inst::INSTANCEOF => handlers::instanceof(vm),
         inst::GT => handlers::gt(vm),

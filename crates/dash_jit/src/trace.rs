@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use dash_middle::compiler::constant::Function;
 use indexmap::IndexMap;
 
+use crate::value::Value;
+
 #[derive(Debug)]
 pub struct Trace {
     pub(crate) origin: *const Function,
@@ -12,8 +14,8 @@ pub struct Trace {
     /// The index is the # of the jump and the bool represents whether the jump is taken.
     pub(crate) conditional_jumps: Vec<bool>,
 
-    pub(crate) locals: IndexMap<u16, i64>,
-    pub(crate) constants: HashMap<u16, i64>
+    pub(crate) locals: IndexMap<u16, Value>,
+    pub(crate) constants: HashMap<u16, Value>,
 }
 
 impl Trace {
@@ -24,15 +26,15 @@ impl Trace {
             end,
             conditional_jumps: Vec::new(),
             locals: IndexMap::new(),
-            constants: HashMap::new()
+            constants: HashMap::new(),
         }
     }
 
-    pub fn record_local(&mut self, index: u16, value: i64) {
+    pub fn record_local(&mut self, index: u16, value: Value) {
         self.locals.insert(index, value);
     }
 
-    pub fn record_constant(&mut self, index: u16, value: i64) {
+    pub fn record_constant(&mut self, index: u16, value: Value) {
         self.constants.insert(index, value);
     }
 

@@ -18,7 +18,8 @@ use self::{
     },
 };
 
-use dash_jit::{trace::Trace as JitTrace, assembler::Assembler};
+use dash_jit::value::Value as JitValue;
+use dash_jit::{assembler::Assembler, trace::Trace as JitTrace};
 use dash_middle::compiler::constant::Constant;
 
 pub mod dispatch;
@@ -51,9 +52,8 @@ pub struct Vm {
     /// this will contain the pc of the loop header and its end
     recording_trace: Option<JitTrace>,
 
-    assembler: Assembler
+    assembler: Assembler,
 }
-
 
 impl Vm {
     pub fn new(params: VmParams) -> Self {
@@ -73,7 +73,7 @@ impl Vm {
             try_blocks: Vec::new(),
             params,
             recording_trace: None,
-            assembler: Assembler::new()
+            assembler: Assembler::new(),
         };
         vm.prepare();
         vm
@@ -736,19 +736,39 @@ impl Vm {
 
     pub(crate) fn record_local(&mut self, index: u16, value: &Value) {
         if let Some(trace) = &mut self.recording_trace {
-            match value {
-                Value::Number(n) => trace.record_local(index, *n as i64),
-                _ => panic!("Unhandled JIT value: {:?}", value)
-            }
+            trace.record_local(
+                index,
+                match value {
+                    Value::Boolean(b) => JitValue::Boolean(*b),
+                    Value::Number(n) => {
+                        if n.floor() == *n {
+                            JitValue::Integer(*n as i64)
+                        } else {
+                            JitValue::Number(*n)
+                        }
+                    }
+                    _ => panic!("Unhandled JIT value: {:?}", value),
+                },
+            );
         }
     }
 
     pub(crate) fn record_constant(&mut self, index: u16, value: &Constant) {
         if let Some(trace) = &mut self.recording_trace {
-            match value {
-                Constant::Number(n) => trace.record_constant(index, *n as i64),
-                _ => panic!("Unhandled JIT value: {:?}", value)
-            }
+            trace.record_constant(
+                index,
+                match value {
+                    Constant::Boolean(b) => JitValue::Boolean(*b),
+                    Constant::Number(n) => {
+                        if n.floor() == *n {
+                            JitValue::Integer(*n as i64)
+                        } else {
+                            JitValue::Number(*n)
+                        }
+                    }
+                    _ => panic!("Unhandled JIT value: {:?}", value),
+                },
+            );
         }
     }
 }

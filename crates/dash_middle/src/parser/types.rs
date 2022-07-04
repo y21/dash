@@ -8,12 +8,12 @@ pub enum TypeSegment<'a> {
     Intersect(Box<TypeSegment<'a>>, Box<TypeSegment<'a>>),
     #[display(fmt = "{_0}[]")]
     Array(Box<TypeSegment<'a>>),
-    Literal(LiteralType<'a>)
+    Literal(LiteralType<'a>),
 }
 
 #[derive(Debug, Clone, Display)]
 pub enum LiteralType<'a> {
     Identifier(&'a str),
     Boolean(bool),
-    Number(f64)
+    Number(f64),
 }

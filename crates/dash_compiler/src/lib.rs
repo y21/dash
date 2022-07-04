@@ -404,7 +404,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         }: IfStatement<'a>,
     ) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
-        
+
         // Desugar last `else` block into `else if(true)` for simplicity
         if let Some(then) = &el {
             let then = &**then;
@@ -424,7 +424,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             .try_into()
             .map_err(|_| CompileError::IfBranchLimitExceeded)?;
 
-            ib.accept_expr(condition)?;
+        ib.accept_expr(condition)?;
         if branches.is_empty() {
             ib.build_jmpfalsep(Label::IfEnd);
         } else {
@@ -468,7 +468,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             VariableBinding {
                 name: fun.name.expect("Function declaration did not have a name"),
                 kind: VariableDeclarationKind::Var,
-                ty: None
+                ty: None,
             },
             false,
         )?;
@@ -720,7 +720,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 VariableBinding {
                     kind: VariableDeclarationKind::Var,
                     name,
-                    ty: None
+                    ty: None,
                 },
                 false,
             )?;
@@ -794,7 +794,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 VariableBinding {
                     kind: VariableDeclarationKind::Var,
                     name: ident,
-                    ty: None
+                    ty: None,
                 },
                 false,
             )?;
@@ -884,7 +884,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                         name: match spec {
                             SpecifierKind::Ident(id) => id,
                         },
-                        ty: None
+                        ty: None,
                     },
                     false,
                 )?;

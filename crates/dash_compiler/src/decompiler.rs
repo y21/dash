@@ -299,12 +299,16 @@ pub fn decompile(CompileResult { cp, instructions, .. }: CompileResult) -> Resul
 fn decompile_test() {
     use crate::FunctionCompiler;
 
-    let c = FunctionCompiler::compile_str(r#"
+    let c = FunctionCompiler::compile_str(
+        r#"
 let n = 1;
 if (n == 1) {
     if (n == 2) {}
 }
-    "#, dash_optimizer::OptLevel::None).unwrap();
+    "#,
+        dash_optimizer::OptLevel::None,
+    )
+    .unwrap();
     let s = decompile(c).unwrap();
     println!("{s}");
 }

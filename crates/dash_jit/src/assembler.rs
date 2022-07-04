@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
 use std::ffi::CStr;
 use std::ffi::CString;
 use std::fmt;
@@ -12,6 +12,7 @@ use std::ptr;
 use cstr::cstr;
 use dash_middle::compiler::constant::Function;
 use dash_middle::compiler::instruction::ADD;
+use dash_middle::compiler::instruction::BITNOT;
 use dash_middle::compiler::instruction::BITXOR;
 use dash_middle::compiler::instruction::CONSTANT;
 use dash_middle::compiler::instruction::GT;
@@ -27,6 +28,7 @@ use dash_middle::compiler::instruction::LDLOCALW;
 use dash_middle::compiler::instruction::LT;
 use dash_middle::compiler::instruction::MUL;
 use dash_middle::compiler::instruction::NE;
+use dash_middle::compiler::instruction::NOT;
 use dash_middle::compiler::instruction::POP;
 use dash_middle::compiler::instruction::REVSTCK;
 use dash_middle::compiler::instruction::STORELOCAL;
@@ -38,24 +40,32 @@ use llvm_sys::core::LLVMAddIncoming;
 use llvm_sys::core::LLVMAppendBasicBlock;
 use llvm_sys::core::LLVMBuildAdd;
 use llvm_sys::core::LLVMBuildAlloca;
+use llvm_sys::core::LLVMBuildBitCast;
 use llvm_sys::core::LLVMBuildBr;
 use llvm_sys::core::LLVMBuildCondBr;
+use llvm_sys::core::LLVMBuildFCmp;
 use llvm_sys::core::LLVMBuildGEP2;
 use llvm_sys::core::LLVMBuildICmp;
 use llvm_sys::core::LLVMBuildLoad2;
 use llvm_sys::core::LLVMBuildMul;
+use llvm_sys::core::LLVMBuildNot;
 use llvm_sys::core::LLVMBuildPhi;
 use llvm_sys::core::LLVMBuildRet;
 use llvm_sys::core::LLVMBuildRetVoid;
 use llvm_sys::core::LLVMBuildStore;
+use llvm_sys::core::LLVMBuildStructGEP2;
 use llvm_sys::core::LLVMBuildSub;
 use llvm_sys::core::LLVMBuildXor;
 use llvm_sys::core::LLVMConstInt;
 use llvm_sys::core::LLVMCreateBuilder;
 use llvm_sys::core::LLVMCreatePassManager;
 use llvm_sys::core::LLVMDisposeModule;
+use llvm_sys::core::LLVMFloatType;
 use llvm_sys::core::LLVMFunctionType;
 use llvm_sys::core::LLVMGetParam;
+use llvm_sys::core::LLVMGetTypeKind;
+use llvm_sys::core::LLVMInt1Type;
+use llvm_sys::core::LLVMInt32Type;
 use llvm_sys::core::LLVMInt64Type;
 use llvm_sys::core::LLVMIntType;
 use llvm_sys::core::LLVMModuleCreateWithName;
@@ -64,6 +74,8 @@ use llvm_sys::core::LLVMPositionBuilderAtEnd;
 use llvm_sys::core::LLVMPrintModuleToString;
 use llvm_sys::core::LLVMRunFunctionPassManager;
 use llvm_sys::core::LLVMRunPassManager;
+use llvm_sys::core::LLVMStructType;
+use llvm_sys::core::LLVMTypeOf;
 use llvm_sys::core::LLVMVoidType;
 use llvm_sys::execution_engine::LLVMCreateExecutionEngineForModule;
 use llvm_sys::execution_engine::LLVMGetFunctionAddress;
@@ -73,18 +85,21 @@ use llvm_sys::transforms::pass_manager_builder::LLVMPassManagerBuilderPopulateFu
 use llvm_sys::transforms::pass_manager_builder::LLVMPassManagerBuilderPopulateModulePassManager;
 use llvm_sys::transforms::pass_manager_builder::LLVMPassManagerBuilderSetOptLevel;
 use llvm_sys::LLVMIntPredicate;
+use llvm_sys::LLVMRealPredicate;
+use llvm_sys::LLVMTypeKind;
 
-type JitFunction = unsafe extern "C" fn(*mut i64) -> i64;
+type JitFunction = unsafe extern "C" fn(*mut Value) -> i64;
 
 const EMPTY: *const i8 = cstr!("").as_ptr();
 
 use crate::trace::Trace;
+use crate::value::Value;
 
 pub struct JitResult {
     /// Instruction pointer that the interpreter should continue executing bytecode.
     pub ip: usize,
-    pub values: Box<[i64]>,
-    pub locals: Box<[u16]>
+    pub values: Box<[Value]>,
+    pub locals: Box<[u16]>,
 }
 
 #[derive(Hash, PartialEq, Eq, Clone)]
@@ -96,9 +111,9 @@ struct JitCacheKey {
 struct JitCacheValue {
     function: JitFunction,
     /// The values of the previous JIT execution. They are cached so that the allocation can be reused.
-    arguments: Box<[i64]>,
+    arguments: Box<[Value]>,
     /// Captured locals in the same order as `arguments`
-    locals: Box<[u16]>
+    locals: Box<[u16]>,
 }
 
 impl From<&Trace> for JitCacheKey {
@@ -112,14 +127,26 @@ impl From<&Trace> for JitCacheKey {
 
 pub struct Assembler {
     module: LLVMModuleRef,
+    value_union: LLVMTypeRef,
     cache: HashMap<JitCacheKey, JitCacheValue>,
 }
 
 impl Assembler {
     pub fn new() -> Self {
         let module = unsafe { LLVMModuleCreateWithName(cstr!("dash_jit").as_ptr()) };
+
+        let largest = unsafe { LLVMIntType(Value::SIZE_OF_LARGEST as u32) };
+        let mut types = unsafe {
+            [
+                LLVMInt32Type(), // discriminant
+                largest
+            ]
+        };
+        let value = unsafe { LLVMStructType(types.as_mut_ptr(), types.len() as u32, 0) };
+
         Self {
             module,
+            value_union: value,
             cache: HashMap::new(),
         }
     }
@@ -143,7 +170,7 @@ impl Assembler {
 
         let cache_key = JitCacheKey {
             function: trace.origin,
-            ip: trace.start
+            ip: trace.start,
         };
         let cache_key_hash = {
             let mut hasher = DefaultHasher::new();
@@ -151,10 +178,16 @@ impl Assembler {
             CString::new(format!("jit{:x}", hasher.finish())).unwrap()
         };
 
-        let (int64, int64ptr) = unsafe { (LLVMInt64Type(), LLVMPointerType(LLVMInt64Type(), 0)) };
+        let (int64, int64ptr, valueptr) = unsafe {
+            (
+                LLVMInt64Type(),
+                LLVMPointerType(LLVMInt64Type(), 0),
+                LLVMPointerType(self.value_union, 0)
+            )
+        };
 
         let fun = unsafe {
-            let mut params = [int64ptr];
+            let mut params = [valueptr];
             let funty = LLVMFunctionType(int64, params.as_mut_ptr(), 1, 0);
 
             LLVMAddFunction(self.module, cache_key_hash.as_ptr(), funty)
@@ -237,7 +270,7 @@ impl Assembler {
                     unsafe { LLVMBuildBr(current_builder, target_block) };
 
                     current_block = target_block;
-                    current_builder = target_builder;                    
+                    current_builder = target_builder;
                 }
                 JMPFALSENP | JMPFALSEP | /* JMPNULLISHNP | JMPNULLISHP |*/ JMPTRUENP | JMPTRUEP => {
                     let condition = stack.pop().unwrap();
@@ -282,40 +315,54 @@ impl Assembler {
                     let (_, operand) = bytecode.next().unwrap();
                     let idx = operand as u16;
 
+                    // This stores the "offset" of the loaded local variable in the parameter pointer.
+                    // This will be used by LLVM's GEP instruction.
+                    let (gep_idx, _, value) = trace_locals.get_full(&idx).unwrap();
+
+                    let ty = value.type_of();
+
                     let value = *locals.entry(idx).or_insert_with(|| unsafe {
                         // Assert: this is the first time we are referencing this local,
                         // and need to do the necessary things to make space for it.
 
                         // Alloca stack space for local variable in entry block
-                        let space = LLVMBuildAlloca(entry_builder, int64, EMPTY);
+                        let space = LLVMBuildAlloca(entry_builder, ty, EMPTY);
 
                         // Copy from parameter pointer into this allocated stack space
                         let param = LLVMGetParam(fun, 0);
 
-                        // This stores the "offset" of the loaded local variable in the parameter pointer.
-                        // This will be used by LLVM's GEP instruction.
-                        let gep_idx = trace_locals.get_index_of(&idx).unwrap() as u64;
+                        let value = {
+                            let mut indices = [
+                                LLVMConstInt(int64, gep_idx as u64, 0)
+                            ];
+                            let base_gep = LLVMBuildGEP2(
+                                entry_builder,
+                                self.value_union,
+                                param,
+                                indices.as_mut_ptr(),
+                                1,
+                                EMPTY,
+                            );
 
-                        let mut indices = [LLVMConstInt(int64, gep_idx, 0)];
-                        let gep = LLVMBuildGEP2(
-                            entry_builder,
-                            int64,
-                            param,
-                            indices.as_mut_ptr(),
-                            1,
-                            EMPTY,
-                        );
+                            let struct_gep = LLVMBuildStructGEP2(
+                                entry_builder,
+                                self.value_union,
+                                base_gep,
+                                1,
+                                EMPTY
+                            );
 
-                        let gep_value = LLVMBuildLoad2(entry_builder, int64, gep, EMPTY);
+                            LLVMBuildLoad2(entry_builder, ty, struct_gep, EMPTY)
+                        };
 
                         // Finally, with this GEP result we can do the actual copy from parameter into the stack space
-                        LLVMBuildStore(entry_builder, gep_value, space);
+                        LLVMBuildStore(entry_builder, value, space);
 
                         space
                     });
 
                     let load = unsafe {
-                        LLVMBuildLoad2(current_builder, int64, value, EMPTY)
+                        LLVMBuildLoad2(current_builder, ty, value, EMPTY)
                     };
 
                     stack.push(load);
@@ -324,37 +371,52 @@ impl Assembler {
                     let (_, operand) = bytecode.next().unwrap();
                     let idx = operand as u16;
 
+                    // This stores the "offset" of the loaded local variable in the parameter pointer.
+                    // This will be used by LLVM's GEP instruction.
+                    let (gep_idx, _, value) = trace_locals.get_full(&idx).unwrap();
+
+                    let ty = value.type_of();
+
                     let place = *locals.entry(idx).or_insert_with(|| unsafe {
                         // Assert: this is the first time we are referencing this local,
                         // and need to do the necessary things to make space for it.
 
                         // Alloca stack space for local variable in entry block
-                        let space = LLVMBuildAlloca(entry_builder, int64, EMPTY);
+                        let space = LLVMBuildAlloca(entry_builder, ty, EMPTY);
 
                         // Copy from parameter pointer into this allocated stack space
                         let param = LLVMGetParam(fun, 0);
 
-                        // This stores the "offset" of the loaded local variable in the parameter pointer.
-                        // This will be used by LLVM's GEP instruction.
-                        let gep_idx = trace_locals.get_index_of(&idx).unwrap() as u64;
+                        let value = {
+                            let mut indices = [
+                                LLVMConstInt(int64, gep_idx as u64, 0)
+                            ];
+                            let base_gep = LLVMBuildGEP2(
+                                entry_builder,
+                                self.value_union,
+                                param,
+                                indices.as_mut_ptr(),
+                                1,
+                                EMPTY,
+                            );
 
-                        let mut indices = [LLVMConstInt(int64, gep_idx, 0)];
-                        let gep = LLVMBuildGEP2(
-                            entry_builder,
-                            int64,
-                            param,
-                            indices.as_mut_ptr(),
-                            1,
-                            EMPTY,
-                        );
+                            let struct_gep = LLVMBuildStructGEP2(
+                                entry_builder,
+                                self.value_union,
+                                base_gep,
+                                1,
+                                EMPTY
+                            );
 
-                        let gep_value = LLVMBuildLoad2(entry_builder, int64, gep, EMPTY);
+                            LLVMBuildLoad2(entry_builder, ty, struct_gep, EMPTY)
+                        };
 
                         // Finally, with this GEP result we can do the actual copy from parameter into the stack space
-                        LLVMBuildStore(entry_builder, gep_value, space);
+                        LLVMBuildStore(entry_builder, value, space);
 
                         space
                     });
+
                     let value = stack.pop().unwrap();
                     unsafe { LLVMBuildStore(current_builder, value, place) };
                     stack.push(value);
@@ -364,37 +426,58 @@ impl Assembler {
                     let (_, operand) = bytecode.next().unwrap();
                     let idx = operand as u16;
 
-                    let num = trace_constants[&idx];
-                    let value = unsafe { LLVMConstInt(int64, num as u64, 0) };
-                    stack.push(value);
+                    let num = trace_constants[&idx];;
+                    stack.push(num.to_const_value());
                 }
                 LT => {
                     let rhs = stack.pop().unwrap();
                     let lhs = stack.pop().unwrap();
 
-                    stack.push(unsafe {
-                        LLVMBuildICmp(
-                            current_builder,
-                            LLVMIntPredicate::LLVMIntSLT,
-                            lhs,
-                            rhs,
-                            EMPTY,
-                        )
-                    });
+                    let ty = unsafe {
+                        let lhs = LLVMGetTypeKind(LLVMTypeOf(lhs));
+                        let rhs = LLVMGetTypeKind(LLVMTypeOf(rhs));
+                        assert_eq!(lhs, rhs);
+                        lhs
+                    };
+
+                    let result = unsafe {
+                        match ty {
+                            LLVMTypeKind::LLVMFloatTypeKind => {
+                                LLVMBuildFCmp(current_builder, LLVMRealPredicate::LLVMRealOLT, lhs, rhs, EMPTY)
+                            },
+                            LLVMTypeKind::LLVMIntegerTypeKind => {
+                                LLVMBuildICmp(current_builder, LLVMIntPredicate::LLVMIntSLT, lhs, rhs, EMPTY)
+                            },
+                            _ => panic!("Unhandled LLVM type {:?}", ty)
+                        }
+                    };
+
+                    stack.push(result);
                 }
                 GT => {
                     let rhs = stack.pop().unwrap();
                     let lhs = stack.pop().unwrap();
 
-                    stack.push(unsafe {
-                        LLVMBuildICmp(
-                            current_builder,
-                            LLVMIntPredicate::LLVMIntSGT,
-                            lhs,
-                            rhs,
-                            EMPTY,
-                        )
-                    });
+                    let ty = unsafe {
+                        let lhs = LLVMGetTypeKind(LLVMTypeOf(lhs));
+                        let rhs = LLVMGetTypeKind(LLVMTypeOf(rhs));
+                        assert_eq!(lhs, rhs);
+                        lhs
+                    };
+
+                    let result = unsafe {
+                        match ty {
+                            LLVMTypeKind::LLVMFloatTypeKind => {
+                                LLVMBuildFCmp(current_builder, LLVMRealPredicate::LLVMRealOGT, lhs, rhs, EMPTY)
+                            },
+                            LLVMTypeKind::LLVMIntegerTypeKind => {
+                                LLVMBuildICmp(current_builder, LLVMIntPredicate::LLVMIntSGT, lhs, rhs, EMPTY)
+                            },
+                            _ => panic!("Unhandled LLVM type {:?}", ty)
+                        }
+                    };
+
+                    stack.push(result);
                 }
                 REVSTCK => {
                     let amount = bytecode.next().unwrap().1 as usize;
@@ -406,6 +489,7 @@ impl Assembler {
                     let rhs = stack.pop().unwrap();
                     let lhs = stack.pop().unwrap();
 
+                    // TODO: Does BuildAdd work on floats, or do we need BuildFAdd
                     let result = unsafe { LLVMBuildAdd(current_builder, lhs, rhs, EMPTY) };
                     stack.push(result);
                 }
@@ -444,6 +528,11 @@ impl Assembler {
                         )
                     });
                 }
+                NOT | BITNOT => {
+                    let value = stack.pop().unwrap();
+
+                    stack.push(unsafe { LLVMBuildNot(current_builder, value, EMPTY) });
+                }
                 POP => {
                     stack.pop().expect("Pop instruction has no target");
                 }
@@ -471,16 +560,35 @@ impl Assembler {
 
             // Copy all of the locals into the function's parameter pointer
             // Interpreter can synchronize the jitted values
-            for (llvm_index, local_index) in trace_locals.keys().enumerate() {
+            for (llvm_index, (local_index, local_value)) in trace_locals.iter().enumerate() {
                 let value = locals[local_index];
 
+                let ty = local_value.type_of();
+
+                // Load alloca'd space
                 let loaded = LLVMBuildLoad2(exit_builder, int64, value, EMPTY);
-
+                
+                // Create GEP to get a poiner to the nth value in the param
                 let mut indices = [LLVMConstInt(int64, llvm_index as u64, 0)];
+                let base_gep = LLVMBuildGEP2(
+                    exit_builder,
+                    self.value_union,
+                    LLVMGetParam(fun, 0),
+                    indices.as_mut_ptr(),
+                    1,
+                    EMPTY,
+                );
 
-                let param = LLVMGetParam(fun, 0);
-                let gep = LLVMBuildGEP2(exit_builder, int64, param, indices.as_mut_ptr(), 1, EMPTY);
-                LLVMBuildStore(exit_builder, loaded, gep);
+                // Create GEP to get a pointer to the value
+                let struct_gep = LLVMBuildStructGEP2(
+                    exit_builder,
+                    self.value_union,
+                    base_gep,
+                    1,
+                    EMPTY
+                );
+
+                LLVMBuildStore(exit_builder, loaded, struct_gep);
             }
 
             LLVMBuildRet(exit_builder, pred_phi);
@@ -511,16 +619,19 @@ impl Assembler {
         let target_ip = unsafe { function(values.as_mut_ptr()) };
         let locals = trace_locals.keys().copied().collect::<Box<[_]>>();
 
-        self.cache.insert(cache_key.clone(), JitCacheValue {
-            function: function,
-            arguments: values.clone(),
-            locals: locals.clone()
-        });
+        self.cache.insert(
+            cache_key.clone(),
+            JitCacheValue {
+                function: function,
+                arguments: values.clone(),
+                locals: locals.clone(),
+            },
+        );
 
         JitResult {
             ip: target_ip as usize,
             values,
-            locals
+            locals,
         }
     }
 }

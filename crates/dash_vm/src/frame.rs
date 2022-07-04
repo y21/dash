@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
-use dash_middle::compiler::CompileResult;
 use dash_middle::compiler::constant::Function;
+use dash_middle::compiler::CompileResult;
 use dash_middle::parser::statement::FunctionKind;
 
 use crate::gc::handle::Handle;
@@ -59,7 +59,7 @@ pub struct Frame {
     pub state: FrameState,
 
     /// Counts the number of backjumps to a particular loop header, to find hot loops
-    pub loop_counter: BTreeMap<usize, LoopCounter>
+    pub loop_counter: BTreeMap<usize, LoopCounter>,
 }
 
 unsafe impl Trace for Frame {
@@ -69,11 +69,7 @@ unsafe impl Trace for Frame {
 }
 
 impl Frame {
-    pub fn from_function(
-        this: Option<Value>,
-        uf: &UserFunction,
-        is_constructor_call: bool,
-    ) -> Self {
+    pub fn from_function(this: Option<Value>, uf: &UserFunction, is_constructor_call: bool) -> Self {
         let inner = uf.inner();
         Self {
             this,
@@ -117,7 +113,7 @@ impl Frame {
             locals: cr.locals,
             name: None,
             params: 0,
-            ty: FunctionKind::Function
+            ty: FunctionKind::Function,
         };
 
         Self {

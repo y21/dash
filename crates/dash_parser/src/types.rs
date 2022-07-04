@@ -5,7 +5,6 @@ use dash_middle::parser::types::TypeSegment;
 
 use crate::Parser;
 
-
 pub trait TypeParser<'a> {
     fn parse_type_segment(&mut self) -> Option<TypeSegment<'a>>;
 
@@ -17,7 +16,7 @@ pub trait TypeParser<'a> {
 
     /// Parse postfix array notation: foo[], foo[][], foo[][][], ...
     fn parse_postfix_array(&mut self) -> Option<TypeSegment<'a>>;
-    
+
     /// Parses a primary type: literals (true, false, Uint8Array)
     fn parse_primary_type(&mut self) -> Option<TypeSegment<'a>>;
 }
@@ -64,11 +63,9 @@ impl<'a> TypeParser<'a> for Parser<'a> {
             let cur = self.next()?;
             (cur.full, cur.ty)
         };
-        
+
         let seg = match ty {
-            TokenType::Identifier => {
-                TypeSegment::Literal(LiteralType::Identifier(full))
-            }
+            TokenType::Identifier => TypeSegment::Literal(LiteralType::Identifier(full)),
             _ => {
                 let cur = self.previous().cloned()?;
                 self.create_error(ErrorKind::UnknownToken(cur));

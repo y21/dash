@@ -7,6 +7,7 @@ use llvm_sys::target::LLVM_InitializeNativeTarget;
 
 pub mod assembler;
 pub mod trace;
+pub mod value;
 
 pub fn init() {
     unsafe {
