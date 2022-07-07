@@ -33,7 +33,7 @@ impl Value {
             match self {
                 Value::Integer(_) => LLVMInt64Type(),
                 Value::Boolean(_) => LLVMInt1Type(),
-                Value::Number(_) => LLVMDoubleType()
+                Value::Number(_) => LLVMDoubleType(),
             }
         }
     }

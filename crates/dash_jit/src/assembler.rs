@@ -78,6 +78,8 @@ use llvm_sys::core::LLVMStructType;
 use llvm_sys::core::LLVMTypeOf;
 use llvm_sys::core::LLVMVoidType;
 use llvm_sys::execution_engine::LLVMCreateExecutionEngineForModule;
+use llvm_sys::execution_engine::LLVMDisposeExecutionEngine;
+use llvm_sys::execution_engine::LLVMExecutionEngineRef;
 use llvm_sys::execution_engine::LLVMGetFunctionAddress;
 use llvm_sys::prelude::*;
 use llvm_sys::transforms::pass_manager_builder::LLVMPassManagerBuilderCreate;
@@ -127,6 +129,7 @@ impl From<&Trace> for JitCacheKey {
 
 pub struct Assembler {
     module: LLVMModuleRef,
+    execution_engine: LLVMExecutionEngineRef,
     value_union: LLVMTypeRef,
     cache: HashMap<JitCacheKey, JitCacheValue>,
 }
@@ -135,11 +138,16 @@ impl Assembler {
     pub fn new() -> Self {
         let module = unsafe { LLVMModuleCreateWithName(cstr!("dash_jit").as_ptr()) };
 
+        let mut engine = ptr::null_mut();
+        let mut error = ptr::null_mut();
+        unsafe { LLVMCreateExecutionEngineForModule(&mut engine, module, &mut error) };
+        assert!(!engine.is_null());
+
         let largest = unsafe { LLVMIntType(Value::SIZE_OF_LARGEST as u32) };
         let mut types = unsafe {
             [
                 LLVMInt32Type(), // discriminant
-                largest
+                largest,
             ]
         };
         let value = unsafe { LLVMStructType(types.as_mut_ptr(), types.len() as u32, 0) };
@@ -147,6 +155,7 @@ impl Assembler {
         Self {
             module,
             value_union: value,
+            execution_engine: engine,
             cache: HashMap::new(),
         }
     }
@@ -182,7 +191,7 @@ impl Assembler {
             (
                 LLVMInt64Type(),
                 LLVMPointerType(LLVMInt64Type(), 0),
-                LLVMPointerType(self.value_union, 0)
+                LLVMPointerType(self.value_union, 0),
             )
         };
 
@@ -259,18 +268,20 @@ impl Assembler {
                     // so here we need to add 3 to it (1 byte for operator, 2 bytes for operands).
                     let target = (bytecode_index as isize + count as isize + 3) as usize;
 
-                    if count > 0 {
+                    if count >= 0 {
+                        // If this is a forwards jump, simply "skip" that many instructions in the iterator
                         (0..count).for_each(|_| drop(bytecode.next()));
+                    } else {
+                        // Otherwise this is a backjump, means we need to jump to an existing label
+                        let (target_block, target_builder) = labels.get(&target)
+                            .copied()
+                            .expect("Arbitrary backjumps are currently unsupported");
+
+                        unsafe { LLVMBuildBr(current_builder, target_block) };
+
+                        current_block = target_block;
+                        current_builder = target_builder;
                     }
-
-                    let (target_block, target_builder) = labels.get(&target)
-                        .copied()
-                        .expect("Arbitrary backjumps are currently unsupported.");
-
-                    unsafe { LLVMBuildBr(current_builder, target_block) };
-
-                    current_block = target_block;
-                    current_builder = target_builder;
                 }
                 JMPFALSENP | JMPFALSEP | /* JMPNULLISHNP | JMPNULLISHP |*/ JMPTRUENP | JMPTRUEP => {
                     let condition = stack.pop().unwrap();
@@ -567,7 +578,7 @@ impl Assembler {
 
                 // Load alloca'd space
                 let loaded = LLVMBuildLoad2(exit_builder, int64, value, EMPTY);
-                
+
                 // Create GEP to get a poiner to the nth value in the param
                 let mut indices = [LLVMConstInt(int64, llvm_index as u64, 0)];
                 let base_gep = LLVMBuildGEP2(
@@ -580,13 +591,7 @@ impl Assembler {
                 );
 
                 // Create GEP to get a pointer to the value
-                let struct_gep = LLVMBuildStructGEP2(
-                    exit_builder,
-                    self.value_union,
-                    base_gep,
-                    1,
-                    EMPTY
-                );
+                let struct_gep = LLVMBuildStructGEP2(exit_builder, self.value_union, base_gep, 1, EMPTY);
 
                 LLVMBuildStore(exit_builder, loaded, struct_gep);
             }
@@ -605,12 +610,7 @@ impl Assembler {
             #[cfg(debug_assertions)]
             LLVMVerifyFunction(fun, LLVMVerifierFailureAction::LLVMAbortProcessAction);
 
-            let mut engine = ptr::null_mut();
-            let mut error = ptr::null_mut();
-            LLVMCreateExecutionEngineForModule(&mut engine, self.module, &mut error);
-            assert!(!engine.is_null());
-
-            let addr = LLVMGetFunctionAddress(engine, cache_key_hash.as_ptr());
+            let addr = LLVMGetFunctionAddress(self.execution_engine, cache_key_hash.as_ptr());
 
             mem::transmute::<u64, JitFunction>(addr)
         };
@@ -622,7 +622,7 @@ impl Assembler {
         self.cache.insert(
             cache_key.clone(),
             JitCacheValue {
-                function: function,
+                function,
                 arguments: values.clone(),
                 locals: locals.clone(),
             },
@@ -639,7 +639,7 @@ impl Assembler {
 impl Drop for Assembler {
     fn drop(&mut self) {
         unsafe {
-            LLVMDisposeModule(self.module);
+            LLVMDisposeExecutionEngine(self.execution_engine);
         }
     }
 }
