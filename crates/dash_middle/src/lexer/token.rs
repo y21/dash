@@ -318,6 +318,12 @@ pub enum TokenType {
     #[display(fmt = "#")]
     Hash,
 
+    #[display(fmt = "switch")]
+    Switch,
+
+    #[display(fmt = "case")]
+    Case,
+
     #[display(fmt = "EOF")]
     Eof,
 }
@@ -389,6 +395,8 @@ impl From<&[u8]> for TokenType {
             b"class" => Self::Class,
             b"extends" => Self::Extends,
             b"static" => Self::Static,
+            b"switch" => Self::Switch,
+            b"case" => Self::Case,
             _ => Self::Identifier,
         }
     }

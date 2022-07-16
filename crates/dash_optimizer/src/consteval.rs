@@ -19,6 +19,7 @@ use dash_middle::parser::statement::IfStatement;
 use dash_middle::parser::statement::Loop;
 use dash_middle::parser::statement::ReturnStatement;
 use dash_middle::parser::statement::Statement;
+use dash_middle::parser::statement::SwitchStatement;
 use dash_middle::parser::statement::TryCatch;
 use dash_middle::parser::statement::VariableDeclaration;
 use dash_middle::parser::statement::WhileLoop;
@@ -285,6 +286,18 @@ impl<'a> Eval for Statement<'a> {
             Statement::Break => {}
             Statement::Debugger => {}
             Statement::Empty => {}
+            Statement::Switch(SwitchStatement { cases, default, expr }) => {
+                for case in cases {
+                    case.body.fold(can_remove);
+                    case.value.fold(can_remove);
+                }
+
+                if let Some(default) = default {
+                    default.fold(can_remove);
+                }
+
+                expr.fold(can_remove);
+            }
         };
 
         if can_remove && !self.has_side_effect() {

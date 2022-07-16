@@ -21,6 +21,7 @@ use dash_middle::parser::statement::IfStatement;
 use dash_middle::parser::statement::ImportKind;
 use dash_middle::parser::statement::ReturnStatement;
 use dash_middle::parser::statement::Statement;
+use dash_middle::parser::statement::SwitchStatement;
 use dash_middle::parser::statement::TryCatch;
 use dash_middle::parser::statement::VariableDeclaration;
 use dash_middle::parser::statement::WhileLoop;
@@ -133,4 +134,7 @@ pub trait Visitor<'a, V> {
 
     /// Visits a class declaration
     fn visit_class_declaration(&mut self, c: Class<'a>) -> V;
+
+    /// Visits a switch statement
+    fn visit_switch_statement(&mut self, s: SwitchStatement<'a>) -> V;
 }

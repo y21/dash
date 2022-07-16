@@ -86,3 +86,4 @@ pub const SUPER: u8 = 0x4B;
 pub const REVSTCK: u8 = 0x4C;
 /// Pushes undefined on the stack
 pub const UNDEF: u8 = 0x4D;
+pub const BREAK: u8 = 0x4E;

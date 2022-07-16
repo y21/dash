@@ -21,6 +21,8 @@ pub enum ErrorKind<'a> {
     UnexpectedEof,
     /// Integer parsing failed
     ParseIntError(Token<'a>, ParseIntError),
+    /// More than one default clause in a switch statement
+    MultipleDefaultInSwitch(Token<'a>),
 }
 
 /// An error that occurred during parsing
@@ -62,6 +64,11 @@ impl fmt::Display for Error<'_> {
                 },
                 "unexpected end of input",
                 Some(Box::new("more tokens are expected for this to be valid")),
+            ),
+            ErrorKind::MultipleDefaultInSwitch(tok) => (
+                tok,
+                "more than one default in a switch statement",
+                Some(Box::new("consider merging all default clauses into one")),
             ),
         };
 
