@@ -81,6 +81,13 @@ impl<'a> Parser<'a> {
         self.idx >= self.tokens.len()
     }
 
+    fn expect(&self, expected_ty: &'static [TokenType]) -> bool {
+        match self.current() {
+            Some(Token { ty, .. }) => expected_ty.contains(ty),
+            _ => false,
+        }
+    }
+
     fn expect_previous(&mut self, ty: &'static [TokenType], emit_error: bool) -> bool {
         let current = match self.previous() {
             Some(k) => *k,

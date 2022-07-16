@@ -223,6 +223,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             Statement::Break => self.visit_break(),
             Statement::Debugger => self.visit_debugger(),
             Statement::Empty => self.visit_empty_statement(),
+            Statement::Switch(s) => self.visit_switch_statement(s),
         }
     }
 
@@ -403,7 +404,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         }: IfStatement<'a>,
     ) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
-        
+
         // Desugar last `else` block into `else if(true)` for simplicity
         if let Some(then) = &el {
             let then = &**then;
@@ -423,7 +424,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             .try_into()
             .map_err(|_| CompileError::IfBranchLimitExceeded)?;
 
-            ib.accept_expr(condition)?;
+        ib.accept_expr(condition)?;
         if branches.is_empty() {
             ib.build_jmpfalsep(Label::IfEnd);
         } else {
@@ -467,7 +468,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             VariableBinding {
                 name: fun.name.expect("Function declaration did not have a name"),
                 kind: VariableDeclarationKind::Var,
-                ty: None
+                ty: None,
             },
             false,
         )?;
@@ -719,7 +720,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 VariableBinding {
                     kind: VariableDeclarationKind::Var,
                     name,
-                    ty: None
+                    ty: None,
                 },
                 false,
             )?;
@@ -793,7 +794,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 VariableBinding {
                     kind: VariableDeclarationKind::Var,
                     name: ident,
-                    ty: None
+                    ty: None,
                 },
                 false,
             )?;
@@ -883,7 +884,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                         name: match spec {
                             SpecifierKind::Ident(id) => id,
                         },
-                        ty: None
+                        ty: None,
                     },
                     false,
                 )?;
@@ -970,5 +971,12 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_class_declaration(&mut self, _c: Class<'a>) -> Result<(), CompileError> {
         unimplementedc!("Class declaration")
+    }
+
+    fn visit_switch_statement(
+        &mut self,
+        _s: dash_middle::parser::statement::SwitchStatement<'a>,
+    ) -> Result<(), CompileError> {
+        unimplementedc!("Switch statement")
     }
 }

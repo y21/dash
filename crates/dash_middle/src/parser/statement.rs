@@ -33,6 +33,8 @@ pub enum Statement<'a> {
     Export(ExportKind<'a>),
     /// Class declaration
     Class(Class<'a>),
+    /// A switch statement
+    Switch(SwitchStatement<'a>),
     /// Continue loop statement
     #[display(fmt = "continue;")]
     Continue,
@@ -345,7 +347,7 @@ impl<'a> fmt::Display for FunctionDeclaration<'a> {
 
         for (id, (param, ty)) in self.parameters.iter().enumerate() {
             if id > 0 {
-                write!(f,  ",")?;
+                write!(f, ",")?;
             }
 
             write!(f, "{param}")?;
@@ -460,6 +462,41 @@ impl<'a> IfStatement<'a> {
             el,
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct SwitchStatement<'a> {
+    pub expr: Expr<'a>,
+    pub cases: Vec<SwitchCase<'a>>,
+    pub default: Option<Vec<Statement<'a>>>,
+}
+
+impl<'a> fmt::Display for SwitchStatement<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "switch ({}) {{", self.expr)?;
+
+        for case in self.cases.iter() {
+            write!(f, "case {}:\n", case.value)?;
+
+            fmt_list(f, &case.body, "\n")?;
+
+            write!(f, "\n")?;
+        }
+
+        if let Some(default) = &self.default {
+            write!(f, "default:\n")?;
+            fmt_list(f, &default, "\n")?;
+            write!(f, "\n")?;
+        }
+
+        write!(f, "}}")
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SwitchCase<'a> {
+    pub value: Expr<'a>,
+    pub body: Vec<Statement<'a>>,
 }
 
 /// The type of a variable declaration
