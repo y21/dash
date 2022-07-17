@@ -98,24 +98,43 @@ use crate::trace::Trace;
 use crate::value::Value;
 
 pub struct JitResult {
-    /// Instruction pointer that the interpreter should continue executing bytecode.
-    pub ip: usize,
-    pub values: Box<[Value]>,
-    pub locals: Box<[u16]>,
+    pub function: JitFunction,
+    pub values: Vec<Value>,
+    pub locals: Vec<u16>
+}
+
+impl JitResult {
+    pub fn exec(&mut self) -> i64 {
+        unsafe { (self.function)(self.values.as_mut_ptr()) }
+    }
 }
 
 #[derive(Hash, PartialEq, Eq, Clone)]
-struct JitCacheKey {
-    function: *const Function,
-    ip: usize,
+pub struct JitCacheKey {
+    pub function: *const Function,
+    pub ip: usize,
 }
 
-struct JitCacheValue {
-    function: JitFunction,
-    /// The values of the previous JIT execution. They are cached so that the allocation can be reused.
-    arguments: Box<[Value]>,
+impl JitCacheKey {
+    pub fn to_c_hash(&self) -> CString {
+        let mut hasher = DefaultHasher::new();
+        Hash::hash(self, &mut hasher);
+        CString::new(format!("jit{:x}", hasher.finish())).unwrap()
+    }
+}
+
+#[derive(Debug)]
+pub struct JitCacheValue {
+    pub function: JitFunction,
     /// Captured locals in the same order as `arguments`
-    locals: Box<[u16]>,
+    pub locals: Vec<u16>,
+}
+
+impl JitCacheValue {
+    pub fn exec(&self, args: &mut [Value]) {
+        assert_eq!(self.locals.len(), args.len());
+        unsafe { (self.function)(args.as_mut_ptr()) };
+    }
 }
 
 impl From<&Trace> for JitCacheKey {
@@ -160,6 +179,10 @@ impl Assembler {
         }
     }
 
+    pub fn get_function(&self, key: JitCacheKey) -> Option<&JitCacheValue> {
+        self.cache.get(&key)
+    }
+
     pub fn compile_trace(&mut self, trace: Trace, bytecode: Vec<u8>) -> JitResult {
         // The idea for jitted function is simple:
         //
@@ -177,15 +200,8 @@ impl Assembler {
         // back to the parameter pointer.
         // In Rust we can then see the changes in the passed array and simply update the VM stack with all of the new values.
 
-        let cache_key = JitCacheKey {
-            function: trace.origin,
-            ip: trace.start,
-        };
-        let cache_key_hash = {
-            let mut hasher = DefaultHasher::new();
-            cache_key.hash(&mut hasher);
-            CString::new(format!("jit{:x}", hasher.finish())).unwrap()
-        };
+        let cache_key = JitCacheKey::from(&trace);
+        let cache_key_hash = cache_key.to_c_hash();
 
         let (int64, int64ptr, valueptr) = unsafe {
             (
@@ -218,6 +234,7 @@ impl Assembler {
 
         // This vector stores all referenced locals, in the exact order as they appeared.
         let local_values = trace_locals.values().copied().collect::<Vec<_>>();
+        let local_keys = trace_locals.keys().copied().collect::<Vec<_>>();
 
         let mut labels = HashMap::new();
 
@@ -615,23 +632,15 @@ impl Assembler {
             mem::transmute::<u64, JitFunction>(addr)
         };
 
-        let mut values = local_values.into_boxed_slice();
-        let target_ip = unsafe { function(values.as_mut_ptr()) };
-        let locals = trace_locals.keys().copied().collect::<Box<[_]>>();
-
-        self.cache.insert(
-            cache_key.clone(),
-            JitCacheValue {
-                function,
-                arguments: values.clone(),
-                locals: locals.clone(),
-            },
-        );
+        self.cache.insert(cache_key, JitCacheValue {
+            function,
+            locals: local_keys.clone()
+        });
 
         JitResult {
-            ip: target_ip as usize,
-            values,
-            locals,
+            function,
+            values: local_values,
+            locals: local_keys
         }
     }
 }

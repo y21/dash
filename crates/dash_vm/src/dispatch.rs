@@ -18,9 +18,11 @@ impl HandleResult {
 mod handlers {
     use std::rc::Rc;
 
+    use dash_jit::assembler::JitCacheKey;
     use dash_jit::assembler::JitResult;
     use dash_jit::value::Value as JitValue;
     use dash_middle::compiler::constant::Constant;
+    use dash_middle::compiler::constant::Function;
     use dash_middle::compiler::FunctionCallMetadata;
     use dash_middle::compiler::StaticImportKind;
 
@@ -447,38 +449,90 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn jmp(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let offset = vm.fetchw_and_inc_ip() as i16;
-        let frame = vm.frames.last_mut().expect("No frame");
+    fn execute_jit_function(mut result: JitResult, vm: &mut Vm, origin: *const Function, loop_end_ip: usize) {
+        // Execute JIT function. Return value is the target instruction pointer where the VM will resume
+        let ip = result.exec() as usize;
 
-        // Note: this is an unconditional jump, so we don't push this into the trace
+        vm.frames.last_mut().unwrap().ip = ip;
 
-        if offset.is_negative() {
-            let old_ip = frame.ip;
-            frame.ip -= -offset as usize;
+        let values = result.values.into_iter();
+        let keys = result.locals.into_iter();
 
-            let origin = Rc::as_ptr(&frame.function);
-            let is_trace = vm.recording_trace.as_ref().map_or(false, |t| t.start() == frame.ip);
+        for (value, local) in values.zip(keys) {
+            vm.set_local(
+                local as usize,
+                match value {
+                    JitValue::Boolean(b) => Value::Boolean(b),
+                    JitValue::Integer(i) => Value::Number(i as f64),
+                    JitValue::Number(n) => Value::Number(n),
+                },
+            );
+        }
 
-            if is_trace {
+        // Mark this side exit, this has the same logic as optimizing loops
+        // TODO: should we be checking if the side exit is the end of the loop
+        let frame = vm.frames.last_mut().unwrap();
+        let counter = frame.loop_counter.entry(ip).or_insert(Default::default());
+
+        counter.inc();
+        if counter.is_hot() {
+            let trace = JitTrace::new(origin, ip, loop_end_ip, true);
+            vm.recording_trace = Some(trace);
+        }
+    }
+
+    fn handle_loop_end(vm: &mut Vm, loop_end_ip: usize) {
+        let frame = vm.frames.last().unwrap();
+        let origin = Rc::as_ptr(&frame.function);
+        let is_loop_trace = vm.recording_trace.as_ref().map_or(false, |t| t.start() == frame.ip);
+
+        let cache = vm.assembler.get_function(JitCacheKey {
+            function: origin,
+            ip: frame.ip,
+        });
+        if let Some(cache) = cache {
+            let mut args = Vec::with_capacity(cache.locals.len());
+            for &local in &cache.locals {
+                args.push(match vm.get_local(local.into()).unwrap() {
+                    Value::Boolean(b) => JitValue::Boolean(b),
+                    Value::Number(n) => {
+                        if n.floor() == n {
+                            JitValue::Integer(n as i64)
+                        } else {
+                            JitValue::Number(n)
+                        }
+                    }
+                    other => panic!("Unhandled JIT value: {:?}", other),
+                });
+            }
+
+            let res = JitResult {
+                function: cache.function,
+                locals: cache.locals.clone(),
+                values: args,
+            };
+            execute_jit_function(res, vm, origin, loop_end_ip);
+            return;
+        }
+
+        if is_loop_trace {
+            let trace = vm.recording_trace.take().expect("Trace must exist");
+
+            let bytecode = frame.function.buffer[trace.start()..trace.end()].to_vec();
+            let result = vm.assembler.compile_trace(trace, bytecode);
+            execute_jit_function(result, vm, origin, loop_end_ip);
+        } else {
+            let is_side_exit_trace = vm.recording_trace.as_ref().map_or(false, |tr| tr.side_exit());
+
+            if is_side_exit_trace {
                 let trace = vm.recording_trace.take().expect("Trace must exist");
 
                 let bytecode = frame.function.buffer[trace.start()..trace.end()].to_vec();
-                let JitResult { ip, values, locals } = vm.assembler.compile_trace(trace, bytecode);
-                vm.frames.last_mut().unwrap().ip = ip;
-
-                for (&value, &local) in values.into_iter().zip(locals.into_iter()) {
-                    vm.set_local(
-                        local.into(),
-                        match value {
-                            JitValue::Boolean(b) => Value::Boolean(b),
-                            JitValue::Number(n) => Value::Number(n),
-                            JitValue::Integer(i) => Value::Number(i as f64),
-                        },
-                    );
-                }
+                let result = vm.assembler.compile_trace(trace, bytecode);
+                execute_jit_function(result, vm, origin, loop_end_ip);
             } else {
                 // We are jumping back to a loop header
+                let frame = vm.frames.last_mut().unwrap();
                 let counter = frame.loop_counter.entry(frame.ip).or_insert(Default::default());
 
                 counter.inc();
@@ -488,10 +542,26 @@ mod handlers {
                     // The trace will go on until either:
                     // - The loop is exited
                     // - The iteration has ended (i.e. we are here again)
-                    let trace = JitTrace::new(origin, frame.ip, old_ip);
+                    let trace = JitTrace::new(origin, frame.ip, loop_end_ip, false);
                     vm.recording_trace = Some(trace);
                 }
             }
+        }
+    }
+
+    pub fn jmp(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        let offset = vm.fetchw_and_inc_ip() as i16;
+        let frame = vm.frames.last_mut().expect("No frame");
+
+        // Note: this is an unconditional jump, so we don't push this into the trace as a conditional jump
+
+        if offset.is_negative() {
+            let old_ip = frame.ip;
+            frame.ip -= -offset as usize;
+
+            // Negative jumps are (currently) always also a marker for the end of a loop
+            // and we want to optimize loops that run often
+            handle_loop_end(vm, old_ip);
         } else {
             frame.ip += offset as usize;
         }

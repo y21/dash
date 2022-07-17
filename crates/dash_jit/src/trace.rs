@@ -7,6 +7,8 @@ use crate::value::Value;
 
 #[derive(Debug)]
 pub struct Trace {
+    /// Whether this trace records a side exit
+    pub(crate) side_exit: bool,
     pub(crate) origin: *const Function,
     pub(crate) start: usize,
     pub(crate) end: usize,
@@ -19,8 +21,9 @@ pub struct Trace {
 }
 
 impl Trace {
-    pub fn new(origin: *const Function, start: usize, end: usize) -> Self {
+    pub fn new(origin: *const Function, start: usize, end: usize, side_exit: bool) -> Self {
         Self {
+            side_exit,
             origin,
             start,
             end,
@@ -48,5 +51,9 @@ impl Trace {
 
     pub fn end(&self) -> usize {
         self.end
+    }
+
+    pub fn side_exit(&self) -> bool {
+        self.side_exit
     }
 }
