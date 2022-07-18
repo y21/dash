@@ -385,7 +385,8 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
                 expr
             }
             TokenType::String => Expr::string_literal(full),
-            TokenType::LeftSquareBrace | TokenType::EmptySquareBrace => {
+            TokenType::EmptySquareBrace => Expr::Array(ArrayLiteral(Vec::new())),
+            TokenType::LeftSquareBrace => {
                 let mut items = Vec::new();
                 while !self.expect_and_skip(&[TokenType::RightSquareBrace], false) {
                     self.expect_and_skip(&[TokenType::Comma], false);
@@ -485,7 +486,6 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
 
         // If it is arrow function, we need to convert everything to their arrow func equivalents
         for expr in prec {
-
             // TODO: this currently breaks with types in arrow functions
             // e.g. (a: number) => {}
             // we need to properly convert types here too
