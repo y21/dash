@@ -19,6 +19,8 @@ use dash_middle::parser::statement::Loop;
 use dash_middle::parser::statement::ReturnStatement;
 use dash_middle::parser::statement::SpecifierKind;
 use dash_middle::parser::statement::Statement;
+use dash_middle::parser::statement::SwitchCase;
+use dash_middle::parser::statement::SwitchStatement;
 use dash_middle::parser::statement::TryCatch;
 use dash_middle::parser::statement::VariableBinding;
 use dash_middle::parser::statement::VariableDeclaration;
@@ -47,6 +49,7 @@ pub trait StatementParser<'a> {
     /// Parses the definition segment of a variable declaration statement, i.e. `= 5`
     fn parse_variable_definition(&mut self) -> Option<Expr<'a>>;
     fn parse_if(&mut self, parse_else: bool) -> Option<IfStatement<'a>>;
+    fn parse_switch(&mut self) -> Option<SwitchStatement<'a>>;
     /// Parses a list of parameters (identifier, followed by optional type segment) delimited by comma,
     /// assuming that the ( has already been consumed
     fn parse_parameter_list(&mut self) -> Option<Vec<(&'a str, Option<TypeSegment<'a>>)>>;
@@ -68,6 +71,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
             TokenType::Import => self.parse_import().map(Statement::Import),
             TokenType::Export => self.parse_export().map(Statement::Export),
             TokenType::Class => self.parse_class().map(Statement::Class),
+            TokenType::Switch => self.parse_switch().map(Statement::Switch),
             TokenType::Continue => Some(Statement::Continue),
             TokenType::Break => Some(Statement::Break),
             TokenType::Debugger => Some(Statement::Debugger),
@@ -424,5 +428,63 @@ impl<'a> StatementParser<'a> for Parser<'a> {
         }
 
         self.parse_expression()
+    }
+
+    fn parse_switch(&mut self) -> Option<SwitchStatement<'a>> {
+        self.expect_and_skip(&[TokenType::LeftParen], true);
+        let value = self.parse_expression()?;
+        self.expect_and_skip(&[TokenType::RightParen], true);
+
+        self.expect_and_skip(&[TokenType::LeftBrace], true);
+
+        let mut cases = Vec::new();
+        let mut default = None;
+
+        // Parse cases
+        while !self.expect_and_skip(&[TokenType::RightBrace], false) {
+            let cur = self.current()?.clone();
+            self.next()?;
+
+            match cur.ty {
+                TokenType::Case => {
+                    let value = self.parse_expression()?;
+                    self.expect_and_skip(&[TokenType::Colon], true);
+
+                    let mut body = Vec::new();
+                    while !self.expect(&[TokenType::Case, TokenType::Default, TokenType::RightBrace]) {
+                        body.push(self.parse_statement()?);
+                    }
+
+                    cases.push(SwitchCase { body, value });
+                }
+                TokenType::Default => {
+                    self.expect_and_skip(&[TokenType::Colon], true);
+
+                    let mut body = Vec::new();
+                    while !self.expect(&[TokenType::Case, TokenType::Default, TokenType::RightBrace]) {
+                        body.push(self.parse_statement()?);
+                        break;
+                    }
+
+                    if default.replace(body).is_some() {
+                        self.create_error(ErrorKind::MultipleDefaultInSwitch(cur));
+                        return None;
+                    }
+                }
+                _ => {
+                    self.create_error(ErrorKind::UnexpectedTokenMultiple(
+                        cur,
+                        &[TokenType::Case, TokenType::Default],
+                    ));
+                    return None;
+                }
+            }
+        }
+
+        Some(SwitchStatement {
+            cases,
+            default,
+            expr: value,
+        })
     }
 }

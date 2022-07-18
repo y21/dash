@@ -5,7 +5,6 @@ use dash_middle::compiler::{
     FunctionCallMetadata, StaticImportKind,
 };
 
-
 use super::{
     builder::{InstructionBuilder, Label},
     error::CompileError,
@@ -110,6 +109,7 @@ pub trait InstructionWriter {
     fn build_named_export(&mut self, it: &[NamedExportKind]) -> Result<(), CompileError>;
     fn build_debugger(&mut self);
     fn build_revstck(&mut self, n: u8);
+    fn build_break(&mut self);
 }
 
 macro_rules! impl_instruction_writer {
@@ -160,7 +160,8 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
         build_debugger inst::DEBUGGER,
         build_super inst::SUPER,
         build_global inst::GLOBAL,
-        build_undef inst::UNDEF
+        build_undef inst::UNDEF,
+        build_break inst::BREAK
     }
 
     fn build_ret(&mut self, tc_depth: u16) {
@@ -253,11 +254,7 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
         self.add_local_jump(label);
     }
 
-    fn build_static_prop_access(
-        &mut self,
-        ident: &str,
-        preserve_this: bool,
-    ) -> Result<(), LimitExceededError> {
+    fn build_static_prop_access(&mut self, ident: &str, preserve_this: bool) -> Result<(), LimitExceededError> {
         let id = self.cp.add(Constant::Identifier(ident.into()))?;
         self.write_wide_instr(inst::STATICPROPACCESS, inst::STATICPROPACCESSW, id);
         self.write(preserve_this.into());
@@ -295,7 +292,8 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
         for constant in constants {
             // For now, we only support object literals in functions with <256 constants,
             // otherwise we would need to emit 2-byte wide instructions for every constant.
-            let id = self.cp
+            let id = self
+                .cp
                 .add(constant)?
                 .try_into()
                 .map_err(|_| CompileError::ConstantPoolLimitExceeded)?;
