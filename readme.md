@@ -13,7 +13,7 @@ This is a *WIP* and **not** yet production ready. It is actively being worked on
 - Compatibility
 - Easily embeddable into any Rust application
 - WebAssembly support
-- Optional JIT
+- [JIT](#jit)
 
 ## Usage
 ### Using the CLI
@@ -50,6 +50,15 @@ $ mv ~/.cargo/bin/dash-cli ~/.cargo/bin/dashjs
 $ dashjs run example.js
 ```
 Now open up your browser, navigate to http://localhost:3030, refresh a bunch of times and see the numbers go up.
+
+### JIT
+This engine has very basic support for JIT compilation. It uses LLVM for further optimizations and codegen, based on specialized type information and branches tracked by tracing one iteration of hot loops.
+
+You can enable it by passing the `jit` feature flag to the dash_vm crate. Beware that it's a very early WIP, expect bugs and crashes!
+
+![JIT Demo](./github/img/JitDemo.gif)
+
+<sub>Running a silly and inefficient `isEven` function on a large number to test the performance of JS engines.</sub>
 
 ### Embedding into a Rust application
 Note that the API is not stable. Things are constantly changing, so your code may break at any time when bumping the version, which is why it is highly recommended to lock in to a specific revision for now.
