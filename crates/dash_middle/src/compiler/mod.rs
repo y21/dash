@@ -9,6 +9,8 @@ pub mod constant;
 pub mod external;
 pub mod instruction;
 pub mod instruction_iter;
+#[cfg(feature = "serde")]
+pub mod format;
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug)]
