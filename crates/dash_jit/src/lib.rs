@@ -9,6 +9,10 @@ pub mod assembler;
 pub mod trace;
 pub mod value;
 
+pub use assembler::Assembler;
+pub use trace::Trace;
+pub use value::Value;
+
 pub fn init() {
     unsafe {
         LLVM_InitializeNativeTarget();

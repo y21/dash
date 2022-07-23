@@ -1,3 +1,4 @@
+use dash_middle::compiler::constant::Constant;
 use llvm_sys::core::LLVMConstInt;
 use llvm_sys::core::LLVMDoubleType;
 use llvm_sys::core::LLVMFloatType;
@@ -35,6 +36,22 @@ impl Value {
                 Value::Boolean(_) => LLVMInt1Type(),
                 Value::Number(_) => LLVMDoubleType(),
             }
+        }
+    }
+}
+
+impl From<&Constant> for Value {
+    fn from(c: &Constant) -> Self {
+        match c {
+            Constant::Boolean(b) => Value::Boolean(*b),
+            Constant::Number(n) => {
+                if n.floor() == *n {
+                    Value::Integer(*n as i64)
+                } else {
+                    Value::Number(*n)
+                }
+            }
+            _ => panic!("Unhandled JIT value: {:?}", c),
         }
     }
 }

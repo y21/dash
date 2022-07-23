@@ -288,6 +288,25 @@ impl Value {
     }
 }
 
+#[cfg(feature = "jit")]
+impl From<&Value> for dash_jit::value::Value {
+    fn from(v: &Value) -> Self {
+        use dash_jit::value::Value as JitValue;
+
+        match v {
+            Value::Boolean(b) => JitValue::Boolean(*b),
+            Value::Number(n) => {
+                if n.floor() == *n {
+                    JitValue::Integer(*n as i64)
+                } else {
+                    JitValue::Number(*n)
+                }
+            }
+            _ => panic!("Unhandled JIT value: {:?}", v),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum Typeof {
     Undefined,

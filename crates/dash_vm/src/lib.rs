@@ -18,9 +18,10 @@ use self::{
     },
 };
 
-use dash_jit::value::Value as JitValue;
-use dash_jit::{assembler::Assembler, trace::Trace as JitTrace};
 use dash_middle::compiler::constant::Constant;
+
+#[cfg(feature = "jit")]
+mod jit;
 
 pub mod dispatch;
 #[cfg(feature = "eval")]
@@ -50,13 +51,16 @@ pub struct Vm {
 
     /// If we are currently recording a trace for a loop iteration,
     /// this will contain the pc of the loop header and its end
-    recording_trace: Option<JitTrace>,
+    #[cfg(feature = "jit")]
+    recording_trace: Option<dash_jit::Trace>,
 
-    assembler: Assembler,
+    #[cfg(feature = "jit")]
+    assembler: dash_jit::Assembler,
 }
 
 impl Vm {
     pub fn new(params: VmParams) -> Self {
+        #[cfg(feature = "jit")]
         dash_jit::init();
 
         let mut gc = Gc::new();
@@ -72,8 +76,11 @@ impl Vm {
             statics,
             try_blocks: Vec::new(),
             params,
+
+            #[cfg(feature = "jit")]
             recording_trace: None,
-            assembler: Assembler::new(),
+            #[cfg(feature = "jit")]
+            assembler: dash_jit::Assembler::new(),
         };
         vm.prepare();
         vm
@@ -728,47 +735,24 @@ impl Vm {
         &self.params
     }
 
+    #[cfg(feature = "jit")]
     pub(crate) fn record_conditional_jump(&mut self, did_jump: bool) {
         if let Some(trace) = &mut self.recording_trace {
             trace.record_conditional_jump(did_jump);
         }
     }
 
+    #[cfg(feature = "jit")]
     pub(crate) fn record_local(&mut self, index: u16, value: &Value) {
         if let Some(trace) = &mut self.recording_trace {
-            trace.record_local(
-                index,
-                match value {
-                    Value::Boolean(b) => JitValue::Boolean(*b),
-                    Value::Number(n) => {
-                        if n.floor() == *n {
-                            JitValue::Integer(*n as i64)
-                        } else {
-                            JitValue::Number(*n)
-                        }
-                    }
-                    _ => panic!("Unhandled JIT value: {:?}", value),
-                },
-            );
+            trace.record_local(index, value.into());
         }
     }
 
+    #[cfg(feature = "jit")]
     pub(crate) fn record_constant(&mut self, index: u16, value: &Constant) {
         if let Some(trace) = &mut self.recording_trace {
-            trace.record_constant(
-                index,
-                match value {
-                    Constant::Boolean(b) => JitValue::Boolean(*b),
-                    Constant::Number(n) => {
-                        if n.floor() == *n {
-                            JitValue::Integer(*n as i64)
-                        } else {
-                            JitValue::Number(*n)
-                        }
-                    }
-                    _ => panic!("Unhandled JIT value: {:?}", value),
-                },
-            );
+            trace.record_constant(index, value.into());
         }
     }
 }

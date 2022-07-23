@@ -1,8 +1,13 @@
 use std::collections::HashMap;
 
+use dash_middle::compiler::constant::Constant;
 use dash_middle::compiler::constant::Function;
+use dash_middle::compiler::instruction as inst;
 use indexmap::IndexMap;
 
+use crate::assembler::Assembler;
+use crate::assembler::JitCacheKey;
+use crate::assembler::JitResult;
 use crate::value::Value;
 
 #[derive(Debug)]
