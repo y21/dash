@@ -30,7 +30,7 @@ impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
         Self {
             inner: fc,
             jumps: BTreeMap::new(),
-            labels: BTreeMap::new()
+            labels: BTreeMap::new(),
         }
     }
 
@@ -84,7 +84,7 @@ impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
     }
 
     /// Emits a jump instruction to a local label
-    /// 
+    ///
     /// Requirement for calling this function: there must be two bytes in the buffer, reserved for this jump
     pub fn add_local_jump(&mut self, label: Label) {
         if let Some(&ip) = self.labels.get(&label) {

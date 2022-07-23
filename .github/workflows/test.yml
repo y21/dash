@@ -39,7 +39,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --manifest-path crates/dash_vm/Cargo.toml --all-features
+          args: --manifest-path crates/dash_vm/Cargo.toml --features eval # no --all-features because jit
 
 
       - name: Test RT

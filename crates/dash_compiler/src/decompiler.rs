@@ -6,6 +6,7 @@ use std::io::Read;
 use std::rc::Rc;
 
 use dash_middle::compiler::constant::Constant;
+use dash_middle::compiler::constant::Function;
 use dash_middle::compiler::instruction as inst;
 
 use super::CompileResult;
@@ -94,7 +95,7 @@ enum StackValue {
     String(Rc<str>),
     Identifier(Rc<str>),
     Boolean(bool),
-    Function(Option<String>),
+    Function(Rc<Function>),
     Null,
     Undefined,
 }
@@ -105,7 +106,7 @@ impl From<Constant> for StackValue {
             Constant::String(s) => StackValue::String(s),
             Constant::Identifier(i) => StackValue::Identifier(i),
             Constant::Boolean(b) => StackValue::Boolean(b),
-            Constant::Function(f) => StackValue::Function(f.name),
+            Constant::Function(f) => StackValue::Function(f),
             Constant::Null => StackValue::Null,
             Constant::Undefined => StackValue::Undefined,
         }
@@ -121,7 +122,7 @@ impl fmt::Display for StackValue {
             StackValue::Null => write!(f, "null"),
             StackValue::Undefined => write!(f, "undefined"),
             StackValue::Function(n) => {
-                write!(f, "function {}", n.as_deref().unwrap_or("{{unnamed}}"))
+                write!(f, "function {}", n.name.as_deref().unwrap_or("{{unnamed}}"))
             }
         }
     }
@@ -195,6 +196,10 @@ pub fn decompile(CompileResult { cp, instructions, .. }: CompileResult) -> Resul
             inst::POP => {
                 output.write_instruction::<u8>(Unit::Main, "POP", &[]);
                 stack -= 1;
+            }
+            inst::REVSTCK => {
+                let n = reader.read().ok_or(DecompileError::AbruptEof)?;
+                output.write_instruction(Unit::Main, "REVSTCK", &[n]);
             }
             inst::CONSTANT | inst::CONSTANTW => {
                 let (name, id) = read_wide(
@@ -294,12 +299,16 @@ pub fn decompile(CompileResult { cp, instructions, .. }: CompileResult) -> Resul
 fn decompile_test() {
     use crate::FunctionCompiler;
 
-    let c = FunctionCompiler::compile_str(r#"
+    let c = FunctionCompiler::compile_str(
+        r#"
 let n = 1;
 if (n == 1) {
     if (n == 2) {}
 }
-    "#, dash_optimizer::OptLevel::None).unwrap();
+    "#,
+        dash_optimizer::OptLevel::None,
+    )
+    .unwrap();
     let s = decompile(c).unwrap();
     println!("{s}");
 }

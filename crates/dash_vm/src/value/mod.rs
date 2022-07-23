@@ -123,16 +123,17 @@ impl Value {
                     externals.push(obj);
                 }
 
-                let uf = UserFunction::new(f.buffer, f.constants, externals.into(), f.locals, f.params);
+                let name: Option<Rc<str>> = f.name.as_deref().map(Into::into);
+                let ty = f.ty;
 
-                let name: Option<Rc<str>> = f.name.map(Into::into);
+                let fun = UserFunction::new(f, externals.into());
 
-                let function = match f.ty {
+                let function = match ty {
                     ParserFunctionKind::Function | ParserFunctionKind::Arrow => {
-                        Function::new(vm, name, FunctionKind::User(uf))
+                        Function::new(vm, name, FunctionKind::User(fun))
                     }
                     ParserFunctionKind::Generator => {
-                        Function::new(vm, name, FunctionKind::Generator(GeneratorFunction::new(uf)))
+                        Function::new(vm, name, FunctionKind::Generator(GeneratorFunction::new(fun)))
                     }
                 };
 
@@ -284,6 +285,25 @@ impl Value {
         let this_proto = obj.get_prototype(sc)?;
 
         Ok(this_proto == target_proto)
+    }
+}
+
+#[cfg(feature = "jit")]
+impl From<&Value> for dash_jit::value::Value {
+    fn from(v: &Value) -> Self {
+        use dash_jit::value::Value as JitValue;
+
+        match v {
+            Value::Boolean(b) => JitValue::Boolean(*b),
+            Value::Number(n) => {
+                if n.floor() == *n {
+                    JitValue::Integer(*n as i64)
+                } else {
+                    JitValue::Number(*n)
+                }
+            }
+            _ => panic!("Unhandled JIT value: {:?}", v),
+        }
     }
 }
 

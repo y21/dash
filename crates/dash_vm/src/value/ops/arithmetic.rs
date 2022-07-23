@@ -94,6 +94,11 @@ impl Value {
         // TODO: >>>
         Ok(Value::Number((this >> that) as f64))
     }
+
+    pub fn bitnot(&self, scope: &mut LocalScope) -> Result<Value, Value> {
+        let this = self.to_int32(scope)?;
+        Ok(Value::Number((!this) as f64))
+    }
 }
 
 macro_rules! delegate {

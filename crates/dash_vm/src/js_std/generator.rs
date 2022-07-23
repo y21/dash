@@ -36,20 +36,20 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
             GeneratorState::Running { ip, stack } => (*ip, mem::take(stack)),
         };
 
-        let (name, function) = match generator
+        let function = match generator
             .function()
             .as_any()
             .downcast_ref::<Function>()
-            .and_then(|fun| fun.kind().as_generator().map(|gen| (fun.name(), gen)))
+            .and_then(|fun| fun.kind().as_generator())
         {
-            Some((name, gen)) => (name, gen.function()),
+            Some(gen) => &gen.function,
             _ => throw!(cx.scope, "Incompatible generator function"),
         };
 
         let current_sp = cx.scope.stack_size();
         cx.scope.try_extend_stack(old_stack)?;
 
-        let mut frame = Frame::from_function(name, None, function, false);
+        let mut frame = Frame::from_function(None, function, false);
         frame.set_ip(ip);
         frame.set_sp(current_sp);
 

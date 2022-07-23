@@ -17,7 +17,6 @@ impl HandleResult {
 
 mod handlers {
     use std::rc::Rc;
-
     use dash_middle::compiler::constant::Constant;
     use dash_middle::compiler::FunctionCallMetadata;
     use dash_middle::compiler::StaticImportKind;
@@ -37,7 +36,7 @@ mod handlers {
     use super::*;
 
     fn force_get_constant(vm: &Vm, index: usize) -> &Constant {
-        &vm.frames.last().expect("Missing frame").constants[index]
+        &vm.frames.last().expect("Missing frame").function.constants[index]
     }
 
     fn force_get_identifier(vm: &Vm, index: usize) -> Rc<str> {
@@ -59,15 +58,27 @@ mod handlers {
         Ok(None)
     }
 
+    fn constant_instruction(vm: &mut Vm, idx: usize) -> Result<(), Value> {
+        let frame = vm.frames.last().expect("No frame");
+        let constant = frame.function.constants[idx].clone();
+
+        #[cfg(feature = "jit")]
+        vm.record_constant(idx as u16, &constant);
+
+        let value = Value::from_constant(constant, vm);
+        vm.try_push_stack(value)?;
+        Ok(())
+    }
+
     pub fn constant(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let id = vm.fetch_and_inc_ip();
-        vm.push_constant(id as usize)?;
+        constant_instruction(vm, id as usize)?;
         Ok(None)
     }
 
     pub fn constantw(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let id = vm.fetchw_and_inc_ip();
-        vm.push_constant(id as usize)?;
+        constant_instruction(vm, id as usize)?;
         Ok(None)
     }
 
@@ -117,6 +128,14 @@ mod handlers {
 
     pub fn bitushr(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         evaluate_binary_expr(vm, Value::bitushr)
+    }
+
+    pub fn bitnot(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        let value = vm.stack.pop().expect("Missing value");
+        let mut sc = LocalScope::new(vm);
+        let result = value.bitnot(&mut sc)?;
+        sc.try_push_stack(result)?;
+        Ok(None)
     }
 
     pub fn objin(_vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
@@ -304,13 +323,25 @@ mod handlers {
         let offset = vm.fetchw_and_inc_ip() as i16;
         let value = vm.stack.pop().expect("No value");
 
-        if !value.is_truthy() {
+        let jump = !value.is_truthy();
+
+        #[cfg(feature = "jit")]
+        vm.record_conditional_jump(jump);
+
+        if jump {
             let frame = vm.frames.last_mut().expect("No frame");
 
             if offset.is_negative() {
                 frame.ip -= -offset as usize;
             } else {
                 frame.ip += offset as usize;
+
+                // let is_trace = vm.recording_trace.as_ref().map_or(false, |t| t.end() == frame.ip);
+
+                // if is_trace {
+                //     let _trace = vm.recording_trace.take().expect("Trace must exist");
+                //     // println!("end of trace, ip {:?}", trace);
+                // }
             }
         }
 
@@ -321,7 +352,12 @@ mod handlers {
         let offset = vm.fetchw_and_inc_ip() as i16;
         let value = vm.stack.last().expect("No value");
 
-        if !value.is_truthy() {
+        let jump = !value.is_truthy();
+
+        #[cfg(feature = "jit")]
+        vm.record_conditional_jump(jump);
+
+        if jump {
             let frame = vm.frames.last_mut().expect("No frame");
 
             if offset.is_negative() {
@@ -338,7 +374,12 @@ mod handlers {
         let offset = vm.fetchw_and_inc_ip() as i16;
         let value = vm.stack.pop().expect("No value");
 
-        if value.is_truthy() {
+        let jump = value.is_truthy();
+
+        #[cfg(feature = "jit")]
+        vm.record_conditional_jump(jump);
+
+        if jump {
             let frame = vm.frames.last_mut().expect("No frame");
 
             if offset.is_negative() {
@@ -355,7 +396,12 @@ mod handlers {
         let offset = vm.fetchw_and_inc_ip() as i16;
         let value = vm.stack.last().expect("No value");
 
-        if value.is_truthy() {
+        let jump = value.is_truthy();
+
+        #[cfg(feature = "jit")]
+        vm.record_conditional_jump(jump);
+
+        if jump {
             let frame = vm.frames.last_mut().expect("No frame");
 
             if offset.is_negative() {
@@ -372,7 +418,12 @@ mod handlers {
         let offset = vm.fetchw_and_inc_ip() as i16;
         let value = vm.stack.pop().expect("No value");
 
-        if value.is_nullish() {
+        let jump = value.is_nullish();
+
+        #[cfg(feature = "jit")]
+        vm.record_conditional_jump(jump);
+
+        if jump {
             let frame = vm.frames.last_mut().expect("No frame");
 
             if offset.is_negative() {
@@ -389,7 +440,12 @@ mod handlers {
         let offset = vm.fetchw_and_inc_ip() as i16;
         let value = vm.stack.last().expect("No value");
 
-        if value.is_nullish() {
+        let jump = value.is_nullish();
+
+        #[cfg(feature = "jit")]
+        vm.record_conditional_jump(jump);
+
+        if jump {
             let frame = vm.frames.last_mut().expect("No frame");
 
             if offset.is_negative() {
@@ -406,8 +462,16 @@ mod handlers {
         let offset = vm.fetchw_and_inc_ip() as i16;
         let frame = vm.frames.last_mut().expect("No frame");
 
+        // Note: this is an unconditional jump, so we don't push this into the trace as a conditional jump
+
         if offset.is_negative() {
+            let old_ip = frame.ip;
             frame.ip -= -offset as usize;
+
+            // Negative jumps are (currently) always also a marker for the end of a loop
+            // and we want to JIT compile loops that run often
+            #[cfg(feature = "jit")]
+            crate::jit::handle_loop_end(vm, old_ip);
         } else {
             frame.ip += offset as usize;
         }
@@ -419,6 +483,9 @@ mod handlers {
         let id = vm.fetch_and_inc_ip() as usize;
         let value = vm.stack.pop().expect("No value");
 
+        #[cfg(feature = "jit")]
+        vm.record_local(id as u16, &value);
+
         vm.set_local(id, value.clone());
         vm.try_push_stack(value)?;
 
@@ -428,6 +495,9 @@ mod handlers {
     pub fn ldlocal(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let id = vm.fetch_and_inc_ip();
         let value = vm.get_local(id as usize).expect("Invalid local reference");
+
+        #[cfg(feature = "jit")]
+        vm.record_local(id as u16, &value);
 
         vm.try_push_stack(value)?;
         Ok(None)
@@ -628,7 +698,7 @@ mod handlers {
         let local_id = vm.fetchw_and_inc_ip();
         let path_id = vm.fetchw_and_inc_ip();
 
-        let path = vm.frames.last().expect("No frame").constants[path_id as usize]
+        let path = vm.frames.last().expect("No frame").function.constants[path_id as usize]
             .as_string()
             .expect("Referenced invalid constant")
             .clone();
@@ -758,6 +828,7 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<Option<HandleResult>, Valu
         inst::BITSHL => handlers::bitshl(vm),
         inst::BITSHR => handlers::bitshr(vm),
         inst::BITUSHR => handlers::bitushr(vm),
+        inst::BITNOT => handlers::bitnot(vm),
         inst::OBJIN => handlers::objin(vm),
         inst::INSTANCEOF => handlers::instanceof(vm),
         inst::GT => handlers::gt(vm),

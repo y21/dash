@@ -1,4 +1,4 @@
-use std::{convert::TryInto, fmt, ops::RangeBounds, vec::Drain};
+use std::{fmt, ops::RangeBounds, vec::Drain};
 
 use crate::{
     gc::{handle::Handle, trace::Trace, Gc},
@@ -17,6 +17,11 @@ use self::{
         Value,
     },
 };
+
+use dash_middle::compiler::constant::Constant;
+
+#[cfg(feature = "jit")]
+mod jit;
 
 pub mod dispatch;
 #[cfg(feature = "eval")]
@@ -43,10 +48,21 @@ pub struct Vm {
     statics: Statics, // TODO: we should box this... maybe?
     try_blocks: Vec<TryBlock>,
     params: VmParams,
+
+    /// If we are currently recording a trace for a loop iteration,
+    /// this will contain the pc of the loop header and its end
+    #[cfg(feature = "jit")]
+    recording_trace: Option<dash_jit::Trace>,
+
+    #[cfg(feature = "jit")]
+    assembler: dash_jit::Assembler,
 }
 
 impl Vm {
     pub fn new(params: VmParams) -> Self {
+        #[cfg(feature = "jit")]
+        dash_jit::init();
+
         let mut gc = Gc::new();
         let statics = Statics::new(&mut gc);
         let global = gc.register(NamedObject::null()); // TODO: set its __proto__ and constructor
@@ -60,6 +76,11 @@ impl Vm {
             statics,
             try_blocks: Vec::new(),
             params,
+
+            #[cfg(feature = "jit")]
+            recording_trace: None,
+            #[cfg(feature = "jit")]
+            assembler: dash_jit::Assembler::new(),
         };
         vm.prepare();
         vm
@@ -68,23 +89,6 @@ impl Vm {
     pub fn global(&self) -> Handle<dyn Object> {
         self.global.clone()
     }
-
-    // pub fn eval<'a>(&mut self, input: &'a str, opt: OptLevel) -> Result<Value, ()> {
-    // let mut ast = Parser::from_str(input)
-    //     .map_err(EvalError::LexError)?
-    //     .parse_all()
-    //     .map_err(EvalError::ParseError)?;
-
-    // optimizer::optimize_ast(&mut ast, opt);
-
-    // let compiled = FunctionCompiler::new()
-    //     .compile_ast(ast)
-    //     .map_err(EvalError::CompileError)?;
-
-    // let frame = Frame::from_compile_result(compiled);
-    // let val = self.execute_frame(frame).map_err(EvalError::VmError)?;
-    // Ok(val.into_value())
-    // }
 
     /// Prepare the VM for execution.
     #[rustfmt::skip]
@@ -548,27 +552,19 @@ impl Vm {
         let frame = self.frames.last_mut().expect("No frame");
         let ip = frame.ip;
         frame.ip += 1;
-        frame.buffer[ip]
+        frame.function.buffer[ip]
     }
 
     /// Fetches a wide value (16-bit) in the currently executing frame
     /// and increments the instruction pointer
     pub(crate) fn fetchw_and_inc_ip(&mut self) -> u16 {
         let frame = self.frames.last_mut().expect("No frame");
-        let value: [u8; 2] = frame.buffer[frame.ip..frame.ip + 2]
+        let value: [u8; 2] = frame.function.buffer[frame.ip..frame.ip + 2]
             .try_into()
             .expect("Failed to get wide instruction");
 
         frame.ip += 2;
         u16::from_ne_bytes(value)
-    }
-
-    /// Pushes a constant at the given index in the current frame on the top of the stack
-    pub(crate) fn push_constant(&mut self, idx: usize) -> Result<(), Value> {
-        let frame = self.frames.last().expect("No frame");
-        let value = Value::from_constant(frame.constants[idx].clone(), self);
-        self.try_push_stack(value)?;
-        Ok(())
     }
 
     pub(crate) fn get_frame_sp(&self) -> usize {
@@ -737,6 +733,27 @@ impl Vm {
 
     pub fn params(&self) -> &VmParams {
         &self.params
+    }
+
+    #[cfg(feature = "jit")]
+    pub(crate) fn record_conditional_jump(&mut self, did_jump: bool) {
+        if let Some(trace) = &mut self.recording_trace {
+            trace.record_conditional_jump(did_jump);
+        }
+    }
+
+    #[cfg(feature = "jit")]
+    pub(crate) fn record_local(&mut self, index: u16, value: &Value) {
+        if let Some(trace) = &mut self.recording_trace {
+            trace.record_local(index, value.into());
+        }
+    }
+
+    #[cfg(feature = "jit")]
+    pub(crate) fn record_constant(&mut self, index: u16, value: &Constant) {
+        if let Some(trace) = &mut self.recording_trace {
+            trace.record_constant(index, value.into());
+        }
     }
 }
 

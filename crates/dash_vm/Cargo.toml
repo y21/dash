@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
+jit = ["dash_jit"]
 eval = ["dash_compiler", "dash_parser", "dash_lexer", "dash_optimizer"]
 
 [dependencies]
@@ -15,3 +16,4 @@ dash_lexer = { path = "../dash_lexer", optional = true }
 dash_parser = { path = "../dash_parser", optional = true }
 dash_compiler = { path = "../dash_compiler", optional = true }
 dash_optimizer = { path = "../dash_optimizer", optional = true }
+dash_jit = { path = "../dash_jit", optional = true }             # todo: optional

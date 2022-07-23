@@ -6,6 +6,7 @@ use self::external::External;
 pub mod constant;
 pub mod external;
 pub mod instruction;
+pub mod instruction_iter;
 
 #[derive(Debug)]
 pub struct CompileResult {

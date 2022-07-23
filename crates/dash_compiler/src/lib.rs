@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use std::{convert::TryInto, ptr::NonNull, usize};
 
 use dash_middle::compiler::constant::{Constant, Function};
@@ -737,7 +738,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             params: arguments.len(),
             externals: cmp.externals.into(),
         };
-        ib.build_constant(Constant::Function(function))?;
+        ib.build_constant(Constant::Function(Rc::new(function)))?;
 
         Ok(())
     }
