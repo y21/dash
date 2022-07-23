@@ -1,11 +1,15 @@
 use std::ops::Deref;
 use std::rc::Rc;
 
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
+
 use crate::parser::expr::LiteralExpr;
 use crate::parser::statement::FunctionKind;
 
 use super::external::External;
 
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub struct Function {
     pub name: Option<String>,
@@ -17,6 +21,7 @@ pub struct Function {
     pub externals: Box<[External]>,
 }
 
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Constant {
     Number(f64),
@@ -69,6 +74,7 @@ impl Constant {
     }
 }
 
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone)]
 pub struct ConstantPool {
     constants: Vec<Constant>,

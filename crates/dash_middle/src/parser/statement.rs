@@ -1,6 +1,8 @@
 use std::{cell::RefCell, fmt};
 
 use derive_more::Display;
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
 
 use crate::lexer::token::TokenType;
 
@@ -310,6 +312,7 @@ impl<'a> WhileLoop<'a> {
 }
 
 /// The type of function
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum FunctionKind {
     /// A normal function

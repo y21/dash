@@ -5,8 +5,12 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+serde = ["dep:serde"]
+
 [dependencies]
 derive_more = { version = "0.99.17", features = ["display"] }
 either = "1.6.1"
 strum = "0.24.0"
 strum_macros = "0.24.0"
+serde = { version = "1.0", features = ["derive", "rc"], optional = true }

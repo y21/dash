@@ -3,11 +3,14 @@ use strum_macros::FromRepr;
 use self::constant::ConstantPool;
 use self::external::External;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 pub mod constant;
 pub mod external;
 pub mod instruction;
 pub mod instruction_iter;
 
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug)]
 pub struct CompileResult {
     pub instructions: Vec<u8>,
