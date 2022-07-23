@@ -59,9 +59,9 @@ You can enable it by passing the `jit` feature flag to the dash_vm crate. Beware
 <details>
     <summary>Show GIF</summary>
     
-    ![JIT Demo](.github/img/JitDemo.gif)
+<sub>Running a silly and inefficient `isEven` function to test the performance of JS engines.</sub>
 
-    <sub>Running a silly and inefficient `isEven` function on a large number to test the performance of JS engines.</sub>
+![JIT Demo](.github/img/JitDemo.gif)
 </details>
 
 ### Embedding into a Rust application
