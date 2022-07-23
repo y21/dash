@@ -33,6 +33,7 @@ use dash_middle::compiler::instruction::POP;
 use dash_middle::compiler::instruction::REVSTCK;
 use dash_middle::compiler::instruction::STORELOCAL;
 use dash_middle::compiler::instruction::SUB;
+use indexmap::IndexMap;
 use llvm_sys::analysis::LLVMVerifierFailureAction;
 use llvm_sys::analysis::LLVMVerifyFunction;
 use llvm_sys::core::LLVMAddFunction;
@@ -349,45 +350,7 @@ impl Assembler {
 
                     let ty = value.type_of();
 
-                    let value = *locals.entry(idx).or_insert_with(|| unsafe {
-                        // Assert: this is the first time we are referencing this local,
-                        // and need to do the necessary things to make space for it.
-
-                        // Alloca stack space for local variable in entry block
-                        let space = LLVMBuildAlloca(entry_builder, ty, EMPTY);
-
-                        // Copy from parameter pointer into this allocated stack space
-                        let param = LLVMGetParam(fun, 0);
-
-                        let value = {
-                            let mut indices = [
-                                LLVMConstInt(int64, gep_idx as u64, 0)
-                            ];
-                            let base_gep = LLVMBuildGEP2(
-                                entry_builder,
-                                self.value_union,
-                                param,
-                                indices.as_mut_ptr(),
-                                1,
-                                EMPTY,
-                            );
-
-                            let struct_gep = LLVMBuildStructGEP2(
-                                entry_builder,
-                                self.value_union,
-                                base_gep,
-                                1,
-                                EMPTY
-                            );
-
-                            LLVMBuildLoad2(entry_builder, ty, struct_gep, EMPTY)
-                        };
-
-                        // Finally, with this GEP result we can do the actual copy from parameter into the stack space
-                        LLVMBuildStore(entry_builder, value, space);
-
-                        space
-                    });
+                    let value = self.find_local_or_insert(&trace_locals, &mut locals, idx, fun, entry_builder);
 
                     let load = unsafe {
                         LLVMBuildLoad2(current_builder, ty, value, EMPTY)
@@ -405,45 +368,7 @@ impl Assembler {
 
                     let ty = value.type_of();
 
-                    let place = *locals.entry(idx).or_insert_with(|| unsafe {
-                        // Assert: this is the first time we are referencing this local,
-                        // and need to do the necessary things to make space for it.
-
-                        // Alloca stack space for local variable in entry block
-                        let space = LLVMBuildAlloca(entry_builder, ty, EMPTY);
-
-                        // Copy from parameter pointer into this allocated stack space
-                        let param = LLVMGetParam(fun, 0);
-
-                        let value = {
-                            let mut indices = [
-                                LLVMConstInt(int64, gep_idx as u64, 0)
-                            ];
-                            let base_gep = LLVMBuildGEP2(
-                                entry_builder,
-                                self.value_union,
-                                param,
-                                indices.as_mut_ptr(),
-                                1,
-                                EMPTY,
-                            );
-
-                            let struct_gep = LLVMBuildStructGEP2(
-                                entry_builder,
-                                self.value_union,
-                                base_gep,
-                                1,
-                                EMPTY
-                            );
-
-                            LLVMBuildLoad2(entry_builder, ty, struct_gep, EMPTY)
-                        };
-
-                        // Finally, with this GEP result we can do the actual copy from parameter into the stack space
-                        LLVMBuildStore(entry_builder, value, space);
-
-                        space
-                    });
+                    let place = self.find_local_or_insert(&trace_locals, &mut locals, idx, fun, entry_builder);
 
                     let value = stack.pop().unwrap();
                     unsafe { LLVMBuildStore(current_builder, value, place) };
@@ -642,6 +567,61 @@ impl Assembler {
             values: local_values,
             locals: local_keys
         }
+    }
+    
+    fn find_local_or_insert(
+        &self,
+        trace_locals: &IndexMap<u16, Value>,
+        locals: &mut HashMap<u16, LLVMValueRef>,
+        idx: u16,
+        fun: LLVMValueRef,
+        entry_builder: LLVMBuilderRef
+    ) -> LLVMValueRef {
+        // This stores the "offset" of the loaded local variable in the parameter pointer.
+        // This will be used by LLVM's GEP instruction.
+        let (gep_idx, _, value) = trace_locals.get_full(&idx).unwrap();
+        
+        let ty = value.type_of();
+
+        *locals.entry(idx).or_insert_with(|| unsafe {
+            // Assert: this is the first time we are referencing this local,
+            // and need to do the necessary things to make space for it.
+
+            // Alloca stack space for local variable in entry block
+            let space = LLVMBuildAlloca(entry_builder, ty, EMPTY);
+
+            // Copy from parameter pointer into this allocated stack space
+            let param = LLVMGetParam(fun, 0);
+
+            let value = {
+                let mut indices = [
+                    LLVMConstInt(LLVMInt64Type(), gep_idx as u64, 0)
+                ];
+                let base_gep = LLVMBuildGEP2(
+                    entry_builder,
+                    self.value_union,
+                    param,
+                    indices.as_mut_ptr(),
+                    1,
+                    EMPTY,
+                );
+
+                let struct_gep = LLVMBuildStructGEP2(
+                    entry_builder,
+                    self.value_union,
+                    base_gep,
+                    1,
+                    EMPTY
+                );
+
+                LLVMBuildLoad2(entry_builder, ty, struct_gep, EMPTY)
+            };
+
+            // Finally, with this GEP result we can do the actual copy from parameter into the stack space
+            LLVMBuildStore(entry_builder, value, space);
+
+            space
+        })
     }
 }
 
