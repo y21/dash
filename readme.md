@@ -56,7 +56,7 @@ This engine has very basic support for JIT compilation. It uses LLVM for further
 
 You can enable it by passing the `jit` feature flag to the dash_vm crate. Beware that it's a very early WIP, expect bugs and crashes!
 
-![JIT Demo](./github/img/JitDemo.gif)
+![JIT Demo](.github/img/JitDemo.gif)
 
 <sub>Running a silly and inefficient `isEven` function on a large number to test the performance of JS engines.</sub>
 
