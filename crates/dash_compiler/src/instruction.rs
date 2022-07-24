@@ -1,8 +1,11 @@
 use std::convert::TryInto;
 
-use dash_middle::compiler::{
-    constant::{Constant, LimitExceededError},
-    FunctionCallMetadata, StaticImportKind,
+use dash_middle::{
+    compiler::{
+        constant::{Constant, LimitExceededError},
+        FunctionCallMetadata, ObjectMemberKind as CompilerObjectMemberKind, StaticImportKind,
+    },
+    parser::expr::ObjectMemberKind,
 };
 
 use super::{
@@ -78,7 +81,7 @@ pub trait InstructionWriter {
     /// Builds the [ARRAYLIT] and [ARRAYLITW] instructions
     fn build_arraylit(&mut self, len: u16);
     /// Builds the [OBJLIT] and [OBJLITW] instructions
-    fn build_objlit(&mut self, constants: Vec<Constant>) -> Result<(), CompileError>;
+    fn build_objlit(&mut self, constants: Vec<ObjectMemberKind>) -> Result<(), CompileError>;
     /// Builds the [JMP] instructions
     fn build_jmp(&mut self, label: Label);
     fn build_call(&mut self, meta: FunctionCallMetadata);
@@ -281,7 +284,7 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
         self.write_wide_instr(inst::ARRAYLIT, inst::ARRAYLITW, len);
     }
 
-    fn build_objlit(&mut self, constants: Vec<Constant>) -> Result<(), CompileError> {
+    fn build_objlit(&mut self, constants: Vec<ObjectMemberKind>) -> Result<(), CompileError> {
         let len = constants
             .len()
             .try_into()
@@ -289,16 +292,22 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
 
         self.write_wide_instr(inst::OBJLIT, inst::OBJLITW, len);
 
-        for constant in constants {
-            // For now, we only support object literals in functions with <256 constants,
-            // otherwise we would need to emit 2-byte wide instructions for every constant.
-            let id = self
-                .cp
-                .add(constant)?
-                .try_into()
-                .map_err(|_| CompileError::ConstantPoolLimitExceeded)?;
+        for member in constants {
+            match member {
+                ObjectMemberKind::Dynamic(..) => self.write(CompilerObjectMemberKind::Dynamic as u8),
+                ObjectMemberKind::Getter(name) | ObjectMemberKind::Setter(name) | ObjectMemberKind::Static(name) => {
+                    let id = self
+                        .cp
+                        .add(Constant::Identifier(name.into()))?
+                        .try_into()
+                        .map_err(|_| CompileError::ConstantPoolLimitExceeded)?;
 
-            self.write(id);
+                    let kind_id = CompilerObjectMemberKind::from(member) as u8;
+
+                    self.write(kind_id);
+                    self.write(id);
+                }
+            }
         }
 
         Ok(())

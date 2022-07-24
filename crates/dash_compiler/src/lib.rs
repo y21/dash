@@ -5,7 +5,6 @@ use dash_middle::compiler::constant::{Constant, Function};
 use dash_middle::compiler::{constant::ConstantPool, external::External};
 use dash_middle::compiler::{CompileResult, FunctionCallMetadata, StaticImportKind};
 use dash_middle::lexer::token::TokenType;
-use dash_middle::parser::expr::ArrayLiteral;
 use dash_middle::parser::expr::AssignmentExpr;
 use dash_middle::parser::expr::BinaryExpr;
 use dash_middle::parser::expr::ConditionalExpr;
@@ -18,6 +17,7 @@ use dash_middle::parser::expr::Postfix;
 use dash_middle::parser::expr::PropertyAccessExpr;
 use dash_middle::parser::expr::Seq;
 use dash_middle::parser::expr::UnaryExpr;
+use dash_middle::parser::expr::{ArrayLiteral, ObjectMemberKind};
 use dash_middle::parser::statement::Class;
 use dash_middle::parser::statement::ExportKind;
 use dash_middle::parser::statement::ForLoop;
@@ -762,14 +762,20 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
     fn visit_object_literal(&mut self, ObjectLiteral(exprs): ObjectLiteral<'a>) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
 
-        let mut idents = Vec::with_capacity(exprs.len());
-        for (ident, value) in exprs {
+        let mut members = Vec::with_capacity(exprs.len());
+        for (member, value) in exprs {
             ib.accept_expr(value)?;
-            let ident = Constant::Identifier((*ident).into());
-            idents.push(ident);
+
+            if let ObjectMemberKind::Dynamic(expr) = member {
+                // TODO: do not clone
+                members.push(ObjectMemberKind::Dynamic(expr.clone()));
+                ib.accept_expr(expr)?;
+            } else {
+                members.push(member);
+            }
         }
 
-        ib.build_objlit(idents)?;
+        ib.build_objlit(members)?;
         Ok(())
     }
 

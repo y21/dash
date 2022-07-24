@@ -4,6 +4,7 @@ use dash_middle::parser::error::ErrorKind;
 use dash_middle::parser::expr::ArrayLiteral;
 use dash_middle::parser::expr::Expr;
 use dash_middle::parser::expr::ObjectLiteral;
+use dash_middle::parser::expr::ObjectMemberKind;
 use dash_middle::parser::expr::UnaryExpr;
 use dash_middle::parser::statement::BlockStatement;
 use dash_middle::parser::statement::FunctionDeclaration;
@@ -398,7 +399,21 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
                 let mut items = Vec::new();
                 while !self.expect_and_skip(&[TokenType::RightBrace], false) {
                     self.expect_and_skip(&[TokenType::Comma], false);
-                    let key = self.next()?.full;
+                    let key = {
+                        let tok = self.next()?;
+
+                        match tok.ty {
+                            TokenType::Get => ObjectMemberKind::Getter(self.next()?.full),
+                            TokenType::Set => ObjectMemberKind::Setter(self.next()?.full),
+                            TokenType::LeftSquareBrace => {
+                                let t = self.parse_expression()?;
+                                let o = ObjectMemberKind::Dynamic(t);
+                                self.expect_and_skip(&[TokenType::RightSquareBrace], true);
+                                o
+                            }
+                            _ => ObjectMemberKind::Static(tok.full),
+                        }
+                    };
 
                     // TODO: support property shorthand, e.g. { test } where test is a var in scope
                     self.expect_and_skip(&[TokenType::Colon], true);

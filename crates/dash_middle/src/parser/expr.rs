@@ -1,4 +1,7 @@
-use std::{borrow::Cow, fmt};
+use std::{
+    borrow::Cow,
+    fmt::{self, Debug},
+};
 
 use derive_more::Display;
 
@@ -167,9 +170,28 @@ impl<'a> fmt::Display for ArrayLiteral<'a> {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum ObjectMemberKind<'a> {
+    Getter(&'a str),
+    Setter(&'a str),
+    Static(&'a str),
+    Dynamic(Expr<'a>),
+}
+
+impl<'a> fmt::Display for ObjectMemberKind<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Getter(name) => write!(f, "get {name}"),
+            Self::Setter(name) => write!(f, "set {name}"),
+            Self::Static(name) => f.write_str(name),
+            Self::Dynamic(expr) => write!(f, "[{expr}]"),
+        }
+    }
+}
+
 /// An object literal expression (`{ k: "v" }`)
 #[derive(Debug, Clone)]
-pub struct ObjectLiteral<'a>(pub Vec<(/*(Expr<'a>*/ &'a str, Expr<'a>)>);
+pub struct ObjectLiteral<'a>(pub Vec<(ObjectMemberKind<'a>, Expr<'a>)>);
 
 impl<'a> fmt::Display for ObjectLiteral<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -179,8 +201,8 @@ impl<'a> fmt::Display for ObjectLiteral<'a> {
             if i > 0 {
                 write!(f, ", ")?;
             }
-            write!(f, "{}: ", k)?;
-            write!(f, "{}", v)?;
+            write!(f, "{k}: ")?;
+            write!(f, "{v}")?;
         }
 
         write!(f, "}}")
