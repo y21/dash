@@ -45,6 +45,7 @@ use crate::{
     },
 };
 
+use self::object::PropertyValue;
 use self::{
     function::{generator::GeneratorFunction, user::UserFunction, Function},
     object::{Object, PropertyKey},
@@ -143,7 +144,12 @@ impl Value {
         }
     }
 
-    pub fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
+    pub fn set_property(
+        &self,
+        sc: &mut LocalScope,
+        key: PropertyKey<'static>,
+        value: PropertyValue,
+    ) -> Result<(), Value> {
         match self {
             Self::Object(h) => h.set_property(sc, key, value),
             Self::Number(n) => n.set_property(sc, key, value),

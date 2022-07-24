@@ -8,6 +8,7 @@ use dash_vm::value::function::Function;
 use dash_vm::value::function::FunctionKind;
 use dash_vm::value::object::NamedObject;
 use dash_vm::value::object::Object;
+use dash_vm::value::object::PropertyValue;
 use dash_vm::value::ops::abstractions::conversions::ValueConversion;
 use dash_vm::value::Value;
 use dlopen::wrapper::Container;
@@ -55,7 +56,11 @@ pub fn import_dl(scope: &mut LocalScope) -> Result<Value, Value> {
     let object = NamedObject::new(scope);
     let load_sync = Function::new(scope, Some("loadSync".into()), FunctionKind::Native(load_sync));
     let load_sync = scope.register(load_sync);
-    object.set_property(scope, "loadSync".into(), Value::Object(load_sync))?;
+    object.set_property(
+        scope,
+        "loadSync".into(),
+        PropertyValue::Static(Value::Object(load_sync)),
+    )?;
 
     let object = scope.register(object);
     Ok(Value::Object(object))

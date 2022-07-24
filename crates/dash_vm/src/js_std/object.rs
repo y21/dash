@@ -10,6 +10,7 @@ use crate::value::function::native::CallContext;
 use crate::value::function::Function;
 use crate::value::object::NamedObject;
 use crate::value::object::Object;
+use crate::value::object::PropertyValue;
 use crate::value::ops::abstractions::conversions::ValueConversion;
 use crate::value::Value;
 use crate::value::ValueContext;
@@ -32,7 +33,7 @@ pub fn create(cx: CallContext) -> Result<Value, Value> {
 pub fn keys(cx: CallContext) -> Result<Value, Value> {
     let obj = cx.args.first().unwrap_or_undefined().to_object(cx.scope)?;
     let keys = obj.own_keys()?;
-    let array = Array::from_vec(cx.scope, keys);
+    let array = Array::from_vec(cx.scope, keys.into_iter().map(PropertyValue::Static).collect());
     Ok(cx.scope.gc_mut().register(array).into())
 }
 

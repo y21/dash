@@ -9,6 +9,7 @@ use crate::local::LocalScope;
 use crate::value::object::NamedObject;
 use crate::value::object::Object;
 use crate::value::object::PropertyKey;
+use crate::value::object::PropertyValue;
 use crate::value::Typeof;
 use crate::value::Value;
 use crate::Vm;
@@ -107,7 +108,7 @@ impl Object for GeneratorIterator {
         self.obj.get_property(sc, key)
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
         self.obj.set_property(sc, key, value)
     }
 

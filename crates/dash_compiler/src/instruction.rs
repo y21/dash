@@ -292,7 +292,8 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
 
         self.write_wide_instr(inst::OBJLIT, inst::OBJLITW, len);
 
-        for member in constants {
+        // Push in reverse order to match order in which the compiler pushes values onto the stack
+        for member in constants.into_iter().rev() {
             match member {
                 ObjectMemberKind::Dynamic(..) => self.write(CompilerObjectMemberKind::Dynamic as u8),
                 ObjectMemberKind::Getter(name) | ObjectMemberKind::Setter(name) | ObjectMemberKind::Static(name) => {

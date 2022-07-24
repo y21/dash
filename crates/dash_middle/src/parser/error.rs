@@ -23,6 +23,11 @@ pub enum ErrorKind<'a> {
     ParseIntError(Token<'a>, ParseIntError),
     /// More than one default clause in a switch statement
     MultipleDefaultInSwitch(Token<'a>),
+    InvalidAccessorParams {
+        got: usize,
+        expect: usize,
+        token: Token<'a>,
+    },
 }
 
 /// An error that occurred during parsing
@@ -69,6 +74,11 @@ impl fmt::Display for Error<'_> {
                 tok,
                 "more than one default in a switch statement",
                 Some(Box::new("consider merging all default clauses into one")),
+            ),
+            ErrorKind::InvalidAccessorParams { got, expect, token } => (
+                token,
+                "invalid number of parameters in accessor",
+                Some(Box::new(format!("expected exactly {expect} parameters, got {got}"))),
             ),
         };
 

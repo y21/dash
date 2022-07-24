@@ -13,6 +13,7 @@ use dash_vm::value::function::Function;
 use dash_vm::value::function::FunctionKind;
 use dash_vm::value::object::NamedObject;
 use dash_vm::value::object::Object;
+use dash_vm::value::object::PropertyValue;
 use dash_vm::value::Value;
 use dash_vm::Vm;
 use rand::Rng;
@@ -76,7 +77,8 @@ impl Runtime {
                         FunctionKind::Native(http::ctx_respond),
                     );
                     let fun = scope.register(fun);
-                    ctx.set_property(&mut scope, "respond".into(), fun.into()).unwrap();
+                    ctx.set_property(&mut scope, "respond".into(), PropertyValue::Static(fun.into()))
+                        .unwrap();
 
                     let ctx = Value::Object(scope.register(ctx));
 
@@ -101,7 +103,7 @@ fn import_callback(vm: &mut Vm, import_ty: StaticImportKind, path: &str) -> Resu
             let module = NamedObject::new(&mut sc);
             let listen = Function::new(&mut sc, None, FunctionKind::Native(http::listen));
             let listen = sc.register(listen);
-            module.set_property(&mut sc, "listen".into(), listen.into())?;
+            module.set_property(&mut sc, "listen".into(), PropertyValue::Static(listen.into()))?;
 
             let module = sc.register(module);
             Ok(module.into())
@@ -163,7 +165,7 @@ fn compile_module(sc: &mut LocalScope, source: &str, import_ty: StaticImportKind
             let export_obj = NamedObject::new(sc);
 
             if let Some(default) = exports.default {
-                export_obj.set_property(sc, "default".into(), default)?;
+                export_obj.set_property(sc, "default".into(), PropertyValue::Static(default))?;
             }
 
             Value::Object(sc.register(export_obj))
@@ -171,7 +173,7 @@ fn compile_module(sc: &mut LocalScope, source: &str, import_ty: StaticImportKind
     };
 
     for (k, v) in exports.named {
-        export_obj.set_property(sc, String::from(k.as_ref()).into(), v)?;
+        export_obj.set_property(sc, String::from(k.as_ref()).into(), PropertyValue::Static(v))?;
     }
 
     Ok(export_obj)

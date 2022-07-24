@@ -2,6 +2,7 @@ use crate::local::LocalScope;
 use crate::throw;
 use crate::value::array::Array;
 use crate::value::function::native::CallContext;
+use crate::value::object::PropertyValue;
 use crate::value::ops::abstractions::conversions::ValueConversion;
 use crate::value::Value;
 use crate::value::ValueContext;
@@ -256,8 +257,8 @@ pub fn split(cx: CallContext) -> Result<Value, Value> {
 
     let result = string
         .split(separator.as_ref())
-        .map(|s| Value::String(s.into()))
-        .collect::<Vec<Value>>();
+        .map(|s| PropertyValue::Static(Value::String(s.into())))
+        .collect();
 
     let array = Array::from_vec(cx.scope, result);
     Ok(cx.scope.gc_mut().register(array).into())

@@ -18,7 +18,7 @@ fn __assert_trait_object_safety(_: Box<dyn Object>) {}
 pub trait Object: Debug + Trace {
     fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value>;
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value>;
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value>;
 
     fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value>;
 
@@ -61,14 +61,74 @@ pub trait Object: Debug + Trace {
 pub struct NamedObject {
     prototype: RefCell<Option<Handle<dyn Object>>>,
     constructor: RefCell<Option<Handle<dyn Object>>>,
-    values: RefCell<HashMap<PropertyKey<'static>, Value>>,
+    values: RefCell<HashMap<PropertyKey<'static>, PropertyValue>>,
 }
 
-// TODO: some kind of Number variant for faster indexing without .to_string()
+// TODO: optimization opportunity: some kind of Number variant for faster indexing without .to_string()
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum PropertyKey<'a> {
     String(Cow<'a, str>),
     Symbol(Symbol),
+}
+
+#[derive(Debug, Clone)]
+pub enum PropertyValue {
+    /// Accessor property
+    Trap {
+        get: Option<Handle<dyn Object>>,
+        set: Option<Handle<dyn Object>>,
+    },
+    /// Static value property
+    Static(Value),
+}
+
+impl PropertyValue {
+    pub fn getter(get: Handle<dyn Object>) -> Self {
+        Self::Trap {
+            get: Some(get),
+            set: None,
+        }
+    }
+
+    pub fn setter(set: Handle<dyn Object>) -> Self {
+        Self::Trap {
+            set: Some(set),
+            get: None,
+        }
+    }
+
+    pub fn as_static(&self) -> Option<&Value> {
+        match self {
+            Self::Static(val) => Some(val),
+            _ => None,
+        }
+    }
+
+    pub fn get_or_apply(&self, sc: &mut LocalScope, this: Value) -> Result<Value, Value> {
+        match self {
+            Self::Static(value) => Ok(value.clone()),
+            Self::Trap { get, .. } => match get {
+                Some(handle) => handle.apply(sc, this, Vec::new()),
+                None => Ok(Value::undefined()),
+            },
+        }
+    }
+}
+
+unsafe impl Trace for PropertyValue {
+    fn trace(&self) {
+        match self {
+            Self::Static(value) => value.trace(),
+            Self::Trap { get, set } => {
+                if let Some(get) = get {
+                    get.trace();
+                }
+                if let Some(set) = set {
+                    set.trace();
+                }
+            }
+        }
+    }
 }
 
 impl<'a> PropertyKey<'a> {
@@ -119,13 +179,17 @@ impl<'a> PropertyKey<'a> {
 
 impl NamedObject {
     pub fn new(vm: &mut Vm) -> Self {
+        Self::with_values(vm, HashMap::new())
+    }
+
+    pub fn with_values(vm: &mut Vm, values: HashMap<PropertyKey<'static>, PropertyValue>) -> Self {
         let objp = vm.statics.object_prototype.clone();
         let objc = vm.statics.object_ctor.clone(); // TODO: function_ctor instead
 
         Self {
             prototype: RefCell::new(Some(objp)),
             constructor: RefCell::new(Some(objc)),
-            values: RefCell::new(HashMap::new()),
+            values: RefCell::new(values),
         }
     }
 
@@ -146,7 +210,7 @@ impl NamedObject {
         }
     }
 
-    pub fn get_raw_property(&self, pk: PropertyKey) -> Option<Value> {
+    pub fn get_raw_property(&self, pk: PropertyKey) -> Option<PropertyValue> {
         self.values.borrow().get(&pk).cloned()
     }
 }
@@ -189,7 +253,8 @@ impl Object for NamedObject {
 
         let values = self.values.borrow();
         if let Some(value) = values.get(&key) {
-            return Ok(value.clone());
+            // TODO: this shouldnt be undefined
+            return value.get_or_apply(sc, Value::undefined());
         }
 
         if let Some(prototype) = self.prototype.borrow().as_ref() {
@@ -199,12 +264,20 @@ impl Object for NamedObject {
         Ok(Value::undefined())
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
         match key.as_string() {
-            Some("__proto__") => return self.set_prototype(sc, value),
+            Some("__proto__") => {
+                return self.set_prototype(
+                    sc,
+                    match value {
+                        PropertyValue::Static(value) => value,
+                        _ => throw!(sc, "Prototype cannot be a trap"),
+                    },
+                )
+            }
             Some("constructor") => {
                 match value {
-                    Value::Object(obj) | Value::External(obj) => {
+                    PropertyValue::Static(Value::Object(obj) | Value::External(obj)) => {
                         self.constructor.replace(Some(obj));
                         return Ok(());
                     }
@@ -213,6 +286,8 @@ impl Object for NamedObject {
             }
             _ => {}
         };
+
+        // TODO: check if we are invoking a setter
 
         let mut map = self.values.borrow_mut();
         map.insert(key, value);
@@ -225,11 +300,25 @@ impl Object for NamedObject {
         let mut values = self.values.borrow_mut();
         let value = values.remove(key);
 
-        if let Some(Value::Object(o) | Value::External(o)) = &value {
-            sc.add_ref(o.clone());
-        }
+        match value {
+            Some(PropertyValue::Static(ref value @ (Value::Object(ref o) | Value::External(ref o)))) => {
+                // If a GC'd value is being removed, put it in the LocalScope so it doesn't get removed too early
+                sc.add_ref(o.clone());
+                Ok(value.clone())
+            }
+            // Primitive values can just be returned normally
+            Some(PropertyValue::Static(value)) => Ok(value),
+            Some(PropertyValue::Trap { get, set }) => {
+                // Accessors need to be added to the LocalScope too
+                get.map(|v| sc.add_ref(v));
+                set.map(|v| sc.add_ref(v));
 
-        Ok(value.unwrap_or_undefined())
+                // Kind of unclear what to return here...
+                // We can't invoke the getters/setters
+                Ok(Value::undefined())
+            }
+            None => Ok(Value::undefined()),
+        }
     }
 
     fn apply(
@@ -276,7 +365,7 @@ impl Object for Handle<dyn Object> {
         (**self).get_property(sc, key)
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
         (**self).set_property(sc, key, value)
     }
 

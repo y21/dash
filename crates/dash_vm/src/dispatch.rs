@@ -16,10 +16,13 @@ impl HandleResult {
 }
 
 mod handlers {
-    use std::rc::Rc;
     use dash_middle::compiler::constant::Constant;
     use dash_middle::compiler::FunctionCallMetadata;
+    use dash_middle::compiler::ObjectMemberKind;
     use dash_middle::compiler::StaticImportKind;
+    use std::borrow::Cow;
+    use std::collections::HashMap;
+    use std::rc::Rc;
 
     use crate::frame::Frame;
     use crate::frame::FrameState;
@@ -30,6 +33,7 @@ mod handlers {
     use crate::value::object::NamedObject;
     use crate::value::object::Object;
     use crate::value::object::PropertyKey;
+    use crate::value::object::PropertyValue;
     use crate::value::ops::abstractions::conversions::ValueConversion;
     use crate::value::ops::equality::ValueEquality;
 
@@ -255,7 +259,7 @@ mod handlers {
 
         let value = match scope.global.as_any().downcast_ref::<NamedObject>() {
             Some(value) => match value.get_raw_property(name.as_ref().into()) {
-                Some(value) => value,
+                Some(value) => value.get_or_apply(&mut scope, Value::undefined())?,
                 None => throw!(&mut scope, "{} is not defined", name),
             },
             None => scope.global.clone().get_property(&mut scope, name.as_ref().into())?,
@@ -271,10 +275,11 @@ mod handlers {
         let value = vm.stack.pop().expect("No value");
 
         let mut scope = LocalScope::new(vm);
-        scope
-            .global
-            .clone()
-            .set_property(&mut scope, ToString::to_string(&name).into(), value.clone())?;
+        scope.global.clone().set_property(
+            &mut scope,
+            ToString::to_string(&name).into(),
+            PropertyValue::Static(value.clone()),
+        )?;
         scope.try_push_stack(value)?;
         Ok(None)
     }
@@ -465,7 +470,9 @@ mod handlers {
         // Note: this is an unconditional jump, so we don't push this into the trace as a conditional jump
 
         if offset.is_negative() {
+            #[cfg(feature = "jit")]
             let old_ip = frame.ip;
+
             frame.ip -= -offset as usize;
 
             // Negative jumps are (currently) always also a marker for the end of a loop
@@ -506,7 +513,11 @@ mod handlers {
     pub fn arraylit(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let len = vm.fetch_and_inc_ip() as usize;
 
-        let elements = vm.stack.drain(vm.stack.len() - len..).collect::<Vec<_>>();
+        let elements = vm
+            .stack
+            .drain(vm.stack.len() - len..)
+            .map(PropertyValue::Static)
+            .collect::<Vec<_>>();
         let array = Array::from_vec(vm, elements);
         let handle = vm.gc.register(array);
         vm.try_push_stack(Value::Object(handle))?;
@@ -516,21 +527,65 @@ mod handlers {
     pub fn objlit(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let len = vm.fetch_and_inc_ip() as usize;
 
-        let elements = vm.stack.drain(vm.stack.len() - len..).collect::<Vec<_>>();
-
         let mut scope = LocalScope::new(vm);
-        let obj = NamedObject::new(&mut scope);
-        for element in elements.into_iter() {
-            // Object literal constant indices are guaranteed to be 1-byte wide, for now...
-            let id = scope.fetch_and_inc_ip();
-            let constant = {
-                let identifier = force_get_identifier(&scope, id.into());
+        let mut obj = HashMap::new();
+        for _ in 0..len {
+            let value = scope.stack.pop().unwrap();
+            let kind = ObjectMemberKind::from_repr(scope.fetch_and_inc_ip()).unwrap();
 
-                String::from(&*identifier)
+            let key = match kind {
+                // TODO: it might be a symbol, don't to_string it then!
+                ObjectMemberKind::Dynamic => {
+                    let key = scope.stack.pop().unwrap().to_string(&mut scope)?;
+                    PropertyKey::String(Cow::Owned(String::from(&*key)))
+                }
+                ObjectMemberKind::Getter | ObjectMemberKind::Setter | ObjectMemberKind::Static => {
+                    let id = scope.fetch_and_inc_ip();
+
+                    // TODO: optimization opportunity: do not reallocate string from Rc<str>
+                    let key = String::from(&*force_get_identifier(&scope, id.into()));
+                    PropertyKey::String(Cow::Owned(key))
+                }
             };
 
-            obj.set_property(&mut scope, constant.into(), element)?;
+            match kind {
+                ObjectMemberKind::Dynamic | ObjectMemberKind::Static => {
+                    drop(obj.insert(key, PropertyValue::Static(value)))
+                }
+                ObjectMemberKind::Getter => {
+                    let value = match value {
+                        Value::Object(o) => o,
+                        _ => panic!("Getter is not an object"),
+                    };
+
+                    obj.entry(key)
+                        .and_modify(|v| match v {
+                            PropertyValue::Trap { get, .. } => {
+                                *get = Some(value.clone());
+                            }
+                            _ => *v = PropertyValue::getter(value.clone()),
+                        })
+                        .or_insert_with(|| PropertyValue::getter(value));
+                }
+                ObjectMemberKind::Setter => {
+                    let value = match value {
+                        Value::Object(o) => o,
+                        _ => panic!("Setter is not an object"),
+                    };
+
+                    obj.entry(key)
+                        .and_modify(|v| match v {
+                            PropertyValue::Trap { set, .. } => {
+                                *set = Some(value.clone());
+                            }
+                            _ => *v = PropertyValue::setter(value.clone()),
+                        })
+                        .or_insert_with(|| PropertyValue::setter(value));
+                }
+            };
         }
+
+        let obj = NamedObject::with_values(&mut scope, obj);
 
         let handle = scope.gc.register(obj);
         scope.try_push_stack(handle.into())?;
@@ -568,7 +623,11 @@ mod handlers {
         let target = vm.stack.pop().expect("No target");
 
         let mut scope = LocalScope::new(vm);
-        target.set_property(&mut scope, ToString::to_string(&key).into(), value.clone())?;
+        target.set_property(
+            &mut scope,
+            ToString::to_string(&key).into(),
+            PropertyValue::Static(value.clone()),
+        )?;
 
         scope.try_push_stack(value)?;
         Ok(None)
@@ -582,7 +641,11 @@ mod handlers {
         let target = vm.stack.pop().expect("No target");
 
         let mut scope = LocalScope::new(vm);
-        target.set_property(&mut scope, ToString::to_string(&key).into(), value.clone())?;
+        target.set_property(
+            &mut scope,
+            ToString::to_string(&key).into(),
+            PropertyValue::Static(value.clone()),
+        )?;
 
         scope.try_push_stack(value)?;
         Ok(None)
@@ -596,7 +659,7 @@ mod handlers {
         let mut scope = LocalScope::new(vm);
 
         let key = PropertyKey::from_value(&mut scope, key)?;
-        target.set_property(&mut scope, key, value.clone())?;
+        target.set_property(&mut scope, key, PropertyValue::Static(value.clone()))?;
 
         scope.try_push_stack(value)?;
         Ok(None)

@@ -9,6 +9,7 @@ use super::arraybuffer::ArrayBuffer;
 use super::object::NamedObject;
 use super::object::Object;
 use super::object::PropertyKey;
+use super::object::PropertyValue;
 use super::ops::abstractions::conversions::ValueConversion;
 use super::Value;
 
@@ -123,10 +124,12 @@ impl Object for TypedArray {
         self.obj.get_property(sc, key)
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
         if let Some(Ok(index)) = key.as_string().map(|k| k.parse::<usize>()) {
             let arraybuffer = self.arraybuffer.as_any().downcast_ref::<ArrayBuffer>();
 
+            // TODO: not undefined as this
+            let value = value.get_or_apply(sc, Value::undefined())?;
             let value = value.to_number(sc)?;
             if let Some(arraybuffer) = arraybuffer {
                 let bytes = arraybuffer.storage();

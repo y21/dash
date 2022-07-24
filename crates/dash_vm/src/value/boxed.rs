@@ -7,6 +7,7 @@ use super::ops::equality::ValueEquality;
 use crate::gc::handle::Handle;
 use crate::gc::trace::Trace;
 use crate::local::LocalScope;
+use crate::value::object::PropertyValue;
 use crate::Vm;
 
 use super::object::NamedObject;
@@ -52,7 +53,7 @@ macro_rules! boxed_primitive {
                     self.1.apply(sc, callee, this, args)
                 }
 
-                fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
+                fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
                     self.1.set_property(sc, key, value)
                 }
 
