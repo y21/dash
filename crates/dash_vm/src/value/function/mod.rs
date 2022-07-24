@@ -20,7 +20,7 @@ use self::{
 };
 
 use super::{
-    object::{NamedObject, Object, PropertyKey},
+    object::{NamedObject, Object, PropertyKey, PropertyValue},
     Typeof, Value,
 };
 
@@ -176,7 +176,7 @@ impl Object for Function {
         self.obj.get_property(sc, key)
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
         self.obj.set_property(sc, key, value)
     }
 

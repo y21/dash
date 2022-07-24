@@ -4,6 +4,7 @@ use dash_vm::local::LocalScope;
 use dash_vm::value::object::NamedObject;
 use dash_vm::value::object::Object;
 use dash_vm::value::object::PropertyKey;
+use dash_vm::value::object::PropertyValue;
 use dash_vm::value::Value;
 
 use crate::util::dash_value_from_wasm_value;
@@ -29,7 +30,7 @@ impl Object for ExternalFunction {
         self.1.get_property(sc, key)
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
         self.1.set_property(sc, key, value)
     }
 

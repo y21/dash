@@ -1,6 +1,7 @@
 use dash_vm::local::LocalScope;
 use dash_vm::value::error::Error;
 use dash_vm::value::object::NamedObject;
+use dash_vm::value::object::PropertyValue;
 use dash_vm::value::Value as DashValue;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue as WasmValue;
@@ -60,7 +61,7 @@ pub fn dash_value_from_wasm_value(scope: &mut LocalScope, value: WasmValue) -> R
 
             let value = dash_value_from_wasm_value(scope, value)?;
 
-            dest.set_property(scope, key.into(), value)
+            dest.set_property(scope, key.into(), PropertyValue::Static(value))
                 .map_err(|_| "Failed to set property")?;
         }
 

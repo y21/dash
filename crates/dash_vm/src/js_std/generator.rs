@@ -10,6 +10,7 @@ use crate::value::function::native::CallContext;
 use crate::value::function::Function;
 use crate::value::object::NamedObject;
 use crate::value::object::Object;
+use crate::value::object::PropertyValue;
 use crate::value::Value;
 use crate::value::ValueContext;
 
@@ -87,7 +88,11 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
 
 fn create_generator_value(scope: &mut LocalScope, done: bool, value: Option<Value>) -> Result<Value, Value> {
     let obj = NamedObject::new(scope);
-    obj.set_property(scope, "done".into(), done.into())?;
-    obj.set_property(scope, "value".into(), value.unwrap_or_undefined())?;
+    obj.set_property(scope, "done".into(), PropertyValue::Static(done.into()))?;
+    obj.set_property(
+        scope,
+        "value".into(),
+        PropertyValue::Static(value.unwrap_or_undefined()),
+    )?;
     Ok(scope.register(obj).into())
 }

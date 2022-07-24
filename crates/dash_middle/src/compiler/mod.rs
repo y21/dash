@@ -1,5 +1,7 @@
 use strum_macros::FromRepr;
 
+use crate::parser;
+
 use self::constant::ConstantPool;
 use self::external::External;
 
@@ -7,10 +9,10 @@ use self::external::External;
 use serde::{Deserialize, Serialize};
 pub mod constant;
 pub mod external;
-pub mod instruction;
-pub mod instruction_iter;
 #[cfg(feature = "serde")]
 pub mod format;
+pub mod instruction;
+pub mod instruction_iter;
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug)]
@@ -76,4 +78,26 @@ impl FunctionCallMetadata {
 pub enum StaticImportKind {
     All,
     Default,
+}
+
+#[repr(u8)]
+#[derive(FromRepr)]
+pub enum ObjectMemberKind {
+    Getter,
+    Setter,
+    Static,
+    Dynamic,
+}
+
+use parser::expr::ObjectMemberKind as ParserObjectMemberKind;
+
+impl From<ParserObjectMemberKind<'_>> for ObjectMemberKind {
+    fn from(v: ParserObjectMemberKind<'_>) -> Self {
+        match v {
+            ParserObjectMemberKind::Dynamic(..) => Self::Dynamic,
+            ParserObjectMemberKind::Getter(..) => Self::Getter,
+            ParserObjectMemberKind::Setter(..) => Self::Setter,
+            ParserObjectMemberKind::Static(..) => Self::Static,
+        }
+    }
 }

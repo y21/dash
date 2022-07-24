@@ -13,11 +13,12 @@ use self::{
     params::VmParams,
     statics::Statics,
     value::{
-        object::{NamedObject, Object},
+        object::{NamedObject, Object, PropertyValue},
         Value,
     },
 };
 
+#[cfg(feature = "jit")]
 use dash_middle::compiler::constant::Constant;
 
 #[cfg(feature = "jit")]
@@ -129,7 +130,7 @@ impl Vm {
                 {
                     let proto = $prototype.clone();
                     let constructor = $constructor.clone();
-                    base.set_property(&mut scope, "constructor".into(), constructor.into()).unwrap();
+                    base.set_property(&mut scope, "constructor".into(), PropertyValue::Static(constructor.into())).unwrap();
                     base.set_prototype(&mut scope, proto.into()).unwrap();
                 }
 
@@ -142,7 +143,7 @@ impl Vm {
                             #[prototype] scope.statics.function_proto;
                             #[constructor] scope.statics.function_ctor;
                         });
-                        base.set_property(&mut scope, method.into(), path.into()).unwrap();
+                        base.set_property(&mut scope, method.into(), PropertyValue::Static(path.into())).unwrap();
                     })+
                 )?
 
@@ -155,7 +156,7 @@ impl Vm {
                             #[prototype] scope.statics.function_proto;
                             #[constructor] scope.statics.function_ctor;
                         });
-                        base.set_property(&mut scope, method.into(), path.into()).unwrap();
+                        base.set_property(&mut scope, method.into(), PropertyValue::Static(path.into())).unwrap();
                     })+
                 )?
 
@@ -164,7 +165,7 @@ impl Vm {
                     $({
                         let method = stringify!($field);
                         let value = $value.clone();
-                        base.set_property(&mut scope, method.into(), value.into()).unwrap();
+                        base.set_property(&mut scope, method.into(), PropertyValue::Static(value.into())).unwrap();
                     })+
                 )?
 

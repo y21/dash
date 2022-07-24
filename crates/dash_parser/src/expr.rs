@@ -4,6 +4,7 @@ use dash_middle::parser::error::ErrorKind;
 use dash_middle::parser::expr::ArrayLiteral;
 use dash_middle::parser::expr::Expr;
 use dash_middle::parser::expr::ObjectLiteral;
+use dash_middle::parser::expr::ObjectMemberKind;
 use dash_middle::parser::expr::UnaryExpr;
 use dash_middle::parser::statement::BlockStatement;
 use dash_middle::parser::statement::FunctionDeclaration;
@@ -398,12 +399,64 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
                 let mut items = Vec::new();
                 while !self.expect_and_skip(&[TokenType::RightBrace], false) {
                     self.expect_and_skip(&[TokenType::Comma], false);
-                    let key = self.next()?.full;
+                    let token = self.next()?.clone();
+                    let key = match token.ty {
+                        // TODO: this breaks object literals with a normal property named "get"
+                        TokenType::Get => ObjectMemberKind::Getter(self.next()?.full),
+                        TokenType::Set => ObjectMemberKind::Setter(self.next()?.full),
+                        TokenType::LeftSquareBrace => {
+                            let t = self.parse_expression()?;
+                            let o = ObjectMemberKind::Dynamic(t);
+                            self.expect_and_skip(&[TokenType::RightSquareBrace], true);
+                            o
+                        }
+                        _ => ObjectMemberKind::Static(token.full),
+                    };
 
-                    // TODO: support property shorthand, e.g. { test } where test is a var in scope
-                    self.expect_and_skip(&[TokenType::Colon], true);
-                    let value = self.parse_expression()?;
-                    items.push((key, value));
+                    match key {
+                        ObjectMemberKind::Dynamic(..) | ObjectMemberKind::Static(..) => {
+                            // TODO: support property shorthand, e.g. { test } where test is a var in scope
+                            self.expect_and_skip(&[TokenType::Colon], true);
+                            let value = self.parse_expression()?;
+                            items.push((key, value));
+                        }
+                        ObjectMemberKind::Getter(..) | ObjectMemberKind::Setter(..) => {
+                            self.expect_and_skip(&[TokenType::LeftParen], true);
+                            let params = self.parse_parameter_list()?;
+
+                            // Make sure parameter count is correct
+                            match key {
+                                ObjectMemberKind::Setter(..) => {
+                                    if params.len() != 1 {
+                                        self.create_error(ErrorKind::InvalidAccessorParams {
+                                            token,
+                                            expect: 1,
+                                            got: params.len(),
+                                        });
+                                        return None;
+                                    }
+                                }
+                                ObjectMemberKind::Getter(..) => {
+                                    if !params.is_empty() {
+                                        self.create_error(ErrorKind::InvalidAccessorParams {
+                                            token,
+                                            expect: 0,
+                                            got: params.len(),
+                                        });
+                                        return None;
+                                    }
+                                }
+                                _ => unreachable!(),
+                            }
+
+                            self.expect_and_skip(&[TokenType::LeftBrace], true);
+                            let BlockStatement(stmts) = self.parse_block()?;
+
+                            // Desugar to function
+                            let fun = FunctionDeclaration::new(None, params, stmts, FunctionKind::Function);
+                            items.push((key, Expr::Function(fun)));
+                        }
+                    }
                 }
                 Expr::Object(ObjectLiteral(items))
             }

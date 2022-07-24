@@ -324,6 +324,12 @@ pub enum TokenType {
     #[display(fmt = "case")]
     Case,
 
+    #[display(fmt = "get")]
+    Get,
+
+    #[display(fmt = "set")]
+    Set,
+
     #[display(fmt = "EOF")]
     Eof,
 }
@@ -397,6 +403,8 @@ impl From<&[u8]> for TokenType {
             b"static" => Self::Static,
             b"switch" => Self::Switch,
             b"case" => Self::Case,
+            b"get" => Self::Get,
+            b"set" => Self::Set,
             _ => Self::Identifier,
         }
     }

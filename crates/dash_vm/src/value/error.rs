@@ -10,6 +10,7 @@ use crate::Vm;
 use super::object::NamedObject;
 use super::object::Object;
 use super::object::PropertyKey;
+use super::object::PropertyValue;
 use super::Value;
 
 #[derive(Debug)]
@@ -76,12 +77,7 @@ impl Object for Error {
         }
     }
 
-    fn set_property(
-        &self,
-        sc: &mut LocalScope,
-        key: PropertyKey<'static>,
-        value: super::Value,
-    ) -> Result<(), super::Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
         // TODO: this should special case name/stack
         self.obj.set_property(sc, key, value)
     }
@@ -95,9 +91,9 @@ impl Object for Error {
         &self,
         scope: &mut LocalScope,
         callee: Handle<dyn Object>,
-        this: super::Value,
-        args: Vec<super::Value>,
-    ) -> Result<super::Value, super::Value> {
+        this: Value,
+        args: Vec<Value>,
+    ) -> Result<Value, Value> {
         self.obj.apply(scope, callee, this, args)
     }
 
@@ -105,7 +101,7 @@ impl Object for Error {
         self
     }
 
-    fn set_prototype(&self, sc: &mut LocalScope, value: super::Value) -> Result<(), Value> {
+    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
         self.obj.set_prototype(sc, value)
     }
 

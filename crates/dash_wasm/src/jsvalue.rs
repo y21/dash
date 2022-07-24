@@ -1,3 +1,4 @@
+use dash_vm::value::object::PropertyValue;
 use dash_vm::value::ops::abstractions::conversions::ValueConversion;
 use dash_vm::value::Value as DashValue;
 use wasm_bindgen::prelude::wasm_bindgen;
@@ -31,7 +32,9 @@ impl JsValue {
     pub fn set_property(&self, vm: &mut ExternalVm, key: String, value: JsValue) -> Result<(), JsValue> {
         vm.with_scope(|scope| {
             let value = value.0;
-            self.0.set_property(scope, key.into(), value).map_err(JsValue)
+            self.0
+                .set_property(scope, key.into(), PropertyValue::Static(value))
+                .map_err(JsValue)
         })
     }
 

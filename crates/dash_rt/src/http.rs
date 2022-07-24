@@ -10,6 +10,7 @@ use dash_vm::value::function::native::CallContext;
 use dash_vm::value::object::NamedObject;
 use dash_vm::value::object::Object;
 use dash_vm::value::object::PropertyKey;
+use dash_vm::value::object::PropertyValue;
 use dash_vm::value::ops::abstractions::conversions::ValueConversion;
 use dash_vm::value::Value;
 use dash_vm::value::ValueContext;
@@ -46,7 +47,7 @@ impl Object for HttpContext {
         self.obj.get_property(sc, key)
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: Value) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
         self.obj.set_property(sc, key, value)
     }
 

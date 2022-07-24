@@ -3,6 +3,7 @@ use crate::throw;
 use crate::value::array::Array;
 use crate::value::array::ArrayIterator;
 use crate::value::function::native::CallContext;
+use crate::value::object::PropertyValue;
 use crate::value::ops::abstractions::conversions::ValueConversion;
 use crate::value::ops::equality::ValueEquality;
 use crate::value::Value;
@@ -73,7 +74,7 @@ pub fn concat(cx: CallContext) -> Result<Value, Value> {
         for i in 0..len {
             let i = i.to_string();
             let element = arg.get_property(cx.scope, i.as_str().into())?;
-            array.push(element);
+            array.push(PropertyValue::Static(element));
         }
     }
 
@@ -115,7 +116,7 @@ pub fn fill(cx: CallContext) -> Result<Value, Value> {
 
     for i in 0..len {
         let pk = i.to_string();
-        this.set_property(cx.scope, pk.into(), value.clone())?;
+        this.set_property(cx.scope, pk.into(), PropertyValue::Static(value.clone()))?;
     }
 
     Ok(this)
@@ -135,7 +136,7 @@ pub fn filter(cx: CallContext) -> Result<Value, Value> {
 
         if test {
             cx.scope.add_value(pkv.clone());
-            values.push(pkv);
+            values.push(PropertyValue::Static(pkv));
         }
     }
 
@@ -246,7 +247,7 @@ pub fn map(cx: CallContext) -> Result<Value, Value> {
         let value = callback.apply(cx.scope, Value::undefined(), args)?;
 
         cx.scope.add_value(value.clone());
-        values.push(value);
+        values.push(PropertyValue::Static(value));
     }
 
     let values = Array::from_vec(cx.scope, values);
@@ -264,7 +265,11 @@ pub fn pop(mut cx: CallContext) -> Result<Value, Value> {
 
     let new_len = len - 1;
     let value = this.delete_property(&mut cx.scope, new_len.to_string().into())?;
-    this.set_property(&mut cx.scope, "length".into(), Value::Number(new_len as f64))?;
+    this.set_property(
+        &mut cx.scope,
+        "length".into(),
+        PropertyValue::Static(Value::Number(new_len as f64)),
+    )?;
 
     Ok(value)
 }
@@ -276,13 +281,17 @@ pub fn push(mut cx: CallContext) -> Result<Value, Value> {
     let mut last = Value::undefined();
 
     if cx.args.is_empty() {
-        this.set_property(&mut cx.scope, len.to_string().into(), Value::undefined())?;
+        this.set_property(
+            &mut cx.scope,
+            len.to_string().into(),
+            PropertyValue::Static(Value::undefined()),
+        )?;
     }
 
     for (idx, arg) in cx.args.into_iter().enumerate() {
         let pk = (idx + len).to_string();
         last = arg.clone();
-        this.set_property(&mut cx.scope, pk.into(), arg)?;
+        this.set_property(&mut cx.scope, pk.into(), PropertyValue::Static(arg))?;
     }
 
     Ok(last)

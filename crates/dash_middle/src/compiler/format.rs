@@ -1,6 +1,6 @@
 use super::CompileResult;
 
-const BYTECODE_VERSION: u32 = 0;
+const BYTECODE_VERSION: u32 = 1;
 
 pub fn serialize(cr: CompileResult) -> bincode::Result<Vec<u8>> {
     let mut buffer = BYTECODE_VERSION.to_le_bytes().to_vec();
@@ -10,7 +10,7 @@ pub fn serialize(cr: CompileResult) -> bincode::Result<Vec<u8>> {
 
 pub enum DeserializeError {
     Bincode(bincode::Error),
-    InvalidVersion
+    InvalidVersion,
 }
 
 pub fn deserialize(buf: &[u8]) -> Result<CompileResult, DeserializeError> {
@@ -20,7 +20,6 @@ pub fn deserialize(buf: &[u8]) -> Result<CompileResult, DeserializeError> {
     if version != BYTECODE_VERSION {
         return Err(DeserializeError::InvalidVersion);
     }
-
 
     bincode::deserialize(&buf[4..]).map_err(DeserializeError::Bincode)
 }

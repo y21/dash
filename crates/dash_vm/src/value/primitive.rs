@@ -13,6 +13,7 @@ use super::boxed::String as BoxedString;
 use super::boxed::Symbol as BoxedSymbol;
 use super::object::Object;
 use super::object::PropertyKey;
+use super::object::PropertyValue;
 use super::ops::abstractions::conversions::PreferredType;
 use super::ops::abstractions::conversions::ValueConversion;
 use super::ops::equality::ValueEquality;
@@ -31,7 +32,12 @@ impl Object for f64 {
         sc.statics.number_prototype.clone().get_property(sc, key)
     }
 
-    fn set_property(&self, _sc: &mut LocalScope, _key: PropertyKey<'static>, _value: Value) -> Result<(), Value> {
+    fn set_property(
+        &self,
+        _sc: &mut LocalScope,
+        _key: PropertyKey<'static>,
+        _value: PropertyValue,
+    ) -> Result<(), Value> {
         Ok(())
     }
 
@@ -84,7 +90,12 @@ impl Object for bool {
         sc.statics.boolean_prototype.clone().get_property(sc, key)
     }
 
-    fn set_property(&self, _sc: &mut LocalScope, _key: PropertyKey<'static>, _value: Value) -> Result<(), Value> {
+    fn set_property(
+        &self,
+        _sc: &mut LocalScope,
+        _key: PropertyKey<'static>,
+        _value: PropertyValue,
+    ) -> Result<(), Value> {
         Ok(())
     }
 
@@ -141,7 +152,12 @@ impl Object for Rc<str> {
         sc.statics.string_prototype.clone().get_property(sc, key)
     }
 
-    fn set_property(&self, _sc: &mut LocalScope, _key: PropertyKey<'static>, _value: Value) -> Result<(), Value> {
+    fn set_property(
+        &self,
+        _sc: &mut LocalScope,
+        _key: PropertyKey<'static>,
+        _value: PropertyValue,
+    ) -> Result<(), Value> {
         Ok(())
     }
 
@@ -208,7 +224,7 @@ impl Object for Undefined {
         throw!(sc, "Cannot read property {:?} of undefined", key)
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, _value: Value) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, _value: PropertyValue) -> Result<(), Value> {
         throw!(sc, "Cannot set property {:?} of undefined", key)
     }
 
@@ -256,7 +272,7 @@ impl Object for Null {
         throw!(sc, "Cannot read property {:?} of null", key)
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, _value: Value) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, _value: PropertyValue) -> Result<(), Value> {
         throw!(sc, "Cannot set property {:?} of null", key)
     }
 
@@ -317,7 +333,12 @@ impl Object for str {
         Ok(Value::undefined())
     }
 
-    fn set_property(&self, _sc: &mut LocalScope, _key: PropertyKey<'static>, _value: Value) -> Result<(), Value> {
+    fn set_property(
+        &self,
+        _sc: &mut LocalScope,
+        _key: PropertyKey<'static>,
+        _value: PropertyValue,
+    ) -> Result<(), Value> {
         Ok(())
     }
 
@@ -374,7 +395,12 @@ impl Object for Symbol {
         sc.statics.symbol_prototype.clone().get_property(sc, key)
     }
 
-    fn set_property(&self, _sc: &mut LocalScope, _key: PropertyKey<'static>, _value: Value) -> Result<(), Value> {
+    fn set_property(
+        &self,
+        _sc: &mut LocalScope,
+        _key: PropertyKey<'static>,
+        _value: PropertyValue,
+    ) -> Result<(), Value> {
         Ok(())
     }
 
