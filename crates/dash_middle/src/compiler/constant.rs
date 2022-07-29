@@ -2,7 +2,7 @@ use std::ops::Deref;
 use std::rc::Rc;
 
 #[cfg(feature = "serde")]
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use crate::parser::expr::LiteralExpr;
 use crate::parser::statement::FunctionKind;
@@ -66,6 +66,7 @@ impl Constant {
         match expr {
             LiteralExpr::Number(n) => Self::Number(*n),
             LiteralExpr::Identifier(s) => Self::Identifier(s.as_ref().into()),
+            LiteralExpr::Binding(b) => Self::Identifier(b.name.into()),
             LiteralExpr::String(s) => Self::String(s.as_ref().into()),
             LiteralExpr::Boolean(b) => Self::Boolean(*b),
             LiteralExpr::Null => Self::Null,

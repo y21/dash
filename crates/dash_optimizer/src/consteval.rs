@@ -178,6 +178,7 @@ impl<'a> Eval for Expr<'a> {
             }
             Literal(..) => {}
             Empty => {}
+            Compiled(..) => {}
         }
     }
 

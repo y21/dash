@@ -7,7 +7,7 @@ use derive_more::Display;
 
 use crate::lexer::token::TokenType;
 
-use super::statement::{fmt_list, FunctionDeclaration};
+use super::statement::{fmt_list, FunctionDeclaration, VariableBinding};
 
 /// The sequence operator (`expr, expr`)
 pub type Seq<'a> = (Box<Expr<'a>>, Box<Expr<'a>>);
@@ -47,6 +47,9 @@ pub enum Expr<'a> {
     Array(ArrayLiteral<'a>),
     /// An object literal expression
     Object(ObjectLiteral<'a>),
+    /// Compiled bytecode
+    #[display(fmt = "<compiled>")]
+    Compiled(Vec<u8>),
     /// An empty expression
     Empty,
 }
@@ -85,6 +88,10 @@ impl<'a> Expr<'a> {
     /// Creates an identifier literal expression
     pub fn identifier(s: &'a str) -> Self {
         Self::Literal(LiteralExpr::Identifier(Cow::Borrowed(s)))
+    }
+
+    pub fn binding(b: VariableBinding<'a>) -> Self {
+        Self::Literal(LiteralExpr::Binding(b))
     }
 
     /// Creates a null literal expression
@@ -328,6 +335,7 @@ impl<'a> fmt::Display for GroupingExpr<'a> {
 pub enum LiteralExpr<'a> {
     /// Boolean literal
     Boolean(bool),
+    Binding(VariableBinding<'a>),
     /// Identifier literal (variable lookup)
     Identifier(Cow<'a, str>),
     /// Number literal
@@ -357,6 +365,7 @@ impl<'a> LiteralExpr<'a> {
                 Cow::Borrowed(s) => Some(s),
                 _ => None,
             },
+            Self::Binding(b) => Some(b.name),
             _ => None,
         }
     }
@@ -370,6 +379,7 @@ impl<'a> LiteralExpr<'a> {
             Self::Null => Cow::Borrowed("null"),
             Self::Number(n) => Cow::Owned(n.to_string()),
             Self::String(s) => s.clone(),
+            Self::Binding(b) => Cow::Borrowed(b.name),
         }
     }
 
@@ -379,7 +389,7 @@ impl<'a> LiteralExpr<'a> {
     pub fn is_truthy(&self) -> Option<bool> {
         match self {
             Self::Boolean(b) => Some(*b),
-            Self::Identifier(_) => None,
+            Self::Identifier(_) | Self::Binding(_) => None,
             Self::Number(n) => Some(*n != 0.0),
             Self::String(s) => Some(!s.is_empty()),
             Self::Null => Some(false),

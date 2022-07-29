@@ -23,6 +23,7 @@ use dash_middle::parser::statement::ReturnStatement;
 use dash_middle::parser::statement::Statement;
 use dash_middle::parser::statement::SwitchStatement;
 use dash_middle::parser::statement::TryCatch;
+use dash_middle::parser::statement::VariableBinding;
 use dash_middle::parser::statement::VariableDeclaration;
 use dash_middle::parser::statement::WhileLoop;
 
@@ -48,6 +49,9 @@ pub trait Visitor<'a, V> {
 
     /// Visits an identifier
     fn visit_identifier_expression(&mut self, i: &str) -> V;
+
+    /// Visits a binding expression
+    fn visit_binding_expression(&mut self, b: VariableBinding<'a>) -> V;
 
     /// Visits an unary expression
     fn visit_unary_expression(&mut self, e: UnaryExpr<'a>) -> V;
