@@ -163,11 +163,13 @@ impl Object for Function {
                     return Ok(Value::String(name));
                 }
                 "prototype" => {
-                    let prototype = self.prototype.borrow();
+                    let mut prototype = self.prototype.borrow_mut();
 
-                    if let Some(prototype) = &*prototype {
-                        return Ok(Value::Object(prototype.clone()));
-                    }
+                    let prototype = prototype.get_or_insert_with(|| {
+                        let proto = NamedObject::new(sc);
+                        sc.register(proto)
+                    });
+                    return Ok(Value::Object(prototype.clone()));
                 }
                 _ => {}
             }
