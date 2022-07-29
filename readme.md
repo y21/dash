@@ -7,6 +7,8 @@ ECMA-262 implementation in pure Rust.
 ## ⚠️ WIP
 This is a *WIP* and **not** yet production ready. It is actively being worked on and the API is constantly changing.
 
+Current status: Not recommended for use in real projects. Feel free to experiment. The majority of language constructs are implemented and "work fine", many builtins are unimplemented and not tested against test262.
+
 ## Goals
 - Target ECMAScript 2015 and some of the newer features
 - Heap/Bytecode snapshot support
