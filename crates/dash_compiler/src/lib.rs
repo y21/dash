@@ -990,6 +990,10 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
     }
 
     fn visit_class_declaration(&mut self, class: Class<'a>) -> Result<(), CompileError> {
+        if class.extends.is_some() {
+            unimplementedc!("Extending class");
+        }
+
         let mut ib = InstructionBuilder::new(self);
 
         let constructor = class.members.iter().find_map(|member| {
