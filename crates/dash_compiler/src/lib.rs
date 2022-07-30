@@ -18,7 +18,6 @@ use dash_middle::parser::expr::PropertyAccessExpr;
 use dash_middle::parser::expr::Seq;
 use dash_middle::parser::expr::UnaryExpr;
 use dash_middle::parser::expr::{ArrayLiteral, ObjectMemberKind};
-use dash_middle::parser::statement::ExportKind;
 use dash_middle::parser::statement::ForLoop;
 use dash_middle::parser::statement::ForOfLoop;
 use dash_middle::parser::statement::FunctionDeclaration;
@@ -35,6 +34,7 @@ use dash_middle::parser::statement::VariableDeclarationKind;
 use dash_middle::parser::statement::WhileLoop;
 use dash_middle::parser::statement::{BlockStatement, Loop};
 use dash_middle::parser::statement::{Class, ClassMemberKind};
+use dash_middle::parser::statement::{ClassProperty, ExportKind};
 use dash_optimizer::consteval::Eval;
 use dash_optimizer::OptLevel;
 
@@ -1011,17 +1011,39 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             })
             .unwrap_or_else(|| VariableBinding::unnameable("DesugaredClass"));
 
-        let (parameters, statements) = match constructor {
-            Some(fun) => (Some(fun.parameters), Some(fun.statements)),
-            None => (None, None),
+        let (parameters, mut statements) = match constructor {
+            Some(fun) => (fun.parameters, fun.statements),
+            None => (Vec::new(), Vec::new()),
         };
 
-        // TODO: fields
+        {
+            // For every field property, insert a `this.fieldName = fieldValue` expression in the constructor
+            let mut prestatements = Vec::new();
+            for member in &class.members {
+                if let ClassMemberKind::Property(ClassProperty {
+                    name,
+                    value: Some(value),
+                }) = &member.kind
+                {
+                    prestatements.push(Statement::Expression(Expr::Assignment(AssignmentExpr {
+                        left: Box::new(Expr::PropertyAccess(PropertyAccessExpr {
+                            computed: false,
+                            property: Box::new(Expr::string_literal(name)),
+                            target: Box::new(Expr::identifier("this")),
+                        })),
+                        operator: TokenType::Assignment,
+                        right: Box::new(value.clone()),
+                    })));
+                }
+            }
+            prestatements.append(&mut statements);
+            statements = prestatements;
+        }
 
         let desugared_class = FunctionDeclaration {
             name: class.name,
-            parameters: parameters.unwrap_or_else(Vec::new),
-            statements: statements.unwrap_or_else(Vec::new),
+            parameters,
+            statements,
             ty: FunctionKind::Function,
         };
 
@@ -1031,32 +1053,29 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         })?;
 
         for member in class.members {
-            match member.kind {
-                ClassMemberKind::Method(method) => {
-                    let name = method.name.expect("Class method did not have a name");
+            if let ClassMemberKind::Method(method) = member.kind {
+                let name = method.name.expect("Class method did not have a name");
 
-                    ib.accept(Statement::Expression(Expr::Assignment(AssignmentExpr {
-                        left: match member.static_ {
-                            true => Box::new(Expr::PropertyAccess(PropertyAccessExpr {
+                ib.accept(Statement::Expression(Expr::Assignment(AssignmentExpr {
+                    left: match member.static_ {
+                        true => Box::new(Expr::PropertyAccess(PropertyAccessExpr {
+                            computed: false,
+                            property: Box::new(Expr::string_literal(name)),
+                            target: Box::new(Expr::binding(binding.clone())),
+                        })),
+                        false => Box::new(Expr::PropertyAccess(PropertyAccessExpr {
+                            computed: false,
+                            property: Box::new(Expr::string_literal(name)),
+                            target: Box::new(Expr::PropertyAccess(PropertyAccessExpr {
                                 computed: false,
-                                property: Box::new(Expr::string_literal(name)),
+                                property: Box::new(Expr::string_literal("prototype")),
                                 target: Box::new(Expr::binding(binding.clone())),
                             })),
-                            false => Box::new(Expr::PropertyAccess(PropertyAccessExpr {
-                                computed: false,
-                                property: Box::new(Expr::string_literal(name)),
-                                target: Box::new(Expr::PropertyAccess(PropertyAccessExpr {
-                                    computed: false,
-                                    property: Box::new(Expr::string_literal("prototype")),
-                                    target: Box::new(Expr::binding(binding.clone())),
-                                })),
-                            })),
-                        },
-                        operator: TokenType::Assignment,
-                        right: Box::new(Expr::Function(method)),
-                    })))?
-                }
-                ClassMemberKind::Property(..) => unimplementedc!("Class field"),
+                        })),
+                    },
+                    operator: TokenType::Assignment,
+                    right: Box::new(Expr::Function(method)),
+                })))?
             }
         }
 
