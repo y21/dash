@@ -76,7 +76,7 @@ impl Object for f64 {
         Typeof::Number
     }
 
-    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
+    fn as_builtin_capable(&self) -> Option<&dyn BuiltinCapabilities> {
         Some(self)
     }
 }
@@ -133,7 +133,7 @@ impl Object for bool {
         Typeof::Boolean
     }
 
-    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
+    fn as_builtin_capable(&self) -> Option<&dyn BuiltinCapabilities> {
         Some(self)
     }
 }
@@ -195,7 +195,7 @@ impl Object for Rc<str> {
         str::type_of(self)
     }
 
-    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
+    fn as_builtin_capable(&self) -> Option<&dyn BuiltinCapabilities> {
         Some(self)
     }
 }
@@ -262,7 +262,7 @@ impl Object for Undefined {
         Typeof::Undefined
     }
 
-    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
+    fn as_builtin_capable(&self) -> Option<&dyn BuiltinCapabilities> {
         Some(self)
     }
 }
@@ -306,7 +306,7 @@ impl Object for Null {
         Ok(Vec::new())
     }
 
-    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
+    fn as_builtin_capable(&self) -> Option<&dyn BuiltinCapabilities> {
         Some(self)
     }
 }
@@ -438,33 +438,51 @@ impl Object for Symbol {
         Typeof::Symbol
     }
 
-    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
+    fn as_builtin_capable(&self) -> Option<&dyn BuiltinCapabilities> {
         Some(self)
     }
 }
 
-pub trait PrimitiveCapabilities: ValueConversion + ValueEquality {
+/**
+ * A trait that offers additional methods for builtin types.
+ */
+pub trait BuiltinCapabilities: ValueConversion + ValueEquality {
+    /**
+     * Extracts the `[[StringData]]` internal slot of this value
+     */
     fn as_string(&self) -> Option<Rc<str>> {
         None
     }
+    /**
+     * Extracts the `[[NumberData]]` internal slot of this value
+     */
     fn as_number(&self) -> Option<f64> {
         None
     }
+    /**
+     * Extracts the `[[BooleanData]]` internal slot of this value
+     */
     fn as_bool(&self) -> Option<bool> {
         None
     }
+    /**
+     * Checks whether this value is undefined
+     */
     fn is_undefined(&self) -> bool {
         // TODO!
         // false
         todo!()
     }
+    /**
+     * Checks whether this value is null
+     */
     fn is_null(&self) -> bool {
         // false
         todo!()
     }
 }
 
-impl PrimitiveCapabilities for f64 {
+impl BuiltinCapabilities for f64 {
     fn as_number(&self) -> Option<f64> {
         Some(*self)
     }
@@ -524,7 +542,7 @@ impl ValueConversion for f64 {
     }
 }
 
-impl PrimitiveCapabilities for bool {
+impl BuiltinCapabilities for bool {
     fn as_bool(&self) -> Option<bool> {
         Some(*self)
     }
@@ -595,7 +613,7 @@ impl ValueConversion for bool {
     }
 }
 
-impl PrimitiveCapabilities for Rc<str> {
+impl BuiltinCapabilities for Rc<str> {
     fn as_string(&self) -> Option<Rc<str>> {
         Some(self.clone())
     }
@@ -654,7 +672,7 @@ impl ValueConversion for Rc<str> {
     }
 }
 
-impl PrimitiveCapabilities for Undefined {}
+impl BuiltinCapabilities for Undefined {}
 
 impl ValueEquality for Undefined {
     fn lt(&self, _other: &Value, _sc: &mut LocalScope) -> Result<Value, Value> {
@@ -678,7 +696,7 @@ impl ValueEquality for Undefined {
         match other {
             Value::Undefined(_) => Ok(Value::Boolean(true)),
             Value::Object(o) | Value::External(o) => Ok(Value::Boolean(
-                o.as_primitive_capable().map_or(false, |p| p.is_undefined()),
+                o.as_builtin_capable().map_or(false, |p| p.is_undefined()),
             )),
             _ => Ok(Value::Boolean(false)),
         }
@@ -715,7 +733,7 @@ impl ValueConversion for Undefined {
     }
 }
 
-impl PrimitiveCapabilities for Null {}
+impl BuiltinCapabilities for Null {}
 
 impl ValueEquality for Null {
     fn lt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
@@ -769,7 +787,7 @@ impl ValueConversion for Null {
     }
 }
 
-impl PrimitiveCapabilities for Symbol {}
+impl BuiltinCapabilities for Symbol {}
 
 impl ValueEquality for Symbol {
     fn lt(&self, _other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {

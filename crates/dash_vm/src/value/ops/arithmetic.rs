@@ -111,7 +111,7 @@ macro_rules! delegate {
             Self::Null(n) => $func(n, $other, $sc),
             Self::Symbol(s) => $func(s, $other, $sc),
             Self::Object(o) | Self::External(o) => {
-                if let Some(prim) = o.as_primitive_capable() {
+                if let Some(prim) = o.as_builtin_capable() {
                     $func(prim, $other, $sc)
                 } else {
                     let is_eq = match $other {

@@ -76,7 +76,7 @@ pub trait ValueConversion {
 impl ValueConversion for Value {
     fn to_number(&self, sc: &mut LocalScope) -> Result<f64, Value> {
         fn object_to_number(this: &Value, obj: &dyn Object, sc: &mut LocalScope) -> Result<f64, Value> {
-            if let Some(prim) = obj.as_primitive_capable() {
+            if let Some(prim) = obj.as_builtin_capable() {
                 ValueConversion::to_number(prim, sc)
             } else {
                 let prim = this.to_primitive(sc, Some(PreferredType::Number))?;
@@ -110,7 +110,7 @@ impl ValueConversion for Value {
 
     fn to_string(&self, sc: &mut LocalScope) -> Result<Rc<str>, Value> {
         fn object_to_string(this: &Value, obj: &dyn Object, sc: &mut LocalScope) -> Result<Rc<str>, Value> {
-            if let Some(prim) = obj.as_primitive_capable() {
+            if let Some(prim) = obj.as_builtin_capable() {
                 ValueConversion::to_string(prim, sc)
             } else {
                 let prim_value = this.to_primitive(sc, Some(PreferredType::String))?;
@@ -132,7 +132,7 @@ impl ValueConversion for Value {
     fn to_primitive(&self, sc: &mut LocalScope, preferred_type: Option<PreferredType>) -> Result<Value, Value> {
         // 1. If Type(input) is Object, then
         if let Value::Object(obj) | Value::External(obj) = self {
-            if let Some(prim) = obj.as_primitive_capable() {
+            if let Some(prim) = obj.as_builtin_capable() {
                 return prim.to_primitive(sc, preferred_type);
             }
 

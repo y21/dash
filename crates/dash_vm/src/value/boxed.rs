@@ -13,7 +13,7 @@ use crate::Vm;
 use super::object::NamedObject;
 use super::object::Object;
 use super::object::PropertyKey;
-use super::primitive::PrimitiveCapabilities;
+use super::primitive::BuiltinCapabilities;
 use super::primitive::Symbol as PrimitiveSymbol;
 use super::Value;
 
@@ -77,7 +77,7 @@ macro_rules! boxed_primitive {
                     self.1.own_keys()
                 }
 
-                fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
+                fn as_builtin_capable(&self) -> Option<&dyn BuiltinCapabilities> {
                     Some(self)
                 }
             }
@@ -153,22 +153,22 @@ boxed_primitive! {
     Symbol: PrimitiveSymbol
 }
 
-impl PrimitiveCapabilities for Number {
+impl BuiltinCapabilities for Number {
     fn as_number(&self) -> Option<f64> {
         Some(self.0)
     }
 }
 
-impl PrimitiveCapabilities for Boolean {
+impl BuiltinCapabilities for Boolean {
     fn as_bool(&self) -> Option<bool> {
         Some(self.0)
     }
 }
 
-impl PrimitiveCapabilities for String {
+impl BuiltinCapabilities for String {
     fn as_string(&self) -> Option<Rc<str>> {
         Some(self.0.clone())
     }
 }
 
-impl PrimitiveCapabilities for Symbol {}
+impl BuiltinCapabilities for Symbol {}

@@ -8,7 +8,7 @@ use crate::{
 
 use super::{
     ops::abstractions::conversions::ValueConversion,
-    primitive::{PrimitiveCapabilities, Symbol},
+    primitive::{BuiltinCapabilities, Symbol},
     Typeof, Value, ValueContext,
 };
 
@@ -46,7 +46,13 @@ pub trait Object: Debug + Trace {
 
     fn as_any(&self) -> &dyn Any;
 
-    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
+    /**
+     * Returns the own value as a trait object implementing the `BuiltinCapabilities` trait.
+     * See docs on the mentioned trait for more details.
+     *
+     * Outside types should not (and usually cannot) implement this method and return Some.
+     */
+    fn as_builtin_capable(&self) -> Option<&dyn BuiltinCapabilities> {
         None
     }
 
@@ -403,8 +409,8 @@ impl Object for Handle<dyn Object> {
         (**self).type_of()
     }
 
-    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
-        (**self).as_primitive_capable()
+    fn as_builtin_capable(&self) -> Option<&dyn BuiltinCapabilities> {
+        (**self).as_builtin_capable()
     }
 }
 
