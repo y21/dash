@@ -2,7 +2,7 @@ use std::{cell::RefCell, fmt};
 
 use derive_more::Display;
 #[cfg(feature = "serde")]
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use crate::lexer::token::TokenType;
 
@@ -503,7 +503,7 @@ pub struct SwitchCase<'a> {
 }
 
 /// The type of a variable declaration
-#[derive(Debug, Copy, Clone, Display)]
+#[derive(Debug, Clone, Display, PartialEq, Eq, PartialOrd, Ord)]
 pub enum VariableDeclarationKind {
     /// Var: lifetime extends to function scope
     #[display(fmt = "var")]
@@ -540,7 +540,7 @@ impl From<TokenType> for VariableDeclarationKind {
 }
 
 /// A variable binding
-#[derive(Debug, Clone, Display)]
+#[derive(Debug, Clone, Display, PartialEq, PartialOrd)]
 #[display(fmt = "{} {}", kind, name)]
 pub struct VariableBinding<'a> {
     /// The name/identifier of this variable
@@ -549,6 +549,16 @@ pub struct VariableBinding<'a> {
     pub kind: VariableDeclarationKind,
     /// The type of a variable, if present
     pub ty: Option<TypeSegment<'a>>,
+}
+
+impl<'a> VariableBinding<'a> {
+    pub fn unnameable(name: &'a str) -> Self {
+        Self {
+            name,
+            kind: VariableDeclarationKind::Unnameable,
+            ty: None,
+        }
+    }
 }
 
 /// A variable declaration

@@ -51,6 +51,14 @@ impl<'a> Scope<'a> {
             .map(|(i, l)| (i as u16, l))
     }
 
+    pub fn find_binding(&self, binding: VariableBinding<'a>) -> Option<(u16, &ScopeLocal<'a>)> {
+        self.locals
+            .iter()
+            .enumerate()
+            .find(|(_, l)| l.binding == binding)
+            .map(|(i, l)| (i as u16, l))
+    }
+
     pub fn add_local(&mut self, binding: VariableBinding<'a>, is_extern: bool) -> Result<u16, LimitExceededError> {
         // if there's already a local with the same name, we should use that
         if let Some((id, _)) = self.find_local(&binding.name) {

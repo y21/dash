@@ -18,8 +18,6 @@ use dash_middle::parser::expr::PropertyAccessExpr;
 use dash_middle::parser::expr::Seq;
 use dash_middle::parser::expr::UnaryExpr;
 use dash_middle::parser::expr::{ArrayLiteral, ObjectMemberKind};
-use dash_middle::parser::statement::Class;
-use dash_middle::parser::statement::ExportKind;
 use dash_middle::parser::statement::ForLoop;
 use dash_middle::parser::statement::ForOfLoop;
 use dash_middle::parser::statement::FunctionDeclaration;
@@ -35,6 +33,8 @@ use dash_middle::parser::statement::VariableDeclaration;
 use dash_middle::parser::statement::VariableDeclarationKind;
 use dash_middle::parser::statement::WhileLoop;
 use dash_middle::parser::statement::{BlockStatement, Loop};
+use dash_middle::parser::statement::{Class, ClassMemberKind};
+use dash_middle::parser::statement::{ClassProperty, ExportKind};
 use dash_optimizer::consteval::Eval;
 use dash_optimizer::OptLevel;
 
@@ -233,6 +233,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             Expr::Binary(e) => self.visit_binary_expression(e),
             Expr::Assignment(e) => self.visit_assignment_expression(e),
             Expr::Grouping(e) => self.visit_grouping_expression(e),
+            Expr::Literal(LiteralExpr::Binding(b)) => self.visit_binding_expression(b),
             Expr::Literal(LiteralExpr::Identifier(i)) => self.visit_identifier_expression(&i),
             Expr::Literal(l) => self.visit_literal_expression(l),
             Expr::Unary(e) => self.visit_unary_expression(e),
@@ -244,6 +245,10 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             Expr::Function(e) => self.visit_function_expr(e),
             Expr::Array(e) => self.visit_array_literal(e),
             Expr::Object(e) => self.visit_object_literal(e),
+            Expr::Compiled(mut buf) => {
+                self.buf.append(&mut buf);
+                Ok(())
+            }
             Expr::Empty => self.visit_empty_expr(),
         }
     }
@@ -333,6 +338,14 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_literal_expression(&mut self, expr: LiteralExpr<'a>) -> Result<(), CompileError> {
         InstructionBuilder::new(self).build_constant(Constant::from_literal(&expr))?;
+        Ok(())
+    }
+
+    fn visit_binding_expression(&mut self, b: VariableBinding<'a>) -> Result<(), CompileError> {
+        let mut ib = InstructionBuilder::new(self);
+        let (id, _) = ib.scope.find_binding(b).ok_or_else(|| CompileError::UnknownBinding)?;
+        ib.build_local_load(id, false);
+
         Ok(())
     }
 
@@ -976,8 +989,101 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn visit_class_declaration(&mut self, _c: Class<'a>) -> Result<(), CompileError> {
-        unimplementedc!("Class declaration")
+    fn visit_class_declaration(&mut self, class: Class<'a>) -> Result<(), CompileError> {
+        if class.extends.is_some() {
+            unimplementedc!("Extending class");
+        }
+
+        let mut ib = InstructionBuilder::new(self);
+
+        let constructor = class.members.iter().find_map(|member| {
+            if let ClassMemberKind::Method(method) = &member.kind {
+                if method.name == Some("constructor") {
+                    return Some(method.clone());
+                }
+            }
+
+            None
+        });
+
+        let binding = class
+            .name
+            .map(|name| VariableBinding {
+                kind: VariableDeclarationKind::Var,
+                ty: None,
+                name,
+            })
+            .unwrap_or_else(|| VariableBinding::unnameable("DesugaredClass"));
+
+        let (parameters, mut statements) = match constructor {
+            Some(fun) => (fun.parameters, fun.statements),
+            None => (Vec::new(), Vec::new()),
+        };
+
+        {
+            // For every field property, insert a `this.fieldName = fieldValue` expression in the constructor
+            let mut prestatements = Vec::new();
+            for member in &class.members {
+                if let ClassMemberKind::Property(ClassProperty {
+                    name,
+                    value: Some(value),
+                }) = &member.kind
+                {
+                    prestatements.push(Statement::Expression(Expr::Assignment(AssignmentExpr {
+                        left: Box::new(Expr::PropertyAccess(PropertyAccessExpr {
+                            computed: false,
+                            property: Box::new(Expr::string_literal(name)),
+                            target: Box::new(Expr::identifier("this")),
+                        })),
+                        operator: TokenType::Assignment,
+                        right: Box::new(value.clone()),
+                    })));
+                }
+            }
+            prestatements.append(&mut statements);
+            statements = prestatements;
+        }
+
+        let desugared_class = FunctionDeclaration {
+            name: class.name,
+            parameters,
+            statements,
+            ty: FunctionKind::Function,
+        };
+
+        ib.visit_variable_declaration(VariableDeclaration {
+            binding: binding.clone(),
+            value: Some(Expr::Function(desugared_class)),
+        })?;
+
+        for member in class.members {
+            if let ClassMemberKind::Method(method) = member.kind {
+                let name = method.name.expect("Class method did not have a name");
+
+                ib.accept(Statement::Expression(Expr::Assignment(AssignmentExpr {
+                    left: match member.static_ {
+                        true => Box::new(Expr::PropertyAccess(PropertyAccessExpr {
+                            computed: false,
+                            property: Box::new(Expr::string_literal(name)),
+                            target: Box::new(Expr::binding(binding.clone())),
+                        })),
+                        false => Box::new(Expr::PropertyAccess(PropertyAccessExpr {
+                            computed: false,
+                            property: Box::new(Expr::string_literal(name)),
+                            target: Box::new(Expr::PropertyAccess(PropertyAccessExpr {
+                                computed: false,
+                                property: Box::new(Expr::string_literal("prototype")),
+                                target: Box::new(Expr::binding(binding.clone())),
+                            })),
+                        })),
+                    },
+                    operator: TokenType::Assignment,
+                    right: Box::new(Expr::Function(method)),
+                })))?
+            }
+        }
+
+        Ok(())
     }
 
     fn visit_switch_statement(
