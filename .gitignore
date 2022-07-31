@@ -5,3 +5,4 @@ target
 *.json
 *.sh
 dash-cli/tests
+builtins/node_modules
