@@ -16,6 +16,7 @@ use dash_middle::parser::statement::FunctionKind;
 use dash_middle::parser::statement::IfStatement;
 use dash_middle::parser::statement::ImportKind;
 use dash_middle::parser::statement::Loop;
+use dash_middle::parser::statement::Parameter;
 use dash_middle::parser::statement::ReturnStatement;
 use dash_middle::parser::statement::SpecifierKind;
 use dash_middle::parser::statement::Statement;
@@ -52,7 +53,7 @@ pub trait StatementParser<'a> {
     fn parse_switch(&mut self) -> Option<SwitchStatement<'a>>;
     /// Parses a list of parameters (identifier, followed by optional type segment) delimited by comma,
     /// assuming that the ( has already been consumed
-    fn parse_parameter_list(&mut self) -> Option<Vec<(&'a str, Option<TypeSegment<'a>>)>>;
+    fn parse_parameter_list(&mut self) -> Option<Vec<(Parameter<'a>, Option<TypeSegment<'a>>)>>;
 }
 
 impl<'a> StatementParser<'a> for Parser<'a> {
@@ -378,14 +379,33 @@ impl<'a> StatementParser<'a> for Parser<'a> {
         Some(IfStatement::new(condition, then, branches, el))
     }
 
-    fn parse_parameter_list(&mut self) -> Option<Vec<(&'a str, Option<TypeSegment<'a>>)>> {
+    fn parse_parameter_list(&mut self) -> Option<Vec<(Parameter<'a>, Option<TypeSegment<'a>>)>> {
         let mut parameters = Vec::new();
 
         while !self.expect_and_skip(&[TokenType::RightParen], false) {
             let tok = self.next().cloned()?;
 
-            let ident = match tok.ty {
-                TokenType::Identifier => tok.full,
+            let parameter = match tok.ty {
+                TokenType::Dot => {
+                    // Begin of spread operator
+                    for _ in 0..2 {
+                        self.expect_and_skip(&[TokenType::Dot], true);
+                    }
+
+                    let ident = match self.next() {
+                        Some(tok) => tok.full,
+                        None => {
+                            self.create_error(ErrorKind::UnexpectedEof);
+                            return None;
+                        }
+                    };
+
+                    // Spread operator must be the last parameter, followed by )
+                    self.expect_and_skip(&[TokenType::RightParen], true);
+
+                    Parameter::Spread(ident)
+                }
+                TokenType::Identifier => Parameter::Identifier(tok.full),
                 TokenType::Comma => continue,
                 _ => {
                     self.create_error(ErrorKind::UnexpectedToken(tok.clone(), TokenType::Comma));
@@ -399,7 +419,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
                 None
             };
 
-            parameters.push((ident, ty));
+            parameters.push((parameter, ty));
         }
 
         Some(parameters)

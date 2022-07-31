@@ -9,6 +9,7 @@ use dash_middle::parser::expr::UnaryExpr;
 use dash_middle::parser::statement::BlockStatement;
 use dash_middle::parser::statement::FunctionDeclaration;
 use dash_middle::parser::statement::FunctionKind;
+use dash_middle::parser::statement::Parameter;
 use dash_middle::parser::statement::ReturnStatement;
 use dash_middle::parser::statement::Statement;
 
@@ -542,7 +543,7 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
             // TODO: this currently breaks with types in arrow functions
             // e.g. (a: number) => {}
             // we need to properly convert types here too
-            list.push((expr.as_identifier()?, None));
+            list.push((Parameter::Identifier(expr.as_identifier()?), None));
         }
 
         let is_statement = self.expect_and_skip(&[TokenType::LeftBrace], false);

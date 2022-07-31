@@ -19,6 +19,8 @@ pub struct Function {
     pub params: usize,
     pub constants: Box<[Constant]>,
     pub externals: Box<[External]>,
+    /// If the parameter list uses the rest operator ..., then this will be Some(local_id)
+    pub rest_local: Option<u16>,
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
