@@ -18,7 +18,6 @@ use dash_middle::parser::expr::PropertyAccessExpr;
 use dash_middle::parser::expr::Seq;
 use dash_middle::parser::expr::UnaryExpr;
 use dash_middle::parser::expr::{ArrayLiteral, ObjectMemberKind};
-use dash_middle::parser::statement::ForLoop;
 use dash_middle::parser::statement::ForOfLoop;
 use dash_middle::parser::statement::FunctionDeclaration;
 use dash_middle::parser::statement::FunctionKind;
@@ -33,8 +32,9 @@ use dash_middle::parser::statement::VariableDeclaration;
 use dash_middle::parser::statement::VariableDeclarationKind;
 use dash_middle::parser::statement::WhileLoop;
 use dash_middle::parser::statement::{BlockStatement, Loop};
-use dash_middle::parser::statement::{Class, ClassMemberKind};
-use dash_middle::parser::statement::{ClassProperty, ExportKind};
+use dash_middle::parser::statement::{Class, Parameter};
+use dash_middle::parser::statement::{ClassMemberKind, ExportKind};
+use dash_middle::parser::statement::{ClassProperty, ForLoop};
 use dash_optimizer::consteval::Eval;
 use dash_optimizer::OptLevel;
 
@@ -729,8 +729,15 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         let mut compiler = unsafe { FunctionCompiler::with_caller(&mut ib, ty) };
         let scope = &mut compiler.scope;
 
-        for (name, _ty) in &arguments {
-            scope.add_local(
+        let mut rest_local = None;
+
+        for (param, _ty) in &arguments {
+            let name = match param {
+                Parameter::Identifier(ident) => ident,
+                Parameter::Spread(ident) => ident,
+            };
+
+            let id = scope.add_local(
                 VariableBinding {
                     kind: VariableDeclarationKind::Var,
                     name,
@@ -738,6 +745,10 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 },
                 false,
             )?;
+
+            if let Parameter::Spread(..) = param {
+                rest_local = Some(id);
+            }
         }
 
         let cmp = compiler.compile_ast(statements, false)?;
@@ -748,8 +759,12 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             locals: cmp.locals,
             name: name.map(ToOwned::to_owned),
             ty,
-            params: arguments.len(),
+            params: match arguments.last() {
+                Some((Parameter::Spread(..), ..)) => arguments.len() - 1,
+                _ => arguments.len(),
+            },
             externals: cmp.externals.into(),
+            rest_local,
         };
         ib.build_constant(Constant::Function(Rc::new(function)))?;
 

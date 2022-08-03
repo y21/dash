@@ -114,6 +114,7 @@ impl Frame {
             name: None,
             params: 0,
             ty: FunctionKind::Function,
+            rest_local: None,
         };
 
         Self {

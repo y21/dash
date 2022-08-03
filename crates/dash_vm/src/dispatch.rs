@@ -290,17 +290,24 @@ mod handlers {
         let is_constructor = meta.is_constructor_call();
         let has_this = meta.is_object_call();
 
-        let mut args = Vec::with_capacity(argc.into());
-        let mut refs = Vec::new();
-        for _ in 0..argc {
-            let value = vm.stack.pop().expect("Missing argument");
-            if let Value::Object(handle) = &value {
-                refs.push(handle.clone());
+        let (args, refs) = {
+            let argc = argc.into();
+            let mut args = Vec::with_capacity(argc);
+            let mut refs = Vec::new();
+
+            let len = vm.stack.len();
+            let iter = vm.stack.drain((len - argc)..);
+
+            for value in iter {
+                if let Value::Object(handle) = &value {
+                    refs.push(handle.clone());
+                }
+
+                args.push(value);
             }
 
-            args.push(value);
-        }
-        args.reverse(); // TODO: we can do better
+            (args, refs)
+        };
 
         let callee = vm.stack.pop().expect("Missing callee");
 

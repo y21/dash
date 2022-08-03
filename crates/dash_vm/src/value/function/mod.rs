@@ -2,6 +2,7 @@ use std::{
     any::Any,
     cell::RefCell,
     fmt::{self, Debug},
+    iter,
     rc::Rc,
 };
 
@@ -20,6 +21,7 @@ use self::{
 };
 
 use super::{
+    array::Array,
     object::{NamedObject, Object, PropertyKey, PropertyValue},
     Typeof, Value,
 };
@@ -134,9 +136,29 @@ fn handle_call(
         FunctionKind::User(uf) => {
             let sp = scope.stack.len();
 
-            let argc = std::cmp::min(uf.inner().params, args.len());
+            // Insert at most [param_count] amount of provided arguments on the stack
+            // In the compiler we allocate local space for every parameter
+            let param_count = uf.inner().params;
+            scope.stack.extend(args.iter().take(param_count).cloned());
 
-            scope.stack.extend(args.into_iter().take(argc));
+            // Insert undefined values for parameters without a value
+            if param_count > args.len() {
+                scope
+                    .stack
+                    .extend(iter::repeat(Value::undefined()).take(param_count - args.len()));
+            }
+
+            // Finally insert Value::Object([]) if this function uses the rest operator
+            if uf.inner().rest_local.is_some() {
+                let args = args
+                    .get(param_count..)
+                    .map(|s| s.iter().cloned().map(PropertyValue::Static).collect())
+                    .unwrap_or_default();
+
+                let array = Array::from_vec(scope, args);
+                let array = scope.register(array);
+                scope.stack.push(Value::Object(array));
+            }
 
             let mut frame = Frame::from_function(Some(this), uf, is_constructor_call);
             frame.set_sp(sp);

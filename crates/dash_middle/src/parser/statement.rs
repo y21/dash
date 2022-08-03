@@ -329,7 +329,7 @@ pub struct FunctionDeclaration<'a> {
     /// The name of this function, if present
     pub name: Option<&'a str>,
     /// Function parameter names
-    pub parameters: Vec<(&'a str, Option<TypeSegment<'a>>)>,
+    pub parameters: Vec<(Parameter<'a>, Option<TypeSegment<'a>>)>,
     /// Function body
     pub statements: Vec<Statement<'a>>,
     /// The type of function
@@ -386,7 +386,7 @@ impl<'a> FunctionDeclaration<'a> {
     /// Creates a new function declaration
     pub fn new(
         name: Option<&'a str>,
-        parameters: Vec<(&'a str, Option<TypeSegment<'a>>)>,
+        parameters: Vec<(Parameter<'a>, Option<TypeSegment<'a>>)>,
         statements: Vec<Statement<'a>>,
         ty: FunctionKind,
     ) -> Self {
@@ -702,4 +702,11 @@ impl<'a> fmt::Display for ClassProperty<'a> {
 
         write!(f, ";")
     }
+}
+
+/// A function parameter
+#[derive(Debug, Clone, Display)]
+pub enum Parameter<'a> {
+    Identifier(&'a str),
+    Spread(&'a str),
 }
