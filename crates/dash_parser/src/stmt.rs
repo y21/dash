@@ -400,9 +400,6 @@ impl<'a> StatementParser<'a> for Parser<'a> {
                         }
                     };
 
-                    // Spread operator must be the last parameter, followed by )
-                    self.expect_and_skip(&[TokenType::RightParen], true);
-
                     Parameter::Spread(ident)
                 }
                 TokenType::Identifier => Parameter::Identifier(tok.full),
@@ -419,7 +416,18 @@ impl<'a> StatementParser<'a> for Parser<'a> {
                 None
             };
 
+            let is_spread = matches!(parameter, Parameter::Spread(..));
+
             parameters.push((parameter, ty));
+
+            if is_spread {
+                // Must be followed by )
+                if !self.expect_and_skip(&[TokenType::RightParen], true) {
+                    return None;
+                }
+
+                break;
+            }
         }
 
         Some(parameters)

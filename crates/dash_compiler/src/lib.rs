@@ -759,7 +759,10 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             locals: cmp.locals,
             name: name.map(ToOwned::to_owned),
             ty,
-            params: arguments.len(),
+            params: match arguments.last() {
+                Some((Parameter::Spread(..), ..)) => arguments.len() - 1,
+                _ => arguments.len(),
+            },
             externals: cmp.externals.into(),
             rest_local,
         };
