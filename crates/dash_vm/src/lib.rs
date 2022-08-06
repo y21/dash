@@ -188,6 +188,9 @@ impl Vm {
         let function_proto = register_builtin_type!(scope.statics.function_proto, {
             #[prototype] scope.statics.object_prototype;
             #[constructor] function_ctor;
+
+            #[properties]
+            bind: scope.statics.function_bind;
         });
 
         let object_ctor = register_builtin_type!(scope.statics.object_ctor, {
