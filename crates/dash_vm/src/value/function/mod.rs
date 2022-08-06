@@ -26,10 +26,10 @@ use super::{
     Typeof, Value,
 };
 
+pub mod bound;
 pub mod generator;
 pub mod native;
 pub mod user;
-
 pub enum FunctionKind {
     Native(NativeFunction),
     User(UserFunction),
@@ -79,12 +79,13 @@ pub struct Function {
 
 impl Function {
     pub fn new(vm: &mut Vm, name: Option<Rc<str>>, kind: FunctionKind) -> Self {
-        Self {
-            name: RefCell::new(name),
+        let (proto, ctor) = (&vm.statics.function_proto, &vm.statics.function_ctor);
+
+        Self::with_obj(
+            name,
             kind,
-            obj: NamedObject::new(vm),
-            prototype: RefCell::new(None),
-        }
+            NamedObject::with_prototype_and_constructor(proto.clone(), ctor.clone()),
+        )
     }
 
     pub fn with_obj(name: Option<Rc<str>>, kind: FunctionKind, obj: NamedObject) -> Self {
