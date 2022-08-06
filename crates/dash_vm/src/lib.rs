@@ -191,6 +191,7 @@ impl Vm {
 
             #[properties]
             bind: scope.statics.function_bind;
+            call: scope.statics.function_call;
         });
 
         let object_ctor = register_builtin_type!(scope.statics.object_ctor, {
