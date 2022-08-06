@@ -9,6 +9,7 @@ pub mod global;
 pub mod math;
 pub mod number;
 pub mod object;
+pub mod promise;
 pub mod string;
 pub mod symbol;
 pub mod typedarray;
