@@ -8,6 +8,7 @@ pub mod inspect;
 pub mod object;
 pub mod ops;
 pub mod primitive;
+pub mod promise;
 pub mod typedarray;
 
 #[macro_export]

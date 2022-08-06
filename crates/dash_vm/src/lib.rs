@@ -42,6 +42,7 @@ pub const MAX_STACK_SIZE: usize = 8196;
 
 pub struct Vm {
     frames: Vec<Frame>,
+    async_tasks: Vec<Handle<dyn Object>>,
     stack: Vec<Value>,
     gc: Gc<dyn Object>,
     global: Handle<dyn Object>,
@@ -70,6 +71,7 @@ impl Vm {
 
         let mut vm = Self {
             frames: Vec::new(),
+            async_tasks: Vec::new(),
             stack: Vec::with_capacity(512),
             gc,
             global,
@@ -675,6 +677,16 @@ impl Vm {
         } else {
             Err(err)
         }
+    }
+
+    /// Adds a function to the async task queue.
+    pub fn add_async_task(&mut self, fun: Handle<dyn Object>) {
+        self.async_tasks.push(fun);
+    }
+
+    /// Processes all queued async tasks
+    pub fn process_async_tasks(&mut self) {
+        todo!()
     }
 
     /// Executes a frame in this VM
