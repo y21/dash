@@ -524,6 +524,21 @@ impl Vm {
             #[constructor] f64array_ctor;
         });
 
+        let promise_ctor = register_builtin_type!(scope.statics.promise_ctor, {
+            #[prototype] function_proto;
+            #[constructor] function_ctor;
+            #[fn_prototype] scope.statics.promise_proto;
+            #[fn_name] Promise;
+            #[properties]
+            resolve: scope.statics.promise_resolve;
+            reject: scope.statics.promise_reject;
+        });
+
+        register_builtin_type!(scope.statics.promise_proto, {
+            #[prototype] object_proto;
+            #[constructor] promise_ctor;
+        });
+
         register_builtin_type!(global, {
             #[prototype] object_proto;
             #[constructor] object_ctor;
@@ -550,6 +565,7 @@ impl Vm {
             Math: math;
             Number: number_ctor;
             Boolean: boolean_ctor;
+            Promise: promise_ctor;
         });
     }
 
