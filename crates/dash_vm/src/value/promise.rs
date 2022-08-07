@@ -5,6 +5,7 @@ use dash_proc_macro::Trace;
 
 use crate::gc::handle::Handle;
 use crate::gc::trace::Trace;
+use crate::PromiseAction;
 use crate::Vm;
 
 use super::object::NamedObject;
@@ -166,11 +167,16 @@ impl Object for PromiseResolver {
     fn apply(
         &self,
         scope: &mut crate::local::LocalScope,
-        callee: Handle<dyn Object>,
-        this: Value,
+        _callee: Handle<dyn Object>,
+        _this: Value,
         args: Vec<Value>,
     ) -> Result<Value, Value> {
-        todo!()
+        scope.drive_promise(
+            PromiseAction::Resolve,
+            self.promise.as_any().downcast_ref().unwrap(),
+            args,
+        );
+        Ok(Value::Object(self.promise.clone()))
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -238,11 +244,16 @@ impl Object for PromiseRejecter {
     fn apply(
         &self,
         scope: &mut crate::local::LocalScope,
-        callee: Handle<dyn Object>,
-        this: Value,
+        _callee: Handle<dyn Object>,
+        _this: Value,
         args: Vec<Value>,
     ) -> Result<Value, Value> {
-        todo!()
+        scope.drive_promise(
+            PromiseAction::Reject,
+            self.promise.as_any().downcast_ref().unwrap(),
+            args,
+        );
+        Ok(Value::Object(self.promise.clone()))
     }
 
     fn as_any(&self) -> &dyn Any {
