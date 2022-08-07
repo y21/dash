@@ -538,6 +538,8 @@ impl Vm {
         register_builtin_type!(scope.statics.promise_proto, {
             #[prototype] object_proto;
             #[constructor] promise_ctor;
+            #[properties]
+            then: scope.statics.promise_then;
         });
 
         register_builtin_type!(global, {

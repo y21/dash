@@ -16,5 +16,7 @@ pub fn eval(args: &ArgMatches) -> anyhow::Result<()> {
         Err(e) => println!("{e}"),
     };
 
+    vm.process_async_tasks();
+
     Ok(())
 }

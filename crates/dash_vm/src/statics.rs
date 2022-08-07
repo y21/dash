@@ -173,6 +173,7 @@ pub struct Statics {
     pub promise_proto: Handle<dyn Object>,
     pub promise_resolve: Handle<dyn Object>,
     pub promise_reject: Handle<dyn Object>,
+    pub promise_then: Handle<dyn Object>,
 }
 
 fn object(gc: &mut Gc<dyn Object>) -> Handle<dyn Object> {
@@ -339,6 +340,7 @@ impl Statics {
             promise_proto: gc.register(NamedObject::null()),
             promise_resolve: function(gc, "resolve", js_std::promise::resolve),
             promise_reject: function(gc, "reject", js_std::promise::reject),
+            promise_then: function(gc, "then", js_std::promise::then),
         }
     }
 
