@@ -703,7 +703,17 @@ impl Vm {
 
     /// Processes all queued async tasks
     pub fn process_async_tasks(&mut self) {
-        todo!()
+        let tasks = mem::take(&mut self.async_tasks);
+
+        let mut scope = LocalScope::new(self);
+
+        for task in tasks {
+            if let Err(ex) = task.apply(&mut scope, Value::undefined(), Vec::new()) {
+                if let Some(callback) = scope.params.unhandled_task_exception_callback() {
+                    callback(&mut scope, ex);
+                }
+            }
+        }
     }
 
     /// Executes a frame in this VM
