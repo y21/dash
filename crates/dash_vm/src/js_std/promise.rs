@@ -35,6 +35,7 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
 
 pub fn resolve(cx: CallContext) -> Result<Value, Value> {
     let value = cx.args.first().unwrap_or_undefined();
+    // TODO: do not wrap thenable values in another promise
     let promise = Promise::resolved(cx.scope, value);
     Ok(Value::Object(cx.scope.register(promise)))
 }

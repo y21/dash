@@ -1,4 +1,4 @@
-use std::{fmt, ops::RangeBounds, vec::Drain};
+use std::{fmt, ops::RangeBounds, vec::Drain, mem};
 
 use crate::{
     gc::{handle::Handle, trace::Trace, Gc},
@@ -20,6 +20,7 @@ use self::{
 
 #[cfg(feature = "jit")]
 use dash_middle::compiler::constant::Constant;
+use value::{promise::{Promise, PromiseState}, ValueContext, function::bound::BoundFunction};
 
 #[cfg(feature = "jit")]
 mod jit;
@@ -768,6 +769,31 @@ impl Vm {
         &self.params
     }
 
+    pub fn drive_promise(&mut self, action: PromiseAction, promise: &Promise, args: Vec<Value>) {
+        let arg = args.first().unwrap_or_undefined();
+        let mut state = promise.state().borrow_mut();
+
+        if let PromiseState::Pending { resolve, reject } = &mut *state {
+            let handlers = match action {
+                PromiseAction::Resolve => mem::take(resolve),
+                PromiseAction::Reject => mem::take(reject)
+            };
+
+            for handler in handlers {
+                let bf = BoundFunction::new(self, handler, None, Some(args.clone()));
+                let bf = self.register(bf);
+                self.add_async_task(bf);
+            }
+        }
+
+        *state = match action {
+            PromiseAction::Resolve => PromiseState::Resolved(arg),
+            PromiseAction::Reject => PromiseState::Rejected(arg),
+        };
+
+        todo!()
+    }
+
     #[cfg(feature = "jit")]
     pub(crate) fn record_conditional_jump(&mut self, did_jump: bool) {
         if let Some(trace) = &mut self.recording_trace {
@@ -788,6 +814,11 @@ impl Vm {
             trace.record_constant(index, value.into());
         }
     }
+}
+
+pub enum PromiseAction {
+    Resolve,
+    Reject
 }
 
 impl fmt::Debug for Vm {
