@@ -42,19 +42,28 @@ impl Promise {
                 reject: Vec::new(),
                 resolve: Vec::new(),
             }),
-            obj: NamedObject::new(vm),
+            obj: NamedObject::with_prototype_and_constructor(
+                vm.statics.promise_proto.clone(),
+                vm.statics.promise_ctor.clone(),
+            ),
         }
     }
     pub fn resolved(vm: &mut Vm, value: Value) -> Self {
         Self {
             state: RefCell::new(PromiseState::Resolved(value)),
-            obj: NamedObject::new(vm),
+            obj: NamedObject::with_prototype_and_constructor(
+                vm.statics.promise_proto.clone(),
+                vm.statics.promise_ctor.clone(),
+            ),
         }
     }
     pub fn rejected(vm: &mut Vm, value: Value) -> Self {
         Self {
             state: RefCell::new(PromiseState::Rejected(value)),
-            obj: NamedObject::new(vm),
+            obj: NamedObject::with_prototype_and_constructor(
+                vm.statics.promise_proto.clone(),
+                vm.statics.promise_ctor.clone(),
+            ),
         }
     }
     pub fn state(&self) -> &RefCell<PromiseState> {

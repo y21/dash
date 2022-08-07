@@ -70,6 +70,8 @@ impl Object for BoundFunction {
         args: Vec<Value>,
     ) -> Result<Value, Value> {
         let target_this = self.this.clone().unwrap_or(this);
+
+        // TODO: args should be concatenated with self.args
         let target_args = self.args.clone().unwrap_or(args);
 
         self.callee.apply(scope, target_this, target_args)
