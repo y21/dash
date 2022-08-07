@@ -2,6 +2,8 @@ use std::any::Any;
 
 use dash_middle::compiler::StaticImportKind;
 
+use crate::local::LocalScope;
+
 use super::value::Value;
 use super::Vm;
 
@@ -9,6 +11,7 @@ pub type MathRandomCallback = fn(vm: &mut Vm) -> Result<f64, Value>;
 pub type StaticImportCallback = fn(vm: &mut Vm, ty: StaticImportKind, path: &str) -> Result<Value, Value>;
 pub type DynamicImportCallback = fn(vm: &mut Vm, val: Value) -> Result<Value, Value>;
 pub type DebuggerCallback = fn(vm: &mut Vm) -> Result<(), Value>;
+pub type UnhandledTaskException = fn(vm: &mut LocalScope, exception: Value);
 
 #[derive(Default)]
 pub struct VmParams {
@@ -16,6 +19,7 @@ pub struct VmParams {
     static_import_callback: Option<StaticImportCallback>,
     dynamic_import_callback: Option<DynamicImportCallback>,
     debugger_callback: Option<DebuggerCallback>,
+    unhandled_task_exception_callback: Option<UnhandledTaskException>,
     state: Option<Box<dyn Any>>,
 }
 
@@ -67,5 +71,14 @@ impl VmParams {
 
     pub fn debugger_callback(&self) -> Option<DebuggerCallback> {
         self.debugger_callback
+    }
+
+    pub fn set_unhandled_task_exception_callback(mut self, callback: UnhandledTaskException) -> Self {
+        self.unhandled_task_exception_callback = Some(callback);
+        self
+    }
+
+    pub fn unhandled_task_exception_callback(&self) -> Option<UnhandledTaskException> {
+        self.unhandled_task_exception_callback
     }
 }

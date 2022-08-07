@@ -173,7 +173,7 @@ impl Object for PromiseResolver {
     ) -> Result<Value, Value> {
         scope.drive_promise(
             PromiseAction::Resolve,
-            self.promise.as_any().downcast_ref().unwrap(),
+            self.promise.as_any().downcast_ref::<Promise>().unwrap(),
             args,
         );
         Ok(Value::Object(self.promise.clone()))
@@ -250,7 +250,7 @@ impl Object for PromiseRejecter {
     ) -> Result<Value, Value> {
         scope.drive_promise(
             PromiseAction::Reject,
-            self.promise.as_any().downcast_ref().unwrap(),
+            self.promise.as_any().downcast_ref::<Promise>().unwrap(),
             args,
         );
         Ok(Value::Object(self.promise.clone()))
