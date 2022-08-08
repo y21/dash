@@ -185,7 +185,8 @@ impl Object for PromiseResolver {
             self.promise.as_any().downcast_ref::<Promise>().unwrap(),
             args,
         );
-        Ok(Value::Object(self.promise.clone()))
+
+        Ok(Value::undefined())
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -262,7 +263,8 @@ impl Object for PromiseRejecter {
             self.promise.as_any().downcast_ref::<Promise>().unwrap(),
             args,
         );
-        Ok(Value::Object(self.promise.clone()))
+
+        Ok(Value::undefined())
     }
 
     fn as_any(&self) -> &dyn Any {

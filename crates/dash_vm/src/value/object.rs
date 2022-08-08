@@ -57,6 +57,64 @@ pub trait Object: Debug + Trace {
     }
 }
 
+#[macro_export]
+macro_rules! delegate {
+    (override $field:ident, get_property) => {
+        fn get_property(
+            &self,
+            sc: &mut crate::local::LocalScope,
+            key: crate::value::object::PropertyKey,
+        ) -> Result<crate::value::Value, crate::value::Value> {
+            self.$field.get_property(sc, key)
+        }
+    };
+    (override $field:ident, set_property) => {
+        fn set_property(
+            &self,
+            sc: &mut crate::local::LocalScope,
+            key: crate::value::object::PropertyKey<'static>,
+            value: crate::value::object::PropertyValue,
+        ) -> Result<(), crate::value::Value> {
+            self.$field.set_property(sc, key, value)
+        }
+    };
+    (override $field:ident, delete_property) => {
+        fn delete_property(
+            &self,
+            sc: &mut crate::local::LocalScope,
+            key: crate::value::object::PropertyKey,
+        ) -> Result<crate::value::Value, crate::value::Value> {
+            self.$field.delete_property(sc, key)
+        }
+    };
+    (override $field:ident, set_prototype) => {
+        fn set_prototype(&self, sc: &mut crate::local::LocalScope, value: crate::value::Value) -> Result<(), crate::value::Value> {
+            self.$field.set_prototype(sc, value)
+        }
+    };
+    (override $field:ident, get_prototype) => {
+        fn get_prototype(&self, sc: &mut crate::local::LocalScope) -> Result<crate::value::Value, crate::value::Value> {
+            self.$field.get_prototype(sc)
+        }
+    };
+    (override $field:ident, as_any) => {
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+    };
+    (override $field:ident, own_keys) => {
+        fn own_keys(&self) -> Result<Vec<crate::value::Value>, crate::value::Value> {
+            self.$field.own_keys()
+        }
+    };
+
+    ($field:ident, $($method:ident),* $(,)?) => {
+        $(
+            crate::delegate!(override $field, $method);
+        )*
+    };
+}
+
 #[derive(Debug, Clone)]
 pub struct NamedObject {
     prototype: RefCell<Option<Handle<dyn Object>>>,

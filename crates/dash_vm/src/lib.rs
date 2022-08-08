@@ -705,14 +705,16 @@ impl Vm {
 
     /// Processes all queued async tasks
     pub fn process_async_tasks(&mut self) {
-        let tasks = mem::take(&mut self.async_tasks);
+        while !self.async_tasks.is_empty() {
+            let tasks = mem::take(&mut self.async_tasks);
 
-        let mut scope = LocalScope::new(self);
+            let mut scope = LocalScope::new(self);
 
-        for task in tasks {
-            if let Err(ex) = task.apply(&mut scope, Value::undefined(), Vec::new()) {
-                if let Some(callback) = scope.params.unhandled_task_exception_callback() {
-                    callback(&mut scope, ex);
+            for task in tasks {
+                if let Err(ex) = task.apply(&mut scope, Value::undefined(), Vec::new()) {
+                    if let Some(callback) = scope.params.unhandled_task_exception_callback() {
+                        callback(&mut scope, ex);
+                    }
                 }
             }
         }
@@ -802,8 +804,6 @@ impl Vm {
             PromiseAction::Resolve => PromiseState::Resolved(arg),
             PromiseAction::Reject => PromiseState::Rejected(arg),
         };
-
-        todo!()
     }
 
     #[cfg(feature = "jit")]
