@@ -703,6 +703,10 @@ impl Vm {
         self.async_tasks.push(fun);
     }
 
+    pub fn has_async_tasks(&self)  -> bool {
+        !self.async_tasks.is_empty()
+    }
+
     /// Processes all queued async tasks
     pub fn process_async_tasks(&mut self) {
         while !self.async_tasks.is_empty() {
