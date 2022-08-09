@@ -21,6 +21,8 @@ pub fn repl() -> anyhow::Result<()> {
             Ok(value) | Err(EvalError::Exception(value)) => util::print_value(value, &mut vm).unwrap(),
             Err(e) => println!("{e}"),
         }
+
+        vm.process_async_tasks();
     }
 
     Ok(())

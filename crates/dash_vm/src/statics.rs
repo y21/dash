@@ -169,6 +169,11 @@ pub struct Statics {
     pub float32array_prototype: Handle<dyn Object>,
     pub float64array_ctor: Handle<dyn Object>,
     pub float64array_prototype: Handle<dyn Object>,
+    pub promise_ctor: Handle<dyn Object>,
+    pub promise_proto: Handle<dyn Object>,
+    pub promise_resolve: Handle<dyn Object>,
+    pub promise_reject: Handle<dyn Object>,
+    pub promise_then: Handle<dyn Object>,
 }
 
 fn object(gc: &mut Gc<dyn Object>) -> Handle<dyn Object> {
@@ -331,6 +336,11 @@ impl Statics {
             float32array_prototype: gc.register(NamedObject::null()),
             float64array_ctor: function(gc, "Float64Array", js_std::typedarray::f64array::constructor),
             float64array_prototype: gc.register(NamedObject::null()),
+            promise_ctor: function(gc, "Promise", js_std::promise::constructor),
+            promise_proto: gc.register(NamedObject::null()),
+            promise_resolve: function(gc, "resolve", js_std::promise::resolve),
+            promise_reject: function(gc, "reject", js_std::promise::reject),
+            promise_then: function(gc, "then", js_std::promise::then),
         }
     }
 

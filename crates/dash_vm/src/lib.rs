@@ -1,4 +1,4 @@
-use std::{fmt, ops::RangeBounds, vec::Drain};
+use std::{fmt, ops::RangeBounds, vec::Drain, mem};
 
 use crate::{
     gc::{handle::Handle, trace::Trace, Gc},
@@ -20,6 +20,7 @@ use self::{
 
 #[cfg(feature = "jit")]
 use dash_middle::compiler::constant::Constant;
+use value::{promise::{Promise, PromiseState}, ValueContext, function::bound::BoundFunction};
 
 #[cfg(feature = "jit")]
 mod jit;
@@ -42,6 +43,7 @@ pub const MAX_STACK_SIZE: usize = 8196;
 
 pub struct Vm {
     frames: Vec<Frame>,
+    async_tasks: Vec<Handle<dyn Object>>,
     stack: Vec<Value>,
     gc: Gc<dyn Object>,
     global: Handle<dyn Object>,
@@ -70,6 +72,7 @@ impl Vm {
 
         let mut vm = Self {
             frames: Vec::new(),
+            async_tasks: Vec::new(),
             stack: Vec::with_capacity(512),
             gc,
             global,
@@ -522,6 +525,23 @@ impl Vm {
             #[constructor] f64array_ctor;
         });
 
+        let promise_ctor = register_builtin_type!(scope.statics.promise_ctor, {
+            #[prototype] function_proto;
+            #[constructor] function_ctor;
+            #[fn_prototype] scope.statics.promise_proto;
+            #[fn_name] Promise;
+            #[properties]
+            resolve: scope.statics.promise_resolve;
+            reject: scope.statics.promise_reject;
+        });
+
+        register_builtin_type!(scope.statics.promise_proto, {
+            #[prototype] object_proto;
+            #[constructor] promise_ctor;
+            #[properties]
+            then: scope.statics.promise_then;
+        });
+
         register_builtin_type!(global, {
             #[prototype] object_proto;
             #[constructor] object_ctor;
@@ -548,6 +568,7 @@ impl Vm {
             Math: math;
             Number: number_ctor;
             Boolean: boolean_ctor;
+            Promise: promise_ctor;
         });
     }
 
@@ -677,6 +698,32 @@ impl Vm {
         }
     }
 
+    /// Adds a function to the async task queue.
+    pub fn add_async_task(&mut self, fun: Handle<dyn Object>) {
+        self.async_tasks.push(fun);
+    }
+
+    pub fn has_async_tasks(&self)  -> bool {
+        !self.async_tasks.is_empty()
+    }
+
+    /// Processes all queued async tasks
+    pub fn process_async_tasks(&mut self) {
+        while !self.async_tasks.is_empty() {
+            let tasks = mem::take(&mut self.async_tasks);
+
+            let mut scope = LocalScope::new(self);
+
+            for task in tasks {
+                if let Err(ex) = task.apply(&mut scope, Value::undefined(), Vec::new()) {
+                    if let Some(callback) = scope.params.unhandled_task_exception_callback() {
+                        callback(&mut scope, ex);
+                    }
+                }
+            }
+        }
+    }
+
     /// Executes a frame in this VM
     pub fn execute_frame(&mut self, frame: Frame) -> Result<HandleResult, Value> {
         self.stack
@@ -740,6 +787,29 @@ impl Vm {
         &self.params
     }
 
+    pub fn drive_promise(&mut self, action: PromiseAction, promise: &Promise, args: Vec<Value>) {
+        let arg = args.first().unwrap_or_undefined();
+        let mut state = promise.state().borrow_mut();
+
+        if let PromiseState::Pending { resolve, reject } = &mut *state {
+            let handlers = match action {
+                PromiseAction::Resolve => mem::take(resolve),
+                PromiseAction::Reject => mem::take(reject)
+            };
+
+            for handler in handlers {
+                let bf = BoundFunction::new(self, handler, None, Some(args.clone()));
+                let bf = self.register(bf);
+                self.add_async_task(bf);
+            }
+        }
+
+        *state = match action {
+            PromiseAction::Resolve => PromiseState::Resolved(arg),
+            PromiseAction::Reject => PromiseState::Rejected(arg),
+        };
+    }
+
     #[cfg(feature = "jit")]
     pub(crate) fn record_conditional_jump(&mut self, did_jump: bool) {
         if let Some(trace) = &mut self.recording_trace {
@@ -760,6 +830,11 @@ impl Vm {
             trace.record_constant(index, value.into());
         }
     }
+}
+
+pub enum PromiseAction {
+    Resolve,
+    Reject
 }
 
 impl fmt::Debug for Vm {
