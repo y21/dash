@@ -52,7 +52,9 @@ impl LoopCounter {
 pub struct Frame {
     pub function: Rc<Function>,
     pub ip: usize,
-    pub reserved_stack_size: usize,
+    /// Extra stack space allocated at the start of frame execution, currently only used for local variables
+    /// (excluding function parameters, as they are pushed onto the stack in Function::apply)
+    pub extra_stack_space: usize,
     pub externals: Rc<[Handle<dyn Object>]>,
     pub this: Option<Value>,
     pub sp: usize,
@@ -77,7 +79,7 @@ impl Frame {
             externals: uf.externals().clone(),
             ip: 0,
             sp: 0,
-            reserved_stack_size: inner.locals, // TODO: do we need to add the param count to this number?
+            extra_stack_space: inner.locals - uf.inner().params,
             state: FrameState::Function { is_constructor_call },
             loop_counter: BTreeMap::new(),
         }
@@ -91,7 +93,7 @@ impl Frame {
             externals: uf.externals().clone(),
             ip: 0,
             sp: 0,
-            reserved_stack_size: inner.locals,
+            extra_stack_space: inner.locals - uf.inner().params,
             state: FrameState::Module(Exports::default()),
             loop_counter: BTreeMap::new(),
         }
@@ -123,7 +125,7 @@ impl Frame {
             externals: Vec::new().into(),
             ip: 0,
             sp: 0,
-            reserved_stack_size: cr.locals,
+            extra_stack_space: cr.locals, /* - 0 params */
             state: FrameState::Function {
                 is_constructor_call: false,
             },
@@ -131,8 +133,8 @@ impl Frame {
         }
     }
 
-    pub fn set_reserved_stack_size(&mut self, size: usize) {
-        self.reserved_stack_size = size;
+    pub fn set_extra_stack_space(&mut self, size: usize) {
+        self.extra_stack_space = size;
     }
 
     pub fn set_ip(&mut self, ip: usize) {

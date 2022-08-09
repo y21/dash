@@ -57,7 +57,7 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
         // If this generator did run before, we do not want to reserve stack space for all locals *again*,
         // because they are already in `old_stack`
         if generator.did_run() {
-            frame.set_reserved_stack_size(0);
+            frame.set_extra_stack_space(0);
         }
 
         frame
