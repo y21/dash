@@ -1,5 +1,4 @@
-#[macro_use]
-extern crate dlopen_derive;
+use std::mem::ManuallyDrop;
 
 use dash_vm::local::LocalScope;
 use dash_vm::throw;
@@ -11,8 +10,9 @@ use dash_vm::value::object::Object;
 use dash_vm::value::object::PropertyValue;
 use dash_vm::value::ops::abstractions::conversions::ValueConversion;
 use dash_vm::value::Value;
-use dlopen::wrapper::Container;
-use dlopen::wrapper::WrapperApi;
+use libloading::Library;
+
+type InitFunction = unsafe extern "C" fn(*mut CallContext, *mut Result<Value, Value>);
 
 #[macro_export]
 macro_rules! dashdl {
@@ -27,11 +27,6 @@ macro_rules! dashdl {
     };
 }
 
-#[derive(WrapperApi)]
-pub struct Library {
-    dashjs_init_module: unsafe fn(cx: *mut CallContext, ret: *mut Result<Value, Value>),
-}
-
 pub fn load_sync(mut cx: CallContext) -> Result<Value, Value> {
     let path = match cx.args.first() {
         Some(first) => first,
@@ -40,16 +35,22 @@ pub fn load_sync(mut cx: CallContext) -> Result<Value, Value> {
 
     let path = ValueConversion::to_string(path, cx.scope)?;
 
-    let lib = match unsafe { Container::<Library>::load(path.as_ref()) } {
-        Ok(lib) => lib,
-        Err(err) => {
-            throw!(cx.scope, "{}", err)
-        }
-    };
+    unsafe {
+        let lib = match Library::new(path.as_ref()) {
+            // TODO: Currently we (intentionally) leak all dlopen'd handles, because we don't know exactly when we should close it
+            Ok(lib) => ManuallyDrop::new(lib),
+            Err(err) => throw!(cx.scope, "{}", err),
+        };
 
-    let mut ret = Ok(Value::undefined());
-    unsafe { lib.dashjs_init_module(&mut cx, &mut ret) };
-    ret
+        let init: libloading::Symbol<InitFunction> = match lib.get(b"dashjs_init_module\0") {
+            Ok(sym) => sym,
+            Err(err) => throw!(cx.scope, "{}", err),
+        };
+
+        let mut ret = Ok(Value::undefined());
+        init(&mut cx, &mut ret);
+        ret
+    }
 }
 
 pub fn import_dl(scope: &mut LocalScope) -> Result<Value, Value> {

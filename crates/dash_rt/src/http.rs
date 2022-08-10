@@ -129,7 +129,9 @@ pub fn listen(mut cx: CallContext) -> Result<Value, Value> {
 
                 let (ttx, trx) = oneshot::channel();
 
-                etx.send(EventMessage::HttpRequest(req, ttx)).unwrap();
+                if let Err(..) = etx.send(EventMessage::HttpRequest(req, ttx)) {
+                    eprintln!("Failed to send event");
+                }
 
                 async {
                     let body = trx.await.unwrap();

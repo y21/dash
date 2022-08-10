@@ -1,5 +1,4 @@
 use std::fs;
-use std::time::Duration;
 
 use dash_compiler::from_string::CompileStrError;
 use dash_compiler::FunctionCompiler;
@@ -61,42 +60,33 @@ impl Runtime {
     }
 
     pub async fn run_event_loop(mut self) {
-        // while let Some(message) = self.erx.recv().await {
-        loop {
-            let message_fut = self.erx.recv();
-            let timeout = tokio::time::timeout(Duration::from_millis(50), message_fut);
+        while let Some(message) = self.erx.recv().await {
+            match message {
+                EventMessage::HttpRequest(_, ttx) => {
+                    let mut scope = LocalScope::new(&mut self.vm);
+                    let state = State::try_from_vm(&scope).unwrap();
+                    let cb = match state.http_handler() {
+                        Some(cb) => cb,
+                        None => continue,
+                    };
 
-            match timeout.await {
-                Ok(Some(message)) => {
-                    match message {
-                        EventMessage::HttpRequest(_, ttx) => {
-                            let mut scope = LocalScope::new(&mut self.vm);
-                            let state = State::try_from_vm(&scope).unwrap();
-                            let cb = match state.http_handler() {
-                                Some(cb) => cb,
-                                None => continue,
-                            };
+                    let ctx = HttpContext::new(&mut scope, ttx);
+                    let fun = Function::new(
+                        &mut scope,
+                        Some("respond".into()),
+                        FunctionKind::Native(http::ctx_respond),
+                    );
+                    let fun = scope.register(fun);
+                    ctx.set_property(&mut scope, "respond".into(), PropertyValue::Static(fun.into()))
+                        .unwrap();
 
-                            let ctx = HttpContext::new(&mut scope, ttx);
-                            let fun = Function::new(
-                                &mut scope,
-                                Some("respond".into()),
-                                FunctionKind::Native(http::ctx_respond),
-                            );
-                            let fun = scope.register(fun);
-                            ctx.set_property(&mut scope, "respond".into(), PropertyValue::Static(fun.into()))
-                                .unwrap();
+                    let ctx = Value::Object(scope.register(ctx));
 
-                            let ctx = Value::Object(scope.register(ctx));
-
-                            // TODO(y21): do not unwrap
-                            cb.apply(&mut scope, Value::undefined(), vec![ctx]).unwrap();
-                        }
-                    }
+                    // TODO(y21): do not unwrap
+                    cb.apply(&mut scope, Value::undefined(), vec![ctx]).unwrap();
                 }
-                Ok(None) => break,
-                Err(_elapsed) => {
-                    self.vm.process_async_tasks();
+                EventMessage::Schedule(fun) => {
+                    fun(&mut self);
                 }
             }
         }
