@@ -38,12 +38,14 @@ async fn inner(source: String, opt: OptLevel) -> anyhow::Result<()> {
         }
     };
 
+    rt.vm_mut().process_async_tasks();
+
     // TODO: EvalError::VmError should probably bail too?
 
     util::print_value(value, rt.vm_mut()).unwrap();
 
     let state = State::try_from_vm(rt.vm()).unwrap();
-    if state.needs_event_loop() || rt.vm().has_async_tasks() {
+    if state.needs_event_loop() {
         rt.run_event_loop().await;
     }
 
