@@ -330,6 +330,9 @@ pub enum TokenType {
     #[display(fmt = "set")]
     Set,
 
+    #[display(fmt = "async")]
+    Async,
+
     #[display(fmt = "EOF")]
     Eof,
 }
@@ -387,6 +390,7 @@ impl From<&[u8]> for TokenType {
             b"while" => Self::While,
             b"in" => Self::In,
             b"instanceof" => Self::Instanceof,
+            b"async" => Self::Async,
             b"await" => Self::Await,
             b"delete" => Self::Delete,
             b"void" => Self::Void,

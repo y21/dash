@@ -62,7 +62,14 @@ impl<'a> StatementParser<'a> for Parser<'a> {
         let stmt = match self.next()?.ty {
             TokenType::Let | TokenType::Const | TokenType::Var => self.parse_variable().map(Statement::Variable),
             TokenType::If => self.parse_if(true).map(Statement::If),
-            TokenType::Function => self.parse_function().map(Statement::Function),
+            TokenType::Function => self.parse_function(false).map(Statement::Function),
+            TokenType::Async => {
+                // async must be followed by function (todo: or async () => {})
+                if !self.expect_and_skip(&[TokenType::Function], true) {
+                    return None;
+                }
+                self.parse_function(true).map(Statement::Function)
+            }
             TokenType::LeftBrace => self.parse_block().map(Statement::Block),
             TokenType::While => self.parse_while_loop().map(Statement::Loop),
             TokenType::Try => self.parse_try().map(Statement::Try),
@@ -119,7 +126,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
                 let arguments = self.parse_parameter_list()?;
                 let body = self.parse_statement()?;
 
-                let func = FunctionDeclaration::new(Some(name), arguments, vec![body], FunctionKind::Function);
+                let func = FunctionDeclaration::new(Some(name), arguments, vec![body], FunctionKind::Function, false);
 
                 members.push(ClassMember {
                     private: is_private,

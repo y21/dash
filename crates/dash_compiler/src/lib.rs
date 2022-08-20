@@ -723,6 +723,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             parameters: arguments,
             statements,
             ty,
+            ..
         }: FunctionDeclaration<'a>,
     ) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
@@ -1064,6 +1065,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             parameters,
             statements,
             ty: FunctionKind::Function,
+            r#async: false,
         };
 
         ib.visit_variable_declaration(VariableDeclaration {

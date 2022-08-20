@@ -328,6 +328,8 @@ pub enum FunctionKind {
 pub struct FunctionDeclaration<'a> {
     /// The name of this function, if present
     pub name: Option<&'a str>,
+    /// Whether this function is an async function
+    pub r#async: bool,
     /// Function parameter names
     pub parameters: Vec<(Parameter<'a>, Option<TypeSegment<'a>>)>,
     /// Function body
@@ -389,12 +391,14 @@ impl<'a> FunctionDeclaration<'a> {
         parameters: Vec<(Parameter<'a>, Option<TypeSegment<'a>>)>,
         statements: Vec<Statement<'a>>,
         ty: FunctionKind,
+        r#async: bool,
     ) -> Self {
         Self {
             name,
             parameters,
             statements,
             ty,
+            r#async,
         }
     }
 }
