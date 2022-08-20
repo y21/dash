@@ -13,7 +13,7 @@ members = [
     "crates/dash_proc_macro",
     "crates/dash_rt",
     "crates/dash_dlloader",
-    "crates/dash_jit"
+    "crates/dash_jit",
 ]
 
 [profile.release]

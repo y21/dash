@@ -724,13 +724,31 @@ impl Vm {
         }
     }
 
-    /// Executes a frame in this VM
+    /// Executes a frame in this VM and initializes local variables (excluding parameters)
+    /// 
+    /// Parameters must be pushed onto the stack in the correct order by the caller before this function is called.
     pub fn execute_frame(&mut self, frame: Frame) -> Result<HandleResult, Value> {
+        self.pad_stack_for_frame(&frame);
+        self.execute_frame_raw(frame)
+    }
+
+    /// Does the necessary stack management that needs to be done before executing a JavaScript frame
+    pub(crate) fn pad_stack_for_frame(&mut self, frame: &Frame) {
+        // TODO: check that the stack space won't exceed our stack frame limit
         self.stack
             .resize(self.stack.len() + frame.extra_stack_space, Value::undefined());
+    }
 
+    /// Executes a frame in this VM, without doing any sort of stack management
+    pub fn execute_frame_raw(&mut self, frame: Frame) -> Result<HandleResult, Value>
+    {
+        // TODO: if this fails, we MUST revert the stack management,
+        // like reserving space for undefined values
         self.try_push_frame(frame)?;
+        self.handle_instruction_loop()
+    }
 
+    fn handle_instruction_loop(&mut self) -> Result<HandleResult, Value> {
         let fp = self.frames.len();
 
         loop {

@@ -29,6 +29,7 @@ fn as_generator<'a>(scope: &mut LocalScope, value: &'a Value) -> Result<&'a Gene
 }
 
 pub fn next(cx: CallContext) -> Result<Value, Value> {
+    let arg = cx.args.first().unwrap_or_undefined();
     let frame = {
         let generator = as_generator(cx.scope, &cx.this)?;
 
@@ -54,16 +55,21 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
         frame.set_ip(ip);
         frame.set_sp(current_sp);
 
-        // If this generator did run before, we do not want to reserve stack space for all locals *again*,
-        // because they are already in `old_stack`
-        if generator.did_run() {
-            frame.set_extra_stack_space(0);
+        if !generator.did_run() {
+            // If it hasn't run before, do the stack space management initially (push undefined values for locals)
+            // We only want to do this if the generator hasn't run already, because the locals are already in `old_stack`
+            cx.scope.pad_stack_for_frame(&frame);
+        } else {
+            // Generator did run before. Push the yielded value onto the stack, which will be what the yield expression
+            // evaluates to.
+            cx.scope.try_push_stack(arg)?;
         }
 
         frame
     };
 
-    let result = cx.scope.vm.execute_frame(frame)?;
+    // Generators work a bit different from normal functions, so we do the stack padding management ourselves here
+    let result = cx.scope.vm.execute_frame_raw(frame)?;
     let generator = as_generator(cx.scope, &cx.this)?;
 
     match result {
@@ -76,10 +82,9 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
             let frame = cx.scope.pop_frame().expect("Generator frame is missing");
             let stack = cx.scope.drain_stack(frame.sp..).collect::<Vec<_>>();
 
-            generator.state().replace(GeneratorState::Running {
-                ip: frame.ip + 1,
-                stack,
-            });
+            generator
+                .state()
+                .replace(GeneratorState::Running { ip: frame.ip, stack });
 
             create_generator_value(cx.scope, false, Some(value))
         }
