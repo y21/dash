@@ -12,3 +12,5 @@ tokio = { version = "1", features = ["full"] }
 dash_rt = { path = "../crates/dash_rt", features = ["dlopen"] }
 dash_vm = { path = "../crates/dash_vm", features = ["eval"] }
 dash_optimizer = { path = "../crates/dash_optimizer" }
+tracing-subscriber = "0.3.15"
+tracing = "0.1.36"

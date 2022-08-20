@@ -20,6 +20,7 @@ use rand::Rng;
 use tokio::sync::mpsc;
 
 use crate::event::EventMessage;
+use crate::event::EventSender;
 use crate::http;
 use crate::http::HttpContext;
 use crate::state::State;
@@ -39,7 +40,7 @@ impl Runtime {
         let params = VmParams::new()
             .set_static_import_callback(import_callback)
             .set_math_random_callback(random_callback)
-            .set_state(Box::new(State::new(rt, etx)));
+            .set_state(Box::new(State::new(rt, EventSender::new(etx))));
 
         Self {
             vm: Vm::new(params),
@@ -84,9 +85,6 @@ impl Runtime {
 
                     // TODO(y21): do not unwrap
                     cb.apply(&mut scope, Value::undefined(), vec![ctx]).unwrap();
-                }
-                EventMessage::Schedule(fun) => {
-                    fun(&mut self);
                 }
             }
         }

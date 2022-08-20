@@ -6,6 +6,8 @@ mod cmd;
 mod util;
 
 fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt::init();
+
     let opt_level = Arg::new("opt")
         .short('o')
         .long("opt")

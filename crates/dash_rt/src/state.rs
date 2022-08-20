@@ -5,18 +5,17 @@ use dash_vm::gc::handle::Handle;
 use dash_vm::gc::handle::InnerHandle;
 use dash_vm::value::object::Object;
 use dash_vm::Vm;
-use tokio::sync::mpsc;
 
-use crate::event::EventMessage;
+use crate::event::EventSender;
 
 pub struct State {
     rt: tokio::runtime::Handle,
-    tx: mpsc::UnboundedSender<EventMessage>,
+    tx: EventSender,
     http_handler: RefCell<Option<NonNull<InnerHandle<dyn Object>>>>,
 }
 
 impl State {
-    pub fn new(rt: tokio::runtime::Handle, tx: mpsc::UnboundedSender<EventMessage>) -> Self {
+    pub fn new(rt: tokio::runtime::Handle, tx: EventSender) -> Self {
         Self {
             rt,
             tx,
@@ -41,7 +40,7 @@ impl State {
         vm.params().state()
     }
 
-    pub fn event_sender(&self) -> mpsc::UnboundedSender<EventMessage> {
+    pub fn event_sender(&self) -> EventSender {
         self.tx.clone()
     }
 

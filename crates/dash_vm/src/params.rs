@@ -55,6 +55,10 @@ impl VmParams {
         self.state.as_ref().and_then(|s| s.downcast_ref::<T>())
     }
 
+    pub fn state_raw(&self) -> Option<&dyn Any> {
+        self.state.as_deref()
+    }
+
     pub fn set_math_random_callback(mut self, callback: MathRandomCallback) -> Self {
         self.math_random_callback = Some(callback);
         self

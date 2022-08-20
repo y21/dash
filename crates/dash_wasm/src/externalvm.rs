@@ -58,4 +58,8 @@ impl ExternalVm {
             Err(e) => Err(format!("{:?}", e)), // TODO: use inspect?
         }
     }
+
+    pub fn process_async_tasks(&mut self) {
+        self.0.process_async_tasks();
+    }
 }
