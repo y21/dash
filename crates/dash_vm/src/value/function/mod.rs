@@ -6,6 +6,7 @@ use std::{
 };
 
 use crate::{
+    dispatch::HandleResult,
     gc::{handle::Handle, trace::Trace},
     local::LocalScope,
     throw, Vm,
@@ -141,7 +142,12 @@ fn handle_call(
             };
             native(cx)
         }
-        FunctionKind::User(fun) => fun.handle_function_call(scope, this, args, is_constructor_call),
+        FunctionKind::User(fun) => fun
+            .handle_function_call(scope, this, args, is_constructor_call)
+            .map(|v| match v {
+                HandleResult::Return(v) => v,
+                HandleResult::Yield(..) | HandleResult::Await(..) => unreachable!(), // UserFunction cannot `yield`/`await`
+            }),
         FunctionKind::Async(fun) => fun.handle_function_call(scope, this, args, is_constructor_call),
         FunctionKind::Generator(..) => {
             GeneratorFunction::handle_function_call(scope, callee, this, args, is_constructor_call)

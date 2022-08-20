@@ -46,6 +46,7 @@ use crate::{
     },
 };
 
+use self::function::r#async::AsyncFunction;
 use self::object::PropertyValue;
 use self::{
     function::{generator::GeneratorFunction, user::UserFunction, Function},
@@ -127,18 +128,22 @@ impl Value {
 
                 let name: Option<Rc<str>> = f.name.as_deref().map(Into::into);
                 let ty = f.ty;
+                let is_async = f.r#async;
 
                 let fun = UserFunction::new(f, externals.into());
 
-                let function = match ty {
+                let kind = match ty {
                     ParserFunctionKind::Function | ParserFunctionKind::Arrow => {
-                        Function::new(vm, name, FunctionKind::User(fun))
+                        if is_async {
+                            FunctionKind::Async(AsyncFunction::new(fun))
+                        } else {
+                            FunctionKind::User(fun)
+                        }
                     }
-                    ParserFunctionKind::Generator => {
-                        Function::new(vm, name, FunctionKind::Generator(GeneratorFunction::new(fun)))
-                    }
+                    ParserFunctionKind::Generator => FunctionKind::Generator(GeneratorFunction::new(fun)),
                 };
 
+                let function = Function::new(vm, name, kind);
                 vm.gc.register(function).into()
             }
             Constant::Identifier(_) => unreachable!(),

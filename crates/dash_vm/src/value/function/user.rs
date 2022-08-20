@@ -37,7 +37,7 @@ impl UserFunction {
         this: Value,
         args: Vec<Value>,
         is_constructor_call: bool,
-    ) -> Result<Value, Value> {
+    ) -> Result<HandleResult, Value> {
         let sp = scope.stack.len();
 
         // Insert at most [param_count] amount of provided arguments on the stack
@@ -67,9 +67,6 @@ impl UserFunction {
         let mut frame = Frame::from_function(Some(this), self, is_constructor_call);
         frame.set_sp(sp);
 
-        scope.vm.execute_frame(frame).map(|v| match v {
-            HandleResult::Return(v) => v,
-            HandleResult::Yield(..) | HandleResult::Await(..) => unreachable!(), // UserFunction cannot `yield`/`await`
-        })
+        scope.vm.execute_frame(frame)
     }
 }
