@@ -116,6 +116,7 @@ impl Frame {
             name: None,
             params: 0,
             ty: FunctionKind::Function,
+            r#async: false,
             rest_local: None,
         };
 

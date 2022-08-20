@@ -2,30 +2,28 @@ use std::{
     any::Any,
     cell::RefCell,
     fmt::{self, Debug},
-    iter,
     rc::Rc,
 };
 
 use crate::{
-    dispatch::HandleResult,
-    frame::Frame,
     gc::{handle::Handle, trace::Trace},
     local::LocalScope,
     throw, Vm,
 };
 
 use self::{
-    generator::{GeneratorFunction, GeneratorIterator},
+    generator::GeneratorFunction,
     native::{CallContext, NativeFunction},
+    r#async::AsyncFunction,
     user::UserFunction,
 };
 
 use super::{
-    array::Array,
     object::{NamedObject, Object, PropertyKey, PropertyValue},
     Typeof, Value,
 };
 
+pub mod r#async;
 pub mod bound;
 pub mod generator;
 pub mod native;
@@ -34,6 +32,7 @@ pub enum FunctionKind {
     Native(NativeFunction),
     User(UserFunction),
     Generator(GeneratorFunction),
+    Async(AsyncFunction),
 }
 
 impl FunctionKind {
@@ -57,14 +56,22 @@ impl FunctionKind {
             _ => None,
         }
     }
+
+    pub fn as_async(&self) -> Option<&AsyncFunction> {
+        match self {
+            Self::Async(f) => Some(f),
+            _ => None,
+        }
+    }
 }
 
 impl fmt::Debug for FunctionKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Native(_) => f.write_str("NativeFunction"),
-            Self::User(_) => f.write_str("UserFunction"),
-            Self::Generator(_) => f.write_str("GeneratorFunction"),
+            Self::Native(..) => f.write_str("NativeFunction"),
+            Self::User(..) => f.write_str("UserFunction"),
+            Self::Generator(..) => f.write_str("GeneratorFunction"),
+            Self::Async(..) => f.write_str("AsyncFunction"),
         }
     }
 }
@@ -134,44 +141,10 @@ fn handle_call(
             };
             native(cx)
         }
-        FunctionKind::User(uf) => {
-            let sp = scope.stack.len();
-
-            // Insert at most [param_count] amount of provided arguments on the stack
-            // In the compiler we allocate local space for every parameter
-            let param_count = uf.inner().params;
-            scope.stack.extend(args.iter().take(param_count).cloned());
-
-            // Insert undefined values for parameters without a value
-            if param_count > args.len() {
-                scope
-                    .stack
-                    .extend(iter::repeat(Value::undefined()).take(param_count - args.len()));
-            }
-
-            // Finally insert Value::Object([]) if this function uses the rest operator
-            if uf.inner().rest_local.is_some() {
-                let args = args
-                    .get(param_count..)
-                    .map(|s| s.iter().cloned().map(PropertyValue::Static).collect())
-                    .unwrap_or_default();
-
-                let array = Array::from_vec(scope, args);
-                let array = scope.register(array);
-                scope.stack.push(Value::Object(array));
-            }
-
-            let mut frame = Frame::from_function(Some(this), uf, is_constructor_call);
-            frame.set_sp(sp);
-
-            scope.vm.execute_frame(frame).map(|v| match v {
-                HandleResult::Return(v) => v,
-                HandleResult::Yield(_) => unreachable!(), // UserFunction cannot `yield`
-            })
-        }
-        FunctionKind::Generator(_) => {
-            let iter = GeneratorIterator::new(callee, scope, args);
-            Ok(scope.register(iter).into())
+        FunctionKind::User(fun) => fun.handle_function_call(scope, this, args, is_constructor_call),
+        FunctionKind::Async(fun) => fun.handle_function_call(scope, this, args, is_constructor_call),
+        FunctionKind::Generator(..) => {
+            GeneratorFunction::handle_function_call(scope, callee, this, args, is_constructor_call)
         }
     }
 }

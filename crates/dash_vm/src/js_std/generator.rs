@@ -88,6 +88,7 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
 
             create_generator_value(cx.scope, false, Some(value))
         }
+        HandleResult::Await(..) => throw!(cx.scope, "Cannot use `await` in generators"),
     }
 }
 

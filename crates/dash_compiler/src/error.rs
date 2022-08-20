@@ -15,6 +15,7 @@ pub enum CompileError {
     Unimplemented(String),
     ParameterLimitExceeded,
     YieldOutsideGenerator,
+    AwaitOutsideAsync,
     UnknownBinding,
 }
 
@@ -44,7 +45,8 @@ impl fmt::Display for CompileError {
             Self::ParameterLimitExceeded => f.write_str("Maximum number of function parameters exceedeed"),
             Self::YieldOutsideGenerator => f.write_str("`yield` is only available in generator functions"),
             Self::ExportNameListLimitExceeded => f.write_str("Maximum number of export names exceedeed"),
-            Self::UnknownBinding => f.write_str("Attempted to visit unknown binding")
+            Self::UnknownBinding => f.write_str("Attempted to visit unknown binding"),
+            Self::AwaitOutsideAsync => f.write_str("`await` is only available in async functions"),
         }
     }
 }

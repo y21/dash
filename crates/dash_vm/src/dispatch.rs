@@ -4,6 +4,7 @@ use dash_middle::compiler::instruction as inst;
 pub enum HandleResult {
     Return(Value),
     Yield(Value),
+    Await(Value),
 }
 
 impl HandleResult {
@@ -11,6 +12,7 @@ impl HandleResult {
         match self {
             HandleResult::Return(v) => v,
             HandleResult::Yield(v) => v,
+            HandleResult::Await(v) => v,
         }
     }
 }
@@ -749,6 +751,11 @@ mod handlers {
         Ok(Some(HandleResult::Yield(value)))
     }
 
+    pub fn await_(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        let value = vm.stack.pop().expect("Missing value");
+        Ok(Some(HandleResult::Await(value)))
+    }
+
     pub fn import_dyn(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
         let value = vm.stack.pop().expect("Missing value");
 
@@ -950,6 +957,7 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<Option<HandleResult>, Valu
         inst::NEG => handlers::neg(vm),
         inst::POS => handlers::pos(vm),
         inst::UNDEF => handlers::undef(vm),
+        inst::AWAIT => handlers::await_(vm),
         _ => unimplemented!("{}", instruction),
     }
 }

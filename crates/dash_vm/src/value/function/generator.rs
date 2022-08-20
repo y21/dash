@@ -29,6 +29,17 @@ impl GeneratorFunction {
     pub fn function(&self) -> &UserFunction {
         &self.function
     }
+
+    pub(crate) fn handle_function_call(
+        scope: &mut LocalScope,
+        callee: Handle<dyn Object>,
+        _this: Value,
+        args: Vec<Value>,
+        _is_constructor_call: bool,
+    ) -> Result<Value, Value> {
+        let iter = GeneratorIterator::new(callee, scope, args);
+        Ok(scope.register(iter).into())
+    }
 }
 
 #[derive(Debug, Clone)]

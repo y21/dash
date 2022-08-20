@@ -75,6 +75,7 @@ pub struct FunctionCompiler<'a> {
     ty: FunctionKind,
     caller: Option<NonNull<FunctionCompiler<'a>>>,
     opt_level: OptLevel,
+    r#async: bool,
 }
 
 /// Implicitly inserts a `return` statement for the last expression
@@ -103,6 +104,7 @@ impl<'a> FunctionCompiler<'a> {
             externals: Vec::new(),
             try_catch_depth: 0,
             ty: FunctionKind::Function,
+            r#async: false,
             caller: None,
             opt_level,
         }
@@ -110,7 +112,7 @@ impl<'a> FunctionCompiler<'a> {
 
     /// # Safety
     /// * Requires `caller` to not be invalid (i.e. due to moving) during calls
-    pub unsafe fn with_caller<'s>(caller: &'s mut FunctionCompiler<'a>, ty: FunctionKind) -> Self {
+    pub unsafe fn with_caller<'s>(caller: &'s mut FunctionCompiler<'a>, ty: FunctionKind, r#async: bool) -> Self {
         Self {
             buf: Vec::new(),
             cp: ConstantPool::new(),
@@ -120,6 +122,7 @@ impl<'a> FunctionCompiler<'a> {
             ty,
             caller: Some(NonNull::new(caller).unwrap()),
             opt_level: caller.opt_level,
+            r#async,
         }
     }
 
@@ -385,6 +388,13 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 }
 
                 ib.build_yield();
+            }
+            TokenType::Await => {
+                if !ib.r#async {
+                    return Err(CompileError::AwaitOutsideAsync);
+                }
+
+                ib.build_await();
             }
             _ => unimplementedc!("Unary operator {:?}", operator),
         }
@@ -723,11 +733,11 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             parameters: arguments,
             statements,
             ty,
-            ..
+            r#async,
         }: FunctionDeclaration<'a>,
     ) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
-        let mut compiler = unsafe { FunctionCompiler::with_caller(&mut ib, ty) };
+        let mut compiler = unsafe { FunctionCompiler::with_caller(&mut ib, ty, r#async) };
         let scope = &mut compiler.scope;
 
         let mut rest_local = None;
@@ -765,6 +775,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 _ => arguments.len(),
             },
             externals: cmp.externals.into(),
+            r#async,
             rest_local,
         };
         ib.build_constant(Constant::Function(Rc::new(function)))?;
