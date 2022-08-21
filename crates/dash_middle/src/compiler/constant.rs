@@ -19,6 +19,7 @@ pub struct Function {
     pub params: usize,
     pub constants: Box<[Constant]>,
     pub externals: Box<[External]>,
+    pub r#async: bool,
     /// If the parameter list uses the rest operator ..., then this will be Some(local_id)
     pub rest_local: Option<u16>,
 }

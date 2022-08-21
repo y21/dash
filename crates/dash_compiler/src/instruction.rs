@@ -98,6 +98,7 @@ pub trait InstructionWriter {
     fn build_try_end(&mut self);
     fn build_throw(&mut self);
     fn build_yield(&mut self);
+    fn build_await(&mut self);
     fn build_bitor(&mut self);
     fn build_bitxor(&mut self);
     fn build_bitand(&mut self);
@@ -151,6 +152,7 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
         build_try_end inst::TRYEND,
         build_throw inst::THROW,
         build_yield inst::YIELD,
+        build_await inst::AWAIT,
         build_bitor inst::BITOR,
         build_bitxor inst::BITXOR,
         build_bitand inst::BITAND,

@@ -18,7 +18,7 @@ use crate::Parser;
 
 pub trait ExpressionParser<'a> {
     fn parse_expression(&mut self) -> Option<Expr<'a>>;
-    fn parse_function(&mut self) -> Option<FunctionDeclaration<'a>>;
+    fn parse_function(&mut self, is_async: bool) -> Option<FunctionDeclaration<'a>>;
     fn parse_sequence(&mut self) -> Option<Expr<'a>>;
     fn parse_yield(&mut self) -> Option<Expr<'a>>;
     fn parse_assignment(&mut self) -> Option<Expr<'a>>;
@@ -454,7 +454,7 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
                             let BlockStatement(stmts) = self.parse_block()?;
 
                             // Desugar to function
-                            let fun = FunctionDeclaration::new(None, params, stmts, FunctionKind::Function);
+                            let fun = FunctionDeclaration::new(None, params, stmts, FunctionKind::Function, false);
                             items.push((key, Expr::Function(fun)));
                         }
                     }
@@ -491,7 +491,15 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
                 // If it's not an arrow function, then it is a group
                 Expr::grouping(exprs)
             }
-            TokenType::Function => Expr::Function(self.parse_function()?),
+            TokenType::Async => {
+                // TODO: if it isn't followed by function, check if followed by ( for arrow functions
+                // or if not, parse it as an identifier
+                if !self.expect_and_skip(&[TokenType::Function], true) {
+                    return None;
+                }
+                Expr::Function(self.parse_function(true)?)
+            }
+            TokenType::Function => Expr::Function(self.parse_function(false)?),
             _ => {
                 let cur = self.previous().cloned()?;
                 self.create_error(ErrorKind::UnknownToken(cur));
@@ -502,7 +510,7 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
         Some(expr)
     }
 
-    fn parse_function(&mut self) -> Option<FunctionDeclaration<'a>> {
+    fn parse_function(&mut self, is_async: bool) -> Option<FunctionDeclaration<'a>> {
         let is_generator = self.expect_and_skip(&[TokenType::Star], false);
 
         let ty = if is_generator {
@@ -532,7 +540,7 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
 
         let BlockStatement(statements) = self.parse_block()?;
 
-        Some(FunctionDeclaration::new(name, arguments, statements, ty))
+        Some(FunctionDeclaration::new(name, arguments, statements, ty, is_async))
     }
 
     fn parse_arrow_function_end(&mut self, prec: Vec<Expr<'a>>) -> Option<FunctionDeclaration<'a>> {
@@ -557,6 +565,12 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
             Statement::Return(ReturnStatement(self.parse_expression()?))
         };
 
-        Some(FunctionDeclaration::new(None, list, vec![body], FunctionKind::Arrow))
+        Some(FunctionDeclaration::new(
+            None,
+            list,
+            vec![body],
+            FunctionKind::Arrow,
+            false,
+        ))
     }
 }

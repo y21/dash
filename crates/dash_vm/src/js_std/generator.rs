@@ -4,29 +4,16 @@ use crate::dispatch::HandleResult;
 use crate::frame::Frame;
 use crate::local::LocalScope;
 use crate::throw;
-use crate::value::function::generator::GeneratorIterator;
+use crate::value::function::generator::as_generator;
 use crate::value::function::generator::GeneratorState;
 use crate::value::function::native::CallContext;
 use crate::value::function::Function;
+use crate::value::function::FunctionKind;
 use crate::value::object::NamedObject;
 use crate::value::object::Object;
 use crate::value::object::PropertyValue;
 use crate::value::Value;
 use crate::value::ValueContext;
-
-fn as_generator<'a>(scope: &mut LocalScope, value: &'a Value) -> Result<&'a GeneratorIterator, Value> {
-    let generator = match value {
-        Value::Object(o) | Value::External(o) => o.as_any().downcast_ref::<GeneratorIterator>(),
-        _ => None,
-    };
-
-    let generator = match generator {
-        Some(it) => it,
-        None => throw!(scope, "Incompatible receiver"),
-    };
-
-    Ok(generator)
-}
 
 pub fn next(cx: CallContext) -> Result<Value, Value> {
     let arg = cx.args.first().unwrap_or_undefined();
@@ -42,9 +29,10 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
             .function()
             .as_any()
             .downcast_ref::<Function>()
-            .and_then(|fun| fun.kind().as_generator())
+            .map(|fun| fun.kind())
         {
-            Some(gen) => &gen.function,
+            Some(FunctionKind::Generator(gen)) => gen.function(),
+            Some(FunctionKind::Async(fun)) => fun.inner().function(),
             _ => throw!(cx.scope, "Incompatible generator function"),
         };
 
@@ -69,7 +57,7 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
     };
 
     // Generators work a bit different from normal functions, so we do the stack padding management ourselves here
-    let result = cx.scope.vm.execute_frame_raw(frame)?;
+    let result = cx.scope.execute_frame_raw(frame)?;
     let generator = as_generator(cx.scope, &cx.this)?;
 
     match result {
@@ -78,7 +66,8 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
 
             create_generator_value(cx.scope, true, Some(value))
         }
-        HandleResult::Yield(value) => {
+        HandleResult::Yield(value) | HandleResult::Await(value) => {
+            // Async functions are desugared to generators, so `await` is treated equivalent to `yield`, for now...
             let frame = cx.scope.pop_frame().expect("Generator frame is missing");
             let stack = cx.scope.drain_stack(frame.sp..).collect::<Vec<_>>();
 

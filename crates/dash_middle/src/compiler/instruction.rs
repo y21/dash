@@ -87,3 +87,4 @@ pub const REVSTCK: u8 = 0x4C;
 /// Pushes undefined on the stack
 pub const UNDEF: u8 = 0x4D;
 pub const BREAK: u8 = 0x4E;
+pub const AWAIT: u8 = 0x4F;
