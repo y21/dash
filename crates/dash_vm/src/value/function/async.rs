@@ -6,8 +6,8 @@ use crate::local::LocalScope;
 use crate::value::object::NamedObject;
 use crate::value::object::Object;
 use crate::value::object::PropertyKey;
+use crate::value::promise::wrap_promise;
 use crate::value::promise::Promise;
-use crate::value::promise::PromiseState;
 use crate::value::Typeof;
 use crate::value::Value;
 use crate::value::ValueContext;
@@ -49,8 +49,6 @@ impl AsyncFunction {
             .apply(scope, generator_iter.clone(), Vec::new())
             .and_then(|result| result.get_property(scope, PropertyKey::String("value".into())));
 
-        let promise = Promise::new(scope);
-        let mut promise_state = promise.state().borrow_mut();
         match &result {
             Ok(value) => {
                 let is_done = as_generator(scope, &generator_iter)
@@ -58,35 +56,34 @@ impl AsyncFunction {
 
                 if is_done {
                     // Promise in resolved state
-                    // TODO: return here?
-                    *promise_state = PromiseState::Resolved(value.clone());
+                    let promise = wrap_promise(scope, value.clone());
+                    Ok(promise)
+                } else {
+                    // Promise in pending state
+                    let final_promise = Promise::new(scope);
+                    let final_promise = scope.register(final_promise);
+                    let then_task = ThenTask::new(scope, generator_iter.clone(), final_promise.clone());
+                    let then_task = scope.register(then_task);
+
+                    let promise = Value::Object(final_promise);
+
+                    scope.statics.promise_then.clone().apply(
+                        scope,
+                        match result {
+                            Ok(value) => value,
+                            Err(value) => value,
+                        },
+                        vec![Value::Object(then_task)],
+                    )?;
+
+                    Ok(promise)
                 }
             }
             Err(value) => {
-                // Promise in rejected state
-                *promise_state = PromiseState::Rejected(value.clone());
+                let promise = wrap_promise(scope, value.clone());
+                Err(promise)
             }
         }
-
-        drop(promise_state);
-        let promise = scope.register(promise);
-
-        // TODO: we dont need to do this if the promise is instantly resolved!
-        let then_task = ThenTask::new(scope, generator_iter.clone(), promise.clone());
-        let then_task = scope.register(then_task);
-
-        let promise = Value::Object(promise);
-
-        scope.statics.promise_then.clone().apply(
-            scope,
-            match result {
-                Ok(value) => value,
-                Err(value) => value,
-            },
-            vec![Value::Object(then_task)],
-        )?;
-
-        Ok(promise)
     }
 
     pub fn inner(&self) -> &GeneratorFunction {
@@ -157,15 +154,16 @@ impl Object for ThenTask {
 
                 if is_done {
                     // Promise in resolved state
+                    // TODO: value might be a promise
                     scope.drive_promise(
                         PromiseAction::Resolve,
                         self.final_promise.as_any().downcast_ref::<Promise>().unwrap(),
                         vec![value],
                     );
                 } else {
-                    // TODO: we dont need to do this if the promise is instantly resolved!
                     let then_task = ThenTask::new(scope, self.generator_iter.clone(), self.final_promise.clone());
                     let then_task = scope.register(then_task);
+                    let value = wrap_promise(scope, value);
 
                     scope
                         .statics
