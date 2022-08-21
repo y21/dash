@@ -67,6 +67,6 @@ impl UserFunction {
         let mut frame = Frame::from_function(Some(this), self, is_constructor_call);
         frame.set_sp(sp);
 
-        scope.vm.execute_frame(frame)
+        scope.execute_frame(frame)
     }
 }

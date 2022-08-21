@@ -491,6 +491,14 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
                 // If it's not an arrow function, then it is a group
                 Expr::grouping(exprs)
             }
+            TokenType::Async => {
+                // TODO: if it isn't followed by function, check if followed by ( for arrow functions
+                // or if not, parse it as an identifier
+                if !self.expect_and_skip(&[TokenType::Function], true) {
+                    return None;
+                }
+                Expr::Function(self.parse_function(true)?)
+            }
             TokenType::Function => Expr::Function(self.parse_function(false)?),
             _ => {
                 let cur = self.previous().cloned()?;
