@@ -148,7 +148,7 @@ fn handle_call(
                 HandleResult::Return(v) => v,
                 HandleResult::Yield(..) | HandleResult::Await(..) => unreachable!(), // UserFunction cannot `yield`/`await`
             }),
-        FunctionKind::Async(fun) => fun.handle_function_call(scope, this, args, is_constructor_call),
+        FunctionKind::Async(fun) => fun.handle_function_call(scope, callee, this, args, is_constructor_call),
         FunctionKind::Generator(..) => {
             GeneratorFunction::handle_function_call(scope, callee, this, args, is_constructor_call)
         }

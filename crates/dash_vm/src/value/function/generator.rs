@@ -6,6 +6,7 @@ use dash_proc_macro::Trace;
 use crate::gc::handle::Handle;
 use crate::gc::trace::Trace;
 use crate::local::LocalScope;
+use crate::throw;
 use crate::value::object::NamedObject;
 use crate::value::object::Object;
 use crate::value::object::PropertyKey;
@@ -18,7 +19,7 @@ use super::user::UserFunction;
 
 #[derive(Debug)]
 pub struct GeneratorFunction {
-    pub function: UserFunction,
+    function: UserFunction,
 }
 
 impl GeneratorFunction {
@@ -156,4 +157,18 @@ impl Object for GeneratorIterator {
     fn type_of(&self) -> Typeof {
         Typeof::Object
     }
+}
+
+pub fn as_generator<'a>(scope: &mut LocalScope, value: &'a Value) -> Result<&'a GeneratorIterator, Value> {
+    let generator = match value {
+        Value::Object(o) | Value::External(o) => o.as_any().downcast_ref::<GeneratorIterator>(),
+        _ => None,
+    };
+
+    let generator = match generator {
+        Some(it) => it,
+        None => throw!(scope, "Incompatible receiver"),
+    };
+
+    Ok(generator)
 }

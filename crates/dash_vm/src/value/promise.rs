@@ -5,6 +5,7 @@ use dash_proc_macro::Trace;
 
 use crate::gc::handle::Handle;
 use crate::gc::trace::Trace;
+use crate::local::LocalScope;
 use crate::PromiseAction;
 use crate::Vm;
 
@@ -278,4 +279,16 @@ impl Object for PromiseRejecter {
     fn type_of(&self) -> super::Typeof {
         Typeof::Function
     }
+}
+
+/// Wraps the passed value in a resolved promise, unless it already is a promise
+pub fn wrap_promise(scope: &mut LocalScope, value: Value) -> Value {
+    if let Value::Object(object) = &value {
+        if object.as_any().is::<Promise>() {
+            return value.clone();
+        }
+    }
+
+    let promise = Promise::resolved(scope, value.clone());
+    Value::Object(scope.register(promise))
 }

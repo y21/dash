@@ -107,6 +107,17 @@ macro_rules! delegate {
             self.$field.own_keys()
         }
     };
+    (override $field:ident, apply) => {
+        fn apply(
+            &self,
+            sc: &mut LocalScope,
+            _handle: Handle<dyn Object>,
+            this: Value,
+            args: Vec<Value>,
+        ) -> Result<Value, Value> {
+            self.$field.apply(sc, this, args)
+        }
+    };
 
     ($field:ident, $($method:ident),* $(,)?) => {
         $(
