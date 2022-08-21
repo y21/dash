@@ -1,8 +1,13 @@
+use dash_vm::gc::handle::Handle;
 use dash_vm::local::LocalScope;
 use dash_vm::value::error::Error;
 use dash_vm::value::object::NamedObject;
+use dash_vm::value::object::Object;
 use dash_vm::value::object::PropertyValue;
+use dash_vm::value::promise::Promise;
 use dash_vm::value::Value as DashValue;
+use dash_vm::PromiseAction;
+use wasm_bindgen::prelude::Closure;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue as WasmValue;
 
@@ -41,6 +46,46 @@ pub fn dash_value_from_wasm_value(scope: &mut LocalScope, value: WasmValue) -> R
             };
             let error = Error::new(scope, message);
             return Ok(DashValue::Object(scope.register(error)));
+        } else if value.is_instance_of::<js_sys::Promise>() {
+            let promise = js_sys::Promise::from(value);
+
+            struct ExternalHandle {
+                scope: LocalScope<'static>,
+                promise: Handle<dyn Object>,
+            }
+            unsafe impl Send for ExternalHandle {}
+            unsafe impl Sync for ExternalHandle {}
+            let (handle, new_promise) = {
+                let scope = LocalScope::new(scope);
+                let mut scope = unsafe { std::mem::transmute::<LocalScope<'_>, LocalScope<'static>>(scope) };
+
+                let promise = Promise::new(&mut scope);
+                let promise = scope.register(promise);
+
+                let handle = ExternalHandle {
+                    scope,
+                    promise: promise.clone(),
+                };
+
+                (handle, promise)
+            };
+
+            let closure = Closure::once(Box::new(move |value| {
+                let mut handle = handle;
+
+                let value = dash_value_from_wasm_value(&mut handle.scope, value).unwrap();
+                let promise = handle.promise.as_any().downcast_ref::<Promise>().unwrap();
+                handle
+                    .scope
+                    .drive_promise(PromiseAction::Resolve, &promise, vec![value]);
+                handle.scope.process_async_tasks();
+            }));
+            let _ = promise.then(&closure);
+
+            // TODO: don't leak
+            closure.forget();
+
+            return Ok(DashValue::Object(new_promise));
         }
 
         let source = js_sys::Object::from(value);

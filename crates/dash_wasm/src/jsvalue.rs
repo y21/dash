@@ -1,10 +1,38 @@
 use dash_vm::value::object::PropertyValue;
 use dash_vm::value::ops::abstractions::conversions::ValueConversion;
+use dash_vm::value::Typeof;
 use dash_vm::value::Value as DashValue;
 use wasm_bindgen::prelude::wasm_bindgen;
 
 use crate::externalvm::ExternalVm;
 use crate::util::dash_value_from_wasm_value;
+
+#[wasm_bindgen]
+pub enum ExternalTypeof {
+    Undefined,
+    Object,
+    Boolean,
+    Number,
+    Bigint,
+    String,
+    Symbol,
+    Function,
+}
+
+impl From<Typeof> for ExternalTypeof {
+    fn from(t: Typeof) -> Self {
+        match t {
+            Typeof::Undefined => Self::Undefined,
+            Typeof::Object => Self::Object,
+            Typeof::Boolean => Self::Boolean,
+            Typeof::Number => Self::Number,
+            Typeof::Bigint => Self::Bigint,
+            Typeof::String => Self::String,
+            Typeof::Symbol => Self::Symbol,
+            Typeof::Function => Self::Function,
+        }
+    }
+}
 
 #[wasm_bindgen]
 pub struct JsValue(DashValue);
@@ -36,6 +64,10 @@ impl JsValue {
                 .set_property(scope, key.into(), PropertyValue::Static(value))
                 .map_err(JsValue)
         })
+    }
+
+    pub fn type_of(&self) -> ExternalTypeof {
+        self.0.type_of().into()
     }
 
     pub fn get_property(&self, vm: &mut ExternalVm, key: String) -> Result<JsValue, JsValue> {

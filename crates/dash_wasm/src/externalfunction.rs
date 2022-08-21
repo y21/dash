@@ -5,6 +5,7 @@ use dash_vm::value::object::NamedObject;
 use dash_vm::value::object::Object;
 use dash_vm::value::object::PropertyKey;
 use dash_vm::value::object::PropertyValue;
+use dash_vm::value::Typeof;
 use dash_vm::value::Value;
 
 use crate::util::dash_value_from_wasm_value;
@@ -73,5 +74,9 @@ impl Object for ExternalFunction {
 
     fn own_keys(&self) -> Result<Vec<Value>, Value> {
         self.1.own_keys()
+    }
+
+    fn type_of(&self) -> Typeof {
+        Typeof::Function
     }
 }

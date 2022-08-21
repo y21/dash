@@ -454,13 +454,10 @@ pub trait PrimitiveCapabilities: ValueConversion + ValueEquality {
         None
     }
     fn is_undefined(&self) -> bool {
-        // TODO!
-        // false
-        todo!()
+        false
     }
     fn is_null(&self) -> bool {
-        // false
-        todo!()
+        false
     }
 }
 
@@ -654,7 +651,11 @@ impl ValueConversion for Rc<str> {
     }
 }
 
-impl PrimitiveCapabilities for Undefined {}
+impl PrimitiveCapabilities for Undefined {
+    fn is_undefined(&self) -> bool {
+        true
+    }
+}
 
 impl ValueEquality for Undefined {
     fn lt(&self, _other: &Value, _sc: &mut LocalScope) -> Result<Value, Value> {
@@ -715,7 +716,11 @@ impl ValueConversion for Undefined {
     }
 }
 
-impl PrimitiveCapabilities for Null {}
+impl PrimitiveCapabilities for Null {
+    fn is_null(&self) -> bool {
+        true
+    }
+}
 
 impl ValueEquality for Null {
     fn lt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
