@@ -88,3 +88,5 @@ pub const REVSTCK: u8 = 0x4C;
 pub const UNDEF: u8 = 0x4D;
 pub const BREAK: u8 = 0x4E;
 pub const AWAIT: u8 = 0x4F;
+pub const NAN: u8 = 0x50;
+pub const INFINITY: u8 = 0x51;

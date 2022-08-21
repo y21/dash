@@ -114,6 +114,8 @@ pub trait InstructionWriter {
     fn build_debugger(&mut self);
     fn build_revstck(&mut self, n: u8);
     fn build_break(&mut self);
+    fn build_infinity(&mut self);
+    fn build_nan(&mut self);
 }
 
 macro_rules! impl_instruction_writer {
@@ -165,6 +167,8 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
         build_debugger inst::DEBUGGER,
         build_super inst::SUPER,
         build_global inst::GLOBAL,
+        build_infinity inst::INFINITY,
+        build_nan inst::NAN,
         build_undef inst::UNDEF,
         build_break inst::BREAK
     }

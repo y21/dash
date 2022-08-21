@@ -69,10 +69,14 @@ async fn run_inner(files: Vec<OsString>) -> anyhow::Result<()> {
         while let Some(()) = futs.next().await {}
     }
 
+    let passes = counter.passes.load(atomic::Ordering::Relaxed);
+    let fails = counter.fails.load(atomic::Ordering::Relaxed);
+    let panics = counter.panics.load(atomic::Ordering::Relaxed);
+    let rate = ((passes as f32) / (files.len() as f32)) * 100.0;
     println!("== Result ===");
-    println!("Passes: {}", counter.passes.load(atomic::Ordering::Relaxed));
-    println!("Fails: {}", counter.fails.load(atomic::Ordering::Relaxed));
-    println!("Panics: {}", counter.panics.load(atomic::Ordering::Relaxed));
+    println!("Passes: {passes} ({rate:.2}%)",);
+    println!("Fails: {fails}");
+    println!("Panics: {panics}");
 
     Ok(())
 }

@@ -887,6 +887,16 @@ mod handlers {
         vm.try_push_stack(Value::undefined())?;
         Ok(None)
     }
+
+    pub fn infinity(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        vm.try_push_stack(Value::Number(f64::INFINITY))?;
+        Ok(None)
+    }
+
+    pub fn nan(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+        vm.try_push_stack(Value::Number(f64::NAN))?;
+        Ok(None)
+    }
 }
 
 pub fn handle(vm: &mut Vm, instruction: u8) -> Result<Option<HandleResult>, Value> {
@@ -958,6 +968,8 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<Option<HandleResult>, Valu
         inst::POS => handlers::pos(vm),
         inst::UNDEF => handlers::undef(vm),
         inst::AWAIT => handlers::await_(vm),
+        inst::NAN => handlers::nan(vm),
+        inst::INFINITY => handlers::infinity(vm),
         _ => unimplemented!("{}", instruction),
     }
 }

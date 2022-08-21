@@ -359,6 +359,8 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             "this" => ib.build_this(),
             "super" => ib.build_super(),
             "globalThis" => ib.build_global(),
+            "Infinity" => ib.build_infinity(),
+            "NaN" => ib.build_nan(),
             ident => match ib.find_local(ident) {
                 Some((index, local)) => ib.build_local_load(index, local.is_extern()),
                 _ => ib.build_global_load(ident)?,
