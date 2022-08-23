@@ -1,5 +1,7 @@
 use std::{any::Any, borrow::Cow, cell::RefCell, collections::HashMap, fmt::Debug, ptr::addr_of};
 
+use bitflags::bitflags;
+
 use crate::{
     gc::{handle::Handle, trace::Trace},
     local::LocalScope,
@@ -140,8 +142,80 @@ pub enum PropertyKey<'a> {
     Symbol(Symbol),
 }
 
+bitflags! {
+    pub struct PropertyDataDescriptor: u8 {
+        const CONFIGURABLE = 1 << 0;
+        const ENUMERABLE = 1 << 1;
+        const WRITABLE = 1 << 2;
+    }
+}
+impl Default for PropertyDataDescriptor {
+    fn default() -> Self {
+        Self::CONFIGURABLE | Self::ENUMERABLE | Self::WRITABLE
+    }
+}
+
 #[derive(Debug, Clone)]
-pub enum PropertyValue {
+pub struct PropertyValue {
+    kind: PropertyValueKind,
+    descriptor: PropertyDataDescriptor,
+}
+
+impl PropertyValue {
+    pub fn new(kind: PropertyValueKind, descriptor: PropertyDataDescriptor) -> Self {
+        Self { kind, descriptor }
+    }
+
+    /// Convenience function for creating a static property with a default descriptor (all bits set to 1)
+    pub fn static_default(value: Value) -> Self {
+        Self::new(PropertyValueKind::Static(value), Default::default())
+    }
+
+    pub fn getter_default(value: Handle<dyn Object>) -> Self {
+        Self::new(
+            PropertyValueKind::Trap {
+                get: Some(value),
+                set: None,
+            },
+            Default::default(),
+        )
+    }
+
+    pub fn setter_default(value: Handle<dyn Object>) -> Self {
+        Self::new(
+            PropertyValueKind::Trap {
+                get: None,
+                set: Some(value),
+            },
+            Default::default(),
+        )
+    }
+
+    pub fn kind(&self) -> &PropertyValueKind {
+        &self.kind
+    }
+
+    pub fn kind_mut(&mut self) -> &mut PropertyValueKind {
+        &mut self.kind
+    }
+
+    pub fn into_parts(self) -> (PropertyValueKind, PropertyDataDescriptor) {
+        (self.kind, self.descriptor)
+    }
+
+    pub fn into_kind(self) -> PropertyValueKind {
+        self.kind
+    }
+}
+
+unsafe impl Trace for PropertyValue {
+    fn trace(&self) {
+        self.kind.trace();
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum PropertyValueKind {
     /// Accessor property
     Trap {
         get: Option<Handle<dyn Object>>,
@@ -151,7 +225,7 @@ pub enum PropertyValue {
     Static(Value),
 }
 
-impl PropertyValue {
+impl PropertyValueKind {
     pub fn getter(get: Handle<dyn Object>) -> Self {
         Self::Trap {
             get: Some(get),
@@ -184,7 +258,7 @@ impl PropertyValue {
     }
 }
 
-unsafe impl Trace for PropertyValue {
+unsafe impl Trace for PropertyValueKind {
     fn trace(&self) {
         match self {
             Self::Static(value) => value.trace(),
@@ -323,7 +397,7 @@ impl Object for NamedObject {
         let values = self.values.borrow();
         if let Some(value) = values.get(&key) {
             // TODO: this shouldnt be undefined
-            return value.get_or_apply(sc, Value::undefined());
+            return value.kind().get_or_apply(sc, Value::undefined());
         }
 
         if let Some(prototype) = self.prototype.borrow().as_ref() {
@@ -338,15 +412,15 @@ impl Object for NamedObject {
             Some("__proto__") => {
                 return self.set_prototype(
                     sc,
-                    match value {
-                        PropertyValue::Static(value) => value,
+                    match value.into_kind() {
+                        PropertyValueKind::Static(value) => value,
                         _ => throw!(sc, "Prototype cannot be a trap"),
                     },
                 )
             }
             Some("constructor") => {
-                match value {
-                    PropertyValue::Static(Value::Object(obj) | Value::External(obj)) => {
+                match value.into_kind() {
+                    PropertyValueKind::Static(Value::Object(obj) | Value::External(obj)) => {
                         self.constructor.replace(Some(obj));
                         return Ok(());
                     }
@@ -369,15 +443,15 @@ impl Object for NamedObject {
         let mut values = self.values.borrow_mut();
         let value = values.remove(key);
 
-        match value {
-            Some(PropertyValue::Static(ref value @ (Value::Object(ref o) | Value::External(ref o)))) => {
+        match value.map(PropertyValue::into_kind) {
+            Some(PropertyValueKind::Static(ref value @ (Value::Object(ref o) | Value::External(ref o)))) => {
                 // If a GC'd value is being removed, put it in the LocalScope so it doesn't get removed too early
                 sc.add_ref(o.clone());
                 Ok(value.clone())
             }
             // Primitive values can just be returned normally
-            Some(PropertyValue::Static(value)) => Ok(value),
-            Some(PropertyValue::Trap { get, set }) => {
+            Some(PropertyValueKind::Static(value)) => Ok(value),
+            Some(PropertyValueKind::Trap { get, set }) => {
                 // Accessors need to be added to the LocalScope too
                 get.map(|v| sc.add_ref(v));
                 set.map(|v| sc.add_ref(v));

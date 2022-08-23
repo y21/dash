@@ -61,7 +61,7 @@ impl JsValue {
         vm.with_scope(|scope| {
             let value = value.0;
             self.0
-                .set_property(scope, key.into(), PropertyValue::Static(value))
+                .set_property(scope, key.into(), PropertyValue::static_default(value))
                 .map_err(JsValue)
         })
     }

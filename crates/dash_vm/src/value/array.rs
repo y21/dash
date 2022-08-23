@@ -12,6 +12,7 @@ use super::object::NamedObject;
 use super::object::Object;
 use super::object::PropertyKey;
 use super::object::PropertyValue;
+use super::object::PropertyValueKind;
 use super::ops::abstractions::conversions::ValueConversion;
 use super::primitive::array_like_keys;
 use super::Value;
@@ -72,9 +73,9 @@ impl Object for Array {
             if let Ok(index) = key.parse::<usize>() {
                 if index < MAX_LENGTH {
                     if let Some(element) = items.get(index) {
-                        match element {
-                            PropertyValue::Static(value) => return Ok(value.clone()),
-                            PropertyValue::Trap { get, .. } => match get {
+                        match element.kind() {
+                            PropertyValueKind::Static(value) => return Ok(value.clone()),
+                            PropertyValueKind::Trap { get, .. } => match get {
                                 // TODO: this shouldnt be undefined
                                 Some(handle) => return handle.apply(sc, Value::undefined(), Vec::new()),
                                 None => {}
@@ -94,21 +95,21 @@ impl Object for Array {
 
             if key == "length" {
                 // TODO: this shouldnt be undefined
-                let value = value.get_or_apply(sc, Value::undefined())?;
+                let value = value.kind().get_or_apply(sc, Value::undefined())?;
                 let new_len = value.to_number(sc)? as usize;
 
                 if new_len > MAX_LENGTH {
                     throw!(sc, "Invalid array length");
                 }
 
-                items.resize(new_len as usize, PropertyValue::Static(Value::undefined()));
+                items.resize(new_len as usize, PropertyValue::static_default(Value::undefined()));
                 return Ok(());
             }
 
             if let Ok(index) = key.parse::<usize>() {
                 if index < MAX_LENGTH {
                     if index >= items.len() {
-                        items.resize(index + 1, PropertyValue::Static(Value::undefined()));
+                        items.resize(index + 1, PropertyValue::static_default(Value::undefined()));
                     }
 
                     items[index] = value;
@@ -130,10 +131,10 @@ impl Object for Array {
                 let mut items = self.items.borrow_mut();
 
                 if let Some(item) = items.get_mut(index) {
-                    let old = std::mem::replace(item, PropertyValue::Static(Value::null()));
-                    return Ok(match old {
-                        PropertyValue::Static(value) => value,
-                        PropertyValue::Trap { .. } => Value::undefined(),
+                    let old = std::mem::replace(item, PropertyValue::static_default(Value::null()));
+                    return Ok(match old.into_kind() {
+                        PropertyValueKind::Static(value) => value,
+                        PropertyValueKind::Trap { .. } => Value::undefined(),
                     });
                 }
             }

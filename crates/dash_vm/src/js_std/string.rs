@@ -257,7 +257,7 @@ pub fn split(cx: CallContext) -> Result<Value, Value> {
 
     let result = string
         .split(separator.as_ref())
-        .map(|s| PropertyValue::Static(Value::String(s.into())))
+        .map(|s| PropertyValue::static_default(Value::String(s.into())))
         .collect();
 
     let array = Array::from_vec(cx.scope, result);

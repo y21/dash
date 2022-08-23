@@ -133,7 +133,7 @@ impl Vm {
                 {
                     let proto = $prototype.clone();
                     let constructor = $constructor.clone();
-                    base.set_property(&mut scope, "constructor".into(), PropertyValue::Static(constructor.into())).unwrap();
+                    base.set_property(&mut scope, "constructor".into(), PropertyValue::static_default(constructor.into())).unwrap();
                     base.set_prototype(&mut scope, proto.into()).unwrap();
                 }
 
@@ -146,7 +146,7 @@ impl Vm {
                             #[prototype] scope.statics.function_proto;
                             #[constructor] scope.statics.function_ctor;
                         });
-                        base.set_property(&mut scope, method.into(), PropertyValue::Static(path.into())).unwrap();
+                        base.set_property(&mut scope, method.into(), PropertyValue::static_default(path.into())).unwrap();
                     })+
                 )?
 
@@ -159,7 +159,7 @@ impl Vm {
                             #[prototype] scope.statics.function_proto;
                             #[constructor] scope.statics.function_ctor;
                         });
-                        base.set_property(&mut scope, method.into(), PropertyValue::Static(path.into())).unwrap();
+                        base.set_property(&mut scope, method.into(), PropertyValue::static_default(path.into())).unwrap();
                     })+
                 )?
 
@@ -168,7 +168,7 @@ impl Vm {
                     $({
                         let method = stringify!($field);
                         let value = $value.clone();
-                        base.set_property(&mut scope, method.into(), PropertyValue::Static(value.into())).unwrap();
+                        base.set_property(&mut scope, method.into(), PropertyValue::static_default(value.into())).unwrap();
                     })+
                 )?
 

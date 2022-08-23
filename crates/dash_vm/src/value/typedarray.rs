@@ -129,7 +129,7 @@ impl Object for TypedArray {
             let arraybuffer = self.arraybuffer.as_any().downcast_ref::<ArrayBuffer>();
 
             // TODO: not undefined as this
-            let value = value.get_or_apply(sc, Value::undefined())?;
+            let value = value.kind().get_or_apply(sc, Value::undefined())?;
             let value = value.to_number(sc)?;
             if let Some(arraybuffer) = arraybuffer {
                 let bytes = arraybuffer.storage();

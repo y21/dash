@@ -36,6 +36,7 @@ mod handlers {
     use crate::value::object::Object;
     use crate::value::object::PropertyKey;
     use crate::value::object::PropertyValue;
+    use crate::value::object::PropertyValueKind;
     use crate::value::ops::abstractions::conversions::ValueConversion;
     use crate::value::ops::equality::ValueEquality;
 
@@ -261,7 +262,7 @@ mod handlers {
 
         let value = match scope.global.as_any().downcast_ref::<NamedObject>() {
             Some(value) => match value.get_raw_property(name.as_ref().into()) {
-                Some(value) => value.get_or_apply(&mut scope, Value::undefined())?,
+                Some(value) => value.kind().get_or_apply(&mut scope, Value::undefined())?,
                 None => throw!(&mut scope, "{} is not defined", name),
             },
             None => scope.global.clone().get_property(&mut scope, name.as_ref().into())?,
@@ -280,7 +281,7 @@ mod handlers {
         scope.global.clone().set_property(
             &mut scope,
             ToString::to_string(&name).into(),
-            PropertyValue::Static(value.clone()),
+            PropertyValue::static_default(value.clone()),
         )?;
         scope.try_push_stack(value)?;
         Ok(None)
@@ -525,7 +526,7 @@ mod handlers {
         let elements = vm
             .stack
             .drain(vm.stack.len() - len..)
-            .map(PropertyValue::Static)
+            .map(PropertyValue::static_default)
             .collect::<Vec<_>>();
         let array = Array::from_vec(vm, elements);
         let handle = vm.gc.register(array);
@@ -559,7 +560,7 @@ mod handlers {
 
             match kind {
                 ObjectMemberKind::Dynamic | ObjectMemberKind::Static => {
-                    drop(obj.insert(key, PropertyValue::Static(value)))
+                    drop(obj.insert(key, PropertyValue::static_default(value)))
                 }
                 ObjectMemberKind::Getter => {
                     let value = match value {
@@ -568,13 +569,13 @@ mod handlers {
                     };
 
                     obj.entry(key)
-                        .and_modify(|v| match v {
-                            PropertyValue::Trap { get, .. } => {
+                        .and_modify(|v| match v.kind_mut() {
+                            PropertyValueKind::Trap { get, .. } => {
                                 *get = Some(value.clone());
                             }
-                            _ => *v = PropertyValue::getter(value.clone()),
+                            _ => *v = PropertyValue::getter_default(value.clone()),
                         })
-                        .or_insert_with(|| PropertyValue::getter(value));
+                        .or_insert_with(|| PropertyValue::getter_default(value));
                 }
                 ObjectMemberKind::Setter => {
                     let value = match value {
@@ -583,13 +584,13 @@ mod handlers {
                     };
 
                     obj.entry(key)
-                        .and_modify(|v| match v {
-                            PropertyValue::Trap { set, .. } => {
+                        .and_modify(|v| match v.kind_mut() {
+                            PropertyValueKind::Trap { set, .. } => {
                                 *set = Some(value.clone());
                             }
-                            _ => *v = PropertyValue::setter(value.clone()),
+                            _ => *v = PropertyValue::setter_default(value.clone()),
                         })
-                        .or_insert_with(|| PropertyValue::setter(value));
+                        .or_insert_with(|| PropertyValue::setter_default(value));
                 }
             };
         }
@@ -635,7 +636,7 @@ mod handlers {
         target.set_property(
             &mut scope,
             ToString::to_string(&key).into(),
-            PropertyValue::Static(value.clone()),
+            PropertyValue::static_default(value.clone()),
         )?;
 
         scope.try_push_stack(value)?;
@@ -653,7 +654,7 @@ mod handlers {
         target.set_property(
             &mut scope,
             ToString::to_string(&key).into(),
-            PropertyValue::Static(value.clone()),
+            PropertyValue::static_default(value.clone()),
         )?;
 
         scope.try_push_stack(value)?;
@@ -668,7 +669,7 @@ mod handlers {
         let mut scope = LocalScope::new(vm);
 
         let key = PropertyKey::from_value(&mut scope, key)?;
-        target.set_property(&mut scope, key, PropertyValue::Static(value.clone()))?;
+        target.set_property(&mut scope, key, PropertyValue::static_default(value.clone()))?;
 
         scope.try_push_stack(value)?;
         Ok(None)

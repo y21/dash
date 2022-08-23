@@ -60,7 +60,7 @@ pub fn import_dl(scope: &mut LocalScope) -> Result<Value, Value> {
     object.set_property(
         scope,
         "loadSync".into(),
-        PropertyValue::Static(Value::Object(load_sync)),
+        PropertyValue::static_default(Value::Object(load_sync)),
     )?;
 
     let object = scope.register(object);

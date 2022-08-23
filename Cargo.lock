@@ -230,6 +230,7 @@ dependencies = [
 name = "dash_vm"
 version = "0.3.0"
 dependencies = [
+ "bitflags",
  "dash_compiler",
  "dash_jit",
  "dash_lexer",
