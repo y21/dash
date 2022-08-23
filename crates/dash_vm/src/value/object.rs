@@ -20,6 +20,8 @@ fn __assert_trait_object_safety(_: Box<dyn Object>) {}
 pub trait Object: Debug + Trace {
     fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value>;
 
+    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value>;
+
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value>;
 
     fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value>;
@@ -70,6 +72,15 @@ macro_rules! delegate {
             self.$field.get_property(sc, key)
         }
     };
+    (override $field:ident, get_property_descriptor) => {
+        fn get_property_descriptor(
+            &self,
+            sc: &mut crate::local::LocalScope,
+            key: crate::value::object::PropertyKey,
+        ) -> Result<Option<crate::value::object::PropertyValue>, crate::value::Value> {
+            self.$field.get_property_descriptor(sc, key)
+        }
+    };
     (override $field:ident, set_property) => {
         fn set_property(
             &self,
@@ -113,11 +124,11 @@ macro_rules! delegate {
         fn apply(
             &self,
             sc: &mut LocalScope,
-            _handle: Handle<dyn Object>,
+            handle: Handle<dyn Object>,
             this: Value,
             args: Vec<Value>,
         ) -> Result<Value, Value> {
-            self.$field.apply(sc, this, args)
+            self.$field.apply(sc, handle, this, args)
         }
     };
 
@@ -205,6 +216,10 @@ impl PropertyValue {
 
     pub fn into_kind(self) -> PropertyValueKind {
         self.kind
+    }
+
+    pub fn get_or_apply(&self, sc: &mut LocalScope, this: Value) -> Result<Value, Value> {
+        self.kind.get_or_apply(sc, this)
     }
 }
 
@@ -379,32 +394,36 @@ unsafe impl Trace for NamedObject {
 
 impl Object for NamedObject {
     fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        delegate_get_property(self, sc, key)
+    }
+
+    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
         if let PropertyKey::String(st) = &key {
             match st.as_ref() {
-                "__proto__" => return self.get_prototype(sc),
+                "__proto__" => return Ok(Some(PropertyValue::static_default(self.get_prototype(sc)?))),
                 "constructor" => {
-                    return Ok(self
-                        .constructor
-                        .borrow()
-                        .as_ref()
-                        .map(|x| Value::from(x.clone()))
-                        .unwrap_or_undefined());
+                    return Ok(Some(PropertyValue::static_default(
+                        self.constructor
+                            .borrow()
+                            .as_ref()
+                            .map(|x| Value::from(x.clone()))
+                            .unwrap_or_undefined(),
+                    )));
                 }
                 _ => {}
             }
         };
 
         let values = self.values.borrow();
-        if let Some(value) = values.get(&key) {
-            // TODO: this shouldnt be undefined
-            return value.kind().get_or_apply(sc, Value::undefined());
+        if let Some(value) = values.get(&key).cloned() {
+            return Ok(Some(value));
         }
 
         if let Some(prototype) = self.prototype.borrow().as_ref() {
-            return prototype.get_property(sc, key);
+            return prototype.get_property_descriptor(sc, key);
         }
 
-        Ok(Value::undefined())
+        Ok(None)
     }
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
@@ -508,6 +527,10 @@ impl Object for Handle<dyn Object> {
         (**self).get_property(sc, key)
     }
 
+    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
+        (**self).get_property_descriptor(sc, key)
+    }
+
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
         (**self).set_property(sc, key, value)
     }
@@ -561,4 +584,15 @@ impl Handle<dyn Object> {
         let callee = self.clone();
         (**self).construct(sc, callee, this, args)
     }
+}
+
+/// Delegates a get_property call to get_property_descriptor and converts the return value respectively
+pub fn delegate_get_property<T: Object + ?Sized>(
+    this: &T,
+    sc: &mut LocalScope,
+    key: PropertyKey,
+) -> Result<Value, Value> {
+    this.get_property_descriptor(sc, key)
+        .map(|x| x.unwrap_or_else(|| PropertyValue::static_default(Value::undefined())))
+        .and_then(|x| x.get_or_apply(sc, Value::undefined()))
 }

@@ -2,12 +2,14 @@ use std::any::Any;
 use std::cell::Cell;
 use std::cell::RefCell;
 
+use crate::delegate;
 use crate::gc::handle::Handle;
 use crate::gc::trace::Trace;
 use crate::local::LocalScope;
 use crate::throw;
 use crate::Vm;
 
+use super::object::delegate_get_property;
 use super::object::NamedObject;
 use super::object::Object;
 use super::object::PropertyKey;
@@ -63,30 +65,27 @@ unsafe impl Trace for Array {
 
 impl Object for Array {
     fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        delegate_get_property(self, sc, key)
+    }
+
+    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
         let items = self.items.borrow();
 
         if let PropertyKey::String(key) = &key {
             if key == "length" {
-                return Ok(Value::Number(items.len() as f64));
+                return Ok(Some(PropertyValue::static_default(Value::Number(items.len() as f64))));
             }
 
             if let Ok(index) = key.parse::<usize>() {
                 if index < MAX_LENGTH {
-                    if let Some(element) = items.get(index) {
-                        match element.kind() {
-                            PropertyValueKind::Static(value) => return Ok(value.clone()),
-                            PropertyValueKind::Trap { get, .. } => match get {
-                                // TODO: this shouldnt be undefined
-                                Some(handle) => return handle.apply(sc, Value::undefined(), Vec::new()),
-                                None => {}
-                            },
-                        }
+                    if let Some(element) = items.get(index).cloned() {
+                        return Ok(Some(element));
                     }
                 }
             }
         }
 
-        self.obj.get_property(sc, key)
+        self.obj.get_property_descriptor(sc, key)
     }
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
@@ -186,25 +185,16 @@ unsafe impl Trace for ArrayIterator {
 }
 
 impl Object for ArrayIterator {
-    fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
-        self.obj.get_property(sc, key)
-    }
-
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
-        self.obj.set_property(sc, key, value)
-    }
-
-    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
-        self.obj.delete_property(sc, key)
-    }
-
-    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
-        self.obj.set_prototype(sc, value)
-    }
-
-    fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
-        self.obj.get_prototype(sc)
-    }
+    delegate!(
+        obj,
+        get_property,
+        get_property_descriptor,
+        set_property,
+        delete_property,
+        set_prototype,
+        get_prototype,
+        own_keys
+    );
 
     fn apply(
         &self,
@@ -218,10 +208,6 @@ impl Object for ArrayIterator {
 
     fn as_any(&self) -> &dyn Any {
         self
-    }
-
-    fn own_keys(&self) -> Result<Vec<Value>, Value> {
-        Ok(Vec::new())
     }
 }
 

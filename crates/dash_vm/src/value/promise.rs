@@ -81,6 +81,14 @@ impl Object for Promise {
         self.obj.get_property(sc, key)
     }
 
+    fn get_property_descriptor(
+        &self,
+        sc: &mut LocalScope,
+        key: super::object::PropertyKey,
+    ) -> Result<Option<super::object::PropertyValue>, Value> {
+        self.obj.get_property_descriptor(sc, key)
+    }
+
     fn set_property(
         &self,
         sc: &mut crate::local::LocalScope,
@@ -147,6 +155,14 @@ impl Object for PromiseResolver {
         key: crate::value::object::PropertyKey,
     ) -> Result<Value, Value> {
         self.obj.get_property(sc, key)
+    }
+
+    fn get_property_descriptor(
+        &self,
+        sc: &mut LocalScope,
+        key: super::object::PropertyKey,
+    ) -> Result<Option<super::object::PropertyValue>, Value> {
+        self.obj.get_property_descriptor(sc, key)
     }
 
     fn set_property(
@@ -225,6 +241,14 @@ impl Object for PromiseRejecter {
         key: crate::value::object::PropertyKey,
     ) -> Result<Value, Value> {
         self.obj.get_property(sc, key)
+    }
+
+    fn get_property_descriptor(
+        &self,
+        sc: &mut LocalScope,
+        key: super::object::PropertyKey,
+    ) -> Result<Option<super::object::PropertyValue>, Value> {
+        self.obj.get_property_descriptor(sc, key)
     }
 
     fn set_property(
