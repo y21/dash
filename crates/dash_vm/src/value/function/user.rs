@@ -56,7 +56,7 @@ impl UserFunction {
         if self.inner.rest_local.is_some() {
             let args = args
                 .get(param_count..)
-                .map(|s| s.iter().cloned().map(PropertyValue::Static).collect())
+                .map(|s| s.iter().cloned().map(PropertyValue::static_default).collect())
                 .unwrap_or_default();
 
             let array = Array::from_vec(scope, args);

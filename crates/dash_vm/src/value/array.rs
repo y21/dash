@@ -2,16 +2,19 @@ use std::any::Any;
 use std::cell::Cell;
 use std::cell::RefCell;
 
+use crate::delegate;
 use crate::gc::handle::Handle;
 use crate::gc::trace::Trace;
 use crate::local::LocalScope;
 use crate::throw;
 use crate::Vm;
 
+use super::object::delegate_get_property;
 use super::object::NamedObject;
 use super::object::Object;
 use super::object::PropertyKey;
 use super::object::PropertyValue;
+use super::object::PropertyValueKind;
 use super::ops::abstractions::conversions::ValueConversion;
 use super::primitive::array_like_keys;
 use super::Value;
@@ -62,30 +65,27 @@ unsafe impl Trace for Array {
 
 impl Object for Array {
     fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        delegate_get_property(self, sc, key)
+    }
+
+    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
         let items = self.items.borrow();
 
         if let PropertyKey::String(key) = &key {
             if key == "length" {
-                return Ok(Value::Number(items.len() as f64));
+                return Ok(Some(PropertyValue::static_default(Value::Number(items.len() as f64))));
             }
 
             if let Ok(index) = key.parse::<usize>() {
                 if index < MAX_LENGTH {
-                    if let Some(element) = items.get(index) {
-                        match element {
-                            PropertyValue::Static(value) => return Ok(value.clone()),
-                            PropertyValue::Trap { get, .. } => match get {
-                                // TODO: this shouldnt be undefined
-                                Some(handle) => return handle.apply(sc, Value::undefined(), Vec::new()),
-                                None => {}
-                            },
-                        }
+                    if let Some(element) = items.get(index).cloned() {
+                        return Ok(Some(element));
                     }
                 }
             }
         }
 
-        self.obj.get_property(sc, key)
+        self.obj.get_property_descriptor(sc, key)
     }
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
@@ -94,21 +94,21 @@ impl Object for Array {
 
             if key == "length" {
                 // TODO: this shouldnt be undefined
-                let value = value.get_or_apply(sc, Value::undefined())?;
+                let value = value.kind().get_or_apply(sc, Value::undefined())?;
                 let new_len = value.to_number(sc)? as usize;
 
                 if new_len > MAX_LENGTH {
                     throw!(sc, "Invalid array length");
                 }
 
-                items.resize(new_len as usize, PropertyValue::Static(Value::undefined()));
+                items.resize(new_len as usize, PropertyValue::static_default(Value::undefined()));
                 return Ok(());
             }
 
             if let Ok(index) = key.parse::<usize>() {
                 if index < MAX_LENGTH {
                     if index >= items.len() {
-                        items.resize(index + 1, PropertyValue::Static(Value::undefined()));
+                        items.resize(index + 1, PropertyValue::static_default(Value::undefined()));
                     }
 
                     items[index] = value;
@@ -130,10 +130,10 @@ impl Object for Array {
                 let mut items = self.items.borrow_mut();
 
                 if let Some(item) = items.get_mut(index) {
-                    let old = std::mem::replace(item, PropertyValue::Static(Value::null()));
-                    return Ok(match old {
-                        PropertyValue::Static(value) => value,
-                        PropertyValue::Trap { .. } => Value::undefined(),
+                    let old = std::mem::replace(item, PropertyValue::static_default(Value::null()));
+                    return Ok(match old.into_kind() {
+                        PropertyValueKind::Static(value) => value,
+                        PropertyValueKind::Trap { .. } => Value::undefined(),
                     });
                 }
             }
@@ -185,25 +185,16 @@ unsafe impl Trace for ArrayIterator {
 }
 
 impl Object for ArrayIterator {
-    fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
-        self.obj.get_property(sc, key)
-    }
-
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
-        self.obj.set_property(sc, key, value)
-    }
-
-    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
-        self.obj.delete_property(sc, key)
-    }
-
-    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
-        self.obj.set_prototype(sc, value)
-    }
-
-    fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
-        self.obj.get_prototype(sc)
-    }
+    delegate!(
+        obj,
+        get_property,
+        get_property_descriptor,
+        set_property,
+        delete_property,
+        set_prototype,
+        get_prototype,
+        own_keys
+    );
 
     fn apply(
         &self,
@@ -217,10 +208,6 @@ impl Object for ArrayIterator {
 
     fn as_any(&self) -> &dyn Any {
         self
-    }
-
-    fn own_keys(&self) -> Result<Vec<Value>, Value> {
-        Ok(Vec::new())
     }
 }
 

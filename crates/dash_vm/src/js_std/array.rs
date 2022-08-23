@@ -74,7 +74,7 @@ pub fn concat(cx: CallContext) -> Result<Value, Value> {
         for i in 0..len {
             let i = i.to_string();
             let element = arg.get_property(cx.scope, i.as_str().into())?;
-            array.push(PropertyValue::Static(element));
+            array.push(PropertyValue::static_default(element));
         }
     }
 
@@ -116,7 +116,7 @@ pub fn fill(cx: CallContext) -> Result<Value, Value> {
 
     for i in 0..len {
         let pk = i.to_string();
-        this.set_property(cx.scope, pk.into(), PropertyValue::Static(value.clone()))?;
+        this.set_property(cx.scope, pk.into(), PropertyValue::static_default(value.clone()))?;
     }
 
     Ok(this)
@@ -136,7 +136,7 @@ pub fn filter(cx: CallContext) -> Result<Value, Value> {
 
         if test {
             cx.scope.add_value(pkv.clone());
-            values.push(PropertyValue::Static(pkv));
+            values.push(PropertyValue::static_default(pkv));
         }
     }
 
@@ -247,7 +247,7 @@ pub fn map(cx: CallContext) -> Result<Value, Value> {
         let value = callback.apply(cx.scope, Value::undefined(), args)?;
 
         cx.scope.add_value(value.clone());
-        values.push(PropertyValue::Static(value));
+        values.push(PropertyValue::static_default(value));
     }
 
     let values = Array::from_vec(cx.scope, values);
@@ -268,7 +268,7 @@ pub fn pop(mut cx: CallContext) -> Result<Value, Value> {
     this.set_property(
         &mut cx.scope,
         "length".into(),
-        PropertyValue::Static(Value::Number(new_len as f64)),
+        PropertyValue::static_default(Value::Number(new_len as f64)),
     )?;
 
     Ok(value)
@@ -284,14 +284,14 @@ pub fn push(mut cx: CallContext) -> Result<Value, Value> {
         this.set_property(
             &mut cx.scope,
             len.to_string().into(),
-            PropertyValue::Static(Value::undefined()),
+            PropertyValue::static_default(Value::undefined()),
         )?;
     }
 
     for (idx, arg) in cx.args.into_iter().enumerate() {
         let pk = (idx + len).to_string();
         last = arg.clone();
-        this.set_property(&mut cx.scope, pk.into(), PropertyValue::Static(arg))?;
+        this.set_property(&mut cx.scope, pk.into(), PropertyValue::static_default(arg))?;
     }
 
     Ok(last)

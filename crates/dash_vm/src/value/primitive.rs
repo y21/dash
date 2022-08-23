@@ -11,6 +11,7 @@ use super::boxed::Boolean as BoxedBoolean;
 use super::boxed::Number as BoxedNumber;
 use super::boxed::String as BoxedString;
 use super::boxed::Symbol as BoxedSymbol;
+use super::object::delegate_get_property;
 use super::object::Object;
 use super::object::PropertyKey;
 use super::object::PropertyValue;
@@ -30,6 +31,10 @@ unsafe impl Trace for f64 {
 impl Object for f64 {
     fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
         sc.statics.number_prototype.clone().get_property(sc, key)
+    }
+
+    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
+        sc.statics.number_prototype.clone().get_property_descriptor(sc, key)
     }
 
     fn set_property(
@@ -90,6 +95,10 @@ impl Object for bool {
         sc.statics.boolean_prototype.clone().get_property(sc, key)
     }
 
+    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
+        sc.statics.boolean_prototype.clone().get_property_descriptor(sc, key)
+    }
+
     fn set_property(
         &self,
         _sc: &mut LocalScope,
@@ -145,11 +154,15 @@ unsafe impl Trace for Rc<str> {
 // TODO: impl<T: Deref<Target=O>, O: Object> Object for T  possible?
 impl Object for Rc<str> {
     fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
-        if let Some(value) = str::get_property(self, sc, key.clone())?.into_option() {
-            return Ok(value);
+        delegate_get_property(self, sc, key)
+    }
+
+    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
+        if let Some(value) = str::get_property_descriptor(self, sc, key.clone())? {
+            return Ok(Some(value));
         }
 
-        sc.statics.string_prototype.clone().get_property(sc, key)
+        sc.statics.string_prototype.clone().get_property_descriptor(sc, key)
     }
 
     fn set_property(
@@ -221,6 +234,10 @@ unsafe impl Trace for Null {
 
 impl Object for Undefined {
     fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        delegate_get_property(self, sc, key)
+    }
+
+    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
         throw!(sc, "Cannot read property {:?} of undefined", key)
     }
 
@@ -269,6 +286,10 @@ impl Object for Undefined {
 
 impl Object for Null {
     fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        delegate_get_property(self, sc, key)
+    }
+
+    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
         throw!(sc, "Cannot read property {:?} of null", key)
     }
 
@@ -316,21 +337,27 @@ unsafe impl Trace for str {
 }
 
 impl Object for str {
-    fn get_property(&self, _sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+    fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        delegate_get_property(self, sc, key)
+    }
+
+    fn get_property_descriptor(&self, _sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
         if let PropertyKey::String(st) = key {
             if st == "length" {
-                return Ok(Value::Number(self.len() as f64));
+                return Ok(Some(PropertyValue::static_default(Value::Number(self.len() as f64))));
             }
 
             if let Ok(index) = st.parse::<usize>() {
                 let bytes = self.as_bytes();
                 if let Some(&byte) = bytes.get(index) {
-                    return Ok(Value::String((byte as char).to_string().into()));
+                    return Ok(Some(PropertyValue::static_default(Value::String(
+                        (byte as char).to_string().into(),
+                    ))));
                 }
             }
         }
 
-        Ok(Value::undefined())
+        Ok(None)
     }
 
     fn set_property(
@@ -393,6 +420,10 @@ unsafe impl Trace for Symbol {
 impl Object for Symbol {
     fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
         sc.statics.symbol_prototype.clone().get_property(sc, key)
+    }
+
+    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
+        sc.statics.symbol_prototype.clone().get_property_descriptor(sc, key)
     }
 
     fn set_property(

@@ -7,6 +7,7 @@ use crate::gc::trace::Trace;
 use crate::local::LocalScope;
 use crate::Vm;
 
+use super::object::delegate_get_property;
 use super::object::NamedObject;
 use super::object::Object;
 use super::object::PropertyKey;
@@ -69,11 +70,21 @@ unsafe impl Trace for Error {
 
 impl Object for Error {
     fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<super::Value, super::Value> {
+        delegate_get_property(self, sc, key)
+    }
+
+    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
         match key {
-            PropertyKey::String(s) if s == "name" => Ok(Value::String(self.name.clone())),
-            PropertyKey::String(s) if s == "message" => Ok(Value::String(self.message.clone())),
-            PropertyKey::String(s) if s == "stack" => Ok(Value::String(self.stack.clone())),
-            _ => self.obj.get_property(sc, key),
+            PropertyKey::String(s) if s == "name" => {
+                Ok(Some(PropertyValue::static_default(Value::String(self.name.clone()))))
+            }
+            PropertyKey::String(s) if s == "message" => {
+                Ok(Some(PropertyValue::static_default(Value::String(self.message.clone()))))
+            }
+            PropertyKey::String(s) if s == "stack" => {
+                Ok(Some(PropertyValue::static_default(Value::String(self.stack.clone()))))
+            }
+            _ => self.obj.get_property_descriptor(sc, key),
         }
     }
 

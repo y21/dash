@@ -20,7 +20,7 @@ use self::{
 };
 
 use super::{
-    object::{NamedObject, Object, PropertyKey, PropertyValue},
+    object::{delegate_get_property, NamedObject, Object, PropertyKey, PropertyValue},
     Typeof, Value,
 };
 
@@ -157,12 +157,15 @@ fn handle_call(
 
 impl Object for Function {
     fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        delegate_get_property(self, sc, key)
+    }
+
+    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
         if let Some(key) = key.as_string() {
             match key {
                 "name" => {
                     let name = self.name().unwrap_or_else(|| sc.statics.empty_str());
-
-                    return Ok(Value::String(name));
+                    return Ok(Some(PropertyValue::static_default(Value::String(name))));
                 }
                 "prototype" => {
                     let mut prototype = self.prototype.borrow_mut();
@@ -171,13 +174,13 @@ impl Object for Function {
                         let proto = NamedObject::new(sc);
                         sc.register(proto)
                     });
-                    return Ok(Value::Object(prototype.clone()));
+                    return Ok(Some(PropertyValue::static_default(Value::Object(prototype.clone()))));
                 }
                 _ => {}
             }
         }
 
-        self.obj.get_property(sc, key)
+        self.obj.get_property_descriptor(sc, key)
     }
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {

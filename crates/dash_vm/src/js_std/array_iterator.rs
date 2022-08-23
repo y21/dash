@@ -25,9 +25,13 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
     obj.set_property(
         cx.scope,
         "value".into(),
-        PropertyValue::Static(next.unwrap_or_undefined()),
+        PropertyValue::static_default(next.unwrap_or_undefined()),
     )?;
-    obj.set_property(cx.scope, "done".into(), PropertyValue::Static(Value::Boolean(done)))?;
+    obj.set_property(
+        cx.scope,
+        "done".into(),
+        PropertyValue::static_default(Value::Boolean(done)),
+    )?;
 
     Ok(cx.scope.register(obj).into())
 }

@@ -1,6 +1,7 @@
 use std::any::Any;
 use std::cell::Cell;
 
+use crate::delegate;
 use crate::gc::handle::Handle;
 use crate::gc::trace::Trace;
 use crate::local::LocalScope;
@@ -8,8 +9,6 @@ use crate::Vm;
 
 use super::object::NamedObject;
 use super::object::Object;
-use super::object::PropertyKey;
-use super::object::PropertyValue;
 use super::Value;
 
 #[derive(Debug)]
@@ -55,26 +54,16 @@ unsafe impl Trace for ArrayBuffer {
 }
 
 impl Object for ArrayBuffer {
-    fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
-        // TODO: check if key == byteLength
-        self.obj.get_property(sc, key)
-    }
-
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
-        self.obj.set_property(sc, key, value)
-    }
-
-    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
-        self.obj.delete_property(sc, key)
-    }
-
-    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
-        self.obj.set_prototype(sc, value)
-    }
-
-    fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
-        self.obj.get_prototype(sc)
-    }
+    delegate!(
+        obj,
+        get_property, // TODO: byteLength
+        get_property_descriptor,
+        set_property,
+        delete_property,
+        set_prototype,
+        get_prototype,
+        own_keys // TODO: byteLength
+    );
 
     fn apply(
         &self,
@@ -88,9 +77,5 @@ impl Object for ArrayBuffer {
 
     fn as_any(&self) -> &dyn Any {
         self
-    }
-
-    fn own_keys(&self) -> Result<Vec<Value>, Value> {
-        self.obj.own_keys() // TODO: add byteLength
     }
 }

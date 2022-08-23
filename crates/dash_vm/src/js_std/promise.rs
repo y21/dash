@@ -131,6 +131,7 @@ impl Object for ThenTask {
     delegate!(
         obj,
         get_property,
+        get_property_descriptor,
         set_property,
         delete_property,
         set_prototype,

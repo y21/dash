@@ -33,7 +33,7 @@ pub fn create(cx: CallContext) -> Result<Value, Value> {
 pub fn keys(cx: CallContext) -> Result<Value, Value> {
     let obj = cx.args.first().unwrap_or_undefined().to_object(cx.scope)?;
     let keys = obj.own_keys()?;
-    let array = Array::from_vec(cx.scope, keys.into_iter().map(PropertyValue::Static).collect());
+    let array = Array::from_vec(cx.scope, keys.into_iter().map(PropertyValue::static_default).collect());
     Ok(cx.scope.gc_mut().register(array).into())
 }
 

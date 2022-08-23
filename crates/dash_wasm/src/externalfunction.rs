@@ -31,6 +31,10 @@ impl Object for ExternalFunction {
         self.1.get_property(sc, key)
     }
 
+    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
+        self.1.get_property_descriptor(sc, key)
+    }
+
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
         self.1.set_property(sc, key, value)
     }

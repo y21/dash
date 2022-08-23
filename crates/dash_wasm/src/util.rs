@@ -106,7 +106,7 @@ pub fn dash_value_from_wasm_value(scope: &mut LocalScope, value: WasmValue) -> R
 
             let value = dash_value_from_wasm_value(scope, value)?;
 
-            dest.set_property(scope, key.into(), PropertyValue::Static(value))
+            dest.set_property(scope, key.into(), PropertyValue::static_default(value))
                 .map_err(|_| "Failed to set property")?;
         }
 

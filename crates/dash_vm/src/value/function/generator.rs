@@ -3,14 +3,13 @@ use std::cell::RefCell;
 
 use dash_proc_macro::Trace;
 
+use crate::delegate;
 use crate::gc::handle::Handle;
 use crate::gc::trace::Trace;
 use crate::local::LocalScope;
 use crate::throw;
 use crate::value::object::NamedObject;
 use crate::value::object::Object;
-use crate::value::object::PropertyKey;
-use crate::value::object::PropertyValue;
 use crate::value::Typeof;
 use crate::value::Value;
 use crate::Vm;
@@ -116,25 +115,16 @@ impl GeneratorIterator {
 }
 
 impl Object for GeneratorIterator {
-    fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
-        self.obj.get_property(sc, key)
-    }
-
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
-        self.obj.set_property(sc, key, value)
-    }
-
-    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
-        self.obj.delete_property(sc, key)
-    }
-
-    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
-        self.obj.set_prototype(sc, value)
-    }
-
-    fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
-        self.obj.get_prototype(sc)
-    }
+    delegate!(
+        obj,
+        get_property,
+        get_property_descriptor,
+        set_property,
+        delete_property,
+        set_prototype,
+        get_prototype,
+        own_keys
+    );
 
     fn apply(
         &self,
@@ -148,10 +138,6 @@ impl Object for GeneratorIterator {
 
     fn as_any(&self) -> &dyn Any {
         self
-    }
-
-    fn own_keys(&self) -> Result<Vec<Value>, Value> {
-        self.obj.own_keys()
     }
 
     fn type_of(&self) -> Typeof {
