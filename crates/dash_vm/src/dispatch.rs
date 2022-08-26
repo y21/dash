@@ -1,5 +1,13 @@
+use std::{
+    ops::{Deref, DerefMut},
+    rc::Rc,
+    vec::Drain,
+};
+
+use crate::{frame::Frame, gc::handle::Handle, local::LocalScope, value::object::Object};
+
 use super::{value::Value, Vm};
-use dash_middle::compiler::instruction as inst;
+use dash_middle::compiler::{constant::Constant, instruction as inst};
 
 pub enum HandleResult {
     Return(Value),
@@ -17,14 +25,129 @@ impl HandleResult {
     }
 }
 
+pub struct DispatchContext<'a> {
+    vm: &'a mut Vm,
+}
+
+impl<'a> DispatchContext<'a> {
+    pub fn new(vm: &'a mut Vm) -> Self {
+        Self { vm }
+    }
+
+    pub fn scope(&mut self) -> LocalScope<'_> {
+        LocalScope::new(self)
+    }
+
+    pub fn get_local(&mut self, index: usize) -> Value {
+        self.vm
+            .get_local(index)
+            .expect("Bytecode attempted to reference invalid local")
+    }
+
+    pub fn get_external(&mut self, index: usize) -> &Handle<dyn Object> {
+        self.vm
+            .get_external(index)
+            .expect("Bytecode attempted to reference invalid external")
+    }
+
+    pub fn pop_frame(&mut self) -> Frame {
+        self.frames
+            .pop()
+            .expect("Bytecode attempted to pop frame, but no frames exist")
+    }
+
+    pub fn pop_stack(&mut self) -> Value {
+        self.stack
+            .pop()
+            .expect("Bytecode attempted to pop stack value, but nothing was on the stack")
+    }
+
+    pub fn pop_stack2(&mut self) -> (Value, Value) {
+        let b = self.stack.pop();
+        let a = self.stack.pop();
+        a.zip(b)
+            .expect("Bytecode attempted to pop two stack value, but nothing was on the stack")
+    }
+
+    pub fn pop_stack3(&mut self) -> (Value, Value, Value) {
+        let c = self.stack.pop();
+        let b = self.stack.pop();
+        let a = self.stack.pop();
+        a.zip(b)
+            .zip(c)
+            .map(|((a, b), c)| (a, b, c))
+            .expect("Bytecode attempted to pop two stack value, but nothing was on the stack")
+    }
+
+    pub fn pop_stack_many(&mut self, count: usize) -> Drain<Value> {
+        let pos = self.stack.len() - count;
+        self.stack.drain(pos..)
+    }
+
+    pub fn evaluate_binary_with_scope<F>(&mut self, fun: F) -> Result<Option<HandleResult>, Value>
+    where
+        F: Fn(&Value, &Value, &mut LocalScope) -> Result<Value, Value>,
+    {
+        let (left, right) = self.pop_stack2();
+        let mut scope = self.scope();
+
+        scope.add_value(left.clone());
+        scope.add_value(right.clone());
+        let result = fun(&left, &right, &mut scope)?;
+        scope.try_push_stack(result)?;
+        Ok(None)
+    }
+
+    pub fn active_frame(&self) -> &Frame {
+        self.frames
+            .last()
+            .expect("Dispatch Context attempted to reference missing frame")
+    }
+
+    pub fn active_frame_mut(&mut self) -> &mut Frame {
+        self.frames
+            .last_mut()
+            .expect("Dispatch Context attempted to reference missing frame")
+    }
+
+    pub fn constant(&self, index: usize) -> Constant {
+        self.active_frame().function.constants[index].clone()
+    }
+
+    pub fn identifier_constant(&self, index: usize) -> Rc<str> {
+        self.constant(index)
+            .as_identifier()
+            .cloned()
+            .expect("Bytecode attempted to reference invalid identifier constant")
+    }
+
+    pub fn string_constant(&self, index: usize) -> Rc<str> {
+        self.constant(index)
+            .as_string()
+            .cloned()
+            .expect("Bytecode attempted to reference invalid string constant")
+    }
+}
+
+impl<'a> Deref for DispatchContext<'a> {
+    type Target = Vm;
+    fn deref(&self) -> &Self::Target {
+        &self.vm
+    }
+}
+
+impl<'a> DerefMut for DispatchContext<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.vm
+    }
+}
+
 mod handlers {
-    use dash_middle::compiler::constant::Constant;
     use dash_middle::compiler::FunctionCallMetadata;
     use dash_middle::compiler::ObjectMemberKind;
     use dash_middle::compiler::StaticImportKind;
     use std::borrow::Cow;
     use std::collections::HashMap;
-    use std::rc::Rc;
 
     use crate::frame::Frame;
     use crate::frame::FrameState;
@@ -42,118 +165,94 @@ mod handlers {
 
     use super::*;
 
-    fn force_get_constant(vm: &Vm, index: usize) -> &Constant {
-        &vm.frames.last().expect("Missing frame").function.constants[index]
-    }
-
-    fn force_get_identifier(vm: &Vm, index: usize) -> Rc<str> {
-        force_get_constant(vm, index)
-            .as_identifier()
-            .cloned()
-            .expect("Invalid constant referenced")
-    }
-
-    fn evaluate_binary_expr<F>(vm: &mut Vm, fun: F) -> Result<Option<HandleResult>, Value>
-    where
-        F: Fn(&Value, &Value, &mut LocalScope) -> Result<Value, Value>,
-    {
-        let right = vm.stack.pop().expect("No right operand");
-        let left = vm.stack.pop().expect("No left operand");
-        let mut scope = LocalScope::new(vm);
-        let result = fun(&left, &right, &mut scope)?;
-        scope.try_push_stack(result)?;
-        Ok(None)
-    }
-
-    fn constant_instruction(vm: &mut Vm, idx: usize) -> Result<(), Value> {
-        let frame = vm.frames.last().expect("No frame");
-        let constant = frame.function.constants[idx].clone();
+    fn constant_instruction(mut cx: DispatchContext<'_>, idx: usize) -> Result<(), Value> {
+        let constant = cx.constant(idx);
 
         #[cfg(feature = "jit")]
-        vm.record_constant(idx as u16, &constant);
+        cx.record_constant(idx as u16, &constant);
 
-        let value = Value::from_constant(constant, vm);
-        vm.try_push_stack(value)?;
+        let value = Value::from_constant(constant, &mut cx);
+        cx.try_push_stack(value)?;
         Ok(())
     }
 
-    pub fn constant(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let id = vm.fetch_and_inc_ip();
-        constant_instruction(vm, id as usize)?;
+    pub fn constant(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let id = cx.fetch_and_inc_ip();
+        constant_instruction(cx, id as usize)?;
         Ok(None)
     }
 
-    pub fn constantw(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let id = vm.fetchw_and_inc_ip();
-        constant_instruction(vm, id as usize)?;
+    pub fn constantw(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let id = cx.fetchw_and_inc_ip();
+        constant_instruction(cx, id as usize)?;
         Ok(None)
     }
 
-    pub fn add(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, Value::add)
+    pub fn add(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        cx.evaluate_binary_with_scope(Value::add)
     }
 
-    pub fn sub(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, Value::sub)
+    pub fn sub(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        cx.evaluate_binary_with_scope(Value::sub)
     }
 
-    pub fn mul(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, Value::mul)
+    pub fn mul(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        cx.evaluate_binary_with_scope(Value::mul)
     }
 
-    pub fn div(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, Value::div)
+    pub fn div(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        cx.evaluate_binary_with_scope(Value::div)
     }
 
-    pub fn rem(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, Value::rem)
+    pub fn rem(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        cx.evaluate_binary_with_scope(Value::rem)
     }
 
-    pub fn pow(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, Value::pow)
+    pub fn pow(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        cx.evaluate_binary_with_scope(Value::pow)
     }
 
-    pub fn bitor(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, Value::bitor)
+    pub fn bitor(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        cx.evaluate_binary_with_scope(Value::bitor)
     }
 
-    pub fn bitxor(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, Value::bitxor)
+    pub fn bitxor(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        cx.evaluate_binary_with_scope(Value::bitxor)
     }
 
-    pub fn bitand(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, Value::bitand)
+    pub fn bitand(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        cx.evaluate_binary_with_scope(Value::bitand)
     }
 
-    pub fn bitshl(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, Value::bitshl)
+    pub fn bitshl(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        cx.evaluate_binary_with_scope(Value::bitshl)
     }
 
-    pub fn bitshr(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, Value::bitshr)
+    pub fn bitshr(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        cx.evaluate_binary_with_scope(Value::bitshr)
     }
 
-    pub fn bitushr(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, Value::bitushr)
+    pub fn bitushr(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        cx.evaluate_binary_with_scope(Value::bitushr)
     }
 
-    pub fn bitnot(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let value = vm.stack.pop().expect("Missing value");
-        let mut sc = LocalScope::new(vm);
+    pub fn bitnot(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let value = cx.pop_stack();
+        let mut sc = cx.scope();
+        sc.add_value(value.clone());
         let result = value.bitnot(&mut sc)?;
         sc.try_push_stack(result)?;
         Ok(None)
     }
 
-    pub fn objin(_vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
+    pub fn objin(_cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
         todo!()
     }
 
-    pub fn instanceof(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let target = vm.stack.pop().expect("Missing target");
-        let source = vm.stack.pop().expect("Missing source");
+    pub fn instanceof(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let (source, target) = cx.pop_stack2();
 
-        let mut sc = LocalScope::new(vm);
+        let mut sc = cx.scope();
         sc.add_value(target.clone());
         sc.add_value(source.clone());
 
@@ -162,83 +261,82 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn lt(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, ValueEquality::lt)
+    pub fn lt(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        cx.evaluate_binary_with_scope(ValueEquality::lt)
     }
 
-    pub fn le(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, ValueEquality::le)
+    pub fn le(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        cx.evaluate_binary_with_scope(ValueEquality::le)
     }
 
-    pub fn gt(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, ValueEquality::gt)
+    pub fn gt(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        cx.evaluate_binary_with_scope(ValueEquality::gt)
     }
 
-    pub fn ge(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, ValueEquality::ge)
+    pub fn ge(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        cx.evaluate_binary_with_scope(ValueEquality::ge)
     }
 
-    pub fn eq(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, ValueEquality::eq)
+    pub fn eq(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        cx.evaluate_binary_with_scope(ValueEquality::eq)
     }
 
-    pub fn ne(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, ValueEquality::ne)
+    pub fn ne(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        cx.evaluate_binary_with_scope(ValueEquality::ne)
     }
 
-    pub fn strict_eq(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, ValueEquality::strict_eq)
+    pub fn strict_eq(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        cx.evaluate_binary_with_scope(ValueEquality::strict_eq)
     }
 
-    pub fn strict_ne(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        evaluate_binary_expr(vm, ValueEquality::strict_ne)
+    pub fn strict_ne(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        cx.evaluate_binary_with_scope(ValueEquality::strict_ne)
     }
 
-    pub fn neg(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let value = vm.stack.pop().expect("Missing operand");
-        let mut scope = LocalScope::new(vm);
+    pub fn neg(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let value = cx.pop_stack();
+        let mut scope = cx.scope();
         let result = value.to_number(&mut scope)?;
         scope.try_push_stack(Value::Number(-result))?;
         Ok(None)
     }
 
-    pub fn pos(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let value = vm.stack.pop().expect("Missing operand");
-        let mut scope = LocalScope::new(vm);
+    pub fn pos(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let value = cx.pop_stack();
+        let mut scope = cx.scope();
         let result = value.to_number(&mut scope)?;
         scope.try_push_stack(Value::Number(result))?;
         Ok(None)
     }
 
-    pub fn not(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let value = vm.stack.pop().expect("No operand");
+    pub fn not(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let value = cx.pop_stack();
         let result = value.not();
-        vm.try_push_stack(result)?;
+        cx.try_push_stack(result)?;
         Ok(None)
     }
 
-    pub fn pop(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        vm.stack.pop();
+    pub fn pop(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        cx.pop_stack();
         Ok(None)
     }
 
-    pub fn ret(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let tc_depth = vm.fetchw_and_inc_ip();
-        let value = vm.stack.pop().expect("No return value");
-
-        let this = vm.frames.pop().expect("No frame");
+    pub fn ret(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let tc_depth = cx.fetchw_and_inc_ip();
+        let value = cx.pop_stack();
+        let this = cx.pop_frame();
 
         // Drain all try catch blocks that are in this frame.
-        let lower_tcp = vm.try_blocks.len() - usize::from(tc_depth);
-        drop(vm.try_blocks.drain(lower_tcp..));
+        let lower_tcp = cx.try_blocks.len() - usize::from(tc_depth);
+        drop(cx.try_blocks.drain(lower_tcp..));
 
         // Drain all the stack space from this frame
-        drop(vm.stack.drain(this.sp..));
+        drop(cx.stack.drain(this.sp..));
 
         match this.state {
             FrameState::Module(_) => {
                 // Put it back on the frame stack, because we'll need it in Vm::execute_module
-                vm.frames.push(this)
+                cx.frames.push(this)
             }
             FrameState::Function { is_constructor_call } => {
                 // If this is a constructor call and the return value is not an object,
@@ -254,11 +352,10 @@ mod handlers {
         Ok(Some(HandleResult::Return(value)))
     }
 
-    pub fn ldglobal(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let id = vm.fetch_and_inc_ip();
-        let name = force_get_identifier(vm, id.into());
-
-        let mut scope = LocalScope::new(vm);
+    pub fn ldglobal(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let id = cx.fetch_and_inc_ip();
+        let name = cx.identifier_constant(id.into());
+        let mut scope = cx.scope();
 
         let value = match scope.global.as_any().downcast_ref::<NamedObject>() {
             Some(value) => match value.get_raw_property(name.as_ref().into()) {
@@ -272,12 +369,12 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn storeglobal(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let id = vm.fetch_and_inc_ip();
-        let name = force_get_identifier(vm, id.into());
-        let value = vm.stack.pop().expect("No value");
+    pub fn storeglobal(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let id = cx.fetch_and_inc_ip();
+        let name = cx.identifier_constant(id.into());
+        let value = cx.pop_stack();
 
-        let mut scope = LocalScope::new(vm);
+        let mut scope = cx.scope();
         scope.global.clone().set_property(
             &mut scope,
             ToString::to_string(&name).into(),
@@ -287,8 +384,8 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn call(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let meta = FunctionCallMetadata::from(vm.fetch_and_inc_ip());
+    pub fn call(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let meta = FunctionCallMetadata::from(cx.fetch_and_inc_ip());
         let argc = meta.value();
         let is_constructor = meta.is_constructor_call();
         let has_this = meta.is_object_call();
@@ -298,8 +395,7 @@ mod handlers {
             let mut args = Vec::with_capacity(argc);
             let mut refs = Vec::new();
 
-            let len = vm.stack.len();
-            let iter = vm.stack.drain((len - argc)..);
+            let iter = cx.pop_stack_many(argc);
 
             for value in iter {
                 if let Value::Object(handle) = &value {
@@ -312,17 +408,13 @@ mod handlers {
             (args, refs)
         };
 
-        let callee = vm.stack.pop().expect("Missing callee");
+        let callee = cx.pop_stack();
 
-        let this = if has_this {
-            vm.stack.pop().expect("Missing this")
-        } else {
-            Value::undefined()
-        };
+        let this = if has_this { cx.pop_stack() } else { Value::undefined() };
 
-        let mut scope = LocalScope::new(vm);
-        let scoper = &scope as *const LocalScope;
-        scope.externals.add(scoper, refs);
+        let mut scope = cx.scope();
+        let scope_ref = &scope as *const LocalScope;
+        scope.externals.add(scope_ref, refs);
 
         let ret = if is_constructor {
             callee.construct(&mut scope, this, args)?
@@ -334,46 +426,39 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn jmpfalsep(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let offset = vm.fetchw_and_inc_ip() as i16;
-        let value = vm.stack.pop().expect("No value");
+    pub fn jmpfalsep(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let offset = cx.fetchw_and_inc_ip() as i16;
+        let value = cx.pop_stack();
 
         let jump = !value.is_truthy();
 
         #[cfg(feature = "jit")]
-        vm.record_conditional_jump(jump);
+        cx.record_conditional_jump(jump);
 
         if jump {
-            let frame = vm.frames.last_mut().expect("No frame");
+            let frame = cx.active_frame_mut();
 
             if offset.is_negative() {
                 frame.ip -= -offset as usize;
             } else {
                 frame.ip += offset as usize;
-
-                // let is_trace = vm.recording_trace.as_ref().map_or(false, |t| t.end() == frame.ip);
-
-                // if is_trace {
-                //     let _trace = vm.recording_trace.take().expect("Trace must exist");
-                //     // println!("end of trace, ip {:?}", trace);
-                // }
             }
         }
 
         Ok(None)
     }
 
-    pub fn jmpfalsenp(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let offset = vm.fetchw_and_inc_ip() as i16;
-        let value = vm.stack.last().expect("No value");
+    pub fn jmpfalsenp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let offset = cx.fetchw_and_inc_ip() as i16;
+        let value = cx.pop_stack();
 
         let jump = !value.is_truthy();
 
         #[cfg(feature = "jit")]
-        vm.record_conditional_jump(jump);
+        cx.record_conditional_jump(jump);
 
         if jump {
-            let frame = vm.frames.last_mut().expect("No frame");
+            let frame = cx.active_frame_mut();
 
             if offset.is_negative() {
                 frame.ip -= -offset as usize;
@@ -385,17 +470,17 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn jmptruep(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let offset = vm.fetchw_and_inc_ip() as i16;
-        let value = vm.stack.pop().expect("No value");
+    pub fn jmptruep(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let offset = cx.fetchw_and_inc_ip() as i16;
+        let value = cx.pop_stack();
 
         let jump = value.is_truthy();
 
         #[cfg(feature = "jit")]
-        vm.record_conditional_jump(jump);
+        cx.record_conditional_jump(jump);
 
         if jump {
-            let frame = vm.frames.last_mut().expect("No frame");
+            let frame = cx.active_frame_mut();
 
             if offset.is_negative() {
                 frame.ip -= -offset as usize;
@@ -407,17 +492,17 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn jmptruenp(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let offset = vm.fetchw_and_inc_ip() as i16;
-        let value = vm.stack.last().expect("No value");
+    pub fn jmptruenp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let offset = cx.fetchw_and_inc_ip() as i16;
+        let value = cx.pop_stack();
 
         let jump = value.is_truthy();
 
         #[cfg(feature = "jit")]
-        vm.record_conditional_jump(jump);
+        cx.record_conditional_jump(jump);
 
         if jump {
-            let frame = vm.frames.last_mut().expect("No frame");
+            let frame = cx.active_frame_mut();
 
             if offset.is_negative() {
                 frame.ip -= -offset as usize;
@@ -429,17 +514,17 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn jmpnullishp(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let offset = vm.fetchw_and_inc_ip() as i16;
-        let value = vm.stack.pop().expect("No value");
+    pub fn jmpnullishp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let offset = cx.fetchw_and_inc_ip() as i16;
+        let value = cx.pop_stack();
 
         let jump = value.is_nullish();
 
         #[cfg(feature = "jit")]
-        vm.record_conditional_jump(jump);
+        cx.record_conditional_jump(jump);
 
         if jump {
-            let frame = vm.frames.last_mut().expect("No frame");
+            let frame = cx.active_frame_mut();
 
             if offset.is_negative() {
                 frame.ip -= -offset as usize;
@@ -451,17 +536,17 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn jmpnullishnp(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let offset = vm.fetchw_and_inc_ip() as i16;
-        let value = vm.stack.last().expect("No value");
+    pub fn jmpnullishnp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let offset = cx.fetchw_and_inc_ip() as i16;
+        let value = cx.pop_stack();
 
         let jump = value.is_nullish();
 
         #[cfg(feature = "jit")]
-        vm.record_conditional_jump(jump);
+        cx.record_conditional_jump(jump);
 
         if jump {
-            let frame = vm.frames.last_mut().expect("No frame");
+            let frame = cx.active_frame_mut();
 
             if offset.is_negative() {
                 frame.ip -= -offset as usize;
@@ -473,9 +558,9 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn jmp(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let offset = vm.fetchw_and_inc_ip() as i16;
-        let frame = vm.frames.last_mut().expect("No frame");
+    pub fn jmp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let offset = cx.fetchw_and_inc_ip() as i16;
+        let frame = cx.active_frame_mut();
 
         // Note: this is an unconditional jump, so we don't push this into the trace as a conditional jump
 
@@ -488,7 +573,7 @@ mod handlers {
             // Negative jumps are (currently) always also a marker for the end of a loop
             // and we want to JIT compile loops that run often
             #[cfg(feature = "jit")]
-            crate::jit::handle_loop_end(vm, old_ip);
+            crate::jit::handle_loop_end(&mut cx, old_ip);
         } else {
             frame.ip += offset as usize;
         }
@@ -496,64 +581,63 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn storelocal(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let id = vm.fetch_and_inc_ip() as usize;
-        let value = vm.stack.pop().expect("No value");
+    pub fn storelocal(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let id = cx.fetch_and_inc_ip() as usize;
+        let value = cx.pop_stack();
 
         #[cfg(feature = "jit")]
-        vm.record_local(id as u16, &value);
+        cx.record_local(id as u16, &value);
 
-        vm.set_local(id, value.clone());
-        vm.try_push_stack(value)?;
+        cx.set_local(id, value.clone());
+        cx.try_push_stack(value)?;
 
         Ok(None)
     }
 
-    pub fn ldlocal(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let id = vm.fetch_and_inc_ip();
-        let value = vm.get_local(id as usize).expect("Invalid local reference");
+    pub fn ldlocal(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let id = cx.fetch_and_inc_ip();
+        let value = cx.get_local(id.into());
 
         #[cfg(feature = "jit")]
-        vm.record_local(id as u16, &value);
+        cx.record_local(id as u16, &value);
 
-        vm.try_push_stack(value)?;
+        cx.try_push_stack(value)?;
         Ok(None)
     }
 
-    pub fn arraylit(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let len = vm.fetch_and_inc_ip() as usize;
+    pub fn arraylit(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let len = cx.fetch_and_inc_ip() as usize;
 
-        let elements = vm
-            .stack
-            .drain(vm.stack.len() - len..)
+        let elements = cx
+            .pop_stack_many(len)
             .map(PropertyValue::static_default)
             .collect::<Vec<_>>();
-        let array = Array::from_vec(vm, elements);
-        let handle = vm.gc.register(array);
-        vm.try_push_stack(Value::Object(handle))?;
+        let array = Array::from_vec(&mut cx, elements);
+        let handle = cx.gc.register(array);
+        cx.try_push_stack(Value::Object(handle))?;
         Ok(None)
     }
 
-    pub fn objlit(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let len = vm.fetch_and_inc_ip() as usize;
+    pub fn objlit(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let len = cx.fetch_and_inc_ip() as usize;
 
-        let mut scope = LocalScope::new(vm);
         let mut obj = HashMap::new();
         for _ in 0..len {
-            let value = scope.stack.pop().unwrap();
-            let kind = ObjectMemberKind::from_repr(scope.fetch_and_inc_ip()).unwrap();
+            let value = cx.pop_stack();
+            let kind = ObjectMemberKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
 
             let key = match kind {
                 // TODO: it might be a symbol, don't to_string it then!
                 ObjectMemberKind::Dynamic => {
-                    let key = scope.stack.pop().unwrap().to_string(&mut scope)?;
+                    // TODO: don't create LocalScope every time
+                    let key = cx.pop_stack().to_string(&mut cx.scope())?;
                     PropertyKey::String(Cow::Owned(String::from(&*key)))
                 }
                 ObjectMemberKind::Getter | ObjectMemberKind::Setter | ObjectMemberKind::Static => {
-                    let id = scope.fetch_and_inc_ip();
+                    let id = cx.fetch_and_inc_ip();
 
                     // TODO: optimization opportunity: do not reallocate string from Rc<str>
-                    let key = String::from(&*force_get_identifier(&scope, id.into()));
+                    let key = String::from(cx.identifier_constant(id.into()).as_ref());
                     PropertyKey::String(Cow::Owned(key))
                 }
             };
@@ -595,6 +679,7 @@ mod handlers {
             };
         }
 
+        let mut scope = cx.scope();
         let obj = NamedObject::with_values(&mut scope, obj);
 
         let handle = scope.gc.register(obj);
@@ -603,13 +688,13 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn staticpropertyaccess(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let id = vm.fetch_and_inc_ip();
-        let ident = force_get_identifier(vm, id.into());
+    pub fn staticpropertyaccess(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let id = cx.fetch_and_inc_ip();
+        let ident = cx.identifier_constant(id.into());
 
-        let preserve_this = vm.fetch_and_inc_ip() == 1;
+        let preserve_this = cx.fetch_and_inc_ip() == 1;
 
-        let mut scope = LocalScope::new(vm);
+        let mut scope = cx.scope();
         // TODO: add scope to externals because calling get_property can invoke getters
 
         let target = if preserve_this {
@@ -625,14 +710,13 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn staticpropertyset(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let id = vm.fetch_and_inc_ip();
-        let key = force_get_identifier(vm, id.into());
+    pub fn staticpropertyset(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let id = cx.fetch_and_inc_ip();
+        let key = cx.identifier_constant(id.into());
 
-        let value = vm.stack.pop().expect("No value");
-        let target = vm.stack.pop().expect("No target");
+        let (target, value) = cx.pop_stack2();
 
-        let mut scope = LocalScope::new(vm);
+        let mut scope = cx.scope();
         target.set_property(
             &mut scope,
             ToString::to_string(&key).into(),
@@ -643,14 +727,13 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn staticpropertysetw(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let id = vm.fetchw_and_inc_ip();
-        let key = force_get_identifier(vm, id.into());
+    pub fn staticpropertysetw(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let id = cx.fetchw_and_inc_ip();
+        let key = cx.identifier_constant(id.into());
 
-        let value = vm.stack.pop().expect("No value");
-        let target = vm.stack.pop().expect("No target");
+        let (target, value) = cx.pop_stack2();
 
-        let mut scope = LocalScope::new(vm);
+        let mut scope = cx.scope();
         target.set_property(
             &mut scope,
             ToString::to_string(&key).into(),
@@ -661,12 +744,9 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn dynamicpropertyset(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let key = vm.stack.pop().expect("No key");
-        let value = vm.stack.pop().expect("No value");
-        let target = vm.stack.pop().expect("No target");
-
-        let mut scope = LocalScope::new(vm);
+    pub fn dynamicpropertyset(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let (target, value, key) = cx.pop_stack3();
+        let mut scope = cx.scope();
 
         let key = PropertyKey::from_value(&mut scope, key)?;
         target.set_property(&mut scope, key, PropertyValue::static_default(value.clone()))?;
@@ -675,12 +755,12 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn dynamicpropertyaccess(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let key = vm.stack.pop().expect("No key");
+    pub fn dynamicpropertyaccess(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let key = cx.pop_stack();
 
-        let preserve_this = vm.fetch_and_inc_ip() == 1;
+        let preserve_this = cx.fetch_and_inc_ip() == 1;
 
-        let mut scope = LocalScope::new(vm);
+        let mut scope = cx.scope();
         // TODO: add scope to externals because calling get_property can invoke getters
 
         let target = if preserve_this {
@@ -698,71 +778,68 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn ldlocalext(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let id = vm.fetch_and_inc_ip();
-        let value = vm.get_external(id as usize).expect("Invalid local reference").clone();
+    pub fn ldlocalext(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let id = cx.fetch_and_inc_ip();
+        let value = cx.get_external(id.into()).clone();
 
-        vm.try_push_stack(Value::External(value))?;
+        cx.try_push_stack(Value::External(value))?;
         Ok(None)
     }
 
-    pub fn storelocalext(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let id = vm.fetch_and_inc_ip();
-        let value = vm.stack.pop().expect("No value");
+    pub fn storelocalext(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let id = cx.fetch_and_inc_ip();
+        let value = cx.pop_stack();
 
-        let external = vm.frames.last_mut().expect("No frame").externals[id as usize].as_ptr();
+        let external = cx.get_external(id.into()).as_ptr();
         // TODO: make sure that nothing really aliases this &mut
         unsafe { (*external).value = value.clone().into_boxed() };
 
-        vm.try_push_stack(value)?;
-
+        cx.try_push_stack(value)?;
         Ok(None)
     }
 
-    pub fn try_block(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let ip = vm.frames.last().unwrap().ip;
-        let catch_offset = vm.fetchw_and_inc_ip() as usize;
+    pub fn try_block(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let ip = cx.active_frame().ip;
+        let catch_offset = cx.fetchw_and_inc_ip() as usize;
         let catch_ip = ip + catch_offset + 2;
+        let frame_ip = cx.frames.len();
 
-        vm.try_blocks.push(TryBlock {
-            catch_ip,
-            frame_ip: vm.frames.len(),
-        });
+        cx.try_blocks.push(TryBlock { catch_ip, frame_ip });
 
         Ok(None)
     }
 
-    pub fn try_end(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        vm.try_blocks.pop();
+    pub fn try_end(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        cx.try_blocks.pop();
         Ok(None)
     }
 
-    pub fn throw(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        Err(vm.stack.pop().expect("Missing value"))
+    pub fn throw(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        Err(cx.pop_stack())
     }
 
-    pub fn type_of(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let value = vm.stack.pop().expect("Missing value");
-        vm.try_push_stack(value.type_of().as_value())?;
+    pub fn type_of(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let value = cx.pop_stack();
+        cx.try_push_stack(value.type_of().as_value())?;
         Ok(None)
     }
 
-    pub fn yield_(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let value = vm.stack.pop().expect("Missing value");
+    pub fn yield_(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let value = cx.pop_stack();
         Ok(Some(HandleResult::Yield(value)))
     }
 
-    pub fn await_(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let value = vm.stack.pop().expect("Missing value");
+    pub fn await_(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let value = cx.pop_stack();
         Ok(Some(HandleResult::Await(value)))
     }
 
-    pub fn import_dyn(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let value = vm.stack.pop().expect("Missing value");
+    pub fn import_dyn(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let value = cx.pop_stack();
 
-        let _ret = match vm.params.dynamic_import_callback() {
-            Some(cb) => cb(vm, value)?,
-            None => throw!(vm, "Dynamic imports are disabled for this context"),
+        let _ret = match cx.params.dynamic_import_callback() {
+            Some(cb) => cb(&mut cx, value)?,
+            None => throw!(cx, "Dynamic imports are disabled for this context"),
         };
 
         // TODO: dynamic imports are currently statements, making them useless
@@ -771,206 +848,206 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn import_static(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let ty = StaticImportKind::from_repr(vm.fetch_and_inc_ip()).expect("Invalid import kind");
-        let local_id = vm.fetchw_and_inc_ip();
-        let path_id = vm.fetchw_and_inc_ip();
+    pub fn import_static(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let ty = StaticImportKind::from_repr(cx.fetch_and_inc_ip()).expect("Invalid import kind");
+        let local_id = cx.fetchw_and_inc_ip();
+        let path_id = cx.fetchw_and_inc_ip();
 
-        let path = vm.frames.last().expect("No frame").function.constants[path_id as usize]
-            .as_string()
-            .expect("Referenced invalid constant")
-            .clone();
+        let path = cx.string_constant(path_id.into());
 
-        let value = match vm.params.static_import_callback() {
-            Some(cb) => cb(vm, ty, &path)?,
-            None => throw!(vm, "Static imports are disabled for this context."),
+        let value = match cx.params.static_import_callback() {
+            Some(cb) => cb(&mut cx, ty, &path)?,
+            None => throw!(cx, "Static imports are disabled for this context."),
         };
 
-        vm.set_local(local_id.into(), value);
+        cx.set_local(local_id.into(), value);
 
         Ok(None)
     }
 
-    pub fn export_default(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let value = vm.stack.pop().expect("Missing value");
-        let frame = vm.frames.last_mut().expect("Missing frame");
+    pub fn export_default(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let value = cx.pop_stack();
+        let frame = cx.active_frame_mut();
 
         match &mut frame.state {
             FrameState::Module(module) => {
                 module.default = Some(value);
             }
-            _ => throw!(vm, "Export is only available at the top level in modules"),
+            _ => throw!(cx, "Export is only available at the top level in modules"),
         }
 
         Ok(None)
     }
 
-    pub fn export_named(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let mut sc = LocalScope::new(vm);
-        let count = sc.fetchw_and_inc_ip();
+    pub fn export_named(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        // let mut sc = cx.scope();
+        let count = cx.fetchw_and_inc_ip();
 
         for _ in 0..count {
-            let (value, ident) = match sc.fetch_and_inc_ip() {
+            let (value, ident) = match cx.fetch_and_inc_ip() {
                 0 => {
                     // Local variable
-                    let loc_id = sc.fetchw_and_inc_ip();
-                    let ident_id = sc.fetchw_and_inc_ip();
+                    let loc_id = cx.fetchw_and_inc_ip();
+                    let ident_id = cx.fetchw_and_inc_ip();
 
-                    let value = sc.get_local(loc_id.into()).expect("Invalid local reference");
-                    let ident = force_get_identifier(&sc, ident_id.into());
+                    let value = cx.get_local(loc_id.into());
+                    let ident = cx.identifier_constant(ident_id.into());
 
                     (value, ident)
                 }
                 1 => {
                     // Global variable
-                    let ident_id = sc.fetchw_and_inc_ip();
+                    let ident_id = cx.fetchw_and_inc_ip();
 
-                    let ident = force_get_identifier(&sc, ident_id.into());
+                    let ident = cx.identifier_constant(ident_id.into());
 
-                    let global = sc.global.clone();
-                    let value = global.get_property(&mut sc, ident.as_ref().into())?;
+                    let global = cx.global.clone();
+                    let value = global.get_property(&mut cx.scope(), ident.as_ref().into())?;
 
                     (value, ident)
                 }
                 _ => unreachable!(),
             };
 
-            let frame = sc.frames.last_mut().expect("Missing frame");
+            let frame = cx.active_frame_mut();
             match &mut frame.state {
                 FrameState::Module(exports) => exports.named.push((ident, value)),
-                _ => throw!(&mut sc, "Export is only available at the top level in modules"),
+                _ => throw!(cx, "Export is only available at the top level in modules"),
             }
         }
 
         Ok(None)
     }
 
-    pub fn debugger(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        if let Some(cb) = vm.params().debugger_callback() {
-            cb(vm)?;
+    pub fn debugger(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        if let Some(cb) = cx.params().debugger_callback() {
+            cb(&mut cx)?;
         }
 
         Ok(None)
     }
 
-    pub fn this(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let this = vm
+    pub fn this(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let this = cx
             .frames
             .iter()
             .rev()
-            .find_map(|f| f.this.clone())
-            .unwrap_or_else(|| Value::Object(vm.global.clone()));
+            .find_map(|f| f.this.as_ref())
+            .cloned()
+            .unwrap_or_else(|| Value::Object(cx.global.clone()));
 
-        vm.try_push_stack(this)?;
+        cx.try_push_stack(this)?;
         Ok(None)
     }
 
-    pub fn global_this(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        vm.try_push_stack(Value::Object(vm.global.clone()))?;
+    pub fn global_this(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let global = cx.global.clone();
+        cx.try_push_stack(Value::Object(global))?;
         Ok(None)
     }
 
-    pub fn super_(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        throw!(vm, "`super` keyword unexpected in this context");
+    pub fn super_(cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        throw!(cx, "`super` keyword unexpected in this context");
     }
 
-    pub fn revstck(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        let count = vm.fetch_and_inc_ip();
+    pub fn revstck(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let count = cx.fetch_and_inc_ip();
 
-        let len = vm.stack.len();
-        let elements = &mut vm.stack[len - count as usize..];
+        let len = cx.stack.len();
+        let elements = &mut cx.stack[len - count as usize..];
         elements.reverse();
 
         Ok(None)
     }
 
-    pub fn undef(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        vm.try_push_stack(Value::undefined())?;
+    pub fn undef(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        cx.try_push_stack(Value::undefined())?;
         Ok(None)
     }
 
-    pub fn infinity(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        vm.try_push_stack(Value::Number(f64::INFINITY))?;
+    pub fn infinity(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        cx.try_push_stack(Value::Number(f64::INFINITY))?;
         Ok(None)
     }
 
-    pub fn nan(vm: &mut Vm) -> Result<Option<HandleResult>, Value> {
-        vm.try_push_stack(Value::Number(f64::NAN))?;
+    pub fn nan(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        cx.try_push_stack(Value::Number(f64::NAN))?;
         Ok(None)
     }
 }
 
 pub fn handle(vm: &mut Vm, instruction: u8) -> Result<Option<HandleResult>, Value> {
+    let cx = DispatchContext::new(vm);
     match instruction {
-        inst::CONSTANT => handlers::constant(vm),
-        inst::CONSTANTW => handlers::constantw(vm),
-        inst::ADD => handlers::add(vm),
-        inst::SUB => handlers::sub(vm),
-        inst::MUL => handlers::mul(vm),
-        inst::DIV => handlers::div(vm),
-        inst::REM => handlers::rem(vm),
-        inst::POW => handlers::pow(vm),
-        inst::BITOR => handlers::bitor(vm),
-        inst::BITXOR => handlers::bitxor(vm),
-        inst::BITAND => handlers::bitand(vm),
-        inst::BITSHL => handlers::bitshl(vm),
-        inst::BITSHR => handlers::bitshr(vm),
-        inst::BITUSHR => handlers::bitushr(vm),
-        inst::BITNOT => handlers::bitnot(vm),
-        inst::OBJIN => handlers::objin(vm),
-        inst::INSTANCEOF => handlers::instanceof(vm),
-        inst::GT => handlers::gt(vm),
-        inst::GE => handlers::ge(vm),
-        inst::LT => handlers::lt(vm),
-        inst::LE => handlers::le(vm),
-        inst::EQ => handlers::eq(vm),
-        inst::NE => handlers::ne(vm),
-        inst::STRICTEQ => handlers::strict_eq(vm),
-        inst::STRICTNE => handlers::strict_ne(vm),
-        inst::NOT => handlers::not(vm),
-        inst::POP => handlers::pop(vm),
-        inst::RET => handlers::ret(vm),
-        inst::LDGLOBAL => handlers::ldglobal(vm),
-        inst::STOREGLOBAL => handlers::storeglobal(vm),
-        inst::CALL => handlers::call(vm),
-        inst::JMPFALSEP => handlers::jmpfalsep(vm),
-        inst::JMP => handlers::jmp(vm),
-        inst::STORELOCAL => handlers::storelocal(vm),
-        inst::LDLOCAL => handlers::ldlocal(vm),
-        inst::ARRAYLIT => handlers::arraylit(vm),
-        inst::OBJLIT => handlers::objlit(vm),
-        inst::STATICPROPACCESS => handlers::staticpropertyaccess(vm),
-        inst::STATICPROPSET => handlers::staticpropertyset(vm),
-        inst::STATICPROPSETW => handlers::staticpropertysetw(vm),
-        inst::DYNAMICPROPSET => handlers::dynamicpropertyset(vm),
-        inst::DYNAMICPROPACCESS => handlers::dynamicpropertyaccess(vm),
-        inst::LDLOCALEXT => handlers::ldlocalext(vm),
-        inst::STORELOCALEXT => handlers::storelocalext(vm),
-        inst::TRY => handlers::try_block(vm),
-        inst::TRYEND => handlers::try_end(vm),
-        inst::THROW => handlers::throw(vm),
-        inst::TYPEOF => handlers::type_of(vm),
-        inst::YIELD => handlers::yield_(vm),
-        inst::JMPFALSENP => handlers::jmpfalsenp(vm),
-        inst::JMPTRUEP => handlers::jmptruep(vm),
-        inst::JMPTRUENP => handlers::jmptruenp(vm),
-        inst::JMPNULLISHP => handlers::jmpnullishp(vm),
-        inst::JMPNULLISHNP => handlers::jmpnullishnp(vm),
-        inst::IMPORTDYN => handlers::import_dyn(vm),
-        inst::IMPORTSTATIC => handlers::import_static(vm),
-        inst::EXPORTDEFAULT => handlers::export_default(vm),
-        inst::EXPORTNAMED => handlers::export_named(vm),
-        inst::THIS => handlers::this(vm),
-        inst::GLOBAL => handlers::global_this(vm),
-        inst::SUPER => handlers::super_(vm),
-        inst::DEBUGGER => handlers::debugger(vm),
-        inst::REVSTCK => handlers::revstck(vm),
-        inst::NEG => handlers::neg(vm),
-        inst::POS => handlers::pos(vm),
-        inst::UNDEF => handlers::undef(vm),
-        inst::AWAIT => handlers::await_(vm),
-        inst::NAN => handlers::nan(vm),
-        inst::INFINITY => handlers::infinity(vm),
+        inst::CONSTANT => handlers::constant(cx),
+        inst::CONSTANTW => handlers::constantw(cx),
+        inst::ADD => handlers::add(cx),
+        inst::SUB => handlers::sub(cx),
+        inst::MUL => handlers::mul(cx),
+        inst::DIV => handlers::div(cx),
+        inst::REM => handlers::rem(cx),
+        inst::POW => handlers::pow(cx),
+        inst::BITOR => handlers::bitor(cx),
+        inst::BITXOR => handlers::bitxor(cx),
+        inst::BITAND => handlers::bitand(cx),
+        inst::BITSHL => handlers::bitshl(cx),
+        inst::BITSHR => handlers::bitshr(cx),
+        inst::BITUSHR => handlers::bitushr(cx),
+        inst::BITNOT => handlers::bitnot(cx),
+        inst::OBJIN => handlers::objin(cx),
+        inst::INSTANCEOF => handlers::instanceof(cx),
+        inst::GT => handlers::gt(cx),
+        inst::GE => handlers::ge(cx),
+        inst::LT => handlers::lt(cx),
+        inst::LE => handlers::le(cx),
+        inst::EQ => handlers::eq(cx),
+        inst::NE => handlers::ne(cx),
+        inst::STRICTEQ => handlers::strict_eq(cx),
+        inst::STRICTNE => handlers::strict_ne(cx),
+        inst::NOT => handlers::not(cx),
+        inst::POP => handlers::pop(cx),
+        inst::RET => handlers::ret(cx),
+        inst::LDGLOBAL => handlers::ldglobal(cx),
+        inst::STOREGLOBAL => handlers::storeglobal(cx),
+        inst::CALL => handlers::call(cx),
+        inst::JMPFALSEP => handlers::jmpfalsep(cx),
+        inst::JMP => handlers::jmp(cx),
+        inst::STORELOCAL => handlers::storelocal(cx),
+        inst::LDLOCAL => handlers::ldlocal(cx),
+        inst::ARRAYLIT => handlers::arraylit(cx),
+        inst::OBJLIT => handlers::objlit(cx),
+        inst::STATICPROPACCESS => handlers::staticpropertyaccess(cx),
+        inst::STATICPROPSET => handlers::staticpropertyset(cx),
+        inst::STATICPROPSETW => handlers::staticpropertysetw(cx),
+        inst::DYNAMICPROPSET => handlers::dynamicpropertyset(cx),
+        inst::DYNAMICPROPACCESS => handlers::dynamicpropertyaccess(cx),
+        inst::LDLOCALEXT => handlers::ldlocalext(cx),
+        inst::STORELOCALEXT => handlers::storelocalext(cx),
+        inst::TRY => handlers::try_block(cx),
+        inst::TRYEND => handlers::try_end(cx),
+        inst::THROW => handlers::throw(cx),
+        inst::TYPEOF => handlers::type_of(cx),
+        inst::YIELD => handlers::yield_(cx),
+        inst::JMPFALSENP => handlers::jmpfalsenp(cx),
+        inst::JMPTRUEP => handlers::jmptruep(cx),
+        inst::JMPTRUENP => handlers::jmptruenp(cx),
+        inst::JMPNULLISHP => handlers::jmpnullishp(cx),
+        inst::JMPNULLISHNP => handlers::jmpnullishnp(cx),
+        inst::IMPORTDYN => handlers::import_dyn(cx),
+        inst::IMPORTSTATIC => handlers::import_static(cx),
+        inst::EXPORTDEFAULT => handlers::export_default(cx),
+        inst::EXPORTNAMED => handlers::export_named(cx),
+        inst::THIS => handlers::this(cx),
+        inst::GLOBAL => handlers::global_this(cx),
+        inst::SUPER => handlers::super_(cx),
+        inst::DEBUGGER => handlers::debugger(cx),
+        inst::REVSTCK => handlers::revstck(cx),
+        inst::NEG => handlers::neg(cx),
+        inst::POS => handlers::pos(cx),
+        inst::UNDEF => handlers::undef(cx),
+        inst::AWAIT => handlers::await_(cx),
+        inst::NAN => handlers::nan(cx),
+        inst::INFINITY => handlers::infinity(cx),
         _ => unimplemented!("{}", instruction),
     }
 }

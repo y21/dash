@@ -828,6 +828,7 @@ impl Vm {
         };
     }
 
+    // TODO: move these to DispatchContext.
     #[cfg(feature = "jit")]
     pub(crate) fn record_conditional_jump(&mut self, did_jump: bool) {
         if let Some(trace) = &mut self.recording_trace {
