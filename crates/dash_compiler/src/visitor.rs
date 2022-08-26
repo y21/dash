@@ -14,6 +14,7 @@ use dash_middle::parser::expr::UnaryExpr;
 use dash_middle::parser::statement::BlockStatement;
 use dash_middle::parser::statement::Class;
 use dash_middle::parser::statement::ExportKind;
+use dash_middle::parser::statement::ForInLoop;
 use dash_middle::parser::statement::ForLoop;
 use dash_middle::parser::statement::ForOfLoop;
 use dash_middle::parser::statement::FunctionDeclaration;
@@ -114,6 +115,9 @@ pub trait Visitor<'a, V> {
 
     /// Visits a for..of loop
     fn visit_for_of_loop(&mut self, f: ForOfLoop<'a>) -> V;
+
+    /// Visits a for..in loop
+    fn visit_for_in_loop(&mut self, f: ForInLoop<'a>) -> V;
 
     /// Visits an import statement
     fn visit_import_statement(&mut self, i: ImportKind<'a>) -> V;

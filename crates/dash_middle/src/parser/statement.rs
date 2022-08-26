@@ -209,6 +209,8 @@ pub enum Loop<'a> {
     For(ForLoop<'a>),
     /// A for..of loop
     ForOf(ForOfLoop<'a>),
+    /// A for..in loop
+    ForIn(ForInLoop<'a>),
     /// A while loop
     While(WhileLoop<'a>),
 }
@@ -289,6 +291,18 @@ impl<'a> ForLoop<'a> {
             body: Box::new(body),
         }
     }
+}
+
+/// A for..in loop
+#[derive(Debug, Clone, Display)]
+#[display(fmt = "for ({} in {}) {{ {} }}", binding, expr, body)]
+pub struct ForInLoop<'a> {
+    /// The binding of this loop
+    pub binding: VariableBinding<'a>,
+    /// The expression to iterate over
+    pub expr: Expr<'a>,
+    /// The body of this loop
+    pub body: Box<Statement<'a>>,
 }
 
 /// A while loop

@@ -9,6 +9,7 @@ use dash_middle::parser::statement::ClassMember;
 use dash_middle::parser::statement::ClassMemberKind;
 use dash_middle::parser::statement::ClassProperty;
 use dash_middle::parser::statement::ExportKind;
+use dash_middle::parser::statement::ForInLoop;
 use dash_middle::parser::statement::ForLoop;
 use dash_middle::parser::statement::ForOfLoop;
 use dash_middle::parser::statement::FunctionDeclaration;
@@ -270,16 +271,21 @@ impl<'a> StatementParser<'a> for Parser<'a> {
 
             if is_binding {
                 let binding = self.parse_variable_binding()?;
-                let is_of = self.expect_and_skip(&[TokenType::Of], false);
+                let is_of_or_in = self.expect_and_skip(&[TokenType::Of, TokenType::In], false);
 
-                if is_of {
+                if is_of_or_in {
+                    let ty = self.previous()?.ty;
                     let expr = self.parse_expression()?;
 
                     self.expect_and_skip(&[TokenType::RightParen], true);
 
                     let body = Box::new(self.parse_statement()?);
 
-                    return Some(Loop::ForOf(ForOfLoop { binding, expr, body }));
+                    return Some(match ty {
+                        TokenType::In => Loop::ForIn(ForInLoop { binding, expr, body }),
+                        TokenType::Of => Loop::ForOf(ForOfLoop { binding, expr, body }),
+                        _ => unreachable!(),
+                    });
                 } else {
                     let value = self.parse_variable_definition();
 

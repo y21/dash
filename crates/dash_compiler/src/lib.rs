@@ -18,7 +18,6 @@ use dash_middle::parser::expr::PropertyAccessExpr;
 use dash_middle::parser::expr::Seq;
 use dash_middle::parser::expr::UnaryExpr;
 use dash_middle::parser::expr::{ArrayLiteral, ObjectMemberKind};
-use dash_middle::parser::statement::ForOfLoop;
 use dash_middle::parser::statement::FunctionDeclaration;
 use dash_middle::parser::statement::FunctionKind;
 use dash_middle::parser::statement::IfStatement;
@@ -35,6 +34,7 @@ use dash_middle::parser::statement::{BlockStatement, Loop};
 use dash_middle::parser::statement::{Class, Parameter};
 use dash_middle::parser::statement::{ClassMemberKind, ExportKind};
 use dash_middle::parser::statement::{ClassProperty, ForLoop};
+use dash_middle::parser::statement::{ForInLoop, ForOfLoop};
 use dash_optimizer::consteval::Eval;
 use dash_optimizer::OptLevel;
 
@@ -217,6 +217,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             Statement::Loop(Loop::For(f)) => self.visit_for_loop(f),
             Statement::Loop(Loop::While(w)) => self.visit_while_loop(w),
             Statement::Loop(Loop::ForOf(f)) => self.visit_for_of_loop(f),
+            Statement::Loop(Loop::ForIn(f)) => self.visit_for_in_loop(f),
             Statement::Return(r) => self.visit_return_statement(r),
             Statement::Try(t) => self.visit_try_catch(t),
             Statement::Throw(t) => self.visit_throw(t),
@@ -916,6 +917,10 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_for_of_loop(&mut self, _f: ForOfLoop<'a>) -> Result<(), CompileError> {
         unimplementedc!("For of loop")
+    }
+
+    fn visit_for_in_loop(&mut self, _f: ForInLoop<'a>) -> Result<(), CompileError> {
+        unimplementedc!("For in loop")
     }
 
     fn visit_import_statement(&mut self, import: ImportKind<'a>) -> Result<(), CompileError> {
