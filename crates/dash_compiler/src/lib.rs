@@ -200,6 +200,121 @@ impl<'a> FunctionCompiler<'a> {
             None
         }
     }
+
+    fn visit_for_each_kinded_loop(
+        &mut self,
+        kind: ForEachLoopKind,
+        binding: VariableBinding<'a>,
+        expr: Expr<'a>,
+        mut body: Box<Statement<'a>>,
+    ) -> Result<(), CompileError> {
+        /* For-Of Loop Desugaring:
+
+        === ORIGINAL ===
+        for (const x of [1,2]) console.log(x)
+
+
+        === AFTER DESUGARING ===
+        let __forOfIter = [1,2][Symbol.iterator]();
+        let __forOfGenStep;
+        let x;
+
+        while ((!__forOfGenStep = __forOfIter.next()).done) {
+            console.log(x)
+        }
+
+        For-In Loop Desugaring
+
+        === ORIGINAL ===
+        for (const x in { a: 3, b: 4 }) console.log(x);
+
+        === AFTER DESUGARING ===
+        let __forInIter = [1,2][__intrinsicForInIter]();
+        let __forInGenStep;
+        let x;
+
+        while ((!__forInGenStep = __forOfIter.next()).done) {
+            console.log(x)
+        }
+        */
+
+        let mut ib = InstructionBuilder::new(self);
+        let for_of_iter_binding = VariableBinding::unnameable("for_of_iter");
+        let for_of_gen_step_binding = VariableBinding::unnameable("for_of_gen_step");
+        let for_of_iter_id = ib.scope.add_local(for_of_iter_binding.clone(), false)?;
+        ib.scope.add_local(for_of_gen_step_binding.clone(), false)?;
+
+        ib.accept_expr(expr)?;
+        match kind {
+            ForEachLoopKind::ForOf => ib.build_symbol_iterator(),
+            ForEachLoopKind::ForIn => ib.build_for_in_iterator(),
+        }
+        ib.build_local_store(for_of_iter_id, false);
+        ib.build_pop();
+
+        // Prepend variable assignment to body
+        if !matches!(&*body, Statement::Block(..)) {
+            let old_body = std::mem::replace(&mut *body, Statement::Empty);
+
+            match old_body {
+                Statement::Expression(expr) => {
+                    *body = Statement::Block(BlockStatement(vec![Statement::Expression(expr)]));
+                }
+                _ => unreachable!("For-of body was neither a block statement nor an expression"),
+            }
+        }
+
+        match &mut *body {
+            Statement::Block(BlockStatement(stmts)) => {
+                let var = Statement::Variable(VariableDeclaration::new(
+                    binding,
+                    Some(Expr::property_access(
+                        false,
+                        Expr::Literal(LiteralExpr::Binding(for_of_gen_step_binding.clone())),
+                        Expr::identifier("value"),
+                    )),
+                ));
+
+                if stmts.is_empty() {
+                    stmts.push(var);
+                } else {
+                    stmts.insert(0, var);
+                }
+            }
+            _ => unreachable!("For-of body was not a statement"),
+        }
+
+        ib.visit_while_loop(WhileLoop {
+            condition: Expr::Unary(UnaryExpr::new(
+                TokenType::LogicalNot,
+                Expr::property_access(
+                    false,
+                    Expr::assignment(
+                        Expr::Literal(LiteralExpr::Binding(for_of_gen_step_binding.clone())),
+                        Expr::function_call(
+                            Expr::property_access(
+                                false,
+                                Expr::Literal(LiteralExpr::Binding(for_of_iter_binding)),
+                                Expr::identifier("next"),
+                            ),
+                            Vec::new(),
+                            false,
+                        ),
+                        TokenType::Assignment,
+                    ),
+                    Expr::identifier("done"),
+                ),
+            )),
+            body,
+        })?;
+
+        Ok(())
+    }
+}
+
+enum ForEachLoopKind {
+    ForOf,
+    ForIn,
 }
 
 impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
@@ -919,103 +1034,12 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn visit_for_of_loop(
-        &mut self,
-        ForOfLoop {
-            binding,
-            expr,
-            mut body,
-        }: ForOfLoop<'a>,
-    ) -> Result<(), CompileError> {
-        /* For-Of Loop Desugaring:
-
-        === ORIGINAL ===
-
-        for (const x of [1,2]) console.log(x)
-
-
-        === AFTER DESUGARING ===
-
-        let __forOfIter = [1,2][Symbol.iterator]();
-        let __forOfGenStep;
-        let x;
-
-        while (!__forOfGenStep = __forOfIter.next()).done) {
-            console.log(x)
-        } */
-
-        let mut ib = InstructionBuilder::new(self);
-        let for_of_iter_binding = VariableBinding::unnameable("for_of_iter");
-        let for_of_gen_step_binding = VariableBinding::unnameable("for_of_gen_step");
-        let for_of_iter_id = ib.scope.add_local(for_of_iter_binding.clone(), false)?;
-        ib.scope.add_local(for_of_gen_step_binding.clone(), false)?;
-
-        ib.accept_expr(expr)?;
-        ib.build_symbol_iterator();
-        ib.build_local_store(for_of_iter_id, false);
-        ib.build_pop();
-
-        // Prepend variable assignment to body
-        if !matches!(&*body, Statement::Block(..)) {
-            let old_body = std::mem::replace(&mut *body, Statement::Empty);
-
-            match old_body {
-                Statement::Expression(expr) => {
-                    *body = Statement::Block(BlockStatement(vec![Statement::Expression(expr)]));
-                }
-                _ => unreachable!("For-of body was neither a block statement nor an expression"),
-            }
-        }
-
-        match &mut *body {
-            Statement::Block(BlockStatement(stmts)) => {
-                let var = Statement::Variable(VariableDeclaration::new(
-                    binding,
-                    Some(Expr::property_access(
-                        false,
-                        Expr::Literal(LiteralExpr::Binding(for_of_gen_step_binding.clone())),
-                        Expr::identifier("value"),
-                    )),
-                ));
-
-                if stmts.is_empty() {
-                    stmts.push(var);
-                } else {
-                    stmts.insert(0, var);
-                }
-            }
-            _ => unreachable!("For-of body was not a statement"),
-        }
-
-        ib.visit_while_loop(WhileLoop {
-            condition: Expr::Unary(UnaryExpr::new(
-                TokenType::LogicalNot,
-                Expr::property_access(
-                    false,
-                    Expr::assignment(
-                        Expr::Literal(LiteralExpr::Binding(for_of_gen_step_binding.clone())),
-                        Expr::function_call(
-                            Expr::property_access(
-                                false,
-                                Expr::Literal(LiteralExpr::Binding(for_of_iter_binding)),
-                                Expr::identifier("next"),
-                            ),
-                            Vec::new(),
-                            false,
-                        ),
-                        TokenType::Assignment,
-                    ),
-                    Expr::identifier("done"),
-                ),
-            )),
-            body,
-        })?;
-
-        Ok(())
+    fn visit_for_of_loop(&mut self, ForOfLoop { binding, expr, body }: ForOfLoop<'a>) -> Result<(), CompileError> {
+        self.visit_for_each_kinded_loop(ForEachLoopKind::ForOf, binding, expr, body)
     }
 
-    fn visit_for_in_loop(&mut self, _f: ForInLoop<'a>) -> Result<(), CompileError> {
-        unimplementedc!("For in loop")
+    fn visit_for_in_loop(&mut self, ForInLoop { binding, expr, body }: ForInLoop<'a>) -> Result<(), CompileError> {
+        self.visit_for_each_kinded_loop(ForEachLoopKind::ForIn, binding, expr, body)
     }
 
     fn visit_import_statement(&mut self, import: ImportKind<'a>) -> Result<(), CompileError> {

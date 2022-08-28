@@ -93,3 +93,5 @@ pub const INFINITY: u8 = 0x51;
 pub const INTRINSIC_OP: u8 = 0x52;
 /// Call @@iterator of value
 pub const CALL_SYMBOL_ITERATOR: u8 = 0x53;
+/// Call internal for..in iterator
+pub const CALL_FOR_IN_ITERATOR: u8 = 0x54;
