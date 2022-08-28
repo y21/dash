@@ -51,11 +51,11 @@ impl<'a> Scope<'a> {
             .map(|(i, l)| (i as u16, l))
     }
 
-    pub fn find_binding(&self, binding: VariableBinding<'a>) -> Option<(u16, &ScopeLocal<'a>)> {
+    pub fn find_binding(&self, binding: &VariableBinding<'a>) -> Option<(u16, &ScopeLocal<'a>)> {
         self.locals
             .iter()
             .enumerate()
-            .find(|(_, l)| l.binding == binding)
+            .find(|(_, l)| &l.binding == binding)
             .map(|(i, l)| (i as u16, l))
     }
 

@@ -974,6 +974,16 @@ mod handlers {
         cx.try_push_stack(Value::Number(f64::NAN))?;
         Ok(None)
     }
+
+    pub fn call_symbol_iterator(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let value = cx.pop_stack();
+        let mut scope = cx.scope();
+        let symbol_iterator = scope.statics.symbol_iterator.clone();
+        let iterable = value.get_property(&mut scope, PropertyKey::Symbol(symbol_iterator))?;
+        let iterator = iterable.apply(&mut scope, value, Vec::new())?;
+        scope.try_push_stack(iterator)?;
+        Ok(None)
+    }
 }
 
 pub fn handle(vm: &mut Vm, instruction: u8) -> Result<Option<HandleResult>, Value> {
@@ -1048,6 +1058,7 @@ pub fn handle(vm: &mut Vm, instruction: u8) -> Result<Option<HandleResult>, Valu
         inst::AWAIT => handlers::await_(cx),
         inst::NAN => handlers::nan(cx),
         inst::INFINITY => handlers::infinity(cx),
+        inst::CALL_SYMBOL_ITERATOR => handlers::call_symbol_iterator(cx),
         _ => unimplemented!("{}", instruction),
     }
 }

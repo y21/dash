@@ -90,3 +90,6 @@ pub const BREAK: u8 = 0x4E;
 pub const AWAIT: u8 = 0x4F;
 pub const NAN: u8 = 0x50;
 pub const INFINITY: u8 = 0x51;
+pub const INTRINSIC_OP: u8 = 0x52;
+/// Call @@iterator of value
+pub const CALL_SYMBOL_ITERATOR: u8 = 0x53;

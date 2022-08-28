@@ -116,6 +116,7 @@ pub trait InstructionWriter {
     fn build_break(&mut self);
     fn build_infinity(&mut self);
     fn build_nan(&mut self);
+    fn build_symbol_iterator(&mut self);
 }
 
 macro_rules! impl_instruction_writer {
@@ -170,7 +171,8 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
         build_infinity inst::INFINITY,
         build_nan inst::NAN,
         build_undef inst::UNDEF,
-        build_break inst::BREAK
+        build_break inst::BREAK,
+        build_symbol_iterator inst::CALL_SYMBOL_ITERATOR
     }
 
     fn build_ret(&mut self, tc_depth: u16) {

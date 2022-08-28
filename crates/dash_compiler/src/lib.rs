@@ -347,7 +347,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_binding_expression(&mut self, b: VariableBinding<'a>) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
-        let (id, _) = ib.scope.find_binding(b).ok_or_else(|| CompileError::UnknownBinding)?;
+        let (id, _) = ib.scope.find_binding(&b).ok_or_else(|| CompileError::UnknownBinding)?;
         ib.build_local_load(id, false);
 
         Ok(())
@@ -534,8 +534,12 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         match *left {
             Expr::Literal(lit) => {
                 let ident = lit.to_identifier();
+                let local = match &lit {
+                    LiteralExpr::Binding(binding) => ib.scope.find_binding(&binding),
+                    _ => ib.scope.find_local(&ident),
+                };
 
-                if let Some((id, local)) = ib.find_local(&ident) {
+                if let Some((id, local)) = local {
                     if matches!(local.binding().kind, VariableDeclarationKind::Const) {
                         return Err(CompileError::ConstAssignment);
                     }
@@ -915,8 +919,99 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn visit_for_of_loop(&mut self, _f: ForOfLoop<'a>) -> Result<(), CompileError> {
-        unimplementedc!("For of loop")
+    fn visit_for_of_loop(
+        &mut self,
+        ForOfLoop {
+            binding,
+            expr,
+            mut body,
+        }: ForOfLoop<'a>,
+    ) -> Result<(), CompileError> {
+        /* For-Of Loop Desugaring:
+
+        === ORIGINAL ===
+
+        for (const x of [1,2]) console.log(x)
+
+
+        === AFTER DESUGARING ===
+
+        let __forOfIter = [1,2][Symbol.iterator]();
+        let __forOfGenStep;
+        let x;
+
+        while (!__forOfGenStep = __forOfIter.next()).done) {
+            console.log(x)
+        } */
+
+        let mut ib = InstructionBuilder::new(self);
+        let for_of_iter_binding = VariableBinding::unnameable("for_of_iter");
+        let for_of_gen_step_binding = VariableBinding::unnameable("for_of_gen_step");
+        let for_of_iter_id = ib.scope.add_local(for_of_iter_binding.clone(), false)?;
+        ib.scope.add_local(for_of_gen_step_binding.clone(), false)?;
+
+        ib.accept_expr(expr)?;
+        ib.build_symbol_iterator();
+        ib.build_local_store(for_of_iter_id, false);
+        ib.build_pop();
+
+        // Prepend variable assignment to body
+        if !matches!(&*body, Statement::Block(..)) {
+            let old_body = std::mem::replace(&mut *body, Statement::Empty);
+
+            match old_body {
+                Statement::Expression(expr) => {
+                    *body = Statement::Block(BlockStatement(vec![Statement::Expression(expr)]));
+                }
+                _ => unreachable!("For-of body was neither a block statement nor an expression"),
+            }
+        }
+
+        match &mut *body {
+            Statement::Block(BlockStatement(stmts)) => {
+                let var = Statement::Variable(VariableDeclaration::new(
+                    binding,
+                    Some(Expr::property_access(
+                        false,
+                        Expr::Literal(LiteralExpr::Binding(for_of_gen_step_binding.clone())),
+                        Expr::identifier("value"),
+                    )),
+                ));
+
+                if stmts.is_empty() {
+                    stmts.push(var);
+                } else {
+                    stmts.insert(0, var);
+                }
+            }
+            _ => unreachable!("For-of body was not a statement"),
+        }
+
+        ib.visit_while_loop(WhileLoop {
+            condition: Expr::Unary(UnaryExpr::new(
+                TokenType::LogicalNot,
+                Expr::property_access(
+                    false,
+                    Expr::assignment(
+                        Expr::Literal(LiteralExpr::Binding(for_of_gen_step_binding.clone())),
+                        Expr::function_call(
+                            Expr::property_access(
+                                false,
+                                Expr::Literal(LiteralExpr::Binding(for_of_iter_binding)),
+                                Expr::identifier("next"),
+                            ),
+                            Vec::new(),
+                            false,
+                        ),
+                        TokenType::Assignment,
+                    ),
+                    Expr::identifier("done"),
+                ),
+            )),
+            body,
+        })?;
+
+        Ok(())
     }
 
     fn visit_for_in_loop(&mut self, _f: ForInLoop<'a>) -> Result<(), CompileError> {

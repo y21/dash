@@ -571,6 +571,7 @@ pub struct VariableBinding<'a> {
 
 impl<'a> VariableBinding<'a> {
     pub fn unnameable(name: &'a str) -> Self {
+        // TODO: we should somehow mangle `name`, otherwise nested for of loops in the same function will clash
         Self {
             name,
             kind: VariableDeclarationKind::Unnameable,
