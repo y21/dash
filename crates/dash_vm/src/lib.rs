@@ -609,11 +609,7 @@ impl Vm {
         let sp = self.get_frame_sp();
         let idx = sp + id;
 
-        if let Value::External(o) = &mut self.stack[idx] {
-            o.replace(value.into_boxed());
-        } else {
             self.stack[idx] = value;
-        }
     }
 
     pub(crate) fn try_push_frame(&mut self, frame: Frame) -> Result<(), Value> {

@@ -201,6 +201,38 @@ impl<'a> FunctionCompiler<'a> {
         }
     }
 
+    /// Tries to find a binding in the current or one of the surrounding scopes
+    ///
+    /// If a local variable is found in a parent scope, it is marked as an extern local
+    pub fn find_binding(&mut self, binding: &VariableBinding<'a>) -> Option<(u16, ScopeLocal<'a>)> {
+        if let Some((id, local)) = self.scope.find_binding(binding) {
+            Some((id, local.clone()))
+        } else {
+            let mut caller = self.caller;
+
+            while let Some(mut up) = caller {
+                let this = unsafe { up.as_mut() };
+
+                if let Some((id, local)) = this.find_binding(binding) {
+                    // If the local found in a parent scope is already an external,
+                    // it needs to be resolved differently at runtime
+                    let is_nested_extern = local.is_extern();
+
+                    // If it's not already marked external, mark it as such
+                    local.set_extern();
+
+                    // TODO: don't hardcast
+                    let id = self.add_external(id, is_nested_extern) as u16;
+                    return Some((id, local.clone()));
+                }
+
+                caller = this.caller;
+            }
+
+            None
+        }
+    }
+
     fn visit_for_each_kinded_loop(
         &mut self,
         kind: ForEachLoopKind,
@@ -219,7 +251,7 @@ impl<'a> FunctionCompiler<'a> {
         let __forOfGenStep;
         let x;
 
-        while ((!__forOfGenStep = __forOfIter.next()).done) {
+        while (!(__forOfGenStep = __forOfIter.next()).done) {
             console.log(x)
         }
 
@@ -233,7 +265,7 @@ impl<'a> FunctionCompiler<'a> {
         let __forInGenStep;
         let x;
 
-        while ((!__forInGenStep = __forOfIter.next()).done) {
+        while (!(__forInGenStep = __forOfIter.next()).done) {
             console.log(x)
         }
         */
@@ -462,7 +494,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_binding_expression(&mut self, b: VariableBinding<'a>) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
-        let (id, _) = ib.scope.find_binding(&b).ok_or_else(|| CompileError::UnknownBinding)?;
+        let (id, _) = ib.find_binding(&b).ok_or_else(|| CompileError::UnknownBinding)?;
         ib.build_local_load(id, false);
 
         Ok(())
@@ -650,8 +682,8 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             Expr::Literal(lit) => {
                 let ident = lit.to_identifier();
                 let local = match &lit {
-                    LiteralExpr::Binding(binding) => ib.scope.find_binding(&binding),
-                    _ => ib.scope.find_local(&ident),
+                    LiteralExpr::Binding(binding) => ib.find_binding(&binding),
+                    _ => ib.find_local(&ident),
                 };
 
                 if let Some((id, local)) = local {

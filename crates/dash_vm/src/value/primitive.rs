@@ -474,7 +474,7 @@ impl Object for Symbol {
     }
 }
 
-pub trait PrimitiveCapabilities: ValueConversion + ValueEquality {
+pub trait PrimitiveCapabilities: ValueConversion + ValueEquality + std::fmt::Debug {
     fn as_string(&self) -> Option<Rc<str>> {
         None
     }

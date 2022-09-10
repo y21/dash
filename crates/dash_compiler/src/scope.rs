@@ -3,7 +3,7 @@ use std::convert::TryFrom;
 
 use dash_middle::parser::statement::VariableBinding;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ScopeLocal<'a> {
     /// The binding of this variable
     binding: VariableBinding<'a>,
