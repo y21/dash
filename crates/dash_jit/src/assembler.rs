@@ -11,28 +11,7 @@ use std::ptr;
 
 use cstr::cstr;
 use dash_middle::compiler::constant::Function;
-use dash_middle::compiler::instruction::ADD;
-use dash_middle::compiler::instruction::BITNOT;
-use dash_middle::compiler::instruction::BITXOR;
-use dash_middle::compiler::instruction::CONSTANT;
-use dash_middle::compiler::instruction::GT;
-use dash_middle::compiler::instruction::JMP;
-use dash_middle::compiler::instruction::JMPFALSENP;
-use dash_middle::compiler::instruction::JMPFALSEP;
-use dash_middle::compiler::instruction::JMPNULLISHNP;
-use dash_middle::compiler::instruction::JMPNULLISHP;
-use dash_middle::compiler::instruction::JMPTRUENP;
-use dash_middle::compiler::instruction::JMPTRUEP;
-use dash_middle::compiler::instruction::LDLOCAL;
-use dash_middle::compiler::instruction::LDLOCALW;
-use dash_middle::compiler::instruction::LT;
-use dash_middle::compiler::instruction::MUL;
-use dash_middle::compiler::instruction::NE;
-use dash_middle::compiler::instruction::NOT;
-use dash_middle::compiler::instruction::POP;
-use dash_middle::compiler::instruction::REVSTCK;
-use dash_middle::compiler::instruction::STORELOCAL;
-use dash_middle::compiler::instruction::SUB;
+use dash_middle::compiler::instruction::Instruction;
 use indexmap::IndexMap;
 use llvm_sys::analysis::LLVMVerifierFailureAction;
 use llvm_sys::analysis::LLVMVerifyFunction;
@@ -101,7 +80,7 @@ use crate::value::Value;
 pub struct JitResult {
     pub function: JitFunction,
     pub values: Vec<Value>,
-    pub locals: Vec<u16>
+    pub locals: Vec<u16>,
 }
 
 impl JitResult {
@@ -276,8 +255,9 @@ impl Assembler {
         }
 
         while let Some((bytecode_index, inst)) = bytecode.next() {
+            let inst = Instruction::from_repr(inst).unwrap();
             match inst {
-                JMP => {
+                Instruction::Jmp => {
                     let operands = [bytecode.next().unwrap().1, bytecode.next().unwrap().1];
                     let count = i16::from_ne_bytes(operands);
 
@@ -291,7 +271,8 @@ impl Assembler {
                         (0..count).for_each(|_| drop(bytecode.next()));
                     } else {
                         // Otherwise this is a backjump, means we need to jump to an existing label
-                        let (target_block, target_builder) = labels.get(&target)
+                        let (target_block, target_builder) = labels
+                            .get(&target)
                             .copied()
                             .expect("Arbitrary backjumps are currently unsupported");
 
@@ -301,7 +282,7 @@ impl Assembler {
                         current_builder = target_builder;
                     }
                 }
-                JMPFALSENP | JMPFALSEP | /* JMPNULLISHNP | JMPNULLISHP |*/ JMPTRUENP | JMPTRUEP => {
+                Instruction::JmpFalseNP | Instruction::JmpFalseP | Instruction::JmpTrueNP | Instruction::JmpTrueP => {
                     let condition = stack.pop().unwrap();
                     let operands = [bytecode.next().unwrap().1, bytecode.next().unwrap().1];
                     let count = i16::from_ne_bytes(operands);
@@ -313,25 +294,24 @@ impl Assembler {
                     }
 
                     let target = (bytecode_index as isize + count as isize + 3) as usize;
-                    let (target_block, target_builder) = *labels.entry(target)
-                        .or_insert_with(|| unsafe {
-                            let block = LLVMAppendBasicBlock(fun, EMPTY);
-                            let builder = LLVMCreateBuilder();
-                            LLVMPositionBuilderAtEnd(builder, block);
-                            (block, builder)
-                        });
+                    let (target_block, target_builder) = *labels.entry(target).or_insert_with(|| unsafe {
+                        let block = LLVMAppendBasicBlock(fun, EMPTY);
+                        let builder = LLVMCreateBuilder();
+                        LLVMPositionBuilderAtEnd(builder, block);
+                        (block, builder)
+                    });
 
                     unsafe {
                         let (then, or) = match (inst, did_jump) {
-                            (JMPFALSENP | JMPFALSEP, true) => (exit_block, target_block),
-                            (JMPFALSENP | JMPFALSEP, false) => (target_block, exit_block),
-                            (JMPTRUENP | JMPTRUEP, true) => (target_block, exit_block),
-                            (JMPTRUENP | JMPTRUEP, false) => (exit_block, target_block),
-                            _ => unreachable!()
+                            (Instruction::JmpFalseNP | Instruction::JmpFalseP, true) => (exit_block, target_block),
+                            (Instruction::JmpFalseNP | Instruction::JmpFalseP, false) => (target_block, exit_block),
+                            (Instruction::JmpTrueNP | Instruction::JmpTrueP, true) => (target_block, exit_block),
+                            (Instruction::JmpTrueNP | Instruction::JmpTrueP, false) => (exit_block, target_block),
+                            _ => unreachable!(),
                         };
-                        
+
                         LLVMBuildCondBr(current_builder, condition, then, or);
-                        
+
                         let ip = target + trace.start;
                         exit_ips.push(LLVMConstInt(int64, ip as u64, 0));
                         exit_pred_blocks.push(current_block);
@@ -340,7 +320,7 @@ impl Assembler {
                     current_block = target_block;
                     current_builder = target_builder;
                 }
-                LDLOCAL => {
+                Instruction::LdLocal => {
                     let (_, operand) = bytecode.next().unwrap();
                     let idx = operand as u16;
 
@@ -352,13 +332,11 @@ impl Assembler {
 
                     let value = self.find_local_or_insert(&trace_locals, &mut locals, idx, fun, entry_builder);
 
-                    let load = unsafe {
-                        LLVMBuildLoad2(current_builder, ty, value, EMPTY)
-                    };
+                    let load = unsafe { LLVMBuildLoad2(current_builder, ty, value, EMPTY) };
 
                     stack.push(load);
                 }
-                STORELOCAL => {
+                Instruction::StoreLocal => {
                     let (_, operand) = bytecode.next().unwrap();
                     let idx = operand as u16;
 
@@ -374,15 +352,15 @@ impl Assembler {
                     unsafe { LLVMBuildStore(current_builder, value, place) };
                     stack.push(value);
                 }
-                LDLOCALW => todo!(),
-                CONSTANT => {
+                Instruction::LdLocalW => todo!(),
+                Instruction::Constant => {
                     let (_, operand) = bytecode.next().unwrap();
                     let idx = operand as u16;
 
-                    let num = trace_constants[&idx];;
+                    let num = trace_constants[&idx];
                     stack.push(num.to_const_value());
                 }
-                LT => {
+                Instruction::Lt => {
                     let rhs = stack.pop().unwrap();
                     let lhs = stack.pop().unwrap();
 
@@ -397,17 +375,17 @@ impl Assembler {
                         match ty {
                             LLVMTypeKind::LLVMFloatTypeKind => {
                                 LLVMBuildFCmp(current_builder, LLVMRealPredicate::LLVMRealOLT, lhs, rhs, EMPTY)
-                            },
+                            }
                             LLVMTypeKind::LLVMIntegerTypeKind => {
                                 LLVMBuildICmp(current_builder, LLVMIntPredicate::LLVMIntSLT, lhs, rhs, EMPTY)
-                            },
-                            _ => panic!("Unhandled LLVM type {:?}", ty)
+                            }
+                            _ => panic!("Unhandled LLVM type {:?}", ty),
                         }
                     };
 
                     stack.push(result);
                 }
-                GT => {
+                Instruction::Gt => {
                     let rhs = stack.pop().unwrap();
                     let lhs = stack.pop().unwrap();
 
@@ -422,23 +400,23 @@ impl Assembler {
                         match ty {
                             LLVMTypeKind::LLVMFloatTypeKind => {
                                 LLVMBuildFCmp(current_builder, LLVMRealPredicate::LLVMRealOGT, lhs, rhs, EMPTY)
-                            },
+                            }
                             LLVMTypeKind::LLVMIntegerTypeKind => {
                                 LLVMBuildICmp(current_builder, LLVMIntPredicate::LLVMIntSGT, lhs, rhs, EMPTY)
-                            },
-                            _ => panic!("Unhandled LLVM type {:?}", ty)
+                            }
+                            _ => panic!("Unhandled LLVM type {:?}", ty),
                         }
                     };
 
                     stack.push(result);
                 }
-                REVSTCK => {
+                Instruction::RevStck => {
                     let amount = bytecode.next().unwrap().1 as usize;
                     let len = stack.len();
                     let target = &mut stack[len - amount..];
                     target.reverse();
                 }
-                ADD => {
+                Instruction::Add => {
                     let rhs = stack.pop().unwrap();
                     let lhs = stack.pop().unwrap();
 
@@ -446,52 +424,44 @@ impl Assembler {
                     let result = unsafe { LLVMBuildAdd(current_builder, lhs, rhs, EMPTY) };
                     stack.push(result);
                 }
-                MUL => {
+                Instruction::Mul => {
                     let rhs = stack.pop().unwrap();
                     let lhs = stack.pop().unwrap();
 
                     let result = unsafe { LLVMBuildMul(current_builder, lhs, rhs, EMPTY) };
                     stack.push(result);
                 }
-                SUB => {
+                Instruction::Sub => {
                     let rhs = stack.pop().unwrap();
                     let lhs = stack.pop().unwrap();
 
                     let result = unsafe { LLVMBuildSub(current_builder, lhs, rhs, EMPTY) };
                     stack.push(result);
                 }
-                BITXOR => {
+                Instruction::BitXor => {
                     let rhs = stack.pop().unwrap();
                     let lhs = stack.pop().unwrap();
 
                     let result = unsafe { LLVMBuildXor(current_builder, lhs, rhs, EMPTY) };
                     stack.push(result);
                 }
-                NE => {
+                Instruction::Ne => {
                     let rhs = stack.pop().unwrap();
                     let lhs = stack.pop().unwrap();
 
-                    stack.push(unsafe {
-                        LLVMBuildICmp(
-                            current_builder,
-                            LLVMIntPredicate::LLVMIntNE,
-                            lhs,
-                            rhs,
-                            EMPTY,
-                        )
-                    });
+                    stack.push(unsafe { LLVMBuildICmp(current_builder, LLVMIntPredicate::LLVMIntNE, lhs, rhs, EMPTY) });
                 }
-                NOT | BITNOT => {
+                Instruction::Not | Instruction::BitNot => {
                     let value = stack.pop().unwrap();
 
                     stack.push(unsafe { LLVMBuildNot(current_builder, value, EMPTY) });
                 }
-                POP => {
+                Instruction::Pop => {
                     stack.pop().expect("Pop instruction has no target");
                 }
                 other => {
-                    todo!("{other}")
-                },
+                    todo!("{other:?}")
+                }
             }
         }
 
@@ -557,30 +527,33 @@ impl Assembler {
             mem::transmute::<u64, JitFunction>(addr)
         };
 
-        self.cache.insert(cache_key, JitCacheValue {
-            function,
-            locals: local_keys.clone()
-        });
+        self.cache.insert(
+            cache_key,
+            JitCacheValue {
+                function,
+                locals: local_keys.clone(),
+            },
+        );
 
         JitResult {
             function,
             values: local_values,
-            locals: local_keys
+            locals: local_keys,
         }
     }
-    
+
     fn find_local_or_insert(
         &self,
         trace_locals: &IndexMap<u16, Value>,
         locals: &mut HashMap<u16, LLVMValueRef>,
         idx: u16,
         fun: LLVMValueRef,
-        entry_builder: LLVMBuilderRef
+        entry_builder: LLVMBuilderRef,
     ) -> LLVMValueRef {
         // This stores the "offset" of the loaded local variable in the parameter pointer.
         // This will be used by LLVM's GEP instruction.
         let (gep_idx, _, value) = trace_locals.get_full(&idx).unwrap();
-        
+
         let ty = value.type_of();
 
         *locals.entry(idx).or_insert_with(|| unsafe {
@@ -594,25 +567,10 @@ impl Assembler {
             let param = LLVMGetParam(fun, 0);
 
             let value = {
-                let mut indices = [
-                    LLVMConstInt(LLVMInt64Type(), gep_idx as u64, 0)
-                ];
-                let base_gep = LLVMBuildGEP2(
-                    entry_builder,
-                    self.value_union,
-                    param,
-                    indices.as_mut_ptr(),
-                    1,
-                    EMPTY,
-                );
+                let mut indices = [LLVMConstInt(LLVMInt64Type(), gep_idx as u64, 0)];
+                let base_gep = LLVMBuildGEP2(entry_builder, self.value_union, param, indices.as_mut_ptr(), 1, EMPTY);
 
-                let struct_gep = LLVMBuildStructGEP2(
-                    entry_builder,
-                    self.value_union,
-                    base_gep,
-                    1,
-                    EMPTY
-                );
+                let struct_gep = LLVMBuildStructGEP2(entry_builder, self.value_union, base_gep, 1, EMPTY);
 
                 LLVMBuildLoad2(entry_builder, ty, struct_gep, EMPTY)
             };

@@ -20,6 +20,7 @@ use self::{
 
 #[cfg(feature = "jit")]
 use dash_middle::compiler::constant::Constant;
+use dash_middle::compiler::instruction::Instruction;
 use value::{promise::{Promise, PromiseState}, ValueContext, function::bound::BoundFunction};
 
 #[cfg(feature = "jit")]
@@ -752,7 +753,7 @@ impl Vm {
         let fp = self.frames.len();
 
         loop {
-            let instruction = self.fetch_and_inc_ip();
+            let instruction = Instruction::from_repr(self.fetch_and_inc_ip()).unwrap();
 
             match dispatch::handle(self, instruction) {
                 Ok(Some(hr)) => return Ok(hr),

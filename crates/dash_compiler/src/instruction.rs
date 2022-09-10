@@ -3,6 +3,7 @@ use std::convert::TryInto;
 use dash_middle::{
     compiler::{
         constant::{Constant, LimitExceededError},
+        instruction::Instruction,
         FunctionCallMetadata, ObjectMemberKind as CompilerObjectMemberKind, StaticImportKind,
     },
     parser::expr::ObjectMemberKind,
@@ -12,7 +13,6 @@ use super::{
     builder::{InstructionBuilder, Label},
     error::CompileError,
 };
-use dash_middle::compiler::instruction as inst;
 
 #[rustfmt::skip]
 pub trait InstructionWriter {
@@ -124,7 +124,7 @@ macro_rules! impl_instruction_writer {
     ($($fname:ident $value:expr),*) => {
         $(
             fn $fname(&mut self) {
-                self.write($value);
+                self.write($value as u8);
             }
         )*
     }
@@ -132,166 +132,169 @@ macro_rules! impl_instruction_writer {
 
 impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
     impl_instruction_writer! {
-        build_add inst::ADD,
-        build_sub inst::SUB,
-        build_mul inst::MUL,
-        build_div inst::DIV,
-        build_rem inst::REM,
-        build_pow inst::POW,
-        build_gt inst::GT,
-        build_ge inst::GE,
-        build_lt inst::LT,
-        build_le inst::LE,
-        build_eq inst::EQ,
-        build_ne inst::NE,
-        build_pop inst::POP,
-        build_pos inst::POS,
-        build_neg inst::NEG,
-        build_typeof inst::TYPEOF,
-        build_bitnot inst::BITNOT,
-        build_not inst::NOT,
-        build_this inst::THIS,
-        build_strict_eq inst::STRICTEQ,
-        build_strict_ne inst::STRICTNE,
-        build_try_end inst::TRYEND,
-        build_throw inst::THROW,
-        build_yield inst::YIELD,
-        build_await inst::AWAIT,
-        build_bitor inst::BITOR,
-        build_bitxor inst::BITXOR,
-        build_bitand inst::BITAND,
-        build_bitshl inst::BITSHL,
-        build_bitshr inst::BITSHR,
-        build_bitushr inst::BITUSHR,
-        build_objin inst::OBJIN,
-        build_instanceof inst::INSTANCEOF,
-        build_default_export inst::EXPORTDEFAULT,
-        build_debugger inst::DEBUGGER,
-        build_super inst::SUPER,
-        build_global inst::GLOBAL,
-        build_infinity inst::INFINITY,
-        build_nan inst::NAN,
-        build_undef inst::UNDEF,
-        build_break inst::BREAK,
-        build_symbol_iterator inst::CALL_SYMBOL_ITERATOR,
-        build_for_in_iterator inst::CALL_FOR_IN_ITERATOR
+        build_add Instruction::Add,
+        build_sub Instruction::Sub,
+        build_mul Instruction::Mul,
+        build_div Instruction::Div,
+        build_rem Instruction::Rem,
+        build_pow Instruction::Pow,
+        build_gt Instruction::Gt,
+        build_ge Instruction::Ge,
+        build_lt Instruction::Lt,
+        build_le Instruction::Le,
+        build_eq Instruction::Eq,
+        build_ne Instruction::Ne,
+        build_pop Instruction::Pop,
+        build_pos Instruction::Pos,
+        build_neg Instruction::Neg,
+        build_typeof Instruction::TypeOf,
+        build_bitnot Instruction::BitNot,
+        build_not Instruction::Not,
+        build_this Instruction::This,
+        build_strict_eq Instruction::StrictEq,
+        build_strict_ne Instruction::StrictNe,
+        build_try_end Instruction::TryEnd,
+        build_throw Instruction::Throw,
+        build_yield Instruction::Yield,
+        build_await Instruction::Await,
+        build_bitor Instruction::BitOr,
+        build_bitxor Instruction::BitXor,
+        build_bitand Instruction::BitAnd,
+        build_bitshl Instruction::BitShl,
+        build_bitshr Instruction::BitShr,
+        build_bitushr Instruction::BitUshr,
+        build_objin Instruction::ObjIn,
+        build_instanceof Instruction::InstanceOf,
+        build_default_export Instruction::ExportDefault,
+        build_debugger Instruction::Debugger,
+        build_super Instruction::Super,
+        build_global Instruction::Global,
+        build_infinity Instruction::Infinity,
+        build_nan Instruction::Nan,
+        build_undef Instruction::Undef,
+        build_break Instruction::Break,
+        build_symbol_iterator Instruction::CallSymbolIterator,
+        build_for_in_iterator Instruction::CallForInIterator
     }
 
     fn build_ret(&mut self, tc_depth: u16) {
-        self.write(inst::RET);
+        self.write_instr(Instruction::Ret);
         self.writew(tc_depth);
     }
 
     fn build_constant(&mut self, constant: Constant) -> Result<(), LimitExceededError> {
         let id = self.cp.add(constant)?;
-        self.write_wide_instr(inst::CONSTANT, inst::CONSTANTW, id);
+        self.write_wide_instr(Instruction::Constant, Instruction::ConstantW, id);
         Ok(())
     }
 
     fn build_try_block(&mut self) {
-        self.write_all(&[inst::TRY, 0, 0]);
+        self.write_instr(Instruction::Try);
+        self.write_all(&[0, 0]);
         self.add_local_jump(Label::Catch);
     }
 
     fn build_local_load(&mut self, index: u16, is_extern: bool) {
         let (thin, wide) = is_extern
-            .then(|| (inst::LDLOCALEXT, inst::LDLOCALEXTW))
-            .unwrap_or((inst::LDLOCAL, inst::LDLOCALW));
+            .then(|| (Instruction::LdLocalExt, Instruction::LdLocalExtW))
+            .unwrap_or((Instruction::LdLocal, Instruction::LdLocalW));
 
         self.write_wide_instr(thin, wide, index);
     }
 
     fn build_global_load(&mut self, ident: &str) -> Result<(), LimitExceededError> {
         let id = self.cp.add(Constant::Identifier(ident.into()))?;
-        self.write_wide_instr(inst::LDGLOBAL, inst::LDGLOBALW, id);
+        self.write_wide_instr(Instruction::LdGlobal, Instruction::LdGlobalW, id);
         Ok(())
     }
 
     fn build_global_store(&mut self, ident: &str) -> Result<(), LimitExceededError> {
         let id = self.cp.add(Constant::Identifier(ident.into()))?;
-        self.write_wide_instr(inst::STOREGLOBAL, inst::STOREGLOBALW, id);
+        self.write_wide_instr(Instruction::StoreGlobal, Instruction::StoreGlobalW, id);
         Ok(())
     }
 
     fn build_local_store(&mut self, id: u16, is_extern: bool) {
         let (thin, wide) = is_extern
-            .then(|| (inst::STORELOCALEXT, inst::STORELOCALEXTW))
-            .unwrap_or((inst::STORELOCAL, inst::STORELOCALW));
+            .then(|| (Instruction::StoreLocalExt, Instruction::StoreLocalExtW))
+            .unwrap_or((Instruction::StoreLocal, Instruction::StoreLocalW));
 
         self.write_wide_instr(thin, wide, id);
     }
 
     fn build_call(&mut self, meta: FunctionCallMetadata) {
-        self.write_all(&[inst::CALL, meta.into()]);
+        self.write_instr(Instruction::Call);
+        self.write(meta.into());
     }
 
     fn build_jmpfalsep(&mut self, label: Label) {
-        self.write(inst::JMPFALSEP);
+        self.write_instr(Instruction::JmpFalseP);
         self.write_all(&[0, 0]);
         self.add_local_jump(label);
     }
 
     fn build_jmpfalsenp(&mut self, label: Label) {
-        self.write(inst::JMPFALSENP);
+        self.write_instr(Instruction::JmpFalseNP);
         self.write_all(&[0, 0]);
         self.add_local_jump(label);
     }
 
     fn build_jmptruep(&mut self, label: Label) {
-        self.write(inst::JMPTRUEP);
+        self.write_instr(Instruction::JmpTrueP);
         self.write_all(&[0, 0]);
         self.add_local_jump(label);
     }
 
     fn build_jmptruenp(&mut self, label: Label) {
-        self.write(inst::JMPTRUENP);
+        self.write_instr(Instruction::JmpTrueNP);
         self.write_all(&[0, 0]);
         self.add_local_jump(label);
     }
 
     fn build_jmpnullishp(&mut self, label: Label) {
-        self.write(inst::JMPNULLISHP);
+        self.write_instr(Instruction::JmpNullishP);
         self.write_all(&[0, 0]);
         self.add_local_jump(label);
     }
 
     fn build_jmpnullishnp(&mut self, label: Label) {
-        self.write(inst::JMPNULLISHNP);
+        self.write_instr(Instruction::JmpNullishNP);
         self.write_all(&[0, 0]);
         self.add_local_jump(label);
     }
 
     fn build_jmp(&mut self, label: Label) {
-        self.write(inst::JMP);
+        self.write_instr(Instruction::Jmp);
         self.write_all(&[0, 0]);
         self.add_local_jump(label);
     }
 
     fn build_static_prop_access(&mut self, ident: &str, preserve_this: bool) -> Result<(), LimitExceededError> {
         let id = self.cp.add(Constant::Identifier(ident.into()))?;
-        self.write_wide_instr(inst::STATICPROPACCESS, inst::STATICPROPACCESSW, id);
+        self.write_wide_instr(Instruction::StaticPropAccess, Instruction::StaticPropAccessW, id);
         self.write(preserve_this.into());
 
         Ok(())
     }
 
     fn build_dynamic_prop_access(&mut self, preserve_this: bool) {
-        self.write_all(&[inst::DYNAMICPROPACCESS, preserve_this.into()]);
+        self.write_instr(Instruction::DynamicPropAccess);
+        self.write(preserve_this.into());
     }
 
     fn build_static_prop_set(&mut self, ident: &str) -> Result<(), LimitExceededError> {
         let id = self.cp.add(Constant::Identifier(ident.into()))?;
-        self.write_wide_instr(inst::STATICPROPSET, inst::STATICPROPSETW, id);
+        self.write_wide_instr(Instruction::StaticPropSet, Instruction::StaticPropSetW, id);
 
         Ok(())
     }
 
     fn build_dynamic_prop_set(&mut self) {
-        self.write(inst::DYNAMICPROPSET);
+        self.write_instr(Instruction::DynamicPropSet)
     }
 
     fn build_arraylit(&mut self, len: u16) {
-        self.write_wide_instr(inst::ARRAYLIT, inst::ARRAYLITW, len);
+        self.write_wide_instr(Instruction::ArrayLit, Instruction::ArrayLitW, len);
     }
 
     fn build_objlit(&mut self, constants: Vec<ObjectMemberKind>) -> Result<(), CompileError> {
@@ -300,7 +303,7 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
             .try_into()
             .map_err(|_| CompileError::ObjectLitLimitExceeded)?;
 
-        self.write_wide_instr(inst::OBJLIT, inst::OBJLITW, len);
+        self.write_wide_instr(Instruction::ObjLit, Instruction::ObjLitW, len);
 
         // Push in reverse order to match order in which the compiler pushes values onto the stack
         for member in constants.into_iter().rev() {
@@ -325,22 +328,23 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
     }
 
     fn build_static_import(&mut self, import: StaticImportKind, local_id: u16, path_id: u16) {
-        self.write(inst::IMPORTSTATIC);
+        self.write_instr(Instruction::ImportStatic);
         self.write(import as u8);
         self.writew(local_id);
         self.writew(path_id);
     }
 
     fn build_dynamic_import(&mut self) {
-        self.write(inst::IMPORTDYN);
+        self.write_instr(Instruction::ImportDyn);
     }
 
     fn build_revstck(&mut self, n: u8) {
-        self.write_all(&[inst::REVSTCK, n]);
+        self.write_instr(Instruction::RevStck);
+        self.write(n);
     }
 
     fn build_named_export(&mut self, it: &[NamedExportKind]) -> Result<(), CompileError> {
-        self.write(inst::EXPORTNAMED);
+        self.write_instr(Instruction::ExportNamed);
 
         let len = it
             .len()

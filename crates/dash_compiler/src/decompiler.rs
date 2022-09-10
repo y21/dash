@@ -7,7 +7,7 @@ use std::rc::Rc;
 
 use dash_middle::compiler::constant::Constant;
 use dash_middle::compiler::constant::Function;
-use dash_middle::compiler::instruction as inst;
+use dash_middle::compiler::instruction::Instruction;
 
 use super::CompileResult;
 
@@ -88,6 +88,7 @@ impl<R: Read> Reader<R> {
 pub enum DecompileError {
     AbruptEof,
     UnknownInstruction(u8),
+    UnimplementedInstruction(Instruction),
 }
 
 enum StackValue {
@@ -143,9 +144,9 @@ fn handle_arithmetic(stack: &mut usize, output: &mut Output, instruction: &str) 
 }
 
 fn read_wide<'a, R: Read>(
-    actual: u8,
-    thin: (&'a str, u8),
-    wide: (&'a str, u8),
+    actual: Instruction,
+    thin: (&'a str, Instruction),
+    wide: (&'a str, Instruction),
     reader: &mut Reader<R>,
 ) -> Result<(&'a str, u16), DecompileError> {
     if actual == thin.1 {
@@ -179,33 +180,34 @@ pub fn decompile(CompileResult { cp, instructions, .. }: CompileResult) -> Resul
 
     loop {
         let instr = reader.read().ok_or(DecompileError::AbruptEof)?;
+        let instr = Instruction::from_repr(instr).ok_or(DecompileError::UnknownInstruction(instr))?;
 
         match instr {
-            inst::ADD => handle_arithmetic(&mut stack, &mut output, "ADD"),
-            inst::SUB => handle_arithmetic(&mut stack, &mut output, "SUB"),
-            inst::MUL => handle_arithmetic(&mut stack, &mut output, "MUL"),
-            inst::DIV => handle_arithmetic(&mut stack, &mut output, "DIV"),
-            inst::REM => handle_arithmetic(&mut stack, &mut output, "REM"),
-            inst::POW => handle_arithmetic(&mut stack, &mut output, "POW"),
-            inst::GT => handle_arithmetic(&mut stack, &mut output, "GT"),
-            inst::GE => handle_arithmetic(&mut stack, &mut output, "GE"),
-            inst::LT => handle_arithmetic(&mut stack, &mut output, "LT"),
-            inst::LE => handle_arithmetic(&mut stack, &mut output, "LE"),
-            inst::EQ => handle_arithmetic(&mut stack, &mut output, "EQ"),
-            inst::NE => handle_arithmetic(&mut stack, &mut output, "NE"),
-            inst::POP => {
+            Instruction::Add => handle_arithmetic(&mut stack, &mut output, "ADD"),
+            Instruction::Sub => handle_arithmetic(&mut stack, &mut output, "SUB"),
+            Instruction::Mul => handle_arithmetic(&mut stack, &mut output, "MUL"),
+            Instruction::Div => handle_arithmetic(&mut stack, &mut output, "DIV"),
+            Instruction::Rem => handle_arithmetic(&mut stack, &mut output, "REM"),
+            Instruction::Pow => handle_arithmetic(&mut stack, &mut output, "POW"),
+            Instruction::Gt => handle_arithmetic(&mut stack, &mut output, "GT"),
+            Instruction::Ge => handle_arithmetic(&mut stack, &mut output, "GE"),
+            Instruction::Lt => handle_arithmetic(&mut stack, &mut output, "LT"),
+            Instruction::Le => handle_arithmetic(&mut stack, &mut output, "LE"),
+            Instruction::Eq => handle_arithmetic(&mut stack, &mut output, "EQ"),
+            Instruction::Ne => handle_arithmetic(&mut stack, &mut output, "NE"),
+            Instruction::Pop => {
                 output.write_instruction::<u8>(Unit::Main, "POP", &[]);
                 stack -= 1;
             }
-            inst::REVSTCK => {
+            Instruction::RevStck => {
                 let n = reader.read().ok_or(DecompileError::AbruptEof)?;
                 output.write_instruction(Unit::Main, "REVSTCK", &[n]);
             }
-            inst::CONSTANT | inst::CONSTANTW => {
+            Instruction::Constant | Instruction::ConstantW => {
                 let (name, id) = read_wide(
                     instr,
-                    ("CONSTANT", inst::CONSTANT),
-                    ("CONSTANTW", inst::CONSTANTW),
+                    ("CONSTANT", Instruction::Constant),
+                    ("CONSTANTW", Instruction::ConstantW),
                     &mut reader,
                 )?;
                 let constant = StackValue::from(cp[id as usize].clone());
@@ -214,29 +216,29 @@ pub fn decompile(CompileResult { cp, instructions, .. }: CompileResult) -> Resul
                 output.write_instruction(Unit::Main, name, args);
                 stack += 1;
             }
-            inst::LDLOCAL | inst::LDLOCALW => {
+            Instruction::LdLocal | Instruction::LdLocalW => {
                 let (name, id) = read_wide(
                     instr,
-                    ("LDLOCAL", inst::LDLOCAL),
-                    ("LDLOCALW", inst::LDLOCALW),
+                    ("LDLOCAL", Instruction::LdLocal),
+                    ("LDLOCALW", Instruction::LdLocalW),
                     &mut reader,
                 )?;
                 stack += 1;
                 output.write_instruction(Unit::Main, name, &[StackId(id.into())]);
             }
-            inst::JMP => {
+            Instruction::Jmp => {
                 let id = reader.read_i16_ne().ok_or(DecompileError::AbruptEof)?;
                 output.write_instruction(Unit::Main, "JMP", &[id]);
             }
-            inst::JMPFALSEP => {
+            Instruction::JmpFalseP => {
                 let id = reader.read_i16_ne().ok_or(DecompileError::AbruptEof)?;
                 output.write_instruction(Unit::Main, "JMPFALSEP", &[id]);
             }
-            inst::LDGLOBAL | inst::LDGLOBALW => {
+            Instruction::LdGlobal | Instruction::LdGlobalW => {
                 let (name, id) = read_wide(
                     instr,
-                    ("LDGLOBAL", inst::LDGLOBAL),
-                    ("LDGLOBALW", inst::LDGLOBALW),
+                    ("LDGLOBAL", Instruction::LdGlobal),
+                    ("LDGLOBALW", Instruction::LdGlobalW),
                     &mut reader,
                 )?;
                 let constant = StackValue::from(cp[id as usize].clone());
@@ -245,11 +247,11 @@ pub fn decompile(CompileResult { cp, instructions, .. }: CompileResult) -> Resul
                 output.write_instruction(Unit::Main, name, args);
                 stack += 1;
             }
-            inst::STORELOCAL | inst::STORELOCALW => {
+            Instruction::StoreLocal | Instruction::StoreLocalW => {
                 let (name, id) = read_wide(
                     instr,
-                    ("STORELOCAL", inst::STORELOCAL),
-                    ("STORELOCALW", inst::STORELOCALW),
+                    ("STORELOCAL", Instruction::StoreLocal),
+                    ("STORELOCALW", Instruction::StoreLocalW),
                     &mut reader,
                 )?;
 
@@ -257,7 +259,7 @@ pub fn decompile(CompileResult { cp, instructions, .. }: CompileResult) -> Resul
                 output.write_instruction(Unit::Main, name, args);
                 stack += 1;
             }
-            inst::CALL => {
+            Instruction::Call => {
                 let argc = reader.read().ok_or(DecompileError::AbruptEof)?;
                 let is_constructor = reader.read().ok_or(DecompileError::AbruptEof)?;
 
@@ -271,11 +273,11 @@ pub fn decompile(CompileResult { cp, instructions, .. }: CompileResult) -> Resul
                 output.write_instruction(Unit::Main, "CALL", args);
                 stack += 1;
             }
-            inst::STATICPROPACCESS | inst::STATICPROPACCESSW => {
+            Instruction::StaticPropAccess | Instruction::StaticPropAccessW => {
                 let (name, id) = read_wide(
                     instr,
-                    ("STATICPROPACCESS", inst::STATICPROPACCESS),
-                    ("STATICPROPACCESSW", inst::STATICPROPACCESSW),
+                    ("STATICPROPACCESS", Instruction::StaticPropAccess),
+                    ("STATICPROPACCESSW", Instruction::StaticPropAccessW),
                     &mut reader,
                 )?;
                 let constant = StackValue::from(cp[id as usize].clone());
@@ -284,11 +286,11 @@ pub fn decompile(CompileResult { cp, instructions, .. }: CompileResult) -> Resul
                 output.write_instruction(Unit::Main, name, args);
                 stack += 1;
             }
-            inst::RET => {
+            Instruction::Ret => {
                 output.write_instruction(Unit::Main, "RET", &[StackId(stack)]);
                 break;
             }
-            _ => return Err(DecompileError::UnknownInstruction(instr)),
+            other => return Err(DecompileError::UnimplementedInstruction(other)),
         }
     }
 

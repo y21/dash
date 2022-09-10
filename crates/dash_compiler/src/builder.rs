@@ -5,6 +5,7 @@ use std::ops::Deref;
 use std::ops::DerefMut;
 
 use dash_middle::compiler::instruction as inst;
+use dash_middle::compiler::instruction::Instruction;
 
 use crate::FunctionCompiler;
 
@@ -42,6 +43,10 @@ impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
         self.buf.push(instruction);
     }
 
+    pub fn write_instr(&mut self, instruction: Instruction) {
+        self.buf.push(instruction as u8);
+    }
+
     pub fn writew(&mut self, instruction: u16) {
         self.buf.extend_from_slice(&instruction.to_ne_bytes());
     }
@@ -50,11 +55,12 @@ impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
         self.buf.extend_from_slice(instruction)
     }
 
-    pub fn write_wide_instr(&mut self, instr: u8, instrw: u8, value: u16) {
+    pub fn write_wide_instr(&mut self, instr: Instruction, instrw: Instruction, value: u16) {
         if let Ok(value) = value.try_into() {
-            self.write_all(&[instr, value]);
+            self.write_instr(instr);
+            self.write(value);
         } else {
-            self.write(instrw);
+            self.write_instr(instrw);
             self.writew(value);
         }
     }

@@ -85,7 +85,10 @@ pub fn decompile(s: &str, o: OptLevel, em: Emit) -> String {
             decompiler::decompile(cmp).unwrap_or_else(|e| match e {
                 DecompileError::AbruptEof => String::from("Error: Abrupt end of file"),
                 DecompileError::UnknownInstruction(u) => {
-                    format!("Error: Unknown or unimplemented instruction 0x{:x}", u)
+                    format!("Error: Unknown instruction 0x{:x}", u)
+                }
+                DecompileError::UnimplementedInstruction(i) => {
+                    format!("Error: Unimplemented instruction {:?}", i)
                 }
             })
         }
