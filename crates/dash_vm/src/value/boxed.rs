@@ -143,11 +143,19 @@ impl PrimitiveCapabilities for Number {
     fn as_number(&self) -> Option<f64> {
         Some(self.inner)
     }
+
+    fn unbox(&self) -> Value {
+        Value::Number(self.inner)
+    }
 }
 
 impl PrimitiveCapabilities for Boolean {
     fn as_bool(&self) -> Option<bool> {
         Some(self.inner)
+    }
+
+    fn unbox(&self) -> Value {
+        Value::Boolean(self.inner)
     }
 }
 
@@ -155,6 +163,14 @@ impl PrimitiveCapabilities for String {
     fn as_string(&self) -> Option<Rc<str>> {
         Some(self.inner.clone())
     }
+
+    fn unbox(&self) -> Value {
+        Value::String(Rc::clone(&self.inner))
+    }
 }
 
-impl PrimitiveCapabilities for Symbol {}
+impl PrimitiveCapabilities for Symbol {
+    fn unbox(&self) -> Value {
+        Value::Symbol(self.inner.clone())
+    }
+}

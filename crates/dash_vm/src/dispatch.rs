@@ -780,9 +780,12 @@ mod handlers {
 
     pub fn ldlocalext(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
         let id = cx.fetch_and_inc_ip();
-        let value = cx.get_external(id.into()).clone();
+        let value = Value::External(cx.get_external(id.into()).clone());
 
-        cx.try_push_stack(Value::External(value))?;
+        // Unbox external values such that any use will create a copy
+        let value = value.unbox_external();
+
+        cx.try_push_stack(value)?;
         Ok(None)
     }
 

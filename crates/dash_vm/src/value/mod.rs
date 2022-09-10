@@ -51,6 +51,7 @@ use crate::{
 
 use self::function::r#async::AsyncFunction;
 use self::object::PropertyValue;
+use self::primitive::PrimitiveCapabilities;
 use self::{
     function::{generator::GeneratorFunction, user::UserFunction, Function},
     object::{Object, PropertyKey},
@@ -251,6 +252,22 @@ impl Value {
 
     pub fn null() -> Value {
         Value::Null(Null)
+    }
+
+    pub fn unbox_external(self) -> Value {
+        match self {
+            Value::Boolean(b) => b.unbox(),
+            Value::String(s) => s.unbox(),
+            Value::Number(n) => n.unbox(),
+            Value::Symbol(s) => s.unbox(),
+            Value::Object(o) => Value::Object(o),
+            Value::Undefined(u) => u.unbox(),
+            Value::Null(n) => n.unbox(),
+            Value::External(ext) => ext
+                .as_primitive_capable()
+                .map(|p| p.unbox())
+                .unwrap_or_else(|| Value::Object(ext)),
+        }
     }
 
     /// Boxes this value

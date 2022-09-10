@@ -490,11 +490,16 @@ pub trait PrimitiveCapabilities: ValueConversion + ValueEquality + std::fmt::Deb
     fn is_null(&self) -> bool {
         false
     }
+    fn unbox(&self) -> Value;
 }
 
 impl PrimitiveCapabilities for f64 {
     fn as_number(&self) -> Option<f64> {
         Some(*self)
+    }
+
+    fn unbox(&self) -> Value {
+        Value::Number(*self)
     }
 }
 
@@ -555,6 +560,10 @@ impl ValueConversion for f64 {
 impl PrimitiveCapabilities for bool {
     fn as_bool(&self) -> Option<bool> {
         Some(*self)
+    }
+
+    fn unbox(&self) -> Value {
+        Value::Boolean(*self)
     }
 }
 
@@ -627,6 +636,10 @@ impl PrimitiveCapabilities for Rc<str> {
     fn as_string(&self) -> Option<Rc<str>> {
         Some(self.clone())
     }
+
+    fn unbox(&self) -> Value {
+        Value::String(Rc::clone(self))
+    }
 }
 
 impl ValueEquality for Rc<str> {
@@ -685,6 +698,10 @@ impl ValueConversion for Rc<str> {
 impl PrimitiveCapabilities for Undefined {
     fn is_undefined(&self) -> bool {
         true
+    }
+
+    fn unbox(&self) -> Value {
+        Value::undefined()
     }
 }
 
@@ -751,6 +768,10 @@ impl PrimitiveCapabilities for Null {
     fn is_null(&self) -> bool {
         true
     }
+
+    fn unbox(&self) -> Value {
+        Value::null()
+    }
 }
 
 impl ValueEquality for Null {
@@ -805,7 +826,11 @@ impl ValueConversion for Null {
     }
 }
 
-impl PrimitiveCapabilities for Symbol {}
+impl PrimitiveCapabilities for Symbol {
+    fn unbox(&self) -> Value {
+        Value::Symbol(self.clone())
+    }
+}
 
 impl ValueEquality for Symbol {
     fn lt(&self, _other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
