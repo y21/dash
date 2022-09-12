@@ -116,7 +116,11 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "clap",
+ "dash_compiler",
+ "dash_decompiler",
+ "dash_lexer",
  "dash_optimizer",
+ "dash_parser",
  "dash_rt",
  "dash_vm",
  "rustyline",
@@ -146,6 +150,14 @@ dependencies = [
  "derive_more",
  "strum",
  "strum_macros",
+]
+
+[[package]]
+name = "dash_decompiler"
+version = "0.1.0"
+dependencies = [
+ "dash_middle",
+ "thiserror",
 ]
 
 [[package]]
@@ -238,6 +250,7 @@ dependencies = [
  "dash_optimizer",
  "dash_parser",
  "dash_proc_macro",
+ "smallvec",
 ]
 
 [[package]]
@@ -909,9 +922,9 @@ checksum = "eb703cfe953bccee95685111adeedb76fabe4e97549a58d16f03ea7b9367bb32"
 
 [[package]]
 name = "smallvec"
-version = "1.8.0"
+version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2dd574626839106c320a323308629dcb1acfc96e32a8cba364ddc61ac23ee83"
+checksum = "2fd0db749597d91ff862fd1d55ea87f7855a744a8425a64695b6fca237d1dad1"
 
 [[package]]
 name = "socket2"
@@ -980,18 +993,18 @@ checksum = "b1141d4d61095b28419e22cb0bbf02755f5e54e0526f97f1e3d1d160e60885fb"
 
 [[package]]
 name = "thiserror"
-version = "1.0.31"
+version = "1.0.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd829fe32373d27f76265620b5309d0340cb8550f523c1dda251d6298069069a"
+checksum = "8c1b05ca9d106ba7d2e31a9dab4a64e7be2cce415321966ea3132c49a656e252"
 dependencies = [
  "thiserror-impl",
 ]
 
 [[package]]
 name = "thiserror-impl"
-version = "1.0.31"
+version = "1.0.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0396bc89e626244658bef819e22d0cc459e795a5ebe878e6ec336d1674a8d79a"
+checksum = "e8f2591983642de85c921015f3f070c665a197ed69e417af436115e3a1407487"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1174,6 +1187,7 @@ name = "wasm"
 version = "0.3.0"
 dependencies = [
  "dash_compiler",
+ "dash_decompiler",
  "dash_middle",
  "dash_optimizer",
  "dash_parser",
