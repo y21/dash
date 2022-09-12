@@ -29,15 +29,23 @@ fn main() -> anyhow::Result<()> {
                 .arg(Arg::new("file").required(true))
                 .arg(Arg::new("timing").short('t').long("timing").takes_value(false))
                 .arg(Arg::new("quiet").short('q').long("quiet").takes_value(false))
-                .arg(opt_level),
+                .arg(opt_level.clone()),
         )
-        .subcommand(Command::new("repl").override_help("Enter a JavaScript REPL"));
+        .subcommand(Command::new("repl").override_help("Enter a JavaScript REPL"))
+        .subcommand(
+            Command::new("dump")
+                .override_help("Dumps intermediate code representation")
+                .arg(Arg::new("file").required(true))
+                .arg(Arg::new("bytecode").long("bytecode").takes_value(false))
+                .arg(opt_level),
+        );
 
     let matches = app.get_matches();
     match matches.subcommand() {
         Some(("eval", args)) => cmd::eval(args),
         Some(("run", args)) => cmd::run(args),
         Some(("repl", _)) => cmd::repl(),
+        Some(("dump", args)) => cmd::dump(args),
         _ => bail!("Unimplemented command"),
     }
 }

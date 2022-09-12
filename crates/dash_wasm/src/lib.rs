@@ -1,5 +1,3 @@
-use dash_compiler::decompiler;
-use dash_compiler::decompiler::DecompileError;
 use dash_compiler::FunctionCompiler;
 use dash_middle::compiler::StaticImportKind;
 use dash_parser::Parser;
@@ -82,15 +80,7 @@ pub fn decompile(s: &str, o: OptLevel, em: Emit) -> String {
     match em {
         Emit::Bytecode => {
             let cmp = FunctionCompiler::new(o.into()).compile_ast(ast, true).unwrap();
-            decompiler::decompile(cmp).unwrap_or_else(|e| match e {
-                DecompileError::AbruptEof => String::from("Error: Abrupt end of file"),
-                DecompileError::UnknownInstruction(u) => {
-                    format!("Error: Unknown instruction 0x{:x}", u)
-                }
-                DecompileError::UnimplementedInstruction(i) => {
-                    format!("Error: Unimplemented instruction {:?}", i)
-                }
-            })
+            dash_decompiler::decompile(&cmp.cp, &cmp.instructions).unwrap_or_else(|e| e.to_string())
         }
         Emit::JavaScript => {
             dash_optimizer::optimize_ast(&mut ast, o.into());

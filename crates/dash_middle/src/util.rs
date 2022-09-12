@@ -1,4 +1,5 @@
 use std::fmt;
+use std::io::Read;
 use std::ops::RangeInclusive;
 
 const DIGIT: RangeInclusive<u8> = b'0'..=b'9';
@@ -70,4 +71,35 @@ pub fn fmt_group<D: fmt::Display>(formatter: &mut fmt::Formatter<'_>, items: &[D
         write!(formatter, "{}", item)?;
     }
     Ok(())
+}
+
+pub struct Reader<R: Read>(R, usize);
+
+impl<R: Read> Reader<R> {
+    pub fn new(r: R) -> Self {
+        Self(r, 0)
+    }
+
+    pub fn offset(&self) -> usize {
+        self.1
+    }
+
+    pub fn read_bytes<const N: usize>(&mut self) -> Option<[u8; N]> {
+        let mut buf = [0; N];
+        self.0.read_exact(&mut buf).ok()?;
+        self.1 += N;
+        Some(buf)
+    }
+
+    pub fn read(&mut self) -> Option<u8> {
+        self.read_bytes::<1>().map(|[b]| b)
+    }
+
+    pub fn read_u16_ne(&mut self) -> Option<u16> {
+        self.read_bytes().map(u16::from_ne_bytes)
+    }
+
+    pub fn read_i16_ne(&mut self) -> Option<i16> {
+        self.read_bytes().map(i16::from_ne_bytes)
+    }
 }

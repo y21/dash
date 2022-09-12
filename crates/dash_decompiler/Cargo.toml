@@ -1,0 +1,8 @@
+[package]
+name = "dash_decompiler"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dash_middle = { path = "../dash_middle" }
+thiserror = "1.0.34"

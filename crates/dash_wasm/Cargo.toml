@@ -16,6 +16,7 @@ dash_compiler = { path = "../dash_compiler", features = [
     "from_string",
     "decompile",
 ] }
+dash_decompiler = { path = "../dash_decompiler" }
 dash_parser = { path = "../dash_parser", features = ["from_string"] }
 dash_middle = { path = "../dash_middle" }
 js-sys = "0.3.57"

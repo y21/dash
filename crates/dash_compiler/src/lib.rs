@@ -48,8 +48,6 @@ use self::{
 };
 
 pub mod builder;
-#[cfg(feature = "decompile")]
-pub mod decompiler;
 pub mod error;
 #[cfg(feature = "from_string")]
 pub mod from_string;
