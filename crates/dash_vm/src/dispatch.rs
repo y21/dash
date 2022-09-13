@@ -62,6 +62,13 @@ impl<'a> DispatchContext<'a> {
             .expect("Bytecode attempted to pop stack value, but nothing was on the stack")
     }
 
+    pub fn peek_stack(&mut self) -> Value {
+        self.stack
+            .last()
+            .expect("Bytecode attempted to peek stack value, but nothing was on the stack")
+            .clone()
+    }
+
     pub fn pop_stack2(&mut self) -> (Value, Value) {
         let b = self.stack.pop();
         let a = self.stack.pop();
@@ -450,7 +457,7 @@ mod handlers {
 
     pub fn jmpfalsenp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
         let offset = cx.fetchw_and_inc_ip() as i16;
-        let value = cx.pop_stack();
+        let value = cx.peek_stack();
 
         let jump = !value.is_truthy();
 
@@ -494,7 +501,7 @@ mod handlers {
 
     pub fn jmptruenp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
         let offset = cx.fetchw_and_inc_ip() as i16;
-        let value = cx.pop_stack();
+        let value = cx.peek_stack();
 
         let jump = value.is_truthy();
 
@@ -538,7 +545,7 @@ mod handlers {
 
     pub fn jmpnullishnp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
         let offset = cx.fetchw_and_inc_ip() as i16;
-        let value = cx.pop_stack();
+        let value = cx.peek_stack();
 
         let jump = value.is_nullish();
 
@@ -694,16 +701,10 @@ mod handlers {
 
         let preserve_this = cx.fetch_and_inc_ip() == 1;
 
+        let target = if preserve_this { cx.peek_stack() } else { cx.pop_stack() };
+
         let mut scope = cx.scope();
         // TODO: add scope to externals because calling get_property can invoke getters
-
-        let target = if preserve_this {
-            scope.stack.last().cloned()
-        } else {
-            scope.stack.pop()
-        };
-
-        let target = target.expect("Missing target");
 
         let value = target.get_property(&mut scope, ident.as_ref().into())?;
         scope.try_push_stack(value)?;

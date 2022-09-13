@@ -76,7 +76,6 @@ pub fn get_own_property_descriptor(cx: CallContext) -> Result<Value, Value> {
     };
     let k = cx.args.get(1).unwrap_or_undefined();
     let k = PropertyKey::from_value(cx.scope, k)?;
-    dbg!(&k);
 
     Ok(o.get_property_descriptor(cx.scope, k)?
         .map(|d| d.to_descriptor_value(cx.scope))
