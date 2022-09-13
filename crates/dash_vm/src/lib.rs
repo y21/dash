@@ -207,6 +207,8 @@ impl Vm {
             #[properties]
             create: scope.statics.object_create;
             keys: scope.statics.object_keys;
+            getOwnPropertyDescriptor: scope.statics.object_get_own_property_descriptor;
+            getOwnPropertyDescriptors: scope.statics.object_get_own_property_descriptors;
         });
 
         let object_proto = register_builtin_type!(scope.statics.object_prototype, {

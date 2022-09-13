@@ -221,6 +221,48 @@ impl PropertyValue {
     pub fn get_or_apply(&self, sc: &mut LocalScope, this: Value) -> Result<Value, Value> {
         self.kind.get_or_apply(sc, this)
     }
+
+    pub fn to_descriptor_value(&self, sc: &mut LocalScope) -> Result<Value, Value> {
+        let obj = NamedObject::new(sc);
+
+        match &self.kind {
+            PropertyValueKind::Static(value) => {
+                obj.set_property(sc, "value".into(), PropertyValue::static_default(value.clone()))?;
+            }
+            PropertyValueKind::Trap { get, set } => {
+                let get = get.as_ref().map(|v| Value::Object(v.clone())).unwrap_or_undefined();
+                let set = set.as_ref().map(|v| Value::Object(v.clone())).unwrap_or_undefined();
+                obj.set_property(sc, "get".into(), PropertyValue::static_default(get))?;
+                obj.set_property(sc, "set".into(), PropertyValue::static_default(set))?;
+            }
+        }
+
+        obj.set_property(
+            sc,
+            "writable".into(),
+            PropertyValue::static_default(Value::Boolean(
+                self.descriptor.contains(PropertyDataDescriptor::WRITABLE),
+            )),
+        )?;
+
+        obj.set_property(
+            sc,
+            "enumerable".into(),
+            PropertyValue::static_default(Value::Boolean(
+                self.descriptor.contains(PropertyDataDescriptor::ENUMERABLE),
+            )),
+        )?;
+
+        obj.set_property(
+            sc,
+            "configurable".into(),
+            PropertyValue::static_default(Value::Boolean(
+                self.descriptor.contains(PropertyDataDescriptor::CONFIGURABLE),
+            )),
+        )?;
+
+        Ok(Value::Object(sc.register(obj)))
+    }
 }
 
 unsafe impl Trace for PropertyValue {

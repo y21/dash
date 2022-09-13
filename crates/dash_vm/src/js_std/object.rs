@@ -10,6 +10,7 @@ use crate::value::function::native::CallContext;
 use crate::value::function::Function;
 use crate::value::object::NamedObject;
 use crate::value::object::Object;
+use crate::value::object::PropertyKey;
 use crate::value::object::PropertyValue;
 use crate::value::ops::abstractions::conversions::ValueConversion;
 use crate::value::Value;
@@ -65,4 +66,45 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
     };
 
     Ok(Value::String(value.into()))
+}
+
+pub fn get_own_property_descriptor(cx: CallContext) -> Result<Value, Value> {
+    let o = cx.args.first().unwrap_or_undefined();
+    let o = match &o {
+        Value::Object(o) | Value::External(o) => &*o,
+        _ => throw!(cx.scope, "Object.getOwnPropertyDescriptor called on non-object"),
+    };
+    let k = cx.args.get(1).unwrap_or_undefined();
+    let k = PropertyKey::from_value(cx.scope, k)?;
+    dbg!(&k);
+
+    Ok(o.get_property_descriptor(cx.scope, k)?
+        .map(|d| d.to_descriptor_value(cx.scope))
+        .transpose()?
+        .unwrap_or_undefined())
+}
+
+pub fn get_own_property_descriptors(cx: CallContext) -> Result<Value, Value> {
+    let o = cx.args.first().unwrap_or_undefined();
+    let o = match &o {
+        Value::Object(o) | Value::External(o) => &*o,
+        _ => throw!(cx.scope, "Object.getOwnPropertyDescriptors called on non-object"),
+    };
+
+    let mut descriptors = Vec::new();
+    let keys = o.own_keys()?;
+
+    for key in keys {
+        let key = PropertyKey::from_value(cx.scope, key)?;
+        let descriptor = o
+            .get_property_descriptor(cx.scope, key)?
+            .map(|d| d.to_descriptor_value(cx.scope))
+            .transpose()?
+            .unwrap_or_undefined();
+
+        descriptors.push(PropertyValue::static_default(descriptor));
+    }
+
+    let descriptors = Array::from_vec(cx.scope, descriptors);
+    Ok(Value::Object(cx.scope.register(descriptors)))
 }
