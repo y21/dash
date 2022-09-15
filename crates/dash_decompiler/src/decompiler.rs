@@ -271,6 +271,8 @@ impl<'buf> FunctionDecompiler<'buf> {
                 Instruction::IntrinsicOp => return Err(DecompileError::Unimplemented(instr)),
                 Instruction::CallSymbolIterator => self.handle_opless_instr("@@iterator"),
                 Instruction::CallForInIterator => self.handle_opless_instr("@@forInIterator"),
+                Instruction::DeletePropertyStatic => self.handle_incw_op_instr("deletepropertystatic")?,
+                Instruction::DeletePropertyDynamic => self.handle_opless_instr("deletepropertydynamic"),
             }
         }
 

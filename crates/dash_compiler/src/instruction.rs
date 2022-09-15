@@ -118,6 +118,8 @@ pub trait InstructionWriter {
     fn build_nan(&mut self);
     fn build_symbol_iterator(&mut self);
     fn build_for_in_iterator(&mut self);
+    fn build_static_delete(&mut self, id: u16);
+    fn build_dynamic_delete(&mut self);
 }
 
 macro_rules! impl_instruction_writer {
@@ -174,7 +176,8 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
         build_undef Instruction::Undef,
         build_break Instruction::Break,
         build_symbol_iterator Instruction::CallSymbolIterator,
-        build_for_in_iterator Instruction::CallForInIterator
+        build_for_in_iterator Instruction::CallForInIterator,
+        build_dynamic_delete Instruction::DeletePropertyDynamic
     }
 
     fn build_ret(&mut self, tc_depth: u16) {
@@ -341,6 +344,11 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
     fn build_revstck(&mut self, n: u8) {
         self.write_instr(Instruction::RevStck);
         self.write(n);
+    }
+
+    fn build_static_delete(&mut self, id: u16) {
+        self.write_instr(Instruction::DeletePropertyStatic);
+        self.writew(id);
     }
 
     fn build_named_export(&mut self, it: &[NamedExportKind]) -> Result<(), CompileError> {

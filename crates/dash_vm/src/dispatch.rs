@@ -988,6 +988,32 @@ mod handlers {
         scope.try_push_stack(iterator)?;
         Ok(None)
     }
+
+    pub fn delete_property_dynamic(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let (property, target) = cx.pop_stack2();
+        let mut scope = cx.scope();
+        let key = PropertyKey::from_value(&mut scope, property)?;
+        let value = target.delete_property(&mut scope, key)?;
+
+        // TODO: not correct, as `undefined` might have been the actual value
+        let did_delete = !matches!(value, Value::Undefined(..));
+        scope.try_push_stack(Value::Boolean(did_delete))?;
+        Ok(None)
+    }
+
+    pub fn delete_property_static(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let target = cx.pop_stack();
+        let cid = cx.fetchw_and_inc_ip();
+        let con = cx.identifier_constant(cid.into());
+        let mut scope = cx.scope();
+        let key = PropertyKey::from(con.as_ref());
+        let value = target.delete_property(&mut scope, key)?;
+
+        // TODO: not correct, as `undefined` might have been the actual value
+        let did_delete = !matches!(value, Value::Undefined(..));
+        scope.try_push_stack(Value::Boolean(did_delete))?;
+        Ok(None)
+    }
 }
 
 pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResult>, Value> {
@@ -1063,6 +1089,8 @@ pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResu
         Instruction::Nan => handlers::nan(cx),
         Instruction::Infinity => handlers::infinity(cx),
         Instruction::CallSymbolIterator => handlers::call_symbol_iterator(cx),
+        Instruction::DeletePropertyDynamic => handlers::delete_property_dynamic(cx),
+        Instruction::DeletePropertyStatic => handlers::delete_property_static(cx),
         _ => unimplemented!("{:?}", instruction),
     }
 }

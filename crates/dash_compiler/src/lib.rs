@@ -518,6 +518,40 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_unary_expression(&mut self, UnaryExpr { operator, expr }: UnaryExpr<'a>) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
+
+        // Special case delete operator, as it works different from other unary operators
+        if let TokenType::Delete = operator {
+            match *expr {
+                Expr::PropertyAccess(PropertyAccessExpr {
+                    computed,
+                    property,
+                    target,
+                }) => match (*property, computed) {
+                    (Expr::Literal(lit), false) => {
+                        ib.accept_expr(*target)?;
+                        let ident = lit.to_identifier();
+                        let id = ib.cp.add(Constant::Identifier(ident.into()))?;
+                        ib.build_static_delete(id);
+                    }
+                    (expr, _) => {
+                        ib.accept_expr(expr)?;
+                        ib.accept_expr(*target)?;
+                        ib.build_dynamic_delete();
+                    }
+                },
+                Expr::Literal(lit) => {
+                    ib.build_global();
+                    let ident = lit.to_identifier();
+                    let id = ib.cp.add(Constant::Identifier(ident.into()))?;
+                    ib.build_static_delete(id);
+                }
+                _ => {
+                    ib.build_constant(Constant::Boolean(true))?;
+                }
+            }
+            return Ok(());
+        }
+
         ib.accept_expr(*expr)?;
 
         match operator {
