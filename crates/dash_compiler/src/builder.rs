@@ -23,6 +23,9 @@ pub enum Label {
     LoopEnd {
         loop_id: usize,
     },
+    LoopIncrement {
+        loop_id: usize,
+    },
     Catch,
     TryEnd,
 }

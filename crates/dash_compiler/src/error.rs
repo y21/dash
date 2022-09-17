@@ -17,6 +17,7 @@ pub enum CompileError {
     YieldOutsideGenerator,
     AwaitOutsideAsync,
     UnknownBinding,
+    IllegalBreak,
 }
 
 impl From<LimitExceededError> for CompileError {
@@ -47,6 +48,7 @@ impl fmt::Display for CompileError {
             Self::ExportNameListLimitExceeded => f.write_str("Maximum number of export names exceedeed"),
             Self::UnknownBinding => f.write_str("Attempted to visit unknown binding"),
             Self::AwaitOutsideAsync => f.write_str("`await` is only available in async functions"),
+            Self::IllegalBreak => f.write_str("`break` is only available in switch-case and loop")
         }
     }
 }

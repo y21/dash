@@ -66,6 +66,11 @@ macro_rules! unimplementedc {
     };
 }
 
+#[derive(Debug, Clone)]
+enum Breakable {
+    Loop { loop_id: usize },
+}
+
 pub struct FunctionCompiler<'a> {
     /// Instruction buffer
     buf: Vec<u8>,
@@ -91,6 +96,8 @@ pub struct FunctionCompiler<'a> {
     r#async: bool,
     /// Container, used for storing global labels that can be jumped to
     jc: JumpContainer,
+    /// A stack of breakable labels (loop/switch)
+    breakables: Vec<Breakable>,
 
     // Keeps track of the total number of loops to be able to have unique IDs
     loop_counter: usize,
@@ -126,6 +133,7 @@ impl<'a> FunctionCompiler<'a> {
             caller: None,
             opt_level,
             jc: JumpContainer::new(),
+            breakables: Vec::new(),
             loop_counter: 0,
         }
     }
@@ -143,6 +151,7 @@ impl<'a> FunctionCompiler<'a> {
             caller: Some(NonNull::new(caller).unwrap()),
             opt_level: caller.opt_level,
             jc: JumpContainer::new(),
+            breakables: Vec::new(),
             r#async,
             loop_counter: 0,
         }
@@ -379,10 +388,16 @@ impl<'a> FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn generate_loop_id(&mut self) -> usize {
-        let before = self.loop_counter;
+    /// "Prepares" a loop and returns a unique ID that identifies this loop
+    ///
+    /// Specifically, this function increments a FunctionCompiler-local loop counter and
+    /// inserts the loop into a stack of switch-case/loops so that `break` (and `continue`)
+    /// statements can be resolved at compile-time
+    fn prepare_loop(&mut self) -> usize {
+        let loop_id = self.loop_counter;
+        self.breakables.push(Breakable::Loop { loop_id });
         self.loop_counter += 1;
-        before
+        loop_id
     }
 
     fn add_global_label(&mut self, label: Label) {
@@ -735,7 +750,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
     fn visit_while_loop(&mut self, WhileLoop { condition, body }: WhileLoop<'a>) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
 
-        let loop_id = ib.generate_loop_id();
+        let loop_id = ib.prepare_loop();
 
         ib.add_global_label(Label::LoopCondition { loop_id });
         ib.accept_expr(condition)?;
@@ -1125,7 +1140,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             ib.accept(*init)?;
         }
 
-        let loop_id = ib.generate_loop_id();
+        let loop_id = ib.prepare_loop();
 
         // Condition
         ib.add_global_label(Label::LoopCondition { loop_id });
@@ -1138,6 +1153,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         ib.accept(*body)?;
 
         // Increment
+        ib.add_global_label(Label::LoopIncrement { loop_id });
         if let Some(finalizer) = finalizer {
             ib.accept_expr(finalizer)?;
             ib.build_pop();
@@ -1242,11 +1258,25 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
     }
 
     fn visit_break(&mut self) -> Result<(), CompileError> {
-        unimplementedc!("Break statement")
+        let mut ib = InstructionBuilder::new(self);
+        let breakable = ib.breakables.pop().ok_or(CompileError::IllegalBreak)?;
+        match breakable {
+            Breakable::Loop { loop_id } => {
+                ib.build_jmp(Label::LoopEnd { loop_id }, false);
+            }
+        }
+        Ok(())
     }
 
     fn visit_continue(&mut self) -> Result<(), CompileError> {
-        unimplementedc!("Continue statement")
+        let mut ib = InstructionBuilder::new(self);
+        let breakable = ib.breakables.pop().ok_or(CompileError::IllegalBreak)?;
+        match breakable {
+            Breakable::Loop { loop_id } => {
+                ib.build_jmp(Label::LoopIncrement { loop_id }, false);
+            }
+        }
+        Ok(())
     }
 
     fn visit_debugger(&mut self) -> Result<(), CompileError> {
