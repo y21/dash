@@ -67,23 +67,37 @@ pub trait InstructionWriter {
     /// Builds the [GLOBAL] instruction
     fn build_global(&mut self);
     /// Builds the [JMPFALSEP] instructions
-    fn build_jmpfalsep(&mut self, label: Label);
+    /// 
+    /// If `is_local_label` is true, then it attempts to lookup a local label, otherwise it uses a global label
+    fn build_jmpfalsep(&mut self, label: Label, is_local_label: bool);
     /// Builds the [JMPFALSENP] instructions
-    fn build_jmpfalsenp(&mut self, label: Label);
+    /// 
+    /// If `is_local_label` is true, then it attempts to lookup a local label, otherwise it uses a global label
+    fn build_jmpfalsenp(&mut self, label: Label, is_local_label: bool);
     /// Builds the [JMPTRUEP] instructions
-    fn build_jmptruep(&mut self, label: Label);
+    /// 
+    /// If `is_local_label` is true, then it attempts to lookup a local label, otherwise it uses a global label
+    fn build_jmptruep(&mut self, label: Label, is_local_label: bool);
     /// Builds the [JMPTRUENP] instructions
-    fn build_jmptruenp(&mut self, label: Label);
+    /// 
+    /// If `is_local_label` is true, then it attempts to lookup a local label, otherwise it uses a global label
+    fn build_jmptruenp(&mut self, label: Label,is_local_label: bool);
     /// Builds the [JMPNULLISHP] instructions
-    fn build_jmpnullishp(&mut self, label: Label);
+    /// 
+    /// If `is_local_label` is true, then it attempts to lookup a local label, otherwise it uses a global label
+    fn build_jmpnullishp(&mut self, label: Label, is_local_label: bool);
     /// Builds the [JMPNULLISHNP] instructions
-    fn build_jmpnullishnp(&mut self, label: Label);
+    /// 
+    /// If `is_local_label` is true, then it attempts to lookup a local label, otherwise it uses a global label
+    fn build_jmpnullishnp(&mut self, label: Label, is_local_label: bool);
     /// Builds the [ARRAYLIT] and [ARRAYLITW] instructions
     fn build_arraylit(&mut self, len: u16);
     /// Builds the [OBJLIT] and [OBJLITW] instructions
     fn build_objlit(&mut self, constants: Vec<ObjectMemberKind>) -> Result<(), CompileError>;
     /// Builds the [JMP] instructions
-    fn build_jmp(&mut self, label: Label);
+    /// 
+    /// If `is_local_label` is true, then it attempts to lookup a local label, otherwise it uses a global label
+    fn build_jmp(&mut self, label: Label, is_local_label: bool);
     fn build_call(&mut self, meta: FunctionCallMetadata);
     fn build_static_prop_access(&mut self, ident: &str, preserve_this: bool) -> Result<(), LimitExceededError>;
     fn build_dynamic_prop_access(&mut self, preserve_this: bool);
@@ -230,46 +244,67 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
         self.write(meta.into());
     }
 
-    fn build_jmpfalsep(&mut self, label: Label) {
+    fn build_jmpfalsep(&mut self, label: Label, is_local_label: bool) {
         self.write_instr(Instruction::JmpFalseP);
         self.write_all(&[0, 0]);
-        self.add_local_jump(label);
+        match is_local_label {
+            true => self.add_local_jump(label),
+            false => self.add_global_jump(label),
+        }
     }
 
-    fn build_jmpfalsenp(&mut self, label: Label) {
+    fn build_jmpfalsenp(&mut self, label: Label, is_local_label: bool) {
         self.write_instr(Instruction::JmpFalseNP);
         self.write_all(&[0, 0]);
-        self.add_local_jump(label);
+        match is_local_label {
+            true => self.add_local_jump(label),
+            false => self.add_global_jump(label),
+        }
     }
 
-    fn build_jmptruep(&mut self, label: Label) {
+    fn build_jmptruep(&mut self, label: Label, is_local_label: bool) {
         self.write_instr(Instruction::JmpTrueP);
         self.write_all(&[0, 0]);
-        self.add_local_jump(label);
+        match is_local_label {
+            true => self.add_local_jump(label),
+            false => self.add_global_jump(label),
+        }
     }
 
-    fn build_jmptruenp(&mut self, label: Label) {
+    fn build_jmptruenp(&mut self, label: Label, is_local_label: bool) {
         self.write_instr(Instruction::JmpTrueNP);
         self.write_all(&[0, 0]);
-        self.add_local_jump(label);
+        match is_local_label {
+            true => self.add_local_jump(label),
+            false => self.add_global_jump(label),
+        }
     }
 
-    fn build_jmpnullishp(&mut self, label: Label) {
+    fn build_jmpnullishp(&mut self, label: Label, is_local_label: bool) {
         self.write_instr(Instruction::JmpNullishP);
         self.write_all(&[0, 0]);
-        self.add_local_jump(label);
+        match is_local_label {
+            true => self.add_local_jump(label),
+            false => self.add_global_jump(label),
+        }
     }
 
-    fn build_jmpnullishnp(&mut self, label: Label) {
+    fn build_jmpnullishnp(&mut self, label: Label, is_local_label: bool) {
         self.write_instr(Instruction::JmpNullishNP);
         self.write_all(&[0, 0]);
-        self.add_local_jump(label);
+        match is_local_label {
+            true => self.add_local_jump(label),
+            false => self.add_global_jump(label),
+        }
     }
 
-    fn build_jmp(&mut self, label: Label) {
+    fn build_jmp(&mut self, label: Label, is_local_label: bool) {
         self.write_instr(Instruction::Jmp);
         self.write_all(&[0, 0]);
-        self.add_local_jump(label);
+        match is_local_label {
+            true => self.add_local_jump(label),
+            false => self.add_global_jump(label),
+        }
     }
 
     fn build_static_prop_access(&mut self, ident: &str, preserve_this: bool) -> Result<(), LimitExceededError> {

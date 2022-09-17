@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::hash::Hash;
 use std::ops::Deref;
@@ -7,31 +6,37 @@ use std::ops::DerefMut;
 use dash_middle::compiler::instruction as inst;
 use dash_middle::compiler::instruction::Instruction;
 
+use crate::jump_container;
+use crate::jump_container::JumpContainer;
 use crate::FunctionCompiler;
 
 #[derive(PartialOrd, Ord, Hash, Eq, PartialEq, Debug, Clone)]
 pub enum Label {
     IfEnd,
     /// A branch of an if statement
-    IfBranch(u16),
-    LoopCondition,
-    LoopEnd,
+    IfBranch {
+        branch_id: usize,
+    },
+    LoopCondition {
+        loop_id: usize,
+    },
+    LoopEnd {
+        loop_id: usize,
+    },
     Catch,
     TryEnd,
 }
 
 pub struct InstructionBuilder<'cx, 'inp> {
     inner: &'cx mut FunctionCompiler<'inp>,
-    jumps: BTreeMap<Label, Vec<usize>>,
-    labels: BTreeMap<Label, usize>,
+    jc: JumpContainer,
 }
 
 impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
     pub fn new(fc: &'cx mut FunctionCompiler<'inp>) -> Self {
         Self {
             inner: fc,
-            jumps: BTreeMap::new(),
-            labels: BTreeMap::new(),
+            jc: JumpContainer::new(),
         }
     }
 
@@ -73,39 +78,14 @@ impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
 
     /// Adds a **local** label at the current instruction pointer, which can be jumped to using add_local_jump
     pub fn add_local_label(&mut self, label: Label) {
-        let ip = self.inner.buf.len();
-
-        // get vector of existing jumps to this label
-        if let Some(assoc_jumps) = self.jumps.remove(&label) {
-            for jump in assoc_jumps {
-                let offset = (ip - jump - 2) as u16; // TODO: don't hardcast..? and use i16
-
-                // write jump offset
-                let pt = &mut self.inner.buf[jump..jump + 2];
-                pt.copy_from_slice(&u16::to_ne_bytes(offset));
-            }
-        }
-
-        self.labels.insert(label, ip);
+        jump_container::add_label(&mut self.jc, label, &mut self.inner.buf)
     }
 
     /// Emits a jump instruction to a local label
     ///
     /// Requirement for calling this function: there must be two bytes in the buffer, reserved for this jump
     pub fn add_local_jump(&mut self, label: Label) {
-        if let Some(&ip) = self.labels.get(&label) {
-            let ip = ip as isize;
-            let len = self.inner.buf.len() as isize;
-            let offset = (ip - len) as i16; // TODO: don't hardcast..?
-
-            let pt = &mut self.inner.buf[len as usize - 2..];
-            pt.copy_from_slice(&i16::to_ne_bytes(offset));
-        } else {
-            self.jumps
-                .entry(label)
-                .or_insert_with(Vec::new)
-                .push(self.inner.buf.len() - 2);
-        }
+        jump_container::add_jump(&mut self.jc, label, &mut self.inner.buf)
     }
 }
 

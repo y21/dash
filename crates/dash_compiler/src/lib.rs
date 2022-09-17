@@ -37,6 +37,7 @@ use dash_middle::parser::statement::{ClassProperty, ForLoop};
 use dash_middle::parser::statement::{ForInLoop, ForOfLoop};
 use dash_optimizer::consteval::Eval;
 use dash_optimizer::OptLevel;
+use jump_container::JumpContainer;
 
 use crate::builder::{InstructionBuilder, Label};
 
@@ -55,6 +56,7 @@ pub mod instruction;
 mod scope;
 // #[cfg(test)]
 // mod test;
+mod jump_container;
 /// Visitor trait, used to walk the AST
 mod visitor;
 
@@ -65,15 +67,33 @@ macro_rules! unimplementedc {
 }
 
 pub struct FunctionCompiler<'a> {
+    /// Instruction buffer
     buf: Vec<u8>,
+    /// A list of constants used throughout this function.
+    ///
+    /// Bytecode can refer to constants using the [Instruction::Constant] instruction, followed by a u8 index.
     cp: ConstantPool,
+    /// Scope manager, stores local variables
     scope: Scope<'a>,
+    /// A vector of external values
     externals: Vec<External>,
+    /// Current try catch depth
     try_catch_depth: u16,
+    /// The type of function that this FunctionCompiler compiles
     ty: FunctionKind,
+    /// The function caller, if any
+    ///
+    /// This is used for resolving variables in enclosing environments
     caller: Option<NonNull<FunctionCompiler<'a>>>,
+    /// Optimization level for this function
     opt_level: OptLevel,
+    /// Whether the function being compiled is async
     r#async: bool,
+    /// Container, used for storing global labels that can be jumped to
+    jc: JumpContainer,
+
+    // Keeps track of the total number of loops to be able to have unique IDs
+    loop_counter: usize,
 }
 
 /// Implicitly inserts a `return` statement for the last expression
@@ -105,6 +125,8 @@ impl<'a> FunctionCompiler<'a> {
             r#async: false,
             caller: None,
             opt_level,
+            jc: JumpContainer::new(),
+            loop_counter: 0,
         }
     }
 
@@ -120,8 +142,24 @@ impl<'a> FunctionCompiler<'a> {
             ty,
             caller: Some(NonNull::new(caller).unwrap()),
             opt_level: caller.opt_level,
+            jc: JumpContainer::new(),
             r#async,
+            loop_counter: 0,
         }
+    }
+
+    /// Short for calling `FunctionCompiler::with_caller`, immediately followed by a `.compile_all()`
+    ///
+    /// Contrary to with_caller, this function is safe because the invariant cannot be broken
+    pub fn compile_ast_with_caller<'s>(
+        caller: &'s mut FunctionCompiler<'a>,
+        ty: FunctionKind,
+        r#async: bool,
+        ast: Vec<Statement<'a>>,
+        implicit_return: bool,
+    ) -> Result<CompileResult, CompileError> {
+        let compiler = unsafe { Self::with_caller(caller, ty, r#async) };
+        compiler.compile_ast(ast, implicit_return)
     }
 
     pub fn compile_ast(
@@ -340,6 +378,21 @@ impl<'a> FunctionCompiler<'a> {
 
         Ok(())
     }
+
+    fn generate_loop_id(&mut self) -> usize {
+        let before = self.loop_counter;
+        self.loop_counter += 1;
+        before
+    }
+
+    fn add_global_label(&mut self, label: Label) {
+        jump_container::add_label(&mut self.jc, label, &mut self.buf)
+    }
+
+    /// Jumps to a label that was previously (or will be) created by a call to `add_global_label`
+    fn add_global_jump(&mut self, label: Label) {
+        jump_container::add_jump(&mut self.jc, label, &mut self.buf)
+    }
 }
 
 enum ForEachLoopKind {
@@ -440,22 +493,22 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             TokenType::In => trivial_case!(InstructionBuilder::build_objin),
             TokenType::Instanceof => trivial_case!(InstructionBuilder::build_instanceof),
             TokenType::LogicalOr => {
-                ib.build_jmptruenp(Label::IfEnd);
+                ib.build_jmptruenp(Label::IfEnd, true);
                 ib.build_pop(); // Only pop LHS if it is false
                 ib.accept_expr(*right)?;
                 ib.add_local_label(Label::IfEnd);
             }
             TokenType::LogicalAnd => {
-                ib.build_jmpfalsenp(Label::IfEnd);
+                ib.build_jmpfalsenp(Label::IfEnd, true);
                 ib.build_pop(); // Only pop LHS if it is true
                 ib.accept_expr(*right)?;
                 ib.add_local_label(Label::IfEnd);
             }
             TokenType::NullishCoalescing => {
-                ib.build_jmpnullishnp(Label::IfBranch(0));
-                ib.build_jmp(Label::IfEnd);
+                ib.build_jmpnullishnp(Label::IfBranch { branch_id: 0 }, true);
+                ib.build_jmp(Label::IfEnd, true);
 
-                ib.add_local_label(Label::IfBranch(0));
+                ib.add_local_label(Label::IfBranch { branch_id: 0 });
                 ib.build_pop();
                 ib.accept_expr(*right)?;
                 ib.add_local_label(Label::IfEnd);
@@ -625,35 +678,30 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         }
 
         let branches = branches.into_inner();
-        let len: u16 = branches
-            .len()
-            .try_into()
-            .map_err(|_| CompileError::IfBranchLimitExceeded)?;
+        let len = branches.len();
 
         ib.accept_expr(condition)?;
         if branches.is_empty() {
-            ib.build_jmpfalsep(Label::IfEnd);
+            ib.build_jmpfalsep(Label::IfEnd, true);
         } else {
-            ib.build_jmpfalsep(Label::IfBranch(0));
+            ib.build_jmpfalsep(Label::IfBranch { branch_id: 0 }, true);
         }
         ib.accept(*then)?;
-        ib.build_jmp(Label::IfEnd);
+        ib.build_jmp(Label::IfEnd, true);
 
         for (id, branch) in branches.into_iter().enumerate() {
-            let id = id as u16;
-
-            ib.add_local_label(Label::IfBranch(id));
+            ib.add_local_label(Label::IfBranch { branch_id: id });
             ib.accept_expr(branch.condition)?;
             if id == len - 1 {
-                ib.build_jmpfalsep(Label::IfEnd);
+                ib.build_jmpfalsep(Label::IfEnd, true);
 
                 ib.accept(*branch.then)?;
             } else {
-                ib.build_jmpfalsep(Label::IfBranch(id + 1));
+                ib.build_jmpfalsep(Label::IfBranch { branch_id: id + 1 }, true);
 
                 ib.accept(*branch.then)?;
 
-                ib.build_jmp(Label::IfEnd);
+                ib.build_jmp(Label::IfEnd, true);
             }
         }
 
@@ -687,14 +735,16 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
     fn visit_while_loop(&mut self, WhileLoop { condition, body }: WhileLoop<'a>) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
 
-        ib.add_local_label(Label::LoopCondition);
+        let loop_id = ib.generate_loop_id();
+
+        ib.add_global_label(Label::LoopCondition { loop_id });
         ib.accept_expr(condition)?;
-        ib.build_jmpfalsep(Label::LoopEnd);
+        ib.build_jmpfalsep(Label::LoopEnd { loop_id }, false);
 
         ib.accept(*body)?;
-        ib.build_jmp(Label::LoopCondition);
+        ib.build_jmp(Label::LoopCondition { loop_id }, false);
 
-        ib.add_local_label(Label::LoopEnd);
+        ib.add_global_label(Label::LoopEnd { loop_id });
         Ok(())
     }
 
@@ -835,12 +885,12 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         let mut ib = InstructionBuilder::new(self);
 
         ib.accept_expr(*condition)?;
-        ib.build_jmpfalsep(Label::IfBranch(0));
+        ib.build_jmpfalsep(Label::IfBranch { branch_id: 0 }, true);
 
         ib.accept_expr(*then)?;
-        ib.build_jmp(Label::IfEnd);
+        ib.build_jmp(Label::IfEnd, true);
 
-        ib.add_local_label(Label::IfBranch(0));
+        ib.add_local_label(Label::IfBranch { branch_id: 0 });
         ib.accept_expr(*el)?;
 
         ib.add_local_label(Label::IfEnd);
@@ -1016,7 +1066,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         ib.scope.exit();
         ib.try_catch_depth -= 1;
 
-        ib.build_jmp(Label::TryEnd);
+        ib.build_jmp(Label::TryEnd, true);
 
         ib.add_local_label(Label::Catch);
 
@@ -1075,11 +1125,13 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             ib.accept(*init)?;
         }
 
+        let loop_id = ib.generate_loop_id();
+
         // Condition
-        ib.add_local_label(Label::LoopCondition);
+        ib.add_global_label(Label::LoopCondition { loop_id });
         if let Some(condition) = condition {
             ib.accept_expr(condition)?;
-            ib.build_jmpfalsep(Label::LoopEnd);
+            ib.build_jmpfalsep(Label::LoopEnd { loop_id }, false);
         }
 
         // Body
@@ -1090,9 +1142,9 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             ib.accept_expr(finalizer)?;
             ib.build_pop();
         }
-        ib.build_jmp(Label::LoopCondition);
+        ib.build_jmp(Label::LoopCondition { loop_id }, false);
 
-        ib.add_local_label(Label::LoopEnd);
+        ib.add_global_label(Label::LoopEnd { loop_id });
         self.scope.exit();
 
         Ok(())
