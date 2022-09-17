@@ -107,3 +107,15 @@ pub fn get_own_property_descriptors(cx: CallContext) -> Result<Value, Value> {
     let descriptors = Array::from_vec(cx.scope, descriptors);
     Ok(Value::Object(cx.scope.register(descriptors)))
 }
+
+pub fn has_own_property(cx: CallContext) -> Result<Value, Value> {
+    let o = match &cx.this {
+        Value::Object(o) | Value::External(o) => o,
+        _ => throw!(cx.scope, "Object.prototype.hasOwnProperty called on non-object"),
+    };
+
+    let key = cx.args.first().unwrap_or_undefined();
+    let key = PropertyKey::from_value(cx.scope, key)?;
+    let desc = o.get_property_descriptor(cx.scope, key)?;
+    Ok(Value::Boolean(desc.is_some()))
+}
