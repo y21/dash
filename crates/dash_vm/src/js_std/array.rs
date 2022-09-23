@@ -296,3 +296,26 @@ pub fn push(mut cx: CallContext) -> Result<Value, Value> {
 
     Ok(last)
 }
+
+pub fn reverse(cx: CallContext) -> Result<Value, Value> {
+    let this = Value::Object(cx.this.to_object(cx.scope)?);
+    let len = this.length_of_array_like(cx.scope)?;
+
+    // Strategy: Given [1,2,3,4,5], swap `i` with `len - i - 1` for every index `i` in `0..len / 2`
+    for k in 0..len / 2 {
+        let pk = k.to_string();
+        let pkv = this.get_property(cx.scope, pk.as_str().into())?;
+        let pk2 = (len - k - 1).to_string();
+        let pk2v = this.get_property(cx.scope, pk2.as_str().into())?;
+        this.set_property(cx.scope, pk.into(), PropertyValue::static_default(pk2v))?;
+        this.set_property(cx.scope, pk2.into(), PropertyValue::static_default(pkv))?;
+    }
+
+    Ok(this)
+}
+
+// pub fn shift(cx: CallContext) -> Result<Value, Value> {
+//     let this = Value::Object(cx.this.to_object(cx.scope)?);
+//     let prop = this.delete_property(cx.scope, PropertyKey::String("0".into()))?;
+//     Ok(prop)
+// }

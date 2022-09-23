@@ -365,6 +365,7 @@ impl Vm {
             map: scope.statics.array_map;
             pop: scope.statics.array_pop;
             push: scope.statics.array_push;
+            reverse: scope.statics.array_reverse;
 
             #[symbols]
             scope.statics.symbol_iterator => scope.statics.array_values;
