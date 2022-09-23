@@ -2,6 +2,7 @@ use std::rc::Rc;
 
 use dash_rt::event::EventMessage;
 use dash_rt::state::State;
+use dash_vm::gc::persistent::Persistent;
 use dash_vm::local::LocalScope;
 use dash_vm::value::function::native::CallContext;
 use dash_vm::value::function::Function;
@@ -42,7 +43,8 @@ fn read_file(cx: CallContext) -> Result<Value, Value> {
     let promise = cx.scope.register(promise);
 
     let state = State::from_vm(cx.scope);
-    let id = state.add_pending_promise(Value::Object(promise.clone()));
+    let persistent_promise = Persistent::new(promise.clone());
+    // let id = state.add_pending_promise(Value::Object(promise.clone()));
     // TODO: somehow prevent promise from being GC'd
 
     tokio::task::spawn_blocking(move || {
@@ -53,14 +55,14 @@ fn read_file(cx: CallContext) -> Result<Value, Value> {
         let file = std::fs::read_to_string(path).unwrap();
 
         event_tx.send(EventMessage::ScheduleCallback(Box::new(move |rt| {
-            let promise = State::from_vm(rt.vm()).take_promise(id);
-            let mut scope = LocalScope::new(rt.vm_mut());
-            let promise = match &promise {
-                Value::Object(o) => o.as_any().downcast_ref::<Promise>().unwrap(),
-                _ => unreachable!(),
-            };
-            scope.drive_promise(PromiseAction::Resolve, promise, vec![Value::String(file.into())]);
-            scope.process_async_tasks();
+            // let promise = State::from_vm(rt.vm()).take_promise(id);
+            // let mut scope = LocalScope::new(rt.vm_mut());
+            // let promise = match &promise {
+            //     Value::Object(o) => o.as_any().downcast_ref::<Promise>().unwrap(),
+            //     _ => unreachable!(),
+            // };
+            // scope.drive_promise(PromiseAction::Resolve, promise, vec![Value::String(file.into())]);
+            // scope.process_async_tasks();
         })));
     });
     Ok(Value::Object(promise))
