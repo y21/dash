@@ -1,15 +1,16 @@
 use std::convert::Infallible;
-use std::mem;
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use dash_middle::compiler::StaticImportKind;
 use dash_middle::util::SharedOnce;
+use dash_middle::util::ThreadSafeStorage;
 use dash_rt::event::EventMessage;
 use dash_rt::module::ModuleLoader;
 use dash_rt::state::State;
-use dash_rt::ThreadSafeHandle;
 use dash_vm::delegate;
 use dash_vm::gc::handle::Handle;
+use dash_vm::gc::persistent::Persistent;
 use dash_vm::gc::trace::Trace;
 use dash_vm::local::LocalScope;
 use dash_vm::throw;
@@ -54,44 +55,42 @@ pub fn listen(mut cx: CallContext) -> Result<Value, Value> {
         _ => throw!(cx.scope, "Expected callback function as second argument"),
     };
 
-    {
-        // Leak LocalScope containing HTTP callback function so that it is forever marked as reachable
-        // TODO: refactor using persistent scopes once we have those.
-        let mut t = LocalScope::new(&mut cx.scope);
-        t.add_ref(Handle::clone(&cb));
-        mem::forget(t);
-    }
-
     let addr = SocketAddr::from(([127, 0, 0, 1], port as u16));
 
-    let state = State::from_vm(&cx.scope);
+    let (task_id, event_tx, rt) = {
+        let state = State::from_vm(&cx.scope);
+        let task_id = state.active_tasks().add();
+        let event_tx = state.event_sender();
+        let rt = state.rt_handle();
+        (task_id, event_tx, rt)
+    };
 
-    let task_id = state.active_tasks().add(); // We (currently) never remove the task
-                                              // because the server always runs forever
-    let etx = state.event_sender();
-    let rt = state.rt_handle();
+    let cb_ref = {
+        let p = Persistent::new(cb);
+        Arc::new(ThreadSafeStorage::new(p))
+    };
 
-    let cb = ThreadSafeHandle::new(cb);
+    rt.spawn(async move {
+        let service_etx = event_tx.clone();
+        let cb = Arc::clone(&cb_ref);
 
-    let server = async move {
-        let service_etx = etx.clone();
         let service = hyper::service::make_service_fn(move |_| {
             let etx = service_etx.clone();
-            let cb = cb.clone();
+            let cb = Arc::clone(&cb);
 
             let service = hyper::service::service_fn(move |_req| {
                 let etx = etx.clone();
-                let cb = cb.clone();
+                let cb = Arc::clone(&cb);
+                let (req_tx, req_rx) = oneshot::channel::<hyper::Body>();
 
-                let (ttx, trx) = oneshot::channel::<hyper::Body>();
-
+                // Need to call cb here
                 etx.send(EventMessage::ScheduleCallback(Box::new(move |rt| {
                     let vm = rt.vm_mut();
                     let mut scope = LocalScope::new(vm);
 
-                    let cb = cb.into_inner();
+                    let cb = cb.get();
 
-                    let ctx = HttpContext::new(&mut scope, ttx);
+                    let ctx = HttpContext::new(&mut scope, req_tx);
                     let fun = Function::new(&mut scope, Some("respond".into()), FunctionKind::Native(ctx_respond));
                     let fun = scope.register(fun);
                     ctx.set_property(&mut scope, "respond".into(), PropertyValue::static_default(fun.into()))
@@ -108,11 +107,10 @@ pub fn listen(mut cx: CallContext) -> Result<Value, Value> {
                 })));
 
                 async {
-                    let body = trx.await.unwrap();
+                    let body = req_rx.await.unwrap();
                     Ok::<_, Infallible>(hyper::Response::new(body))
                 }
             });
-
             async move { Ok::<_, Infallible>(service) }
         });
 
@@ -121,13 +119,11 @@ pub fn listen(mut cx: CallContext) -> Result<Value, Value> {
         match server.await {
             Ok(..) => {
                 // Shutdown server
-                etx.send(EventMessage::RemoveTask(task_id));
+                event_tx.send(EventMessage::RemoveTask(task_id));
             }
             Err(err) => eprintln!("Failed to start HTTP server! {err}"),
         }
-    };
-
-    rt.spawn(server);
+    });
 
     Ok(Value::undefined())
 }

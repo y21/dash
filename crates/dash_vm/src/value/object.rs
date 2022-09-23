@@ -3,7 +3,7 @@ use std::{any::Any, borrow::Cow, cell::RefCell, collections::HashMap, fmt::Debug
 use bitflags::bitflags;
 
 use crate::{
-    gc::{handle::Handle, trace::Trace},
+    gc::{handle::Handle, persistent::Persistent, trace::Trace},
     local::LocalScope,
     throw, Vm,
 };
@@ -624,6 +624,18 @@ impl Handle<dyn Object> {
 
     pub fn construct(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
         let callee = self.clone();
+        (**self).construct(sc, callee, this, args)
+    }
+}
+
+impl Persistent<dyn Object> {
+    pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
+        let callee = self.handle().clone();
+        (**self).apply(sc, callee, this, args)
+    }
+
+    pub fn construct(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
+        let callee = self.handle().clone();
         (**self).construct(sc, callee, this, args)
     }
 }

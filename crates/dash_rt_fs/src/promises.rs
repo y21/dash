@@ -61,13 +61,15 @@ where
         cx.scope.register(promise)
     };
 
-    let promise_id = {
+    let (promise_id, rt) = {
         let state = State::from_vm(cx.scope);
         let persistent_promise = Persistent::new(promise.clone());
-        state.add_pending_promise(persistent_promise)
+        let pid = state.add_pending_promise(persistent_promise);
+        let rt = state.rt_handle();
+        (pid, rt)
     };
 
-    tokio::spawn(async move {
+    rt.spawn(async move {
         let data = fut.await;
 
         event_tx.send(EventMessage::ScheduleCallback(Box::new(move |rt| {
