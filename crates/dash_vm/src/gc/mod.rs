@@ -10,6 +10,7 @@ use self::{
 
 pub mod handle;
 pub mod linkedlist;
+pub mod persistent;
 pub mod trace;
 
 pub struct Gc<T: ?Sized> {
@@ -29,16 +30,16 @@ impl<T: ?Sized + Trace> Gc<T> {
 
         loop {
             if let Some(ptr) = node {
-                let (marked, next) = {
+                let (marked, refcount, next) = {
                     let node = ptr.as_ref();
 
-                    (&node.value.marked, node.next)
+                    (&node.value.marked, node.value.refcount.get(), node.next)
                 };
 
                 node = next;
 
-                if !marked.get() {
-                    // Reference did not get marked during GC trace. Deallocate.
+                if !marked.get() && refcount == 0 {
+                    // Reference did not get marked during GC trace and there are no Persistent<T> refs. Deallocate.
 
                     // If this node is the tail (i.e. oldest/first node) or there is no tail,
                     // set it to the next node.
@@ -91,6 +92,7 @@ unsafe impl<T: Object + 'static> IntoHandle<dyn Object, InnerHandle<dyn Object>>
         let handle: InnerHandle<dyn Object> = InnerHandle {
             marked: Cell::new(false),
             value: Box::new(self),
+            refcount: Cell::new(0),
         };
 
         let node = Node {

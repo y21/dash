@@ -11,6 +11,8 @@ use super::trace::Trace;
 #[derive(Debug)]
 pub struct InnerHandle<T: ?Sized> {
     pub(crate) marked: Cell<bool>,
+    /// Persistent<T> reference count
+    pub(crate) refcount: Cell<u64>,
     pub(crate) value: Box<T>,
 }
 
