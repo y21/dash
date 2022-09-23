@@ -51,6 +51,10 @@ impl VmParams {
         self
     }
 
+    pub fn update_state(&mut self, state: Box<dyn Any>) {
+        self.state = Some(state);
+    }
+
     pub fn state<T: 'static>(&self) -> Option<&T> {
         self.state.as_ref().and_then(|s| s.downcast_ref::<T>())
     }

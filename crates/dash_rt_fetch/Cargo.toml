@@ -1,0 +1,13 @@
+[package]
+name = "dash_rt_fetch"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+reqwest = "0.11.12"
+dash_rt = { path = "../dash_rt" }
+dash_vm = { path = "../dash_vm" }
+dash_middle = { path = "../dash_middle" }
+once_cell = "1.15.0"

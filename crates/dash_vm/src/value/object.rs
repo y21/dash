@@ -3,7 +3,7 @@ use std::{any::Any, borrow::Cow, cell::RefCell, collections::HashMap, fmt::Debug
 use bitflags::bitflags;
 
 use crate::{
-    gc::{handle::Handle, trace::Trace},
+    gc::{handle::Handle, persistent::Persistent, trace::Trace},
     local::LocalScope,
     throw, Vm,
 };
@@ -66,47 +66,47 @@ macro_rules! delegate {
     (override $field:ident, get_property) => {
         fn get_property(
             &self,
-            sc: &mut crate::local::LocalScope,
-            key: crate::value::object::PropertyKey,
-        ) -> Result<crate::value::Value, crate::value::Value> {
+            sc: &mut $crate::local::LocalScope,
+            key: $crate::value::object::PropertyKey,
+        ) -> Result<$crate::value::Value, $crate::value::Value> {
             self.$field.get_property(sc, key)
         }
     };
     (override $field:ident, get_property_descriptor) => {
         fn get_property_descriptor(
             &self,
-            sc: &mut crate::local::LocalScope,
-            key: crate::value::object::PropertyKey,
-        ) -> Result<Option<crate::value::object::PropertyValue>, crate::value::Value> {
+            sc: &mut $crate::local::LocalScope,
+            key: $crate::value::object::PropertyKey,
+        ) -> Result<Option<$crate::value::object::PropertyValue>, $crate::value::Value> {
             self.$field.get_property_descriptor(sc, key)
         }
     };
     (override $field:ident, set_property) => {
         fn set_property(
             &self,
-            sc: &mut crate::local::LocalScope,
-            key: crate::value::object::PropertyKey<'static>,
-            value: crate::value::object::PropertyValue,
-        ) -> Result<(), crate::value::Value> {
+            sc: &mut $crate::local::LocalScope,
+            key: $crate::value::object::PropertyKey<'static>,
+            value: $crate::value::object::PropertyValue,
+        ) -> Result<(), $crate::value::Value> {
             self.$field.set_property(sc, key, value)
         }
     };
     (override $field:ident, delete_property) => {
         fn delete_property(
             &self,
-            sc: &mut crate::local::LocalScope,
-            key: crate::value::object::PropertyKey,
-        ) -> Result<crate::value::Value, crate::value::Value> {
+            sc: &mut $crate::local::LocalScope,
+            key: $crate::value::object::PropertyKey,
+        ) -> Result<$crate::value::Value, $crate::value::Value> {
             self.$field.delete_property(sc, key)
         }
     };
     (override $field:ident, set_prototype) => {
-        fn set_prototype(&self, sc: &mut crate::local::LocalScope, value: crate::value::Value) -> Result<(), crate::value::Value> {
+        fn set_prototype(&self, sc: &mut $crate::local::LocalScope, value: $crate::value::Value) -> Result<(), $crate::value::Value> {
             self.$field.set_prototype(sc, value)
         }
     };
     (override $field:ident, get_prototype) => {
-        fn get_prototype(&self, sc: &mut crate::local::LocalScope) -> Result<crate::value::Value, crate::value::Value> {
+        fn get_prototype(&self, sc: &mut $crate::local::LocalScope) -> Result<$crate::value::Value, $crate::value::Value> {
             self.$field.get_prototype(sc)
         }
     };
@@ -116,7 +116,7 @@ macro_rules! delegate {
         }
     };
     (override $field:ident, own_keys) => {
-        fn own_keys(&self) -> Result<Vec<crate::value::Value>, crate::value::Value> {
+        fn own_keys(&self) -> Result<Vec<$crate::value::Value>, $crate::value::Value> {
             self.$field.own_keys()
         }
     };
@@ -124,7 +124,7 @@ macro_rules! delegate {
         fn apply(
             &self,
             sc: &mut LocalScope,
-            handle: Handle<dyn Object>,
+            handle: $crate::gc::handle::Handle<dyn Object>,
             this: Value,
             args: Vec<Value>,
         ) -> Result<Value, Value> {
@@ -624,6 +624,18 @@ impl Handle<dyn Object> {
 
     pub fn construct(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
         let callee = self.clone();
+        (**self).construct(sc, callee, this, args)
+    }
+}
+
+impl Persistent<dyn Object> {
+    pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
+        let callee = self.handle().clone();
+        (**self).apply(sc, callee, this, args)
+    }
+
+    pub fn construct(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
+        let callee = self.handle().clone();
         (**self).construct(sc, callee, this, args)
     }
 }

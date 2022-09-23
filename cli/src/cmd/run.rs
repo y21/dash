@@ -30,6 +30,9 @@ pub fn run(args: &ArgMatches) -> anyhow::Result<()> {
 async fn inner(source: String, opt: OptLevel, quiet: bool) -> anyhow::Result<()> {
     let mut rt = Runtime::new().await;
 
+    let module = dash_rt_modules::init_modules();
+    rt.set_module_manager(module);
+
     let value = match rt.eval(&source, opt) {
         Ok(val) | Err(EvalError::Exception(val)) => val,
         Err(e) => {
@@ -46,7 +49,7 @@ async fn inner(source: String, opt: OptLevel, quiet: bool) -> anyhow::Result<()>
         util::print_value(value, rt.vm_mut()).unwrap();
     }
 
-    let state = State::try_from_vm(rt.vm()).unwrap();
+    let state = State::from_vm(rt.vm());
     if state.needs_event_loop() {
         rt.run_event_loop().await;
     }

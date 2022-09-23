@@ -12,6 +12,10 @@ impl<T: ?Sized> Persistent<T> {
         this
     }
 
+    pub(crate) fn handle(&self) -> &Handle<T> {
+        &self.0
+    }
+
     fn inc_refcount(&self) -> u64 {
         let inner = unsafe { &*self.0.as_ptr() };
         let refcount = inner.refcount.get().checked_add(1).expect("Reference count overflowed");

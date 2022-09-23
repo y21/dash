@@ -10,6 +10,7 @@ use super::Vm;
 
 #[derive(Debug)]
 pub struct LocalScope<'a> {
+    // This lets us hold multiple LocalScopes of the same Vm unsafely without UB
     vm: *mut Vm,
     _p: PhantomData<&'a mut Vm>,
 }

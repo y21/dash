@@ -809,6 +809,10 @@ impl Vm {
         &self.params
     }
 
+    pub fn params_mut(&mut self) -> &mut VmParams {
+        &mut self.params
+    }
+
     pub fn drive_promise(&mut self, action: PromiseAction, promise: &Promise, args: Vec<Value>) {
         let arg = args.first().unwrap_or_undefined();
         let mut state = promise.state().borrow_mut();
