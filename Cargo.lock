@@ -144,9 +144,7 @@ dependencies = [
  "dash_optimizer",
  "dash_parser",
  "dash_rt",
- "dash_rt_fetch",
- "dash_rt_fs",
- "dash_rt_http",
+ "dash_rt_modules",
  "dash_vm",
  "rustyline",
  "tokio",
@@ -299,8 +297,19 @@ name = "dash_rt_modules"
 version = "0.1.0"
 dependencies = [
  "dash_rt",
+ "dash_rt_fetch",
  "dash_rt_fs",
  "dash_rt_http",
+ "dash_rt_script_modules",
+]
+
+[[package]]
+name = "dash_rt_script_modules"
+version = "0.1.0"
+dependencies = [
+ "dash_middle",
+ "dash_rt",
+ "dash_vm",
 ]
 
 [[package]]

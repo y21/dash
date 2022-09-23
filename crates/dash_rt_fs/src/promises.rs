@@ -18,20 +18,18 @@ use dash_vm::value::Value;
 use dash_vm::value::ValueContext;
 use dash_vm::PromiseAction;
 
-pub fn init_module(sc: &mut LocalScope) -> Option<Value> {
+pub fn init_module(sc: &mut LocalScope) -> Result<Value, Value> {
     let read_file_value = Function::new(sc, Some("readFile".into()), FunctionKind::Native(read_file));
     let read_file_value = sc.register(read_file_value);
 
     let module = NamedObject::new(sc);
-    module
-        .set_property(
-            sc,
-            PropertyKey::String("readFile".into()),
-            PropertyValue::static_default(Value::Object(read_file_value)),
-        )
-        .unwrap();
+    module.set_property(
+        sc,
+        PropertyKey::String("readFile".into()),
+        PropertyValue::static_default(Value::Object(read_file_value)),
+    )?;
 
-    Some(Value::Object(sc.register(module)))
+    Ok(Value::Object(sc.register(module)))
 }
 
 fn read_file(cx: CallContext) -> Result<Value, Value> {

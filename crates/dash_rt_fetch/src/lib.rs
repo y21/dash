@@ -28,15 +28,15 @@ use reqwest::Method;
 pub struct FetchModule;
 
 impl ModuleLoader for FetchModule {
-    fn import(&self, sc: &mut LocalScope, _import_ty: StaticImportKind, path: &str) -> Option<Value> {
+    fn import(&self, sc: &mut LocalScope, _import_ty: StaticImportKind, path: &str) -> Result<Option<Value>, Value> {
         if path != "@std/fetch" {
-            return None;
+            return Ok(None);
         }
 
         let fun = Function::new(sc, Some("fetch".into()), FunctionKind::Native(fetch));
         let fun = sc.register(fun);
 
-        Some(Value::Object(fun))
+        Ok(Some(Value::Object(fun)))
     }
 }
 

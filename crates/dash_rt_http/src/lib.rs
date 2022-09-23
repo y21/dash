@@ -30,20 +30,18 @@ use tokio::sync::oneshot::Sender;
 pub struct HttpModule;
 
 impl ModuleLoader for HttpModule {
-    fn import(&self, sc: &mut LocalScope, _import_ty: StaticImportKind, path: &str) -> Option<Value> {
+    fn import(&self, sc: &mut LocalScope, _import_ty: StaticImportKind, path: &str) -> Result<Option<Value>, Value> {
         if path != "@std/http" {
-            return None;
+            return Ok(None);
         }
 
         let module = NamedObject::new(sc);
         let listen = Function::new(sc, None, FunctionKind::Native(listen));
         let listen = sc.register(listen);
-        module
-            .set_property(sc, "listen".into(), PropertyValue::static_default(listen.into()))
-            .ok()?;
+        module.set_property(sc, "listen".into(), PropertyValue::static_default(listen.into()))?;
 
         let module = sc.register(module);
-        Some(module.into())
+        Ok(Some(module.into()))
     }
 }
 

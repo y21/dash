@@ -1,0 +1,11 @@
+[package]
+name = "dash_rt_script_modules"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+dash_rt = { path = "../dash_rt" }
+dash_vm = { path = "../dash_vm", features = ["eval"] }
+dash_middle = { path = "../dash_middle" }

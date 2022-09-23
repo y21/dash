@@ -19,6 +19,7 @@ members = [
     "crates/dash_rt_http",
     "crates/dash_rt_fs",
     "crates/dash_rt_fetch",
+    "crates/dash_rt_script_modules",
 ]
 
 [profile.release]

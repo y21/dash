@@ -5,7 +5,7 @@ use dash_vm::local::LocalScope;
 use dash_vm::value::Value;
 
 pub trait ModuleLoader: Debug {
-    fn import(&self, sc: &mut LocalScope, import_ty: StaticImportKind, path: &str) -> Option<Value>;
+    fn import(&self, sc: &mut LocalScope, import_ty: StaticImportKind, path: &str) -> Result<Option<Value>, Value>;
 
     fn or<M: ModuleLoader>(self, other: M) -> Or<Self, M>
     where
@@ -22,9 +22,13 @@ pub struct Or<M1, M2> {
 }
 
 impl<M1: ModuleLoader, M2: ModuleLoader> ModuleLoader for Or<M1, M2> {
-    fn import(&self, sc: &mut LocalScope, import_ty: StaticImportKind, path: &str) -> Option<Value> {
-        self.m1
-            .import(sc, import_ty, path)
-            .or_else(|| self.m2.import(sc, import_ty, path))
+    fn import(&self, sc: &mut LocalScope, import_ty: StaticImportKind, path: &str) -> Result<Option<Value>, Value> {
+        let m1 = self.m1.import(sc, import_ty, path)?;
+        if m1.is_some() {
+            return Ok(m1);
+        }
+
+        let m2 = self.m2.import(sc, import_ty, path)?;
+        Ok(m2)
     }
 }

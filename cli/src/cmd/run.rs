@@ -1,5 +1,4 @@
 use dash_optimizer::OptLevel;
-use dash_rt::module::ModuleLoader;
 use dash_rt::runtime::Runtime;
 use dash_rt::state::State;
 use dash_vm::eval::EvalError;
@@ -31,11 +30,8 @@ pub fn run(args: &ArgMatches) -> anyhow::Result<()> {
 async fn inner(source: String, opt: OptLevel, quiet: bool) -> anyhow::Result<()> {
     let mut rt = Runtime::new().await;
 
-    let module = dash_rt_http::HttpModule
-        .or(dash_rt_fs::FsModule)
-        .or(dash_rt_fetch::FetchModule);
-
-    rt.set_module_manager(Box::new(module));
+    let module = dash_rt_modules::init_modules();
+    rt.set_module_manager(module);
 
     let value = match rt.eval(&source, opt) {
         Ok(val) | Err(EvalError::Exception(val)) => val,

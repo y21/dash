@@ -10,11 +10,11 @@ pub mod sync;
 pub struct FsModule;
 
 impl ModuleLoader for FsModule {
-    fn import(&self, sc: &mut LocalScope, _import_ty: StaticImportKind, path: &str) -> Option<Value> {
+    fn import(&self, sc: &mut LocalScope, _import_ty: StaticImportKind, path: &str) -> Result<Option<Value>, Value> {
         match path {
-            "@std/fs" => promises::init_module(sc),
-            "@std/fssync" => sync::init_module(sc),
-            _ => None,
+            "@std/fs" => promises::init_module(sc).map(Some),
+            "@std/fssync" => sync::init_module(sc).map(Some),
+            _ => Ok(None),
         }
     }
 }

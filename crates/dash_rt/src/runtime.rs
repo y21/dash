@@ -88,8 +88,10 @@ fn import_callback(vm: &mut Vm, import_ty: StaticImportKind, path: &str) -> Resu
     let root = State::from_vm(&sc).root_module().clone();
 
     if let Some(module) = &*root.borrow() {
-        if let Some(value) = module.import(&mut sc, import_ty, path) {
-            return Ok(value);
+        match module.import(&mut sc, import_ty, path) {
+            Ok(Some(module)) => return Ok(module),
+            Ok(None) => {}
+            Err(err) => return Err(err),
         }
     }
 

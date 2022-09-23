@@ -16,8 +16,6 @@ dash_compiler = { path = "../crates/dash_compiler" }
 dash_vm = { path = "../crates/dash_vm", features = ["eval"] }
 dash_optimizer = { path = "../crates/dash_optimizer" }
 dash_decompiler = { path = "../crates/dash_decompiler" }
-dash_rt_http = { path = "../crates/dash_rt_http" }
-dash_rt_fs = { path = "../crates/dash_rt_fs" }
-dash_rt_fetch = { path = "../crates/dash_rt_fetch" }
+dash_rt_modules = { path = "../crates/dash_rt_modules" }
 tracing-subscriber = "0.3.15"
 tracing = "0.1.36"
