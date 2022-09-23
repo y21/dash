@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::fmt;
 use std::io::Read;
 use std::mem::ManuallyDrop;
@@ -147,5 +148,23 @@ impl<T> Drop for ThreadSafeStorage<T> {
     fn drop(&mut self) {
         self.assert_same_thread();
         unsafe { ManuallyDrop::drop(&mut self.value) };
+    }
+}
+
+/// A type that allows moving a value out of a shared reference (once).
+#[derive(Debug, Clone)]
+pub struct SharedOnce<T>(RefCell<Option<T>>);
+
+impl<T> SharedOnce<T> {
+    pub fn new(value: T) -> Self {
+        Self(RefCell::new(Some(value)))
+    }
+
+    pub fn take(&self) -> T {
+        self.0.borrow_mut().take().expect("Already taken")
+    }
+
+    pub fn try_take(&self) -> Option<T> {
+        self.0.borrow_mut().take()
     }
 }

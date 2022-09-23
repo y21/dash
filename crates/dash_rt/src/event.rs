@@ -1,10 +1,13 @@
-use hyper::Body;
-use hyper::Request;
 use tokio::sync::mpsc::UnboundedSender;
-use tokio::sync::oneshot;
+
+use crate::runtime::Runtime;
 
 pub enum EventMessage {
-    HttpRequest(Request<Body>, oneshot::Sender<Body>),
+    /// Schedules a callback to be executed on the runtime.
+    ///
+    /// The callback function will run on the same thread as the VM and must be used when calling into JS
+    ScheduleCallback(Box<dyn FnOnce(&mut Runtime) + Send + Sync>),
+    RemoveTask(u64),
 }
 
 #[derive(Debug, Clone)]

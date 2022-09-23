@@ -74,7 +74,7 @@ impl FunctionCallMetadata {
 }
 
 #[repr(u8)]
-#[derive(FromRepr)]
+#[derive(FromRepr, Clone, Copy)]
 pub enum StaticImportKind {
     All,
     Default,

@@ -18,3 +18,4 @@ dash_optimizer = { path = "../crates/dash_optimizer" }
 dash_decompiler = { path = "../crates/dash_decompiler" }
 tracing-subscriber = "0.3.15"
 tracing = "0.1.36"
+dash_rt_http = { path = "../crates/dash_rt_http" }

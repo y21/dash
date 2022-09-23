@@ -66,47 +66,47 @@ macro_rules! delegate {
     (override $field:ident, get_property) => {
         fn get_property(
             &self,
-            sc: &mut crate::local::LocalScope,
-            key: crate::value::object::PropertyKey,
-        ) -> Result<crate::value::Value, crate::value::Value> {
+            sc: &mut $crate::local::LocalScope,
+            key: $crate::value::object::PropertyKey,
+        ) -> Result<$crate::value::Value, $crate::value::Value> {
             self.$field.get_property(sc, key)
         }
     };
     (override $field:ident, get_property_descriptor) => {
         fn get_property_descriptor(
             &self,
-            sc: &mut crate::local::LocalScope,
-            key: crate::value::object::PropertyKey,
-        ) -> Result<Option<crate::value::object::PropertyValue>, crate::value::Value> {
+            sc: &mut $crate::local::LocalScope,
+            key: $crate::value::object::PropertyKey,
+        ) -> Result<Option<$crate::value::object::PropertyValue>, $crate::value::Value> {
             self.$field.get_property_descriptor(sc, key)
         }
     };
     (override $field:ident, set_property) => {
         fn set_property(
             &self,
-            sc: &mut crate::local::LocalScope,
-            key: crate::value::object::PropertyKey<'static>,
-            value: crate::value::object::PropertyValue,
-        ) -> Result<(), crate::value::Value> {
+            sc: &mut $crate::local::LocalScope,
+            key: $crate::value::object::PropertyKey<'static>,
+            value: $crate::value::object::PropertyValue,
+        ) -> Result<(), $crate::value::Value> {
             self.$field.set_property(sc, key, value)
         }
     };
     (override $field:ident, delete_property) => {
         fn delete_property(
             &self,
-            sc: &mut crate::local::LocalScope,
-            key: crate::value::object::PropertyKey,
-        ) -> Result<crate::value::Value, crate::value::Value> {
+            sc: &mut $crate::local::LocalScope,
+            key: $crate::value::object::PropertyKey,
+        ) -> Result<$crate::value::Value, $crate::value::Value> {
             self.$field.delete_property(sc, key)
         }
     };
     (override $field:ident, set_prototype) => {
-        fn set_prototype(&self, sc: &mut crate::local::LocalScope, value: crate::value::Value) -> Result<(), crate::value::Value> {
+        fn set_prototype(&self, sc: &mut $crate::local::LocalScope, value: $crate::value::Value) -> Result<(), $crate::value::Value> {
             self.$field.set_prototype(sc, value)
         }
     };
     (override $field:ident, get_prototype) => {
-        fn get_prototype(&self, sc: &mut crate::local::LocalScope) -> Result<crate::value::Value, crate::value::Value> {
+        fn get_prototype(&self, sc: &mut $crate::local::LocalScope) -> Result<$crate::value::Value, $crate::value::Value> {
             self.$field.get_prototype(sc)
         }
     };
@@ -116,7 +116,7 @@ macro_rules! delegate {
         }
     };
     (override $field:ident, own_keys) => {
-        fn own_keys(&self) -> Result<Vec<crate::value::Value>, crate::value::Value> {
+        fn own_keys(&self) -> Result<Vec<$crate::value::Value>, $crate::value::Value> {
             self.$field.own_keys()
         }
     };

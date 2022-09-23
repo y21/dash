@@ -11,7 +11,6 @@ dlopen = ["dash_dlloader"]
 dash_core = { path = "../dash_core" }
 rand = { version = "0.8.4" }
 tokio = { version = "1", features = ["full"] }
-hyper = { version = "0.14.18", features = ["server", "tcp", "http1"] }
 dash_vm = { path = "../dash_vm", features = ["eval"] }
 dash_optimizer = { path = "../dash_optimizer" }
 dash_middle = { path = "../dash_middle" }
