@@ -36,12 +36,11 @@ macro_rules! throw {
     };
 }
 
-use std::mem::ManuallyDrop;
 use std::rc::Rc;
-use std::thread::ThreadId;
 
 use dash_middle::compiler::{constant::Constant, external::External};
 use dash_middle::parser::statement::FunctionKind as ParserFunctionKind;
+use dash_middle::util::ThreadSafeStorage;
 
 use crate::{
     gc::{handle::Handle, trace::Trace},
@@ -443,46 +442,4 @@ impl<E> ValueContext for Result<Value, E> {
     }
 }
 
-/// A storage container for JavaScript values that is `Send` and `Sync`
-///
-/// It does so soundly by only allowing access to the contained value on the same thread.
-/// This allows moving `Value`s between threads (but not using them), and eventually moving them back to the original thread.
-///
-/// Dropping the ThreadSafeValue on a different thread than it was created on will panic, and not drop the contained value.
-pub struct ThreadSafeValue {
-    value: ManuallyDrop<Value>,
-    thread_id: ThreadId,
-}
-
-unsafe impl Send for ThreadSafeValue {}
-unsafe impl Sync for ThreadSafeValue {}
-
-impl ThreadSafeValue {
-    pub fn new(value: Value) -> Self {
-        Self {
-            value: ManuallyDrop::new(value),
-            thread_id: std::thread::current().id(),
-        }
-    }
-
-    pub fn get(&self) -> &Value {
-        self.assert_same_thread();
-        &self.value
-    }
-
-    pub fn get_mut(&mut self) -> &mut Value {
-        self.assert_same_thread();
-        &mut self.value
-    }
-
-    fn assert_same_thread(&self) {
-        assert_eq!(self.thread_id, std::thread::current().id());
-    }
-}
-
-impl Drop for ThreadSafeValue {
-    fn drop(&mut self) {
-        self.assert_same_thread();
-        unsafe { ManuallyDrop::drop(&mut self.value) };
-    }
-}
+pub type ThreadSafeValue = ThreadSafeStorage<Value>;

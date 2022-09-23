@@ -1,6 +1,8 @@
 use std::fmt;
 use std::io::Read;
+use std::mem::ManuallyDrop;
 use std::ops::RangeInclusive;
+use std::thread::ThreadId;
 
 const DIGIT: RangeInclusive<u8> = b'0'..=b'9';
 const OCTAL_DIGIT: RangeInclusive<u8> = b'0'..=b'7';
@@ -101,5 +103,49 @@ impl<R: Read> Reader<R> {
 
     pub fn read_i16_ne(&mut self) -> Option<i16> {
         self.read_bytes().map(i16::from_ne_bytes)
+    }
+}
+
+/// A storage container for any value that is always `Send` and `Sync` regardless of its contents.
+///
+/// It does so soundly by only allowing access to the contained value on the same thread.
+/// This allows moving `Value`s between threads (but not ever touching them), and eventually moving them back to the original thread.
+///
+/// Dropping the ThreadSafeValue on a different thread than it was created on will panic, and not drop the contained value.
+pub struct ThreadSafeStorage<T> {
+    value: ManuallyDrop<T>,
+    thread_id: ThreadId,
+}
+
+unsafe impl<T> Send for ThreadSafeStorage<T> {}
+unsafe impl<T> Sync for ThreadSafeStorage<T> {}
+
+impl<T> ThreadSafeStorage<T> {
+    pub fn new(value: T) -> Self {
+        Self {
+            value: ManuallyDrop::new(value),
+            thread_id: std::thread::current().id(),
+        }
+    }
+
+    pub fn get(&self) -> &T {
+        self.assert_same_thread();
+        &self.value
+    }
+
+    pub fn get_mut(&mut self) -> &mut T {
+        self.assert_same_thread();
+        &mut self.value
+    }
+
+    fn assert_same_thread(&self) {
+        assert_eq!(self.thread_id, std::thread::current().id());
+    }
+}
+
+impl<T> Drop for ThreadSafeStorage<T> {
+    fn drop(&mut self) {
+        self.assert_same_thread();
+        unsafe { ManuallyDrop::drop(&mut self.value) };
     }
 }
