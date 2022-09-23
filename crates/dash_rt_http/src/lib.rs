@@ -9,7 +9,6 @@ use dash_rt::event::EventMessage;
 use dash_rt::module::ModuleLoader;
 use dash_rt::state::State;
 use dash_vm::delegate;
-use dash_vm::gc::handle::Handle;
 use dash_vm::gc::persistent::Persistent;
 use dash_vm::gc::trace::Trace;
 use dash_vm::local::LocalScope;

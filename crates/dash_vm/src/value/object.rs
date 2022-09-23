@@ -124,7 +124,7 @@ macro_rules! delegate {
         fn apply(
             &self,
             sc: &mut LocalScope,
-            handle: Handle<dyn Object>,
+            handle: $crate::gc::handle::Handle<dyn Object>,
             this: Value,
             args: Vec<Value>,
         ) -> Result<Value, Value> {
