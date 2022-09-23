@@ -17,6 +17,7 @@ members = [
     "crates/dash_decompiler",
     "crates/dash_rt_modules",
     "crates/dash_rt_http",
+    "crates/dash_rt_fs",
 ]
 
 [profile.release]

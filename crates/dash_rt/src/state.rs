@@ -1,6 +1,9 @@
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
+use dash_vm::value::Value;
 use dash_vm::Vm;
 
 use crate::active_tasks::TaskIds;
@@ -12,6 +15,7 @@ pub struct State {
     tx: EventSender,
     root_module: Rc<RefCell<Option<Box<dyn ModuleLoader>>>>,
     tasks: TaskIds,
+    promises: RefCell<HashMap<u64, Value>>,
 }
 
 impl State {
@@ -21,6 +25,7 @@ impl State {
             tx,
             root_module: Rc::new(RefCell::new(None)),
             tasks: TaskIds::new(),
+            promises: RefCell::new(HashMap::new()),
         }
     }
 
@@ -34,6 +39,10 @@ impl State {
 
     pub fn active_tasks(&self) -> &TaskIds {
         &self.tasks
+    }
+
+    pub fn needs_event_loop(&self) -> bool {
+        self.tasks.has_tasks() || !self.promises.borrow().is_empty()
     }
 
     pub fn try_from_vm(vm: &Vm) -> Option<&Self> {
@@ -53,5 +62,21 @@ impl State {
 
     pub fn rt_handle(&self) -> tokio::runtime::Handle {
         self.rt.clone()
+    }
+
+    pub fn add_pending_promise(&self, promise: Value) -> u64 {
+        static NEXT_PROMISE_ID: AtomicU64 = AtomicU64::new(0);
+        let id = NEXT_PROMISE_ID.fetch_add(1, Ordering::Relaxed);
+        self.promises.borrow_mut().insert(id, promise);
+        id
+    }
+
+    pub fn take_promise(&self, id: u64) -> Value {
+        self.try_take_promise(id)
+            .expect("Attempted to take a promise that was already taken")
+    }
+
+    pub fn try_take_promise(&self, id: u64) -> Option<Value> {
+        self.promises.borrow_mut().remove(&id)
     }
 }

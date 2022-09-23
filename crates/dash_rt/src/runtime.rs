@@ -10,6 +10,7 @@ use dash_vm::value::Value;
 use dash_vm::Vm;
 use rand::Rng;
 use tokio::sync::mpsc;
+use tracing::info;
 
 use crate::event::EventMessage;
 use crate::event::EventSender;
@@ -29,15 +30,14 @@ impl Runtime {
 
         let (etx, erx) = mpsc::unbounded_channel();
 
+        let state = State::new(rt, EventSender::new(etx));
         let params = VmParams::new()
             .set_static_import_callback(import_callback)
             .set_math_random_callback(random_callback)
-            .set_state(Box::new(State::new(rt, EventSender::new(etx))));
+            .set_state(Box::new(state));
 
-        Self {
-            vm: Vm::new(params),
-            event_rx: erx,
-        }
+        let vm = Vm::new(params);
+        Self { vm, event_rx: erx }
     }
 
     pub fn set_module_manager(&mut self, module_manager: Box<dyn ModuleLoader>) {
@@ -65,12 +65,13 @@ impl Runtime {
                 EventMessage::RemoveTask(id) => {
                     let tasks = State::from_vm(&self.vm).active_tasks();
                     tasks.remove(id);
-
-                    if !tasks.has_tasks() {
-                        // Exit event loop if no more active tasks
-                        return;
-                    }
                 }
+            }
+
+            let state = State::from_vm(&self.vm);
+            if !state.needs_event_loop() {
+                info!("Event loop finished");
+                return;
             }
         }
     }

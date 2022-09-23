@@ -19,3 +19,4 @@ dash_decompiler = { path = "../crates/dash_decompiler" }
 tracing-subscriber = "0.3.15"
 tracing = "0.1.36"
 dash_rt_http = { path = "../crates/dash_rt_http" }
+dash_rt_fs = { path = "../crates/dash_rt_fs" }

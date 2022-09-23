@@ -7,6 +7,7 @@ use dash_middle::util::SharedOnce;
 use dash_rt::event::EventMessage;
 use dash_rt::module::ModuleLoader;
 use dash_rt::state::State;
+use dash_rt::ThreadSafeHandle;
 use dash_vm::delegate;
 use dash_vm::gc::handle::Handle;
 use dash_vm::gc::trace::Trace;
@@ -46,12 +47,6 @@ impl ModuleLoader for HttpModule {
     }
 }
 
-#[derive(Clone)]
-struct ThreadSafeHandle(Handle<dyn Object>);
-
-unsafe impl Send for ThreadSafeHandle {}
-unsafe impl Sync for ThreadSafeHandle {}
-
 pub fn listen(mut cx: CallContext) -> Result<Value, Value> {
     let port = cx.args.first().unwrap_or_undefined().to_int32(&mut cx.scope)?;
     let cb = match cx.args.get(1).cloned() {
@@ -76,7 +71,7 @@ pub fn listen(mut cx: CallContext) -> Result<Value, Value> {
     let etx = state.event_sender();
     let rt = state.rt_handle();
 
-    let cb = ThreadSafeHandle(cb);
+    let cb = ThreadSafeHandle::new(cb);
 
     let server = async move {
         let service_etx = etx.clone();
@@ -94,8 +89,7 @@ pub fn listen(mut cx: CallContext) -> Result<Value, Value> {
                     let vm = rt.vm_mut();
                     let mut scope = LocalScope::new(vm);
 
-                    let cb = cb;
-                    let ThreadSafeHandle(cb) = cb;
+                    let cb = cb.into_inner();
 
                     let ctx = HttpContext::new(&mut scope, ttx);
                     let fun = Function::new(&mut scope, Some("respond".into()), FunctionKind::Native(ctx_respond));
