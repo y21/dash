@@ -217,6 +217,7 @@ impl Vm {
 
             #[properties]
             toString: scope.statics.object_to_string;
+            hasOwnProperty: scope.statics.object_has_own_property;
         });
 
         let console = register_builtin_type!(scope.statics.console, {

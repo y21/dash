@@ -6,21 +6,62 @@ use std::{
     ptr::NonNull,
 };
 
+use bitflags::bitflags;
+
 use super::trace::Trace;
+
+bitflags! {
+    struct HandleFlagsInner: u8 {
+        const MARKED_VISITED = 1 << 0;
+        const VM_DETACHED = 1 << 1;
+    }
+}
+
+#[derive(Debug)]
+#[repr(transparent)]
+pub struct HandleFlags {
+    flags: Cell<HandleFlagsInner>,
+}
+
+impl HandleFlags {
+    pub fn new() -> Self {
+        Self {
+            flags: Cell::new(HandleFlagsInner::empty()),
+        }
+    }
+
+    pub fn mark(&self) {
+        self.flags.set(self.flags.get() | HandleFlagsInner::MARKED_VISITED);
+    }
+
+    pub unsafe fn unmark(&self) {
+        self.flags.set(!(self.flags.get() & HandleFlagsInner::MARKED_VISITED));
+    }
+
+    pub fn is_marked(&self) -> bool {
+        self.flags.get().contains(HandleFlagsInner::MARKED_VISITED)
+    }
+
+    pub fn detach_vm(&self) {
+        self.flags.set(self.flags.get() | HandleFlagsInner::VM_DETACHED);
+    }
+
+    pub fn is_vm_detached(&self) -> bool {
+        self.flags.get().contains(HandleFlagsInner::VM_DETACHED)
+    }
+}
 
 #[derive(Debug)]
 pub struct InnerHandle<T: ?Sized> {
-    pub(crate) marked: Cell<bool>,
+    pub(crate) flags: HandleFlags,
+    /// Persistent<T> reference count
+    pub(crate) refcount: Cell<u64>,
     pub(crate) value: Box<T>,
 }
 
 impl<T: ?Sized> InnerHandle<T> {
-    pub fn mark(&self) {
-        self.marked.set(true);
-    }
-
-    pub unsafe fn unmark(&self) {
-        self.marked.set(false);
+    pub fn ref_count(&self) -> u64 {
+        self.refcount.get()
     }
 }
 
@@ -58,7 +99,7 @@ unsafe impl<T: ?Sized + Trace> Trace for Handle<T> {
     fn trace(&self) {
         unsafe {
             let this = self.0.as_ref();
-            this.mark();
+            this.flags.mark();
         };
 
         T::trace(self);

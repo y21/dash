@@ -3,13 +3,14 @@ use std::{cell::Cell, ptr::NonNull};
 use crate::{gc::handle::InnerHandle, value::object::Object};
 
 use self::{
-    handle::Handle,
+    handle::{Handle, HandleFlags},
     linkedlist::{LinkedList, Node},
     trace::Trace,
 };
 
 pub mod handle;
 pub mod linkedlist;
+pub mod persistent;
 pub mod trace;
 
 pub struct Gc<T: ?Sized> {
@@ -29,16 +30,16 @@ impl<T: ?Sized + Trace> Gc<T> {
 
         loop {
             if let Some(ptr) = node {
-                let (marked, next) = {
+                let (flags, refcount, next) = {
                     let node = ptr.as_ref();
 
-                    (&node.value.marked, node.next)
+                    (&node.value.flags, node.value.refcount.get(), node.next)
                 };
 
                 node = next;
 
-                if !marked.get() {
-                    // Reference did not get marked during GC trace. Deallocate.
+                if !flags.is_marked() && refcount == 0 {
+                    // Reference did not get marked during GC trace and there are no Persistent<T> refs. Deallocate.
 
                     // If this node is the tail (i.e. oldest/first node) or there is no tail,
                     // set it to the next node.
@@ -65,7 +66,7 @@ impl<T: ?Sized + Trace> Gc<T> {
                     // There's one less node now, so decrement length.
                     self.list.dec_len();
                 } else {
-                    marked.set(false);
+                    flags.unmark();
                     previous = Some(ptr);
                 }
             } else {
@@ -89,8 +90,9 @@ pub unsafe trait IntoHandle<T: ?Sized, U> {
 unsafe impl<T: Object + 'static> IntoHandle<dyn Object, InnerHandle<dyn Object>> for T {
     fn into_handle(self, link: &mut LinkedList<InnerHandle<dyn Object>>) -> Handle<dyn Object> {
         let handle: InnerHandle<dyn Object> = InnerHandle {
-            marked: Cell::new(false),
+            flags: HandleFlags::new(),
             value: Box::new(self),
+            refcount: Cell::new(0),
         };
 
         let node = Node {
