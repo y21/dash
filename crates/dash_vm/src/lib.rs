@@ -368,6 +368,7 @@ impl Vm {
             entries: scope.statics.array_entries;
             keys: scope.statics.array_keys;
             every: scope.statics.array_every;
+            some: scope.statics.array_some;
             fill: scope.statics.array_fill;
             filter: scope.statics.array_filter;
             find: scope.statics.array_find;

@@ -18,5 +18,5 @@ dash_compiler = { path = "../dash_compiler", features = [
 ] }
 dash_decompiler = { path = "../dash_decompiler" }
 dash_parser = { path = "../dash_parser", features = ["from_string"] }
-dash_middle = { path = "../dash_middle" }
+dash_middle = { path = "../dash_middle", features = ["serde"] }
 js-sys = "0.3.57"
