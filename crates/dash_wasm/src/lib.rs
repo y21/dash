@@ -73,7 +73,7 @@ fn fmt_value(value: Value, vm: &mut Vm) -> String {
 }
 
 #[wasm_bindgen]
-pub fn decompile(s: &str, o: OptLevel, em: Emit) -> String {
+pub fn debug(s: &str, o: OptLevel, em: Emit) -> String {
     let parser = Parser::from_str(s).unwrap();
     let mut ast = parser.parse_all().unwrap();
 
@@ -92,6 +92,33 @@ pub fn decompile(s: &str, o: OptLevel, em: Emit) -> String {
         }
     }
 }
+
+#[wasm_bindgen]
+pub fn decompile(s: &str, o: OptLevel) -> Result<js_sys::Uint8Array, String> {
+    let cmp = FunctionCompiler::compile_str(s, o.into()).map_err(|e| format!("{e:?}"))?;
+    dash_middle::compiler::format::serialize(cmp)
+        .map(|v| {
+            let u8 = js_sys::Uint8Array::new_with_length(v.len() as u32);
+            u8.copy_from(&v);
+            u8
+        })
+        .map_err(|e| e.to_string())
+}
+
+// #[wasm_bindgen]
+// pub fn interpret(b: &[u8]) -> Result<String, String> {
+//     let cmp = dash_middle::compiler::format::deserialize(b).map_err(|e| format!("{e:?}"))?;
+//     let mut vm = Vm::new(VmParams::new());
+
+//     // let cmp = FunctionCompiler::compile_str(s, o.into()).map_err(|e| format!("{e:?}"))?;
+//     // dash_middle::compiler::format::serialize(cmp)
+//     //     .map(|v| {
+//     //         let u8 = js_sys::Uint8Array::new_with_length(v.len() as u32);
+//     //         u8.copy_from(&v);
+//     //         u8
+//     //     })
+//     //     .map_err(|e| e.to_string())
+// }
 
 fn compile_inspect(vm: &mut Vm) -> Value {
     let source = include_str!("../../dash_rt/js/inspect.js");

@@ -332,6 +332,20 @@ impl Vm {
             split: scope.statics.string_split;
             toLowerCase: scope.statics.string_to_lowercase;
             toUpperCase: scope.statics.string_to_uppercase;
+            big: scope.statics.string_big;
+            blink: scope.statics.string_blink;
+            bold: scope.statics.string_bold;
+            fixed: scope.statics.string_fixed;
+            italics: scope.statics.string_italics;
+            strike: scope.statics.string_strike;
+            sub: scope.statics.string_sub;
+            sup: scope.statics.string_sup;
+            fontcolor: scope.statics.string_fontcolor;
+            fontsize: scope.statics.string_fontsize;
+            link: scope.statics.string_link;
+            trim: scope.statics.string_trim;
+            trimStart: scope.statics.string_trim_start;
+            trimEnd: scope.statics.string_trim_end;
         });
 
         let array_ctor = register_builtin_type!(scope.statics.array_ctor, {

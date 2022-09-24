@@ -8,6 +8,7 @@ pub fn serialize(cr: CompileResult) -> bincode::Result<Vec<u8>> {
     Ok(buffer)
 }
 
+#[derive(Debug)]
 pub enum DeserializeError {
     Bincode(bincode::Error),
     InvalidVersion,

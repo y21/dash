@@ -109,6 +109,24 @@ pub fn every(cx: CallContext) -> Result<Value, Value> {
     Ok(true.into())
 }
 
+pub fn some(cx: CallContext) -> Result<Value, Value> {
+    let this = Value::Object(cx.this.to_object(cx.scope)?);
+    let len = this.length_of_array_like(cx.scope)?;
+    let callback = cx.args.first().unwrap_or_undefined();
+
+    for k in 0..len {
+        let pk = k.to_string();
+        let pkv = this.get_property(cx.scope, pk.as_str().into())?;
+        let args = vec![pkv, Value::Number(k as f64)];
+        let test = callback.apply(cx.scope, Value::undefined(), args)?.to_boolean()?;
+        if test {
+            return Ok(true.into());
+        }
+    }
+
+    Ok(false.into())
+}
+
 pub fn fill(cx: CallContext) -> Result<Value, Value> {
     let this = Value::Object(cx.this.to_object(cx.scope)?);
     let len = this.length_of_array_like(cx.scope)?;

@@ -1,7 +1,9 @@
+use dash_vm::frame::Frame;
 use dash_vm::local::LocalScope;
 use dash_vm::params::VmParams;
 use dash_vm::value::Value as DashValue;
 use dash_vm::Vm;
+use js_sys::Uint8Array;
 use wasm_bindgen::prelude::wasm_bindgen;
 
 use crate::jsvalue::JsValue;
@@ -56,6 +58,16 @@ impl ExternalVm {
         match self.0.eval(code, opt.into()) {
             Ok(value) => Ok(JsValue::from(value)),
             Err(e) => Err(format!("{:?}", e)), // TODO: use inspect?
+        }
+    }
+
+    pub fn eval_serialized(&mut self, serialized: Uint8Array) -> Result<JsValue, String> {
+        let bytecode = serialized.to_vec();
+        let deserialized = dash_middle::compiler::format::deserialize(&bytecode).map_err(|e| format!("{e:?}"))?;
+        let frame = Frame::from_compile_result(deserialized);
+        match self.0.execute_frame(frame) {
+            Ok(x) => Ok(JsValue::from(x.into_value())),
+            Err(err) => Err(format!("{:?}", err)),
         }
     }
 

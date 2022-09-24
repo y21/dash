@@ -275,3 +275,21 @@ pub fn to_lowercase(cx: CallContext) -> Result<Value, Value> {
     let result = string.to_lowercase();
     Ok(Value::String(result.into()))
 }
+
+pub fn trim(cx: CallContext) -> Result<Value, Value> {
+    let string = cx.this.to_string(cx.scope)?;
+    let result = string.trim();
+    Ok(Value::String(result.into()))
+}
+
+pub fn trim_start(cx: CallContext) -> Result<Value, Value> {
+    let string = cx.this.to_string(cx.scope)?;
+    let result = string.trim_start();
+    Ok(Value::String(result.into()))
+}
+
+pub fn trim_end(cx: CallContext) -> Result<Value, Value> {
+    let string = cx.this.to_string(cx.scope)?;
+    let result = string.trim_start();
+    Ok(Value::String(result.into()))
+}
