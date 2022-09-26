@@ -16,12 +16,12 @@ pub enum CompileStrError<'a> {
 }
 
 impl<'a> FunctionCompiler<'a> {
-    pub fn compile_str(input: &'a str, opt: OptLevel) -> Result<CompileResult, CompileStrError<'a>> {
+    pub fn compile_str(self, input: &'a str) -> Result<CompileResult, CompileStrError<'a>> {
         let tokens = Lexer::new(input).scan_all().map_err(CompileStrError::Lexer)?;
         let ast = Parser::new(input, tokens)
             .parse_all()
             .map_err(CompileStrError::Parser)?;
 
-        Self::new(opt).compile_ast(ast, true).map_err(CompileStrError::Compiler)
+        self.compile_ast(ast, true).map_err(CompileStrError::Compiler)
     }
 }

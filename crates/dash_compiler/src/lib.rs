@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::rc::Rc;
 use std::{convert::TryInto, ptr::NonNull, usize};
 
@@ -53,7 +54,7 @@ pub mod error;
 #[cfg(feature = "from_string")]
 pub mod from_string;
 pub mod instruction;
-mod scope;
+pub mod scope;
 // #[cfg(test)]
 // mod test;
 mod jump_container;
@@ -408,6 +409,14 @@ impl<'a> FunctionCompiler<'a> {
     fn add_global_jump(&mut self, label: Label) {
         jump_container::add_jump(&mut self.jc, label, &mut self.buf)
     }
+
+    pub fn scope(&self) -> &Scope<'a> {
+        &self.scope
+    }
+
+    pub fn scope_mut(&mut self) -> &mut Scope<'a> {
+        &mut self.scope
+    }
 }
 
 enum ForEachLoopKind {
@@ -735,7 +744,10 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         let mut ib = InstructionBuilder::new(self);
         let id = ib.scope.add_local(
             VariableBinding {
-                name: fun.name.expect("Function declaration did not have a name"),
+                name: fun
+                    .name
+                    .map(Cow::Borrowed)
+                    .expect("Function declaration did not have a name"),
                 kind: VariableDeclarationKind::Var,
                 ty: None,
             },
@@ -1002,7 +1014,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             let id = scope.add_local(
                 VariableBinding {
                     kind: VariableDeclarationKind::Var,
-                    name,
+                    name: Cow::Borrowed(name),
                     ty: None,
                 },
                 false,
@@ -1091,7 +1103,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             let id = ib.scope.add_local(
                 VariableBinding {
                     kind: VariableDeclarationKind::Var,
-                    name: ident,
+                    name: Cow::Borrowed(ident),
                     ty: None,
                 },
                 false,
@@ -1187,7 +1199,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                     VariableBinding {
                         kind: VariableDeclarationKind::Var,
                         name: match spec {
-                            SpecifierKind::Ident(id) => id,
+                            SpecifierKind::Ident(id) => Cow::Borrowed(id),
                         },
                         ty: None,
                     },
@@ -1222,8 +1234,8 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             ExportKind::Named(names) => {
                 let mut it = Vec::with_capacity(names.len());
 
-                for name in names.iter().copied() {
-                    let ident_id = ib.cp.add(Constant::Identifier(name.into()))?;
+                for name in names.iter() {
+                    let ident_id = ib.cp.add(Constant::Identifier(name.as_ref().into()))?;
 
                     match ib.find_local(name) {
                         Some((loc_id, loc)) => {
@@ -1241,7 +1253,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 ib.build_named_export(&it)?;
             }
             ExportKind::NamedVar(vars) => {
-                let it = vars.iter().map(|var| var.binding.name).collect::<Vec<_>>();
+                let it = vars.iter().map(|var| var.binding.name.clone()).collect::<Vec<_>>();
 
                 for var in vars {
                     self.visit_variable_declaration(var)?;
@@ -1310,7 +1322,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             .map(|name| VariableBinding {
                 kind: VariableDeclarationKind::Var,
                 ty: None,
-                name,
+                name: Cow::Borrowed(name),
             })
             .unwrap_or_else(|| VariableBinding::unnameable("DesugaredClass"));
 

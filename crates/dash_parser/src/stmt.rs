@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use dash_middle::lexer::token::TokenType;
 use dash_middle::lexer::token::VARIABLE_TYPES;
 use dash_middle::parser::error::ErrorKind;
@@ -168,7 +170,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
             let mut names = Vec::new();
             while !self.expect_and_skip(&[TokenType::RightBrace], false) {
                 let name = self.next()?.full;
-                names.push(name);
+                names.push(Cow::Borrowed(name));
                 self.expect_and_skip(&[TokenType::Comma], false);
             }
             return Some(ExportKind::Named(names));
@@ -457,7 +459,11 @@ impl<'a> StatementParser<'a> for Parser<'a> {
             None
         };
 
-        Some(VariableBinding { kind, name, ty })
+        Some(VariableBinding {
+            kind,
+            name: Cow::Borrowed(name),
+            ty,
+        })
     }
 
     fn parse_variable_definition(&mut self) -> Option<Expr<'a>> {

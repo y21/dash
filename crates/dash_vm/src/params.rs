@@ -1,6 +1,7 @@
 use std::any::Any;
 
 use dash_middle::compiler::StaticImportKind;
+use dash_optimizer::OptLevel;
 
 use crate::local::LocalScope;
 
@@ -21,6 +22,7 @@ pub struct VmParams {
     debugger_callback: Option<DebuggerCallback>,
     unhandled_task_exception_callback: Option<UnhandledTaskException>,
     state: Option<Box<dyn Any>>,
+    opt_level: Option<OptLevel>,
 }
 
 impl VmParams {
@@ -88,5 +90,14 @@ impl VmParams {
 
     pub fn unhandled_task_exception_callback(&self) -> Option<UnhandledTaskException> {
         self.unhandled_task_exception_callback
+    }
+
+    pub fn set_opt_level(mut self, opt_level: OptLevel) -> Self {
+        self.opt_level = Some(opt_level);
+        self
+    }
+
+    pub fn opt_level(&self) -> Option<OptLevel> {
+        self.opt_level
     }
 }

@@ -108,17 +108,8 @@ impl Frame {
         // there's likely a bug somewhere if this assertion fails and will be *really* confusing if this invariant doesn't get caught
         debug_assert!(cr.externals.is_empty());
 
-        let fun = Function {
-            buffer: cr.instructions.into(),
-            constants: cr.cp.into_vec().into(),
-            externals: Vec::new().into(),
-            locals: cr.locals,
-            name: None,
-            params: 0,
-            ty: FunctionKind::Function,
-            r#async: false,
-            rest_local: None,
-        };
+        let fun = Function::from_compile_result(cr);
+        let locals = fun.locals;
 
         Self {
             this: None,
@@ -126,7 +117,7 @@ impl Frame {
             externals: Vec::new().into(),
             ip: 0,
             sp: 0,
-            extra_stack_space: cr.locals, /* - 0 params */
+            extra_stack_space: locals, /* - 0 params */
             state: FrameState::Function {
                 is_constructor_call: false,
             },

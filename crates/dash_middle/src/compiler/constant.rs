@@ -8,6 +8,7 @@ use crate::parser::expr::LiteralExpr;
 use crate::parser::statement::FunctionKind;
 
 use super::external::External;
+use super::CompileResult;
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
@@ -22,6 +23,22 @@ pub struct Function {
     pub r#async: bool,
     /// If the parameter list uses the rest operator ..., then this will be Some(local_id)
     pub rest_local: Option<u16>,
+}
+
+impl Function {
+    pub fn from_compile_result(cr: CompileResult) -> Self {
+        Self {
+            buffer: cr.instructions.into(),
+            constants: cr.cp.into_vec().into(),
+            externals: Vec::new().into(),
+            locals: cr.locals,
+            name: None,
+            params: 0,
+            ty: FunctionKind::Function,
+            r#async: false,
+            rest_local: None,
+        }
+    }
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -69,7 +86,7 @@ impl Constant {
         match expr {
             LiteralExpr::Number(n) => Self::Number(*n),
             LiteralExpr::Identifier(s) => Self::Identifier(s.as_ref().into()),
-            LiteralExpr::Binding(b) => Self::Identifier(b.name.into()),
+            LiteralExpr::Binding(b) => Self::Identifier(b.name.as_ref().into()),
             LiteralExpr::String(s) => Self::String(s.as_ref().into()),
             LiteralExpr::Boolean(b) => Self::Boolean(*b),
             LiteralExpr::Null => Self::Null,

@@ -1,4 +1,4 @@
-use std::{cell::RefCell, fmt};
+use std::{borrow::Cow, cell::RefCell, fmt};
 
 use derive_more::Display;
 #[cfg(feature = "serde")]
@@ -93,7 +93,7 @@ pub enum ExportKind<'a> {
     /// export default foo
     Default(Expr<'a>),
     /// export { foo, bar }
-    Named(Vec<&'a str>),
+    Named(Vec<Cow<'a, str>>),
     /// export let foo = "bar"
     NamedVar(Vec<VariableDeclaration<'a>>),
 }
@@ -562,7 +562,7 @@ impl From<TokenType> for VariableDeclarationKind {
 #[display(fmt = "{} {}", kind, name)]
 pub struct VariableBinding<'a> {
     /// The name/identifier of this variable
-    pub name: &'a str,
+    pub name: Cow<'a, str>,
     /// The type of this variable
     pub kind: VariableDeclarationKind,
     /// The type of a variable, if present
@@ -573,7 +573,7 @@ impl<'a> VariableBinding<'a> {
     pub fn unnameable(name: &'a str) -> Self {
         // TODO: we should somehow mangle `name`, otherwise nested for of loops in the same function will clash
         Self {
-            name,
+            name: Cow::Borrowed(name),
             kind: VariableDeclarationKind::Unnameable,
             ty: None,
         }

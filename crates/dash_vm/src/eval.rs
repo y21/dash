@@ -68,7 +68,8 @@ impl Vm {
         import_ty: StaticImportKind,
         opt: OptLevel,
     ) -> Result<Value, Value> {
-        let re = match FunctionCompiler::compile_str(input, opt) {
+        let compiler = FunctionCompiler::new(opt);
+        let re = match compiler.compile_str(input) {
             Ok(re) => re,
             Err(CompileStrError::Compiler(ce)) => throw!(sc, "Compile error: {:?}", ce),
             Err(CompileStrError::Parser(pe)) => throw!(sc, "Parse error: {:?}", pe),

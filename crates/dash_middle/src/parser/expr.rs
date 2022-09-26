@@ -365,7 +365,10 @@ impl<'a> LiteralExpr<'a> {
                 Cow::Borrowed(s) => Some(s),
                 _ => None,
             },
-            Self::Binding(b) => Some(b.name),
+            Self::Binding(b) => match b.name {
+                Cow::Borrowed(b) => Some(b),
+                _ => None,
+            },
             _ => None,
         }
     }
@@ -379,7 +382,7 @@ impl<'a> LiteralExpr<'a> {
             Self::Null => Cow::Borrowed("null"),
             Self::Number(n) => Cow::Owned(n.to_string()),
             Self::String(s) => s.clone(),
-            Self::Binding(b) => Cow::Borrowed(b.name),
+            Self::Binding(b) => b.name.clone(),
         }
     }
 
