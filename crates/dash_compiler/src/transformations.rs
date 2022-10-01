@@ -1,4 +1,5 @@
 use dash_middle::parser::statement::BlockStatement;
+use dash_middle::parser::statement::FunctionDeclaration;
 use dash_middle::parser::statement::ReturnStatement;
 use dash_middle::parser::statement::Statement;
 use dash_middle::parser::statement::VariableBinding;
@@ -36,6 +37,13 @@ pub fn find_hoisted_declarations<'a>(ast: &Vec<Statement<'a>>) -> Vec<VariableBi
                 ..
             }) => {
                 vars.push(binding.clone());
+            }
+            Statement::Function(FunctionDeclaration { name: Some(name), .. }) => {
+                vars.push(VariableBinding {
+                    name,
+                    kind: VariableDeclarationKind::Var,
+                    ty: None,
+                });
             }
             // TODO: recursively visit all nodes to hoist nested variable declarations
             _ => {}
