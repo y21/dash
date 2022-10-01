@@ -6,7 +6,10 @@ use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
 
 use clap::ArgMatches;
+use dash_vm::eval::EvalError;
+use dash_vm::local::LocalScope;
 use dash_vm::params::VmParams;
+use dash_vm::value::ops::abstractions::conversions::ValueConversion;
 use dash_vm::Vm;
 use futures_util::future;
 use futures_util::stream::FuturesUnordered;
@@ -16,15 +19,16 @@ use crate::util;
 
 pub fn run(matches: &ArgMatches) -> anyhow::Result<()> {
     let path = matches.value_of("path").unwrap_or("../test262/test");
+    let verbose = matches.is_present("verbose");
     let files = util::get_all_files(OsStr::new(path))?;
 
     let tokio = tokio::runtime::Runtime::new()?;
-    tokio.block_on(run_inner(files))?;
+    tokio.block_on(run_inner(files, verbose))?;
 
     Ok(())
 }
 
-async fn run_inner(files: Vec<OsString>) -> anyhow::Result<()> {
+async fn run_inner(files: Vec<OsString>, verbose: bool) -> anyhow::Result<()> {
     let setup: Arc<str> = {
         let sta = tokio::fs::read_to_string("../test262/harness/sta.js");
         let assert = tokio::fs::read_to_string("../test262/harness/assert.js");
@@ -52,7 +56,7 @@ async fn run_inner(files: Vec<OsString>) -> anyhow::Result<()> {
             let counter = Arc::clone(&counter);
 
             let fut = async move {
-                let result = run_test(&setup, file).await;
+                let result = run_test(&setup, file, verbose).await;
 
                 let counter = match result {
                     RunResult::Pass => &counter.passes,
@@ -88,7 +92,7 @@ enum RunResult {
     Panic,
 }
 
-async fn run_test(setup: &str, path: &OsStr) -> RunResult {
+async fn run_test(setup: &str, path: &OsStr, verbose: bool) -> RunResult {
     let contents = tokio::fs::read_to_string(path).await.unwrap();
     let contents = format!("{setup}{contents}");
 
@@ -96,7 +100,24 @@ async fn run_test(setup: &str, path: &OsStr) -> RunResult {
         let mut vm = Vm::new(VmParams::default());
         match vm.eval(&contents, Default::default()) {
             Ok(_) => RunResult::Pass,
-            Err(_) => RunResult::Fail,
+            Err(err) => {
+                if verbose {
+                    let s = match err {
+                        EvalError::Compiler(c) => c.to_string(),
+                        EvalError::Lexer(l) => format!("{l:?}"),
+                        EvalError::Parser(p) => format!("{p:?}"),
+                        EvalError::Exception(ex) => {
+                            let mut sc = LocalScope::new(&mut vm);
+                            match ex.to_string(&mut sc) {
+                                Ok(s) => ToString::to_string(&s),
+                                Err(err) => format!("{err:?}"),
+                            }
+                        }
+                    };
+                    println!("Error in {:?}: {s}", path.to_str());
+                }
+                RunResult::Fail
+            }
         }
     });
 

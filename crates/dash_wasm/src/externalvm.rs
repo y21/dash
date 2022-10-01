@@ -1,3 +1,4 @@
+use dash_vm::eval::EvalError;
 use dash_vm::frame::Frame;
 use dash_vm::local::LocalScope;
 use dash_vm::params::VmParams;
@@ -54,10 +55,14 @@ impl ExternalVm {
         JsValue::from(DashValue::Object(self.0.global()))
     }
 
-    pub fn eval(&mut self, code: &str, opt: OptLevel) -> Result<JsValue, String> {
+    pub fn eval(&mut self, code: &str, opt: OptLevel) -> Result<JsValue, JsValue> {
         match self.0.eval(code, opt.into()) {
             Ok(value) => Ok(JsValue::from(value)),
-            Err(e) => Err(format!("{:?}", e)), // TODO: use inspect?
+            Err(EvalError::Exception(value)) => Err(JsValue::from(value)),
+            Err(e) => {
+                let err = DashValue::String(format!("{e:?}").into());
+                Err(JsValue::from(err))
+            }
         }
     }
 

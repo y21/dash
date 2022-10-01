@@ -14,6 +14,7 @@ dash_lexer = { path = "../crates/dash_lexer" }
 dash_parser = { path = "../crates/dash_parser" }
 dash_compiler = { path = "../crates/dash_compiler" }
 dash_vm = { path = "../crates/dash_vm", features = ["eval"] }
+dash_middle = { path = "../crates/dash_middle", features = ["serde"] }
 dash_optimizer = { path = "../crates/dash_optimizer" }
 dash_decompiler = { path = "../crates/dash_decompiler" }
 dash_rt_modules = { path = "../crates/dash_rt_modules" }

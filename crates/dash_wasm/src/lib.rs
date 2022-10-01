@@ -64,7 +64,7 @@ pub fn eval(s: &str, opt: OptLevel, _context: Option<js_sys::Object>) -> Result<
     Ok(result)
 }
 
-fn fmt_value(value: Value, vm: &mut Vm) -> String {
+pub fn fmt_value(value: Value, vm: &mut Vm) -> String {
     let mut scope = LocalScope::new(vm);
     value
         .to_string(&mut scope)
@@ -86,7 +86,7 @@ pub fn debug(s: &str, o: OptLevel, em: Emit) -> String {
             dash_optimizer::optimize_ast(&mut ast, o.into());
             let mut output = String::new();
             for node in ast {
-                let _ = write!(output, "{node}; ");
+                let _ = write!(output, "{node}");
             }
             output
         }

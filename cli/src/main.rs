@@ -36,6 +36,9 @@ fn main() -> anyhow::Result<()> {
             Command::new("dump")
                 .override_help("Dumps intermediate code representation")
                 .arg(Arg::new("file").required(true))
+                .arg(Arg::new("ir").long("ir").takes_value(false))
+                .arg(Arg::new("ast").long("ast").takes_value(false))
+                .arg(Arg::new("js").long("js").takes_value(false))
                 .arg(Arg::new("bytecode").long("bytecode").takes_value(false))
                 .arg(opt_level),
         );

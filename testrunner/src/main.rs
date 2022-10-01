@@ -11,7 +11,8 @@ fn main() -> anyhow::Result<()> {
         .subcommand(
             Command::new("run")
                 .override_help("Runs the testrunner")
-                .arg(Arg::new("path").long("path").takes_value(true)),
+                .arg(Arg::new("path").long("path").takes_value(true))
+                .arg(Arg::new("verbose").long("verbose").takes_value(false)),
         );
 
     match app.get_matches().subcommand() {

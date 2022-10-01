@@ -1,4 +1,6 @@
 use std::fs;
+use std::io;
+use std::io::Write;
 
 use anyhow::anyhow;
 use anyhow::Context;
@@ -7,6 +9,9 @@ use clap::ArgMatches;
 use crate::util;
 
 pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
+    let dump_ir = arg.is_present("ir");
+    let dump_ast = arg.is_present("ast");
+    let dump_js = arg.is_present("js");
     let dump_bytecode = arg.is_present("bytecode");
 
     let opt = util::opt_level_from_matches(arg)?;
@@ -21,11 +26,27 @@ pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
         .parse_all()
         .map_err(|_| anyhow!("Failed to parse source string"))?;
 
+    if dump_ast {
+        println!("{:#?}", ast);
+    }
+
+    if dump_js {
+        for node in &ast {
+            println!("{node}");
+        }
+    }
+
     let bytecode = dash_compiler::FunctionCompiler::new(opt)
         .compile_ast(ast, true)
         .map_err(|_| anyhow!("Failed to compile source string"))?;
 
     if dump_bytecode {
+        let buffer = dash_middle::compiler::format::serialize(bytecode)?;
+        io::stdout().write_all(&buffer)?;
+        return Ok(());
+    }
+
+    if dump_ir {
         let out = dash_decompiler::decompile(&bytecode.cp, &bytecode.instructions)?;
         println!("{out}");
     }

@@ -341,6 +341,7 @@ pub enum LiteralExpr<'a> {
     /// Number literal
     Number(f64),
     /// String literal, borrowed from input string
+    #[display(fmt = "\"{_0}\"")]
     String(Cow<'a, str>),
 
     #[display(fmt = "null")]

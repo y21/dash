@@ -95,8 +95,18 @@ impl<'a> Eval for Expr<'a> {
                         TokenType::BitwiseXor => *self = u64op!(left ^ right),
                         TokenType::LeftShift => *self = u64op!(left << right),
                         TokenType::RightShift => *self = u64op!(left >> right),
-                        TokenType::LogicalOr => *self = Literal(Boolean(truthy_f64(*left) || truthy_f64(*right))),
-                        TokenType::LogicalAnd => *self = Literal(Boolean(truthy_f64(*left) && truthy_f64(*right))),
+                        TokenType::LogicalOr => {
+                            *self = Literal(Number(match truthy_f64(*left) {
+                                true => *left,
+                                false => *right,
+                            }))
+                        }
+                        TokenType::LogicalAnd => {
+                            *self = Literal(Number(match truthy_f64(*left) {
+                                true => *right,
+                                false => *left,
+                            }))
+                        }
                         _ => {}
                     },
                     _ => {}

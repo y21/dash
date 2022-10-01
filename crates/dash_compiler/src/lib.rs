@@ -54,6 +54,7 @@ pub mod error;
 pub mod from_string;
 pub mod instruction;
 mod scope;
+pub mod transformations;
 // #[cfg(test)]
 // mod test;
 mod jump_container;
@@ -101,23 +102,6 @@ pub struct FunctionCompiler<'a> {
 
     // Keeps track of the total number of loops to be able to have unique IDs
     loop_counter: usize,
-}
-
-/// Implicitly inserts a `return` statement for the last expression
-fn ast_insert_return<'a>(ast: &mut Vec<Statement<'a>>) {
-    match ast.last_mut() {
-        Some(Statement::Return(..)) => {}
-        Some(Statement::Expression(..)) => {
-            let expr = match ast.pop() {
-                Some(Statement::Expression(expr)) => expr,
-                _ => unreachable!(),
-            };
-
-            ast.push(Statement::Return(ReturnStatement(expr)));
-        }
-        Some(Statement::Block(BlockStatement(block))) => ast_insert_return(block),
-        _ => ast.push(Statement::Return(ReturnStatement::default())),
-    }
 }
 
 impl<'a> FunctionCompiler<'a> {
@@ -177,10 +161,15 @@ impl<'a> FunctionCompiler<'a> {
         implicit_return: bool,
     ) -> Result<CompileResult, CompileError> {
         if implicit_return {
-            ast_insert_return(&mut ast);
+            transformations::ast_insert_return(&mut ast);
         } else {
             // Push an implicit `return undefined;` statement at the end in case there is not already an explicit one
             ast.push(Statement::Return(Default::default()));
+        }
+
+        let hoisted_locals = transformations::find_hoisted_declarations(&ast);
+        for binding in hoisted_locals {
+            self.scope.add_local(binding, false)?;
         }
 
         self.accept_multiple(ast)?;
