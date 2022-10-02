@@ -26,6 +26,12 @@ pub enum Label {
     LoopIncrement {
         loop_id: usize,
     },
+    SwitchCase {
+        case_id: u16,
+    },
+    SwitchEnd {
+        switch_id: usize,
+    },
     Catch,
     TryEnd,
 }

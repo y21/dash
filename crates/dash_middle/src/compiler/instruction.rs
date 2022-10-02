@@ -90,6 +90,7 @@ pub enum Instruction {
     CallForInIterator,
     DeletePropertyStatic,
     DeletePropertyDynamic,
+    Switch,
 }
 
 // Some instruction opcodes have a separate u8 constant to be used in for example match guards,

@@ -18,7 +18,6 @@ use dash_middle::parser::expr::PropertyAccessExpr;
 use dash_middle::parser::expr::Seq;
 use dash_middle::parser::expr::UnaryExpr;
 use dash_middle::parser::expr::{ArrayLiteral, ObjectMemberKind};
-use dash_middle::parser::statement::FunctionDeclaration;
 use dash_middle::parser::statement::FunctionKind;
 use dash_middle::parser::statement::IfStatement;
 use dash_middle::parser::statement::ImportKind;
@@ -35,6 +34,7 @@ use dash_middle::parser::statement::{Class, Parameter};
 use dash_middle::parser::statement::{ClassMemberKind, ExportKind};
 use dash_middle::parser::statement::{ClassProperty, ForLoop};
 use dash_middle::parser::statement::{ForInLoop, ForOfLoop};
+use dash_middle::parser::statement::{FunctionDeclaration, SwitchStatement};
 use dash_optimizer::consteval::Eval;
 use dash_optimizer::OptLevel;
 use jump_container::JumpContainer;
@@ -70,6 +70,7 @@ macro_rules! unimplementedc {
 #[derive(Debug, Clone)]
 enum Breakable {
     Loop { loop_id: usize },
+    Switch { switch_id: usize },
 }
 
 pub struct FunctionCompiler<'a> {
@@ -100,8 +101,11 @@ pub struct FunctionCompiler<'a> {
     /// A stack of breakable labels (loop/switch)
     breakables: Vec<Breakable>,
 
-    // Keeps track of the total number of loops to be able to have unique IDs
+    /// Keeps track of the total number of loops to be able to have unique IDs
     loop_counter: usize,
+
+    /// Keeps track of the total number of loops to be able to have unique IDs
+    switch_counter: usize,
 }
 
 impl<'a> FunctionCompiler<'a> {
@@ -119,6 +123,7 @@ impl<'a> FunctionCompiler<'a> {
             jc: JumpContainer::new(),
             breakables: Vec::new(),
             loop_counter: 0,
+            switch_counter: 0,
         }
     }
 
@@ -138,6 +143,7 @@ impl<'a> FunctionCompiler<'a> {
             breakables: Vec::new(),
             r#async,
             loop_counter: 0,
+            switch_counter: 0,
         }
     }
 
@@ -387,6 +393,30 @@ impl<'a> FunctionCompiler<'a> {
         self.breakables.push(Breakable::Loop { loop_id });
         self.loop_counter += 1;
         loop_id
+    }
+
+    fn exit_loop(&mut self) {
+        let item = self.breakables.pop();
+        match item {
+            None | Some(Breakable::Switch { .. }) => panic!("Tried to exit loop, but no breakable was found"),
+            Some(Breakable::Loop { .. }) => {}
+        }
+    }
+
+    /// Same as [`prepare_loop`] but for switch statements
+    fn prepare_switch(&mut self) -> usize {
+        let switch_id = self.switch_counter;
+        self.breakables.push(Breakable::Switch { switch_id });
+        self.switch_counter += 1;
+        switch_id
+    }
+
+    fn exit_switch(&mut self) {
+        let item = self.breakables.pop();
+        match item {
+            None | Some(Breakable::Loop { .. }) => panic!("Tried to exit switch, but no breakable was found"),
+            Some(Breakable::Switch { .. }) => {}
+        }
     }
 
     fn add_global_label(&mut self, label: Label) {
@@ -749,6 +779,9 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         ib.build_jmp(Label::LoopCondition { loop_id }, false);
 
         ib.add_global_label(Label::LoopEnd { loop_id });
+
+        ib.exit_loop();
+
         Ok(())
     }
 
@@ -1150,7 +1183,8 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         ib.build_jmp(Label::LoopCondition { loop_id }, false);
 
         ib.add_global_label(Label::LoopEnd { loop_id });
-        self.scope.exit();
+        ib.scope.exit();
+        ib.exit_loop();
 
         Ok(())
     }
@@ -1248,10 +1282,13 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_break(&mut self) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
-        let breakable = ib.breakables.pop().ok_or(CompileError::IllegalBreak)?;
+        let breakable = ib.breakables.last().ok_or(CompileError::IllegalBreak)?;
         match breakable {
             Breakable::Loop { loop_id } => {
-                ib.build_jmp(Label::LoopEnd { loop_id }, false);
+                ib.build_jmp(Label::LoopEnd { loop_id: *loop_id }, false);
+            }
+            Breakable::Switch { switch_id } => {
+                ib.build_jmp(Label::SwitchEnd { switch_id: *switch_id }, false);
             }
         }
         Ok(())
@@ -1259,10 +1296,14 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_continue(&mut self) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
-        let breakable = ib.breakables.pop().ok_or(CompileError::IllegalBreak)?;
+        let breakable = ib.breakables.last().ok_or(CompileError::IllegalBreak)?;
         match breakable {
             Breakable::Loop { loop_id } => {
-                ib.build_jmp(Label::LoopIncrement { loop_id }, false);
+                ib.build_jmp(Label::LoopIncrement { loop_id: *loop_id }, false);
+            }
+            Breakable::Switch { .. } => {
+                // TODO: make it possible to use `continue` in loops even if its used in a switch
+                unimplementedc!("`continue` used inside of a switch statement");
             }
         }
         Ok(())
@@ -1377,8 +1418,62 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_switch_statement(
         &mut self,
-        _s: dash_middle::parser::statement::SwitchStatement<'a>,
+        SwitchStatement { expr, cases, default }: SwitchStatement<'a>,
     ) -> Result<(), CompileError> {
-        unimplementedc!("Switch statement")
+        let mut ib = InstructionBuilder::new(self);
+
+        let switch_id = ib.prepare_switch();
+        let has_default = default.is_some();
+        let case_count = cases.len();
+
+        // First, compile all case expressions in reverse order, so that the first pop() in the vm
+        // will be the first case value
+        for case in cases.iter().rev() {
+            ib.accept_expr(case.value.clone())?;
+        }
+
+        // Then, compile switch expression
+        ib.accept_expr(expr)?;
+
+        // Write switch metadata (case count, has default case)
+        let case_count = case_count
+            .try_into()
+            .map_err(|_| CompileError::SwitchCaseLimitExceeded)?;
+
+        ib.build_switch(case_count, has_default);
+
+        // Then, build jump headers for every case
+        for (case_id, ..) in cases.iter().enumerate() {
+            ib.build_jmp_header(
+                Label::SwitchCase {
+                    case_id: case_id as u16,
+                },
+                true,
+            );
+        }
+        if has_default {
+            ib.build_jmp_header(Label::SwitchCase { case_id: case_count }, true);
+        }
+
+        // If no case matches, then jump to SwitchEnd
+        ib.build_jmp(Label::SwitchEnd { switch_id }, false);
+
+        // Finally, compile case bodies
+        // All of the case bodies must be adjacent because of fallthrough
+        for (case_id, case) in cases.into_iter().enumerate() {
+            ib.add_local_label(Label::SwitchCase {
+                case_id: case_id as u16,
+            });
+            ib.accept_multiple(case.body)?;
+        }
+        if let Some(default) = default {
+            ib.add_local_label(Label::SwitchCase { case_id: case_count });
+            ib.accept_multiple(default)?;
+        }
+
+        ib.add_global_label(Label::SwitchEnd { switch_id });
+        ib.exit_switch();
+
+        Ok(())
     }
 }

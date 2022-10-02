@@ -134,6 +134,7 @@ pub trait InstructionWriter {
     fn build_for_in_iterator(&mut self);
     fn build_static_delete(&mut self, id: u16);
     fn build_dynamic_delete(&mut self);
+    fn build_switch(&mut self, case_count: u16, has_default: bool);
 }
 
 macro_rules! impl_instruction_writer {
@@ -143,6 +144,16 @@ macro_rules! impl_instruction_writer {
                 self.write($value as u8);
             }
         )*
+    }
+}
+
+impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
+    pub fn build_jmp_header(&mut self, label: Label, is_local_label: bool) {
+        self.write_all(&[0, 0]);
+        match is_local_label {
+            true => self.add_local_jump(label),
+            false => self.add_global_jump(label),
+        }
     }
 }
 
@@ -246,65 +257,37 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
 
     fn build_jmpfalsep(&mut self, label: Label, is_local_label: bool) {
         self.write_instr(Instruction::JmpFalseP);
-        self.write_all(&[0, 0]);
-        match is_local_label {
-            true => self.add_local_jump(label),
-            false => self.add_global_jump(label),
-        }
+        self.build_jmp_header(label, is_local_label);
     }
 
     fn build_jmpfalsenp(&mut self, label: Label, is_local_label: bool) {
         self.write_instr(Instruction::JmpFalseNP);
-        self.write_all(&[0, 0]);
-        match is_local_label {
-            true => self.add_local_jump(label),
-            false => self.add_global_jump(label),
-        }
+        self.build_jmp_header(label, is_local_label);
     }
 
     fn build_jmptruep(&mut self, label: Label, is_local_label: bool) {
         self.write_instr(Instruction::JmpTrueP);
-        self.write_all(&[0, 0]);
-        match is_local_label {
-            true => self.add_local_jump(label),
-            false => self.add_global_jump(label),
-        }
+        self.build_jmp_header(label, is_local_label);
     }
 
     fn build_jmptruenp(&mut self, label: Label, is_local_label: bool) {
         self.write_instr(Instruction::JmpTrueNP);
-        self.write_all(&[0, 0]);
-        match is_local_label {
-            true => self.add_local_jump(label),
-            false => self.add_global_jump(label),
-        }
+        self.build_jmp_header(label, is_local_label);
     }
 
     fn build_jmpnullishp(&mut self, label: Label, is_local_label: bool) {
         self.write_instr(Instruction::JmpNullishP);
-        self.write_all(&[0, 0]);
-        match is_local_label {
-            true => self.add_local_jump(label),
-            false => self.add_global_jump(label),
-        }
+        self.build_jmp_header(label, is_local_label);
     }
 
     fn build_jmpnullishnp(&mut self, label: Label, is_local_label: bool) {
         self.write_instr(Instruction::JmpNullishNP);
-        self.write_all(&[0, 0]);
-        match is_local_label {
-            true => self.add_local_jump(label),
-            false => self.add_global_jump(label),
-        }
+        self.build_jmp_header(label, is_local_label);
     }
 
     fn build_jmp(&mut self, label: Label, is_local_label: bool) {
         self.write_instr(Instruction::Jmp);
-        self.write_all(&[0, 0]);
-        match is_local_label {
-            true => self.add_local_jump(label),
-            false => self.add_global_jump(label),
-        }
+        self.build_jmp_header(label, is_local_label);
     }
 
     fn build_static_prop_access(&mut self, ident: &str, preserve_this: bool) -> Result<(), LimitExceededError> {
@@ -411,6 +394,12 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
         }
 
         Ok(())
+    }
+
+    fn build_switch(&mut self, case_count: u16, has_default: bool) {
+        self.write(Instruction::Switch as u8);
+        self.writew(case_count);
+        self.write(has_default.into());
     }
 }
 

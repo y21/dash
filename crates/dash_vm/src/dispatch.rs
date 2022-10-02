@@ -1014,6 +1014,47 @@ mod handlers {
         scope.try_push_stack(Value::Boolean(did_delete))?;
         Ok(None)
     }
+
+    pub fn switch(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let case_count = cx.fetchw_and_inc_ip();
+        let has_default = cx.fetch_and_inc_ip() == 1;
+
+        let switch_expr = cx.pop_stack();
+
+        let mut target_ip = None;
+
+        let mut scope = LocalScope::new(&mut cx);
+        for _ in 0..case_count {
+            let mut cx = DispatchContext::new(&mut scope);
+            let case_value = cx.pop_stack();
+            let case_offset = cx.fetchw_and_inc_ip() as usize;
+            let ip = cx.active_frame().ip;
+            drop(cx);
+
+            let is_eq = switch_expr.strict_eq(&case_value, &mut scope)?.to_boolean()?;
+            let has_matching_case = target_ip.is_some();
+
+            if is_eq && !has_matching_case {
+                target_ip = Some(ip + case_offset);
+            }
+        }
+
+        let mut cx = DispatchContext::new(&mut scope);
+        if has_default {
+            let default_offset = cx.fetchw_and_inc_ip() as usize;
+            let ip = cx.active_frame().ip;
+
+            if target_ip.is_none() {
+                target_ip = Some(ip + default_offset);
+            }
+        }
+
+        if let Some(target_ip) = target_ip {
+            cx.active_frame_mut().ip = target_ip;
+        }
+
+        Ok(None)
+    }
 }
 
 pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResult>, Value> {
@@ -1091,6 +1132,7 @@ pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResu
         Instruction::CallSymbolIterator => handlers::call_symbol_iterator(cx),
         Instruction::DeletePropertyDynamic => handlers::delete_property_dynamic(cx),
         Instruction::DeletePropertyStatic => handlers::delete_property_static(cx),
+        Instruction::Switch => handlers::switch(cx),
         _ => unimplemented!("{:?}", instruction),
     }
 }

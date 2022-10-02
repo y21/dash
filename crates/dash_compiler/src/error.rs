@@ -8,6 +8,7 @@ pub enum CompileError {
     ConstantPoolLimitExceeded,
     LocalLimitExceeded,
     IfBranchLimitExceeded,
+    SwitchCaseLimitExceeded,
     ArrayLitLimitExceeded,
     ObjectLitLimitExceeded,
     ExportNameListLimitExceeded,
@@ -39,6 +40,7 @@ impl fmt::Display for CompileError {
             Self::ConstantPoolLimitExceeded => f.write_str("Maximum number of entries in constant pool exceedeed"),
             Self::LocalLimitExceeded => f.write_str("Maximum number of local variables exceedeed"),
             Self::IfBranchLimitExceeded => f.write_str("Maximum number of if branches exceedeed"),
+            Self::SwitchCaseLimitExceeded => f.write_str("Maximum number of switch cases exceeded"),
             Self::ArrayLitLimitExceeded => f.write_str("Maximum number of array literal elements exceedeed"),
             Self::ObjectLitLimitExceeded => f.write_str("Maximum number of object literal properties exceedeed"),
             Self::ConstAssignment => f.write_str("Cannot assign to constant"),
@@ -48,7 +50,7 @@ impl fmt::Display for CompileError {
             Self::ExportNameListLimitExceeded => f.write_str("Maximum number of export names exceedeed"),
             Self::UnknownBinding => f.write_str("Attempted to visit unknown binding"),
             Self::AwaitOutsideAsync => f.write_str("`await` is only available in async functions"),
-            Self::IllegalBreak => f.write_str("`break` is only available in switch-case and loop")
+            Self::IllegalBreak => f.write_str("`break` is only available in switch-case and loop"),
         }
     }
 }

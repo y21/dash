@@ -273,6 +273,7 @@ impl<'buf> FunctionDecompiler<'buf> {
                 Instruction::CallForInIterator => self.handle_opless_instr("@@forInIterator"),
                 Instruction::DeletePropertyStatic => self.handle_incw_op_instr("deletepropertystatic")?,
                 Instruction::DeletePropertyDynamic => self.handle_opless_instr("deletepropertydynamic"),
+                Instruction::Switch => todo!(),
             }
         }
 
