@@ -280,6 +280,11 @@ impl<'buf> FunctionDecompiler<'buf> {
                     for _ in 0..case_count {
                         self.read_u16()?; // discard case offsets for now..
                     }
+
+                    if has_default {
+                        self.read_u16()?;
+                    }
+
                     self.handle_op_map_instr("switch", &[("case_count", &case_count), ("has_default", &has_default)])
                 }
             }
