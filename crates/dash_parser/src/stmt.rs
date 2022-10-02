@@ -504,7 +504,6 @@ impl<'a> StatementParser<'a> for Parser<'a> {
                     let mut body = Vec::new();
                     while !self.expect(&[TokenType::Case, TokenType::Default, TokenType::RightBrace]) {
                         body.push(self.parse_statement()?);
-                        break;
                     }
 
                     if default.replace(body).is_some() {
