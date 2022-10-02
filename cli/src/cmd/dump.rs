@@ -22,9 +22,11 @@ pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
         .scan_all()
         .map_err(|_| anyhow!("Failed to lex source string"))?;
 
-    let ast = dash_parser::Parser::new(&source, tokens)
+    let mut ast = dash_parser::Parser::new(&source, tokens)
         .parse_all()
         .map_err(|_| anyhow!("Failed to parse source string"))?;
+
+    dash_optimizer::optimize_ast(&mut ast, opt);
 
     if dump_ast {
         println!("{:#?}", ast);

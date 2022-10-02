@@ -1,32 +1,37 @@
-use dash_middle::parser::expr::ArrayLiteral;
-use dash_middle::parser::expr::AssignmentExpr;
-use dash_middle::parser::expr::BinaryExpr;
-use dash_middle::parser::expr::ConditionalExpr;
-use dash_middle::parser::expr::Expr;
-use dash_middle::parser::expr::FunctionCall;
-use dash_middle::parser::expr::GroupingExpr;
-use dash_middle::parser::expr::LiteralExpr;
-use dash_middle::parser::expr::ObjectLiteral;
-use dash_middle::parser::expr::Postfix;
-use dash_middle::parser::expr::PropertyAccessExpr;
-use dash_middle::parser::expr::Seq;
-use dash_middle::parser::expr::UnaryExpr;
-use dash_middle::parser::statement::BlockStatement;
-use dash_middle::parser::statement::Class;
-use dash_middle::parser::statement::ExportKind;
-use dash_middle::parser::statement::ForInLoop;
-use dash_middle::parser::statement::ForLoop;
-use dash_middle::parser::statement::ForOfLoop;
-use dash_middle::parser::statement::FunctionDeclaration;
-use dash_middle::parser::statement::IfStatement;
-use dash_middle::parser::statement::ImportKind;
-use dash_middle::parser::statement::ReturnStatement;
-use dash_middle::parser::statement::Statement;
-use dash_middle::parser::statement::SwitchStatement;
-use dash_middle::parser::statement::TryCatch;
-use dash_middle::parser::statement::VariableBinding;
-use dash_middle::parser::statement::VariableDeclaration;
-use dash_middle::parser::statement::WhileLoop;
+use crate::parser::expr::ArrayLiteral;
+use crate::parser::expr::AssignmentExpr;
+use crate::parser::expr::BinaryExpr;
+use crate::parser::expr::ConditionalExpr;
+use crate::parser::expr::Expr;
+use crate::parser::expr::FunctionCall;
+use crate::parser::expr::GroupingExpr;
+use crate::parser::expr::LiteralExpr;
+use crate::parser::expr::ObjectLiteral;
+use crate::parser::expr::Postfix;
+use crate::parser::expr::PropertyAccessExpr;
+use crate::parser::expr::Seq;
+use crate::parser::expr::UnaryExpr;
+use crate::parser::statement::BlockStatement;
+use crate::parser::statement::Class;
+use crate::parser::statement::ExportKind;
+use crate::parser::statement::ForInLoop;
+use crate::parser::statement::ForLoop;
+use crate::parser::statement::ForOfLoop;
+use crate::parser::statement::FunctionDeclaration;
+use crate::parser::statement::IfStatement;
+use crate::parser::statement::ImportKind;
+use crate::parser::statement::ReturnStatement;
+use crate::parser::statement::Statement;
+use crate::parser::statement::SwitchStatement;
+use crate::parser::statement::TryCatch;
+use crate::parser::statement::VariableBinding;
+use crate::parser::statement::VariableDeclaration;
+use crate::parser::statement::WhileLoop;
+
+pub trait VisitorExt<'a>: Visitor<'a, ()> {
+    fn accept(&mut self, e: Statement<'a>);
+    fn accept_expr(&mut self, e: Statement<'a>);
+}
 
 /// A visitor trait that helps walking an AST
 pub trait Visitor<'a, V> {

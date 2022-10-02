@@ -35,6 +35,7 @@ use dash_middle::parser::statement::{ClassMemberKind, ExportKind};
 use dash_middle::parser::statement::{ClassProperty, ForLoop};
 use dash_middle::parser::statement::{ForInLoop, ForOfLoop};
 use dash_middle::parser::statement::{FunctionDeclaration, SwitchStatement};
+use dash_middle::visitor::Visitor;
 use dash_optimizer::consteval::Eval;
 use dash_optimizer::OptLevel;
 use jump_container::JumpContainer;
@@ -45,7 +46,6 @@ use self::{
     error::CompileError,
     instruction::{InstructionWriter, NamedExportKind},
     scope::{Scope, ScopeLocal},
-    visitor::Visitor,
 };
 
 pub mod builder;
@@ -58,8 +58,6 @@ pub mod transformations;
 // #[cfg(test)]
 // mod test;
 mod jump_container;
-/// Visitor trait, used to walk the AST
-mod visitor;
 
 macro_rules! unimplementedc {
     ($($what:expr),*) => {

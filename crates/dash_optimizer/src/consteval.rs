@@ -298,16 +298,16 @@ impl<'a> Eval for Statement<'a> {
             Statement::Debugger => {}
             Statement::Empty => {}
             Statement::Switch(SwitchStatement { cases, default, expr }) => {
-                for case in cases {
-                    case.body.fold(can_remove);
-                    case.value.fold(can_remove);
-                }
+                expr.fold(can_remove);
 
                 if let Some(default) = default {
                     default.fold(can_remove);
                 }
 
-                expr.fold(can_remove);
+                for case in cases {
+                    case.body.fold(can_remove);
+                    case.value.fold(can_remove);
+                }
             }
         };
 
