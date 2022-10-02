@@ -13,6 +13,7 @@ pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
     let dump_ast = arg.is_present("ast");
     let dump_js = arg.is_present("js");
     let dump_bytecode = arg.is_present("bytecode");
+    let dump_tokens = arg.is_present("tokens");
 
     let opt = util::opt_level_from_matches(arg)?;
     let path = arg.value_of("file").context("Missing file")?;
@@ -20,7 +21,11 @@ pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
 
     let tokens = dash_lexer::Lexer::new(&source)
         .scan_all()
-        .map_err(|_| anyhow!("Failed to lex source string"))?;
+        .map_err(|e| anyhow!("Failed to lex source string: {e:?}"))?;
+
+    if dump_tokens {
+        println!("{:#?}", tokens);
+    }
 
     let mut ast = dash_parser::Parser::new(&source, tokens)
         .parse_all()

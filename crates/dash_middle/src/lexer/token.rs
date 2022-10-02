@@ -21,6 +21,9 @@ pub enum TokenType {
     #[display(fmt = "}}")]
     RightBrace,
 
+    #[display(fmt = "$")]
+    Dollar,
+
     #[display(fmt = "[")]
     LeftSquareBrace,
 
@@ -188,6 +191,9 @@ pub enum TokenType {
 
     /// String: "foo"
     String,
+
+    /// Template literal: `foo`
+    TemplateLiteral,
 
     /// Number: 42
     NumberDec,

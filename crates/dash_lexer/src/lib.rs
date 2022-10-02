@@ -8,10 +8,15 @@ use dash_middle::util;
 #[derive(Debug)]
 pub struct Lexer<'a> {
     input: &'a [u8],
+
+    tokens: Vec<Token<'a>>,
+    errors: Vec<Error<'a>>,
+
     idx: usize,
     line: usize,
     start: usize,
     line_idx: usize,
+    template_literal_depths_stack: Vec<usize>,
 }
 
 /// Represents a comment
@@ -24,6 +29,7 @@ pub enum CommentKind {
 }
 
 /// A lexer node (either a token or an error)
+#[derive(Debug)]
 pub enum Node<'a> {
     /// A valid token
     Token(Token<'a>),
@@ -40,6 +46,9 @@ impl<'a> Lexer<'a> {
             line: 1,
             start: 0,
             line_idx: 0,
+            template_literal_depths_stack: Vec::new(),
+            errors: Vec::new(),
+            tokens: Vec::new(),
         }
     }
 
@@ -71,8 +80,8 @@ impl<'a> Lexer<'a> {
     }
 
     /// Creates a token based on the current location
-    fn create_contextified_token(&mut self, ty: TokenType) -> Node<'a> {
-        Node::Token(Token {
+    fn create_contextified_token(&mut self, ty: TokenType) {
+        let tok = Token {
             ty,
             loc: Location {
                 line: self.line,
@@ -80,18 +89,15 @@ impl<'a> Lexer<'a> {
                 line_offset: self.line_idx,
             },
             full: util::force_utf8_borrowed(self.get_lexeme()),
-        })
+        };
+        self.tokens.push(tok);
     }
 
     /// Creates a token based on the current location and a given predicate
     ///
     /// A token may be multiple bytes wide, in which case this function can be used.
     /// This function can be seen as a helper function to create a token based on the next bytes.
-    fn create_contextified_conditional_token(
-        &mut self,
-        default: Option<TokenType>,
-        tokens: &[(&[u8], TokenType)],
-    ) -> Node<'a> {
+    fn create_contextified_conditional_token(&mut self, default: Option<TokenType>, tokens: &[(&[u8], TokenType)]) {
         for (expect, token) in tokens {
             let from = self.idx;
             let slice = self.safe_subslice(from, from + expect.len());
@@ -104,16 +110,16 @@ impl<'a> Lexer<'a> {
         }
 
         if let Some(tt) = default {
-            return self.create_contextified_token(tt);
+            self.create_contextified_token(tt);
+        } else {
+            // TODO: can we actually reach this branch?
+            unreachable!()
         }
-
-        // TODO: can we actually reach this branch?
-        unreachable!()
     }
 
     /// Creates a new error token
-    fn create_error(&mut self, kind: ErrorKind) -> Error<'a> {
-        Error {
+    fn create_error(&mut self, kind: ErrorKind) {
+        let err = Error {
             loc: Location {
                 line: self.line,
                 offset: self.start,
@@ -121,12 +127,13 @@ impl<'a> Lexer<'a> {
             },
             kind,
             source: self.input,
-        }
+        };
+        self.errors.push(err);
     }
 
     /// Creates a token based on the current location and a given lexeme
-    fn create_contextified_token_with_lexeme(&mut self, ty: TokenType, lexeme: &'a [u8]) -> Token<'a> {
-        Token {
+    fn create_contextified_token_with_lexeme(&mut self, ty: TokenType, lexeme: &'a [u8]) {
+        let tok = Token {
             ty,
             loc: Location {
                 line: self.line,
@@ -134,7 +141,8 @@ impl<'a> Lexer<'a> {
                 line_offset: self.line_idx,
             },
             full: util::force_utf8_borrowed(lexeme),
-        }
+        };
+        self.tokens.push(tok);
     }
 
     /// Returns the current lexeme
@@ -183,7 +191,7 @@ impl<'a> Lexer<'a> {
     /// Reads a string literal
     ///
     /// This function expects to be one byte ahead of a quote
-    fn read_string_literal(&mut self) -> Node<'a> {
+    fn read_string_literal(&mut self) {
         let quote = self.input[self.idx - 1];
         let mut found_quote = false;
         while !self.is_eof() {
@@ -203,15 +211,15 @@ impl<'a> Lexer<'a> {
         }
 
         if !found_quote && self.is_eof() {
-            return Node::Error(self.create_error(ErrorKind::UnexpectedEof));
+            return self.create_error(ErrorKind::UnexpectedEof);
         }
 
         let lexeme = self.subslice(self.start + 1..self.idx - 1);
-        Node::Token(self.create_contextified_token_with_lexeme(TokenType::String, lexeme))
+        self.create_contextified_token_with_lexeme(TokenType::String, lexeme);
     }
 
     /// Reads a prefixed number literal (0x, 0b, 0o)
-    fn read_prefixed_literal<P>(&mut self, ty: TokenType, predicate: P) -> Node<'a>
+    fn read_prefixed_literal<P>(&mut self, ty: TokenType, predicate: P)
     where
         P: Fn(u8) -> bool,
     {
@@ -228,11 +236,11 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        self.create_contextified_token(ty)
+        self.create_contextified_token(ty);
     }
 
     /// Reads a number literal
-    fn read_number_literal(&mut self) -> Node<'a> {
+    fn read_number_literal(&mut self) {
         let mut is_float = false;
         let mut is_exp = false;
 
@@ -267,8 +275,50 @@ impl<'a> Lexer<'a> {
         self.create_contextified_token(TokenType::NumberDec)
     }
 
+    fn read_template_literal_segment(&mut self) {
+        let mut found_end = false;
+        let mut is_interpolated = false;
+        while !self.is_eof() {
+            let cur = self.current_real();
+            if cur == b'`' {
+                self.advance();
+                found_end = true;
+                break;
+            }
+
+            if cur == b'$' {
+                if let Some(b'{') = self.peek() {
+                    // String interpolation
+                    found_end = true;
+                    is_interpolated = true;
+                    self.template_literal_depths_stack.push(0);
+                    break;
+                }
+            }
+
+            if cur == b'\n' {
+                self.line += 1;
+                self.line_idx = self.idx;
+            }
+
+            self.advance();
+        }
+
+        if !found_end && self.is_eof() {
+            return self.create_error(ErrorKind::UnexpectedEof);
+        }
+
+        let range = match is_interpolated {
+            true => self.start + 1..self.idx,
+            false => self.start + 1..self.idx - 1,
+        };
+
+        let lexeme = self.subslice(range);
+        self.create_contextified_token_with_lexeme(TokenType::TemplateLiteral, lexeme);
+    }
+
     /// Reads an identifier and returns it as a node
-    fn read_identifier(&mut self) -> Node<'a> {
+    fn read_identifier(&mut self) {
         while !self.is_eof() {
             let cur = self.current_real();
 
@@ -280,11 +330,11 @@ impl<'a> Lexer<'a> {
         }
 
         let lexeme = self.get_lexeme();
-        self.create_contextified_token(lexeme.into())
+        self.create_contextified_token(lexeme.into());
     }
 
     /// Iterates through the input string and yields the next node
-    pub fn scan_next(&mut self) -> Option<Node<'a>> {
+    pub fn scan_next(&mut self) -> Option<()> {
         self.skip_whitespaces();
         while self.current() == Some(b'/') {
             let index_before_skip = self.idx;
@@ -301,16 +351,34 @@ impl<'a> Lexer<'a> {
         self.skip_whitespaces();
         self.start = self.idx;
 
-        let cur = match self.next_char() {
-            Some(c) => c,
-            None => return None,
-        };
+        let cur = self.next_char()?;
 
-        Some(match cur {
+        match cur {
+            b'$' => self.create_contextified_token(TokenType::Dollar),
             b'(' => self.create_contextified_token(TokenType::LeftParen),
             b')' => self.create_contextified_token(TokenType::RightParen),
-            b'{' => self.create_contextified_token(TokenType::LeftBrace),
-            b'}' => self.create_contextified_token(TokenType::RightBrace),
+            b'{' => {
+                if let Some(depth) = self.template_literal_depths_stack.last_mut() {
+                    *depth += 1;
+                }
+
+                self.create_contextified_token(TokenType::LeftBrace)
+            }
+            b'}' => {
+                self.create_contextified_token(TokenType::RightBrace);
+
+                if let Some(depth) = self.template_literal_depths_stack.last_mut() {
+                    *depth -= 1;
+                    if *depth == 0 {
+                        self.template_literal_depths_stack.pop();
+                        self.read_template_literal_segment();
+                    }
+                }
+                // if self.template_literal_depth > 0 {
+                //     self.template_literal_depth -= 1;
+                //     self.read_template_literal_segment();
+                // }
+            }
             b'[' => self.create_contextified_conditional_token(
                 Some(TokenType::LeftSquareBrace),
                 &[(b"]", TokenType::EmptySquareBrace)],
@@ -405,6 +473,7 @@ impl<'a> Lexer<'a> {
                 ],
             ),
             b'"' | b'\'' => self.read_string_literal(),
+            b'`' => self.read_template_literal_segment(),
             _ => {
                 if util::is_digit(cur) {
                     let is_prefixed = cur == b'0';
@@ -424,10 +493,11 @@ impl<'a> Lexer<'a> {
                 } else if util::is_identifier_start(cur) {
                     self.read_identifier()
                 } else {
-                    Node::Error(self.create_error(ErrorKind::UnknownCharacter(cur)))
+                    self.create_error(ErrorKind::UnknownCharacter(cur));
                 }
             }
-        })
+        };
+        Some(())
     }
 
     /// Skips any meaningless whitespaces
@@ -510,29 +580,14 @@ impl<'a> Lexer<'a> {
     /// Drives this lexer to completion
     ///
     /// Calling this function will exhaust the lexer and return all nodes
-    pub fn scan_all(self) -> Result<Vec<Token<'a>>, Vec<Error<'a>>> {
-        let mut errors = Vec::new();
-        let mut tokens = Vec::new();
-        for node in self {
-            match node {
-                Node::Token(t) => tokens.push(t),
-                Node::Error(e) => errors.push(e),
-            }
+    pub fn scan_all(mut self) -> Result<Vec<Token<'a>>, Vec<Error<'a>>> {
+        while !self.is_eof() {
+            self.scan_next();
         }
-
-        // If there are errors, return them
-        if !errors.is_empty() {
-            Err(errors)
+        if self.errors.is_empty() {
+            Ok(self.tokens)
         } else {
-            Ok(tokens)
+            Err(self.errors)
         }
-    }
-}
-
-impl<'a> Iterator for Lexer<'a> {
-    type Item = Node<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.scan_next()
     }
 }

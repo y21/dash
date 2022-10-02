@@ -372,6 +372,23 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
         let expr = match ty {
             // TODO: ; shouldnt be a valid expression
             TokenType::Semicolon => Expr::undefined_literal(),
+            TokenType::TemplateLiteral => {
+                let mut left = Expr::string_literal(full);
+                while !self.is_eof() {
+                    if self.expect_and_skip(&[TokenType::Dollar], false) {
+                        self.expect_and_skip(&[TokenType::LeftBrace], true);
+                        let right = self.parse_expression()?;
+                        self.expect_and_skip(&[TokenType::RightBrace], true);
+                        left = Expr::binary(left, right, TokenType::Plus);
+                    } else if self.expect_and_skip(&[TokenType::TemplateLiteral], false) {
+                        let right = Expr::string_literal(self.previous()?.full);
+                        left = Expr::binary(left, right, TokenType::Plus);
+                    } else {
+                        break;
+                    }
+                }
+                left
+            }
             TokenType::FalseLit => Expr::bool_literal(false),
             TokenType::TrueLit => Expr::bool_literal(true),
             TokenType::NullLit => Expr::null_literal(),
