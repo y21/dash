@@ -273,7 +273,15 @@ impl<'buf> FunctionDecompiler<'buf> {
                 Instruction::CallForInIterator => self.handle_opless_instr("@@forInIterator"),
                 Instruction::DeletePropertyStatic => self.handle_incw_op_instr("deletepropertystatic")?,
                 Instruction::DeletePropertyDynamic => self.handle_opless_instr("deletepropertydynamic"),
-                Instruction::Switch => todo!(),
+                Instruction::Switch => {
+                    let case_count = self.read_u16()?;
+                    let has_default = self.read()? == 1;
+
+                    for _ in 0..case_count {
+                        self.read_u16()?; // discard case offsets for now..
+                    }
+                    self.handle_op_map_instr("switch", &[("case_count", &case_count), ("has_default", &has_default)])
+                }
             }
         }
 
