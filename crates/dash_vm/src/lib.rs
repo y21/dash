@@ -309,6 +309,8 @@ impl Vm {
             #[constructor] function_ctor;
             #[fn_prototype] scope.statics.string_prototype;
             #[fn_name] String;
+            #[properties]
+            fromCharCode: scope.statics.string_from_char_code;
         });
         
         register_builtin_type!(scope.statics.string_prototype, {

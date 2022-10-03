@@ -293,3 +293,9 @@ pub fn trim_end(cx: CallContext) -> Result<Value, Value> {
     let result = string.trim_start();
     Ok(Value::String(result.into()))
 }
+
+pub fn from_char_code(cx: CallContext) -> Result<Value, Value> {
+    let code = cx.args.first().unwrap_or_undefined().to_int32(cx.scope)?;
+    let s = char::from_u32(code as u32).unwrap_or(char::REPLACEMENT_CHARACTER);
+    Ok(Value::String(s.to_string().into()))
+}
