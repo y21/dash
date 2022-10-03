@@ -433,10 +433,21 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
 
                     match key {
                         ObjectMemberKind::Dynamic(..) | ObjectMemberKind::Static(..) => {
-                            // TODO: support property shorthand, e.g. { test } where test is a var in scope
-                            self.expect_and_skip(&[TokenType::Colon], true);
-                            let value = self.parse_expression()?;
-                            items.push((key, value));
+                            let has_colon = self.expect_and_skip(&[TokenType::Colon], false);
+
+                            if has_colon {
+                                let value = self.parse_expression()?;
+                                items.push((key, value));
+                            } else {
+                                match key {
+                                    ObjectMemberKind::Static(name) => items.push((key, Expr::identifier(name))),
+                                    ObjectMemberKind::Dynamic(..) => {
+                                        self.create_error(ErrorKind::UnexpectedToken(token, TokenType::Colon));
+                                        return None;
+                                    }
+                                    _ => unreachable!(),
+                                }
+                            }
                         }
                         ObjectMemberKind::Getter(..) | ObjectMemberKind::Setter(..) => {
                             self.expect_and_skip(&[TokenType::LeftParen], true);
