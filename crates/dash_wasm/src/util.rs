@@ -4,6 +4,7 @@ use dash_vm::value::error::Error;
 use dash_vm::value::object::NamedObject;
 use dash_vm::value::object::Object;
 use dash_vm::value::object::PropertyValue;
+use dash_vm::value::primitive::Number;
 use dash_vm::value::promise::Promise;
 use dash_vm::value::Value as DashValue;
 use dash_vm::PromiseAction;
@@ -19,7 +20,7 @@ pub fn wasm_value_from_dash_value(_scope: &mut LocalScope, value: DashValue) -> 
         DashValue::Undefined(_) => Ok(WasmValue::UNDEFINED),
         DashValue::Null(_) => Ok(WasmValue::NULL),
         DashValue::Boolean(b) => Ok(WasmValue::from_bool(b)),
-        DashValue::Number(n) => Ok(WasmValue::from_f64(n)),
+        DashValue::Number(Number(n)) => Ok(WasmValue::from_f64(n)),
         DashValue::String(s) => Ok(WasmValue::from_str(&s)),
         DashValue::Object(o) => Ok(WasmValue::from(JsValue::from(DashValue::Object(o)))),
         DashValue::Symbol(_) => Err("Unhandled symbol".into()),
@@ -29,7 +30,7 @@ pub fn wasm_value_from_dash_value(_scope: &mut LocalScope, value: DashValue) -> 
 
 pub fn dash_value_from_wasm_value(scope: &mut LocalScope, value: WasmValue) -> Result<DashValue, String> {
     if let Some(value) = value.as_f64() {
-        Ok(DashValue::Number(value))
+        Ok(DashValue::number(value))
     } else if let Some(value) = value.as_bool() {
         Ok(DashValue::Boolean(value))
     } else if let Some(value) = value.as_string() {

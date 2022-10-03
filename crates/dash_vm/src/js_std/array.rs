@@ -99,7 +99,7 @@ pub fn every(cx: CallContext) -> Result<Value, Value> {
     for k in 0..len {
         let pk = k.to_string();
         let pkv = this.get_property(cx.scope, pk.as_str().into())?;
-        let args = vec![pkv, Value::Number(k as f64)];
+        let args = vec![pkv, Value::number(k as f64)];
         let test = callback.apply(cx.scope, Value::undefined(), args)?.to_boolean()?;
         if !test {
             return Ok(false.into());
@@ -117,7 +117,7 @@ pub fn some(cx: CallContext) -> Result<Value, Value> {
     for k in 0..len {
         let pk = k.to_string();
         let pkv = this.get_property(cx.scope, pk.as_str().into())?;
-        let args = vec![pkv, Value::Number(k as f64)];
+        let args = vec![pkv, Value::number(k as f64)];
         let test = callback.apply(cx.scope, Value::undefined(), args)?.to_boolean()?;
         if test {
             return Ok(true.into());
@@ -149,7 +149,7 @@ pub fn filter(cx: CallContext) -> Result<Value, Value> {
     for k in 0..len {
         let pk = k.to_string();
         let pkv = this.get_property(cx.scope, pk.as_str().into())?;
-        let args = vec![pkv.clone(), Value::Number(k as f64)];
+        let args = vec![pkv.clone(), Value::number(k as f64)];
         let test = callback.apply(cx.scope, Value::undefined(), args)?.to_boolean()?;
 
         if test {
@@ -171,7 +171,7 @@ pub fn find(cx: CallContext) -> Result<Value, Value> {
     for k in 0..len {
         let pk = k.to_string();
         let pkv = this.get_property(cx.scope, pk.as_str().into())?;
-        let args = vec![pkv.clone(), Value::Number(k as f64)];
+        let args = vec![pkv.clone(), Value::number(k as f64)];
         let test = callback.apply(cx.scope, Value::undefined(), args)?.to_boolean()?;
 
         if test {
@@ -190,15 +190,15 @@ pub fn find_index(cx: CallContext) -> Result<Value, Value> {
     for k in 0..len {
         let pk = k.to_string();
         let pkv = this.get_property(cx.scope, pk.as_str().into())?;
-        let args = vec![pkv, Value::Number(k as f64)];
+        let args = vec![pkv, Value::number(k as f64)];
         let test = callback.apply(cx.scope, Value::undefined(), args)?.to_boolean()?;
 
         if test {
-            return Ok(Value::Number(k as f64));
+            return Ok(Value::number(k as f64));
         }
     }
 
-    Ok(Value::Number(-1.0))
+    Ok(Value::number(-1.0))
 }
 
 pub fn flat(cx: CallContext) -> Result<Value, Value> {
@@ -213,7 +213,7 @@ pub fn for_each(cx: CallContext) -> Result<Value, Value> {
     for k in 0..len {
         let pk = k.to_string();
         let pkv = this.get_property(cx.scope, pk.as_str().into())?;
-        let args = vec![pkv, Value::Number(k as f64)];
+        let args = vec![pkv, Value::number(k as f64)];
         callback.apply(cx.scope, Value::undefined(), args)?;
     }
 
@@ -245,11 +245,11 @@ pub fn index_of(cx: CallContext) -> Result<Value, Value> {
         let pk = k.to_string();
         let pkv = this.get_property(cx.scope, pk.as_str().into())?;
         if pkv.strict_eq(&search_element, cx.scope)?.is_truthy() {
-            return Ok(Value::Number(k as f64));
+            return Ok(Value::number(k as f64));
         }
     }
 
-    Ok(Value::Number(-1.0))
+    Ok(Value::number(-1.0))
 }
 
 pub fn map(cx: CallContext) -> Result<Value, Value> {
@@ -261,7 +261,7 @@ pub fn map(cx: CallContext) -> Result<Value, Value> {
     for k in 0..len {
         let pk = k.to_string();
         let pkv = this.get_property(cx.scope, pk.as_str().into())?;
-        let args = vec![pkv.clone(), Value::Number(k as f64)];
+        let args = vec![pkv.clone(), Value::number(k as f64)];
         let value = callback.apply(cx.scope, Value::undefined(), args)?;
 
         cx.scope.add_value(value.clone());
@@ -286,7 +286,7 @@ pub fn pop(mut cx: CallContext) -> Result<Value, Value> {
     this.set_property(
         &mut cx.scope,
         "length".into(),
-        PropertyValue::static_default(Value::Number(new_len as f64)),
+        PropertyValue::static_default(Value::number(new_len as f64)),
     )?;
 
     Ok(value)

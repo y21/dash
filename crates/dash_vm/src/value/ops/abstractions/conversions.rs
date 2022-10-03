@@ -8,6 +8,7 @@ use crate::value::boxed::Number as BoxedNumber;
 use crate::value::boxed::String as BoxedString;
 use crate::value::boxed::Symbol as BoxedSymbol;
 use crate::value::object::Object;
+use crate::value::primitive::Number;
 use crate::value::primitive::MAX_SAFE_INTEGERF;
 use crate::value::Typeof;
 use crate::value::Value;
@@ -85,7 +86,7 @@ impl ValueConversion for Value {
         }
 
         match self {
-            Value::Number(n) => Ok(*n),
+            Value::Number(Number(n)) => Ok(*n),
             Value::Undefined(_) => Ok(f64::NAN),
             Value::Null(_) => Ok(0.0),
             Value::Boolean(b) => Ok(*b as i8 as f64),
@@ -100,7 +101,7 @@ impl ValueConversion for Value {
             Value::Boolean(b) => Ok(*b),
             Value::Undefined(_) => Ok(false),
             Value::Null(_) => Ok(false),
-            Value::Number(n) => Ok(*n != 0.0 && !n.is_nan()),
+            Value::Number(Number(n)) => Ok(*n != 0.0 && !n.is_nan()),
             Value::String(s) => Ok(!s.is_empty()),
             Value::Symbol(_) => Ok(true),
             Value::Object(_) => Ok(true),
@@ -185,7 +186,7 @@ impl ValueConversion for Value {
             Value::Null(_) => throw!(sc, "Cannot convert null to object"),
             Value::Boolean(b) => register_dyn(sc, |sc| Boolean::new(sc, *b)),
             Value::Symbol(s) => register_dyn(sc, |sc| BoxedSymbol::new(sc, s.clone())),
-            Value::Number(n) => register_dyn(sc, |sc| BoxedNumber::new(sc, *n)),
+            Value::Number(Number(n)) => register_dyn(sc, |sc| BoxedNumber::new(sc, *n)),
             Value::String(s) => register_dyn(sc, |sc| BoxedString::new(sc, s.clone())),
             Value::External(e) => Ok(e.clone()), // TODO: is this correct?
         }

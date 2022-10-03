@@ -304,7 +304,7 @@ mod handlers {
         let value = cx.pop_stack();
         let mut scope = cx.scope();
         let result = value.to_number(&mut scope)?;
-        scope.try_push_stack(Value::Number(-result))?;
+        scope.try_push_stack(Value::number(-result))?;
         Ok(None)
     }
 
@@ -312,7 +312,7 @@ mod handlers {
         let value = cx.pop_stack();
         let mut scope = cx.scope();
         let result = value.to_number(&mut scope)?;
-        scope.try_push_stack(Value::Number(result))?;
+        scope.try_push_stack(Value::number(result))?;
         Ok(None)
     }
 
@@ -970,12 +970,12 @@ mod handlers {
     }
 
     pub fn infinity(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
-        cx.try_push_stack(Value::Number(f64::INFINITY))?;
+        cx.try_push_stack(Value::number(f64::INFINITY))?;
         Ok(None)
     }
 
     pub fn nan(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
-        cx.try_push_stack(Value::Number(f64::NAN))?;
+        cx.try_push_stack(Value::number(f64::NAN))?;
         Ok(None)
     }
 

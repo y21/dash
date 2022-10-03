@@ -1,3 +1,4 @@
+
 use std::{fmt, ops::RangeBounds, vec::Drain, mem};
 
 use crate::{
@@ -263,7 +264,7 @@ impl Vm {
             random: scope.statics.math_random;
 
             #[fields]
-            PI: Value::Number(std::f64::consts::PI);
+            PI: Value::number(std::f64::consts::PI);
         });
 
         let number_ctor = register_builtin_type!(scope.statics.number_ctor, {
@@ -562,6 +563,24 @@ impl Vm {
             then: scope.statics.promise_then;
         });
 
+        let set_ctor = register_builtin_type!(scope.statics.set_constructor, {
+            #[prototype] function_proto;
+            #[constructor] function_ctor;
+            #[fn_prototype] scope.statics.set_prototype;
+            #[fn_name] Set;
+        });
+
+        register_builtin_type!(scope.statics.set_prototype, {
+            #[prototype] object_proto;
+            #[constructor] set_ctor;
+            #[properties]
+            add: scope.statics.set_add;
+            has: scope.statics.set_has;
+            delete: scope.statics.set_delete;
+            clear: scope.statics.set_clear;
+            // size: scope.statics.set_size; // TODO: getter, not a function
+        });
+
         register_builtin_type!(global, {
             #[prototype] object_proto;
             #[constructor] object_ctor;
@@ -584,6 +603,7 @@ impl Vm {
             Error: error_ctor;
             String: string_ctor;
             Object: object_ctor;
+            Set: set_ctor;
             console: console;
             Math: math;
             Number: number_ctor;
@@ -888,6 +908,7 @@ impl fmt::Debug for Vm {
 
 #[test]
 fn test_eval() {
+    use crate::value::primitive::Number;
     let mut vm = Vm::new(Default::default());
     let value = vm
         .eval(
@@ -904,7 +925,7 @@ fn test_eval() {
     assert_eq!(vm.stack.len(), 0);
     assert_eq!(vm.frames.len(), 0);
     match value {
-        Value::Number(n) => assert_eq!(n, 18.0),
+        Value::Number(Number(n)) => assert_eq!(n, 18.0),
         _ => unreachable!("{:?}", value),
     }
 }

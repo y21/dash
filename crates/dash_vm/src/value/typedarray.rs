@@ -121,7 +121,7 @@ impl Object for TypedArray {
                 };
 
                 if let Some(value) = value {
-                    return Ok(Some(PropertyValue::static_default(Value::Number(value))));
+                    return Ok(Some(PropertyValue::static_default(Value::number(value))));
                 }
             }
         }

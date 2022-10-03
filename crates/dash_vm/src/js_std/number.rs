@@ -1,12 +1,13 @@
 use crate::value::function::native::CallContext;
 use crate::value::ops::abstractions::conversions::ValueConversion;
+use crate::value::primitive::Number;
 use crate::value::primitive::MAX_SAFE_INTEGERF;
 use crate::value::Value;
 use crate::value::ValueContext;
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let value = cx.args.get(0).unwrap_or_undefined().to_number(cx.scope)?;
-    Ok(Value::Number(value))
+    Ok(Value::number(value))
 }
 
 pub fn to_string(cx: CallContext) -> Result<Value, Value> {
@@ -33,7 +34,7 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
 
 pub fn is_finite(cx: CallContext) -> Result<Value, Value> {
     let num = match cx.args.first() {
-        Some(Value::Number(n)) => n,
+        Some(Value::Number(Number(n))) => n,
         _ => return Ok(Value::Boolean(false)),
     };
 
@@ -42,7 +43,7 @@ pub fn is_finite(cx: CallContext) -> Result<Value, Value> {
 
 pub fn is_nan(cx: CallContext) -> Result<Value, Value> {
     let num = match cx.args.first() {
-        Some(Value::Number(n)) => n,
+        Some(Value::Number(Number(n))) => n,
         _ => return Ok(Value::Boolean(false)),
     };
 
@@ -51,11 +52,11 @@ pub fn is_nan(cx: CallContext) -> Result<Value, Value> {
 
 pub fn is_safe_integer(cx: CallContext) -> Result<Value, Value> {
     let num = match cx.args.first() {
-        Some(Value::Number(n)) => *n,
+        Some(Value::Number(Number(n))) => n,
         _ => return Ok(Value::Boolean(false)),
     };
 
-    Ok(Value::Boolean(num < MAX_SAFE_INTEGERF))
+    Ok(Value::Boolean(*num < MAX_SAFE_INTEGERF))
 }
 
 pub fn to_fixed(cx: CallContext) -> Result<Value, Value> {

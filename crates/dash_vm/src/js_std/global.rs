@@ -37,7 +37,7 @@ pub fn parse_float(cx: CallContext) -> Result<Value, Value> {
     // TODO: follow spec
     let num = trimmed_string
         .parse::<f64>()
-        .map(Value::Number)
+        .map(Value::number)
         .context(cx.scope, "Failed to parse float")?;
 
     Ok(num)
@@ -57,7 +57,7 @@ pub fn parse_int(cx: CallContext) -> Result<Value, Value> {
 
     // TODO: follow spec
     let num = i32::from_str_radix(trimmed_string, radix)
-        .map(|n| Value::Number(n as f64))
+        .map(|n| Value::number(n as f64))
         .context(cx.scope, "Failed to parse number")?;
 
     Ok(num)

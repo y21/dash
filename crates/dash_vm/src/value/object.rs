@@ -123,7 +123,7 @@ macro_rules! delegate {
     (override $field:ident, apply) => {
         fn apply(
             &self,
-            sc: &mut LocalScope,
+            sc: &mut $crate::local::LocalScope,
             handle: $crate::gc::handle::Handle<dyn Object>,
             this: Value,
             args: Vec<Value>,

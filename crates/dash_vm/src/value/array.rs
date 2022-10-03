@@ -73,7 +73,7 @@ impl Object for Array {
 
         if let PropertyKey::String(key) = &key {
             if key == "length" {
-                return Ok(Some(PropertyValue::static_default(Value::Number(items.len() as f64))));
+                return Ok(Some(PropertyValue::static_default(Value::number(items.len() as f64))));
             }
 
             if let Ok(index) = key.parse::<usize>() {

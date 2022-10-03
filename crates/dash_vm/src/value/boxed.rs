@@ -133,7 +133,7 @@ macro_rules! boxed_primitive {
 }
 
 boxed_primitive! {
-    Number: f64,
+    Number: f64, // TODO: should this store a primitive::Number?
     Boolean: bool,
     String: Rc<str>,
     Symbol: PrimitiveSymbol
@@ -145,7 +145,7 @@ impl PrimitiveCapabilities for Number {
     }
 
     fn unbox(&self) -> Value {
-        Value::Number(self.inner)
+        Value::number(self.inner)
     }
 }
 

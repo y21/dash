@@ -5,6 +5,7 @@ use crate::gc::Gc;
 use crate::js_std;
 use crate::value::function::Function;
 use crate::value::function::FunctionKind;
+use crate::value::set::Set;
 
 use super::value::array::Array;
 use super::value::array::ArrayIterator;
@@ -193,6 +194,13 @@ pub struct Statics {
     pub promise_resolve: Handle<dyn Object>,
     pub promise_reject: Handle<dyn Object>,
     pub promise_then: Handle<dyn Object>,
+    pub set_constructor: Handle<dyn Object>,
+    pub set_prototype: Handle<dyn Object>,
+    pub set_add: Handle<dyn Object>,
+    pub set_has: Handle<dyn Object>,
+    pub set_delete: Handle<dyn Object>,
+    pub set_clear: Handle<dyn Object>,
+    pub set_size: Handle<dyn Object>,
 }
 
 fn object(gc: &mut Gc<dyn Object>) -> Handle<dyn Object> {
@@ -387,6 +395,13 @@ impl Statics {
             promise_resolve: function(gc, "resolve", js_std::promise::resolve),
             promise_reject: function(gc, "reject", js_std::promise::reject),
             promise_then: function(gc, "then", js_std::promise::then),
+            set_constructor: function(gc, "Set", js_std::set::constructor),
+            set_add: function(gc, "add", js_std::set::add),
+            set_has: function(gc, "has", js_std::set::has),
+            set_delete: function(gc, "delete", js_std::set::delete),
+            set_prototype: gc.register(Set::with_obj(NamedObject::null())),
+            set_clear: function(gc, "clear", js_std::set::clear),
+            set_size: function(gc, "size", js_std::set::size),
         }
     }
 

@@ -5,10 +5,12 @@ pub mod conversions;
 pub mod error;
 pub mod function;
 pub mod inspect;
+pub mod map;
 pub mod object;
 pub mod ops;
 pub mod primitive;
 pub mod promise;
+pub mod set;
 pub mod typedarray;
 
 #[macro_export]
@@ -52,7 +54,7 @@ use crate::{
 
 use self::function::r#async::AsyncFunction;
 use self::object::PropertyValue;
-use self::primitive::PrimitiveCapabilities;
+use self::primitive::{Number, PrimitiveCapabilities};
 use self::{
     function::{generator::GeneratorFunction, user::UserFunction, Function},
     object::{Object, PropertyKey},
@@ -60,10 +62,10 @@ use self::{
 };
 
 use super::{local::LocalScope, Vm};
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Value {
     /// The number type
-    Number(f64),
+    Number(Number),
     /// The boolean type
     Boolean(bool),
     /// The string type
@@ -91,7 +93,7 @@ unsafe impl Trace for Value {
 impl Value {
     pub fn from_constant(constant: Constant, vm: &mut Vm) -> Self {
         match constant {
-            Constant::Number(n) => Value::Number(n),
+            Constant::Number(n) => Value::number(n),
             Constant::Boolean(b) => Value::Boolean(b),
             Constant::String(s) => Value::String(s),
             Constant::Undefined => Value::undefined(),
@@ -229,7 +231,7 @@ impl Value {
         match self {
             Value::Boolean(b) => *b,
             Value::String(s) => !s.is_empty(),
-            Value::Number(n) => *n != 0.0 && !n.is_nan(),
+            Value::Number(Number(n)) => *n != 0.0 && !n.is_nan(),
             Value::Symbol(_) => true,
             Value::Object(_) => true,
             Value::Undefined(_) => false,
@@ -253,6 +255,10 @@ impl Value {
 
     pub fn null() -> Value {
         Value::Null(Null)
+    }
+
+    pub fn number(n: f64) -> Value {
+        Value::Number(Number(n))
     }
 
     pub fn unbox_external(self) -> Value {
@@ -328,7 +334,7 @@ impl From<&Value> for dash_jit::value::Value {
 
         match v {
             Value::Boolean(b) => JitValue::Boolean(*b),
-            Value::Number(n) => {
+            Value::Number(Number(n)) => {
                 if n.floor() == *n {
                     JitValue::Integer(*n as i64)
                 } else {

@@ -1,4 +1,7 @@
 use std::any::Any;
+use std::fmt;
+use std::hash::Hash;
+use std::hash::Hasher;
 use std::iter;
 use std::rc::Rc;
 
@@ -220,13 +223,13 @@ pub fn array_like_keys(len: usize) -> impl Iterator<Item = Value> {
         .map(|x| Value::String(x.as_str().into()))
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Undefined;
 unsafe impl Trace for Undefined {
     fn trace(&self) {}
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Null;
 unsafe impl Trace for Null {
     fn trace(&self) {}
@@ -344,7 +347,7 @@ impl Object for str {
     fn get_property_descriptor(&self, _sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
         if let PropertyKey::String(st) = key {
             if st == "length" {
-                return Ok(Some(PropertyValue::static_default(Value::Number(self.len() as f64))));
+                return Ok(Some(PropertyValue::static_default(Value::number(self.len() as f64))));
             }
 
             if let Ok(index) = st.parse::<usize>() {
@@ -499,7 +502,7 @@ impl PrimitiveCapabilities for f64 {
     }
 
     fn unbox(&self) -> Value {
-        Value::Number(*self)
+        Value::number(*self)
     }
 }
 
@@ -531,7 +534,7 @@ impl ValueEquality for f64 {
 
 impl ValueConversion for f64 {
     fn to_primitive(&self, _sc: &mut LocalScope, _preferred_type: Option<PreferredType>) -> Result<Value, Value> {
-        Ok(Value::Number(*self))
+        Ok(Value::number(*self))
     }
 
     fn to_number(&self, _sc: &mut LocalScope) -> Result<f64, Value> {
@@ -882,5 +885,139 @@ impl ValueConversion for Symbol {
     fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value> {
         let sym = BoxedSymbol::new(sc, self.clone());
         Ok(sc.register(sym))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Number(pub f64);
+
+impl Eq for Number {}
+
+impl fmt::Display for Number {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Hash for Number {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.to_bits().hash(state)
+    }
+}
+
+unsafe impl Trace for Number {
+    fn trace(&self) {}
+}
+
+impl Object for Number {
+    fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        self.0.get_property(sc, key)
+    }
+
+    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
+        self.0.get_property_descriptor(sc, key)
+    }
+
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
+        self.0.set_property(sc, key, value)
+    }
+
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        self.0.delete_property(sc, key)
+    }
+
+    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
+        self.0.set_prototype(sc, value)
+    }
+
+    fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
+        self.0.get_prototype(sc)
+    }
+
+    fn apply(
+        &self,
+        scope: &mut LocalScope,
+        callee: Handle<dyn Object>,
+        this: Value,
+        args: Vec<Value>,
+    ) -> Result<Value, Value> {
+        self.0.apply(scope, callee, this, args)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn own_keys(&self) -> Result<Vec<Value>, Value> {
+        self.0.own_keys()
+    }
+
+    fn type_of(&self) -> Typeof {
+        self.0.type_of()
+    }
+
+    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
+        Some(self)
+    }
+}
+impl PrimitiveCapabilities for Number {
+    fn as_number(&self) -> Option<f64> {
+        Some(self.0)
+    }
+
+    fn unbox(&self) -> Value {
+        Value::Number(*self)
+    }
+}
+
+impl ValueEquality for Number {
+    fn lt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        ValueEquality::lt(&self.0, other, sc)
+    }
+
+    fn le(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        ValueEquality::le(&self.0, other, sc)
+    }
+
+    fn gt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        ValueEquality::gt(&self.0, other, sc)
+    }
+
+    fn ge(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        ValueEquality::ge(&self.0, other, sc)
+    }
+
+    fn eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        ValueEquality::eq(&self.0, other, sc)
+    }
+
+    fn strict_eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        ValueEquality::strict_eq(&self.0, other, sc)
+    }
+}
+
+impl ValueConversion for Number {
+    fn to_primitive(&self, sc: &mut LocalScope, preferred_type: Option<PreferredType>) -> Result<Value, Value> {
+        self.0.to_primitive(sc, preferred_type)
+    }
+
+    fn to_number(&self, sc: &mut LocalScope) -> Result<f64, Value> {
+        self.0.to_number(sc)
+    }
+
+    fn to_boolean(&self) -> Result<bool, Value> {
+        self.0.to_boolean()
+    }
+
+    fn to_string(&self, sc: &mut LocalScope) -> Result<Rc<str>, Value> {
+        ValueConversion::to_string(&self.0, sc)
+    }
+
+    fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value> {
+        self.0.length_of_array_like(sc)
+    }
+
+    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value> {
+        self.0.to_object(sc)
     }
 }

@@ -6,6 +6,7 @@ use dash_jit::Trace;
 use dash_jit::Value as JitValue;
 use dash_middle::compiler::constant::Function;
 
+use crate::value::primitive::Number;
 use crate::value::Value;
 use crate::Vm;
 
@@ -23,7 +24,7 @@ pub fn handle_loop_end(vm: &mut Vm, loop_end_ip: usize) {
         for &local in &cache.locals {
             args.push(match vm.get_local(local.into()).unwrap() {
                 Value::Boolean(b) => JitValue::Boolean(b),
-                Value::Number(n) => {
+                Value::Number(Number(n)) => {
                     if n.floor() == n {
                         JitValue::Integer(n as i64)
                     } else {
@@ -91,8 +92,8 @@ pub fn execute_jit_function(mut result: JitResult, vm: &mut Vm, origin: *const F
             local as usize,
             match value {
                 JitValue::Boolean(b) => Value::Boolean(b),
-                JitValue::Integer(i) => Value::Number(i as f64),
-                JitValue::Number(n) => Value::Number(n),
+                JitValue::Integer(i) => Value::number(i as f64),
+                JitValue::Number(n) => Value::number(n),
             },
         );
     }

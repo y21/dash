@@ -74,6 +74,8 @@ impl<T: ?Sized> PartialEq for Handle<T> {
     }
 }
 
+impl<T: ?Sized> Eq for Handle<T> {}
+
 impl<T: ?Sized> Clone for Handle<T> {
     fn clone(&self) -> Self {
         Self(self.0)

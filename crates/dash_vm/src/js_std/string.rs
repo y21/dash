@@ -104,7 +104,7 @@ pub fn char_code_at(cx: CallContext) -> Result<Value, Value> {
     let this = cx.this.to_string(cx.scope)?;
     // TODO: this isn't right, but it is what it is
     match this.as_bytes().get(index) {
-        Some(&c) => Ok(Value::Number(c as f64)),
+        Some(&c) => Ok(Value::number(c as f64)),
         None => Ok(Value::undefined()),
     }
 }
@@ -138,14 +138,14 @@ pub fn index_of(cx: CallContext) -> Result<Value, Value> {
     let this = cx.this.to_string(cx.scope)?;
     let other = cx.args.first().unwrap_or_undefined().to_string(cx.scope)?;
     let pos = this.find(other.as_ref()).map(|i| i as f64).unwrap_or(-1.0);
-    Ok(Value::Number(pos))
+    Ok(Value::number(pos))
 }
 
 pub fn last_index_of(cx: CallContext) -> Result<Value, Value> {
     let this = cx.this.to_string(cx.scope)?;
     let other = cx.args.first().unwrap_or_undefined().to_string(cx.scope)?;
     let pos = this.rfind(other.as_ref()).map(|i| i as f64).unwrap_or(-1.0);
-    Ok(Value::Number(pos))
+    Ok(Value::number(pos))
 }
 
 enum PadPlacement {

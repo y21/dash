@@ -20,38 +20,38 @@ impl Value {
         } else {
             let lnum = left.to_number(scope)?;
             let rnum = right.to_number(scope)?;
-            Ok(Value::Number(lnum + rnum))
+            Ok(Value::number(lnum + rnum))
         }
     }
 
     pub fn sub(&self, other: &Self, scope: &mut LocalScope) -> Result<Value, Value> {
         let lnum = self.to_number(scope)?;
         let rnum = other.to_number(scope)?;
-        Ok(Value::Number(lnum - rnum))
+        Ok(Value::number(lnum - rnum))
     }
 
     pub fn mul(&self, other: &Self, scope: &mut LocalScope) -> Result<Value, Value> {
         let lnum = self.to_number(scope)?;
         let rnum = other.to_number(scope)?;
-        Ok(Value::Number(lnum * rnum))
+        Ok(Value::number(lnum * rnum))
     }
 
     pub fn div(&self, other: &Self, scope: &mut LocalScope) -> Result<Value, Value> {
         let lnum = self.to_number(scope)?;
         let rnum = other.to_number(scope)?;
-        Ok(Value::Number(lnum / rnum))
+        Ok(Value::number(lnum / rnum))
     }
 
     pub fn rem(&self, other: &Self, scope: &mut LocalScope) -> Result<Value, Value> {
         let lnum = self.to_number(scope)?;
         let rnum = other.to_number(scope)?;
-        Ok(Value::Number(lnum % rnum))
+        Ok(Value::number(lnum % rnum))
     }
 
     pub fn pow(&self, other: &Self, scope: &mut LocalScope) -> Result<Value, Value> {
         let lnum = self.to_number(scope)?;
         let rnum = other.to_number(scope)?;
-        Ok(Value::Number(lnum.powf(rnum)))
+        Ok(Value::number(lnum.powf(rnum)))
     }
 
     pub fn not(&self) -> Value {
@@ -61,43 +61,43 @@ impl Value {
     pub fn bitor(&self, other: &Self, scope: &mut LocalScope) -> Result<Value, Value> {
         let this = self.to_int32(scope)?;
         let that = other.to_int32(scope)?;
-        Ok(Value::Number((this | that) as f64))
+        Ok(Value::number((this | that) as f64))
     }
 
     pub fn bitxor(&self, other: &Self, scope: &mut LocalScope) -> Result<Value, Value> {
         let this = self.to_int32(scope)?;
         let that = other.to_int32(scope)?;
-        Ok(Value::Number((this ^ that) as f64))
+        Ok(Value::number((this ^ that) as f64))
     }
 
     pub fn bitand(&self, other: &Self, scope: &mut LocalScope) -> Result<Value, Value> {
         let this = self.to_int32(scope)?;
         let that = other.to_int32(scope)?;
-        Ok(Value::Number((this & that) as f64))
+        Ok(Value::number((this & that) as f64))
     }
 
     pub fn bitshl(&self, other: &Self, scope: &mut LocalScope) -> Result<Value, Value> {
         let this = self.to_int32(scope)?;
         let that = other.to_int32(scope)?;
-        Ok(Value::Number((this << that) as f64))
+        Ok(Value::number((this << that) as f64))
     }
 
     pub fn bitshr(&self, other: &Self, scope: &mut LocalScope) -> Result<Value, Value> {
         let this = self.to_int32(scope)?;
         let that = other.to_int32(scope)?;
-        Ok(Value::Number((this >> that) as f64))
+        Ok(Value::number((this >> that) as f64))
     }
 
     pub fn bitushr(&self, other: &Self, scope: &mut LocalScope) -> Result<Value, Value> {
         let this = self.to_int32(scope)?;
         let that = other.to_int32(scope)?;
         // TODO: >>>
-        Ok(Value::Number((this >> that) as f64))
+        Ok(Value::number((this >> that) as f64))
     }
 
     pub fn bitnot(&self, scope: &mut LocalScope) -> Result<Value, Value> {
         let this = self.to_int32(scope)?;
-        Ok(Value::Number((!this) as f64))
+        Ok(Value::number((!this) as f64))
     }
 }
 
