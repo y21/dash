@@ -2,6 +2,8 @@ use std::cell::Cell;
 use std::convert::TryFrom;
 
 use dash_middle::parser::statement::VariableBinding;
+use dash_middle::parser::statement::VariableDeclarationKind;
+use dash_middle::parser::statement::VariableDeclarationName;
 
 #[derive(Debug, Clone)]
 pub struct ScopeLocal<'a> {
@@ -47,7 +49,10 @@ impl<'a> Scope<'a> {
         self.locals
             .iter()
             .enumerate()
-            .find(|(_, l)| l.binding.name == identifier && l.binding.kind.is_nameable())
+            .find(|(_, l)| match l.binding.name {
+                VariableDeclarationName::Identifier(i) => i == identifier && l.binding.kind.is_nameable(),
+                _ => panic!("Only identifiers can be registered"),
+            })
             .map(|(i, l)| (i as u16, l))
     }
 
@@ -59,14 +64,23 @@ impl<'a> Scope<'a> {
             .map(|(i, l)| (i as u16, l))
     }
 
-    pub fn add_local(&mut self, binding: VariableBinding<'a>, is_extern: bool) -> Result<u16, LimitExceededError> {
+    pub fn add_local(
+        &mut self,
+        name: &'a str,
+        kind: VariableDeclarationKind,
+        is_extern: bool,
+    ) -> Result<u16, LimitExceededError> {
         // if there's already a local with the same name, we should use that
-        if let Some((id, _)) = self.find_local(&binding.name) {
+        if let Some((id, _)) = self.find_local(name) {
             return Ok(id);
         }
 
         self.locals.push(ScopeLocal {
-            binding,
+            binding: VariableBinding {
+                name: VariableDeclarationName::Identifier(name),
+                kind,
+                ty: None,
+            },
             is_extern: Cell::new(is_extern),
         });
 

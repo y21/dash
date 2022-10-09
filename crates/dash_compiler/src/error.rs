@@ -12,6 +12,7 @@ pub enum CompileError {
     ArrayLitLimitExceeded,
     ObjectLitLimitExceeded,
     ExportNameListLimitExceeded,
+    ObjectDestructureLimitExceeded,
     ConstAssignment,
     Unimplemented(String),
     ParameterLimitExceeded,
@@ -19,6 +20,7 @@ pub enum CompileError {
     AwaitOutsideAsync,
     UnknownBinding,
     IllegalBreak,
+    MissingInitializerInDestructuring,
 }
 
 impl From<LimitExceededError> for CompileError {
@@ -43,6 +45,7 @@ impl fmt::Display for CompileError {
             Self::SwitchCaseLimitExceeded => f.write_str("Maximum number of switch cases exceeded"),
             Self::ArrayLitLimitExceeded => f.write_str("Maximum number of array literal elements exceedeed"),
             Self::ObjectLitLimitExceeded => f.write_str("Maximum number of object literal properties exceedeed"),
+            Self::ObjectDestructureLimitExceeded => f.write_str("Maximum number of object destructuring properties exceedeed"),
             Self::ConstAssignment => f.write_str("Cannot assign to constant"),
             Self::Unimplemented(s) => write!(f, "Unimplemented: {}", s),
             Self::ParameterLimitExceeded => f.write_str("Maximum number of function parameters exceedeed"),
@@ -51,6 +54,7 @@ impl fmt::Display for CompileError {
             Self::UnknownBinding => f.write_str("Attempted to visit unknown binding"),
             Self::AwaitOutsideAsync => f.write_str("`await` is only available in async functions"),
             Self::IllegalBreak => f.write_str("`break` is only available in switch-case and loop"),
+            Self::MissingInitializerInDestructuring => f.write_str("Missing initializer in destructuring pattern"),
         }
     }
 }

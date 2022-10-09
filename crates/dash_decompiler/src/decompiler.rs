@@ -287,6 +287,14 @@ impl<'buf> FunctionDecompiler<'buf> {
 
                     self.handle_op_map_instr("switch", &[("case_count", &case_count), ("has_default", &has_default)])
                 }
+                Instruction::ObjDestruct => {
+                    let count = self.read_u16()?;
+                    for _ in 0..count {
+                        self.read_u16()?; // discard var id
+                        self.read_u16()?; // discard property name id
+                    }
+                    self.handle_op_map_instr("objdestruct", &[("count", &count)])
+                }
             }
         }
 

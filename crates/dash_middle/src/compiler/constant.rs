@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::parser::expr::LiteralExpr;
 use crate::parser::statement::FunctionKind;
+use crate::parser::statement::VariableBinding;
+use crate::parser::statement::VariableDeclarationName;
 
 use super::external::External;
 
@@ -69,7 +71,11 @@ impl Constant {
         match expr {
             LiteralExpr::Number(n) => Self::Number(*n),
             LiteralExpr::Identifier(s) => Self::Identifier(s.as_ref().into()),
-            LiteralExpr::Binding(b) => Self::Identifier(b.name.into()),
+            LiteralExpr::Binding(VariableBinding {
+                name: VariableDeclarationName::Identifier(name),
+                ..
+            }) => Self::Identifier((*name).into()),
+            LiteralExpr::Binding(..) => panic!("Cannot convert destructuring binding to constant"),
             LiteralExpr::String(s) => Self::String(s.as_ref().into()),
             LiteralExpr::Boolean(b) => Self::Boolean(*b),
             LiteralExpr::Null => Self::Null,

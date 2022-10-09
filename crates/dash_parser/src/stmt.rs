@@ -27,6 +27,7 @@ use dash_middle::parser::statement::TryCatch;
 use dash_middle::parser::statement::VariableBinding;
 use dash_middle::parser::statement::VariableDeclaration;
 use dash_middle::parser::statement::VariableDeclarationKind;
+use dash_middle::parser::statement::VariableDeclarationName;
 use dash_middle::parser::statement::WhileLoop;
 use dash_middle::parser::types::TypeSegment;
 
@@ -449,7 +450,120 @@ impl<'a> StatementParser<'a> for Parser<'a> {
     fn parse_variable_binding(&mut self) -> Option<VariableBinding<'a>> {
         let kind: VariableDeclarationKind = self.previous()?.ty.into();
 
-        let name = self.next()?.full;
+        let name = if self.expect_and_skip(&[TokenType::LeftBrace], false) {
+            // Object destructuring
+            let mut fields = Vec::new();
+            let mut rest = None;
+
+            while !self.expect_and_skip(&[TokenType::RightBrace], false) {
+                let cur = self.current()?.clone();
+                match cur.ty {
+                    TokenType::Dot => {
+                        // Skip the dot
+                        self.advance();
+                        // Begin of rest operator, must be followed by two more dots
+                        for _ in 0..2 {
+                            self.expect_and_skip(&[TokenType::Dot], true);
+                        }
+
+                        let name = self.current()?.clone();
+                        match name.ty {
+                            TokenType::Identifier => {
+                                if rest.is_some() {
+                                    // Only allow one rest operator
+                                    self.create_error(ErrorKind::MultipleRestInDestructuring(name));
+                                    return None;
+                                }
+
+                                rest = Some(name.full);
+                                self.advance();
+                            }
+                            _ => {
+                                self.create_error(ErrorKind::UnexpectedToken(name, TokenType::Identifier));
+                                return None;
+                            }
+                        }
+                    }
+                    TokenType::Identifier => {
+                        let name = cur.full;
+                        self.advance();
+                        let alias = if self.expect_and_skip(&[TokenType::Colon], false) {
+                            let alias = self.current()?.clone();
+                            match alias.ty {
+                                TokenType::Identifier => {
+                                    self.advance();
+                                    Some(alias.full)
+                                }
+                                _ => {
+                                    self.create_error(ErrorKind::UnexpectedToken(alias, TokenType::Identifier));
+                                    return None;
+                                }
+                            }
+                        } else {
+                            None
+                        };
+                        fields.push((name, alias));
+                    }
+                    _ => {
+                        self.create_error(ErrorKind::UnexpectedToken(cur, TokenType::Identifier));
+                        return None;
+                    }
+                }
+            }
+
+            VariableDeclarationName::ObjectDestructuring { fields, rest: None }
+        } else if self.expect_and_skip(&[TokenType::LeftSquareBrace], false) {
+            // Array destructuring
+            let mut fields = Vec::new();
+            let mut rest = None;
+
+            while !self.expect_and_skip(&[TokenType::RightBrace], false) {
+                let cur = self.current()?.clone();
+                match cur.ty {
+                    TokenType::Dot => {
+                        // Skip the dot
+                        self.advance();
+                        // Begin of rest operator, must be followed by two more dots
+                        for _ in 0..2 {
+                            self.expect_and_skip(&[TokenType::Dot], true);
+                        }
+
+                        let name = self.current()?.clone();
+                        match name.ty {
+                            TokenType::Identifier => {
+                                if rest.is_some() {
+                                    // Only allow one rest operator
+                                    self.create_error(ErrorKind::MultipleRestInDestructuring(name));
+                                    return None;
+                                }
+
+                                rest = Some(name.full);
+                                self.advance();
+                            }
+                            _ => {
+                                self.create_error(ErrorKind::UnexpectedToken(name, TokenType::Identifier));
+                                return None;
+                            }
+                        }
+                    }
+                    TokenType::Identifier => {
+                        let name = cur.full;
+                        self.advance();
+                        fields.push(name);
+                    }
+                    _ => {
+                        self.create_error(ErrorKind::UnexpectedToken(cur, TokenType::Identifier));
+                        return None;
+                    }
+                }
+            }
+
+            VariableDeclarationName::ArrayDestructuring { fields, rest: None }
+        } else {
+            // Identifier
+            let name = self.next()?.full;
+            VariableDeclarationName::Identifier(name)
+        };
 
         let ty = if self.expect_and_skip(&[TokenType::Colon], false) {
             Some(self.parse_type_segment()?)

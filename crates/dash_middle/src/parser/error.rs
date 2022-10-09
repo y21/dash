@@ -28,6 +28,7 @@ pub enum ErrorKind<'a> {
         expect: usize,
         token: Token<'a>,
     },
+    MultipleRestInDestructuring(Token<'a>),
 }
 
 /// An error that occurred during parsing
@@ -80,6 +81,9 @@ impl fmt::Display for Error<'_> {
                 "invalid number of parameters in accessor",
                 Some(Box::new(format!("expected exactly {expect} parameters, got {got}"))),
             ),
+            ErrorKind::MultipleRestInDestructuring(tok) => {
+                (tok, "a rest element must be last in a destructuring pattern", None)
+            }
         };
 
         let format_err = FormattableError {

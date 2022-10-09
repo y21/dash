@@ -7,7 +7,7 @@ use derive_more::Display;
 
 use crate::lexer::token::TokenType;
 
-use super::statement::{fmt_list, FunctionDeclaration, VariableBinding};
+use super::statement::{fmt_list, FunctionDeclaration, VariableBinding, VariableDeclarationName};
 
 /// The sequence operator (`expr, expr`)
 pub type Seq<'a> = (Box<Expr<'a>>, Box<Expr<'a>>);
@@ -362,11 +362,11 @@ impl<'a> LiteralExpr<'a> {
             },
             Self::Undefined => Some("undefined"),
             Self::Null => Some("null"),
-            Self::String(s) => match s {
-                Cow::Borrowed(s) => Some(s),
-                _ => None,
-            },
-            Self::Binding(b) => Some(b.name),
+            Self::String(Cow::Borrowed(s)) => Some(s),
+            Self::Binding(VariableBinding {
+                name: VariableDeclarationName::Identifier(name),
+                ..
+            }) => Some(name),
             _ => None,
         }
     }
@@ -380,7 +380,11 @@ impl<'a> LiteralExpr<'a> {
             Self::Null => Cow::Borrowed("null"),
             Self::Number(n) => Cow::Owned(n.to_string()),
             Self::String(s) => s.clone(),
-            Self::Binding(b) => Cow::Borrowed(b.name),
+            Self::Binding(VariableBinding {
+                name: VariableDeclarationName::Identifier(name),
+                ..
+            }) => Cow::Borrowed(*name),
+            Self::Binding(VariableBinding { name, .. }) => Cow::Owned(name.to_string()),
         }
     }
 

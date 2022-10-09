@@ -91,6 +91,8 @@ pub enum Instruction {
     DeletePropertyStatic,
     DeletePropertyDynamic,
     Switch,
+    ObjDestruct,
+    // ArrayDestruct,
 }
 
 // Some instruction opcodes have a separate u8 constant to be used in for example match guards,

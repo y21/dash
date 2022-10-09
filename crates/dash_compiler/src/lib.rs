@@ -18,7 +18,6 @@ use dash_middle::parser::expr::PropertyAccessExpr;
 use dash_middle::parser::expr::Seq;
 use dash_middle::parser::expr::UnaryExpr;
 use dash_middle::parser::expr::{ArrayLiteral, ObjectMemberKind};
-use dash_middle::parser::statement::FunctionKind;
 use dash_middle::parser::statement::IfStatement;
 use dash_middle::parser::statement::ImportKind;
 use dash_middle::parser::statement::ReturnStatement;
@@ -35,6 +34,7 @@ use dash_middle::parser::statement::{ClassMemberKind, ExportKind};
 use dash_middle::parser::statement::{ClassProperty, ForLoop};
 use dash_middle::parser::statement::{ForInLoop, ForOfLoop};
 use dash_middle::parser::statement::{FunctionDeclaration, SwitchStatement};
+use dash_middle::parser::statement::{FunctionKind, VariableDeclarationName};
 use dash_middle::visitor::Visitor;
 use dash_optimizer::consteval::Eval;
 use dash_optimizer::OptLevel;
@@ -173,7 +173,14 @@ impl<'a> FunctionCompiler<'a> {
 
         let hoisted_locals = transformations::find_hoisted_declarations(&ast);
         for binding in hoisted_locals {
-            self.scope.add_local(binding, false)?;
+            self.scope.add_local(
+                match binding.name {
+                    VariableDeclarationName::Identifier(name) => name,
+                    _ => return Err(CompileError::MissingInitializerInDestructuring),
+                },
+                binding.kind,
+                false,
+            )?;
         }
 
         self.accept_multiple(ast)?;
@@ -311,8 +318,12 @@ impl<'a> FunctionCompiler<'a> {
         let mut ib = InstructionBuilder::new(self);
         let for_of_iter_binding = VariableBinding::unnameable("for_of_iter");
         let for_of_gen_step_binding = VariableBinding::unnameable("for_of_gen_step");
-        let for_of_iter_id = ib.scope.add_local(for_of_iter_binding.clone(), false)?;
-        ib.scope.add_local(for_of_gen_step_binding.clone(), false)?;
+        let for_of_iter_id = ib
+            .scope
+            .add_local("for_of_iter", VariableDeclarationKind::Unnameable, false)?;
+
+        ib.scope
+            .add_local("for_of_gen_step", VariableDeclarationKind::Unnameable, false)?;
 
         ib.accept_expr(expr)?;
         match kind {
@@ -674,12 +685,44 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         VariableDeclaration { binding, value }: VariableDeclaration<'a>,
     ) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
-        let id = ib.scope.add_local(binding, false)?;
 
-        if let Some(expr) = value {
-            ib.accept_expr(expr)?;
-            ib.build_local_store(id, false);
-            ib.build_pop();
+        match binding.name {
+            VariableDeclarationName::Identifier(ident) => {
+                let id = ib.scope.add_local(ident, binding.kind, false)?;
+
+                if let Some(expr) = value {
+                    ib.accept_expr(expr)?;
+                    ib.build_local_store(id, false);
+                    ib.build_pop();
+                }
+            }
+            VariableDeclarationName::ObjectDestructuring { fields, rest } => {
+                if rest.is_some() {
+                    unimplementedc!("Rest operator in object destructuring");
+                }
+
+                let field_count = fields
+                    .len()
+                    .try_into()
+                    .map_err(|_| CompileError::ObjectDestructureLimitExceeded)?;
+
+                // Unwrap ok; checked at parse time
+                let value = value.expect("Object destructuring requires a value");
+                ib.accept_expr(value)?;
+
+                ib.build_objdestruct(field_count);
+
+                for (name, alias) in fields {
+                    let name = alias.unwrap_or(name);
+                    let id = ib.scope.add_local(name, binding.kind, false)?;
+
+                    let var_id = ib.cp.add(Constant::Number(id as f64))?;
+                    let ident_id = ib.cp.add(Constant::Identifier(name.into()))?;
+                    ib.writew(var_id);
+                    ib.writew(ident_id);
+                }
+            }
+            _ => unimplementedc!("Array destructuring"),
         }
 
         Ok(())
@@ -750,16 +793,15 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_function_declaration(&mut self, fun: FunctionDeclaration<'a>) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
-        let id = ib.scope.add_local(
-            VariableBinding {
-                name: fun.name.expect("Function declaration did not have a name"),
-                kind: VariableDeclarationKind::Var,
-                ty: None,
-            },
-            false,
-        )?;
+        let var_id = match fun.name {
+            Some(name) => Some(ib.scope.add_local(name, VariableDeclarationKind::Var, false)?),
+            None => None,
+        };
+
         ib.visit_function_expr(fun)?;
-        ib.build_local_store(id, false);
+        if let Some(var_id) = var_id {
+            ib.build_local_store(var_id, false);
+        }
         ib.build_pop();
         Ok(())
     }
@@ -1151,14 +1193,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 Parameter::Spread(ident) => ident,
             };
 
-            let id = scope.add_local(
-                VariableBinding {
-                    kind: VariableDeclarationKind::Var,
-                    name,
-                    ty: None,
-                },
-                false,
-            )?;
+            let id = scope.add_local(name, VariableDeclarationKind::Var, false)?;
 
             if let Parameter::Spread(..) = param {
                 rest_local = Some(id);
@@ -1240,14 +1275,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         ib.scope.enter();
 
         if let Some(ident) = catch.ident {
-            let id = ib.scope.add_local(
-                VariableBinding {
-                    kind: VariableDeclarationKind::Var,
-                    name: ident,
-                    ty: None,
-                },
-                false,
-            )?;
+            let id = ib.scope.add_local(ident, VariableDeclarationKind::Var, false)?;
 
             if id == u16::MAX {
                 // Max u16 value is reserved for "no binding"
@@ -1337,13 +1365,10 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             }
             ref kind @ (ImportKind::DefaultAs(ref spec, path) | ImportKind::AllAs(ref spec, path)) => {
                 let local_id = ib.scope.add_local(
-                    VariableBinding {
-                        kind: VariableDeclarationKind::Var,
-                        name: match spec {
-                            SpecifierKind::Ident(id) => id,
-                        },
-                        ty: None,
+                    match spec {
+                        SpecifierKind::Ident(id) => id,
                     },
+                    VariableDeclarationKind::Var,
                     false,
                 )?;
 
@@ -1394,9 +1419,21 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 ib.build_named_export(&it)?;
             }
             ExportKind::NamedVar(vars) => {
-                let it = vars.iter().map(|var| var.binding.name).collect::<Vec<_>>();
+                let mut it: Vec<&'a str> = Vec::with_capacity(vars.len());
 
                 for var in vars {
+                    match &var.binding.name {
+                        VariableDeclarationName::Identifier(ident) => it.push(ident),
+                        VariableDeclarationName::ArrayDestructuring { fields, rest } => {
+                            it.extend(fields.iter());
+                            it.extend(rest);
+                        }
+                        VariableDeclarationName::ObjectDestructuring { fields, rest } => {
+                            it.extend(fields.iter().map(|(name, ident)| ident.unwrap_or(name)));
+                            it.extend(rest);
+                        }
+                    }
+
                     self.visit_variable_declaration(var)?;
                 }
 
@@ -1470,7 +1507,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             .map(|name| VariableBinding {
                 kind: VariableDeclarationKind::Var,
                 ty: None,
-                name,
+                name: VariableDeclarationName::Identifier(name),
             })
             .unwrap_or_else(|| VariableBinding::unnameable("DesugaredClass"));
 

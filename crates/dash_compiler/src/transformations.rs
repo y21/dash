@@ -5,6 +5,7 @@ use dash_middle::parser::statement::Statement;
 use dash_middle::parser::statement::VariableBinding;
 use dash_middle::parser::statement::VariableDeclaration;
 use dash_middle::parser::statement::VariableDeclarationKind;
+use dash_middle::parser::statement::VariableDeclarationName;
 
 /// Implicitly inserts a `return` statement for the last expression
 pub fn ast_insert_return<'a>(ast: &mut Vec<Statement<'a>>) {
@@ -40,7 +41,7 @@ pub fn find_hoisted_declarations<'a>(ast: &Vec<Statement<'a>>) -> Vec<VariableBi
             }
             Statement::Function(FunctionDeclaration { name: Some(name), .. }) => {
                 vars.push(VariableBinding {
-                    name,
+                    name: VariableDeclarationName::Identifier(name),
                     kind: VariableDeclarationKind::Var,
                     ty: None,
                 });

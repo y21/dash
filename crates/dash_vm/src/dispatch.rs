@@ -134,6 +134,12 @@ impl<'a> DispatchContext<'a> {
             .cloned()
             .expect("Bytecode attempted to reference invalid string constant")
     }
+
+    pub fn number_constant(&self, index: usize) -> f64 {
+        self.constant(index)
+            .as_number()
+            .expect("Bytecode attempted to reference invalid number constant")
+    }
 }
 
 impl<'a> Deref for DispatchContext<'a> {
@@ -1055,6 +1061,27 @@ mod handlers {
 
         Ok(None)
     }
+
+    pub fn objdestruct(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let count = cx.fetchw_and_inc_ip();
+        let obj = cx.pop_stack();
+        let mut scope = cx.scope();
+
+        for _ in 0..count {
+            let mut cx = DispatchContext::new(&mut scope);
+            let loc_id = cx.fetchw_and_inc_ip();
+            let ident_id = cx.fetchw_and_inc_ip();
+
+            let id = cx.number_constant(loc_id.into()) as usize;
+            let ident = cx.identifier_constant(ident_id.into());
+            drop(cx);
+
+            let prop = obj.get_property(&mut scope, PropertyKey::from(ident.as_ref()))?;
+            scope.set_local(id, prop);
+        }
+
+        Ok(None)
+    }
 }
 
 pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResult>, Value> {
@@ -1133,6 +1160,7 @@ pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResu
         Instruction::DeletePropertyDynamic => handlers::delete_property_dynamic(cx),
         Instruction::DeletePropertyStatic => handlers::delete_property_static(cx),
         Instruction::Switch => handlers::switch(cx),
+        Instruction::ObjDestruct => handlers::objdestruct(cx),
         _ => unimplemented!("{:?}", instruction),
     }
 }

@@ -521,7 +521,7 @@ pub struct SwitchCase<'a> {
 }
 
 /// The type of a variable declaration
-#[derive(Debug, Clone, Display, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, Display, PartialEq, Eq, PartialOrd, Ord)]
 pub enum VariableDeclarationKind {
     /// Var: lifetime extends to function scope
     #[display(fmt = "var")]
@@ -538,6 +538,74 @@ pub enum VariableDeclarationKind {
     /// Unnameable variables cannot be referred to by JavaScript code directly and are created by the compiler
     #[display(fmt = "__intrinsic_var")]
     Unnameable,
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub enum VariableDeclarationName<'a> {
+    /// Normal identifier
+    Identifier(&'a str),
+    /// Object destructuring: { a } = { a: 1 }
+    ObjectDestructuring {
+        /// Fields to destructure
+        ///
+        /// Destructured fields can also be aliased with ` { a: b } = { a: 3 } `
+        fields: Vec<(&'a str, Option<&'a str>)>,
+        /// The rest element, if present
+        rest: Option<&'a str>,
+    },
+    /// Array destructuring: [ a ] = [ 1 ]
+    ArrayDestructuring {
+        /// Elements to destructure
+        fields: Vec<&'a str>,
+        /// The rest element, if present
+        rest: Option<&'a str>,
+    },
+}
+
+impl<'a> fmt::Display for VariableDeclarationName<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            VariableDeclarationName::Identifier(name) => write!(f, "{}", name),
+            VariableDeclarationName::ObjectDestructuring { fields, rest } => {
+                write!(f, "{{ ")?;
+
+                for (i, (name, alias)) in fields.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+
+                    if let Some(alias) = alias {
+                        write!(f, "{}: {}", name, alias)?;
+                    } else {
+                        write!(f, "{}", name)?;
+                    }
+                }
+
+                if let Some(rest) = rest {
+                    write!(f, ", ...{}", rest)?;
+                }
+
+                write!(f, " }}")
+            }
+            VariableDeclarationName::ArrayDestructuring { fields, rest } => {
+                write!(f, "[ ")?;
+
+                for (i, name) in fields.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+
+                    write!(f, "{}", name)?;
+                }
+
+                if let Some(rest) = rest {
+                    write!(f, ", ...{}", rest)?;
+                }
+
+                write!(f, " ]")
+            }
+        }
+    }
 }
 
 impl VariableDeclarationKind {
@@ -562,7 +630,7 @@ impl From<TokenType> for VariableDeclarationKind {
 #[display(fmt = "{} {}", kind, name)]
 pub struct VariableBinding<'a> {
     /// The name/identifier of this variable
-    pub name: &'a str,
+    pub name: VariableDeclarationName<'a>,
     /// The type of this variable
     pub kind: VariableDeclarationKind,
     /// The type of a variable, if present
@@ -573,7 +641,7 @@ impl<'a> VariableBinding<'a> {
     pub fn unnameable(name: &'a str) -> Self {
         // TODO: we should somehow mangle `name`, otherwise nested for of loops in the same function will clash
         Self {
-            name,
+            name: VariableDeclarationName::Identifier(name),
             kind: VariableDeclarationKind::Unnameable,
             ty: None,
         }
