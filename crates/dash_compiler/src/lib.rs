@@ -65,7 +65,7 @@ macro_rules! unimplementedc {
     };
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 enum Breakable {
     Loop { loop_id: usize },
     Switch { switch_id: usize },
@@ -810,37 +810,89 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
                     let is_extern = local.is_extern();
 
+                    ib.build_local_load(id, is_extern);
+                    ib.build_revstck(2);
                     match operator {
                         TokenType::Assignment => {}
                         TokenType::AdditionAssignment => {
-                            ib.build_local_load(id, is_extern);
-                            // += requires reversing (right, left)
-                            // we effectively need to rewrite it from
-                            // left = right + left
-                            // to
-                            // left = left + right
-                            ib.build_revstck(2);
                             ib.build_add();
                         }
                         TokenType::SubtractionAssignment => {
-                            ib.build_local_load(id, is_extern);
-                            ib.build_revstck(2);
                             ib.build_sub();
+                        }
+                        TokenType::MultiplicationAssignment => {
+                            ib.build_mul();
+                        }
+                        TokenType::DivisionAssignment => {
+                            ib.build_div();
+                        }
+                        TokenType::RemainderAssignment => {
+                            ib.build_rem();
+                        }
+                        TokenType::ExponentiationAssignment => {
+                            ib.build_pow();
+                        }
+                        TokenType::LeftShiftAssignment => {
+                            ib.build_bitshl();
+                        }
+                        TokenType::RightShiftAssignment => {
+                            ib.build_bitshr();
+                        }
+                        TokenType::UnsignedRightShiftAssignment => {
+                            ib.build_bitushr();
+                        }
+                        TokenType::BitwiseAndAssignment => {
+                            ib.build_bitand();
+                        }
+                        TokenType::BitwiseOrAssignment => {
+                            ib.build_bitor();
+                        }
+                        TokenType::BitwiseXorAssignment => {
+                            ib.build_bitxor();
                         }
                         _ => unimplementedc!("Unknown operator"),
                     }
 
                     ib.build_local_store(id, is_extern);
                 } else {
+                    ib.build_global_load(&ident)?;
                     match operator {
                         TokenType::Assignment => {}
                         TokenType::AdditionAssignment => {
-                            ib.build_global_load(&ident)?;
                             ib.build_add();
                         }
                         TokenType::SubtractionAssignment => {
-                            ib.build_global_load(&ident)?;
                             ib.build_sub();
+                        }
+                        TokenType::MultiplicationAssignment => {
+                            ib.build_mul();
+                        }
+                        TokenType::DivisionAssignment => {
+                            ib.build_div();
+                        }
+                        TokenType::RemainderAssignment => {
+                            ib.build_rem();
+                        }
+                        TokenType::ExponentiationAssignment => {
+                            ib.build_pow();
+                        }
+                        TokenType::LeftShiftAssignment => {
+                            ib.build_bitshl();
+                        }
+                        TokenType::RightShiftAssignment => {
+                            ib.build_bitshr();
+                        }
+                        TokenType::UnsignedRightShiftAssignment => {
+                            ib.build_bitushr();
+                        }
+                        TokenType::BitwiseAndAssignment => {
+                            ib.build_bitand();
+                        }
+                        TokenType::BitwiseOrAssignment => {
+                            ib.build_bitor();
+                        }
+                        TokenType::BitwiseXorAssignment => {
+                            ib.build_bitxor();
                         }
                         _ => unimplementedc!("Unknown operator"),
                     }
@@ -848,22 +900,101 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                     ib.build_global_store(&ident)?;
                 }
             }
-            Expr::PropertyAccess(PropertyAccessExpr { computed, property, .. }) => {
-                if !matches!(operator, TokenType::Assignment) {
-                    unimplementedc!("Assignment operator {:?}", operator);
+            Expr::PropertyAccess(prop) => match ((*prop.property).clone(), prop.computed, operator) {
+                (Expr::Literal(lit), false, TokenType::Assignment) => {
+                    let ident = lit.to_identifier();
+                    ib.build_static_prop_set(&ident)?;
                 }
-
-                match (*property, computed) {
-                    (Expr::Literal(lit), false) => {
-                        let ident = lit.to_identifier();
-                        ib.build_static_prop_set(&ident)?;
-                    }
-                    (e, _) => {
-                        ib.accept_expr(e)?;
-                        ib.build_dynamic_prop_set();
-                    }
+                (Expr::Literal(lit), false, TokenType::AdditionAssignment) => {
+                    let ident = lit.to_identifier();
+                    ib.visit_property_access_expr(prop, false)?;
+                    ib.build_revstck(2);
+                    ib.build_add();
+                    ib.build_static_prop_set(&ident)?;
                 }
-            }
+                (Expr::Literal(lit), false, TokenType::SubtractionAssignment) => {
+                    let ident = lit.to_identifier();
+                    ib.visit_property_access_expr(prop, false)?;
+                    ib.build_revstck(2);
+                    ib.build_sub();
+                    ib.build_static_prop_set(&ident)?;
+                }
+                (Expr::Literal(lit), false, TokenType::MultiplicationAssignment) => {
+                    let ident = lit.to_identifier();
+                    ib.visit_property_access_expr(prop, false)?;
+                    ib.build_revstck(2);
+                    ib.build_mul();
+                    ib.build_static_prop_set(&ident)?;
+                }
+                (Expr::Literal(lit), false, TokenType::DivisionAssignment) => {
+                    let ident = lit.to_identifier();
+                    ib.visit_property_access_expr(prop, false)?;
+                    ib.build_revstck(2);
+                    ib.build_div();
+                    ib.build_static_prop_set(&ident)?;
+                }
+                (Expr::Literal(lit), false, TokenType::RemainderAssignment) => {
+                    let ident = lit.to_identifier();
+                    ib.visit_property_access_expr(prop, false)?;
+                    ib.build_revstck(2);
+                    ib.build_rem();
+                    ib.build_static_prop_set(&ident)?;
+                }
+                (Expr::Literal(lit), false, TokenType::ExponentiationAssignment) => {
+                    let ident = lit.to_identifier();
+                    ib.visit_property_access_expr(prop, false)?;
+                    ib.build_revstck(2);
+                    ib.build_pow();
+                    ib.build_static_prop_set(&ident)?;
+                }
+                (Expr::Literal(lit), false, TokenType::LeftShiftAssignment) => {
+                    let ident = lit.to_identifier();
+                    ib.visit_property_access_expr(prop, false)?;
+                    ib.build_revstck(2);
+                    ib.build_bitshl();
+                    ib.build_static_prop_set(&ident)?;
+                }
+                (Expr::Literal(lit), false, TokenType::RightShiftAssignment) => {
+                    let ident = lit.to_identifier();
+                    ib.visit_property_access_expr(prop, false)?;
+                    ib.build_revstck(2);
+                    ib.build_bitshr();
+                    ib.build_static_prop_set(&ident)?;
+                }
+                (Expr::Literal(lit), false, TokenType::UnsignedRightShiftAssignment) => {
+                    let ident = lit.to_identifier();
+                    ib.visit_property_access_expr(prop, false)?;
+                    ib.build_revstck(2);
+                    ib.build_bitushr();
+                    ib.build_static_prop_set(&ident)?;
+                }
+                (Expr::Literal(lit), false, TokenType::BitwiseAndAssignment) => {
+                    let ident = lit.to_identifier();
+                    ib.visit_property_access_expr(prop, false)?;
+                    ib.build_revstck(2);
+                    ib.build_bitand();
+                    ib.build_static_prop_set(&ident)?;
+                }
+                (Expr::Literal(lit), false, TokenType::BitwiseOrAssignment) => {
+                    let ident = lit.to_identifier();
+                    ib.visit_property_access_expr(prop, false)?;
+                    ib.build_revstck(2);
+                    ib.build_bitor();
+                    ib.build_static_prop_set(&ident)?;
+                }
+                (Expr::Literal(lit), false, TokenType::BitwiseXorAssignment) => {
+                    let ident = lit.to_identifier();
+                    ib.visit_property_access_expr(prop, false)?;
+                    ib.build_revstck(2);
+                    ib.build_bitxor();
+                    ib.build_static_prop_set(&ident)?;
+                }
+                (e, _, TokenType::Assignment) => {
+                    ib.accept_expr(e)?;
+                    ib.build_dynamic_prop_set();
+                }
+                _ => todo!(),
+            },
             _ => unimplementedc!("Assignment to non-identifier"),
         }
 
@@ -980,6 +1111,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                     unimplementedc!("Global postfix expression");
                 }
             }
+            Expr::PropertyAccess(prop) => ib.visit_property_access_expr(prop.clone(), false)?,
             _ => unimplementedc!("Non-identifier postfix expression"),
         }
 
@@ -1280,13 +1412,13 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_break(&mut self) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
-        let breakable = ib.breakables.last().ok_or(CompileError::IllegalBreak)?;
+        let breakable = *ib.breakables.last().ok_or(CompileError::IllegalBreak)?;
         match breakable {
             Breakable::Loop { loop_id } => {
-                ib.build_jmp(Label::LoopEnd { loop_id: *loop_id }, false);
+                ib.build_jmp(Label::LoopEnd { loop_id: loop_id }, false);
             }
             Breakable::Switch { switch_id } => {
-                ib.build_jmp(Label::SwitchEnd { switch_id: *switch_id }, false);
+                ib.build_jmp(Label::SwitchEnd { switch_id: switch_id }, false);
             }
         }
         Ok(())
@@ -1294,10 +1426,10 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_continue(&mut self) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
-        let breakable = ib.breakables.last().ok_or(CompileError::IllegalBreak)?;
+        let breakable = *ib.breakables.last().ok_or(CompileError::IllegalBreak)?;
         match breakable {
             Breakable::Loop { loop_id } => {
-                ib.build_jmp(Label::LoopIncrement { loop_id: *loop_id }, false);
+                ib.build_jmp(Label::LoopIncrement { loop_id }, false);
             }
             Breakable::Switch { .. } => {
                 // TODO: make it possible to use `continue` in loops even if its used in a switch

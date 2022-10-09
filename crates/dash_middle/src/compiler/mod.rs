@@ -5,16 +5,16 @@ use crate::parser;
 use self::constant::ConstantPool;
 use self::external::External;
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "format")]
 use serde::{Deserialize, Serialize};
 pub mod constant;
 pub mod external;
-#[cfg(feature = "serde")]
+#[cfg(feature = "format")]
 pub mod format;
 pub mod instruction;
 pub mod instruction_iter;
 
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
 #[derive(Debug)]
 pub struct CompileResult {
     pub instructions: Vec<u8>,

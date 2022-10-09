@@ -24,7 +24,7 @@ impl<T: ?Sized> Persistent<T> {
     }
 
     unsafe fn dec_refcount(&self) -> u64 {
-        let inner = unsafe { &*self.0.as_ptr() };
+        let inner = &*self.0.as_ptr();
         let refcount = inner.refcount.get().checked_sub(1).expect("Reference count overflowed");
         inner.refcount.set(refcount);
         refcount

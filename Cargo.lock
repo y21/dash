@@ -141,6 +141,7 @@ dependencies = [
  "dash_compiler",
  "dash_decompiler",
  "dash_lexer",
+ "dash_middle",
  "dash_optimizer",
  "dash_parser",
  "dash_rt",

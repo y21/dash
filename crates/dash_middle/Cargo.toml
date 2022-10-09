@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-serde = ["dep:serde", "bincode"]
+format = ["serde", "bincode"]
 
 [dependencies]
 derive_more = { version = "0.99.17", features = ["display"] }
