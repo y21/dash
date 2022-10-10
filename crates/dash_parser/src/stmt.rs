@@ -456,6 +456,8 @@ impl<'a> StatementParser<'a> for Parser<'a> {
             let mut rest = None;
 
             while !self.expect_and_skip(&[TokenType::RightBrace], false) {
+                self.expect_and_skip(&[TokenType::Comma], false); // TODO: should be an error
+
                 let cur = self.current()?.clone();
                 match cur.ty {
                     TokenType::Dot => {
@@ -518,6 +520,8 @@ impl<'a> StatementParser<'a> for Parser<'a> {
             let mut rest = None;
 
             while !self.expect_and_skip(&[TokenType::RightBrace], false) {
+                self.expect_and_skip(&[TokenType::Comma], false); // TODO: should be an error
+
                 let cur = self.current()?.clone();
                 match cur.ty {
                     TokenType::Dot => {
