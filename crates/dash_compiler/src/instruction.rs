@@ -90,6 +90,10 @@ pub trait InstructionWriter {
     /// 
     /// If `is_local_label` is true, then it attempts to lookup a local label, otherwise it uses a global label
     fn build_jmpnullishnp(&mut self, label: Label, is_local_label: bool);
+    /// Builds the [JMPUNDEFINEDNP] instruction
+    fn build_jmpundefinednp(&mut self, label:  Label, is_local_label: bool);
+    /// Builds the [JMPUNDEFINEDP] instruction
+    fn build_jmpundefinedp(&mut self, label:  Label, is_local_label: bool);
     /// Builds the [ARRAYLIT] and [ARRAYLITW] instructions
     fn build_arraylit(&mut self, len: u16);
     /// Builds the [OBJLIT] and [OBJLITW] instructions
@@ -283,6 +287,16 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
 
     fn build_jmpnullishnp(&mut self, label: Label, is_local_label: bool) {
         self.write_instr(Instruction::JmpNullishNP);
+        self.build_jmp_header(label, is_local_label);
+    }
+
+    fn build_jmpundefinednp(&mut self, label: Label, is_local_label: bool) {
+        self.write_instr(Instruction::JmpUndefinedNP);
+        self.build_jmp_header(label, is_local_label);
+    }
+
+    fn build_jmpundefinedp(&mut self, label: Label, is_local_label: bool) {
+        self.write_instr(Instruction::JmpUndefinedP);
         self.build_jmp_header(label, is_local_label);
     }
 

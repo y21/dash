@@ -1182,25 +1182,39 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         }: FunctionDeclaration<'a>,
     ) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
-        let mut compiler = unsafe { FunctionCompiler::with_caller(&mut ib, ty, r#async) };
-        let scope = &mut compiler.scope;
+        let mut subcompiler = unsafe { FunctionCompiler::with_caller(&mut ib, ty, r#async) };
 
         let mut rest_local = None;
 
-        for (param, _ty) in &arguments {
+        for (param, default, _ty) in &arguments {
             let name = match param {
                 Parameter::Identifier(ident) => ident,
                 Parameter::Spread(ident) => ident,
             };
 
-            let id = scope.add_local(name, VariableDeclarationKind::Var, false)?;
+            let id = subcompiler.scope.add_local(name, VariableDeclarationKind::Var, false)?;
 
             if let Parameter::Spread(..) = param {
                 rest_local = Some(id);
             }
+
+            if let Some(default) = default {
+                let mut sub_ib = InstructionBuilder::new(&mut subcompiler);
+                // First, load parameter
+                sub_ib.build_local_load(id, false);
+                // Jump to InitParamWithDefaultValue if param is undefined
+                sub_ib.build_jmpundefinedp(Label::InitParamWithDefaultValue, true);
+                // If it isn't undefined, it won't jump to InitParamWithDefaultValue, so we jump to the end
+                sub_ib.build_jmp(Label::FinishParamDefaultValueInit, true);
+                sub_ib.add_local_label(Label::InitParamWithDefaultValue);
+                sub_ib.accept_expr(default.clone())?;
+                sub_ib.build_local_store(id, false);
+
+                sub_ib.add_local_label(Label::FinishParamDefaultValueInit);
+            }
         }
 
-        let cmp = compiler.compile_ast(statements, false)?;
+        let cmp = subcompiler.compile_ast(statements, false)?;
 
         let function = Function {
             buffer: cmp.instructions.into(),

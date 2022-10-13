@@ -55,7 +55,7 @@ pub trait StatementParser<'a> {
     fn parse_switch(&mut self) -> Option<SwitchStatement<'a>>;
     /// Parses a list of parameters (identifier, followed by optional type segment) delimited by comma,
     /// assuming that the ( has already been consumed
-    fn parse_parameter_list(&mut self) -> Option<Vec<(Parameter<'a>, Option<TypeSegment<'a>>)>>;
+    fn parse_parameter_list(&mut self) -> Option<Vec<(Parameter<'a>, Option<Expr<'a>>, Option<TypeSegment<'a>>)>>;
 }
 
 impl<'a> StatementParser<'a> for Parser<'a> {
@@ -393,7 +393,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
         Some(IfStatement::new(condition, then, branches, el))
     }
 
-    fn parse_parameter_list(&mut self) -> Option<Vec<(Parameter<'a>, Option<TypeSegment<'a>>)>> {
+    fn parse_parameter_list(&mut self) -> Option<Vec<(Parameter<'a>, Option<Expr<'a>>, Option<TypeSegment<'a>>)>> {
         let mut parameters = Vec::new();
 
         while !self.expect_and_skip(&[TokenType::RightParen], false) {
@@ -424,15 +424,23 @@ impl<'a> StatementParser<'a> for Parser<'a> {
                 }
             };
 
+            // Parse type param
             let ty = if self.expect_and_skip(&[TokenType::Colon], false) {
                 Some(self.parse_type_segment()?)
             } else {
                 None
             };
 
+            // Parse default value
+            let default = if self.expect_and_skip(&[TokenType::Assignment], false) {
+                Some(self.parse_expression()?)
+            } else {
+                None
+            };
+
             let is_spread = matches!(parameter, Parameter::Spread(..));
 
-            parameters.push((parameter, ty));
+            parameters.push((parameter, default, ty));
 
             if is_spread {
                 // Must be followed by )

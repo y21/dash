@@ -345,7 +345,14 @@ pub struct FunctionDeclaration<'a> {
     /// Whether this function is an async function
     pub r#async: bool,
     /// Function parameter names
-    pub parameters: Vec<(Parameter<'a>, Option<TypeSegment<'a>>)>,
+    pub parameters: Vec<(
+        // Parameter
+        Parameter<'a>,
+        // Default value
+        Option<Expr<'a>>,
+        // Type segment
+        Option<TypeSegment<'a>>,
+    )>,
     /// Function body
     pub statements: Vec<Statement<'a>>,
     /// The type of function
@@ -364,7 +371,7 @@ impl<'a> fmt::Display for FunctionDeclaration<'a> {
 
         write!(f, "(")?;
 
-        for (id, (param, ty)) in self.parameters.iter().enumerate() {
+        for (id, (param, default, ty)) in self.parameters.iter().enumerate() {
             if id > 0 {
                 write!(f, ",")?;
             }
@@ -373,6 +380,10 @@ impl<'a> fmt::Display for FunctionDeclaration<'a> {
 
             if let Some(ty) = ty {
                 write!(f, ": {ty}")?;
+            }
+
+            if let Some(default) = default {
+                write!(f, " = {default}")?;
             }
         }
 
@@ -402,7 +413,7 @@ impl<'a> FunctionDeclaration<'a> {
     /// Creates a new function declaration
     pub fn new(
         name: Option<&'a str>,
-        parameters: Vec<(Parameter<'a>, Option<TypeSegment<'a>>)>,
+        parameters: Vec<(Parameter<'a>, Option<Expr<'a>>, Option<TypeSegment<'a>>)>,
         statements: Vec<Statement<'a>>,
         ty: FunctionKind,
         r#async: bool,

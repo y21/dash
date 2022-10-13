@@ -64,6 +64,8 @@ pub enum Instruction {
     JmpTrueNP,
     JmpNullishP,
     JmpNullishNP,
+    JmpUndefinedNP,
+    JmpUndefinedP,
     BitOr,
     BitXor,
     BitAnd,

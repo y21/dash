@@ -34,6 +34,8 @@ pub enum Label {
     },
     Catch,
     TryEnd,
+    InitParamWithDefaultValue,
+    FinishParamDefaultValueInit,
 }
 
 pub struct InstructionBuilder<'cx, 'inp> {

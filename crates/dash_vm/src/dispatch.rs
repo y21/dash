@@ -571,6 +571,62 @@ mod handlers {
         Ok(None)
     }
 
+    pub fn jmpundefinedp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let offset = cx.fetchw_and_inc_ip() as i16;
+        let value = cx.pop_stack();
+
+        let jump = match value {
+            Value::Undefined(..) => true,
+            Value::Object(obj) | Value::External(obj) => {
+                obj.as_primitive_capable().map(|p| p.is_undefined()).unwrap_or_default()
+            }
+            _ => false,
+        };
+
+        #[cfg(feature = "jit")]
+        cx.record_conditional_jump(jump);
+
+        if jump {
+            let frame = cx.active_frame_mut();
+
+            if offset.is_negative() {
+                frame.ip -= -offset as usize;
+            } else {
+                frame.ip += offset as usize;
+            }
+        }
+
+        Ok(None)
+    }
+
+    pub fn jmpundefinednp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let offset = cx.fetchw_and_inc_ip() as i16;
+        let value = cx.peek_stack();
+
+        let jump = match value {
+            Value::Undefined(..) => true,
+            Value::Object(obj) | Value::External(obj) => {
+                obj.as_primitive_capable().map(|p| p.is_undefined()).unwrap_or_default()
+            }
+            _ => false,
+        };
+
+        #[cfg(feature = "jit")]
+        cx.record_conditional_jump(jump);
+
+        if jump {
+            let frame = cx.active_frame_mut();
+
+            if offset.is_negative() {
+                frame.ip -= -offset as usize;
+            } else {
+                frame.ip += offset as usize;
+            }
+        }
+
+        Ok(None)
+    }
+
     pub fn jmp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
         let offset = cx.fetchw_and_inc_ip() as i16;
         let frame = cx.active_frame_mut();
@@ -1141,6 +1197,8 @@ pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResu
         Instruction::JmpTrueNP => handlers::jmptruenp(cx),
         Instruction::JmpNullishP => handlers::jmpnullishp(cx),
         Instruction::JmpNullishNP => handlers::jmpnullishnp(cx),
+        Instruction::JmpUndefinedP => handlers::jmpundefinedp(cx),
+        Instruction::JmpUndefinedNP => handlers::jmpundefinednp(cx),
         Instruction::ImportDyn => handlers::import_dyn(cx),
         Instruction::ImportStatic => handlers::import_static(cx),
         Instruction::ExportDefault => handlers::export_default(cx),

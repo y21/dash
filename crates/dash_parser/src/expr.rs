@@ -579,7 +579,9 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
             // TODO: this currently breaks with types in arrow functions
             // e.g. (a: number) => {}
             // we need to properly convert types here too
-            list.push((Parameter::Identifier(expr.as_identifier()?), None));
+
+            // TODO2: handle parameter default values
+            list.push((Parameter::Identifier(expr.as_identifier()?), None, None));
         }
 
         let is_statement = self.expect_and_skip(&[TokenType::LeftBrace], false);

@@ -136,7 +136,9 @@ impl<'buf> FunctionDecompiler<'buf> {
                 | Instruction::JmpNullishNP
                 | Instruction::JmpNullishP
                 | Instruction::JmpTrueNP
-                | Instruction::JmpTrueP => {
+                | Instruction::JmpTrueP
+                | Instruction::JmpUndefinedNP
+                | Instruction::JmpUndefinedP => {
                     let byte = self.read_i16()?;
                     let offset = (self.reader.offset() as isize) + byte as isize;
                     let arg = format!("@{offset:x}");
@@ -149,6 +151,8 @@ impl<'buf> FunctionDecompiler<'buf> {
                             Instruction::JmpNullishP => "jmpnullishp",
                             Instruction::JmpTrueNP => "jmtruenp",
                             Instruction::JmpTrueP => "jmtruep",
+                            Instruction::JmpUndefinedP => "jmpundefinedp",
+                            Instruction::JmpUndefinedNP => "jmpundefinednp",
                             _ => unreachable!(),
                         },
                         &[&arg],
