@@ -56,6 +56,7 @@ use crate::{
 use self::function::r#async::AsyncFunction;
 use self::object::PropertyValue;
 use self::primitive::{Number, PrimitiveCapabilities};
+use self::regex::RegExp;
 use self::{
     function::{generator::GeneratorFunction, user::UserFunction, Function},
     object::{Object, PropertyKey},
@@ -99,6 +100,10 @@ impl Value {
             Constant::String(s) => Value::String(s),
             Constant::Undefined => Value::undefined(),
             Constant::Null => Value::null(),
+            Constant::Regex(nodes, source) => {
+                let regex = RegExp::new(nodes, source, vm);
+                Value::Object(vm.register(regex))
+            }
             Constant::Function(f) => {
                 let mut externals = Vec::new();
 

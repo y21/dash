@@ -1,9 +1,16 @@
+pub use error::Error;
+pub use matcher::Matcher;
+pub use node::Node;
+pub use parser::Parser;
+
 pub mod error;
 pub mod matcher;
 pub mod node;
 pub mod parser;
 mod stream;
 mod visitor;
+
+pub type Regex = Vec<Node>;
 
 #[cfg(test)]
 #[test]

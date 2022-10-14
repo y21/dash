@@ -5,6 +5,6 @@ pub enum Error {
     #[error("unexpected end of file")]
     UnexpectedEof,
 
-    #[error("unexpected character: {_0}")]
+    #[error("unexpected character: {}", *.0 as char)]
     UnexpectedChar(u8),
 }

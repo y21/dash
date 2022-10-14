@@ -21,7 +21,7 @@ pub fn run(args: &ArgMatches) -> anyhow::Result<()> {
     async_rt.block_on(inner(source, opt, args.is_present("quiet")))?;
 
     if let Some(before) = before {
-        println!("{:?}", before.elapsed());
+        println!("\n{:?}", before.elapsed());
     }
 
     Ok(())

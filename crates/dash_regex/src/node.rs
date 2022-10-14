@@ -1,4 +1,8 @@
-#[derive(Debug)]
+#[cfg(feature = "format")]
+use serde::{Deserialize, Serialize};
+
+#[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Node {
     AnyCharacter,
     MetaSequence(MetaSequence),
@@ -29,14 +33,16 @@ impl Node {
     }
 }
 
-#[derive(Debug)]
+#[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, PartialEq)]
 pub enum MetaSequence {
     Digit,
     Word,
     Whitespace,
 }
 
-#[derive(Debug)]
+#[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Anchor {
     StartOfString,
     EndOfString,

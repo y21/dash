@@ -344,6 +344,9 @@ pub enum LiteralExpr<'a> {
     #[display(fmt = "\"{_0}\"")]
     String(Cow<'a, str>),
 
+    #[display(fmt = "/{_1}/")]
+    Regex(dash_regex::Regex, &'a str),
+
     #[display(fmt = "null")]
     Null,
 
@@ -385,6 +388,7 @@ impl<'a> LiteralExpr<'a> {
                 ..
             }) => Cow::Borrowed(*name),
             Self::Binding(VariableBinding { name, .. }) => Cow::Owned(name.to_string()),
+            Self::Regex(_, s) => Cow::Borrowed(*s),
         }
     }
 
@@ -399,6 +403,7 @@ impl<'a> LiteralExpr<'a> {
             Self::String(s) => Some(!s.is_empty()),
             Self::Null => Some(false),
             Self::Undefined => Some(false),
+            Self::Regex(..) => Some(true),
         }
     }
 }
