@@ -852,44 +852,66 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
                     let is_extern = local.is_extern();
 
-                    ib.build_local_load(id, is_extern);
-                    ib.build_revstck(2);
                     match operator {
                         TokenType::Assignment => {}
                         TokenType::AdditionAssignment => {
+                            ib.build_local_load(id, is_extern);
+                            ib.build_revstck(2);
                             ib.build_add();
                         }
                         TokenType::SubtractionAssignment => {
+                            ib.build_local_load(id, is_extern);
+                            ib.build_revstck(2);
                             ib.build_sub();
                         }
                         TokenType::MultiplicationAssignment => {
+                            ib.build_local_load(id, is_extern);
+                            ib.build_revstck(2);
                             ib.build_mul();
                         }
                         TokenType::DivisionAssignment => {
+                            ib.build_local_load(id, is_extern);
+                            ib.build_revstck(2);
                             ib.build_div();
                         }
                         TokenType::RemainderAssignment => {
+                            ib.build_local_load(id, is_extern);
+                            ib.build_revstck(2);
                             ib.build_rem();
                         }
                         TokenType::ExponentiationAssignment => {
+                            ib.build_local_load(id, is_extern);
+                            ib.build_revstck(2);
                             ib.build_pow();
                         }
                         TokenType::LeftShiftAssignment => {
+                            ib.build_local_load(id, is_extern);
+                            ib.build_revstck(2);
                             ib.build_bitshl();
                         }
                         TokenType::RightShiftAssignment => {
+                            ib.build_local_load(id, is_extern);
+                            ib.build_revstck(2);
                             ib.build_bitshr();
                         }
                         TokenType::UnsignedRightShiftAssignment => {
+                            ib.build_local_load(id, is_extern);
+                            ib.build_revstck(2);
                             ib.build_bitushr();
                         }
                         TokenType::BitwiseAndAssignment => {
+                            ib.build_local_load(id, is_extern);
+                            ib.build_revstck(2);
                             ib.build_bitand();
                         }
                         TokenType::BitwiseOrAssignment => {
+                            ib.build_local_load(id, is_extern);
+                            ib.build_revstck(2);
                             ib.build_bitor();
                         }
                         TokenType::BitwiseXorAssignment => {
+                            ib.build_local_load(id, is_extern);
+                            ib.build_revstck(2);
                             ib.build_bitxor();
                         }
                         _ => unimplementedc!("Unknown operator"),
@@ -897,43 +919,54 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
                     ib.build_local_store(id, is_extern);
                 } else {
-                    ib.build_global_load(&ident)?;
                     match operator {
                         TokenType::Assignment => {}
                         TokenType::AdditionAssignment => {
+                            ib.build_global_load(&ident)?;
                             ib.build_add();
                         }
                         TokenType::SubtractionAssignment => {
+                            ib.build_global_load(&ident)?;
                             ib.build_sub();
                         }
                         TokenType::MultiplicationAssignment => {
+                            ib.build_global_load(&ident)?;
                             ib.build_mul();
                         }
                         TokenType::DivisionAssignment => {
+                            ib.build_global_load(&ident)?;
                             ib.build_div();
                         }
                         TokenType::RemainderAssignment => {
+                            ib.build_global_load(&ident)?;
                             ib.build_rem();
                         }
                         TokenType::ExponentiationAssignment => {
+                            ib.build_global_load(&ident)?;
                             ib.build_pow();
                         }
                         TokenType::LeftShiftAssignment => {
+                            ib.build_global_load(&ident)?;
                             ib.build_bitshl();
                         }
                         TokenType::RightShiftAssignment => {
+                            ib.build_global_load(&ident)?;
                             ib.build_bitshr();
                         }
                         TokenType::UnsignedRightShiftAssignment => {
+                            ib.build_global_load(&ident)?;
                             ib.build_bitushr();
                         }
                         TokenType::BitwiseAndAssignment => {
+                            ib.build_global_load(&ident)?;
                             ib.build_bitand();
                         }
                         TokenType::BitwiseOrAssignment => {
+                            ib.build_global_load(&ident)?;
                             ib.build_bitor();
                         }
                         TokenType::BitwiseXorAssignment => {
+                            ib.build_global_load(&ident)?;
                             ib.build_bitxor();
                         }
                         _ => unimplementedc!("Unknown operator"),
