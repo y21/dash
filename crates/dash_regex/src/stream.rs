@@ -22,6 +22,10 @@ impl<'a, T> BorrowedStream<'a, T> {
         self.source.get(self.index)
     }
 
+    pub fn index(&self) -> usize {
+        self.index
+    }
+
     pub fn is_eof(&self) -> bool {
         self.index >= self.source.len()
     }

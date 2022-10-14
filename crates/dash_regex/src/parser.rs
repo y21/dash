@@ -1,4 +1,5 @@
 use crate::error::Error;
+use crate::node::Anchor;
 use crate::node::MetaSequence;
 use crate::node::Node;
 
@@ -47,6 +48,9 @@ impl<'a> Parser<'a> {
             Some(b'.') => Ok(Node::AnyCharacter),
             Some(b'\\') => self.parse_escape(),
             Some(b'[') => self.parse_character_class(),
+            // Anchor = Return early as they cannot have quantifiers
+            Some(b'^') => return Ok(Node::Anchor(Anchor::StartOfString)),
+            Some(b'$') => return Ok(Node::Anchor(Anchor::EndOfString)),
             Some(other) => Ok(Node::LiteralCharacter(other)),
             None => Err(Error::UnexpectedEof),
         }?;
@@ -85,7 +89,11 @@ impl<'a> Parser<'a> {
                         self.advance();
                         Ok(Node::unbounded_max_repetition(node, min))
                     }
-                    _ => Ok(Node::repetition(node, min, self.read_int()?)),
+                    _ => {
+                        let max = self.read_int()?;
+                        self.advance(); // }
+                        Ok(Node::repetition(node, min, max))
+                    }
                 }
             }
             Some(b'}') => {

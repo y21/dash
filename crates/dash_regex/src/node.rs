@@ -9,6 +9,7 @@ pub enum Node {
     },
     LiteralCharacter(u8),
     CharacterClass(Vec<Node>),
+    Anchor(Anchor),
 }
 
 impl Node {
@@ -33,4 +34,10 @@ pub enum MetaSequence {
     Digit,
     Word,
     Whitespace,
+}
+
+#[derive(Debug)]
+pub enum Anchor {
+    StartOfString,
+    EndOfString,
 }

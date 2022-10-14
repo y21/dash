@@ -1,9 +1,19 @@
+use crate::node::Anchor;
 use crate::node::MetaSequence;
 use crate::node::Node;
 use crate::stream::BorrowedStream;
 
 pub trait Visit<'a> {
     fn matches(&self, s: &mut BorrowedStream<'a, u8>) -> bool;
+}
+
+impl<'a> Visit<'a> for Anchor {
+    fn matches(&self, s: &mut BorrowedStream<'a, u8>) -> bool {
+        match self {
+            Anchor::StartOfString => s.index() == 0,
+            Anchor::EndOfString => s.is_eof(),
+        }
+    }
 }
 
 impl<'a> Visit<'a> for MetaSequence {
@@ -47,6 +57,7 @@ impl<'a> Visit<'a> for Node {
                 }
                 matches
             }
+            Node::Anchor(anchor) => anchor.matches(s),
             Node::MetaSequence(seq) => seq.matches(s),
             Node::Repetition { node, min, max } => {
                 let mut count = 0;
