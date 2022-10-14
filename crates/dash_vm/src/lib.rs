@@ -583,6 +583,20 @@ impl Vm {
             // size: scope.statics.set_size; // TODO: getter, not a function
         });
 
+        let regexp_ctor = register_builtin_type!(scope.statics.regexp_ctor, {
+            #[prototype] function_proto;
+            #[constructor] function_ctor;
+            #[fn_prototype] scope.statics.regexp_prototype;
+            #[fn_name] RegExp;
+        });
+
+        register_builtin_type!(scope.statics.regexp_prototype, {
+            #[prototype] object_proto;
+            #[constructor] regexp_ctor;
+            #[properties]
+            test: scope.statics.regexp_test;
+        });
+
         register_builtin_type!(global, {
             #[prototype] object_proto;
             #[constructor] object_ctor;
@@ -592,7 +606,7 @@ impl Vm {
             isFinite: scope.statics.is_finite;
             parseFloat: scope.statics.parse_float;
             parseInt: scope.statics.parse_int;
-
+            RegExp: regexp_ctor;
             Symbol: symbol_ctor;
             ArrayBuffer: arraybuffer_ctor;
             Uint8Array: u8array_ctor;

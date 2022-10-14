@@ -10,6 +10,7 @@ pub mod object;
 pub mod ops;
 pub mod primitive;
 pub mod promise;
+pub mod regex;
 pub mod set;
 pub mod typedarray;
 

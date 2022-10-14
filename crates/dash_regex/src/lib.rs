@@ -14,7 +14,7 @@ pub fn test() {
 
     fn matches(regex: &str, input: &str) -> bool {
         let nodes = Parser::new(regex.as_bytes()).parse_all().unwrap();
-        let mut matcher = Matcher::new(dbg!(nodes), input.as_bytes());
+        let mut matcher = Matcher::new(&nodes, input.as_bytes());
         matcher.matches()
     }
 

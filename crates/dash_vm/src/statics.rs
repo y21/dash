@@ -5,6 +5,7 @@ use crate::gc::Gc;
 use crate::js_std;
 use crate::value::function::Function;
 use crate::value::function::FunctionKind;
+use crate::value::regex::RegExp;
 use crate::value::set::Set;
 
 use super::value::array::Array;
@@ -202,6 +203,9 @@ pub struct Statics {
     pub set_delete: Handle<dyn Object>,
     pub set_clear: Handle<dyn Object>,
     pub set_size: Handle<dyn Object>,
+    pub regexp_ctor: Handle<dyn Object>,
+    pub regexp_prototype: Handle<dyn Object>,
+    pub regexp_test: Handle<dyn Object>,
 }
 
 fn object(gc: &mut Gc<dyn Object>) -> Handle<dyn Object> {
@@ -404,6 +408,9 @@ impl Statics {
             set_prototype: gc.register(Set::with_obj(NamedObject::null())),
             set_clear: function(gc, "clear", js_std::set::clear),
             set_size: function(gc, "size", js_std::set::size),
+            regexp_ctor: function(gc, "RegExp", js_std::regex::constructor),
+            regexp_prototype: gc.register(RegExp::empty()),
+            regexp_test: function(gc, "test", js_std::regex::test),
         }
     }
 
