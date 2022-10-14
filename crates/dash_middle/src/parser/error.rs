@@ -29,6 +29,7 @@ pub enum ErrorKind<'a> {
         token: Token<'a>,
     },
     MultipleRestInDestructuring(Token<'a>),
+    RegexSyntaxError(Token<'a>, dash_regex::Error),
 }
 
 /// An error that occurred during parsing
@@ -84,6 +85,7 @@ impl fmt::Display for Error<'_> {
             ErrorKind::MultipleRestInDestructuring(tok) => {
                 (tok, "a rest element must be last in a destructuring pattern", None)
             }
+            ErrorKind::RegexSyntaxError(tok, err) => (tok, "regex parse error", Some(Box::new(err))),
         };
 
         let format_err = FormattableError {

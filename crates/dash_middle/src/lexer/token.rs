@@ -198,6 +198,9 @@ pub enum TokenType {
     /// Number: 42
     NumberDec,
 
+    /// Regex literal: /a+b/g
+    RegexLiteral,
+
     #[display(fmt = "0x")]
     NumberHex,
 

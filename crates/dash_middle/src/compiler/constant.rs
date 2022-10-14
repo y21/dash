@@ -1,7 +1,7 @@
 use std::ops::Deref;
 use std::rc::Rc;
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "format")]
 use serde::{Deserialize, Serialize};
 
 use crate::parser::expr::LiteralExpr;
@@ -11,7 +11,7 @@ use crate::parser::statement::VariableDeclarationName;
 
 use super::external::External;
 
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub struct Function {
     pub name: Option<String>,
@@ -26,7 +26,7 @@ pub struct Function {
     pub rest_local: Option<u16>,
 }
 
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Constant {
     Number(f64),
@@ -34,6 +34,7 @@ pub enum Constant {
     Identifier(Rc<str>),
     Boolean(bool),
     Function(Rc<Function>),
+    Regex(dash_regex::Regex, Rc<str>),
     Null,
     Undefined,
 }
@@ -80,11 +81,12 @@ impl Constant {
             LiteralExpr::Boolean(b) => Self::Boolean(*b),
             LiteralExpr::Null => Self::Null,
             LiteralExpr::Undefined => Self::Undefined,
+            LiteralExpr::Regex(regex, source) => Self::Regex(regex.clone(), (*source).into()),
         }
     }
 }
 
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone)]
 pub struct ConstantPool {
     constants: Vec<Constant>,

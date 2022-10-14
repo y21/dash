@@ -10,6 +10,7 @@ members = [
     "cli",
     "testrunner",
     "crates/dash_wasm",
+    "crates/dash_regex",
     "crates/dash_proc_macro",
     "crates/dash_rt",
     "crates/dash_dlloader",

@@ -330,6 +330,7 @@ impl fmt::Display for DisplayConstant<'_> {
             Constant::Function(fun) => write!(f, "<function {}>", fun.name.as_deref().unwrap_or("<anonymous>")),
             Constant::Null => f.write_str("null"),
             Constant::Undefined => f.write_str("undefined"),
+            Constant::Regex(_, source) => write!(f, "{source}"),
         }
     }
 }

@@ -1,0 +1,49 @@
+#[cfg(feature = "format")]
+use serde::{Deserialize, Serialize};
+
+#[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, PartialEq)]
+pub enum Node {
+    AnyCharacter,
+    MetaSequence(MetaSequence),
+    Repetition {
+        node: Box<Node>,
+        min: usize,
+        max: Option<usize>,
+    },
+    LiteralCharacter(u8),
+    CharacterClass(Vec<Node>),
+    Anchor(Anchor),
+}
+
+impl Node {
+    pub fn unbounded_max_repetition(node: Node, min: usize) -> Self {
+        Self::Repetition {
+            node: Box::new(node),
+            min,
+            max: None,
+        }
+    }
+    pub fn repetition(node: Node, min: usize, max: usize) -> Self {
+        Self::Repetition {
+            node: Box::new(node),
+            min,
+            max: Some(max),
+        }
+    }
+}
+
+#[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, PartialEq)]
+pub enum MetaSequence {
+    Digit,
+    Word,
+    Whitespace,
+}
+
+#[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, PartialEq)]
+pub enum Anchor {
+    StartOfString,
+    EndOfString,
+}

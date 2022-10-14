@@ -3,6 +3,7 @@ use dash_middle::lexer::token::ASSIGNMENT_TYPES;
 use dash_middle::parser::error::ErrorKind;
 use dash_middle::parser::expr::ArrayLiteral;
 use dash_middle::parser::expr::Expr;
+use dash_middle::parser::expr::LiteralExpr;
 use dash_middle::parser::expr::ObjectLiteral;
 use dash_middle::parser::expr::ObjectMemberKind;
 use dash_middle::parser::expr::UnaryExpr;
@@ -528,6 +529,19 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
                 Expr::Function(self.parse_function(true)?)
             }
             TokenType::Function => Expr::Function(self.parse_function(false)?),
+            TokenType::RegexLiteral => {
+                // Trim / prefix and suffix
+                let full = &full[1..full.len() - 1];
+                let nodes = match dash_regex::Parser::new(full.as_bytes()).parse_all() {
+                    Ok(nodes) => nodes,
+                    Err(err) => {
+                        let tok = self.current().unwrap().clone();
+                        self.create_error(ErrorKind::RegexSyntaxError(tok, err));
+                        return None;
+                    }
+                };
+                Expr::Literal(LiteralExpr::Regex(nodes, full))
+            }
             _ => {
                 let cur = self.previous().cloned()?;
                 self.create_error(ErrorKind::UnknownToken(cur));

@@ -1,0 +1,13 @@
+[package]
+name = "dash_regex"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+format = ["serde"]
+
+[dependencies]
+thiserror = "1.0.37"
+serde = { version = "1.0", features = ["derive", "rc"], optional = true }

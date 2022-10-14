@@ -333,6 +333,24 @@ impl<'a> Lexer<'a> {
         self.create_contextified_token(lexeme.into());
     }
 
+    /// Reads a regex literal, assuming the current cursor is one byte ahead of the `/`
+    fn read_regex_literal(&mut self) {
+        // No real regex parsing here, we only skip to the end of the regex literal here.
+        while !self.is_eof() {
+            let c = self.next_char().unwrap();
+            if c == b'/' {
+                // End of regex literal
+                break;
+            } else if c == b'\\' {
+                // Skip escaped character
+                self.advance();
+            }
+        }
+
+        let lexeme = self.get_lexeme();
+        self.create_contextified_token_with_lexeme(TokenType::RegexLiteral, lexeme);
+    }
+
     /// Iterates through the input string and yields the next node
     pub fn scan_next(&mut self) -> Option<()> {
         self.skip_whitespaces();
@@ -444,10 +462,99 @@ impl<'a> Lexer<'a> {
                 Some(TokenType::Remainder),
                 &[(b"=", TokenType::RemainderAssignment)],
             ),
-            b'/' => self.create_contextified_conditional_token(
-                Some(TokenType::Slash),
-                &[(b"=", TokenType::DivisionAssignment)],
-            ),
+            b'/' => {
+                // '/' is very ambiguous, probably the most ambiguous character in the grammar
+                // Comments (both single line and multi line) have already been checked for,
+                // so the only ambiguity left is the division operator and the start of a regex literal.
+                // It is impossible (as far as I'm aware) to fully distuingish these at the lexer level,
+                // as the lexer does not understand grammar (i.e. where a certain token is valid).
+                // But we also HAVE to special case regex literals here in the lexer as they can contain any character,
+                // and should not be parsed as JS source tokens (whitespaces are not preserved at the parser level),
+                // much like how string literals work.
+
+                // One way that "works" for most cases is to look at the previous token:
+                // If the previous token was a token that syntactically requires an expression to follow (not an operator),
+                // then the '/' MUST be the start of a regex literal.
+                // For example: `let x = /b/` is a regex literal, because `=` requires an expression.
+                // `a /b/ c` is not a regex literal, because `a` must NOT be followed by another expression.
+                // Unfortunately, even the previous token can be ambiguous, for example:
+                // `+{}  /a/g` : /a/ is NOT a regex literal
+                // `{}   /a/g` : /a/ IS a regex literal
+                // The previous token is the same in both cases `}`, but is parsed differently depending on whether
+                // `}` ends a code block or an object literal.
+
+                const PRECEDING_TOKENS: &[TokenType] = &[
+                    // Symbols
+                    TokenType::Dot,
+                    TokenType::LeftParen,
+                    TokenType::LeftBrace,
+                    TokenType::LeftSquareBrace,
+                    TokenType::Semicolon,
+                    TokenType::Comma,
+                    TokenType::Less,
+                    TokenType::Greater,
+                    TokenType::LessEqual,
+                    TokenType::GreaterEqual,
+                    TokenType::Equality,
+                    TokenType::Inequality,
+                    TokenType::StrictEquality,
+                    TokenType::StrictInequality,
+                    TokenType::Plus,
+                    TokenType::Minus,
+                    TokenType::Star,
+                    TokenType::Remainder,
+                    TokenType::Increment,
+                    TokenType::Decrement,
+                    TokenType::LeftShift,
+                    TokenType::RightShift,
+                    TokenType::UnsignedRightShift,
+                    TokenType::BitwiseAnd,
+                    TokenType::BitwiseOr,
+                    TokenType::BitwiseXor,
+                    TokenType::LogicalNot,
+                    TokenType::BitwiseNot,
+                    TokenType::LogicalAnd,
+                    TokenType::LogicalOr,
+                    TokenType::Conditional,
+                    TokenType::Colon,
+                    TokenType::Assignment,
+                    TokenType::AdditionAssignment,
+                    TokenType::SubtractionAssignment,
+                    TokenType::MultiplicationAssignment,
+                    TokenType::RemainderAssignment,
+                    TokenType::LeftShiftAssignment,
+                    TokenType::RightShiftAssignment,
+                    TokenType::UnsignedRightShiftAssignment,
+                    TokenType::BitwiseAndAssignment,
+                    TokenType::BitwiseOrAssignment,
+                    TokenType::BitwiseXorAssignment,
+                    TokenType::Slash,
+                    TokenType::DivisionAssignment,
+                    // Keywords
+                    TokenType::New,
+                    TokenType::Delete,
+                    TokenType::Void,
+                    TokenType::Typeof,
+                    TokenType::Instanceof,
+                    TokenType::In,
+                    // TokenType::Do,
+                    TokenType::Return,
+                    TokenType::Case,
+                    TokenType::Throw,
+                    TokenType::Else,
+                    TokenType::Await,
+                    TokenType::Yield,
+                ];
+
+                match self.tokens.last() {
+                    Some(token) if PRECEDING_TOKENS.contains(&token.ty) => self.read_regex_literal(),
+                    None => self.read_regex_literal(),
+                    _ => self.create_contextified_conditional_token(
+                        Some(TokenType::Slash),
+                        &[(b"=", TokenType::DivisionAssignment)],
+                    ),
+                }
+            }
             b'!' => self.create_contextified_conditional_token(
                 Some(TokenType::LogicalNot),
                 &[(b"==", TokenType::StrictInequality), (b"=", TokenType::Inequality)],

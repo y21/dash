@@ -12,3 +12,4 @@ parse_type_annotations = []
 [dependencies]
 dash_middle = { path = "../dash_middle" }
 dash_lexer = { path = "../dash_lexer", optional = true }
+dash_regex = { path = "../dash_regex" }
