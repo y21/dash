@@ -14,6 +14,9 @@ pub enum Node {
     LiteralCharacter(u8),
     CharacterClass(Vec<Node>),
     Anchor(Anchor),
+    Or(Vec<Node>, Vec<Node>),
+    Optional(Box<Node>),
+    Group(Vec<Node>),
 }
 
 impl Node {
@@ -30,6 +33,9 @@ impl Node {
             min,
             max: Some(max),
         }
+    }
+    pub fn optional(node: Node) -> Self {
+        Self::Optional(Box::new(node))
     }
 }
 

@@ -25,5 +25,5 @@ pub fn test() {
         matcher.matches()
     }
 
-    dbg!(matches("^a[\\db]{2,4}c$", "ab342c"));
+    dbg!(matches("^(ab|cd|ef)+$", "abababcdcdabef"));
 }

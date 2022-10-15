@@ -26,6 +26,10 @@ impl<'a, T> BorrowedStream<'a, T> {
         self.index
     }
 
+    pub fn set_index(&mut self, i: usize) {
+        self.index = i;
+    }
+
     pub fn is_eof(&self) -> bool {
         self.index >= self.source.len()
     }

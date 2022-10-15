@@ -57,6 +57,20 @@ impl<'a> Visit<'a> for Node {
                 }
                 matches
             }
+            Node::Optional(node) => {
+                node.matches(s);
+                true
+            }
+            Node::Group(group) => group.iter().all(|node| node.matches(s)),
+            Node::Or(left, right) => {
+                let left_index = s.index();
+                let left_matches = left.iter().all(|node| node.matches(s));
+                if left_matches {
+                    return true;
+                }
+                s.set_index(left_index);
+                right.iter().all(|node| node.matches(s))
+            }
             Node::Anchor(anchor) => anchor.matches(s),
             Node::MetaSequence(seq) => seq.matches(s),
             Node::Repetition { node, min, max } => {
