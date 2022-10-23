@@ -50,7 +50,7 @@ pub struct Vm {
     gc: Gc<dyn Object>,
     global: Handle<dyn Object>,
     externals: Externals,
-    statics: Statics, // TODO: we should box this... maybe?
+    statics: Box<Statics>, // TODO: we should box this... maybe?
     try_blocks: Vec<TryBlock>,
     params: VmParams,
 
@@ -62,6 +62,7 @@ pub struct Vm {
     #[cfg(feature = "jit")]
     assembler: dash_jit::Assembler,
 }
+
 
 impl Vm {
     pub fn new(params: VmParams) -> Self {
@@ -79,7 +80,7 @@ impl Vm {
             gc,
             global,
             externals: Externals::new(),
-            statics,
+            statics: Box::new(statics),
             try_blocks: Vec::new(),
             params,
 
