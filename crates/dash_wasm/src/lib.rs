@@ -94,7 +94,7 @@ pub fn debug(s: &str, o: OptLevel, em: Emit) -> String {
 }
 
 #[wasm_bindgen]
-pub fn decompile(s: &str, o: OptLevel) -> Result<js_sys::Uint8Array, String> {
+pub fn compile(s: &str, o: OptLevel) -> Result<js_sys::Uint8Array, String> {
     let cmp = FunctionCompiler::compile_str(s, o.into()).map_err(|e| format!("{e:?}"))?;
     dash_middle::compiler::format::serialize(cmp)
         .map(|v| {
