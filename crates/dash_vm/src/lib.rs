@@ -434,7 +434,7 @@ impl Vm {
             #[fn_name] Error;
         });
 
-        register_builtin_type!(scope.statics.error_prototype, {
+        let error_proto = register_builtin_type!(scope.statics.error_prototype, {
             #[prototype] object_proto;
             #[constructor] error_ctor;
             #[properties]
@@ -598,6 +598,90 @@ impl Vm {
             test: scope.statics.regexp_test;
         });
 
+        let eval_error_ctor = register_builtin_type!(scope.statics.eval_error_ctor, {
+            #[prototype] function_proto;
+            #[constructor] function_ctor;
+            #[fn_prototype] scope.statics.eval_error_prototype;
+            #[fn_name] EvalError;
+        });
+
+        register_builtin_type!(scope.statics.eval_error_prototype, {
+            #[prototype] error_proto;
+            #[constructor] eval_error_ctor;
+        });
+
+        let range_error_ctor = register_builtin_type!(scope.statics.range_error_ctor, {
+            #[prototype] function_proto;
+            #[constructor] function_ctor;
+            #[fn_prototype] scope.statics.range_error_prototype;
+            #[fn_name] RangeError;
+        });
+
+        register_builtin_type!(scope.statics.range_error_prototype, {
+            #[prototype] error_proto;
+            #[constructor] range_error_ctor;
+        });
+
+        let reference_error_ctor = register_builtin_type!(scope.statics.reference_error_ctor, {
+            #[prototype] function_proto;
+            #[constructor] function_ctor;
+            #[fn_prototype] scope.statics.reference_error_prototype;
+            #[fn_name] ReferenceError;
+        });
+
+        register_builtin_type!(scope.statics.reference_error_prototype, {
+            #[prototype] error_proto;
+            #[constructor] reference_error_ctor;
+        });
+
+        let syntax_error_ctor = register_builtin_type!(scope.statics.syntax_error_ctor, {
+            #[prototype] function_proto;
+            #[constructor] function_ctor;
+            #[fn_prototype] scope.statics.syntax_error_prototype;
+            #[fn_name] SyntaxError;
+        });
+
+        register_builtin_type!(scope.statics.syntax_error_prototype, {
+            #[prototype] error_proto;
+            #[constructor] syntax_error_ctor;
+        });
+
+        let type_error_ctor = register_builtin_type!(scope.statics.type_error_ctor, {
+            #[prototype] function_proto;
+            #[constructor] function_ctor;
+            #[fn_prototype] scope.statics.type_error_prototype;
+            #[fn_name] TypeError;
+        });
+
+        register_builtin_type!(scope.statics.type_error_prototype, {
+            #[prototype] error_proto;
+            #[constructor] type_error_ctor;
+        });
+
+        let uri_error_ctor = register_builtin_type!(scope.statics.uri_error_ctor, {
+            #[prototype] function_proto;
+            #[constructor] function_ctor;
+            #[fn_prototype] scope.statics.uri_error_prototype;
+            #[fn_name] URIError;
+        });
+
+        register_builtin_type!(scope.statics.uri_error_prototype, {
+            #[prototype] error_proto;
+            #[constructor] uri_error_ctor;
+        });
+
+        let aggregate_error_ctor = register_builtin_type!(scope.statics.aggregate_error_ctor, {
+            #[prototype] function_proto;
+            #[constructor] function_ctor;
+            #[fn_prototype] scope.statics.aggregate_error_prototype;
+            #[fn_name] AggregateError;
+        });
+
+        register_builtin_type!(scope.statics.aggregate_error_prototype, {
+            #[prototype] error_proto;
+            #[constructor] aggregate_error_ctor;
+        });
+
         register_builtin_type!(global, {
             #[prototype] object_proto;
             #[constructor] object_ctor;
@@ -618,6 +702,13 @@ impl Vm {
             Int32Array: i32array_ctor;
             Array: array_ctor;
             Error: error_ctor;
+            EvalError: eval_error_ctor;
+            RangeError: range_error_ctor;
+            ReferenceError: reference_error_ctor;
+            SyntaxError: syntax_error_ctor;
+            TypeError: type_error_ctor;
+            URIError: uri_error_ctor;
+            AggregateError: aggregate_error_ctor;
             String: string_ctor;
             Object: object_ctor;
             Set: set_ctor;

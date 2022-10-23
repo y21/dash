@@ -3,6 +3,13 @@ use dash_proc_macro::Trace;
 use crate::gc::handle::Handle;
 use crate::gc::Gc;
 use crate::js_std;
+use crate::value::error::AggregateError;
+use crate::value::error::EvalError;
+use crate::value::error::RangeError;
+use crate::value::error::ReferenceError;
+use crate::value::error::SyntaxError;
+use crate::value::error::TypeError;
+use crate::value::error::URIError;
 use crate::value::function::Function;
 use crate::value::function::FunctionKind;
 use crate::value::regex::RegExp;
@@ -173,6 +180,20 @@ pub struct Statics {
     pub error_ctor: Handle<dyn Object>,
     pub error_prototype: Handle<dyn Object>,
     pub error_to_string: Handle<dyn Object>,
+    pub eval_error_ctor: Handle<dyn Object>,
+    pub eval_error_prototype: Handle<dyn Object>,
+    pub range_error_ctor: Handle<dyn Object>,
+    pub range_error_prototype: Handle<dyn Object>,
+    pub reference_error_ctor: Handle<dyn Object>,
+    pub reference_error_prototype: Handle<dyn Object>,
+    pub syntax_error_ctor: Handle<dyn Object>,
+    pub syntax_error_prototype: Handle<dyn Object>,
+    pub type_error_ctor: Handle<dyn Object>,
+    pub type_error_prototype: Handle<dyn Object>,
+    pub uri_error_ctor: Handle<dyn Object>,
+    pub uri_error_prototype: Handle<dyn Object>,
+    pub aggregate_error_ctor: Handle<dyn Object>,
+    pub aggregate_error_prototype: Handle<dyn Object>,
     pub arraybuffer_ctor: Handle<dyn Object>,
     pub arraybuffer_prototype: Handle<dyn Object>,
     pub uint8array_ctor: Handle<dyn Object>,
@@ -375,9 +396,23 @@ impl Statics {
                 gc.register(GeneratorIterator::empty(obj))
             },
             generator_iterator_next: function(gc, "next", js_std::generator::next),
-            error_ctor: function(gc, "Error", js_std::error::constructor),
+            error_ctor: function(gc, "Error", js_std::error::error_constructor),
             error_prototype: gc.register(Error::empty()),
             error_to_string: function(gc, "toString", js_std::error::to_string),
+            eval_error_ctor: function(gc, "EvalError", js_std::error::eval_error_constructor),
+            eval_error_prototype: gc.register(EvalError::empty()),
+            range_error_ctor: function(gc, "RangeError", js_std::error::range_error_constructor),
+            range_error_prototype: gc.register(RangeError::empty()),
+            reference_error_ctor: function(gc, "ReferenceError", js_std::error::reference_error_constructor),
+            reference_error_prototype: gc.register(ReferenceError::empty()),
+            syntax_error_ctor: function(gc, "SyntaxError", js_std::error::syntax_error_constructor),
+            syntax_error_prototype: gc.register(SyntaxError::empty()),
+            type_error_ctor: function(gc, "TypeError", js_std::error::type_error_constructor),
+            type_error_prototype: gc.register(TypeError::empty()),
+            uri_error_ctor: function(gc, "URIError", js_std::error::uri_error_constructor),
+            uri_error_prototype: gc.register(URIError::empty()),
+            aggregate_error_ctor: function(gc, "AggregateError", js_std::error::aggregate_error_constructor),
+            aggregate_error_prototype: gc.register(AggregateError::empty()),
             arraybuffer_ctor: function(gc, "ArrayBuffer", js_std::arraybuffer::constructor),
             arraybuffer_prototype: gc.register(ArrayBuffer::empty()),
             uint8array_ctor: function(gc, "Uint8Array", js_std::typedarray::u8array::constructor),

@@ -2,6 +2,9 @@ use std::any::Any;
 use std::fmt::Write;
 use std::rc::Rc;
 
+use dash_proc_macro::Trace;
+
+use crate::delegate;
 use crate::gc::handle::Handle;
 use crate::gc::trace::Trace;
 use crate::local::LocalScope;
@@ -62,10 +65,21 @@ impl Error {
             obj: NamedObject::null(),
         }
     }
+
+    pub fn empty_with_name<S: Into<Rc<str>>>(name: S) -> Self {
+        Self {
+            name: name.into(),
+            message: "".into(),
+            stack: "".into(),
+            obj: NamedObject::null(),
+        }
+    }
 }
 
 unsafe impl Trace for Error {
-    fn trace(&self) {}
+    fn trace(&self) {
+        self.obj.trace();
+    }
 }
 
 impl Object for Error {
@@ -124,3 +138,57 @@ impl Object for Error {
         self.obj.own_keys()
     }
 }
+
+// Other types of errors
+macro_rules! define_error_type {
+    ( $($t:ident $proto:ident $ctor:ident),* ) => {
+        $(
+            #[derive(Debug, Trace)]
+            pub struct $t {
+                pub inner: Error,
+            }
+
+            impl $t {
+                pub fn new<S: Into<Rc<str>>>(vm: &mut Vm, message: S) -> Self {
+                    let _proto = vm.statics.$proto.clone();
+                    let _ctor = vm.statics.$ctor.clone();
+
+                    Self {
+                        inner: Error::with_name(vm, stringify!($t), message),
+                    }
+                }
+
+                pub fn empty() -> Self {
+                    Self {
+                        inner: Error::empty_with_name(stringify!($t)),
+                    }
+                }
+            }
+
+            impl Object for $t {
+                delegate!(
+                    inner,
+                    get_property,
+                    get_property_descriptor,
+                    set_property,
+                    delete_property,
+                    set_prototype,
+                    get_prototype,
+                    as_any,
+                    apply,
+                    own_keys
+                );
+            }
+        )*
+    };
+}
+
+define_error_type!(
+    EvalError eval_error_prototype eval_error_ctor,
+    RangeError range_error_prototype range_error_ctor,
+    ReferenceError reference_error_prototype reference_error_ctor,
+    SyntaxError syntax_error_prototype syntax_error_ctor,
+    TypeError type_error_prototype type_error_ctor,
+    URIError uri_error_prototype uri_error_ctor,
+    AggregateError aggregate_error_prototype aggregate_error_ctor
+);
