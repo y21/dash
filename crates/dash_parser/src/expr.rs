@@ -315,13 +315,11 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
 
     fn parse_field_access(&mut self) -> Option<Expr<'a>> {
         if self.expect_and_skip(&[TokenType::New], false) {
-            let mut rval = self.parse_field_access()?;
-            if let Expr::Call(fc) = &mut rval {
-                fc.constructor_call = true;
-            } else {
-                self.create_error(ErrorKind::UnexpectedToken(self.previous()?.clone(), TokenType::New));
-                return None;
-            };
+            self.new_level_stack
+                .inc_level()
+                .expect("Failed to increment `new` stack level");
+
+            let rval = self.parse_field_access()?;
 
             return Some(rval);
         }
@@ -344,7 +342,14 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
                         arguments.push(self.parse_expression()?);
                     }
 
-                    expr = Expr::function_call(expr, arguments, false);
+                    // End of function call.
+                    let level = self.new_level_stack.cur_level().expect("Missing `new` level stack");
+                    let is_constructor_call = level > 0;
+                    if is_constructor_call {
+                        self.new_level_stack.dec_level().expect("Missing `new` level stack");
+                    }
+
+                    expr = Expr::function_call(expr, arguments, is_constructor_call);
                 }
                 TokenType::Dot => {
                     let property = Expr::identifier(self.next()?.full);
@@ -505,12 +510,14 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
                     return self.parse_arrow_function_end(Vec::new()).map(Expr::Function);
                 }
 
+                self.new_level_stack.add_level();
                 let mut exprs = vec![self.parse_expression()?];
 
                 while !self.expect_and_skip(&[TokenType::RightParen], false) {
                     self.expect_and_skip(&[TokenType::Comma], false);
                     exprs.push(self.parse_expression()?);
                 }
+                self.new_level_stack.pop_level();
 
                 // This is an arrow function if the next token is an arrow (`=>`)
                 if self.expect_and_skip(&[TokenType::FatArrow], false) {
@@ -580,7 +587,11 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
             return None;
         }
 
+        self.new_level_stack.add_level();
+
         let BlockStatement(statements) = self.parse_block()?;
+
+        self.new_level_stack.pop_level().unwrap();
 
         Some(FunctionDeclaration::new(name, arguments, statements, ty, is_async))
     }
