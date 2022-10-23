@@ -5,6 +5,8 @@ use std::mem::ManuallyDrop;
 use std::ops::RangeInclusive;
 use std::thread::ThreadId;
 
+use smallvec::SmallVec;
+
 const DIGIT: RangeInclusive<u8> = b'0'..=b'9';
 const OCTAL_DIGIT: RangeInclusive<u8> = b'0'..=b'7';
 const IDENTIFIER_START_LOWERCASE: RangeInclusive<u8> = b'a'..=b'z';
@@ -166,5 +168,35 @@ impl<T> SharedOnce<T> {
 
     pub fn try_take(&self) -> Option<T> {
         self.0.borrow_mut().take()
+    }
+}
+
+pub struct LevelStack(SmallVec<[u8; 4]>);
+
+impl LevelStack {
+    pub fn new() -> Self {
+        Self(SmallVec::new())
+    }
+
+    pub fn add_level(&mut self) {
+        self.0.push(0);
+    }
+
+    pub fn inc_level(&mut self) -> Option<()> {
+        *self.0.last_mut()? += 1;
+        Some(())
+    }
+
+    pub fn dec_level(&mut self) -> Option<()> {
+        *self.0.last_mut()? -= 1;
+        Some(())
+    }
+
+    pub fn cur_level(&self) -> Option<u8> {
+        self.0.last().copied()
+    }
+
+    pub fn pop_level(&mut self) -> Option<u8> {
+        self.0.pop()
     }
 }
