@@ -280,6 +280,7 @@ pub enum PropertyValueKind {
     },
     /// Static value property
     Static(Value),
+    // TODO: magic property that appears "static" but is actually computed, e.g. array.length
 }
 
 impl PropertyValueKind {
