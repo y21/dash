@@ -350,6 +350,8 @@ impl Vm {
             trim: scope.statics.string_trim;
             trimStart: scope.statics.string_trim_start;
             trimEnd: scope.statics.string_trim_end;
+            substr: scope.statics.string_substr;
+            substring: scope.statics.string_substring;
         });
 
         let array_ctor = register_builtin_type!(scope.statics.array_ctor, {

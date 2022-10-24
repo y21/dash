@@ -299,3 +299,45 @@ pub fn from_char_code(cx: CallContext) -> Result<Value, Value> {
     let s = char::from_u32(code as u32).unwrap_or(char::REPLACEMENT_CHARACTER);
     Ok(Value::String(s.to_string().into()))
 }
+
+pub fn substr(cx: CallContext) -> Result<Value, Value> {
+    let string = cx.this.to_string(cx.scope)?;
+    let start = cx.args.first().unwrap_or_undefined().to_int32(cx.scope)?;
+    let length = cx.args.get(1).unwrap_or_undefined().to_int32(cx.scope)?;
+
+    let start = if start < 0 { string.len() as i32 + start } else { start };
+
+    let length = if length < 0 { 0 } else { length };
+
+    let end = start + length;
+
+    let result = string
+        .chars()
+        .skip(start as usize)
+        .take((end - start) as usize)
+        .collect::<String>();
+
+    Ok(Value::String(result.into()))
+}
+
+pub fn substring(cx: CallContext) -> Result<Value, Value> {
+    let string = cx.this.to_string(cx.scope)?;
+    let start = cx.args.first().unwrap_or_undefined().to_int32(cx.scope)?;
+    let end = cx.args.get(1).unwrap_or_undefined().to_int32(cx.scope)?;
+
+    let start = if start < 0 { 0 } else { start };
+
+    let end = if end < 0 { 0 } else { end };
+
+    let start = if start > end { end } else { start };
+
+    let end = if end < start { start } else { end };
+
+    let result = string
+        .chars()
+        .skip(start as usize)
+        .take((end - start) as usize)
+        .collect::<String>();
+
+    Ok(Value::String(result.into()))
+}
