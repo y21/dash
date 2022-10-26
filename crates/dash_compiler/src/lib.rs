@@ -171,7 +171,7 @@ impl<'a> FunctionCompiler<'a> {
             ast.push(Statement::Return(Default::default()));
         }
 
-        let hoisted_locals = transformations::find_hoisted_declarations(&ast);
+        let hoisted_locals = transformations::hoist_declarations(&mut ast);
         for binding in hoisted_locals {
             self.scope.add_local(
                 match binding.name {
