@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt;
 use std::num::ParseIntError;
 
@@ -61,7 +62,7 @@ impl fmt::Display for Error<'_> {
             ErrorKind::ParseIntError(tok, err) => (tok, "int parsing failed", Some(Box::new(err))),
             ErrorKind::UnexpectedEof => (
                 &Token {
-                    full: "",
+                    full: Cow::Borrowed(""),
                     ty: TokenType::Eof,
                     loc: Location {
                         line: 0,
@@ -93,7 +94,7 @@ impl fmt::Display for Error<'_> {
             loc: &tok.loc,
             display_token: true,
             message,
-            tok: Either::Left(tok.full),
+            tok: Either::Left(&tok.full),
             help,
         };
 

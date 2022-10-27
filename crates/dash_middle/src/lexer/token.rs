@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt;
 
 use derive_more::Display;
@@ -375,49 +376,49 @@ impl TokenType {
     }
 }
 
-impl From<&[u8]> for TokenType {
-    fn from(s: &[u8]) -> Self {
+impl From<&str> for TokenType {
+    fn from(s: &str) -> Self {
         match s {
-            b"if" => Self::If,
-            b"else" => Self::Else,
-            b"function" => Self::Function,
-            b"var" => Self::Var,
-            b"let" => Self::Let,
-            b"const" => Self::Const,
-            b"return" => Self::Return,
-            b"throw" => Self::Throw,
-            b"try" => Self::Try,
-            b"catch" => Self::Catch,
-            b"finally" => Self::Finally,
-            b"true" => Self::TrueLit,
-            b"false" => Self::FalseLit,
-            b"null" => Self::NullLit,
-            b"undefined" => Self::UndefinedLit,
-            b"yield" => Self::Yield,
-            b"new" => Self::New,
-            b"for" => Self::For,
-            b"while" => Self::While,
-            b"in" => Self::In,
-            b"instanceof" => Self::Instanceof,
-            b"async" => Self::Async,
-            b"await" => Self::Await,
-            b"delete" => Self::Delete,
-            b"void" => Self::Void,
-            b"typeof" => Self::Typeof,
-            b"continue" => Self::Continue,
-            b"break" => Self::Break,
-            b"import" => Self::Import,
-            b"export" => Self::Export,
-            b"default" => Self::Default,
-            b"debugger" => Self::Debugger,
-            b"of" => Self::Of,
-            b"class" => Self::Class,
-            b"extends" => Self::Extends,
-            b"static" => Self::Static,
-            b"switch" => Self::Switch,
-            b"case" => Self::Case,
-            b"get" => Self::Get,
-            b"set" => Self::Set,
+            "if" => Self::If,
+            "else" => Self::Else,
+            "function" => Self::Function,
+            "var" => Self::Var,
+            "let" => Self::Let,
+            "const" => Self::Const,
+            "return" => Self::Return,
+            "throw" => Self::Throw,
+            "try" => Self::Try,
+            "catch" => Self::Catch,
+            "finally" => Self::Finally,
+            "true" => Self::TrueLit,
+            "false" => Self::FalseLit,
+            "null" => Self::NullLit,
+            "undefined" => Self::UndefinedLit,
+            "yield" => Self::Yield,
+            "new" => Self::New,
+            "for" => Self::For,
+            "while" => Self::While,
+            "in" => Self::In,
+            "instanceof" => Self::Instanceof,
+            "async" => Self::Async,
+            "await" => Self::Await,
+            "delete" => Self::Delete,
+            "void" => Self::Void,
+            "typeof" => Self::Typeof,
+            "continue" => Self::Continue,
+            "break" => Self::Break,
+            "import" => Self::Import,
+            "export" => Self::Export,
+            "default" => Self::Default,
+            "debugger" => Self::Debugger,
+            "of" => Self::Of,
+            "class" => Self::Class,
+            "extends" => Self::Extends,
+            "static" => Self::Static,
+            "switch" => Self::Switch,
+            "case" => Self::Case,
+            "get" => Self::Get,
+            "set" => Self::Set,
             _ => Self::Identifier,
         }
     }
@@ -434,12 +435,12 @@ impl From<TokenType> for &str {
 }
 
 /// A token
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Token<'a> {
     /// The type of token
     pub ty: TokenType,
     /// The full string representation of this token
-    pub full: &'a str,
+    pub full: Cow<'a, str>,
     /// Location of this token in the input string
     pub loc: Location,
 }
@@ -455,16 +456,16 @@ pub struct Location {
     pub line_offset: usize,
 }
 
-pub struct FormattableError<'a> {
+pub struct FormattableError<'a, 'b> {
     pub loc: &'a Location,
     pub source: &'a [u8],
-    pub tok: Either<&'a str, char>,
+    pub tok: Either<&'b str, char>,
     pub message: &'a str,
     pub display_token: bool,
     pub help: Option<Box<dyn fmt::Display + 'a>>,
 }
 
-impl fmt::Display for FormattableError<'_> {
+impl<'a, 'b> fmt::Display for FormattableError<'a, 'b> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let offset = if self.loc.line <= 1 {
             self.loc.line_offset
@@ -483,7 +484,7 @@ impl fmt::Display for FormattableError<'_> {
             &partial[..end]
         };
 
-        let token_len = match self.tok {
+        let token_len = match &self.tok {
             Either::Left(s) => s.len(),
             Either::Right(c) => c.len_utf8(),
         };

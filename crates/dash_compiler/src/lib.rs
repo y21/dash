@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::rc::Rc;
 use std::{convert::TryInto, ptr::NonNull, usize};
 
@@ -352,7 +353,7 @@ impl<'a> FunctionCompiler<'a> {
                     Some(Expr::property_access(
                         false,
                         Expr::Literal(LiteralExpr::Binding(for_of_gen_step_binding.clone())),
-                        Expr::identifier("value"),
+                        Expr::identifier(Cow::Borrowed("value")),
                     )),
                 ));
 
@@ -376,14 +377,14 @@ impl<'a> FunctionCompiler<'a> {
                             Expr::property_access(
                                 false,
                                 Expr::Literal(LiteralExpr::Binding(for_of_iter_binding)),
-                                Expr::identifier("next"),
+                                Expr::identifier(Cow::Borrowed("next")),
                             ),
                             Vec::new(),
                             false,
                         ),
                         TokenType::Assignment,
                     ),
-                    Expr::identifier("done"),
+                    Expr::identifier(Cow::Borrowed("done")),
                 ),
             )),
             body,
@@ -1410,7 +1411,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 ib.accept_expr(ex)?;
                 ib.build_dynamic_import();
             }
-            ref kind @ (ImportKind::DefaultAs(ref spec, path) | ImportKind::AllAs(ref spec, path)) => {
+            ref kind @ (ImportKind::DefaultAs(ref spec, ref path) | ImportKind::AllAs(ref spec, ref path)) => {
                 let local_id = ib.scope.add_local(
                     match spec {
                         SpecifierKind::Ident(id) => id,
@@ -1419,7 +1420,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                     false,
                 )?;
 
-                let path_id = ib.cp.add(Constant::String((*path).into()))?;
+                let path_id = ib.cp.add(Constant::String(path.as_ref().into()))?;
 
                 ib.build_static_import(
                     match kind {
@@ -1575,8 +1576,8 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                     prestatements.push(Statement::Expression(Expr::Assignment(AssignmentExpr {
                         left: Box::new(Expr::PropertyAccess(PropertyAccessExpr {
                             computed: false,
-                            property: Box::new(Expr::string_literal(name)),
-                            target: Box::new(Expr::identifier("this")),
+                            property: Box::new(Expr::string_literal(Cow::Borrowed(name))),
+                            target: Box::new(Expr::identifier(Cow::Borrowed("this"))),
                         })),
                         operator: TokenType::Assignment,
                         right: Box::new(value.clone()),
@@ -1608,15 +1609,15 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                     left: match member.static_ {
                         true => Box::new(Expr::PropertyAccess(PropertyAccessExpr {
                             computed: false,
-                            property: Box::new(Expr::string_literal(name)),
+                            property: Box::new(Expr::string_literal(Cow::Borrowed(name))),
                             target: Box::new(Expr::binding(binding.clone())),
                         })),
                         false => Box::new(Expr::PropertyAccess(PropertyAccessExpr {
                             computed: false,
-                            property: Box::new(Expr::string_literal(name)),
+                            property: Box::new(Expr::string_literal(Cow::Borrowed(name))),
                             target: Box::new(Expr::PropertyAccess(PropertyAccessExpr {
                                 computed: false,
-                                property: Box::new(Expr::string_literal("prototype")),
+                                property: Box::new(Expr::string_literal(Cow::Borrowed("prototype"))),
                                 target: Box::new(Expr::binding(binding.clone())),
                             })),
                         })),

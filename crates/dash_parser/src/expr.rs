@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use dash_middle::lexer::token::TokenType;
 use dash_middle::lexer::token::ASSIGNMENT_TYPES;
 use dash_middle::parser::error::ErrorKind;
@@ -14,6 +16,7 @@ use dash_middle::parser::statement::Parameter;
 use dash_middle::parser::statement::ReturnStatement;
 use dash_middle::parser::statement::Statement;
 
+use crate::must_borrow_lexeme;
 use crate::stmt::StatementParser;
 use crate::Parser;
 
@@ -352,7 +355,7 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
                     expr = Expr::function_call(expr, arguments, is_constructor_call);
                 }
                 TokenType::Dot => {
-                    let property = Expr::identifier(self.next()?.full);
+                    let property = Expr::identifier(self.next()?.full.clone());
                     expr = Expr::property_access(false, expr, property);
                 }
                 TokenType::LeftSquareBrace => {
@@ -368,18 +371,15 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
     }
 
     fn parse_primary_expr(&mut self) -> Option<Expr<'a>> {
-        let (ty, full) = {
-            let cur = self.current()?;
-            (cur.ty, cur.full)
-        };
+        let current = self.current()?.clone();
 
         self.advance();
 
-        let expr = match ty {
+        let expr = match current.ty {
             // TODO: ; shouldnt be a valid expression
             TokenType::Semicolon => Expr::undefined_literal(),
             TokenType::TemplateLiteral => {
-                let mut left = Expr::string_literal(full);
+                let mut left = Expr::string_literal(current.full);
                 while !self.is_eof() {
                     if self.expect_and_skip(&[TokenType::Dollar], false) {
                         self.expect_and_skip(&[TokenType::LeftBrace], true);
@@ -387,7 +387,7 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
                         self.expect_and_skip(&[TokenType::RightBrace], true);
                         left = Expr::binary(left, right, TokenType::Plus);
                     } else if self.expect_and_skip(&[TokenType::TemplateLiteral], false) {
-                        let right = Expr::string_literal(self.previous()?.full);
+                        let right = Expr::string_literal(self.previous()?.full.clone());
                         left = Expr::binary(left, right, TokenType::Plus);
                     } else {
                         break;
@@ -400,7 +400,7 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
             TokenType::NullLit => Expr::null_literal(),
             TokenType::UndefinedLit => Expr::undefined_literal(),
             TokenType::Identifier => {
-                let expr = Expr::identifier(full);
+                let expr = Expr::identifier(current.full);
 
                 // If this identifier is followed by an arrow, this is an arrow function
                 if self.expect_and_skip(&[TokenType::FatArrow], false) {
@@ -409,7 +409,7 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
 
                 expr
             }
-            TokenType::String => Expr::string_literal(full),
+            TokenType::String => Expr::string_literal(current.full),
             TokenType::EmptySquareBrace => Expr::Array(ArrayLiteral(Vec::new())),
             TokenType::LeftSquareBrace => {
                 let mut items = Vec::new();
@@ -426,15 +426,15 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
                     let token = self.next()?.clone();
                     let key = match token.ty {
                         // TODO: this breaks object literals with a normal property named "get"
-                        TokenType::Get => ObjectMemberKind::Getter(self.next()?.full),
-                        TokenType::Set => ObjectMemberKind::Setter(self.next()?.full),
+                        TokenType::Get => ObjectMemberKind::Getter(self.next()?.full.clone()),
+                        TokenType::Set => ObjectMemberKind::Setter(self.next()?.full.clone()),
                         TokenType::LeftSquareBrace => {
                             let t = self.parse_expression()?;
                             let o = ObjectMemberKind::Dynamic(t);
                             self.expect_and_skip(&[TokenType::RightSquareBrace], true);
                             o
                         }
-                        _ => ObjectMemberKind::Static(token.full),
+                        _ => ObjectMemberKind::Static(must_borrow_lexeme!(self, &token)?),
                     };
 
                     match key {
@@ -446,7 +446,9 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
                                 items.push((key, value));
                             } else {
                                 match key {
-                                    ObjectMemberKind::Static(name) => items.push((key, Expr::identifier(name))),
+                                    ObjectMemberKind::Static(name) => {
+                                        items.push((key, Expr::identifier(Cow::Borrowed(name))))
+                                    }
                                     ObjectMemberKind::Dynamic(..) => {
                                         self.create_error(ErrorKind::UnexpectedToken(token, TokenType::Colon));
                                         return None;
@@ -496,10 +498,16 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
                 Expr::Object(ObjectLiteral(items))
             }
             // TODO: this unwrap is not safe
-            TokenType::NumberDec => Expr::number_literal(full.parse::<f64>().unwrap()),
-            TokenType::NumberHex => self.parse_prefixed_number_literal(full, 16).map(Expr::number_literal)?,
-            TokenType::NumberBin => self.parse_prefixed_number_literal(full, 2).map(Expr::number_literal)?,
-            TokenType::NumberOct => self.parse_prefixed_number_literal(full, 8).map(Expr::number_literal)?,
+            TokenType::NumberDec => Expr::number_literal(current.full.parse::<f64>().unwrap()),
+            TokenType::NumberHex => self
+                .parse_prefixed_number_literal(&current.full, 16)
+                .map(Expr::number_literal)?,
+            TokenType::NumberBin => self
+                .parse_prefixed_number_literal(&current.full, 2)
+                .map(Expr::number_literal)?,
+            TokenType::NumberOct => self
+                .parse_prefixed_number_literal(&current.full, 8)
+                .map(Expr::number_literal)?,
             TokenType::LeftParen => {
                 if self.expect_and_skip(&[TokenType::RightParen], false) {
                     // () MUST be followed by an arrow. Empty groups are not valid syntax
@@ -538,6 +546,7 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
             TokenType::Function => Expr::Function(self.parse_function(false)?),
             TokenType::RegexLiteral => {
                 // Trim / prefix and suffix
+                let full = must_borrow_lexeme!(self, &current)?;
                 let full = &full[1..full.len() - 1];
                 let nodes = match dash_regex::Parser::new(full.as_bytes()).parse_all() {
                     Ok(nodes) => nodes,
@@ -571,7 +580,10 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
         let name = {
             let ty = self.current()?.ty;
             if ty == TokenType::Identifier {
-                self.next().map(|x| x.full)
+                match self.next() {
+                    Some(tok) => Some(must_borrow_lexeme!(self, tok)?),
+                    None => None,
+                }
             } else {
                 None
             }

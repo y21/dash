@@ -3,6 +3,7 @@ use dash_middle::parser::error::ErrorKind;
 use dash_middle::parser::types::LiteralType;
 use dash_middle::parser::types::TypeSegment;
 
+use crate::must_borrow_lexeme;
 use crate::Parser;
 
 pub trait TypeParser<'a> {
@@ -59,13 +60,10 @@ impl<'a> TypeParser<'a> for Parser<'a> {
     }
 
     fn parse_primary_type(&mut self) -> Option<TypeSegment<'a>> {
-        let (full, ty) = {
-            let cur = self.next()?;
-            (cur.full, cur.ty)
-        };
+        let cur = self.next()?;
 
-        let seg = match ty {
-            TokenType::Identifier => TypeSegment::Literal(LiteralType::Identifier(full)),
+        let seg = match cur.ty {
+            TokenType::Identifier => TypeSegment::Literal(LiteralType::Identifier(must_borrow_lexeme!(self, cur)?)),
             _ => {
                 let cur = self.previous().cloned()?;
                 self.create_error(ErrorKind::UnknownToken(cur));

@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::ops::Range;
 
 use dash_middle::lexer::error::{Error, ErrorKind};
@@ -88,7 +89,7 @@ impl<'a> Lexer<'a> {
                 offset: self.start,
                 line_offset: self.line_idx,
             },
-            full: util::force_utf8_borrowed(self.get_lexeme()),
+            full: Cow::Borrowed(self.get_lexeme()),
         };
         self.tokens.push(tok);
     }
@@ -132,7 +133,7 @@ impl<'a> Lexer<'a> {
     }
 
     /// Creates a token based on the current location and a given lexeme
-    fn create_contextified_token_with_lexeme(&mut self, ty: TokenType, lexeme: &'a [u8]) {
+    fn create_contextified_token_with_lexeme(&mut self, ty: TokenType, lexeme: Cow<'a, str>) {
         let tok = Token {
             ty,
             loc: Location {
@@ -140,14 +141,14 @@ impl<'a> Lexer<'a> {
                 offset: lexeme.as_ptr() as usize - self.input.as_ptr() as usize,
                 line_offset: self.line_idx,
             },
-            full: util::force_utf8_borrowed(lexeme),
+            full: lexeme,
         };
         self.tokens.push(tok);
     }
 
     /// Returns the current lexeme
-    fn get_lexeme(&self) -> &'a [u8] {
-        &self.input[self.start..self.idx]
+    fn get_lexeme(&self) -> &'a str {
+        util::force_utf8_borrowed(&self.input[self.start..self.idx])
     }
 
     /// Slices into the source string
@@ -194,6 +195,10 @@ impl<'a> Lexer<'a> {
     fn read_string_literal(&mut self) {
         let quote = self.input[self.idx - 1];
         let mut found_quote = false;
+
+        let mut lexeme: Option<Cow<'a, str>> = None;
+        let mut lexeme_starting_idx = self.idx;
+
         while !self.is_eof() {
             let cur = self.current_real();
             if cur == quote {
@@ -207,14 +212,56 @@ impl<'a> Lexer<'a> {
                 self.line_idx = self.idx;
             }
 
+            if cur == b'\\' {
+                // Append borrowed segment since last escape sequence
+                let segment = util::force_utf8_borrowed(self.subslice(lexeme_starting_idx..self.idx));
+                match &mut lexeme {
+                    Some(lexeme) => lexeme.to_mut().push_str(segment),
+                    None => lexeme = Some(Cow::Borrowed(segment)),
+                };
+
+                self.advance();
+                let escape = self.current_real();
+                match escape {
+                    b'n' | b't' | b'r' | b'b' | b'f' | b'v' => {
+                        lexeme.as_mut().unwrap().to_mut().push(match escape {
+                            b'n' => '\n',
+                            b't' => '\t',
+                            b'r' => '\r',
+                            b'b' => '\x08',
+                            b'f' => '\x0C',
+                            b'v' => '\x0B',
+                            _ => unreachable!(),
+                        });
+                        self.advance();
+                    }
+                    // TODO: handle \u, \x
+                    other => {
+                        lexeme.as_mut().unwrap().to_mut().push(other as char);
+                        self.advance();
+                    }
+                }
+                lexeme_starting_idx = self.idx;
+            }
+
             self.advance();
         }
+
+        let lexeme = match lexeme {
+            None => Cow::Borrowed(util::force_utf8_borrowed(self.subslice(self.start + 1..self.idx - 1))),
+            Some(Cow::Owned(mut lexeme)) => {
+                lexeme.push_str(util::force_utf8_borrowed(
+                    self.subslice(lexeme_starting_idx..self.idx - 1),
+                ));
+                Cow::Owned(lexeme)
+            }
+            Some(Cow::Borrowed(..)) => unreachable!("Lexeme cannot be borrowed at this point"),
+        };
 
         if !found_quote && self.is_eof() {
             return self.create_error(ErrorKind::UnexpectedEof);
         }
 
-        let lexeme = self.subslice(self.start + 1..self.idx - 1);
         self.create_contextified_token_with_lexeme(TokenType::String, lexeme);
     }
 
@@ -278,6 +325,7 @@ impl<'a> Lexer<'a> {
     fn read_template_literal_segment(&mut self) {
         let mut found_end = false;
         let mut is_interpolated = false;
+
         while !self.is_eof() {
             let cur = self.current_real();
             if cur == b'`' {
@@ -313,8 +361,8 @@ impl<'a> Lexer<'a> {
             false => self.start + 1..self.idx - 1,
         };
 
-        let lexeme = self.subslice(range);
-        self.create_contextified_token_with_lexeme(TokenType::TemplateLiteral, lexeme);
+        let lexeme = util::force_utf8_borrowed(self.subslice(range));
+        self.create_contextified_token_with_lexeme(TokenType::TemplateLiteral, Cow::Borrowed(lexeme));
     }
 
     /// Reads an identifier and returns it as a node
@@ -348,7 +396,7 @@ impl<'a> Lexer<'a> {
         }
 
         let lexeme = self.get_lexeme();
-        self.create_contextified_token_with_lexeme(TokenType::RegexLiteral, lexeme);
+        self.create_contextified_token_with_lexeme(TokenType::RegexLiteral, Cow::Borrowed(lexeme));
     }
 
     /// Iterates through the input string and yields the next node
