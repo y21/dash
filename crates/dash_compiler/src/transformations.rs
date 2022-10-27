@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::expr::Expr;
 use dash_middle::parser::statement::BlockStatement;
@@ -79,7 +81,7 @@ pub fn hoist_declarations<'a>(ast: &mut Vec<Statement<'a>>) -> Vec<VariableBindi
                     ty: None,
                 });
                 prepend_function_assigns.push(Statement::Expression(Expr::assignment(
-                    Expr::identifier(name),
+                    Expr::identifier(Cow::Borrowed(name)),
                     Expr::Function(function_stmt),
                     TokenType::Assignment,
                 )));

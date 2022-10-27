@@ -10,6 +10,33 @@ mod expr;
 mod stmt;
 mod types;
 
+/// "Forces" a token to have a borrowed lexeme, or emit an error if it is not.
+/// Evaluates to an option such that it can be used in combination with `?` in functions
+/// returning `Option`s, which is the case almost everywhere in the parser.
+///
+/// This is a macro because this borrowing pattern cannot be expressed as a function,
+/// as it would need to (1) mutably borrow the parser to potentially create an error and
+/// (2) immutably borrow the token which automatically also immutably borrows the parser.
+/// However with this macro, the compiler can see that the borrows are disjoint, i.e.
+/// it only clones the token if it has to due to an error.
+#[macro_export]
+macro_rules! must_borrow_lexeme {
+    ($parser:expr, $tok:expr) => {
+        match $tok {
+            dash_middle::lexer::token::Token {
+                full: std::borrow::Cow::Borrowed(s),
+                ..
+            } => Some(*s),
+            tok => {
+                let tok = tok.clone();
+
+                $parser.create_error(ErrorKind::UnexpectedToken(tok.clone(), TokenType::Identifier));
+                None
+            }
+        }
+    };
+}
+
 /// A JavaScript source code parser
 pub struct Parser<'a> {
     tokens: Box<[Token<'a>]>,
@@ -77,7 +104,7 @@ impl<'a> Parser<'a> {
         match u64::from_str_radix(src, radix).map(|x| x as f64) {
             Ok(f) => Some(f),
             Err(e) => {
-                self.create_error(ErrorKind::ParseIntError(self.previous().copied()?, e));
+                self.create_error(ErrorKind::ParseIntError(self.previous().cloned()?, e));
                 None
             }
         }
@@ -96,7 +123,7 @@ impl<'a> Parser<'a> {
 
     fn expect_previous(&mut self, ty: &'static [TokenType], emit_error: bool) -> bool {
         let current = match self.previous() {
-            Some(k) => *k,
+            Some(k) => k,
             None => {
                 if emit_error {
                     self.create_error(ErrorKind::UnexpectedEof);
@@ -108,6 +135,7 @@ impl<'a> Parser<'a> {
         let ok = ty.iter().any(|ty| ty.eq(&current.ty));
 
         if !ok && emit_error {
+            let current = current.clone();
             self.create_error(ErrorKind::UnexpectedTokenMultiple(current, ty));
         }
 
@@ -116,7 +144,7 @@ impl<'a> Parser<'a> {
 
     fn expect_and_skip(&mut self, ty: &'static [TokenType], emit_error: bool) -> bool {
         let current = match self.current() {
-            Some(k) => *k,
+            Some(k) => k,
             None => {
                 if emit_error {
                     self.create_error(ErrorKind::UnexpectedEof);
@@ -130,6 +158,7 @@ impl<'a> Parser<'a> {
         if ok {
             self.advance();
         } else if emit_error {
+            let current = current.clone();
             self.create_error(ErrorKind::UnexpectedTokenMultiple(current, ty));
         }
 
@@ -165,5 +194,16 @@ impl<'a> Parser<'a> {
     fn next(&mut self) -> Option<&Token<'a>> {
         self.advance();
         self.previous()
+    }
+
+    pub fn next_identifier(&mut self) -> Option<&'a str> {
+        let next = match self.next() {
+            Some(tok) => tok,
+            None => {
+                self.create_error(ErrorKind::UnexpectedEof);
+                return None;
+            }
+        };
+        must_borrow_lexeme!(self, next)
     }
 }

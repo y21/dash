@@ -1,4 +1,4 @@
-use std::{cell::RefCell, fmt};
+use std::{borrow::Cow, cell::RefCell, fmt};
 
 use derive_more::Display;
 #[cfg(feature = "serde")]
@@ -81,10 +81,10 @@ pub enum ImportKind<'a> {
     Dynamic(Expr<'a>),
     /// import foo from "bar"
     #[display(fmt = "import {_0} from \"{_1}\"")]
-    DefaultAs(SpecifierKind<'a>, &'a str),
+    DefaultAs(SpecifierKind<'a>, Cow<'a, str>),
     /// import * as foo from "bar"
     #[display(fmt = "import * as {_0} from \"{_1}\"")]
-    AllAs(SpecifierKind<'a>, &'a str),
+    AllAs(SpecifierKind<'a>, Cow<'a, str>),
 }
 
 /// Type of export statement
@@ -123,15 +123,6 @@ impl<'a> ImportKind<'a> {
             Self::Dynamic(_) => None,
             Self::DefaultAs(s, _) => Some(s),
             Self::AllAs(s, _) => Some(s),
-        }
-    }
-
-    /// Attempts to return the underlying module target, if present
-    pub fn get_module_target(&self) -> Option<&'a str> {
-        match self {
-            Self::Dynamic(_) => None,
-            Self::DefaultAs(_, i) => Some(i),
-            Self::AllAs(_, i) => Some(i),
         }
     }
 }

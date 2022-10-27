@@ -341,21 +341,30 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
 
         self.write_wide_instr(Instruction::ObjLit, Instruction::ObjLitW, len);
 
+        fn compile_object_member_kind(
+            ib: &mut InstructionBuilder,
+            name: &str,
+            kind_id: u8,
+        ) -> Result<(), CompileError> {
+            let id = ib
+                .cp
+                .add(Constant::Identifier(name.into()))?
+                .try_into()
+                .map_err(|_| CompileError::ConstantPoolLimitExceeded)?;
+
+            ib.write(kind_id);
+            ib.write(id);
+            Ok(())
+        }
+
         // Push in reverse order to match order in which the compiler pushes values onto the stack
         for member in constants.into_iter().rev() {
+            let kind_id = CompilerObjectMemberKind::from(&member) as u8;
             match member {
                 ObjectMemberKind::Dynamic(..) => self.write(CompilerObjectMemberKind::Dynamic as u8),
-                ObjectMemberKind::Getter(name) | ObjectMemberKind::Setter(name) | ObjectMemberKind::Static(name) => {
-                    let id = self
-                        .cp
-                        .add(Constant::Identifier(name.into()))?
-                        .try_into()
-                        .map_err(|_| CompileError::ConstantPoolLimitExceeded)?;
-
-                    let kind_id = CompilerObjectMemberKind::from(member) as u8;
-
-                    self.write(kind_id);
-                    self.write(id);
+                ObjectMemberKind::Static(name) => compile_object_member_kind(self, name, kind_id)?,
+                ObjectMemberKind::Getter(name) | ObjectMemberKind::Setter(name) => {
+                    compile_object_member_kind(self, &name, kind_id)?
                 }
             }
         }

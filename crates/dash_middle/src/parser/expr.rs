@@ -81,13 +81,13 @@ impl<'a> Expr<'a> {
     }
 
     /// Creates a string literal expression
-    pub fn string_literal(s: &'a str) -> Self {
-        Self::Literal(LiteralExpr::String(Cow::Borrowed(s)))
+    pub fn string_literal(s: Cow<'a, str>) -> Self {
+        Self::Literal(LiteralExpr::String(s))
     }
 
     /// Creates an identifier literal expression
-    pub fn identifier(s: &'a str) -> Self {
-        Self::Literal(LiteralExpr::Identifier(Cow::Borrowed(s)))
+    pub fn identifier(s: Cow<'a, str>) -> Self {
+        Self::Literal(LiteralExpr::Identifier(s))
     }
 
     pub fn binding(b: VariableBinding<'a>) -> Self {
@@ -179,8 +179,8 @@ impl<'a> fmt::Display for ArrayLiteral<'a> {
 
 #[derive(Debug, Clone)]
 pub enum ObjectMemberKind<'a> {
-    Getter(&'a str),
-    Setter(&'a str),
+    Getter(Cow<'a, str>),
+    Setter(Cow<'a, str>),
     Static(&'a str),
     Dynamic(Expr<'a>),
 }

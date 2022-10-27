@@ -32,6 +32,7 @@ use dash_middle::parser::statement::WhileLoop;
 use dash_middle::parser::types::TypeSegment;
 
 use crate::expr::ExpressionParser;
+use crate::must_borrow_lexeme;
 use crate::types::TypeParser;
 use crate::Parser;
 
@@ -100,7 +101,8 @@ impl<'a> StatementParser<'a> for Parser<'a> {
 
     fn parse_class(&mut self) -> Option<Class<'a>> {
         let name = if self.expect_and_skip(&[TokenType::Identifier], false) {
-            self.previous().map(|x| x.full)
+            let prev = self.previous()?;
+            Some(must_borrow_lexeme!(self, prev)?)
         } else {
             None
         };
@@ -120,7 +122,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
             let is_static = self.expect_and_skip(&[TokenType::Static], false);
             let is_private = self.expect_and_skip(&[TokenType::Hash], false);
 
-            let name = self.next()?.full;
+            let name = self.next_identifier()?;
 
             let is_method = self.expect_and_skip(&[TokenType::LeftParen], false);
 
@@ -168,7 +170,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
         if is_named {
             let mut names = Vec::new();
             while !self.expect_and_skip(&[TokenType::RightBrace], false) {
-                let name = self.next()?.full;
+                let name = self.next_identifier()?;
                 names.push(name);
                 self.expect_and_skip(&[TokenType::Comma], false);
             }
@@ -212,18 +214,18 @@ impl<'a> StatementParser<'a> for Parser<'a> {
         if is_import_all {
             self.expect_and_skip(&[TokenType::Identifier], true);
             // TODO: enforce identifier be == b"as"
-            let ident = self.next()?.full;
+            let ident = self.next_identifier()?;
             self.expect_and_skip(&[TokenType::Identifier], true);
             // TODO: enforce identifier be == b"from"
-            let specifier = self.next()?.full;
+            let specifier = self.next()?.full.clone();
             return Some(ImportKind::AllAs(SpecifierKind::Ident(ident), specifier));
         }
 
         // `import` followed by an identifier is considered a default import
-        if let Some(default_import_ident) = self.next().map(|tok| tok.full) {
+        if let Some(default_import_ident) = self.next_identifier() {
             self.expect_and_skip(&[TokenType::Identifier], true);
             // TODO: enforce identifier be == b"from"
-            let specifier = self.next()?.full;
+            let specifier = self.next()?.full.clone();
             return Some(ImportKind::DefaultAs(
                 SpecifierKind::Ident(default_import_ident),
                 specifier,
@@ -243,7 +245,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
         self.expect_and_skip(&[TokenType::Catch], true);
 
         let capture_ident = if self.expect_and_skip(&[TokenType::LeftParen], false) {
-            let ident = self.next()?.full;
+            let ident = self.next_identifier()?;
             self.expect_and_skip(&[TokenType::RightParen], true);
             Some(ident)
         } else {
@@ -406,17 +408,11 @@ impl<'a> StatementParser<'a> for Parser<'a> {
                         self.expect_and_skip(&[TokenType::Dot], true);
                     }
 
-                    let ident = match self.next() {
-                        Some(tok) => tok.full,
-                        None => {
-                            self.create_error(ErrorKind::UnexpectedEof);
-                            return None;
-                        }
-                    };
+                    let ident = self.next_identifier()?;
 
                     Parameter::Spread(ident)
                 }
-                TokenType::Identifier => Parameter::Identifier(tok.full),
+                TokenType::Identifier => Parameter::Identifier(must_borrow_lexeme!(self, &tok)?),
                 TokenType::Comma => continue,
                 _ => {
                     self.create_error(ErrorKind::UnexpectedToken(tok.clone(), TokenType::Comma));
@@ -495,14 +491,14 @@ impl<'a> StatementParser<'a> for Parser<'a> {
                         }
                     }
                     TokenType::Identifier => {
-                        let name = cur.full;
+                        let name = must_borrow_lexeme!(self, &cur)?;
                         self.advance();
                         let alias = if self.expect_and_skip(&[TokenType::Colon], false) {
                             let alias = self.current()?.clone();
                             match alias.ty {
                                 TokenType::Identifier => {
                                     self.advance();
-                                    Some(alias.full)
+                                    Some(must_borrow_lexeme!(self, &alias)?)
                                 }
                                 _ => {
                                     self.create_error(ErrorKind::UnexpectedToken(alias, TokenType::Identifier));
@@ -559,7 +555,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
                         }
                     }
                     TokenType::Identifier => {
-                        let name = cur.full;
+                        let name = must_borrow_lexeme!(self, &cur)?;
                         self.advance();
                         fields.push(name);
                     }
@@ -573,7 +569,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
             VariableDeclarationName::ArrayDestructuring { fields, rest: None }
         } else {
             // Identifier
-            let name = self.next()?.full;
+            let name = self.next_identifier()?;
             VariableDeclarationName::Identifier(name)
         };
 
