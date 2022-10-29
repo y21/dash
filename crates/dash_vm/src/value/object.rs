@@ -600,6 +600,16 @@ impl Object for Handle<dyn Object> {
         (**self).apply(scope, callee, this, args)
     }
 
+    fn construct(
+        &self,
+        scope: &mut LocalScope,
+        callee: Handle<dyn Object>,
+        this: Value,
+        args: Vec<Value>,
+    ) -> Result<Value, Value> {
+        (**self).construct(scope, callee, this, args)
+    }
+
     fn as_any(&self) -> &dyn Any {
         (**self).as_any()
     }
