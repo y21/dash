@@ -9,6 +9,9 @@ use crate::Parser;
 pub trait TypeParser<'a> {
     fn parse_type_segment(&mut self) -> Option<TypeSegment<'a>>;
 
+    /// Parses a generic type: foo<bar>
+    fn parse_generic_type(&mut self) -> Option<TypeSegment<'a>>;
+
     /// Parses a union type: foo | bar
     fn parse_union_type(&mut self) -> Option<TypeSegment<'a>>;
 
@@ -24,7 +27,28 @@ pub trait TypeParser<'a> {
 
 impl<'a> TypeParser<'a> for Parser<'a> {
     fn parse_type_segment(&mut self) -> Option<TypeSegment<'a>> {
-        self.parse_union_type()
+        self.parse_generic_type()
+    }
+
+    fn parse_generic_type(&mut self) -> Option<TypeSegment<'a>> {
+        let mut left = self.parse_union_type()?;
+
+        while self.expect_and_skip(&[TokenType::Less], false) {
+            let mut args = Vec::new();
+
+            while !self.expect_and_skip(&[TokenType::Greater], false) {
+                if !args.is_empty() {
+                    // separate types by comma
+                    self.expect_and_skip(&[TokenType::Comma], true);
+                }
+
+                args.push(self.parse_type_segment()?);
+            }
+
+            left = TypeSegment::Generic(Box::new(left), args);
+        }
+
+        Some(left)
     }
 
     fn parse_union_type(&mut self) -> Option<TypeSegment<'a>> {
