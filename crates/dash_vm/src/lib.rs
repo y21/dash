@@ -39,6 +39,8 @@ pub mod params;
 pub mod statics;
 pub mod util;
 pub mod value;
+#[cfg(test)]
+mod test;
 
 pub const MAX_FRAME_STACK_SIZE: usize = 1024;
 pub const MAX_STACK_SIZE: usize = 8196;
@@ -1013,29 +1015,5 @@ pub enum PromiseAction {
 impl fmt::Debug for Vm {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_str("Vm")
-    }
-}
-
-#[test]
-fn test_eval() {
-    use crate::value::primitive::Number;
-    let mut vm = Vm::new(Default::default());
-    let value = vm
-        .eval(
-            r#"
-        function add(a,b) {
-            return a +b
-        }
-        add(10, 7) + 1
-    "#,
-            Default::default(),
-        )
-        .unwrap();
-
-    assert_eq!(vm.stack.len(), 0);
-    assert_eq!(vm.frames.len(), 0);
-    match value {
-        Value::Number(Number(n)) => assert_eq!(n, 18.0),
-        _ => unreachable!("{:?}", value),
     }
 }
