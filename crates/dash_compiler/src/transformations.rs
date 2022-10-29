@@ -96,6 +96,15 @@ pub fn hoist_declarations<'a>(ast: &mut Vec<Statement<'a>>) -> Vec<VariableBindi
             }) => {
                 variable_bindings.push(binding.clone());
             }
+            Statement::Class(class_decl) => {
+                let name = class_decl.name.expect("Class statement did not have a name");
+
+                variable_bindings.push(VariableBinding {
+                    kind: VariableDeclarationKind::Var,
+                    name: VariableDeclarationName::Identifier(name),
+                    ty: None,
+                });
+            }
             Statement::Block(BlockStatement(stmts)) => {
                 let mut prepend = Vec::new();
                 for stmt in stmts.iter_mut() {

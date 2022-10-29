@@ -242,6 +242,8 @@ impl<'a> Lexer<'a> {
                     }
                 }
                 lexeme_starting_idx = self.idx;
+
+                continue;
             }
 
             self.advance();
