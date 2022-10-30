@@ -69,7 +69,6 @@ unsafe impl Trace for Array {
 
 impl Object for Array {
     fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
-        panic!();
         delegate_get_property(self, sc, key)
     }
 
