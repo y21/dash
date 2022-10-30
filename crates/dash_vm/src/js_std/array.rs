@@ -1,5 +1,6 @@
 use crate::local::LocalScope;
 use crate::throw;
+use crate::value::array;
 use crate::value::array::Array;
 use crate::value::array::ArrayIterator;
 use crate::value::function::native::CallContext;
@@ -307,9 +308,8 @@ pub fn push(mut cx: CallContext) -> Result<Value, Value> {
     }
 
     for (idx, arg) in cx.args.into_iter().enumerate() {
-        let pk = (idx + len).to_string();
         last = arg.clone();
-        this.set_property(&mut cx.scope, pk.into(), PropertyValue::static_default(arg))?;
+        array::spec_array_set_property(&mut cx.scope, &this, idx + len, PropertyValue::static_default(arg))?;
     }
 
     Ok(last)
