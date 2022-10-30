@@ -778,7 +778,11 @@ impl Vm {
     }
 
     pub(crate) fn try_push_stack(&mut self, value: Value) -> Result<(), Value> {
+        #[cold]
+        fn stack_overflow() {}
+        
         if self.stack.len() > MAX_STACK_SIZE {
+            stack_overflow();
             throw!(self, "Maximum stack size exceeded");
         }
 
