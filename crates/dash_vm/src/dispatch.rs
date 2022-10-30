@@ -1138,6 +1138,25 @@ mod handlers {
 
         Ok(None)
     }
+
+    pub fn arraydestruct(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let count = cx.fetchw_and_inc_ip();
+        let array = cx.pop_stack();
+        let mut scope = cx.scope();
+
+        for i in 0..count {
+            let mut cx = DispatchContext::new(&mut scope);
+            let loc_id = cx.fetchw_and_inc_ip();
+
+            let id = cx.number_constant(loc_id.into()) as usize;
+            drop(cx);
+
+            let prop = array.get_property(&mut scope, PropertyKey::from(i.to_string().as_ref()))?;
+            scope.set_local(id, prop);
+        }
+
+        Ok(None)
+    }
 }
 
 pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResult>, Value> {
@@ -1219,6 +1238,7 @@ pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResu
         Instruction::DeletePropertyStatic => handlers::delete_property_static(cx),
         Instruction::Switch => handlers::switch(cx),
         Instruction::ObjDestruct => handlers::objdestruct(cx),
+        Instruction::ArrayDestruct => handlers::arraydestruct(cx),
         _ => unimplemented!("{:?}", instruction),
     }
 }

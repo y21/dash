@@ -299,6 +299,13 @@ impl<'buf> FunctionDecompiler<'buf> {
                     }
                     self.handle_op_map_instr("objdestruct", &[("count", &count)])
                 }
+                Instruction::ArrayDestruct => {
+                    let count = self.read_u16()?;
+                    for _ in 0..count {
+                        self.read_u16()?; // discard var id
+                    }
+                    self.handle_op_map_instr("arraydestruct", &[("count", &count)])
+                }
             }
         }
 

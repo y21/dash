@@ -705,7 +705,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 let field_count = fields
                     .len()
                     .try_into()
-                    .map_err(|_| CompileError::ObjectDestructureLimitExceeded)?;
+                    .map_err(|_| CompileError::DestructureLimitExceeded)?;
 
                 // Unwrap ok; checked at parse time
                 let value = value.expect("Object destructuring requires a value");
@@ -723,7 +723,29 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                     ib.writew(ident_id);
                 }
             }
-            _ => unimplementedc!("Array destructuring"),
+            VariableDeclarationName::ArrayDestructuring { fields, rest } => {
+                if rest.is_some() {
+                    unimplementedc!("Rest operator in array destructuring");
+                }
+
+                let field_count = fields
+                    .len()
+                    .try_into()
+                    .map_err(|_| CompileError::DestructureLimitExceeded)?;
+
+                // Unwrap ok; checked at parse time
+                let value = value.expect("Array destructuring requires a value");
+                ib.accept_expr(value)?;
+
+                ib.build_arraydestruct(field_count);
+
+                for name in fields {
+                    let id = ib.scope.add_local(name, binding.kind, false)?;
+
+                    let var_id = ib.cp.add(Constant::Number(id as f64))?;
+                    ib.writew(var_id);
+                }
+            }
         }
 
         Ok(())

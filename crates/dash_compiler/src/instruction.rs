@@ -140,6 +140,7 @@ pub trait InstructionWriter {
     fn build_dynamic_delete(&mut self);
     fn build_switch(&mut self, case_count: u16, has_default: bool);
     fn build_objdestruct(&mut self, count: u16);
+    fn build_arraydestruct(&mut self, count: u16);
 }
 
 macro_rules! impl_instruction_writer {
@@ -428,6 +429,11 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
 
     fn build_objdestruct(&mut self, count: u16) {
         self.write_instr(Instruction::ObjDestruct);
+        self.writew(count);
+    }
+
+    fn build_arraydestruct(&mut self, count: u16) {
+        self.write_instr(Instruction::ArrayDestruct);
         self.writew(count);
     }
 }

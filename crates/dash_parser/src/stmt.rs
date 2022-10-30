@@ -523,7 +523,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
             let mut fields = Vec::new();
             let mut rest = None;
 
-            while !self.expect_and_skip(&[TokenType::RightBrace], false) {
+            while !self.expect_and_skip(&[TokenType::RightSquareBrace], false) {
                 self.expect_and_skip(&[TokenType::Comma], false); // TODO: should be an error
 
                 let cur = self.current()?.clone();
