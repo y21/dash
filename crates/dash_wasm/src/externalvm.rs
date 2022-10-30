@@ -4,6 +4,7 @@ use dash_vm::local::LocalScope;
 use dash_vm::params::VmParams;
 use dash_vm::value::Value as DashValue;
 use dash_vm::Vm;
+use js_sys::Math;
 use js_sys::Uint8Array;
 use wasm_bindgen::prelude::wasm_bindgen;
 
@@ -42,12 +43,20 @@ impl ExternalVm {
     }
 }
 
+fn math_random(_: &mut Vm) -> Result<f64, DashValue> {
+    Ok(Math::random())
+}
+
 #[wasm_bindgen]
 impl ExternalVm {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
         let state = ExternalVmState::default();
-        let vm = Vm::new(VmParams::default().set_state(Box::new(state)));
+        let vm = Vm::new(
+            VmParams::default()
+                .set_math_random_callback(math_random)
+                .set_state(Box::new(state)),
+        );
         ExternalVm(vm)
     }
 
