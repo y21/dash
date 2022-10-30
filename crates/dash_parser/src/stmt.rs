@@ -481,7 +481,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
                                     return None;
                                 }
 
-                                rest = Some(name.full);
+                                rest = Some(must_borrow_lexeme!(self, &name)?);
                                 self.advance();
                             }
                             _ => {
@@ -517,7 +517,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
                 }
             }
 
-            VariableDeclarationName::ObjectDestructuring { fields, rest: None }
+            VariableDeclarationName::ObjectDestructuring { fields, rest }
         } else if self.expect_and_skip(&[TokenType::LeftSquareBrace], false) {
             // Array destructuring
             let mut fields = Vec::new();
@@ -545,7 +545,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
                                     return None;
                                 }
 
-                                rest = Some(name.full);
+                                rest = Some(must_borrow_lexeme!(self, &name)?);
                                 self.advance();
                             }
                             _ => {
@@ -566,7 +566,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
                 }
             }
 
-            VariableDeclarationName::ArrayDestructuring { fields, rest: None }
+            VariableDeclarationName::ArrayDestructuring { fields, rest }
         } else {
             // Identifier
             let name = self.next_identifier()?;
