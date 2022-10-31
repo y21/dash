@@ -698,8 +698,15 @@ mod handlers {
                 // TODO: it might be a symbol, don't to_string it then!
                 ObjectMemberKind::Dynamic => {
                     // TODO: don't create LocalScope every time
-                    let key = cx.pop_stack().to_string(&mut cx.scope())?;
-                    PropertyKey::String(Cow::Owned(String::from(&*key)))
+                    match cx.pop_stack() {
+                        Value::Symbol(sym) => PropertyKey::Symbol(sym),
+                        value => {
+                            let string = value.to_string(&mut cx.scope())?;
+                            // TODO: can PropertyKey::String be a Rc<str>?
+                            let string = Cow::Owned(String::from(&*string));
+                            PropertyKey::String(string)
+                        }
+                    }
                 }
                 ObjectMemberKind::Getter | ObjectMemberKind::Setter | ObjectMemberKind::Static => {
                     let id = cx.fetch_and_inc_ip();
