@@ -692,7 +692,6 @@ mod handlers {
 
         let mut obj = HashMap::new();
         for _ in 0..len {
-            let value = cx.pop_stack();
             let kind = ObjectMemberKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
 
             let key = match kind {
@@ -710,6 +709,7 @@ mod handlers {
                     PropertyKey::String(Cow::Owned(key))
                 }
             };
+            let value = cx.pop_stack();
 
             match kind {
                 ObjectMemberKind::Dynamic | ObjectMemberKind::Static => {

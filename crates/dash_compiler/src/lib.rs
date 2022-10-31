@@ -1315,7 +1315,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             ib.accept_expr(value)?;
 
             if let ObjectMemberKind::Dynamic(expr) = member {
-                // TODO: do not clone
+                // TODO: do not clone, the `expr` is not needed in ib.build_objlit
                 members.push(ObjectMemberKind::Dynamic(expr.clone()));
                 ib.accept_expr(expr)?;
             } else {
