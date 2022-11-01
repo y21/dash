@@ -25,7 +25,7 @@ pub enum Emit {
 }
 
 #[wasm_bindgen]
-pub fn eval(s: &str, opt: OptLevel, _context: Option<js_sys::Object>) -> Result<String, JsValue> {
+pub fn evaluate(s: &str, opt: OptLevel, _context: Option<js_sys::Object>) -> Result<String, JsValue> {
     fn import_callback(_: &mut Vm, _: StaticImportKind, path: &str) -> Result<Value, Value> {
         Ok(Value::String(format!("Hello from module {path}").into()))
     }
