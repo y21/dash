@@ -86,14 +86,7 @@ pub fn hoist_declarations<'a>(ast: &mut Vec<Statement<'a>>) -> Vec<VariableBindi
                     TokenType::Assignment,
                 )));
             }
-            Statement::Variable(VariableDeclaration {
-                binding:
-                    binding @ VariableBinding {
-                        kind: VariableDeclarationKind::Var,
-                        ..
-                    },
-                ..
-            }) => {
+            Statement::Variable(VariableDeclaration { binding, .. }) => {
                 variable_bindings.push(binding.clone());
             }
             Statement::Class(class_decl) => {
