@@ -20,6 +20,7 @@ pub struct VmParams {
     dynamic_import_callback: Option<DynamicImportCallback>,
     debugger_callback: Option<DebuggerCallback>,
     unhandled_task_exception_callback: Option<UnhandledTaskException>,
+    initial_gc_object_threshold: Option<usize>,
     state: Option<Box<dyn Any>>,
 }
 
@@ -88,5 +89,14 @@ impl VmParams {
 
     pub fn unhandled_task_exception_callback(&self) -> Option<UnhandledTaskException> {
         self.unhandled_task_exception_callback
+    }
+
+    pub fn set_initial_gc_object_threshold(mut self, threshold: usize) -> Self {
+        self.initial_gc_object_threshold = Some(threshold);
+        self
+    }
+
+    pub fn initial_gc_object_threshold(&self) -> Option<usize> {
+        self.initial_gc_object_threshold
     }
 }

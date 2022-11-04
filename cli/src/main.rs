@@ -14,6 +14,12 @@ fn main() -> anyhow::Result<()> {
         .default_value("1")
         .possible_values(["0", "1", "2"]);
 
+    let initial_gc_threshold = Arg::new("initial-gc-threshold")
+        .help("Sets the initial GC object threshold, i.e. the object count at which the first GC cycle triggers.")
+        .long("initial-gc-threshold")
+        .takes_value(true)
+        .required(false);
+
     let app = Command::new("dash")
         .about("Execute JavaScript code using the dash JavaScript engine")
         .arg_required_else_help(true)
@@ -29,7 +35,8 @@ fn main() -> anyhow::Result<()> {
                 .arg(Arg::new("file").required(true))
                 .arg(Arg::new("timing").short('t').long("timing").takes_value(false))
                 .arg(Arg::new("quiet").short('q').long("quiet").takes_value(false))
-                .arg(opt_level.clone()),
+                .arg(opt_level.clone())
+                .arg(initial_gc_threshold.clone()),
         )
         .subcommand(Command::new("repl").override_help("Enter a JavaScript REPL"))
         .subcommand(

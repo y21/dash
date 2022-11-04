@@ -25,19 +25,27 @@ pub struct Runtime {
 }
 
 impl Runtime {
-    pub async fn new() -> Self {
+    pub async fn new(initial_gc_threshold: Option<usize>) -> Self {
         let rt = tokio::runtime::Handle::current();
 
         let (etx, erx) = mpsc::unbounded_channel();
 
         let state = State::new(rt, EventSender::new(etx));
-        let params = VmParams::new()
+        let mut params = VmParams::new()
             .set_static_import_callback(import_callback)
             .set_math_random_callback(random_callback)
             .set_state(Box::new(state));
 
+        if let Some(threshold) = initial_gc_threshold {
+            params = params.set_initial_gc_object_threshold(threshold);
+        }
+
         let vm = Vm::new(params);
         Self { vm, event_rx: erx }
+    }
+
+    pub fn vm_params(&mut self) -> &mut VmParams {
+        self.vm.params_mut()
     }
 
     pub fn set_module_manager(&mut self, module_manager: Box<dyn ModuleLoader>) {

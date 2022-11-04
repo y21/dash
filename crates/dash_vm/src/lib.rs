@@ -22,6 +22,7 @@ use self::{
 #[cfg(feature = "jit")]
 use dash_middle::compiler::constant::Constant;
 use dash_middle::compiler::instruction::Instruction;
+use util::unlikely;
 use value::{promise::{Promise, PromiseState}, ValueContext, function::bound::BoundFunction};
 
 #[cfg(feature = "jit")]
@@ -43,7 +44,8 @@ pub mod value;
 mod test;
 
 pub const MAX_FRAME_STACK_SIZE: usize = 1024;
-pub const MAX_STACK_SIZE: usize = 8196;
+pub const MAX_STACK_SIZE: usize = 8192;
+const DEFAULT_GC_OBJECT_COUNT_THRESHOLD: usize = 8192;
 
 pub struct Vm {
     frames: Vec<Frame>,
@@ -55,6 +57,7 @@ pub struct Vm {
     statics: Box<Statics>, // TODO: we should box this... maybe?
     try_blocks: Vec<TryBlock>,
     params: VmParams,
+    gc_object_threshold: usize,
 
     /// If we are currently recording a trace for a loop iteration,
     /// this will contain the pc of the loop header and its end
@@ -74,6 +77,9 @@ impl Vm {
         let mut gc = Gc::new();
         let statics = Statics::new(&mut gc);
         let global = gc.register(NamedObject::null()); // TODO: set its __proto__ and constructor
+        let gc_object_threshold = params
+            .initial_gc_object_threshold()
+            .unwrap_or(DEFAULT_GC_OBJECT_COUNT_THRESHOLD);
 
         let mut vm = Self {
             frames: Vec::new(),
@@ -85,6 +91,7 @@ impl Vm {
             statics: Box::new(statics),
             try_blocks: Vec::new(),
             params,
+            gc_object_threshold,
 
             #[cfg(feature = "jit")]
             recording_trace: None,
@@ -778,11 +785,7 @@ impl Vm {
     }
 
     pub(crate) fn try_push_stack(&mut self, value: Value) -> Result<(), Value> {
-        #[cold]
-        fn stack_overflow() {}
-        
-        if self.stack.len() > MAX_STACK_SIZE {
-            stack_overflow();
+        if unlikely(self.stack.len() > MAX_STACK_SIZE) {
             throw!(self, "Maximum stack size exceeded");
         }
 
@@ -908,6 +911,10 @@ impl Vm {
         let fp = self.frames.len();
 
         loop {
+            if unlikely(self.gc.heap_size() > self.gc_object_threshold) {
+                self.perform_gc();
+            }
+
             let instruction = Instruction::from_repr(self.fetch_and_inc_ip()).unwrap();
 
             match dispatch::handle(self, instruction) {
@@ -935,6 +942,10 @@ impl Vm {
 
         // All reachable roots are marked.
         unsafe { self.gc.sweep() };
+
+        // Adjust GC threshold
+        let new_object_count = self.gc.heap_size();
+        self.gc_object_threshold = new_object_count * 2;
     }
 
     fn trace_roots(&mut self) {

@@ -24,6 +24,10 @@ impl<T: ?Sized + Trace> Gc<T> {
         }
     }
 
+    pub fn heap_size(&self) -> usize {
+        self.list.len()
+    }
+
     pub unsafe fn sweep(&mut self) {
         let mut previous = None;
         let mut node = self.list.tail();
