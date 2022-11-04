@@ -1,3 +1,4 @@
+use dash_proc_macro::Trace;
 use std::any::Any;
 use std::rc::Rc;
 
@@ -6,7 +7,6 @@ use super::ops::abstractions::conversions::ValueConversion;
 use super::ops::equality::ValueEquality;
 use crate::delegate;
 use crate::gc::handle::Handle;
-use crate::gc::trace::Trace;
 use crate::local::LocalScope;
 use crate::Vm;
 
@@ -19,7 +19,7 @@ use super::Value;
 macro_rules! boxed_primitive {
     ($($name:ident: $t:ty),*) => {
         $(
-            #[derive(Debug)]
+            #[derive(Debug, Trace)]
             pub struct $name {
                 inner: $t,
                 obj: NamedObject
@@ -36,13 +36,6 @@ macro_rules! boxed_primitive {
 
                 pub fn value(&self) -> &$t {
                     &self.inner
-                }
-            }
-
-            unsafe impl Trace for $name {
-                fn trace(&self) {
-                    self.inner.trace();
-                    self.obj.trace();
                 }
             }
 

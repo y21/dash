@@ -5,6 +5,8 @@ use std::{
     rc::Rc,
 };
 
+use dash_proc_macro::Trace;
+
 use crate::{
     dispatch::HandleResult,
     gc::{handle::Handle, trace::Trace},
@@ -34,6 +36,17 @@ pub enum FunctionKind {
     User(UserFunction),
     Generator(GeneratorFunction),
     Async(AsyncFunction),
+}
+
+unsafe impl Trace for FunctionKind {
+    fn trace(&self) {
+        match self {
+            Self::User(user) => user.trace(),
+            Self::Generator(generator) => generator.trace(),
+            Self::Async(async_) => async_.trace(),
+            Self::Native(_) => {}
+        }
+    }
 }
 
 impl FunctionKind {
@@ -77,7 +90,7 @@ impl fmt::Debug for FunctionKind {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Trace)]
 pub struct Function {
     name: RefCell<Option<Rc<str>>>,
     kind: FunctionKind,
@@ -120,10 +133,6 @@ impl Function {
     pub fn set_fn_prototype(&self, prototype: Handle<dyn Object>) {
         self.prototype.replace(Some(prototype));
     }
-}
-
-unsafe impl Trace for Function {
-    fn trace(&self) {}
 }
 
 fn handle_call(

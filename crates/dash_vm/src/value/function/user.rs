@@ -2,6 +2,7 @@ use std::iter;
 use std::rc::Rc;
 
 use dash_middle::compiler::constant::Function;
+use dash_proc_macro::Trace;
 
 use crate::dispatch::HandleResult;
 use crate::frame::Frame;
@@ -12,7 +13,7 @@ use crate::value::object::Object;
 use crate::value::object::PropertyValue;
 use crate::value::Value;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Trace)]
 pub struct UserFunction {
     inner: Rc<Function>,
     externals: Rc<[Handle<dyn Object>]>,

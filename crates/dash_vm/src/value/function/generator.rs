@@ -16,7 +16,7 @@ use crate::Vm;
 
 use super::user::UserFunction;
 
-#[derive(Debug)]
+#[derive(Debug, Trace)]
 pub struct GeneratorFunction {
     function: UserFunction,
 }

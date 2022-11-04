@@ -6,7 +6,6 @@ use dash_proc_macro::Trace;
 
 use crate::delegate;
 use crate::gc::handle::Handle;
-use crate::gc::trace::Trace;
 use crate::local::LocalScope;
 use crate::Vm;
 
@@ -17,7 +16,7 @@ use super::object::PropertyKey;
 use super::object::PropertyValue;
 use super::Value;
 
-#[derive(Debug)]
+#[derive(Debug, Trace)]
 pub struct Error {
     pub name: Rc<str>,
     pub message: Rc<str>,
@@ -73,12 +72,6 @@ impl Error {
             stack: "".into(),
             obj: NamedObject::null(),
         }
-    }
-}
-
-unsafe impl Trace for Error {
-    fn trace(&self) {
-        self.obj.trace();
     }
 }
 

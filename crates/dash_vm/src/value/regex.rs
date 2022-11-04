@@ -1,21 +1,21 @@
 use std::rc::Rc;
 
+use dash_proc_macro::Trace;
 use dash_regex::node::Node;
 
 use crate::delegate;
-use crate::gc::trace::Trace;
 use crate::Vm;
 
 use super::object::NamedObject;
 use super::object::Object;
 
 #[derive(Debug)]
-struct RegExpInner {
+pub struct RegExpInner {
     nodes: Vec<Node>,
     source: Rc<str>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Trace)]
 pub struct RegExp {
     inner: Option<RegExpInner>,
     object: NamedObject,
@@ -43,12 +43,6 @@ impl RegExp {
         self.inner
             .as_ref()
             .map(|inner| (inner.nodes.as_slice(), inner.source.as_ref()))
-    }
-}
-
-unsafe impl Trace for RegExp {
-    fn trace(&self) {
-        self.object.trace();
     }
 }
 

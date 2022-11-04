@@ -4,6 +4,7 @@ use std::rc::Rc;
 use dash_middle::compiler::constant::Function;
 use dash_middle::compiler::CompileResult;
 use dash_middle::parser::statement::FunctionKind;
+use dash_proc_macro::Trace;
 
 use crate::gc::handle::Handle;
 use crate::gc::trace::Trace;
@@ -24,6 +25,15 @@ pub struct Exports {
     pub named: Vec<(Rc<str>, Value)>,
 }
 
+unsafe impl Trace for Exports {
+    fn trace(&self) {
+        self.default.trace();
+        for (_, v) in &self.named {
+            v.trace();
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum FrameState {
     /// Regular function
@@ -33,6 +43,15 @@ pub enum FrameState {
     },
     /// Top level frame of a module
     Module(Exports),
+}
+
+unsafe impl Trace for FrameState {
+    fn trace(&self) {
+        match self {
+            Self::Module(exports) => exports.trace(),
+            Self::Function { .. } => {}
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -49,6 +68,23 @@ impl LoopCounter {
 }
 
 #[derive(Debug, Clone)]
+pub struct LoopCounterMap(BTreeMap<usize, LoopCounter>);
+
+impl LoopCounterMap {
+    pub fn new() -> Self {
+        Self(BTreeMap::new())
+    }
+
+    pub fn get_or_insert(&mut self, id: usize) -> &mut LoopCounter {
+        self.0.entry(id).or_insert_with(Default::default)
+    }
+}
+
+unsafe impl Trace for LoopCounterMap {
+    fn trace(&self) {}
+}
+
+#[derive(Debug, Clone, Trace)]
 pub struct Frame {
     pub function: Rc<Function>,
     pub ip: usize,
@@ -61,13 +97,7 @@ pub struct Frame {
     pub state: FrameState,
 
     /// Counts the number of backjumps to a particular loop header, to find hot loops
-    pub loop_counter: BTreeMap<usize, LoopCounter>,
-}
-
-unsafe impl Trace for Frame {
-    fn trace(&self) {
-        self.externals.trace();
-    }
+    pub loop_counter: LoopCounterMap,
 }
 
 impl Frame {
@@ -81,7 +111,7 @@ impl Frame {
             sp: 0,
             extra_stack_space: inner.locals - uf.inner().params,
             state: FrameState::Function { is_constructor_call },
-            loop_counter: BTreeMap::new(),
+            loop_counter: LoopCounterMap::new(),
         }
     }
 
@@ -95,7 +125,7 @@ impl Frame {
             sp: 0,
             extra_stack_space: inner.locals - uf.inner().params,
             state: FrameState::Module(Exports::default()),
-            loop_counter: BTreeMap::new(),
+            loop_counter: LoopCounterMap::new(),
         }
     }
 
@@ -130,7 +160,7 @@ impl Frame {
             state: FrameState::Function {
                 is_constructor_call: false,
             },
-            loop_counter: BTreeMap::new(),
+            loop_counter: LoopCounterMap::new(),
         }
     }
 

@@ -1,28 +1,19 @@
 use std::cell::RefCell;
 use std::collections::HashSet;
 
+use dash_proc_macro::Trace;
+
 use crate::delegate;
-use crate::gc::trace::Trace;
 use crate::Vm;
 
 use super::object::NamedObject;
 use super::object::Object;
 use super::Value;
 
-#[derive(Debug)]
+#[derive(Debug, Trace)]
 pub struct Set {
     inner: RefCell<HashSet<Value>>,
     obj: NamedObject,
-}
-
-unsafe impl Trace for Set {
-    fn trace(&self) {
-        let inner = self.inner.borrow();
-        for v in inner.iter() {
-            v.trace();
-        }
-        self.obj.trace();
-    }
 }
 
 impl Set {

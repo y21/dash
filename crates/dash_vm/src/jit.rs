@@ -62,7 +62,7 @@ pub fn handle_loop_end(vm: &mut Vm, loop_end_ip: usize) {
         } else {
             // We are jumping back to a loop header
             let frame = vm.frames.last_mut().unwrap();
-            let counter = frame.loop_counter.entry(frame.ip).or_insert(Default::default());
+            let counter = frame.loop_counter.get_or_insert(frame.ip);
 
             counter.inc();
             if counter.is_hot() {
@@ -101,7 +101,7 @@ pub fn execute_jit_function(mut result: JitResult, vm: &mut Vm, origin: *const F
     // Mark this side exit, this has the same logic as optimizing loops
     // TODO: should we be checking if the side exit is the end of the loop
     let frame = vm.frames.last_mut().unwrap();
-    let counter = frame.loop_counter.entry(ip).or_insert(Default::default());
+    let counter = frame.loop_counter.get_or_insert(ip);
 
     counter.inc();
     if counter.is_hot() {

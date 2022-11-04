@@ -19,7 +19,7 @@ use super::generator::GeneratorFunction;
 use super::generator::GeneratorState;
 use super::user::UserFunction;
 
-#[derive(Debug)]
+#[derive(Debug, Trace)]
 pub struct AsyncFunction {
     /// The properties of generator functions are very similar to async functions, so we can build upon generators
     inner: GeneratorFunction,

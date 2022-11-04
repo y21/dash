@@ -1,6 +1,7 @@
 use std::{any::Any, borrow::Cow, cell::RefCell, collections::HashMap, fmt::Debug, ptr::addr_of};
 
 use bitflags::bitflags;
+use dash_proc_macro::Trace;
 
 use crate::{
     gc::{handle::Handle, persistent::Persistent, trace::Trace},
@@ -160,13 +161,18 @@ bitflags! {
         const WRITABLE = 1 << 2;
     }
 }
+
+unsafe impl Trace for PropertyDataDescriptor {
+    fn trace(&self) {}
+}
+
 impl Default for PropertyDataDescriptor {
     fn default() -> Self {
         Self::CONFIGURABLE | Self::ENUMERABLE | Self::WRITABLE
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Trace)]
 pub struct PropertyValue {
     kind: PropertyValueKind,
     descriptor: PropertyDataDescriptor,
@@ -262,12 +268,6 @@ impl PropertyValue {
         )?;
 
         Ok(Value::Object(sc.register(obj)))
-    }
-}
-
-unsafe impl Trace for PropertyValue {
-    fn trace(&self) {
-        self.kind.trace();
     }
 }
 

@@ -6,7 +6,6 @@ use std::iter;
 use std::rc::Rc;
 
 use crate::gc::handle::Handle;
-use crate::gc::trace::Trace;
 use crate::local::LocalScope;
 use crate::throw;
 
@@ -26,10 +25,6 @@ use super::Value;
 
 pub const MAX_SAFE_INTEGER: u64 = 9007199254740991u64;
 pub const MAX_SAFE_INTEGERF: f64 = 9007199254740991f64;
-
-unsafe impl Trace for f64 {
-    fn trace(&self) {}
-}
 
 impl Object for f64 {
     fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
@@ -89,10 +84,6 @@ impl Object for f64 {
     }
 }
 
-unsafe impl Trace for bool {
-    fn trace(&self) {}
-}
-
 impl Object for bool {
     fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
         sc.statics.boolean_prototype.clone().get_property(sc, key)
@@ -148,10 +139,6 @@ impl Object for bool {
     fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
         Some(self)
     }
-}
-
-unsafe impl Trace for Rc<str> {
-    fn trace(&self) {}
 }
 
 // TODO: impl<T: Deref<Target=O>, O: Object> Object for T  possible?
@@ -225,15 +212,9 @@ pub fn array_like_keys(len: usize) -> impl Iterator<Item = Value> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Undefined;
-unsafe impl Trace for Undefined {
-    fn trace(&self) {}
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Null;
-unsafe impl Trace for Null {
-    fn trace(&self) {}
-}
 
 impl Object for Undefined {
     fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
@@ -335,10 +316,6 @@ impl Object for Null {
     }
 }
 
-unsafe impl Trace for str {
-    fn trace(&self) {}
-}
-
 impl Object for str {
     fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
         delegate_get_property(self, sc, key)
@@ -414,10 +391,6 @@ impl Symbol {
     pub fn new(description: Rc<str>) -> Self {
         Symbol(description)
     }
-}
-
-unsafe impl Trace for Symbol {
-    fn trace(&self) {}
 }
 
 impl Object for Symbol {
@@ -903,10 +876,6 @@ impl Hash for Number {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.0.to_bits().hash(state)
     }
-}
-
-unsafe impl Trace for Number {
-    fn trace(&self) {}
 }
 
 impl Object for Number {

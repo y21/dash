@@ -1,9 +1,10 @@
 use std::any::Any;
 use std::cell::Cell;
 
+use dash_proc_macro::Trace;
+
 use crate::delegate;
 use crate::gc::handle::Handle;
-use crate::gc::trace::Trace;
 use crate::local::LocalScope;
 use crate::Vm;
 
@@ -11,7 +12,7 @@ use super::object::NamedObject;
 use super::object::Object;
 use super::Value;
 
-#[derive(Debug)]
+#[derive(Debug, Trace)]
 pub struct ArrayBuffer {
     storage: Vec<Cell<u8>>,
     obj: NamedObject,
@@ -44,12 +45,6 @@ impl ArrayBuffer {
 
     pub fn len(&self) -> usize {
         self.storage.len()
-    }
-}
-
-unsafe impl Trace for ArrayBuffer {
-    fn trace(&self) {
-        self.obj.trace();
     }
 }
 

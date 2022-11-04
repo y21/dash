@@ -24,16 +24,23 @@ pub enum PromiseState {
     Rejected(Value),
 }
 
-#[derive(Debug)]
+unsafe impl Trace for PromiseState {
+    fn trace(&self) {
+        match self {
+            Self::Pending { resolve, reject } => {
+                resolve.trace();
+                reject.trace();
+            }
+            Self::Resolved(v) => v.trace(),
+            Self::Rejected(v) => v.trace(),
+        }
+    }
+}
+
+#[derive(Debug, Trace)]
 pub struct Promise {
     state: RefCell<PromiseState>,
     obj: NamedObject,
-}
-
-unsafe impl Trace for Promise {
-    fn trace(&self) {
-        self.obj.trace();
-    }
 }
 
 impl Promise {

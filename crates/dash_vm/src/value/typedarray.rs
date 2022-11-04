@@ -1,7 +1,8 @@
 use std::any::Any;
 
+use dash_proc_macro::Trace;
+
 use crate::gc::handle::Handle;
-use crate::gc::trace::Trace;
 use crate::local::LocalScope;
 use crate::Vm;
 
@@ -43,18 +44,11 @@ impl TypedArrayKind {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Trace)]
 pub struct TypedArray {
     arraybuffer: Handle<dyn Object>,
     kind: TypedArrayKind,
     obj: NamedObject,
-}
-
-unsafe impl Trace for TypedArray {
-    fn trace(&self) {
-        self.arraybuffer.trace();
-        self.obj.trace();
-    }
 }
 
 impl TypedArray {

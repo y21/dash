@@ -2,9 +2,10 @@ use std::any::Any;
 use std::cell::Cell;
 use std::cell::RefCell;
 
+use dash_proc_macro::Trace;
+
 use crate::delegate;
 use crate::gc::handle::Handle;
-use crate::gc::trace::Trace;
 use crate::local::LocalScope;
 use crate::throw;
 use crate::Vm;
@@ -21,7 +22,7 @@ use super::Value;
 
 pub const MAX_LENGTH: usize = 4294967295;
 
-#[derive(Debug)]
+#[derive(Debug, Trace)]
 pub struct Array {
     items: RefCell<Vec<PropertyValue>>,
     obj: NamedObject,
@@ -55,15 +56,6 @@ impl Array {
 
     pub fn inner(&self) -> &RefCell<Vec<PropertyValue>> {
         &self.items
-    }
-}
-
-unsafe impl Trace for Array {
-    fn trace(&self) {
-        let items = self.items.borrow();
-        for item in items.iter() {
-            item.trace();
-        }
     }
 }
 
@@ -174,18 +166,12 @@ impl Object for Array {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Trace)]
 pub struct ArrayIterator {
     index: Cell<usize>,
     length: usize,
     value: Value,
     obj: NamedObject,
-}
-
-unsafe impl Trace for ArrayIterator {
-    fn trace(&self) {
-        self.value.trace();
-    }
 }
 
 impl Object for ArrayIterator {
