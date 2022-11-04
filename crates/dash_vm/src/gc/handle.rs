@@ -101,6 +101,10 @@ unsafe impl<T: ?Sized + Trace> Trace for Handle<T> {
     fn trace(&self) {
         unsafe {
             let this = self.0.as_ref();
+            if this.flags.is_marked() {
+                // If already marked, do nothing to avoid getting stucked in an infinite loop
+                return;
+            }
             this.flags.mark();
         };
 

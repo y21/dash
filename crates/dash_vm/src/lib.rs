@@ -939,6 +939,7 @@ impl Vm {
 
     fn trace_roots(&mut self) {
         self.frames.trace();
+        self.async_tasks.trace();
         self.stack.trace();
         self.global.trace();
         self.externals.trace();
