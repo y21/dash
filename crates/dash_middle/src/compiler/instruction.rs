@@ -81,7 +81,6 @@ pub enum Instruction {
     Debugger,
     Global,
     Super,
-    RevStck,
     Undef,
     Break,
     Await,
@@ -95,6 +94,8 @@ pub enum Instruction {
     Switch,
     ObjDestruct,
     ArrayDestruct,
+    // Nop exists solely for the sake of benchmarking the raw throughput of the VM dispatch loop
+    Nop,
 }
 
 // Some instruction opcodes have a separate u8 constant to be used in for example match guards,

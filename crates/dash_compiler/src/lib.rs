@@ -858,8 +858,6 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             ib.accept_expr((*prop.target).clone())?;
         }
 
-        ib.accept_expr(*right)?;
-
         match *left {
             Expr::Literal(lit) => {
                 let ident = lit.to_identifier();
@@ -875,224 +873,99 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
                     let is_extern = local.is_extern();
 
+                    macro_rules! assign {
+                        ($e:expr) => {{
+                            ib.build_local_load(id, is_extern);
+                            ib.accept_expr(*right)?;
+                            $e;
+                        }};
+                    }
+
                     match operator {
-                        TokenType::Assignment => {}
-                        TokenType::AdditionAssignment => {
-                            ib.build_local_load(id, is_extern);
-                            ib.build_revstck(2);
-                            ib.build_add();
-                        }
-                        TokenType::SubtractionAssignment => {
-                            ib.build_local_load(id, is_extern);
-                            ib.build_revstck(2);
-                            ib.build_sub();
-                        }
-                        TokenType::MultiplicationAssignment => {
-                            ib.build_local_load(id, is_extern);
-                            ib.build_revstck(2);
-                            ib.build_mul();
-                        }
-                        TokenType::DivisionAssignment => {
-                            ib.build_local_load(id, is_extern);
-                            ib.build_revstck(2);
-                            ib.build_div();
-                        }
-                        TokenType::RemainderAssignment => {
-                            ib.build_local_load(id, is_extern);
-                            ib.build_revstck(2);
-                            ib.build_rem();
-                        }
-                        TokenType::ExponentiationAssignment => {
-                            ib.build_local_load(id, is_extern);
-                            ib.build_revstck(2);
-                            ib.build_pow();
-                        }
-                        TokenType::LeftShiftAssignment => {
-                            ib.build_local_load(id, is_extern);
-                            ib.build_revstck(2);
-                            ib.build_bitshl();
-                        }
-                        TokenType::RightShiftAssignment => {
-                            ib.build_local_load(id, is_extern);
-                            ib.build_revstck(2);
-                            ib.build_bitshr();
-                        }
-                        TokenType::UnsignedRightShiftAssignment => {
-                            ib.build_local_load(id, is_extern);
-                            ib.build_revstck(2);
-                            ib.build_bitushr();
-                        }
-                        TokenType::BitwiseAndAssignment => {
-                            ib.build_local_load(id, is_extern);
-                            ib.build_revstck(2);
-                            ib.build_bitand();
-                        }
-                        TokenType::BitwiseOrAssignment => {
-                            ib.build_local_load(id, is_extern);
-                            ib.build_revstck(2);
-                            ib.build_bitor();
-                        }
-                        TokenType::BitwiseXorAssignment => {
-                            ib.build_local_load(id, is_extern);
-                            ib.build_revstck(2);
-                            ib.build_bitxor();
-                        }
+                        TokenType::Assignment => ib.accept_expr(*right)?,
+                        TokenType::AdditionAssignment => assign!(ib.build_add()),
+                        TokenType::SubtractionAssignment => assign!(ib.build_sub()),
+                        TokenType::MultiplicationAssignment => assign!(ib.build_mul()),
+                        TokenType::DivisionAssignment => assign!(ib.build_div()),
+                        TokenType::RemainderAssignment => assign!(ib.build_rem()),
+                        TokenType::ExponentiationAssignment => assign!(ib.build_pow()),
+                        TokenType::LeftShiftAssignment => assign!(ib.build_bitshl()),
+                        TokenType::RightShiftAssignment => assign!(ib.build_bitshr()),
+                        TokenType::UnsignedRightShiftAssignment => assign!(ib.build_bitushr()),
+                        TokenType::BitwiseAndAssignment => assign!(ib.build_bitand()),
+                        TokenType::BitwiseOrAssignment => assign!(ib.build_bitor()),
+                        TokenType::BitwiseXorAssignment => assign!(ib.build_bitxor()),
                         _ => unimplementedc!("Unknown operator"),
                     }
 
                     ib.build_local_store(id, is_extern);
                 } else {
+                    macro_rules! assign {
+                        ($e:expr) => {{
+                            ib.build_global_load(&ident)?;
+                            ib.accept_expr(*right)?;
+                            $e;
+                        }};
+                    }
+
                     match operator {
-                        TokenType::Assignment => {}
-                        TokenType::AdditionAssignment => {
-                            ib.build_global_load(&ident)?;
-                            ib.build_add();
-                        }
-                        TokenType::SubtractionAssignment => {
-                            ib.build_global_load(&ident)?;
-                            ib.build_sub();
-                        }
-                        TokenType::MultiplicationAssignment => {
-                            ib.build_global_load(&ident)?;
-                            ib.build_mul();
-                        }
-                        TokenType::DivisionAssignment => {
-                            ib.build_global_load(&ident)?;
-                            ib.build_div();
-                        }
-                        TokenType::RemainderAssignment => {
-                            ib.build_global_load(&ident)?;
-                            ib.build_rem();
-                        }
-                        TokenType::ExponentiationAssignment => {
-                            ib.build_global_load(&ident)?;
-                            ib.build_pow();
-                        }
-                        TokenType::LeftShiftAssignment => {
-                            ib.build_global_load(&ident)?;
-                            ib.build_bitshl();
-                        }
-                        TokenType::RightShiftAssignment => {
-                            ib.build_global_load(&ident)?;
-                            ib.build_bitshr();
-                        }
-                        TokenType::UnsignedRightShiftAssignment => {
-                            ib.build_global_load(&ident)?;
-                            ib.build_bitushr();
-                        }
-                        TokenType::BitwiseAndAssignment => {
-                            ib.build_global_load(&ident)?;
-                            ib.build_bitand();
-                        }
-                        TokenType::BitwiseOrAssignment => {
-                            ib.build_global_load(&ident)?;
-                            ib.build_bitor();
-                        }
-                        TokenType::BitwiseXorAssignment => {
-                            ib.build_global_load(&ident)?;
-                            ib.build_bitxor();
-                        }
+                        TokenType::Assignment => ib.accept_expr(*right)?,
+                        TokenType::AdditionAssignment => assign!(ib.build_add()),
+                        TokenType::SubtractionAssignment => assign!(ib.build_sub()),
+                        TokenType::MultiplicationAssignment => assign!(ib.build_mul()),
+                        TokenType::DivisionAssignment => assign!(ib.build_div()),
+                        TokenType::RemainderAssignment => assign!(ib.build_rem()),
+                        TokenType::ExponentiationAssignment => assign!(ib.build_pow()),
+                        TokenType::LeftShiftAssignment => assign!(ib.build_bitshl()),
+                        TokenType::RightShiftAssignment => assign!(ib.build_bitshr()),
+                        TokenType::UnsignedRightShiftAssignment => assign!(ib.build_bitushr()),
+                        TokenType::BitwiseAndAssignment => assign!(ib.build_bitand()),
+                        TokenType::BitwiseOrAssignment => assign!(ib.build_bitor()),
+                        TokenType::BitwiseXorAssignment => assign!(ib.build_bitxor()),
                         _ => unimplementedc!("Unknown operator"),
                     }
 
                     ib.build_global_store(&ident)?;
                 }
             }
-            Expr::PropertyAccess(prop) => match ((*prop.property).clone(), prop.computed, operator) {
-                (Expr::Literal(lit), false, TokenType::Assignment) => {
-                    let ident = lit.to_identifier();
-                    ib.build_static_prop_set(&ident)?;
+            Expr::PropertyAccess(prop) => {
+                macro_rules! assign {
+                    ($lit:expr,$e:expr) => {{
+                        let ident = $lit.to_identifier();
+                        ib.visit_property_access_expr(prop, false)?;
+                        ib.accept_expr(*right)?;
+                        $e;
+                        ib.build_static_prop_set(&ident)?;
+                    }};
                 }
-                (Expr::Literal(lit), false, TokenType::AdditionAssignment) => {
-                    let ident = lit.to_identifier();
-                    ib.visit_property_access_expr(prop, false)?;
-                    ib.build_revstck(2);
-                    ib.build_add();
-                    ib.build_static_prop_set(&ident)?;
+                match ((*prop.property).clone(), prop.computed, operator) {
+                    (Expr::Literal(lit), false, TokenType::Assignment) => {
+                        ib.accept_expr(*right)?;
+                        let ident = lit.to_identifier();
+                        ib.build_static_prop_set(&ident)?;
+                    }
+                    (Expr::Literal(lit), false, TokenType::AdditionAssignment) => assign!(lit, ib.build_add()),
+                    (Expr::Literal(lit), false, TokenType::SubtractionAssignment) => assign!(lit, ib.build_sub()),
+                    (Expr::Literal(lit), false, TokenType::MultiplicationAssignment) => assign!(lit, ib.build_mul()),
+                    (Expr::Literal(lit), false, TokenType::DivisionAssignment) => assign!(lit, ib.build_div()),
+                    (Expr::Literal(lit), false, TokenType::RemainderAssignment) => assign!(lit, ib.build_rem()),
+                    (Expr::Literal(lit), false, TokenType::ExponentiationAssignment) => assign!(lit, ib.build_pow()),
+                    (Expr::Literal(lit), false, TokenType::LeftShiftAssignment) => assign!(lit, ib.build_bitshl()),
+                    (Expr::Literal(lit), false, TokenType::RightShiftAssignment) => assign!(lit, ib.build_bitshr()),
+                    (Expr::Literal(lit), false, TokenType::UnsignedRightShiftAssignment) => {
+                        assign!(lit, ib.build_bitushr())
+                    }
+                    (Expr::Literal(lit), false, TokenType::BitwiseAndAssignment) => assign!(lit, ib.build_bitand()),
+                    (Expr::Literal(lit), false, TokenType::BitwiseOrAssignment) => assign!(lit, ib.build_bitor()),
+                    (Expr::Literal(lit), false, TokenType::BitwiseXorAssignment) => assign!(lit, ib.build_bitxor()),
+                    (e, _, TokenType::Assignment) => {
+                        ib.accept_expr(*right)?;
+                        ib.accept_expr(e)?;
+                        ib.build_dynamic_prop_set();
+                    }
+                    _ => unimplementedc!("Assignment to computed property"),
                 }
-                (Expr::Literal(lit), false, TokenType::SubtractionAssignment) => {
-                    let ident = lit.to_identifier();
-                    ib.visit_property_access_expr(prop, false)?;
-                    ib.build_revstck(2);
-                    ib.build_sub();
-                    ib.build_static_prop_set(&ident)?;
-                }
-                (Expr::Literal(lit), false, TokenType::MultiplicationAssignment) => {
-                    let ident = lit.to_identifier();
-                    ib.visit_property_access_expr(prop, false)?;
-                    ib.build_revstck(2);
-                    ib.build_mul();
-                    ib.build_static_prop_set(&ident)?;
-                }
-                (Expr::Literal(lit), false, TokenType::DivisionAssignment) => {
-                    let ident = lit.to_identifier();
-                    ib.visit_property_access_expr(prop, false)?;
-                    ib.build_revstck(2);
-                    ib.build_div();
-                    ib.build_static_prop_set(&ident)?;
-                }
-                (Expr::Literal(lit), false, TokenType::RemainderAssignment) => {
-                    let ident = lit.to_identifier();
-                    ib.visit_property_access_expr(prop, false)?;
-                    ib.build_revstck(2);
-                    ib.build_rem();
-                    ib.build_static_prop_set(&ident)?;
-                }
-                (Expr::Literal(lit), false, TokenType::ExponentiationAssignment) => {
-                    let ident = lit.to_identifier();
-                    ib.visit_property_access_expr(prop, false)?;
-                    ib.build_revstck(2);
-                    ib.build_pow();
-                    ib.build_static_prop_set(&ident)?;
-                }
-                (Expr::Literal(lit), false, TokenType::LeftShiftAssignment) => {
-                    let ident = lit.to_identifier();
-                    ib.visit_property_access_expr(prop, false)?;
-                    ib.build_revstck(2);
-                    ib.build_bitshl();
-                    ib.build_static_prop_set(&ident)?;
-                }
-                (Expr::Literal(lit), false, TokenType::RightShiftAssignment) => {
-                    let ident = lit.to_identifier();
-                    ib.visit_property_access_expr(prop, false)?;
-                    ib.build_revstck(2);
-                    ib.build_bitshr();
-                    ib.build_static_prop_set(&ident)?;
-                }
-                (Expr::Literal(lit), false, TokenType::UnsignedRightShiftAssignment) => {
-                    let ident = lit.to_identifier();
-                    ib.visit_property_access_expr(prop, false)?;
-                    ib.build_revstck(2);
-                    ib.build_bitushr();
-                    ib.build_static_prop_set(&ident)?;
-                }
-                (Expr::Literal(lit), false, TokenType::BitwiseAndAssignment) => {
-                    let ident = lit.to_identifier();
-                    ib.visit_property_access_expr(prop, false)?;
-                    ib.build_revstck(2);
-                    ib.build_bitand();
-                    ib.build_static_prop_set(&ident)?;
-                }
-                (Expr::Literal(lit), false, TokenType::BitwiseOrAssignment) => {
-                    let ident = lit.to_identifier();
-                    ib.visit_property_access_expr(prop, false)?;
-                    ib.build_revstck(2);
-                    ib.build_bitor();
-                    ib.build_static_prop_set(&ident)?;
-                }
-                (Expr::Literal(lit), false, TokenType::BitwiseXorAssignment) => {
-                    let ident = lit.to_identifier();
-                    ib.visit_property_access_expr(prop, false)?;
-                    ib.build_revstck(2);
-                    ib.build_bitxor();
-                    ib.build_static_prop_set(&ident)?;
-                }
-                (e, _, TokenType::Assignment) => {
-                    ib.accept_expr(e)?;
-                    ib.build_dynamic_prop_set();
-                }
-                _ => todo!(),
-            },
+            }
             _ => unimplementedc!("Assignment to non-identifier"),
         }
 

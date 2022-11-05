@@ -1023,16 +1023,6 @@ mod handlers {
         throw!(cx, "`super` keyword unexpected in this context");
     }
 
-    pub fn revstck(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
-        let count = cx.fetch_and_inc_ip();
-
-        let len = cx.stack.len();
-        let elements = &mut cx.stack[len - count as usize..];
-        elements.reverse();
-
-        Ok(None)
-    }
-
     pub fn undef(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
         cx.try_push_stack(Value::undefined())?;
         Ok(None)
@@ -1233,7 +1223,6 @@ pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResu
         Instruction::Global => handlers::global_this(cx),
         Instruction::Super => handlers::super_(cx),
         Instruction::Debugger => handlers::debugger(cx),
-        Instruction::RevStck => handlers::revstck(cx),
         Instruction::Neg => handlers::neg(cx),
         Instruction::Pos => handlers::pos(cx),
         Instruction::Undef => handlers::undef(cx),
@@ -1246,6 +1235,7 @@ pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResu
         Instruction::Switch => handlers::switch(cx),
         Instruction::ObjDestruct => handlers::objdestruct(cx),
         Instruction::ArrayDestruct => handlers::arraydestruct(cx),
+        Instruction::Nop => Ok(None),
         _ => unimplemented!("{:?}", instruction),
     }
 }

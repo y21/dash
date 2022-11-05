@@ -410,12 +410,6 @@ impl Assembler {
 
                     stack.push(result);
                 }
-                Instruction::RevStck => {
-                    let amount = bytecode.next().unwrap().1 as usize;
-                    let len = stack.len();
-                    let target = &mut stack[len - amount..];
-                    target.reverse();
-                }
                 Instruction::Add => {
                     let rhs = stack.pop().unwrap();
                     let lhs = stack.pop().unwrap();

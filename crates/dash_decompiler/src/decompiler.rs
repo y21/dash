@@ -107,7 +107,6 @@ impl<'buf> FunctionDecompiler<'buf> {
                 Instruction::Eq => self.handle_opless_instr("eq"),
                 Instruction::Ne => self.handle_opless_instr("ne"),
                 Instruction::Pop => self.handle_opless_instr("pop"),
-                Instruction::RevStck => self.handle_inc_op_instr("revstck")?,
                 Instruction::Constant => {
                     let b = self.read()?;
                     let constant = &self.constants[b as usize];
@@ -306,6 +305,7 @@ impl<'buf> FunctionDecompiler<'buf> {
                     }
                     self.handle_op_map_instr("arraydestruct", &[("count", &count)])
                 }
+                Instruction::Nop => self.handle_opless_instr("nop"),
             }
         }
 

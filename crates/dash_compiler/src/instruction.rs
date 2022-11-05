@@ -130,7 +130,6 @@ pub trait InstructionWriter {
     fn build_default_export(&mut self);
     fn build_named_export(&mut self, it: &[NamedExportKind]) -> Result<(), CompileError>;
     fn build_debugger(&mut self);
-    fn build_revstck(&mut self, n: u8);
     fn build_break(&mut self);
     fn build_infinity(&mut self);
     fn build_nan(&mut self);
@@ -382,11 +381,6 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
 
     fn build_dynamic_import(&mut self) {
         self.write_instr(Instruction::ImportDyn);
-    }
-
-    fn build_revstck(&mut self, n: u8) {
-        self.write_instr(Instruction::RevStck);
-        self.write(n);
     }
 
     fn build_static_delete(&mut self, id: u16) {
