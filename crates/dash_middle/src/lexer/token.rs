@@ -289,16 +289,16 @@ pub enum TokenType {
     #[display(fmt = "instanceof")]
     Instanceof,
 
-    #[display(fmt = "await")]
+    #[display(fmt = "await ")]
     Await,
 
-    #[display(fmt = "delete")]
+    #[display(fmt = "delete ")]
     Delete,
 
-    #[display(fmt = "void")]
+    #[display(fmt = "void ")]
     Void,
 
-    #[display(fmt = "typeof")]
+    #[display(fmt = "typeof ")]
     Typeof,
 
     #[display(fmt = "break")]

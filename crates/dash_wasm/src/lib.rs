@@ -90,7 +90,7 @@ pub fn debug(s: &str, o: OptLevel, em: Emit) -> String {
             dash_optimizer::optimize_ast(&mut ast, o.into());
             let mut output = String::new();
             for node in ast {
-                let _ = write!(output, "{node}");
+                let _ = write!(output, "{node}\n");
             }
             output
         }
