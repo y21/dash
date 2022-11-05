@@ -102,3 +102,47 @@ pub enum Instruction {
 // where `Instruction::Pop as u8` isn't allowed
 pub const POP: u8 = Instruction::Pop as u8;
 pub const RET: u8 = Instruction::Ret as u8;
+
+/// Intrinsic operations, i.e. operations known by the compiler. These can be
+/// specialized operations, such as the `+` operator on two numbers.
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromRepr)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum IntrinsicOperation {
+    /// Addition, where the left and right side is a number
+    AddNumLR,
+    /// Subtraction, where the left and right side is a number
+    SubNumLR,
+    /// Multiplication, where the left and right side is a number
+    MulNumLR,
+    /// Division, where the left and right side is a number
+    DivNumLR,
+    /// Remainder, where the left and right side is a number
+    RemNumLR,
+    /// Power, where the left and right side is a number
+    PowNumLR,
+    /// Greater than, where the left and right side is a number
+    GtNumLR,
+    /// Greater than or equal, where the left and right side is a number
+    GeNumLR,
+    /// Less than, where the left and right side is a number
+    LtNumLR,
+    /// Less than or equal, where the left and right side is a number
+    LeNumLR,
+    /// Equal, where the left and right side is a number
+    EqNumLR,
+    /// Not equal, where the left and right side is a number
+    NeNumLR,
+    /// Bitwise or, where the left and right side is a number
+    BitOrNumLR,
+    /// Bitwise xor, where the left and right side is a number
+    BitXorNumLR,
+    /// Bitwise and, where the left and right side is a number
+    BitAndNumLR,
+    /// Bitwise shift left, where the left and right side is a number
+    BitShlNumLR,
+    /// Bitwise shift right, where the left and right side is a number
+    BitShrNumLR,
+    /// Bitwise unsigned shift right, where the left and right side is a number
+    BitUshrNumLR,
+}

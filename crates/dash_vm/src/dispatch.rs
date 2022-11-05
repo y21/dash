@@ -156,11 +156,17 @@ impl<'a> DerefMut for DispatchContext<'a> {
 }
 
 mod handlers {
+    use dash_middle::compiler::instruction::IntrinsicOperation;
     use dash_middle::compiler::FunctionCallMetadata;
     use dash_middle::compiler::ObjectMemberKind;
     use dash_middle::compiler::StaticImportKind;
     use std::borrow::Cow;
     use std::collections::HashMap;
+    use std::ops::Add;
+    use std::ops::Div;
+    use std::ops::Mul;
+    use std::ops::Rem;
+    use std::ops::Sub;
 
     use crate::frame::Frame;
     use crate::frame::FrameState;
@@ -1154,6 +1160,64 @@ mod handlers {
 
         Ok(None)
     }
+
+    pub fn intrinsic_op(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let op = IntrinsicOperation::from_repr(cx.fetch_and_inc_ip()).unwrap();
+
+        macro_rules! lr_as_num_spec {
+            () => {{
+                let (left, right) = cx.pop_stack2();
+                match (left, right) {
+                    (Value::Number(l), Value::Number(r)) => (l.0, r.0),
+                    _ => unreachable!(),
+                }
+            }};
+        }
+
+        macro_rules! bin_op {
+            ($fun:expr) => {{
+                let (l, r) = lr_as_num_spec!();
+                cx.try_push_stack(Value::number($fun(l, r)))?;
+            }};
+        }
+
+        macro_rules! bin_op_i64 {
+            ($op:tt) => {{
+                let (l, r) = lr_as_num_spec!();
+                cx.try_push_stack(Value::number(((l as i32) $op (r as i32)) as f64))?;
+            }};
+        }
+
+        macro_rules! bin_op_to_f64 {
+            ($op:tt) => {{
+                let (l, r) = lr_as_num_spec!();
+                cx.try_push_stack(Value::number((l $op r) as i64 as f64))?;
+            }};
+        }
+
+        match op {
+            IntrinsicOperation::AddNumLR => bin_op!(Add::add),
+            IntrinsicOperation::SubNumLR => bin_op!(Sub::sub),
+            IntrinsicOperation::MulNumLR => bin_op!(Mul::mul),
+            IntrinsicOperation::DivNumLR => bin_op!(Div::div),
+            IntrinsicOperation::RemNumLR => bin_op!(Rem::rem),
+            IntrinsicOperation::PowNumLR => bin_op!(f64::powf),
+            IntrinsicOperation::GtNumLR => bin_op_to_f64!(>),
+            IntrinsicOperation::GeNumLR => bin_op_to_f64!(>=),
+            IntrinsicOperation::LtNumLR => bin_op_to_f64!(<),
+            IntrinsicOperation::LeNumLR => bin_op_to_f64!(<=),
+            IntrinsicOperation::EqNumLR => bin_op_to_f64!(==),
+            IntrinsicOperation::NeNumLR => bin_op_to_f64!(!=),
+            IntrinsicOperation::BitOrNumLR => bin_op_i64!(|),
+            IntrinsicOperation::BitXorNumLR => bin_op_i64!(^),
+            IntrinsicOperation::BitAndNumLR => bin_op_i64!(&),
+            IntrinsicOperation::BitShlNumLR => bin_op_i64!(<<),
+            IntrinsicOperation::BitShrNumLR => bin_op_i64!(>>),
+            IntrinsicOperation::BitUshrNumLR => bin_op_i64!(>>),
+        }
+
+        Ok(None)
+    }
 }
 
 pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResult>, Value> {
@@ -1236,6 +1300,7 @@ pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResu
         Instruction::ObjDestruct => handlers::objdestruct(cx),
         Instruction::ArrayDestruct => handlers::arraydestruct(cx),
         Instruction::Nop => Ok(None),
+        Instruction::IntrinsicOp => handlers::intrinsic_op(cx),
         _ => unimplemented!("{:?}", instruction),
     }
 }

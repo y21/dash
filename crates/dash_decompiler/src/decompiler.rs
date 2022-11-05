@@ -1,5 +1,6 @@
 use dash_middle::compiler::constant::Constant;
 use dash_middle::compiler::instruction::Instruction;
+use dash_middle::compiler::instruction::IntrinsicOperation;
 use dash_middle::compiler::FunctionCallMetadata;
 use dash_middle::compiler::ObjectMemberKind;
 use dash_middle::util::Reader;
@@ -271,7 +272,31 @@ impl<'buf> FunctionDecompiler<'buf> {
                 Instruction::Await => self.handle_opless_instr("await"),
                 Instruction::Nan => self.handle_opless_instr("nan"),
                 Instruction::Infinity => self.handle_opless_instr("inf"),
-                Instruction::IntrinsicOp => return Err(DecompileError::Unimplemented(instr)),
+                Instruction::IntrinsicOp => {
+                    let op =
+                        IntrinsicOperation::from_repr(self.read()?).ok_or(DecompileError::InvalidObjectMemberKind)?;
+
+                    match op {
+                        IntrinsicOperation::AddNumLR => self.handle_opless_instr("addnumlr"),
+                        IntrinsicOperation::SubNumLR => self.handle_opless_instr("subnumlr"),
+                        IntrinsicOperation::MulNumLR => self.handle_opless_instr("mulnumlr"),
+                        IntrinsicOperation::DivNumLR => self.handle_opless_instr("divnumlr"),
+                        IntrinsicOperation::RemNumLR => self.handle_opless_instr("remnumlr"),
+                        IntrinsicOperation::PowNumLR => self.handle_opless_instr("pownumlr"),
+                        IntrinsicOperation::GtNumLR => self.handle_opless_instr("gtnumlr"),
+                        IntrinsicOperation::GeNumLR => self.handle_opless_instr("genumlr"),
+                        IntrinsicOperation::LtNumLR => self.handle_opless_instr("ltnumlr"),
+                        IntrinsicOperation::LeNumLR => self.handle_opless_instr("lenumlr"),
+                        IntrinsicOperation::EqNumLR => self.handle_opless_instr("eqnumlr"),
+                        IntrinsicOperation::NeNumLR => self.handle_opless_instr("nenumlr"),
+                        IntrinsicOperation::BitOrNumLR => self.handle_opless_instr("bitornumlr"),
+                        IntrinsicOperation::BitXorNumLR => self.handle_opless_instr("bitxornumlr"),
+                        IntrinsicOperation::BitAndNumLR => self.handle_opless_instr("bitandnumlr"),
+                        IntrinsicOperation::BitShlNumLR => self.handle_opless_instr("bitshlnumlr"),
+                        IntrinsicOperation::BitShrNumLR => self.handle_opless_instr("bitshrnumlr"),
+                        IntrinsicOperation::BitUshrNumLR => self.handle_opless_instr("bitushrnumlr"),
+                    }
+                }
                 Instruction::CallSymbolIterator => self.handle_opless_instr("@@iterator"),
                 Instruction::CallForInIterator => self.handle_opless_instr("@@forInIterator"),
                 Instruction::DeletePropertyStatic => self.handle_incw_op_instr("deletepropertystatic")?,

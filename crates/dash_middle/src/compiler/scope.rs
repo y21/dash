@@ -113,6 +113,12 @@ impl<'a> Scope<'a> {
         u16::try_from(self.locals.len() - 1).map_err(|_| LimitExceededError)
     }
 
+    pub fn add_scope_local(&mut self, local: ScopeLocal<'a>) -> Result<u16, LimitExceededError> {
+        // TODO: check if it exists already
+        self.locals.push(local);
+        u16::try_from(self.locals.len() - 1).map_err(|_| LimitExceededError)
+    }
+
     pub fn enter(&mut self) {
         self.depth += 1;
     }
@@ -123,5 +129,9 @@ impl<'a> Scope<'a> {
 
     pub fn locals(&self) -> &[ScopeLocal<'a>] {
         self.locals.as_ref()
+    }
+
+    pub fn into_locals(self) -> Vec<ScopeLocal<'a>> {
+        self.locals
     }
 }

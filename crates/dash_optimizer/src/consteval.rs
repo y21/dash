@@ -1,3 +1,4 @@
+use dash_middle::compiler::infer_type;
 use dash_middle::compiler::scope::CompileValueType;
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::expr::ArrayLiteral;
@@ -255,7 +256,7 @@ impl<'a> Eval<'a> for Statement<'a> {
 
                 if let VariableDeclarationName::Identifier(name) = binding.name {
                     let ty = match value {
-                        Some(expr) => infer_type(cx, expr),
+                        Some(expr) => infer_type(cx.scope_mut(), expr),
                         None => Some(CompileValueType::Uninit),
                     };
 
@@ -397,56 +398,5 @@ impl<'a> Eval<'a> for [Expr<'a>] {
 
     fn has_side_effect(&self, cx: &mut OptimizerContext<'a>) -> bool {
         self.iter().any(|e| e.has_side_effect(cx))
-    }
-}
-
-fn infer_type<'a>(cx: &mut OptimizerContext<'a>, expr: &Expr<'a>) -> Option<CompileValueType> {
-    match expr {
-        Expr::Literal(LiteralExpr::Boolean(..)) => Some(CompileValueType::Boolean),
-        Expr::Literal(LiteralExpr::Null) => Some(CompileValueType::Null),
-        Expr::Literal(LiteralExpr::Undefined) => Some(CompileValueType::Undefined),
-        Expr::Literal(LiteralExpr::Number(n)) => {
-            if n.floor() != *n {
-                Some(CompileValueType::F64)
-            } else {
-                Some(CompileValueType::I64)
-            }
-        }
-        Expr::Literal(LiteralExpr::String(..)) => Some(CompileValueType::String),
-        Expr::Literal(LiteralExpr::Identifier(ident)) => match cx.scope_mut().find_local(&ident) {
-            Some((_, local)) => local.inferred_type().borrow().clone(),
-            None => None,
-        },
-        Expr::Assignment(AssignmentExpr { right, .. }) => infer_type(cx, right),
-        Expr::Binary(bin) => match bin.operator {
-            TokenType::Plus => {
-                let left = infer_type(cx, &bin.left);
-                let right = infer_type(cx, &bin.right);
-
-                match (left, right) {
-                    (Some(CompileValueType::String), _) => Some(CompileValueType::String),
-                    (_, Some(CompileValueType::String)) => Some(CompileValueType::String),
-                    (Some(CompileValueType::F64), _) => Some(CompileValueType::F64),
-                    (_, Some(CompileValueType::F64)) => Some(CompileValueType::F64),
-                    (Some(CompileValueType::I64), _) => Some(CompileValueType::I64),
-                    (_, Some(CompileValueType::I64)) => Some(CompileValueType::I64),
-                    _ => None,
-                }
-            }
-            TokenType::Minus | TokenType::Star | TokenType::Slash => {
-                let left = infer_type(cx, &bin.left);
-                let right = infer_type(cx, &bin.right);
-
-                match (left, right) {
-                    (Some(CompileValueType::F64), _) => Some(CompileValueType::F64),
-                    (_, Some(CompileValueType::F64)) => Some(CompileValueType::F64),
-                    (Some(CompileValueType::I64), _) => Some(CompileValueType::I64),
-                    (_, Some(CompileValueType::I64)) => Some(CompileValueType::I64),
-                    _ => None,
-                }
-            }
-            _ => None,
-        },
-        _ => None,
     }
 }

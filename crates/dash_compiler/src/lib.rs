@@ -3,10 +3,11 @@ use std::rc::Rc;
 use std::{convert::TryInto, ptr::NonNull, usize};
 
 use dash_middle::compiler::constant::{Constant, Function};
-use dash_middle::compiler::scope::Scope;
+use dash_middle::compiler::instruction::IntrinsicOperation;
 use dash_middle::compiler::scope::ScopeLocal;
+use dash_middle::compiler::scope::{CompileValueType, Scope};
 use dash_middle::compiler::{constant::ConstantPool, external::External};
-use dash_middle::compiler::{CompileResult, FunctionCallMetadata, StaticImportKind};
+use dash_middle::compiler::{infer_type, CompileResult, FunctionCallMetadata, StaticImportKind};
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::expr::AssignmentExpr;
 use dash_middle::parser::expr::BinaryExpr;
@@ -176,6 +177,11 @@ impl<'a> FunctionCompiler<'a> {
         if self.opt_level.enabled() {
             let mut cx = OptimizerContext::new();
             ast.fold(&mut cx, false);
+
+            let scope = std::mem::replace(cx.scope_mut(), Scope::new());
+            for local in scope.into_locals() {
+                self.scope.add_scope_local(local)?;
+            }
         }
 
         let hoisted_locals = transformations::hoist_declarations(&mut ast);
@@ -506,39 +512,64 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         &mut self,
         BinaryExpr { left, right, operator }: BinaryExpr<'a>,
     ) -> Result<(), CompileError> {
+        let left_type = infer_type(&mut self.scope, &left);
+        let right_type = infer_type(&mut self.scope, &right);
+
         let mut ib = InstructionBuilder::new(self);
         ib.accept_expr(*left)?;
 
-        macro_rules! trivial_case {
-            ($k:expr) => {{
+        macro_rules! generic_bin {
+            ($gen:expr) => {{
                 ib.accept_expr(*right)?;
-                $k(&mut ib)
+                $gen(&mut ib);
+            }};
+        }
+
+        macro_rules! numeric_bin {
+            ($gen:expr, $spec: expr) => {{
+                ib.accept_expr(*right)?;
+
+                match (left_type, right_type) {
+                    (
+                        Some(CompileValueType::I64 | CompileValueType::F64),
+                        Some(CompileValueType::I64 | CompileValueType::F64),
+                    ) => {
+                        ib.build_intrinsic_op($spec);
+                    }
+                    _ => {
+                        $gen(&mut ib);
+                    }
+                }
             }};
         }
 
         match operator {
-            TokenType::Plus => trivial_case!(InstructionBuilder::build_add),
-            TokenType::Minus => trivial_case!(InstructionBuilder::build_sub),
-            TokenType::Star => trivial_case!(InstructionBuilder::build_mul),
-            TokenType::Slash => trivial_case!(InstructionBuilder::build_div),
-            TokenType::Remainder => trivial_case!(InstructionBuilder::build_rem),
-            TokenType::Exponentiation => trivial_case!(InstructionBuilder::build_pow),
-            TokenType::Greater => trivial_case!(InstructionBuilder::build_gt),
-            TokenType::GreaterEqual => trivial_case!(InstructionBuilder::build_ge),
-            TokenType::Less => trivial_case!(InstructionBuilder::build_lt),
-            TokenType::LessEqual => trivial_case!(InstructionBuilder::build_le),
-            TokenType::Equality => trivial_case!(InstructionBuilder::build_eq),
-            TokenType::Inequality => trivial_case!(InstructionBuilder::build_ne),
-            TokenType::StrictEquality => trivial_case!(InstructionBuilder::build_strict_eq),
-            TokenType::StrictInequality => trivial_case!(InstructionBuilder::build_strict_ne),
-            TokenType::BitwiseOr => trivial_case!(InstructionBuilder::build_bitor),
-            TokenType::BitwiseXor => trivial_case!(InstructionBuilder::build_bitxor),
-            TokenType::BitwiseAnd => trivial_case!(InstructionBuilder::build_bitand),
-            TokenType::LeftShift => trivial_case!(InstructionBuilder::build_bitshl),
-            TokenType::RightShift => trivial_case!(InstructionBuilder::build_bitshr),
-            TokenType::UnsignedRightShift => trivial_case!(InstructionBuilder::build_bitushr),
-            TokenType::In => trivial_case!(InstructionBuilder::build_objin),
-            TokenType::Instanceof => trivial_case!(InstructionBuilder::build_instanceof),
+            TokenType::Plus => numeric_bin!(InstructionBuilder::build_add, IntrinsicOperation::AddNumLR),
+            TokenType::Minus => numeric_bin!(InstructionBuilder::build_sub, IntrinsicOperation::SubNumLR),
+            TokenType::Star => numeric_bin!(InstructionBuilder::build_mul, IntrinsicOperation::MulNumLR),
+            TokenType::Slash => numeric_bin!(InstructionBuilder::build_div, IntrinsicOperation::DivNumLR),
+            TokenType::Remainder => numeric_bin!(InstructionBuilder::build_rem, IntrinsicOperation::RemNumLR),
+            TokenType::Exponentiation => numeric_bin!(InstructionBuilder::build_pow, IntrinsicOperation::PowNumLR),
+            TokenType::Greater => numeric_bin!(InstructionBuilder::build_gt, IntrinsicOperation::GtNumLR),
+            TokenType::GreaterEqual => numeric_bin!(InstructionBuilder::build_ge, IntrinsicOperation::GeNumLR),
+            TokenType::Less => numeric_bin!(InstructionBuilder::build_lt, IntrinsicOperation::LtNumLR),
+            TokenType::LessEqual => numeric_bin!(InstructionBuilder::build_le, IntrinsicOperation::LeNumLR),
+            TokenType::Equality => numeric_bin!(InstructionBuilder::build_eq, IntrinsicOperation::EqNumLR),
+            TokenType::Inequality => numeric_bin!(InstructionBuilder::build_ne, IntrinsicOperation::NeNumLR),
+            TokenType::StrictEquality => numeric_bin!(InstructionBuilder::build_strict_eq, IntrinsicOperation::EqNumLR),
+            TokenType::StrictInequality => {
+                numeric_bin!(InstructionBuilder::build_strict_ne, IntrinsicOperation::NeNumLR)
+            }
+            TokenType::BitwiseOr => numeric_bin!(InstructionBuilder::build_bitor, IntrinsicOperation::BitOrNumLR),
+            TokenType::BitwiseXor => numeric_bin!(InstructionBuilder::build_bitxor, IntrinsicOperation::BitXorNumLR),
+            TokenType::BitwiseAnd => numeric_bin!(InstructionBuilder::build_bitand, IntrinsicOperation::BitAndNumLR),
+            TokenType::LeftShift => numeric_bin!(InstructionBuilder::build_bitshl, IntrinsicOperation::BitShlNumLR),
+            TokenType::RightShift => numeric_bin!(InstructionBuilder::build_bitshr, IntrinsicOperation::BitShrNumLR),
+            TokenType::UnsignedRightShift => {
+                numeric_bin!(InstructionBuilder::build_bitushr, IntrinsicOperation::BitUshrNumLR)
+            }
+            TokenType::In => generic_bin!(InstructionBuilder::build_objin),
+            TokenType::Instanceof => generic_bin!(InstructionBuilder::build_instanceof),
             TokenType::LogicalOr => {
                 ib.build_jmptruenp(Label::IfEnd, true);
                 ib.build_pop(); // Only pop LHS if it is false

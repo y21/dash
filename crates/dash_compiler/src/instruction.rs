@@ -3,7 +3,7 @@ use std::convert::TryInto;
 use dash_middle::{
     compiler::{
         constant::{Constant, LimitExceededError},
-        instruction::Instruction,
+        instruction::{Instruction, IntrinsicOperation},
         FunctionCallMetadata, ObjectMemberKind as CompilerObjectMemberKind, StaticImportKind,
     },
     parser::expr::ObjectMemberKind,
@@ -140,6 +140,7 @@ pub trait InstructionWriter {
     fn build_switch(&mut self, case_count: u16, has_default: bool);
     fn build_objdestruct(&mut self, count: u16);
     fn build_arraydestruct(&mut self, count: u16);
+    fn build_intrinsic_op(&mut self, op: IntrinsicOperation);
 }
 
 macro_rules! impl_instruction_writer {
@@ -429,6 +430,11 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
     fn build_arraydestruct(&mut self, count: u16) {
         self.write_instr(Instruction::ArrayDestruct);
         self.writew(count);
+    }
+
+    fn build_intrinsic_op(&mut self, op: IntrinsicOperation) {
+        self.write_instr(Instruction::IntrinsicOp);
+        self.write(op as u8);
     }
 }
 

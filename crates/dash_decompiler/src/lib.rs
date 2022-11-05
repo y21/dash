@@ -15,6 +15,8 @@ pub enum DecompileError {
     Unimplemented(Instruction),
     #[error("Invalid object member kind variant")]
     InvalidObjectMemberKind,
+    #[error("Invalid intrinsic operation: {_0}")]
+    InvalidIntrinsicOp(u8),
 }
 
 pub fn decompile(constants: &[Constant], instructions: &[u8]) -> Result<String, DecompileError> {
