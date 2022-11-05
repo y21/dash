@@ -5,6 +5,9 @@ use std::io::Write;
 use anyhow::anyhow;
 use anyhow::Context;
 use clap::ArgMatches;
+use dash_middle::parser::statement::VariableDeclarationName;
+use dash_optimizer::consteval::Eval;
+use dash_optimizer::context::OptimizerContext;
 
 use crate::util;
 
@@ -14,6 +17,7 @@ pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
     let dump_js = arg.is_present("js");
     let dump_bytecode = arg.is_present("bytecode");
     let dump_tokens = arg.is_present("tokens");
+    let dump_types = arg.is_present("types");
 
     let opt = util::opt_level_from_matches(arg)?;
     let path = arg.value_of("file").context("Missing file")?;
@@ -31,7 +35,19 @@ pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
         .parse_all()
         .map_err(|_| anyhow!("Failed to parse source string"))?;
 
-    dash_optimizer::optimize_ast(&mut ast, opt);
+    if dump_types {
+        let mut cx = OptimizerContext::new();
+        ast.fold(&mut cx, true);
+
+        for local in cx.scope_mut().locals() {
+            if let VariableDeclarationName::Identifier(ident) = local.binding().name {
+                let ty = local.inferred_type().borrow();
+                println!("{ident}: {ty:?}");
+            }
+        }
+    } else {
+        dash_optimizer::optimize_ast(&mut ast, opt);
+    }
 
     if dump_ast {
         println!("{:#?}", ast);

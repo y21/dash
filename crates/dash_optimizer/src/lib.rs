@@ -1,8 +1,10 @@
+use context::OptimizerContext;
 use dash_middle::parser::statement::Statement;
 
 use self::consteval::Eval;
 
 pub mod consteval;
+pub mod context;
 
 #[derive(Debug, Copy, Clone)]
 pub enum OptLevel {
@@ -35,7 +37,8 @@ impl OptLevel {
 }
 
 pub fn optimize_ast<'a>(stmts: &mut Vec<Statement<'a>>, opt: OptLevel) {
+    let mut cx = OptimizerContext::new();
     if opt.enabled() {
-        stmts.fold(true);
+        stmts.fold(&mut cx, true);
     }
 }

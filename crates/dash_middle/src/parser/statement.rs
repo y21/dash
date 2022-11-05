@@ -54,6 +54,15 @@ pub enum Statement<'a> {
     Empty,
 }
 
+impl<'a> Statement<'a> {
+    pub fn enters_scope(&self) -> bool {
+        matches!(
+            self,
+            Statement::Block(_) | Statement::Function(_) | Statement::Loop(_) | Statement::Try(_) | Statement::Class(_)
+        )
+    }
+}
+
 /// The type of a specifier
 ///
 /// This is used in import/export statements, as well as variable declaration

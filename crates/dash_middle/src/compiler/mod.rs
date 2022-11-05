@@ -13,6 +13,7 @@ pub mod external;
 pub mod format;
 pub mod instruction;
 pub mod instruction_iter;
+pub mod scope;
 
 #[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
 #[derive(Debug)]

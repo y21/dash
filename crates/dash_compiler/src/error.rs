@@ -1,7 +1,7 @@
 use core::fmt;
 
-use super::scope::LimitExceededError as LocalLimitExceededError;
 use dash_middle::compiler::constant::LimitExceededError;
+use dash_middle::compiler::scope::LimitExceededError as LocalLimitExceededError;
 
 #[derive(Debug)]
 pub enum CompileError {

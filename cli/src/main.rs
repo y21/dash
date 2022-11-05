@@ -48,6 +48,7 @@ fn main() -> anyhow::Result<()> {
                 .arg(Arg::new("js").long("js").takes_value(false))
                 .arg(Arg::new("bytecode").long("bytecode").takes_value(false))
                 .arg(Arg::new("tokens").long("tokens").takes_value(false))
+                .arg(Arg::new("types").long("types").takes_value(false))
                 .arg(opt_level),
         );
 

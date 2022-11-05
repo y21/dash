@@ -3,6 +3,8 @@ use std::rc::Rc;
 use std::{convert::TryInto, ptr::NonNull, usize};
 
 use dash_middle::compiler::constant::{Constant, Function};
+use dash_middle::compiler::scope::Scope;
+use dash_middle::compiler::scope::ScopeLocal;
 use dash_middle::compiler::{constant::ConstantPool, external::External};
 use dash_middle::compiler::{CompileResult, FunctionCallMetadata, StaticImportKind};
 use dash_middle::lexer::token::TokenType;
@@ -38,6 +40,7 @@ use dash_middle::parser::statement::{FunctionDeclaration, SwitchStatement};
 use dash_middle::parser::statement::{FunctionKind, VariableDeclarationName};
 use dash_middle::visitor::Visitor;
 use dash_optimizer::consteval::Eval;
+use dash_optimizer::context::OptimizerContext;
 use dash_optimizer::OptLevel;
 use jump_container::JumpContainer;
 
@@ -46,7 +49,6 @@ use crate::builder::{InstructionBuilder, Label};
 use self::{
     error::CompileError,
     instruction::{InstructionWriter, NamedExportKind},
-    scope::{Scope, ScopeLocal},
 };
 
 pub mod builder;
@@ -54,7 +56,6 @@ pub mod error;
 #[cfg(feature = "from_string")]
 pub mod from_string;
 pub mod instruction;
-mod scope;
 pub mod transformations;
 // #[cfg(test)]
 // mod test;
@@ -172,6 +173,11 @@ impl<'a> FunctionCompiler<'a> {
             ast.push(Statement::Return(Default::default()));
         }
 
+        if self.opt_level.enabled() {
+            let mut cx = OptimizerContext::new();
+            ast.fold(&mut cx, false);
+        }
+
         let hoisted_locals = transformations::hoist_declarations(&mut ast);
         for binding in hoisted_locals {
             self.scope.add_local(
@@ -181,6 +187,7 @@ impl<'a> FunctionCompiler<'a> {
                 },
                 binding.kind,
                 false,
+                None,
             )?;
         }
 
@@ -321,10 +328,10 @@ impl<'a> FunctionCompiler<'a> {
         let for_of_gen_step_binding = VariableBinding::unnameable("for_of_gen_step");
         let for_of_iter_id = ib
             .scope
-            .add_local("for_of_iter", VariableDeclarationKind::Unnameable, false)?;
+            .add_local("for_of_iter", VariableDeclarationKind::Unnameable, false, None)?;
 
         ib.scope
-            .add_local("for_of_gen_step", VariableDeclarationKind::Unnameable, false)?;
+            .add_local("for_of_gen_step", VariableDeclarationKind::Unnameable, false, None)?;
 
         ib.accept_expr(expr)?;
         match kind {
@@ -445,11 +452,7 @@ enum ForEachLoopKind {
 }
 
 impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
-    fn accept(&mut self, mut stmt: Statement<'a>) -> Result<(), CompileError> {
-        if self.opt_level.enabled() {
-            stmt.fold(true);
-        }
-
+    fn accept(&mut self, stmt: Statement<'a>) -> Result<(), CompileError> {
         match stmt {
             Statement::Expression(e) => self.visit_expression_statement(e),
             Statement::Variable(v) => self.visit_variable_declaration(v),
@@ -689,7 +692,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
         match binding.name {
             VariableDeclarationName::Identifier(ident) => {
-                let id = ib.scope.add_local(ident, binding.kind, false)?;
+                let id = ib.scope.add_local(ident, binding.kind, false, None)?;
 
                 if let Some(expr) = value {
                     ib.accept_expr(expr)?;
@@ -715,7 +718,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
                 for (name, alias) in fields {
                     let name = alias.unwrap_or(name);
-                    let id = ib.scope.add_local(name, binding.kind, false)?;
+                    let id = ib.scope.add_local(name, binding.kind, false, None)?;
 
                     let var_id = ib.cp.add(Constant::Number(id as f64))?;
                     let ident_id = ib.cp.add(Constant::Identifier(name.into()))?;
@@ -740,7 +743,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 ib.build_arraydestruct(field_count);
 
                 for name in fields {
-                    let id = ib.scope.add_local(name, binding.kind, false)?;
+                    let id = ib.scope.add_local(name, binding.kind, false, None)?;
 
                     let var_id = ib.cp.add(Constant::Number(id as f64))?;
                     ib.writew(var_id);
@@ -817,7 +820,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
     fn visit_function_declaration(&mut self, fun: FunctionDeclaration<'a>) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
         let var_id = match fun.name {
-            Some(name) => Some(ib.scope.add_local(name, VariableDeclarationKind::Var, false)?),
+            Some(name) => Some(ib.scope.add_local(name, VariableDeclarationKind::Var, false, None)?),
             None => None,
         };
 
@@ -1121,7 +1124,9 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 Parameter::Spread(ident) => ident,
             };
 
-            let id = subcompiler.scope.add_local(name, VariableDeclarationKind::Var, false)?;
+            let id = subcompiler
+                .scope
+                .add_local(name, VariableDeclarationKind::Var, false, None)?;
 
             if let Parameter::Spread(..) = param {
                 rest_local = Some(id);
@@ -1218,7 +1223,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         ib.scope.enter();
 
         if let Some(ident) = catch.ident {
-            let id = ib.scope.add_local(ident, VariableDeclarationKind::Var, false)?;
+            let id = ib.scope.add_local(ident, VariableDeclarationKind::Var, false, None)?;
 
             if id == u16::MAX {
                 // Max u16 value is reserved for "no binding"
@@ -1313,6 +1318,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                     },
                     VariableDeclarationKind::Var,
                     false,
+                    None,
                 )?;
 
                 let path_id = ib.cp.add(Constant::String(path.as_ref().into()))?;

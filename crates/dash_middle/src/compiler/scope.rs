@@ -1,9 +1,23 @@
 use std::cell::Cell;
+use std::cell::RefCell;
 use std::convert::TryFrom;
 
-use dash_middle::parser::statement::VariableBinding;
-use dash_middle::parser::statement::VariableDeclarationKind;
-use dash_middle::parser::statement::VariableDeclarationName;
+use crate::parser::statement::VariableBinding;
+use crate::parser::statement::VariableDeclarationKind;
+use crate::parser::statement::VariableDeclarationName;
+
+#[derive(Debug, Clone)]
+pub enum CompileValueType {
+    Boolean,
+    Null,
+    Undefined,
+    Uninit,
+    F64,
+    I64,
+    String,
+    Either(Box<CompileValueType>, Box<CompileValueType>),
+    Maybe(Box<CompileValueType>),
+}
 
 #[derive(Debug, Clone)]
 pub struct ScopeLocal<'a> {
@@ -11,6 +25,7 @@ pub struct ScopeLocal<'a> {
     binding: VariableBinding<'a>,
     /// Whether this local variable is used by inner functions and as such may outlive the frame when returned
     is_extern: Cell<bool>,
+    inferred_type: RefCell<Option<CompileValueType>>,
 }
 
 impl<'a> ScopeLocal<'a> {
@@ -26,6 +41,15 @@ impl<'a> ScopeLocal<'a> {
     /// Checks whether this local variable is marked extern
     pub fn is_extern(&self) -> bool {
         self.is_extern.get()
+    }
+
+    /// Sets the inferred type of this local variable
+    pub fn infer(&self, value: CompileValueType) {
+        *self.inferred_type.borrow_mut() = Some(value);
+    }
+
+    pub fn inferred_type(&self) -> &RefCell<Option<CompileValueType>> {
+        &self.inferred_type
     }
 }
 
@@ -69,6 +93,7 @@ impl<'a> Scope<'a> {
         name: &'a str,
         kind: VariableDeclarationKind,
         is_extern: bool,
+        inferred_type: Option<CompileValueType>,
     ) -> Result<u16, LimitExceededError> {
         // if there's already a local with the same name, we should use that
         if let Some((id, _)) = self.find_local(name) {
@@ -82,6 +107,7 @@ impl<'a> Scope<'a> {
                 ty: None,
             },
             is_extern: Cell::new(is_extern),
+            inferred_type: RefCell::new(inferred_type),
         });
 
         u16::try_from(self.locals.len() - 1).map_err(|_| LimitExceededError)

@@ -1,5 +1,9 @@
 use dash_compiler::FunctionCompiler;
+use dash_middle::compiler::scope::Scope;
 use dash_middle::compiler::StaticImportKind;
+use dash_middle::parser::statement::VariableDeclarationName;
+use dash_optimizer::consteval::Eval;
+use dash_optimizer::context::OptimizerContext;
 use dash_parser::Parser;
 use dash_vm::eval::EvalError;
 use dash_vm::frame::Frame;
@@ -103,6 +107,29 @@ pub fn compile(s: &str, o: OptLevel) -> Result<js_sys::Uint8Array, String> {
             u8
         })
         .map_err(|e| e.to_string())
+}
+
+#[wasm_bindgen]
+pub fn infer(s: &str) -> Result<JsValue, String> {
+    let mut ast = Parser::from_str(s)
+        .map_err(|err| format!("{err:?}"))?
+        .parse_all()
+        .map_err(|err| format!("{err:?}"))?;
+
+    let mut cx = OptimizerContext::new();
+    ast.fold(&mut cx, false);
+    let mut out = String::new();
+
+    for local in cx.scope_mut().locals() {
+        if let VariableDeclarationName::Identifier(ident) = local.binding().name {
+            let ty = local.inferred_type().borrow();
+            let _ = write!(out, "{ident}: {ty:?} \n");
+        }
+    }
+
+    Ok(JsValue::from_str(&out))
+    // let scope = std::mem::replace(cx.scope_mut(), Scope::new());
+    // Ok(JsValue::from_str(&format!("{:?}", scope.locals())))
 }
 
 // #[wasm_bindgen]
