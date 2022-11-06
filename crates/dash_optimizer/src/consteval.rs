@@ -114,6 +114,10 @@ impl<'a> Eval<'a> for Expr<'a> {
                         }
                         _ => {}
                     },
+                    (Literal(String(left)), Literal(String(right))) => match expr.operator {
+                        TokenType::Equality | TokenType::StrictEquality => *self = Literal(Boolean(left == right)),
+                        _ => {}
+                    },
                     _ => {}
                 }
             }
