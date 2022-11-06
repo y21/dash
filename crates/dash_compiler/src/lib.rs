@@ -530,10 +530,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 ib.accept_expr(*right)?;
 
                 match (left_type, right_type) {
-                    (
-                        Some(CompileValueType::I64 | CompileValueType::F64),
-                        Some(CompileValueType::I64 | CompileValueType::F64),
-                    ) => {
+                    (Some(CompileValueType::Number), Some(CompileValueType::Number)) => {
                         ib.build_intrinsic_op($spec);
                     }
                     _ => {

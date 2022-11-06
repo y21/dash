@@ -6,14 +6,13 @@ use crate::parser::statement::VariableBinding;
 use crate::parser::statement::VariableDeclarationKind;
 use crate::parser::statement::VariableDeclarationName;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompileValueType {
     Boolean,
     Null,
     Undefined,
     Uninit,
-    F64,
-    I64,
+    Number,
     String,
     Either(Box<CompileValueType>, Box<CompileValueType>),
     Maybe(Box<CompileValueType>),

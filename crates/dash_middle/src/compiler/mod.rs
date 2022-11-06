@@ -2,7 +2,7 @@ use strum_macros::FromRepr;
 
 use crate::lexer::token::TokenType;
 use crate::parser;
-use crate::parser::expr::{AssignmentExpr, Expr, LiteralExpr};
+use crate::parser::expr::{AssignmentExpr, Expr, GroupingExpr, LiteralExpr};
 
 use self::external::External;
 use self::scope::CompileValueType;
@@ -111,19 +111,52 @@ pub fn infer_type<'a>(cx: &mut Scope<'a>, expr: &Expr<'a>) -> Option<CompileValu
         Expr::Literal(LiteralExpr::Boolean(..)) => Some(CompileValueType::Boolean),
         Expr::Literal(LiteralExpr::Null) => Some(CompileValueType::Null),
         Expr::Literal(LiteralExpr::Undefined) => Some(CompileValueType::Undefined),
-        Expr::Literal(LiteralExpr::Number(n)) => {
-            if n.floor() != *n {
-                Some(CompileValueType::F64)
-            } else {
-                Some(CompileValueType::I64)
-            }
-        }
+        Expr::Literal(LiteralExpr::Number(..)) => Some(CompileValueType::Number),
         Expr::Literal(LiteralExpr::String(..)) => Some(CompileValueType::String),
         Expr::Literal(LiteralExpr::Identifier(ident)) => match cx.find_local(&ident) {
             Some((_, local)) => local.inferred_type().borrow().clone(),
             None => None,
         },
-        Expr::Assignment(AssignmentExpr { right, .. }) => infer_type(cx, right),
+        Expr::Grouping(GroupingExpr(exprs)) => {
+            let mut last = None;
+            for expr in exprs.iter() {
+                last = infer_type(cx, expr);
+            }
+            Some(last.expect("GroupingExpr should have at least one expression"))
+        }
+        Expr::Assignment(AssignmentExpr { left, right, .. }) => {
+            let right_type = infer_type(cx, right);
+            if let Expr::Literal(LiteralExpr::Identifier(ident)) = left.as_ref() {
+                if let Some((_, local)) = cx.find_local(&ident) {
+                    let left_type = local.inferred_type();
+                    let left_type_ref = left_type.borrow();
+
+                    if left_type_ref.as_ref() == right_type.as_ref() {
+                        // No change.
+                    } else {
+                        match (left_type_ref.as_ref(), right_type.as_ref()) {
+                            (Some(left), Some(right)) => {
+                                let left = left.clone();
+                                let right = right.clone();
+                                drop(left_type_ref);
+                                *left_type.borrow_mut() =
+                                    Some(CompileValueType::Either(Box::new(left), Box::new(right)));
+                            }
+                            (_, Some(right)) => {
+                                drop(left_type_ref);
+                                *left_type.borrow_mut() = Some(CompileValueType::Maybe(Box::new(right.clone())));
+                            }
+                            (_, _) => {
+                                drop(left_type_ref);
+                                *left_type.borrow_mut() = None;
+                            }
+                        }
+                    }
+                }
+            }
+
+            right_type
+        }
         Expr::Binary(bin) => match bin.operator {
             TokenType::Plus => {
                 let left = infer_type(cx, &bin.left);
@@ -132,10 +165,8 @@ pub fn infer_type<'a>(cx: &mut Scope<'a>, expr: &Expr<'a>) -> Option<CompileValu
                 match (left, right) {
                     (Some(CompileValueType::String), _) => Some(CompileValueType::String),
                     (_, Some(CompileValueType::String)) => Some(CompileValueType::String),
-                    (Some(CompileValueType::F64), _) => Some(CompileValueType::F64),
-                    (_, Some(CompileValueType::F64)) => Some(CompileValueType::F64),
-                    (Some(CompileValueType::I64), _) => Some(CompileValueType::I64),
-                    (_, Some(CompileValueType::I64)) => Some(CompileValueType::I64),
+                    (Some(CompileValueType::Number), _) => Some(CompileValueType::Number),
+                    (_, Some(CompileValueType::Number)) => Some(CompileValueType::Number),
                     _ => None,
                 }
             }
@@ -144,10 +175,8 @@ pub fn infer_type<'a>(cx: &mut Scope<'a>, expr: &Expr<'a>) -> Option<CompileValu
                 let right = infer_type(cx, &bin.right);
 
                 match (left, right) {
-                    (Some(CompileValueType::F64), _) => Some(CompileValueType::F64),
-                    (_, Some(CompileValueType::F64)) => Some(CompileValueType::F64),
-                    (Some(CompileValueType::I64), _) => Some(CompileValueType::I64),
-                    (_, Some(CompileValueType::I64)) => Some(CompileValueType::I64),
+                    (Some(CompileValueType::Number), _) => Some(CompileValueType::Number),
+                    (_, Some(CompileValueType::Number)) => Some(CompileValueType::Number),
                     _ => None,
                 }
             }

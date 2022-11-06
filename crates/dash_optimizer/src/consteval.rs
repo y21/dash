@@ -65,6 +65,9 @@ impl<'a> Eval<'a> for Expr<'a> {
         use Expr::*;
         use LiteralExpr::*;
 
+        // infer_type might want to write to scope
+        infer_type(cx.scope_mut(), self);
+
         macro_rules! u64op {
             ($l:ident $tok:tt $r:ident) => {
                 Literal(Number(((*$l as u64) $tok (*$r as u64)) as f64))
@@ -157,8 +160,7 @@ impl<'a> Eval<'a> for Expr<'a> {
                                 Some(CompileValueType::Null) => *self = Literal(String("object".into())),
                                 Some(CompileValueType::Undefined) => *self = Literal(String("undefined".into())),
                                 Some(CompileValueType::Uninit) => *self = Literal(String("undefined".into())),
-                                Some(CompileValueType::I64) => *self = Literal(String("number".into())),
-                                Some(CompileValueType::F64) => *self = Literal(String("number".into())),
+                                Some(CompileValueType::Number) => *self = Literal(String("number".into())),
                                 Some(CompileValueType::String) => *self = Literal(String("string".into())),
                                 // don't guess about Either and Maybe
                                 _ => {}
