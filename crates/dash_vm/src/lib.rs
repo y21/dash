@@ -853,6 +853,7 @@ impl Vm {
 
             Ok(())
         } else {
+            self.frames.pop();
             Err(err)
         }
     }
