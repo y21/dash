@@ -70,20 +70,16 @@ impl<'a> DispatchContext<'a> {
     }
 
     pub fn pop_stack2(&mut self) -> (Value, Value) {
-        let b = self.stack.pop();
-        let a = self.stack.pop();
-        a.zip(b)
-            .expect("Bytecode attempted to pop two stack value, but nothing was on the stack")
+        let b = self.stack.pop().unwrap();
+        let a = self.stack.pop().unwrap();
+        (a, b)
     }
 
     pub fn pop_stack3(&mut self) -> (Value, Value, Value) {
-        let c = self.stack.pop();
-        let b = self.stack.pop();
-        let a = self.stack.pop();
-        a.zip(b)
-            .zip(c)
-            .map(|((a, b), c)| (a, b, c))
-            .expect("Bytecode attempted to pop two stack value, but nothing was on the stack")
+        let c = self.stack.pop().unwrap();
+        let b = self.stack.pop().unwrap();
+        let a = self.stack.pop().unwrap();
+        (a, b, c)
     }
 
     pub fn pop_stack_many(&mut self, count: usize) -> Drain<Value> {
@@ -1177,21 +1173,22 @@ mod handlers {
         macro_rules! bin_op {
             ($fun:expr) => {{
                 let (l, r) = lr_as_num_spec!();
-                cx.try_push_stack(Value::number($fun(l, r)))?;
+                // No try_push_stack needed, because we just popped two values off. Therefore it can hold one more now
+                cx.stack.push(Value::number($fun(l, r)));
             }};
         }
 
         macro_rules! bin_op_i64 {
             ($op:tt) => {{
                 let (l, r) = lr_as_num_spec!();
-                cx.try_push_stack(Value::number(((l as i32) $op (r as i32)) as f64))?;
+                cx.stack.push(Value::number(((l as i32) $op (r as i32)) as f64));
             }};
         }
 
         macro_rules! bin_op_to_f64 {
             ($op:tt) => {{
                 let (l, r) = lr_as_num_spec!();
-                cx.try_push_stack(Value::number((l $op r) as i64 as f64))?;
+                cx.stack.push(Value::number((l $op r) as i64 as f64));
             }};
         }
 
