@@ -122,7 +122,7 @@ pub fn infer_type<'a>(cx: &mut Scope<'a>, expr: &Expr<'a>) -> Option<CompileValu
             for expr in exprs.iter() {
                 last = infer_type(cx, expr);
             }
-            Some(last.expect("GroupingExpr should have at least one expression"))
+            last
         }
         Expr::Assignment(AssignmentExpr { left, right, .. }) => {
             let right_type = infer_type(cx, right);
