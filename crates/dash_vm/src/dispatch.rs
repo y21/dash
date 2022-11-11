@@ -1218,6 +1218,32 @@ mod handlers {
             }};
         }
 
+        macro_rules! bin_op_numl_constr {
+            ($op:tt) => {{
+                let left = match cx.pop_stack() {
+                    Value::Number(n) => n.0,
+                    _ => unreachable!(),
+                };
+                let right = cx.fetch_and_inc_ip() as f64;
+                cx.try_push_stack(Value::Boolean(left $op right))?;
+            }};
+        }
+
+        macro_rules! bin_op_numl_constr_n {
+            ($op:tt, $ty:ty) => {{
+                let left = match cx.pop_stack() {
+                    Value::Number(n) => n.0,
+                    _ => unreachable!(),
+                };
+                let mut right_bytes: [u8; <$ty>::BITS as usize / 8] = [0; <$ty>::BITS as usize / 8];
+                for byte in right_bytes.iter_mut() {
+                    *byte = cx.fetch_and_inc_ip();
+                }
+                let right = <$ty>::from_ne_bytes(right_bytes) as f64;
+                cx.try_push_stack(Value::Boolean(left $op right))?;
+            }};
+        }
+
         match op {
             IntrinsicOperation::AddNumLR => bin_op!(Add::add),
             IntrinsicOperation::SubNumLR => bin_op!(Sub::sub),
@@ -1241,6 +1267,14 @@ mod handlers {
             IntrinsicOperation::PostfixDecLocalNum => postfix!(-),
             IntrinsicOperation::PrefixIncLocalNum => prefix!(+),
             IntrinsicOperation::PrefixDecLocalNum => prefix!(-),
+            IntrinsicOperation::GtNumLConstR => bin_op_numl_constr!(>),
+            IntrinsicOperation::GeNumLConstR => bin_op_numl_constr!(>=),
+            IntrinsicOperation::LtNumLConstR => bin_op_numl_constr!(<),
+            IntrinsicOperation::LeNumLConstR => bin_op_numl_constr!(<=),
+            IntrinsicOperation::GtNumLConstR32 => bin_op_numl_constr_n!(>, u32),
+            IntrinsicOperation::GeNumLConstR32 => bin_op_numl_constr_n!(>=, u32),
+            IntrinsicOperation::LtNumLConstR32 => bin_op_numl_constr_n!(<, u32),
+            IntrinsicOperation::LeNumLConstR32 => bin_op_numl_constr_n!(<=, u32),
         }
 
         Ok(None)

@@ -145,6 +145,14 @@ pub trait InstructionWriter {
     fn build_postfix_dec_local_num(&mut self, id: u8);
     fn build_prefix_inc_local_num(&mut self, id: u8);
     fn build_prefix_dec_local_num(&mut self, id: u8);
+    fn build_gt_numl_constr(&mut self, right: u8);
+    fn build_ge_numl_constr(&mut self, right: u8);
+    fn build_lt_numl_constr(&mut self, right: u8);
+    fn build_le_numl_constr(&mut self, right: u8);
+    fn build_gt_numl_constr32(&mut self, right: u32);
+    fn build_ge_numl_constr32(&mut self, right: u32);
+    fn build_lt_numl_constr32(&mut self, right: u32);
+    fn build_le_numl_constr32(&mut self, right: u32);
 }
 
 macro_rules! impl_instruction_writer {
@@ -459,6 +467,46 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
     fn build_prefix_inc_local_num(&mut self, id: u8) {
         self.build_intrinsic_op(IntrinsicOperation::PrefixIncLocalNum);
         self.write(id);
+    }
+
+    fn build_ge_numl_constr(&mut self, right: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::GeNumLConstR);
+        self.write(right);
+    }
+
+    fn build_gt_numl_constr(&mut self, right: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::GtNumLConstR);
+        self.write(right);
+    }
+
+    fn build_le_numl_constr(&mut self, right: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::LeNumLConstR);
+        self.write(right);
+    }
+
+    fn build_lt_numl_constr(&mut self, right: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::LtNumLConstR);
+        self.write(right);
+    }
+
+    fn build_ge_numl_constr32(&mut self, right: u32) {
+        self.build_intrinsic_op(IntrinsicOperation::GeNumLConstR32);
+        self.write_all(&right.to_ne_bytes());
+    }
+
+    fn build_gt_numl_constr32(&mut self, right: u32) {
+        self.build_intrinsic_op(IntrinsicOperation::GtNumLConstR32);
+        self.write_all(&right.to_ne_bytes());
+    }
+
+    fn build_le_numl_constr32(&mut self, right: u32) {
+        self.build_intrinsic_op(IntrinsicOperation::LeNumLConstR32);
+        self.write_all(&right.to_ne_bytes());
+    }
+
+    fn build_lt_numl_constr32(&mut self, right: u32) {
+        self.build_intrinsic_op(IntrinsicOperation::LtNumLConstR32);
+        self.write_all(&right.to_ne_bytes());
     }
 }
 

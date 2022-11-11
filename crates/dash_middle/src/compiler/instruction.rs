@@ -123,12 +123,28 @@ pub enum IntrinsicOperation {
     PowNumLR,
     /// Greater than, where the left and right side is a number
     GtNumLR,
+    /// Greater than, where the left side is a number and right side is a constant number (u8)
+    GtNumLConstR,
+    /// Greater than, where the left side is a number and right side is a constant number (u32)
+    GtNumLConstR32,
     /// Greater than or equal, where the left and right side is a number
     GeNumLR,
+    /// Greater than or equal, where the left side is a number and right side is a constant number (u8)
+    GeNumLConstR,
+    /// Greater than or equal, where the left side is a number and right side is a constant number (u32)
+    GeNumLConstR32,
     /// Less than, where the left and right side is a number
     LtNumLR,
+    /// Less than, where the left side is a number and right side is a constant number (u8)
+    LtNumLConstR,
+    /// Less than, where the left side is a number and right side is a constant number (u32)
+    LtNumLConstR32,
     /// Less than or equal, where the left and right side is a number
     LeNumLR,
+    /// Less than or equal, where the left side is a number and right side is a constant number (u8)
+    LeNumLConstR,
+    /// Less than or equal, where the left side is a number and right side is a constant number (u32)
+    LeNumLConstR32,
     /// Equal, where the left and right side is a number
     EqNumLR,
     /// Not equal, where the left and right side is a number

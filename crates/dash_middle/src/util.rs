@@ -104,6 +104,10 @@ impl<R: Read> Reader<R> {
         self.read_bytes().map(u16::from_ne_bytes)
     }
 
+    pub fn read_u32_ne(&mut self) -> Option<u32> {
+        self.read_bytes().map(u32::from_ne_bytes)
+    }
+
     pub fn read_i16_ne(&mut self) -> Option<i16> {
         self.read_bytes().map(i16::from_ne_bytes)
     }

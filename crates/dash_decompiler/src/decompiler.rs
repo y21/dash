@@ -84,6 +84,10 @@ impl<'buf> FunctionDecompiler<'buf> {
         self.reader.read_i16_ne().ok_or(DecompileError::AbruptEof)
     }
 
+    fn read_u32(&mut self) -> Result<u32, DecompileError> {
+        self.reader.read_u32_ne().ok_or(DecompileError::AbruptEof)
+    }
+
     pub fn run(mut self) -> Result<String, DecompileError> {
         let mut functions = Vec::new();
 
@@ -299,6 +303,26 @@ impl<'buf> FunctionDecompiler<'buf> {
                         IntrinsicOperation::PostfixDecLocalNum => self.handle_inc_op_instr("ipostdeclocal")?,
                         IntrinsicOperation::PrefixIncLocalNum => self.handle_inc_op_instr("ipreinclocal")?,
                         IntrinsicOperation::PrefixDecLocalNum => self.handle_inc_op_instr("ipredeclocal")?,
+                        IntrinsicOperation::GtNumLConstR => self.handle_inc_op_instr("igtconst")?,
+                        IntrinsicOperation::GeNumLConstR => self.handle_inc_op_instr("igeconst")?,
+                        IntrinsicOperation::LtNumLConstR => self.handle_inc_op_instr("iltconst")?,
+                        IntrinsicOperation::LeNumLConstR => self.handle_inc_op_instr("ileconst")?,
+                        IntrinsicOperation::GtNumLConstR32 => {
+                            let b = self.read_u32()?;
+                            self.handle_op_instr("igtconst32", &[&b]);
+                        }
+                        IntrinsicOperation::GeNumLConstR32 => {
+                            let b = self.read_u32()?;
+                            self.handle_op_instr("igeconst32", &[&b]);
+                        }
+                        IntrinsicOperation::LtNumLConstR32 => {
+                            let b = self.read_u32()?;
+                            self.handle_op_instr("iltconst32", &[&b]);
+                        }
+                        IntrinsicOperation::LeNumLConstR32 => {
+                            let b = self.read_u32()?;
+                            self.handle_op_instr("ileconst32", &[&b]);
+                        }
                     }
                 }
                 Instruction::CallSymbolIterator => self.handle_opless_instr("@@iterator"),

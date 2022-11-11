@@ -541,6 +541,43 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             }};
         }
 
+        macro_rules! numeric_bin_const_spec {
+            ($gen:expr, $spec: expr, $( $t:ty => $spec_const:expr ),*) => {{
+                match (left_type, right_type) {
+                    (Some(CompileValueType::Number), Some(CompileValueType::Number)) => {
+                        fn try_const_spec<'cx, 'a>(ib: &mut InstructionBuilder<'cx, 'a>, right: &Expr<'a>) -> bool {
+                            if let Expr::Literal(LiteralExpr::Number(n)) = right {
+                                let n = *n;
+
+                                // Using match to be able to expand type->spec metavars
+                                match n.floor() == n {
+                                    $(
+                                        true if n >= (<$t>::MIN as f64) && n <= (<$t>::MAX as f64) => {
+                                            // n can be safely cast to $t
+                                            $spec_const(ib, n as $t);
+                                            return true;
+                                        }
+                                    )*
+                                    _ => {}
+                                }
+                            }
+                            false
+                        }
+
+                        if !try_const_spec(&mut ib, &right) {
+                            // Less specialized: both sides are numbers, but dynamic values
+                            ib.accept_expr(*right)?;
+                            ib.build_intrinsic_op($spec);
+                        }
+                    }
+                    _ => {
+                        ib.accept_expr(*right)?;
+                        $gen(&mut ib);
+                    }
+                }
+            }};
+        }
+
         match operator {
             TokenType::Plus => numeric_bin!(InstructionBuilder::build_add, IntrinsicOperation::AddNumLR),
             TokenType::Minus => numeric_bin!(InstructionBuilder::build_sub, IntrinsicOperation::SubNumLR),
@@ -548,10 +585,30 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             TokenType::Slash => numeric_bin!(InstructionBuilder::build_div, IntrinsicOperation::DivNumLR),
             TokenType::Remainder => numeric_bin!(InstructionBuilder::build_rem, IntrinsicOperation::RemNumLR),
             TokenType::Exponentiation => numeric_bin!(InstructionBuilder::build_pow, IntrinsicOperation::PowNumLR),
-            TokenType::Greater => numeric_bin!(InstructionBuilder::build_gt, IntrinsicOperation::GtNumLR),
-            TokenType::GreaterEqual => numeric_bin!(InstructionBuilder::build_ge, IntrinsicOperation::GeNumLR),
-            TokenType::Less => numeric_bin!(InstructionBuilder::build_lt, IntrinsicOperation::LtNumLR),
-            TokenType::LessEqual => numeric_bin!(InstructionBuilder::build_le, IntrinsicOperation::LeNumLR),
+            TokenType::Greater => numeric_bin_const_spec!(
+                InstructionBuilder::build_gt,
+                IntrinsicOperation::GtNumLR,
+                u8 => InstructionBuilder::build_gt_numl_constr,
+                u32 => InstructionBuilder::build_gt_numl_constr32
+            ),
+            TokenType::GreaterEqual => numeric_bin_const_spec!(
+                InstructionBuilder::build_ge,
+                IntrinsicOperation::GeNumLR,
+                u8 => InstructionBuilder::build_ge_numl_constr,
+                u32 => InstructionBuilder::build_ge_numl_constr32
+            ),
+            TokenType::Less => numeric_bin_const_spec!(
+                InstructionBuilder::build_lt,
+                IntrinsicOperation::LtNumLR,
+                u8 => InstructionBuilder::build_lt_numl_constr,
+                u32 => InstructionBuilder::build_lt_numl_constr32
+            ),
+            TokenType::LessEqual => numeric_bin_const_spec!(
+                InstructionBuilder::build_le,
+                IntrinsicOperation::LeNumLR,
+                u8 => InstructionBuilder::build_le_numl_constr,
+                u32 => InstructionBuilder::build_le_numl_constr32
+            ),
             TokenType::Equality => numeric_bin!(InstructionBuilder::build_eq, IntrinsicOperation::EqNumLR),
             TokenType::Inequality => numeric_bin!(InstructionBuilder::build_ne, IntrinsicOperation::NeNumLR),
             TokenType::StrictEquality => numeric_bin!(InstructionBuilder::build_strict_eq, IntrinsicOperation::EqNumLR),
