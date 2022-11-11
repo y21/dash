@@ -15,7 +15,9 @@ use dash_middle::parser::expr::UnaryExpr;
 use dash_middle::parser::statement::BlockStatement;
 use dash_middle::parser::statement::Catch;
 use dash_middle::parser::statement::ExportKind;
+use dash_middle::parser::statement::ForInLoop;
 use dash_middle::parser::statement::ForLoop;
+use dash_middle::parser::statement::ForOfLoop;
 use dash_middle::parser::statement::FunctionDeclaration;
 use dash_middle::parser::statement::IfStatement;
 use dash_middle::parser::statement::Loop;
@@ -275,11 +277,27 @@ impl<'a> Eval<'a> for Statement<'a> {
             Self::Block(BlockStatement(expr)) => expr.fold(cx, can_remove),
             Self::Function(FunctionDeclaration { statements, .. }) => statements.fold(cx, can_remove),
             Self::Loop(r#loop) => {
-                let condition = match r#loop {
-                    Loop::For(ForLoop { condition, .. }) => condition.as_mut(),
-                    Loop::While(WhileLoop { condition, .. }) => Some(condition),
-                    _ => None,
+                let (init, condition, finalizer, body) = match r#loop {
+                    Loop::For(ForLoop {
+                        condition,
+                        body,
+                        finalizer,
+                        init,
+                    }) => (init.as_mut(), condition.as_mut(), finalizer.as_mut(), body),
+                    Loop::While(WhileLoop { condition, body }) => (None, Some(condition), None, body),
+                    Loop::ForOf(ForOfLoop { body, expr, .. }) => (None, Some(expr), None, body),
+                    Loop::ForIn(ForInLoop { body, expr, .. }) => (None, Some(expr), None, body),
                 };
+
+                if let Some(init) = init {
+                    init.fold(cx, can_remove);
+                }
+
+                if let Some(finalizer) = finalizer {
+                    finalizer.fold(cx, can_remove);
+                }
+
+                body.fold(cx, can_remove);
 
                 if let Some(condition) = condition {
                     condition.fold(cx, can_remove);
