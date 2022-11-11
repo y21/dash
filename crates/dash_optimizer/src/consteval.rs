@@ -187,7 +187,7 @@ impl<'a> Eval<'a> for Expr<'a> {
                 property.fold(cx, can_remove);
                 target.fold(cx, can_remove);
             }
-            Postfix((_, expr)) => {
+            Postfix((_, expr)) | Prefix((_, expr)) => {
                 expr.fold(cx, can_remove);
             }
             Function(FunctionDeclaration { statements, .. }) => {

@@ -8,6 +8,7 @@ use crate::parser::expr::GroupingExpr;
 use crate::parser::expr::LiteralExpr;
 use crate::parser::expr::ObjectLiteral;
 use crate::parser::expr::Postfix;
+use crate::parser::expr::Prefix;
 use crate::parser::expr::PropertyAccessExpr;
 use crate::parser::expr::Seq;
 use crate::parser::expr::UnaryExpr;
@@ -96,6 +97,9 @@ pub trait Visitor<'a, V> {
 
     /// Visits a sequence expression
     fn visit_sequence_expr(&mut self, s: Seq<'a>) -> V;
+
+    /// Visits any prefix expression
+    fn visit_prefix_expr(&mut self, p: Prefix<'a>) -> V;
 
     /// Visits any postfix expression
     fn visit_postfix_expr(&mut self, p: Postfix<'a>) -> V;

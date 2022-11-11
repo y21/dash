@@ -291,14 +291,7 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
             let rval = self.parse_unary()?;
 
             if [TokenType::Increment, TokenType::Decrement].contains(&operator) {
-                let operator = if operator == TokenType::Increment {
-                    TokenType::AdditionAssignment
-                } else {
-                    TokenType::SubtractionAssignment
-                };
-
-                // Desugar ++foo and --foo directly to foo += 1 and foo -= 1
-                Some(Expr::assignment(rval, Expr::number_literal(1f64), operator))
+                Some(Expr::Prefix((operator, Box::new(rval))))
             } else {
                 Some(Expr::Unary(UnaryExpr::new(operator, rval)))
             }

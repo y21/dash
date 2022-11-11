@@ -497,6 +497,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             Expr::PropertyAccess(e) => self.visit_property_access_expr(e, false),
             Expr::Sequence(e) => self.visit_sequence_expr(e),
             Expr::Postfix(e) => self.visit_postfix_expr(e),
+            Expr::Prefix(e) => self.visit_prefix_expr(e),
             Expr::Function(e) => self.visit_function_expr(e),
             Expr::Array(e) => self.visit_array_literal(e),
             Expr::Object(e) => self.visit_object_literal(e),
@@ -1108,6 +1109,61 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 let ident = lit.to_identifier();
 
                 if let Some((id, loc)) = ib.find_local(&ident) {
+                    let ty = loc.inferred_type().borrow();
+
+                    if let (Ok(id), Some(CompileValueType::Number)) = (u8::try_from(id), &*ty) {
+                        // SPEC
+                        match tt {
+                            TokenType::Increment => ib.build_postfix_inc_local_num(id),
+                            TokenType::Decrement => ib.build_postfix_dec_local_num(id),
+                            _ => unreachable!("Token never emitted"),
+                        }
+                        return Ok(());
+                    }
+
+                    ib.build_local_load(id, loc.is_extern());
+                } else {
+                    unimplementedc!("Global postfix expression");
+                }
+            }
+            Expr::PropertyAccess(prop) => ib.visit_property_access_expr(prop.clone(), false)?,
+            _ => unimplementedc!("Non-identifier postfix expression"),
+        }
+
+        ib.visit_assignment_expression(AssignmentExpr {
+            left: expr.clone(),
+            operator: match tt {
+                TokenType::Increment => TokenType::AdditionAssignment,
+                TokenType::Decrement => TokenType::SubtractionAssignment,
+                _ => unreachable!("Token never emitted"),
+            },
+            right: Box::new(Expr::number_literal(1.0)),
+        })?;
+        ib.build_pop();
+
+        Ok(())
+    }
+
+    fn visit_prefix_expr(&mut self, (tt, expr): Postfix<'a>) -> Result<(), CompileError> {
+        let mut ib = InstructionBuilder::new(self);
+
+        match &*expr {
+            Expr::Literal(lit) => {
+                let ident = lit.to_identifier();
+
+                if let Some((id, loc)) = ib.find_local(&ident) {
+                    let ty = loc.inferred_type().borrow();
+
+                    if let (Ok(id), Some(CompileValueType::Number)) = (u8::try_from(id), &*ty) {
+                        // SPEC
+                        match tt {
+                            TokenType::Increment => ib.build_prefix_inc_local_num(id),
+                            TokenType::Decrement => ib.build_prefix_dec_local_num(id),
+                            _ => unreachable!("Token never emitted"),
+                        }
+                        return Ok(());
+                    }
+
                     ib.build_local_load(id, loc.is_extern());
                 } else {
                     unimplementedc!("Global postfix expression");

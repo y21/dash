@@ -11,6 +11,8 @@ use super::statement::{fmt_list, FunctionDeclaration, VariableBinding, VariableD
 
 /// The sequence operator (`expr, expr`)
 pub type Seq<'a> = (Box<Expr<'a>>, Box<Expr<'a>>);
+/// Any prefix expression, i.e. `++foo`
+pub type Prefix<'a> = (TokenType, Box<Expr<'a>>);
 /// Any postfix expression, i.e. `foo++`
 pub type Postfix<'a> = (TokenType, Box<Expr<'a>>);
 
@@ -36,6 +38,9 @@ pub enum Expr<'a> {
     /// A sequence expression, i.e. `foo, bar`
     #[display(fmt = "{}, {}", "_0.0", "_0.1")]
     Sequence(Seq<'a>),
+    /// Any prefix expression, i.e. `++foo`
+    #[display(fmt = "{}{}", "_0.0", "_0.1")]
+    Prefix(Prefix<'a>),
     /// Any postfix expression, i.e. `foo++`
     #[display(fmt = "{}{}", "_0.1", "_0.0")]
     Postfix(Postfix<'a>),

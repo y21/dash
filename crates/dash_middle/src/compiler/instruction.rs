@@ -145,4 +145,12 @@ pub enum IntrinsicOperation {
     BitShrNumLR,
     /// Bitwise unsigned shift right, where the left and right side is a number
     BitUshrNumLR,
+    /// Postfix increment, where the left side is an identifier that refers to a variable of type number
+    PostfixIncLocalNum,
+    /// Postfix decrement, where the left side is an identifier that refers to a variable of type number
+    PostfixDecLocalNum,
+    /// Prefix increment, where the left side is an identifier that refers to a variable of type number
+    PrefixIncLocalNum,
+    /// Prefix decrement, where the left side is an identifier that refers to a variable of type number
+    PrefixDecLocalNum,
 }

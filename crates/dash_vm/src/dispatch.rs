@@ -1192,6 +1192,32 @@ mod handlers {
             }};
         }
 
+        macro_rules! postfix {
+            ($op:tt) => {{
+                let id = cx.fetch_and_inc_ip();
+                let local = match cx.get_local(id.into()) {
+                    Value::Number(n) => n,
+                    _ => unreachable!(),
+                };
+                cx.set_local(id.into(), Value::number(local.0 $op 1.0));
+                cx.try_push_stack(Value::Number(local))?;
+            }};
+        }
+
+        macro_rules! prefix {
+            ($op:tt) => {{{
+                let id = cx.fetch_and_inc_ip();
+                let local = match cx.get_local(id.into()) {
+                    Value::Number(n) => n,
+                    _ => unreachable!(),
+                };
+                let new = Value::number(local.0 $op 1.0);
+                cx.set_local(id.into(), new.clone());
+                cx.try_push_stack(new)?;
+            }
+            }};
+        }
+
         match op {
             IntrinsicOperation::AddNumLR => bin_op!(Add::add),
             IntrinsicOperation::SubNumLR => bin_op!(Sub::sub),
@@ -1211,6 +1237,10 @@ mod handlers {
             IntrinsicOperation::BitShlNumLR => bin_op_i64!(<<),
             IntrinsicOperation::BitShrNumLR => bin_op_i64!(>>),
             IntrinsicOperation::BitUshrNumLR => bin_op_i64!(>>),
+            IntrinsicOperation::PostfixIncLocalNum => postfix!(+),
+            IntrinsicOperation::PostfixDecLocalNum => postfix!(-),
+            IntrinsicOperation::PrefixIncLocalNum => prefix!(+),
+            IntrinsicOperation::PrefixDecLocalNum => prefix!(-),
         }
 
         Ok(None)

@@ -141,6 +141,10 @@ pub trait InstructionWriter {
     fn build_objdestruct(&mut self, count: u16);
     fn build_arraydestruct(&mut self, count: u16);
     fn build_intrinsic_op(&mut self, op: IntrinsicOperation);
+    fn build_postfix_inc_local_num(&mut self, id: u8);
+    fn build_postfix_dec_local_num(&mut self, id: u8);
+    fn build_prefix_inc_local_num(&mut self, id: u8);
+    fn build_prefix_dec_local_num(&mut self, id: u8);
 }
 
 macro_rules! impl_instruction_writer {
@@ -435,6 +439,26 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
     fn build_intrinsic_op(&mut self, op: IntrinsicOperation) {
         self.write_instr(Instruction::IntrinsicOp);
         self.write(op as u8);
+    }
+
+    fn build_postfix_dec_local_num(&mut self, id: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::PostfixDecLocalNum);
+        self.write(id);
+    }
+
+    fn build_postfix_inc_local_num(&mut self, id: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::PostfixIncLocalNum);
+        self.write(id);
+    }
+
+    fn build_prefix_dec_local_num(&mut self, id: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::PrefixDecLocalNum);
+        self.write(id);
+    }
+
+    fn build_prefix_inc_local_num(&mut self, id: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::PrefixIncLocalNum);
+        self.write(id);
     }
 }
 

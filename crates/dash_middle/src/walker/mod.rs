@@ -9,6 +9,7 @@ use crate::parser::expr::LiteralExpr;
 use crate::parser::expr::ObjectLiteral;
 use crate::parser::expr::ObjectMemberKind;
 use crate::parser::expr::Postfix;
+use crate::parser::expr::Prefix;
 use crate::parser::expr::PropertyAccessExpr;
 use crate::parser::expr::Seq;
 use crate::parser::expr::UnaryExpr;
@@ -124,6 +125,10 @@ pub trait AstWalker<'a> {
     }
 
     fn visit_postfix_expr(&mut self, p: Postfix<'a>) -> () {
+        self.accept_expr(*p.1);
+    }
+
+    fn visit_prefix_expr(&mut self, p: Prefix<'a>) -> () {
         self.accept_expr(*p.1);
     }
 
@@ -261,6 +266,7 @@ pub fn accept_expr_default<'a, V: AstWalker<'a> + ?Sized>(this: &mut V, e: Expr<
         Expr::PropertyAccess(e) => this.visit_property_access_expr(e, false),
         Expr::Sequence(e) => this.visit_sequence_expr(e),
         Expr::Postfix(e) => this.visit_postfix_expr(e),
+        Expr::Prefix(e) => this.visit_prefix_expr(e),
         Expr::Function(e) => this.visit_function_expr(e),
         Expr::Array(e) => this.visit_array_literal(e),
         Expr::Object(e) => this.visit_object_literal(e),
