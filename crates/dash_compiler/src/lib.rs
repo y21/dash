@@ -1069,14 +1069,94 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             arguments,
         }: FunctionCall<'a>,
     ) -> Result<(), CompileError> {
-        // specialize property access
+        let mut ib = InstructionBuilder::new(self);
         // TODO: this also needs to be specialized for assignment expressions with property access as target
 
+        /// Attempts to specialize a function call
+        ///
+        /// For example, if the expression is `Math.max(a, b)`, then we can skip
+        /// the overhead of a dynamic property lookup at runtime and emit a specialized `max` instruction.
+        /// Of course, the VM still needs a guard to account for bad code messing with builtins, e.g.
+        /// ```js
+        /// let k = input(); // assume k = "max", black box to the compiler
+        /// delete Math[k];
+        ///
+        /// Math.max(1, 2); // *should* throw a TypeError, but will not without a guard
+        /// ```
+        fn try_spec_function_call<'cx, 'a>(
+            ib: &mut InstructionBuilder<'cx, 'a>,
+            target: &Expr<'a>,
+            arguments: &[Expr<'a>],
+        ) -> Result<bool, CompileError> {
+            match target {
+                Expr::PropertyAccess(PropertyAccessExpr { target, property, .. }) => {
+                    let Some(target) = target.as_identifier() else {
+                        return Ok(false);
+                    };
+
+                    let Some(property) = property.as_identifier() else {
+                        return Ok(false);
+                    };
+
+                    let Ok(arg_len) = u8::try_from(arguments.len()) else {
+                        return Ok(false);
+                    };
+
+                    macro_rules! emit_spec {
+                        ($spec:expr) => {{
+                            for arg in arguments {
+                                // TODO: we dont actually need to clone, we could take mem::take, if worth it
+                                ib.accept_expr(arg.clone())?;
+                            }
+                            $spec(ib, arg_len);
+                            return Ok(true);
+                        }};
+                    }
+
+                    match (target, property) {
+                        ("Math", "exp") => emit_spec!(InstructionBuilder::build_exp),
+                        ("Math", "log2") => emit_spec!(InstructionBuilder::build_log2),
+                        ("Math", "expm1") => emit_spec!(InstructionBuilder::build_expm1),
+                        ("Math", "cbrt") => emit_spec!(InstructionBuilder::build_cbrt),
+                        ("Math", "clz32") => emit_spec!(InstructionBuilder::build_clz32),
+                        ("Math", "atanh") => emit_spec!(InstructionBuilder::build_atanh),
+                        ("Math", "atan2") => emit_spec!(InstructionBuilder::build_atanh2),
+                        ("Math", "round") => emit_spec!(InstructionBuilder::build_round),
+                        ("Math", "acosh") => emit_spec!(InstructionBuilder::build_acosh),
+                        ("Math", "abs") => emit_spec!(InstructionBuilder::build_abs),
+                        ("Math", "sinh") => emit_spec!(InstructionBuilder::build_sinh),
+                        ("Math", "sin") => emit_spec!(InstructionBuilder::build_sin),
+                        ("Math", "ceil") => emit_spec!(InstructionBuilder::build_ceil),
+                        ("Math", "tan") => emit_spec!(InstructionBuilder::build_tan),
+                        ("Math", "trunc") => emit_spec!(InstructionBuilder::build_trunc),
+                        ("Math", "asinh") => emit_spec!(InstructionBuilder::build_asinh),
+                        ("Math", "log10") => emit_spec!(InstructionBuilder::build_log10),
+                        ("Math", "asin") => emit_spec!(InstructionBuilder::build_asin),
+                        ("Math", "random") => emit_spec!(InstructionBuilder::build_random),
+                        ("Math", "log1p") => emit_spec!(InstructionBuilder::build_log1p),
+                        ("Math", "sqrt") => emit_spec!(InstructionBuilder::build_sqrt),
+                        ("Math", "atan") => emit_spec!(InstructionBuilder::build_atan),
+                        ("Math", "log") => emit_spec!(InstructionBuilder::build_log),
+                        ("Math", "floor") => emit_spec!(InstructionBuilder::build_floor),
+                        ("Math", "cosh") => emit_spec!(InstructionBuilder::build_cosh),
+                        ("Math", "acos") => emit_spec!(InstructionBuilder::build_acos),
+                        _ => {}
+                    }
+                }
+                _ => {}
+            }
+            Ok(false)
+        }
+
+        if try_spec_function_call(&mut ib, &target, &arguments)? {
+            return Ok(());
+        }
+
         let has_this = if let Expr::PropertyAccess(p) = *target {
-            self.visit_property_access_expr(p, true)?;
+            ib.visit_property_access_expr(p, true)?;
             true
         } else {
-            self.accept_expr(*target)?;
+            ib.accept_expr(*target)?;
             false
         };
 
@@ -1086,13 +1166,13 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             .map_err(|_| CompileError::ParameterLimitExceeded)?;
 
         for arg in arguments {
-            self.accept_expr(arg)?;
+            ib.accept_expr(arg)?;
         }
 
         let meta = FunctionCallMetadata::new_checked(argc, constructor_call, has_this)
             .ok_or(CompileError::ParameterLimitExceeded)?;
 
-        InstructionBuilder::new(self).build_call(meta);
+        ib.build_call(meta);
 
         Ok(())
     }

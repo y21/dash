@@ -2,7 +2,7 @@ use strum_macros::FromRepr;
 
 use crate::lexer::token::TokenType;
 use crate::parser;
-use crate::parser::expr::{AssignmentExpr, Expr, GroupingExpr, LiteralExpr};
+use crate::parser::expr::{ArrayLiteral, AssignmentExpr, Expr, GroupingExpr, LiteralExpr};
 
 use self::external::External;
 use self::scope::CompileValueType;
@@ -113,6 +113,7 @@ pub fn infer_type<'a>(cx: &mut Scope<'a>, expr: &Expr<'a>) -> Option<CompileValu
         Expr::Literal(LiteralExpr::Undefined) => Some(CompileValueType::Undefined),
         Expr::Literal(LiteralExpr::Number(..)) => Some(CompileValueType::Number),
         Expr::Literal(LiteralExpr::String(..)) => Some(CompileValueType::String),
+        Expr::Array(ArrayLiteral(..)) => Some(CompileValueType::Array),
         Expr::Literal(LiteralExpr::Identifier(ident)) => match cx.find_local(&ident) {
             Some((_, local)) => local.inferred_type().borrow().clone(),
             None => None,

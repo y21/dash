@@ -1244,6 +1244,17 @@ mod handlers {
             }};
         }
 
+        macro_rules! fn_call {
+            ($fun:ident) => {{
+                let argc = cx.fetch_and_inc_ip();
+                let args = cx.pop_stack_many(argc.into()).collect::<Vec<_>>();
+                let fun = cx.statics.$fun.clone();
+                let mut sc = cx.scope();
+                let result = fun.apply(&mut sc, Value::undefined(), args)?;
+                sc.try_push_stack(result)?;
+            }};
+        }
+
         match op {
             IntrinsicOperation::AddNumLR => bin_op!(Add::add),
             IntrinsicOperation::SubNumLR => bin_op!(Sub::sub),
@@ -1275,6 +1286,34 @@ mod handlers {
             IntrinsicOperation::GeNumLConstR32 => bin_op_numl_constr_n!(>=, u32),
             IntrinsicOperation::LtNumLConstR32 => bin_op_numl_constr_n!(<, u32),
             IntrinsicOperation::LeNumLConstR32 => bin_op_numl_constr_n!(<=, u32),
+            IntrinsicOperation::Exp => fn_call!(math_exp),
+            IntrinsicOperation::Log2 => fn_call!(math_log2),
+            IntrinsicOperation::Expm1 => fn_call!(math_expm1),
+            IntrinsicOperation::Cbrt => fn_call!(math_cbrt),
+            IntrinsicOperation::Clz32 => fn_call!(math_clz32),
+            IntrinsicOperation::Atanh => fn_call!(math_atanh),
+            IntrinsicOperation::Atan2 => fn_call!(math_atan2),
+            IntrinsicOperation::Round => fn_call!(math_round),
+            IntrinsicOperation::Acosh => fn_call!(math_acosh),
+            IntrinsicOperation::Abs => fn_call!(math_abs),
+            IntrinsicOperation::Sinh => fn_call!(math_sinh),
+            IntrinsicOperation::Sin => fn_call!(math_sin),
+            IntrinsicOperation::Ceil => fn_call!(math_ceil),
+            IntrinsicOperation::Tan => fn_call!(math_tan),
+            IntrinsicOperation::Trunc => fn_call!(math_trunc),
+            IntrinsicOperation::Asinh => fn_call!(math_asinh),
+            IntrinsicOperation::Log10 => fn_call!(math_log10),
+            IntrinsicOperation::Asin => fn_call!(math_asin),
+            IntrinsicOperation::Random => fn_call!(math_random),
+            IntrinsicOperation::Log1p => fn_call!(math_log1p),
+            IntrinsicOperation::Sqrt => fn_call!(math_sqrt),
+            IntrinsicOperation::Atan => fn_call!(math_atan),
+            IntrinsicOperation::Cos => fn_call!(math_cos),
+            IntrinsicOperation::Tanh => fn_call!(math_tanh),
+            IntrinsicOperation::Log => fn_call!(math_log),
+            IntrinsicOperation::Floor => fn_call!(math_floor),
+            IntrinsicOperation::Cosh => fn_call!(math_cosh),
+            IntrinsicOperation::Acos => fn_call!(math_acos),
         }
 
         Ok(None)

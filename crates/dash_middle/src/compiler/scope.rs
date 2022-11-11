@@ -14,6 +14,7 @@ pub enum CompileValueType {
     Uninit,
     Number,
     String,
+    Array,
     Either(Box<CompileValueType>, Box<CompileValueType>),
     Maybe(Box<CompileValueType>),
 }
