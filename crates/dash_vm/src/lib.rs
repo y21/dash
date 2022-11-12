@@ -14,7 +14,7 @@ use self::{
     params::VmParams,
     statics::Statics,
     value::{
-        object::{NamedObject, Object, PropertyValue},
+        object::{Object, PropertyValue},
         Value,
     },
 };
@@ -23,7 +23,7 @@ use self::{
 use dash_middle::compiler::constant::Constant;
 use dash_middle::compiler::instruction::Instruction;
 use util::unlikely;
-use value::{promise::{Promise, PromiseState}, ValueContext, function::bound::BoundFunction};
+use value::{promise::{Promise, PromiseState}, ValueContext, function::bound::BoundFunction, Global};
 
 #[cfg(feature = "jit")]
 mod jit;
@@ -58,6 +58,12 @@ pub struct Vm {
     try_blocks: Vec<TryBlock>,
     params: VmParams,
     gc_object_threshold: usize,
+    /// Keeps track of the "purity" of the builtins of this VM.
+    /// Purity here refers to whether builtins have been (in one way or another) mutated.
+    /// Removing a property from the global object (e.g. `Math`) or any other builtin,
+    /// or adding a property to a builtin, will cause this to be set to `false`, which in turn
+    /// will disable many optimizations such as specialized intrinsics.
+    builtins_pure: bool,
 
     /// If we are currently recording a trace for a loop iteration,
     /// this will contain the pc of the loop header and its end
@@ -76,7 +82,7 @@ impl Vm {
 
         let mut gc = Gc::new();
         let statics = Statics::new(&mut gc);
-        let global = gc.register(NamedObject::null()); // TODO: set its __proto__ and constructor
+        let global = gc.register(Global::new()); 
         let gc_object_threshold = params
             .initial_gc_object_threshold()
             .unwrap_or(DEFAULT_GC_OBJECT_COUNT_THRESHOLD);
@@ -92,6 +98,7 @@ impl Vm {
             try_blocks: Vec::new(),
             params,
             gc_object_threshold,
+            builtins_pure: true,
 
             #[cfg(feature = "jit")]
             recording_trace: None,
@@ -729,6 +736,8 @@ impl Vm {
             Boolean: boolean_ctor;
             Promise: promise_ctor;
         });
+
+        scope.builtins_pure = true;
     }
 
     /// Fetches the current instruction/value in the currently executing frame
@@ -999,6 +1008,15 @@ impl Vm {
             PromiseAction::Resolve => PromiseState::Resolved(arg),
             PromiseAction::Reject => PromiseState::Rejected(arg),
         };
+    }
+
+    pub(crate) fn builtins_purity(&self) -> bool {
+        self.builtins_pure
+    }
+
+    pub(crate) fn impure_builtins(&mut self) {
+        println!("WARN! Builtins poisoned");
+        self.builtins_pure = false;
     }
 
     // TODO: move these to DispatchContext.

@@ -169,6 +169,7 @@ mod handlers {
     use crate::frame::TryBlock;
     use crate::local::LocalScope;
     use crate::throw;
+    use crate::util::unlikely;
     use crate::value::array::Array;
     use crate::value::object::NamedObject;
     use crate::value::object::Object;
@@ -1245,13 +1246,24 @@ mod handlers {
         }
 
         macro_rules! fn_call {
-            ($fun:ident) => {{
+            ($fun:ident, $k:ident, $v:ident) => {{
                 let argc = cx.fetch_and_inc_ip();
                 let args = cx.pop_stack_many(argc.into()).collect::<Vec<_>>();
                 let fun = cx.statics.$fun.clone();
                 let mut sc = cx.scope();
-                let result = fun.apply(&mut sc, Value::undefined(), args)?;
-                sc.try_push_stack(result)?;
+
+                if unlikely(!sc.builtins_purity()) {
+                    // Builtins impure, fallback to slow dynamic property lookup
+                    let global = sc.global.clone();
+                    let k = global.get_property(&mut sc, PropertyKey::from(stringify!($k)))?;
+                    let fun = k.get_property(&mut sc, PropertyKey::from(stringify!($v)))?;
+                    let result = fun.apply(&mut sc, Value::undefined(), args)?;
+                    sc.try_push_stack(result)?;
+                } else {
+                    // Fastpath: call builtin directly
+                    let result = fun.apply(&mut sc, Value::undefined(), args)?;
+                    sc.try_push_stack(result)?;
+                }
             }};
         }
 
@@ -1286,34 +1298,34 @@ mod handlers {
             IntrinsicOperation::GeNumLConstR32 => bin_op_numl_constr_n!(>=, u32),
             IntrinsicOperation::LtNumLConstR32 => bin_op_numl_constr_n!(<, u32),
             IntrinsicOperation::LeNumLConstR32 => bin_op_numl_constr_n!(<=, u32),
-            IntrinsicOperation::Exp => fn_call!(math_exp),
-            IntrinsicOperation::Log2 => fn_call!(math_log2),
-            IntrinsicOperation::Expm1 => fn_call!(math_expm1),
-            IntrinsicOperation::Cbrt => fn_call!(math_cbrt),
-            IntrinsicOperation::Clz32 => fn_call!(math_clz32),
-            IntrinsicOperation::Atanh => fn_call!(math_atanh),
-            IntrinsicOperation::Atan2 => fn_call!(math_atan2),
-            IntrinsicOperation::Round => fn_call!(math_round),
-            IntrinsicOperation::Acosh => fn_call!(math_acosh),
-            IntrinsicOperation::Abs => fn_call!(math_abs),
-            IntrinsicOperation::Sinh => fn_call!(math_sinh),
-            IntrinsicOperation::Sin => fn_call!(math_sin),
-            IntrinsicOperation::Ceil => fn_call!(math_ceil),
-            IntrinsicOperation::Tan => fn_call!(math_tan),
-            IntrinsicOperation::Trunc => fn_call!(math_trunc),
-            IntrinsicOperation::Asinh => fn_call!(math_asinh),
-            IntrinsicOperation::Log10 => fn_call!(math_log10),
-            IntrinsicOperation::Asin => fn_call!(math_asin),
-            IntrinsicOperation::Random => fn_call!(math_random),
-            IntrinsicOperation::Log1p => fn_call!(math_log1p),
-            IntrinsicOperation::Sqrt => fn_call!(math_sqrt),
-            IntrinsicOperation::Atan => fn_call!(math_atan),
-            IntrinsicOperation::Cos => fn_call!(math_cos),
-            IntrinsicOperation::Tanh => fn_call!(math_tanh),
-            IntrinsicOperation::Log => fn_call!(math_log),
-            IntrinsicOperation::Floor => fn_call!(math_floor),
-            IntrinsicOperation::Cosh => fn_call!(math_cosh),
-            IntrinsicOperation::Acos => fn_call!(math_acos),
+            IntrinsicOperation::Exp => fn_call!(math_exp, Math, exp),
+            IntrinsicOperation::Log2 => fn_call!(math_log2, Math, log2),
+            IntrinsicOperation::Expm1 => fn_call!(math_expm1, Math, expm1),
+            IntrinsicOperation::Cbrt => fn_call!(math_cbrt, Math, cbrt),
+            IntrinsicOperation::Clz32 => fn_call!(math_clz32, Math, clz32),
+            IntrinsicOperation::Atanh => fn_call!(math_atanh, Math, atanh),
+            IntrinsicOperation::Atan2 => fn_call!(math_atan2, Math, atan2),
+            IntrinsicOperation::Round => fn_call!(math_round, Math, round),
+            IntrinsicOperation::Acosh => fn_call!(math_acosh, Math, acosh),
+            IntrinsicOperation::Abs => fn_call!(math_abs, Math, abs),
+            IntrinsicOperation::Sinh => fn_call!(math_sinh, Math, sinh),
+            IntrinsicOperation::Sin => fn_call!(math_sin, Math, sin),
+            IntrinsicOperation::Ceil => fn_call!(math_ceil, Math, ceil),
+            IntrinsicOperation::Tan => fn_call!(math_tan, Math, tan),
+            IntrinsicOperation::Trunc => fn_call!(math_trunc, Math, trunc),
+            IntrinsicOperation::Asinh => fn_call!(math_asinh, Math, asinh),
+            IntrinsicOperation::Log10 => fn_call!(math_log10, Math, log10),
+            IntrinsicOperation::Asin => fn_call!(math_asin, Math, asin),
+            IntrinsicOperation::Random => fn_call!(math_random, Math, random),
+            IntrinsicOperation::Log1p => fn_call!(math_log1p, Math, log1p),
+            IntrinsicOperation::Sqrt => fn_call!(math_sqrt, Math, sqrt),
+            IntrinsicOperation::Atan => fn_call!(math_atan, Math, atan),
+            IntrinsicOperation::Cos => fn_call!(math_cos, Math, cos),
+            IntrinsicOperation::Tanh => fn_call!(math_tanh, Math, tanh),
+            IntrinsicOperation::Log => fn_call!(math_log, Math, log),
+            IntrinsicOperation::Floor => fn_call!(math_floor, Math, floor),
+            IntrinsicOperation::Cosh => fn_call!(math_cosh, Math, cosh),
+            IntrinsicOperation::Acos => fn_call!(math_acos, Math, acos),
         }
 
         Ok(None)

@@ -44,7 +44,9 @@ use std::rc::Rc;
 use dash_middle::compiler::{constant::Constant, external::External};
 use dash_middle::parser::statement::FunctionKind as ParserFunctionKind;
 use dash_middle::util::ThreadSafeStorage;
+use dash_proc_macro::Trace;
 
+use crate::delegate;
 use crate::{
     gc::{handle::Handle, trace::Trace},
     value::{
@@ -54,7 +56,7 @@ use crate::{
 };
 
 use self::function::r#async::AsyncFunction;
-use self::object::PropertyValue;
+use self::object::{NamedObject, PropertyValue};
 use self::primitive::{Number, PrimitiveCapabilities};
 use self::regex::RegExp;
 use self::{
@@ -455,3 +457,45 @@ impl<E> ValueContext for Result<Value, E> {
 }
 
 pub type ThreadSafeValue = ThreadSafeStorage<Value>;
+
+/// The global object
+/// Implementation note: MUST be kept cheaply cloneable
+#[derive(Debug, Clone, Trace)]
+pub struct Global {
+    inner: NamedObject,
+}
+
+impl Global {
+    pub fn new() -> Self {
+        // TODO: set its __proto__ and constructor
+        let inner = NamedObject::null();
+        Self { inner }
+    }
+}
+
+impl Object for Global {
+    delegate!(inner, get_property, get_property_descriptor, get_prototype, apply);
+
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
+        sc.impure_builtins();
+        self.inner.set_property(sc, key, value)
+    }
+
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        sc.impure_builtins();
+        self.inner.delete_property(sc, key)
+    }
+
+    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
+        sc.impure_builtins();
+        self.inner.set_prototype(sc, value)
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn own_keys(&self) -> Result<Vec<Value>, Value> {
+        self.inner.own_keys()
+    }
+}
