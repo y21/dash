@@ -26,6 +26,8 @@ mod util;
 pub enum Emit {
     Bytecode,
     JavaScript,
+    PrettyAst,
+    Ast,
 }
 
 #[wasm_bindgen]
@@ -91,6 +93,20 @@ pub fn debug(s: &str, o: OptLevel, em: Emit) -> String {
             let mut output = String::new();
             for node in ast {
                 let _ = write!(output, "{node}\n");
+            }
+            output
+        }
+        Emit::Ast => {
+            let mut output = String::new();
+            for node in ast {
+                let _ = write!(output, "{node:?}\n");
+            }
+            output
+        }
+        Emit::PrettyAst => {
+            let mut output = String::new();
+            for node in ast {
+                let _ = write!(output, "{node:#?}\n");
             }
             output
         }
