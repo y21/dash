@@ -101,6 +101,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "colorful"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0bca1619ff57dd7a56b58a8e25ef4199f123e78e503fe1653410350a1b98ae65"
+
+[[package]]
 name = "convert_case"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -138,6 +144,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "clap",
+ "colorful",
  "dash_compiler",
  "dash_decompiler",
  "dash_lexer",
@@ -322,6 +329,7 @@ dependencies = [
  "dash_middle",
  "dash_rt",
  "dash_vm",
+ "indexmap",
 ]
 
 [[package]]

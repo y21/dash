@@ -1,6 +1,10 @@
+use std::backtrace::Backtrace;
+use std::backtrace::BacktraceStatus;
+
 use anyhow::bail;
 use clap::Arg;
 use clap::Command;
+use colorful::Colorful;
 
 mod cmd;
 mod util;
@@ -51,6 +55,36 @@ fn main() -> anyhow::Result<()> {
                 .arg(Arg::new("types").long("types").takes_value(false))
                 .arg(opt_level),
         );
+
+    std::panic::set_hook(Box::new(|info| {
+        eprintln!("{}\n", "dash has unexpectedly panicked! this is a bug!".red().bold());
+
+        let location = info.location().unwrap();
+        eprintln!(
+            "cause: '{}': {}:{}:{}",
+            info.payload().downcast_ref::<&str>().unwrap_or(&"<unknown>"),
+            location.file(),
+            location.line(),
+            location.column(),
+        );
+
+        let backtrace = Backtrace::capture();
+        match backtrace.status() {
+            BacktraceStatus::Captured => {
+                eprintln!("--- begin of backtrace ---");
+                eprintln!("{backtrace}");
+            }
+            BacktraceStatus::Disabled => {
+                eprintln!("set RUST_BACKTRACE=1 to print a backtrace");
+            }
+            BacktraceStatus::Unsupported => {
+                eprintln!("backtraces are not supported on this platform");
+            }
+            _ => {
+                eprintln!("backtraces are not available");
+            }
+        }
+    }));
 
     let matches = app.get_matches();
     match matches.subcommand() {
