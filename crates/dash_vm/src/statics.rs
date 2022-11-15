@@ -14,6 +14,7 @@ use crate::value::function::Function;
 use crate::value::function::FunctionKind;
 use crate::value::regex::RegExp;
 use crate::value::set::Set;
+use crate::value::PureBuiltin;
 
 use super::value::array::Array;
 use super::value::array::ArrayIterator;
@@ -231,13 +232,17 @@ pub struct Statics {
     pub regexp_test: Handle<dyn Object>,
 }
 
-fn object(gc: &mut Gc<dyn Object>) -> Handle<dyn Object> {
-    gc.register(NamedObject::null())
+fn builtin_object<O: Object + 'static>(gc: &mut Gc<dyn Object>, obj: O) -> Handle<dyn Object> {
+    gc.register(PureBuiltin::new(obj))
+}
+
+fn empty_object(gc: &mut Gc<dyn Object>) -> Handle<dyn Object> {
+    builtin_object(gc, NamedObject::null())
 }
 
 fn function(gc: &mut Gc<dyn Object>, name: &str, cb: NativeFunction) -> Handle<dyn Object> {
     let f = Function::with_obj(Some(name.into()), FunctionKind::Native(cb), NamedObject::null());
-    gc.register(f)
+    gc.register(PureBuiltin::new(f))
 }
 
 impl Statics {
@@ -253,18 +258,18 @@ impl Statics {
             default_str: "default".into(),
             number_str: "number".into(),
             string_str: "string".into(),
-            function_proto: object(gc),
+            function_proto: empty_object(gc),
             function_ctor: function(gc, "Function", js_std::function::constructor),
             function_bind: function(gc, "bind", js_std::function::bind),
             function_call: function(gc, "call", js_std::function::call),
-            console: object(gc),
+            console: empty_object(gc),
             console_log: function(gc, "log", js_std::global::log),
-            math: object(gc),
+            math: empty_object(gc),
             math_floor: function(gc, "floor", js_std::math::floor),
             object_ctor: function(gc, "Object", js_std::object::constructor),
             object_create: function(gc, "create", js_std::object::create),
             object_keys: function(gc, "keys", js_std::object::keys),
-            object_prototype: object(gc),
+            object_prototype: empty_object(gc),
             object_to_string: function(gc, "toString", js_std::object::to_string),
             object_get_own_property_descriptor: function(
                 gc,
@@ -278,13 +283,13 @@ impl Statics {
             ),
             object_has_own_property: function(gc, "hasOwnProperty", js_std::object::has_own_property),
             number_ctor: function(gc, "Number", js_std::number::constructor),
-            number_prototype: gc.register(BoxedNumber::with_obj(0.0, NamedObject::null())),
+            number_prototype: builtin_object(gc, BoxedNumber::with_obj(0.0, NamedObject::null())),
             number_tostring: function(gc, "toString", js_std::number::to_string),
             boolean_ctor: function(gc, "Boolean", js_std::boolean::constructor),
             boolean_tostring: function(gc, "toString", js_std::boolean::to_string),
-            boolean_prototype: gc.register(BoxedBoolean::with_obj(false, NamedObject::null())),
+            boolean_prototype: builtin_object(gc, BoxedBoolean::with_obj(false, NamedObject::null())),
             string_ctor: function(gc, "Boolean", js_std::string::constructor),
-            string_prototype: gc.register(BoxedString::with_obj(empty_str.clone(), NamedObject::null())),
+            string_prototype: builtin_object(gc, BoxedString::with_obj(empty_str.clone(), NamedObject::null())),
             is_nan: function(gc, "isNaN", js_std::global::is_nan),
             is_finite: function(gc, "isFinite", js_std::global::is_finite),
             parse_float: function(gc, "parseFloat", js_std::global::parse_float),
@@ -357,12 +362,12 @@ impl Statics {
             string_substring: function(gc, "substring", js_std::string::substring),
             array_ctor: function(gc, "Array", js_std::array::constructor),
             array_tostring: function(gc, "toString", js_std::array::to_string),
-            array_prototype: gc.register(Array::with_obj(NamedObject::null())),
+            array_prototype: builtin_object(gc, Array::with_obj(NamedObject::null())),
             array_join: function(gc, "join", js_std::array::join),
             array_values: function(gc, "values", js_std::array::values),
             array_reverse: function(gc, "reverse", js_std::array::reverse),
             symbol_ctor: function(gc, "Symbol", js_std::symbol::constructor),
-            symbol_prototype: gc.register(BoxedSymbol::with_obj(Symbol::new(empty_str), NamedObject::null())),
+            symbol_prototype: builtin_object(gc, BoxedSymbol::with_obj(Symbol::new(empty_str), NamedObject::null())),
             symbol_async_iterator: Symbol::new("Symbol.asyncIterator".into()),
             symbol_has_instance: Symbol::new("Symbol.hasInstance".into()),
             symbol_is_concat_spreadable: Symbol::new("Symbol.isConcatSpreadable".into()),
@@ -376,7 +381,7 @@ impl Statics {
             symbol_to_primitive: Symbol::new("SymboltoPrimitive".into()),
             symbol_to_string_tag: Symbol::new("Symbol.toStringTag".into()),
             symbol_unscopables: Symbol::new("Symbol.unscopables".into()),
-            array_iterator_prototype: gc.register(ArrayIterator::empty()),
+            array_iterator_prototype: builtin_object(gc, ArrayIterator::empty()),
             array_iterator_next: function(gc, "next", js_std::array_iterator::next),
             array_at: function(gc, "at", js_std::array::at),
             array_concat: function(gc, "concat", js_std::array::concat),
@@ -396,47 +401,47 @@ impl Statics {
             array_pop: function(gc, "pop", js_std::array::pop),
             array_push: function(gc, "push", js_std::array::push),
             generator_iterator_prototype: {
-                let obj = object(gc);
-                gc.register(GeneratorIterator::empty(obj))
+                let obj = gc.register(NamedObject::null());
+                builtin_object(gc, GeneratorIterator::empty(obj))
             },
             generator_iterator_next: function(gc, "next", js_std::generator::next),
             error_ctor: function(gc, "Error", js_std::error::error_constructor),
-            error_prototype: gc.register(Error::empty()),
+            error_prototype: builtin_object(gc, Error::empty()),
             error_to_string: function(gc, "toString", js_std::error::to_string),
             eval_error_ctor: function(gc, "EvalError", js_std::error::eval_error_constructor),
-            eval_error_prototype: gc.register(EvalError::empty()),
+            eval_error_prototype: builtin_object(gc, EvalError::empty()),
             range_error_ctor: function(gc, "RangeError", js_std::error::range_error_constructor),
-            range_error_prototype: gc.register(RangeError::empty()),
+            range_error_prototype: builtin_object(gc, RangeError::empty()),
             reference_error_ctor: function(gc, "ReferenceError", js_std::error::reference_error_constructor),
-            reference_error_prototype: gc.register(ReferenceError::empty()),
+            reference_error_prototype: builtin_object(gc, ReferenceError::empty()),
             syntax_error_ctor: function(gc, "SyntaxError", js_std::error::syntax_error_constructor),
-            syntax_error_prototype: gc.register(SyntaxError::empty()),
+            syntax_error_prototype: builtin_object(gc, SyntaxError::empty()),
             type_error_ctor: function(gc, "TypeError", js_std::error::type_error_constructor),
-            type_error_prototype: gc.register(TypeError::empty()),
+            type_error_prototype: builtin_object(gc, TypeError::empty()),
             uri_error_ctor: function(gc, "URIError", js_std::error::uri_error_constructor),
-            uri_error_prototype: gc.register(URIError::empty()),
+            uri_error_prototype: builtin_object(gc, URIError::empty()),
             aggregate_error_ctor: function(gc, "AggregateError", js_std::error::aggregate_error_constructor),
-            aggregate_error_prototype: gc.register(AggregateError::empty()),
+            aggregate_error_prototype: builtin_object(gc, AggregateError::empty()),
             arraybuffer_ctor: function(gc, "ArrayBuffer", js_std::arraybuffer::constructor),
-            arraybuffer_prototype: gc.register(ArrayBuffer::empty()),
+            arraybuffer_prototype: builtin_object(gc, ArrayBuffer::empty()),
             uint8array_ctor: function(gc, "Uint8Array", js_std::typedarray::u8array::constructor),
-            uint8array_prototype: gc.register(NamedObject::null()),
+            uint8array_prototype: empty_object(gc),
             int8array_ctor: function(gc, "Int8Array", js_std::typedarray::i8array::constructor),
-            int8array_prototype: gc.register(NamedObject::null()),
+            int8array_prototype: empty_object(gc),
             uint16array_ctor: function(gc, "Uint16Array", js_std::typedarray::u16array::constructor),
-            uint16array_prototype: gc.register(NamedObject::null()),
+            uint16array_prototype: empty_object(gc),
             int16array_ctor: function(gc, "Int16Array", js_std::typedarray::i16array::constructor),
-            int16array_prototype: gc.register(NamedObject::null()),
+            int16array_prototype: empty_object(gc),
             uint32array_ctor: function(gc, "Uint32Array", js_std::typedarray::u32array::constructor),
-            uint32array_prototype: gc.register(NamedObject::null()),
+            uint32array_prototype: empty_object(gc),
             int32array_ctor: function(gc, "Int32Array", js_std::typedarray::i32array::constructor),
-            int32array_prototype: gc.register(NamedObject::null()),
+            int32array_prototype: empty_object(gc),
             float32array_ctor: function(gc, "Float32Array", js_std::typedarray::f32array::constructor),
-            float32array_prototype: gc.register(NamedObject::null()),
+            float32array_prototype: empty_object(gc),
             float64array_ctor: function(gc, "Float64Array", js_std::typedarray::f64array::constructor),
-            float64array_prototype: gc.register(NamedObject::null()),
+            float64array_prototype: empty_object(gc),
             promise_ctor: function(gc, "Promise", js_std::promise::constructor),
-            promise_proto: gc.register(NamedObject::null()),
+            promise_proto: empty_object(gc),
             promise_resolve: function(gc, "resolve", js_std::promise::resolve),
             promise_reject: function(gc, "reject", js_std::promise::reject),
             promise_then: function(gc, "then", js_std::promise::then),
@@ -444,11 +449,11 @@ impl Statics {
             set_add: function(gc, "add", js_std::set::add),
             set_has: function(gc, "has", js_std::set::has),
             set_delete: function(gc, "delete", js_std::set::delete),
-            set_prototype: gc.register(Set::with_obj(NamedObject::null())),
+            set_prototype: builtin_object(gc, Set::with_obj(NamedObject::null())),
             set_clear: function(gc, "clear", js_std::set::clear),
             set_size: function(gc, "size", js_std::set::size),
             regexp_ctor: function(gc, "RegExp", js_std::regex::constructor),
-            regexp_prototype: gc.register(RegExp::empty()),
+            regexp_prototype: builtin_object(gc, RegExp::empty()),
             regexp_test: function(gc, "test", js_std::regex::test),
         }
     }

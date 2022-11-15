@@ -17,6 +17,7 @@ pub fn trace(tt: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(tt as syn::DeriveInput);
     let ident = input.ident;
 
+    let generics = &input.generics;
     let fields = match input.data {
         Data::Struct(DataStruct {
             fields: Fields::Named(ref fields),
@@ -34,8 +35,9 @@ pub fn trace(tt: TokenStream) -> TokenStream {
         FoundCrate::Name(crate_name) => quote!(::#crate_name::gc::trace::Trace),
     };
 
+    let generics_names = generics.type_params().map(|x| &x.ident);
     let expanded = quote! {
-        unsafe impl #found_crate for #ident {
+        unsafe impl #generics #found_crate for #ident <#(#generics_names),*> {
             fn trace(&self) {
                 #(#fields)*
             }

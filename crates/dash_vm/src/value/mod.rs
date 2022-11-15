@@ -56,7 +56,7 @@ use crate::{
 };
 
 use self::function::r#async::AsyncFunction;
-use self::object::{NamedObject, PropertyValue};
+use self::object::PropertyValue;
 use self::primitive::{Number, PrimitiveCapabilities};
 use self::regex::RegExp;
 use self::{
@@ -458,22 +458,33 @@ impl<E> ValueContext for Result<Value, E> {
 
 pub type ThreadSafeValue = ThreadSafeStorage<Value>;
 
-/// The global object
-/// Implementation note: MUST be kept cheaply cloneable
+/// A wrapper type for builtin objects that are protected from poisoning
+///
+/// The compiler can sometimes emit specialized opcodes for builtin functions,
+/// such as Math.clz32 when called with a number, which skips all the property lookups.
+/// As soon as builtins are mutated, this optimization is "unsafe", as the change
+/// can be observed, for example:
+/// ```js
+/// Math.clz32 = () => 0;
+/// assert(Math.clz32(1 << 30), 1);
+/// ```
+/// The compiler emits a clz32 opcode here, which would ignore the trapped function,
+/// so the assert would fail here.
+///
+/// For this reason we wrap builtins in a `PureBuiltin`, which, when mutated, will
+/// set a VM flag that makes the specialized opcodes fall back to the slow path (property lookup).
 #[derive(Debug, Clone, Trace)]
-pub struct Global {
-    inner: NamedObject,
+pub struct PureBuiltin<O: Object> {
+    inner: O,
 }
 
-impl Global {
-    pub fn new() -> Self {
-        // TODO: set its __proto__ and constructor
-        let inner = NamedObject::null();
+impl<O: Object> PureBuiltin<O> {
+    pub fn new(inner: O) -> Self {
         Self { inner }
     }
 }
 
-impl Object for Global {
+impl<O: Object + 'static> Object for PureBuiltin<O> {
     delegate!(inner, get_property, get_property_descriptor, get_prototype, apply);
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
@@ -492,7 +503,7 @@ impl Object for Global {
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
-        self
+        &self.inner
     }
 
     fn own_keys(&self) -> Result<Vec<Value>, Value> {

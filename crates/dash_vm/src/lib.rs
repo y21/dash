@@ -23,7 +23,7 @@ use self::{
 use dash_middle::compiler::constant::Constant;
 use dash_middle::compiler::instruction::Instruction;
 use util::unlikely;
-use value::{promise::{Promise, PromiseState}, ValueContext, function::bound::BoundFunction, Global};
+use value::{promise::{Promise, PromiseState}, ValueContext, function::bound::BoundFunction, PureBuiltin, object::NamedObject};
 
 #[cfg(feature = "jit")]
 mod jit;
@@ -82,7 +82,8 @@ impl Vm {
 
         let mut gc = Gc::new();
         let statics = Statics::new(&mut gc);
-        let global = gc.register(Global::new()); 
+        // TODO: global __proto__ and constructor
+        let global = gc.register(PureBuiltin::new(NamedObject::null())); 
         let gc_object_threshold = params
             .initial_gc_object_threshold()
             .unwrap_or(DEFAULT_GC_OBJECT_COUNT_THRESHOLD);
@@ -1015,7 +1016,6 @@ impl Vm {
     }
 
     pub(crate) fn impure_builtins(&mut self) {
-        println!("WARN! Builtins poisoned");
         self.builtins_pure = false;
     }
 
