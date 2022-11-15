@@ -44,7 +44,9 @@ use std::rc::Rc;
 use dash_middle::compiler::{constant::Constant, external::External};
 use dash_middle::parser::statement::FunctionKind as ParserFunctionKind;
 use dash_middle::util::ThreadSafeStorage;
+use dash_proc_macro::Trace;
 
+use crate::delegate;
 use crate::{
     gc::{handle::Handle, trace::Trace},
     value::{
@@ -455,3 +457,56 @@ impl<E> ValueContext for Result<Value, E> {
 }
 
 pub type ThreadSafeValue = ThreadSafeStorage<Value>;
+
+/// A wrapper type for builtin objects that are protected from poisoning
+///
+/// The compiler can sometimes emit specialized opcodes for builtin functions,
+/// such as Math.clz32 when called with a number, which skips all the property lookups.
+/// As soon as builtins are mutated, this optimization is "unsafe", as the change
+/// can be observed, for example:
+/// ```js
+/// Math.clz32 = () => 0;
+/// assert(Math.clz32(1 << 30), 1);
+/// ```
+/// The compiler emits a clz32 opcode here, which would ignore the trapped function,
+/// so the assert would fail here.
+///
+/// For this reason we wrap builtins in a `PureBuiltin`, which, when mutated, will
+/// set a VM flag that makes the specialized opcodes fall back to the slow path (property lookup).
+#[derive(Debug, Clone, Trace)]
+pub struct PureBuiltin<O: Object> {
+    inner: O,
+}
+
+impl<O: Object> PureBuiltin<O> {
+    pub fn new(inner: O) -> Self {
+        Self { inner }
+    }
+}
+
+impl<O: Object + 'static> Object for PureBuiltin<O> {
+    delegate!(inner, get_property, get_property_descriptor, get_prototype, apply);
+
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
+        sc.impure_builtins();
+        self.inner.set_property(sc, key, value)
+    }
+
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        sc.impure_builtins();
+        self.inner.delete_property(sc, key)
+    }
+
+    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
+        sc.impure_builtins();
+        self.inner.set_prototype(sc, value)
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        &self.inner
+    }
+
+    fn own_keys(&self) -> Result<Vec<Value>, Value> {
+        self.inner.own_keys()
+    }
+}

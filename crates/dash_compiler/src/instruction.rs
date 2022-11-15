@@ -153,6 +153,32 @@ pub trait InstructionWriter {
     fn build_ge_numl_constr32(&mut self, right: u32);
     fn build_lt_numl_constr32(&mut self, right: u32);
     fn build_le_numl_constr32(&mut self, right: u32);
+    fn build_exp(&mut self, args: u8);
+    fn build_log2(&mut self, args: u8);
+    fn build_expm1(&mut self, args: u8);
+    fn build_cbrt(&mut self, args: u8);
+    fn build_clz32(&mut self, args: u8);
+    fn build_atanh(&mut self, args: u8);
+    fn build_atanh2(&mut self, args: u8);
+    fn build_round(&mut self, args: u8);
+    fn build_acosh(&mut self, args: u8);
+    fn build_abs(&mut self, args: u8);
+    fn build_sinh(&mut self, args: u8);
+    fn build_sin(&mut self, args: u8);
+    fn build_ceil(&mut self, args: u8);
+    fn build_tan(&mut self, args: u8);
+    fn build_trunc(&mut self, args: u8);
+    fn build_asinh(&mut self, args: u8);
+    fn build_log10(&mut self, args: u8);
+    fn build_asin(&mut self, args: u8);
+    fn build_random(&mut self, args: u8);
+    fn build_log1p(&mut self, args: u8);
+    fn build_sqrt(&mut self, args: u8);
+    fn build_atan(&mut self, args: u8);
+    fn build_log(&mut self, args: u8);
+    fn build_floor(&mut self, args: u8);
+    fn build_cosh(&mut self, args: u8);
+    fn build_acos(&mut self, args: u8);
 }
 
 macro_rules! impl_instruction_writer {
@@ -507,6 +533,136 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
     fn build_lt_numl_constr32(&mut self, right: u32) {
         self.build_intrinsic_op(IntrinsicOperation::LtNumLConstR32);
         self.write_all(&right.to_ne_bytes());
+    }
+
+    fn build_exp(&mut self, args: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::Exp);
+        self.write(args);
+    }
+
+    fn build_log2(&mut self, args: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::Log2);
+        self.write(args);
+    }
+
+    fn build_expm1(&mut self, args: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::Expm1);
+        self.write(args);
+    }
+
+    fn build_cbrt(&mut self, args: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::Cbrt);
+        self.write(args);
+    }
+
+    fn build_clz32(&mut self, args: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::Clz32);
+        self.write(args);
+    }
+
+    fn build_atanh(&mut self, args: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::Atanh);
+        self.write(args);
+    }
+
+    fn build_atanh2(&mut self, args: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::Atan2);
+        self.write(args);
+    }
+
+    fn build_round(&mut self, args: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::Round);
+        self.write(args);
+    }
+
+    fn build_acosh(&mut self, args: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::Acosh);
+        self.write(args);
+    }
+
+    fn build_abs(&mut self, args: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::Abs);
+        self.write(args);
+    }
+
+    fn build_sinh(&mut self, args: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::Sinh);
+        self.write(args);
+    }
+
+    fn build_sin(&mut self, args: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::Sin);
+        self.write(args);
+    }
+
+    fn build_ceil(&mut self, args: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::Ceil);
+        self.write(args);
+    }
+
+    fn build_tan(&mut self, args: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::Tan);
+        self.write(args);
+    }
+
+    fn build_trunc(&mut self, args: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::Trunc);
+        self.write(args);
+    }
+
+    fn build_asinh(&mut self, args: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::Asinh);
+        self.write(args);
+    }
+
+    fn build_log10(&mut self, args: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::Log10);
+        self.write(args);
+    }
+
+    fn build_asin(&mut self, args: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::Asin);
+        self.write(args);
+    }
+
+    fn build_random(&mut self, args: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::Random);
+        self.write(args);
+    }
+
+    fn build_log1p(&mut self, args: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::Log1p);
+        self.write(args);
+    }
+
+    fn build_sqrt(&mut self, args: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::Sqrt);
+        self.write(args);
+    }
+
+    fn build_atan(&mut self, args: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::Atan);
+        self.write(args);
+    }
+
+    fn build_log(&mut self, args: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::Log);
+        self.write(args);
+    }
+
+    fn build_floor(&mut self, args: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::Floor);
+        self.write(args);
+    }
+
+    fn build_cosh(&mut self, args: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::Cosh);
+        self.write(args);
+    }
+
+    fn build_acos(&mut self, args: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::Acos);
+        self.write(args);
     }
 }
 
