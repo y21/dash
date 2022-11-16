@@ -179,6 +179,7 @@ pub trait InstructionWriter {
     fn build_floor(&mut self, args: u8);
     fn build_cosh(&mut self, args: u8);
     fn build_acos(&mut self, args: u8);
+    fn build_cos(&mut self, args: u8);
 }
 
 macro_rules! impl_instruction_writer {
@@ -662,6 +663,11 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
 
     fn build_acos(&mut self, args: u8) {
         self.build_intrinsic_op(IntrinsicOperation::Acos);
+        self.write(args);
+    }
+
+    fn build_cos(&mut self, args: u8) {
+        self.build_intrinsic_op(IntrinsicOperation::Cos);
         self.write(args);
     }
 }

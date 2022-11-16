@@ -1140,6 +1140,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                         ("Math", "floor") => emit_spec!(InstructionBuilder::build_floor),
                         ("Math", "cosh") => emit_spec!(InstructionBuilder::build_cosh),
                         ("Math", "acos") => emit_spec!(InstructionBuilder::build_acos),
+                        ("Math", "cos") => emit_spec!(InstructionBuilder::build_cos),
                         _ => {}
                     }
                 }
