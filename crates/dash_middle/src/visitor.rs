@@ -25,7 +25,6 @@ use crate::parser::statement::ReturnStatement;
 use crate::parser::statement::Statement;
 use crate::parser::statement::SwitchStatement;
 use crate::parser::statement::TryCatch;
-use crate::parser::statement::VariableBinding;
 use crate::parser::statement::VariableDeclaration;
 use crate::parser::statement::WhileLoop;
 
@@ -56,9 +55,6 @@ pub trait Visitor<'a, V> {
 
     /// Visits an identifier
     fn visit_identifier_expression(&mut self, i: &str) -> V;
-
-    /// Visits a binding expression
-    fn visit_binding_expression(&mut self, b: VariableBinding<'a>) -> V;
 
     /// Visits an unary expression
     fn visit_unary_expression(&mut self, e: UnaryExpr<'a>) -> V;

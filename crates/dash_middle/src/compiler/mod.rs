@@ -2,7 +2,7 @@ use strum_macros::FromRepr;
 
 use crate::lexer::token::TokenType;
 use crate::parser;
-use crate::parser::expr::{ArrayLiteral, AssignmentExpr, Expr, GroupingExpr, LiteralExpr};
+use crate::parser::expr::{ArrayLiteral, AssignmentExpr, AssignmentTarget, Expr, GroupingExpr, LiteralExpr};
 
 use self::external::External;
 use self::scope::CompileValueType;
@@ -126,6 +126,10 @@ pub fn infer_type<'a>(cx: &mut Scope<'a>, expr: &Expr<'a>) -> Option<CompileValu
             last
         }
         Expr::Assignment(AssignmentExpr { left, right, .. }) => {
+            let AssignmentTarget::Expr(left) = left else {
+                panic!("Cannot infer type for assignment place LocalId");
+            };
+
             let right_type = infer_type(cx, right);
             if let Expr::Literal(LiteralExpr::Identifier(ident)) = left.as_ref() {
                 if let Some((_, local)) = cx.find_local(&ident) {

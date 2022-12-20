@@ -3,6 +3,7 @@ use dash_middle::compiler::scope::CompileValueType;
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::expr::ArrayLiteral;
 use dash_middle::parser::expr::AssignmentExpr;
+use dash_middle::parser::expr::AssignmentTarget;
 use dash_middle::parser::expr::BinaryExpr;
 use dash_middle::parser::expr::ConditionalExpr;
 use dash_middle::parser::expr::Expr;
@@ -169,14 +170,16 @@ impl<'a> Eval<'a> for Expr<'a> {
                             },
                             None => {}
                         },
-                        LiteralExpr::Binding(..) => {}
                         LiteralExpr::Regex(..) => *self = Literal(String("object".into())),
                     },
                     _ => {}
                 }
             }
             Assignment(AssignmentExpr { left, right, .. }) => {
-                left.fold(cx, can_remove);
+                match left {
+                    AssignmentTarget::Expr(left) => left.fold(cx, can_remove),
+                    AssignmentTarget::LocalId(..) => {}
+                };
                 right.fold(cx, can_remove);
             }
             Sequence((left, right)) => {

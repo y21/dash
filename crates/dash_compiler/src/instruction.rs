@@ -268,11 +268,7 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
     }
 
     fn build_local_load(&mut self, index: u16, is_extern: bool) {
-        let (thin, wide) = is_extern
-            .then(|| (Instruction::LdLocalExt, Instruction::LdLocalExtW))
-            .unwrap_or((Instruction::LdLocal, Instruction::LdLocalW));
-
-        self.write_wide_instr(thin, wide, index);
+        compile_local_load_into(&mut self.buf, index, is_extern);
     }
 
     fn build_global_load(&mut self, ident: &str) -> Result<(), LimitExceededError> {
@@ -676,4 +672,25 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
 pub enum NamedExportKind {
     Local { loc_id: u16, ident_id: u16 },
     Global { ident_id: u16 },
+}
+
+pub fn compile_local_load_into(out: &mut Vec<u8>, index: u16, is_extern: bool) {
+    let (thin, wide) = is_extern
+        .then(|| (Instruction::LdLocalExt, Instruction::LdLocalExtW))
+        .unwrap_or((Instruction::LdLocal, Instruction::LdLocalW));
+
+    if let Ok(index) = u8::try_from(index) {
+        out.push(thin as u8);
+        out.push(index);
+    } else {
+        out.push(wide as u8);
+        out.extend_from_slice(&index.to_ne_bytes());
+    }
+}
+
+/// Convenience function for creating a vec and calling `compile_local_load_into`.
+pub fn compile_local_load(index: u16, is_extern: bool) -> Vec<u8> {
+    let mut out = Vec::new();
+    compile_local_load_into(&mut out, index, is_extern);
+    out
 }

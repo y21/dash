@@ -7,7 +7,7 @@ use derive_more::Display;
 
 use crate::lexer::token::TokenType;
 
-use super::statement::{fmt_list, FunctionDeclaration, VariableBinding, VariableDeclarationName};
+use super::statement::{fmt_list, FunctionDeclaration};
 
 /// The sequence operator (`expr, expr`)
 pub type Seq<'a> = (Box<Expr<'a>>, Box<Expr<'a>>);
@@ -72,7 +72,7 @@ impl<'a> Expr<'a> {
 
     /// Creates an assignment expression
     pub fn assignment(l: Expr<'a>, r: Expr<'a>, op: TokenType) -> Self {
-        Self::Assignment(AssignmentExpr::new(l, r, op))
+        Self::Assignment(AssignmentExpr::new_expr_place(l, r, op))
     }
 
     /// Creates a bool literal expression
@@ -93,10 +93,6 @@ impl<'a> Expr<'a> {
     /// Creates an identifier literal expression
     pub fn identifier(s: Cow<'a, str>) -> Self {
         Self::Literal(LiteralExpr::Identifier(s))
-    }
-
-    pub fn binding(b: VariableBinding<'a>) -> Self {
-        Self::Literal(LiteralExpr::Binding(b))
     }
 
     /// Creates a null literal expression
@@ -277,12 +273,30 @@ impl<'a> fmt::Display for FunctionCall<'a> {
     }
 }
 
+/// The target of an assignment
+#[derive(Debug, Clone, Display)]
+pub enum AssignmentTarget<'a> {
+    /// Assignment to an expression-place
+    Expr(Box<Expr<'a>>),
+    /// Assignment to a local id (i.e. previously allocated stack space)
+    LocalId(u16),
+}
+
+impl<'a> AssignmentTarget<'a> {
+    pub fn as_expr(&self) -> Option<&Expr<'a>> {
+        match self {
+            Self::Expr(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
 /// An assignment expression
 #[derive(Debug, Clone, Display)]
 #[display(fmt = "{} {} {}", left, operator, right)]
 pub struct AssignmentExpr<'a> {
-    /// The lefthand side (target)
-    pub left: Box<Expr<'a>>,
+    /// The lefthand side (place-expression)
+    pub left: AssignmentTarget<'a>,
     /// The righthand side (value)
     pub right: Box<Expr<'a>>,
     /// The type of assignment, (`=`/`+=`/etc)
@@ -291,9 +305,25 @@ pub struct AssignmentExpr<'a> {
 
 impl<'a> AssignmentExpr<'a> {
     /// Creates a new assignment expression
-    pub fn new(l: Expr<'a>, r: Expr<'a>, op: TokenType) -> Self {
+    pub fn new(l: AssignmentTarget<'a>, r: Expr<'a>, op: TokenType) -> Self {
         Self {
-            left: Box::new(l),
+            left: l,
+            right: Box::new(r),
+            operator: op,
+        }
+    }
+    /// Convenient method for `AssignmentExpr::new(AssignmentTarget::Expr(Box::new(left)), right, op)`
+    pub fn new_expr_place(l: Expr<'a>, r: Expr<'a>, op: TokenType) -> Self {
+        Self {
+            left: AssignmentTarget::Expr(Box::new(l)),
+            right: Box::new(r),
+            operator: op,
+        }
+    }
+    /// Convenient method for `AssignmentExpr::new(AssignmentTarget::LocalId(left), right, op)`
+    pub fn new_local_place(l: u16, r: Expr<'a>, op: TokenType) -> Self {
+        Self {
+            left: AssignmentTarget::LocalId(l),
             right: Box::new(r),
             operator: op,
         }
@@ -340,7 +370,7 @@ impl<'a> fmt::Display for GroupingExpr<'a> {
 pub enum LiteralExpr<'a> {
     /// Boolean literal
     Boolean(bool),
-    Binding(VariableBinding<'a>),
+    // Binding(VariableBinding<'a>),
     /// Identifier literal (variable lookup)
     Identifier(Cow<'a, str>),
     /// Number literal
@@ -371,10 +401,6 @@ impl<'a> LiteralExpr<'a> {
             Self::Undefined => Some("undefined"),
             Self::Null => Some("null"),
             Self::String(Cow::Borrowed(s)) => Some(s),
-            Self::Binding(VariableBinding {
-                name: VariableDeclarationName::Identifier(name),
-                ..
-            }) => Some(name),
             _ => None,
         }
     }
@@ -388,11 +414,6 @@ impl<'a> LiteralExpr<'a> {
             Self::Null => Cow::Borrowed("null"),
             Self::Number(n) => Cow::Owned(n.to_string()),
             Self::String(s) => s.clone(),
-            Self::Binding(VariableBinding {
-                name: VariableDeclarationName::Identifier(name),
-                ..
-            }) => Cow::Borrowed(*name),
-            Self::Binding(VariableBinding { name, .. }) => Cow::Owned(name.to_string()),
             Self::Regex(_, s) => Cow::Borrowed(*s),
         }
     }
@@ -403,7 +424,7 @@ impl<'a> LiteralExpr<'a> {
     pub fn is_truthy(&self) -> Option<bool> {
         match self {
             Self::Boolean(b) => Some(*b),
-            Self::Identifier(_) | Self::Binding(_) => None,
+            Self::Identifier(_) => None,
             Self::Number(n) => Some(*n != 0.0),
             Self::String(s) => Some(!s.is_empty()),
             Self::Null => Some(false),

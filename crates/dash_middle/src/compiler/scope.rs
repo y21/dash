@@ -29,6 +29,7 @@ pub struct ScopeLocal<'a> {
 }
 
 impl<'a> ScopeLocal<'a> {
+    /// Returns the binding of this variable
     pub fn binding(&self) -> &VariableBinding<'a> {
         &self.binding
     }
@@ -73,18 +74,14 @@ impl<'a> Scope<'a> {
         self.locals
             .iter()
             .enumerate()
-            .find(|(_, l)| match l.binding.name {
-                VariableDeclarationName::Identifier(i) => i == identifier && l.binding.kind.is_nameable(),
+            .find(|(_, l)| match l.binding() {
+                VariableBinding {
+                    name: VariableDeclarationName::Identifier(name),
+                    kind,
+                    ..
+                } => *name == identifier && kind.is_nameable(),
                 _ => panic!("Only identifiers can be registered"),
             })
-            .map(|(i, l)| (i as u16, l))
-    }
-
-    pub fn find_binding(&self, binding: &VariableBinding<'a>) -> Option<(u16, &ScopeLocal<'a>)> {
-        self.locals
-            .iter()
-            .enumerate()
-            .find(|(_, l)| &l.binding == binding)
             .map(|(i, l)| (i as u16, l))
     }
 

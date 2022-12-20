@@ -9,7 +9,6 @@ use dash_middle::compiler::scope::{CompileValueType, Scope};
 use dash_middle::compiler::{constant::ConstantPool, external::External};
 use dash_middle::compiler::{infer_type, CompileResult, FunctionCallMetadata, StaticImportKind};
 use dash_middle::lexer::token::TokenType;
-use dash_middle::parser::expr::AssignmentExpr;
 use dash_middle::parser::expr::BinaryExpr;
 use dash_middle::parser::expr::ConditionalExpr;
 use dash_middle::parser::expr::Expr;
@@ -22,6 +21,7 @@ use dash_middle::parser::expr::PropertyAccessExpr;
 use dash_middle::parser::expr::Seq;
 use dash_middle::parser::expr::UnaryExpr;
 use dash_middle::parser::expr::{ArrayLiteral, ObjectMemberKind};
+use dash_middle::parser::expr::{AssignmentExpr, AssignmentTarget};
 use dash_middle::parser::statement::IfStatement;
 use dash_middle::parser::statement::ImportKind;
 use dash_middle::parser::statement::ReturnStatement;
@@ -43,6 +43,7 @@ use dash_middle::visitor::Visitor;
 use dash_optimizer::consteval::Eval;
 use dash_optimizer::context::OptimizerContext;
 use dash_optimizer::OptLevel;
+use instruction::compile_local_load;
 use jump_container::JumpContainer;
 
 use crate::builder::{InstructionBuilder, Label};
@@ -260,37 +261,37 @@ impl<'a> FunctionCompiler<'a> {
         }
     }
 
-    /// Tries to find a binding in the current or one of the surrounding scopes
-    ///
-    /// If a local variable is found in a parent scope, it is marked as an extern local
-    pub fn find_binding(&mut self, binding: &VariableBinding<'a>) -> Option<(u16, ScopeLocal<'a>)> {
-        if let Some((id, local)) = self.scope.find_binding(binding) {
-            Some((id, local.clone()))
-        } else {
-            let mut caller = self.caller;
+    // /// Tries to find a binding in the current or one of the surrounding scopes
+    // ///
+    // /// If a local variable is found in a parent scope, it is marked as an extern local
+    // pub fn find_binding(&mut self, binding: &VariableBinding<'a>) -> Option<(u16, ScopeLocal<'a>)> {
+    //     if let Some((id, local)) = self.scope.find_binding(binding) {
+    //         Some((id, local.clone()))
+    //     } else {
+    //         let mut caller = self.caller;
 
-            while let Some(mut up) = caller {
-                let this = unsafe { up.as_mut() };
+    //         while let Some(mut up) = caller {
+    //             let this = unsafe { up.as_mut() };
 
-                if let Some((id, local)) = this.find_binding(binding) {
-                    // If the local found in a parent scope is already an external,
-                    // it needs to be resolved differently at runtime
-                    let is_nested_extern = local.is_extern();
+    //             if let Some((id, local)) = this.find_binding(binding) {
+    //                 // If the local found in a parent scope is already an external,
+    //                 // it needs to be resolved differently at runtime
+    //                 let is_nested_extern = local.is_extern();
 
-                    // If it's not already marked external, mark it as such
-                    local.set_extern();
+    //                 // If it's not already marked external, mark it as such
+    //                 local.set_extern();
 
-                    // TODO: don't hardcast
-                    let id = self.add_external(id, is_nested_extern) as u16;
-                    return Some((id, local.clone()));
-                }
+    //                 // TODO: don't hardcast
+    //                 let id = self.add_external(id, is_nested_extern) as u16;
+    //                 return Some((id, local.clone()));
+    //             }
 
-                caller = this.caller;
-            }
+    //             caller = this.caller;
+    //         }
 
-            None
-        }
-    }
+    //         None
+    //     }
+    // }
 
     fn visit_for_each_kinded_loop(
         &mut self,
@@ -330,14 +331,13 @@ impl<'a> FunctionCompiler<'a> {
         */
 
         let mut ib = InstructionBuilder::new(self);
-        let for_of_iter_binding = VariableBinding::unnameable("for_of_iter");
-        let for_of_gen_step_binding = VariableBinding::unnameable("for_of_gen_step");
         let for_of_iter_id = ib
             .scope
             .add_local("for_of_iter", VariableDeclarationKind::Unnameable, false, None)?;
 
-        ib.scope
-            .add_local("for_of_gen_step", VariableDeclarationKind::Unnameable, false, None)?;
+        let for_of_gen_step_id =
+            ib.scope
+                .add_local("for_of_gen_step", VariableDeclarationKind::Unnameable, false, None)?;
 
         ib.accept_expr(expr)?;
         match kind {
@@ -355,17 +355,21 @@ impl<'a> FunctionCompiler<'a> {
                 Statement::Expression(expr) => {
                     *body = Statement::Block(BlockStatement(vec![Statement::Expression(expr)]));
                 }
+                // TODO: pattern _ is actually reachable: `for (const _ of [1]) return 1;`
                 _ => unreachable!("For-of body was neither a block statement nor an expression"),
             }
         }
 
+        // Assign iterator value to binding at the very start of the for loop body
         match &mut *body {
             Statement::Block(BlockStatement(stmts)) => {
+                let gen_step = compile_local_load(for_of_gen_step_id, false);
+
                 let var = Statement::Variable(VariableDeclaration::new(
                     binding,
                     Some(Expr::property_access(
                         false,
-                        Expr::Literal(LiteralExpr::Binding(for_of_gen_step_binding.clone())),
+                        Expr::Compiled(gen_step),
                         Expr::identifier(Cow::Borrowed("value")),
                     )),
                 ));
@@ -379,24 +383,27 @@ impl<'a> FunctionCompiler<'a> {
             _ => unreachable!("For-of body was not a statement"),
         }
 
+        let for_of_iter_binding_bc = compile_local_load(for_of_iter_id, false);
+
+        // for..of -> while loop rewrite
         ib.visit_while_loop(WhileLoop {
             condition: Expr::Unary(UnaryExpr::new(
                 TokenType::LogicalNot,
                 Expr::property_access(
                     false,
-                    Expr::assignment(
-                        Expr::Literal(LiteralExpr::Binding(for_of_gen_step_binding.clone())),
+                    Expr::Assignment(AssignmentExpr::new_local_place(
+                        for_of_gen_step_id,
                         Expr::function_call(
                             Expr::property_access(
                                 false,
-                                Expr::Literal(LiteralExpr::Binding(for_of_iter_binding)),
+                                Expr::Compiled(for_of_iter_binding_bc),
                                 Expr::identifier(Cow::Borrowed("next")),
                             ),
                             Vec::new(),
                             false,
                         ),
                         TokenType::Assignment,
-                    ),
+                    )),
                     Expr::identifier(Cow::Borrowed("done")),
                 ),
             )),
@@ -488,7 +495,6 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             Expr::Binary(e) => self.visit_binary_expression(e),
             Expr::Assignment(e) => self.visit_assignment_expression(e),
             Expr::Grouping(e) => self.visit_grouping_expression(e),
-            Expr::Literal(LiteralExpr::Binding(b)) => self.visit_binding_expression(b),
             Expr::Literal(LiteralExpr::Identifier(i)) => self.visit_identifier_expression(&i),
             Expr::Literal(l) => self.visit_literal_expression(l),
             Expr::Unary(e) => self.visit_unary_expression(e),
@@ -673,14 +679,6 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_literal_expression(&mut self, expr: LiteralExpr<'a>) -> Result<(), CompileError> {
         InstructionBuilder::new(self).build_constant(Constant::from_literal(&expr))?;
-        Ok(())
-    }
-
-    fn visit_binding_expression(&mut self, b: VariableBinding<'a>) -> Result<(), CompileError> {
-        let mut ib = InstructionBuilder::new(self);
-        let (id, _) = ib.find_binding(&b).ok_or_else(|| CompileError::UnknownBinding)?;
-        ib.build_local_load(id, false);
-
         Ok(())
     }
 
@@ -943,119 +941,126 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
     ) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
 
-        if let Expr::PropertyAccess(prop) = &*left {
+        if let Some(Expr::PropertyAccess(prop)) = left.as_expr() {
             ib.accept_expr((*prop.target).clone())?;
         }
 
-        match *left {
-            Expr::Literal(lit) => {
-                let ident = lit.to_identifier();
-                let local = match &lit {
-                    LiteralExpr::Binding(binding) => ib.find_binding(&binding),
-                    _ => ib.find_local(&ident),
-                };
+        match left {
+            AssignmentTarget::Expr(left) => match *left {
+                Expr::Literal(lit) => {
+                    let ident = lit.to_identifier();
+                    let local = ib.find_local(&ident);
 
-                if let Some((id, local)) = local {
-                    if matches!(local.binding().kind, VariableDeclarationKind::Const) {
-                        return Err(CompileError::ConstAssignment);
+                    if let Some((id, local)) = local {
+                        if matches!(local.binding().kind, VariableDeclarationKind::Const) {
+                            return Err(CompileError::ConstAssignment);
+                        }
+
+                        let is_extern = local.is_extern();
+
+                        macro_rules! assign {
+                            ($e:expr) => {{
+                                ib.build_local_load(id, is_extern);
+                                ib.accept_expr(*right)?;
+                                $e;
+                            }};
+                        }
+
+                        match operator {
+                            TokenType::Assignment => ib.accept_expr(*right)?,
+                            TokenType::AdditionAssignment => assign!(ib.build_add()),
+                            TokenType::SubtractionAssignment => assign!(ib.build_sub()),
+                            TokenType::MultiplicationAssignment => assign!(ib.build_mul()),
+                            TokenType::DivisionAssignment => assign!(ib.build_div()),
+                            TokenType::RemainderAssignment => assign!(ib.build_rem()),
+                            TokenType::ExponentiationAssignment => assign!(ib.build_pow()),
+                            TokenType::LeftShiftAssignment => assign!(ib.build_bitshl()),
+                            TokenType::RightShiftAssignment => assign!(ib.build_bitshr()),
+                            TokenType::UnsignedRightShiftAssignment => assign!(ib.build_bitushr()),
+                            TokenType::BitwiseAndAssignment => assign!(ib.build_bitand()),
+                            TokenType::BitwiseOrAssignment => assign!(ib.build_bitor()),
+                            TokenType::BitwiseXorAssignment => assign!(ib.build_bitxor()),
+                            _ => unimplementedc!("Unknown operator"),
+                        }
+
+                        ib.build_local_store(id, is_extern);
+                    } else {
+                        macro_rules! assign {
+                            ($e:expr) => {{
+                                ib.build_global_load(&ident)?;
+                                ib.accept_expr(*right)?;
+                                $e;
+                            }};
+                        }
+
+                        match operator {
+                            TokenType::Assignment => ib.accept_expr(*right)?,
+                            TokenType::AdditionAssignment => assign!(ib.build_add()),
+                            TokenType::SubtractionAssignment => assign!(ib.build_sub()),
+                            TokenType::MultiplicationAssignment => assign!(ib.build_mul()),
+                            TokenType::DivisionAssignment => assign!(ib.build_div()),
+                            TokenType::RemainderAssignment => assign!(ib.build_rem()),
+                            TokenType::ExponentiationAssignment => assign!(ib.build_pow()),
+                            TokenType::LeftShiftAssignment => assign!(ib.build_bitshl()),
+                            TokenType::RightShiftAssignment => assign!(ib.build_bitshr()),
+                            TokenType::UnsignedRightShiftAssignment => assign!(ib.build_bitushr()),
+                            TokenType::BitwiseAndAssignment => assign!(ib.build_bitand()),
+                            TokenType::BitwiseOrAssignment => assign!(ib.build_bitor()),
+                            TokenType::BitwiseXorAssignment => assign!(ib.build_bitxor()),
+                            _ => unimplementedc!("Unknown operator"),
+                        }
+
+                        ib.build_global_store(&ident)?;
                     }
-
-                    let is_extern = local.is_extern();
-
+                }
+                Expr::PropertyAccess(prop) => {
                     macro_rules! assign {
-                        ($e:expr) => {{
-                            ib.build_local_load(id, is_extern);
+                        ($lit:expr,$e:expr) => {{
+                            let ident = $lit.to_identifier();
+                            ib.visit_property_access_expr(prop, false)?;
                             ib.accept_expr(*right)?;
                             $e;
+                            ib.build_static_prop_set(&ident)?;
                         }};
                     }
-
-                    match operator {
-                        TokenType::Assignment => ib.accept_expr(*right)?,
-                        TokenType::AdditionAssignment => assign!(ib.build_add()),
-                        TokenType::SubtractionAssignment => assign!(ib.build_sub()),
-                        TokenType::MultiplicationAssignment => assign!(ib.build_mul()),
-                        TokenType::DivisionAssignment => assign!(ib.build_div()),
-                        TokenType::RemainderAssignment => assign!(ib.build_rem()),
-                        TokenType::ExponentiationAssignment => assign!(ib.build_pow()),
-                        TokenType::LeftShiftAssignment => assign!(ib.build_bitshl()),
-                        TokenType::RightShiftAssignment => assign!(ib.build_bitshr()),
-                        TokenType::UnsignedRightShiftAssignment => assign!(ib.build_bitushr()),
-                        TokenType::BitwiseAndAssignment => assign!(ib.build_bitand()),
-                        TokenType::BitwiseOrAssignment => assign!(ib.build_bitor()),
-                        TokenType::BitwiseXorAssignment => assign!(ib.build_bitxor()),
-                        _ => unimplementedc!("Unknown operator"),
-                    }
-
-                    ib.build_local_store(id, is_extern);
-                } else {
-                    macro_rules! assign {
-                        ($e:expr) => {{
-                            ib.build_global_load(&ident)?;
+                    match ((*prop.property).clone(), prop.computed, operator) {
+                        (Expr::Literal(lit), false, TokenType::Assignment) => {
                             ib.accept_expr(*right)?;
-                            $e;
-                        }};
+                            let ident = lit.to_identifier();
+                            ib.build_static_prop_set(&ident)?;
+                        }
+                        (Expr::Literal(lit), false, TokenType::AdditionAssignment) => assign!(lit, ib.build_add()),
+                        (Expr::Literal(lit), false, TokenType::SubtractionAssignment) => assign!(lit, ib.build_sub()),
+                        (Expr::Literal(lit), false, TokenType::MultiplicationAssignment) => {
+                            assign!(lit, ib.build_mul())
+                        }
+                        (Expr::Literal(lit), false, TokenType::DivisionAssignment) => assign!(lit, ib.build_div()),
+                        (Expr::Literal(lit), false, TokenType::RemainderAssignment) => assign!(lit, ib.build_rem()),
+                        (Expr::Literal(lit), false, TokenType::ExponentiationAssignment) => {
+                            assign!(lit, ib.build_pow())
+                        }
+                        (Expr::Literal(lit), false, TokenType::LeftShiftAssignment) => assign!(lit, ib.build_bitshl()),
+                        (Expr::Literal(lit), false, TokenType::RightShiftAssignment) => assign!(lit, ib.build_bitshr()),
+                        (Expr::Literal(lit), false, TokenType::UnsignedRightShiftAssignment) => {
+                            assign!(lit, ib.build_bitushr())
+                        }
+                        (Expr::Literal(lit), false, TokenType::BitwiseAndAssignment) => assign!(lit, ib.build_bitand()),
+                        (Expr::Literal(lit), false, TokenType::BitwiseOrAssignment) => assign!(lit, ib.build_bitor()),
+                        (Expr::Literal(lit), false, TokenType::BitwiseXorAssignment) => assign!(lit, ib.build_bitxor()),
+                        (e, _, TokenType::Assignment) => {
+                            ib.accept_expr(*right)?;
+                            ib.accept_expr(e)?;
+                            ib.build_dynamic_prop_set();
+                        }
+                        _ => unimplementedc!("Assignment to computed property"),
                     }
-
-                    match operator {
-                        TokenType::Assignment => ib.accept_expr(*right)?,
-                        TokenType::AdditionAssignment => assign!(ib.build_add()),
-                        TokenType::SubtractionAssignment => assign!(ib.build_sub()),
-                        TokenType::MultiplicationAssignment => assign!(ib.build_mul()),
-                        TokenType::DivisionAssignment => assign!(ib.build_div()),
-                        TokenType::RemainderAssignment => assign!(ib.build_rem()),
-                        TokenType::ExponentiationAssignment => assign!(ib.build_pow()),
-                        TokenType::LeftShiftAssignment => assign!(ib.build_bitshl()),
-                        TokenType::RightShiftAssignment => assign!(ib.build_bitshr()),
-                        TokenType::UnsignedRightShiftAssignment => assign!(ib.build_bitushr()),
-                        TokenType::BitwiseAndAssignment => assign!(ib.build_bitand()),
-                        TokenType::BitwiseOrAssignment => assign!(ib.build_bitor()),
-                        TokenType::BitwiseXorAssignment => assign!(ib.build_bitxor()),
-                        _ => unimplementedc!("Unknown operator"),
-                    }
-
-                    ib.build_global_store(&ident)?;
                 }
+                _ => unimplementedc!("Assignment to non-identifier"),
+            },
+            AssignmentTarget::LocalId(id) => {
+                ib.accept_expr(*right)?;
+                ib.build_local_store(id, false);
             }
-            Expr::PropertyAccess(prop) => {
-                macro_rules! assign {
-                    ($lit:expr,$e:expr) => {{
-                        let ident = $lit.to_identifier();
-                        ib.visit_property_access_expr(prop, false)?;
-                        ib.accept_expr(*right)?;
-                        $e;
-                        ib.build_static_prop_set(&ident)?;
-                    }};
-                }
-                match ((*prop.property).clone(), prop.computed, operator) {
-                    (Expr::Literal(lit), false, TokenType::Assignment) => {
-                        ib.accept_expr(*right)?;
-                        let ident = lit.to_identifier();
-                        ib.build_static_prop_set(&ident)?;
-                    }
-                    (Expr::Literal(lit), false, TokenType::AdditionAssignment) => assign!(lit, ib.build_add()),
-                    (Expr::Literal(lit), false, TokenType::SubtractionAssignment) => assign!(lit, ib.build_sub()),
-                    (Expr::Literal(lit), false, TokenType::MultiplicationAssignment) => assign!(lit, ib.build_mul()),
-                    (Expr::Literal(lit), false, TokenType::DivisionAssignment) => assign!(lit, ib.build_div()),
-                    (Expr::Literal(lit), false, TokenType::RemainderAssignment) => assign!(lit, ib.build_rem()),
-                    (Expr::Literal(lit), false, TokenType::ExponentiationAssignment) => assign!(lit, ib.build_pow()),
-                    (Expr::Literal(lit), false, TokenType::LeftShiftAssignment) => assign!(lit, ib.build_bitshl()),
-                    (Expr::Literal(lit), false, TokenType::RightShiftAssignment) => assign!(lit, ib.build_bitshr()),
-                    (Expr::Literal(lit), false, TokenType::UnsignedRightShiftAssignment) => {
-                        assign!(lit, ib.build_bitushr())
-                    }
-                    (Expr::Literal(lit), false, TokenType::BitwiseAndAssignment) => assign!(lit, ib.build_bitand()),
-                    (Expr::Literal(lit), false, TokenType::BitwiseOrAssignment) => assign!(lit, ib.build_bitor()),
-                    (Expr::Literal(lit), false, TokenType::BitwiseXorAssignment) => assign!(lit, ib.build_bitxor()),
-                    (e, _, TokenType::Assignment) => {
-                        ib.accept_expr(*right)?;
-                        ib.accept_expr(e)?;
-                        ib.build_dynamic_prop_set();
-                    }
-                    _ => unimplementedc!("Assignment to computed property"),
-                }
-            }
-            _ => unimplementedc!("Assignment to non-identifier"),
         }
 
         Ok(())
@@ -1268,15 +1273,15 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             _ => unimplementedc!("Non-identifier postfix expression"),
         }
 
-        ib.visit_assignment_expression(AssignmentExpr {
-            left: expr.clone(),
-            operator: match tt {
+        ib.visit_assignment_expression(AssignmentExpr::new(
+            AssignmentTarget::Expr(expr),
+            Expr::number_literal(1.0),
+            match tt {
                 TokenType::Increment => TokenType::AdditionAssignment,
                 TokenType::Decrement => TokenType::SubtractionAssignment,
                 _ => unreachable!("Token never emitted"),
             },
-            right: Box::new(Expr::number_literal(1.0)),
-        })?;
+        ))?;
         ib.build_pop();
 
         Ok(())
@@ -1311,15 +1316,15 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             _ => unimplementedc!("Non-identifier postfix expression"),
         }
 
-        ib.visit_assignment_expression(AssignmentExpr {
-            left: expr.clone(),
-            operator: match tt {
+        ib.visit_assignment_expression(AssignmentExpr::new(
+            AssignmentTarget::Expr(expr),
+            Expr::number_literal(1.0),
+            match tt {
                 TokenType::Increment => TokenType::AdditionAssignment,
                 TokenType::Decrement => TokenType::SubtractionAssignment,
                 _ => unreachable!("Token never emitted"),
             },
-            right: Box::new(Expr::number_literal(1.0)),
-        })?;
+        ))?;
         ib.build_pop();
 
         Ok(())
@@ -1673,14 +1678,21 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             None
         });
 
-        let binding = class
-            .name
-            .map(|name| VariableBinding {
-                kind: VariableDeclarationKind::Var,
-                ty: None,
-                name: VariableDeclarationName::Identifier(name),
-            })
-            .unwrap_or_else(|| VariableBinding::unnameable("DesugaredClass"));
+        // let binding = class
+        //     .name
+        //     .map(|name| VariableBinding {
+        //         kind: VariableDeclarationKind::Var,
+        //         ty: None,
+        //         name: VariableDeclarationName::Identifier(name),
+        //     })
+        //     .unwrap_or_else(|| VariableBinding::unnameable("DesugaredClass"));
+
+        let binding_id = match class.name {
+            Some(name) => ib.scope.add_local(name, VariableDeclarationKind::Var, false, None)?,
+            None => ib
+                .scope
+                .add_local("DesugaredClass", VariableDeclarationKind::Unnameable, false, None)?,
+        };
 
         let (parameters, mut statements) = match constructor {
             Some(fun) => (fun.parameters, fun.statements),
@@ -1697,11 +1709,11 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 }) = &member.kind
                 {
                     prestatements.push(Statement::Expression(Expr::Assignment(AssignmentExpr {
-                        left: Box::new(Expr::PropertyAccess(PropertyAccessExpr {
+                        left: AssignmentTarget::Expr(Box::new(Expr::PropertyAccess(PropertyAccessExpr {
                             computed: false,
                             property: Box::new(Expr::string_literal(Cow::Borrowed(name))),
                             target: Box::new(Expr::identifier(Cow::Borrowed("this"))),
-                        })),
+                        }))),
                         operator: TokenType::Assignment,
                         right: Box::new(value.clone()),
                     })));
@@ -1719,21 +1731,23 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             r#async: false,
         };
 
-        ib.visit_variable_declaration(VariableDeclaration {
-            binding: binding.clone(),
-            value: Some(Expr::Function(desugared_class)),
-        })?;
+        ib.visit_assignment_expression(AssignmentExpr::new_local_place(
+            binding_id,
+            Expr::Function(desugared_class),
+            TokenType::Assignment,
+        ))?;
+        let load_class_binding = Expr::Compiled(compile_local_load(binding_id, false));
 
         for member in class.members {
             if let ClassMemberKind::Method(method) = member.kind {
                 let name = method.name.expect("Class method did not have a name");
 
                 ib.accept(Statement::Expression(Expr::Assignment(AssignmentExpr {
-                    left: match member.static_ {
+                    left: AssignmentTarget::Expr(match member.static_ {
                         true => Box::new(Expr::PropertyAccess(PropertyAccessExpr {
                             computed: false,
                             property: Box::new(Expr::string_literal(Cow::Borrowed(name))),
-                            target: Box::new(Expr::binding(binding.clone())),
+                            target: Box::new(load_class_binding.clone()),
                         })),
                         false => Box::new(Expr::PropertyAccess(PropertyAccessExpr {
                             computed: false,
@@ -1741,10 +1755,10 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                             target: Box::new(Expr::PropertyAccess(PropertyAccessExpr {
                                 computed: false,
                                 property: Box::new(Expr::string_literal(Cow::Borrowed("prototype"))),
-                                target: Box::new(Expr::binding(binding.clone())),
+                                target: Box::new(load_class_binding.clone()),
                             })),
                         })),
-                    },
+                    }),
                     operator: TokenType::Assignment,
                     right: Box::new(Expr::Function(method)),
                 })))?

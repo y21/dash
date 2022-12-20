@@ -1,5 +1,6 @@
 use crate::parser::expr::ArrayLiteral;
 use crate::parser::expr::AssignmentExpr;
+use crate::parser::expr::AssignmentTarget;
 use crate::parser::expr::BinaryExpr;
 use crate::parser::expr::ConditionalExpr;
 use crate::parser::expr::Expr;
@@ -95,7 +96,10 @@ pub trait AstWalker<'a> {
     }
 
     fn visit_assignment_expression(&mut self, e: AssignmentExpr<'a>) -> () {
-        self.accept_expr(*e.left);
+        match e.left {
+            AssignmentTarget::Expr(e) => self.accept_expr(*e),
+            AssignmentTarget::LocalId(..) => {}
+        };
         self.accept_expr(*e.right);
     }
 
@@ -257,7 +261,6 @@ pub fn accept_expr_default<'a, V: AstWalker<'a> + ?Sized>(this: &mut V, e: Expr<
         Expr::Binary(e) => this.visit_binary_expression(e),
         Expr::Assignment(e) => this.visit_assignment_expression(e),
         Expr::Grouping(e) => this.visit_grouping_expression(e),
-        Expr::Literal(LiteralExpr::Binding(b)) => this.visit_binding_expression(b),
         Expr::Literal(LiteralExpr::Identifier(i)) => this.visit_identifier_expression(&i),
         Expr::Literal(l) => this.visit_literal_expression(l),
         Expr::Unary(e) => this.visit_unary_expression(e),
