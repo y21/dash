@@ -132,6 +132,11 @@ macro_rules! delegate {
             self.$field.apply(sc, handle, this, args)
         }
     };
+    (override $field:ident, type_of) => {
+        fn type_of(&self) -> $crate::value::Typeof {
+            self.$field.type_of()
+        }
+    };
 
     ($field:ident, $($method:ident),* $(,)?) => {
         $(

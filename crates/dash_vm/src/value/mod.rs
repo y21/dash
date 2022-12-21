@@ -485,7 +485,14 @@ impl<O: Object> PureBuiltin<O> {
 }
 
 impl<O: Object + 'static> Object for PureBuiltin<O> {
-    delegate!(inner, get_property, get_property_descriptor, get_prototype, apply);
+    delegate!(
+        inner,
+        get_property,
+        get_property_descriptor,
+        get_prototype,
+        apply,
+        type_of
+    );
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
         sc.impure_builtins();
