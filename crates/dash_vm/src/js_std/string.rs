@@ -302,42 +302,42 @@ pub fn from_char_code(cx: CallContext) -> Result<Value, Value> {
 
 pub fn substr(cx: CallContext) -> Result<Value, Value> {
     let string = cx.this.to_string(cx.scope)?;
-    let start = cx.args.first().unwrap_or_undefined().to_int32(cx.scope)?;
-    let length = cx.args.get(1).unwrap_or_undefined().to_int32(cx.scope)?;
+    let (start, end) = {
+        let start = match cx.args.first() {
+            Some(arg) => arg.to_int32(cx.scope)? as usize,
+            None => 0,
+        };
+        let end = match cx.args.get(1) {
+            Some(arg) => arg.to_int32(cx.scope)? as usize,
+            None => string.len(),
+        };
 
-    let start = if start < 0 { string.len() as i32 + start } else { start };
+        (start, end)
+    };
 
-    let length = if length < 0 { 0 } else { length };
-
-    let end = start + length;
-
-    let result = string
-        .chars()
-        .skip(start as usize)
-        .take((end - start) as usize)
-        .collect::<String>();
+    let bytes = string.as_bytes().get(start..start + end).unwrap_or(&[]);
+    let result = String::from_utf8_lossy(bytes).into_owned();
 
     Ok(Value::String(result.into()))
 }
 
 pub fn substring(cx: CallContext) -> Result<Value, Value> {
     let string = cx.this.to_string(cx.scope)?;
-    let start = cx.args.first().unwrap_or_undefined().to_int32(cx.scope)?;
-    let end = cx.args.get(1).unwrap_or_undefined().to_int32(cx.scope)?;
+    let (start, end) = {
+        let start = match cx.args.first() {
+            Some(arg) => arg.to_int32(cx.scope)? as usize,
+            None => 0,
+        };
+        let end = match cx.args.get(1) {
+            Some(arg) => arg.to_int32(cx.scope)? as usize,
+            None => string.len(),
+        };
 
-    let start = if start < 0 { 0 } else { start };
+        (start, end)
+    };
 
-    let end = if end < 0 { 0 } else { end };
-
-    let start = if start > end { end } else { start };
-
-    let end = if end < start { start } else { end };
-
-    let result = string
-        .chars()
-        .skip(start as usize)
-        .take((end - start) as usize)
-        .collect::<String>();
+    let bytes = string.as_bytes().get(start..end).unwrap_or(&[]);
+    let result = String::from_utf8_lossy(bytes).into_owned();
 
     Ok(Value::String(result.into()))
 }
