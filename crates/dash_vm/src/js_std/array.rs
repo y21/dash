@@ -164,6 +164,39 @@ pub fn filter(cx: CallContext) -> Result<Value, Value> {
     Ok(cx.scope.register(values).into())
 }
 
+pub fn reduce(cx: CallContext) -> Result<Value, Value> {
+    let this = Value::Object(cx.this.to_object(cx.scope)?);
+    let len = this.length_of_array_like(cx.scope)?;
+    let callback = cx.args.first().unwrap_or_undefined();
+    let initial_value = cx.args.get(1);
+
+    let (start, mut accumulator) = match (len, initial_value) {
+        (0, None) => throw!(cx.scope, "Reduce of empty array with no initial value"),
+        (0, Some(_)) => return Ok(initial_value.unwrap().clone()),
+        (_, Some(initial)) => (0, initial.clone()),
+        (1, None) => {
+            let pk = 0.to_string();
+            let pkv = this.get_property(cx.scope, pk.as_str().into())?;
+            return Ok(pkv);
+        }
+        (_, None) => {
+            let pkv = this.get_property(cx.scope, "0".into())?;
+            let pkv2 = this.get_property(cx.scope, "1".into())?;
+            let args = vec![pkv, pkv2, Value::number(1 as f64)];
+            (2, callback.apply(cx.scope, Value::undefined(), args)?)
+        }
+    };
+
+    for k in start..len {
+        let pk = k.to_string();
+        let pkv = this.get_property(cx.scope, pk.as_str().into())?;
+        let args = vec![accumulator, pkv, Value::number(k as f64)];
+        accumulator = callback.apply(cx.scope, Value::undefined(), args)?;
+    }
+
+    Ok(accumulator)
+}
+
 pub fn find(cx: CallContext) -> Result<Value, Value> {
     let this = Value::Object(cx.this.to_object(cx.scope)?);
     let len = this.length_of_array_like(cx.scope)?;

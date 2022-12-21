@@ -394,6 +394,7 @@ impl Vm {
             some: scope.statics.array_some;
             fill: scope.statics.array_fill;
             filter: scope.statics.array_filter;
+            reduce: scope.statics.array_reduce;
             find: scope.statics.array_find;
             findIndex: scope.statics.array_find_index;
             flat: scope.statics.array_flat;
