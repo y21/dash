@@ -200,21 +200,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "dash_jit"
+name = "dash_lexer"
+version = "0.3.0"
+dependencies = [
+ "dash_middle",
+ "either",
+]
+
+[[package]]
+name = "dash_llvm_jit_backend"
 version = "0.1.0"
 dependencies = [
  "cstr",
  "dash_middle",
  "indexmap",
  "llvm-sys",
-]
-
-[[package]]
-name = "dash_lexer"
-version = "0.3.0"
-dependencies = [
- "dash_middle",
- "either",
 ]
 
 [[package]]
@@ -320,6 +320,7 @@ dependencies = [
  "dash_rt_fs",
  "dash_rt_http",
  "dash_rt_script_modules",
+ "dash_rt_timers",
 ]
 
 [[package]]
@@ -333,13 +334,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "dash_rt_timers"
+version = "0.1.0"
+dependencies = [
+ "dash_middle",
+ "dash_rt",
+ "dash_vm",
+ "indexmap",
+ "tokio",
+]
+
+[[package]]
 name = "dash_vm"
 version = "0.3.0"
 dependencies = [
  "bitflags",
  "dash_compiler",
- "dash_jit",
  "dash_lexer",
+ "dash_llvm_jit_backend",
  "dash_middle",
  "dash_optimizer",
  "dash_parser",
