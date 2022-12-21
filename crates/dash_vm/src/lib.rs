@@ -68,17 +68,17 @@ pub struct Vm {
     /// If we are currently recording a trace for a loop iteration,
     /// this will contain the pc of the loop header and its end
     #[cfg(feature = "jit")]
-    recording_trace: Option<dash_jit::Trace>,
+    recording_trace: Option<dash_llvm_jit_backend::Trace>,
 
     #[cfg(feature = "jit")]
-    assembler: dash_jit::Assembler,
+    assembler: dash_llvm_jit_backend::Assembler,
 }
 
 
 impl Vm {
     pub fn new(params: VmParams) -> Self {
         #[cfg(feature = "jit")]
-        dash_jit::init();
+        dash_llvm_jit_backend::init();
 
         let mut gc = Gc::new();
         let statics = Statics::new(&mut gc);
@@ -104,7 +104,7 @@ impl Vm {
             #[cfg(feature = "jit")]
             recording_trace: None,
             #[cfg(feature = "jit")]
-            assembler: dash_jit::Assembler::new(),
+            assembler: dash_llvm_jit_backend::Assembler::new(),
         };
         vm.prepare();
         vm

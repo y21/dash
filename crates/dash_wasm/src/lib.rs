@@ -1,5 +1,4 @@
 use dash_compiler::FunctionCompiler;
-use dash_middle::compiler::scope::Scope;
 use dash_middle::compiler::StaticImportKind;
 use dash_middle::parser::statement::VariableDeclarationName;
 use dash_optimizer::consteval::Eval;

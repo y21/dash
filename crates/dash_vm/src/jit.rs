@@ -1,9 +1,9 @@
 use std::rc::Rc;
 
-use dash_jit::assembler::JitCacheKey;
-use dash_jit::assembler::JitResult;
-use dash_jit::Trace;
-use dash_jit::Value as JitValue;
+use dash_llvm_jit_backend::assembler::JitCacheKey;
+use dash_llvm_jit_backend::assembler::JitResult;
+use dash_llvm_jit_backend::Trace;
+use dash_llvm_jit_backend::Value as JitValue;
 use dash_middle::compiler::constant::Function;
 
 use crate::value::primitive::Number;

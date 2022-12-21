@@ -1,5 +1,5 @@
 [package]
-name = "dash_jit"
+name = "dash_llvm_jit_backend"
 version = "0.1.0"
 edition = "2021"
 

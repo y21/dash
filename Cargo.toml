@@ -14,7 +14,7 @@ members = [
     "crates/dash_proc_macro",
     "crates/dash_rt",
     "crates/dash_dlloader",
-    "crates/dash_jit",
+    "crates/dash_llvm_jit_backend",
     "crates/dash_decompiler",
     "crates/dash_rt_modules",
     "crates/dash_rt_http",
