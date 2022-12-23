@@ -336,9 +336,9 @@ impl Value {
 }
 
 #[cfg(feature = "jit")]
-impl From<&Value> for dash_llvm_jit_backend::value::Value {
+impl From<&Value> for dash_llvm_jit_backend::legacy::value::Value {
     fn from(v: &Value) -> Self {
-        use dash_llvm_jit_backend::value::Value as JitValue;
+        use dash_llvm_jit_backend::legacy::value::Value as JitValue;
 
         match v {
             Value::Boolean(b) => JitValue::Boolean(*b),

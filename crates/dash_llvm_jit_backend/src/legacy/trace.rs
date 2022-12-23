@@ -5,10 +5,10 @@ use dash_middle::compiler::constant::Function;
 use dash_middle::compiler::instruction as inst;
 use indexmap::IndexMap;
 
-use crate::assembler::Assembler;
-use crate::assembler::JitCacheKey;
-use crate::assembler::JitResult;
-use crate::value::Value;
+use super::assembler::Assembler;
+use super::assembler::JitCacheKey;
+use super::assembler::JitResult;
+use super::value::Value;
 
 #[derive(Debug)]
 pub struct Trace {

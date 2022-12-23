@@ -74,8 +74,8 @@ type JitFunction = unsafe extern "C" fn(*mut Value) -> i64;
 
 const EMPTY: *const i8 = cstr!("").as_ptr();
 
-use crate::trace::Trace;
-use crate::value::Value;
+use super::trace::Trace;
+use super::value::Value;
 
 pub struct JitResult {
     pub function: JitFunction,

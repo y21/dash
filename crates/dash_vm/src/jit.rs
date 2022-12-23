@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
-use dash_llvm_jit_backend::assembler::JitCacheKey;
-use dash_llvm_jit_backend::assembler::JitResult;
+use dash_llvm_jit_backend::legacy::assembler::JitCacheKey;
+use dash_llvm_jit_backend::legacy::assembler::JitResult;
 use dash_llvm_jit_backend::Trace;
 use dash_llvm_jit_backend::Value as JitValue;
 use dash_middle::compiler::constant::Function;
