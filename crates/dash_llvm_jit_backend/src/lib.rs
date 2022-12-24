@@ -6,6 +6,7 @@ use llvm_sys::target::LLVM_InitializeNativeAsmPrinter;
 use llvm_sys::target::LLVM_InitializeNativeTarget;
 
 pub mod legacy;
+pub mod passes;
 // pub mod assembler;
 // pub mod trace;
 // pub mod value;

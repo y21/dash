@@ -19,6 +19,9 @@ pub struct Trace {
     pub(crate) end: usize,
     /// A vector of conditional jumps, i.e. diverging control flow.
     /// The index is the # of the jump and the bool represents whether the jump is taken.
+    ///
+    /// Note for later: can change to HashSet<usize, bool> where usize is the IP if a trace
+    /// is composed of multiple possible paths
     pub(crate) conditional_jumps: Vec<bool>,
 
     pub(crate) locals: IndexMap<u16, Value>,
@@ -36,6 +39,10 @@ impl Trace {
             locals: IndexMap::new(),
             constants: HashMap::new(),
         }
+    }
+
+    pub fn get_conditional_jump(&self, id: usize) -> bool {
+        self.conditional_jumps[id]
     }
 
     pub fn record_local(&mut self, index: u16, value: Value) {
