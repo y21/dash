@@ -3,16 +3,29 @@ use std::fmt::Debug;
 use std::ptr;
 
 use llvm_sys::analysis::LLVMVerifyFunction;
+use llvm_sys::core::LLVMCreatePassManager;
 use llvm_sys::core::LLVMModuleCreateWithName;
 use llvm_sys::core::LLVMPrintModuleToString;
+use llvm_sys::core::LLVMRunFunctionPassManager;
+use llvm_sys::core::LLVMRunPassManager;
 use llvm_sys::execution_engine::LLVMCreateExecutionEngineForModule;
 use llvm_sys::execution_engine::LLVMExecutionEngineRef;
+use llvm_sys::execution_engine::LLVMGetFunctionAddress;
 use llvm_sys::prelude::LLVMModuleRef;
+use llvm_sys::prelude::LLVMPassManagerRef;
+use llvm_sys::prelude::LLVMValueRef;
+use llvm_sys::target_machine::LLVMCodeGenOptLevel;
+use llvm_sys::transforms::pass_manager_builder::LLVMPassManagerBuilderCreate;
+use llvm_sys::transforms::pass_manager_builder::LLVMPassManagerBuilderPopulateFunctionPassManager;
+use llvm_sys::transforms::pass_manager_builder::LLVMPassManagerBuilderPopulateModulePassManager;
+use llvm_sys::transforms::pass_manager_builder::LLVMPassManagerBuilderSetOptLevel;
 
 use crate::function::CompileQuery;
 use crate::function::Function;
 use crate::passes::infer::InferResult;
 use crate::Trace;
+
+pub type JitFunction = unsafe extern "C" fn(*mut (), u64);
 
 #[macro_export]
 macro_rules! cstr {
@@ -25,6 +38,7 @@ macro_rules! cstr {
 pub struct Backend {
     module: LLVMModuleRef,
     engine: LLVMExecutionEngineRef,
+    pass_manager: LLVMPassManagerRef,
 }
 
 impl Backend {
@@ -35,16 +49,48 @@ impl Backend {
         unsafe { LLVMCreateExecutionEngineForModule(&mut engine, module, &mut error) };
         assert!(!engine.is_null());
 
-        Self { module, engine }
+        let pass_manager = unsafe {
+            let pm = LLVMCreatePassManager();
+            let pmb = LLVMPassManagerBuilderCreate();
+            LLVMPassManagerBuilderSetOptLevel(pmb, LLVMCodeGenOptLevel::LLVMCodeGenLevelAggressive as u32);
+            LLVMPassManagerBuilderPopulateFunctionPassManager(pmb, pm);
+            LLVMPassManagerBuilderPopulateModulePassManager(pmb, pm);
+            pm
+        };
+
+        Self {
+            module,
+            engine,
+            pass_manager,
+        }
     }
 
-    pub fn compile_trace<Q: CompileQuery>(&self, q: Q, bytecode: &[u8], infer: InferResult, trace: &Trace) {
+    pub fn compile_trace<Q: CompileQuery>(
+        &self,
+        q: Q,
+        bytecode: &[u8],
+        infer: InferResult,
+        trace: &Trace,
+    ) -> JitFunction {
         let mut fun = Function::new(self);
 
         fun.init_locals(&infer.local_tys);
         fun.compile_trace(bytecode, q, &infer, &trace);
-        self.print_module();
+
+        self.run_pass_manager();
+
+        #[cfg(debug_assertions)]
         fun.verify();
+
+        self.print_module();
+        let fun = self.compile_fn(fun.function_name());
+        fun
+    }
+
+    pub fn run_pass_manager(&self) {
+        unsafe {
+            LLVMRunPassManager(self.pass_manager, self.module);
+        }
     }
 
     pub fn print_module(&self) {
@@ -59,5 +105,14 @@ impl Backend {
 
     pub fn engine(&self) -> LLVMExecutionEngineRef {
         self.engine
+    }
+
+    pub fn compile_fn(&self, name: &CStr) -> JitFunction {
+        unsafe {
+            let addr = LLVMGetFunctionAddress(self.engine, name.as_ptr());
+            assert!(addr != 0);
+            let fun = std::mem::transmute::<u64, JitFunction>(addr);
+            fun
+        }
     }
 }

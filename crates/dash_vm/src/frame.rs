@@ -63,7 +63,7 @@ impl LoopCounter {
     }
 
     pub fn is_hot(&self) -> bool {
-        self.0 > 5
+        self.0 > 100
     }
 }
 
