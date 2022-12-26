@@ -67,6 +67,7 @@ use self::{
 
 use super::{local::LocalScope, Vm};
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[repr(C)]
 pub enum Value {
     /// The number type
     Number(Number),

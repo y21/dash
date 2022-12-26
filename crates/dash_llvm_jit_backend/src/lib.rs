@@ -5,12 +5,12 @@ use llvm_sys::target::LLVM_InitializeNativeAsmParser;
 use llvm_sys::target::LLVM_InitializeNativeAsmPrinter;
 use llvm_sys::target::LLVM_InitializeNativeTarget;
 
+pub mod backend;
+pub mod function;
 pub mod legacy;
 pub mod passes;
-// pub mod assembler;
-// pub mod trace;
-// pub mod value;
 
+pub use backend::Backend;
 pub use legacy::assembler::Assembler;
 pub use legacy::trace::Trace;
 pub use legacy::value::Value;

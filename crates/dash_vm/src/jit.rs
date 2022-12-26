@@ -1,7 +1,9 @@
 use std::rc::Rc;
 
+use dash_llvm_jit_backend::function::CompileQuery;
+use dash_llvm_jit_backend::function::JITConstant;
 use dash_llvm_jit_backend::legacy::assembler::JitResult;
-use dash_llvm_jit_backend::passes::infer::infer_types;
+use dash_llvm_jit_backend::passes::infer::infer_types_and_labels;
 use dash_llvm_jit_backend::passes::infer::InferQueryProvider;
 use dash_llvm_jit_backend::passes::infer::Type;
 use dash_llvm_jit_backend::Trace;
@@ -37,15 +39,28 @@ impl<'a> InferQueryProvider for QueryProvider<'a> {
     }
 }
 
+impl<'a> CompileQuery for QueryProvider<'a> {
+    fn get_constant(&self, id: u16) -> JITConstant {
+        let constant = &self.vm.frames.last().unwrap().function.constants[usize::from(id)];
+        match constant {
+            Constant::Boolean(b) => JITConstant::Boolean(*b),
+            Constant::Number(n) => JITConstant::F64(*n), // TODO: I64 may be ok
+            _ => todo!(),
+        }
+    }
+}
+
 fn handle_loop_trace(vm: &mut Vm, loop_end_ip: usize) {
     let frame = vm.frames.last().unwrap();
     let trace = vm.recording_trace.as_ref().unwrap();
     let bytecode = &frame.function.buffer[trace.start()..trace.end()];
 
-    let Ok(types) = infer_types(bytecode, QueryProvider { vm }) else {
+    let Ok(types) = infer_types_and_labels(bytecode, QueryProvider { vm }) else {
         todo!("Mark code region as poisoned");
     };
-    // println!("{x:?}");
+
+    vm.jit_backend
+        .compile_trace(QueryProvider { vm }, bytecode, types, &trace);
 
     std::process::abort();
 }

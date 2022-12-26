@@ -71,7 +71,7 @@ pub struct Vm {
     recording_trace: Option<dash_llvm_jit_backend::Trace>,
 
     #[cfg(feature = "jit")]
-    assembler: dash_llvm_jit_backend::Assembler,
+    jit_backend: dash_llvm_jit_backend::Backend,
 }
 
 
@@ -104,7 +104,7 @@ impl Vm {
             #[cfg(feature = "jit")]
             recording_trace: None,
             #[cfg(feature = "jit")]
-            assembler: dash_llvm_jit_backend::Assembler::new(),
+            jit_backend: dash_llvm_jit_backend::Backend::new(),
         };
         vm.prepare();
         vm

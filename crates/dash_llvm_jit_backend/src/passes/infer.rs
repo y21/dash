@@ -1,13 +1,32 @@
 use std::collections::HashMap;
+use std::iter::Enumerate;
 use std::slice::Iter;
 
+use boolvec::BoolVec;
 use dash_middle::compiler::instruction::Instruction;
+use llvm_sys::core::LLVMDoubleType;
+use llvm_sys::core::LLVMInt1Type;
+use llvm_sys::core::LLVMInt64Type;
+use llvm_sys::prelude::LLVMTypeRef;
+use llvm_sys::prelude::LLVMValueRef;
 
 #[derive(Debug, Clone)]
 pub enum Type {
     I64,
     F64,
     Boolean,
+}
+
+impl Type {
+    pub fn to_llvm_type(&self) -> LLVMTypeRef {
+        unsafe {
+            match self {
+                Self::I64 => LLVMInt64Type(),
+                Self::F64 => LLVMDoubleType(),
+                Self::Boolean => LLVMInt1Type(),
+            }
+        }
+    }
 }
 
 pub trait InferQueryProvider {
@@ -17,16 +36,20 @@ pub trait InferQueryProvider {
 }
 
 struct DecodeContext<'a> {
-    iter: Iter<'a, u8>,
+    iter: Enumerate<Iter<'a, u8>>,
     type_stack: Vec<Type>,
     local_types: HashMap<u16, Type>,
+    /// Instruction pointer maps to whether this is the start of a label
+    labels: BoolVec,
 }
+
 impl<'a> DecodeContext<'a> {
     pub fn new(bytes: &'a [u8]) -> Self {
         Self {
-            iter: bytes.iter(),
+            iter: bytes.iter().enumerate(),
             type_stack: Vec::new(),
             local_types: HashMap::new(),
+            labels: BoolVec::filled_with(bytes.len(), false),
         }
     }
 
@@ -45,22 +68,30 @@ impl<'a> DecodeContext<'a> {
         self.type_stack.pop()
     }
 
-    pub fn next_instruction(&mut self) -> Option<Instruction> {
-        self.iter.next().map(|&b| Instruction::from_repr(b).unwrap())
+    pub fn next_instruction(&mut self) -> Option<(usize, Instruction)> {
+        self.iter.next().map(|(a, &b)| (a, Instruction::from_repr(b).unwrap()))
     }
 
     pub fn next_byte(&mut self) -> u8 {
-        self.iter.next().copied().unwrap()
+        self.iter.next().map(|(_, &b)| b).unwrap()
     }
 
     pub fn next_wide(&mut self) -> u16 {
         let a = self.next_byte();
         let b = self.next_byte();
-        u16::from_be_bytes([a, b])
+        u16::from_ne_bytes([a, b])
+    }
+
+    pub fn next_wide_signed(&mut self) -> i16 {
+        self.next_wide() as i16
     }
 
     pub fn set_inferred_type(&mut self, index: u16, ty: Type) {
         self.local_types.insert(index, ty);
+    }
+
+    pub fn set_label_at(&mut self, at: usize) {
+        self.labels.set(at, true);
     }
 }
 
@@ -76,12 +107,17 @@ pub enum InferError {
     },
 }
 
-pub fn infer_types<Q: InferQueryProvider>(bytecode: &[u8], query: Q) -> Result<HashMap<u16, Type>, InferError> {
+pub struct InferResult {
+    pub local_tys: HashMap<u16, Type>,
+    pub labels: BoolVec,
+}
+
+pub fn infer_types_and_labels<Q: InferQueryProvider>(bytecode: &[u8], query: Q) -> Result<InferResult, InferError> {
     let mut iter = bytecode.iter();
     let mut cx = DecodeContext::new(bytecode);
     let mut branch_count = 0;
 
-    while let Some(instr) = cx.next_instruction() {
+    while let Some((index, instr)) = cx.next_instruction() {
         match instr {
             Instruction::Add | Instruction::Sub | Instruction::Mul | Instruction::Div | Instruction::Rem => {
                 let (left, right) = cx.pop_two();
@@ -144,23 +180,28 @@ pub fn infer_types<Q: InferQueryProvider>(bytecode: &[u8], query: Q) -> Result<H
             | Instruction::Ne
             | Instruction::StrictEq
             | Instruction::StrictNe => {
-                let _ = cx.pop_two(); // TODO: check types?
+                let _ = cx.pop_two();
                 cx.push(Type::Boolean);
             }
             Instruction::Jmp => {
-                let n = cx.next_wide() as i16;
+                let n = cx.next_wide_signed() + 3;
+                let target_ip = index as i16 + n;
                 for _ in 0..n {
                     cx.next_byte();
                 }
+                cx.set_label_at(target_ip as usize);
             }
             Instruction::JmpFalseP | Instruction::JmpNullishP | Instruction::JmpTrueP | Instruction::JmpUndefinedP => {
                 let _ = cx.pop();
-                let count = cx.next_wide() as i16;
+                let count = cx.next_wide_signed() + 3;
+                let target_ip = index as i16 + count;
 
                 if query.did_take_nth_branch(branch_count) {
                     for _ in 0..count {
                         cx.next_byte();
                     }
+
+                    cx.set_label_at(target_ip as usize);
                 }
 
                 branch_count += 1;
@@ -170,5 +211,8 @@ pub fn infer_types<Q: InferQueryProvider>(bytecode: &[u8], query: Q) -> Result<H
         }
     }
 
-    Ok(cx.local_types)
+    Ok(InferResult {
+        labels: cx.labels,
+        local_tys: cx.local_types,
+    })
 }
