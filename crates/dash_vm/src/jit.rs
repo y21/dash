@@ -63,6 +63,8 @@ fn handle_loop_trace(vm: &mut Vm) {
     unsafe {
         fun(vm.stack.as_mut_ptr().cast(), u64::try_from(frame.sp).unwrap());
     }
+
+    vm.recording_trace = None;
 }
 
 pub fn handle_loop_end(vm: &mut Vm, loop_end_ip: usize) {

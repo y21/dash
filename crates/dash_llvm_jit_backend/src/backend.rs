@@ -2,13 +2,17 @@ use std::ffi::CStr;
 use std::fmt::Debug;
 use std::ptr;
 
+use dash_middle::compiler::instruction::Instruction;
+use llvm_sys::analysis::LLVMVerifierFailureAction;
 use llvm_sys::analysis::LLVMVerifyFunction;
+use llvm_sys::analysis::LLVMVerifyModule;
 use llvm_sys::core::LLVMCreatePassManager;
 use llvm_sys::core::LLVMModuleCreateWithName;
 use llvm_sys::core::LLVMPrintModuleToString;
 use llvm_sys::core::LLVMRunFunctionPassManager;
 use llvm_sys::core::LLVMRunPassManager;
 use llvm_sys::execution_engine::LLVMCreateExecutionEngineForModule;
+use llvm_sys::execution_engine::LLVMExecutionEngineGetErrMsg;
 use llvm_sys::execution_engine::LLVMExecutionEngineRef;
 use llvm_sys::execution_engine::LLVMGetFunctionAddress;
 use llvm_sys::prelude::LLVMModuleRef;
@@ -73,18 +77,23 @@ impl Backend {
         trace: &Trace,
     ) -> JitFunction {
         let mut fun = Function::new(self);
-
         fun.init_locals(&infer.local_tys);
-        fun.compile_trace(bytecode, q, &infer, &trace);
+        fun.compile_trace(bytecode, &q, &infer, &trace);
+
+        #[cfg(debug_assertions)]
+        self.verify();
 
         self.run_pass_manager();
 
-        #[cfg(debug_assertions)]
-        fun.verify();
-
-        self.print_module();
         let fun = self.compile_fn(fun.function_name());
         fun
+    }
+
+    pub fn verify(&self) {
+        unsafe {
+            let mut msg = ptr::null_mut();
+            LLVMVerifyModule(self.module, LLVMVerifierFailureAction::LLVMAbortProcessAction, &mut msg);
+        }
     }
 
     pub fn run_pass_manager(&self) {

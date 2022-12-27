@@ -1027,20 +1027,6 @@ impl Vm {
             trace.record_conditional_jump(did_jump);
         }
     }
-
-    #[cfg(feature = "jit")]
-    pub(crate) fn record_local(&mut self, index: u16, value: &Value) {
-        if let Some(trace) = &mut self.recording_trace {
-            trace.record_local(index, value.into());
-        }
-    }
-
-    #[cfg(feature = "jit")]
-    pub(crate) fn record_constant(&mut self, index: u16, value: &Constant) {
-        if let Some(trace) = &mut self.recording_trace {
-            trace.record_constant(index, value.into());
-        }
-    }
 }
 
 pub enum PromiseAction {

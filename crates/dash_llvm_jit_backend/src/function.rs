@@ -289,8 +289,6 @@ impl Function {
         self.setup_builder = Some(setup_builder);
 
         for (&local_index, ty) in locals {
-            // let temp_space = unsafe { LLVMBuildAlloca(setup_builder, self.value_union, cstr!("temp")) };
-
             let space = self.alloca_local(setup_builder, ty);
 
             let stack_ptr = self.get_param(0);
@@ -319,7 +317,9 @@ impl Function {
 
         // Compile exit block
         // Write all the values back to the stack
-        let (exit_block, exit_builder) = self.append_and_enter_block();
+        let (exit_block, exit_builder) = self.append_block();
+        self.position_builder_at(exit_builder, exit_block);
+
         self.exit_block = Some(exit_block);
         self.exit_builder = Some(exit_builder);
 
@@ -350,7 +350,7 @@ impl Function {
         self.build_retvoid(exit_builder);
     }
 
-    pub fn compile_trace<Q: CompileQuery>(&mut self, bytecode: &[u8], q: Q, infer: &InferResult, trace: &Trace) {
+    pub fn compile_trace<Q: CompileQuery>(&mut self, bytecode: &[u8], q: &Q, infer: &InferResult, trace: &Trace) {
         let mut cx = CompilationContext::new(self, bytecode);
 
         let mut jumps = 0;
@@ -407,7 +407,6 @@ impl Function {
                     let did_take = trace.conditional_jumps[jumps];
                     jumps += 1;
                     cx.emit_guard(value, !did_take);
-                    // TODO: Emit guard here to assert value is false or true, depending on value of `did_take`
                 }
                 _ => panic!("Unimplemented instruction: {:?}", instr),
             }
