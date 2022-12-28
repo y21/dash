@@ -72,6 +72,11 @@ use crate::passes::infer::Type;
 use crate::Backend;
 use crate::Trace;
 
+#[derive(Debug)]
+pub enum CompileError {
+    UnimplementedInstr(Instruction),
+}
+
 pub struct Function {
     function: LLVMValueRef,
     value_union: LLVMTypeRef,
@@ -350,7 +355,13 @@ impl Function {
         self.build_retvoid(exit_builder);
     }
 
-    pub fn compile_trace<Q: CompileQuery>(&mut self, bytecode: &[u8], q: &Q, infer: &InferResult, trace: &Trace) {
+    pub fn compile_trace<Q: CompileQuery>(
+        &mut self,
+        bytecode: &[u8],
+        q: &Q,
+        infer: &InferResult,
+        trace: &Trace,
+    ) -> Result<(), CompileError> {
         let mut cx = CompilationContext::new(self, bytecode);
 
         let mut jumps = 0;
@@ -408,9 +419,11 @@ impl Function {
                     jumps += 1;
                     cx.emit_guard(value, !did_take);
                 }
-                _ => panic!("Unimplemented instruction: {:?}", instr),
+                _ => return Err(CompileError::UnimplementedInstr(instr)),
             }
         }
+
+        Ok(())
     }
 
     pub fn verify(&self) {

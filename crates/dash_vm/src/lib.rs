@@ -20,7 +20,6 @@ use self::{
 };
 
 #[cfg(feature = "jit")]
-use dash_middle::compiler::constant::Constant;
 use dash_middle::compiler::instruction::Instruction;
 use util::unlikely;
 use value::{promise::{Promise, PromiseState}, ValueContext, function::bound::BoundFunction, PureBuiltin, object::NamedObject};
@@ -1010,6 +1009,12 @@ impl Vm {
             PromiseAction::Resolve => PromiseState::Resolved(arg),
             PromiseAction::Reject => PromiseState::Rejected(arg),
         };
+    }
+
+    /// Marks an instruction pointer (i.e. code region) as JIT-"poisoned".
+    /// It will replace the instruction with one that does not attempt to trigger a trace.
+    pub(crate) fn poison_ip(&mut self, ip: usize) {
+        self.frames.last().unwrap().function.poison_ip(ip);
     }
 
     pub(crate) fn builtins_purity(&self) -> bool {

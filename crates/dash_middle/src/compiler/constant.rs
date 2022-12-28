@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+use std::collections::HashSet;
 use std::ops::Deref;
 use std::rc::Rc;
 
@@ -22,6 +24,19 @@ pub struct Function {
     pub r#async: bool,
     /// If the parameter list uses the rest operator ..., then this will be Some(local_id)
     pub rest_local: Option<u16>,
+    // JIT-poisoned code regions (instruction pointers)
+    // TODO: refactor this a bit so this isn't "visible" to e.g. the bytecode compiler with builder pattern
+    pub poison_ips: RefCell<HashSet<usize>>,
+}
+
+impl Function {
+    pub fn poison_ip(&self, ip: usize) {
+        self.poison_ips.borrow_mut().insert(ip);
+    }
+
+    pub fn is_poisoned_ip(&self, ip: usize) -> bool {
+        self.poison_ips.borrow().contains(&ip)
+    }
 }
 
 #[cfg_attr(feature = "format", derive(Serialize, Deserialize))]

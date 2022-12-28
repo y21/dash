@@ -1,4 +1,6 @@
+use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::collections::HashSet;
 use std::rc::Rc;
 
 use dash_middle::compiler::constant::Function;
@@ -148,6 +150,7 @@ impl Frame {
             ty: FunctionKind::Function,
             r#async: false,
             rest_local: None,
+            poison_ips: RefCell::new(HashSet::new()),
         };
 
         Self {

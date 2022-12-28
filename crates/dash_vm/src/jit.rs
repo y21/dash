@@ -13,6 +13,7 @@ use crate::Vm;
 
 struct QueryProvider<'a> {
     vm: &'a Vm,
+    trace: &'a Trace,
 }
 
 impl<'a> InferQueryProvider for QueryProvider<'a> {
@@ -32,7 +33,7 @@ impl<'a> InferQueryProvider for QueryProvider<'a> {
         }
     }
     fn did_take_nth_branch(&self, nth: usize) -> bool {
-        self.vm.recording_trace.as_ref().unwrap().get_conditional_jump(nth)
+        self.trace.get_conditional_jump(nth)
     }
 }
 
@@ -47,33 +48,35 @@ impl<'a> CompileQuery for QueryProvider<'a> {
     }
 }
 
-fn handle_loop_trace(vm: &mut Vm) {
+fn handle_loop_trace(vm: &mut Vm, jmp_instr_ip: usize) {
     let frame = vm.frames.last().unwrap();
-    let trace = vm.recording_trace.as_ref().unwrap();
+    let trace = vm.recording_trace.take().unwrap();
     let bytecode = &frame.function.buffer[trace.start()..trace.end()];
 
-    let Ok(types) = infer_types_and_labels(bytecode, QueryProvider { vm }) else {
-        todo!("Mark code region as poisoned");
+    let Ok(types) = infer_types_and_labels(bytecode, QueryProvider { vm, trace: &trace }) else {
+        vm.poison_ip(jmp_instr_ip);
+        return;
     };
 
     let fun = vm
         .jit_backend
-        .compile_trace(QueryProvider { vm }, bytecode, types, &trace);
+        .compile_trace(QueryProvider { vm, trace: &trace }, bytecode, types, &trace);
 
     unsafe {
         fun(vm.stack.as_mut_ptr().cast(), u64::try_from(frame.sp).unwrap());
     }
 
-    vm.recording_trace = None;
+    // TODO (important): synchronize frame ip here, depending on the exit
 }
 
 pub fn handle_loop_end(vm: &mut Vm, loop_end_ip: usize) {
     let frame = vm.frames.last().unwrap();
     let origin = Rc::as_ptr(&frame.function);
+    let vm_instr_ip = loop_end_ip - 3;
 
     if let Some(trace) = vm.recording_trace.as_ref() {
         if trace.start() == frame.ip {
-            handle_loop_trace(vm);
+            handle_loop_trace(vm, vm_instr_ip);
         } else {
             todo!("Side exit")
         }
@@ -84,6 +87,12 @@ pub fn handle_loop_end(vm: &mut Vm, loop_end_ip: usize) {
 
         counter.inc();
         if counter.is_hot() {
+            if frame.function.is_poisoned_ip(vm_instr_ip) {
+                // We have already tried to compile this loop, and failed
+                // So don't bother re-tracing
+                return;
+            }
+
             // Hot loop detected
             // Start recording a trace (i.e. every opcode) for the next loop iteration
             // The trace will go on until either:

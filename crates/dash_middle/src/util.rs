@@ -204,3 +204,14 @@ impl LevelStack {
         self.0.pop()
     }
 }
+
+#[macro_export]
+macro_rules! timed {
+    ($name:expr, $code:expr) => {{
+        let start = std::time::Instant::now();
+        let result = $code;
+        let elapsed = start.elapsed();
+        println!("{} - {:?}", $name, elapsed);
+        result
+    }};
+}
