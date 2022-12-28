@@ -29,7 +29,11 @@ use crate::function::Function;
 use crate::passes::infer::InferResult;
 use crate::Trace;
 
-pub type JitFunction = unsafe extern "C" fn(*mut (), u64);
+pub type JitFunction = unsafe extern "C" fn(
+    *mut (),  // stack pointer
+    u64,      // stack offset for frame
+    *mut u64, // out pointer for the IP after exiting
+);
 
 #[macro_export]
 macro_rules! cstr {
@@ -77,8 +81,9 @@ impl Backend {
         trace: &Trace,
     ) -> JitFunction {
         let mut fun = Function::new(self);
-        fun.init_locals(&infer.local_tys);
+        fun.compile_setup(&infer.local_tys);
         fun.compile_trace(bytecode, &q, &infer, &trace);
+        fun.compile_exit_block(&infer.local_tys);
 
         #[cfg(debug_assertions)]
         self.verify();

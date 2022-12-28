@@ -62,11 +62,18 @@ fn handle_loop_trace(vm: &mut Vm, jmp_instr_ip: usize) {
         .jit_backend
         .compile_trace(QueryProvider { vm, trace: &trace }, bytecode, types, &trace);
 
+    let offset_ip = trace.start();
+    let mut target_ip = 0;
+
     unsafe {
-        fun(vm.stack.as_mut_ptr().cast(), u64::try_from(frame.sp).unwrap());
+        let stack_ptr = vm.stack.as_mut_ptr().cast();
+        let frame_sp = u64::try_from(frame.sp).unwrap();
+        let out_target_ip = &mut target_ip;
+        fun(stack_ptr, frame_sp, out_target_ip);
     }
 
-    // TODO (important): synchronize frame ip here, depending on the exit
+    // `target_ip` is not the "real" IP, there may be some extra instructions before the loop header
+    vm.frames.last_mut().unwrap().ip = offset_ip + target_ip as usize;
 }
 
 pub fn handle_loop_end(vm: &mut Vm, loop_end_ip: usize) {

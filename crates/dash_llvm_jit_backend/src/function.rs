@@ -12,6 +12,7 @@ use indexmap::Equivalent;
 use llvm_sys::analysis::LLVMVerifierFailureAction;
 use llvm_sys::analysis::LLVMVerifyFunction;
 use llvm_sys::core::LLVMAddFunction;
+use llvm_sys::core::LLVMAddIncoming;
 use llvm_sys::core::LLVMAppendBasicBlock;
 use llvm_sys::core::LLVMBuildAdd;
 use llvm_sys::core::LLVMBuildAlloca;
@@ -27,6 +28,7 @@ use llvm_sys::core::LLVMBuildFSub;
 use llvm_sys::core::LLVMBuildGEP2;
 use llvm_sys::core::LLVMBuildLoad2;
 use llvm_sys::core::LLVMBuildMul;
+use llvm_sys::core::LLVMBuildPhi;
 use llvm_sys::core::LLVMBuildRet;
 use llvm_sys::core::LLVMBuildRetVoid;
 use llvm_sys::core::LLVMBuildStore;
@@ -38,6 +40,7 @@ use llvm_sys::core::LLVMCreateBuilder;
 use llvm_sys::core::LLVMDoubleType;
 use llvm_sys::core::LLVMFloatType;
 use llvm_sys::core::LLVMFunctionType;
+use llvm_sys::core::LLVMGetLastBasicBlock;
 use llvm_sys::core::LLVMGetParam;
 use llvm_sys::core::LLVMGetValueName2;
 use llvm_sys::core::LLVMInt16TypeInContext;
@@ -82,10 +85,10 @@ pub struct Function {
     value_union: LLVMTypeRef,
     locals: HashMap<u16, (LLVMValueRef, LLVMTypeRef)>,
     labels: HashMap<u16, (LLVMBasicBlockRef, LLVMBuilderRef)>,
-    setup_block: Option<LLVMBasicBlockRef>,
-    setup_builder: Option<LLVMBuilderRef>,
-    exit_block: Option<LLVMBasicBlockRef>,
-    exit_builder: Option<LLVMBuilderRef>,
+    setup_block: LLVMBasicBlockRef,
+    builder: LLVMBuilderRef,
+    exit_block: LLVMBasicBlockRef,
+    exit_guards: Vec<(u64, LLVMBasicBlockRef)>,
 }
 
 impl Function {
@@ -107,7 +110,11 @@ impl Function {
     }
     fn create_function_type(engine: LLVMExecutionEngineRef) -> LLVMTypeRef {
         unsafe {
-            let mut args = [LLVMPointerType(Self::value_type(engine), 0), LLVMInt64Type()];
+            let mut args = [
+                LLVMPointerType(Self::value_type(engine), 0),
+                LLVMInt64Type(),
+                LLVMPointerType(LLVMInt64Type(), 0),
+            ];
             let ret = LLVMVoidType();
             LLVMFunctionType(ret, args.as_mut_ptr(), args.len() as u32, 0)
         }
@@ -119,15 +126,19 @@ impl Function {
         let function = unsafe { LLVMAddFunction(backend.module(), cstr!("jit"), ty) };
         unsafe { LLVMSetInstructionCallConv(function, LLVMCallConv::LLVMCCallConv as u32) }
 
+        let builder = unsafe { LLVMCreateBuilder() };
+        let setup_block = unsafe { LLVMAppendBasicBlock(function, cstr!("setup")) };
+        let exit_block = unsafe { LLVMAppendBasicBlock(function, cstr!("exit")) };
+
         Self {
             function,
             locals: HashMap::new(),
             value_union,
             labels: HashMap::new(),
-            setup_block: None,
-            setup_builder: None,
-            exit_block: None,
-            exit_builder: None,
+            setup_block,
+            exit_block,
+            builder,
+            exit_guards: Vec::new(),
         }
     }
 
@@ -272,87 +283,100 @@ impl Function {
     }
 
     fn setup_block(&self) -> LLVMBasicBlockRef {
-        self.setup_block.unwrap()
+        self.setup_block
     }
 
-    fn setup_builder(&self) -> LLVMBuilderRef {
-        self.setup_builder.unwrap()
+    fn builder(&self) -> LLVMBuilderRef {
+        self.builder
     }
 
     fn exit_block(&self) -> LLVMBasicBlockRef {
-        self.exit_block.unwrap()
+        self.exit_block
     }
 
-    fn exit_builder(&self) -> LLVMBuilderRef {
-        self.exit_builder.unwrap()
-    }
+    /// Compiles the setup block by initializing locals (copying them out of the stack). Must be the first function to be called
+    pub fn compile_setup(&mut self, locals: &HashMap<u16, Type>) {
+        let builder = self.builder();
+        let setup_block = self.setup_block();
 
-    /// Initializes locals. Must be the first function to be called
-    pub fn init_locals(&mut self, locals: &HashMap<u16, Type>) {
-        let (setup_block, setup_builder) = self.append_and_enter_block();
-        self.setup_block = Some(setup_block);
-        self.setup_builder = Some(setup_builder);
+        self.position_builder_at(builder, setup_block);
 
         for (&local_index, ty) in locals {
-            let space = self.alloca_local(setup_builder, ty);
+            let space = self.alloca_local(builder, ty);
 
             let stack_ptr = self.get_param(0);
             let stack_offset = self.get_param(1);
             let index = self.const_i64(local_index as i64);
-            let stack_offset = self.build_add(setup_builder, stack_offset, index);
+            let stack_offset = self.build_add(builder, stack_offset, index);
 
             let mut indices = [stack_offset, self.const_i32(1)];
-            let value_ptr = unsafe {
-                LLVMBuildGEP2(
-                    setup_builder,
-                    self.value_union,
-                    stack_ptr,
-                    indices.as_mut_ptr(),
-                    indices.len() as u32,
-                    cstr!("gep"),
-                )
-            };
+            let value_ptr = self.build_gep(builder, self.value_union, stack_ptr, &mut indices);
 
-            let value = self.build_load(setup_builder, self.i64_ty(), value_ptr);
-            let value = self.build_bitcast(setup_builder, value, ty.to_llvm_type());
-            self.build_store(setup_builder, value, space);
+            let value = self.build_load(builder, self.i64_ty(), value_ptr);
+            let value = self.build_bitcast(builder, value, ty.to_llvm_type());
+            self.build_store(builder, value, space);
 
             self.locals.insert(local_index, (space, ty.to_llvm_type()));
         }
+    }
 
+    /// Compiles the exit block
+    pub fn compile_exit_block(&mut self, locals: &HashMap<u16, Type>) {
         // Compile exit block
         // Write all the values back to the stack
-        let (exit_block, exit_builder) = self.append_block();
-        self.position_builder_at(exit_builder, exit_block);
+        let builder = self.builder();
+        let exit_block = self.exit_block();
+        self.position_builder_at(builder, exit_block);
 
-        self.exit_block = Some(exit_block);
-        self.exit_builder = Some(exit_builder);
+        let mut ret_phi = self.build_phi(builder, self.i64_ty());
+        for (ip, block) in &self.exit_guards {
+            let mut value = [self.const_i64(*ip as i64)];
+            let mut block = [*block];
+            unsafe { LLVMAddIncoming(ret_phi, value.as_mut_ptr(), block.as_mut_ptr(), 1) }
+        }
+        let out_ip = self.get_param(2);
+        self.build_store(builder, ret_phi, out_ip);
 
         for (&local_index, ty) in locals {
             let (space, _) = self.locals[&local_index];
-            let value = self.build_local_load(exit_builder, local_index);
-            let value = self.build_bitcast(exit_builder, value, self.i64_ty());
+            let value = self.build_local_load(builder, local_index);
+            let value = self.build_bitcast(builder, value, self.i64_ty());
 
             let stack_ptr = self.get_param(0);
             let stack_offset = self.get_param(1);
             let index = self.const_i64(local_index as i64);
-            let stack_offset = self.build_add(exit_builder, stack_offset, index);
+            let stack_offset = self.build_add(builder, stack_offset, index);
 
             let mut indices = [stack_offset, self.const_i32(1)];
-            let value_ptr = unsafe {
-                LLVMBuildGEP2(
-                    exit_builder,
-                    self.value_union,
-                    stack_ptr,
-                    indices.as_mut_ptr(),
-                    indices.len() as u32,
-                    cstr!("gep"),
-                )
-            };
+            let value_ptr = self.build_gep(builder, self.value_union, stack_ptr, &mut indices);
 
-            self.build_store(exit_builder, value, value_ptr);
+            self.build_store(builder, value, value_ptr);
         }
-        self.build_retvoid(exit_builder);
+
+        self.build_retvoid(builder);
+    }
+
+    fn build_gep(
+        &self,
+        builder: LLVMBuilderRef,
+        ty: LLVMTypeRef,
+        ptr: LLVMValueRef,
+        indices: &mut [LLVMValueRef],
+    ) -> LLVMValueRef {
+        unsafe {
+            LLVMBuildGEP2(
+                builder,
+                ty,
+                ptr,
+                indices.as_mut_ptr(),
+                indices.len() as u32,
+                cstr!("gep"),
+            )
+        }
+    }
+
+    fn build_phi(&self, builder: LLVMBuilderRef, ty: LLVMTypeRef) -> LLVMValueRef {
+        unsafe { LLVMBuildPhi(builder, ty, cstr!("phi")) }
     }
 
     pub fn compile_trace<Q: CompileQuery>(
@@ -370,27 +394,27 @@ impl Function {
             let is_label = infer.labels.get(index).unwrap();
             if is_label {
                 let (block, builder) = cx.create_jumpable_block(index as u16);
-                cx.build_br(cx.current_builder, block);
-                cx.position_builder_at(cx.current_builder, block);
+                cx.build_br(cx.builder, block);
+                cx.position_builder_at(cx.builder, block);
             }
 
             match instr {
-                Instruction::Add => cx.with2(|cx, a, b| cx.build_fadd(cx.current_builder, a, b)),
-                Instruction::Sub => cx.with2(|cx, a, b| cx.build_fsub(cx.current_builder, a, b)),
-                Instruction::Mul => cx.with2(|cx, a, b| cx.build_fmul(cx.current_builder, a, b)),
-                Instruction::Div => cx.with2(|cx, a, b| cx.build_fdiv(cx.current_builder, a, b)),
-                Instruction::Rem => cx.with2(|cx, a, b| cx.build_frem(cx.current_builder, a, b)),
+                Instruction::Add => cx.with2(|cx, a, b| cx.build_fadd(cx.builder, a, b)),
+                Instruction::Sub => cx.with2(|cx, a, b| cx.build_fsub(cx.builder, a, b)),
+                Instruction::Mul => cx.with2(|cx, a, b| cx.build_fmul(cx.builder, a, b)),
+                Instruction::Div => cx.with2(|cx, a, b| cx.build_fdiv(cx.builder, a, b)),
+                Instruction::Rem => cx.with2(|cx, a, b| cx.build_frem(cx.builder, a, b)),
                 Instruction::LdLocal => {
                     let id = cx.next_byte();
-                    let value = cx.build_local_load(cx.current_builder, id.into());
+                    let value = cx.build_local_load(cx.builder, id.into());
                     cx.push(value);
                 }
                 Instruction::StoreLocal => {
                     let id = cx.next_byte();
                     let value = cx.pop();
                     let (local, ty) = cx.locals[&id.into()];
-                    cx.build_store(cx.current_builder, value, local);
-                    let value = cx.build_local_load(cx.current_builder, id.into());
+                    cx.build_store(cx.builder, value, local);
+                    let value = cx.build_local_load(cx.builder, id.into());
                     cx.push(value);
                 }
                 Instruction::Constant => {
@@ -404,20 +428,21 @@ impl Function {
                     cx.push(value);
                 }
                 Instruction::Pop => drop(cx.pop()),
-                Instruction::Lt => cx.with2(|cx, a, b| cx.build_fult(cx.current_builder, a, b)),
-                Instruction::Gt => cx.with2(|cx, a, b| cx.build_fugt(cx.current_builder, a, b)),
+                Instruction::Lt => cx.with2(|cx, a, b| cx.build_fult(cx.builder, a, b)),
+                Instruction::Gt => cx.with2(|cx, a, b| cx.build_fugt(cx.builder, a, b)),
                 Instruction::Jmp => {
                     let count = cx.next_wide() as i16;
                     let target_ip = (index as isize + count as isize) + 3;
                     let (target_block, target_builder) = cx.labels[&(target_ip as u16)];
-                    cx.build_br(cx.current_builder, target_block);
+                    cx.build_br(cx.builder, target_block);
                 }
                 Instruction::JmpFalseP => {
                     let count = cx.next_wide() as i16;
+                    let target_ip = (index as isize + count as isize) + 3;
                     let value = cx.pop();
                     let did_take = trace.conditional_jumps[jumps];
                     jumps += 1;
-                    cx.emit_guard(value, !did_take);
+                    cx.emit_guard(value, !did_take, target_ip.try_into().unwrap());
                 }
                 _ => return Err(CompileError::UnimplementedInstr(instr)),
             }
@@ -458,27 +483,15 @@ pub trait CompileQuery {
 struct CompilationContext<'fun, 'bytecode> {
     iter: Enumerate<Iter<'bytecode, u8>>,
     function: &'fun mut Function,
-    current_builder: LLVMBuilderRef,
-    current_block: LLVMBasicBlockRef,
-    exit_builder: LLVMBuilderRef,
-    exit_block: LLVMBasicBlockRef,
+    // current_block: LLVMBasicBlockRef,
     value_stack: Vec<LLVMValueRef>,
 }
 
 impl<'fun, 'bytecode> CompilationContext<'fun, 'bytecode> {
     pub fn new(function: &'fun mut Function, bytecode: &'bytecode [u8]) -> Self {
-        let current_builder = function.setup_builder();
-        let current_block = function.setup_block();
-        let exit_builder = function.exit_builder();
-        let exit_block = function.exit_block();
-
         Self {
             iter: bytecode.iter().enumerate(),
             function,
-            current_builder,
-            current_block,
-            exit_block,
-            exit_builder,
             value_stack: Vec::new(),
         }
     }
@@ -523,14 +536,17 @@ impl<'fun, 'bytecode> CompilationContext<'fun, 'bytecode> {
         u16::from_ne_bytes([high, low])
     }
 
-    pub fn emit_guard(&self, condition: LLVMValueRef, expected: bool) {
+    pub fn emit_guard(&mut self, condition: LLVMValueRef, expected: bool, target_ip: u64) {
+        let block = unsafe { LLVMGetLastBasicBlock(self.function.function) };
+        self.exit_guards.push((target_ip, block));
+
         let (next_block, next_builder) = self.append_block();
         let (dest_true, dest_false) = match expected {
             true => (next_block, self.exit_block),
             false => (self.exit_block, next_block),
         };
-        self.build_condbr(self.current_builder, condition, dest_true, dest_false);
-        self.position_builder_at(self.current_builder, next_block);
+        self.build_condbr(self.builder, condition, dest_true, dest_false);
+        self.position_builder_at(self.builder, next_block);
     }
 }
 
