@@ -20,6 +20,7 @@ use self::{
 };
 
 use dash_middle::compiler::instruction::Instruction;
+use jit::Frontend;
 use util::unlikely;
 use value::{promise::{Promise, PromiseState}, ValueContext, function::bound::BoundFunction, PureBuiltin, object::NamedObject};
 
@@ -62,22 +63,13 @@ pub struct Vm {
     /// or adding a property to a builtin, will cause this to be set to `false`, which in turn
     /// will disable many optimizations such as specialized intrinsics.
     builtins_pure: bool,
-
-    /// If we are currently recording a trace for a loop iteration,
-    /// this will contain the pc of the loop header and its end
     #[cfg(feature = "jit")]
-    recording_trace: Option<dash_llvm_jit_backend::Trace>,
-
-    #[cfg(feature = "jit")]
-    jit_backend: dash_llvm_jit_backend::Backend,
+    jit: jit::Frontend
 }
 
 
 impl Vm {
     pub fn new(params: VmParams) -> Self {
-        #[cfg(feature = "jit")]
-        dash_llvm_jit_backend::init();
-
         let mut gc = Gc::new();
         let statics = Statics::new(&mut gc);
         // TODO: global __proto__ and constructor
@@ -100,9 +92,7 @@ impl Vm {
             builtins_pure: true,
 
             #[cfg(feature = "jit")]
-            recording_trace: None,
-            #[cfg(feature = "jit")]
-            jit_backend: dash_llvm_jit_backend::Backend::new(),
+            jit: Frontend::new(),
         };
         vm.prepare();
         vm
@@ -1010,13 +1000,6 @@ impl Vm {
         };
     }
 
-    /// Marks an instruction pointer (i.e. code region) as JIT-"poisoned".
-    /// It will replace the instruction with one that does not attempt to trigger a trace.
-    #[cfg(feature = "jit")]
-    pub(crate) fn poison_ip(&mut self, ip: usize) {
-        self.frames.last().unwrap().function.poison_ip(ip);
-    }
-
     pub(crate) fn builtins_purity(&self) -> bool {
         self.builtins_pure
     }
@@ -1025,10 +1008,19 @@ impl Vm {
         self.builtins_pure = false;
     }
 
+    // -- JIT specific methods --
+
+    /// Marks an instruction pointer (i.e. code region) as JIT-"poisoned".
+    /// It will replace the instruction with one that does not attempt to trigger a trace.
+    #[cfg(feature = "jit")]
+    pub(crate) fn poison_ip(&mut self, ip: usize) {
+        self.frames.last().unwrap().function.poison_ip(ip);
+    }
+
     // TODO: move these to DispatchContext.
     #[cfg(feature = "jit")]
     pub(crate) fn record_conditional_jump(&mut self, did_jump: bool) {
-        if let Some(trace) = &mut self.recording_trace {
+        if let Some(trace) = self.jit.recording_trace_mut() {
             trace.record_conditional_jump(did_jump);
         }
     }
