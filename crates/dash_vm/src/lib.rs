@@ -20,7 +20,6 @@ use self::{
 };
 
 use dash_middle::compiler::instruction::Instruction;
-use jit::Frontend;
 use util::unlikely;
 use value::{promise::{Promise, PromiseState}, ValueContext, function::bound::BoundFunction, PureBuiltin, object::NamedObject};
 
@@ -92,7 +91,7 @@ impl Vm {
             builtins_pure: true,
 
             #[cfg(feature = "jit")]
-            jit: Frontend::new(),
+            jit: jit::Frontend::new(),
         };
         vm.prepare();
         vm
