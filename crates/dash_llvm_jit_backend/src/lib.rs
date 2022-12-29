@@ -5,13 +5,15 @@ use llvm_sys::target::LLVM_InitializeNativeAsmParser;
 use llvm_sys::target::LLVM_InitializeNativeAsmPrinter;
 use llvm_sys::target::LLVM_InitializeNativeTarget;
 
-pub mod assembler;
-pub mod trace;
-pub mod value;
+pub mod backend;
+pub mod function;
+pub mod legacy;
+pub mod passes;
 
-pub use assembler::Assembler;
-pub use trace::Trace;
-pub use value::Value;
+pub use backend::Backend;
+pub use legacy::assembler::Assembler;
+pub use legacy::trace::Trace;
+pub use legacy::value::Value;
 
 pub fn init() {
     unsafe {

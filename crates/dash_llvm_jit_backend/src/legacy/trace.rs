@@ -5,10 +5,10 @@ use dash_middle::compiler::constant::Function;
 use dash_middle::compiler::instruction as inst;
 use indexmap::IndexMap;
 
-use crate::assembler::Assembler;
-use crate::assembler::JitCacheKey;
-use crate::assembler::JitResult;
-use crate::value::Value;
+use super::assembler::Assembler;
+use super::assembler::JitCacheKey;
+use super::assembler::JitResult;
+use super::value::Value;
 
 #[derive(Debug)]
 pub struct Trace {
@@ -19,6 +19,9 @@ pub struct Trace {
     pub(crate) end: usize,
     /// A vector of conditional jumps, i.e. diverging control flow.
     /// The index is the # of the jump and the bool represents whether the jump is taken.
+    ///
+    /// Note for later: can change to HashSet<usize, bool> where usize is the IP if a trace
+    /// is composed of multiple possible paths
     pub(crate) conditional_jumps: Vec<bool>,
 
     pub(crate) locals: IndexMap<u16, Value>,
@@ -36,6 +39,10 @@ impl Trace {
             locals: IndexMap::new(),
             constants: HashMap::new(),
         }
+    }
+
+    pub fn get_conditional_jump(&self, id: usize) -> bool {
+        self.conditional_jumps[id]
     }
 
     pub fn record_local(&mut self, index: u16, value: Value) {

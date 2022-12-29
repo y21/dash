@@ -862,6 +862,7 @@ impl ValueConversion for Symbol {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[repr(transparent)]
 pub struct Number(pub f64);
 
 impl Eq for Number {}

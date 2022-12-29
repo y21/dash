@@ -1,4 +1,6 @@
 use std::borrow::Cow;
+use std::cell::RefCell;
+use std::collections::HashSet;
 use std::rc::Rc;
 use std::{convert::TryInto, ptr::NonNull, usize};
 
@@ -1390,6 +1392,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             externals: cmp.externals.into(),
             r#async,
             rest_local,
+            poison_ips: RefCell::new(HashSet::new()),
         };
         ib.build_constant(Constant::Function(Rc::new(function)))?;
 

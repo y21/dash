@@ -184,9 +184,6 @@ mod handlers {
     fn constant_instruction(mut cx: DispatchContext<'_>, idx: usize) -> Result<(), Value> {
         let constant = cx.constant(idx);
 
-        #[cfg(feature = "jit")]
-        cx.record_constant(idx as u16, &constant);
-
         let value = Value::from_constant(constant, &mut cx);
         cx.try_push_stack(value)?;
         Ok(())
@@ -657,9 +654,6 @@ mod handlers {
         let id = cx.fetch_and_inc_ip() as usize;
         let value = cx.pop_stack();
 
-        #[cfg(feature = "jit")]
-        cx.record_local(id as u16, &value);
-
         cx.set_local(id, value.clone());
         cx.try_push_stack(value)?;
 
@@ -669,9 +663,6 @@ mod handlers {
     pub fn ldlocal(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
         let id = cx.fetch_and_inc_ip();
         let value = cx.get_local(id.into());
-
-        #[cfg(feature = "jit")]
-        cx.record_local(id as u16, &value);
 
         cx.try_push_stack(value)?;
         Ok(None)

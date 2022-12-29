@@ -67,6 +67,7 @@ use self::{
 
 use super::{local::LocalScope, Vm};
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[repr(C)]
 pub enum Value {
     /// The number type
     Number(Number),
@@ -332,25 +333,6 @@ impl Value {
         let this_proto = obj.get_prototype(sc)?;
 
         Ok(this_proto == target_proto)
-    }
-}
-
-#[cfg(feature = "jit")]
-impl From<&Value> for dash_llvm_jit_backend::value::Value {
-    fn from(v: &Value) -> Self {
-        use dash_llvm_jit_backend::value::Value as JitValue;
-
-        match v {
-            Value::Boolean(b) => JitValue::Boolean(*b),
-            Value::Number(Number(n)) => {
-                if n.floor() == *n {
-                    JitValue::Integer(*n as i64)
-                } else {
-                    JitValue::Number(*n)
-                }
-            }
-            _ => panic!("Unhandled JIT value: {:?}", v),
-        }
     }
 }
 

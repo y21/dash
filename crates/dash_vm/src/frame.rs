@@ -1,4 +1,6 @@
+use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::collections::HashSet;
 use std::rc::Rc;
 
 use dash_middle::compiler::constant::Function;
@@ -63,7 +65,7 @@ impl LoopCounter {
     }
 
     pub fn is_hot(&self) -> bool {
-        self.0 > 5
+        self.0 > 100
     }
 }
 
@@ -148,6 +150,7 @@ impl Frame {
             ty: FunctionKind::Function,
             r#async: false,
             rest_local: None,
+            poison_ips: RefCell::new(HashSet::new()),
         };
 
         Self {
