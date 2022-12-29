@@ -24,6 +24,7 @@ use llvm_sys::transforms::pass_manager_builder::LLVMPassManagerBuilderPopulateFu
 use llvm_sys::transforms::pass_manager_builder::LLVMPassManagerBuilderPopulateModulePassManager;
 use llvm_sys::transforms::pass_manager_builder::LLVMPassManagerBuilderSetOptLevel;
 
+use crate::function::CompileError;
 use crate::function::CompileQuery;
 use crate::function::Function;
 use crate::passes::infer::InferResult;
@@ -79,10 +80,10 @@ impl Backend {
         bytecode: &[u8],
         infer: InferResult,
         trace: &Trace,
-    ) -> JitFunction {
+    ) -> Result<JitFunction, CompileError> {
         let mut fun = Function::new(self);
         fun.compile_setup(&infer.local_tys);
-        fun.compile_trace(bytecode, &q, &infer, &trace);
+        fun.compile_trace(bytecode, &q, &infer, &trace)?;
         fun.compile_exit_block(&infer.local_tys);
 
         #[cfg(debug_assertions)]
@@ -91,7 +92,7 @@ impl Backend {
         self.run_pass_manager();
 
         let fun = self.compile_fn(fun.function_name());
-        fun
+        Ok(fun)
     }
 
     pub fn verify(&self) {

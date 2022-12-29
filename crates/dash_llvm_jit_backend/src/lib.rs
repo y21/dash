@@ -9,6 +9,7 @@ pub mod backend;
 pub mod function;
 pub mod legacy;
 pub mod passes;
+pub mod error;
 
 pub use backend::Backend;
 pub use legacy::assembler::Assembler;

@@ -1,7 +1,7 @@
 use dash_llvm_jit_backend::backend::JitFunction;
+use dash_llvm_jit_backend::error::Error;
 use dash_llvm_jit_backend::init;
 use dash_llvm_jit_backend::passes::infer::infer_types_and_labels;
-use dash_llvm_jit_backend::passes::infer::InferError;
 use dash_llvm_jit_backend::Backend;
 
 use crate::Vm;
@@ -44,7 +44,7 @@ impl Frontend {
     }
 }
 
-pub fn compile_current_trace(vm: &mut Vm) -> Result<(Trace, JitFunction), InferError> {
+pub fn compile_current_trace(vm: &mut Vm) -> Result<(Trace, JitFunction), Error> {
     let frame = vm.frames.last().unwrap();
     let trace = vm.jit.take_recording_trace().unwrap();
     let bytecode = &frame.function.buffer[trace.start()..trace.end()];
@@ -54,7 +54,7 @@ pub fn compile_current_trace(vm: &mut Vm) -> Result<(Trace, JitFunction), InferE
     let fun = vm
         .jit
         .backend
-        .compile_trace(QueryProvider::new(vm, &trace), bytecode, types, &trace);
+        .compile_trace(QueryProvider::new(vm, &trace), bytecode, types, &trace)?;
 
     Ok((trace, fun))
 }

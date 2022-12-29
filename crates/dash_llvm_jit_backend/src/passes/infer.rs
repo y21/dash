@@ -4,11 +4,13 @@ use std::slice::Iter;
 
 use boolvec::BoolVec;
 use dash_middle::compiler::instruction::Instruction;
+use dash_middle::compiler::instruction::IntrinsicOperation;
 use llvm_sys::core::LLVMDoubleType;
 use llvm_sys::core::LLVMInt1Type;
 use llvm_sys::core::LLVMInt64Type;
 use llvm_sys::prelude::LLVMTypeRef;
 use llvm_sys::prelude::LLVMValueRef;
+use thiserror::Error;
 
 #[derive(Debug, Clone)]
 pub enum Type {
@@ -82,6 +84,14 @@ impl<'a> DecodeContext<'a> {
         u16::from_ne_bytes([a, b])
     }
 
+    pub fn next_u32(&mut self) -> u32 {
+        let a = self.next_byte();
+        let b = self.next_byte();
+        let c = self.next_byte();
+        let d = self.next_byte();
+        u32::from_ne_bytes([a, b, c, d])
+    }
+
     pub fn next_wide_signed(&mut self) -> i16 {
         self.next_wide() as i16
     }
@@ -95,16 +105,16 @@ impl<'a> DecodeContext<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum InferError {
+    #[error("Unsupported type for bi instruction")]
     UnsupportedTypeBiInstruction {
         instr: Instruction,
         left: Type,
         right: Type,
     },
-    UnsupportedTypeInstruction {
-        instr: Instruction,
-    },
+    #[error("Unsupported type for instruction")]
+    UnsupportedTypeInstruction { instr: Instruction },
 }
 
 pub struct InferResult {
@@ -205,6 +215,60 @@ pub fn infer_types_and_labels<Q: InferQueryProvider>(bytecode: &[u8], query: Q) 
                 }
 
                 branch_count += 1;
+            }
+            Instruction::IntrinsicOp => {
+                let op = IntrinsicOperation::from_repr(cx.next_byte()).unwrap();
+                match op {
+                    IntrinsicOperation::AddNumLR
+                    | IntrinsicOperation::SubNumLR
+                    | IntrinsicOperation::MulNumLR
+                    | IntrinsicOperation::DivNumLR
+                    | IntrinsicOperation::RemNumLR
+                    | IntrinsicOperation::PowNumLR
+                    | IntrinsicOperation::GtNumLR
+                    | IntrinsicOperation::GeNumLR
+                    | IntrinsicOperation::LtNumLR
+                    | IntrinsicOperation::LeNumLR
+                    | IntrinsicOperation::EqNumLR
+                    | IntrinsicOperation::NeNumLR
+                    | IntrinsicOperation::BitOrNumLR
+                    | IntrinsicOperation::BitXorNumLR
+                    | IntrinsicOperation::BitAndNumLR
+                    | IntrinsicOperation::BitShlNumLR
+                    | IntrinsicOperation::BitShrNumLR
+                    | IntrinsicOperation::BitUshrNumLR => {
+                        let _ = cx.pop_two();
+                        cx.push(Type::F64);
+                    }
+
+                    IntrinsicOperation::PostfixIncLocalNum
+                    | IntrinsicOperation::PostfixDecLocalNum
+                    | IntrinsicOperation::PrefixIncLocalNum
+                    | IntrinsicOperation::PrefixDecLocalNum => {
+                        let id = cx.next_byte();
+                        cx.set_inferred_type(id.into(), Type::F64);
+                        cx.push(Type::F64);
+                    }
+
+                    IntrinsicOperation::GtNumLConstR
+                    | IntrinsicOperation::GeNumLConstR
+                    | IntrinsicOperation::LtNumLConstR
+                    | IntrinsicOperation::LeNumLConstR => {
+                        let _ = cx.pop();
+                        let _ = cx.next_byte();
+                        cx.push(Type::Boolean);
+                    }
+
+                    IntrinsicOperation::GtNumLConstR32
+                    | IntrinsicOperation::GeNumLConstR32
+                    | IntrinsicOperation::LtNumLConstR32
+                    | IntrinsicOperation::LeNumLConstR32 => {
+                        let _ = cx.pop();
+                        let _ = cx.next_u32();
+                        cx.push(Type::Boolean);
+                    }
+                    _ => return Err(InferError::UnsupportedTypeInstruction { instr }),
+                }
             }
             Instruction::Pop => drop(cx.pop()),
             _ => return Err(InferError::UnsupportedTypeInstruction { instr }),

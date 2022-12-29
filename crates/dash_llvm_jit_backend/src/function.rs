@@ -8,6 +8,7 @@ use std::ops::DerefMut;
 use std::slice::Iter;
 
 use dash_middle::compiler::instruction::Instruction;
+use dash_middle::compiler::instruction::IntrinsicOperation;
 use indexmap::Equivalent;
 use llvm_sys::analysis::LLVMVerifierFailureAction;
 use llvm_sys::analysis::LLVMVerifyFunction;
@@ -68,6 +69,7 @@ use llvm_sys::target::LLVMSizeOfTypeInBits;
 use llvm_sys::LLVMCallConv;
 use llvm_sys::LLVMIntPredicate;
 use llvm_sys::LLVMRealPredicate;
+use thiserror::Error;
 
 use crate::cstr;
 use crate::passes::infer::InferResult;
@@ -75,8 +77,9 @@ use crate::passes::infer::Type;
 use crate::Backend;
 use crate::Trace;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum CompileError {
+    #[error("Unimplemented instruction")]
     UnimplementedInstr(Instruction),
 }
 
@@ -264,6 +267,11 @@ impl Function {
         unsafe { LLVMBuildLoad2(builder, ty, local, cstr!("local_load")) }
     }
 
+    fn build_local_store(&self, builder: LLVMBuilderRef, id: u16, value: LLVMValueRef) -> LLVMValueRef {
+        let (local, _) = self.locals[&id];
+        unsafe { LLVMBuildStore(builder, value, local) }
+    }
+
     fn build_retvoid(&self, builder: LLVMBuilderRef) -> LLVMValueRef {
         unsafe { LLVMBuildRetVoid(builder) }
     }
@@ -412,8 +420,7 @@ impl Function {
                 Instruction::StoreLocal => {
                     let id = cx.next_byte();
                     let value = cx.pop();
-                    let (local, ty) = cx.locals[&id.into()];
-                    cx.build_store(cx.builder, value, local);
+                    cx.build_local_store(cx.builder, id.into(), value);
                     let value = cx.build_local_load(cx.builder, id.into());
                     cx.push(value);
                 }
@@ -443,6 +450,57 @@ impl Function {
                     let did_take = trace.conditional_jumps[jumps];
                     jumps += 1;
                     cx.emit_guard(value, !did_take, target_ip.try_into().unwrap());
+                }
+                Instruction::IntrinsicOp => {
+                    let op = IntrinsicOperation::from_repr(cx.next_byte()).unwrap();
+
+                    match op {
+                        IntrinsicOperation::AddNumLR => {
+                            cx.with2(|cx, a, b| cx.build_fadd(cx.builder, a, b));
+                        }
+                        IntrinsicOperation::SubNumLR => {
+                            cx.with2(|cx, a, b| cx.build_fsub(cx.builder, a, b));
+                        }
+                        IntrinsicOperation::MulNumLR => {
+                            cx.with2(|cx, a, b| cx.build_fmul(cx.builder, a, b));
+                        }
+                        IntrinsicOperation::DivNumLR => {
+                            cx.with2(|cx, a, b| cx.build_fdiv(cx.builder, a, b));
+                        }
+
+                        IntrinsicOperation::PostfixIncLocalNum => {
+                            let id = cx.next_byte();
+                            let old_value = cx.build_local_load(cx.builder, id.into());
+                            let value = cx.build_fadd(cx.builder, old_value, cx.const_f64(1.0));
+                            cx.build_local_store(cx.builder, id.into(), value);
+                            cx.push(old_value);
+                        }
+                        IntrinsicOperation::PostfixDecLocalNum => {
+                            let id = cx.next_byte();
+                            let old_value = cx.build_local_load(cx.builder, id.into());
+                            let value = cx.build_fsub(cx.builder, old_value, cx.const_f64(1.0));
+                            cx.build_local_store(cx.builder, id.into(), value);
+                            cx.push(old_value);
+                        }
+
+                        IntrinsicOperation::LtNumLConstR => {
+                            let value = cx.pop();
+                            let num = cx.next_byte() as f64;
+                            let res = cx.build_fult(cx.builder, value, cx.const_f64(num));
+                            cx.push(res);
+                        }
+
+                        IntrinsicOperation::GtNumLConstR32
+                        | IntrinsicOperation::GeNumLConstR32
+                        | IntrinsicOperation::LtNumLConstR32
+                        | IntrinsicOperation::LeNumLConstR32 => {
+                            let value = cx.pop();
+                            let num = cx.next_u32() as f64;
+                            let res = cx.build_fult(cx.builder, value, cx.const_f64(num));
+                            cx.push(res);
+                        }
+                        _ => return Err(CompileError::UnimplementedInstr(instr)),
+                    }
                 }
                 _ => return Err(CompileError::UnimplementedInstr(instr)),
             }
@@ -534,6 +592,14 @@ impl<'fun, 'bytecode> CompilationContext<'fun, 'bytecode> {
         let high = self.next_byte();
         let low = self.next_byte();
         u16::from_ne_bytes([high, low])
+    }
+
+    pub fn next_u32(&mut self) -> u32 {
+        let a = self.next_byte();
+        let b = self.next_byte();
+        let c = self.next_byte();
+        let d = self.next_byte();
+        u32::from_ne_bytes([a, b, c, d])
     }
 
     pub fn emit_guard(&mut self, condition: LLVMValueRef, expected: bool, target_ip: u64) {
