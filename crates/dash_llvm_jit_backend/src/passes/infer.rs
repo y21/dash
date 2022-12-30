@@ -129,12 +129,21 @@ pub fn infer_types_and_labels<Q: InferQueryProvider>(bytecode: &[u8], query: Q) 
 
     while let Some((index, instr)) = cx.next_instruction() {
         match instr {
-            Instruction::Add | Instruction::Sub | Instruction::Mul | Instruction::Div | Instruction::Rem => {
+            Instruction::Add | Instruction::Sub | Instruction::Mul => {
                 let (left, right) = cx.pop_two();
 
                 match (&left, &right) {
                     (Type::I64, Type::I64) => cx.push(Type::I64),
                     (Type::F64, Type::F64) => cx.push(Type::F64),
+                    (Type::I64 | Type::F64, Type::I64 | Type::F64) => cx.push(Type::F64),
+                    (Type::Boolean, Type::Boolean) => cx.push(Type::Boolean),
+                    _ => return Err(InferError::UnsupportedTypeBiInstruction { instr, left, right }),
+                }
+            }
+            Instruction::Div | Instruction::Rem => {
+                let (left, right) = cx.pop_two();
+
+                match (&left, &right) {
                     (Type::I64 | Type::F64, Type::I64 | Type::F64) => cx.push(Type::F64),
                     (Type::Boolean, Type::Boolean) => cx.push(Type::Boolean),
                     _ => return Err(InferError::UnsupportedTypeBiInstruction { instr, left, right }),
@@ -229,23 +238,32 @@ pub fn infer_types_and_labels<Q: InferQueryProvider>(bytecode: &[u8], query: Q) 
                     IntrinsicOperation::AddNumLR
                     | IntrinsicOperation::SubNumLR
                     | IntrinsicOperation::MulNumLR
-                    | IntrinsicOperation::DivNumLR
-                    | IntrinsicOperation::RemNumLR
-                    | IntrinsicOperation::PowNumLR
-                    | IntrinsicOperation::GtNumLR
+                    | IntrinsicOperation::PowNumLR => match cx.pop_two() {
+                        (Type::I64, Type::I64) => cx.push(Type::I64),
+                        (Type::I64 | Type::F64, Type::I64 | Type::F64) => cx.push(Type::F64),
+                        _ => unreachable!(),
+                    },
+                    IntrinsicOperation::DivNumLR | IntrinsicOperation::RemNumLR => {
+                        let _ = cx.pop_two();
+                        cx.push(Type::F64);
+                    }
+                    IntrinsicOperation::GtNumLR
                     | IntrinsicOperation::GeNumLR
                     | IntrinsicOperation::LtNumLR
                     | IntrinsicOperation::LeNumLR
                     | IntrinsicOperation::EqNumLR
-                    | IntrinsicOperation::NeNumLR
-                    | IntrinsicOperation::BitOrNumLR
+                    | IntrinsicOperation::NeNumLR => {
+                        let _ = cx.pop_two();
+                        cx.push(Type::Boolean);
+                    }
+                    IntrinsicOperation::BitOrNumLR
                     | IntrinsicOperation::BitXorNumLR
                     | IntrinsicOperation::BitAndNumLR
                     | IntrinsicOperation::BitShlNumLR
                     | IntrinsicOperation::BitShrNumLR
                     | IntrinsicOperation::BitUshrNumLR => {
                         let _ = cx.pop_two();
-                        cx.push(Type::F64);
+                        cx.push(Type::I64);
                     }
 
                     IntrinsicOperation::PostfixIncLocalNum
@@ -253,8 +271,8 @@ pub fn infer_types_and_labels<Q: InferQueryProvider>(bytecode: &[u8], query: Q) 
                     | IntrinsicOperation::PrefixIncLocalNum
                     | IntrinsicOperation::PrefixDecLocalNum => {
                         let id = cx.next_byte();
-                        cx.set_inferred_type(id.into(), Type::F64);
-                        cx.push(Type::F64);
+                        let ty = cx.local_types[&(id as u16)].clone();
+                        cx.push(ty);
                     }
 
                     IntrinsicOperation::GtNumLConstR

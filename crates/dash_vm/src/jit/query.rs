@@ -4,7 +4,9 @@ use dash_llvm_jit_backend::passes::infer::InferQueryProvider;
 use dash_llvm_jit_backend::passes::infer::Type;
 use dash_llvm_jit_backend::Trace;
 use dash_middle::compiler::constant::Constant;
+use dash_middle::util::is_integer;
 
+use crate::value::primitive::Number;
 use crate::value::Value;
 use crate::Vm;
 
@@ -24,14 +26,26 @@ impl<'a> InferQueryProvider for QueryProvider<'a> {
         let constant = &self.vm.frames.last().unwrap().function.constants[usize::from(index)];
         match constant {
             Constant::Boolean(..) => Some(Type::Boolean),
-            Constant::Number(..) => Some(Type::F64),
+            Constant::Number(n) => {
+                if is_integer(*n) {
+                    Some(Type::I64)
+                } else {
+                    Some(Type::F64)
+                }
+            }
             _ => None,
         }
     }
     fn type_of_local(&self, index: u16) -> Option<Type> {
         match self.vm.get_local(index.into()).unwrap() {
             Value::Boolean(..) => Some(Type::Boolean),
-            Value::Number(..) => Some(Type::F64),
+            Value::Number(Number(n)) => {
+                if is_integer(n) {
+                    Some(Type::I64)
+                } else {
+                    Some(Type::F64)
+                }
+            }
             _ => None,
         }
     }
@@ -45,7 +59,13 @@ impl<'a> CompileQuery for QueryProvider<'a> {
         let constant = &self.vm.frames.last().unwrap().function.constants[usize::from(id)];
         match constant {
             Constant::Boolean(b) => JITConstant::Boolean(*b),
-            Constant::Number(n) => JITConstant::F64(*n), // TODO: I64 may be ok
+            Constant::Number(n) => {
+                if is_integer(*n) {
+                    JITConstant::I64(*n as i64)
+                } else {
+                    JITConstant::F64(*n)
+                }
+            }
             _ => todo!(),
         }
     }

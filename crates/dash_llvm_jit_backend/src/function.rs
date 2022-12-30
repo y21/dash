@@ -484,7 +484,10 @@ impl Function {
             let value = self.build_local_load(local_index);
             let value = match ty {
                 Type::Boolean => self.build_cast(value, ty, &Type::I64),
-                Type::I64 => value,
+                Type::I64 => {
+                    let value = self.build_cast(value, ty, &Type::F64);
+                    self.build_f64_to_i64_transmute(value)
+                }
                 Type::F64 => self.build_f64_to_i64_transmute(value),
             };
 
@@ -620,14 +623,24 @@ impl Function {
                         IntrinsicOperation::PostfixIncLocalNum => {
                             let id = cx.next_byte();
                             let old_value = cx.build_local_load(id.into());
-                            let value = cx.build_add(old_value, cx.const_f64(1.0));
+                            let rhs = match cx.type_of_value(old_value) {
+                                LLVMTypeKind::LLVMIntegerTypeKind => cx.const_i64(1),
+                                LLVMTypeKind::LLVMDoubleTypeKind => cx.const_f64(1.0),
+                                _ => unreachable!(),
+                            };
+                            let value = cx.build_add(old_value, rhs);
                             cx.build_local_store(id.into(), value);
                             cx.push(old_value);
                         }
                         IntrinsicOperation::PostfixDecLocalNum => {
                             let id = cx.next_byte();
                             let old_value = cx.build_local_load(id.into());
-                            let value = cx.build_sub(old_value, cx.const_f64(1.0));
+                            let rhs = match cx.type_of_value(old_value) {
+                                LLVMTypeKind::LLVMIntegerTypeKind => cx.const_i64(1),
+                                LLVMTypeKind::LLVMDoubleTypeKind => cx.const_f64(1.0),
+                                _ => unreachable!(),
+                            };
+                            let value = cx.build_sub(old_value, rhs);
                             cx.build_local_store(id.into(), value);
                             cx.push(old_value);
                         }
@@ -635,7 +648,12 @@ impl Function {
                         IntrinsicOperation::LtNumLConstR => {
                             let value = cx.pop();
                             let num = cx.next_byte() as f64;
-                            let res = cx.build_lt(value, cx.const_f64(num));
+                            let rhs = match cx.type_of_value(value) {
+                                LLVMTypeKind::LLVMIntegerTypeKind => cx.const_i64(num as i64),
+                                LLVMTypeKind::LLVMDoubleTypeKind => cx.const_f64(num),
+                                _ => unreachable!(),
+                            };
+                            let res = cx.build_lt(value, rhs);
                             cx.push(res);
                         }
 
@@ -645,7 +663,12 @@ impl Function {
                         | IntrinsicOperation::LeNumLConstR32 => {
                             let value = cx.pop();
                             let num = cx.next_u32() as f64;
-                            let res = cx.build_lt(value, cx.const_f64(num));
+                            let rhs = match cx.type_of_value(value) {
+                                LLVMTypeKind::LLVMIntegerTypeKind => cx.const_i64(num as i64),
+                                LLVMTypeKind::LLVMDoubleTypeKind => cx.const_f64(num),
+                                _ => unreachable!(),
+                            };
+                            let res = cx.build_lt(value, rhs);
                             cx.push(res);
                         }
                         _ => return Err(CompileError::UnimplementedInstr(instr)),
@@ -677,6 +700,7 @@ impl Function {
     }
 }
 
+#[derive(Debug)]
 pub enum JITConstant {
     F64(f64),
     I64(i64),
@@ -690,7 +714,6 @@ pub trait CompileQuery {
 struct CompilationContext<'fun, 'bytecode> {
     iter: Enumerate<Iter<'bytecode, u8>>,
     function: &'fun mut Function,
-    // current_block: LLVMBasicBlockRef,
     value_stack: Vec<LLVMValueRef>,
 }
 

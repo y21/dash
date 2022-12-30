@@ -49,6 +49,10 @@ pub fn is_numeric(c: impl AsRef<str>) -> bool {
     c.as_ref().chars().all(|c| c.is_numeric())
 }
 
+pub fn is_integer(n: f64) -> bool {
+    n.fract() == 0.0
+}
+
 #[cold]
 fn unlikely_inner() {}
 
