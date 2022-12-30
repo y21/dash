@@ -162,7 +162,10 @@ pub fn infer_types_and_labels<Q: InferQueryProvider>(bytecode: &[u8], query: Q) 
 
                 let ty = query.type_of_local(index);
                 match ty {
-                    Some(ty) => cx.push(ty),
+                    Some(ty) => {
+                        cx.set_inferred_type(index, ty.clone());
+                        cx.push(ty)
+                    }
                     None => return Err(InferError::UnsupportedTypeInstruction { instr }),
                 }
             }
@@ -181,6 +184,10 @@ pub fn infer_types_and_labels<Q: InferQueryProvider>(bytecode: &[u8], query: Q) 
                     }
                     None => return Err(InferError::UnsupportedTypeInstruction { instr }),
                 }
+            }
+            Instruction::Not => {
+                let _ = cx.pop();
+                cx.push(Type::Boolean);
             }
             Instruction::Lt
             | Instruction::Le

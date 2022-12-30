@@ -8,9 +8,13 @@ use frontend::Trace;
 use crate::Vm;
 
 fn handle_loop_trace(vm: &mut Vm, jmp_instr_ip: usize) {
-    let Ok((trace, fun)) = frontend::compile_current_trace(vm) else {
-        vm.poison_ip(jmp_instr_ip);
-        return;
+    let (trace, fun) = match frontend::compile_current_trace(vm) {
+        Ok(t) => t,
+        Err(err) => {
+            eprintln!("JIT compilation failed! {err:?}");
+            vm.poison_ip(jmp_instr_ip);
+            return;
+        }
     };
 
     let frame_sp = {
