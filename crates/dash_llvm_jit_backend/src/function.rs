@@ -12,9 +12,11 @@ use dash_middle::compiler::instruction::IntrinsicOperation;
 use indexmap::Equivalent;
 use llvm_sys::analysis::LLVMVerifierFailureAction;
 use llvm_sys::analysis::LLVMVerifyFunction;
+use llvm_sys::analysis::LLVMVerifyModule;
 use llvm_sys::core::LLVMAddFunction;
 use llvm_sys::core::LLVMAddIncoming;
 use llvm_sys::core::LLVMAppendBasicBlock;
+use llvm_sys::core::LLVMAppendBasicBlockInContext;
 use llvm_sys::core::LLVMBuildAdd;
 use llvm_sys::core::LLVMBuildAlloca;
 use llvm_sys::core::LLVMBuildBitCast;
@@ -47,8 +49,16 @@ use llvm_sys::core::LLVMBuildUDiv;
 use llvm_sys::core::LLVMBuildURem;
 use llvm_sys::core::LLVMConstInt;
 use llvm_sys::core::LLVMConstReal;
+use llvm_sys::core::LLVMContextCreate;
+use llvm_sys::core::LLVMContextDispose;
 use llvm_sys::core::LLVMCreateBuilder;
+use llvm_sys::core::LLVMCreateBuilderInContext;
+use llvm_sys::core::LLVMCreatePassManager;
+use llvm_sys::core::LLVMDisposeBuilder;
+use llvm_sys::core::LLVMDisposeMessage;
+use llvm_sys::core::LLVMDisposePassManager;
 use llvm_sys::core::LLVMDoubleType;
+use llvm_sys::core::LLVMDoubleTypeInContext;
 use llvm_sys::core::LLVMFloatType;
 use llvm_sys::core::LLVMFunctionType;
 use llvm_sys::core::LLVMGetLastBasicBlock;
@@ -57,33 +67,56 @@ use llvm_sys::core::LLVMGetTypeKind;
 use llvm_sys::core::LLVMGetValueName2;
 use llvm_sys::core::LLVMInt16TypeInContext;
 use llvm_sys::core::LLVMInt1Type;
+use llvm_sys::core::LLVMInt1TypeInContext;
 use llvm_sys::core::LLVMInt32Type;
+use llvm_sys::core::LLVMInt32TypeInContext;
 use llvm_sys::core::LLVMInt64Type;
+use llvm_sys::core::LLVMInt64TypeInContext;
 use llvm_sys::core::LLVMInt8Type;
+use llvm_sys::core::LLVMInt8TypeInContext;
+use llvm_sys::core::LLVMModuleCreateWithNameInContext;
 use llvm_sys::core::LLVMPointerType;
 use llvm_sys::core::LLVMPositionBuilderAtEnd;
+use llvm_sys::core::LLVMPrintModuleToString;
 use llvm_sys::core::LLVMPrintValueToString;
+use llvm_sys::core::LLVMRunPassManager;
 use llvm_sys::core::LLVMSetInstructionCallConv;
 use llvm_sys::core::LLVMSizeOf;
 use llvm_sys::core::LLVMStructType;
+use llvm_sys::core::LLVMStructTypeInContext;
 use llvm_sys::core::LLVMTypeOf;
 use llvm_sys::core::LLVMVoidType;
+use llvm_sys::core::LLVMVoidTypeInContext;
+use llvm_sys::error::LLVMDisposeErrorMessage;
+use llvm_sys::execution_engine::LLVMCreateExecutionEngineForModule;
+use llvm_sys::execution_engine::LLVMDisposeExecutionEngine;
 use llvm_sys::execution_engine::LLVMExecutionEngineRef;
 use llvm_sys::execution_engine::LLVMGetExecutionEngineTargetData;
 use llvm_sys::execution_engine::LLVMGetFunctionAddress;
 use llvm_sys::prelude::LLVMBasicBlockRef;
 use llvm_sys::prelude::LLVMBuilderRef;
+use llvm_sys::prelude::LLVMContextRef;
 use llvm_sys::prelude::LLVMModuleRef;
+use llvm_sys::prelude::LLVMPassManagerRef;
 use llvm_sys::prelude::LLVMTypeRef;
 use llvm_sys::prelude::LLVMValueRef;
 use llvm_sys::target::LLVMABISizeOfType;
 use llvm_sys::target::LLVMSizeOfTypeInBits;
+use llvm_sys::target_machine::LLVMCodeGenOptLevel;
+use llvm_sys::transforms::pass_builder::LLVMDisposePassBuilderOptions;
+use llvm_sys::transforms::pass_manager_builder::LLVMPassManagerBuilderCreate;
+use llvm_sys::transforms::pass_manager_builder::LLVMPassManagerBuilderDispose;
+use llvm_sys::transforms::pass_manager_builder::LLVMPassManagerBuilderPopulateFunctionPassManager;
+use llvm_sys::transforms::pass_manager_builder::LLVMPassManagerBuilderPopulateModulePassManager;
+use llvm_sys::transforms::pass_manager_builder::LLVMPassManagerBuilderRef;
+use llvm_sys::transforms::pass_manager_builder::LLVMPassManagerBuilderSetOptLevel;
 use llvm_sys::LLVMCallConv;
 use llvm_sys::LLVMIntPredicate;
 use llvm_sys::LLVMRealPredicate;
 use llvm_sys::LLVMTypeKind;
 use thiserror::Error;
 
+use crate::backend::JitFunction;
 use crate::cstr;
 use crate::passes::infer::InferResult;
 use crate::passes::infer::Type;
@@ -106,6 +139,10 @@ pub enum CompileError {
 }
 
 pub struct Function {
+    context: LLVMContextRef,
+    module: LLVMModuleRef,
+    engine: LLVMExecutionEngineRef,
+    pass_manager: LLVMPassManagerRef,
     function: LLVMValueRef,
     value_union: LLVMTypeRef,
     locals: HashMap<u16, (LLVMValueRef, LLVMTypeRef)>,
@@ -117,15 +154,20 @@ pub struct Function {
 }
 
 impl Function {
-    fn value_type(engine: LLVMExecutionEngineRef) -> LLVMTypeRef {
+    fn value_type(ctx: LLVMContextRef, engine: LLVMExecutionEngineRef) -> LLVMTypeRef {
         // Biggest type is (u8, usize, usize): trait object
         // TODO: don't hardcode this
         // TODO2: don't hardcode usize as i64
         unsafe {
-            let mut elements = [LLVMInt8Type(), LLVMInt64Type(), LLVMInt64Type()];
-            let ty = LLVMStructType(elements.as_mut_ptr(), elements.len() as u32, 0);
+            let mut elements = [
+                LLVMInt8TypeInContext(ctx),
+                LLVMInt64TypeInContext(ctx),
+                LLVMInt64TypeInContext(ctx),
+            ];
+            let ty = LLVMStructTypeInContext(ctx, elements.as_mut_ptr(), elements.len() as u32, 0);
 
             debug_assert!({
+                // TODO: do we need to free this TargetData?
                 let size = LLVMSizeOfTypeInBits(LLVMGetExecutionEngineTargetData(engine), ty);
                 size == 24 * 8
             });
@@ -133,29 +175,51 @@ impl Function {
             ty
         }
     }
-    fn create_function_type(engine: LLVMExecutionEngineRef) -> LLVMTypeRef {
+    fn create_function_type(ctx: LLVMContextRef, engine: LLVMExecutionEngineRef) -> LLVMTypeRef {
         unsafe {
             let mut args = [
-                LLVMPointerType(Self::value_type(engine), 0),
-                LLVMInt64Type(),
-                LLVMPointerType(LLVMInt64Type(), 0),
+                LLVMPointerType(Self::value_type(ctx, engine), 0),
+                LLVMInt64TypeInContext(ctx),
+                LLVMPointerType(LLVMInt64TypeInContext(ctx), 0),
             ];
-            let ret = LLVMVoidType();
+            let ret = LLVMVoidTypeInContext(ctx);
             LLVMFunctionType(ret, args.as_mut_ptr(), args.len() as u32, 0)
         }
     }
 
-    pub fn new(backend: &Backend) -> Self {
-        let value_union = Self::value_type(backend.engine());
-        let ty = Self::create_function_type(backend.engine());
-        let function = unsafe { LLVMAddFunction(backend.module(), cstr!("jit"), ty) };
+    pub fn new() -> Self {
+        let context = unsafe { LLVMContextCreate() };
+        let module = unsafe { LLVMModuleCreateWithNameInContext(cstr!("jit"), context) };
+        let mut engine = std::ptr::null_mut();
+        let mut error = std::ptr::null_mut();
+        assert!(unsafe { LLVMCreateExecutionEngineForModule(&mut engine, module, &mut error) } == 0);
+        assert!(error.is_null());
+
+        let value_union = Self::value_type(context, engine);
+        let ty = Self::create_function_type(context, engine);
+        let function = unsafe { LLVMAddFunction(module, cstr!("jit"), ty) };
         unsafe { LLVMSetInstructionCallConv(function, LLVMCallConv::LLVMCCallConv as u32) }
 
-        let builder = unsafe { LLVMCreateBuilder() };
-        let setup_block = unsafe { LLVMAppendBasicBlock(function, cstr!("setup")) };
-        let exit_block = unsafe { LLVMAppendBasicBlock(function, cstr!("exit")) };
+        let pass_manager = unsafe {
+            let pm = LLVMCreatePassManager();
+            let pmb = LLVMPassManagerBuilderCreate();
+            LLVMPassManagerBuilderSetOptLevel(pmb, LLVMCodeGenOptLevel::LLVMCodeGenLevelAggressive as u32);
+            LLVMPassManagerBuilderPopulateFunctionPassManager(pmb, pm);
+            LLVMPassManagerBuilderPopulateModulePassManager(pmb, pm);
+
+            LLVMPassManagerBuilderDispose(pmb);
+            pm
+        };
+
+        let builder = unsafe { LLVMCreateBuilderInContext(context) };
+        let setup_block = unsafe { LLVMAppendBasicBlockInContext(context, function, cstr!("setup")) };
+        let exit_block = unsafe { LLVMAppendBasicBlockInContext(context, function, cstr!("exit")) };
 
         Self {
+            context,
+            engine,
+            module,
+            pass_manager,
             function,
             locals: HashMap::new(),
             value_union,
@@ -168,7 +232,7 @@ impl Function {
     }
 
     fn append_block(&self) -> LLVMBasicBlockRef {
-        unsafe { LLVMAppendBasicBlock(self.function, cstr!("block")) }
+        unsafe { LLVMAppendBasicBlockInContext(self.context, self.function, cstr!("block")) }
     }
 
     fn append_and_enter_block(&self) -> LLVMBasicBlockRef {
@@ -180,7 +244,7 @@ impl Function {
     }
 
     fn alloca_local(&self, ty: &Type) -> LLVMValueRef {
-        unsafe { LLVMBuildAlloca(self.builder, ty.to_llvm_type(), cstr!("local")) }
+        unsafe { LLVMBuildAlloca(self.builder, ty.to_llvm_type(self.context), cstr!("local")) }
     }
 
     fn get_param(&self, param: u32) -> LLVMValueRef {
@@ -188,31 +252,35 @@ impl Function {
     }
 
     fn const_i1(&self, value: bool) -> LLVMValueRef {
-        unsafe { LLVMConstInt(LLVMInt1Type(), value as u64, 0) }
+        unsafe { LLVMConstInt(self.i1_ty(), value as u64, 0) }
     }
 
     fn const_i32(&self, value: i32) -> LLVMValueRef {
-        unsafe { LLVMConstInt(LLVMInt32Type(), value as u64, 0) }
+        unsafe { LLVMConstInt(self.i32_ty(), value as u64, 0) }
     }
 
     fn i64_ty(&self) -> LLVMTypeRef {
-        unsafe { LLVMInt64Type() }
+        unsafe { LLVMInt64TypeInContext(self.context) }
+    }
+
+    fn i32_ty(&self) -> LLVMTypeRef {
+        unsafe { LLVMInt32TypeInContext(self.context) }
     }
 
     fn i1_ty(&self) -> LLVMTypeRef {
-        unsafe { LLVMInt1Type() }
+        unsafe { LLVMInt1TypeInContext(self.context) }
     }
 
     fn f64_ty(&self) -> LLVMTypeRef {
-        unsafe { LLVMDoubleType() }
+        unsafe { LLVMDoubleTypeInContext(self.context) }
     }
 
     fn const_i64(&self, value: i64) -> LLVMValueRef {
-        unsafe { LLVMConstInt(LLVMInt64Type(), value as u64, 0) }
+        unsafe { LLVMConstInt(self.i64_ty(), value as u64, 0) }
     }
 
     fn const_f64(&self, value: f64) -> LLVMValueRef {
-        unsafe { LLVMConstReal(LLVMDoubleType(), value) }
+        unsafe { LLVMConstReal(self.f64_ty(), value) }
     }
 
     fn build_add(&self, a: LLVMValueRef, b: LLVMValueRef) -> LLVMValueRef {
@@ -461,7 +529,7 @@ impl Function {
             };
             self.build_store(value, space);
 
-            self.locals.insert(local_index, (space, ty.to_llvm_type()));
+            self.locals.insert(local_index, (space, ty.to_llvm_type(self.context)));
         }
     }
 
@@ -682,7 +750,38 @@ impl Function {
     }
 
     pub fn verify(&self) {
-        unsafe { LLVMVerifyFunction(self.function, LLVMVerifierFailureAction::LLVMAbortProcessAction) };
+        let mut error = std::ptr::null_mut();
+        unsafe {
+            LLVMVerifyModule(
+                self.module,
+                LLVMVerifierFailureAction::LLVMAbortProcessAction,
+                &mut error,
+            );
+            LLVMDisposeMessage(error);
+        };
+    }
+
+    pub fn run_pass_manager(&self) {
+        unsafe {
+            LLVMRunPassManager(self.pass_manager, self.module);
+        }
+    }
+
+    pub fn print_module(&self) {
+        let string = unsafe { CStr::from_ptr(LLVMPrintModuleToString(self.module)) };
+        let rust_string = String::from_utf8_lossy(string.to_bytes());
+        println!("{}", rust_string);
+
+        unsafe { LLVMDisposeMessage(string.as_ptr() as *mut i8) }
+    }
+
+    pub fn compile(&self) -> JitFunction {
+        unsafe {
+            let addr = LLVMGetFunctionAddress(self.engine, self.function_name().as_ptr());
+            assert!(addr != 0);
+            let fun = std::mem::transmute::<u64, JitFunction>(addr);
+            fun
+        }
     }
 
     pub fn function_name(&self) -> &CStr {
@@ -697,6 +796,17 @@ impl Function {
 
     pub fn function_value(&self) -> LLVMValueRef {
         self.function
+    }
+}
+
+impl Drop for Function {
+    fn drop(&mut self) {
+        unsafe {
+            LLVMDisposeBuilder(self.builder);
+            LLVMDisposePassManager(self.pass_manager);
+            LLVMDisposeExecutionEngine(self.engine);
+            LLVMContextDispose(self.context);
+        }
     }
 }
 

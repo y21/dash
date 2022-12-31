@@ -68,4 +68,8 @@ impl Trace {
     pub fn side_exit(&self) -> bool {
         self.side_exit
     }
+
+    pub fn origin(&self) -> *const Function {
+        self.origin
+    }
 }

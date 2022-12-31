@@ -1,8 +1,12 @@
+use std::collections::HashMap;
+
+use dash_llvm_jit_backend::backend::CompiledFunction;
 use dash_llvm_jit_backend::backend::JitFunction;
 use dash_llvm_jit_backend::error::Error;
 use dash_llvm_jit_backend::init;
 use dash_llvm_jit_backend::passes::infer::infer_types_and_labels;
 use dash_llvm_jit_backend::Backend;
+use dash_middle::compiler::constant::Function;
 
 use crate::Vm;
 
@@ -15,6 +19,7 @@ pub struct Frontend {
     trace: Option<Trace>,
     /// The JIT backend
     backend: Backend,
+    cache: HashMap<(*const (), usize), CompiledFunction>,
 }
 
 impl Frontend {
@@ -24,6 +29,7 @@ impl Frontend {
         Self {
             trace: None,
             backend: Backend::new(),
+            cache: HashMap::new(),
         }
     }
 
@@ -42,12 +48,21 @@ impl Frontend {
     pub fn set_recording_trace(&mut self, trace: Trace) {
         self.trace = Some(trace);
     }
+
+    fn get_cached_function(&self, origin: *const Function, pc: usize) -> Option<&CompiledFunction> {
+        self.cache.get(&(origin.cast(), pc))
+    }
 }
 
 pub fn compile_current_trace(vm: &mut Vm) -> Result<(Trace, JitFunction), Error> {
     let frame = vm.frames.last().unwrap();
     let trace = vm.jit.take_recording_trace().unwrap();
     let bytecode = &frame.function.buffer[trace.start()..trace.end()];
+    let origin = trace.origin();
+
+    if let Some(cached) = vm.jit.get_cached_function(origin, trace.start()) {
+        return Ok((trace, cached.compiled()));
+    }
 
     let types = infer_types_and_labels(bytecode, QueryProvider::new(vm, &trace))?;
 
@@ -56,5 +71,9 @@ pub fn compile_current_trace(vm: &mut Vm) -> Result<(Trace, JitFunction), Error>
         .backend
         .compile_trace(QueryProvider::new(vm, &trace), bytecode, types, &trace)?;
 
-    Ok((trace, fun))
+    let compiled = fun.compiled();
+
+    vm.jit.cache.insert((origin.cast(), trace.start()), fun);
+
+    Ok((trace, compiled))
 }

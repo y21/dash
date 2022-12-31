@@ -6,8 +6,12 @@ use boolvec::BoolVec;
 use dash_middle::compiler::instruction::Instruction;
 use dash_middle::compiler::instruction::IntrinsicOperation;
 use llvm_sys::core::LLVMDoubleType;
+use llvm_sys::core::LLVMDoubleTypeInContext;
 use llvm_sys::core::LLVMInt1Type;
+use llvm_sys::core::LLVMInt1TypeInContext;
 use llvm_sys::core::LLVMInt64Type;
+use llvm_sys::core::LLVMInt64TypeInContext;
+use llvm_sys::prelude::LLVMContextRef;
 use llvm_sys::prelude::LLVMTypeRef;
 use llvm_sys::prelude::LLVMValueRef;
 use thiserror::Error;
@@ -20,12 +24,12 @@ pub enum Type {
 }
 
 impl Type {
-    pub fn to_llvm_type(&self) -> LLVMTypeRef {
+    pub fn to_llvm_type(&self, ctx: LLVMContextRef) -> LLVMTypeRef {
         unsafe {
             match self {
-                Self::I64 => LLVMInt64Type(),
-                Self::F64 => LLVMDoubleType(),
-                Self::Boolean => LLVMInt1Type(),
+                Self::I64 => LLVMInt64TypeInContext(ctx),
+                Self::F64 => LLVMDoubleTypeInContext(ctx),
+                Self::Boolean => LLVMInt1TypeInContext(ctx),
             }
         }
     }
