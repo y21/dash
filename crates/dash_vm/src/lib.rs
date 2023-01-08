@@ -38,6 +38,7 @@ pub mod params;
 pub mod statics;
 pub mod util;
 pub mod value;
+mod macros;
 #[cfg(test)]
 mod test;
 

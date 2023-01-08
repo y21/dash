@@ -14,31 +14,6 @@ pub mod regex;
 pub mod set;
 pub mod typedarray;
 
-#[macro_export]
-macro_rules! throw {
-    ($vm:expr) => {
-        return Err({
-            let mut vm = $vm;
-            let err = $crate::value::error::Error::new(&mut vm, "Unnamed error");
-            vm.gc_mut().register(err).into()
-        })
-    };
-    ($vm:expr, $msg:expr) => {
-        return Err({
-            let mut vm = $vm;
-            let err = $crate::value::error::Error::new(&mut vm, $msg);
-            vm.gc_mut().register(err).into()
-        })
-    };
-    ($vm:expr, $msg:expr, $($arg:expr),*) => {
-        return Err({
-            let mut vm = $vm;
-            let err = $crate::value::error::Error::new(&mut vm, format!($msg, $($arg),*));
-            vm.gc_mut().register(err).into()
-        })
-    };
-}
-
 use std::rc::Rc;
 
 use dash_middle::compiler::{constant::Constant, external::External};
@@ -46,7 +21,7 @@ use dash_middle::parser::statement::FunctionKind as ParserFunctionKind;
 use dash_middle::util::ThreadSafeStorage;
 use dash_proc_macro::Trace;
 
-use crate::delegate;
+use crate::{delegate, throw};
 use crate::{
     gc::{handle::Handle, trace::Trace},
     value::{
