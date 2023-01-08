@@ -392,6 +392,10 @@ impl Vm {
             pop: scope.statics.array_pop;
             push: scope.statics.array_push;
             reverse: scope.statics.array_reverse;
+            shift: scope.statics.array_shift;
+            unshift: scope.statics.array_unshift;
+            slice: scope.statics.array_slice;
+            lastIndexOf: scope.statics.array_last_index_of;
 
             #[symbols]
             scope.statics.symbol_iterator => scope.statics.array_values;

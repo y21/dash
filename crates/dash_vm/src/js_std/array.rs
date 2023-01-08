@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use crate::local::LocalScope;
 use crate::throw;
 use crate::value::array;
@@ -286,6 +288,28 @@ pub fn index_of(cx: CallContext) -> Result<Value, Value> {
     Ok(Value::number(-1.0))
 }
 
+pub fn last_index_of(cx: CallContext) -> Result<Value, Value> {
+    let this = Value::Object(cx.this.to_object(cx.scope)?);
+    let len = this.length_of_array_like(cx.scope)?;
+    let search_element = cx.args.first().unwrap_or_undefined();
+    let from_index = cx
+        .args
+        .get(1)
+        .map(|x| x.to_length_u(cx.scope))
+        .transpose()?
+        .unwrap_or(len);
+
+    for k in (0..from_index).rev() {
+        let pk = k.to_string();
+        let pkv = this.get_property(cx.scope, pk.as_str().into())?;
+        if pkv.strict_eq(&search_element, cx.scope)?.is_truthy() {
+            return Ok(Value::number(k as f64));
+        }
+    }
+
+    Ok(Value::number(-1.0))
+}
+
 pub fn map(cx: CallContext) -> Result<Value, Value> {
     let this = Value::Object(cx.this.to_object(cx.scope)?);
     let len = this.length_of_array_like(cx.scope)?;
@@ -365,8 +389,132 @@ pub fn reverse(cx: CallContext) -> Result<Value, Value> {
     Ok(this)
 }
 
-// pub fn shift(cx: CallContext) -> Result<Value, Value> {
-//     let this = Value::Object(cx.this.to_object(cx.scope)?);
-//     let prop = this.delete_property(cx.scope, PropertyKey::String("0".into()))?;
-//     Ok(prop)
-// }
+pub fn shift(cx: CallContext) -> Result<Value, Value> {
+    let this = Value::Object(cx.this.to_object(cx.scope)?);
+    let len = this.length_of_array_like(cx.scope)?;
+
+    if len == 0 {
+        return Ok(Value::undefined());
+    }
+
+    let prop = this.delete_property(cx.scope, "0".into())?;
+
+    for k in 1..len {
+        let pk = k.to_string();
+        let pkv = this.get_property(cx.scope, pk.as_str().into())?;
+        this.set_property(cx.scope, (k - 1).to_string().into(), PropertyValue::static_default(pkv))?;
+    }
+
+    this.set_property(
+        cx.scope,
+        "length".into(),
+        PropertyValue::static_default(Value::number((len - 1) as f64)),
+    )?;
+
+    Ok(prop)
+}
+
+/// Shifts the elements of a JavaScript array by a given amount to the left (negative value) or right (positive value).
+fn shift_array(
+    scope: &mut LocalScope,
+    arr: &Value,
+    len: usize,
+    shift_by: isize,
+    range: Range<usize>,
+) -> Result<(), Value> {
+    let range = range.start as isize..range.end as isize;
+
+    let new_len = (range.end + shift_by) as usize;
+
+    // If the range end + shift_by results in a value greater than the length of the array, we need to
+    // set the length of the array to the new length.
+    // Technically this isn't needed, and we can just let the array grow as needed, but this is for clarity
+    if range.end + shift_by > len as isize {
+        arr.set_property(
+            scope,
+            "length".into(),
+            PropertyValue::static_default(Value::number(new_len as f64)),
+        )?;
+    }
+
+    // Start shifting the elements by the shift_by (can be either negative or positive) amount
+    for k in range {
+        let pk = k.to_string();
+        let pkv = arr.get_property(scope, pk.as_str().into())?;
+        arr.set_property(
+            scope,
+            (k as isize + shift_by).to_string().into(),
+            PropertyValue::static_default(pkv),
+        )?;
+    }
+
+    // If the shift_by is negative, we need to delete the remaining elements at the end that were shifted
+    // This must be done after the shifting, otherwise we would be deleting elements before they can be shifted
+    if shift_by < 0 {
+        arr.set_property(
+            scope,
+            "length".into(),
+            PropertyValue::static_default(Value::number(new_len as f64)),
+        )?;
+    }
+
+    Ok(())
+}
+
+pub fn unshift(cx: CallContext) -> Result<Value, Value> {
+    let this = Value::Object(cx.this.to_object(cx.scope)?);
+    let len = this.length_of_array_like(cx.scope)?;
+    let arg_len = cx.args.len();
+    let new_len = len + cx.args.len();
+
+    shift_array(cx.scope, &this, len, arg_len as isize, 0..len)?;
+
+    for (idx, arg) in cx.args.into_iter().enumerate() {
+        this.set_property(cx.scope, idx.to_string().into(), PropertyValue::static_default(arg))?;
+    }
+
+    Ok(Value::number(new_len as f64))
+}
+
+fn to_slice_index(index: isize, len: usize) -> usize {
+    if index < 0 {
+        let new_index = len as isize + index;
+        if new_index < 0 {
+            0
+        } else {
+            new_index as usize
+        }
+    } else {
+        index as usize
+    }
+}
+
+pub fn slice(cx: CallContext) -> Result<Value, Value> {
+    let this = Value::Object(cx.this.to_object(cx.scope)?);
+    let len = this.length_of_array_like(cx.scope)?;
+
+    let start = match cx.args.get(0) {
+        Some(v) => to_slice_index(v.to_int32(cx.scope)? as isize, len),
+        None => 0,
+    };
+
+    let end = match cx.args.get(1) {
+        Some(v) => to_slice_index(v.to_int32(cx.scope)? as isize, len),
+        None => len,
+    };
+
+    // TODO: optimization opportunity to have a `SliceArray` type of internal array kind
+    // that just stores a reference to the original array and the start/end indices
+    // instead of allocating a new array for the subslice
+    let mut values = Vec::new();
+
+    for k in start..end {
+        let pk = k.to_string();
+        let pkv = this.get_property(cx.scope, pk.as_str().into())?;
+        values.push(PropertyValue::static_default(pkv));
+    }
+
+    let values = Array::from_vec(cx.scope, values);
+
+    Ok(cx.scope.register(values).into())
+}

@@ -179,6 +179,10 @@ pub struct Statics {
     pub array_pop: Handle<dyn Object>,
     pub array_push: Handle<dyn Object>,
     pub array_reverse: Handle<dyn Object>,
+    pub array_shift: Handle<dyn Object>,
+    pub array_unshift: Handle<dyn Object>,
+    pub array_slice: Handle<dyn Object>,
+    pub array_last_index_of: Handle<dyn Object>,
     pub generator_iterator_prototype: Handle<dyn Object>,
     pub generator_iterator_next: Handle<dyn Object>,
     pub error_ctor: Handle<dyn Object>,
@@ -402,6 +406,10 @@ impl Statics {
             array_map: function(gc, "map", js_std::array::map),
             array_pop: function(gc, "pop", js_std::array::pop),
             array_push: function(gc, "push", js_std::array::push),
+            array_shift: function(gc, "shift", js_std::array::shift),
+            array_unshift: function(gc, "unshift", js_std::array::unshift),
+            array_slice: function(gc, "slice", js_std::array::slice),
+            array_last_index_of: function(gc, "lastIndexOf", js_std::array::last_index_of),
             generator_iterator_prototype: {
                 let obj = gc.register(NamedObject::null());
                 builtin_object(gc, GeneratorIterator::empty(obj))
