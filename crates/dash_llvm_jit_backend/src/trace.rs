@@ -5,15 +5,13 @@ use dash_middle::compiler::constant::Function;
 use dash_middle::compiler::instruction as inst;
 use indexmap::IndexMap;
 
-use super::assembler::Assembler;
-use super::assembler::JitCacheKey;
-use super::assembler::JitResult;
-use super::value::Value;
-
 #[derive(Debug)]
 pub struct Trace {
-    /// Whether this trace records a side exit
-    pub(crate) side_exit: bool,
+    /// The "parent" instruction pointer
+    ///
+    /// This is `Some` if this trace records a side exit and will contain the instruction pointer
+    /// of the predecessor trace
+    pub(crate) parent_ip: Option<usize>,
     pub(crate) origin: *const Function,
     pub(crate) start: usize,
     pub(crate) end: usize,
@@ -23,34 +21,21 @@ pub struct Trace {
     /// Note for later: can change to HashSet<usize, bool> where usize is the IP if a trace
     /// is composed of multiple possible paths
     pub(crate) conditional_jumps: Vec<bool>,
-
-    pub(crate) locals: IndexMap<u16, Value>,
-    pub(crate) constants: HashMap<u16, Value>,
 }
 
 impl Trace {
-    pub fn new(origin: *const Function, start: usize, end: usize, side_exit: bool) -> Self {
+    pub fn new(origin: *const Function, start: usize, end: usize, parent_ip: Option<usize>) -> Self {
         Self {
-            side_exit,
+            parent_ip,
             origin,
             start,
             end,
             conditional_jumps: Vec::new(),
-            locals: IndexMap::new(),
-            constants: HashMap::new(),
         }
     }
 
     pub fn get_conditional_jump(&self, id: usize) -> bool {
         self.conditional_jumps[id]
-    }
-
-    pub fn record_local(&mut self, index: u16, value: Value) {
-        self.locals.insert(index, value);
-    }
-
-    pub fn record_constant(&mut self, index: u16, value: Value) {
-        self.constants.insert(index, value);
     }
 
     pub fn record_conditional_jump(&mut self, taken: bool) {
@@ -63,10 +48,6 @@ impl Trace {
 
     pub fn end(&self) -> usize {
         self.end
-    }
-
-    pub fn side_exit(&self) -> bool {
-        self.side_exit
     }
 
     pub fn origin(&self) -> *const Function {

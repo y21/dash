@@ -214,8 +214,8 @@ pub fn infer_types_and_labels<Q: InferQueryProvider>(bytecode: &[u8], query: Q) 
                 cx.push(Type::Boolean);
             }
             Instruction::Jmp => {
-                let n = cx.next_wide_signed() + 3;
-                let target_ip = index as i16 + n;
+                let n = cx.next_wide_signed();
+                let target_ip = index as i16 + n + 3;
                 for _ in 0..n {
                     cx.next_byte();
                 }
@@ -223,8 +223,8 @@ pub fn infer_types_and_labels<Q: InferQueryProvider>(bytecode: &[u8], query: Q) 
             }
             Instruction::JmpFalseP | Instruction::JmpNullishP | Instruction::JmpTrueP | Instruction::JmpUndefinedP => {
                 let _ = cx.pop();
-                let count = cx.next_wide_signed() + 3;
-                let target_ip = index as i16 + count;
+                let count = cx.next_wide_signed();
+                let target_ip = index as i16 + count + 3;
 
                 if query.did_take_nth_branch(branch_count) {
                     for _ in 0..count {

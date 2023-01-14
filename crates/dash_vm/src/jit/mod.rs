@@ -32,8 +32,10 @@ fn handle_loop_trace(vm: &mut Vm, jmp_instr_ip: usize) {
         fun(stack_ptr, frame_sp, out_target_ip);
     }
 
+    target_ip = offset_ip as u64 + target_ip;
+
     // `target_ip` is not the "real" IP, there may be some extra instructions before the loop header
-    vm.frames.last_mut().unwrap().ip = offset_ip + target_ip as usize;
+    vm.frames.last_mut().unwrap().ip = target_ip as usize;
 }
 
 pub fn handle_loop_end(vm: &mut Vm, loop_end_ip: usize) {
@@ -41,14 +43,15 @@ pub fn handle_loop_end(vm: &mut Vm, loop_end_ip: usize) {
     let origin = Rc::as_ptr(&frame.function);
     let vm_instr_ip = loop_end_ip - 3;
 
+    // We are jumping back to a loop header
     if let Some(trace) = vm.jit.recording_trace() {
+        // There is a trace being recorded for this loop
         if trace.start() == frame.ip {
             handle_loop_trace(vm, vm_instr_ip);
         } else {
             todo!("Side exit")
         }
     } else {
-        // We are jumping back to a loop header
         let frame = vm.frames.last_mut().unwrap();
         let counter = frame.loop_counter.get_or_insert(frame.ip);
 
@@ -65,7 +68,7 @@ pub fn handle_loop_end(vm: &mut Vm, loop_end_ip: usize) {
             // The trace will go on until either:
             // - The loop is exited
             // - The iteration has ended (i.e. we are here again)
-            let trace = Trace::new(origin, frame.ip, loop_end_ip, false);
+            let trace = Trace::new(origin, frame.ip, loop_end_ip, None);
             vm.jit.set_recording_trace(trace);
         }
     }
