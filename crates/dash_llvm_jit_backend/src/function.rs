@@ -417,6 +417,14 @@ impl Function {
         self.build_cmp(a, b, Predicate::Gt)
     }
 
+    fn build_le(&self, a: LLVMValueRef, b: LLVMValueRef) -> LLVMValueRef {
+        self.build_cmp(a, b, Predicate::Le)
+    }
+
+    fn build_ge(&self, a: LLVMValueRef, b: LLVMValueRef) -> LLVMValueRef {
+        self.build_cmp(a, b, Predicate::Ge)
+    }
+
     fn build_eq(&self, a: LLVMValueRef, b: LLVMValueRef) -> LLVMValueRef {
         self.build_cmp(a, b, Predicate::Eq)
     }
@@ -747,7 +755,13 @@ impl Function {
                                 LLVMTypeKind::LLVMDoubleTypeKind => cx.const_f64(num),
                                 _ => unreachable!(),
                             };
-                            let res = cx.build_lt(value, rhs);
+                            let res = match op {
+                                IntrinsicOperation::GtNumLConstR32 => cx.build_gt(value, rhs),
+                                IntrinsicOperation::GeNumLConstR32 => cx.build_ge(value, rhs),
+                                IntrinsicOperation::LtNumLConstR32 => cx.build_lt(value, rhs),
+                                IntrinsicOperation::LeNumLConstR32 => cx.build_le(value, rhs),
+                                _ => unreachable!(),
+                            };
                             cx.push(res);
                         }
                         _ => return Err(CompileError::UnimplementedInstr(instr)),
