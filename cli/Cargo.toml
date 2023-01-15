@@ -8,7 +8,7 @@ edition = "2018"
 anyhow = "1.0"
 clap = { version = "3.0.0", features = ["std"], default-features = false }
 rustyline = "9.1.2"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1.24.0", features = ["full"] }
 dash_rt = { path = "../crates/dash_rt", features = ["dlopen"] }
 dash_lexer = { path = "../crates/dash_lexer" }
 dash_parser = { path = "../crates/dash_parser" }

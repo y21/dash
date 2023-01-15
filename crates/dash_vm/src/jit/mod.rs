@@ -39,37 +39,40 @@ fn handle_loop_trace(vm: &mut Vm, jmp_instr_ip: usize) {
 }
 
 pub fn handle_loop_end(vm: &mut Vm, loop_end_ip: usize) {
-    let frame = vm.frames.last().unwrap();
-    let origin = Rc::as_ptr(&frame.function);
-    let vm_instr_ip = loop_end_ip - 3;
+    let frame = vm.frames.last_mut().unwrap();
 
     // We are jumping back to a loop header
     if let Some(trace) = vm.jit.recording_trace() {
         // There is a trace being recorded for this loop
-        if trace.start() == frame.ip {
-            handle_loop_trace(vm, vm_instr_ip);
+        if frame.ip == trace.start() {
+            handle_loop_trace(vm, loop_end_ip);
         } else {
-            todo!("Side exit")
+            todo!("Side exit");
         }
     } else {
-        let frame = vm.frames.last_mut().unwrap();
-        let counter = frame.loop_counter.get_or_insert(frame.ip);
+        handle_loop_counter_inc(vm, loop_end_ip, None);
+    }
+}
 
-        counter.inc();
-        if counter.is_hot() {
-            if frame.function.is_poisoned_ip(vm_instr_ip) {
-                // We have already tried to compile this loop, and failed
-                // So don't bother re-tracing
-                return;
-            }
+fn handle_loop_counter_inc(vm: &mut Vm, loop_end_ip: usize, parent_ip: Option<usize>) {
+    let frame = vm.frames.last_mut().unwrap();
+    let origin = Rc::as_ptr(&frame.function);
+    let counter = frame.loop_counter.get_or_insert(frame.ip);
 
-            // Hot loop detected
-            // Start recording a trace (i.e. every opcode) for the next loop iteration
-            // The trace will go on until either:
-            // - The loop is exited
-            // - The iteration has ended (i.e. we are here again)
-            let trace = Trace::new(origin, frame.ip, loop_end_ip, None);
-            vm.jit.set_recording_trace(trace);
+    counter.inc();
+    if counter.is_hot() {
+        if frame.function.is_poisoned_ip(loop_end_ip) {
+            // We have already tried to compile this loop, and failed
+            // So don't bother re-tracing
+            return;
         }
+
+        // Hot loop detected
+        // Start recording a trace (i.e. every opcode) for the next loop iteration
+        // The trace will go on until either:
+        // - The loop is exited
+        // - The iteration has ended (i.e. we are here again)
+        let trace = Trace::new(origin, frame.ip, loop_end_ip, parent_ip);
+        vm.jit.set_recording_trace(trace);
     }
 }
