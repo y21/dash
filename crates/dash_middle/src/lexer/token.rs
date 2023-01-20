@@ -368,11 +368,18 @@ pub const ASSIGNMENT_TYPES: &[TokenType] = &[
 ];
 
 pub const VARIABLE_TYPES: &[TokenType] = &[TokenType::Var, TokenType::Let, TokenType::Const];
+pub const IDENTIFIER_TYPES: &[TokenType] = &[TokenType::Identifier, TokenType::Dollar];
 
 impl TokenType {
     /// Checks if this token is a variable kind
     pub fn is_variable(&self) -> bool {
         VARIABLE_TYPES.contains(self)
+    }
+
+    /// Checks if this token is a possible symbol for identfiers
+    pub fn is_identifier(&self) -> bool {
+        // even though `$` is its own token, it is also a valid identifier
+        IDENTIFIER_TYPES.contains(self)
     }
 }
 

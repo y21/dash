@@ -1,4 +1,5 @@
 use dash_middle::lexer::token::TokenType;
+use dash_middle::lexer::token::IDENTIFIER_TYPES;
 use dash_middle::lexer::token::VARIABLE_TYPES;
 use dash_middle::parser::error::ErrorKind;
 use dash_middle::parser::expr::Expr;
@@ -100,7 +101,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
     }
 
     fn parse_class(&mut self) -> Option<Class<'a>> {
-        let name = if self.expect_and_skip(&[TokenType::Identifier], false) {
+        let name = if self.expect_and_skip(IDENTIFIER_TYPES, false) {
             let prev = self.previous()?;
             Some(must_borrow_lexeme!(self, prev)?)
         } else {
@@ -212,10 +213,10 @@ impl<'a> StatementParser<'a> for Parser<'a> {
         // `import` followed by a `*` imports all exported values
         let is_import_all = self.expect_and_skip(&[TokenType::Star], false);
         if is_import_all {
-            self.expect_and_skip(&[TokenType::Identifier], true);
+            self.expect_and_skip(IDENTIFIER_TYPES, true);
             // TODO: enforce identifier be == b"as"
             let ident = self.next_identifier()?;
-            self.expect_and_skip(&[TokenType::Identifier], true);
+            self.expect_and_skip(IDENTIFIER_TYPES, true);
             // TODO: enforce identifier be == b"from"
             let specifier = self.next()?.full.clone();
             return Some(ImportKind::AllAs(SpecifierKind::Ident(ident), specifier));
@@ -223,7 +224,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
 
         // `import` followed by an identifier is considered a default import
         if let Some(default_import_ident) = self.next_identifier() {
-            self.expect_and_skip(&[TokenType::Identifier], true);
+            self.expect_and_skip(IDENTIFIER_TYPES, true);
             // TODO: enforce identifier be == b"from"
             let specifier = self.next()?.full.clone();
             return Some(ImportKind::DefaultAs(
@@ -412,8 +413,8 @@ impl<'a> StatementParser<'a> for Parser<'a> {
 
                     Parameter::Spread(ident)
                 }
-                TokenType::Identifier => Parameter::Identifier(must_borrow_lexeme!(self, &tok)?),
                 TokenType::Comma => continue,
+                other if other.is_identifier() => Parameter::Identifier(must_borrow_lexeme!(self, &tok)?),
                 _ => {
                     self.create_error(ErrorKind::UnexpectedToken(tok.clone(), TokenType::Comma));
                     return None;
@@ -473,37 +474,32 @@ impl<'a> StatementParser<'a> for Parser<'a> {
                         }
 
                         let name = self.current()?.clone();
-                        match name.ty {
-                            TokenType::Identifier => {
-                                if rest.is_some() {
-                                    // Only allow one rest operator
-                                    self.create_error(ErrorKind::MultipleRestInDestructuring(name));
-                                    return None;
-                                }
-
-                                rest = Some(must_borrow_lexeme!(self, &name)?);
-                                self.advance();
-                            }
-                            _ => {
-                                self.create_error(ErrorKind::UnexpectedToken(name, TokenType::Identifier));
+                        if name.ty.is_identifier() {
+                            if rest.is_some() {
+                                // Only allow one rest operator
+                                self.create_error(ErrorKind::MultipleRestInDestructuring(name));
                                 return None;
                             }
+
+                            rest = Some(must_borrow_lexeme!(self, &name)?);
+                            self.advance();
+                        } else {
+                            self.create_error(ErrorKind::UnexpectedToken(name, TokenType::Identifier));
+                            return None;
                         }
                     }
-                    TokenType::Identifier => {
+                    other if other.is_identifier() => {
                         let name = must_borrow_lexeme!(self, &cur)?;
                         self.advance();
+
                         let alias = if self.expect_and_skip(&[TokenType::Colon], false) {
                             let alias = self.current()?.clone();
-                            match alias.ty {
-                                TokenType::Identifier => {
-                                    self.advance();
-                                    Some(must_borrow_lexeme!(self, &alias)?)
-                                }
-                                _ => {
-                                    self.create_error(ErrorKind::UnexpectedToken(alias, TokenType::Identifier));
-                                    return None;
-                                }
+                            if alias.ty.is_identifier() {
+                                self.advance();
+                                Some(must_borrow_lexeme!(self, &alias)?)
+                            } else {
+                                self.create_error(ErrorKind::UnexpectedToken(alias, TokenType::Identifier));
+                                return None;
                             }
                         } else {
                             None
@@ -537,24 +533,21 @@ impl<'a> StatementParser<'a> for Parser<'a> {
                         }
 
                         let name = self.current()?.clone();
-                        match name.ty {
-                            TokenType::Identifier => {
-                                if rest.is_some() {
-                                    // Only allow one rest operator
-                                    self.create_error(ErrorKind::MultipleRestInDestructuring(name));
-                                    return None;
-                                }
-
-                                rest = Some(must_borrow_lexeme!(self, &name)?);
-                                self.advance();
-                            }
-                            _ => {
-                                self.create_error(ErrorKind::UnexpectedToken(name, TokenType::Identifier));
+                        if name.ty.is_identifier() {
+                            if rest.is_some() {
+                                // Only allow one rest operator
+                                self.create_error(ErrorKind::MultipleRestInDestructuring(name));
                                 return None;
                             }
+
+                            rest = Some(must_borrow_lexeme!(self, &name)?);
+                            self.advance();
+                        } else {
+                            self.create_error(ErrorKind::UnexpectedToken(name, TokenType::Identifier));
+                            return None;
                         }
                     }
-                    TokenType::Identifier => {
+                    other if other.is_identifier() => {
                         let name = must_borrow_lexeme!(self, &cur)?;
                         self.advance();
                         fields.push(name);

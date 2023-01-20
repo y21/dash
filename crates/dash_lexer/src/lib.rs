@@ -422,7 +422,13 @@ impl<'a> Lexer<'a> {
         let cur = self.next_char()?;
 
         match cur {
-            b'$' => self.create_contextified_token(TokenType::Dollar),
+            b'$' => {
+                if util::is_alpha(self.current()?) {
+                    self.read_identifier();
+                } else {
+                    self.create_contextified_token(TokenType::Dollar);
+                }
+            }
             b'(' => self.create_contextified_token(TokenType::LeftParen),
             b')' => self.create_contextified_token(TokenType::RightParen),
             b'{' => {

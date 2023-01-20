@@ -392,16 +392,6 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
             TokenType::TrueLit => Expr::bool_literal(true),
             TokenType::NullLit => Expr::null_literal(),
             TokenType::UndefinedLit => Expr::undefined_literal(),
-            TokenType::Identifier => {
-                let expr = Expr::identifier(current.full);
-
-                // If this identifier is followed by an arrow, this is an arrow function
-                if self.expect_and_skip(&[TokenType::FatArrow], false) {
-                    return self.parse_arrow_function_end(vec![expr]).map(Expr::Function);
-                }
-
-                expr
-            }
             TokenType::String => Expr::string_literal(current.full),
             TokenType::EmptySquareBrace => Expr::Array(ArrayLiteral(Vec::new())),
             TokenType::LeftSquareBrace => {
@@ -551,6 +541,16 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
                 };
                 Expr::Literal(LiteralExpr::Regex(nodes, full))
             }
+            other if other.is_identifier() => {
+                let expr = Expr::identifier(current.full);
+
+                // If this identifier is followed by an arrow, this is an arrow function
+                if self.expect_and_skip(&[TokenType::FatArrow], false) {
+                    return self.parse_arrow_function_end(vec![expr]).map(Expr::Function);
+                }
+
+                expr
+            }
             _ => {
                 let cur = self.previous().cloned()?;
                 self.create_error(ErrorKind::UnknownToken(cur));
@@ -572,7 +572,7 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
 
         let name = {
             let ty = self.current()?.ty;
-            if ty == TokenType::Identifier {
+            if ty.is_identifier() {
                 match self.next() {
                     Some(tok) => Some(must_borrow_lexeme!(self, tok)?),
                     None => None,

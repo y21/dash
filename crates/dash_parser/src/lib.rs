@@ -142,6 +142,10 @@ impl<'a> Parser<'a> {
         ok
     }
 
+    fn expect_identifier_and_skip(&mut self, emit_error: bool) -> bool {
+        self.expect_and_skip(&[TokenType::Identifier, TokenType::Dollar], emit_error)
+    }
+
     fn expect_and_skip(&mut self, ty: &'static [TokenType], emit_error: bool) -> bool {
         let current = match self.current() {
             Some(k) => k,
