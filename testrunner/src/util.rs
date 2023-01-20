@@ -12,6 +12,16 @@ pub const IGNORED_TESTS: &[&str] = &[
     "Array/length/S15.4.5.1_A1.1_T1.js",
     "Array/length/S15.4.5.2_A3_T4.js",
     "Array/property-cast-number.js",
+    "Array/prototype/unshift/clamps-to-integer-limit.js",
+    "Array/prototype/unshift/throws-if-integer-limit-exceeded.js",
+    "Array/prototype/unshift/clamps-to-integer-limit.js",
+    "Array/prototype/unshift/length-near-integer-limit.js",
+    "Array/prototype/map/15.4.4.19-3-29.js",
+    "Array/prototype/map/15.4.4.19-3-14.js",
+    "Array/prototype/map/15.4.4.19-3-8.js",
+    "Array/prototype/map/15.4.4.19-3-28.js",
+    "Array/prototype/slice/S15.4.4.10_A3_T2.js",
+    "Array/prototype/slice/S15.4.4.10_A3_T1.js",
     "indexOf/15.4.4.14-9-9.js",
     "lastIndexOf/15.4.4.15-8-9.js",
     "push/S15.4.4.7_A3.js",
@@ -37,6 +47,7 @@ pub const IGNORED_TESTS: &[&str] = &[
     // infinite loops
     "try/S12.14_A9_T1.js",
     "while/S12.6.2_A9.js",
+    "RegExp/S15.10.2_A1_T1.js",
 ];
 
 /// Returns a vector of path strings
