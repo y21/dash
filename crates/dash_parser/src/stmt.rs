@@ -1,5 +1,4 @@
 use dash_middle::lexer::token::TokenType;
-use dash_middle::lexer::token::IDENTIFIER_TYPES;
 use dash_middle::lexer::token::VARIABLE_TYPES;
 use dash_middle::parser::error::ErrorKind;
 use dash_middle::parser::expr::Expr;
@@ -101,7 +100,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
     }
 
     fn parse_class(&mut self) -> Option<Class<'a>> {
-        let name = if self.expect_and_skip(IDENTIFIER_TYPES, false) {
+        let name = if self.expect_identifier_and_skip(false) {
             let prev = self.previous()?;
             Some(must_borrow_lexeme!(self, prev)?)
         } else {
@@ -213,10 +212,10 @@ impl<'a> StatementParser<'a> for Parser<'a> {
         // `import` followed by a `*` imports all exported values
         let is_import_all = self.expect_and_skip(&[TokenType::Star], false);
         if is_import_all {
-            self.expect_and_skip(IDENTIFIER_TYPES, true);
+            self.expect_identifier_and_skip(true);
             // TODO: enforce identifier be == b"as"
             let ident = self.next_identifier()?;
-            self.expect_and_skip(IDENTIFIER_TYPES, true);
+            self.expect_identifier_and_skip(true);
             // TODO: enforce identifier be == b"from"
             let specifier = self.next()?.full.clone();
             return Some(ImportKind::AllAs(SpecifierKind::Ident(ident), specifier));
@@ -224,7 +223,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
 
         // `import` followed by an identifier is considered a default import
         if let Some(default_import_ident) = self.next_identifier() {
-            self.expect_and_skip(IDENTIFIER_TYPES, true);
+            self.expect_identifier_and_skip(true);
             // TODO: enforce identifier be == b"from"
             let specifier = self.next()?.full.clone();
             return Some(ImportKind::DefaultAs(

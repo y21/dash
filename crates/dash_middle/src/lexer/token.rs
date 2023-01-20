@@ -188,6 +188,9 @@ pub enum TokenType {
     LessEqual,
 
     /// Identifier: foo
+    ///
+    /// Note: for checking if a [`TokenType`] is an identifier, use the is_identifier method, as
+    /// there are certain tokens that are valid identifiers but aren't necessarily of the type `TokenType::Identifier`
     Identifier,
 
     /// String: "foo"

@@ -1,3 +1,4 @@
+use crate::throw;
 use crate::value::function::native::CallContext;
 use crate::value::ops::abstractions::conversions::ValueConversion;
 use crate::value::primitive::Number;
@@ -26,7 +27,7 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
         2 => format!("{:b}", num),
         10 => num.to_string(),
         16 => format!("{:x}", num),
-        _ => todo!(),
+        _ => throw!(cx.scope, "Invalid radix: {}", radix),
     };
 
     Ok(Value::String(re.into()))

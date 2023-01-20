@@ -473,4 +473,8 @@ impl<O: Object + 'static> Object for PureBuiltin<O> {
     fn own_keys(&self) -> Result<Vec<Value>, Value> {
         self.inner.own_keys()
     }
+
+    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
+        self.inner.as_primitive_capable()
+    }
 }
