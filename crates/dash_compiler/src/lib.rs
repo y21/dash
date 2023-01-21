@@ -1271,7 +1271,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 if let Some((id, loc)) = ib.find_local(&ident) {
                     let ty = loc.inferred_type().borrow();
 
-                    if let (Ok(id), Some(CompileValueType::Number)) = (u8::try_from(id), &*ty) {
+                    if let (Ok(id), Some(CompileValueType::Number), false) = (u8::try_from(id), &*ty, loc.is_extern()) {
                         // SPEC
                         match tt {
                             TokenType::Increment => ib.build_postfix_inc_local_num(id),
@@ -1314,7 +1314,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 if let Some((id, loc)) = ib.find_local(&ident) {
                     let ty = loc.inferred_type().borrow();
 
-                    if let (Ok(id), Some(CompileValueType::Number)) = (u8::try_from(id), &*ty) {
+                    if let (Ok(id), Some(CompileValueType::Number), false) = (u8::try_from(id), &*ty, loc.is_extern()) {
                         // SPEC
                         match tt {
                             TokenType::Increment => ib.build_prefix_inc_local_num(id),

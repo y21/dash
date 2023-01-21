@@ -140,7 +140,7 @@ macro_rules! delegate {
 
     ($field:ident, $($method:ident),* $(,)?) => {
         $(
-            crate::delegate!(override $field, $method);
+            $crate::delegate!(override $field, $method);
         )*
     };
 }

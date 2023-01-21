@@ -662,7 +662,7 @@ mod handlers {
 
     pub fn ldlocal(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
         let id = cx.fetch_and_inc_ip();
-        let value = cx.get_local(id.into());
+        let value = cx.get_local(id.into()).unbox_external();
 
         cx.try_push_stack(value)?;
         Ok(None)

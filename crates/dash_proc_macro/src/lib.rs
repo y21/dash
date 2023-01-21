@@ -1,10 +1,12 @@
 use proc_macro::TokenStream;
+use proc_macro2::Span;
 use proc_macro_crate::crate_name;
 use proc_macro_crate::FoundCrate;
 use quote::quote;
 use syn::Data;
 use syn::DataStruct;
 use syn::Fields;
+use syn::Ident;
 
 macro_rules! error {
     ($msg:expr) => {
@@ -32,7 +34,10 @@ pub fn trace(tt: TokenStream) -> TokenStream {
 
     let found_crate = match crate_name("dash_vm").unwrap() {
         FoundCrate::Itself => quote!(crate::gc::trace::Trace),
-        FoundCrate::Name(crate_name) => quote!(::#crate_name::gc::trace::Trace),
+        FoundCrate::Name(crate_name) => {
+            let ident = Ident::new(&crate_name, Span::call_site());
+            quote!(::#ident::gc::trace::Trace)
+        }
     };
 
     let generics_names = generics.type_params().map(|x| &x.ident);
