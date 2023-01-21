@@ -1,5 +1,7 @@
 use std::mem::ManuallyDrop;
 
+use dash_middle::compiler::StaticImportKind;
+use dash_rt::module::ModuleLoader;
 use dash_vm::local::LocalScope;
 use dash_vm::throw;
 use dash_vm::value::function::native::CallContext;
@@ -13,6 +15,34 @@ use dash_vm::value::Value;
 use libloading::Library;
 
 type InitFunction = unsafe extern "C" fn(*mut CallContext, *mut Result<Value, Value>);
+
+#[derive(Debug)]
+pub struct DllModule;
+
+impl DllModule {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl ModuleLoader for DllModule {
+    fn import(&self, sc: &mut LocalScope, _: StaticImportKind, path: &str) -> Result<Option<Value>, Value> {
+        if path != "@std/dlloader" {
+            return Ok(None);
+        }
+
+        let object = NamedObject::new(sc);
+        let load_sync = Function::new(sc, Some("load".into()), FunctionKind::Native(load_sync));
+        let load_sync = sc.register(load_sync);
+        object.set_property(
+            sc,
+            "load".into(),
+            PropertyValue::static_default(Value::Object(load_sync)),
+        )?;
+
+        Ok(Some(Value::Object(sc.register(object))))
+    }
+}
 
 #[macro_export]
 macro_rules! dashdl {
@@ -51,18 +81,4 @@ pub fn load_sync(mut cx: CallContext) -> Result<Value, Value> {
         init(&mut cx, &mut ret);
         ret
     }
-}
-
-pub fn import_dl(scope: &mut LocalScope) -> Result<Value, Value> {
-    let object = NamedObject::new(scope);
-    let load_sync = Function::new(scope, Some("loadSync".into()), FunctionKind::Native(load_sync));
-    let load_sync = scope.register(load_sync);
-    object.set_property(
-        scope,
-        "loadSync".into(),
-        PropertyValue::static_default(Value::Object(load_sync)),
-    )?;
-
-    let object = scope.register(object);
-    Ok(Value::Object(object))
 }
