@@ -189,15 +189,28 @@ impl<'a> FunctionCompiler<'a> {
 
         let hoisted_locals = transformations::hoist_declarations(&mut ast);
         for binding in hoisted_locals {
-            self.scope.add_local(
-                match binding.name {
-                    VariableDeclarationName::Identifier(name) => name,
-                    _ => return Err(CompileError::MissingInitializerInDestructuring),
-                },
-                binding.kind,
-                false,
-                None,
-            )?;
+            match binding.name {
+                VariableDeclarationName::Identifier(name) => {
+                    self.scope.add_local(name, binding.kind, false, None)?;
+                }
+                VariableDeclarationName::ArrayDestructuring { fields, rest } => {
+                    for field in fields {
+                        self.scope.add_local(field, binding.kind, false, None)?;
+                    }
+                    if let Some(rest) = rest {
+                        self.scope.add_local(rest, binding.kind, false, None)?;
+                    }
+                }
+                VariableDeclarationName::ObjectDestructuring { fields, rest } => {
+                    for (field, alias) in fields {
+                        let field = alias.unwrap_or(field);
+                        self.scope.add_local(field, binding.kind, false, None)?;
+                    }
+                    if let Some(rest) = rest {
+                        self.scope.add_local(rest, binding.kind, false, None)?;
+                    }
+                }
+            }
         }
 
         self.accept_multiple(ast)?;
