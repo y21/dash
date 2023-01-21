@@ -28,6 +28,7 @@ use dash_middle::parser::statement::VariableBinding;
 use dash_middle::parser::statement::VariableDeclaration;
 use dash_middle::parser::statement::VariableDeclarationKind;
 use dash_middle::parser::statement::VariableDeclarationName;
+use dash_middle::parser::statement::VariableDeclarations;
 use dash_middle::parser::statement::WhileLoop;
 use dash_middle::parser::types::TypeSegment;
 
@@ -47,7 +48,8 @@ pub trait StatementParser<'a> {
     fn parse_for_loop(&mut self) -> Option<Loop<'a>>;
     fn parse_while_loop(&mut self) -> Option<Loop<'a>>;
     fn parse_block(&mut self) -> Option<BlockStatement<'a>>;
-    fn parse_variable(&mut self) -> Option<VariableDeclaration<'a>>;
+    fn parse_variable(&mut self) -> Option<VariableDeclarations<'a>>;
+    fn parse_variable_binding_with_kind(&mut self, kind: VariableDeclarationKind) -> Option<VariableBinding<'a>>;
     /// Parses a variable binding, i.e. `let x`
     fn parse_variable_binding(&mut self) -> Option<VariableBinding<'a>>;
     /// Parses the definition segment of a variable declaration statement, i.e. `= 5`
@@ -180,12 +182,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
         let current = self.current()?;
 
         if current.ty.is_variable() {
-            let mut variables = Vec::new();
-            while self.expect_and_skip(VARIABLE_TYPES, false) {
-                let variable = self.parse_variable()?;
-                variables.push(variable);
-                self.expect_and_skip(&[TokenType::Comma], false);
-            }
+            let variables = self.parse_variable()?;
 
             return Some(ExportKind::NamedVar(variables));
         }
@@ -294,7 +291,9 @@ impl<'a> StatementParser<'a> for Parser<'a> {
 
                     self.expect_and_skip(&[TokenType::Semicolon], true);
 
-                    Some(Statement::Variable(VariableDeclaration::new(binding, value)))
+                    Some(Statement::Variable(VariableDeclarations(vec![
+                        VariableDeclaration::new(binding, value),
+                    ])))
                 }
             } else {
                 let stmt = self.parse_statement();
@@ -355,11 +354,24 @@ impl<'a> StatementParser<'a> for Parser<'a> {
         Some(BlockStatement(stmts))
     }
 
-    fn parse_variable(&mut self) -> Option<VariableDeclaration<'a>> {
-        let binding = self.parse_variable_binding()?;
-        let value = self.parse_variable_definition();
+    fn parse_variable(&mut self) -> Option<VariableDeclarations<'a>> {
+        let mut decls = Vec::new();
 
-        Some(VariableDeclaration::new(binding, value))
+        let initial_kind = {
+            let binding = self.parse_variable_binding()?;
+            let value = self.parse_variable_definition();
+            let kind = binding.kind;
+            decls.push(VariableDeclaration::new(binding, value));
+            kind
+        };
+
+        while self.expect_and_skip(&[TokenType::Comma], false) {
+            let binding = self.parse_variable_binding_with_kind(initial_kind)?;
+            let value = self.parse_variable_definition();
+            decls.push(VariableDeclaration::new(binding, value));
+        }
+
+        Some(VariableDeclarations(decls))
     }
 
     fn parse_if(&mut self, parse_else: bool) -> Option<IfStatement<'a>> {
@@ -451,9 +463,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
         Some(parameters)
     }
 
-    fn parse_variable_binding(&mut self) -> Option<VariableBinding<'a>> {
-        let kind: VariableDeclarationKind = self.previous()?.ty.into();
-
+    fn parse_variable_binding_with_kind(&mut self, kind: VariableDeclarationKind) -> Option<VariableBinding<'a>> {
         let name = if self.expect_and_skip(&[TokenType::LeftBrace], false) {
             // Object destructuring
             let mut fields = Vec::new();
@@ -572,6 +582,11 @@ impl<'a> StatementParser<'a> for Parser<'a> {
         };
 
         Some(VariableBinding { kind, name, ty })
+    }
+
+    fn parse_variable_binding(&mut self) -> Option<VariableBinding<'a>> {
+        let kind: VariableDeclarationKind = self.previous()?.ty.into();
+        self.parse_variable_binding_with_kind(kind)
     }
 
     fn parse_variable_definition(&mut self) -> Option<Expr<'a>> {

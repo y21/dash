@@ -28,6 +28,7 @@ use dash_middle::parser::statement::SwitchStatement;
 use dash_middle::parser::statement::TryCatch;
 use dash_middle::parser::statement::VariableDeclaration;
 use dash_middle::parser::statement::VariableDeclarationName;
+use dash_middle::parser::statement::VariableDeclarations;
 use dash_middle::parser::statement::WhileLoop;
 
 use crate::context::OptimizerContext;
@@ -262,18 +263,20 @@ impl<'a> Eval<'a> for Statement<'a> {
 
         match self {
             Self::Expression(expr) => expr.fold(cx, can_remove),
-            Self::Variable(VariableDeclaration { value, binding }) => {
-                value.fold(cx, can_remove);
+            Self::Variable(VariableDeclarations(declarations)) => {
+                for VariableDeclaration { value, binding } in declarations {
+                    value.fold(cx, can_remove);
 
-                if let VariableDeclarationName::Identifier(name) = binding.name {
-                    let ty = match value {
-                        Some(expr) => infer_type(cx.scope_mut(), expr),
-                        None => Some(CompileValueType::Uninit),
-                    };
+                    if let VariableDeclarationName::Identifier(name) = binding.name {
+                        let ty = match value {
+                            Some(expr) => infer_type(cx.scope_mut(), expr),
+                            None => Some(CompileValueType::Uninit),
+                        };
 
-                    // TODO: can't really do anything with the error here
-                    // once we have logging, log the error
-                    let _ = cx.scope_mut().add_local(name, binding.kind, false, ty);
+                        // TODO: can't really do anything with the error here
+                        // once we have logging, log the error
+                        let _ = cx.scope_mut().add_local(name, binding.kind, false, ty);
+                    }
                 }
             }
             Self::Return(ReturnStatement(expr)) => expr.fold(cx, can_remove),

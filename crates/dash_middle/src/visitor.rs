@@ -25,7 +25,7 @@ use crate::parser::statement::ReturnStatement;
 use crate::parser::statement::Statement;
 use crate::parser::statement::SwitchStatement;
 use crate::parser::statement::TryCatch;
-use crate::parser::statement::VariableDeclaration;
+use crate::parser::statement::VariableDeclarations;
 use crate::parser::statement::WhileLoop;
 
 pub trait VisitorExt<'a>: Visitor<'a, ()> {
@@ -60,7 +60,7 @@ pub trait Visitor<'a, V> {
     fn visit_unary_expression(&mut self, e: UnaryExpr<'a>) -> V;
 
     /// Visits a variable declaration
-    fn visit_variable_declaration(&mut self, v: VariableDeclaration<'a>) -> V;
+    fn visit_variable_declaration(&mut self, v: VariableDeclarations<'a>) -> V;
 
     /// Visits an if statement
     fn visit_if_statement(&mut self, i: IfStatement<'a>) -> V;

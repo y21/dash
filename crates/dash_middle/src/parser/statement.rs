@@ -14,7 +14,7 @@ pub enum Statement<'a> {
     /// Expression statement
     Expression(Expr<'a>),
     /// Variable declaration
-    Variable(VariableDeclaration<'a>),
+    Variable(VariableDeclarations<'a>),
     /// If statement
     If(IfStatement<'a>),
     /// Block statement
@@ -104,7 +104,7 @@ pub enum ExportKind<'a> {
     /// export { foo, bar }
     Named(Vec<&'a str>),
     /// export let foo = "bar"
-    NamedVar(Vec<VariableDeclaration<'a>>),
+    NamedVar(VariableDeclarations<'a>),
 }
 
 impl<'a> fmt::Display for ExportKind<'a> {
@@ -118,7 +118,7 @@ impl<'a> fmt::Display for ExportKind<'a> {
             }
             Self::NamedVar(nv) => {
                 write!(f, "export {{ ")?;
-                fmt_list(f, nv, ",")?;
+                fmt_list(f, &nv.0, ",")?;
                 write!(f, " }}")
             }
         }
@@ -656,6 +656,15 @@ impl<'a> VariableBinding<'a> {
             kind: VariableDeclarationKind::Unnameable,
             ty: None,
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct VariableDeclarations<'a>(pub Vec<VariableDeclaration<'a>>);
+
+impl<'a> fmt::Display for VariableDeclarations<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt_list(f, &self.0, ", ")
     }
 }
 

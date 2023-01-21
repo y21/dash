@@ -31,7 +31,7 @@ use crate::parser::statement::Statement;
 use crate::parser::statement::SwitchStatement;
 use crate::parser::statement::TryCatch;
 use crate::parser::statement::VariableBinding;
-use crate::parser::statement::VariableDeclaration;
+use crate::parser::statement::VariableDeclarations;
 use crate::parser::statement::WhileLoop;
 
 pub mod function_local;
@@ -66,9 +66,11 @@ pub trait AstWalker<'a> {
         self.accept_expr(*e.expr);
     }
 
-    fn visit_variable_declaration(&mut self, v: VariableDeclaration<'a>) {
-        if let Some(expr) = v.value {
-            self.accept_expr(expr);
+    fn visit_variable_declaration(&mut self, v: VariableDeclarations<'a>) {
+        for decl in v.0 {
+            if let Some(expr) = decl.value {
+                self.accept_expr(expr);
+            }
         }
     }
 
@@ -191,9 +193,7 @@ pub trait AstWalker<'a> {
         match e {
             ExportKind::Default(e) => self.accept_expr(e),
             ExportKind::NamedVar(v) => {
-                for decl in v {
-                    self.accept(Statement::Variable(decl));
-                }
+                self.accept(Statement::Variable(v));
             }
             ExportKind::Named(..) => {}
         }

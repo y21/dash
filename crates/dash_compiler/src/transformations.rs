@@ -10,6 +10,7 @@ use dash_middle::parser::statement::VariableBinding;
 use dash_middle::parser::statement::VariableDeclaration;
 use dash_middle::parser::statement::VariableDeclarationKind;
 use dash_middle::parser::statement::VariableDeclarationName;
+use dash_middle::parser::statement::VariableDeclarations;
 
 /// Implicitly inserts a `return` statement for the last expression
 pub fn ast_insert_return<'a>(ast: &mut Vec<Statement<'a>>) {
@@ -86,8 +87,10 @@ pub fn hoist_declarations<'a>(ast: &mut Vec<Statement<'a>>) -> Vec<VariableBindi
                     TokenType::Assignment,
                 )));
             }
-            Statement::Variable(VariableDeclaration { binding, .. }) => {
-                variable_bindings.push(binding.clone());
+            Statement::Variable(VariableDeclarations(declarations)) => {
+                for VariableDeclaration { binding, .. } in declarations {
+                    variable_bindings.push(binding.clone());
+                }
             }
             Statement::Class(class_decl) => {
                 let name = class_decl.name.expect("Class statement did not have a name");

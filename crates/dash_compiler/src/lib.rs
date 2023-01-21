@@ -24,7 +24,6 @@ use dash_middle::parser::expr::Seq;
 use dash_middle::parser::expr::UnaryExpr;
 use dash_middle::parser::expr::{ArrayLiteral, ObjectMemberKind};
 use dash_middle::parser::expr::{AssignmentExpr, AssignmentTarget};
-use dash_middle::parser::statement::IfStatement;
 use dash_middle::parser::statement::ImportKind;
 use dash_middle::parser::statement::ReturnStatement;
 use dash_middle::parser::statement::SpecifierKind;
@@ -41,6 +40,7 @@ use dash_middle::parser::statement::{ClassProperty, ForLoop};
 use dash_middle::parser::statement::{ForInLoop, ForOfLoop};
 use dash_middle::parser::statement::{FunctionDeclaration, SwitchStatement};
 use dash_middle::parser::statement::{FunctionKind, VariableDeclarationName};
+use dash_middle::parser::statement::{IfStatement, VariableDeclarations};
 use dash_middle::visitor::Visitor;
 use dash_optimizer::consteval::Eval;
 use dash_optimizer::context::OptimizerContext;
@@ -367,14 +367,14 @@ impl<'a> FunctionCompiler<'a> {
             Statement::Block(BlockStatement(stmts)) => {
                 let gen_step = compile_local_load(for_of_gen_step_id, false);
 
-                let var = Statement::Variable(VariableDeclaration::new(
+                let var = Statement::Variable(VariableDeclarations(vec![VariableDeclaration::new(
                     binding,
                     Some(Expr::property_access(
                         false,
                         Expr::Compiled(gen_step),
                         Expr::identifier(Cow::Borrowed("value")),
                     )),
-                ));
+                )]));
 
                 if stmts.is_empty() {
                     stmts.push(var);
@@ -772,67 +772,69 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_variable_declaration(
         &mut self,
-        VariableDeclaration { binding, value }: VariableDeclaration<'a>,
+        VariableDeclarations(declarations): VariableDeclarations<'a>,
     ) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
 
-        match binding.name {
-            VariableDeclarationName::Identifier(ident) => {
-                let id = ib.scope.add_local(ident, binding.kind, false, None)?;
+        for VariableDeclaration { binding, value } in declarations {
+            match binding.name {
+                VariableDeclarationName::Identifier(ident) => {
+                    let id = ib.scope.add_local(ident, binding.kind, false, None)?;
 
-                if let Some(expr) = value {
-                    ib.accept_expr(expr)?;
-                    ib.build_local_store(id, false);
-                    ib.build_pop();
+                    if let Some(expr) = value {
+                        ib.accept_expr(expr)?;
+                        ib.build_local_store(id, false);
+                        ib.build_pop();
+                    }
                 }
-            }
-            VariableDeclarationName::ObjectDestructuring { fields, rest } => {
-                if rest.is_some() {
-                    unimplementedc!("Rest operator in object destructuring");
+                VariableDeclarationName::ObjectDestructuring { fields, rest } => {
+                    if rest.is_some() {
+                        unimplementedc!("Rest operator in object destructuring");
+                    }
+
+                    let field_count = fields
+                        .len()
+                        .try_into()
+                        .map_err(|_| CompileError::DestructureLimitExceeded)?;
+
+                    // Unwrap ok; checked at parse time
+                    let value = value.expect("Object destructuring requires a value");
+                    ib.accept_expr(value)?;
+
+                    ib.build_objdestruct(field_count);
+
+                    for (name, alias) in fields {
+                        let name = alias.unwrap_or(name);
+                        let id = ib.scope.add_local(name, binding.kind, false, None)?;
+
+                        let var_id = ib.cp.add(Constant::Number(id as f64))?;
+                        let ident_id = ib.cp.add(Constant::Identifier(name.into()))?;
+                        ib.writew(var_id);
+                        ib.writew(ident_id);
+                    }
                 }
+                VariableDeclarationName::ArrayDestructuring { fields, rest } => {
+                    if rest.is_some() {
+                        unimplementedc!("Rest operator in array destructuring");
+                    }
 
-                let field_count = fields
-                    .len()
-                    .try_into()
-                    .map_err(|_| CompileError::DestructureLimitExceeded)?;
+                    let field_count = fields
+                        .len()
+                        .try_into()
+                        .map_err(|_| CompileError::DestructureLimitExceeded)?;
 
-                // Unwrap ok; checked at parse time
-                let value = value.expect("Object destructuring requires a value");
-                ib.accept_expr(value)?;
+                    // Unwrap ok; checked at parse time
+                    let value = value.expect("Array destructuring requires a value");
+                    ib.accept_expr(value)?;
 
-                ib.build_objdestruct(field_count);
+                    ib.build_arraydestruct(field_count);
 
-                for (name, alias) in fields {
-                    let name = alias.unwrap_or(name);
-                    let id = ib.scope.add_local(name, binding.kind, false, None)?;
+                    for name in fields {
+                        let id = ib.scope.add_local(name, binding.kind, false, None)?;
 
-                    let var_id = ib.cp.add(Constant::Number(id as f64))?;
-                    let ident_id = ib.cp.add(Constant::Identifier(name.into()))?;
-                    ib.writew(var_id);
-                    ib.writew(ident_id);
-                }
-            }
-            VariableDeclarationName::ArrayDestructuring { fields, rest } => {
-                if rest.is_some() {
-                    unimplementedc!("Rest operator in array destructuring");
-                }
-
-                let field_count = fields
-                    .len()
-                    .try_into()
-                    .map_err(|_| CompileError::DestructureLimitExceeded)?;
-
-                // Unwrap ok; checked at parse time
-                let value = value.expect("Array destructuring requires a value");
-                ib.accept_expr(value)?;
-
-                ib.build_arraydestruct(field_count);
-
-                for name in fields {
-                    let id = ib.scope.add_local(name, binding.kind, false, None)?;
-
-                    let var_id = ib.cp.add(Constant::Number(id as f64))?;
-                    ib.writew(var_id);
+                        let var_id = ib.cp.add(Constant::Number(id as f64))?;
+                        ib.writew(var_id);
+                    }
                 }
             }
         }
@@ -1597,10 +1599,10 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
                 ib.build_named_export(&it)?;
             }
-            ExportKind::NamedVar(vars) => {
+            ExportKind::NamedVar(VariableDeclarations(vars)) => {
                 let mut it: Vec<&'a str> = Vec::with_capacity(vars.len());
 
-                for var in vars {
+                for var in &vars {
                     match &var.binding.name {
                         VariableDeclarationName::Identifier(ident) => it.push(ident),
                         VariableDeclarationName::ArrayDestructuring { fields, rest } => {
@@ -1612,10 +1614,9 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                             it.extend(rest);
                         }
                     }
-
-                    self.visit_variable_declaration(var)?;
                 }
 
+                self.visit_variable_declaration(VariableDeclarations(vars))?;
                 self.visit_export_statement(ExportKind::Named(it))?;
             }
         };
