@@ -70,12 +70,16 @@ impl<'a> DispatchContext<'a> {
     }
 
     pub fn pop_stack2(&mut self) -> (Value, Value) {
+        // This assert improves codegen (only one panic branch)
+        assert!(self.stack.len() >= 2);
         let b = self.stack.pop().unwrap();
         let a = self.stack.pop().unwrap();
         (a, b)
     }
 
     pub fn pop_stack3(&mut self) -> (Value, Value, Value) {
+        // This assert improves codegen (only one panic branch)
+        assert!(self.stack.len() >= 3);
         let c = self.stack.pop().unwrap();
         let b = self.stack.pop().unwrap();
         let a = self.stack.pop().unwrap();
