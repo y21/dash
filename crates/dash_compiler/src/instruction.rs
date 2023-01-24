@@ -3,7 +3,7 @@ use std::convert::TryInto;
 use dash_middle::{
     compiler::{
         constant::{Constant, LimitExceededError},
-        instruction::{Instruction, IntrinsicOperation},
+        instruction::{AssignKind, Instruction, IntrinsicOperation},
         FunctionCallMetadata, ObjectMemberKind as CompilerObjectMemberKind, StaticImportKind,
     },
     parser::expr::ObjectMemberKind,
@@ -105,8 +105,8 @@ pub trait InstructionWriter {
     fn build_call(&mut self, meta: FunctionCallMetadata);
     fn build_static_prop_access(&mut self, ident: &str, preserve_this: bool) -> Result<(), LimitExceededError>;
     fn build_dynamic_prop_access(&mut self, preserve_this: bool);
-    fn build_static_prop_set(&mut self, ident: &str) -> Result<(), LimitExceededError>;
-    fn build_dynamic_prop_set(&mut self);
+    fn build_static_prop_assign(&mut self, kind: AssignKind, ident: &str) -> Result<(), LimitExceededError>;
+    fn build_dynamic_prop_assign(&mut self, kind: AssignKind);
     fn build_constant(&mut self, constant: Constant) -> Result<(), LimitExceededError>;
     fn build_local_load(&mut self, index: u16, is_extern: bool);
     fn build_global_load(&mut self, ident: &str) -> Result<(), LimitExceededError>;
@@ -354,15 +354,18 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
         self.write(preserve_this.into());
     }
 
-    fn build_static_prop_set(&mut self, ident: &str) -> Result<(), LimitExceededError> {
+    fn build_static_prop_assign(&mut self, kind: AssignKind, ident: &str) -> Result<(), LimitExceededError> {
         let id = self.cp.add(Constant::Identifier(ident.into()))?;
-        self.write_wide_instr(Instruction::StaticPropSet, Instruction::StaticPropSetW, id);
+        self.write_instr(Instruction::StaticPropAssign);
+        self.write(kind as u8);
+        self.writew(id);
 
         Ok(())
     }
 
-    fn build_dynamic_prop_set(&mut self) {
-        self.write_instr(Instruction::DynamicPropSet)
+    fn build_dynamic_prop_assign(&mut self, kind: AssignKind) {
+        self.write_instr(Instruction::DynamicPropAssign);
+        self.write(kind as u8);
     }
 
     fn build_arraylit(&mut self, len: u16) {

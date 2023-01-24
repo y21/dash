@@ -5,7 +5,7 @@ use std::rc::Rc;
 use std::{convert::TryInto, ptr::NonNull, usize};
 
 use dash_middle::compiler::constant::{Constant, Function};
-use dash_middle::compiler::instruction::IntrinsicOperation;
+use dash_middle::compiler::instruction::{AssignKind, IntrinsicOperation};
 use dash_middle::compiler::scope::ScopeLocal;
 use dash_middle::compiler::scope::{CompileValueType, Scope};
 use dash_middle::compiler::{constant::ConstantPool, external::External};
@@ -958,10 +958,6 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
     ) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
 
-        if let Some(Expr::PropertyAccess(prop)) = left.as_expr() {
-            ib.accept_expr((*prop.target).clone())?;
-        }
-
         match left {
             AssignmentTarget::Expr(left) => match *left {
                 Expr::Literal(lit) => {
@@ -1031,43 +1027,99 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                     }
                 }
                 Expr::PropertyAccess(prop) => {
-                    macro_rules! assign {
-                        ($lit:expr,$e:expr) => {{
-                            let ident = $lit.to_identifier();
-                            ib.visit_property_access_expr(prop, false)?;
+                    ib.accept_expr(*prop.target)?;
+
+                    macro_rules! staticassign {
+                        ($lit:expr, $kind:expr) => {{
                             ib.accept_expr(*right)?;
-                            $e;
-                            ib.build_static_prop_set(&ident)?;
+                            let ident = $lit.to_identifier();
+                            ib.build_static_prop_assign($kind, &ident)?;
                         }};
                     }
-                    match ((*prop.property).clone(), prop.computed, operator) {
+                    macro_rules! dynamicassign {
+                        ($prop:expr, $kind:expr) => {{
+                            ib.accept_expr(*right)?;
+                            ib.accept_expr($prop)?;
+                            ib.build_dynamic_prop_assign($kind);
+                        }};
+                    }
+
+                    match (*prop.property, prop.computed, operator) {
                         (Expr::Literal(lit), false, TokenType::Assignment) => {
-                            ib.accept_expr(*right)?;
-                            let ident = lit.to_identifier();
-                            ib.build_static_prop_set(&ident)?;
+                            staticassign!(lit, AssignKind::Assignment)
                         }
-                        (Expr::Literal(lit), false, TokenType::AdditionAssignment) => assign!(lit, ib.build_add()),
-                        (Expr::Literal(lit), false, TokenType::SubtractionAssignment) => assign!(lit, ib.build_sub()),
+                        (Expr::Literal(lit), false, TokenType::AdditionAssignment) => {
+                            staticassign!(lit, AssignKind::AddAssignment)
+                        }
+                        (Expr::Literal(lit), false, TokenType::SubtractionAssignment) => {
+                            staticassign!(lit, AssignKind::SubAssignment)
+                        }
                         (Expr::Literal(lit), false, TokenType::MultiplicationAssignment) => {
-                            assign!(lit, ib.build_mul())
+                            staticassign!(lit, AssignKind::MulAssignment)
                         }
-                        (Expr::Literal(lit), false, TokenType::DivisionAssignment) => assign!(lit, ib.build_div()),
-                        (Expr::Literal(lit), false, TokenType::RemainderAssignment) => assign!(lit, ib.build_rem()),
+                        (Expr::Literal(lit), false, TokenType::DivisionAssignment) => {
+                            staticassign!(lit, AssignKind::DivAssignment)
+                        }
+                        (Expr::Literal(lit), false, TokenType::RemainderAssignment) => {
+                            staticassign!(lit, AssignKind::RemAssignment)
+                        }
                         (Expr::Literal(lit), false, TokenType::ExponentiationAssignment) => {
-                            assign!(lit, ib.build_pow())
+                            staticassign!(lit, AssignKind::PowAssignment)
                         }
-                        (Expr::Literal(lit), false, TokenType::LeftShiftAssignment) => assign!(lit, ib.build_bitshl()),
-                        (Expr::Literal(lit), false, TokenType::RightShiftAssignment) => assign!(lit, ib.build_bitshr()),
+                        (Expr::Literal(lit), false, TokenType::LeftShiftAssignment) => {
+                            staticassign!(lit, AssignKind::ShlAssignment)
+                        }
+                        (Expr::Literal(lit), false, TokenType::RightShiftAssignment) => {
+                            staticassign!(lit, AssignKind::ShrAssignment)
+                        }
                         (Expr::Literal(lit), false, TokenType::UnsignedRightShiftAssignment) => {
-                            assign!(lit, ib.build_bitushr())
+                            staticassign!(lit, AssignKind::UshrAssignment)
                         }
-                        (Expr::Literal(lit), false, TokenType::BitwiseAndAssignment) => assign!(lit, ib.build_bitand()),
-                        (Expr::Literal(lit), false, TokenType::BitwiseOrAssignment) => assign!(lit, ib.build_bitor()),
-                        (Expr::Literal(lit), false, TokenType::BitwiseXorAssignment) => assign!(lit, ib.build_bitxor()),
-                        (e, _, TokenType::Assignment) => {
-                            ib.accept_expr(*right)?;
-                            ib.accept_expr(e)?;
-                            ib.build_dynamic_prop_set();
+                        (Expr::Literal(lit), false, TokenType::BitwiseAndAssignment) => {
+                            staticassign!(lit, AssignKind::BitAndAssignment)
+                        }
+                        (Expr::Literal(lit), false, TokenType::BitwiseOrAssignment) => {
+                            staticassign!(lit, AssignKind::BitOrAssignment)
+                        }
+                        (Expr::Literal(lit), false, TokenType::BitwiseXorAssignment) => {
+                            staticassign!(lit, AssignKind::BitXorAssignment)
+                        }
+                        (prop, true, TokenType::Assignment) => dynamicassign!(prop, AssignKind::Assignment),
+                        (prop, true, TokenType::AdditionAssignment) => {
+                            dynamicassign!(prop, AssignKind::AddAssignment)
+                        }
+                        (prop, true, TokenType::SubtractionAssignment) => {
+                            dynamicassign!(prop, AssignKind::SubAssignment)
+                        }
+                        (prop, true, TokenType::MultiplicationAssignment) => {
+                            dynamicassign!(prop, AssignKind::MulAssignment)
+                        }
+                        (prop, true, TokenType::DivisionAssignment) => {
+                            dynamicassign!(prop, AssignKind::DivAssignment)
+                        }
+                        (prop, true, TokenType::RemainderAssignment) => {
+                            dynamicassign!(prop, AssignKind::RemAssignment)
+                        }
+                        (prop, true, TokenType::ExponentiationAssignment) => {
+                            dynamicassign!(prop, AssignKind::PowAssignment)
+                        }
+                        (prop, true, TokenType::LeftShiftAssignment) => {
+                            dynamicassign!(prop, AssignKind::ShlAssignment)
+                        }
+                        (prop, true, TokenType::RightShiftAssignment) => {
+                            dynamicassign!(prop, AssignKind::ShrAssignment)
+                        }
+                        (prop, true, TokenType::UnsignedRightShiftAssignment) => {
+                            dynamicassign!(prop, AssignKind::UshrAssignment)
+                        }
+                        (prop, true, TokenType::BitwiseAndAssignment) => {
+                            dynamicassign!(prop, AssignKind::BitAndAssignment)
+                        }
+                        (prop, true, TokenType::BitwiseOrAssignment) => {
+                            dynamicassign!(prop, AssignKind::BitOrAssignment)
+                        }
+                        (prop, true, TokenType::BitwiseXorAssignment) => {
+                            dynamicassign!(prop, AssignKind::BitXorAssignment)
                         }
                         _ => unimplementedc!("Assignment to computed property"),
                     }

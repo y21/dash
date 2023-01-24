@@ -46,9 +46,8 @@ pub enum Instruction {
     ObjLit,
     ObjLitW,
     This,
-    StaticPropSet,
-    StaticPropSetW,
-    DynamicPropSet,
+    StaticPropAssign,
+    DynamicPropAssign,
     LdLocalExt,
     LdLocalExtW,
     StoreLocalExt,
@@ -102,6 +101,25 @@ pub enum Instruction {
 // where `Instruction::Pop as u8` isn't allowed
 pub const POP: u8 = Instruction::Pop as u8;
 pub const RET: u8 = Instruction::Ret as u8;
+
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromRepr)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum AssignKind {
+    Assignment,
+    AddAssignment,
+    SubAssignment,
+    MulAssignment,
+    DivAssignment,
+    RemAssignment,
+    PowAssignment,
+    ShlAssignment,
+    ShrAssignment,
+    UshrAssignment,
+    BitAndAssignment,
+    BitOrAssignment,
+    BitXorAssignment,
+}
 
 /// Intrinsic operations, i.e. operations known by the compiler. These can be
 /// specialized operations, such as the `+` operator on two numbers.

@@ -237,15 +237,15 @@ impl<'buf> FunctionDecompiler<'buf> {
                 }
                 Instruction::ObjLitW => todo!(),
                 Instruction::This => self.handle_opless_instr("this"),
-                Instruction::StaticPropSet => {
+                Instruction::StaticPropAssign => {
+                    let _k = self.read()?;
                     let b = self.read()?;
-                    self.handle_op_instr("staticpropset", &[&DisplayConstant(&self.constants[b as usize])]);
+                    self.handle_op_instr("staticpropassign", &[&DisplayConstant(&self.constants[b as usize])]);
                 }
-                Instruction::StaticPropSetW => {
-                    let b = self.read_u16()?;
-                    self.handle_op_instr("staticpropsetw", &[&DisplayConstant(&self.constants[b as usize])]);
+                Instruction::DynamicPropAssign => {
+                    let _k = self.read()?;
+                    self.handle_opless_instr("dynamicpropset")
                 }
-                Instruction::DynamicPropSet => self.handle_opless_instr("dynamicpropset"),
                 Instruction::LdLocalExt => self.handle_inc_op_instr("ldlocalext")?,
                 Instruction::LdLocalExtW => self.handle_incw_op_instr("ldlocalextw")?,
                 Instruction::StoreLocalExt => self.handle_inc_op_instr("storelocalext")?,

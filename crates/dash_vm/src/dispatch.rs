@@ -156,6 +156,7 @@ impl<'a> DerefMut for DispatchContext<'a> {
 }
 
 mod handlers {
+    use dash_middle::compiler::instruction::AssignKind;
     use dash_middle::compiler::instruction::IntrinsicOperation;
     use dash_middle::compiler::FunctionCallMetadata;
     use dash_middle::compiler::ObjectMemberKind;
@@ -778,30 +779,37 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn staticpropertyset(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
-        let id = cx.fetch_and_inc_ip();
-        let key = cx.identifier_constant(id.into());
-
-        let (target, value) = cx.pop_stack2();
-
-        let mut scope = cx.scope();
-        target.set_property(
-            &mut scope,
-            ToString::to_string(&key).into(),
-            PropertyValue::static_default(value.clone()),
-        )?;
-
-        scope.try_push_stack(value)?;
-        Ok(None)
-    }
-
-    pub fn staticpropertysetw(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn staticpropertyassign(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let kind = AssignKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
         let id = cx.fetchw_and_inc_ip();
         let key = cx.identifier_constant(id.into());
 
         let (target, value) = cx.pop_stack2();
 
         let mut scope = cx.scope();
+
+        macro_rules! op {
+            ($op:expr) => {{
+                let p = target.get_property(&mut scope, ToString::to_string(&key).into())?;
+                $op(&p, &value, &mut scope)?
+            }};
+        }
+
+        let value = match kind {
+            AssignKind::Assignment => value,
+            AssignKind::AddAssignment => op!(Value::add),
+            AssignKind::SubAssignment => op!(Value::sub),
+            AssignKind::MulAssignment => op!(Value::mul),
+            AssignKind::DivAssignment => op!(Value::div),
+            AssignKind::RemAssignment => op!(Value::rem),
+            AssignKind::PowAssignment => op!(Value::pow),
+            AssignKind::ShlAssignment => op!(Value::bitshl),
+            AssignKind::ShrAssignment => op!(Value::bitshr),
+            AssignKind::UshrAssignment => op!(Value::bitushr),
+            AssignKind::BitAndAssignment => op!(Value::bitand),
+            AssignKind::BitOrAssignment => op!(Value::bitor),
+            AssignKind::BitXorAssignment => op!(Value::bitxor),
+        };
         target.set_property(
             &mut scope,
             ToString::to_string(&key).into(),
@@ -812,11 +820,35 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn dynamicpropertyset(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn dynamicpropertyassign(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let kind = AssignKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
         let (target, value, key) = cx.pop_stack3();
-        let mut scope = cx.scope();
 
+        let mut scope = cx.scope();
         let key = PropertyKey::from_value(&mut scope, key)?;
+
+        macro_rules! op {
+            ($op:expr) => {{
+                let p = target.get_property(&mut scope, key.clone())?;
+                $op(&p, &value, &mut scope)?
+            }};
+        }
+
+        let value = match kind {
+            AssignKind::Assignment => value,
+            AssignKind::AddAssignment => op!(Value::add),
+            AssignKind::SubAssignment => op!(Value::sub),
+            AssignKind::MulAssignment => op!(Value::mul),
+            AssignKind::DivAssignment => op!(Value::div),
+            AssignKind::RemAssignment => op!(Value::rem),
+            AssignKind::PowAssignment => op!(Value::pow),
+            AssignKind::ShlAssignment => op!(Value::bitshl),
+            AssignKind::ShrAssignment => op!(Value::bitshr),
+            AssignKind::UshrAssignment => op!(Value::bitushr),
+            AssignKind::BitAndAssignment => op!(Value::bitand),
+            AssignKind::BitOrAssignment => op!(Value::bitor),
+            AssignKind::BitXorAssignment => op!(Value::bitxor),
+        };
         target.set_property(&mut scope, key, PropertyValue::static_default(value.clone()))?;
 
         scope.try_push_stack(value)?;
@@ -1368,9 +1400,8 @@ pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResu
         Instruction::ArrayLit => handlers::arraylit(cx),
         Instruction::ObjLit => handlers::objlit(cx),
         Instruction::StaticPropAccess => handlers::staticpropertyaccess(cx),
-        Instruction::StaticPropSet => handlers::staticpropertyset(cx),
-        Instruction::StaticPropSetW => handlers::staticpropertysetw(cx),
-        Instruction::DynamicPropSet => handlers::dynamicpropertyset(cx),
+        Instruction::StaticPropAssign => handlers::staticpropertyassign(cx),
+        Instruction::DynamicPropAssign => handlers::dynamicpropertyassign(cx),
         Instruction::DynamicPropAccess => handlers::dynamicpropertyaccess(cx),
         Instruction::LdLocalExt => handlers::ldlocalext(cx),
         Instruction::StoreLocalExt => handlers::storelocalext(cx),
