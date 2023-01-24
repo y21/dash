@@ -20,7 +20,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --manifest-path crates/dash_vm/Cargo.toml --features eval # no --all-features because jit
+          args: --manifest-path crates/dash_vm/Cargo.toml # no --all-features because jit
       - name: Benchmark VM
         run:  eval $(cargo test --release --benches -p dash_vm |& grep -o -P 'target/release/deps/full-[^\)]+') --bench --output-format bencher | tee output.txt
       - name: Store output
@@ -29,3 +29,5 @@ jobs:
           name: Benchmarks
           tool: "cargo"
           output-file-path: output.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
