@@ -27,7 +27,6 @@ use value::{promise::{Promise, PromiseState}, ValueContext, function::bound::Bou
 mod jit;
 
 pub mod dispatch;
-#[cfg(feature = "eval")]
 pub mod eval;
 pub mod external;
 pub mod frame;

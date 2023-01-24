@@ -7,6 +7,6 @@ edition = "2021"
 
 [dependencies]
 dash_rt = { path = "../dash_rt" }
-dash_vm = { path = "../dash_vm", features = ["eval"] }
+dash_vm = { path = "../dash_vm", features = [] }
 dash_middle = { path = "../dash_middle" }
 indexmap = "1.9.1"
