@@ -22,7 +22,7 @@ jobs:
           command: test
           args: --manifest-path crates/dash_vm/Cargo.toml --features eval # no --all-features because jit
       - name: Benchmark VM
-        run: cargo bench -p dash_vm -- --output-format bencher | tee output.txt
+        run: cargo bench -p dash_vm --features eval -- --output-format bencher | tee output.txt
       - name: Store output
         uses: benchmark-action/github-action-benchmark@v1.15.0
         with:
