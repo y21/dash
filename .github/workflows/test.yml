@@ -21,3 +21,11 @@ jobs:
         with:
           command: test
           args: --manifest-path crates/dash_vm/Cargo.toml --features eval # no --all-features because jit
+      - name: Benchmark VM
+        run: cargo bench -p dash_vm -- --output-format bencher | tee output.txt
+      - name: Store output
+        uses: benchmark-action/github-action-benchmark@v1.15.0
+        with:
+          name: Benchmarks
+          tool: "cargo"
+          output-file-path: output.txt
