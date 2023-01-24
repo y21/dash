@@ -3,8 +3,10 @@ use std::borrow::Cow;
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::expr::Expr;
 use dash_middle::parser::statement::BlockStatement;
+use dash_middle::parser::statement::ImportKind;
 use dash_middle::parser::statement::Loop;
 use dash_middle::parser::statement::ReturnStatement;
+use dash_middle::parser::statement::SpecifierKind;
 use dash_middle::parser::statement::Statement;
 use dash_middle::parser::statement::VariableBinding;
 use dash_middle::parser::statement::VariableDeclaration;
@@ -69,6 +71,16 @@ pub fn hoist_declarations<'a>(ast: &mut Vec<Statement<'a>>) -> Vec<VariableBindi
         stmt: &mut Statement<'a>,
     ) {
         match stmt {
+            Statement::Import(
+                ImportKind::AllAs(SpecifierKind::Ident(name), ..)
+                | ImportKind::DefaultAs(SpecifierKind::Ident(name), ..),
+            ) => {
+                variable_bindings.push(VariableBinding {
+                    ty: None,
+                    kind: VariableDeclarationKind::Const,
+                    name: VariableDeclarationName::Identifier(*name),
+                });
+            }
             Statement::Function(function_decl) => {
                 let name = function_decl.name.expect("Function statement did not have a name");
                 let function_stmt = match std::mem::replace(stmt, Statement::Empty) {

@@ -265,7 +265,12 @@ impl<'buf> FunctionDecompiler<'buf> {
                 Instruction::ObjIn => self.handle_opless_instr("objin"),
                 Instruction::InstanceOf => self.handle_opless_instr("instanceof"),
                 Instruction::ImportDyn => todo!(),
-                Instruction::ImportStatic => todo!(),
+                Instruction::ImportStatic => {
+                    let _kind = self.read()?;
+                    let _local_id = self.read_i16()?;
+                    let _path_id = self.read_i16()?;
+                    self.handle_opless_instr("importstatic")
+                }
                 Instruction::ExportDefault => todo!(),
                 Instruction::ExportNamed => todo!(),
                 Instruction::Debugger => self.handle_opless_instr("debugger"),
