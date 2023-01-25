@@ -69,20 +69,23 @@ impl<'a> DispatchContext<'a> {
             .clone()
     }
 
+    pub fn pop_stack_const<const N: usize>(&mut self) -> [Value; N] {
+        assert!(self.stack.len() >= N);
+        // SAFETY: n pops are safe because we've checked the length
+        // Sadly unsafe is needed here, see https://github.com/rust-lang/rust/issues/71257
+        // TODO: remove this once the issue is fixed
+        let mut arr: [Value; N] = std::array::from_fn(|_| unsafe { self.stack.pop().unwrap_unchecked() });
+        arr.reverse();
+        arr
+    }
+
     pub fn pop_stack2(&mut self) -> (Value, Value) {
-        // This assert improves codegen (only one panic branch)
-        assert!(self.stack.len() >= 2);
-        let b = self.stack.pop().unwrap();
-        let a = self.stack.pop().unwrap();
+        let [a, b] = self.pop_stack_const();
         (a, b)
     }
 
     pub fn pop_stack3(&mut self) -> (Value, Value, Value) {
-        // This assert improves codegen (only one panic branch)
-        assert!(self.stack.len() >= 3);
-        let c = self.stack.pop().unwrap();
-        let b = self.stack.pop().unwrap();
-        let a = self.stack.pop().unwrap();
+        let [a, b, c] = self.pop_stack_const();
         (a, b, c)
     }
 

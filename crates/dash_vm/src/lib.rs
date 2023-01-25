@@ -3,7 +3,7 @@ use std::{fmt, ops::RangeBounds, vec::Drain, mem};
 
 use crate::{
     gc::{handle::Handle, trace::Trace, Gc},
-    value::function::Function,
+    value::function::Function, util::cold_path,
 };
 
 use self::{
@@ -711,6 +711,8 @@ impl Vm {
             Int16Array: i16array_ctor;
             Uint32Array: u32array_ctor;
             Int32Array: i32array_ctor;
+            Float32Array: f32array_ctor;
+            Float64Array: f64array_ctor;
             Array: array_ctor;
             Error: error_ctor;
             EvalError: eval_error_ctor;
@@ -778,20 +780,22 @@ impl Vm {
     }
 
     pub(crate) fn try_push_frame(&mut self, frame: Frame) -> Result<(), Value> {
-        if self.frames.len() > MAX_FRAME_STACK_SIZE {
+        if self.frames.len() <= MAX_FRAME_STACK_SIZE {
+            self.frames.push(frame);
+        } else {
+            cold_path();
             throw!(self, "Maximum call stack size exceeded");
         }
-
-        self.frames.push(frame);
         Ok(())
     }
 
     pub(crate) fn try_push_stack(&mut self, value: Value) -> Result<(), Value> {
-        if unlikely(self.stack.len() > MAX_STACK_SIZE) {
+        if self.stack.len() <= MAX_STACK_SIZE {
+            self.stack.push(value);
+        } else {
+            cold_path();
             throw!(self, "Maximum stack size exceeded");
         }
-
-        self.stack.push(value);
         Ok(())
     }
 
