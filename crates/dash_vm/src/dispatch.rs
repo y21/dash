@@ -176,6 +176,7 @@ mod handlers {
     use crate::throw;
     use crate::util::unlikely;
     use crate::value::array::Array;
+    use crate::value::array::ArrayIterator;
     use crate::value::object::NamedObject;
     use crate::value::object::Object;
     use crate::value::object::PropertyKey;
@@ -1078,6 +1079,24 @@ mod handlers {
         Ok(None)
     }
 
+    pub fn call_for_in_iterator(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let value = cx.pop_stack();
+        let mut scope = cx.scope();
+
+        let keys = match value {
+            Value::Object(obj) | Value::External(obj) => {
+                obj.own_keys()?.into_iter().map(PropertyValue::static_default).collect()
+            }
+            _ => Vec::new(),
+        };
+        let keys = Array::from_vec(&mut scope, keys);
+        let keys = scope.register(keys);
+        let iter = ArrayIterator::new(&mut scope, Value::Object(keys))?;
+        let iter = scope.register(iter);
+        scope.try_push_stack(Value::Object(iter))?;
+        Ok(None)
+    }
+
     pub fn delete_property_dynamic(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
         let (property, target) = cx.pop_stack2();
         let mut scope = cx.scope();
@@ -1432,6 +1451,7 @@ pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResu
         Instruction::Nan => handlers::nan(cx),
         Instruction::Infinity => handlers::infinity(cx),
         Instruction::CallSymbolIterator => handlers::call_symbol_iterator(cx),
+        Instruction::CallForInIterator => handlers::call_for_in_iterator(cx),
         Instruction::DeletePropertyDynamic => handlers::delete_property_dynamic(cx),
         Instruction::DeletePropertyStatic => handlers::delete_property_static(cx),
         Instruction::Switch => handlers::switch(cx),
