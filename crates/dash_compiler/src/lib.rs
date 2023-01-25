@@ -1335,7 +1335,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
                     ib.build_local_load(id, loc.is_extern());
                 } else {
-                    unimplementedc!("Global postfix expression");
+                    ib.build_global_load(&ident)?;
                 }
             }
             Expr::PropertyAccess(prop) => ib.visit_property_access_expr(prop.clone(), false)?,
@@ -1378,7 +1378,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
                     ib.build_local_load(id, loc.is_extern());
                 } else {
-                    unimplementedc!("Global postfix expression");
+                    ib.build_global_load(&ident);
                 }
             }
             Expr::PropertyAccess(prop) => ib.visit_property_access_expr(prop.clone(), false)?,
