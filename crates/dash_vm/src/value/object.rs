@@ -132,6 +132,17 @@ macro_rules! delegate {
             self.$field.apply(sc, handle, this, args)
         }
     };
+    (override $field:ident, construct) => {
+        fn construct(
+            &self,
+            sc: &mut $crate::local::LocalScope,
+            handle: $crate::gc::handle::Handle<dyn Object>,
+            this: $crate::value::Value,
+            args: Vec<$crate::value::Value>,
+        ) -> Result<$crate::value::Value, $crate::value::Value> {
+            self.$field.construct(sc, handle, this, args)
+        }
+    };
     (override $field:ident, type_of) => {
         fn type_of(&self) -> $crate::value::Typeof {
             self.$field.type_of()

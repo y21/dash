@@ -1,14 +1,16 @@
-use dash_proc_macro::Trace;
-use std::any::Any;
-use std::rc::Rc;
-
 use super::ops::abstractions::conversions::PreferredType;
 use super::ops::abstractions::conversions::ValueConversion;
 use super::ops::equality::ValueEquality;
 use crate::delegate;
 use crate::gc::handle::Handle;
 use crate::local::LocalScope;
+use crate::value::object::delegate_get_property;
+use crate::value::PropertyKey;
+use crate::PropertyValue;
 use crate::Vm;
+use dash_proc_macro::Trace;
+use std::any::Any;
+use std::rc::Rc;
 
 use super::object::NamedObject;
 use super::object::Object;
@@ -42,8 +44,6 @@ macro_rules! boxed_primitive {
             impl Object for $name {
                 delegate!(
                     obj,
-                    get_property,
-                    get_property_descriptor,
                     set_property,
                     delete_property,
                     set_prototype,
@@ -51,6 +51,18 @@ macro_rules! boxed_primitive {
                     own_keys,
                     apply
                 );
+
+                fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+                    delegate_get_property(self, sc, key)
+                }
+
+                fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
+                    if let Some(x) = self.inner.get_property_descriptor(sc, key.clone())? {
+                        return Ok(Some(x));
+                    }
+
+                    self.obj.get_property_descriptor(sc, key)
+                }
 
                 fn as_any(&self) -> &dyn Any {
                     self

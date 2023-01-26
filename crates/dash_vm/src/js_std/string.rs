@@ -1,6 +1,7 @@
 use crate::local::LocalScope;
 use crate::throw;
 use crate::value::array::Array;
+use crate::value::boxed::String as BoxedString;
 use crate::value::function::native::CallContext;
 use crate::value::object::PropertyValue;
 use crate::value::ops::abstractions::conversions::ValueConversion;
@@ -11,7 +12,12 @@ use std::fmt::Write;
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let value = cx.args.get(0).unwrap_or_undefined().to_string(cx.scope)?;
-    Ok(Value::String(value))
+    if cx.is_constructor_call {
+        let boxed = BoxedString::new(cx.scope, value);
+        Ok(Value::Object(cx.scope.register(boxed)))
+    } else {
+        Ok(Value::String(value))
+    }
 }
 
 pub fn to_string(cx: CallContext) -> Result<Value, Value> {

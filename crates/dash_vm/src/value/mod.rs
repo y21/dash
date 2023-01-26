@@ -448,6 +448,7 @@ impl<O: Object + 'static> Object for PureBuiltin<O> {
         get_property_descriptor,
         get_prototype,
         apply,
+        construct,
         type_of
     );
 
