@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1674688143165,
+  "lastUpdate": 1674739434513,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -167,6 +167,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 77939,
             "range": "± 551",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "0bf35140d655de3463979cf21984f18d3b36170c",
+          "message": "Revert boxed primitive delegation",
+          "timestamp": "2023-01-26T14:18:49+01:00",
+          "tree_id": "0a29977be6d924179e582f743d10588a50752b70",
+          "url": "https://github.com/y21/dash/commit/0bf35140d655de3463979cf21984f18d3b36170c"
+        },
+        "date": 1674739432941,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 4041385,
+            "range": "± 260248",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 392445,
+            "range": "± 26977",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 109246,
+            "range": "± 14974",
             "unit": "ns/iter"
           }
         ]
