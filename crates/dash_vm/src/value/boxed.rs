@@ -57,10 +57,6 @@ macro_rules! boxed_primitive {
                 }
 
                 fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
-                    if let Some(x) = self.inner.get_property_descriptor(sc, key.clone())? {
-                        return Ok(Some(x));
-                    }
-
                     self.obj.get_property_descriptor(sc, key)
                 }
 
