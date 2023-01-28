@@ -8,6 +8,7 @@ use super::value::Value;
 use super::Vm;
 
 pub type MathRandomCallback = fn(vm: &mut Vm) -> Result<f64, Value>;
+pub type TimeMillisCallback = fn(vm: &mut Vm) -> Result<u64, Value>;
 pub type StaticImportCallback = fn(vm: &mut Vm, ty: StaticImportKind, path: &str) -> Result<Value, Value>;
 pub type DynamicImportCallback = fn(vm: &mut Vm, val: Value) -> Result<Value, Value>;
 pub type DebuggerCallback = fn(vm: &mut Vm) -> Result<(), Value>;
@@ -16,6 +17,7 @@ pub type UnhandledTaskException = fn(vm: &mut LocalScope, exception: Value);
 #[derive(Default)]
 pub struct VmParams {
     math_random_callback: Option<MathRandomCallback>,
+    time_millis_callback: Option<TimeMillisCallback>,
     static_import_callback: Option<StaticImportCallback>,
     dynamic_import_callback: Option<DynamicImportCallback>,
     debugger_callback: Option<DebuggerCallback>,
@@ -71,6 +73,15 @@ impl VmParams {
 
     pub fn math_random_callback(&self) -> Option<MathRandomCallback> {
         self.math_random_callback
+    }
+
+    pub fn set_time_millis_callback(mut self, callback: TimeMillisCallback) -> Self {
+        self.time_millis_callback = Some(callback);
+        self
+    }
+
+    pub fn time_millis_callback(&self) -> Option<TimeMillisCallback> {
+        self.time_millis_callback
     }
 
     pub fn set_debugger_callback(mut self, callback: DebuggerCallback) -> Self {

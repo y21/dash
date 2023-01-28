@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use std::time::SystemTime;
 
 use dash_middle::compiler::StaticImportKind;
 use dash_optimizer::OptLevel;
@@ -34,6 +35,7 @@ impl Runtime {
         let mut params = VmParams::new()
             .set_static_import_callback(import_callback)
             .set_math_random_callback(random_callback)
+            .set_time_millis_callback(time_callback)
             .set_state(Box::new(state));
 
         if let Some(threshold) = initial_gc_threshold {
@@ -88,6 +90,13 @@ impl Runtime {
 fn random_callback(_: &mut Vm) -> Result<f64, Value> {
     let mut rng = rand::thread_rng();
     Ok(rng.gen())
+}
+
+fn time_callback(_: &mut Vm) -> Result<u64, Value> {
+    Ok(SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("time() < UNIX_EPOCH")
+        .as_millis() as u64)
 }
 
 fn import_callback(vm: &mut Vm, import_ty: StaticImportKind, path: &str) -> Result<Value, Value> {

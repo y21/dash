@@ -236,6 +236,9 @@ pub struct Statics {
     pub regexp_ctor: Handle<dyn Object>,
     pub regexp_prototype: Handle<dyn Object>,
     pub regexp_test: Handle<dyn Object>,
+    pub date_ctor: Handle<dyn Object>,
+    pub date_prototype: Handle<dyn Object>,
+    pub date_now: Handle<dyn Object>,
 }
 
 fn builtin_object<O: Object + 'static>(gc: &mut Gc<dyn Object>, obj: O) -> Handle<dyn Object> {
@@ -467,6 +470,9 @@ impl Statics {
             regexp_ctor: function(gc, "RegExp", js_std::regex::constructor),
             regexp_prototype: builtin_object(gc, RegExp::empty()),
             regexp_test: function(gc, "test", js_std::regex::test),
+            date_ctor: function(gc, "Date", js_std::date::constructor),
+            date_prototype: builtin_object(gc, NamedObject::null()),
+            date_now: function(gc, "now", js_std::date::now),
         }
     }
 

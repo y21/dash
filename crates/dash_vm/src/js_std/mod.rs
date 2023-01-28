@@ -2,6 +2,7 @@ pub mod array;
 pub mod array_iterator;
 pub mod arraybuffer;
 pub mod boolean;
+pub mod date;
 pub mod error;
 pub mod function;
 pub mod generator;

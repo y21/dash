@@ -709,6 +709,20 @@ impl Vm {
             #[constructor] aggregate_error_ctor;
         });
 
+        let date_ctor = register_builtin_type!(scope.statics.date_ctor, {
+            #[prototype] function_proto;
+            #[constructor] function_ctor;
+            #[fn_prototype] scope.statics.date_prototype;
+            #[fn_name] Date;
+            #[properties]
+            now: scope.statics.date_now;
+        });
+
+        register_builtin_type!(scope.statics.date_prototype, {
+            #[prototype] object_proto;
+            #[constructor] date_ctor;
+        });
+
         register_builtin_type!(global, {
             #[prototype] object_proto;
             #[constructor] object_ctor;
@@ -720,6 +734,7 @@ impl Vm {
             parseInt: scope.statics.parse_int;
             RegExp: regexp_ctor;
             Symbol: symbol_ctor;
+            Date: date_ctor;
             ArrayBuffer: arraybuffer_ctor;
             Uint8Array: u8array_ctor;
             Int8Array: i8array_ctor;
