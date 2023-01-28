@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1674920995819,
+  "lastUpdate": 1674943953693,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -419,6 +419,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 81863,
             "range": "± 410",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "dcfde0e787d35eb671ef5a5f1f404ab2d11409fe",
+          "message": "add Array.from",
+          "timestamp": "2023-01-28T22:29:20+01:00",
+          "tree_id": "caa188f184b76f3c86a2c43bac79eecfe20b89bb",
+          "url": "https://github.com/y21/dash/commit/dcfde0e787d35eb671ef5a5f1f404ab2d11409fe"
+        },
+        "date": 1674943952346,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 3655055,
+            "range": "± 50513",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 338568,
+            "range": "± 4538",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 98547,
+            "range": "± 1562",
             "unit": "ns/iter"
           }
         ]
