@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1674877374460,
+  "lastUpdate": 1674920995819,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -377,6 +377,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 84313,
             "range": "± 1089",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "67b14cbe58c6c31cbdbdf43a9f746be09b74439b",
+          "message": "consteval: fix incorrect f64 to i32 conversion",
+          "timestamp": "2023-01-28T16:45:58+01:00",
+          "tree_id": "6d79e59912f2642ee22466b4bfaceb77eb6a2748",
+          "url": "https://github.com/y21/dash/commit/67b14cbe58c6c31cbdbdf43a9f746be09b74439b"
+        },
+        "date": 1674920995074,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 2772827,
+            "range": "± 27329",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 256752,
+            "range": "± 434",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 81863,
+            "range": "± 410",
             "unit": "ns/iter"
           }
         ]
