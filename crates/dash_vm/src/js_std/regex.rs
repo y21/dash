@@ -23,12 +23,7 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
 pub fn test(cx: CallContext) -> Result<Value, Value> {
     let text = cx.args.first().unwrap_or_undefined().to_string(cx.scope)?;
 
-    let regex = match cx.this {
-        Value::Object(obj) => obj,
-        _ => throw!(cx.scope, "Receiver must be a RegExp"),
-    };
-
-    let regex = match regex.as_any().downcast_ref::<RegExp>() {
+    let regex = match cx.this.downcast_ref::<RegExp>() {
         Some(regex) => regex,
         None => throw!(cx.scope, "Receiver must be a RegExp"),
     };

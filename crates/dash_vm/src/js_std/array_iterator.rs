@@ -8,12 +8,7 @@ use crate::value::Value;
 use crate::value::ValueContext;
 
 pub fn next(cx: CallContext) -> Result<Value, Value> {
-    let iterator = match &cx.this {
-        Value::Object(o) | Value::External(o) => o.as_any().downcast_ref::<ArrayIterator>(),
-        _ => None,
-    };
-
-    let iterator = match iterator {
+    let iterator = match cx.this.downcast_ref::<ArrayIterator>() {
         Some(it) => it,
         None => throw!(cx.scope, "Incompatible receiver"),
     };

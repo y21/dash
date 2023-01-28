@@ -57,12 +57,7 @@ pub fn reject(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn then(cx: CallContext) -> Result<Value, Value> {
-    let promise = match cx.this {
-        Value::Object(obj) => obj,
-        _ => throw!(cx.scope, "Receiver must be a promise"),
-    };
-
-    let promise = match promise.as_any().downcast_ref::<Promise>() {
+    let promise = match cx.this.downcast_ref::<Promise>() {
         Some(promise) => promise,
         None => throw!(cx.scope, "Receiver must be a promise"),
     };

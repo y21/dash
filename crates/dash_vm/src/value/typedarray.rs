@@ -14,7 +14,7 @@ use super::object::PropertyValue;
 use super::ops::abstractions::conversions::ValueConversion;
 use super::Value;
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum TypedArrayKind {
     Int8Array,
     Uint8Array,
@@ -69,6 +69,14 @@ impl TypedArray {
             kind,
             obj: NamedObject::with_prototype_and_constructor(proto.clone(), ctor.clone()),
         }
+    }
+
+    pub fn kind(&self) -> TypedArrayKind {
+        self.kind
+    }
+
+    pub fn buffer(&self) -> &Handle<dyn Object> {
+        &self.arraybuffer
     }
 }
 

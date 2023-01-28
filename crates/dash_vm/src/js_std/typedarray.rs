@@ -2,6 +2,7 @@ use crate::throw;
 use crate::value::arraybuffer::ArrayBuffer;
 use crate::value::function::native::CallContext;
 use crate::value::object::Object;
+use crate::value::ops::abstractions::conversions::ValueConversion;
 use crate::value::typedarray::TypedArray;
 use crate::value::typedarray::TypedArrayKind;
 use crate::value::Value;
@@ -45,6 +46,44 @@ macro_rules! typedarray {
             }
         }
     };
+}
+
+pub fn fill(cx: CallContext) -> Result<Value, Value> {
+    let this = match cx.this.downcast_ref::<TypedArray>() {
+        Some(this) => this,
+        None => throw!(cx.scope, "Invalid receiver"),
+    };
+    let value = match cx.args.first() {
+        Some(value) => value.to_number(cx.scope)?,
+        None => throw!(cx.scope, "Missing fill value"),
+    };
+    let buf = this.buffer().as_any().downcast_ref::<ArrayBuffer>().unwrap().storage();
+
+    macro_rules! fill_typed_array {
+        ($ty:ty) => {{
+            let value = <$ty>::to_ne_bytes(value as $ty);
+            for chunk in buf.chunks_exact(value.len()) {
+                // For Uint8Array, it only compiles to a memset if we use an indexed for loop
+                // It seems like zipped iterators are not smart enough
+                for index in 0..value.len() {
+                    chunk[index].set(value[index]);
+                }
+            }
+        }};
+    }
+
+    match this.kind() {
+        TypedArrayKind::Uint32Array => fill_typed_array!(u32),
+        TypedArrayKind::Int8Array => fill_typed_array!(i8),
+        TypedArrayKind::Uint8Array => fill_typed_array!(u8),
+        TypedArrayKind::Uint8ClampedArray => fill_typed_array!(u8),
+        TypedArrayKind::Int16Array => fill_typed_array!(i16),
+        TypedArrayKind::Uint16Array => fill_typed_array!(u16),
+        TypedArrayKind::Int32Array => fill_typed_array!(i32),
+        TypedArrayKind::Float32Array => fill_typed_array!(f32),
+        TypedArrayKind::Float64Array => fill_typed_array!(f64),
+    }
+    Ok(Value::undefined())
 }
 
 typedarray!(module: u8array, kind: TypedArrayKind::Uint8Array);

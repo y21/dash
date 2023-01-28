@@ -474,6 +474,8 @@ impl Vm {
         register_builtin_type!(scope.statics.uint8array_prototype, {
             #[prototype] object_proto;
             #[constructor] u8array_ctor;
+            #[properties]
+            fill: scope.statics.typedarray_fill;
         });
 
         let i8array_ctor = register_builtin_type!(scope.statics.int8array_ctor, {
@@ -486,6 +488,8 @@ impl Vm {
         register_builtin_type!(scope.statics.int8array_prototype, {
             #[prototype] object_proto;
             #[constructor] i8array_ctor;
+            #[properties]
+            fill: scope.statics.typedarray_fill;
         });
 
         let u16array_ctor = register_builtin_type!(scope.statics.uint16array_ctor, {
@@ -498,6 +502,8 @@ impl Vm {
         register_builtin_type!(scope.statics.uint16array_prototype, {
             #[prototype] object_proto;
             #[constructor] u16array_ctor;
+            #[properties]
+            fill: scope.statics.typedarray_fill;
         });
 
         let i16array_ctor = register_builtin_type!(scope.statics.int16array_ctor, {
@@ -510,6 +516,8 @@ impl Vm {
         register_builtin_type!(scope.statics.int16array_prototype, {
             #[prototype] object_proto;
             #[constructor] i16array_ctor;
+            #[properties]
+            fill: scope.statics.typedarray_fill;
         });
 
         let u32array_ctor = register_builtin_type!(scope.statics.uint32array_ctor, {
@@ -522,6 +530,8 @@ impl Vm {
         register_builtin_type!(scope.statics.uint32array_prototype, {
             #[prototype] object_proto;
             #[constructor] u32array_ctor;
+            #[properties]
+            fill: scope.statics.typedarray_fill;
         });
 
         let i32array_ctor = register_builtin_type!(scope.statics.int32array_ctor, {
@@ -534,6 +544,8 @@ impl Vm {
         register_builtin_type!(scope.statics.int32array_prototype, {
             #[prototype] object_proto;
             #[constructor] i32array_ctor;
+            #[properties]
+            fill: scope.statics.typedarray_fill;
         });
 
         let f32array_ctor = register_builtin_type!(scope.statics.float32array_ctor, {
@@ -546,6 +558,8 @@ impl Vm {
         register_builtin_type!(scope.statics.float32array_prototype, {
             #[prototype] object_proto;
             #[constructor] f32array_ctor;
+            #[properties]
+            fill: scope.statics.typedarray_fill;
         });
 
         let f64array_ctor = register_builtin_type!(scope.statics.float64array_ctor, {
@@ -558,6 +572,8 @@ impl Vm {
         register_builtin_type!(scope.statics.float64array_prototype, {
             #[prototype] object_proto;
             #[constructor] f64array_ctor;
+            #[properties]
+            fill: scope.statics.typedarray_fill;
         });
 
         let promise_ctor = register_builtin_type!(scope.statics.promise_ctor, {

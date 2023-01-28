@@ -309,6 +309,13 @@ impl Value {
 
         Ok(this_proto == target_proto)
     }
+
+    pub fn downcast_ref<T: 'static>(&self) -> Option<&T> {
+        match self {
+            Value::Object(obj) | Value::External(obj) => obj.as_any().downcast_ref(),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug)]

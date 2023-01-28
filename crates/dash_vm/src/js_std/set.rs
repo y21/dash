@@ -22,11 +22,7 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn add(cx: CallContext) -> Result<Value, Value> {
-    let this = match &cx.this {
-        Value::Object(o) | Value::External(o) => o.as_any().downcast_ref::<Set>(),
-        _ => throw!(cx.scope, "Incompatible receiver"),
-    };
-    let this = match &this {
+    let this = match cx.this.downcast_ref::<Set>() {
         Some(set) => set,
         _ => throw!(cx.scope, "Incompatible receiver"),
     };
@@ -38,11 +34,7 @@ pub fn add(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn has(cx: CallContext) -> Result<Value, Value> {
-    let this = match &cx.this {
-        Value::Object(o) | Value::External(o) => o.as_any().downcast_ref::<Set>(),
-        _ => throw!(cx.scope, "Incompatible receiver"),
-    };
-    let this = match &this {
+    let this = match cx.this.downcast_ref::<Set>() {
         Some(set) => set,
         _ => throw!(cx.scope, "Incompatible receiver"),
     };
@@ -52,11 +44,7 @@ pub fn has(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn delete(cx: CallContext) -> Result<Value, Value> {
-    let this = match &cx.this {
-        Value::Object(o) | Value::External(o) => o.as_any().downcast_ref::<Set>(),
-        _ => throw!(cx.scope, "Incompatible receiver"),
-    };
-    let this = match &this {
+    let this = match cx.this.downcast_ref::<Set>() {
         Some(set) => set,
         _ => throw!(cx.scope, "Incompatible receiver"),
     };
@@ -68,11 +56,7 @@ pub fn delete(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn clear(cx: CallContext) -> Result<Value, Value> {
-    let this = match &cx.this {
-        Value::Object(o) | Value::External(o) => o.as_any().downcast_ref::<Set>(),
-        _ => throw!(cx.scope, "Incompatible receiver"),
-    };
-    let this = match &this {
+    let this = match cx.this.downcast_ref::<Set>() {
         Some(set) => set,
         _ => throw!(cx.scope, "Incompatible receiver"),
     };
@@ -83,11 +67,7 @@ pub fn clear(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn size(cx: CallContext) -> Result<Value, Value> {
-    let this = match &cx.this {
-        Value::Object(o) | Value::External(o) => o.as_any().downcast_ref::<Set>(),
-        _ => throw!(cx.scope, "Incompatible receiver"),
-    };
-    let this = match &this {
+    let this = match cx.this.downcast_ref::<Set>() {
         Some(set) => set,
         _ => throw!(cx.scope, "Incompatible receiver"),
     };
