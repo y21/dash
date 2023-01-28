@@ -9,7 +9,6 @@ use crate::gc::handle::Handle;
 use crate::local::LocalScope;
 use crate::Vm;
 
-use super::object::delegate_get_property;
 use super::object::NamedObject;
 use super::object::Object;
 use super::object::PropertyKey;
@@ -76,11 +75,11 @@ impl Error {
 }
 
 impl Object for Error {
-    fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<super::Value, super::Value> {
-        delegate_get_property(self, sc, key)
-    }
-
-    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
+    fn get_own_property_descriptor(
+        &self,
+        sc: &mut LocalScope,
+        key: PropertyKey,
+    ) -> Result<Option<PropertyValue>, Value> {
         match key {
             PropertyKey::String(s) if s == "name" => {
                 Ok(Some(PropertyValue::static_default(Value::String(self.name.clone()))))
@@ -161,6 +160,7 @@ macro_rules! define_error_type {
             impl Object for $t {
                 delegate!(
                     inner,
+                    get_own_property_descriptor,
                     get_property,
                     get_property_descriptor,
                     set_property,

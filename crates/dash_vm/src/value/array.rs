@@ -10,7 +10,6 @@ use crate::local::LocalScope;
 use crate::throw;
 use crate::Vm;
 
-use super::object::delegate_get_property;
 use super::object::NamedObject;
 use super::object::Object;
 use super::object::PropertyKey;
@@ -60,11 +59,11 @@ impl Array {
 }
 
 impl Object for Array {
-    fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
-        delegate_get_property(self, sc, key)
-    }
-
-    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
+    fn get_own_property_descriptor(
+        &self,
+        sc: &mut LocalScope,
+        key: PropertyKey,
+    ) -> Result<Option<PropertyValue>, Value> {
         let items = self.items.borrow();
 
         if let PropertyKey::String(key) = &key {
@@ -177,6 +176,7 @@ pub struct ArrayIterator {
 impl Object for ArrayIterator {
     delegate!(
         obj,
+        get_own_property_descriptor,
         get_property,
         get_property_descriptor,
         set_property,

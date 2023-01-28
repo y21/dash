@@ -22,7 +22,7 @@ use self::{
 };
 
 use super::{
-    object::{delegate_get_property, NamedObject, Object, PropertyKey, PropertyValue},
+    object::{NamedObject, Object, PropertyKey, PropertyValue},
     Typeof, Value,
 };
 
@@ -165,11 +165,11 @@ fn handle_call(
 }
 
 impl Object for Function {
-    fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
-        delegate_get_property(self, sc, key)
-    }
-
-    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
+    fn get_own_property_descriptor(
+        &self,
+        sc: &mut LocalScope,
+        key: PropertyKey,
+    ) -> Result<Option<PropertyValue>, Value> {
         if let Some(key) = key.as_string() {
             match key {
                 "name" => {
@@ -189,7 +189,7 @@ impl Object for Function {
             }
         }
 
-        self.obj.get_property_descriptor(sc, key)
+        self.obj.get_own_property_descriptor(sc, key)
     }
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {

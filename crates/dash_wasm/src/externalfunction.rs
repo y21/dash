@@ -27,12 +27,12 @@ unsafe impl Trace for ExternalFunction {
 }
 
 impl Object for ExternalFunction {
-    fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
-        self.1.get_property(sc, key)
-    }
-
-    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
-        self.1.get_property_descriptor(sc, key)
+    fn get_own_property_descriptor(
+        &self,
+        sc: &mut LocalScope,
+        key: PropertyKey,
+    ) -> Result<Option<PropertyValue>, Value> {
+        self.1.get_own_property_descriptor(sc, key)
     }
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {

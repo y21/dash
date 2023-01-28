@@ -7,7 +7,6 @@ use crate::local::LocalScope;
 use crate::Vm;
 
 use super::arraybuffer::ArrayBuffer;
-use super::object::delegate_get_property;
 use super::object::NamedObject;
 use super::object::Object;
 use super::object::PropertyKey;
@@ -74,11 +73,11 @@ impl TypedArray {
 }
 
 impl Object for TypedArray {
-    fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
-        delegate_get_property(self, sc, key)
-    }
-
-    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
+    fn get_own_property_descriptor(
+        &self,
+        sc: &mut LocalScope,
+        key: PropertyKey,
+    ) -> Result<Option<PropertyValue>, Value> {
         if let Some(Ok(index)) = key.as_string().map(|k| k.parse::<usize>()) {
             let arraybuffer = self.arraybuffer.as_any().downcast_ref::<ArrayBuffer>();
 
@@ -120,7 +119,7 @@ impl Object for TypedArray {
             }
         }
 
-        self.obj.get_property_descriptor(sc, key)
+        self.obj.get_own_property_descriptor(sc, key)
     }
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {

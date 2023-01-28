@@ -51,7 +51,8 @@ impl ArrayBuffer {
 impl Object for ArrayBuffer {
     delegate!(
         obj,
-        get_property, // TODO: byteLength
+        get_own_property_descriptor, // TODO: byteLength
+        get_property,
         get_property_descriptor,
         set_property,
         delete_property,

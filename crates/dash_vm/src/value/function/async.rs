@@ -114,6 +114,7 @@ impl ThenTask {
 impl Object for ThenTask {
     delegate!(
         obj,
+        get_own_property_descriptor,
         get_property,
         get_property_descriptor,
         set_property,

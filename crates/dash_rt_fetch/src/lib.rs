@@ -187,6 +187,7 @@ unsafe impl Trace for HttpResponse {
 impl Object for HttpResponse {
     delegate!(
         obj,
+        get_own_property_descriptor,
         get_property,
         get_property_descriptor,
         set_property,

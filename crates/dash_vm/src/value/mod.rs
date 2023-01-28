@@ -444,6 +444,7 @@ impl<O: Object> PureBuiltin<O> {
 impl<O: Object + 'static> Object for PureBuiltin<O> {
     delegate!(
         inner,
+        get_own_property_descriptor,
         get_property,
         get_property_descriptor,
         get_prototype,

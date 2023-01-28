@@ -49,6 +49,7 @@ impl RegExp {
 impl Object for RegExp {
     delegate!(
         object,
+        get_own_property_descriptor,
         get_property,
         get_property_descriptor,
         set_property,

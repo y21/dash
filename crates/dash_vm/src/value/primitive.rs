@@ -13,7 +13,6 @@ use super::boxed::Boolean as BoxedBoolean;
 use super::boxed::Number as BoxedNumber;
 use super::boxed::String as BoxedString;
 use super::boxed::Symbol as BoxedSymbol;
-use super::object::delegate_get_property;
 use super::object::Object;
 use super::object::PropertyKey;
 use super::object::PropertyValue;
@@ -27,12 +26,12 @@ pub const MAX_SAFE_INTEGER: u64 = 9007199254740991u64;
 pub const MAX_SAFE_INTEGERF: f64 = 9007199254740991f64;
 
 impl Object for f64 {
-    fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
-        sc.statics.number_prototype.clone().get_property(sc, key)
-    }
-
-    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
-        sc.statics.number_prototype.clone().get_property_descriptor(sc, key)
+    fn get_own_property_descriptor(
+        &self,
+        _sc: &mut LocalScope,
+        _key: PropertyKey,
+    ) -> Result<Option<PropertyValue>, Value> {
+        Ok(None)
     }
 
     fn set_property(
@@ -85,12 +84,12 @@ impl Object for f64 {
 }
 
 impl Object for bool {
-    fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
-        sc.statics.boolean_prototype.clone().get_property(sc, key)
-    }
-
-    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
-        sc.statics.boolean_prototype.clone().get_property_descriptor(sc, key)
+    fn get_own_property_descriptor(
+        &self,
+        _sc: &mut LocalScope,
+        _key: PropertyKey,
+    ) -> Result<Option<PropertyValue>, Value> {
+        Ok(None)
     }
 
     fn set_property(
@@ -143,16 +142,12 @@ impl Object for bool {
 
 // TODO: impl<T: Deref<Target=O>, O: Object> Object for T  possible?
 impl Object for Rc<str> {
-    fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
-        delegate_get_property(self, sc, key)
-    }
-
-    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
-        if let Some(value) = str::get_property_descriptor(self, sc, key.clone())? {
-            return Ok(Some(value));
-        }
-
-        sc.statics.string_prototype.clone().get_property_descriptor(sc, key)
+    fn get_own_property_descriptor(
+        &self,
+        sc: &mut LocalScope,
+        key: PropertyKey,
+    ) -> Result<Option<PropertyValue>, Value> {
+        str::get_own_property_descriptor(self, sc, key.clone())
     }
 
     fn set_property(
@@ -217,11 +212,11 @@ pub struct Undefined;
 pub struct Null;
 
 impl Object for Undefined {
-    fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
-        delegate_get_property(self, sc, key)
-    }
-
-    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
+    fn get_own_property_descriptor(
+        &self,
+        sc: &mut LocalScope,
+        key: PropertyKey,
+    ) -> Result<Option<PropertyValue>, Value> {
         throw!(sc, "Cannot read property {:?} of undefined", key)
     }
 
@@ -269,11 +264,11 @@ impl Object for Undefined {
 }
 
 impl Object for Null {
-    fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
-        delegate_get_property(self, sc, key)
-    }
-
-    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
+    fn get_own_property_descriptor(
+        &self,
+        sc: &mut LocalScope,
+        key: PropertyKey,
+    ) -> Result<Option<PropertyValue>, Value> {
         throw!(sc, "Cannot read property {:?} of null", key)
     }
 
@@ -317,11 +312,11 @@ impl Object for Null {
 }
 
 impl Object for str {
-    fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
-        delegate_get_property(self, sc, key)
-    }
-
-    fn get_property_descriptor(&self, _sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
+    fn get_own_property_descriptor(
+        &self,
+        _sc: &mut LocalScope,
+        key: PropertyKey,
+    ) -> Result<Option<PropertyValue>, Value> {
         if let PropertyKey::String(st) = key {
             if st == "length" {
                 return Ok(Some(PropertyValue::static_default(Value::number(self.len() as f64))));
@@ -394,12 +389,12 @@ impl Symbol {
 }
 
 impl Object for Symbol {
-    fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
-        sc.statics.symbol_prototype.clone().get_property(sc, key)
-    }
-
-    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
-        sc.statics.symbol_prototype.clone().get_property_descriptor(sc, key)
+    fn get_own_property_descriptor(
+        &self,
+        _sc: &mut LocalScope,
+        _key: PropertyKey,
+    ) -> Result<Option<PropertyValue>, Value> {
+        Ok(None)
     }
 
     fn set_property(
@@ -880,12 +875,12 @@ impl Hash for Number {
 }
 
 impl Object for Number {
-    fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
-        self.0.get_property(sc, key)
-    }
-
-    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
-        self.0.get_property_descriptor(sc, key)
+    fn get_own_property_descriptor(
+        &self,
+        sc: &mut LocalScope,
+        key: PropertyKey,
+    ) -> Result<Option<PropertyValue>, Value> {
+        self.0.get_own_property_descriptor(sc, key)
     }
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
