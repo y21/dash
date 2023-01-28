@@ -1,6 +1,7 @@
 use crate::local::LocalScope;
 use crate::throw;
 use crate::value::array::Array;
+use crate::value::array::ArrayIterator;
 use crate::value::boxed::String as BoxedString;
 use crate::value::function::native::CallContext;
 use crate::value::object::PropertyValue;
@@ -9,6 +10,7 @@ use crate::value::Value;
 use crate::value::ValueContext;
 use std::borrow::Cow;
 use std::fmt::Write;
+use std::rc::Rc;
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let value = cx.args.get(0).unwrap_or_undefined().to_string(cx.scope)?;
@@ -346,4 +348,20 @@ pub fn substring(cx: CallContext) -> Result<Value, Value> {
     let result = String::from_utf8_lossy(bytes).into_owned();
 
     Ok(Value::String(result.into()))
+}
+
+pub fn iterator(cx: CallContext) -> Result<Value, Value> {
+    let string = cx.this.to_string(cx.scope)?;
+    let chars = string
+        .chars()
+        .map(|c| Rc::from(c.to_string()))
+        .map(Value::String)
+        .map(PropertyValue::static_default)
+        .collect::<Vec<_>>();
+    let chars = Array::from_vec(cx.scope, chars);
+    let chars = cx.scope.register(chars);
+    let iter = ArrayIterator::new(cx.scope, Value::Object(chars))?;
+    let iter = cx.scope.register(iter);
+
+    Ok(Value::Object(iter))
 }

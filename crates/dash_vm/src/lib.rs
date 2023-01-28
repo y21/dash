@@ -356,6 +356,9 @@ impl Vm {
             trimEnd: scope.statics.string_trim_end;
             substr: scope.statics.string_substr;
             substring: scope.statics.string_substring;
+            
+            #[symbols]
+            scope.statics.symbol_iterator => scope.statics.string_iterator;
         });
 
         let array_ctor = register_builtin_type!(scope.statics.array_ctor, {
@@ -363,6 +366,9 @@ impl Vm {
             #[constructor] function_ctor;
             #[fn_prototype] scope.statics.array_prototype;
             #[fn_name] Array;
+
+            #[properties]
+            from: scope.statics.array_from;
         });
         
         register_builtin_type!(scope.statics.array_prototype, {
@@ -407,6 +413,9 @@ impl Vm {
 
             #[properties]
             next: scope.statics.array_iterator_next;
+
+            #[symbols]
+            scope.statics.symbol_iterator => scope.statics.array_iterator_iterator;
         });
 
         register_builtin_type!(scope.statics.generator_iterator_prototype, {

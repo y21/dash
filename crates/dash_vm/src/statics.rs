@@ -138,6 +138,7 @@ pub struct Statics {
     pub string_from_char_code: Handle<dyn Object>,
     pub string_substr: Handle<dyn Object>,
     pub string_substring: Handle<dyn Object>,
+    pub string_iterator: Handle<dyn Object>,
     pub array_ctor: Handle<dyn Object>,
     pub array_tostring: Handle<dyn Object>,
     pub array_prototype: Handle<dyn Object>,
@@ -160,6 +161,7 @@ pub struct Statics {
     pub symbol_unscopables: Symbol,
     pub array_iterator_prototype: Handle<dyn Object>,
     pub array_iterator_next: Handle<dyn Object>,
+    pub array_iterator_iterator: Handle<dyn Object>,
     pub array_at: Handle<dyn Object>,
     pub array_concat: Handle<dyn Object>,
     pub array_entries: Handle<dyn Object>,
@@ -183,6 +185,7 @@ pub struct Statics {
     pub array_unshift: Handle<dyn Object>,
     pub array_slice: Handle<dyn Object>,
     pub array_last_index_of: Handle<dyn Object>,
+    pub array_from: Handle<dyn Object>,
     pub generator_iterator_prototype: Handle<dyn Object>,
     pub generator_iterator_next: Handle<dyn Object>,
     pub error_ctor: Handle<dyn Object>,
@@ -369,6 +372,7 @@ impl Statics {
             string_from_char_code: function(gc, "fromCharCode", js_std::string::from_char_code),
             string_substr: function(gc, "substr", js_std::string::substr),
             string_substring: function(gc, "substring", js_std::string::substring),
+            string_iterator: function(gc, "iterator", js_std::string::iterator),
             array_ctor: function(gc, "Array", js_std::array::constructor),
             array_tostring: function(gc, "toString", js_std::array::to_string),
             array_prototype: builtin_object(gc, Array::with_obj(NamedObject::null())),
@@ -392,6 +396,7 @@ impl Statics {
             symbol_unscopables: Symbol::new("Symbol.unscopables".into()),
             array_iterator_prototype: builtin_object(gc, ArrayIterator::empty()),
             array_iterator_next: function(gc, "next", js_std::array_iterator::next),
+            array_iterator_iterator: function(gc, "iterator", js_std::identity_this),
             array_at: function(gc, "at", js_std::array::at),
             array_concat: function(gc, "concat", js_std::array::concat),
             array_entries: function(gc, "entries", js_std::array::entries),
@@ -414,6 +419,7 @@ impl Statics {
             array_unshift: function(gc, "unshift", js_std::array::unshift),
             array_slice: function(gc, "slice", js_std::array::slice),
             array_last_index_of: function(gc, "lastIndexOf", js_std::array::last_index_of),
+            array_from: function(gc, "from", js_std::array::from),
             generator_iterator_prototype: {
                 let obj = gc.register(NamedObject::null());
                 builtin_object(gc, GeneratorIterator::empty(obj))

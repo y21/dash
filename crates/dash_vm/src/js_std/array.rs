@@ -518,3 +518,63 @@ pub fn slice(cx: CallContext) -> Result<Value, Value> {
 
     Ok(cx.scope.register(values).into())
 }
+
+pub fn from(cx: CallContext) -> Result<Value, Value> {
+    fn with_iterator(scope: &mut LocalScope, items: Value, mapper: Option<Value>) -> Result<Value, Value> {
+        let mut values = Vec::new();
+
+        let next = items.get_property(scope, "next".into())?;
+        loop {
+            let item = next.apply(scope, items.clone(), Vec::new())?;
+            let done = matches!(item.get_property(scope, "done".into())?, Value::Boolean(true));
+            if done {
+                break;
+            }
+            let value = item.get_property(scope, "value".into())?;
+            let value = match &mapper {
+                Some(mapper) => mapper.apply(scope, Value::undefined(), vec![value])?,
+                None => value,
+            };
+            values.push(PropertyValue::static_default(value));
+        }
+
+        let values = Array::from_vec(scope, values);
+        Ok(Value::Object(scope.register(values)))
+    }
+
+    fn with_array_like(scope: &mut LocalScope, items: Value, mapper: Option<Value>) -> Result<Value, Value> {
+        let len = items.length_of_array_like(scope)?;
+
+        let mut values = Vec::new();
+
+        for i in 0..len {
+            let value = items.get_property(scope, i.to_string().into())?;
+            let value = match &mapper {
+                Some(mapper) => mapper.apply(scope, Value::undefined(), vec![value])?,
+                None => value,
+            };
+            values.push(PropertyValue::static_default(value));
+        }
+
+        let values = Array::from_vec(scope, values);
+        Ok(Value::Object(scope.register(values)))
+    }
+
+    let mut args = cx.args.into_iter();
+
+    let items = args.next().unwrap_or_undefined();
+    let mapper = args.next();
+
+    let items_iterator = {
+        let iterator = cx.scope.statics.symbol_iterator.clone();
+        items.get_property(cx.scope, iterator.into())?.into_option()
+    };
+
+    match items_iterator {
+        Some(iterator) => {
+            let iterator = iterator.apply(cx.scope, items.clone(), Vec::new())?;
+            with_iterator(cx.scope, iterator, mapper)
+        }
+        None => with_array_like(cx.scope, items, mapper),
+    }
+}
