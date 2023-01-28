@@ -72,9 +72,9 @@ impl<'a> Eval<'a> for Expr<'a> {
         // infer_type might want to write to scope
         infer_type(cx.scope_mut(), self);
 
-        macro_rules! u64op {
+        macro_rules! i64op {
             ($l:ident $tok:tt $r:ident) => {
-                Literal(Number(((*$l as u64) $tok (*$r as u64)) as f64))
+                Literal(Number(((*$l as i64 as i32) $tok (*$r as i64 as i32)) as f64))
             };
         }
 
@@ -102,11 +102,11 @@ impl<'a> Eval<'a> for Expr<'a> {
                         TokenType::Inequality => *self = Literal(Boolean(left != right)),
                         TokenType::StrictEquality => *self = Literal(Boolean(left == right)),
                         TokenType::StrictInequality => *self = Literal(Boolean(left != right)),
-                        TokenType::BitwiseOr => *self = u64op!(left | right),
-                        TokenType::BitwiseAnd => *self = u64op!(left & right),
-                        TokenType::BitwiseXor => *self = u64op!(left ^ right),
-                        TokenType::LeftShift => *self = u64op!(left << right),
-                        TokenType::RightShift => *self = u64op!(left >> right),
+                        TokenType::BitwiseOr => *self = i64op!(left | right),
+                        TokenType::BitwiseAnd => *self = i64op!(left & right),
+                        TokenType::BitwiseXor => *self = i64op!(left ^ right),
+                        TokenType::LeftShift => *self = i64op!(left << right),
+                        TokenType::RightShift => *self = i64op!(left >> right),
                         TokenType::LogicalOr => {
                             *self = Literal(Number(match truthy_f64(*left) {
                                 true => *left,

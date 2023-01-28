@@ -1231,7 +1231,7 @@ mod handlers {
         macro_rules! bin_op_i64 {
             ($op:tt) => {{
                 let (l, r) = lr_as_num_spec!();
-                cx.stack.push(Value::number(((l as i32) $op (r as i32)) as f64));
+                cx.stack.push(Value::number(((l as i64 as i32) $op (r as i64 as i32)) as f64));
             }};
         }
 

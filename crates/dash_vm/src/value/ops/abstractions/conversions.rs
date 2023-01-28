@@ -70,7 +70,7 @@ pub trait ValueConversion {
 
     fn to_int32(&self, sc: &mut LocalScope) -> Result<i32, Value> {
         let n = self.to_number(sc)?;
-        Ok(n as i32)
+        Ok(n as i64 as i32)
     }
 }
 
