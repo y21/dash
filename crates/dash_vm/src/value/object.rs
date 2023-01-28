@@ -40,8 +40,9 @@ pub trait Object: Debug + Trace {
         }
 
         match self.get_prototype(sc)? {
-            Value::Object(object) | Value::External(object) => object.get_own_property_descriptor(sc, key),
-            _ => todo!(),
+            Value::Object(object) | Value::External(object) => object.get_property_descriptor(sc, key),
+            Value::Null(..) => Ok(None),
+            _ => unreachable!(),
         }
     }
 
