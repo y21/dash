@@ -12,6 +12,7 @@ use super::{expr::Expr, types::TypeSegment};
 #[derive(Debug, Clone, Display)]
 pub enum Statement<'a> {
     /// Expression statement
+    #[display(fmt = "{_0};")]
     Expression(Expr<'a>),
     /// Variable declaration
     Variable(VariableDeclarations<'a>),
@@ -387,9 +388,11 @@ impl<'a> fmt::Display for FunctionDeclaration<'a> {
             }
         }
 
-        write!(f, ") {{")?;
+        writeln!(f, ") {{")?;
 
-        fmt_list(f, &self.statements, ";")?;
+        fmt_list(f, &self.statements, "\n")?;
+
+        write!(f, "\n}}")?;
 
         Ok(())
     }
@@ -434,11 +437,11 @@ pub struct BlockStatement<'a>(pub Vec<Statement<'a>>);
 
 impl<'a> fmt::Display for BlockStatement<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{{")?;
+        writeln!(f, "{{")?;
 
-        fmt_list(f, &self.0, ";")?;
+        fmt_list(f, &self.0, "\n")?;
 
-        write!(f, "}}")?;
+        write!(f, "\n}}")?;
 
         Ok(())
     }
