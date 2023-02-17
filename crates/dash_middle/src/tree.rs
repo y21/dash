@@ -3,7 +3,7 @@ use std::ops::DerefMut;
 use std::ops::Index;
 use std::ops::IndexMut;
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 #[repr(transparent)]
 pub struct TreeToken(usize);
 
@@ -19,6 +19,7 @@ impl From<TreeToken> for usize {
     }
 }
 
+#[derive(Debug)]
 pub struct TreeNode<T> {
     value: T,
     parent: Option<TreeToken>,
@@ -48,6 +49,7 @@ impl<T> DerefMut for TreeNode<T> {
     }
 }
 
+#[derive(Debug)]
 pub struct Tree<T> {
     pool: Vec<TreeNode<T>>,
 }

@@ -41,6 +41,7 @@ use dash_middle::tree::Tree;
 use dash_middle::tree::TreeNode;
 use dash_middle::util::Counter;
 
+#[derive(Debug)]
 pub struct TypeInferCtx<'a> {
     counter: Counter<FuncId>,
     scopes: Tree<Scope<'a>>,

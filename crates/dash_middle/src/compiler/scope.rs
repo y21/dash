@@ -56,6 +56,8 @@ impl<'a> ScopeLocal<'a> {
 
 pub struct LimitExceededError;
 
+#[derive(Debug)]
+
 pub struct Scope<'a> {
     depth: u16,
     // length limited to u16

@@ -49,10 +49,7 @@ use jump_container::JumpContainer;
 
 use crate::builder::{InstructionBuilder, Label};
 
-use self::{
-    error::CompileError,
-    instruction::{InstructionWriter, NamedExportKind},
-};
+use self::{error::CompileError, instruction::NamedExportKind};
 
 pub mod builder;
 pub mod error;
@@ -194,7 +191,10 @@ impl<'a> FunctionCompiler<'a> {
             ast.push(Statement::Return(Default::default()));
         }
 
-        // Run type inference here
+        // Run type inference
+        for stmt in &mut ast {
+            self.tcx.visit_statement(&stmt, FuncId::ROOT);
+        }
         // Run const eval here
 
         // if self.opt_level.enabled() {
@@ -762,7 +762,8 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         for VariableDeclaration { binding, value } in declarations {
             match binding.name {
                 VariableDeclarationName::Identifier(ident) => {
-                    let id = ib.current_scope_mut().add_local(ident, binding.kind, false, None)?;
+                    // Type infer pass must have discovered the local variable
+                    let (id, _) = ib.current_scope_mut().find_local(ident).unwrap();
 
                     if let Some(expr) = value {
                         ib.accept_expr(expr)?;

@@ -221,6 +221,7 @@ macro_rules! timed {
     }};
 }
 
+#[derive(Debug)]
 pub struct Counter<T>(usize, PhantomData<T>);
 
 impl<T> Counter<T>
