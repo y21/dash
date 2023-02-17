@@ -4,7 +4,7 @@ use derive_more::Display;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use crate::lexer::token::TokenType;
+use crate::{lexer::token::TokenType, tree::TreeToken};
 
 use super::{expr::Expr, types::TypeSegment};
 
@@ -338,9 +338,49 @@ pub enum FunctionKind {
     Arrow,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct FuncId(usize);
+
+impl FuncId {
+    /// The root function of
+    pub const ROOT: FuncId = FuncId(0);
+    /// The ID that refers to the first function that is not the root function
+    pub const FIRST_NON_ROOT: FuncId = FuncId(1);
+
+    pub fn new(id: usize) -> Self {
+        Self(id)
+    }
+}
+
+impl From<usize> for FuncId {
+    fn from(value: usize) -> Self {
+        FuncId(value)
+    }
+}
+
+impl Into<usize> for FuncId {
+    fn into(self) -> usize {
+        self.0
+    }
+}
+
+impl From<FuncId> for TreeToken {
+    fn from(value: FuncId) -> Self {
+        Self::new(value.0)
+    }
+}
+
+impl From<TreeToken> for FuncId {
+    fn from(value: TreeToken) -> Self {
+        Self::new(value.into())
+    }
+}
+
 /// A function declaration
 #[derive(Debug, Clone)]
 pub struct FunctionDeclaration<'a> {
+    pub id: FuncId,
     /// The name of this function, if present
     pub name: Option<&'a str>,
     /// Whether this function is an async function
@@ -416,12 +456,14 @@ impl<'a> FunctionDeclaration<'a> {
     /// Creates a new function declaration
     pub fn new(
         name: Option<&'a str>,
+        id: FuncId,
         parameters: Vec<(Parameter<'a>, Option<Expr<'a>>, Option<TypeSegment<'a>>)>,
         statements: Vec<Statement<'a>>,
         ty: FunctionKind,
         r#async: bool,
     ) -> Self {
         Self {
+            id,
             name,
             parameters,
             statements,

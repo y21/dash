@@ -2,14 +2,14 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
-use std::{convert::TryInto, ptr::NonNull, usize};
+use std::{convert::TryInto, usize};
 
 use dash_middle::compiler::constant::{Constant, Function};
 use dash_middle::compiler::instruction::{AssignKind, IntrinsicOperation};
 use dash_middle::compiler::scope::ScopeLocal;
 use dash_middle::compiler::scope::{CompileValueType, Scope};
 use dash_middle::compiler::{constant::ConstantPool, external::External};
-use dash_middle::compiler::{infer_type, CompileResult, FunctionCallMetadata, StaticImportKind};
+use dash_middle::compiler::{CompileResult, FunctionCallMetadata, StaticImportKind};
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::expr::BinaryExpr;
 use dash_middle::parser::expr::ConditionalExpr;
@@ -24,7 +24,6 @@ use dash_middle::parser::expr::Seq;
 use dash_middle::parser::expr::UnaryExpr;
 use dash_middle::parser::expr::{ArrayLiteral, ObjectMemberKind};
 use dash_middle::parser::expr::{AssignmentExpr, AssignmentTarget};
-use dash_middle::parser::statement::ImportKind;
 use dash_middle::parser::statement::ReturnStatement;
 use dash_middle::parser::statement::SpecifierKind;
 use dash_middle::parser::statement::Statement;
@@ -38,12 +37,12 @@ use dash_middle::parser::statement::{Class, Parameter};
 use dash_middle::parser::statement::{ClassMemberKind, ExportKind};
 use dash_middle::parser::statement::{ClassProperty, ForLoop};
 use dash_middle::parser::statement::{ForInLoop, ForOfLoop};
+use dash_middle::parser::statement::{FuncId, ImportKind};
 use dash_middle::parser::statement::{FunctionDeclaration, SwitchStatement};
 use dash_middle::parser::statement::{FunctionKind, VariableDeclarationName};
 use dash_middle::parser::statement::{IfStatement, VariableDeclarations};
 use dash_middle::visitor::Visitor;
-use dash_optimizer::consteval::Eval;
-use dash_optimizer::context::OptimizerContext;
+use dash_optimizer::type_infer::TypeInferCtx;
 use dash_optimizer::OptLevel;
 use instruction::compile_local_load;
 use jump_container::JumpContainer;
@@ -77,92 +76,110 @@ enum Breakable {
     Switch { switch_id: usize },
 }
 
-pub struct FunctionCompiler<'a> {
+/// Function-specific state, such as
+struct FunctionLocalState {
     /// Instruction buffer
     buf: Vec<u8>,
     /// A list of constants used throughout this function.
     ///
     /// Bytecode can refer to constants using the [Instruction::Constant] instruction, followed by a u8 index.
     cp: ConstantPool,
-    /// Scope manager, stores local variables
-    scope: Scope<'a>,
     /// A vector of external values
     externals: Vec<External>,
     /// Current try catch depth
     try_catch_depth: u16,
     /// The type of function that this FunctionCompiler compiles
     ty: FunctionKind,
-    /// The function caller, if any
-    ///
-    /// This is used for resolving variables in enclosing environments
-    caller: Option<NonNull<FunctionCompiler<'a>>>,
-    /// Optimization level for this function
-    opt_level: OptLevel,
     /// Whether the function being compiled is async
     r#async: bool,
     /// Container, used for storing global labels that can be jumped to
     jc: JumpContainer,
     /// A stack of breakable labels (loop/switch)
     breakables: Vec<Breakable>,
-
     /// Keeps track of the total number of loops to be able to have unique IDs
     loop_counter: usize,
-
     /// Keeps track of the total number of loops to be able to have unique IDs
     switch_counter: usize,
+    id: FuncId,
 }
 
-impl<'a> FunctionCompiler<'a> {
-    pub fn new(opt_level: OptLevel) -> Self {
+impl FunctionLocalState {
+    pub fn new(id: FuncId) -> Self {
         Self {
             buf: Vec::new(),
             cp: ConstantPool::new(),
-            scope: Scope::new(),
             externals: Vec::new(),
             try_catch_depth: 0,
             ty: FunctionKind::Function,
             r#async: false,
-            caller: None,
-            opt_level,
             jc: JumpContainer::new(),
             breakables: Vec::new(),
             loop_counter: 0,
             switch_counter: 0,
+            id,
         }
     }
 
-    /// # Safety
-    /// * Requires `caller` to not be invalid (i.e. due to moving) during calls
-    pub unsafe fn with_caller<'s>(caller: &'s mut FunctionCompiler<'a>, ty: FunctionKind, r#async: bool) -> Self {
-        Self {
-            buf: Vec::new(),
-            cp: ConstantPool::new(),
-            scope: Scope::new(),
-            externals: Vec::new(),
-            try_catch_depth: 0,
-            ty,
-            caller: Some(NonNull::new(caller).unwrap()),
-            opt_level: caller.opt_level,
-            jc: JumpContainer::new(),
-            breakables: Vec::new(),
-            r#async,
-            loop_counter: 0,
-            switch_counter: 0,
-        }
-    }
-
-    /// Short for calling `FunctionCompiler::with_caller`, immediately followed by a `.compile_all()`
+    /// "Prepares" a loop and returns a unique ID that identifies this loop
     ///
-    /// Contrary to with_caller, this function is safe because the invariant cannot be broken
-    pub fn compile_ast_with_caller<'s>(
-        caller: &'s mut FunctionCompiler<'a>,
-        ty: FunctionKind,
-        r#async: bool,
-        ast: Vec<Statement<'a>>,
-        implicit_return: bool,
-    ) -> Result<CompileResult, CompileError> {
-        let compiler = unsafe { Self::with_caller(caller, ty, r#async) };
-        compiler.compile_ast(ast, implicit_return)
+    /// Specifically, this function increments a FunctionCompiler-local loop counter and
+    /// inserts the loop into a stack of switch-case/loops so that `break` (and `continue`)
+    /// statements can be resolved at compile-time
+    fn prepare_loop(&mut self) -> usize {
+        let loop_id = self.loop_counter;
+        self.breakables.push(Breakable::Loop { loop_id });
+        self.loop_counter += 1;
+        loop_id
+    }
+
+    /// Same as [`prepare_loop`] but for switch statements
+    fn prepare_switch(&mut self) -> usize {
+        let switch_id = self.switch_counter;
+        self.breakables.push(Breakable::Switch { switch_id });
+        self.switch_counter += 1;
+        switch_id
+    }
+    fn exit_loop(&mut self) {
+        let item = self.breakables.pop();
+        match item {
+            None | Some(Breakable::Switch { .. }) => panic!("Tried to exit loop, but no breakable was found"),
+            Some(Breakable::Loop { .. }) => {}
+        }
+    }
+
+    fn exit_switch(&mut self) {
+        let item = self.breakables.pop();
+        match item {
+            None | Some(Breakable::Loop { .. }) => panic!("Tried to exit switch, but no breakable was found"),
+            Some(Breakable::Switch { .. }) => {}
+        }
+    }
+
+    fn add_global_label(&mut self, label: Label) {
+        jump_container::add_label(&mut self.jc, label, &mut self.buf)
+    }
+
+    /// Jumps to a label that was previously (or will be) created by a call to `add_global_label`
+    fn add_global_jump(&mut self, label: Label) {
+        jump_container::add_jump(&mut self.jc, label, &mut self.buf)
+    }
+}
+
+pub struct FunctionCompiler<'a> {
+    function_stack: Vec<FunctionLocalState>,
+    tcx: TypeInferCtx<'a>,
+    /// Optimization level
+    #[allow(unused)]
+    opt_level: OptLevel,
+}
+
+impl<'a> FunctionCompiler<'a> {
+    pub fn new(opt_level: OptLevel, tcx: TypeInferCtx<'a>) -> Self {
+        Self {
+            opt_level,
+            tcx,
+            function_stack: Vec::new(),
+        }
     }
 
     pub fn compile_ast(
@@ -177,48 +194,59 @@ impl<'a> FunctionCompiler<'a> {
             ast.push(Statement::Return(Default::default()));
         }
 
-        if self.opt_level.enabled() {
-            let mut cx = OptimizerContext::new();
-            ast.fold(&mut cx, false);
+        // Run type inference here
+        // Run const eval here
 
-            let scope = std::mem::replace(cx.scope_mut(), Scope::new());
-            for local in scope.into_locals() {
-                self.scope.add_scope_local(local)?;
-            }
-        }
+        // if self.opt_level.enabled() {
+        //     let mut cx = OptimizerContext::new();
+        //     ast.fold(&mut cx, false);
 
-        let hoisted_locals = transformations::hoist_declarations(&mut ast);
-        for binding in hoisted_locals {
-            match binding.name {
-                VariableDeclarationName::Identifier(name) => {
-                    self.scope.add_local(name, binding.kind, false, None)?;
-                }
-                VariableDeclarationName::ArrayDestructuring { fields, rest } => {
-                    for field in fields {
-                        self.scope.add_local(field, binding.kind, false, None)?;
-                    }
-                    if let Some(rest) = rest {
-                        self.scope.add_local(rest, binding.kind, false, None)?;
-                    }
-                }
-                VariableDeclarationName::ObjectDestructuring { fields, rest } => {
-                    for (field, alias) in fields {
-                        let field = alias.unwrap_or(field);
-                        self.scope.add_local(field, binding.kind, false, None)?;
-                    }
-                    if let Some(rest) = rest {
-                        self.scope.add_local(rest, binding.kind, false, None)?;
-                    }
-                }
-            }
-        }
+        //     let scope = std::mem::replace(cx.scope_mut(), Scope::new());
+        //     for local in scope.into_locals() {
+        //         self.scope.add_scope_local(local)?;
+        //     }
+        // }
+
+        // TODO: this needs to be done for every function in the TypeInfer pass
+        // let hoisted_locals = transformations::hoist_declarations(&mut ast);
+        // for binding in hoisted_locals {
+        //     match binding.name {
+        //         VariableDeclarationName::Identifier(name) => {
+        //             self.scope.add_local(name, binding.kind, false, None)?;
+        //         }
+        //         VariableDeclarationName::ArrayDestructuring { fields, rest } => {
+        //             for field in fields {
+        //                 self.scope.add_local(field, binding.kind, false, None)?;
+        //             }
+        //             if let Some(rest) = rest {
+        //                 self.scope.add_local(rest, binding.kind, false, None)?;
+        //             }
+        //         }
+        //         VariableDeclarationName::ObjectDestructuring { fields, rest } => {
+        //             for (field, alias) in fields {
+        //                 let field = alias.unwrap_or(field);
+        //                 self.scope.add_local(field, binding.kind, false, None)?;
+        //             }
+        //             if let Some(rest) = rest {
+        //                 self.scope.add_local(rest, binding.kind, false, None)?;
+        //             }
+        //         }
+        //     }
+        // }
+
+        self.function_stack.push(FunctionLocalState::new(FuncId::ROOT));
 
         self.accept_multiple(ast)?;
+
+        let root = self.function_stack.pop().expect("No root function");
+        assert_eq!(root.id, FuncId::ROOT, "Function must be the root function");
+        let locals = self.tcx.scope_mut(root.id).locals().len();
+
         Ok(CompileResult {
-            instructions: self.buf,
-            cp: self.cp,
-            locals: self.scope.locals().len(),
-            externals: self.externals,
+            instructions: root.buf,
+            cp: root.cp,
+            locals,
+            externals: root.externals,
         })
     }
 
@@ -229,17 +257,38 @@ impl<'a> FunctionCompiler<'a> {
         Ok(())
     }
 
+    fn current_function(&self) -> &FunctionLocalState {
+        self.function_stack.last().expect("Function must be present")
+    }
+
+    fn current_function_mut(&mut self) -> &mut FunctionLocalState {
+        self.function_stack.last_mut().expect("Function must be present")
+    }
+
+    fn current_scope(&self) -> &Scope<'a> {
+        let id = self.current_function().id;
+        self.tcx.scope(id)
+    }
+
+    fn current_scope_mut(&mut self) -> &mut Scope<'a> {
+        let id = self.current_function().id;
+        self.tcx.scope_mut(id)
+    }
+
+    /// Adds an external to the current [`FunctionLocalState`] if it's not already present
+    /// and returns its ID
     fn add_external(&mut self, external_id: u16, is_nested_external: bool) -> usize {
-        let id = self.externals.iter().position(|External { id, .. }| *id == external_id);
+        let externals = &mut self.current_function_mut().externals;
+        let id = externals.iter().position(|External { id, .. }| *id == external_id);
 
         match id {
             Some(id) => id,
             None => {
-                self.externals.push(External {
+                externals.push(External {
                     id: external_id,
                     is_external: is_nested_external,
                 });
-                self.externals.len() - 1
+                externals.len() - 1
             }
         }
     }
@@ -248,65 +297,33 @@ impl<'a> FunctionCompiler<'a> {
     ///
     /// If a local variable is found in a parent scope, it is marked as an extern local
     pub fn find_local(&mut self, ident: &str) -> Option<(u16, ScopeLocal<'a>)> {
-        if let Some((id, local)) = self.scope.find_local(ident) {
+        if let Some((id, local)) = self.current_scope().find_local(ident) {
             Some((id, local.clone()))
         } else {
-            let mut caller = self.caller;
+            let mut next_func_id = Some(self.current_function().id);
 
-            while let Some(mut up) = caller {
-                let this = unsafe { up.as_mut() };
-
-                if let Some((id, local)) = this.find_local(ident) {
+            while let Some(func_id) = next_func_id {
+                let scope = self.tcx.scope(func_id);
+                if let Some((id, local)) = scope.find_local(ident) {
                     // If the local found in a parent scope is already an external,
                     // it needs to be resolved differently at runtime
                     let is_nested_extern = local.is_extern();
 
-                    // If it's not already marked external, mark it as such
+                    // If it's not already marked external, mark it as such now
                     local.set_extern();
+                    let local = local.clone();
 
                     // TODO: don't hardcast
                     let id = self.add_external(id, is_nested_extern) as u16;
-                    return Some((id, local.clone()));
+                    return Some((id, local));
                 }
 
-                caller = this.caller;
+                next_func_id = self.tcx.scope_node(func_id).parent().map(Into::into);
             }
 
             None
         }
     }
-
-    // /// Tries to find a binding in the current or one of the surrounding scopes
-    // ///
-    // /// If a local variable is found in a parent scope, it is marked as an extern local
-    // pub fn find_binding(&mut self, binding: &VariableBinding<'a>) -> Option<(u16, ScopeLocal<'a>)> {
-    //     if let Some((id, local)) = self.scope.find_binding(binding) {
-    //         Some((id, local.clone()))
-    //     } else {
-    //         let mut caller = self.caller;
-
-    //         while let Some(mut up) = caller {
-    //             let this = unsafe { up.as_mut() };
-
-    //             if let Some((id, local)) = this.find_binding(binding) {
-    //                 // If the local found in a parent scope is already an external,
-    //                 // it needs to be resolved differently at runtime
-    //                 let is_nested_extern = local.is_extern();
-
-    //                 // If it's not already marked external, mark it as such
-    //                 local.set_extern();
-
-    //                 // TODO: don't hardcast
-    //                 let id = self.add_external(id, is_nested_extern) as u16;
-    //                 return Some((id, local.clone()));
-    //             }
-
-    //             caller = this.caller;
-    //         }
-
-    //         None
-    //     }
-    // }
 
     fn visit_for_each_kinded_loop(
         &mut self,
@@ -315,43 +332,41 @@ impl<'a> FunctionCompiler<'a> {
         expr: Expr<'a>,
         mut body: Box<Statement<'a>>,
     ) -> Result<(), CompileError> {
-        /* For-Of Loop Desugaring:
+        // For-Of Loop Desugaring:
 
-        === ORIGINAL ===
-        for (const x of [1,2]) console.log(x)
+        // === ORIGINAL ===
+        // for (const x of [1,2]) console.log(x)
 
+        // === AFTER DESUGARING ===
+        // let __forOfIter = [1,2][Symbol.iterator]();
+        // let __forOfGenStep;
+        // let x;
 
-        === AFTER DESUGARING ===
-        let __forOfIter = [1,2][Symbol.iterator]();
-        let __forOfGenStep;
-        let x;
+        // while (!(__forOfGenStep = __forOfIter.next()).done) {
+        //     console.log(x)
+        // }
 
-        while (!(__forOfGenStep = __forOfIter.next()).done) {
-            console.log(x)
-        }
+        // For-In Loop Desugaring
 
-        For-In Loop Desugaring
+        // === ORIGINAL ===
+        // for (const x in { a: 3, b: 4 }) console.log(x);
 
-        === ORIGINAL ===
-        for (const x in { a: 3, b: 4 }) console.log(x);
+        // === AFTER DESUGARING ===
+        // let __forInIter = [1,2][__intrinsicForInIter]();
+        // let __forInGenStep;
+        // let x;
 
-        === AFTER DESUGARING ===
-        let __forInIter = [1,2][__intrinsicForInIter]();
-        let __forInGenStep;
-        let x;
-
-        while (!(__forInGenStep = __forOfIter.next()).done) {
-            console.log(x)
-        }
-        */
+        // while (!(__forInGenStep = __forOfIter.next()).done) {
+        //     console.log(x)
+        // }
 
         let mut ib = InstructionBuilder::new(self);
-        let for_of_iter_id = ib
-            .scope
-            .add_local("for_of_iter", VariableDeclarationKind::Unnameable, false, None)?;
+        let for_of_iter_id =
+            ib.current_scope_mut()
+                .add_local("for_of_iter", VariableDeclarationKind::Unnameable, false, None)?;
 
         let for_of_gen_step_id =
-            ib.scope
+            ib.current_scope_mut()
                 .add_local("for_of_gen_step", VariableDeclarationKind::Unnameable, false, None)?;
 
         ib.accept_expr(expr)?;
@@ -384,7 +399,7 @@ impl<'a> FunctionCompiler<'a> {
                     binding,
                     Some(Expr::property_access(
                         false,
-                        Expr::Compiled(gen_step),
+                        Expr::compiled(gen_step),
                         Expr::identifier(Cow::Borrowed("value")),
                     )),
                 )]));
@@ -402,75 +417,30 @@ impl<'a> FunctionCompiler<'a> {
 
         // for..of -> while loop rewrite
         ib.visit_while_loop(WhileLoop {
-            condition: Expr::Unary(UnaryExpr::new(
+            condition: Expr::unary(
                 TokenType::LogicalNot,
                 Expr::property_access(
                     false,
-                    Expr::Assignment(AssignmentExpr::new_local_place(
+                    Expr::assignment_local_space(
                         for_of_gen_step_id,
                         Expr::function_call(
                             Expr::property_access(
                                 false,
-                                Expr::Compiled(for_of_iter_binding_bc),
+                                Expr::compiled(for_of_iter_binding_bc),
                                 Expr::identifier(Cow::Borrowed("next")),
                             ),
                             Vec::new(),
                             false,
                         ),
                         TokenType::Assignment,
-                    )),
+                    ),
                     Expr::identifier(Cow::Borrowed("done")),
                 ),
-            )),
+            ),
             body,
         })?;
 
         Ok(())
-    }
-
-    /// "Prepares" a loop and returns a unique ID that identifies this loop
-    ///
-    /// Specifically, this function increments a FunctionCompiler-local loop counter and
-    /// inserts the loop into a stack of switch-case/loops so that `break` (and `continue`)
-    /// statements can be resolved at compile-time
-    fn prepare_loop(&mut self) -> usize {
-        let loop_id = self.loop_counter;
-        self.breakables.push(Breakable::Loop { loop_id });
-        self.loop_counter += 1;
-        loop_id
-    }
-
-    fn exit_loop(&mut self) {
-        let item = self.breakables.pop();
-        match item {
-            None | Some(Breakable::Switch { .. }) => panic!("Tried to exit loop, but no breakable was found"),
-            Some(Breakable::Loop { .. }) => {}
-        }
-    }
-
-    /// Same as [`prepare_loop`] but for switch statements
-    fn prepare_switch(&mut self) -> usize {
-        let switch_id = self.switch_counter;
-        self.breakables.push(Breakable::Switch { switch_id });
-        self.switch_counter += 1;
-        switch_id
-    }
-
-    fn exit_switch(&mut self) {
-        let item = self.breakables.pop();
-        match item {
-            None | Some(Breakable::Loop { .. }) => panic!("Tried to exit switch, but no breakable was found"),
-            Some(Breakable::Switch { .. }) => {}
-        }
-    }
-
-    fn add_global_label(&mut self, label: Label) {
-        jump_container::add_label(&mut self.jc, label, &mut self.buf)
-    }
-
-    /// Jumps to a label that was previously (or will be) created by a call to `add_global_label`
-    fn add_global_jump(&mut self, label: Label) {
-        jump_container::add_jump(&mut self.jc, label, &mut self.buf)
     }
 }
 
@@ -523,7 +493,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             Expr::Array(e) => self.visit_array_literal(e),
             Expr::Object(e) => self.visit_object_literal(e),
             Expr::Compiled(mut buf) => {
-                self.buf.append(&mut buf);
+                self.current_function_mut().buf.append(&mut buf);
                 Ok(())
             }
             Expr::Empty => self.visit_empty_expr(),
@@ -534,8 +504,9 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         &mut self,
         BinaryExpr { left, right, operator }: BinaryExpr<'a>,
     ) -> Result<(), CompileError> {
-        let left_type = infer_type(&mut self.scope, &left);
-        let right_type = infer_type(&mut self.scope, &right);
+        let func_id = self.current_function().id;
+        let left_type = self.tcx.visit(&left, func_id);
+        let right_type = self.tcx.visit(&right, func_id);
 
         let mut ib = InstructionBuilder::new(self);
         ib.accept_expr(*left)?;
@@ -569,7 +540,6 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                         fn try_const_spec<'cx, 'a>(ib: &mut InstructionBuilder<'cx, 'a>, right: &Expr<'a>) -> bool {
                             if let Expr::Literal(LiteralExpr::Number(n)) = right {
                                 let n = *n;
-
                                 // Using match to be able to expand type->spec metavars
                                 match n.floor() == n {
                                     $(
@@ -729,7 +699,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                     (Expr::Literal(lit), false) => {
                         ib.accept_expr(*target)?;
                         let ident = lit.to_identifier();
-                        let id = ib.cp.add(Constant::Identifier(ident.into()))?;
+                        let id = ib.current_function_mut().cp.add(Constant::Identifier(ident.into()))?;
                         ib.build_static_delete(id);
                     }
                     (expr, _) => {
@@ -741,7 +711,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 Expr::Literal(lit) => {
                     ib.build_global();
                     let ident = lit.to_identifier();
-                    let id = ib.cp.add(Constant::Identifier(ident.into()))?;
+                    let id = ib.current_function_mut().cp.add(Constant::Identifier(ident.into()))?;
                     ib.build_static_delete(id);
                 }
                 _ => {
@@ -764,14 +734,14 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 ib.build_undef();
             }
             TokenType::Yield => {
-                if !matches!(ib.ty, FunctionKind::Generator) {
+                if !matches!(ib.current_function().ty, FunctionKind::Generator) {
                     return Err(CompileError::YieldOutsideGenerator);
                 }
 
                 ib.build_yield();
             }
             TokenType::Await => {
-                if !ib.r#async {
+                if !ib.current_function().r#async {
                     return Err(CompileError::AwaitOutsideAsync);
                 }
 
@@ -792,7 +762,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         for VariableDeclaration { binding, value } in declarations {
             match binding.name {
                 VariableDeclarationName::Identifier(ident) => {
-                    let id = ib.scope.add_local(ident, binding.kind, false, None)?;
+                    let id = ib.current_scope_mut().add_local(ident, binding.kind, false, None)?;
 
                     if let Some(expr) = value {
                         ib.accept_expr(expr)?;
@@ -818,10 +788,10 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
                     for (name, alias) in fields {
                         let name = alias.unwrap_or(name);
-                        let id = ib.scope.add_local(name, binding.kind, false, None)?;
+                        let id = ib.current_scope_mut().add_local(name, binding.kind, false, None)?;
 
-                        let var_id = ib.cp.add(Constant::Number(id as f64))?;
-                        let ident_id = ib.cp.add(Constant::Identifier(name.into()))?;
+                        let var_id = ib.current_function_mut().cp.add(Constant::Number(id as f64))?;
+                        let ident_id = ib.current_function_mut().cp.add(Constant::Identifier(name.into()))?;
                         ib.writew(var_id);
                         ib.writew(ident_id);
                     }
@@ -843,9 +813,9 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                     ib.build_arraydestruct(field_count);
 
                     for name in fields {
-                        let id = ib.scope.add_local(name, binding.kind, false, None)?;
+                        let id = ib.current_scope_mut().add_local(name, binding.kind, false, None)?;
 
-                        let var_id = ib.cp.add(Constant::Number(id as f64))?;
+                        let var_id = ib.current_function_mut().cp.add(Constant::Number(id as f64))?;
                         ib.writew(var_id);
                     }
                 }
@@ -912,16 +882,20 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
     }
 
     fn visit_block_statement(&mut self, BlockStatement(stmt): BlockStatement<'a>) -> Result<(), CompileError> {
-        self.scope.enter();
+        self.current_scope_mut().enter();
+        // Note: No `?` here because we need to always exit the scope
         let re = self.accept_multiple(stmt);
-        self.scope.exit();
+        self.current_scope_mut().exit();
         re
     }
 
     fn visit_function_declaration(&mut self, fun: FunctionDeclaration<'a>) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
         let var_id = match fun.name {
-            Some(name) => Some(ib.scope.add_local(name, VariableDeclarationKind::Var, false, None)?),
+            Some(name) => Some(
+                ib.current_scope_mut()
+                    .add_local(name, VariableDeclarationKind::Var, false, None)?,
+            ),
             None => None,
         };
 
@@ -936,18 +910,19 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
     fn visit_while_loop(&mut self, WhileLoop { condition, body }: WhileLoop<'a>) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
 
-        let loop_id = ib.prepare_loop();
+        let loop_id = ib.current_function_mut().prepare_loop();
 
-        ib.add_global_label(Label::LoopCondition { loop_id });
+        ib.current_function_mut()
+            .add_global_label(Label::LoopCondition { loop_id });
         ib.accept_expr(condition)?;
         ib.build_jmpfalsep(Label::LoopEnd { loop_id }, false);
 
         ib.accept(*body)?;
         ib.build_jmp(Label::LoopCondition { loop_id }, false);
 
-        ib.add_global_label(Label::LoopEnd { loop_id });
+        ib.current_function_mut().add_global_label(Label::LoopEnd { loop_id });
 
-        ib.exit_loop();
+        ib.current_function_mut().exit_loop();
 
         Ok(())
     }
@@ -1253,7 +1228,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
     }
 
     fn visit_return_statement(&mut self, ReturnStatement(stmt): ReturnStatement<'a>) -> Result<(), CompileError> {
-        let tc_depth = self.try_catch_depth;
+        let tc_depth = self.current_function().try_catch_depth;
         self.accept_expr(stmt)?;
         InstructionBuilder::new(self).build_ret(tc_depth);
         Ok(())
@@ -1402,6 +1377,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
     fn visit_function_expr(
         &mut self,
         FunctionDeclaration {
+            id,
             name,
             parameters: arguments,
             statements,
@@ -1410,7 +1386,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         }: FunctionDeclaration<'a>,
     ) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
-        let mut subcompiler = unsafe { FunctionCompiler::with_caller(&mut ib, ty, r#async) };
+        ib.function_stack.push(FunctionLocalState::new(id));
 
         let mut rest_local = None;
 
@@ -1420,8 +1396,9 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 Parameter::Spread(ident) => ident,
             };
 
-            let id = subcompiler
-                .scope
+            let id = ib
+                .tcx
+                .scope_mut(id)
                 .add_local(name, VariableDeclarationKind::Var, false, None)?;
 
             if let Parameter::Spread(..) = param {
@@ -1429,27 +1406,31 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             }
 
             if let Some(default) = default {
-                let mut sub_ib = InstructionBuilder::new(&mut subcompiler);
                 // First, load parameter
-                sub_ib.build_local_load(id, false);
+                ib.build_local_load(id, false);
                 // Jump to InitParamWithDefaultValue if param is undefined
-                sub_ib.build_jmpundefinedp(Label::InitParamWithDefaultValue, true);
+                ib.build_jmpundefinedp(Label::InitParamWithDefaultValue, true);
                 // If it isn't undefined, it won't jump to InitParamWithDefaultValue, so we jump to the end
-                sub_ib.build_jmp(Label::FinishParamDefaultValueInit, true);
-                sub_ib.add_local_label(Label::InitParamWithDefaultValue);
-                sub_ib.accept_expr(default.clone())?;
-                sub_ib.build_local_store(id, false);
+                ib.build_jmp(Label::FinishParamDefaultValueInit, true);
+                ib.add_local_label(Label::InitParamWithDefaultValue);
+                ib.accept_expr(default.clone())?;
+                ib.build_local_store(id, false);
 
-                sub_ib.add_local_label(Label::FinishParamDefaultValueInit);
+                ib.add_local_label(Label::FinishParamDefaultValueInit);
             }
         }
 
-        let cmp = subcompiler.compile_ast(statements, false)?;
+        for stmt in statements {
+            ib.accept(stmt)?;
+        }
+
+        let cmp = ib.function_stack.pop().expect("Missing function state");
+        let locals = ib.tcx.scope(id).locals().len();
 
         let function = Function {
-            buffer: cmp.instructions.into(),
+            buffer: cmp.buf.into(),
             constants: cmp.cp.into_vec().into(),
-            locals: cmp.locals,
+            locals,
             name: name.map(ToOwned::to_owned),
             ty,
             params: match arguments.last() {
@@ -1507,20 +1488,22 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
         ib.build_try_block();
 
-        ib.try_catch_depth += 1;
-        ib.scope.enter();
+        ib.current_function_mut().try_catch_depth += 1;
+        ib.current_scope_mut().enter();
         ib.accept(*try_)?;
-        ib.scope.exit();
-        ib.try_catch_depth -= 1;
+        ib.current_scope_mut().exit();
+        ib.current_function_mut().try_catch_depth -= 1;
 
         ib.build_jmp(Label::TryEnd, true);
 
         ib.add_local_label(Label::Catch);
 
-        ib.scope.enter();
+        ib.current_scope_mut().enter();
 
         if let Some(ident) = catch.ident {
-            let id = ib.scope.add_local(ident, VariableDeclarationKind::Var, false, None)?;
+            let id = ib
+                .current_scope_mut()
+                .add_local(ident, VariableDeclarationKind::Var, false, None)?;
 
             if id == u16::MAX {
                 // Max u16 value is reserved for "no binding"
@@ -1533,7 +1516,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         }
 
         ib.accept(*catch.body)?;
-        ib.scope.exit();
+        ib.current_scope_mut().exit();
 
         ib.add_local_label(Label::TryEnd);
         ib.build_try_end();
@@ -1558,17 +1541,18 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         }: ForLoop<'a>,
     ) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
-        ib.scope.enter();
+        ib.current_scope_mut().enter();
 
         // Initialization
         if let Some(init) = init {
             ib.accept(*init)?;
         }
 
-        let loop_id = ib.prepare_loop();
+        let loop_id = ib.current_function_mut().prepare_loop();
 
         // Condition
-        ib.add_global_label(Label::LoopCondition { loop_id });
+        ib.current_function_mut()
+            .add_global_label(Label::LoopCondition { loop_id });
         if let Some(condition) = condition {
             ib.accept_expr(condition)?;
             ib.build_jmpfalsep(Label::LoopEnd { loop_id }, false);
@@ -1578,16 +1562,17 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         ib.accept(*body)?;
 
         // Increment
-        ib.add_global_label(Label::LoopIncrement { loop_id });
+        ib.current_function_mut()
+            .add_global_label(Label::LoopIncrement { loop_id });
         if let Some(finalizer) = finalizer {
             ib.accept_expr(finalizer)?;
             ib.build_pop();
         }
         ib.build_jmp(Label::LoopCondition { loop_id }, false);
 
-        ib.add_global_label(Label::LoopEnd { loop_id });
-        ib.scope.exit();
-        ib.exit_loop();
+        ib.current_function_mut().add_global_label(Label::LoopEnd { loop_id });
+        ib.current_scope_mut().exit();
+        ib.current_function_mut().exit_loop();
 
         Ok(())
     }
@@ -1609,7 +1594,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 ib.build_dynamic_import();
             }
             ref kind @ (ImportKind::DefaultAs(ref spec, ref path) | ImportKind::AllAs(ref spec, ref path)) => {
-                let local_id = ib.scope.add_local(
+                let local_id = ib.current_scope_mut().add_local(
                     match spec {
                         SpecifierKind::Ident(id) => id,
                     },
@@ -1618,7 +1603,10 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                     None,
                 )?;
 
-                let path_id = ib.cp.add(Constant::String(path.as_ref().into()))?;
+                let path_id = ib
+                    .current_function_mut()
+                    .cp
+                    .add(Constant::String(path.as_ref().into()))?;
 
                 ib.build_static_import(
                     match kind {
@@ -1647,7 +1635,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 let mut it = Vec::with_capacity(names.len());
 
                 for name in names.iter().copied() {
-                    let ident_id = ib.cp.add(Constant::Identifier(name.into()))?;
+                    let ident_id = ib.current_function_mut().cp.add(Constant::Identifier(name.into()))?;
 
                     match ib.find_local(name) {
                         Some((loc_id, loc)) => {
@@ -1694,7 +1682,11 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_break(&mut self) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
-        let breakable = *ib.breakables.last().ok_or(CompileError::IllegalBreak)?;
+        let breakable = *ib
+            .current_function_mut()
+            .breakables
+            .last()
+            .ok_or(CompileError::IllegalBreak)?;
         match breakable {
             Breakable::Loop { loop_id } => {
                 ib.build_jmp(Label::LoopEnd { loop_id: loop_id }, false);
@@ -1708,7 +1700,11 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_continue(&mut self) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
-        let breakable = *ib.breakables.last().ok_or(CompileError::IllegalBreak)?;
+        let breakable = *ib
+            .current_function_mut()
+            .breakables
+            .last()
+            .ok_or(CompileError::IllegalBreak)?;
         match breakable {
             Breakable::Loop { loop_id } => {
                 ib.build_jmp(Label::LoopIncrement { loop_id }, false);
@@ -1757,15 +1753,21 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         //     .unwrap_or_else(|| VariableBinding::unnameable("DesugaredClass"));
 
         let binding_id = match class.name {
-            Some(name) => ib.scope.add_local(name, VariableDeclarationKind::Var, false, None)?,
-            None => ib
-                .scope
-                .add_local("DesugaredClass", VariableDeclarationKind::Unnameable, false, None)?,
+            Some(name) => ib
+                .current_scope_mut()
+                .add_local(name, VariableDeclarationKind::Var, false, None)?,
+            None => {
+                ib.current_scope_mut()
+                    .add_local("DesugaredClass", VariableDeclarationKind::Unnameable, false, None)?
+            }
         };
 
-        let (parameters, mut statements) = match constructor {
-            Some(fun) => (fun.parameters, fun.statements),
-            None => (Vec::new(), Vec::new()),
+        let (parameters, mut statements, id) = match constructor {
+            Some(fun) => (fun.parameters, fun.statements, fun.id),
+            None => {
+                let parent = ib.current_function().id;
+                (Vec::new(), Vec::new(), ib.tcx.add_scope(Some(parent)))
+            }
         };
 
         {
@@ -1793,6 +1795,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         }
 
         let desugared_class = FunctionDeclaration {
+            id,
             name: class.name,
             parameters,
             statements,
@@ -1843,7 +1846,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
     ) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
 
-        let switch_id = ib.prepare_switch();
+        let switch_id = ib.current_function_mut().prepare_switch();
         let has_default = default.is_some();
         let case_count = cases.len();
 
@@ -1892,8 +1895,9 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             ib.accept_multiple(default)?;
         }
 
-        ib.add_global_label(Label::SwitchEnd { switch_id });
-        ib.exit_switch();
+        ib.current_function_mut()
+            .add_global_label(Label::SwitchEnd { switch_id });
+        ib.current_function_mut().exit_switch();
 
         Ok(())
     }

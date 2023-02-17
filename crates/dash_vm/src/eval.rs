@@ -7,6 +7,7 @@ use dash_middle::compiler::StaticImportKind;
 use dash_middle::lexer;
 use dash_middle::parser;
 use dash_middle::util;
+use dash_optimizer::type_infer::TypeInferCtx;
 use dash_optimizer::OptLevel;
 use dash_parser::Parser;
 
@@ -52,9 +53,10 @@ impl<'a> fmt::Display for EvalError<'a> {
 impl Vm {
     pub fn eval<'a>(&mut self, input: &'a str, opt: OptLevel) -> Result<Value, EvalError<'a>> {
         let tokens = Lexer::new(input).scan_all().map_err(EvalError::Lexer)?;
-        let ast = Parser::new(input, tokens).parse_all().map_err(EvalError::Parser)?;
+        let (ast, counter) = Parser::new(input, tokens).parse_all().map_err(EvalError::Parser)?;
 
-        let cr = FunctionCompiler::new(opt)
+        let tcx = TypeInferCtx::new(counter);
+        let cr = FunctionCompiler::new(opt, tcx)
             .compile_ast(ast, true)
             .map_err(EvalError::Compiler)?;
         let frame = Frame::from_compile_result(cr);

@@ -8,6 +8,7 @@ use clap::ArgMatches;
 use dash_middle::parser::statement::VariableDeclarationName;
 use dash_optimizer::consteval::Eval;
 use dash_optimizer::context::OptimizerContext;
+use dash_optimizer::type_infer::TypeInferCtx;
 
 use crate::util;
 
@@ -31,9 +32,11 @@ pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
         println!("{:#?}", tokens);
     }
 
-    let mut ast = dash_parser::Parser::new(&source, tokens)
+    let (mut ast, counter) = dash_parser::Parser::new(&source, tokens)
         .parse_all()
         .map_err(|_| anyhow!("Failed to parse source string"))?;
+
+    let tcx = TypeInferCtx::new(counter);
 
     if dump_types {
         let mut cx = OptimizerContext::new();
@@ -59,7 +62,7 @@ pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
         }
     }
 
-    let bytecode = dash_compiler::FunctionCompiler::new(opt)
+    let bytecode = dash_compiler::FunctionCompiler::new(opt, tcx)
         .compile_ast(ast, true)
         .map_err(|_| anyhow!("Failed to compile source string"))?;
 

@@ -52,23 +52,25 @@ impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
     }
 
     pub fn append(&mut self, other: &mut Vec<u8>) {
-        self.buf.append(other)
+        self.current_function_mut().buf.append(other)
     }
 
     pub fn write(&mut self, instruction: u8) {
-        self.buf.push(instruction);
+        self.current_function_mut().buf.push(instruction);
     }
 
     pub fn write_instr(&mut self, instruction: Instruction) {
-        self.buf.push(instruction as u8);
+        self.current_function_mut().buf.push(instruction as u8);
     }
 
     pub fn writew(&mut self, instruction: u16) {
-        self.buf.extend_from_slice(&instruction.to_ne_bytes());
+        self.current_function_mut()
+            .buf
+            .extend_from_slice(&instruction.to_ne_bytes());
     }
 
     pub fn write_all(&mut self, instruction: &[u8]) {
-        self.buf.extend_from_slice(instruction)
+        self.current_function_mut().buf.extend_from_slice(instruction)
     }
 
     pub fn write_wide_instr(&mut self, instr: Instruction, instrw: Instruction, value: u16) {
@@ -82,21 +84,21 @@ impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
     }
 
     pub fn remove_pop_end(&mut self) {
-        if let Some(&inst::POP) = self.buf.last() {
-            self.buf.pop();
+        if let Some(&inst::POP) = self.current_function_mut().buf.last() {
+            self.current_function_mut().buf.pop();
         }
     }
 
     /// Adds a **local** label at the current instruction pointer, which can be jumped to using add_local_jump
     pub fn add_local_label(&mut self, label: Label) {
-        jump_container::add_label(&mut self.jc, label, &mut self.inner.buf)
+        jump_container::add_label(&mut self.jc, label, &mut self.inner.current_function_mut().buf)
     }
 
     /// Emits a jump instruction to a local label
     ///
     /// Requirement for calling this function: there must be two bytes in the buffer, reserved for this jump
     pub fn add_local_jump(&mut self, label: Label) {
-        jump_container::add_jump(&mut self.jc, label, &mut self.inner.buf)
+        jump_container::add_jump(&mut self.jc, label, &mut self.inner.current_function_mut().buf)
     }
 }
 

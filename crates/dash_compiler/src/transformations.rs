@@ -95,7 +95,7 @@ pub fn hoist_declarations<'a>(ast: &mut Vec<Statement<'a>>) -> Vec<VariableBindi
                 });
                 prepend_function_assigns.push(Statement::Expression(Expr::assignment(
                     Expr::identifier(Cow::Borrowed(name)),
-                    Expr::Function(function_stmt),
+                    Expr::function(function_stmt),
                     TokenType::Assignment,
                 )));
             }

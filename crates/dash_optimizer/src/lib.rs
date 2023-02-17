@@ -5,6 +5,7 @@ use self::consteval::Eval;
 
 pub mod consteval;
 pub mod context;
+pub mod type_infer;
 
 #[derive(Debug, Copy, Clone)]
 pub enum OptLevel {

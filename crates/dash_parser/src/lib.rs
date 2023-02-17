@@ -2,7 +2,9 @@ use dash_middle::lexer::token::Token;
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::error::Error;
 use dash_middle::parser::error::ErrorKind;
+use dash_middle::parser::statement::FuncId;
 use dash_middle::parser::statement::Statement;
+use dash_middle::util::Counter;
 use dash_middle::util::LevelStack;
 use stmt::StatementParser;
 
@@ -45,6 +47,7 @@ pub struct Parser<'a> {
     idx: usize,
     input: &'a [u8],
     new_level_stack: LevelStack,
+    function_counter: Counter<FuncId>,
 }
 
 impl<'a> Parser<'a> {
@@ -67,6 +70,8 @@ impl<'a> Parser<'a> {
             idx: 0,
             input: input.as_bytes(),
             new_level_stack: level_stack,
+            // FuncId::ROOT (0) is reserved for the root function, so the counter for new functions has to start at 1
+            function_counter: Counter::with(FuncId::FIRST_NON_ROOT),
         }
     }
 
@@ -82,7 +87,7 @@ impl<'a> Parser<'a> {
     /// Iteratively parses every token and returns an AST, or a vector of errors
     ///
     /// The AST will be folded by passing true as the `fold` parameter.
-    pub fn parse_all(mut self) -> Result<Vec<Statement<'a>>, Vec<Error<'a>>> {
+    pub fn parse_all(mut self) -> Result<(Vec<Statement<'a>>, Counter<FuncId>), Vec<Error<'a>>> {
         let mut stmts = Vec::new();
 
         while !self.is_eof() {
@@ -94,7 +99,7 @@ impl<'a> Parser<'a> {
         if !self.errors.is_empty() {
             Err(self.errors)
         } else {
-            Ok(stmts)
+            Ok((stmts, self.function_counter))
         }
     }
 

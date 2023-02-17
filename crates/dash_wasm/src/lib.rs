@@ -1,8 +1,8 @@
 use dash_compiler::FunctionCompiler;
 use dash_middle::compiler::StaticImportKind;
 use dash_middle::parser::statement::VariableDeclarationName;
-use dash_optimizer::consteval::Eval;
 use dash_optimizer::context::OptimizerContext;
+use dash_optimizer::type_infer::TypeInferCtx;
 use dash_parser::Parser;
 use dash_vm::eval::EvalError;
 use dash_vm::frame::Frame;
@@ -80,11 +80,12 @@ pub fn fmt_value(value: Value, vm: &mut Vm) -> String {
 #[wasm_bindgen]
 pub fn debug(s: &str, o: OptLevel, em: Emit) -> String {
     let parser = Parser::from_str(s).unwrap();
-    let mut ast = parser.parse_all().unwrap();
+    let (mut ast, counter) = parser.parse_all().unwrap();
+    let tcx = TypeInferCtx::new(counter);
 
     match em {
         Emit::Bytecode => {
-            let cmp = FunctionCompiler::new(o.into()).compile_ast(ast, true).unwrap();
+            let cmp = FunctionCompiler::new(o.into(), tcx).compile_ast(ast, true).unwrap();
             dash_decompiler::decompile(&cmp.cp, &cmp.instructions).unwrap_or_else(|e| e.to_string())
         }
         Emit::JavaScript => {
@@ -132,7 +133,7 @@ pub fn infer(s: &str) -> Result<JsValue, String> {
         .map_err(|err| format!("{err:?}"))?;
 
     let mut cx = OptimizerContext::new();
-    ast.fold(&mut cx, false);
+    // ast.fold(&mut cx, false);
     let mut out = String::new();
 
     for local in cx.scope_mut().locals() {
@@ -143,8 +144,6 @@ pub fn infer(s: &str) -> Result<JsValue, String> {
     }
 
     Ok(JsValue::from_str(&out))
-    // let scope = std::mem::replace(cx.scope_mut(), Scope::new());
-    // Ok(JsValue::from_str(&format!("{:?}", scope.locals())))
 }
 
 // #[wasm_bindgen]
@@ -164,10 +163,7 @@ pub fn infer(s: &str) -> Result<JsValue, String> {
 
 fn compile_inspect(vm: &mut Vm) -> Value {
     let source = include_str!("../../dash_rt/js/inspect.js");
-    let ast = Parser::from_str(source).unwrap().parse_all().unwrap();
-    let re = FunctionCompiler::new(Default::default())
-        .compile_ast(ast, true)
-        .unwrap();
+    let re = FunctionCompiler::compile_str(source, Default::default()).unwrap();
 
     let f = Frame::from_compile_result(re);
     vm.execute_module(f).unwrap().default.unwrap()

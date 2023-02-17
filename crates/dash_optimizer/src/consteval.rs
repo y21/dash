@@ -1,4 +1,3 @@
-use dash_middle::compiler::infer_type;
 use dash_middle::compiler::scope::CompileValueType;
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::expr::ArrayLiteral;
@@ -68,9 +67,6 @@ impl<'a> Eval<'a> for Expr<'a> {
     fn fold(&mut self, cx: &mut OptimizerContext<'a>, can_remove: bool) {
         use Expr::*;
         use LiteralExpr::*;
-
-        // infer_type might want to write to scope
-        infer_type(cx.scope_mut(), self);
 
         macro_rules! i64op {
             ($l:ident $tok:tt $r:ident) => {
@@ -233,10 +229,10 @@ impl<'a> Eval<'a> for Expr<'a> {
     }
 
     fn has_side_effect(&self, cx: &mut OptimizerContext<'a>) -> bool {
-        match self {
-            Self::Binary(expr) => expr.has_side_effect(cx),
-            Self::Literal(expr) => expr.has_side_effect(cx),
-            Self::Grouping(GroupingExpr(exprs)) => exprs.has_side_effect(cx),
+        match &self {
+            Expr::Binary(expr) => expr.has_side_effect(cx),
+            Expr::Literal(expr) => expr.has_side_effect(cx),
+            Expr::Grouping(GroupingExpr(exprs)) => exprs.has_side_effect(cx),
             _ => true, // assume it does to prevent dead code elimination
         }
     }
@@ -269,7 +265,8 @@ impl<'a> Eval<'a> for Statement<'a> {
 
                     if let VariableDeclarationName::Identifier(name) = binding.name {
                         let ty = match value {
-                            Some(expr) => infer_type(cx.scope_mut(), expr),
+                            // Some(expr) => infer_type(cx.scope_mut(), expr),
+                            Some(_expr) => None,
                             None => Some(CompileValueType::Uninit),
                         };
 

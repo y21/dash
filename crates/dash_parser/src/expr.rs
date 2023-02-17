@@ -3,12 +3,8 @@ use std::borrow::Cow;
 use dash_middle::lexer::token::TokenType;
 use dash_middle::lexer::token::ASSIGNMENT_TYPES;
 use dash_middle::parser::error::ErrorKind;
-use dash_middle::parser::expr::ArrayLiteral;
 use dash_middle::parser::expr::Expr;
-use dash_middle::parser::expr::LiteralExpr;
-use dash_middle::parser::expr::ObjectLiteral;
 use dash_middle::parser::expr::ObjectMemberKind;
-use dash_middle::parser::expr::UnaryExpr;
 use dash_middle::parser::statement::BlockStatement;
 use dash_middle::parser::statement::FunctionDeclaration;
 use dash_middle::parser::statement::FunctionKind;
@@ -69,7 +65,7 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
     fn parse_yield(&mut self) -> Option<Expr<'a>> {
         if self.expect_and_skip(&[TokenType::Yield], false) {
             let right = self.parse_yield()?;
-            return Some(Expr::Unary(UnaryExpr::new(TokenType::Yield, right)));
+            return Some(Expr::unary(TokenType::Yield, right));
         }
 
         self.parse_assignment()
@@ -291,9 +287,9 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
             let rval = self.parse_unary()?;
 
             if [TokenType::Increment, TokenType::Decrement].contains(&operator) {
-                Some(Expr::Prefix((operator, Box::new(rval))))
+                Some(Expr::prefix(operator, rval))
             } else {
-                Some(Expr::Unary(UnaryExpr::new(operator, rval)))
+                Some(Expr::unary(operator, rval))
             }
         } else {
             self.parse_postfix()
@@ -304,7 +300,7 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
         let expr = self.parse_field_access()?;
         if self.expect_and_skip(&[TokenType::Increment, TokenType::Decrement], false) {
             let operator = self.previous()?.ty;
-            return Some(Expr::Postfix((operator, Box::new(expr))));
+            return Some(Expr::postfix(operator, expr));
         }
         Some(expr)
     }
@@ -393,14 +389,14 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
             TokenType::NullLit => Expr::null_literal(),
             TokenType::UndefinedLit => Expr::undefined_literal(),
             TokenType::String => Expr::string_literal(current.full),
-            TokenType::EmptySquareBrace => Expr::Array(ArrayLiteral(Vec::new())),
+            TokenType::EmptySquareBrace => Expr::array_literal(Vec::new()),
             TokenType::LeftSquareBrace => {
                 let mut items = Vec::new();
                 while !self.expect_and_skip(&[TokenType::RightSquareBrace], false) {
                     self.expect_and_skip(&[TokenType::Comma], false);
                     items.push(self.parse_expression()?);
                 }
-                Expr::Array(ArrayLiteral(items))
+                Expr::array_literal(items)
             }
             TokenType::LeftBrace => {
                 let mut items = Vec::new();
@@ -473,12 +469,14 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
                             let BlockStatement(stmts) = self.parse_block()?;
 
                             // Desugar to function
-                            let fun = FunctionDeclaration::new(None, params, stmts, FunctionKind::Function, false);
-                            items.push((key, Expr::Function(fun)));
+                            let func_id = self.function_counter.next();
+                            let fun =
+                                FunctionDeclaration::new(None, func_id, params, stmts, FunctionKind::Function, false);
+                            items.push((key, Expr::function(fun)));
                         }
                     }
                 }
-                Expr::Object(ObjectLiteral(items))
+                Expr::object_literal(items)
             }
             // TODO: this unwrap is not safe
             TokenType::NumberDec => Expr::number_literal(current.full.parse::<f64>().unwrap()),
@@ -498,7 +496,7 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
                         return None;
                     }
 
-                    return self.parse_arrow_function_end(Vec::new()).map(Expr::Function);
+                    return self.parse_arrow_function_end(Vec::new()).map(Expr::function);
                 }
 
                 self.new_level_stack.add_level();
@@ -512,7 +510,7 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
 
                 // This is an arrow function if the next token is an arrow (`=>`)
                 if self.expect_and_skip(&[TokenType::FatArrow], false) {
-                    return self.parse_arrow_function_end(exprs).map(Expr::Function);
+                    return self.parse_arrow_function_end(exprs).map(Expr::function);
                 }
 
                 // If it's not an arrow function, then it is a group
@@ -524,9 +522,9 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
                 if !self.expect_and_skip(&[TokenType::Function], true) {
                     return None;
                 }
-                Expr::Function(self.parse_function(true)?)
+                Expr::function(self.parse_function(true)?)
             }
-            TokenType::Function => Expr::Function(self.parse_function(false)?),
+            TokenType::Function => Expr::function(self.parse_function(false)?),
             TokenType::RegexLiteral => {
                 // Trim / prefix and suffix
                 let full = must_borrow_lexeme!(self, &current)?;
@@ -539,14 +537,14 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
                         return None;
                     }
                 };
-                Expr::Literal(LiteralExpr::Regex(nodes, full))
+                Expr::regex_literal(nodes, full)
             }
             other if other.is_identifier() => {
                 let expr = Expr::identifier(current.full);
 
                 // If this identifier is followed by an arrow, this is an arrow function
                 if self.expect_and_skip(&[TokenType::FatArrow], false) {
-                    return self.parse_arrow_function_end(vec![expr]).map(Expr::Function);
+                    return self.parse_arrow_function_end(vec![expr]).map(Expr::function);
                 }
 
                 expr
@@ -598,7 +596,10 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
 
         self.new_level_stack.pop_level().unwrap();
 
-        Some(FunctionDeclaration::new(name, arguments, statements, ty, is_async))
+        let func_id = self.function_counter.next();
+        Some(FunctionDeclaration::new(
+            name, func_id, arguments, statements, ty, is_async,
+        ))
     }
 
     fn parse_arrow_function_end(&mut self, prec: Vec<Expr<'a>>) -> Option<FunctionDeclaration<'a>> {
@@ -625,8 +626,10 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
             Statement::Return(ReturnStatement(self.parse_expression()?))
         };
 
+        let func_id = self.function_counter.next();
         Some(FunctionDeclaration::new(
             None,
+            func_id,
             list,
             vec![body],
             FunctionKind::Arrow,

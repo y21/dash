@@ -197,7 +197,7 @@ impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
         self.write_all(&[0, 0]);
         match is_local_label {
             true => self.add_local_jump(label),
-            false => self.add_global_jump(label),
+            false => self.current_function_mut().add_global_jump(label),
         }
     }
 }
@@ -256,7 +256,7 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
     }
 
     fn build_constant(&mut self, constant: Constant) -> Result<(), LimitExceededError> {
-        let id = self.cp.add(constant)?;
+        let id = self.current_function_mut().cp.add(constant)?;
         self.write_wide_instr(Instruction::Constant, Instruction::ConstantW, id);
         Ok(())
     }
@@ -268,17 +268,17 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
     }
 
     fn build_local_load(&mut self, index: u16, is_extern: bool) {
-        compile_local_load_into(&mut self.buf, index, is_extern);
+        compile_local_load_into(&mut self.current_function_mut().buf, index, is_extern);
     }
 
     fn build_global_load(&mut self, ident: &str) -> Result<(), LimitExceededError> {
-        let id = self.cp.add(Constant::Identifier(ident.into()))?;
+        let id = self.current_function_mut().cp.add(Constant::Identifier(ident.into()))?;
         self.write_wide_instr(Instruction::LdGlobal, Instruction::LdGlobalW, id);
         Ok(())
     }
 
     fn build_global_store(&mut self, ident: &str) -> Result<(), LimitExceededError> {
-        let id = self.cp.add(Constant::Identifier(ident.into()))?;
+        let id = self.current_function_mut().cp.add(Constant::Identifier(ident.into()))?;
         self.write_wide_instr(Instruction::StoreGlobal, Instruction::StoreGlobalW, id);
         Ok(())
     }
@@ -342,7 +342,7 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
     }
 
     fn build_static_prop_access(&mut self, ident: &str, preserve_this: bool) -> Result<(), LimitExceededError> {
-        let id = self.cp.add(Constant::Identifier(ident.into()))?;
+        let id = self.current_function_mut().cp.add(Constant::Identifier(ident.into()))?;
         self.write_wide_instr(Instruction::StaticPropAccess, Instruction::StaticPropAccessW, id);
         self.write(preserve_this.into());
 
@@ -355,7 +355,7 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
     }
 
     fn build_static_prop_assign(&mut self, kind: AssignKind, ident: &str) -> Result<(), LimitExceededError> {
-        let id = self.cp.add(Constant::Identifier(ident.into()))?;
+        let id = self.current_function_mut().cp.add(Constant::Identifier(ident.into()))?;
         self.write_instr(Instruction::StaticPropAssign);
         self.write(kind as u8);
         self.writew(id);
@@ -386,6 +386,7 @@ impl<'cx, 'inp> InstructionWriter for InstructionBuilder<'cx, 'inp> {
             kind_id: u8,
         ) -> Result<(), CompileError> {
             let id = ib
+                .current_function_mut()
                 .cp
                 .add(Constant::Identifier(name.into()))?
                 .try_into()

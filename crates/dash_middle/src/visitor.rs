@@ -21,6 +21,7 @@ use crate::parser::statement::ForOfLoop;
 use crate::parser::statement::FunctionDeclaration;
 use crate::parser::statement::IfStatement;
 use crate::parser::statement::ImportKind;
+use crate::parser::statement::Loop;
 use crate::parser::statement::ReturnStatement;
 use crate::parser::statement::Statement;
 use crate::parser::statement::SwitchStatement;
@@ -150,4 +151,54 @@ pub trait Visitor<'a, V> {
 
     /// Visits a switch statement
     fn visit_switch_statement(&mut self, s: SwitchStatement<'a>) -> V;
+}
+
+pub fn accept_default<'a, T, V: Visitor<'a, T>>(this: &mut V, s: Statement<'a>) -> T {
+    match s {
+        Statement::Expression(e) => this.visit_expression_statement(e),
+        Statement::Variable(v) => this.visit_variable_declaration(v),
+        Statement::If(i) => this.visit_if_statement(i),
+        Statement::Block(b) => this.visit_block_statement(b),
+        Statement::Function(f) => this.visit_function_declaration(f),
+        Statement::Loop(Loop::For(f)) => this.visit_for_loop(f),
+        Statement::Loop(Loop::While(w)) => this.visit_while_loop(w),
+        Statement::Loop(Loop::ForOf(f)) => this.visit_for_of_loop(f),
+        Statement::Loop(Loop::ForIn(f)) => this.visit_for_in_loop(f),
+        Statement::Return(r) => this.visit_return_statement(r),
+        Statement::Try(t) => this.visit_try_catch(t),
+        Statement::Throw(t) => this.visit_throw(t),
+        Statement::Import(i) => this.visit_import_statement(i),
+        Statement::Export(e) => this.visit_export_statement(e),
+        Statement::Class(c) => this.visit_class_declaration(c),
+        Statement::Continue => this.visit_continue(),
+        Statement::Break => this.visit_break(),
+        Statement::Debugger => this.visit_debugger(),
+        Statement::Empty => this.visit_empty_statement(),
+        Statement::Switch(s) => this.visit_switch_statement(s),
+    }
+}
+
+pub fn accept_expr_default<'a, T, V: Visitor<'a, T>, F>(this: &mut V, e: Expr<'a>, on_empty: F) -> T
+where
+    F: FnOnce(&mut V) -> T,
+{
+    match e {
+        Expr::Binary(e) => this.visit_binary_expression(e),
+        Expr::Assignment(e) => this.visit_assignment_expression(e),
+        Expr::Grouping(e) => this.visit_grouping_expression(e),
+        Expr::Literal(LiteralExpr::Identifier(i)) => this.visit_identifier_expression(&i),
+        Expr::Literal(l) => this.visit_literal_expression(l),
+        Expr::Unary(e) => this.visit_unary_expression(e),
+        Expr::Call(e) => this.visit_function_call(e),
+        Expr::Conditional(e) => this.visit_conditional_expr(e),
+        Expr::PropertyAccess(e) => this.visit_property_access_expr(e, false),
+        Expr::Sequence(e) => this.visit_sequence_expr(e),
+        Expr::Postfix(e) => this.visit_postfix_expr(e),
+        Expr::Prefix(e) => this.visit_prefix_expr(e),
+        Expr::Function(e) => this.visit_function_expr(e),
+        Expr::Array(e) => this.visit_array_literal(e),
+        Expr::Object(e) => this.visit_object_literal(e),
+        Expr::Compiled(..) => on_empty(this),
+        Expr::Empty => this.visit_empty_expr(),
+    }
 }
