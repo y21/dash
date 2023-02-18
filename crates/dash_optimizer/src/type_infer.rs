@@ -27,6 +27,7 @@ use dash_middle::parser::statement::FunctionDeclaration;
 use dash_middle::parser::statement::IfStatement;
 use dash_middle::parser::statement::ImportKind;
 use dash_middle::parser::statement::Loop;
+use dash_middle::parser::statement::Parameter;
 use dash_middle::parser::statement::ReturnStatement;
 use dash_middle::parser::statement::SpecifierKind;
 use dash_middle::parser::statement::Statement;
@@ -35,6 +36,7 @@ use dash_middle::parser::statement::SwitchStatement;
 use dash_middle::parser::statement::TryCatch;
 use dash_middle::parser::statement::VariableBinding;
 use dash_middle::parser::statement::VariableDeclaration;
+use dash_middle::parser::statement::VariableDeclarationKind;
 use dash_middle::parser::statement::VariableDeclarationName;
 use dash_middle::parser::statement::VariableDeclarations;
 use dash_middle::parser::statement::WhileLoop;
@@ -436,20 +438,38 @@ impl<'a> TypeInferCtx<'a> {
             parameters,
             statements,
             id,
+            name,
             ..
         }: &FunctionDeclaration<'a>,
         func_id: FuncId,
     ) -> Option<CompileValueType> {
-        self.scope_node_mut(*id).set_parent(func_id.into());
+        let sub_func_id = *id;
 
-        for (_, expr, _) in parameters {
+        self.scope_node_mut(sub_func_id).set_parent(func_id.into());
+        if let Some(name) = name {
+            // TODO: handle this error, somehow
+            let _ = self
+                .scope_mut(func_id)
+                .add_local(name, VariableDeclarationKind::Var, None);
+        }
+
+        for (param, expr, _) in parameters {
+            match param {
+                Parameter::Identifier(ident) | Parameter::Spread(ident) => {
+                    // TODO: handle this error, somehow
+                    let _ = self
+                        .scope_mut(sub_func_id)
+                        .add_local(ident, VariableDeclarationKind::Var, None);
+                }
+            }
+
             if let Some(expr) = expr {
-                self.visit(expr, func_id);
+                self.visit(expr, sub_func_id);
             }
         }
 
         for stmt in statements {
-            self.visit_statement(stmt, *id);
+            self.visit_statement(stmt, sub_func_id);
         }
         None
     }

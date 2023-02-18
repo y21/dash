@@ -298,9 +298,10 @@ impl<'a> FunctionCompiler<'a> {
         } else {
             let parent = self.tcx.scope_node(func_id).parent()?;
 
-            let (id, loc, nested_extern) = self.find_local_in_scope(ident, parent.into())?;
-            self.add_external_to_func(func_id, id, nested_extern);
-            Some((id, loc, true))
+            let (local_id, loc, nested_extern) = self.find_local_in_scope(ident, parent.into())?;
+            // TODO: don't hardcast
+            let external_id = self.add_external_to_func(func_id, local_id, nested_extern) as u16;
+            Some((external_id, loc, true))
         }
     }
     /// Tries to find a local in the current or surrounding scopes

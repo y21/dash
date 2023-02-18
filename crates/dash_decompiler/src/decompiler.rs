@@ -239,7 +239,7 @@ impl<'buf> FunctionDecompiler<'buf> {
                 Instruction::This => self.handle_opless_instr("this"),
                 Instruction::StaticPropAssign => {
                     let _k = self.read()?;
-                    let b = self.read()?;
+                    let b = self.read_u16()?;
                     self.handle_op_instr("staticpropassign", &[&DisplayConstant(&self.constants[b as usize])]);
                 }
                 Instruction::DynamicPropAssign => {
