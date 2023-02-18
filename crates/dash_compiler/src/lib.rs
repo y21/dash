@@ -749,7 +749,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             match binding.name {
                 VariableDeclarationName::Identifier(ident) => {
                     // Type infer pass must have discovered the local variable
-                    let (id, _) = ib.current_scope_mut().find_local(ident).unwrap();
+                    let (id, _) = ib.current_scope().find_local(ident).unwrap();
 
                     if let Some(expr) = value {
                         ib.accept_expr(expr)?;

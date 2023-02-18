@@ -33,6 +33,7 @@ use dash_middle::parser::statement::Statement;
 use dash_middle::parser::statement::SwitchCase;
 use dash_middle::parser::statement::SwitchStatement;
 use dash_middle::parser::statement::TryCatch;
+use dash_middle::parser::statement::VariableBinding;
 use dash_middle::parser::statement::VariableDeclaration;
 use dash_middle::parser::statement::VariableDeclarationName;
 use dash_middle::parser::statement::VariableDeclarations;
@@ -186,11 +187,13 @@ impl<'a> TypeInferCtx<'a> {
                 self.visit_maybe_expr(finalizer.as_ref(), func_id);
                 self.visit_statement(&body, func_id);
             }
-            Loop::ForOf(ForOfLoop { expr, body, .. }) => {
+            Loop::ForOf(ForOfLoop { expr, body, binding }) => {
+                self.visit_variable_binding(binding, None, func_id);
                 self.visit(expr, func_id);
                 self.visit_statement(&body, func_id);
             }
-            Loop::ForIn(ForInLoop { expr, body, .. }) => {
+            Loop::ForIn(ForInLoop { expr, body, binding }) => {
+                self.visit_variable_binding(binding, None, func_id);
                 self.visit(expr, func_id);
                 self.visit_statement(&body, func_id);
             }
@@ -201,22 +204,26 @@ impl<'a> TypeInferCtx<'a> {
         }
     }
 
+    fn visit_variable_binding(&mut self, binding: &VariableBinding<'a>, value: Option<&Expr<'a>>, func_id: FuncId) {
+        if let VariableDeclarationName::Identifier(ident) = binding.name {
+            let ty = match value {
+                Some(expr) => self.visit(expr, func_id),
+                None => Some(CompileValueType::Uninit),
+            };
+
+            // TODO: can't really do anything with the error here
+            // once we have logging, log the error
+            let _ = self.scope_mut(func_id).add_local(ident, binding.kind, ty);
+        }
+    }
+
     pub fn visit_variable_declaration(
         &mut self,
         VariableDeclarations(declarations): &VariableDeclarations<'a>,
         func_id: FuncId,
     ) {
         for VariableDeclaration { binding, value } in declarations {
-            if let VariableDeclarationName::Identifier(ident) = binding.name {
-                let ty = match value {
-                    Some(expr) => self.visit(expr, func_id),
-                    None => Some(CompileValueType::Uninit),
-                };
-
-                // TODO: can't really do anything with the error here
-                // once we have logging, log the error
-                let _ = self.scope_mut(func_id).add_local(ident, binding.kind, ty);
-            }
+            self.visit_variable_binding(binding, value.as_ref(), func_id);
         }
     }
 
