@@ -14,8 +14,10 @@ use dash_middle::parser::statement::VariableDeclarationKind;
 use dash_middle::parser::statement::VariableDeclarationName;
 use dash_middle::parser::statement::VariableDeclarations;
 
-/// Implicitly inserts a `return` statement for the last expression
-pub fn ast_insert_return<'a>(ast: &mut Vec<Statement<'a>>) {
+/// Implicitly patches the last expression to be returned from the function
+///
+/// Or inserts `return undefined;` if there is no last expression
+pub fn ast_patch_implicit_return<'a>(ast: &mut Vec<Statement<'a>>) {
     match ast.last_mut() {
         Some(Statement::Return(..)) => {}
         Some(Statement::Expression(..)) => {
@@ -26,9 +28,13 @@ pub fn ast_insert_return<'a>(ast: &mut Vec<Statement<'a>>) {
 
             ast.push(Statement::Return(ReturnStatement(expr)));
         }
-        Some(Statement::Block(BlockStatement(block))) => ast_insert_return(block),
-        _ => ast.push(Statement::Return(ReturnStatement::default())),
+        Some(Statement::Block(BlockStatement(block))) => ast_patch_implicit_return(block),
+        _ => ast_insert_implicit_return(ast),
     }
+}
+
+pub fn ast_insert_implicit_return<'a>(ast: &mut Vec<Statement<'a>>) {
+    ast.push(Statement::Return(ReturnStatement::default()));
 }
 
 /// Returns a vector of variable declarations that must be hoisted

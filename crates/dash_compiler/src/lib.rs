@@ -185,10 +185,10 @@ impl<'a> FunctionCompiler<'a> {
         implicit_return: bool,
     ) -> Result<CompileResult, CompileError> {
         if implicit_return {
-            transformations::ast_insert_return(&mut ast);
+            transformations::ast_patch_implicit_return(&mut ast);
         } else {
             // Push an implicit `return undefined;` statement at the end in case there is not already an explicit one
-            ast.push(Statement::Return(Default::default()));
+            transformations::ast_insert_implicit_return(&mut ast);
         }
 
         // Run type inference
@@ -1366,7 +1366,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             id,
             name,
             parameters: arguments,
-            statements,
+            mut statements,
             ty,
             r#async,
         }: FunctionDeclaration<'a>,
@@ -1406,6 +1406,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             }
         }
 
+        transformations::ast_insert_implicit_return(&mut statements);
         for stmt in statements {
             ib.accept(stmt)?;
         }

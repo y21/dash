@@ -1,4 +1,3 @@
-use std::cell::Cell;
 use std::cell::RefCell;
 use std::convert::TryFrom;
 
