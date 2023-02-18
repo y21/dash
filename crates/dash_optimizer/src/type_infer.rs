@@ -1,5 +1,6 @@
 use dash_middle::compiler::scope::CompileValueType;
 use dash_middle::compiler::scope::Scope;
+use dash_middle::compiler::scope::ScopeLocal;
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::expr::ArrayLiteral;
 use dash_middle::parser::expr::AssignmentExpr;
@@ -82,7 +83,6 @@ impl<'a> TypeInferCtx<'a> {
 
     pub fn add_scope(&mut self, parent: Option<FuncId>) -> FuncId {
         self.scopes.push(parent.map(Into::into), Scope::new()).into()
-        // self.scopes.add(parent.map(Into::into), id.into(), Scope::new()).into()
     }
 
     pub fn visit_statement(&mut self, statement: &Statement<'a>, func_id: FuncId) {
@@ -300,6 +300,17 @@ impl<'a> TypeInferCtx<'a> {
         ty
     }
 
+    fn find_local(&self, ident: &str, func_id: FuncId) -> Option<&ScopeLocal<'a>> {
+        if let Some((_, local)) = self.scope(func_id).find_local(ident) {
+            Some(local)
+        } else {
+            let parent = self.scope_node(func_id).parent()?;
+            let local = self.find_local(ident, parent.into())?;
+            local.infer(CompileValueType::Extern);
+            Some(local)
+        }
+    }
+
     pub fn visit_literal_expression(
         &mut self,
         expression: &LiteralExpr<'a>,
@@ -307,8 +318,8 @@ impl<'a> TypeInferCtx<'a> {
     ) -> Option<CompileValueType> {
         match expression {
             LiteralExpr::Boolean(..) => Some(CompileValueType::Boolean),
-            LiteralExpr::Identifier(identifier) => match self.scope_mut(func_id).find_local(identifier) {
-                Some((_, local)) => local.inferred_type().borrow().clone(),
+            LiteralExpr::Identifier(identifier) => match self.find_local(identifier, func_id) {
+                Some(local) => local.inferred_type().borrow().clone(),
                 _ => None,
             },
             LiteralExpr::Number(..) => Some(CompileValueType::Number),
@@ -342,7 +353,7 @@ impl<'a> TypeInferCtx<'a> {
 
         // Also propagate assignment to target
         if let Expr::Literal(LiteralExpr::Identifier(ident)) = &**left {
-            if let Some((_, local)) = self.scope_mut(func_id).find_local(ident) {
+            if let Some(local) = self.find_local(ident, func_id) {
                 let left_type = local.inferred_type();
                 let left_type_ref = left_type.borrow();
 

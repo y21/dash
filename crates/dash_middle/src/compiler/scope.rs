@@ -18,6 +18,7 @@ pub enum CompileValueType {
     Array,
     Either(Box<CompileValueType>, Box<CompileValueType>),
     Maybe(Box<CompileValueType>),
+    Extern,
 }
 
 #[derive(Debug, Clone)]
