@@ -5,6 +5,8 @@ use crate::parser::statement::VariableBinding;
 use crate::parser::statement::VariableDeclarationKind;
 use crate::parser::statement::VariableDeclarationName;
 
+use super::external::External;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompileValueType {
     Boolean,
@@ -49,6 +51,8 @@ pub struct Scope<'a> {
     depth: u16,
     // length limited to u16
     locals: Vec<ScopeLocal<'a>>,
+    /// A vector of external values
+    externals: Vec<External>,
 }
 
 impl<'a> Scope<'a> {
@@ -56,7 +60,16 @@ impl<'a> Scope<'a> {
         Self {
             depth: 0,
             locals: Vec::new(),
+            externals: Vec::new(),
         }
+    }
+
+    pub fn externals(&self) -> &[External] {
+        &self.externals
+    }
+
+    pub fn externals_mut(&mut self) -> &mut Vec<External> {
+        &mut self.externals
     }
 
     pub fn find_local(&self, identifier: &str) -> Option<(u16, &ScopeLocal<'a>)> {

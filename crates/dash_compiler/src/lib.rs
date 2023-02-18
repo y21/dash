@@ -81,8 +81,6 @@ struct FunctionLocalState {
     ///
     /// Bytecode can refer to constants using the [Instruction::Constant] instruction, followed by a u8 index.
     cp: ConstantPool,
-    /// A vector of external values
-    externals: Vec<External>,
     /// Current try catch depth
     try_catch_depth: u16,
     /// The type of function that this FunctionCompiler compiles
@@ -105,7 +103,6 @@ impl FunctionLocalState {
         Self {
             buf: Vec::new(),
             cp: ConstantPool::new(),
-            externals: Vec::new(),
             try_catch_depth: 0,
             ty: FunctionKind::Function,
             r#async: false,
@@ -240,13 +237,15 @@ impl<'a> FunctionCompiler<'a> {
 
         let root = self.function_stack.pop().expect("No root function");
         assert_eq!(root.id, FuncId::ROOT, "Function must be the root function");
-        let locals = self.tcx.scope_mut(root.id).locals().len();
+        let root_scope = self.tcx.scope(root.id);
+        let locals = root_scope.locals().len();
+        let externals = root_scope.externals().to_owned();
 
         Ok(CompileResult {
             instructions: root.buf,
             cp: root.cp,
             locals,
-            externals: root.externals,
+            externals,
         })
     }
 
@@ -277,8 +276,8 @@ impl<'a> FunctionCompiler<'a> {
 
     /// Adds an external to the current [`FunctionLocalState`] if it's not already present
     /// and returns its ID
-    fn add_external(&mut self, external_id: u16, is_nested_external: bool) -> usize {
-        let externals = &mut self.current_function_mut().externals;
+    fn add_external_to_func(&mut self, func_id: FuncId, external_id: u16, is_nested_external: bool) -> usize {
+        let externals = self.tcx.scope_mut(func_id).externals_mut();
         let id = externals.iter().position(|External { id, .. }| *id == external_id);
 
         match id {
@@ -300,7 +299,7 @@ impl<'a> FunctionCompiler<'a> {
             let parent = self.tcx.scope_node(func_id).parent()?;
 
             let (id, loc, nested_extern) = self.find_local_in_scope(ident, parent.into())?;
-            self.add_external(id, nested_extern);
+            self.add_external_to_func(func_id, id, nested_extern);
             Some((id, loc, true))
         }
     }
@@ -1412,7 +1411,9 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         }
 
         let cmp = ib.function_stack.pop().expect("Missing function state");
-        let locals = ib.tcx.scope(id).locals().len();
+        let scope = ib.tcx.scope(id);
+        let externals = scope.externals();
+        let locals = scope.locals().len();
 
         let function = Function {
             buffer: cmp.buf.into(),
@@ -1424,7 +1425,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 Some((Parameter::Spread(..), ..)) => arguments.len() - 1,
                 _ => arguments.len(),
             },
-            externals: cmp.externals.into(),
+            externals: externals.into(),
             r#async,
             rest_local,
             poison_ips: RefCell::new(HashSet::new()),
