@@ -215,7 +215,7 @@ impl<'a> TypeInferCtx<'a> {
 
                 // TODO: can't really do anything with the error here
                 // once we have logging, log the error
-                let _ = self.scope_mut(func_id).add_local(ident, binding.kind, false, ty);
+                let _ = self.scope_mut(func_id).add_local(ident, binding.kind, ty);
             }
         }
     }

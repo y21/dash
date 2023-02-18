@@ -23,8 +23,6 @@ pub enum CompileValueType {
 pub struct ScopeLocal<'a> {
     /// The binding of this variable
     binding: VariableBinding<'a>,
-    /// Whether this local variable is used by inner functions and as such may outlive the frame when returned
-    is_extern: Cell<bool>,
     inferred_type: RefCell<Option<CompileValueType>>,
 }
 
@@ -32,16 +30,6 @@ impl<'a> ScopeLocal<'a> {
     /// Returns the binding of this variable
     pub fn binding(&self) -> &VariableBinding<'a> {
         &self.binding
-    }
-
-    /// Marks this local variable as "extern"
-    pub fn set_extern(&self) {
-        self.is_extern.set(true);
-    }
-
-    /// Checks whether this local variable is marked extern
-    pub fn is_extern(&self) -> bool {
-        self.is_extern.get()
     }
 
     /// Sets the inferred type of this local variable
@@ -91,7 +79,6 @@ impl<'a> Scope<'a> {
         &mut self,
         name: &'a str,
         kind: VariableDeclarationKind,
-        is_extern: bool,
         inferred_type: Option<CompileValueType>,
     ) -> Result<u16, LimitExceededError> {
         // if there's already a local with the same name, we should use that
@@ -105,7 +92,6 @@ impl<'a> Scope<'a> {
                 kind,
                 ty: None,
             },
-            is_extern: Cell::new(is_extern),
             inferred_type: RefCell::new(inferred_type),
         });
 

@@ -293,36 +293,23 @@ impl<'a> FunctionCompiler<'a> {
         }
     }
 
+    fn find_local_in_scope(&mut self, ident: &str, func_id: FuncId) -> Option<(u16, ScopeLocal<'a>, bool)> {
+        if let Some((id, local)) = self.tcx.scope(func_id).find_local(ident) {
+            Some((id, local.clone(), false))
+        } else {
+            let parent = self.tcx.scope_node(func_id).parent()?;
+
+            let (id, loc, nested_extern) = self.find_local_in_scope(ident, parent.into())?;
+            self.add_external(id, nested_extern);
+            Some((id, loc, true))
+        }
+    }
     /// Tries to find a local in the current or surrounding scopes
     ///
     /// If a local variable is found in a parent scope, it is marked as an extern local
-    pub fn find_local(&mut self, ident: &str) -> Option<(u16, ScopeLocal<'a>)> {
-        if let Some((id, local)) = self.current_scope().find_local(ident) {
-            Some((id, local.clone()))
-        } else {
-            let mut next_func_id = Some(self.current_function().id);
-
-            while let Some(func_id) = next_func_id {
-                let scope = self.tcx.scope(func_id);
-                if let Some((id, local)) = scope.find_local(ident) {
-                    // If the local found in a parent scope is already an external,
-                    // it needs to be resolved differently at runtime
-                    let is_nested_extern = local.is_extern();
-
-                    // If it's not already marked external, mark it as such now
-                    local.set_extern();
-                    let local = local.clone();
-
-                    // TODO: don't hardcast
-                    let id = self.add_external(id, is_nested_extern) as u16;
-                    return Some((id, local));
-                }
-
-                next_func_id = self.tcx.scope_node(func_id).parent().map(Into::into);
-            }
-
-            None
-        }
+    pub fn find_local(&mut self, ident: &str) -> Option<(u16, ScopeLocal<'a>, bool)> {
+        let func_id = self.current_function().id;
+        self.find_local_in_scope(ident, func_id)
     }
 
     fn visit_for_each_kinded_loop(
@@ -363,11 +350,11 @@ impl<'a> FunctionCompiler<'a> {
         let mut ib = InstructionBuilder::new(self);
         let for_of_iter_id =
             ib.current_scope_mut()
-                .add_local("for_of_iter", VariableDeclarationKind::Unnameable, false, None)?;
+                .add_local("for_of_iter", VariableDeclarationKind::Unnameable, None)?;
 
         let for_of_gen_step_id =
             ib.current_scope_mut()
-                .add_local("for_of_gen_step", VariableDeclarationKind::Unnameable, false, None)?;
+                .add_local("for_of_gen_step", VariableDeclarationKind::Unnameable, None)?;
 
         ib.accept_expr(expr)?;
         match kind {
@@ -677,7 +664,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             "Infinity" => ib.build_infinity(),
             "NaN" => ib.build_nan(),
             ident => match ib.find_local(ident) {
-                Some((index, local)) => ib.build_local_load(index, local.is_extern()),
+                Some((index, _, is_extern)) => ib.build_local_load(index, is_extern),
                 _ => ib.build_global_load(ident)?,
             },
         };
@@ -789,7 +776,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
                     for (name, alias) in fields {
                         let name = alias.unwrap_or(name);
-                        let id = ib.current_scope_mut().add_local(name, binding.kind, false, None)?;
+                        let id = ib.current_scope_mut().add_local(name, binding.kind, None)?;
 
                         let var_id = ib.current_function_mut().cp.add(Constant::Number(id as f64))?;
                         let ident_id = ib.current_function_mut().cp.add(Constant::Identifier(name.into()))?;
@@ -814,7 +801,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                     ib.build_arraydestruct(field_count);
 
                     for name in fields {
-                        let id = ib.current_scope_mut().add_local(name, binding.kind, false, None)?;
+                        let id = ib.current_scope_mut().add_local(name, binding.kind, None)?;
 
                         let var_id = ib.current_function_mut().cp.add(Constant::Number(id as f64))?;
                         ib.writew(var_id);
@@ -895,7 +882,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         let var_id = match fun.name {
             Some(name) => Some(
                 ib.current_scope_mut()
-                    .add_local(name, VariableDeclarationKind::Var, false, None)?,
+                    .add_local(name, VariableDeclarationKind::Var, None)?,
             ),
             None => None,
         };
@@ -940,12 +927,10 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                     let ident = lit.to_identifier();
                     let local = ib.find_local(&ident);
 
-                    if let Some((id, local)) = local {
+                    if let Some((id, local, is_extern)) = local {
                         if matches!(local.binding().kind, VariableDeclarationKind::Const) {
                             return Err(CompileError::ConstAssignment);
                         }
-
-                        let is_extern = local.is_extern();
 
                         macro_rules! assign {
                             ($e:expr) => {{
@@ -1296,10 +1281,10 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             Expr::Literal(lit) => {
                 let ident = lit.to_identifier();
 
-                if let Some((id, loc)) = ib.find_local(&ident) {
+                if let Some((id, loc, is_extern)) = ib.find_local(&ident) {
                     let ty = loc.inferred_type().borrow();
 
-                    if let (Ok(id), Some(CompileValueType::Number), false) = (u8::try_from(id), &*ty, loc.is_extern()) {
+                    if let (Ok(id), Some(CompileValueType::Number), false) = (u8::try_from(id), &*ty, is_extern) {
                         // SPEC
                         match tt {
                             TokenType::Increment => ib.build_postfix_inc_local_num(id),
@@ -1309,7 +1294,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                         return Ok(());
                     }
 
-                    ib.build_local_load(id, loc.is_extern());
+                    ib.build_local_load(id, is_extern);
                 } else {
                     ib.build_global_load(&ident)?;
                 }
@@ -1339,10 +1324,10 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             Expr::Literal(lit) => {
                 let ident = lit.to_identifier();
 
-                if let Some((id, loc)) = ib.find_local(&ident) {
+                if let Some((id, loc, is_extern)) = ib.find_local(&ident) {
                     let ty = loc.inferred_type().borrow();
 
-                    if let (Ok(id), Some(CompileValueType::Number), false) = (u8::try_from(id), &*ty, loc.is_extern()) {
+                    if let (Ok(id), Some(CompileValueType::Number), false) = (u8::try_from(id), &*ty, is_extern) {
                         // SPEC
                         match tt {
                             TokenType::Increment => ib.build_prefix_inc_local_num(id),
@@ -1352,7 +1337,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                         return Ok(());
                     }
 
-                    ib.build_local_load(id, loc.is_extern());
+                    ib.build_local_load(id, is_extern);
                 } else {
                     ib.build_global_load(&ident)?;
                 }
@@ -1400,7 +1385,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             let id = ib
                 .tcx
                 .scope_mut(id)
-                .add_local(name, VariableDeclarationKind::Var, false, None)?;
+                .add_local(name, VariableDeclarationKind::Var, None)?;
 
             if let Parameter::Spread(..) = param {
                 rest_local = Some(id);
@@ -1504,7 +1489,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         if let Some(ident) = catch.ident {
             let id = ib
                 .current_scope_mut()
-                .add_local(ident, VariableDeclarationKind::Var, false, None)?;
+                .add_local(ident, VariableDeclarationKind::Var, None)?;
 
             if id == u16::MAX {
                 // Max u16 value is reserved for "no binding"
@@ -1600,7 +1585,6 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                         SpecifierKind::Ident(id) => id,
                     },
                     VariableDeclarationKind::Var,
-                    false,
                     None,
                 )?;
 
@@ -1639,9 +1623,9 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                     let ident_id = ib.current_function_mut().cp.add(Constant::Identifier(name.into()))?;
 
                     match ib.find_local(name) {
-                        Some((loc_id, loc)) => {
+                        Some((loc_id, _, is_extern)) => {
                             // Top level exports shouldn't be able to refer to extern locals
-                            assert!(!loc.is_extern());
+                            assert!(!is_extern);
 
                             it.push(NamedExportKind::Local { loc_id, ident_id });
                         }
@@ -1756,11 +1740,10 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         let binding_id = match class.name {
             Some(name) => ib
                 .current_scope_mut()
-                .add_local(name, VariableDeclarationKind::Var, false, None)?,
-            None => {
-                ib.current_scope_mut()
-                    .add_local("DesugaredClass", VariableDeclarationKind::Unnameable, false, None)?
-            }
+                .add_local(name, VariableDeclarationKind::Var, None)?,
+            None => ib
+                .current_scope_mut()
+                .add_local("DesugaredClass", VariableDeclarationKind::Unnameable, None)?,
         };
 
         let (parameters, mut statements, id) = match constructor {

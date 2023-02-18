@@ -93,6 +93,7 @@ pub struct Frame {
     /// Extra stack space allocated at the start of frame execution, currently only used for local variables
     /// (excluding function parameters, as they are pushed onto the stack in Function::apply)
     pub extra_stack_space: usize,
+    /// Contains local variable values from the outer scope
     pub externals: Rc<[Handle<dyn Object>]>,
     pub this: Option<Value>,
     pub sp: usize,

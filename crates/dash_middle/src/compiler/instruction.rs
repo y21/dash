@@ -48,8 +48,10 @@ pub enum Instruction {
     This,
     StaticPropAssign,
     DynamicPropAssign,
+    /// Loads an external variable
     LdLocalExt,
     LdLocalExtW,
+    /// Stores a value into an external variable
     StoreLocalExt,
     StoreLocalExtW,
     StrictEq,

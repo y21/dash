@@ -272,7 +272,7 @@ impl<'a> Eval<'a> for Statement<'a> {
 
                         // TODO: can't really do anything with the error here
                         // once we have logging, log the error
-                        let _ = cx.scope_mut().add_local(name, binding.kind, false, ty);
+                        let _ = cx.scope_mut().add_local(name, binding.kind, ty);
                     }
                 }
             }
