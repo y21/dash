@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1676775588374,
+  "lastUpdate": 1676776446340,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -861,6 +861,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 109488,
             "range": "± 6394",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "e079486a97f097b7b114e96cc95869e987c087b8",
+          "message": "tcx: fix typeof operator having wrong type",
+          "timestamp": "2023-02-19T04:09:48+01:00",
+          "tree_id": "4cc9270e152aa90bd10ca1099584f8dcff77659a",
+          "url": "https://github.com/y21/dash/commit/e079486a97f097b7b114e96cc95869e987c087b8"
+        },
+        "date": 1676776445200,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 3193943,
+            "range": "± 37281",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 293341,
+            "range": "± 3235",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 81869,
+            "range": "± 119",
             "unit": "ns/iter"
           }
         ]
