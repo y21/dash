@@ -1395,17 +1395,18 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             }
 
             if let Some(default) = default {
+                let mut sub_ib = InstructionBuilder::new(&mut ib);
                 // First, load parameter
-                ib.build_local_load(id, false);
+                sub_ib.build_local_load(id, false);
                 // Jump to InitParamWithDefaultValue if param is undefined
-                ib.build_jmpundefinedp(Label::InitParamWithDefaultValue, true);
+                sub_ib.build_jmpundefinedp(Label::InitParamWithDefaultValue, true);
                 // If it isn't undefined, it won't jump to InitParamWithDefaultValue, so we jump to the end
-                ib.build_jmp(Label::FinishParamDefaultValueInit, true);
-                ib.add_local_label(Label::InitParamWithDefaultValue);
-                ib.accept_expr(default.clone())?;
-                ib.build_local_store(id, false);
+                sub_ib.build_jmp(Label::FinishParamDefaultValueInit, true);
+                sub_ib.add_local_label(Label::InitParamWithDefaultValue);
+                sub_ib.accept_expr(default.clone())?;
+                sub_ib.build_local_store(id, false);
 
-                ib.add_local_label(Label::FinishParamDefaultValueInit);
+                sub_ib.add_local_label(Label::FinishParamDefaultValueInit);
             }
         }
 
