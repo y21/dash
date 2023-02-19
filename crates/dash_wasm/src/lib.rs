@@ -4,7 +4,6 @@ use dash_middle::parser::statement::FuncId;
 use dash_middle::parser::statement::VariableDeclarationName;
 use dash_optimizer::consteval::ConstFunctionEvalCtx;
 use dash_optimizer::type_infer::TypeInferCtx;
-use dash_optimizer::OptLevel;
 use dash_parser::Parser;
 use dash_vm::eval::EvalError;
 use dash_vm::frame::Frame;
@@ -15,6 +14,8 @@ use dash_vm::value::Value;
 use dash_vm::Vm;
 use std::fmt::Write;
 use wasm_bindgen::prelude::*;
+
+use crate::externalvm::OptLevel;
 
 mod externalfunction;
 mod externalvm;
@@ -135,11 +136,11 @@ pub fn infer(s: &str) -> Result<JsValue, String> {
 
     let mut tcx = TypeInferCtx::new(counter);
 
-    let mut cfx = ConstFunctionEvalCtx::new(&mut tcx, Default::Default());
+    let mut cfx = ConstFunctionEvalCtx::new(&mut tcx, dash_optimizer::OptLevel::default());
     cfx.visit_many_statements(&mut ast, FuncId::ROOT);
     let mut out = String::new();
 
-    for local in tcx.scope_mut().locals() {
+    for local in tcx.scope_mut(FuncId::ROOT).locals() {
         if let VariableDeclarationName::Identifier(ident) = local.binding().name {
             let ty = local.inferred_type().borrow();
             let _ = write!(out, "{ident}: {ty:?} \n");
