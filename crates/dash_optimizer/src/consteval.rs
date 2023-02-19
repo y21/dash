@@ -529,7 +529,7 @@ impl<'a, 'b> ConstFunctionEvalCtx<'a, 'b> {
                 self.expr_has_side_effects(target) || self.expr_has_side_effects(property)
             }
             Expr::Sequence((left, right)) => self.expr_has_side_effects(left) || self.expr_has_side_effects(right),
-            Expr::Unary(UnaryExpr { expr, .. }) => self.expr_has_side_effects(expr),
+            Expr::Unary(UnaryExpr { .. }) => true, // TODO: can special case +- literal
             _ => true,
         }
     }
