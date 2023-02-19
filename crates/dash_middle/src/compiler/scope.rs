@@ -129,6 +129,10 @@ impl<'a> Scope<'a> {
         self.depth = 0;
     }
 
+    pub fn depth(&self) -> u16 {
+        self.depth
+    }
+
     pub fn locals(&self) -> &[ScopeLocal<'a>] {
         self.locals.as_ref()
     }

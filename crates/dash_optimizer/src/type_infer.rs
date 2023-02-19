@@ -57,15 +57,6 @@ impl<'a> TypeInferCtx<'a> {
         Self { scopes, counter }
     }
 
-    /// Resets the `depth` of every function's scope
-    ///
-    /// This needs to be called after visiting the AST nodes with the TypeInferCtx
-    pub fn reset_scope_depths(&mut self) {
-        for node in self.scopes.iter_mut() {
-            node.reset_depth();
-        }
-    }
-
     pub fn scope_mut(&mut self, func_id: FuncId) -> &mut Scope<'a> {
         // Scope not found implies a programmer error
         &mut self.scopes[func_id.into()]

@@ -193,7 +193,6 @@ impl<'a> FunctionCompiler<'a> {
         for stmt in &ast {
             self.tcx.visit_statement(&stmt, FuncId::ROOT);
         }
-        self.tcx.reset_scope_depths();
 
         // Run const eval
         if self.opt_level.enabled() {
@@ -203,7 +202,6 @@ impl<'a> FunctionCompiler<'a> {
                 cfx.visit_statement(stmt, FuncId::ROOT);
             }
         }
-        self.tcx.reset_scope_depths();
 
         // TODO: this needs to be done for every function in the TypeInfer pass
         // let hoisted_locals = transformations::hoist_declarations(&mut ast);
@@ -279,7 +277,9 @@ impl<'a> FunctionCompiler<'a> {
     /// and returns its ID
     fn add_external_to_func(&mut self, func_id: FuncId, external_id: u16, is_nested_external: bool) -> usize {
         let externals = self.tcx.scope_mut(func_id).externals_mut();
-        let id = externals.iter().position(|External { id, .. }| *id == external_id);
+        let id = externals
+            .iter()
+            .position(|External { id, is_external }| *id == external_id && *is_external == is_nested_external);
 
         match id {
             Some(id) => id,
@@ -302,6 +302,7 @@ impl<'a> FunctionCompiler<'a> {
             let (local_id, loc, nested_extern) = self.find_local_in_scope(ident, parent.into())?;
             // TODO: don't hardcast
             let external_id = self.add_external_to_func(func_id, local_id, nested_extern) as u16;
+            // println!("{func_id:?} {external_id}");
             Some((external_id, loc, true))
         }
     }
