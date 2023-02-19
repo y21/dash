@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1676814991253,
+  "lastUpdate": 1676822240035,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -1021,6 +1021,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 83707,
             "range": "± 403",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "d5641ef06db962dc2581f1e64d0701008b8cd203",
+          "message": "compiler: add func jump labels in sub ib",
+          "timestamp": "2023-02-19T16:53:01+01:00",
+          "tree_id": "fe415c36f05ae780dda49e2cf0b41468624831c5",
+          "url": "https://github.com/y21/dash/commit/d5641ef06db962dc2581f1e64d0701008b8cd203"
+        },
+        "date": 1676822238288,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 3397742,
+            "range": "± 40691",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 294199,
+            "range": "± 1784",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 84995,
+            "range": "± 1343",
             "unit": "ns/iter"
           }
         ]
