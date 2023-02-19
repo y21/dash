@@ -24,6 +24,7 @@ use dash_middle::parser::expr::Seq;
 use dash_middle::parser::expr::UnaryExpr;
 use dash_middle::parser::expr::{ArrayLiteral, ObjectMemberKind};
 use dash_middle::parser::expr::{AssignmentExpr, AssignmentTarget};
+use dash_middle::parser::statement::ForLoop;
 use dash_middle::parser::statement::ReturnStatement;
 use dash_middle::parser::statement::SpecifierKind;
 use dash_middle::parser::statement::Statement;
@@ -35,13 +36,13 @@ use dash_middle::parser::statement::WhileLoop;
 use dash_middle::parser::statement::{BlockStatement, Loop};
 use dash_middle::parser::statement::{Class, Parameter};
 use dash_middle::parser::statement::{ClassMemberKind, ExportKind};
-use dash_middle::parser::statement::{ClassProperty, ForLoop};
 use dash_middle::parser::statement::{ForInLoop, ForOfLoop};
 use dash_middle::parser::statement::{FuncId, ImportKind};
 use dash_middle::parser::statement::{FunctionDeclaration, SwitchStatement};
 use dash_middle::parser::statement::{FunctionKind, VariableDeclarationName};
 use dash_middle::parser::statement::{IfStatement, VariableDeclarations};
 use dash_middle::visitor::Visitor;
+use dash_optimizer::consteval::ConstFunctionEvalCtx;
 use dash_optimizer::type_infer::TypeInferCtx;
 use dash_optimizer::OptLevel;
 use instruction::compile_local_load;
@@ -189,20 +190,20 @@ impl<'a> FunctionCompiler<'a> {
         }
 
         // Run type inference
-        for stmt in &mut ast {
+        for stmt in &ast {
             self.tcx.visit_statement(&stmt, FuncId::ROOT);
         }
-        // Run const eval here
+        self.tcx.reset_scope_depths();
 
-        // if self.opt_level.enabled() {
-        //     let mut cx = OptimizerContext::new();
-        //     ast.fold(&mut cx, false);
+        // Run const eval
+        if self.opt_level.enabled() {
+            let mut cfx = ConstFunctionEvalCtx::new(&mut self.tcx, self.opt_level);
 
-        //     let scope = std::mem::replace(cx.scope_mut(), Scope::new());
-        //     for local in scope.into_locals() {
-        //         self.scope.add_scope_local(local)?;
-        //     }
-        // }
+            for stmt in &mut ast {
+                cfx.visit_statement(stmt, FuncId::ROOT);
+            }
+        }
+        self.tcx.reset_scope_depths();
 
         // TODO: this needs to be done for every function in the TypeInfer pass
         // let hoisted_locals = transformations::hoist_declarations(&mut ast);
@@ -1731,15 +1732,6 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             None
         });
 
-        // let binding = class
-        //     .name
-        //     .map(|name| VariableBinding {
-        //         kind: VariableDeclarationKind::Var,
-        //         ty: None,
-        //         name: VariableDeclarationName::Identifier(name),
-        //     })
-        //     .unwrap_or_else(|| VariableBinding::unnameable("DesugaredClass"));
-
         let binding_id = match class.name {
             Some(name) => ib
                 .current_scope_mut()
@@ -1757,29 +1749,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             }
         };
 
-        {
-            // For every field property, insert a `this.fieldName = fieldValue` expression in the constructor
-            let mut prestatements = Vec::new();
-            for member in &class.members {
-                if let ClassMemberKind::Property(ClassProperty {
-                    name,
-                    value: Some(value),
-                }) = &member.kind
-                {
-                    prestatements.push(Statement::Expression(Expr::Assignment(AssignmentExpr {
-                        left: AssignmentTarget::Expr(Box::new(Expr::PropertyAccess(PropertyAccessExpr {
-                            computed: false,
-                            property: Box::new(Expr::string_literal(Cow::Borrowed(name))),
-                            target: Box::new(Expr::identifier(Cow::Borrowed("this"))),
-                        }))),
-                        operator: TokenType::Assignment,
-                        right: Box::new(value.clone()),
-                    })));
-                }
-            }
-            prestatements.append(&mut statements);
-            statements = prestatements;
-        }
+        transformations::insert_initializer_in_constructor(&class, &mut statements);
 
         let desugared_class = FunctionDeclaration {
             id,

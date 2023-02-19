@@ -125,6 +125,10 @@ impl<'a> Scope<'a> {
         self.depth -= 1;
     }
 
+    pub fn reset_depth(&mut self) {
+        self.depth = 0;
+    }
+
     pub fn locals(&self) -> &[ScopeLocal<'a>] {
         self.locals.as_ref()
     }

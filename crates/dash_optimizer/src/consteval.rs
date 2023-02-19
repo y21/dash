@@ -1,4 +1,3 @@
-use dash_middle::compiler::scope::CompileValueType;
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::expr::ArrayLiteral;
 use dash_middle::parser::expr::AssignmentExpr;
@@ -10,67 +9,388 @@ use dash_middle::parser::expr::FunctionCall;
 use dash_middle::parser::expr::GroupingExpr;
 use dash_middle::parser::expr::LiteralExpr;
 use dash_middle::parser::expr::ObjectLiteral;
+use dash_middle::parser::expr::ObjectMemberKind;
 use dash_middle::parser::expr::PropertyAccessExpr;
 use dash_middle::parser::expr::UnaryExpr;
 use dash_middle::parser::statement::BlockStatement;
-use dash_middle::parser::statement::Catch;
+use dash_middle::parser::statement::Class;
+use dash_middle::parser::statement::ClassMemberKind;
+use dash_middle::parser::statement::ClassProperty;
 use dash_middle::parser::statement::ExportKind;
 use dash_middle::parser::statement::ForInLoop;
 use dash_middle::parser::statement::ForLoop;
 use dash_middle::parser::statement::ForOfLoop;
+use dash_middle::parser::statement::FuncId;
 use dash_middle::parser::statement::FunctionDeclaration;
 use dash_middle::parser::statement::IfStatement;
+use dash_middle::parser::statement::ImportKind;
 use dash_middle::parser::statement::Loop;
+use dash_middle::parser::statement::Parameter;
 use dash_middle::parser::statement::ReturnStatement;
+use dash_middle::parser::statement::SpecifierKind;
 use dash_middle::parser::statement::Statement;
+use dash_middle::parser::statement::SwitchCase;
 use dash_middle::parser::statement::SwitchStatement;
 use dash_middle::parser::statement::TryCatch;
+use dash_middle::parser::statement::VariableBinding;
 use dash_middle::parser::statement::VariableDeclaration;
-use dash_middle::parser::statement::VariableDeclarationName;
+use dash_middle::parser::statement::VariableDeclarationKind;
 use dash_middle::parser::statement::VariableDeclarations;
 use dash_middle::parser::statement::WhileLoop;
 
-use crate::context::OptimizerContext;
+use crate::type_infer::TypeInferCtx;
+use crate::OptLevel;
 
-/// A trait for evaluating constant expressions.
-pub trait Eval<'a> {
-    /// Attempts to fold an expression or statement prior to execution
-    fn fold(&mut self, cx: &mut OptimizerContext<'a>, can_remove: bool);
-    /// Whether this item has side effects
-    ///
-    /// If this function returns true, it may be entirely removed when folded
-    fn has_side_effect(&self, _cx: &mut OptimizerContext<'a>) -> bool {
-        true
-    }
+#[derive(Debug)]
+pub struct ConstFunctionEvalCtx<'a, 'b> {
+    tcx: &'b mut TypeInferCtx<'a>,
+    #[allow(unused)]
+    opt_level: OptLevel,
 }
 
-impl<'a> Eval<'a> for LiteralExpr<'a> {
-    fn fold(&mut self, _cx: &mut OptimizerContext<'a>, _can_remove: bool) {}
-    fn has_side_effect(&self, _cx: &mut OptimizerContext<'a>) -> bool {
-        // identifier might invoke a global getter
-        matches!(self, Self::Identifier(_))
-    }
-}
-
-impl<'a> Eval<'a> for BinaryExpr<'a> {
-    fn fold(&mut self, cx: &mut OptimizerContext<'a>, can_remove: bool) {
-        self.left.fold(cx, can_remove);
-        self.right.fold(cx, can_remove);
+impl<'a, 'b> ConstFunctionEvalCtx<'a, 'b> {
+    pub fn new(tcx: &'b mut TypeInferCtx<'a>, opt_level: OptLevel) -> Self {
+        Self { tcx, opt_level }
     }
 
-    fn has_side_effect(&self, cx: &mut OptimizerContext<'a>) -> bool {
-        self.left.has_side_effect(cx) || self.right.has_side_effect(cx)
-    }
-}
+    pub fn visit_statement(&mut self, statement: &mut Statement<'a>, func_id: FuncId) {
+        match statement {
+            Statement::Block(BlockStatement(stmt)) => {
+                self.tcx.scope_mut(func_id).enter();
+                for stmt in stmt {
+                    self.visit_statement(stmt, func_id);
+                }
+                self.tcx.scope_mut(func_id).exit();
+            }
+            Statement::Expression(expr) => drop(self.visit(expr, func_id)),
+            Statement::Variable(stmt) => self.visit_variable_declaration(stmt, func_id),
+            Statement::If(stmt) => self.visit_if_statement(stmt, func_id),
+            Statement::Function(expr) => drop(self.visit_function_expression(expr, func_id)),
+            Statement::Loop(expr) => self.visit_loop_statement(expr, func_id),
+            Statement::Return(stmt) => self.visit_return_statement(stmt, func_id),
+            Statement::Try(stmt) => self.visit_try_statement(stmt, func_id),
+            Statement::Throw(expr) => drop(self.visit(expr, func_id)),
+            Statement::Import(ImportKind::AllAs(SpecifierKind::Ident(..), ..)) => {}
+            Statement::Import(ImportKind::Dynamic(expr)) => drop(self.visit(expr, func_id)),
+            Statement::Import(ImportKind::DefaultAs(SpecifierKind::Ident(..), ..)) => {}
+            Statement::Export(ExportKind::Default(expr)) => drop(self.visit(expr, func_id)),
+            Statement::Export(ExportKind::Named(..)) => {}
+            Statement::Export(ExportKind::NamedVar(stmt)) => self.visit_variable_declaration(stmt, func_id),
+            Statement::Class(stmt) => self.visit_class_statement(stmt, func_id),
+            Statement::Switch(stmt) => self.visit_switch_statement(stmt, func_id),
+            Statement::Continue => {}
+            Statement::Break => {}
+            Statement::Debugger => {}
+            Statement::Empty => {}
+        };
 
-impl<'a> Eval<'a> for Expr<'a> {
-    fn fold(&mut self, cx: &mut OptimizerContext<'a>, can_remove: bool) {
+        if !self.stmt_has_side_effects(statement) {
+            *statement = Statement::Empty;
+        }
+    }
+
+    pub fn visit_maybe_statement(&mut self, stmt: Option<&mut Statement<'a>>, func_id: FuncId) {
+        if let Some(stmt) = stmt {
+            self.visit_statement(stmt, func_id);
+        }
+    }
+
+    pub fn visit_many_statements(&mut self, stmt: &mut [Statement<'a>], func_id: FuncId) {
+        for stmt in stmt {
+            self.visit_statement(stmt, func_id);
+        }
+    }
+
+    pub fn visit_many_exprs(&mut self, expr: &mut [Expr<'a>], func_id: FuncId) {
+        for expr in expr {
+            self.visit(expr, func_id);
+        }
+    }
+
+    pub fn visit_maybe_expr(&mut self, expr: Option<&mut Expr<'a>>, func_id: FuncId) {
+        if let Some(expr) = expr {
+            self.visit(expr, func_id);
+        }
+    }
+
+    pub fn visit_return_statement(&mut self, ReturnStatement(expr): &mut ReturnStatement<'a>, func_id: FuncId) {
+        self.visit(expr, func_id);
+    }
+
+    pub fn visit_try_statement(&mut self, TryCatch { try_, catch, finally }: &mut TryCatch<'a>, func_id: FuncId) {
+        self.visit_statement(try_, func_id);
+        self.visit_statement(&mut catch.body, func_id);
+        self.visit_maybe_statement(finally.as_deref_mut(), func_id);
+    }
+
+    pub fn visit_class_statement(&mut self, Class { extends, members, .. }: &mut Class<'a>, func_id: FuncId) {
+        self.visit_maybe_expr(extends.as_mut(), func_id);
+        for member in members {
+            match &mut member.kind {
+                ClassMemberKind::Method(method) => drop(self.visit_function_expression(method, func_id)),
+                ClassMemberKind::Property(ClassProperty { value, .. }) => {
+                    drop(self.visit_maybe_expr(value.as_mut(), func_id))
+                }
+            }
+        }
+    }
+
+    pub fn visit_switch_statement(
+        &mut self,
+        SwitchStatement { expr, default, cases }: &mut SwitchStatement<'a>,
+        func_id: FuncId,
+    ) {
+        self.visit(expr, func_id);
+
+        if let Some(default) = default {
+            self.visit_many_statements(default, func_id);
+        }
+
+        for SwitchCase { value, body } in cases {
+            self.visit(value, func_id);
+            self.visit_many_statements(body, func_id);
+        }
+    }
+
+    pub fn visit_loop_statement(&mut self, loop_: &mut Loop<'a>, func_id: FuncId) {
+        match loop_ {
+            Loop::For(ForLoop {
+                init,
+                condition,
+                finalizer,
+                body,
+            }) => {
+                self.visit_maybe_statement(init.as_deref_mut(), func_id);
+                self.visit_maybe_expr(condition.as_mut(), func_id);
+                self.visit_maybe_expr(finalizer.as_mut(), func_id);
+                self.visit_statement(body, func_id);
+            }
+            Loop::ForOf(ForOfLoop { expr, body, binding }) => {
+                self.visit_variable_binding(binding, None, func_id);
+                self.visit(expr, func_id);
+                self.visit_statement(body, func_id);
+            }
+            Loop::ForIn(ForInLoop { expr, body, binding }) => {
+                self.visit_variable_binding(binding, None, func_id);
+                self.visit(expr, func_id);
+                self.visit_statement(body, func_id);
+            }
+            Loop::While(WhileLoop { condition, body }) => {
+                self.visit(condition, func_id);
+                self.visit_statement(body, func_id);
+            }
+        }
+    }
+
+    fn visit_variable_binding(
+        &mut self,
+        _binding: &VariableBinding<'a>,
+        value: Option<&mut Expr<'a>>,
+        func_id: FuncId,
+    ) {
+        if let Some(value) = value {
+            self.visit(value, func_id);
+        }
+    }
+
+    pub fn visit_variable_declaration(
+        &mut self,
+        VariableDeclarations(declarations): &mut VariableDeclarations<'a>,
+        func_id: FuncId,
+    ) {
+        for VariableDeclaration { binding, value } in declarations {
+            self.visit_variable_binding(binding, value.as_mut(), func_id);
+        }
+    }
+
+    pub fn visit_if_statement(
+        &mut self,
+        IfStatement {
+            condition,
+            then,
+            branches,
+            el,
+        }: &mut IfStatement<'a>,
+        func_id: FuncId,
+    ) {
+        self.visit(condition, func_id);
+        self.visit_statement(then, func_id);
+        if let Some(el) = el {
+            self.visit_statement(el, func_id);
+        }
+        let mut branches = branches.borrow_mut();
+        for branch in branches.iter_mut() {
+            self.visit_if_statement(branch, func_id);
+        }
+        drop(branches);
+    }
+
+    pub fn visit(&mut self, expression: &mut Expr<'a>, func_id: FuncId) {
+        match expression {
+            Expr::Binary(..) => self.visit_binary_expression(expression, func_id),
+            Expr::Grouping(GroupingExpr(expr)) => expr.iter_mut().for_each(|e| self.visit(e, func_id)),
+            Expr::Literal(..) => {}
+            Expr::Unary(..) => self.visit_unary_expression(expression, func_id),
+            Expr::Assignment(..) => self.visit_assignment_expression(expression, func_id),
+            Expr::Call(..) => self.visit_call_expression(expression, func_id),
+            Expr::Conditional(..) => self.visit_conditional_expression(expression, func_id),
+            Expr::PropertyAccess(..) => self.visit_property_access_expression(expression, func_id),
+            Expr::Sequence(..) => self.visit_seq_expression(expression, func_id),
+            Expr::Prefix(..) => self.visit_prefix_expression(expression, func_id),
+            Expr::Postfix(..) => self.visit_postfix_expression(expression, func_id),
+            Expr::Function(expr) => self.visit_function_expression(expr, func_id),
+            Expr::Array(..) => self.visit_array_expression(expression, func_id),
+            Expr::Object(..) => self.visit_object_expression(expression, func_id),
+            Expr::Compiled(..) => {}
+            Expr::Empty => {}
+        }
+    }
+
+    fn visit_array_expression(&mut self, array_expr: &mut Expr<'a>, func_id: FuncId) {
+        let Expr::Array(ArrayLiteral(array)) = array_expr else {
+            unreachable!()
+        };
+
+        self.visit_many_exprs(array, func_id);
+    }
+
+    fn visit_object_expression(&mut self, object_expr: &mut Expr<'a>, func_id: FuncId) {
+        let Expr::Object(ObjectLiteral(object)) = object_expr else {
+            unreachable!()
+        };
+
+        for (kind, expr) in object {
+            if let ObjectMemberKind::Dynamic(expr) = kind {
+                self.visit(expr, func_id);
+            }
+            self.visit(expr, func_id);
+        }
+    }
+
+    fn visit_postfix_expression(&mut self, postfix_expr: &mut Expr<'a>, func_id: FuncId) {
+        let Expr::Postfix((_, expr)) = postfix_expr else {
+            unreachable!()
+        };
+
+        self.visit(expr, func_id);
+    }
+
+    fn visit_prefix_expression(&mut self, prefix_expr: &mut Expr<'a>, func_id: FuncId) {
+        let Expr::Prefix((_, expr)) = prefix_expr else {
+            unreachable!()
+        };
+
+        self.visit(expr, func_id);
+    }
+
+    fn visit_seq_expression(&mut self, seq_expr: &mut Expr<'a>, func_id: FuncId) {
+        let Expr::Sequence((left, right)) = seq_expr else {
+            unreachable!()
+        };
+
+        self.visit(left, func_id);
+        self.visit(right, func_id);
+    }
+
+    fn visit_property_access_expression(&mut self, property_access_expr: &mut Expr<'a>, func_id: FuncId) {
+        let Expr::PropertyAccess(PropertyAccessExpr { target, property, .. }) = property_access_expr else {
+            unreachable!()
+        };
+
+        self.visit(target, func_id);
+        self.visit(property, func_id);
+    }
+
+    fn visit_conditional_expression(&mut self, conditional_expr: &mut Expr<'a>, func_id: FuncId) {
+        let Expr::Conditional(ConditionalExpr { condition, then, el }) = conditional_expr else {
+            unreachable!()
+        };
+        self.visit(condition, func_id);
+        self.visit(then, func_id);
+        self.visit(el, func_id);
+
+        use Expr::Literal;
+        use LiteralExpr::Boolean;
+
+        match &**condition {
+            Literal(Boolean(true)) => {
+                *conditional_expr = (**then).clone();
+            }
+            Literal(Boolean(false)) => *conditional_expr = (**el).clone(),
+            _ => {}
+        }
+    }
+
+    fn visit_call_expression(&mut self, call_expr: &mut Expr<'a>, func_id: FuncId) {
+        let Expr::Call(FunctionCall { target, arguments,.. }) = call_expr else {
+            unreachable!()
+        };
+
+        self.visit(target, func_id);
+        self.visit_many_exprs(arguments, func_id);
+    }
+
+    fn visit_assignment_expression(&mut self, assignment_expr: &mut Expr<'a>, func_id: FuncId) {
+        let Expr::Assignment(AssignmentExpr { left, right, .. }) = assignment_expr else {
+            unreachable!()
+        };
+
+        if let AssignmentTarget::Expr(left) = left {
+            self.visit(left, func_id);
+        }
+        self.visit(right, func_id);
+    }
+
+    fn visit_unary_expression(&mut self, unary_expr: &mut Expr<'a>, func_id: FuncId) {
+        let Expr::Unary(UnaryExpr { operator, expr }) = unary_expr else {
+            unreachable!()
+        };
+
+        self.visit(expr, func_id);
+
         use Expr::*;
         use LiteralExpr::*;
+        use TokenType::*;
 
-        macro_rules! i64op {
-            ($l:ident $tok:tt $r:ident) => {
-                Literal(Number(((*$l as i64 as i32) $tok (*$r as i64 as i32)) as f64))
+        match (operator, &**expr) {
+            (Minus, Literal(Number(n))) => *unary_expr = Literal(Number(-*n)),
+            (Plus, Literal(Number(n))) => *unary_expr = Literal(Number(*n)),
+            _ => {}
+        }
+    }
+
+    fn visit_binary_expression(&mut self, binary_expr: &mut Expr<'a>, func_id: FuncId) {
+        let Expr::Binary(BinaryExpr { left, right, operator }) = binary_expr else {
+            unreachable!()
+        };
+
+        self.visit(left, func_id);
+        self.visit(right, func_id);
+
+        use Expr::*;
+        use LiteralExpr::*;
+        use TokenType::*;
+
+        macro_rules! f64_opt {
+            ($left:ident $t:tt $right:ident) => {{
+                *binary_expr = Literal(Number(*$left $t *$right));
+            }};
+        }
+        macro_rules! float_opt_to_bool {
+            ($left:ident $t:tt $right:ident) => {{
+                *binary_expr = Literal(Boolean(*$left $t *$right));
+            }};
+        }
+
+        macro_rules! float_fopt {
+            ($fun:expr, $left:ident, $right:ident) => {{
+                *binary_expr = Literal(Number($fun(*$left, *$right)));
+            }};
+        }
+
+        macro_rules! i64_op {
+            ($left:ident $t:tt $right:ident) => {
+                *binary_expr = Literal(Number(((*$left as i64 as i32) $t (*$right as i64 as i32)) as f64))
             };
         }
 
@@ -78,352 +398,139 @@ impl<'a> Eval<'a> for Expr<'a> {
             !n.is_nan() && n != 0.0
         }
 
-        match self {
-            Binary(expr) => {
-                expr.fold(cx, can_remove);
+        match (&**left, &**right, operator) {
+            (Literal(Number(left)), Literal(Number(right)), Plus) => f64_opt!(left + right),
+            (Literal(Number(left)), Literal(Number(right)), Minus) => f64_opt!(left - right),
+            (Literal(Number(left)), Literal(Number(right)), Star) => f64_opt!(left * right),
+            (Literal(Number(left)), Literal(Number(right)), Slash) => f64_opt!(left / right),
+            (Literal(Number(left)), Literal(Number(right)), Remainder) => f64_opt!(left % right),
+            (Literal(Number(left)), Literal(Number(right)), Exponentiation) => float_fopt!(f64::powf, left, right),
+            (Literal(Number(left)), Literal(Number(right)), Greater) => float_opt_to_bool!(left > right),
+            (Literal(Number(left)), Literal(Number(right)), GreaterEqual) => float_opt_to_bool!(left >= right),
+            (Literal(Number(left)), Literal(Number(right)), Less) => float_opt_to_bool!(left < right),
+            (Literal(Number(left)), Literal(Number(right)), LessEqual) => float_opt_to_bool!(left <= right),
+            (Literal(Number(left)), Literal(Number(right)), Equality) => float_opt_to_bool!(left == right),
+            (Literal(Number(left)), Literal(Number(right)), Inequality) => float_opt_to_bool!(left != right),
+            (Literal(Number(left)), Literal(Number(right)), StrictEquality) => float_opt_to_bool!(left == right),
+            (Literal(Number(left)), Literal(Number(right)), StrictInequality) => float_opt_to_bool!(left != right),
+            (Literal(Number(left)), Literal(Number(right)), BitwiseOr) => i64_op!(left | right),
+            (Literal(Number(left)), Literal(Number(right)), BitwiseAnd) => i64_op!(left & right),
+            (Literal(Number(left)), Literal(Number(right)), BitwiseXor) => i64_op!(left ^ right),
+            (Literal(Number(left)), Literal(Number(right)), LeftShift) => i64_op!(left << right),
+            (Literal(Number(left)), Literal(Number(right)), RightShift) => i64_op!(left >> right),
+            (Literal(Number(left)), Literal(Number(right)), LogicalOr) => {
+                *binary_expr = Literal(Number(match truthy_f64(*left) {
+                    true => *left,
+                    false => *right,
+                }))
+            }
+            (Literal(Number(left)), Literal(Number(right)), LogicalAnd) => {
+                *binary_expr = Literal(Number(match truthy_f64(*left) {
+                    true => *right,
+                    false => *left,
+                }))
+            }
+            (Literal(LiteralExpr::String(left)), Literal(LiteralExpr::String(right)), Equality) => {
+                *binary_expr = Literal(Boolean(left == right));
+            }
+            (Literal(LiteralExpr::String(left)), Literal(LiteralExpr::String(right)), Inequality) => {
+                *binary_expr = Literal(Boolean(left == right));
+            }
+            (Literal(LiteralExpr::String(left)), Literal(LiteralExpr::String(right)), Plus) => {
+                let mut left = left.to_string();
+                left.push_str(&right);
+                *binary_expr = Literal(LiteralExpr::String(left.into()));
+            }
+            _ => {}
+        }
+    }
 
-                match (&*expr.left, &*expr.right) {
-                    (Literal(Number(left)), Literal(Number(right))) => match expr.operator {
-                        TokenType::Plus => *self = Literal(Number(left + right)),
-                        TokenType::Minus => *self = Literal(Number(left - right)),
-                        TokenType::Star => *self = Literal(Number(left * right)),
-                        TokenType::Slash => *self = Literal(Number(left / right)),
-                        TokenType::Remainder => *self = Literal(Number(left % right)),
-                        TokenType::Exponentiation => *self = Literal(Number(left.powf(*right))),
-                        TokenType::Greater => *self = Literal(Boolean(left > right)),
-                        TokenType::GreaterEqual => *self = Literal(Boolean(left >= right)),
-                        TokenType::Less => *self = Literal(Boolean(left < right)),
-                        TokenType::LessEqual => *self = Literal(Boolean(left <= right)),
-                        TokenType::Equality => *self = Literal(Boolean(left == right)),
-                        TokenType::Inequality => *self = Literal(Boolean(left != right)),
-                        TokenType::StrictEquality => *self = Literal(Boolean(left == right)),
-                        TokenType::StrictInequality => *self = Literal(Boolean(left != right)),
-                        TokenType::BitwiseOr => *self = i64op!(left | right),
-                        TokenType::BitwiseAnd => *self = i64op!(left & right),
-                        TokenType::BitwiseXor => *self = i64op!(left ^ right),
-                        TokenType::LeftShift => *self = i64op!(left << right),
-                        TokenType::RightShift => *self = i64op!(left >> right),
-                        TokenType::LogicalOr => {
-                            *self = Literal(Number(match truthy_f64(*left) {
-                                true => *left,
-                                false => *right,
-                            }))
-                        }
-                        TokenType::LogicalAnd => {
-                            *self = Literal(Number(match truthy_f64(*left) {
-                                true => *right,
-                                false => *left,
-                            }))
-                        }
-                        _ => {}
-                    },
-                    (Literal(String(left)), Literal(String(right))) => match expr.operator {
-                        TokenType::Equality | TokenType::StrictEquality => *self = Literal(Boolean(left == right)),
-                        _ => {}
-                    },
-                    _ => {}
+    pub fn visit_function_expression(
+        &mut self,
+        FunctionDeclaration {
+            parameters,
+            statements,
+            id,
+            ..
+        }: &mut FunctionDeclaration<'a>,
+        _func_id: FuncId,
+    ) {
+        let sub_func_id = *id;
+
+        for (param, expr, _) in parameters {
+            match param {
+                Parameter::Identifier(ident) | Parameter::Spread(ident) => {
+                    // TODO: handle this error, somehow
+                    let _ = self
+                        .tcx
+                        .scope_mut(sub_func_id)
+                        .add_local(ident, VariableDeclarationKind::Var, None);
                 }
             }
-            Grouping(GroupingExpr(expr)) => {
-                expr.fold(cx, can_remove);
-            }
-            Unary(UnaryExpr { operator, expr }) => {
-                expr.fold(cx, can_remove);
 
-                match (operator, &**expr) {
-                    (TokenType::LogicalNot, Literal(lit)) => match lit {
-                        LiteralExpr::Number(n) => *self = Literal(Boolean(!truthy_f64(*n))),
-                        LiteralExpr::Boolean(b) => *self = Literal(Boolean(!*b)),
-                        LiteralExpr::String(s) => *self = Literal(Boolean(s.is_empty())),
-                        LiteralExpr::Null | LiteralExpr::Undefined => *self = Literal(Boolean(true)),
-                        _ => {}
-                    },
-                    (TokenType::Minus, Literal(lit)) => match lit {
-                        LiteralExpr::Number(n) => *self = Literal(Number(-n)),
-                        LiteralExpr::Boolean(b) => *self = Literal(Number(-(*b as u64 as f64))),
-                        _ => {}
-                    },
-                    (TokenType::Plus, Literal(lit)) => match lit {
-                        LiteralExpr::Number(n) => *self = Literal(Number(*n)),
-                        LiteralExpr::Boolean(b) => *self = Literal(Number(*b as u64 as f64)),
-                        _ => {}
-                    },
-                    (TokenType::Typeof, Literal(lit)) => match lit {
-                        LiteralExpr::Number(_) => *self = Literal(String("number".into())),
-                        LiteralExpr::Boolean(_) => *self = Literal(String("boolean".into())),
-                        LiteralExpr::String(_) => *self = Literal(String("string".into())),
-                        LiteralExpr::Null => *self = Literal(String("object".into())),
-                        LiteralExpr::Undefined => *self = Literal(String("undefined".into())),
-                        LiteralExpr::Identifier(ident) => match cx.scope_mut().find_local(&ident) {
-                            Some((_, local)) => match local.inferred_type().borrow().as_ref() {
-                                Some(CompileValueType::Boolean) => *self = Literal(String("boolean".into())),
-                                Some(CompileValueType::Null) => *self = Literal(String("object".into())),
-                                Some(CompileValueType::Undefined) => *self = Literal(String("undefined".into())),
-                                Some(CompileValueType::Uninit) => *self = Literal(String("undefined".into())),
-                                Some(CompileValueType::Number) => *self = Literal(String("number".into())),
-                                Some(CompileValueType::String) => *self = Literal(String("string".into())),
-                                // don't guess about Either and Maybe
-                                _ => {}
-                            },
-                            None => {}
-                        },
-                        LiteralExpr::Regex(..) => *self = Literal(String("object".into())),
-                    },
-                    _ => {}
-                }
+            if let Some(expr) = expr {
+                self.visit(expr, sub_func_id);
             }
-            Assignment(AssignmentExpr { left, right, .. }) => {
-                match left {
-                    AssignmentTarget::Expr(left) => left.fold(cx, can_remove),
-                    AssignmentTarget::LocalId(..) => {}
+        }
+
+        for stmt in statements {
+            self.visit_statement(stmt, sub_func_id);
+        }
+    }
+
+    pub fn stmt_has_side_effects(&self, stmt: &Statement<'a>) -> bool {
+        match stmt {
+            Statement::Block(BlockStatement(block)) => block.iter().any(|s| self.stmt_has_side_effects(s)),
+            Statement::Break => true,
+            Statement::Class(Class { .. }) => true, // TODO: can possibly be SE-free
+            Statement::Empty => false,
+            Statement::Expression(expr) => self.expr_has_side_effects(expr),
+            Statement::Function(FunctionDeclaration { name, .. }) => {
+                // Only considered to have side-effects if it's an actual declaration
+                name.is_some()
+            }
+            Statement::If(IfStatement { .. }) => true,
+            _ => true,
+        }
+    }
+
+    pub fn expr_has_side_effects(&self, expr: &Expr<'a>) -> bool {
+        match expr {
+            Expr::Array(ArrayLiteral(array)) => array.iter().any(|e| self.expr_has_side_effects(e)),
+            Expr::Binary(BinaryExpr { left, right, .. }) => {
+                self.expr_has_side_effects(left) || self.expr_has_side_effects(right)
+            }
+            Expr::Conditional(ConditionalExpr { condition, then, el }) => {
+                self.expr_has_side_effects(condition)
+                    || self.expr_has_side_effects(then)
+                    || self.expr_has_side_effects(el)
+            }
+            Expr::Empty => false,
+            Expr::Function(..) => false,
+            Expr::Grouping(GroupingExpr(grouping)) => grouping.iter().any(|e| self.expr_has_side_effects(e)),
+            Expr::Literal(LiteralExpr::Boolean(..)) => false,
+            Expr::Literal(LiteralExpr::Identifier(..)) => true, // might invoke a global getter
+            Expr::Literal(LiteralExpr::Null) => false,
+            Expr::Literal(LiteralExpr::Undefined) => false,
+            Expr::Literal(LiteralExpr::Number(..)) => false,
+            Expr::Literal(LiteralExpr::Regex(..)) => false,
+            Expr::Literal(LiteralExpr::String(..)) => false,
+            Expr::Object(ObjectLiteral(object)) => object.iter().any(|(kind, expr)| {
+                if let ObjectMemberKind::Dynamic(dynamic) = kind {
+                    if self.expr_has_side_effects(dynamic) {
+                        return true;
+                    }
                 };
-                right.fold(cx, can_remove);
+                self.expr_has_side_effects(expr)
+            }),
+            Expr::Postfix((_, expr)) => self.expr_has_side_effects(expr),
+            Expr::Prefix((_, expr)) => self.expr_has_side_effects(expr),
+            Expr::PropertyAccess(PropertyAccessExpr { target, property, .. }) => {
+                self.expr_has_side_effects(target) || self.expr_has_side_effects(property)
             }
-            Sequence((left, right)) => {
-                left.fold(cx, can_remove);
-                right.fold(cx, can_remove);
-            }
-            PropertyAccess(PropertyAccessExpr { property, target, .. }) => {
-                property.fold(cx, can_remove);
-                target.fold(cx, can_remove);
-            }
-            Postfix((_, expr)) | Prefix((_, expr)) => {
-                expr.fold(cx, can_remove);
-            }
-            Function(FunctionDeclaration { statements, .. }) => {
-                statements.fold(cx, can_remove);
-            }
-            Array(ArrayLiteral(lit)) => {
-                lit.fold(cx, can_remove);
-            }
-            Object(ObjectLiteral(lit)) => {
-                let it = lit.iter_mut().map(|(_, expr)| expr);
-
-                for expr in it {
-                    expr.fold(cx, can_remove);
-                }
-            }
-            Conditional(ConditionalExpr { condition, el, then }) => {
-                condition.fold(cx, can_remove);
-                el.fold(cx, can_remove);
-                then.fold(cx, can_remove);
-
-                match condition.is_truthy() {
-                    Some(true) => {
-                        *self = (**then).clone();
-                    }
-                    Some(false) => {
-                        *self = (**el).clone();
-                    }
-                    _ => {}
-                };
-            }
-            Call(FunctionCall { target, arguments, .. }) => {
-                target.fold(cx, can_remove);
-                arguments.fold(cx, can_remove);
-            }
-            Literal(..) => {}
-            Empty => {}
-            Compiled(..) => {}
+            Expr::Sequence((left, right)) => self.expr_has_side_effects(left) || self.expr_has_side_effects(right),
+            Expr::Unary(UnaryExpr { expr, .. }) => self.expr_has_side_effects(expr),
+            _ => true,
         }
-    }
-
-    fn has_side_effect(&self, cx: &mut OptimizerContext<'a>) -> bool {
-        match &self {
-            Expr::Binary(expr) => expr.has_side_effect(cx),
-            Expr::Literal(expr) => expr.has_side_effect(cx),
-            Expr::Grouping(GroupingExpr(exprs)) => exprs.has_side_effect(cx),
-            _ => true, // assume it does to prevent dead code elimination
-        }
-    }
-}
-
-impl<'a, T: Eval<'a>> Eval<'a> for Option<T> {
-    fn fold(&mut self, cx: &mut OptimizerContext<'a>, can_remove: bool) {
-        if let Some(expr) = self {
-            expr.fold(cx, can_remove);
-        }
-    }
-
-    fn has_side_effect(&self, cx: &mut OptimizerContext<'a>) -> bool {
-        self.as_ref().map_or(false, |expr| expr.has_side_effect(cx))
-    }
-}
-
-impl<'a> Eval<'a> for Statement<'a> {
-    fn fold(&mut self, cx: &mut OptimizerContext<'a>, can_remove: bool) {
-        let enters_scope = self.enters_scope();
-        if enters_scope {
-            cx.scope_mut().enter();
-        }
-
-        match self {
-            Self::Expression(expr) => expr.fold(cx, can_remove),
-            Self::Variable(VariableDeclarations(declarations)) => {
-                for VariableDeclaration { value, binding } in declarations {
-                    value.fold(cx, can_remove);
-
-                    if let VariableDeclarationName::Identifier(name) = binding.name {
-                        let ty = match value {
-                            // Some(expr) => infer_type(cx.scope_mut(), expr),
-                            Some(_expr) => None,
-                            None => Some(CompileValueType::Uninit),
-                        };
-
-                        // TODO: can't really do anything with the error here
-                        // once we have logging, log the error
-                        let _ = cx.scope_mut().add_local(name, binding.kind, ty);
-                    }
-                }
-            }
-            Self::Return(ReturnStatement(expr)) => expr.fold(cx, can_remove),
-            Self::Block(BlockStatement(expr)) => expr.fold(cx, can_remove),
-            Self::Function(FunctionDeclaration { statements, .. }) => statements.fold(cx, can_remove),
-            Self::Loop(r#loop) => {
-                let (init, condition, finalizer, body) = match r#loop {
-                    Loop::For(ForLoop {
-                        condition,
-                        body,
-                        finalizer,
-                        init,
-                    }) => (init.as_mut(), condition.as_mut(), finalizer.as_mut(), body),
-                    Loop::While(WhileLoop { condition, body }) => (None, Some(condition), None, body),
-                    Loop::ForOf(ForOfLoop { body, expr, .. }) => (None, Some(expr), None, body),
-                    Loop::ForIn(ForInLoop { body, expr, .. }) => (None, Some(expr), None, body),
-                };
-
-                if let Some(init) = init {
-                    init.fold(cx, can_remove);
-                }
-
-                if let Some(finalizer) = finalizer {
-                    finalizer.fold(cx, can_remove);
-                }
-
-                body.fold(cx, can_remove);
-
-                if let Some(condition) = condition {
-                    condition.fold(cx, can_remove);
-
-                    // if the condition is known to always be false,
-                    // we can remove the loop entirely
-                    if let Some(false) = condition.is_truthy() {
-                        *self = Statement::Empty;
-                    }
-                }
-            }
-            Self::If(IfStatement {
-                condition,
-                then,
-                branches,
-                el,
-            }) => {
-                condition.fold(cx, can_remove);
-                then.fold(cx, can_remove);
-
-                let mut branches = branches.borrow_mut();
-                for branch in branches.iter_mut() {
-                    branch.condition.fold(cx, can_remove);
-                    branch.then.fold(cx, can_remove);
-                }
-                drop(branches);
-
-                if let Some(el) = el {
-                    el.fold(cx, can_remove);
-                }
-
-                match condition.is_truthy() {
-                    Some(true) => {
-                        // if the condition is always true, replace the if statement with the `then` branch statements
-                        *self = (**then).clone();
-                    }
-                    Some(false) => {
-                        // if the condition is always false, replace it with the else branch
-                        // or if there is no else branch, remove it
-                        *self = match el {
-                            Some(el) => (**el).clone(),
-                            None => Statement::Empty,
-                        };
-                    }
-                    _ => {}
-                };
-            }
-            Self::Try(TryCatch {
-                try_,
-                catch: Catch { body, .. },
-                finally,
-            }) => {
-                try_.fold(cx, can_remove);
-                body.fold(cx, can_remove);
-                if let Some(finally) = finally {
-                    finally.fold(cx, can_remove);
-                }
-            }
-            Statement::Throw(expr) => expr.fold(cx, can_remove),
-            Statement::Import(..) => {}
-            Statement::Export(export) => match export {
-                ExportKind::Default(expr) => expr.fold(cx, can_remove),
-                _ => {}
-            },
-            Statement::Class(..) => {}
-            Statement::Continue => {}
-            Statement::Break => {}
-            Statement::Debugger => {}
-            Statement::Empty => {}
-            Statement::Switch(SwitchStatement { cases, default, expr }) => {
-                expr.fold(cx, can_remove);
-
-                if let Some(default) = default {
-                    default.fold(cx, can_remove);
-                }
-
-                for case in cases {
-                    case.body.fold(cx, can_remove);
-                    case.value.fold(cx, can_remove);
-                }
-            }
-        };
-
-        if can_remove && !self.has_side_effect(cx) {
-            *self = Statement::Empty;
-        }
-
-        if enters_scope {
-            cx.scope_mut().exit();
-        }
-    }
-
-    fn has_side_effect(&self, cx: &mut OptimizerContext<'a>) -> bool {
-        match self {
-            Self::Expression(expr) => expr.has_side_effect(cx),
-            _ => true, // assume it does to prevent dead code elimination
-        }
-    }
-}
-
-impl<'a> Eval<'a> for [Statement<'a>] {
-    fn fold(&mut self, cx: &mut OptimizerContext<'a>, can_remove: bool) {
-        let len = self.len();
-        for (id, stmt) in self.iter_mut().enumerate() {
-            let is_last = id == len - 1;
-
-            stmt.fold(cx, can_remove && !is_last);
-        }
-    }
-
-    fn has_side_effect(&self, cx: &mut OptimizerContext<'a>) -> bool {
-        self.iter().any(|e| e.has_side_effect(cx))
-    }
-}
-
-impl<'a> Eval<'a> for [Expr<'a>] {
-    fn fold(&mut self, cx: &mut OptimizerContext<'a>, can_remove: bool) {
-        for stmt in self.iter_mut() {
-            stmt.fold(cx, can_remove);
-        }
-    }
-
-    fn has_side_effect(&self, cx: &mut OptimizerContext<'a>) -> bool {
-        self.iter().any(|e| e.has_side_effect(cx))
     }
 }

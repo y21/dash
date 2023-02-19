@@ -2,6 +2,7 @@ use std::ops::Deref;
 use std::ops::DerefMut;
 use std::ops::Index;
 use std::ops::IndexMut;
+use std::slice::IterMut;
 
 #[derive(Debug, Clone, Copy)]
 #[repr(transparent)]
@@ -70,6 +71,10 @@ impl<T> Tree<T> {
         let id = self.pool.len();
         self.pool.push(TreeNode { value, parent });
         TreeToken(id)
+    }
+
+    pub fn iter_mut<'a>(&'a mut self) -> IterMut<'a, TreeNode<T>> {
+        self.pool.iter_mut()
     }
 }
 

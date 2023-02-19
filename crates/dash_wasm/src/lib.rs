@@ -1,8 +1,10 @@
 use dash_compiler::FunctionCompiler;
 use dash_middle::compiler::StaticImportKind;
+use dash_middle::parser::statement::FuncId;
 use dash_middle::parser::statement::VariableDeclarationName;
-use dash_optimizer::context::OptimizerContext;
+use dash_optimizer::consteval::ConstFunctionEvalCtx;
 use dash_optimizer::type_infer::TypeInferCtx;
+use dash_optimizer::OptLevel;
 use dash_parser::Parser;
 use dash_vm::eval::EvalError;
 use dash_vm::frame::Frame;
@@ -13,8 +15,6 @@ use dash_vm::value::Value;
 use dash_vm::Vm;
 use std::fmt::Write;
 use wasm_bindgen::prelude::*;
-
-use crate::externalvm::OptLevel;
 
 mod externalfunction;
 mod externalvm;
@@ -81,7 +81,7 @@ pub fn fmt_value(value: Value, vm: &mut Vm) -> String {
 pub fn debug(s: &str, o: OptLevel, em: Emit) -> String {
     let parser = Parser::from_str(s).unwrap();
     let (mut ast, counter) = parser.parse_all().unwrap();
-    let tcx = TypeInferCtx::new(counter);
+    let mut tcx = TypeInferCtx::new(counter);
 
     match em {
         Emit::Bytecode => {
@@ -89,7 +89,8 @@ pub fn debug(s: &str, o: OptLevel, em: Emit) -> String {
             dash_decompiler::decompile(&cmp.cp, &cmp.instructions).unwrap_or_else(|e| e.to_string())
         }
         Emit::JavaScript => {
-            dash_optimizer::optimize_ast(&mut ast, o.into());
+            let mut cfx = ConstFunctionEvalCtx::new(&mut tcx, o.into());
+            cfx.visit_many_statements(&mut ast, FuncId::ROOT);
             let mut output = String::new();
             for node in ast {
                 let _ = write!(output, "{node}\n");
@@ -127,16 +128,18 @@ pub fn compile(s: &str, o: OptLevel) -> Result<js_sys::Uint8Array, String> {
 
 #[wasm_bindgen]
 pub fn infer(s: &str) -> Result<JsValue, String> {
-    let mut ast = Parser::from_str(s)
+    let (mut ast, counter) = Parser::from_str(s)
         .map_err(|err| format!("{err:?}"))?
         .parse_all()
         .map_err(|err| format!("{err:?}"))?;
 
-    let mut cx = OptimizerContext::new();
-    // ast.fold(&mut cx, false);
+    let mut tcx = TypeInferCtx::new(counter);
+
+    let mut cfx = ConstFunctionEvalCtx::new(&mut tcx, Default::Default());
+    cfx.visit_many_statements(&mut ast, FuncId::ROOT);
     let mut out = String::new();
 
-    for local in cx.scope_mut().locals() {
+    for local in tcx.scope_mut().locals() {
         if let VariableDeclarationName::Identifier(ident) = local.binding().name {
             let ty = local.inferred_type().borrow();
             let _ = write!(out, "{ident}: {ty:?} \n");
