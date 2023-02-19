@@ -341,11 +341,15 @@ impl<'a> TypeInferCtx<'a> {
 
     pub fn visit_unary_expression(
         &mut self,
-        UnaryExpr { expr, .. }: &UnaryExpr<'a>,
+        UnaryExpr { expr, operator }: &UnaryExpr<'a>,
         func_id: FuncId,
     ) -> Option<CompileValueType> {
         self.visit(expr, func_id);
-        Some(CompileValueType::Number)
+        match operator {
+            TokenType::Plus | TokenType::Minus => Some(CompileValueType::Number),
+            TokenType::Typeof => Some(CompileValueType::String),
+            _ => None,
+        }
     }
 
     pub fn visit_assignment_expression(
