@@ -1109,16 +1109,82 @@ mod handlers {
         Ok(None)
     }
 
+    fn assign_to_external(handle: &Handle<dyn Object>, value: Value) {
+        unsafe {
+            let value = value.into_boxed();
+            // NOTE: Make sure this does not alias!
+            (*handle.as_ptr()).value = value;
+        }
+    }
+
     pub fn storelocalext(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
         let id = cx.fetch_and_inc_ip();
-        let value = cx.pop_stack();
+        let kind = AssignKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
 
-        let external = cx.get_external(id.into()).as_ptr();
-        // TODO: make sure that nothing really aliases this &mut
-        unsafe { (*external).value = value.clone().into_boxed() };
+        macro_rules! op {
+            ($op:expr) => {{
+                let value = Value::External(cx.get_external(id.into()).clone()).unbox_external();
+                let right = cx.pop_stack();
+                let mut scope = cx.scope();
+                let res = $op(&value, &right, &mut scope)?;
+                assign_to_external(scope.get_external(id.into()).unwrap(), res.clone());
+                scope.try_push_stack(res)?;
+            }};
+        }
 
-        cx.try_push_stack(value)?;
+        macro_rules! prefix {
+            ($op:expr) => {{
+                let value = Value::External(cx.get_external(id.into()).clone()).unbox_external();
+                let right = Value::number(1.0);
+                let mut scope = cx.scope();
+                let res = $op(&value, &right, &mut scope)?;
+                assign_to_external(scope.get_external(id.into()).unwrap(), res.clone());
+                scope.try_push_stack(res)?;
+            }};
+        }
+
+        macro_rules! postfix {
+            ($op:expr) => {{
+                let value = Value::External(cx.get_external(id.into()).clone()).unbox_external();
+                let right = Value::number(1.0);
+                let mut scope = cx.scope();
+                let res = $op(&value, &right, &mut scope)?;
+                assign_to_external(scope.get_external(id.into()).unwrap(), res);
+                scope.try_push_stack(value)?;
+            }};
+        }
+
+        match kind {
+            AssignKind::Assignment => {
+                let value = cx.pop_stack();
+                assign_to_external(cx.get_external(id.into()), value.clone());
+                cx.try_push_stack(value)?;
+            }
+            AssignKind::AddAssignment => op!(Value::add),
+            AssignKind::SubAssignment => op!(Value::sub),
+            AssignKind::MulAssignment => op!(Value::mul),
+            AssignKind::DivAssignment => op!(Value::div),
+            AssignKind::RemAssignment => op!(Value::rem),
+            AssignKind::PowAssignment => op!(Value::pow),
+            AssignKind::ShlAssignment => op!(Value::bitshl),
+            AssignKind::ShrAssignment => op!(Value::bitshr),
+            AssignKind::UshrAssignment => op!(Value::bitushr),
+            AssignKind::BitAndAssignment => op!(Value::bitand),
+            AssignKind::BitOrAssignment => op!(Value::bitor),
+            AssignKind::BitXorAssignment => op!(Value::bitxor),
+            AssignKind::PrefixIncrement => prefix!(Value::add),
+            AssignKind::PostfixIncrement => postfix!(Value::add),
+            AssignKind::PrefixDecrement => prefix!(Value::sub),
+            AssignKind::PostfixDecrement => postfix!(Value::sub),
+        }
+
         Ok(None)
+        // let external = cx.get_external(id.into()).as_ptr();
+        // // TODO: make sure that nothing really aliases this &mut
+        // unsafe { (*external).value = value.clone().into_boxed() };
+
+        // cx.try_push_stack(value)?;
+        // Ok(None)
     }
 
     pub fn try_block(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
