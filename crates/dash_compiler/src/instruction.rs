@@ -107,18 +107,20 @@ impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
         Ok(())
     }
 
-    pub fn build_global_store(&mut self, ident: &str) -> Result<(), LimitExceededError> {
+    pub fn build_global_store(&mut self, kind: AssignKind, ident: &str) -> Result<(), LimitExceededError> {
         let id = self.current_function_mut().cp.add(Constant::Identifier(ident.into()))?;
         self.write_wide_instr(Instruction::StoreGlobal, Instruction::StoreGlobalW, id);
+        self.write(kind as u8);
         Ok(())
     }
 
-    pub fn build_local_store(&mut self, id: u16, is_extern: bool) {
+    pub fn build_local_store(&mut self, kind: AssignKind, id: u16, is_extern: bool) {
         let (thin, wide) = is_extern
             .then(|| (Instruction::StoreLocalExt, Instruction::StoreLocalExtW))
             .unwrap_or((Instruction::StoreLocal, Instruction::StoreLocalW));
 
         self.write_wide_instr(thin, wide, id);
+        self.write(kind as u8);
     }
 
     pub fn build_call(&mut self, meta: FunctionCallMetadata) {

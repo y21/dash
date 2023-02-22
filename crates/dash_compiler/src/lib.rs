@@ -364,7 +364,7 @@ impl<'a> FunctionCompiler<'a> {
             ForEachLoopKind::ForOf => ib.build_symbol_iterator(),
             ForEachLoopKind::ForIn => ib.build_for_in_iterator(),
         }
-        ib.build_local_store(for_of_iter_id, false);
+        ib.build_local_store(AssignKind::Assignment, for_of_iter_id, false);
         ib.build_pop();
 
         // Prepend variable assignment to body
@@ -757,7 +757,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
                     if let Some(expr) = value {
                         ib.accept_expr(expr)?;
-                        ib.build_local_store(id, false);
+                        ib.build_local_store(AssignKind::Assignment, id, false);
                         ib.build_pop();
                     }
                 }
@@ -892,7 +892,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
         ib.visit_function_expr(fun)?;
         if let Some(var_id) = var_id {
-            ib.build_local_store(var_id, false);
+            ib.build_local_store(AssignKind::Assignment, var_id, false);
         }
         ib.build_pop();
         Ok(())
@@ -936,58 +936,52 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                         }
 
                         macro_rules! assign {
-                            ($e:expr) => {{
-                                ib.build_local_load(id, is_extern);
+                            ($kind:expr) => {{
                                 ib.accept_expr(*right)?;
-                                $e;
+                                ib.build_local_store($kind, id, is_extern);
                             }};
                         }
 
                         match operator {
-                            TokenType::Assignment => ib.accept_expr(*right)?,
-                            TokenType::AdditionAssignment => assign!(ib.build_add()),
-                            TokenType::SubtractionAssignment => assign!(ib.build_sub()),
-                            TokenType::MultiplicationAssignment => assign!(ib.build_mul()),
-                            TokenType::DivisionAssignment => assign!(ib.build_div()),
-                            TokenType::RemainderAssignment => assign!(ib.build_rem()),
-                            TokenType::ExponentiationAssignment => assign!(ib.build_pow()),
-                            TokenType::LeftShiftAssignment => assign!(ib.build_bitshl()),
-                            TokenType::RightShiftAssignment => assign!(ib.build_bitshr()),
-                            TokenType::UnsignedRightShiftAssignment => assign!(ib.build_bitushr()),
-                            TokenType::BitwiseAndAssignment => assign!(ib.build_bitand()),
-                            TokenType::BitwiseOrAssignment => assign!(ib.build_bitor()),
-                            TokenType::BitwiseXorAssignment => assign!(ib.build_bitxor()),
+                            TokenType::Assignment => assign!(AssignKind::Assignment),
+                            TokenType::AdditionAssignment => assign!(AssignKind::AddAssignment),
+                            TokenType::SubtractionAssignment => assign!(AssignKind::SubAssignment),
+                            TokenType::MultiplicationAssignment => assign!(AssignKind::MulAssignment),
+                            TokenType::DivisionAssignment => assign!(AssignKind::DivAssignment),
+                            TokenType::RemainderAssignment => assign!(AssignKind::RemAssignment),
+                            TokenType::ExponentiationAssignment => assign!(AssignKind::PowAssignment),
+                            TokenType::LeftShiftAssignment => assign!(AssignKind::ShlAssignment),
+                            TokenType::RightShiftAssignment => assign!(AssignKind::ShrAssignment),
+                            TokenType::UnsignedRightShiftAssignment => assign!(AssignKind::UshrAssignment),
+                            TokenType::BitwiseAndAssignment => assign!(AssignKind::BitAndAssignment),
+                            TokenType::BitwiseOrAssignment => assign!(AssignKind::BitOrAssignment),
+                            TokenType::BitwiseXorAssignment => assign!(AssignKind::BitXorAssignment),
                             _ => unimplementedc!("Unknown operator"),
                         }
-
-                        ib.build_local_store(id, is_extern);
                     } else {
                         macro_rules! assign {
-                            ($e:expr) => {{
-                                ib.build_global_load(&ident)?;
+                            ($kind:expr) => {{
                                 ib.accept_expr(*right)?;
-                                $e;
+                                ib.build_global_store($kind, &ident)?;
                             }};
                         }
 
                         match operator {
-                            TokenType::Assignment => ib.accept_expr(*right)?,
-                            TokenType::AdditionAssignment => assign!(ib.build_add()),
-                            TokenType::SubtractionAssignment => assign!(ib.build_sub()),
-                            TokenType::MultiplicationAssignment => assign!(ib.build_mul()),
-                            TokenType::DivisionAssignment => assign!(ib.build_div()),
-                            TokenType::RemainderAssignment => assign!(ib.build_rem()),
-                            TokenType::ExponentiationAssignment => assign!(ib.build_pow()),
-                            TokenType::LeftShiftAssignment => assign!(ib.build_bitshl()),
-                            TokenType::RightShiftAssignment => assign!(ib.build_bitshr()),
-                            TokenType::UnsignedRightShiftAssignment => assign!(ib.build_bitushr()),
-                            TokenType::BitwiseAndAssignment => assign!(ib.build_bitand()),
-                            TokenType::BitwiseOrAssignment => assign!(ib.build_bitor()),
-                            TokenType::BitwiseXorAssignment => assign!(ib.build_bitxor()),
+                            TokenType::Assignment => assign!(AssignKind::Assignment),
+                            TokenType::AdditionAssignment => assign!(AssignKind::AddAssignment),
+                            TokenType::SubtractionAssignment => assign!(AssignKind::SubAssignment),
+                            TokenType::MultiplicationAssignment => assign!(AssignKind::MulAssignment),
+                            TokenType::DivisionAssignment => assign!(AssignKind::DivAssignment),
+                            TokenType::RemainderAssignment => assign!(AssignKind::RemAssignment),
+                            TokenType::ExponentiationAssignment => assign!(AssignKind::PowAssignment),
+                            TokenType::LeftShiftAssignment => assign!(AssignKind::ShlAssignment),
+                            TokenType::RightShiftAssignment => assign!(AssignKind::ShrAssignment),
+                            TokenType::UnsignedRightShiftAssignment => assign!(AssignKind::UshrAssignment),
+                            TokenType::BitwiseAndAssignment => assign!(AssignKind::BitAndAssignment),
+                            TokenType::BitwiseOrAssignment => assign!(AssignKind::BitOrAssignment),
+                            TokenType::BitwiseXorAssignment => assign!(AssignKind::BitXorAssignment),
                             _ => unimplementedc!("Unknown operator"),
                         }
-
-                        ib.build_global_store(&ident)?;
                     }
                 }
                 Expr::PropertyAccess(prop) => {
@@ -1092,7 +1086,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             },
             AssignmentTarget::LocalId(id) => {
                 ib.accept_expr(*right)?;
-                ib.build_local_store(id, false);
+                ib.build_local_store(AssignKind::Assignment, id, false);
             }
         }
 
@@ -1280,15 +1274,15 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
     fn visit_postfix_expr(&mut self, (tt, expr): Postfix<'a>) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
 
-        match &*expr {
+        match *expr {
             Expr::Literal(lit) => {
                 let ident = lit.to_identifier();
 
                 if let Some((id, loc, is_extern)) = ib.find_local(&ident) {
                     let ty = loc.inferred_type().borrow();
 
+                    // Specialize guaranteed local number increment
                     if let (Ok(id), Some(CompileValueType::Number), false) = (u8::try_from(id), &*ty, is_extern) {
-                        // SPEC
                         match tt {
                             TokenType::Increment => ib.build_postfix_inc_local_num(id),
                             TokenType::Decrement => ib.build_postfix_dec_local_num(id),
@@ -1297,25 +1291,48 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                         return Ok(());
                     }
 
-                    ib.build_local_load(id, is_extern);
+                    match tt {
+                        TokenType::Increment => ib.build_local_store(AssignKind::PostfixIncrement, id, is_extern),
+                        TokenType::Decrement => ib.build_local_store(AssignKind::PostfixDecrement, id, is_extern),
+                        _ => unreachable!("Token never emitted"),
+                    }
                 } else {
-                    ib.build_global_load(&ident)?;
+                    match tt {
+                        TokenType::Increment => ib.build_global_store(AssignKind::PostfixIncrement, &ident)?,
+                        TokenType::Decrement => ib.build_global_store(AssignKind::PostfixDecrement, &ident)?,
+                        _ => unreachable!("Token never emitted"),
+                    }
                 }
             }
-            Expr::PropertyAccess(prop) => ib.visit_property_access_expr(prop.clone(), false)?,
+            Expr::PropertyAccess(prop) => {
+                ib.accept_expr(*prop.target)?;
+
+                match (*prop.property, prop.computed) {
+                    (Expr::Literal(lit), false) => {
+                        let ident = lit.to_identifier();
+                        match tt {
+                            TokenType::Increment => {
+                                ib.build_static_prop_assign(AssignKind::PostfixIncrement, &ident)?
+                            }
+                            TokenType::Decrement => {
+                                ib.build_static_prop_assign(AssignKind::PostfixDecrement, &ident)?
+                            }
+                            _ => unreachable!("Token never emitted"),
+                        }
+                    }
+                    (prop, true) => {
+                        ib.accept_expr(prop)?;
+                        match tt {
+                            TokenType::Increment => ib.build_dynamic_prop_assign(AssignKind::PostfixIncrement),
+                            TokenType::Decrement => ib.build_dynamic_prop_assign(AssignKind::PostfixDecrement),
+                            _ => unreachable!("Token never emitted"),
+                        }
+                    }
+                    _ => unreachable!("Static assignment was not a literal"),
+                }
+            }
             _ => unimplementedc!("Non-identifier postfix expression"),
         }
-
-        ib.visit_assignment_expression(AssignmentExpr::new(
-            AssignmentTarget::Expr(expr),
-            Expr::number_literal(1.0),
-            match tt {
-                TokenType::Increment => TokenType::AdditionAssignment,
-                TokenType::Decrement => TokenType::SubtractionAssignment,
-                _ => unreachable!("Token never emitted"),
-            },
-        ))?;
-        ib.build_pop();
 
         Ok(())
     }
@@ -1323,15 +1340,15 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
     fn visit_prefix_expr(&mut self, (tt, expr): Postfix<'a>) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
 
-        match &*expr {
+        match *expr {
             Expr::Literal(lit) => {
                 let ident = lit.to_identifier();
 
                 if let Some((id, loc, is_extern)) = ib.find_local(&ident) {
                     let ty = loc.inferred_type().borrow();
 
+                    // Specialize guaranteed local number increment
                     if let (Ok(id), Some(CompileValueType::Number), false) = (u8::try_from(id), &*ty, is_extern) {
-                        // SPEC
                         match tt {
                             TokenType::Increment => ib.build_prefix_inc_local_num(id),
                             TokenType::Decrement => ib.build_prefix_dec_local_num(id),
@@ -1340,25 +1357,44 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                         return Ok(());
                     }
 
-                    ib.build_local_load(id, is_extern);
+                    match tt {
+                        TokenType::Increment => ib.build_local_store(AssignKind::PrefixIncrement, id, is_extern),
+                        TokenType::Decrement => ib.build_local_store(AssignKind::PrefixDecrement, id, is_extern),
+                        _ => unreachable!("Token never emitted"),
+                    }
                 } else {
-                    ib.build_global_load(&ident)?;
+                    match tt {
+                        TokenType::Increment => ib.build_global_store(AssignKind::PrefixIncrement, &ident)?,
+                        TokenType::Decrement => ib.build_global_store(AssignKind::PrefixDecrement, &ident)?,
+                        _ => unreachable!("Token never emitted"),
+                    }
                 }
             }
-            Expr::PropertyAccess(prop) => ib.visit_property_access_expr(prop.clone(), false)?,
+            Expr::PropertyAccess(prop) => {
+                ib.accept_expr(*prop.target)?;
+
+                match (*prop.property, prop.computed) {
+                    (Expr::Literal(lit), false) => {
+                        let ident = lit.to_identifier();
+                        match tt {
+                            TokenType::Increment => ib.build_static_prop_assign(AssignKind::PrefixIncrement, &ident)?,
+                            TokenType::Decrement => ib.build_static_prop_assign(AssignKind::PrefixDecrement, &ident)?,
+                            _ => unreachable!("Token never emitted"),
+                        }
+                    }
+                    (prop, true) => {
+                        ib.accept_expr(prop)?;
+                        match tt {
+                            TokenType::Increment => ib.build_dynamic_prop_assign(AssignKind::PrefixIncrement),
+                            TokenType::Decrement => ib.build_dynamic_prop_assign(AssignKind::PrefixDecrement),
+                            _ => unreachable!("Token never emitted"),
+                        }
+                    }
+                    _ => unreachable!("Static assignment was not a literal"),
+                }
+            }
             _ => unimplementedc!("Non-identifier postfix expression"),
         }
-
-        ib.visit_assignment_expression(AssignmentExpr::new(
-            AssignmentTarget::Expr(expr),
-            Expr::number_literal(1.0),
-            match tt {
-                TokenType::Increment => TokenType::AdditionAssignment,
-                TokenType::Decrement => TokenType::SubtractionAssignment,
-                _ => unreachable!("Token never emitted"),
-            },
-        ))?;
-        ib.build_pop();
 
         Ok(())
     }
@@ -1404,7 +1440,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 sub_ib.build_jmp(Label::FinishParamDefaultValueInit, true);
                 sub_ib.add_local_label(Label::InitParamWithDefaultValue);
                 sub_ib.accept_expr(default.clone())?;
-                sub_ib.build_local_store(id, false);
+                sub_ib.build_local_store(AssignKind::Assignment, id, false);
 
                 sub_ib.add_local_label(Label::FinishParamDefaultValueInit);
             }

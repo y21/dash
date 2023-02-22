@@ -394,15 +394,91 @@ mod handlers {
     pub fn storeglobal(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
         let id = cx.fetch_and_inc_ip();
         let name = cx.identifier_constant(id.into());
-        let value = cx.pop_stack();
+        let kind = AssignKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
 
-        let mut scope = cx.scope();
-        scope.global.clone().set_property(
-            &mut scope,
-            ToString::to_string(&name).into(),
-            PropertyValue::static_default(value.clone()),
-        )?;
-        scope.try_push_stack(value)?;
+        macro_rules! op {
+            ($op:expr) => {{
+                let right = cx.pop_stack();
+                let mut scope = cx.scope();
+                let value = scope
+                    .global
+                    .clone()
+                    .get_property(&mut scope, PropertyKey::String(Cow::Borrowed(&name)))?;
+                let res = $op(&value, &right, &mut scope)?;
+                scope.global.clone().set_property(
+                    &mut scope,
+                    ToString::to_string(&name).into(),
+                    PropertyValue::static_default(res.clone()),
+                )?;
+                scope.try_push_stack(res)?;
+            }};
+        }
+
+        macro_rules! prefix {
+            ($op:expr) => {{
+                let mut scope = cx.scope();
+                let value = scope
+                    .global
+                    .clone()
+                    .get_property(&mut scope, PropertyKey::String(Cow::Borrowed(&name)))?;
+                let right = Value::number(1.0);
+                let res = $op(&value, &right, &mut scope)?;
+                scope.global.clone().set_property(
+                    &mut scope,
+                    ToString::to_string(&name).into(),
+                    PropertyValue::static_default(res.clone()),
+                )?;
+                scope.try_push_stack(res)?;
+            }};
+        }
+
+        macro_rules! postfix {
+            ($op:expr) => {{
+                let mut scope = cx.scope();
+                let value = scope
+                    .global
+                    .clone()
+                    .get_property(&mut scope, PropertyKey::String(Cow::Borrowed(&name)))?;
+                let right = Value::number(1.0);
+                let res = $op(&value, &right, &mut scope)?;
+                scope.global.clone().set_property(
+                    &mut scope,
+                    ToString::to_string(&name).into(),
+                    PropertyValue::static_default(res),
+                )?;
+                scope.try_push_stack(value)?;
+            }};
+        }
+
+        match kind {
+            AssignKind::Assignment => {
+                let value = cx.pop_stack();
+
+                let mut scope = cx.scope();
+                scope.global.clone().set_property(
+                    &mut scope,
+                    ToString::to_string(&name).into(),
+                    PropertyValue::static_default(value.clone()),
+                )?;
+                scope.try_push_stack(value)?;
+            }
+            AssignKind::AddAssignment => op!(Value::add),
+            AssignKind::SubAssignment => op!(Value::sub),
+            AssignKind::MulAssignment => op!(Value::mul),
+            AssignKind::DivAssignment => op!(Value::div),
+            AssignKind::RemAssignment => op!(Value::rem),
+            AssignKind::PowAssignment => op!(Value::pow),
+            AssignKind::ShlAssignment => op!(Value::bitshl),
+            AssignKind::ShrAssignment => op!(Value::bitshr),
+            AssignKind::UshrAssignment => op!(Value::bitushr),
+            AssignKind::BitAndAssignment => op!(Value::bitand),
+            AssignKind::BitOrAssignment => op!(Value::bitor),
+            AssignKind::BitXorAssignment => op!(Value::bitxor),
+            AssignKind::PrefixIncrement => prefix!(Value::add),
+            AssignKind::PostfixIncrement => postfix!(Value::add),
+            AssignKind::PrefixDecrement => prefix!(Value::sub),
+            AssignKind::PostfixDecrement => postfix!(Value::sub),
+        }
         Ok(None)
     }
 
@@ -661,10 +737,64 @@ mod handlers {
 
     pub fn storelocal(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
         let id = cx.fetch_and_inc_ip() as usize;
-        let value = cx.pop_stack();
+        let kind = AssignKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
 
-        cx.set_local(id, value.clone());
-        cx.try_push_stack(value)?;
+        macro_rules! op {
+            ($op:expr) => {{
+                let value = cx.get_local(id);
+                let right = cx.pop_stack();
+                let mut scope = cx.scope();
+                let res = $op(&value, &right, &mut scope)?;
+                scope.set_local(id, res.clone());
+                scope.try_push_stack(res)?;
+            }};
+        }
+
+        macro_rules! prefix {
+            ($op:expr) => {{
+                let value = cx.get_local(id);
+                let mut scope = cx.scope();
+                let one = Value::number(1.0);
+                let res = $op(&value, &one, &mut scope)?;
+                scope.set_local(id, res.clone());
+                scope.try_push_stack(res)?;
+            }};
+        }
+
+        macro_rules! postfix {
+            ($op:expr) => {{
+                let value = cx.get_local(id);
+                let mut scope = cx.scope();
+                let one = Value::number(1.0);
+                let res = $op(&value, &one, &mut scope)?;
+                scope.set_local(id, res);
+                scope.try_push_stack(value)?;
+            }};
+        }
+
+        match kind {
+            AssignKind::Assignment => {
+                let value = cx.pop_stack();
+                cx.set_local(id, value.clone());
+                cx.try_push_stack(value)?;
+            }
+            AssignKind::AddAssignment => op!(Value::add),
+            AssignKind::SubAssignment => op!(Value::sub),
+            AssignKind::MulAssignment => op!(Value::mul),
+            AssignKind::DivAssignment => op!(Value::div),
+            AssignKind::RemAssignment => op!(Value::rem),
+            AssignKind::PowAssignment => op!(Value::pow),
+            AssignKind::ShlAssignment => op!(Value::bitshl),
+            AssignKind::ShrAssignment => op!(Value::bitshr),
+            AssignKind::UshrAssignment => op!(Value::bitushr),
+            AssignKind::BitAndAssignment => op!(Value::bitand),
+            AssignKind::BitOrAssignment => op!(Value::bitor),
+            AssignKind::BitXorAssignment => op!(Value::bitxor),
+            AssignKind::PrefixIncrement => prefix!(Value::add),
+            AssignKind::PostfixIncrement => postfix!(Value::add),
+            AssignKind::PrefixDecrement => prefix!(Value::sub),
+            AssignKind::PostfixDecrement => postfix!(Value::sub),
+        }
 
         Ok(None)
     }
@@ -788,19 +918,67 @@ mod handlers {
         let id = cx.fetchw_and_inc_ip();
         let key = cx.identifier_constant(id.into());
 
-        let (target, value) = cx.pop_stack2();
-
-        let mut scope = cx.scope();
-
         macro_rules! op {
             ($op:expr) => {{
-                let p = target.get_property(&mut scope, ToString::to_string(&key).into())?;
-                $op(&p, &value, &mut scope)?
+                let (target, value) = cx.pop_stack2();
+
+                let mut scope = cx.scope();
+
+                let p = target.get_property(&mut scope, PropertyKey::String(Cow::Borrowed(&key)))?;
+                let res = $op(&p, &value, &mut scope)?;
+
+                target.set_property(
+                    &mut scope,
+                    ToString::to_string(&key).into(),
+                    PropertyValue::static_default(res.clone()),
+                )?;
+                scope.try_push_stack(res)?;
             }};
         }
 
-        let value = match kind {
-            AssignKind::Assignment => value,
+        macro_rules! postfix {
+            ($op:expr) => {{
+                let target = cx.pop_stack();
+                let mut scope = cx.scope();
+                let prop = target.get_property(&mut scope, PropertyKey::String(Cow::Borrowed(&key)))?;
+                let one = Value::number(1.0);
+                let res = $op(&prop, &one, &mut scope)?;
+                target.set_property(
+                    &mut scope,
+                    ToString::to_string(&key).into(),
+                    PropertyValue::static_default(res),
+                )?;
+                scope.try_push_stack(prop)?;
+            }};
+        }
+
+        macro_rules! prefix {
+            ($op:expr) => {{
+                let target = cx.pop_stack();
+                let mut scope = cx.scope();
+                let prop = target.get_property(&mut scope, PropertyKey::String(Cow::Borrowed(&key)))?;
+                let one = Value::number(1.0);
+                let res = $op(&prop, &one, &mut scope)?;
+                target.set_property(
+                    &mut scope,
+                    ToString::to_string(&key).into(),
+                    PropertyValue::static_default(res.clone()),
+                )?;
+                scope.try_push_stack(res)?;
+            }};
+        }
+
+        match kind {
+            AssignKind::Assignment => {
+                let (target, value) = cx.pop_stack2();
+                let mut scope = cx.scope();
+                target.set_property(
+                    &mut scope,
+                    ToString::to_string(&key).into(),
+                    PropertyValue::static_default(value.clone()),
+                )?;
+                scope.try_push_stack(value)?;
+            }
             AssignKind::AddAssignment => op!(Value::add),
             AssignKind::SubAssignment => op!(Value::sub),
             AssignKind::MulAssignment => op!(Value::mul),
@@ -813,33 +991,69 @@ mod handlers {
             AssignKind::BitAndAssignment => op!(Value::bitand),
             AssignKind::BitOrAssignment => op!(Value::bitor),
             AssignKind::BitXorAssignment => op!(Value::bitxor),
+            AssignKind::PrefixIncrement => prefix!(Value::add),
+            AssignKind::PostfixIncrement => postfix!(Value::add),
+            AssignKind::PrefixDecrement => prefix!(Value::sub),
+            AssignKind::PostfixDecrement => postfix!(Value::sub),
         };
-        target.set_property(
-            &mut scope,
-            ToString::to_string(&key).into(),
-            PropertyValue::static_default(value.clone()),
-        )?;
 
-        scope.try_push_stack(value)?;
         Ok(None)
     }
 
     pub fn dynamicpropertyassign(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
         let kind = AssignKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
-        let (target, value, key) = cx.pop_stack3();
-
-        let mut scope = cx.scope();
-        let key = PropertyKey::from_value(&mut scope, key)?;
 
         macro_rules! op {
             ($op:expr) => {{
+                let (target, value, key) = cx.pop_stack3();
+
+                let mut scope = cx.scope();
+                let key = PropertyKey::from_value(&mut scope, key)?;
+
                 let p = target.get_property(&mut scope, key.clone())?;
-                $op(&p, &value, &mut scope)?
+                let result = $op(&p, &value, &mut scope)?;
+
+                target.set_property(&mut scope, key, PropertyValue::static_default(result.clone()))?;
+                scope.try_push_stack(result)?;
             }};
         }
 
-        let value = match kind {
-            AssignKind::Assignment => value,
+        macro_rules! postfix {
+            ($op:expr) => {{
+                let (target, key) = cx.pop_stack2();
+                let mut scope = cx.scope();
+                let key = PropertyKey::from_value(&mut scope, key)?;
+                let prop = target.get_property(&mut scope, key.clone())?;
+                let one = Value::number(1.0);
+                let res = $op(&prop, &one, &mut scope)?;
+                target.set_property(&mut scope, key, PropertyValue::static_default(res))?;
+                scope.try_push_stack(prop)?;
+            }};
+        }
+
+        macro_rules! prefix {
+            ($op:expr) => {{
+                let (target, key) = cx.pop_stack2();
+                let mut scope = cx.scope();
+                let key = PropertyKey::from_value(&mut scope, key)?;
+                let prop = target.get_property(&mut scope, key.clone())?;
+                let one = Value::number(1.0);
+                let res = $op(&prop, &one, &mut scope)?;
+                target.set_property(&mut scope, key, PropertyValue::static_default(res.clone()))?;
+                scope.try_push_stack(res)?;
+            }};
+        }
+
+        match kind {
+            AssignKind::Assignment => {
+                let (target, value, key) = cx.pop_stack3();
+
+                let mut scope = cx.scope();
+                let key = PropertyKey::from_value(&mut scope, key)?;
+
+                target.set_property(&mut scope, key, PropertyValue::static_default(value.clone()))?;
+                scope.try_push_stack(value)?;
+            }
             AssignKind::AddAssignment => op!(Value::add),
             AssignKind::SubAssignment => op!(Value::sub),
             AssignKind::MulAssignment => op!(Value::mul),
@@ -852,10 +1066,12 @@ mod handlers {
             AssignKind::BitAndAssignment => op!(Value::bitand),
             AssignKind::BitOrAssignment => op!(Value::bitor),
             AssignKind::BitXorAssignment => op!(Value::bitxor),
+            AssignKind::PrefixIncrement => prefix!(Value::add),
+            AssignKind::PostfixIncrement => postfix!(Value::add),
+            AssignKind::PrefixDecrement => prefix!(Value::sub),
+            AssignKind::PostfixDecrement => postfix!(Value::sub),
         };
-        target.set_property(&mut scope, key, PropertyValue::static_default(value.clone()))?;
 
-        scope.try_push_stack(value)?;
         Ok(None)
     }
 
