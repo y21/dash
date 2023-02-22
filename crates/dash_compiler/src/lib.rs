@@ -371,13 +371,7 @@ impl<'a> FunctionCompiler<'a> {
         if !matches!(&*body, Statement::Block(..)) {
             let old_body = std::mem::replace(&mut *body, Statement::Empty);
 
-            match old_body {
-                Statement::Expression(expr) => {
-                    *body = Statement::Block(BlockStatement(vec![Statement::Expression(expr)]));
-                }
-                // TODO: pattern _ is actually reachable: `for (const _ of [1]) return 1;`
-                _ => unreachable!("For-of body was neither a block statement nor an expression"),
-            }
+            *body = Statement::Block(BlockStatement(vec![old_body]));
         }
 
         // Assign iterator value to binding at the very start of the for loop body

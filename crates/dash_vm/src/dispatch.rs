@@ -267,8 +267,8 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn objin(_cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
-        todo!()
+    pub fn objin(cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        throw!(cx, "in keyword is unimplemented");
     }
 
     pub fn instanceof(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
@@ -404,6 +404,10 @@ mod handlers {
                     .global
                     .clone()
                     .get_property(&mut scope, PropertyKey::String(Cow::Borrowed(&name)))?;
+
+                let value = Value::number(value.to_number(&mut scope)?);
+                let right = Value::number(right.to_number(&mut scope)?);
+
                 let res = $op(&value, &right, &mut scope)?;
                 scope.global.clone().set_property(
                     &mut scope,
@@ -421,6 +425,8 @@ mod handlers {
                     .global
                     .clone()
                     .get_property(&mut scope, PropertyKey::String(Cow::Borrowed(&name)))?;
+                let value = Value::number(value.to_number(&mut scope)?);
+
                 let right = Value::number(1.0);
                 let res = $op(&value, &right, &mut scope)?;
                 scope.global.clone().set_property(
@@ -439,6 +445,8 @@ mod handlers {
                     .global
                     .clone()
                     .get_property(&mut scope, PropertyKey::String(Cow::Borrowed(&name)))?;
+                let value = Value::number(value.to_number(&mut scope)?);
+
                 let right = Value::number(1.0);
                 let res = $op(&value, &right, &mut scope)?;
                 scope.global.clone().set_property(
@@ -744,6 +752,8 @@ mod handlers {
                 let value = cx.get_local(id);
                 let right = cx.pop_stack();
                 let mut scope = cx.scope();
+                let value = Value::number(value.to_number(&mut scope)?);
+                let right = Value::number(right.to_number(&mut scope)?);
                 let res = $op(&value, &right, &mut scope)?;
                 scope.set_local(id, res.clone());
                 scope.try_push_stack(res)?;
@@ -754,6 +764,7 @@ mod handlers {
             ($op:expr) => {{
                 let value = cx.get_local(id);
                 let mut scope = cx.scope();
+                let value = Value::number(value.to_number(&mut scope)?);
                 let one = Value::number(1.0);
                 let res = $op(&value, &one, &mut scope)?;
                 scope.set_local(id, res.clone());
@@ -765,6 +776,7 @@ mod handlers {
             ($op:expr) => {{
                 let value = cx.get_local(id);
                 let mut scope = cx.scope();
+                let value = Value::number(value.to_number(&mut scope)?);
                 let one = Value::number(1.0);
                 let res = $op(&value, &one, &mut scope)?;
                 scope.set_local(id, res);
@@ -924,6 +936,9 @@ mod handlers {
 
                 let mut scope = cx.scope();
 
+                let target = Value::number(target.to_number(&mut scope)?);
+                let value = Value::number(value.to_number(&mut scope)?);
+
                 let p = target.get_property(&mut scope, PropertyKey::String(Cow::Borrowed(&key)))?;
                 let res = $op(&p, &value, &mut scope)?;
 
@@ -941,6 +956,7 @@ mod handlers {
                 let target = cx.pop_stack();
                 let mut scope = cx.scope();
                 let prop = target.get_property(&mut scope, PropertyKey::String(Cow::Borrowed(&key)))?;
+                let prop = Value::number(prop.to_number(&mut scope)?);
                 let one = Value::number(1.0);
                 let res = $op(&prop, &one, &mut scope)?;
                 target.set_property(
@@ -957,6 +973,7 @@ mod handlers {
                 let target = cx.pop_stack();
                 let mut scope = cx.scope();
                 let prop = target.get_property(&mut scope, PropertyKey::String(Cow::Borrowed(&key)))?;
+                let prop = Value::number(prop.to_number(&mut scope)?);
                 let one = Value::number(1.0);
                 let res = $op(&prop, &one, &mut scope)?;
                 target.set_property(
@@ -1009,9 +1026,12 @@ mod handlers {
 
                 let mut scope = cx.scope();
                 let key = PropertyKey::from_value(&mut scope, key)?;
+                let prop = target.get_property(&mut scope, key.clone())?;
 
-                let p = target.get_property(&mut scope, key.clone())?;
-                let result = $op(&p, &value, &mut scope)?;
+                let prop = Value::number(prop.to_number(&mut scope)?);
+                let value = Value::number(value.to_number(&mut scope)?);
+
+                let result = $op(&prop, &value, &mut scope)?;
 
                 target.set_property(&mut scope, key, PropertyValue::static_default(result.clone()))?;
                 scope.try_push_stack(result)?;
@@ -1024,6 +1044,7 @@ mod handlers {
                 let mut scope = cx.scope();
                 let key = PropertyKey::from_value(&mut scope, key)?;
                 let prop = target.get_property(&mut scope, key.clone())?;
+                let prop = Value::number(prop.to_number(&mut scope)?);
                 let one = Value::number(1.0);
                 let res = $op(&prop, &one, &mut scope)?;
                 target.set_property(&mut scope, key, PropertyValue::static_default(res))?;
@@ -1037,6 +1058,7 @@ mod handlers {
                 let mut scope = cx.scope();
                 let key = PropertyKey::from_value(&mut scope, key)?;
                 let prop = target.get_property(&mut scope, key.clone())?;
+                let prop = Value::number(prop.to_number(&mut scope)?);
                 let one = Value::number(1.0);
                 let res = $op(&prop, &one, &mut scope)?;
                 target.set_property(&mut scope, key, PropertyValue::static_default(res.clone()))?;
@@ -1517,10 +1539,10 @@ mod handlers {
             }};
         }
 
-        macro_rules! bin_op_to_f64 {
+        macro_rules! bin_op_to_bool {
             ($op:tt) => {{
                 let (l, r) = lr_as_num_spec!();
-                cx.stack.push(Value::number((l $op r) as i64 as f64));
+                cx.stack.push(Value::Boolean(l $op r));
             }};
         }
 
@@ -1605,12 +1627,12 @@ mod handlers {
             IntrinsicOperation::DivNumLR => bin_op!(Div::div),
             IntrinsicOperation::RemNumLR => bin_op!(Rem::rem),
             IntrinsicOperation::PowNumLR => bin_op!(f64::powf),
-            IntrinsicOperation::GtNumLR => bin_op_to_f64!(>),
-            IntrinsicOperation::GeNumLR => bin_op_to_f64!(>=),
-            IntrinsicOperation::LtNumLR => bin_op_to_f64!(<),
-            IntrinsicOperation::LeNumLR => bin_op_to_f64!(<=),
-            IntrinsicOperation::EqNumLR => bin_op_to_f64!(==),
-            IntrinsicOperation::NeNumLR => bin_op_to_f64!(!=),
+            IntrinsicOperation::GtNumLR => bin_op_to_bool!(>),
+            IntrinsicOperation::GeNumLR => bin_op_to_bool!(>=),
+            IntrinsicOperation::LtNumLR => bin_op_to_bool!(<),
+            IntrinsicOperation::LeNumLR => bin_op_to_bool!(<=),
+            IntrinsicOperation::EqNumLR => bin_op_to_bool!(==),
+            IntrinsicOperation::NeNumLR => bin_op_to_bool!(!=),
             IntrinsicOperation::BitOrNumLR => bin_op_i64!(|),
             IntrinsicOperation::BitXorNumLR => bin_op_i64!(^),
             IntrinsicOperation::BitAndNumLR => bin_op_i64!(&),

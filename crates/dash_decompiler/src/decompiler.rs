@@ -65,10 +65,26 @@ impl<'buf> FunctionDecompiler<'buf> {
         Ok(())
     }
 
+    /// Handles an opcode with a single argument that is in the following bytecode.
+    fn handle_inc_op_instr2(&mut self, name: &str) -> Result<(), DecompileError> {
+        let b = self.read()?;
+        let b2 = self.read()?;
+        self.handle_op_instr(name, &[&b, &b2]);
+        Ok(())
+    }
+
     /// Handles an opcode with a single wide argument that is in the following bytecode.
     fn handle_incw_op_instr(&mut self, name: &str) -> Result<(), DecompileError> {
         let b = self.read_u16()?;
         self.handle_op_instr(name, &[&b]);
+        Ok(())
+    }
+
+    /// Handles an opcode with a single wide argument that is in the following bytecode.
+    fn handle_incw_op_instr2(&mut self, name: &str) -> Result<(), DecompileError> {
+        let b = self.read_u16()?;
+        let b2 = self.read()?;
+        self.handle_op_instr(name, &[&b, &b2]);
         Ok(())
     }
 
@@ -170,8 +186,8 @@ impl<'buf> FunctionDecompiler<'buf> {
                     let b = self.read_u16()?;
                     self.handle_op_instr("ldglobalw", &[&DisplayConstant(&self.constants[b as usize])]);
                 }
-                Instruction::StoreLocal => self.handle_inc_op_instr("storelocal")?,
-                Instruction::StoreLocalW => self.handle_inc_op_instr("storelocalw")?,
+                Instruction::StoreLocal => self.handle_inc_op_instr2("storelocal")?,
+                Instruction::StoreLocalW => self.handle_inc_op_instr2("storelocalw")?,
                 Instruction::Call => {
                     let meta = FunctionCallMetadata::from(self.read()?);
                     self.handle_op_map_instr(
@@ -203,10 +219,12 @@ impl<'buf> FunctionDecompiler<'buf> {
                 Instruction::Not => self.handle_opless_instr("not"),
                 Instruction::StoreGlobal => {
                     let b = self.read()?;
+                    let _kind = self.read();
                     self.handle_op_instr("storeglobal", &[&DisplayConstant(&self.constants[b as usize])]);
                 }
                 Instruction::StoreGlobalW => {
                     let b = self.read_u16()?;
+                    let _kind = self.read();
                     self.handle_op_instr("storeglobalw", &[&DisplayConstant(&self.constants[b as usize])]);
                 }
                 Instruction::DynamicPropAccess => {
@@ -248,8 +266,8 @@ impl<'buf> FunctionDecompiler<'buf> {
                 }
                 Instruction::LdLocalExt => self.handle_inc_op_instr("ldlocalext")?,
                 Instruction::LdLocalExtW => self.handle_incw_op_instr("ldlocalextw")?,
-                Instruction::StoreLocalExt => self.handle_inc_op_instr("storelocalext")?,
-                Instruction::StoreLocalExtW => self.handle_incw_op_instr("storelocalextw")?,
+                Instruction::StoreLocalExt => self.handle_inc_op_instr2("storelocalext")?,
+                Instruction::StoreLocalExtW => self.handle_incw_op_instr2("storelocalextw")?,
                 Instruction::StrictEq => self.handle_opless_instr("stricteq"),
                 Instruction::StrictNe => self.handle_opless_instr("strictne"),
                 Instruction::Try => self.handle_incw_op_instr("try")?, // TODO: show @offset like in JMP
