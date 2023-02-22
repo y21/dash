@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1677087968000,
+  "lastUpdate": 1677089618306,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -1181,6 +1181,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 114685,
             "range": "± 6126",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "26f99cf2612347f8214369c941fc9053b7e1db4e",
+          "message": "reimplement pre/postfix assignment for externals",
+          "timestamp": "2023-02-22T19:09:19+01:00",
+          "tree_id": "89896470c7281117434bd60b3b7c36f85b5dd754",
+          "url": "https://github.com/y21/dash/commit/26f99cf2612347f8214369c941fc9053b7e1db4e"
+        },
+        "date": 1677089617120,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 2820706,
+            "range": "± 9155",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 293353,
+            "range": "± 2706",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 82126,
+            "range": "± 124",
             "unit": "ns/iter"
           }
         ]
