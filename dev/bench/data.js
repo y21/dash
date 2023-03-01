@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1677089626737,
+  "lastUpdate": 1677698361286,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -1261,6 +1261,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 82379,
             "range": "± 147",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "92145e71694545c4baa3d585318b87a223142922",
+          "message": "fix last edge cases in spec ops",
+          "timestamp": "2023-03-01T20:14:43+01:00",
+          "tree_id": "80eb5899a53cdda14f6b72c129b2efa8b7b3eda4",
+          "url": "https://github.com/y21/dash/commit/92145e71694545c4baa3d585318b87a223142922"
+        },
+        "date": 1677698360492,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 3194230,
+            "range": "± 27596",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 292186,
+            "range": "± 754",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 81092,
+            "range": "± 132",
             "unit": "ns/iter"
           }
         ]
