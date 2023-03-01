@@ -766,7 +766,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                         .map_err(|_| CompileError::DestructureLimitExceeded)?;
 
                     // Unwrap ok; checked at parse time
-                    let value = value.expect("Object destructuring requires a value");
+                    let value = value.ok_or(CompileError::MissingInitializerInDestructuring)?;
                     ib.accept_expr(value)?;
 
                     ib.build_objdestruct(field_count);

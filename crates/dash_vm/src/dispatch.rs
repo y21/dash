@@ -405,9 +405,6 @@ mod handlers {
                     .clone()
                     .get_property(&mut scope, PropertyKey::String(Cow::Borrowed(&name)))?;
 
-                let value = Value::number(value.to_number(&mut scope)?);
-                let right = Value::number(right.to_number(&mut scope)?);
-
                 let res = $op(&value, &right, &mut scope)?;
                 scope.global.clone().set_property(
                     &mut scope,
@@ -752,8 +749,6 @@ mod handlers {
                 let value = cx.get_local(id);
                 let right = cx.pop_stack();
                 let mut scope = cx.scope();
-                let value = Value::number(value.to_number(&mut scope)?);
-                let right = Value::number(right.to_number(&mut scope)?);
                 let res = $op(&value, &right, &mut scope)?;
                 scope.set_local(id, res.clone());
                 scope.try_push_stack(res)?;
@@ -936,9 +931,6 @@ mod handlers {
 
                 let mut scope = cx.scope();
 
-                let target = Value::number(target.to_number(&mut scope)?);
-                let value = Value::number(value.to_number(&mut scope)?);
-
                 let p = target.get_property(&mut scope, PropertyKey::String(Cow::Borrowed(&key)))?;
                 let res = $op(&p, &value, &mut scope)?;
 
@@ -1027,9 +1019,6 @@ mod handlers {
                 let mut scope = cx.scope();
                 let key = PropertyKey::from_value(&mut scope, key)?;
                 let prop = target.get_property(&mut scope, key.clone())?;
-
-                let prop = Value::number(prop.to_number(&mut scope)?);
-                let value = Value::number(value.to_number(&mut scope)?);
 
                 let result = $op(&prop, &value, &mut scope)?;
 
