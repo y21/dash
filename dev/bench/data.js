@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1677698390743,
+  "lastUpdate": 1677698893953,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -1341,6 +1341,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 96718,
             "range": "± 163",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "Timo",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f08f7cf838cf26ed9d424471a5f012183abce555",
+          "message": "Merge pull request #50 from y21/type-infer-pass\n\nrun type inference as its own pass",
+          "timestamp": "2023-03-01T20:23:38+01:00",
+          "tree_id": "80eb5899a53cdda14f6b72c129b2efa8b7b3eda4",
+          "url": "https://github.com/y21/dash/commit/f08f7cf838cf26ed9d424471a5f012183abce555"
+        },
+        "date": 1677698893106,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 3173730,
+            "range": "± 18208",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 293094,
+            "range": "± 405",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 81382,
+            "range": "± 65",
             "unit": "ns/iter"
           }
         ]
