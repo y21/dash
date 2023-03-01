@@ -90,7 +90,10 @@ impl ValueConversion for Value {
             Value::Undefined(_) => Ok(f64::NAN),
             Value::Null(_) => Ok(0.0),
             Value::Boolean(b) => Ok(*b as i8 as f64),
-            Value::String(s) => s.parse().or_else(|e| throw!(sc, "{}", e)),
+            Value::String(s) => match s.len() {
+                0 => Ok(0.0),
+                _ => s.parse().or_else(|e| throw!(sc, "{}", e)),
+            },
             Value::Symbol(_) => throw!(sc, "Cannot convert symbol to number"),
             Value::Object(o) | Value::External(o) => object_to_number(self, o, sc),
         }

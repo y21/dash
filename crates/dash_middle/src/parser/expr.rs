@@ -75,6 +75,11 @@ impl<'a> Expr<'a> {
         Self::Assignment(AssignmentExpr::new_expr_place(l, r, op))
     }
 
+    /// Creates an assignment expression
+    pub fn assignment_local_space(l: u16, r: Expr<'a>, op: TokenType) -> Self {
+        Self::Assignment(AssignmentExpr::new_local_place(l, r, op))
+    }
+
     /// Creates a bool literal expression
     pub fn bool_literal(b: bool) -> Self {
         Self::Literal(LiteralExpr::Boolean(b))
@@ -90,6 +95,14 @@ impl<'a> Expr<'a> {
         Self::Literal(LiteralExpr::String(s))
     }
 
+    pub fn array_literal(a: Vec<Expr<'a>>) -> Self {
+        Self::Array(ArrayLiteral(a))
+    }
+
+    pub fn object_literal(o: Vec<(ObjectMemberKind<'a>, Expr<'a>)>) -> Self {
+        Self::Object(ObjectLiteral(o))
+    }
+
     /// Creates an identifier literal expression
     pub fn identifier(s: Cow<'a, str>) -> Self {
         Self::Literal(LiteralExpr::Identifier(s))
@@ -103,6 +116,10 @@ impl<'a> Expr<'a> {
     /// Creates an undefined literal expression
     pub fn undefined_literal() -> Self {
         Self::Literal(LiteralExpr::Undefined)
+    }
+
+    pub fn regex_literal(regex: dash_regex::Regex, source: &'a str) -> Self {
+        Self::Literal(LiteralExpr::Regex(regex, source))
     }
 
     /// Creates a function call expression
@@ -132,36 +149,56 @@ impl<'a> Expr<'a> {
         })
     }
 
+    pub fn unary(op: TokenType, expr: Expr<'a>) -> Self {
+        Self::Unary(UnaryExpr::new(op, expr))
+    }
+
+    pub fn prefix(op: TokenType, expr: Expr<'a>) -> Self {
+        Self::Prefix((op, Box::new(expr)))
+    }
+
+    pub fn postfix(op: TokenType, expr: Expr<'a>) -> Self {
+        Self::Postfix((op, Box::new(expr)))
+    }
+
+    pub fn function(function: FunctionDeclaration<'a>) -> Self {
+        Self::Function(function)
+    }
+
+    pub fn compiled(c: Vec<u8>) -> Self {
+        Self::Compiled(c)
+    }
+
     /// Tries to convert an expression into a list of arrow function parameters
     ///
     /// We only know whether a value is an arrow function after parsing
     pub fn to_arrow_function_parameter_list(&self) -> Option<Vec<&'a str>> {
-        match self {
-            Self::Grouping(g) => {
+        match &self {
+            Expr::Grouping(g) => {
                 let mut list = Vec::with_capacity(g.0.len());
                 for expr in &g.0 {
                     list.push(expr.as_identifier()?);
                 }
                 Some(list)
             }
-            Self::Literal(lit) => Some(vec![lit.as_identifier_borrowed()?]),
+            Expr::Literal(lit) => Some(vec![lit.as_identifier_borrowed()?]),
             _ => None,
         }
     }
 
     /// Tries to return the identifier that is associated to this expression
     pub fn as_identifier(&self) -> Option<&'a str> {
-        match self {
-            Self::Literal(lit) => lit.as_identifier_borrowed(),
+        match &self {
+            Expr::Literal(lit) => lit.as_identifier_borrowed(),
             _ => None,
         }
     }
 
     pub fn is_truthy(&self) -> Option<bool> {
-        match self {
-            Self::Literal(lit) => lit.is_truthy(),
-            Self::Assignment(ass) => ass.right.is_truthy(),
-            Self::Grouping(GroupingExpr(group)) => group.last().and_then(|e| e.is_truthy()),
+        match &self {
+            Expr::Literal(lit) => lit.is_truthy(),
+            Expr::Assignment(ass) => ass.right.is_truthy(),
+            Expr::Grouping(GroupingExpr(group)) => group.last().and_then(|e| e.is_truthy()),
             _ => None,
         }
     }

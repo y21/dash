@@ -138,7 +138,11 @@ impl<'a> Lexer<'a> {
             ty,
             loc: Location {
                 line: self.line,
-                offset: lexeme.as_ptr() as usize - self.input.as_ptr() as usize,
+                offset: match lexeme {
+                    Cow::Borrowed(lexeme) => lexeme.as_ptr() as usize - self.input.as_ptr() as usize,
+                    // TODO: Handle the Cow::Owned case properly, somehow
+                    _ => 0,
+                },
                 line_offset: self.line_idx,
             },
             full: lexeme,

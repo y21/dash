@@ -2,6 +2,7 @@ use dash_lexer::Lexer;
 use dash_middle::compiler::CompileResult;
 use dash_middle::lexer;
 use dash_middle::parser;
+use dash_optimizer::type_infer::TypeInferCtx;
 use dash_optimizer::OptLevel;
 use dash_parser::Parser;
 
@@ -18,10 +19,14 @@ pub enum CompileStrError<'a> {
 impl<'a> FunctionCompiler<'a> {
     pub fn compile_str(input: &'a str, opt: OptLevel) -> Result<CompileResult, CompileStrError<'a>> {
         let tokens = Lexer::new(input).scan_all().map_err(CompileStrError::Lexer)?;
-        let ast = Parser::new(input, tokens)
+        let (ast, counter) = Parser::new(input, tokens)
             .parse_all()
             .map_err(CompileStrError::Parser)?;
 
-        Self::new(opt).compile_ast(ast, true).map_err(CompileStrError::Compiler)
+        let tcx = TypeInferCtx::new(counter);
+
+        Self::new(opt, tcx)
+            .compile_ast(ast, true)
+            .map_err(CompileStrError::Compiler)
     }
 }

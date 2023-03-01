@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::fmt;
 use std::io::Read;
+use std::marker::PhantomData;
 use std::mem::ManuallyDrop;
 use std::ops::RangeInclusive;
 use std::thread::ThreadId;
@@ -218,4 +219,42 @@ macro_rules! timed {
         println!("{} - {:?}", $name, elapsed);
         result
     }};
+}
+
+#[derive(Debug)]
+pub struct Counter<T>(usize, PhantomData<T>);
+
+impl<T> Counter<T>
+where
+    T: From<usize>,
+{
+    pub fn new() -> Self {
+        Self(0, PhantomData)
+    }
+
+    /// Returns the highest ID that is currently in use
+    pub fn highest(&self) -> Option<T> {
+        if self.0 > 0 {
+            Some(T::from(self.0 - 1))
+        } else {
+            None
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.0
+    }
+
+    pub fn with(start: T) -> Self
+    where
+        T: Into<usize>,
+    {
+        Self(start.into(), PhantomData)
+    }
+
+    pub fn next(&mut self) -> T {
+        let old = self.0;
+        self.0 += 1;
+        T::from(old)
+    }
 }

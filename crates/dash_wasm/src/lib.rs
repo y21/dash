@@ -1,8 +1,9 @@
 use dash_compiler::FunctionCompiler;
 use dash_middle::compiler::StaticImportKind;
+use dash_middle::parser::statement::FuncId;
 use dash_middle::parser::statement::VariableDeclarationName;
-use dash_optimizer::consteval::Eval;
-use dash_optimizer::context::OptimizerContext;
+use dash_optimizer::consteval::ConstFunctionEvalCtx;
+use dash_optimizer::type_infer::TypeInferCtx;
 use dash_parser::Parser;
 use dash_vm::eval::EvalError;
 use dash_vm::frame::Frame;
@@ -80,15 +81,17 @@ pub fn fmt_value(value: Value, vm: &mut Vm) -> String {
 #[wasm_bindgen]
 pub fn debug(s: &str, o: OptLevel, em: Emit) -> String {
     let parser = Parser::from_str(s).unwrap();
-    let mut ast = parser.parse_all().unwrap();
+    let (mut ast, counter) = parser.parse_all().unwrap();
+    let mut tcx = TypeInferCtx::new(counter);
 
     match em {
         Emit::Bytecode => {
-            let cmp = FunctionCompiler::new(o.into()).compile_ast(ast, true).unwrap();
+            let cmp = FunctionCompiler::new(o.into(), tcx).compile_ast(ast, true).unwrap();
             dash_decompiler::decompile(&cmp.cp, &cmp.instructions).unwrap_or_else(|e| e.to_string())
         }
         Emit::JavaScript => {
-            dash_optimizer::optimize_ast(&mut ast, o.into());
+            let mut cfx = ConstFunctionEvalCtx::new(&mut tcx, o.into());
+            cfx.visit_many_statements(&mut ast, FuncId::ROOT);
             let mut output = String::new();
             for node in ast {
                 let _ = write!(output, "{node}\n");
@@ -126,16 +129,18 @@ pub fn compile(s: &str, o: OptLevel) -> Result<js_sys::Uint8Array, String> {
 
 #[wasm_bindgen]
 pub fn infer(s: &str) -> Result<JsValue, String> {
-    let mut ast = Parser::from_str(s)
+    let (mut ast, counter) = Parser::from_str(s)
         .map_err(|err| format!("{err:?}"))?
         .parse_all()
         .map_err(|err| format!("{err:?}"))?;
 
-    let mut cx = OptimizerContext::new();
-    ast.fold(&mut cx, false);
+    let mut tcx = TypeInferCtx::new(counter);
+
+    let mut cfx = ConstFunctionEvalCtx::new(&mut tcx, dash_optimizer::OptLevel::default());
+    cfx.visit_many_statements(&mut ast, FuncId::ROOT);
     let mut out = String::new();
 
-    for local in cx.scope_mut().locals() {
+    for local in tcx.scope_mut(FuncId::ROOT).locals() {
         if let VariableDeclarationName::Identifier(ident) = local.binding().name {
             let ty = local.inferred_type().borrow();
             let _ = write!(out, "{ident}: {ty:?} \n");
@@ -143,8 +148,6 @@ pub fn infer(s: &str) -> Result<JsValue, String> {
     }
 
     Ok(JsValue::from_str(&out))
-    // let scope = std::mem::replace(cx.scope_mut(), Scope::new());
-    // Ok(JsValue::from_str(&format!("{:?}", scope.locals())))
 }
 
 // #[wasm_bindgen]
@@ -164,10 +167,7 @@ pub fn infer(s: &str) -> Result<JsValue, String> {
 
 fn compile_inspect(vm: &mut Vm) -> Value {
     let source = include_str!("../../dash_rt/js/inspect.js");
-    let ast = Parser::from_str(source).unwrap().parse_all().unwrap();
-    let re = FunctionCompiler::new(Default::default())
-        .compile_ast(ast, true)
-        .unwrap();
+    let re = FunctionCompiler::compile_str(source, Default::default()).unwrap();
 
     let f = Frame::from_compile_result(re);
     vm.execute_module(f).unwrap().default.unwrap()

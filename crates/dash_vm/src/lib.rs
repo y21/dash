@@ -415,7 +415,7 @@ impl Vm {
             next: scope.statics.array_iterator_next;
 
             #[symbols]
-            scope.statics.symbol_iterator => scope.statics.array_iterator_iterator;
+            scope.statics.symbol_iterator => scope.statics.identity_this;
         });
 
         register_builtin_type!(scope.statics.generator_iterator_prototype, {
@@ -424,6 +424,9 @@ impl Vm {
 
             #[properties]
             next: scope.statics.generator_iterator_next;
+
+            #[symbols]
+            scope.statics.symbol_iterator => scope.statics.identity_this;
         });
 
         let symbol_ctor = register_builtin_type!(scope.statics.symbol_ctor, {

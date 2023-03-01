@@ -5,9 +5,11 @@ use std::io::Write;
 use anyhow::anyhow;
 use anyhow::Context;
 use clap::ArgMatches;
+use dash_compiler::transformations;
+use dash_middle::parser::statement::FuncId;
 use dash_middle::parser::statement::VariableDeclarationName;
-use dash_optimizer::consteval::Eval;
-use dash_optimizer::context::OptimizerContext;
+use dash_optimizer::consteval::ConstFunctionEvalCtx;
+use dash_optimizer::type_infer::TypeInferCtx;
 
 use crate::util;
 
@@ -31,22 +33,31 @@ pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
         println!("{:#?}", tokens);
     }
 
-    let mut ast = dash_parser::Parser::new(&source, tokens)
+    let (mut ast, counter) = dash_parser::Parser::new(&source, tokens)
         .parse_all()
         .map_err(|_| anyhow!("Failed to parse source string"))?;
 
-    if dump_types {
-        let mut cx = OptimizerContext::new();
-        ast.fold(&mut cx, true);
+    transformations::ast_patch_implicit_return(&mut ast);
 
-        for local in cx.scope_mut().locals() {
+    let mut tcx = TypeInferCtx::new(counter);
+    for stmt in &ast {
+        tcx.visit_statement(stmt, FuncId::ROOT);
+    }
+
+    if dump_types {
+        for local in tcx.scope_mut(FuncId::ROOT).locals() {
             if let VariableDeclarationName::Identifier(ident) = local.binding().name {
                 let ty = local.inferred_type().borrow();
                 println!("{ident}: {ty:?}");
             }
         }
-    } else {
-        dash_optimizer::optimize_ast(&mut ast, opt);
+    }
+
+    if opt.enabled() {
+        let mut cfx = ConstFunctionEvalCtx::new(&mut tcx, opt);
+        for stmt in &mut ast {
+            cfx.visit_statement(stmt, FuncId::ROOT);
+        }
     }
 
     if dump_ast {
@@ -59,7 +70,7 @@ pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
         }
     }
 
-    let bytecode = dash_compiler::FunctionCompiler::new(opt)
+    let bytecode = dash_compiler::FunctionCompiler::new(opt, tcx)
         .compile_ast(ast, true)
         .map_err(|_| anyhow!("Failed to compile source string"))?;
 

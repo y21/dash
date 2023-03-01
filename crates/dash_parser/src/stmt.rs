@@ -132,7 +132,15 @@ impl<'a> StatementParser<'a> for Parser<'a> {
                 let arguments = self.parse_parameter_list()?;
                 let body = self.parse_statement()?;
 
-                let func = FunctionDeclaration::new(Some(name), arguments, vec![body], FunctionKind::Function, false);
+                let func_id = self.function_counter.next();
+                let func = FunctionDeclaration::new(
+                    Some(name),
+                    func_id,
+                    arguments,
+                    vec![body],
+                    FunctionKind::Function,
+                    false,
+                );
 
                 members.push(ClassMember {
                     private: is_private,

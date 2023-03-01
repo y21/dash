@@ -48,8 +48,10 @@ pub enum Instruction {
     This,
     StaticPropAssign,
     DynamicPropAssign,
+    /// Loads an external variable
     LdLocalExt,
     LdLocalExtW,
+    /// Stores a value into an external variable
     StoreLocalExt,
     StoreLocalExtW,
     StrictEq,
@@ -119,6 +121,10 @@ pub enum AssignKind {
     BitAndAssignment,
     BitOrAssignment,
     BitXorAssignment,
+    PrefixIncrement,
+    PostfixIncrement,
+    PrefixDecrement,
+    PostfixDecrement,
 }
 
 /// Intrinsic operations, i.e. operations known by the compiler. These can be

@@ -1,12 +1,9 @@
 use strum_macros::FromRepr;
 
-use crate::lexer::token::TokenType;
 use crate::parser;
-use crate::parser::expr::{ArrayLiteral, AssignmentExpr, AssignmentTarget, Expr, GroupingExpr, LiteralExpr};
 
+use self::constant::ConstantPool;
 use self::external::External;
-use self::scope::CompileValueType;
-use self::{constant::ConstantPool, scope::Scope};
 
 #[cfg(feature = "format")]
 use serde::{Deserialize, Serialize};
@@ -103,90 +100,5 @@ impl From<&ParserObjectMemberKind<'_>> for ObjectMemberKind {
             ParserObjectMemberKind::Setter(..) => Self::Setter,
             ParserObjectMemberKind::Static(..) => Self::Static,
         }
-    }
-}
-
-pub fn infer_type<'a>(cx: &mut Scope<'a>, expr: &Expr<'a>) -> Option<CompileValueType> {
-    match expr {
-        Expr::Literal(LiteralExpr::Boolean(..)) => Some(CompileValueType::Boolean),
-        Expr::Literal(LiteralExpr::Null) => Some(CompileValueType::Null),
-        Expr::Literal(LiteralExpr::Undefined) => Some(CompileValueType::Undefined),
-        Expr::Literal(LiteralExpr::Number(..)) => Some(CompileValueType::Number),
-        Expr::Literal(LiteralExpr::String(..)) => Some(CompileValueType::String),
-        Expr::Array(ArrayLiteral(..)) => Some(CompileValueType::Array),
-        Expr::Literal(LiteralExpr::Identifier(ident)) => match cx.find_local(&ident) {
-            Some((_, local)) => local.inferred_type().borrow().clone(),
-            None => None,
-        },
-        Expr::Grouping(GroupingExpr(exprs)) => {
-            let mut last = None;
-            for expr in exprs.iter() {
-                last = infer_type(cx, expr);
-            }
-            last
-        }
-        Expr::Assignment(AssignmentExpr { left, right, .. }) => {
-            let AssignmentTarget::Expr(left) = left else {
-                panic!("Cannot infer type for assignment place LocalId");
-            };
-
-            let right_type = infer_type(cx, right);
-            if let Expr::Literal(LiteralExpr::Identifier(ident)) = left.as_ref() {
-                if let Some((_, local)) = cx.find_local(&ident) {
-                    let left_type = local.inferred_type();
-                    let left_type_ref = left_type.borrow();
-
-                    if left_type_ref.as_ref() == right_type.as_ref() {
-                        // No change.
-                    } else {
-                        match (left_type_ref.as_ref(), right_type.as_ref()) {
-                            (Some(left), Some(right)) => {
-                                let left = left.clone();
-                                let right = right.clone();
-                                drop(left_type_ref);
-                                *left_type.borrow_mut() =
-                                    Some(CompileValueType::Either(Box::new(left), Box::new(right)));
-                            }
-                            (_, Some(right)) => {
-                                drop(left_type_ref);
-                                *left_type.borrow_mut() = Some(CompileValueType::Maybe(Box::new(right.clone())));
-                            }
-                            (_, _) => {
-                                drop(left_type_ref);
-                                *left_type.borrow_mut() = None;
-                            }
-                        }
-                    }
-                }
-            }
-
-            right_type
-        }
-        Expr::Binary(bin) => match bin.operator {
-            TokenType::Plus => {
-                let left = infer_type(cx, &bin.left);
-                let right = infer_type(cx, &bin.right);
-
-                match (left, right) {
-                    (Some(CompileValueType::String), _) => Some(CompileValueType::String),
-                    (_, Some(CompileValueType::String)) => Some(CompileValueType::String),
-                    (Some(CompileValueType::Number), _) => Some(CompileValueType::Number),
-                    (_, Some(CompileValueType::Number)) => Some(CompileValueType::Number),
-                    _ => None,
-                }
-            }
-            TokenType::Minus | TokenType::Star | TokenType::Slash => {
-                let left = infer_type(cx, &bin.left);
-                let right = infer_type(cx, &bin.right);
-
-                match (left, right) {
-                    (Some(CompileValueType::Number), _) => Some(CompileValueType::Number),
-                    (_, Some(CompileValueType::Number)) => Some(CompileValueType::Number),
-                    _ => None,
-                }
-            }
-            _ => None,
-        },
-        _ => None,
     }
 }
