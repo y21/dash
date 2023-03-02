@@ -84,8 +84,26 @@ enum RunResult {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum NegativePhase {
+    Parse,
+    Resolution,
+    Runtime,
+}
+
+#[derive(Deserialize)]
+struct NegativeMetadata {
+    #[allow(unused)]
+    phase: NegativePhase,
+    #[serde(rename = "type")]
+    #[allow(unused)]
+    ty: String,
+}
+
+#[derive(Deserialize)]
 struct YamlMetadata {
     includes: Option<Vec<String>>,
+    negative: Option<NegativeMetadata>,
 }
 
 fn extract_yaml_metadata(source: &str) -> Option<YamlMetadata> {
@@ -106,6 +124,7 @@ fn get_harness_code(path: &str) -> String {
 }
 
 fn run_test(setup: &str, path: &OsStr, verbose: bool) -> RunResult {
+    let mut negative = None;
     let contents = std::fs::read_to_string(path).unwrap();
     let mut prelude = String::from(setup);
     if let Some(metadata) = extract_yaml_metadata(&contents) {
@@ -115,16 +134,18 @@ fn run_test(setup: &str, path: &OsStr, verbose: bool) -> RunResult {
                 prelude += &get_harness_code(&patched_file);
             }
         }
+        negative = metadata.negative;
     }
     let contents = format!("{prelude}{contents}");
 
     let maybe_pass = panic::catch_unwind(move || {
         let mut vm = Vm::new(VmParams::default());
-        match vm.eval(&contents, Default::default()) {
-            Ok(_) => RunResult::Pass,
-            Err(err) => {
+        match (vm.eval(&contents, Default::default()), negative.map(|n| n.phase)) {
+            (Ok(_), None) => RunResult::Pass,
+            (Ok(_), Some(..)) => RunResult::Fail,
+            (Err(err), negative) => {
                 if verbose {
-                    let s = match err {
+                    let s = match &err {
                         EvalError::Compiler(c) => c.to_string(),
                         EvalError::Lexer(l) => format!("{:?}", l[0].kind),
                         EvalError::Parser(p) => format!("{:?}", p[0].kind),
@@ -138,13 +159,22 @@ fn run_test(setup: &str, path: &OsStr, verbose: bool) -> RunResult {
                     };
                     println!("Error in {:?}: {s}", path.to_str());
                 }
-                RunResult::Fail
+                match (err, negative) {
+                    (
+                        EvalError::Compiler(..) | EvalError::Lexer(..) | EvalError::Parser(..),
+                        Some(NegativePhase::Parse | NegativePhase::Resolution),
+                    ) => RunResult::Pass,
+                    (EvalError::Compiler(..) | EvalError::Lexer(..) | EvalError::Parser(..), None) => RunResult::Fail,
+                    (EvalError::Exception(..), Some(NegativePhase::Runtime)) => RunResult::Pass,
+                    (EvalError::Exception(..), None) => RunResult::Fail,
+                    (_, Some(..)) => RunResult::Fail,
+                }
             }
         }
     });
 
     match maybe_pass {
-        Ok(pass) => pass,
+        Ok(res) => res,
         Err(_) => {
             println!("Panic in {}", path.to_str().unwrap());
             RunResult::Panic
