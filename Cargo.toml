@@ -22,6 +22,7 @@ members = [
     "crates/dash_rt_fetch",
     "crates/dash_rt_script_modules",
     "crates/dash_rt_timers",
+    "crates/dash_log",
 ]
 
 [profile.release]

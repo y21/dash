@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use crate::builder::Label;
 
 /// A container that is responsible for storing and resolving jumps to labels
+#[derive(Debug)]
 pub struct JumpContainer {
     jumps: BTreeMap<Label, Vec<usize>>,
     labels: BTreeMap<Label, usize>,

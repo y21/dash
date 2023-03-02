@@ -1,3 +1,5 @@
+use dash_log::debug;
+use dash_log::error;
 use dash_middle::compiler::scope::CompileValueType;
 use dash_middle::compiler::scope::Scope;
 use dash_middle::compiler::scope::ScopeLocal;
@@ -213,9 +215,11 @@ impl<'a> TypeInferCtx<'a> {
                 None => Some(CompileValueType::Uninit),
             };
 
-            // TODO: can't really do anything with the error here
-            // once we have logging, log the error
-            let _ = self.scope_mut(func_id).add_local(ident, binding.kind, ty);
+            debug!("discovered new variable {} of type {:?}", ident, ty);
+
+            if let Err(..) = self.scope_mut(func_id).add_local(ident, binding.kind, ty) {
+                error!("failed to add variable");
+            }
         }
     }
 
@@ -372,6 +376,11 @@ impl<'a> TypeInferCtx<'a> {
                 if left_type_ref.as_ref() == right_type.as_ref() {
                     // Assign value is the same, no change.
                 } else {
+                    debug!(
+                        "variable {} changed type {:?} -> {:?}",
+                        ident, left_type_ref, right_type
+                    );
+
                     match (left_type_ref.as_ref(), right_type.as_ref()) {
                         (Some(left), Some(right)) => {
                             let left = left.clone();
@@ -470,19 +479,25 @@ impl<'a> TypeInferCtx<'a> {
 
         self.scope_node_mut(sub_func_id).set_parent(func_id.into());
         if let Some(name) = name {
-            // TODO: handle this error, somehow
-            let _ = self
+            debug!("visit function {name}");
+
+            if let Err(..) = self
                 .scope_mut(func_id)
-                .add_local(name, VariableDeclarationKind::Var, None);
+                .add_local(name, VariableDeclarationKind::Var, None)
+            {
+                error!("failed to reserve local space for function");
+            }
         }
 
         for (param, expr, _) in parameters {
             match param {
                 Parameter::Identifier(ident) | Parameter::Spread(ident) => {
-                    // TODO: handle this error, somehow
-                    let _ = self
+                    if let Err(..) = self
                         .scope_mut(sub_func_id)
-                        .add_local(ident, VariableDeclarationKind::Var, None);
+                        .add_local(ident, VariableDeclarationKind::Var, None)
+                    {
+                        error!("failed to reserve space for parameter")
+                    }
                 }
             }
 

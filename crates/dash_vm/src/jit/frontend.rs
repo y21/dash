@@ -6,6 +6,9 @@ use dash_llvm_jit_backend::error::Error;
 use dash_llvm_jit_backend::init;
 use dash_llvm_jit_backend::passes::infer::infer_types_and_labels;
 use dash_llvm_jit_backend::Backend;
+use dash_log::debug;
+use dash_log::span;
+use dash_log::Level;
 use dash_middle::compiler::constant::Function;
 
 use crate::Vm;
@@ -61,15 +64,19 @@ pub fn compile_current_trace(vm: &mut Vm) -> Result<(Trace, JitFunction), Error>
     let origin = trace.origin();
 
     if let Some(cached) = vm.jit.get_cached_function(origin, trace.start()) {
+        debug!("jit function cached");
         return Ok((trace, cached.compiled()));
     }
 
-    let types = infer_types_and_labels(bytecode, QueryProvider::new(vm, &trace))?;
+    let jit_infer = span!(Level::TRACE, "jit type infer");
+    let types = jit_infer.in_scope(|| infer_types_and_labels(bytecode, QueryProvider::new(vm, &trace)))?;
 
-    let fun = vm
-        .jit
-        .backend
-        .compile_trace(QueryProvider::new(vm, &trace), bytecode, types, &trace)?;
+    let jit_compile = span!(Level::TRACE, "jit compile");
+    let fun = jit_compile.in_scope(|| {
+        vm.jit
+            .backend
+            .compile_trace(QueryProvider::new(vm, &trace), bytecode, types, &trace)
+    })?;
 
     let compiled = fun.compiled();
 

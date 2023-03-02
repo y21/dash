@@ -19,6 +19,7 @@ use self::{
     },
 };
 
+use dash_log::{debug, error, span, Level};
 use dash_middle::compiler::instruction::Instruction;
 use util::unlikely;
 use value::{promise::{Promise, PromiseState}, ValueContext, function::bound::BoundFunction, PureBuiltin, object::NamedObject};
@@ -69,6 +70,7 @@ pub struct Vm {
 
 impl Vm {
     pub fn new(params: VmParams) -> Self {
+        debug!("create vm");
         let mut gc = Gc::new();
         let statics = Statics::new(&mut gc);
         // TODO: global __proto__ and constructor
@@ -104,6 +106,7 @@ impl Vm {
     /// Prepare the VM for execution.
     #[rustfmt::skip]
     fn prepare(&mut self) {
+        debug!("initialize vm intrinsics");
         fn set_fn_prototype(v: &dyn Object, proto: &Handle<dyn Object>, name: &str) {
             let fun = v.as_any().downcast_ref::<Function>().unwrap();
             fun.set_name(name.into());
@@ -850,6 +853,7 @@ impl Vm {
         let it = other.into_iter();
         let len = it.len();
         if self.stack.len() + len > MAX_STACK_SIZE {
+            debug!("vm exceeded stack size");
             throw!(self, RangeError,"Maximum stack size exceeded");
         }
         self.stack.extend(it);
@@ -872,6 +876,7 @@ impl Vm {
     }
 
     fn handle_rt_error(&mut self, err: Value, max_fp: usize) -> Result<(), Value> {
+        debug!("handling rt error @{max_fp}");
         // Using .last() here instead of .pop() because there is a possibility that we
         // can't use this block (read the comment above the if statement try_fp < max_fp)
         if let Some(last) = self.try_blocks.last() {
@@ -918,14 +923,19 @@ impl Vm {
 
     /// Processes all queued async tasks
     pub fn process_async_tasks(&mut self) {
+        debug!("process async tasks");
+        debug!(async_task_count = %self.async_tasks.len());
+
         while !self.async_tasks.is_empty() {
             let tasks = mem::take(&mut self.async_tasks);
 
             let mut scope = LocalScope::new(self);
 
             for task in tasks {
+                debug!("process task {:?}", task);
                 if let Err(ex) = task.apply(&mut scope, Value::undefined(), Vec::new()) {
                     if let Some(callback) = scope.params.unhandled_task_exception_callback() {
+                        error!("uncaught async task exception");
                         callback(&mut scope, ex);
                     }
                 }
@@ -937,15 +947,21 @@ impl Vm {
     /// 
     /// Parameters must be pushed onto the stack in the correct order by the caller before this function is called.
     pub fn execute_frame(&mut self, frame: Frame) -> Result<HandleResult, Value> {
-        self.pad_stack_for_frame(&frame);
-        self.execute_frame_raw(frame)
+        debug!("execute frame {:?}", frame.function.name);
+        let span = span!(Level::TRACE, "vm frame");
+        span.in_scope(|| {
+            self.pad_stack_for_frame(&frame);
+            self.execute_frame_raw(frame)
+        })
     }
 
     /// Does the necessary stack management that needs to be done before executing a JavaScript frame
     pub(crate) fn pad_stack_for_frame(&mut self, frame: &Frame) {
+        let pad_to = self.stack.len() + frame.extra_stack_space;
+        debug!(pad_to);
         // TODO: check that the stack space won't exceed our stack frame limit
         self.stack
-            .resize(self.stack.len() + frame.extra_stack_space, Value::undefined());
+            .resize(pad_to, Value::undefined());
     }
 
     /// Executes a frame in this VM, without doing any sort of stack management
@@ -988,22 +1004,35 @@ impl Vm {
     }
 
     pub fn perform_gc(&mut self) {
-        self.trace_roots();
+        debug!("gc cycle triggered");
+
+        let trace_roots = span!(Level::TRACE, "gc trace");
+        trace_roots.in_scope(|| self.trace_roots());
 
         // All reachable roots are marked.
-        unsafe { self.gc.sweep() };
+        debug!("object count before sweep: {}", self.gc.heap_size());
+        let sweep = span!(Level::TRACE, "gc sweep");
+        sweep.in_scope(|| unsafe { self.gc.sweep() });
+        debug!("object count after sweep: {}", self.gc.heap_size());
 
         // Adjust GC threshold
         let new_object_count = self.gc.heap_size();
         self.gc_object_threshold = new_object_count * 2;
+        debug!("new threshold: {}", self.gc_object_threshold);
     }
 
     fn trace_roots(&mut self) {
+        debug!("trace frames");
         self.frames.trace();
+        debug!("trace async tasks");
         self.async_tasks.trace();
+        debug!("trace stack");
         self.stack.trace();
+        debug!("trace globals");
         self.global.trace();
+        debug!("trace externals");
         self.externals.trace();
+        debug!("trace statics");
         self.statics.trace();
     }
 
@@ -1064,6 +1093,7 @@ impl Vm {
     /// It will replace the instruction with one that does not attempt to trigger a trace.
     #[cfg(feature = "jit")]
     pub(crate) fn poison_ip(&mut self, ip: usize) {
+        warn!("ip poisoned: {}", ip);
         self.frames.last().unwrap().function.poison_ip(ip);
     }
 

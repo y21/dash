@@ -2,16 +2,20 @@ use std::rc::Rc;
 
 mod frontend;
 mod query;
+use dash_log::debug;
+use dash_log::error;
+use dash_log::warn;
 pub use frontend::Frontend;
 use frontend::Trace;
 
 use crate::Vm;
 
 fn handle_loop_trace(vm: &mut Vm, jmp_instr_ip: usize) {
+    debug!("end of loop tracing");
     let (trace, fun) = match frontend::compile_current_trace(vm) {
         Ok(t) => t,
         Err(err) => {
-            eprintln!("JIT compilation failed! {err:?}");
+            error!("JIT compilation failed! {err:?}");
             vm.poison_ip(jmp_instr_ip);
             return;
         }
@@ -25,6 +29,7 @@ fn handle_loop_trace(vm: &mut Vm, jmp_instr_ip: usize) {
     let offset_ip = trace.start();
     let mut target_ip = 0;
 
+    debug!("call into jit");
     unsafe {
         let stack_ptr = vm.stack.as_mut_ptr().cast();
         let frame_sp = u64::try_from(frame_sp).unwrap();
@@ -33,6 +38,8 @@ fn handle_loop_trace(vm: &mut Vm, jmp_instr_ip: usize) {
     }
 
     target_ip = offset_ip as u64 + target_ip;
+    debug!("jit returned");
+    debug!(target_ip);
 
     // `target_ip` is not the "real" IP, there may be some extra instructions before the loop header
     vm.frames.last_mut().unwrap().ip = target_ip as usize;
@@ -64,6 +71,7 @@ fn handle_loop_counter_inc(vm: &mut Vm, loop_end_ip: usize, parent_ip: Option<us
         if frame.function.is_poisoned_ip(loop_end_ip) {
             // We have already tried to compile this loop, and failed
             // So don't bother re-tracing
+            warn!("loop is poisoned, cannot jit");
             return;
         }
 
@@ -72,6 +80,8 @@ fn handle_loop_counter_inc(vm: &mut Vm, loop_end_ip: usize, parent_ip: Option<us
         // The trace will go on until either:
         // - The loop is exited
         // - The iteration has ended (i.e. we are here again)
+        debug!("detected hot loop, begin trace");
+        debug!(loop_end_ip, parent_ip);
         let trace = Trace::new(origin, frame.ip, loop_end_ip, parent_ip);
         vm.jit.set_recording_trace(trace);
     }

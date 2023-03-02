@@ -1,5 +1,7 @@
 use std::{cell::Cell, ptr::NonNull};
 
+use dash_log::debug;
+
 use crate::{gc::handle::InnerHandle, value::object::Object};
 
 use self::{
@@ -42,6 +44,7 @@ impl<T: ?Sized + Trace> Gc<T> {
 
                 node = next;
 
+                debug!(flags = ?flags, refcount, ptr = ?ptr);
                 if !flags.is_marked() && refcount == 0 {
                     // Reference did not get marked during GC trace and there are no Persistent<T> refs. Deallocate.
 

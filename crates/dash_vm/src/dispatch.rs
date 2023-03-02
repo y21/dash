@@ -1,3 +1,4 @@
+use dash_log::warn;
 use std::{
     ops::{Deref, DerefMut},
     rc::Rc,
@@ -1601,6 +1602,7 @@ mod handlers {
                 let mut sc = cx.scope();
 
                 if unlikely(!sc.builtins_purity()) {
+                    warn!("missed spec call due to impurity");
                     // Builtins impure, fallback to slow dynamic property lookup
                     let global = sc.global.clone();
                     let k = global.get_property(&mut sc, PropertyKey::from(stringify!($k)))?;

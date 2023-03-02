@@ -1,3 +1,4 @@
+use dash_log::debug;
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::expr::ArrayLiteral;
 use dash_middle::parser::expr::AssignmentExpr;
@@ -305,6 +306,7 @@ impl<'a, 'b> ConstFunctionEvalCtx<'a, 'b> {
         let Expr::Conditional(ConditionalExpr { condition, then, el }) = conditional_expr else {
             unreachable!()
         };
+        debug!("reduce conditional {:?}", condition);
         self.visit(condition, func_id);
         self.visit(then, func_id);
         self.visit(el, func_id);
@@ -314,9 +316,13 @@ impl<'a, 'b> ConstFunctionEvalCtx<'a, 'b> {
 
         match &**condition {
             Literal(Boolean(true)) => {
+                debug!("reduced condition to true");
                 *conditional_expr = (**then).clone();
             }
-            Literal(Boolean(false)) => *conditional_expr = (**el).clone(),
+            Literal(Boolean(false)) => {
+                debug!("reduced condition to false");
+                *conditional_expr = (**el).clone()
+            }
             _ => {}
         }
     }
@@ -363,9 +369,10 @@ impl<'a, 'b> ConstFunctionEvalCtx<'a, 'b> {
         let Expr::Binary(BinaryExpr { left, right, operator }) = binary_expr else {
             unreachable!()
         };
-
+        debug!("reduce binary: {:?} {:?}", left, right);
         self.visit(left, func_id);
         self.visit(right, func_id);
+        debug!("reduced binary to: {:?} {:?}", left, right);
 
         use Expr::*;
         use LiteralExpr::*;

@@ -190,6 +190,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
         let current = self.current()?;
 
         if current.ty.is_variable() {
+            self.advance();
             let variables = self.parse_variable()?;
 
             return Some(ExportKind::NamedVar(variables));

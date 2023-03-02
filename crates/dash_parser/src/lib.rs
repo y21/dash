@@ -1,3 +1,6 @@
+use dash_log::debug;
+use dash_log::span;
+use dash_log::Level;
 use dash_middle::lexer::token::Token;
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::error::Error;
@@ -81,7 +84,8 @@ impl<'a> Parser<'a> {
     /// Usually `parse_all` is used to attempt to parse the entire program
     /// and get any existing errors
     pub fn parse(&mut self) -> Option<Statement<'a>> {
-        self.parse_statement()
+        let parse = span!(Level::TRACE, "parser");
+        parse.in_scope(|| self.parse_statement())
     }
 
     /// Iteratively parses every token and returns an AST, or a vector of errors
@@ -175,6 +179,7 @@ impl<'a> Parser<'a> {
     }
 
     fn create_error(&mut self, kind: ErrorKind<'a>) {
+        debug!("got error {:?}, recovering", kind);
         if !self.error_sync {
             self.errors.push(Error {
                 kind,

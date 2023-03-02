@@ -3,6 +3,7 @@ use std::iter::Enumerate;
 use std::slice::Iter;
 
 use boolvec::BoolVec;
+use dash_log::debug;
 use dash_middle::compiler::instruction::Instruction;
 use dash_middle::compiler::instruction::IntrinsicOperation;
 use llvm_sys::core::LLVMDoubleType;
@@ -101,10 +102,13 @@ impl<'a> DecodeContext<'a> {
     }
 
     pub fn set_inferred_type(&mut self, index: u16, ty: Type) {
+        debug!("inferred type of local");
+        debug!(index, ?ty);
         self.local_types.insert(index, ty);
     }
 
     pub fn set_label_at(&mut self, at: usize) {
+        debug!("discovered label at {}", at);
         self.labels.set(at, true);
     }
 }

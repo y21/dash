@@ -1,10 +1,9 @@
 [package]
-name = "dash_optimizer"
-version = "0.3.0"
+name = "dash_log"
+version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-dash_middle = { path = "../dash_middle" }
-dash_log = { path = "../dash_log" }
+tracing = "0.1.37"

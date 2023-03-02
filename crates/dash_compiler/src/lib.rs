@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::rc::Rc;
 use std::{convert::TryInto, usize};
 
+use dash_log::{debug, span, Level};
 use dash_middle::compiler::constant::{Constant, Function};
 use dash_middle::compiler::instruction::{AssignKind, IntrinsicOperation};
 use dash_middle::compiler::scope::ScopeLocal;
@@ -47,6 +48,7 @@ use dash_optimizer::type_infer::TypeInferCtx;
 use dash_optimizer::OptLevel;
 use instruction::compile_local_load;
 use jump_container::JumpContainer;
+use tracing::instrument;
 
 use crate::builder::{InstructionBuilder, Label};
 
@@ -75,6 +77,7 @@ enum Breakable {
 }
 
 /// Function-specific state, such as
+#[derive(Debug)]
 struct FunctionLocalState {
     /// Instruction buffer
     buf: Vec<u8>,
@@ -160,6 +163,7 @@ impl FunctionLocalState {
     }
 }
 
+#[derive(Debug)]
 pub struct FunctionCompiler<'a> {
     function_stack: Vec<FunctionLocalState>,
     tcx: TypeInferCtx<'a>,
@@ -182,6 +186,9 @@ impl<'a> FunctionCompiler<'a> {
         mut ast: Vec<Statement<'a>>,
         implicit_return: bool,
     ) -> Result<CompileResult, CompileError> {
+        let compile_span = span!(Level::TRACE, "compile ast");
+        let _enter = compile_span.enter();
+
         if implicit_return {
             transformations::ast_patch_implicit_return(&mut ast);
         } else {
@@ -189,46 +196,30 @@ impl<'a> FunctionCompiler<'a> {
             transformations::ast_insert_implicit_return(&mut ast);
         }
 
-        // Run type inference
-        for stmt in &ast {
-            self.tcx.visit_statement(&stmt, FuncId::ROOT);
-        }
-
-        // Run const eval
-        if self.opt_level.enabled() {
-            let mut cfx = ConstFunctionEvalCtx::new(&mut self.tcx, self.opt_level);
-
-            for stmt in &mut ast {
-                cfx.visit_statement(stmt, FuncId::ROOT);
+        let tif_span = span!(Level::TRACE, "type infer");
+        tif_span.in_scope(|| {
+            debug!("begin type inference");
+            for stmt in &ast {
+                self.tcx.visit_statement(&stmt, FuncId::ROOT);
             }
-        }
+            debug!("finished type inference");
+        });
 
-        // TODO: this needs to be done for every function in the TypeInfer pass
-        // let hoisted_locals = transformations::hoist_declarations(&mut ast);
-        // for binding in hoisted_locals {
-        //     match binding.name {
-        //         VariableDeclarationName::Identifier(name) => {
-        //             self.scope.add_local(name, binding.kind, false, None)?;
-        //         }
-        //         VariableDeclarationName::ArrayDestructuring { fields, rest } => {
-        //             for field in fields {
-        //                 self.scope.add_local(field, binding.kind, false, None)?;
-        //             }
-        //             if let Some(rest) = rest {
-        //                 self.scope.add_local(rest, binding.kind, false, None)?;
-        //             }
-        //         }
-        //         VariableDeclarationName::ObjectDestructuring { fields, rest } => {
-        //             for (field, alias) in fields {
-        //                 let field = alias.unwrap_or(field);
-        //                 self.scope.add_local(field, binding.kind, false, None)?;
-        //             }
-        //             if let Some(rest) = rest {
-        //                 self.scope.add_local(rest, binding.kind, false, None)?;
-        //             }
-        //         }
-        //     }
-        // }
+        let consteval_span = span!(Level::TRACE, "const eval");
+        consteval_span.in_scope(|| {
+            let opt_level = self.opt_level;
+            if opt_level.enabled() {
+                debug!("begin const eval, opt level: {:?}", opt_level);
+                let mut cfx = ConstFunctionEvalCtx::new(&mut self.tcx, opt_level);
+
+                for stmt in &mut ast {
+                    cfx.visit_statement(stmt, FuncId::ROOT);
+                }
+                debug!("finished const eval");
+            } else {
+                debug!("skipping const eval");
+            }
+        });
 
         self.function_stack
             .push(FunctionLocalState::new(FunctionKind::Function, FuncId::ROOT));
