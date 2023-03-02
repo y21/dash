@@ -89,10 +89,9 @@ impl Value {
     }
 
     pub fn bitushr(&self, other: &Self, scope: &mut LocalScope) -> Result<Value, Value> {
-        let this = self.to_int32(scope)?;
-        let that = other.to_int32(scope)?;
-        // TODO: >>>
-        Ok(Value::number((this >> that) as f64))
+        let this = self.to_int32(scope)? as u32;
+        let that = other.to_int32(scope)? as u32;
+        Ok(Value::number((this.wrapping_shr(that)) as f64))
     }
 
     pub fn bitnot(&self, scope: &mut LocalScope) -> Result<Value, Value> {

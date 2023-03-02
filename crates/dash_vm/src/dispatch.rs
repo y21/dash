@@ -1527,6 +1527,12 @@ mod handlers {
                 cx.stack.push(Value::number(((l as i64 as i32) $op (r as i64 as i32)) as f64));
             }};
         }
+        macro_rules! bin_op_u64 {
+            ($op:tt) => {{
+                let (l, r) = lr_as_num_spec!();
+                cx.stack.push(Value::number(((l as i64 as u32) $op (r as i64 as u32)) as f64));
+            }};
+        }
 
         macro_rules! bin_op_to_bool {
             ($op:tt) => {{
@@ -1627,7 +1633,7 @@ mod handlers {
             IntrinsicOperation::BitAndNumLR => bin_op_i64!(&),
             IntrinsicOperation::BitShlNumLR => bin_op_i64!(<<),
             IntrinsicOperation::BitShrNumLR => bin_op_i64!(>>),
-            IntrinsicOperation::BitUshrNumLR => bin_op_i64!(>>),
+            IntrinsicOperation::BitUshrNumLR => bin_op_u64!(>>),
             IntrinsicOperation::PostfixIncLocalNum => postfix!(+),
             IntrinsicOperation::PostfixDecLocalNum => postfix!(-),
             IntrinsicOperation::PrefixIncLocalNum => prefix!(+),
