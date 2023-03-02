@@ -36,10 +36,18 @@ fn get_stack_trace(name: &str, message: &str, vm: &Vm) -> Rc<str> {
 
 impl Error {
     pub fn new<S: Into<Rc<str>>>(vm: &mut Vm, message: S) -> Self {
-        Self::with_name(vm, "Error", message)
+        let ctor = vm.statics.error_ctor.clone();
+        let proto = vm.statics.error_prototype.clone();
+        Self::suberror(vm, "Error", message, ctor, proto)
     }
 
-    pub fn with_name<S1: Into<Rc<str>>, S2: Into<Rc<str>>>(vm: &mut Vm, name: S1, message: S2) -> Self {
+    pub fn suberror<S1: Into<Rc<str>>, S2: Into<Rc<str>>>(
+        vm: &mut Vm,
+        name: S1,
+        message: S2,
+        ctor: Handle<dyn Object>,
+        proto: Handle<dyn Object>,
+    ) -> Self {
         let name = name.into();
         let message = message.into();
         let stack = get_stack_trace(&name, &message, vm);
@@ -48,10 +56,7 @@ impl Error {
             name,
             message,
             stack,
-            obj: NamedObject::with_prototype_and_constructor(
-                vm.statics.error_prototype.clone(),
-                vm.statics.error_ctor.clone(),
-            ),
+            obj: NamedObject::with_prototype_and_constructor(proto, ctor),
         }
     }
 
@@ -142,11 +147,11 @@ macro_rules! define_error_type {
 
             impl $t {
                 pub fn new<S: Into<Rc<str>>>(vm: &mut Vm, message: S) -> Self {
-                    let _proto = vm.statics.$proto.clone();
-                    let _ctor = vm.statics.$ctor.clone();
+                    let ctor = vm.statics.$ctor.clone();
+                    let proto = vm.statics.$proto.clone();
 
                     Self {
-                        inner: Error::with_name(vm, stringify!($t), message),
+                        inner: Error::suberror(vm, stringify!($t), message, ctor, proto),
                     }
                 }
 
