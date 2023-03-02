@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1677762818915,
+  "lastUpdate": 1677765938168,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -1551,6 +1551,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 84296,
             "range": "± 842",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "c643aff764eafcad52d3f7b879eb3042d6524537",
+          "message": "testrunner: support negative tests",
+          "timestamp": "2023-03-02T15:00:57+01:00",
+          "tree_id": "0698a5e1a7d808e4cad662265e75293ed80b990a",
+          "url": "https://github.com/y21/dash/commit/c643aff764eafcad52d3f7b879eb3042d6524537"
+        },
+        "date": 1677765936507,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 3433765,
+            "range": "± 60793",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 299154,
+            "range": "± 5646",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 84111,
+            "range": "± 401",
             "unit": "ns/iter"
           }
         ]
