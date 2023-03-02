@@ -1,9 +1,10 @@
+use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::panic;
 use std::sync::atomic;
 use std::sync::atomic::AtomicU32;
-use std::sync::Arc;
+use std::sync::Mutex;
 
 use clap::ArgMatches;
 use dash_vm::eval::EvalError;
@@ -11,9 +12,8 @@ use dash_vm::local::LocalScope;
 use dash_vm::params::VmParams;
 use dash_vm::value::ops::abstractions::conversions::ValueConversion;
 use dash_vm::Vm;
-use futures_util::future;
-use futures_util::stream::FuturesUnordered;
-use futures_util::StreamExt;
+use once_cell::sync::Lazy;
+use serde::Deserialize;
 
 use crate::util;
 
@@ -22,21 +22,18 @@ pub fn run(matches: &ArgMatches) -> anyhow::Result<()> {
     let verbose = matches.is_present("verbose");
     let files = util::get_all_files(OsStr::new(path))?;
 
-    let tokio = tokio::runtime::Runtime::new()?;
-    tokio.block_on(run_inner(files, verbose))?;
+    run_inner(files, verbose)?;
 
     Ok(())
 }
 
-async fn run_inner(files: Vec<OsString>, verbose: bool) -> anyhow::Result<()> {
-    let setup: Arc<str> = {
-        let sta = tokio::fs::read_to_string("../test262/harness/sta.js");
-        let assert = tokio::fs::read_to_string("../test262/harness/assert.js");
+fn run_inner(files: Vec<OsString>, verbose: bool) -> anyhow::Result<()> {
+    let setup: String = {
+        let sta = std::fs::read_to_string("../test262/harness/sta.js")?;
+        let assert = std::fs::read_to_string("../test262/harness/assert.js")?;
 
-        let (sta, assert) = future::join(sta, assert).await;
-
-        let code = format!("{};\n{};\n", sta?, assert?);
-        code.into()
+        let code = format!("{};\n{};\n", sta, assert);
+        code
     };
 
     #[derive(Default)]
@@ -46,17 +43,15 @@ async fn run_inner(files: Vec<OsString>, verbose: bool) -> anyhow::Result<()> {
         panics: AtomicU32,
     }
 
-    let counter = Arc::new(Counter::default());
+    let counter = Counter::default();
+    let file_count = files.len();
 
-    for files in files.chunks(4) {
-        let mut futs = FuturesUnordered::new();
-
+    let tp = rayon::ThreadPoolBuilder::default().stack_size(8_000_000).build()?;
+    tp.scope(|s| {
         for file in files {
-            let setup = Arc::clone(&setup);
-            let counter = Arc::clone(&counter);
-
-            let fut = async move {
-                let result = run_test(&setup, file, verbose).await;
+            s.spawn(|_| {
+                let file = file;
+                let result = run_test(&setup, &file, verbose);
 
                 let counter = match result {
                     RunResult::Pass => &counter.passes,
@@ -65,18 +60,14 @@ async fn run_inner(files: Vec<OsString>, verbose: bool) -> anyhow::Result<()> {
                 };
 
                 counter.fetch_add(1, atomic::Ordering::Relaxed);
-            };
-
-            futs.push(fut);
+            });
         }
-
-        while let Some(()) = futs.next().await {}
-    }
+    });
 
     let passes = counter.passes.load(atomic::Ordering::Relaxed);
     let fails = counter.fails.load(atomic::Ordering::Relaxed);
     let panics = counter.panics.load(atomic::Ordering::Relaxed);
-    let rate = ((passes as f32) / (files.len() as f32)) * 100.0;
+    let rate = ((passes as f32) / (file_count as f32)) * 100.0;
     println!("== Result ===");
     println!("Passes: {passes} ({rate:.2}%)",);
     println!("Fails: {fails}");
@@ -92,9 +83,40 @@ enum RunResult {
     Panic,
 }
 
-async fn run_test(setup: &str, path: &OsStr, verbose: bool) -> RunResult {
-    let contents = tokio::fs::read_to_string(path).await.unwrap();
-    let contents = format!("{setup}{contents}");
+#[derive(Deserialize)]
+struct YamlMetadata {
+    includes: Option<Vec<String>>,
+}
+
+fn extract_yaml_metadata(source: &str) -> Option<YamlMetadata> {
+    let start = source.find("/*---")?;
+    let end = source[start..].find("---*/")?;
+    let full = &source[start + 6..start + end];
+    let value = serde_yaml::from_str(full).unwrap();
+    Some(value)
+}
+
+fn get_harness_code(path: &str) -> String {
+    static CACHE: Lazy<Mutex<HashMap<String, String>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+    let mut lock = CACHE.lock().unwrap();
+    let code = lock
+        .entry(path.into())
+        .or_insert_with(|| std::fs::read_to_string(path).unwrap());
+    code.clone()
+}
+
+fn run_test(setup: &str, path: &OsStr, verbose: bool) -> RunResult {
+    let contents = std::fs::read_to_string(path).unwrap();
+    let mut prelude = String::from(setup);
+    if let Some(metadata) = extract_yaml_metadata(&contents) {
+        if let Some(includes) = metadata.includes {
+            for include in includes {
+                let patched_file = format!("../test262/harness/{include}");
+                prelude += &get_harness_code(&patched_file);
+            }
+        }
+    }
+    let contents = format!("{prelude}{contents}");
 
     let maybe_pass = panic::catch_unwind(move || {
         let mut vm = Vm::new(VmParams::default());
@@ -104,8 +126,8 @@ async fn run_test(setup: &str, path: &OsStr, verbose: bool) -> RunResult {
                 if verbose {
                     let s = match err {
                         EvalError::Compiler(c) => c.to_string(),
-                        EvalError::Lexer(l) => format!("{l:?}"),
-                        EvalError::Parser(p) => format!("{p:?}"),
+                        EvalError::Lexer(l) => format!("{:?}", l[0].kind),
+                        EvalError::Parser(p) => format!("{:?}", p[0].kind),
                         EvalError::Exception(ex) => {
                             let mut sc = LocalScope::new(&mut vm);
                             match ex.to_string(&mut sc) {
@@ -123,6 +145,9 @@ async fn run_test(setup: &str, path: &OsStr, verbose: bool) -> RunResult {
 
     match maybe_pass {
         Ok(pass) => pass,
-        Err(_) => RunResult::Panic,
+        Err(_) => {
+            println!("Panic in {}", path.to_str().unwrap());
+            RunResult::Panic
+        }
     }
 }

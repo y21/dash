@@ -9,7 +9,9 @@ edition = "2018"
 clap = { version = "3.0.0", features = ["std"], default-features = false }
 anyhow = "1.0"
 dash_core = { path = "../crates/dash_core" }
-tokio = { version = "1.24.0", features = ["full"] }
-futures-util = "0.3.21"
 dash_vm = { path = "../crates/dash_vm", features = [] }
 dash_optimizer = { path = "../crates/dash_optimizer" }
+serde_yaml = "0.9.17"
+once_cell = "1.17.1"
+rayon = "1.6.1"
+serde = { version = "1.0.152", features = ["derive"] }
