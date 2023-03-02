@@ -24,6 +24,6 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
 pub fn value_of(cx: CallContext) -> Result<Value, Value> {
     match cx.this {
         Value::Boolean(b) => Ok(Value::Boolean(b)),
-        _ => throw!(cx.scope, "Boolean.valueOf called on non-boolean"),
+        _ => throw!(cx.scope, TypeError, "Boolean.valueOf called on non-boolean"),
     }
 }

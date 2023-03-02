@@ -12,7 +12,7 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
 
     let nodes = match RegexParser::new(pattern.as_bytes()).parse_all() {
         Ok(nodes) => nodes,
-        Err(err) => throw!(cx.scope, "Regex parser error: {}", err),
+        Err(err) => throw!(cx.scope, SyntaxError, "Regex parser error: {}", err),
     };
 
     let regex = RegExp::new(nodes, pattern, cx.scope);
@@ -25,12 +25,12 @@ pub fn test(cx: CallContext) -> Result<Value, Value> {
 
     let regex = match cx.this.downcast_ref::<RegExp>() {
         Some(regex) => regex,
-        None => throw!(cx.scope, "Receiver must be a RegExp"),
+        None => throw!(cx.scope, TypeError, "Receiver must be a RegExp"),
     };
 
     let (nodes, _) = match regex.inner() {
         Some(nodes) => nodes,
-        None => throw!(cx.scope, "Receiver must be an initialized RegExp object"),
+        None => throw!(cx.scope, TypeError, "Receiver must be an initialized RegExp object"),
     };
 
     let mut matcher = RegexMatcher::new(nodes, text.as_bytes());

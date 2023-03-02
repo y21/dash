@@ -149,7 +149,7 @@ impl Object for GeneratorIterator {
 pub fn as_generator<'a>(scope: &mut LocalScope, value: &'a Value) -> Result<&'a GeneratorIterator, Value> {
     let generator = match value.downcast_ref::<GeneratorIterator>() {
         Some(it) => it,
-        None => throw!(scope, "Incompatible receiver"),
+        None => throw!(scope, TypeError, "Incompatible receiver"),
     };
 
     Ok(generator)

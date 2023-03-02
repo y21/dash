@@ -224,7 +224,7 @@ pub fn repeat(cx: CallContext) -> Result<Value, Value> {
 
     // 3. If n < 0, throw a RangeError exception.
     if n < 0.0 {
-        throw!(cx.scope, "Invalid count value");
+        throw!(cx.scope, RangeError, "Invalid count value");
     }
 
     // 4. Let result be the String value that is the concatenation of n copies of O.

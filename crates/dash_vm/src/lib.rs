@@ -827,7 +827,7 @@ impl Vm {
             self.frames.push(frame);
         } else {
             cold_path();
-            throw!(self, "Maximum call stack size exceeded");
+            throw!(self, RangeError, "Maximum call stack size exceeded");
         }
         Ok(())
     }
@@ -837,7 +837,7 @@ impl Vm {
             self.stack.push(value);
         } else {
             cold_path();
-            throw!(self, "Maximum stack size exceeded");
+            throw!(self, RangeError, "Maximum stack size exceeded");
         }
         Ok(())
     }
@@ -850,7 +850,7 @@ impl Vm {
         let it = other.into_iter();
         let len = it.len();
         if self.stack.len() + len > MAX_STACK_SIZE {
-            throw!(self, "Maximum stack size exceeded");
+            throw!(self, RangeError,"Maximum stack size exceeded");
         }
         self.stack.extend(it);
         Ok(())

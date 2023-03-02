@@ -93,7 +93,7 @@ impl Object for Array {
                 let new_len = value.to_number(sc)? as usize;
 
                 if new_len > MAX_LENGTH {
-                    throw!(sc, "Invalid array length");
+                    throw!(sc, RangeError, "Invalid array length");
                 }
 
                 items.resize(new_len as usize, PropertyValue::static_default(Value::undefined()));

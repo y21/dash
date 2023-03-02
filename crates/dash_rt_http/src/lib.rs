@@ -49,7 +49,7 @@ pub fn listen(mut cx: CallContext) -> Result<Value, Value> {
     let port = cx.args.first().unwrap_or_undefined().to_int32(&mut cx.scope)?;
     let cb = match cx.args.get(1).cloned() {
         Some(Value::Object(o)) => o,
-        _ => throw!(cx.scope, "Expected callback function as second argument"),
+        _ => throw!(cx.scope, TypeError, "Expected callback function as second argument"),
     };
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port as u16));
@@ -166,14 +166,14 @@ fn ctx_respond(cx: CallContext) -> Result<Value, Value> {
     let this = match &cx.this {
         Value::Object(this) | Value::External(this) => match this.as_any().downcast_ref::<HttpContext>() {
             Some(ctx) => ctx,
-            None => throw!(cx.scope, "Incompatible receiver"),
+            None => throw!(cx.scope, TypeError, "Incompatible receiver"),
         },
-        _ => throw!(cx.scope, "Missing this"),
+        _ => throw!(cx.scope, TypeError, "Missing this"),
     };
 
     let sender = match this.sender.try_take() {
         Some(sender) => sender,
-        None => throw!(cx.scope, "Cannot respond twice"),
+        None => throw!(cx.scope, Error, "Cannot respond twice"),
     };
 
     let message = cx.args.first().unwrap_or_undefined().to_string(cx.scope)?;

@@ -212,7 +212,7 @@ pub fn floor(cx: CallContext) -> Result<Value, Value> {
 pub fn random(mut cx: CallContext) -> Result<Value, Value> {
     let num = match cx.scope.params().math_random_callback() {
         Some(cb) => cb(&mut cx.scope)?,
-        None => throw!(cx.scope, "Math.random is disabled for this context"),
+        None => throw!(cx.scope, Error, "Math.random is disabled for this context"),
     };
 
     Ok(Value::number(num))

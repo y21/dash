@@ -524,7 +524,7 @@ impl Object for NamedObject {
                     sc,
                     match value.into_kind() {
                         PropertyValueKind::Static(value) => value,
-                        _ => throw!(sc, "Prototype cannot be a trap"),
+                        _ => throw!(sc, TypeError, "Prototype cannot be a trap"),
                     },
                 )
             }
@@ -534,7 +534,7 @@ impl Object for NamedObject {
                         self.constructor.replace(Some(obj));
                         return Ok(());
                     }
-                    _ => throw!(sc, "constructor is not an object"), // TODO: it doesn't need to be
+                    _ => throw!(sc, TypeError, "constructor is not an object"), // TODO: it doesn't need to be
                 }
             }
             _ => {}
@@ -593,7 +593,7 @@ impl Object for NamedObject {
             Value::Null(_) => self.prototype.replace(None),
             Value::Object(handle) => self.prototype.replace(Some(handle)),
             Value::External(handle) => self.prototype.replace(Some(handle)), // TODO: check that handle is an object
-            _ => throw!(sc, "prototype must be an object"),
+            _ => throw!(sc, TypeError, "prototype must be an object"),
         };
 
         Ok(())

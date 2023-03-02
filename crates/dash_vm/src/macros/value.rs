@@ -1,23 +1,16 @@
 #[macro_export]
 macro_rules! throw {
-    ($vm:expr) => {
+    ($vm:expr, $err:ident, $msg:expr) => {
         return Err({
             let mut vm = $vm;
-            let err = $crate::value::error::Error::new(&mut vm, "Unnamed error");
+            let err = $crate::value::error::$err::new(&mut vm, $msg);
             vm.gc_mut().register(err).into()
         })
     };
-    ($vm:expr, $msg:expr) => {
+    ($vm:expr, $err:ident, $msg:expr, $($arg:expr),*) => {
         return Err({
             let mut vm = $vm;
-            let err = $crate::value::error::Error::new(&mut vm, $msg);
-            vm.gc_mut().register(err).into()
-        })
-    };
-    ($vm:expr, $msg:expr, $($arg:expr),*) => {
-        return Err({
-            let mut vm = $vm;
-            let err = $crate::value::error::Error::new(&mut vm, format!($msg, $($arg),*));
+            let err = $crate::value::error::$err::new(&mut vm, format!($msg, $($arg),*));
             vm.gc_mut().register(err).into()
         })
     };

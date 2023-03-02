@@ -20,7 +20,7 @@ use crate::Vm;
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let initiator = match cx.args.first() {
         Some(v) if matches!(v.type_of(), Typeof::Function) => v,
-        _ => throw!(cx.scope, "Promise callback must be a function"),
+        _ => throw!(cx.scope, TypeError, "Promise callback must be a function"),
     };
 
     let promise = {
@@ -59,12 +59,12 @@ pub fn reject(cx: CallContext) -> Result<Value, Value> {
 pub fn then(cx: CallContext) -> Result<Value, Value> {
     let promise = match cx.this.downcast_ref::<Promise>() {
         Some(promise) => promise,
-        None => throw!(cx.scope, "Receiver must be a promise"),
+        None => throw!(cx.scope, TypeError, "Receiver must be a promise"),
     };
 
     let handler = match cx.args.first() {
         Some(Value::Object(obj)) if matches!(obj.type_of(), Typeof::Function) => obj.clone(),
-        _ => throw!(cx.scope, "Promise handler must be a function"),
+        _ => throw!(cx.scope, TypeError, "Promise handler must be a function"),
     };
 
     let mut state = promise.state().borrow_mut();

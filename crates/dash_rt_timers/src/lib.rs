@@ -47,14 +47,14 @@ impl ModuleLoader for TimersModule {
 fn set_timeout(cx: CallContext) -> Result<Value, Value> {
     let callback = match cx.args.first() {
         Some(Value::Object(cb)) => cb.clone(),
-        _ => throw!(cx.scope, "missing callback function argument"),
+        _ => throw!(cx.scope, TypeError, "missing callback function argument"),
     };
 
     let callback = Arc::new(ThreadSafeStorage::new(Persistent::new(callback)));
 
     let delay = match cx.args.get(1) {
         Some(delay) => delay.to_int32(cx.scope)? as u64,
-        None => throw!(cx.scope, "Missing delay argument"),
+        None => throw!(cx.scope, TypeError, "Missing delay argument"),
     };
 
     let state = State::from_vm(cx.scope);

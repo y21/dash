@@ -113,5 +113,5 @@ fn import_callback(vm: &mut Vm, import_ty: StaticImportKind, path: &str) -> Resu
     }
 
     // If it got here, the module was not found
-    throw!(sc, "Module not found: {}", path)
+    throw!(sc, RangeError, "Module not found: {}", path)
 }

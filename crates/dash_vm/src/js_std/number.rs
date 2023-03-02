@@ -27,7 +27,7 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
         2 => format!("{:b}", num),
         10 => num.to_string(),
         16 => format!("{:x}", num),
-        _ => throw!(cx.scope, "Invalid radix: {}", radix),
+        _ => throw!(cx.scope, RangeError, "Invalid radix: {}", radix),
     };
 
     Ok(Value::String(re.into()))

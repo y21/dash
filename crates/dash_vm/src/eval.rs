@@ -72,9 +72,9 @@ impl Vm {
     ) -> Result<Value, Value> {
         let re = match FunctionCompiler::compile_str(input, opt) {
             Ok(re) => re,
-            Err(CompileStrError::Compiler(ce)) => throw!(sc, "Compile error: {:?}", ce),
-            Err(CompileStrError::Parser(pe)) => throw!(sc, "Parse error: {:?}", pe),
-            Err(CompileStrError::Lexer(le)) => throw!(sc, "Lex error: {:?}", le),
+            Err(CompileStrError::Compiler(ce)) => throw!(sc, SyntaxError, "Compile error: {:?}", ce),
+            Err(CompileStrError::Parser(pe)) => throw!(sc, SyntaxError, "Parse error: {:?}", pe),
+            Err(CompileStrError::Lexer(le)) => throw!(sc, SyntaxError, "Lex error: {:?}", le),
         };
 
         let frame = Frame::from_compile_result(re);

@@ -87,11 +87,11 @@ pub fn concat(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn entries(cx: CallContext) -> Result<Value, Value> {
-    throw!(cx.scope, "Not implemented")
+    throw!(cx.scope, Error, "Not implemented")
 }
 
 pub fn keys(cx: CallContext) -> Result<Value, Value> {
-    throw!(cx.scope, "Not implemented")
+    throw!(cx.scope, Error, "Not implemented")
 }
 
 pub fn every(cx: CallContext) -> Result<Value, Value> {
@@ -173,7 +173,7 @@ pub fn reduce(cx: CallContext) -> Result<Value, Value> {
     let initial_value = cx.args.get(1);
 
     let (start, mut accumulator) = match (len, initial_value) {
-        (0, None) => throw!(cx.scope, "Reduce of empty array with no initial value"),
+        (0, None) => throw!(cx.scope, TypeError, "Reduce of empty array with no initial value"),
         (0, Some(_)) => return Ok(initial_value.unwrap().clone()),
         (_, Some(initial)) => (0, initial.clone()),
         (1, None) => {
@@ -238,7 +238,7 @@ pub fn find_index(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn flat(cx: CallContext) -> Result<Value, Value> {
-    throw!(cx.scope, "Not implemented")
+    throw!(cx.scope, Error, "Not implemented")
 }
 
 pub fn for_each(cx: CallContext) -> Result<Value, Value> {

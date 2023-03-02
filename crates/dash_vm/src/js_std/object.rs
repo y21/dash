@@ -17,7 +17,7 @@ use crate::value::Value;
 use crate::value::ValueContext;
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
-    throw!(cx.scope, "unimplemented")
+    throw!(cx.scope, Error, "unimplemented")
 }
 
 pub fn create(cx: CallContext) -> Result<Value, Value> {
@@ -72,7 +72,11 @@ pub fn get_own_property_descriptor(cx: CallContext) -> Result<Value, Value> {
     let o = cx.args.first().unwrap_or_undefined();
     let o = match &o {
         Value::Object(o) | Value::External(o) => &*o,
-        _ => throw!(cx.scope, "Object.getOwnPropertyDescriptor called on non-object"),
+        _ => throw!(
+            cx.scope,
+            TypeError,
+            "Object.getOwnPropertyDescriptor called on non-object"
+        ),
     };
     let k = cx.args.get(1).unwrap_or_undefined();
     let k = PropertyKey::from_value(cx.scope, k)?;
@@ -87,7 +91,11 @@ pub fn get_own_property_descriptors(cx: CallContext) -> Result<Value, Value> {
     let o = cx.args.first().unwrap_or_undefined();
     let o = match &o {
         Value::Object(o) | Value::External(o) => &*o,
-        _ => throw!(cx.scope, "Object.getOwnPropertyDescriptors called on non-object"),
+        _ => throw!(
+            cx.scope,
+            TypeError,
+            "Object.getOwnPropertyDescriptors called on non-object"
+        ),
     };
 
     let mut descriptors = Vec::new();
@@ -111,7 +119,11 @@ pub fn get_own_property_descriptors(cx: CallContext) -> Result<Value, Value> {
 pub fn has_own_property(cx: CallContext) -> Result<Value, Value> {
     let o = match &cx.this {
         Value::Object(o) | Value::External(o) => o,
-        _ => throw!(cx.scope, "Object.prototype.hasOwnProperty called on non-object"),
+        _ => throw!(
+            cx.scope,
+            TypeError,
+            "Object.prototype.hasOwnProperty called on non-object"
+        ),
     };
 
     let key = cx.args.first().unwrap_or_undefined();

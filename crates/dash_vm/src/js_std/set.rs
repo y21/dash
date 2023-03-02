@@ -24,7 +24,7 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
 pub fn add(cx: CallContext) -> Result<Value, Value> {
     let this = match cx.this.downcast_ref::<Set>() {
         Some(set) => set,
-        _ => throw!(cx.scope, "Incompatible receiver"),
+        _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
     };
 
     let item = cx.args.first().unwrap_or_undefined();
@@ -36,7 +36,7 @@ pub fn add(cx: CallContext) -> Result<Value, Value> {
 pub fn has(cx: CallContext) -> Result<Value, Value> {
     let this = match cx.this.downcast_ref::<Set>() {
         Some(set) => set,
-        _ => throw!(cx.scope, "Incompatible receiver"),
+        _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
     };
 
     let item = cx.args.first().unwrap_or_undefined();
@@ -46,7 +46,7 @@ pub fn has(cx: CallContext) -> Result<Value, Value> {
 pub fn delete(cx: CallContext) -> Result<Value, Value> {
     let this = match cx.this.downcast_ref::<Set>() {
         Some(set) => set,
-        _ => throw!(cx.scope, "Incompatible receiver"),
+        _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
     };
 
     let item = cx.args.first().unwrap_or_undefined();
@@ -58,7 +58,7 @@ pub fn delete(cx: CallContext) -> Result<Value, Value> {
 pub fn clear(cx: CallContext) -> Result<Value, Value> {
     let this = match cx.this.downcast_ref::<Set>() {
         Some(set) => set,
-        _ => throw!(cx.scope, "Incompatible receiver"),
+        _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
     };
 
     this.clear();
@@ -69,7 +69,7 @@ pub fn clear(cx: CallContext) -> Result<Value, Value> {
 pub fn size(cx: CallContext) -> Result<Value, Value> {
     let this = match cx.this.downcast_ref::<Set>() {
         Some(set) => set,
-        _ => throw!(cx.scope, "Incompatible receiver"),
+        _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
     };
 
     Ok(Value::number(this.size() as f64))

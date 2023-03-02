@@ -223,7 +223,7 @@ impl Object for Function {
                 scope.register(prototype)
             }
             Value::Object(o) | Value::External(o) => o,
-            _ => throw!(scope, "prototype is not an object"),
+            _ => throw!(scope, TypeError, "prototype is not an object"),
         };
 
         let this = scope.register(NamedObject::with_prototype_and_constructor(prototype, callee.clone()));

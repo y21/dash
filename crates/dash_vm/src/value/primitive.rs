@@ -63,7 +63,7 @@ impl Object for f64 {
         _this: Value,
         _args: Vec<Value>,
     ) -> Result<Value, Value> {
-        throw!(scope, "number is not a function")
+        throw!(scope, TypeError, "number is not a function")
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -120,7 +120,7 @@ impl Object for bool {
         _this: Value,
         _args: Vec<Value>,
     ) -> Result<Value, Value> {
-        throw!(scope, "boolean is not a function")
+        throw!(scope, TypeError, "boolean is not a function")
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -178,7 +178,7 @@ impl Object for Rc<str> {
         _this: Value,
         _args: Vec<Value>,
     ) -> Result<Value, Value> {
-        throw!(scope, "string is not a function")
+        throw!(scope, TypeError, "string is not a function")
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -217,11 +217,11 @@ impl Object for Undefined {
         sc: &mut LocalScope,
         key: PropertyKey,
     ) -> Result<Option<PropertyValue>, Value> {
-        throw!(sc, "Cannot read property {:?} of undefined", key)
+        throw!(sc, TypeError, "Cannot read property {:?} of undefined", key)
     }
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, _value: PropertyValue) -> Result<(), Value> {
-        throw!(sc, "Cannot set property {:?} of undefined", key)
+        throw!(sc, TypeError, "Cannot set property {:?} of undefined", key)
     }
 
     fn delete_property(&self, _sc: &mut LocalScope, _key: PropertyKey) -> Result<Value, Value> {
@@ -229,11 +229,11 @@ impl Object for Undefined {
     }
 
     fn set_prototype(&self, sc: &mut LocalScope, _value: Value) -> Result<(), Value> {
-        throw!(sc, "Cannot set prototype of undefined")
+        throw!(sc, TypeError, "Cannot set prototype of undefined")
     }
 
     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
-        throw!(sc, "Cannot get prototype of undefined")
+        throw!(sc, TypeError, "Cannot get prototype of undefined")
     }
 
     fn apply(
@@ -243,7 +243,7 @@ impl Object for Undefined {
         _this: Value,
         _args: Vec<Value>,
     ) -> Result<Value, Value> {
-        throw!(sc, "undefined is not a function")
+        throw!(sc, TypeError, "undefined is not a function")
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -269,11 +269,11 @@ impl Object for Null {
         sc: &mut LocalScope,
         key: PropertyKey,
     ) -> Result<Option<PropertyValue>, Value> {
-        throw!(sc, "Cannot read property {:?} of null", key)
+        throw!(sc, TypeError, "Cannot read property {:?} of null", key)
     }
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, _value: PropertyValue) -> Result<(), Value> {
-        throw!(sc, "Cannot set property {:?} of null", key)
+        throw!(sc, TypeError, "Cannot set property {:?} of null", key)
     }
 
     fn delete_property(&self, _sc: &mut LocalScope, _key: PropertyKey) -> Result<Value, Value> {
@@ -281,11 +281,11 @@ impl Object for Null {
     }
 
     fn set_prototype(&self, sc: &mut LocalScope, _value: Value) -> Result<(), Value> {
-        throw!(sc, "Cannot set prototype of null")
+        throw!(sc, TypeError, "Cannot set prototype of null")
     }
 
     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
-        throw!(sc, "Cannot get prototype of null")
+        throw!(sc, TypeError, "Cannot get prototype of null")
     }
 
     fn apply(
@@ -295,7 +295,7 @@ impl Object for Null {
         _this: Value,
         _args: Vec<Value>,
     ) -> Result<Value, Value> {
-        throw!(sc, "null is not a function")
+        throw!(sc, TypeError, "null is not a function")
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -363,7 +363,7 @@ impl Object for str {
         _this: Value,
         _args: Vec<Value>,
     ) -> Result<Value, Value> {
-        throw!(scope, "string is not a function")
+        throw!(scope, TypeError, "string is not a function")
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -425,7 +425,7 @@ impl Object for Symbol {
         _this: Value,
         _args: Vec<Value>,
     ) -> Result<Value, Value> {
-        throw!(scope, "symbol is not a function")
+        throw!(scope, TypeError, "symbol is not a function")
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -644,8 +644,8 @@ impl ValueConversion for Rc<str> {
         Ok(Value::String(Rc::clone(self)))
     }
 
-    fn to_number(&self, sc: &mut LocalScope) -> Result<f64, Value> {
-        self.parse().or_else(|e| throw!(sc, "{}", e))
+    fn to_number(&self, _sc: &mut LocalScope) -> Result<f64, Value> {
+        Ok(self.parse().unwrap_or(f64::NAN))
     }
 
     fn to_boolean(&self) -> Result<bool, Value> {
@@ -731,7 +731,7 @@ impl ValueConversion for Undefined {
     }
 
     fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value> {
-        throw!(sc, "Cannot convert undefined to object")
+        throw!(sc, TypeError, "Cannot convert undefined to object")
     }
 }
 
@@ -793,7 +793,7 @@ impl ValueConversion for Null {
     }
 
     fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value> {
-        throw!(sc, "Cannot convert null to object");
+        throw!(sc, TypeError, "Cannot convert null to object");
     }
 }
 
@@ -805,19 +805,19 @@ impl PrimitiveCapabilities for Symbol {
 
 impl ValueEquality for Symbol {
     fn lt(&self, _other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        throw!(sc, "Cannot convert a Symbol value to a number")
+        throw!(sc, TypeError, "Cannot convert a Symbol value to a number")
     }
 
     fn le(&self, _other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        throw!(sc, "Cannot convert a Symbol value to a number")
+        throw!(sc, TypeError, "Cannot convert a Symbol value to a number")
     }
 
     fn gt(&self, _other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        throw!(sc, "Cannot convert a Symbol value to a number")
+        throw!(sc, TypeError, "Cannot convert a Symbol value to a number")
     }
 
     fn ge(&self, _other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        throw!(sc, "Cannot convert a Symbol value to a number")
+        throw!(sc, TypeError, "Cannot convert a Symbol value to a number")
     }
 
     fn eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
@@ -835,7 +835,7 @@ impl ValueConversion for Symbol {
     }
 
     fn to_number(&self, sc: &mut LocalScope) -> Result<f64, Value> {
-        throw!(sc, "Cannot convert symbol to number");
+        throw!(sc, TypeError, "Cannot convert symbol to number");
     }
 
     fn to_boolean(&self) -> Result<bool, Value> {
@@ -843,7 +843,7 @@ impl ValueConversion for Symbol {
     }
 
     fn to_string(&self, sc: &mut LocalScope) -> Result<Rc<str>, Value> {
-        throw!(sc, "Cannot convert symbol to string");
+        throw!(sc, TypeError, "Cannot convert symbol to string");
     }
 
     fn length_of_array_like(&self, _sc: &mut LocalScope) -> Result<usize, Value> {

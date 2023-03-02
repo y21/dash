@@ -45,7 +45,7 @@ static REQWEST: Lazy<Client> = Lazy::new(|| Client::new());
 fn fetch(cx: CallContext) -> Result<Value, Value> {
     let url = match cx.args.first() {
         Some(Value::String(url)) => url.to_string(),
-        _ => throw!(cx.scope, "Expected a string as the first argument"),
+        _ => throw!(cx.scope, TypeError, "Expected a string as the first argument"),
     };
 
     let (rt, event_tx) = {
@@ -108,11 +108,11 @@ fn fetch(cx: CallContext) -> Result<Value, Value> {
 fn http_response_text(cx: CallContext) -> Result<Value, Value> {
     let this = match &cx.this {
         Value::Object(obj) => obj,
-        _ => throw!(cx.scope, "Expected a this value"),
+        _ => throw!(cx.scope, TypeError, "Expected a this value"),
     };
     let this = match this.as_any().downcast_ref::<HttpResponse>() {
         Some(resp) => resp,
-        None => throw!(cx.scope, "Invalid receiver, expected HttpResponse"),
+        None => throw!(cx.scope, TypeError, "Invalid receiver, expected HttpResponse"),
     };
 
     let (rt, event_tx) = {
@@ -124,7 +124,7 @@ fn http_response_text(cx: CallContext) -> Result<Value, Value> {
 
     let response = match this.response.try_take() {
         Some(response) => response,
-        None => throw!(cx.scope, "HTTP Response already consumed"),
+        None => throw!(cx.scope, Error, "HTTP Response already consumed"),
     };
 
     let promise = Promise::new(cx.scope);

@@ -23,6 +23,7 @@ macro_rules! typedarray {
                             if this.len() % REQUIRED_ALIGN != 0 {
                                 throw!(
                                     cx.scope,
+                                    RangeError,
                                     "Length of array buffer must be a multiple of {}",
                                     REQUIRED_ALIGN
                                 );
@@ -38,7 +39,7 @@ macro_rules! typedarray {
 
                 let this = match this {
                     Some(this) => this,
-                    None => throw!(cx.scope, "Incompatible receiver"),
+                    None => throw!(cx.scope, TypeError, "Incompatible receiver"),
                 };
 
                 let array = TypedArray::new(cx.scope, this, $kind);
@@ -51,11 +52,11 @@ macro_rules! typedarray {
 pub fn fill(cx: CallContext) -> Result<Value, Value> {
     let this = match cx.this.downcast_ref::<TypedArray>() {
         Some(this) => this,
-        None => throw!(cx.scope, "Invalid receiver"),
+        None => throw!(cx.scope, TypeError, "Invalid receiver"),
     };
     let value = match cx.args.first() {
         Some(value) => value.to_number(cx.scope)?,
-        None => throw!(cx.scope, "Missing fill value"),
+        None => throw!(cx.scope, TypeError, "Missing fill value"), // TODO: shouldn't throw
     };
     let buf = this.buffer().as_any().downcast_ref::<ArrayBuffer>().unwrap().storage();
 

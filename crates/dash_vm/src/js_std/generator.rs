@@ -33,7 +33,7 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
         {
             Some(FunctionKind::Generator(gen)) => gen.function(),
             Some(FunctionKind::Async(fun)) => fun.inner().function(),
-            _ => throw!(cx.scope, "Incompatible generator function"),
+            _ => throw!(cx.scope, TypeError, "Incompatible generator function"),
         };
 
         let current_sp = cx.scope.stack_size();

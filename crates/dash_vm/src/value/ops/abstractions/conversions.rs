@@ -92,9 +92,9 @@ impl ValueConversion for Value {
             Value::Boolean(b) => Ok(*b as i8 as f64),
             Value::String(s) => match s.len() {
                 0 => Ok(0.0),
-                _ => s.parse().or_else(|e| throw!(sc, "{}", e)),
+                _ => Ok(s.parse::<f64>().unwrap_or(f64::NAN)),
             },
-            Value::Symbol(_) => throw!(sc, "Cannot convert symbol to number"),
+            Value::Symbol(_) => throw!(sc, TypeError, "Cannot convert symbol to number"),
             Value::Object(o) | Value::External(o) => object_to_number(self, o, sc),
         }
     }
@@ -129,7 +129,7 @@ impl ValueConversion for Value {
             Value::Undefined(u) => ValueConversion::to_string(u, sc),
             Value::Number(n) => ValueConversion::to_string(n, sc),
             Value::External(o) | Value::Object(o) => object_to_string(self, o, sc),
-            Value::Symbol(_) => throw!(sc, "Cannot convert symbol to a string"),
+            Value::Symbol(_) => throw!(sc, TypeError, "Cannot convert symbol to a string"),
         }
     }
 
@@ -161,7 +161,7 @@ impl ValueConversion for Value {
                 }
 
                 // vi. Throw a TypeError exception.
-                throw!(sc, "Failed to convert to primitive");
+                throw!(sc, TypeError, "Failed to convert to primitive");
             }
 
             self.ordinary_to_primitive(sc, preferred_type)
@@ -185,8 +185,8 @@ impl ValueConversion for Value {
 
         match self {
             Value::Object(o) => Ok(o.clone()),
-            Value::Undefined(_) => throw!(sc, "Cannot convert undefined to object"),
-            Value::Null(_) => throw!(sc, "Cannot convert null to object"),
+            Value::Undefined(_) => throw!(sc, TypeError, "Cannot convert undefined to object"),
+            Value::Null(_) => throw!(sc, TypeError, "Cannot convert null to object"),
             Value::Boolean(b) => register_dyn(sc, |sc| Boolean::new(sc, *b)),
             Value::Symbol(s) => register_dyn(sc, |sc| BoxedSymbol::new(sc, s.clone())),
             Value::Number(Number(n)) => register_dyn(sc, |sc| BoxedNumber::new(sc, *n)),
@@ -232,6 +232,6 @@ impl Value {
             }
         }
 
-        throw!(sc, "Failed to convert to primitive")
+        throw!(sc, TypeError, "Failed to convert to primitive")
     }
 }

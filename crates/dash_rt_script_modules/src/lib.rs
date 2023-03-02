@@ -23,7 +23,7 @@ impl ScriptModule {
     pub fn add_import(&self, sc: &mut LocalScope, name: &str) -> Result<(), Value> {
         let mut stack = self.import_stack.borrow_mut();
         if stack.contains(name) {
-            throw!(sc, "import cycle detected: {}", name);
+            throw!(sc, Error, "import cycle detected: {}", name);
         }
 
         stack.insert(name.to_string());
@@ -41,7 +41,7 @@ impl ModuleLoader for ScriptModule {
 
         let contents = match std::fs::read_to_string(path) {
             Ok(c) => c,
-            Err(err) => throw!(sc, "{}", err),
+            Err(err) => throw!(sc, ReferenceError, "{}", err),
         };
         let module = Vm::evaluate_module(sc, &contents, import_ty, Default::default());
 

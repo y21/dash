@@ -268,7 +268,7 @@ mod handlers {
     }
 
     pub fn objin(cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
-        throw!(cx, "in keyword is unimplemented");
+        throw!(cx, Error, "in keyword is unimplemented");
     }
 
     pub fn instanceof(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
@@ -382,7 +382,7 @@ mod handlers {
         let value = match scope.global.as_any().downcast_ref::<NamedObject>() {
             Some(value) => match value.get_raw_property(name.as_ref().into()) {
                 Some(value) => value.kind().get_or_apply(&mut scope, Value::undefined())?,
-                None => throw!(&mut scope, "{} is not defined", name),
+                None => throw!(&mut scope, ReferenceError, "{} is not defined", name),
             },
             None => scope.global.clone().get_property(&mut scope, name.as_ref().into())?,
         };
@@ -1239,7 +1239,7 @@ mod handlers {
 
         let _ret = match cx.params.dynamic_import_callback() {
             Some(cb) => cb(&mut cx, value)?,
-            None => throw!(cx, "Dynamic imports are disabled for this context"),
+            None => throw!(cx, Error, "Dynamic imports are disabled for this context"),
         };
 
         // TODO: dynamic imports are currently statements, making them useless
@@ -1257,7 +1257,7 @@ mod handlers {
 
         let value = match cx.params.static_import_callback() {
             Some(cb) => cb(&mut cx, ty, &path)?,
-            None => throw!(cx, "Static imports are disabled for this context."),
+            None => throw!(cx, Error, "Static imports are disabled for this context."),
         };
 
         cx.set_local(local_id.into(), value);
@@ -1273,7 +1273,7 @@ mod handlers {
             FrameState::Module(module) => {
                 module.default = Some(value);
             }
-            _ => throw!(cx, "Export is only available at the top level in modules"),
+            _ => throw!(cx, Error, "Export is only available at the top level in modules"),
         }
 
         Ok(None)
@@ -1312,7 +1312,7 @@ mod handlers {
             let frame = cx.active_frame_mut();
             match &mut frame.state {
                 FrameState::Module(exports) => exports.named.push((ident, value)),
-                _ => throw!(cx, "Export is only available at the top level in modules"),
+                _ => throw!(cx, Error, "Export is only available at the top level in modules"),
             }
         }
 
@@ -1347,7 +1347,7 @@ mod handlers {
     }
 
     pub fn super_(cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
-        throw!(cx, "`super` keyword unexpected in this context");
+        throw!(cx, SyntaxError, "`super` keyword unexpected in this context");
     }
 
     pub fn undef(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {

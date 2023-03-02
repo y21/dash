@@ -60,7 +60,7 @@ macro_rules! dashdl {
 pub fn load_sync(mut cx: CallContext) -> Result<Value, Value> {
     let path = match cx.args.first() {
         Some(first) => first,
-        None => throw!(cx.scope, "Missing path to dynamic library"),
+        None => throw!(cx.scope, ReferenceError, "Missing path to dynamic library"),
     };
 
     let path = ValueConversion::to_string(path, cx.scope)?;
@@ -69,12 +69,12 @@ pub fn load_sync(mut cx: CallContext) -> Result<Value, Value> {
         let lib = match Library::new(path.as_ref()) {
             // TODO: Currently we (intentionally) leak all dlopen'd handles, because we don't know exactly when we should close it
             Ok(lib) => ManuallyDrop::new(lib),
-            Err(err) => throw!(cx.scope, "{}", err),
+            Err(err) => throw!(cx.scope, Error, "{}", err),
         };
 
         let init: libloading::Symbol<InitFunction> = match lib.get(b"dashjs_init_module\0") {
             Ok(sym) => sym,
-            Err(err) => throw!(cx.scope, "{}", err),
+            Err(err) => throw!(cx.scope, Error, "{}", err),
         };
 
         let mut ret = Ok(Value::undefined());

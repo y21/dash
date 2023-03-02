@@ -189,12 +189,12 @@ impl Value {
         match self {
             Self::Object(o) => o.apply(sc, this, args),
             Self::External(o) => o.apply(sc, this, args),
-            Self::Number(n) => throw!(sc, "{} is not a function", n),
-            Self::Boolean(b) => throw!(sc, "{} is not a function", b),
-            Self::String(s) => throw!(sc, "{} is not a function", s),
-            Self::Undefined(_) => throw!(sc, "undefined is not a function"),
-            Self::Null(_) => throw!(sc, "null is not a function"),
-            Self::Symbol(s) => throw!(sc, "{:?} is not a function", s),
+            Self::Number(n) => throw!(sc, TypeError, "{} is not a function", n),
+            Self::Boolean(b) => throw!(sc, TypeError, "{} is not a function", b),
+            Self::String(s) => throw!(sc, TypeError, "{} is not a function", s),
+            Self::Undefined(_) => throw!(sc, TypeError, "undefined is not a function"),
+            Self::Null(_) => throw!(sc, TypeError, "null is not a function"),
+            Self::Symbol(s) => throw!(sc, TypeError, "{:?} is not a function", s),
         }
     }
 
@@ -202,12 +202,12 @@ impl Value {
         match self {
             Self::Object(o) => o.construct(sc, this, args),
             Self::External(o) => o.construct(sc, this, args),
-            Self::Number(n) => throw!(sc, "{} is not a constructor", n),
-            Self::Boolean(b) => throw!(sc, "{} is not a constructor", b),
-            Self::String(s) => throw!(sc, "{} is not a constructor", s),
-            Self::Undefined(_) => throw!(sc, "undefined is not a constructor"),
-            Self::Null(_) => throw!(sc, "null is not a constructor"),
-            Self::Symbol(s) => throw!(sc, "{:?} is not a constructor", s),
+            Self::Number(n) => throw!(sc, TypeError, "{} is not a constructor", n),
+            Self::Boolean(b) => throw!(sc, TypeError, "{} is not a constructor", b),
+            Self::String(s) => throw!(sc, TypeError, "{} is not a constructor", s),
+            Self::Undefined(_) => throw!(sc, TypeError, "undefined is not a constructor"),
+            Self::Null(_) => throw!(sc, TypeError, "null is not a constructor"),
+            Self::Symbol(s) => throw!(sc, TypeError, "{:?} is not a constructor", s),
         }
     }
 
@@ -348,7 +348,7 @@ impl Typeof {
 pub trait ValueContext {
     fn unwrap_or_undefined(self) -> Value;
     fn unwrap_or_null(self) -> Value;
-    fn context<S: Into<Rc<str>>>(self, vm: &mut Vm, message: S) -> Result<Value, Value>;
+    // fn context<S: Into<Rc<str>>>(self, vm: &mut Vm, message: S) -> Result<Value, Value>;
 }
 
 impl ValueContext for Option<Value> {
@@ -366,12 +366,12 @@ impl ValueContext for Option<Value> {
         }
     }
 
-    fn context<S: Into<Rc<str>>>(self, vm: &mut Vm, message: S) -> Result<Value, Value> {
-        match self {
-            Some(x) => Ok(x),
-            None => throw!(vm, message),
-        }
-    }
+    // fn context<S: Into<Rc<str>>>(self, vm: &mut Vm, message: S) -> Result<Value, Value> {
+    //     match self {
+    //         Some(x) => Ok(x),
+    //         None => throw!(vm, message),
+    //     }
+    // }
 }
 
 impl ValueContext for Option<&Value> {
@@ -389,12 +389,12 @@ impl ValueContext for Option<&Value> {
         }
     }
 
-    fn context<S: Into<Rc<str>>>(self, vm: &mut Vm, message: S) -> Result<Value, Value> {
-        match self {
-            Some(x) => Ok(x.clone()),
-            None => throw!(vm, message),
-        }
-    }
+    // fn context<S: Into<Rc<str>>>(self, vm: &mut Vm, message: S) -> Result<Value, Value> {
+    //     match self {
+    //         Some(x) => Ok(x.clone()),
+    //         None => throw!(vm, message),
+    //     }
+    // }
 }
 
 impl<E> ValueContext for Result<Value, E> {
@@ -412,12 +412,12 @@ impl<E> ValueContext for Result<Value, E> {
         }
     }
 
-    fn context<S: Into<Rc<str>>>(self, vm: &mut Vm, message: S) -> Result<Value, Value> {
-        match self {
-            Ok(x) => Ok(x),
-            Err(_) => throw!(vm, message),
-        }
-    }
+    // fn context<S: Into<Rc<str>>>(self, vm: &mut Vm, message: S) -> Result<Value, Value> {
+    //     match self {
+    //         Ok(x) => Ok(x),
+    //         Err(_) => throw!(vm, message),
+    //     }
+    // }
 }
 
 pub type ThreadSafeValue = ThreadSafeStorage<Value>;

@@ -10,7 +10,7 @@ use crate::value::ValueContext;
 pub fn next(cx: CallContext) -> Result<Value, Value> {
     let iterator = match cx.this.downcast_ref::<ArrayIterator>() {
         Some(it) => it,
-        None => throw!(cx.scope, "Incompatible receiver"),
+        None => throw!(cx.scope, TypeError, "Incompatible receiver"),
     };
 
     let next = iterator.next(cx.scope)?;
