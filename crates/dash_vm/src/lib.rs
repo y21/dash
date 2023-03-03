@@ -1093,7 +1093,7 @@ impl Vm {
     /// It will replace the instruction with one that does not attempt to trigger a trace.
     #[cfg(feature = "jit")]
     pub(crate) fn poison_ip(&mut self, ip: usize) {
-        warn!("ip poisoned: {}", ip);
+        dash_log::warn!("ip poisoned: {}", ip);
         self.frames.last().unwrap().function.poison_ip(ip);
     }
 

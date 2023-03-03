@@ -48,7 +48,6 @@ use dash_optimizer::type_infer::TypeInferCtx;
 use dash_optimizer::OptLevel;
 use instruction::compile_local_load;
 use jump_container::JumpContainer;
-use tracing::instrument;
 
 use crate::builder::{InstructionBuilder, Label};
 
