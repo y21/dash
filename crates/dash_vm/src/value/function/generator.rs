@@ -14,6 +14,7 @@ use crate::value::Typeof;
 use crate::value::Value;
 use crate::Vm;
 
+use super::extend_stack_from_args;
 use super::user::UserFunction;
 
 #[derive(Debug, Trace)]
@@ -31,12 +32,24 @@ impl GeneratorFunction {
     }
 
     pub(crate) fn handle_function_call(
+        &self,
         scope: &mut LocalScope,
         callee: Handle<dyn Object>,
         _this: Value,
         args: Vec<Value>,
         _is_constructor_call: bool,
     ) -> Result<Value, Value> {
+        // Handle edge cases such as provided_args != expected_args
+        // by delegating to the usual arg handling logic that occurs with normal user functions
+        let args = {
+            // TODO: if this turns out slow
+            // we can avoid extending into the stack just to drain + collect again
+            let inner = self.function.inner();
+            let sp = scope.stack.len();
+            extend_stack_from_args(args, inner.params, scope, inner.rest_local.is_some());
+            scope.stack.drain(sp..).collect::<Vec<_>>()
+        };
+
         let iter = GeneratorIterator::new(callee, scope, args);
         Ok(scope.register(iter).into())
     }

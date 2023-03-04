@@ -40,7 +40,9 @@ impl AsyncFunction {
         args: Vec<Value>,
         is_constructor_call: bool,
     ) -> Result<Value, Value> {
-        let generator_iter = GeneratorFunction::handle_function_call(scope, callee, this, args, is_constructor_call)?;
+        let generator_iter = self
+            .inner
+            .handle_function_call(scope, callee, this, args, is_constructor_call)?;
 
         let result = scope
             .statics

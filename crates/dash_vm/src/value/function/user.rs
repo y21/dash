@@ -1,4 +1,3 @@
-use std::iter;
 use std::rc::Rc;
 
 use dash_middle::compiler::constant::Function;
@@ -8,10 +7,10 @@ use crate::dispatch::HandleResult;
 use crate::frame::Frame;
 use crate::gc::handle::Handle;
 use crate::local::LocalScope;
-use crate::value::array::Array;
 use crate::value::object::Object;
-use crate::value::object::PropertyValue;
 use crate::value::Value;
+
+use super::extend_stack_from_args;
 
 #[derive(Debug, Clone, Trace)]
 pub struct UserFunction {
@@ -41,29 +40,7 @@ impl UserFunction {
     ) -> Result<HandleResult, Value> {
         let sp = scope.stack.len();
 
-        // Insert at most [param_count] amount of provided arguments on the stack
-        // In the compiler we allocate local space for every parameter
-        let param_count = self.inner.params;
-        scope.stack.extend(args.iter().take(param_count).cloned());
-
-        // Insert undefined values for parameters without a value
-        if param_count > args.len() {
-            scope
-                .stack
-                .extend(iter::repeat(Value::undefined()).take(param_count - args.len()));
-        }
-
-        // Finally insert Value::Object([]) if this function uses the rest operator
-        if self.inner.rest_local.is_some() {
-            let args = args
-                .get(param_count..)
-                .map(|s| s.iter().cloned().map(PropertyValue::static_default).collect())
-                .unwrap_or_default();
-
-            let array = Array::from_vec(scope, args);
-            let array = scope.register(array);
-            scope.stack.push(Value::Object(array));
-        }
+        extend_stack_from_args(args, self.inner.params, scope, self.inner.rest_local.is_some());
 
         let mut frame = Frame::from_function(Some(this), self, is_constructor_call);
         frame.set_sp(sp);

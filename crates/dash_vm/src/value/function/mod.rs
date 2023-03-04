@@ -2,6 +2,7 @@ use std::{
     any::Any,
     cell::RefCell,
     fmt::{self, Debug},
+    iter,
     rc::Rc,
 };
 
@@ -22,6 +23,7 @@ use self::{
 };
 
 use super::{
+    array::Array,
     object::{NamedObject, Object, PropertyKey, PropertyValue},
     Typeof, Value,
 };
@@ -158,9 +160,7 @@ fn handle_call(
                 HandleResult::Yield(..) | HandleResult::Await(..) => unreachable!(), // UserFunction cannot `yield`/`await`
             }),
         FunctionKind::Async(fun) => fun.handle_function_call(scope, callee, this, args, is_constructor_call),
-        FunctionKind::Generator(..) => {
-            GeneratorFunction::handle_function_call(scope, callee, this, args, is_constructor_call)
-        }
+        FunctionKind::Generator(fun) => fun.handle_function_call(scope, callee, this, args, is_constructor_call),
     }
 }
 
@@ -249,5 +249,30 @@ impl Object for Function {
 
     fn type_of(&self) -> Typeof {
         Typeof::Function
+    }
+}
+
+pub(self) fn extend_stack_from_args(args: Vec<Value>, expected_args: usize, scope: &mut LocalScope, is_rest: bool) {
+    // Insert at most [param_count] amount of provided arguments on the stack
+    // In the compiler we allocate local space for every parameter
+    scope.stack.extend(args.iter().take(expected_args).cloned());
+
+    // Insert undefined values for parameters without a value
+    if expected_args > args.len() {
+        scope
+            .stack
+            .extend(iter::repeat(Value::undefined()).take(expected_args - args.len()));
+    }
+
+    // Finally insert Value::Object([]) if this function uses the rest operator
+    if is_rest {
+        let args = args
+            .get(expected_args..)
+            .map(|s| s.iter().cloned().map(PropertyValue::static_default).collect())
+            .unwrap_or_default();
+
+        let array = Array::from_vec(scope, args);
+        let array = scope.register(array);
+        scope.stack.push(Value::Object(array));
     }
 }
