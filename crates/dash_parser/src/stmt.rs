@@ -203,7 +203,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
             return Some(ExportKind::Default(expr));
         }
 
-        unreachable!()
+        None
     }
 
     fn parse_import(&mut self) -> Option<ImportKind<'a>> {
