@@ -313,6 +313,11 @@ impl<'a> Lexer<'a> {
                         break;
                     }
 
+                    // Handle minus after e, like 1e-5
+                    if matches!(self.peek(), Some(b'-')) {
+                        self.advance();
+                    }
+
                     is_exp = true;
                 }
                 _ => {
