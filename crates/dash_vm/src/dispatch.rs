@@ -105,7 +105,7 @@ impl<'a> DispatchContext<'a> {
         scope.add_value(left.clone());
         scope.add_value(right.clone());
         let result = fun(&left, &right, &mut scope)?;
-        scope.try_push_stack(result)?;
+        scope.stack.push(result);
         Ok(None)
     }
 
@@ -195,7 +195,7 @@ mod handlers {
         let constant = cx.constant(idx);
 
         let value = Value::from_constant(constant, &mut cx);
-        cx.try_push_stack(value)?;
+        cx.stack.push(value);
         Ok(())
     }
 
@@ -264,7 +264,7 @@ mod handlers {
         let mut sc = cx.scope();
         sc.add_value(value.clone());
         let result = value.bitnot(&mut sc)?;
-        sc.try_push_stack(result)?;
+        sc.stack.push(result);
         Ok(None)
     }
 
@@ -280,7 +280,7 @@ mod handlers {
         sc.add_value(source.clone());
 
         let is_instanceof = source.instanceof(&target, &mut sc).map(Value::Boolean)?;
-        sc.try_push_stack(is_instanceof)?;
+        sc.stack.push(is_instanceof);
         Ok(None)
     }
 
@@ -320,7 +320,7 @@ mod handlers {
         let value = cx.pop_stack();
         let mut scope = cx.scope();
         let result = value.to_number(&mut scope)?;
-        scope.try_push_stack(Value::number(-result))?;
+        scope.stack.push(Value::number(-result));
         Ok(None)
     }
 
@@ -328,14 +328,14 @@ mod handlers {
         let value = cx.pop_stack();
         let mut scope = cx.scope();
         let result = value.to_number(&mut scope)?;
-        scope.try_push_stack(Value::number(result))?;
+        scope.stack.push(Value::number(result));
         Ok(None)
     }
 
     pub fn not(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
         let value = cx.pop_stack();
         let result = value.not();
-        cx.try_push_stack(result)?;
+        cx.stack.push(result);
         Ok(None)
     }
 
@@ -388,7 +388,7 @@ mod handlers {
             None => scope.global.clone().get_property(&mut scope, name.as_ref().into())?,
         };
 
-        scope.try_push_stack(value)?;
+        scope.stack.push(value);
         Ok(None)
     }
 
@@ -412,7 +412,7 @@ mod handlers {
                     ToString::to_string(&name).into(),
                     PropertyValue::static_default(res.clone()),
                 )?;
-                scope.try_push_stack(res)?;
+                scope.stack.push(res);
             }};
         }
 
@@ -432,7 +432,7 @@ mod handlers {
                     ToString::to_string(&name).into(),
                     PropertyValue::static_default(res.clone()),
                 )?;
-                scope.try_push_stack(res)?;
+                scope.stack.push(res);
             }};
         }
 
@@ -452,7 +452,7 @@ mod handlers {
                     ToString::to_string(&name).into(),
                     PropertyValue::static_default(res),
                 )?;
-                scope.try_push_stack(value)?;
+                scope.stack.push(value);
             }};
         }
 
@@ -466,7 +466,7 @@ mod handlers {
                     ToString::to_string(&name).into(),
                     PropertyValue::static_default(value.clone()),
                 )?;
-                scope.try_push_stack(value)?;
+                scope.stack.push(value);
             }
             AssignKind::AddAssignment => op!(Value::add),
             AssignKind::SubAssignment => op!(Value::sub),
@@ -526,7 +526,7 @@ mod handlers {
             callee.apply(&mut scope, this, args)?
         };
 
-        scope.try_push_stack(ret)?;
+        scope.stack.push(ret);
         Ok(None)
     }
 
@@ -752,7 +752,7 @@ mod handlers {
                 let mut scope = cx.scope();
                 let res = $op(&value, &right, &mut scope)?;
                 scope.set_local(id, res.clone());
-                scope.try_push_stack(res)?;
+                scope.stack.push(res);
             }};
         }
 
@@ -764,7 +764,7 @@ mod handlers {
                 let one = Value::number(1.0);
                 let res = $op(&value, &one, &mut scope)?;
                 scope.set_local(id, res.clone());
-                scope.try_push_stack(res)?;
+                scope.stack.push(res);
             }};
         }
 
@@ -776,7 +776,7 @@ mod handlers {
                 let one = Value::number(1.0);
                 let res = $op(&value, &one, &mut scope)?;
                 scope.set_local(id, res);
-                scope.try_push_stack(value)?;
+                scope.stack.push(value);
             }};
         }
 
@@ -784,7 +784,7 @@ mod handlers {
             AssignKind::Assignment => {
                 let value = cx.pop_stack();
                 cx.set_local(id, value.clone());
-                cx.try_push_stack(value)?;
+                cx.stack.push(value);
             }
             AssignKind::AddAssignment => op!(Value::add),
             AssignKind::SubAssignment => op!(Value::sub),
@@ -811,7 +811,7 @@ mod handlers {
         let id = cx.fetch_and_inc_ip();
         let value = cx.get_local(id.into()).unbox_external();
 
-        cx.try_push_stack(value)?;
+        cx.stack.push(value);
         Ok(None)
     }
 
@@ -824,7 +824,7 @@ mod handlers {
             .collect::<Vec<_>>();
         let array = Array::from_vec(&mut cx, elements);
         let handle = cx.gc.register(array);
-        cx.try_push_stack(Value::Object(handle))?;
+        cx.stack.push(Value::Object(handle));
         Ok(None)
     }
 
@@ -900,7 +900,7 @@ mod handlers {
         let obj = NamedObject::with_values(&mut scope, obj);
 
         let handle = scope.gc.register(obj);
-        scope.try_push_stack(handle.into())?;
+        scope.stack.push(handle.into());
 
         Ok(None)
     }
@@ -917,7 +917,7 @@ mod handlers {
         // TODO: add scope to externals because calling get_property can invoke getters
 
         let value = target.get_property(&mut scope, ident.as_ref().into())?;
-        scope.try_push_stack(value)?;
+        scope.stack.push(value);
         Ok(None)
     }
 
@@ -940,7 +940,7 @@ mod handlers {
                     ToString::to_string(&key).into(),
                     PropertyValue::static_default(res.clone()),
                 )?;
-                scope.try_push_stack(res)?;
+                scope.stack.push(res);
             }};
         }
 
@@ -957,7 +957,7 @@ mod handlers {
                     ToString::to_string(&key).into(),
                     PropertyValue::static_default(res),
                 )?;
-                scope.try_push_stack(prop)?;
+                scope.stack.push(prop);
             }};
         }
 
@@ -974,7 +974,7 @@ mod handlers {
                     ToString::to_string(&key).into(),
                     PropertyValue::static_default(res.clone()),
                 )?;
-                scope.try_push_stack(res)?;
+                scope.stack.push(res);
             }};
         }
 
@@ -987,7 +987,7 @@ mod handlers {
                     ToString::to_string(&key).into(),
                     PropertyValue::static_default(value.clone()),
                 )?;
-                scope.try_push_stack(value)?;
+                scope.stack.push(value);
             }
             AssignKind::AddAssignment => op!(Value::add),
             AssignKind::SubAssignment => op!(Value::sub),
@@ -1024,7 +1024,7 @@ mod handlers {
                 let result = $op(&prop, &value, &mut scope)?;
 
                 target.set_property(&mut scope, key, PropertyValue::static_default(result.clone()))?;
-                scope.try_push_stack(result)?;
+                scope.stack.push(result);
             }};
         }
 
@@ -1038,7 +1038,7 @@ mod handlers {
                 let one = Value::number(1.0);
                 let res = $op(&prop, &one, &mut scope)?;
                 target.set_property(&mut scope, key, PropertyValue::static_default(res))?;
-                scope.try_push_stack(prop)?;
+                scope.stack.push(prop);
             }};
         }
 
@@ -1052,7 +1052,7 @@ mod handlers {
                 let one = Value::number(1.0);
                 let res = $op(&prop, &one, &mut scope)?;
                 target.set_property(&mut scope, key, PropertyValue::static_default(res.clone()))?;
-                scope.try_push_stack(res)?;
+                scope.stack.push(res);
             }};
         }
 
@@ -1064,7 +1064,7 @@ mod handlers {
                 let key = PropertyKey::from_value(&mut scope, key)?;
 
                 target.set_property(&mut scope, key, PropertyValue::static_default(value.clone()))?;
-                scope.try_push_stack(value)?;
+                scope.stack.push(value);
             }
             AssignKind::AddAssignment => op!(Value::add),
             AssignKind::SubAssignment => op!(Value::sub),
@@ -1106,7 +1106,7 @@ mod handlers {
         let key = PropertyKey::from_value(&mut scope, key)?;
 
         let value = target.get_property(&mut scope, key)?;
-        scope.try_push_stack(value)?;
+        scope.stack.push(value);
         Ok(None)
     }
 
@@ -1117,7 +1117,7 @@ mod handlers {
         // Unbox external values such that any use will create a copy
         let value = value.unbox_external();
 
-        cx.try_push_stack(value)?;
+        cx.stack.push(value);
         Ok(None)
     }
 
@@ -1140,7 +1140,7 @@ mod handlers {
                 let mut scope = cx.scope();
                 let res = $op(&value, &right, &mut scope)?;
                 assign_to_external(scope.get_external(id.into()).unwrap(), res.clone());
-                scope.try_push_stack(res)?;
+                scope.stack.push(res);
             }};
         }
 
@@ -1151,7 +1151,7 @@ mod handlers {
                 let mut scope = cx.scope();
                 let res = $op(&value, &right, &mut scope)?;
                 assign_to_external(scope.get_external(id.into()).unwrap(), res.clone());
-                scope.try_push_stack(res)?;
+                scope.stack.push(res);
             }};
         }
 
@@ -1162,7 +1162,7 @@ mod handlers {
                 let mut scope = cx.scope();
                 let res = $op(&value, &right, &mut scope)?;
                 assign_to_external(scope.get_external(id.into()).unwrap(), res);
-                scope.try_push_stack(value)?;
+                scope.stack.push(value);
             }};
         }
 
@@ -1170,7 +1170,7 @@ mod handlers {
             AssignKind::Assignment => {
                 let value = cx.pop_stack();
                 assign_to_external(cx.get_external(id.into()), value.clone());
-                cx.try_push_stack(value)?;
+                cx.stack.push(value);
             }
             AssignKind::AddAssignment => op!(Value::add),
             AssignKind::SubAssignment => op!(Value::sub),
@@ -1221,7 +1221,7 @@ mod handlers {
 
     pub fn type_of(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
         let value = cx.pop_stack();
-        cx.try_push_stack(value.type_of().as_value())?;
+        cx.stack.push(value.type_of().as_value());
         Ok(None)
     }
 
@@ -1337,13 +1337,13 @@ mod handlers {
             .cloned()
             .unwrap_or_else(|| Value::Object(cx.global.clone()));
 
-        cx.try_push_stack(this)?;
+        cx.stack.push(this);
         Ok(None)
     }
 
     pub fn global_this(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
         let global = cx.global.clone();
-        cx.try_push_stack(Value::Object(global))?;
+        cx.stack.push(Value::Object(global));
         Ok(None)
     }
 
@@ -1352,17 +1352,17 @@ mod handlers {
     }
 
     pub fn undef(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
-        cx.try_push_stack(Value::undefined())?;
+        cx.stack.push(Value::undefined());
         Ok(None)
     }
 
     pub fn infinity(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
-        cx.try_push_stack(Value::number(f64::INFINITY))?;
+        cx.stack.push(Value::number(f64::INFINITY));
         Ok(None)
     }
 
     pub fn nan(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
-        cx.try_push_stack(Value::number(f64::NAN))?;
+        cx.stack.push(Value::number(f64::NAN));
         Ok(None)
     }
 
@@ -1372,7 +1372,7 @@ mod handlers {
         let symbol_iterator = scope.statics.symbol_iterator.clone();
         let iterable = value.get_property(&mut scope, PropertyKey::Symbol(symbol_iterator))?;
         let iterator = iterable.apply(&mut scope, value, Vec::new())?;
-        scope.try_push_stack(iterator)?;
+        scope.stack.push(iterator);
         Ok(None)
     }
 
@@ -1390,7 +1390,7 @@ mod handlers {
         let keys = scope.register(keys);
         let iter = ArrayIterator::new(&mut scope, Value::Object(keys))?;
         let iter = scope.register(iter);
-        scope.try_push_stack(Value::Object(iter))?;
+        scope.stack.push(Value::Object(iter));
         Ok(None)
     }
 
@@ -1402,7 +1402,7 @@ mod handlers {
 
         // TODO: not correct, as `undefined` might have been the actual value
         let did_delete = !matches!(value, Value::Undefined(..));
-        scope.try_push_stack(Value::Boolean(did_delete))?;
+        scope.stack.push(Value::Boolean(did_delete));
         Ok(None)
     }
 
@@ -1416,7 +1416,7 @@ mod handlers {
 
         // TODO: not correct, as `undefined` might have been the actual value
         let did_delete = !matches!(value, Value::Undefined(..));
-        scope.try_push_stack(Value::Boolean(did_delete))?;
+        scope.stack.push(Value::Boolean(did_delete));
         Ok(None)
     }
 
@@ -1550,7 +1550,7 @@ mod handlers {
                     _ => unreachable!(),
                 };
                 cx.set_local(id.into(), Value::number(local.0 $op 1.0));
-                cx.try_push_stack(Value::Number(local))?;
+                cx.stack.push(Value::Number(local));
             }};
         }
 
@@ -1563,7 +1563,7 @@ mod handlers {
                 };
                 let new = Value::number(local.0 $op 1.0);
                 cx.set_local(id.into(), new.clone());
-                cx.try_push_stack(new)?;
+                cx.stack.push(new);
             }
             }};
         }
@@ -1575,7 +1575,7 @@ mod handlers {
                     _ => unreachable!(),
                 };
                 let right = cx.fetch_and_inc_ip() as f64;
-                cx.try_push_stack(Value::Boolean(left $op right))?;
+                cx.stack.push(Value::Boolean(left $op right));
             }};
         }
 
@@ -1590,7 +1590,7 @@ mod handlers {
                     *byte = cx.fetch_and_inc_ip();
                 }
                 let right = <$ty>::from_ne_bytes(right_bytes) as f64;
-                cx.try_push_stack(Value::Boolean(left $op right))?;
+                cx.stack.push(Value::Boolean(left $op right));
             }};
         }
 
@@ -1608,11 +1608,11 @@ mod handlers {
                     let k = global.get_property(&mut sc, PropertyKey::from(stringify!($k)))?;
                     let fun = k.get_property(&mut sc, PropertyKey::from(stringify!($v)))?;
                     let result = fun.apply(&mut sc, Value::undefined(), args)?;
-                    sc.try_push_stack(result)?;
+                    sc.stack.push(result);
                 } else {
                     // Fastpath: call builtin directly
                     let result = fun.apply(&mut sc, Value::undefined(), args)?;
-                    sc.try_push_stack(result)?;
+                    sc.stack.push(result);
                 }
             }};
         }

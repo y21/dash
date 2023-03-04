@@ -50,7 +50,7 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
         } else {
             // Generator did run before. Push the yielded value onto the stack, which will be what the yield expression
             // evaluates to.
-            cx.scope.try_push_stack(arg)?;
+            cx.scope.stack.push(arg);
         }
 
         frame

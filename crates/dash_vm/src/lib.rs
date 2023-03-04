@@ -835,16 +835,6 @@ impl Vm {
         Ok(())
     }
 
-    pub(crate) fn try_push_stack(&mut self, value: Value) -> Result<(), Value> {
-        if self.stack.len() <= MAX_STACK_SIZE {
-            self.stack.push(value);
-        } else {
-            cold_path();
-            throw!(self, RangeError, "Maximum stack size exceeded");
-        }
-        Ok(())
-    }
-
     pub(crate) fn try_extend_stack<I>(&mut self, other: I) -> Result<(), Value>
     where
         I: IntoIterator<Item = Value>,
@@ -854,7 +844,7 @@ impl Vm {
         let len = it.len();
         if self.stack.len() + len > MAX_STACK_SIZE {
             debug!("vm exceeded stack size");
-            throw!(self, RangeError,"Maximum stack size exceeded");
+            throw!(self, RangeError, "Maximum stack size exceeded");
         }
         self.stack.extend(it);
         Ok(())
