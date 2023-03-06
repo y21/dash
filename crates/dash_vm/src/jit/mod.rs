@@ -82,7 +82,43 @@ fn handle_loop_counter_inc(vm: &mut Vm, loop_end_ip: usize, parent_ip: Option<us
         // - The iteration has ended (i.e. we are here again)
         debug!("detected hot loop, begin trace");
         debug!(loop_end_ip, parent_ip);
-        let trace = Trace::new(origin, frame.ip, loop_end_ip, parent_ip);
+        let trace = Trace::new(origin, frame.ip, loop_end_ip);
         vm.jit.set_recording_trace(trace);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use dash_compiler::FunctionCompiler;
+    use dash_llvm_jit_backend::passes::bb_generation::find_labels;
+    use dash_llvm_jit_backend::passes::bb_generation::BBGenerationCtxt;
+    use dash_optimizer::OptLevel;
+
+    #[test]
+    pub fn llvm() {
+        let cr = FunctionCompiler::compile_str(
+            r"
+
+        for (let i = 0; i < 10; i++) {
+            let x = 3;
+        }
+        ",
+            OptLevel::None,
+        )
+        .unwrap();
+        let bytecode = &cr.instructions;
+
+        let labels = find_labels(bytecode).unwrap();
+
+        let mut bcx = BBGenerationCtxt {
+            bytecode,
+            labels: labels.0,
+            bbs: HashMap::new(),
+        };
+        bcx.find_bbs();
+        bcx.resolve_edges();
+        dbg!(bcx);
     }
 }

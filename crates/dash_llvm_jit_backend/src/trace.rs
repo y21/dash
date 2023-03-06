@@ -7,11 +7,6 @@ use indexmap::IndexMap;
 
 #[derive(Debug)]
 pub struct Trace {
-    /// The "parent" instruction pointer
-    ///
-    /// This is `Some` if this trace records a side exit and will contain the instruction pointer
-    /// of the predecessor trace
-    pub(crate) parent_ip: Option<usize>,
     pub(crate) origin: *const Function,
     pub(crate) start: usize,
     pub(crate) end: usize,
@@ -24,9 +19,8 @@ pub struct Trace {
 }
 
 impl Trace {
-    pub fn new(origin: *const Function, start: usize, end: usize, parent_ip: Option<usize>) -> Self {
+    pub fn new(origin: *const Function, start: usize, end: usize) -> Self {
         Self {
-            parent_ip,
             origin,
             start,
             end,

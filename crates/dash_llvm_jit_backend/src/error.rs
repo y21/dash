@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 use crate::function::CompileError;
-use crate::passes::infer::InferError;
+use crate::passes_legacy::infer::InferError;
 
 #[derive(Debug, Error)]
 pub enum Error {

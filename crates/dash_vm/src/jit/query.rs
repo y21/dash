@@ -1,7 +1,7 @@
 use dash_llvm_jit_backend::function::CompileQuery;
 use dash_llvm_jit_backend::function::JITConstant;
-use dash_llvm_jit_backend::passes::infer::InferQueryProvider;
-use dash_llvm_jit_backend::passes::infer::Type;
+use dash_llvm_jit_backend::passes_legacy::infer::InferQueryProvider;
+use dash_llvm_jit_backend::passes_legacy::infer::Type;
 use dash_llvm_jit_backend::Trace;
 use dash_middle::compiler::constant::Constant;
 use dash_middle::util::is_integer;

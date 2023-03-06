@@ -28,7 +28,7 @@ use llvm_sys::transforms::pass_manager_builder::LLVMPassManagerBuilderSetOptLeve
 use crate::function::CompileError;
 use crate::function::CompileQuery;
 use crate::function::Function;
-use crate::passes::infer::InferResult;
+use crate::passes_legacy::infer::InferResult;
 use crate::Trace;
 
 pub type JitFunction = unsafe extern "C" fn(

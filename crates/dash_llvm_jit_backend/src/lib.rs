@@ -9,7 +9,9 @@ pub mod backend;
 pub mod error;
 pub mod function;
 pub mod passes;
+pub mod passes_legacy;
 pub mod trace;
+pub mod util;
 
 pub use backend::Backend;
 pub use trace::Trace;

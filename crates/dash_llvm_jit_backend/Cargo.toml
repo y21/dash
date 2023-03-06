@@ -11,5 +11,5 @@ indexmap = "1.9.0"
 cstr = "0.2.10"
 dash_middle = { path = "../dash_middle" }
 dash_log = { path = "../dash_log" }
-boolvec = "0.2.6"
 thiserror = "1.0.38"
+bitvec = "1.0.1"

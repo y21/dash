@@ -118,8 +118,8 @@ use thiserror::Error;
 
 use crate::backend::JitFunction;
 use crate::cstr;
-use crate::passes::infer::InferResult;
-use crate::passes::infer::Type;
+use crate::passes_legacy::infer::InferResult;
+use crate::passes_legacy::infer::Type;
 use crate::Backend;
 use crate::Trace;
 
@@ -620,7 +620,7 @@ impl Function {
         let mut jumps = 0;
 
         while let Some((index, instr)) = cx.next_instruction() {
-            let is_label = infer.labels.get(index).unwrap();
+            let is_label = infer.labels[index];
             if is_label {
                 let block = cx.create_jumpable_block(index as u16);
                 cx.build_br(block);

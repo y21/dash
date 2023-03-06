@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use std::iter::Enumerate;
 use std::slice::Iter;
 
-use boolvec::BoolVec;
+use bitvec::bitvec;
+use bitvec::vec::BitVec;
 use dash_log::debug;
 use dash_middle::compiler::instruction::Instruction;
 use dash_middle::compiler::instruction::IntrinsicOperation;
@@ -47,7 +48,7 @@ struct DecodeContext<'a> {
     type_stack: Vec<Type>,
     local_types: HashMap<u16, Type>,
     /// Instruction pointer maps to whether this is the start of a label
-    labels: BoolVec,
+    labels: BitVec,
 }
 
 impl<'a> DecodeContext<'a> {
@@ -56,7 +57,7 @@ impl<'a> DecodeContext<'a> {
             iter: bytes.iter().enumerate(),
             type_stack: Vec::new(),
             local_types: HashMap::new(),
-            labels: BoolVec::filled_with(bytes.len(), false),
+            labels: bitvec![0; bytes.len()],
         }
     }
 
@@ -127,7 +128,7 @@ pub enum InferError {
 
 pub struct InferResult {
     pub local_tys: HashMap<u16, Type>,
-    pub labels: BoolVec,
+    pub labels: BitVec,
 }
 
 pub fn infer_types_and_labels<Q: InferQueryProvider>(bytecode: &[u8], query: Q) -> Result<InferResult, InferError> {

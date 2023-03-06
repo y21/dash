@@ -4,7 +4,7 @@ use dash_llvm_jit_backend::backend::CompiledFunction;
 use dash_llvm_jit_backend::backend::JitFunction;
 use dash_llvm_jit_backend::error::Error;
 use dash_llvm_jit_backend::init;
-use dash_llvm_jit_backend::passes::infer::infer_types_and_labels;
+use dash_llvm_jit_backend::passes_legacy::infer::infer_types_and_labels;
 use dash_llvm_jit_backend::Backend;
 use dash_log::debug;
 use dash_log::span;
