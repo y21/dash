@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1677946404046,
+  "lastUpdate": 1678131804866,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -1761,6 +1761,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 82017,
             "range": "± 269",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "7b678f900a4e3378ad9f285748ded72115a7b6a8",
+          "message": "jit: implement BB discovery pass",
+          "timestamp": "2023-03-06T20:38:46+01:00",
+          "tree_id": "b563306f5a43dfb113bcd41984a122a0d7045535",
+          "url": "https://github.com/y21/dash/commit/7b678f900a4e3378ad9f285748ded72115a7b6a8"
+        },
+        "date": 1678131803963,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 3315492,
+            "range": "± 23153",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 279636,
+            "range": "± 430",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 83204,
+            "range": "± 1095",
             "unit": "ns/iter"
           }
         ]
