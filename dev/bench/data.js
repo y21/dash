@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1678131804866,
+  "lastUpdate": 1678188554624,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -1803,6 +1803,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 83204,
             "range": "± 1095",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "2ba7b5eda7bfb021a4476c31d1b106cb4dabbc9d",
+          "message": "jit: type infer pass based on BBs",
+          "timestamp": "2023-03-07T10:41:13+01:00",
+          "tree_id": "89f4acdf9e6f125c368307fcd109079d3dc53155",
+          "url": "https://github.com/y21/dash/commit/2ba7b5eda7bfb021a4476c31d1b106cb4dabbc9d"
+        },
+        "date": 1678188553092,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 3781494,
+            "range": "± 218039",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 309340,
+            "range": "± 7469",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 92380,
+            "range": "± 2308",
             "unit": "ns/iter"
           }
         ]
