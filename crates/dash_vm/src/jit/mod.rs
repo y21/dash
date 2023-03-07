@@ -90,10 +90,15 @@ fn handle_loop_counter_inc(vm: &mut Vm, loop_end_ip: usize, parent_ip: Option<us
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::collections::HashSet;
 
     use dash_compiler::FunctionCompiler;
     use dash_llvm_jit_backend::passes::bb_generation::find_labels;
     use dash_llvm_jit_backend::passes::bb_generation::BBGenerationCtxt;
+    use dash_llvm_jit_backend::passes::type_infer::Type;
+    use dash_llvm_jit_backend::passes::type_infer::TypeInferCtxt;
+    use dash_llvm_jit_backend::passes::type_infer::TypeInferQuery;
+    use dash_llvm_jit_backend::passes::type_infer::TypeStack;
     use dash_optimizer::OptLevel;
 
     #[test]
@@ -119,6 +124,34 @@ mod tests {
         };
         bcx.find_bbs();
         bcx.resolve_edges();
-        dbg!(bcx);
+        dbg!(&bcx);
+
+        struct TypeProvider {}
+
+        impl TypeInferQuery for TypeProvider {
+            fn type_of_constant(&self, index: u16) -> dash_llvm_jit_backend::passes::type_infer::Type {
+                match index {
+                    0 | 1 | 2 => Type::I64,
+                    _ => todo!("{index}"),
+                }
+            }
+
+            fn type_of_local(&self, index: u16) -> Type {
+                match index {
+                    0 | 1 => Type::I64,
+                    o => todo!("{o}"),
+                }
+            }
+        }
+
+        let mut tycx = TypeInferCtxt {
+            bbs: bcx.bbs,
+            bytecode,
+            local_tys: HashMap::new(),
+            query: TypeProvider {},
+            visited: HashSet::new(),
+        };
+        tycx.resolve_types(TypeStack::default(), 0);
+        dbg!(&tycx.local_tys);
     }
 }

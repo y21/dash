@@ -5,3 +5,4 @@
 ///
 /// and one predecessor edge (the parent)
 pub mod bb_generation;
+pub mod type_infer;

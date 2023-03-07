@@ -31,12 +31,13 @@ pub type BasicBlockKey = usize;
 
 #[derive(Debug)]
 pub struct BasicBlock {
-    index: usize,
-    predecessors: Vec<BasicBlockKey>,
-    successor: Option<BasicBlockSuccessor>,
+    pub index: usize,
+    pub end: usize,
+    pub predecessors: Vec<BasicBlockKey>,
+    pub successor: Option<BasicBlockSuccessor>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum BasicBlockSuccessor {
     Unconditional(usize),
     Conditional { true_: usize, false_: usize },
@@ -61,18 +62,18 @@ pub struct BBGeneration {
 /// conditional jumps or unconditional jumps) in bytecode
 pub fn find_labels(bytecode: &[u8]) -> Result<Labels, LabelPassError> {
     let mut labels = Vec::new();
-    let mut dctxt = DecodeCtxt::new(bytecode);
+    let mut dcx = DecodeCtxt::new(bytecode);
 
-    while let Some((index, instr)) = dctxt.next_instruction() {
+    while let Some((index, instr)) = dcx.next_instruction() {
         match instr {
             // Instructions we care about:
             Instruction::Jmp => {
-                let count = dctxt.next_wide_signed();
+                let count = dcx.next_wide_signed();
                 let target_ip = usize::try_from(index as i16 + count + 3).unwrap();
                 labels.push(LabelKind::UnconditionalJumpTarget { target: target_ip });
             }
             Instruction::JmpFalseP | Instruction::JmpNullishP | Instruction::JmpTrueP | Instruction::JmpUndefinedP => {
-                let count = dctxt.next_wide_signed();
+                let count = dcx.next_wide_signed();
                 let target_ip = usize::try_from(index as i16 + count + 3).unwrap();
                 labels.push(LabelKind::ConditionalJumpTarget {
                     target_true: target_ip,
@@ -81,7 +82,7 @@ pub fn find_labels(bytecode: &[u8]) -> Result<Labels, LabelPassError> {
             }
 
             // Remaining instructions we do not care about but still need to decode
-            other => dctxt.decode_ignore(other),
+            other => dcx.decode_ignore(other),
         }
     }
 
@@ -109,6 +110,7 @@ impl<'a> BBGenerationCtxt<'a> {
             0,
             BasicBlock {
                 index: 0,
+                end: self.bytecode.len(),
                 predecessors: Vec::new(),
                 successor: None,
             },
@@ -121,6 +123,7 @@ impl<'a> BBGenerationCtxt<'a> {
                         *target,
                         BasicBlock {
                             index: *target,
+                            end: self.bytecode.len(),
                             predecessors: Vec::new(),
                             successor: None,
                         },
@@ -134,6 +137,7 @@ impl<'a> BBGenerationCtxt<'a> {
                         *target_true,
                         BasicBlock {
                             index: *target_true,
+                            end: self.bytecode.len(),
                             predecessors: Vec::new(),
                             successor: None,
                         },
@@ -142,6 +146,7 @@ impl<'a> BBGenerationCtxt<'a> {
                         *target_false,
                         BasicBlock {
                             index: *target_false,
+                            end: self.bytecode.len(),
                             predecessors: Vec::new(),
                             successor: None,
                         },
@@ -153,16 +158,17 @@ impl<'a> BBGenerationCtxt<'a> {
 
     /// Resolves predecessors and successors of every basic block
     pub fn resolve_edges(&mut self) {
-        let mut dctxt = DecodeCtxt::new(self.bytecode);
+        let mut dcx = DecodeCtxt::new(self.bytecode);
         let mut current_bb_ip = 0;
 
-        while let Some((index, instr)) = dctxt.next_instruction() {
+        while let Some((index, instr)) = dcx.next_instruction() {
             if index != 0 {
                 if let Some(label) = self.bbs.get(&index) {
                     let current_bb = self.bbs.get_mut(&current_bb_ip).unwrap();
                     if let None = current_bb.successor {
                         current_bb.successor = Some(BasicBlockSuccessor::Unconditional(index));
                     }
+                    current_bb.end = index;
                     current_bb_ip = index;
                 }
             }
@@ -170,12 +176,13 @@ impl<'a> BBGenerationCtxt<'a> {
             match instr {
                 // Instructions we care about:
                 Instruction::Jmp => {
-                    let count = dctxt.next_wide_signed();
+                    let count = dcx.next_wide_signed();
                     let target_ip = usize::try_from(index as i16 + count + 3).unwrap();
 
                     let this = self.bbs.get_mut(&current_bb_ip).unwrap();
                     assert!(this.successor.is_none());
                     this.successor = Some(BasicBlockSuccessor::Unconditional(target_ip));
+                    this.end = target_ip;
 
                     let bb = self.bbs.get_mut(&target_ip).unwrap();
                     bb.predecessors.push(current_bb_ip);
@@ -184,7 +191,7 @@ impl<'a> BBGenerationCtxt<'a> {
                 | Instruction::JmpNullishP
                 | Instruction::JmpTrueP
                 | Instruction::JmpUndefinedP => {
-                    let count = dctxt.next_wide_signed();
+                    let count = dcx.next_wide_signed();
                     let target_ip = usize::try_from(index as i16 + count + 3).unwrap();
 
                     let this = self.bbs.get_mut(&current_bb_ip).unwrap();
@@ -193,13 +200,14 @@ impl<'a> BBGenerationCtxt<'a> {
                         true_: target_ip,
                         false_: index + 3,
                     });
+                    this.end = target_ip;
 
                     let bb = self.bbs.get_mut(&target_ip).unwrap();
                     bb.predecessors.push(current_bb_ip);
                 }
 
                 // Remaining instructions we do not care about but still need to decode
-                other => dctxt.decode_ignore(other),
+                other => dcx.decode_ignore(other),
             }
         }
     }
