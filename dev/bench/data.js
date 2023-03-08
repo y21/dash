@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1678188554624,
+  "lastUpdate": 1678293825905,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -1845,6 +1845,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 92380,
             "range": "± 2308",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "2dbb6c26fea98a65fc4de3dc838d286512a4a0ab",
+          "message": "jit: impl codegenctxt",
+          "timestamp": "2023-03-08T17:31:28+01:00",
+          "tree_id": "29ae0704077d2208a9932deec91903a43e6d06fd",
+          "url": "https://github.com/y21/dash/commit/2dbb6c26fea98a65fc4de3dc838d286512a4a0ab"
+        },
+        "date": 1678293823891,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 3389971,
+            "range": "± 126349",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 315702,
+            "range": "± 17873",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 99524,
+            "range": "± 3994",
             "unit": "ns/iter"
           }
         ]
