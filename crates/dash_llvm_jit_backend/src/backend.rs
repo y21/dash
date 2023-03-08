@@ -37,13 +37,6 @@ pub type JitFunction = unsafe extern "C" fn(
     *mut u64, // out pointer for the IP after exiting
 );
 
-#[macro_export]
-macro_rules! cstr {
-    ($string:expr) => {
-        cstr::cstr!($string).as_ptr()
-    };
-}
-
 /// The JIT backend.
 pub struct Backend {
     cache: RefCell<Vec<Function>>,

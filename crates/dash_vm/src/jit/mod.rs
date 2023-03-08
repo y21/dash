@@ -95,11 +95,43 @@ mod tests {
     use dash_compiler::FunctionCompiler;
     use dash_llvm_jit_backend::passes::bb_generation::find_labels;
     use dash_llvm_jit_backend::passes::bb_generation::BBGenerationCtxt;
+    use dash_llvm_jit_backend::passes::bb_generation::BBGenerationQuery;
+    use dash_llvm_jit_backend::passes::bb_generation::ConditionalBranchAction;
     use dash_llvm_jit_backend::passes::type_infer::Type;
     use dash_llvm_jit_backend::passes::type_infer::TypeInferCtxt;
     use dash_llvm_jit_backend::passes::type_infer::TypeInferQuery;
     use dash_llvm_jit_backend::passes::type_infer::TypeStack;
     use dash_optimizer::OptLevel;
+
+    #[derive(Debug)]
+    struct BBProvider {}
+    impl BBGenerationQuery for BBProvider {
+        fn conditional_branch_at(&self, ip: usize) -> ConditionalBranchAction {
+            match ip {
+                0xB => ConditionalBranchAction::Either,
+                _ => todo!(),
+            }
+        }
+    }
+
+    struct TypeProvider {}
+
+    impl TypeInferQuery for TypeProvider {
+        fn type_of_constant(&self, index: u16) -> dash_llvm_jit_backend::passes::type_infer::Type {
+            match index {
+                0 | 1 | 2 => Type::I64,
+                _ => todo!("{index}"),
+            }
+        }
+
+        fn type_of_local(&self, index: u16) -> Type {
+            match index {
+                0 => Type::I64,
+                1 => Type::Boolean,
+                o => todo!("{o}"),
+            }
+        }
+    }
 
     #[test]
     pub fn llvm() {
@@ -107,7 +139,7 @@ mod tests {
             r"
 
         for (let i = 0; i < 10; i++) {
-            let x = 3;
+            let x = i > 3;
         }
         ",
             OptLevel::None,
@@ -121,28 +153,11 @@ mod tests {
             bytecode,
             labels: labels.0,
             bbs: HashMap::new(),
+            query: BBProvider {},
         };
         bcx.find_bbs();
         bcx.resolve_edges();
         dbg!(&bcx);
-
-        struct TypeProvider {}
-
-        impl TypeInferQuery for TypeProvider {
-            fn type_of_constant(&self, index: u16) -> dash_llvm_jit_backend::passes::type_infer::Type {
-                match index {
-                    0 | 1 | 2 => Type::I64,
-                    _ => todo!("{index}"),
-                }
-            }
-
-            fn type_of_local(&self, index: u16) -> Type {
-                match index {
-                    0 | 1 => Type::I64,
-                    o => todo!("{o}"),
-                }
-            }
-        }
 
         let mut tycx = TypeInferCtxt {
             bbs: bcx.bbs,

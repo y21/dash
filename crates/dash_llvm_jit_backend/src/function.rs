@@ -117,7 +117,7 @@ use llvm_sys::LLVMTypeKind;
 use thiserror::Error;
 
 use crate::backend::JitFunction;
-use crate::cstr;
+use crate::cstrp;
 use crate::passes_legacy::infer::InferResult;
 use crate::passes_legacy::infer::Type;
 use crate::Backend;
@@ -189,7 +189,7 @@ impl Function {
 
     pub fn new() -> Self {
         let context = unsafe { LLVMContextCreate() };
-        let module = unsafe { LLVMModuleCreateWithNameInContext(cstr!("jit"), context) };
+        let module = unsafe { LLVMModuleCreateWithNameInContext(cstrp!("jit"), context) };
         let mut engine = std::ptr::null_mut();
         let mut error = std::ptr::null_mut();
         assert!(unsafe { LLVMCreateExecutionEngineForModule(&mut engine, module, &mut error) } == 0);
@@ -197,7 +197,7 @@ impl Function {
 
         let value_union = Self::value_type(context, engine);
         let ty = Self::create_function_type(context, engine);
-        let function = unsafe { LLVMAddFunction(module, cstr!("jit"), ty) };
+        let function = unsafe { LLVMAddFunction(module, cstrp!("jit"), ty) };
         unsafe { LLVMSetInstructionCallConv(function, LLVMCallConv::LLVMCCallConv as u32) }
 
         let pass_manager = unsafe {
@@ -212,8 +212,8 @@ impl Function {
         };
 
         let builder = unsafe { LLVMCreateBuilderInContext(context) };
-        let setup_block = unsafe { LLVMAppendBasicBlockInContext(context, function, cstr!("setup")) };
-        let exit_block = unsafe { LLVMAppendBasicBlockInContext(context, function, cstr!("exit")) };
+        let setup_block = unsafe { LLVMAppendBasicBlockInContext(context, function, cstrp!("setup")) };
+        let exit_block = unsafe { LLVMAppendBasicBlockInContext(context, function, cstrp!("exit")) };
 
         Self {
             context,
@@ -232,7 +232,7 @@ impl Function {
     }
 
     fn append_block(&self) -> LLVMBasicBlockRef {
-        unsafe { LLVMAppendBasicBlockInContext(self.context, self.function, cstr!("block")) }
+        unsafe { LLVMAppendBasicBlockInContext(self.context, self.function, cstrp!("block")) }
     }
 
     fn append_and_enter_block(&self) -> LLVMBasicBlockRef {
@@ -244,7 +244,7 @@ impl Function {
     }
 
     fn alloca_local(&self, ty: &Type) -> LLVMValueRef {
-        unsafe { LLVMBuildAlloca(self.builder, ty.to_llvm_type(self.context), cstr!("local")) }
+        unsafe { LLVMBuildAlloca(self.builder, ty.to_llvm_type(self.context), cstrp!("local")) }
     }
 
     fn get_param(&self, param: u32) -> LLVMValueRef {
@@ -288,8 +288,8 @@ impl Function {
         let builder = self.builder;
         unsafe {
             match ty {
-                LLVMTypeKind::LLVMIntegerTypeKind => LLVMBuildAdd(self.builder, a, b, cstr!("iadd")),
-                LLVMTypeKind::LLVMDoubleTypeKind => LLVMBuildFAdd(self.builder, a, b, cstr!("fadd")),
+                LLVMTypeKind::LLVMIntegerTypeKind => LLVMBuildAdd(self.builder, a, b, cstrp!("iadd")),
+                LLVMTypeKind::LLVMDoubleTypeKind => LLVMBuildFAdd(self.builder, a, b, cstrp!("fadd")),
                 _ => panic!("Unsupported type for addition"),
             }
         }
@@ -300,8 +300,8 @@ impl Function {
         let builder = self.builder;
         unsafe {
             match ty {
-                LLVMTypeKind::LLVMIntegerTypeKind => LLVMBuildSub(self.builder, a, b, cstr!("isub")),
-                LLVMTypeKind::LLVMDoubleTypeKind => LLVMBuildFSub(self.builder, a, b, cstr!("fsub")),
+                LLVMTypeKind::LLVMIntegerTypeKind => LLVMBuildSub(self.builder, a, b, cstrp!("isub")),
+                LLVMTypeKind::LLVMDoubleTypeKind => LLVMBuildFSub(self.builder, a, b, cstrp!("fsub")),
                 _ => panic!("Unsupported type for subtraction"),
             }
         }
@@ -312,8 +312,8 @@ impl Function {
         let builder = self.builder;
         unsafe {
             match ty {
-                LLVMTypeKind::LLVMIntegerTypeKind => LLVMBuildMul(self.builder, a, b, cstr!("imul")),
-                LLVMTypeKind::LLVMDoubleTypeKind => LLVMBuildFMul(self.builder, a, b, cstr!("fmul")),
+                LLVMTypeKind::LLVMIntegerTypeKind => LLVMBuildMul(self.builder, a, b, cstrp!("imul")),
+                LLVMTypeKind::LLVMDoubleTypeKind => LLVMBuildFMul(self.builder, a, b, cstrp!("fmul")),
                 _ => panic!("Unsupported type for multiplication"),
             }
         }
@@ -324,8 +324,8 @@ impl Function {
         let builder = self.builder;
         unsafe {
             match ty {
-                LLVMTypeKind::LLVMIntegerTypeKind => LLVMBuildSDiv(self.builder, a, b, cstr!("idiv")),
-                LLVMTypeKind::LLVMDoubleTypeKind => LLVMBuildFMul(self.builder, a, b, cstr!("fdiv")),
+                LLVMTypeKind::LLVMIntegerTypeKind => LLVMBuildSDiv(self.builder, a, b, cstrp!("idiv")),
+                LLVMTypeKind::LLVMDoubleTypeKind => LLVMBuildFMul(self.builder, a, b, cstrp!("fdiv")),
                 _ => panic!("Unsupported type for division"),
             }
         }
@@ -336,15 +336,15 @@ impl Function {
         let builder = self.builder;
         unsafe {
             match ty {
-                LLVMTypeKind::LLVMIntegerTypeKind => LLVMBuildSRem(self.builder, a, b, cstr!("irem")),
-                LLVMTypeKind::LLVMDoubleTypeKind => LLVMBuildFRem(self.builder, a, b, cstr!("frem")),
+                LLVMTypeKind::LLVMIntegerTypeKind => LLVMBuildSRem(self.builder, a, b, cstrp!("irem")),
+                LLVMTypeKind::LLVMDoubleTypeKind => LLVMBuildFRem(self.builder, a, b, cstrp!("frem")),
                 _ => panic!("Unsupported type for remainder"),
             }
         }
     }
 
     fn build_load(&self, ty: LLVMTypeRef, value: LLVMValueRef) -> LLVMValueRef {
-        unsafe { LLVMBuildLoad2(self.builder, ty, value, cstr!("load")) }
+        unsafe { LLVMBuildLoad2(self.builder, ty, value, cstrp!("load")) }
     }
 
     fn build_store(&self, value: LLVMValueRef, ptr: LLVMValueRef) -> LLVMValueRef {
@@ -369,40 +369,40 @@ impl Function {
         unsafe {
             match (ty, pred) {
                 (LLVMTypeKind::LLVMIntegerTypeKind, Predicate::Le) => {
-                    LLVMBuildICmp(self.builder, LLVMIntPredicate::LLVMIntSLE, a, b, cstr!("ile"))
+                    LLVMBuildICmp(self.builder, LLVMIntPredicate::LLVMIntSLE, a, b, cstrp!("ile"))
                 }
                 (LLVMTypeKind::LLVMIntegerTypeKind, Predicate::Lt) => {
-                    LLVMBuildICmp(self.builder, LLVMIntPredicate::LLVMIntSLT, a, b, cstr!("ilt"))
+                    LLVMBuildICmp(self.builder, LLVMIntPredicate::LLVMIntSLT, a, b, cstrp!("ilt"))
                 }
                 (LLVMTypeKind::LLVMIntegerTypeKind, Predicate::Ge) => {
-                    LLVMBuildICmp(self.builder, LLVMIntPredicate::LLVMIntSGE, a, b, cstr!("ige"))
+                    LLVMBuildICmp(self.builder, LLVMIntPredicate::LLVMIntSGE, a, b, cstrp!("ige"))
                 }
                 (LLVMTypeKind::LLVMIntegerTypeKind, Predicate::Gt) => {
-                    LLVMBuildICmp(self.builder, LLVMIntPredicate::LLVMIntSGT, a, b, cstr!("igt"))
+                    LLVMBuildICmp(self.builder, LLVMIntPredicate::LLVMIntSGT, a, b, cstrp!("igt"))
                 }
                 (LLVMTypeKind::LLVMIntegerTypeKind, Predicate::Eq) => {
-                    LLVMBuildICmp(self.builder, LLVMIntPredicate::LLVMIntEQ, a, b, cstr!("ieq"))
+                    LLVMBuildICmp(self.builder, LLVMIntPredicate::LLVMIntEQ, a, b, cstrp!("ieq"))
                 }
                 (LLVMTypeKind::LLVMIntegerTypeKind, Predicate::Ne) => {
-                    LLVMBuildICmp(self.builder, LLVMIntPredicate::LLVMIntNE, a, b, cstr!("ine"))
+                    LLVMBuildICmp(self.builder, LLVMIntPredicate::LLVMIntNE, a, b, cstrp!("ine"))
                 }
                 (LLVMTypeKind::LLVMDoubleTypeKind, Predicate::Le) => {
-                    LLVMBuildFCmp(self.builder, LLVMRealPredicate::LLVMRealULE, a, b, cstr!("fle"))
+                    LLVMBuildFCmp(self.builder, LLVMRealPredicate::LLVMRealULE, a, b, cstrp!("fle"))
                 }
                 (LLVMTypeKind::LLVMDoubleTypeKind, Predicate::Lt) => {
-                    LLVMBuildFCmp(self.builder, LLVMRealPredicate::LLVMRealULT, a, b, cstr!("flt"))
+                    LLVMBuildFCmp(self.builder, LLVMRealPredicate::LLVMRealULT, a, b, cstrp!("flt"))
                 }
                 (LLVMTypeKind::LLVMDoubleTypeKind, Predicate::Ge) => {
-                    LLVMBuildFCmp(self.builder, LLVMRealPredicate::LLVMRealUGE, a, b, cstr!("fge"))
+                    LLVMBuildFCmp(self.builder, LLVMRealPredicate::LLVMRealUGE, a, b, cstrp!("fge"))
                 }
                 (LLVMTypeKind::LLVMDoubleTypeKind, Predicate::Gt) => {
-                    LLVMBuildFCmp(self.builder, LLVMRealPredicate::LLVMRealUGT, a, b, cstr!("fgt"))
+                    LLVMBuildFCmp(self.builder, LLVMRealPredicate::LLVMRealUGT, a, b, cstrp!("fgt"))
                 }
                 (LLVMTypeKind::LLVMDoubleTypeKind, Predicate::Eq) => {
-                    LLVMBuildFCmp(self.builder, LLVMRealPredicate::LLVMRealUEQ, a, b, cstr!("feq"))
+                    LLVMBuildFCmp(self.builder, LLVMRealPredicate::LLVMRealUEQ, a, b, cstrp!("feq"))
                 }
                 (LLVMTypeKind::LLVMDoubleTypeKind, Predicate::Ne) => {
-                    LLVMBuildFCmp(self.builder, LLVMRealPredicate::LLVMRealUNE, a, b, cstr!("fne"))
+                    LLVMBuildFCmp(self.builder, LLVMRealPredicate::LLVMRealUNE, a, b, cstrp!("fne"))
                 }
                 _ => panic!("Unsupported type for comparison"),
             }
@@ -437,7 +437,7 @@ impl Function {
         let ty = self.type_of_value(a);
         unsafe {
             match ty {
-                LLVMTypeKind::LLVMIntegerTypeKind => LLVMBuildNot(self.builder, a, cstr!("not")),
+                LLVMTypeKind::LLVMIntegerTypeKind => LLVMBuildNot(self.builder, a, cstrp!("not")),
                 _ => panic!("Unsupported type for not"),
             }
         }
@@ -445,7 +445,7 @@ impl Function {
 
     fn build_local_load(&self, id: u16) -> LLVMValueRef {
         let (local, ty) = self.locals[&id];
-        unsafe { LLVMBuildLoad2(self.builder, ty, local, cstr!("local_load")) }
+        unsafe { LLVMBuildLoad2(self.builder, ty, local, cstrp!("local_load")) }
     }
 
     fn build_local_store(&self, id: u16, value: LLVMValueRef) -> LLVMValueRef {
@@ -458,28 +458,28 @@ impl Function {
     }
 
     fn build_i64_to_f64_transmute(&self, value: LLVMValueRef) -> LLVMValueRef {
-        unsafe { LLVMBuildBitCast(self.builder, value, self.f64_ty(), cstr!("i64_to_f64")) }
+        unsafe { LLVMBuildBitCast(self.builder, value, self.f64_ty(), cstrp!("i64_to_f64")) }
     }
 
     fn build_f64_to_i64_transmute(&self, value: LLVMValueRef) -> LLVMValueRef {
-        unsafe { LLVMBuildBitCast(self.builder, value, self.i64_ty(), cstr!("f64_to_i64")) }
+        unsafe { LLVMBuildBitCast(self.builder, value, self.i64_ty(), cstrp!("f64_to_i64")) }
     }
 
     fn build_cast(&self, value: LLVMValueRef, from: &Type, to: &Type) -> LLVMValueRef {
         unsafe {
             match (from, to) {
-                (Type::I64, Type::Boolean) => LLVMBuildTrunc(self.builder, value, self.i1_ty(), cstr!("trunc")),
+                (Type::I64, Type::Boolean) => LLVMBuildTrunc(self.builder, value, self.i1_ty(), cstrp!("trunc")),
                 (Type::F64, Type::Boolean) => {
                     let to_int = self.build_cast(value, from, &Type::I64);
                     self.build_cast(to_int, &Type::I64, &Type::Boolean)
                 }
-                (Type::Boolean, Type::I64) => LLVMBuildSExt(self.builder, value, self.i64_ty(), cstr!("sext")),
+                (Type::Boolean, Type::I64) => LLVMBuildSExt(self.builder, value, self.i64_ty(), cstrp!("sext")),
                 (Type::Boolean, Type::F64) => {
                     let to_int = self.build_cast(value, from, &Type::I64);
                     self.build_cast(to_int, &Type::I64, &Type::F64)
                 }
-                (Type::I64, Type::F64) => LLVMBuildSIToFP(self.builder, value, self.f64_ty(), cstr!("sitofp")),
-                (Type::F64, Type::I64) => LLVMBuildFPToSI(self.builder, value, self.i64_ty(), cstr!("fptosi")),
+                (Type::I64, Type::F64) => LLVMBuildSIToFP(self.builder, value, self.f64_ty(), cstrp!("sitofp")),
+                (Type::F64, Type::I64) => LLVMBuildFPToSI(self.builder, value, self.i64_ty(), cstrp!("fptosi")),
                 _ => panic!("Invalid cast {:?} -> {:?}", from, to),
             }
         }
@@ -589,7 +589,7 @@ impl Function {
                 ptr,
                 indices.as_mut_ptr(),
                 indices.len() as u32,
-                cstr!("gep"),
+                cstrp!("gep"),
             )
         }
     }
@@ -599,7 +599,7 @@ impl Function {
     }
 
     fn build_phi(&self, ty: LLVMTypeRef) -> LLVMValueRef {
-        unsafe { LLVMBuildPhi(self.builder, ty, cstr!("phi")) }
+        unsafe { LLVMBuildPhi(self.builder, ty, cstrp!("phi")) }
     }
 
     fn build_phi_node(&self, phi: LLVMValueRef, value: LLVMValueRef, block: LLVMBasicBlockRef) {

@@ -9,7 +9,11 @@ use crate::util::DecodeCtxt;
 use super::bb_generation::BBGenerationCtxt;
 use super::bb_generation::BasicBlock;
 use super::bb_generation::BasicBlockKey;
+use super::bb_generation::BasicBlockMap;
 use super::bb_generation::BasicBlockSuccessor;
+use super::bb_generation::ConditionalBranchAction;
+
+pub type TypeMap = HashMap<usize, Type>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
@@ -43,7 +47,7 @@ impl TypeStack {
 
 pub struct TypeInferCtxt<'a, Q> {
     pub bytecode: &'a [u8],
-    pub bbs: HashMap<usize, BasicBlock>,
+    pub bbs: BasicBlockMap,
     pub local_tys: HashMap<u16, Type>,
     pub query: Q,
     /// Basic blocks we've already visited,
@@ -191,12 +195,18 @@ impl<'a, Q: TypeInferQuery> TypeInferCtxt<'a, Q> {
                     let target_ip = usize::try_from(index as i16 + count + 3).unwrap();
 
                     let bb = &self.bbs[&bbk];
-                    let Some(BasicBlockSuccessor::Conditional { true_, false_ }) = bb.successor else {
+                    let Some(BasicBlockSuccessor::Conditional { true_ip: true_, false_ip: false_, action }) = bb.successor else {
                         panic!("unmatched basic block successor");
                     };
-                    // TODO: only resolve types of BBs we care about
-                    self.resolve_types(ty_stack.clone(), true_);
-                    self.resolve_types(ty_stack.clone(), false_);
+
+                    if let ConditionalBranchAction::Either | ConditionalBranchAction::True = action {
+                        self.resolve_types(ty_stack.clone(), true_);
+                    }
+
+                    if let ConditionalBranchAction::Either | ConditionalBranchAction::False = action {
+                        self.resolve_types(ty_stack.clone(), false_);
+                    }
+
                     return;
                 }
                 Instruction::BitOr
@@ -285,9 +295,18 @@ impl<'a, Q: TypeInferQuery> TypeInferCtxt<'a, Q> {
         if let Some(succ) = succ {
             match succ {
                 BasicBlockSuccessor::Unconditional(succ) => self.resolve_types(ty_stack.clone(), succ),
-                BasicBlockSuccessor::Conditional { true_, false_ } => {
-                    self.resolve_types(ty_stack.clone(), true_);
-                    self.resolve_types(ty_stack, false_);
+                BasicBlockSuccessor::Conditional {
+                    true_ip: true_,
+                    false_ip: false_,
+                    action,
+                } => {
+                    if let ConditionalBranchAction::Either | ConditionalBranchAction::True = action {
+                        self.resolve_types(ty_stack.clone(), true_);
+                    }
+
+                    if let ConditionalBranchAction::Either | ConditionalBranchAction::False = action {
+                        self.resolve_types(ty_stack, false_);
+                    }
                 }
             }
         }

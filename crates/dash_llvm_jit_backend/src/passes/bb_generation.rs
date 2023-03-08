@@ -28,6 +28,7 @@ pub enum LabelKind {
 pub struct Labels(pub Vec<LabelKind>);
 
 pub type BasicBlockKey = usize;
+pub type BasicBlockMap = HashMap<usize, BasicBlock>;
 
 #[derive(Debug)]
 pub struct BasicBlock {
@@ -40,16 +41,21 @@ pub struct BasicBlock {
 #[derive(Debug, Clone, Copy)]
 pub enum BasicBlockSuccessor {
     Unconditional(usize),
-    Conditional { true_: usize, false_: usize },
+    Conditional {
+        true_ip: usize,
+        false_ip: usize,
+        action: ConditionalBranchAction,
+    },
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum ConditionalBranchAction {
     True,
     False,
     Either,
 }
 
-pub trait BBQuery {
+pub trait BBGenerationQuery {
     fn conditional_branch_at(&self, ip: usize) -> ConditionalBranchAction;
 }
 
@@ -98,13 +104,14 @@ pub fn find_labels(bytecode: &[u8]) -> Result<Labels, LabelPassError> {
 }
 
 #[derive(Debug)]
-pub struct BBGenerationCtxt<'a> {
+pub struct BBGenerationCtxt<'a, Q> {
     pub bytecode: &'a [u8],
     pub labels: Vec<LabelKind>,
-    pub bbs: HashMap<usize, BasicBlock>,
+    pub bbs: BasicBlockMap,
+    pub query: Q,
 }
 
-impl<'a> BBGenerationCtxt<'a> {
+impl<'a, Q: BBGenerationQuery> BBGenerationCtxt<'a, Q> {
     pub fn find_bbs(&mut self) {
         self.bbs.insert(
             0,
@@ -193,12 +200,14 @@ impl<'a> BBGenerationCtxt<'a> {
                 | Instruction::JmpUndefinedP => {
                     let count = dcx.next_wide_signed();
                     let target_ip = usize::try_from(index as i16 + count + 3).unwrap();
+                    let action = self.query.conditional_branch_at(index);
 
                     let this = self.bbs.get_mut(&current_bb_ip).unwrap();
                     assert!(this.successor.is_none());
                     this.successor = Some(BasicBlockSuccessor::Conditional {
-                        true_: target_ip,
-                        false_: index + 3,
+                        true_ip: target_ip,
+                        false_ip: index + 3,
+                        action,
                     });
                     this.end = target_ip;
 
