@@ -1,9 +1,14 @@
 use llvm_sys::core::LLVMAddIncoming;
+use llvm_sys::core::LLVMGetTypeKind;
+use llvm_sys::core::LLVMTypeOf;
+use llvm_sys::prelude::LLVMTypeRef;
 use llvm_sys::prelude::LLVMValueRef;
+use llvm_sys::LLVMTypeKind;
 
 use crate::util::transmute_slice_mut;
 
 use super::BasicBlock;
+use super::Ty;
 
 #[derive(Clone)]
 pub struct Value(pub(super) LLVMValueRef);
@@ -11,6 +16,14 @@ pub struct Value(pub(super) LLVMValueRef);
 impl Value {
     pub fn slice_of_values_as_raw(slice: &mut [Value]) -> &mut [LLVMValueRef] {
         unsafe { transmute_slice_mut(slice) }
+    }
+
+    pub fn ty(&self) -> Ty {
+        Ty(unsafe { LLVMTypeOf(self.0) })
+    }
+
+    pub fn ty_kind(&self) -> LLVMTypeKind {
+        self.ty().kind()
     }
 }
 

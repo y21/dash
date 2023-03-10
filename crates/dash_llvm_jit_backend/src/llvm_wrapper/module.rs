@@ -1,6 +1,8 @@
 use std::ffi::CStr;
 use std::ptr;
 
+use llvm_sys::analysis::LLVMVerifierFailureAction;
+use llvm_sys::analysis::LLVMVerifyModule;
 use llvm_sys::core::LLVMAddFunction;
 use llvm_sys::core::LLVMDisposeMessage;
 use llvm_sys::core::LLVMPrintModuleToString;
@@ -37,7 +39,7 @@ impl Module {
     }
 
     pub fn create_c_function(&self, ty: &Ty) -> Function {
-        self.create_c_function_with_name(CStr::from_bytes_with_nul(b"anon").unwrap(), ty)
+        self.create_c_function_with_name(CStr::from_bytes_with_nul(b"anon\0").unwrap(), ty)
     }
 
     pub fn run_pass_manager(&self, pm: &PassManager) {
@@ -50,5 +52,13 @@ impl Module {
         println!("{}", rust_string);
 
         unsafe { LLVMDisposeMessage(string.as_ptr() as *mut i8) }
+    }
+
+    pub fn verify(&self) {
+        let mut error = ptr::null_mut();
+        unsafe {
+            LLVMVerifyModule(self.0, LLVMVerifierFailureAction::LLVMAbortProcessAction, &mut error);
+            LLVMDisposeMessage(error);
+        }
     }
 }

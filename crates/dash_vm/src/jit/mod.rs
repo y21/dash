@@ -93,6 +93,9 @@ mod tests {
     use std::collections::HashSet;
 
     use dash_compiler::FunctionCompiler;
+    use dash_llvm_jit_backend::codegen::CodegenCtxt;
+    use dash_llvm_jit_backend::codegen::CodegenQuery;
+    use dash_llvm_jit_backend::codegen::JitConstant;
     use dash_llvm_jit_backend::passes::bb_generation::find_labels;
     use dash_llvm_jit_backend::passes::bb_generation::BBGenerationCtxt;
     use dash_llvm_jit_backend::passes::bb_generation::BBGenerationQuery;
@@ -103,12 +106,15 @@ mod tests {
     use dash_llvm_jit_backend::passes::type_infer::TypeStack;
     use dash_optimizer::OptLevel;
 
+    use crate::value::primitive::Number;
+    use crate::value::Value;
+
     #[derive(Debug)]
     struct BBProvider {}
     impl BBGenerationQuery for BBProvider {
         fn conditional_branch_at(&self, ip: usize) -> ConditionalBranchAction {
             match ip {
-                0xB => ConditionalBranchAction::Either,
+                0xB => ConditionalBranchAction::NotTaken,
                 _ => todo!(),
             }
         }
@@ -129,6 +135,18 @@ mod tests {
                 0 => Type::I64,
                 1 => Type::Boolean,
                 o => todo!("{o}"),
+            }
+        }
+    }
+
+    struct CodegenProvider {}
+    impl CodegenQuery for CodegenProvider {
+        fn get_constant(&self, cid: u16) -> JitConstant {
+            match cid {
+                0 => JitConstant::I64(0),
+                1 => JitConstant::I64(10),
+                2 => JitConstant::I64(3),
+                _ => todo!(),
             }
         }
     }
@@ -168,5 +186,23 @@ mod tests {
         };
         tycx.resolve_types(TypeStack::default(), 0);
         dbg!(&tycx.local_tys);
+
+        dash_llvm_jit_backend::init();
+
+        let mut codegenctxt = CodegenCtxt::new(tycx.local_tys, tycx.bbs, bytecode, CodegenProvider {});
+        codegenctxt.compile_setup_block();
+
+        codegenctxt.compile_bb(Default::default(), 0);
+
+        codegenctxt.compile_exit_block();
+
+        codegenctxt.module.print_module();
+        codegenctxt.module.verify();
+        codegenctxt.module.run_pass_manager(&codegenctxt.pm);
+        let f = codegenctxt.ee.compile_fn(codegenctxt.function.name());
+        let mut s = [Value::Number(Number(0.0)), Value::Boolean(false)];
+        let mut x = 0;
+        unsafe { f(s.as_mut_ptr().cast(), s.len().try_into().unwrap(), &mut x) };
+        dbg!(x);
     }
 }

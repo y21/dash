@@ -50,8 +50,8 @@ pub enum BasicBlockSuccessor {
 
 #[derive(Debug, Clone, Copy)]
 pub enum ConditionalBranchAction {
-    True,
-    False,
+    Taken,
+    NotTaken,
     Either,
 }
 
@@ -78,7 +78,14 @@ pub fn find_labels(bytecode: &[u8]) -> Result<Labels, LabelPassError> {
                 let target_ip = usize::try_from(index as i16 + count + 3).unwrap();
                 labels.push(LabelKind::UnconditionalJumpTarget { target: target_ip });
             }
-            Instruction::JmpFalseP | Instruction::JmpNullishP | Instruction::JmpTrueP | Instruction::JmpUndefinedP => {
+            Instruction::JmpFalseP
+            | Instruction::JmpNullishP
+            | Instruction::JmpTrueP
+            | Instruction::JmpUndefinedP
+            | Instruction::JmpFalseNP
+            | Instruction::JmpNullishNP
+            | Instruction::JmpTrueNP
+            | Instruction::JmpUndefinedNP => {
                 let count = dcx.next_wide_signed();
                 let target_ip = usize::try_from(index as i16 + count + 3).unwrap();
                 labels.push(LabelKind::ConditionalJumpTarget {
@@ -197,7 +204,11 @@ impl<'a, Q: BBGenerationQuery> BBGenerationCtxt<'a, Q> {
                 Instruction::JmpFalseP
                 | Instruction::JmpNullishP
                 | Instruction::JmpTrueP
-                | Instruction::JmpUndefinedP => {
+                | Instruction::JmpUndefinedP
+                | Instruction::JmpFalseNP
+                | Instruction::JmpNullishNP
+                | Instruction::JmpTrueNP
+                | Instruction::JmpUndefinedNP => {
                     let count = dcx.next_wide_signed();
                     let target_ip = usize::try_from(index as i16 + count + 3).unwrap();
                     let action = self.query.conditional_branch_at(index);
@@ -211,8 +222,11 @@ impl<'a, Q: BBGenerationQuery> BBGenerationCtxt<'a, Q> {
                     });
                     this.end = target_ip;
 
-                    let bb = self.bbs.get_mut(&target_ip).unwrap();
-                    bb.predecessors.push(current_bb_ip);
+                    let bb_true = self.bbs.get_mut(&target_ip).unwrap();
+                    bb_true.predecessors.push(current_bb_ip);
+
+                    let bb_false = self.bbs.get_mut(&(index + 3)).unwrap();
+                    bb_false.predecessors.push(current_bb_ip);
                 }
 
                 // Remaining instructions we do not care about but still need to decode
