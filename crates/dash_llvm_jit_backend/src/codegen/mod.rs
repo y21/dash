@@ -16,6 +16,7 @@ use llvm_sys::prelude::LLVMValueRef;
 use llvm_sys::target_machine::LLVMCodeGenOptLevel;
 use llvm_sys::LLVMTypeKind;
 
+use crate::error::Error;
 use crate::llvm_wrapper as llvm;
 use crate::llvm_wrapper::Value;
 use crate::passes::bb_generation::BasicBlockKey;
@@ -24,9 +25,16 @@ use crate::passes::bb_generation::BasicBlockSuccessor;
 use crate::passes::bb_generation::ConditionalBranchAction;
 use crate::passes::type_infer::Type;
 use crate::passes::type_infer::TypeMap;
+use crate::typed_cfg::TypedCfg;
 use crate::util::DecodeCtxt;
 
 use cstr::cstr;
+
+pub type JitFunction = unsafe extern "C" fn(
+    *mut (),  // stack pointer
+    u64,      // stack offset for frame
+    *mut u64, // out pointer for the IP after exiting
+);
 
 fn value_ty_in_context(cx: &llvm::Context, ee: &llvm::ExecutionEngine) -> llvm::Ty {
     let mut elements = [
@@ -110,11 +118,11 @@ pub trait CodegenQuery {
     fn get_constant(&self, cid: u16) -> JitConstant;
 }
 
-pub struct CodegenCtxt<'a, Q> {
-    pub ty_map: TypeMap,
-    pub bb_map: BasicBlockMap,
+pub struct CodegenCtxt<'a, 'q, Q> {
+    pub ty_map: &'q TypeMap,
+    pub bb_map: &'q BasicBlockMap,
     pub bytecode: &'a [u8],
-    pub query: Q,
+    pub query: &'q mut Q,
 
     pub bbs_visited: HashSet<BasicBlockKey>,
     pub llcx: llvm::Context,
@@ -131,8 +139,8 @@ pub struct CodegenCtxt<'a, Q> {
     pub exit_guards: Vec<(usize, llvm::BasicBlock)>,
 }
 
-impl<'a, Q: CodegenQuery> CodegenCtxt<'a, Q> {
-    pub fn new(ty_map: TypeMap, bb_map: BasicBlockMap, bytecode: &'a [u8], query: Q) -> Self {
+impl<'a, 'q, Q: CodegenQuery> CodegenCtxt<'a, 'q, Q> {
+    pub fn new(ty_map: &'q TypeMap, bb_map: &'q BasicBlockMap, bytecode: &'a [u8], query: &'q mut Q) -> Self {
         let mut llcx = llvm::Context::new();
         let module = llcx.create_module();
         let ee = module.create_execution_engine();
@@ -208,7 +216,7 @@ impl<'a, Q: CodegenQuery> CodegenCtxt<'a, Q> {
     pub fn compile_setup_block(&mut self) {
         self.builder.position_at_end(&self.setup_block);
 
-        for (&id, ty) in &self.ty_map {
+        for (&id, ty) in self.ty_map.iter() {
             // Allocate space for local
             let space = self.alloca_local(ty);
 
@@ -261,7 +269,7 @@ impl<'a, Q: CodegenQuery> CodegenCtxt<'a, Q> {
         let out_ip = self.function.get_param(2);
         self.builder.build_store(ret_phi.as_value(), &out_ip);
 
-        for (&local_index, ty) in &self.ty_map {
+        for (&local_index, ty) in self.ty_map.iter() {
             let (space, llty) = &self.locals[&local_index];
             let value = self.builder.build_load(llty, space);
 
@@ -290,9 +298,9 @@ impl<'a, Q: CodegenQuery> CodegenCtxt<'a, Q> {
         self.builder.build_retvoid();
     }
 
-    pub fn compile_bb(&mut self, mut stack: ValueStack, bbk: BasicBlockKey) {
+    pub fn compile_bb(&mut self, mut stack: ValueStack, bbk: BasicBlockKey) -> Result<(), Error> {
         if self.bbs_visited.contains(&bbk) {
-            return;
+            return Ok(());
         }
         self.bbs_visited.insert(bbk);
 
@@ -348,7 +356,7 @@ impl<'a, Q: CodegenQuery> CodegenCtxt<'a, Q> {
                     self.builder.build_br(llbb);
                     self.compile_bb(stack.clone(), *target);
 
-                    return;
+                    return Ok(());
                 }
                 Instruction::JmpFalseP
                 | Instruction::JmpFalseNP
@@ -398,7 +406,7 @@ impl<'a, Q: CodegenQuery> CodegenCtxt<'a, Q> {
                         }
                     }
 
-                    return;
+                    return Ok(());
                 }
                 Instruction::IntrinsicOp => {
                     let op = IntrinsicOperation::from_repr(dcx.next_byte()).unwrap();
@@ -509,14 +517,14 @@ impl<'a, Q: CodegenQuery> CodegenCtxt<'a, Q> {
                             self.store_local(id.into(), &value);
                             stack.push(value);
                         }
-                        _ => todo!(),
+                        _ => return Err(Error::UnsupportedInstruction { instr }),
                     }
                 }
                 Instruction::Ret => {
                     let _value = stack.pop();
                     let _c = dcx.next_wide();
                 }
-                other => todo!("{other:?}"),
+                _ => return Err(Error::UnsupportedInstruction { instr }),
             }
         }
 
@@ -531,23 +539,8 @@ impl<'a, Q: CodegenQuery> CodegenCtxt<'a, Q> {
             self.builder.build_br(next_bb);
             self.compile_bb(stack, target);
         }
-    }
-    fn emit_partial_branch(
-        &mut self,
-        stack: ValueStack,
-        cur: llvm::BasicBlock,
-        condition: &Value,
-        expected: bool,
-        true_ip: usize,
-        false_ip: usize,
-    ) {
-        let (dest_true, dest_false, dest_ip) = match expected {
-            true => (&self.llvm_bbs[&true_ip], &self.exit_block, true_ip),
-            false => (&self.exit_block, &self.llvm_bbs[&true_ip], false_ip),
-        };
-        self.exit_guards.push((dest_ip, cur)); // TODO: how does target_ip work?
-        self.builder.build_condbr(condition, dest_true, dest_false);
-        self.compile_bb(stack, dest_ip);
+
+        Ok(())
     }
 }
 
@@ -581,4 +574,19 @@ impl ValueStack {
         let a = self.pop();
         (b, a)
     }
+}
+
+pub fn compile_typed_cfg<Q: CodegenQuery>(
+    bytecode: &[u8],
+    tcfg: &TypedCfg,
+    query: &mut Q,
+) -> Result<JitFunction, Error> {
+    let mut codegenctxt = CodegenCtxt::new(&tcfg.ty_map, &tcfg.bb_map, bytecode, query);
+    codegenctxt.compile_setup_block();
+    codegenctxt.compile_bb(ValueStack::default(), 0)?;
+    codegenctxt.compile_exit_block();
+    codegenctxt.module.verify();
+    codegenctxt.module.run_pass_manager(&codegenctxt.pm);
+    let func = codegenctxt.ee.compile_fn(codegenctxt.function.name());
+    Ok(func)
 }

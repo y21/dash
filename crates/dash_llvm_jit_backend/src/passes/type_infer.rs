@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use dash_middle::compiler::instruction::Instruction;
 use dash_middle::compiler::instruction::IntrinsicOperation;
 
+use crate::error::Error;
 use crate::util::DecodeCtxt;
 
 use super::bb_generation::BBGenerationCtxt;
@@ -45,18 +46,18 @@ impl TypeStack {
     }
 }
 
-pub struct TypeInferCtxt<'a, Q> {
+pub struct TypeInferCtxt<'a, 'q, Q> {
     pub bytecode: &'a [u8],
     pub bbs: BasicBlockMap,
     pub local_tys: TypeMap,
-    pub query: Q,
+    pub query: &'q mut Q,
     /// Basic blocks we've already visited,
     /// to prevent getting into an infinite loop
     /// while following BB successors
     pub visited: HashSet<usize>,
 }
 
-impl<'a, Q: TypeInferQuery> TypeInferCtxt<'a, Q> {
+impl<'a, 'q, Q: TypeInferQuery> TypeInferCtxt<'a, 'q, Q> {
     fn get_or_insert_local_ty(&mut self, index: u16) -> Type {
         match self.local_tys.get(&index) {
             Some(ty) => ty.clone(),
@@ -67,11 +68,11 @@ impl<'a, Q: TypeInferQuery> TypeInferCtxt<'a, Q> {
             }
         }
     }
-    pub fn resolve_types(&mut self, mut ty_stack: TypeStack, bbk: BasicBlockKey) {
+    pub fn resolve_types(&mut self, mut ty_stack: TypeStack, bbk: BasicBlockKey) -> Result<(), Error> {
         // If this BB is in the list of visited BBs
         // do not resolve it again
         if self.visited.contains(&bbk) {
-            return;
+            return Ok(());
         }
         self.visited.insert(bbk);
 
@@ -170,7 +171,7 @@ impl<'a, Q: TypeInferQuery> TypeInferCtxt<'a, Q> {
                         panic!("unmatched basic block successor");
                     };
                     self.resolve_types(ty_stack.clone(), succ);
-                    return;
+                    return Ok(());
                 }
                 Instruction::StrictEq => todo!(),
                 Instruction::StrictNe => todo!(),
@@ -207,7 +208,7 @@ impl<'a, Q: TypeInferQuery> TypeInferCtxt<'a, Q> {
                         self.resolve_types(ty_stack.clone(), false_);
                     }
 
-                    return;
+                    return Ok(());
                 }
                 Instruction::BitOr
                 | Instruction::BitXor
@@ -281,11 +282,11 @@ impl<'a, Q: TypeInferQuery> TypeInferCtxt<'a, Q> {
                             let _ = dcx.next_u32();
                             ty_stack.push(Type::Boolean);
                         }
-                        _ => todo!(),
+                        _ => return Err(Error::UnsupportedInstruction { instr }),
                     }
                 }
                 Instruction::Nop => {}
-                _ => todo!(),
+                _ => return Err(Error::UnsupportedInstruction { instr }),
             }
         }
 
@@ -298,5 +299,7 @@ impl<'a, Q: TypeInferQuery> TypeInferCtxt<'a, Q> {
             };
             self.resolve_types(ty_stack.clone(), target);
         }
+
+        Ok(())
     }
 }

@@ -5,6 +5,8 @@ use dash_middle::compiler::constant::Function;
 use dash_middle::compiler::instruction as inst;
 use indexmap::IndexMap;
 
+use crate::passes::bb_generation::ConditionalBranchAction;
+
 #[derive(Debug)]
 pub struct Trace {
     pub(crate) origin: *const Function,
@@ -15,7 +17,8 @@ pub struct Trace {
     ///
     /// Note for later: can change to HashSet<usize, bool> where usize is the IP if a trace
     /// is composed of multiple possible paths
-    pub(crate) conditional_jumps: Vec<bool>,
+    // pub(crate) conditional_jumps: Vec<bool>,
+    pub(crate) conditional_jumps: HashMap<usize, ConditionalBranchAction>,
 }
 
 impl Trace {
@@ -24,16 +27,16 @@ impl Trace {
             origin,
             start,
             end,
-            conditional_jumps: Vec::new(),
+            conditional_jumps: HashMap::new(),
         }
     }
 
-    pub fn get_conditional_jump(&self, id: usize) -> bool {
-        self.conditional_jumps[id]
+    pub fn get_conditional_jump(&self, id: usize) -> ConditionalBranchAction {
+        self.conditional_jumps[&id]
     }
 
-    pub fn record_conditional_jump(&mut self, taken: bool) {
-        self.conditional_jumps.push(taken);
+    pub fn record_conditional_jump(&mut self, id: usize, action: ConditionalBranchAction) {
+        self.conditional_jumps.insert(id, action);
     }
 
     pub fn start(&self) -> usize {

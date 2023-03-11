@@ -11,9 +11,8 @@ use frontend::Trace;
 use crate::Vm;
 
 fn handle_loop_trace(vm: &mut Vm, jmp_instr_ip: usize) {
-    debug!("end of loop tracing");
     let (trace, fun) = match frontend::compile_current_trace(vm) {
-        Ok(t) => t,
+        Ok(v) => v,
         Err(err) => {
             error!("JIT compilation failed! {err:?}");
             vm.poison_ip(jmp_instr_ip);
@@ -28,16 +27,13 @@ fn handle_loop_trace(vm: &mut Vm, jmp_instr_ip: usize) {
 
     let offset_ip = trace.start();
     let mut target_ip = 0;
-
-    debug!("call into jit");
     unsafe {
         let stack_ptr = vm.stack.as_mut_ptr().cast();
         let frame_sp = u64::try_from(frame_sp).unwrap();
-        let out_target_ip = &mut target_ip;
-        fun(stack_ptr, frame_sp, out_target_ip);
+        fun(stack_ptr, frame_sp, &mut target_ip);
     }
 
-    target_ip = offset_ip as u64 + target_ip;
+    target_ip += offset_ip as u64;
     debug!("jit returned");
     debug!(target_ip);
 
@@ -87,31 +83,27 @@ fn handle_loop_counter_inc(vm: &mut Vm, loop_end_ip: usize, parent_ip: Option<us
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "jit"))]
 mod tests {
-    use std::collections::HashMap;
-    use std::collections::HashSet;
 
     use dash_compiler::FunctionCompiler;
-    use dash_llvm_jit_backend::codegen::CodegenCtxt;
+    use dash_llvm_jit_backend::codegen;
     use dash_llvm_jit_backend::codegen::CodegenQuery;
     use dash_llvm_jit_backend::codegen::JitConstant;
-    use dash_llvm_jit_backend::passes::bb_generation::find_labels;
-    use dash_llvm_jit_backend::passes::bb_generation::BBGenerationCtxt;
     use dash_llvm_jit_backend::passes::bb_generation::BBGenerationQuery;
     use dash_llvm_jit_backend::passes::bb_generation::ConditionalBranchAction;
     use dash_llvm_jit_backend::passes::type_infer::Type;
-    use dash_llvm_jit_backend::passes::type_infer::TypeInferCtxt;
     use dash_llvm_jit_backend::passes::type_infer::TypeInferQuery;
-    use dash_llvm_jit_backend::passes::type_infer::TypeStack;
+    use dash_llvm_jit_backend::typed_cfg;
+    use dash_llvm_jit_backend::typed_cfg::TypedCfgQuery;
     use dash_optimizer::OptLevel;
 
     use crate::value::primitive::Number;
     use crate::value::Value;
 
     #[derive(Debug)]
-    struct BBProvider {}
-    impl BBGenerationQuery for BBProvider {
+    struct TestQueryProvider {}
+    impl BBGenerationQuery for TestQueryProvider {
         fn conditional_branch_at(&self, ip: usize) -> ConditionalBranchAction {
             match ip {
                 0xB => ConditionalBranchAction::NotTaken,
@@ -120,9 +112,7 @@ mod tests {
         }
     }
 
-    struct TypeProvider {}
-
-    impl TypeInferQuery for TypeProvider {
+    impl TypeInferQuery for TestQueryProvider {
         fn type_of_constant(&self, index: u16) -> dash_llvm_jit_backend::passes::type_infer::Type {
             match index {
                 0 | 1 | 2 => Type::I64,
@@ -139,8 +129,7 @@ mod tests {
         }
     }
 
-    struct CodegenProvider {}
-    impl CodegenQuery for CodegenProvider {
+    impl CodegenQuery for TestQueryProvider {
         fn get_constant(&self, cid: u16) -> JitConstant {
             match cid {
                 0 => JitConstant::I64(0),
@@ -150,6 +139,8 @@ mod tests {
             }
         }
     }
+
+    impl TypedCfgQuery for TestQueryProvider {}
 
     #[test]
     pub fn llvm() {
@@ -164,45 +155,16 @@ mod tests {
         )
         .unwrap();
         let bytecode = &cr.instructions;
-
-        let labels = find_labels(bytecode).unwrap();
-
-        let mut bcx = BBGenerationCtxt {
-            bytecode,
-            labels: labels.0,
-            bbs: HashMap::new(),
-            query: BBProvider {},
-        };
-        bcx.find_bbs();
-        bcx.resolve_edges();
-        dbg!(&bcx);
-
-        let mut tycx = TypeInferCtxt {
-            bbs: bcx.bbs,
-            bytecode,
-            local_tys: HashMap::new(),
-            query: TypeProvider {},
-            visited: HashSet::new(),
-        };
-        tycx.resolve_types(TypeStack::default(), 0);
-        dbg!(&tycx.local_tys);
+        let mut query = TestQueryProvider {};
+        let tcfg = typed_cfg::lower(bytecode, &mut query).unwrap();
+        dbg!(&tcfg);
 
         dash_llvm_jit_backend::init();
 
-        let mut codegenctxt = CodegenCtxt::new(tycx.local_tys, tycx.bbs, bytecode, CodegenProvider {});
-        codegenctxt.compile_setup_block();
-
-        codegenctxt.compile_bb(Default::default(), 0);
-
-        codegenctxt.compile_exit_block();
-
-        codegenctxt.module.print_module();
-        codegenctxt.module.verify();
-        codegenctxt.module.run_pass_manager(&codegenctxt.pm);
-        let f = codegenctxt.ee.compile_fn(codegenctxt.function.name());
+        let fun = codegen::compile_typed_cfg(bytecode, &tcfg, &mut query).unwrap();
         let mut s = [Value::Number(Number(0.0)), Value::Boolean(false)];
         let mut x = 0;
-        unsafe { f(s.as_mut_ptr().cast(), s.len().try_into().unwrap(), &mut x) };
-        dbg!(x);
+        unsafe { fun(s.as_mut_ptr().cast(), 0, &mut x) };
+        dbg!(x, s);
     }
 }

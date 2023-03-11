@@ -10,13 +10,8 @@ use dash_middle::compiler::instruction::Instruction;
 use dash_middle::compiler::instruction::IntrinsicOperation;
 use thiserror::Error;
 
+use crate::error::Error;
 use crate::util::DecodeCtxt;
-
-#[derive(Debug, Error)]
-pub enum LabelPassError {
-    #[error("Unsupported instruction")]
-    UnsupportedInstruction { instr: Instruction },
-}
 
 #[derive(Debug)]
 pub enum LabelKind {
@@ -66,7 +61,7 @@ pub struct BBGeneration {
 }
 /// Identifies labels (i.e. the target of jump instructions, either
 /// conditional jumps or unconditional jumps) in bytecode
-pub fn find_labels(bytecode: &[u8]) -> Result<Labels, LabelPassError> {
+pub fn find_labels(bytecode: &[u8]) -> Result<Labels, Error> {
     let mut labels = Vec::new();
     let mut dcx = DecodeCtxt::new(bytecode);
 
@@ -111,14 +106,14 @@ pub fn find_labels(bytecode: &[u8]) -> Result<Labels, LabelPassError> {
 }
 
 #[derive(Debug)]
-pub struct BBGenerationCtxt<'a, Q> {
+pub struct BBGenerationCtxt<'a, 'q, Q> {
     pub bytecode: &'a [u8],
     pub labels: Vec<LabelKind>,
     pub bbs: BasicBlockMap,
-    pub query: Q,
+    pub query: &'q mut Q,
 }
 
-impl<'a, Q: BBGenerationQuery> BBGenerationCtxt<'a, Q> {
+impl<'a, 'q, Q: BBGenerationQuery> BBGenerationCtxt<'a, 'q, Q> {
     pub fn find_bbs(&mut self) {
         self.bbs.insert(
             0,
@@ -196,7 +191,7 @@ impl<'a, Q: BBGenerationQuery> BBGenerationCtxt<'a, Q> {
                     let this = self.bbs.get_mut(&current_bb_ip).unwrap();
                     assert!(this.successor.is_none());
                     this.successor = Some(BasicBlockSuccessor::Unconditional(target_ip));
-                    this.end = target_ip;
+                    this.end = index;
 
                     let bb = self.bbs.get_mut(&target_ip).unwrap();
                     bb.predecessors.push(current_bb_ip);
@@ -220,7 +215,7 @@ impl<'a, Q: BBGenerationQuery> BBGenerationCtxt<'a, Q> {
                         false_ip: index + 3,
                         action,
                     });
-                    this.end = target_ip;
+                    this.end = index;
 
                     let bb_true = self.bbs.get_mut(&target_ip).unwrap();
                     bb_true.predecessors.push(current_bb_ip);
