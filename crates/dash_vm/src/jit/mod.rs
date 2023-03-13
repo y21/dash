@@ -2,6 +2,7 @@ use std::rc::Rc;
 
 mod frontend;
 mod query;
+use dash_llvm_jit_backend::passes::bb_generation::ConditionalBranchAction;
 use dash_log::debug;
 use dash_log::error;
 use dash_log::warn;
@@ -10,8 +11,8 @@ use frontend::Trace;
 
 use crate::Vm;
 
-fn handle_loop_trace(vm: &mut Vm, jmp_instr_ip: usize) {
-    let (trace, fun) = match frontend::compile_current_trace(vm) {
+fn handle_loop_trace(vm: &mut Vm, jmp_instr_ip: usize, allow_cache: bool) {
+    let (mut trace, fun) = match frontend::compile_current_trace(vm, allow_cache) {
         Ok(v) => v,
         Err(err) => {
             error!("JIT compilation failed! {err:?}");
@@ -34,23 +35,27 @@ fn handle_loop_trace(vm: &mut Vm, jmp_instr_ip: usize) {
     }
 
     target_ip += offset_ip as u64;
-    debug!("jit returned");
-    debug!(target_ip);
+
+    let is_side_exit = target_ip != trace.end() as u64;
+
+    if is_side_exit {
+        trace.record_conditional_jump(target_ip as usize - 2, ConditionalBranchAction::Either);
+
+        trace.set_subtrace();
+        vm.jit.set_recording_trace(trace);
+    }
 
     // `target_ip` is not the "real" IP, there may be some extra instructions before the loop header
     vm.frames.last_mut().unwrap().ip = target_ip as usize;
 }
 
 pub fn handle_loop_end(vm: &mut Vm, loop_end_ip: usize) {
-    let frame = vm.frames.last_mut().unwrap();
-
     // We are jumping back to a loop header
     if let Some(trace) = vm.jit.recording_trace() {
-        // There is a trace being recorded for this loop
-        if frame.ip == trace.start() {
-            handle_loop_trace(vm, loop_end_ip);
+        if trace.is_subtrace() {
+            handle_loop_trace(vm, loop_end_ip, false);
         } else {
-            todo!("Side exit");
+            handle_loop_trace(vm, loop_end_ip, true);
         }
     } else {
         handle_loop_counter_inc(vm, loop_end_ip, None);
@@ -78,7 +83,7 @@ fn handle_loop_counter_inc(vm: &mut Vm, loop_end_ip: usize, parent_ip: Option<us
         // - The iteration has ended (i.e. we are here again)
         debug!("detected hot loop, begin trace");
         debug!(loop_end_ip, parent_ip);
-        let trace = Trace::new(origin, frame.ip, loop_end_ip);
+        let trace = Trace::new(origin, frame.ip, loop_end_ip, false);
         vm.jit.set_recording_trace(trace);
     }
 }
@@ -104,9 +109,9 @@ mod tests {
     #[derive(Debug)]
     struct TestQueryProvider {}
     impl BBGenerationQuery for TestQueryProvider {
-        fn conditional_branch_at(&self, ip: usize) -> ConditionalBranchAction {
+        fn conditional_branch_at(&self, ip: usize) -> Option<ConditionalBranchAction> {
             match ip {
-                0xB => ConditionalBranchAction::NotTaken,
+                0xB => Some(ConditionalBranchAction::NotTaken),
                 _ => todo!(),
             }
         }

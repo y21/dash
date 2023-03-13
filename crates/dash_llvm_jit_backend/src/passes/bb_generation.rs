@@ -39,7 +39,8 @@ pub enum BasicBlockSuccessor {
     Conditional {
         true_ip: usize,
         false_ip: usize,
-        action: ConditionalBranchAction,
+        /// [`None`] is used for actions that are not yet known.
+        action: Option<ConditionalBranchAction>,
     },
 }
 
@@ -51,7 +52,7 @@ pub enum ConditionalBranchAction {
 }
 
 pub trait BBGenerationQuery {
-    fn conditional_branch_at(&self, ip: usize) -> ConditionalBranchAction;
+    fn conditional_branch_at(&self, ip: usize) -> Option<ConditionalBranchAction>;
 }
 
 #[derive(Debug)]

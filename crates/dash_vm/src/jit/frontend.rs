@@ -21,9 +21,18 @@ pub struct Frontend {
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
-struct CacheKey {
-    origin: *const Function,
-    ip: usize,
+pub struct CacheKey {
+    pub origin: *const Function,
+    pub ip: usize,
+}
+
+impl CacheKey {
+    pub fn from_trace(trace: &Trace) -> Self {
+        Self {
+            ip: trace.start(),
+            origin: trace.origin(),
+        }
+    }
 }
 
 impl Frontend {
@@ -51,20 +60,29 @@ impl Frontend {
     pub fn set_recording_trace(&mut self, trace: Trace) {
         self.trace = Some(trace);
     }
+
+    pub fn get_cached_fn(&self, key: &CacheKey) -> Option<&(TypedCfg, JitFunction)> {
+        self.cache.get(key)
+    }
+
+    pub fn get_cached_fn_mut(&mut self, key: &CacheKey) -> Option<&mut (TypedCfg, JitFunction)> {
+        self.cache.get_mut(key)
+    }
 }
 
-pub fn compile_current_trace(vm: &mut Vm) -> Result<(Trace, JitFunction), Error> {
+pub fn compile_current_trace(vm: &mut Vm, allow_cache: bool) -> Result<(Trace, JitFunction), Error> {
     let frame = vm.frames.last().unwrap();
     let trace = vm.jit.take_recording_trace().unwrap();
     let bytecode = &frame.function.buffer[trace.start()..trace.end()];
 
-    let key = CacheKey {
-        ip: trace.start(),
-        origin: trace.origin(),
-    };
+    let key = CacheKey::from_trace(&trace);
 
-    if let Some((_, fun)) = vm.jit.cache.get(&key) {
-        return Ok((trace, *fun));
+    // only check cache if we are allowed to.
+    // if not, recompile and recache.
+    if allow_cache {
+        if let Some((_, fun)) = vm.jit.cache.get(&key) {
+            return Ok((trace, *fun));
+        }
     }
 
     let mut query = QueryProvider { vm, trace: &trace };

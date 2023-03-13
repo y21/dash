@@ -84,10 +84,10 @@ fn register_llvm_bbs(
             false_ip,
             action,
         }) => {
-            if let ConditionalBranchAction::Either | ConditionalBranchAction::Taken = action {
+            if let Some(ConditionalBranchAction::Either | ConditionalBranchAction::Taken) = action {
                 register_llvm_bbs(llcx, func, bb_map, llvm_bbs, *true_ip, visited);
             }
-            if let ConditionalBranchAction::Either | ConditionalBranchAction::NotTaken = action {
+            if let Some(ConditionalBranchAction::Either | ConditionalBranchAction::NotTaken) = action {
                 register_llvm_bbs(llcx, func, bb_map, llvm_bbs, *false_ip, visited);
             }
         }
@@ -377,8 +377,14 @@ impl<'a, 'q, Q: CodegenQuery> CodegenCtxt<'a, 'q, Q> {
                     let count = dcx.next_wide_signed();
                     let _target_ip = usize::try_from(index as i16 + count + 3).unwrap();
                     let bb = &self.bb_map[&bbk];
-                    let Some(BasicBlockSuccessor::Conditional { true_ip, false_ip, action }) = bb.successor else {
+                    let Some(BasicBlockSuccessor::Conditional { true_ip, false_ip, action: Some(action) }) = bb.successor else {
                         panic!("unmatched basic block successor");
+                    };
+
+                    let (true_ip, false_ip) = match instr {
+                        Instruction::JmpTrueNP | Instruction::JmpTrueP => (true_ip, false_ip),
+                        Instruction::JmpFalseNP | Instruction::JmpFalseP => (false_ip, true_ip),
+                        _ => todo!(),
                     };
                     let llbb = self.llvm_bbs[&bbk].clone();
 
@@ -391,18 +397,18 @@ impl<'a, 'q, Q: CodegenQuery> CodegenCtxt<'a, 'q, Q> {
                             self.compile_bb(stack.clone(), false_ip);
                         }
                         ConditionalBranchAction::NotTaken => {
-                            let false_bb = &self.llvm_bbs[&false_ip];
-                            self.exit_guards.push((true_ip, llbb));
-
-                            self.builder.build_condbr(&cond, false_bb, &self.exit_block);
-                            self.compile_bb(stack.clone(), false_ip);
-                        }
-                        ConditionalBranchAction::Taken => {
-                            let true_bb = &self.llvm_bbs[&true_ip];
+                            let bb = &self.llvm_bbs[&true_ip];
                             self.exit_guards.push((false_ip, llbb));
 
-                            self.builder.build_condbr(&cond, true_bb, &self.exit_block);
+                            self.builder.build_condbr(&cond, bb, &self.exit_block);
                             self.compile_bb(stack.clone(), true_ip);
+                        }
+                        ConditionalBranchAction::Taken => {
+                            let bb = &self.llvm_bbs[&false_ip];
+                            self.exit_guards.push((true_ip, llbb));
+
+                            self.builder.build_condbr(&cond, &self.exit_block, bb);
+                            self.compile_bb(stack.clone(), false_ip);
                         }
                     }
 

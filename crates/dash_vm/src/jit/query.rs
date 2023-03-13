@@ -21,7 +21,7 @@ pub struct QueryProvider<'a> {
 impl<'a> TypedCfgQuery for QueryProvider<'a> {}
 
 impl<'a> BBGenerationQuery for QueryProvider<'a> {
-    fn conditional_branch_at(&self, ip: usize) -> ConditionalBranchAction {
+    fn conditional_branch_at(&self, ip: usize) -> Option<ConditionalBranchAction> {
         self.trace.get_conditional_jump(self.trace.start() + ip + 1)
     }
 }

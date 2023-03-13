@@ -9,6 +9,7 @@ use crate::passes::bb_generation::ConditionalBranchAction;
 
 #[derive(Debug)]
 pub struct Trace {
+    pub(crate) is_subtrace: bool,
     pub(crate) origin: *const Function,
     pub(crate) start: usize,
     pub(crate) end: usize,
@@ -22,17 +23,18 @@ pub struct Trace {
 }
 
 impl Trace {
-    pub fn new(origin: *const Function, start: usize, end: usize) -> Self {
+    pub fn new(origin: *const Function, start: usize, end: usize, is_subtrace: bool) -> Self {
         Self {
             origin,
             start,
             end,
             conditional_jumps: HashMap::new(),
+            is_subtrace,
         }
     }
 
-    pub fn get_conditional_jump(&self, id: usize) -> ConditionalBranchAction {
-        self.conditional_jumps[&id]
+    pub fn get_conditional_jump(&self, id: usize) -> Option<ConditionalBranchAction> {
+        self.conditional_jumps.get(&id).copied()
     }
 
     pub fn record_conditional_jump(&mut self, id: usize, action: ConditionalBranchAction) {
@@ -49,5 +51,13 @@ impl Trace {
 
     pub fn origin(&self) -> *const Function {
         self.origin
+    }
+
+    pub fn set_subtrace(&mut self) {
+        self.is_subtrace = true;
+    }
+
+    pub fn is_subtrace(&self) -> bool {
+        self.is_subtrace
     }
 }

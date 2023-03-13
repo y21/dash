@@ -200,11 +200,11 @@ impl<'a, 'q, Q: TypeInferQuery> TypeInferCtxt<'a, 'q, Q> {
                         panic!("unmatched basic block successor");
                     };
 
-                    if let ConditionalBranchAction::Either | ConditionalBranchAction::Taken = action {
+                    if let Some(ConditionalBranchAction::Either | ConditionalBranchAction::Taken) = action {
                         self.resolve_types(ty_stack.clone(), true_);
                     }
 
-                    if let ConditionalBranchAction::Either | ConditionalBranchAction::NotTaken = action {
+                    if let Some(ConditionalBranchAction::Either | ConditionalBranchAction::NotTaken) = action {
                         self.resolve_types(ty_stack.clone(), false_);
                     }
 

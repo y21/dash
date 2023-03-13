@@ -17,13 +17,13 @@ use crate::passes::type_infer::TypeStack;
 
 pub trait TypedCfgQuery: TypeInferQuery + BBGenerationQuery {}
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct TypedCfg {
     pub ty_map: TypeMap,
     pub bb_map: BasicBlockMap,
 }
 
-pub fn lower<'a, Q: TypedCfgQuery>(bytecode: &[u8], query: &mut Q) -> Result<TypedCfg, Error> {
+pub fn lower<Q: TypedCfgQuery>(bytecode: &[u8], query: &mut Q) -> Result<TypedCfg, Error> {
     let Labels(labels) = passes::bb_generation::find_labels(bytecode).unwrap();
 
     let mut bcx = BBGenerationCtxt {
