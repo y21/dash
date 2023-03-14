@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1678750206854,
+  "lastUpdate": 1678829487206,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -1929,6 +1929,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 84590,
             "range": "± 99",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "dc5f19668ef3085234df35d3eb5d28a67f76a05b",
+          "message": "jit: fix ValueStack::pop2 order",
+          "timestamp": "2023-03-14T22:26:41+01:00",
+          "tree_id": "1589a009e66a84ae6e91caa0ebe1847570a12f5c",
+          "url": "https://github.com/y21/dash/commit/dc5f19668ef3085234df35d3eb5d28a67f76a05b"
+        },
+        "date": 1678829486450,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 3106485,
+            "range": "± 15175",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 272415,
+            "range": "± 239",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 82194,
+            "range": "± 82",
             "unit": "ns/iter"
           }
         ]
