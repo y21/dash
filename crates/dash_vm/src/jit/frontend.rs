@@ -60,14 +60,6 @@ impl Frontend {
     pub fn set_recording_trace(&mut self, trace: Trace) {
         self.trace = Some(trace);
     }
-
-    pub fn get_cached_fn(&self, key: &CacheKey) -> Option<&(TypedCfg, JitFunction)> {
-        self.cache.get(key)
-    }
-
-    pub fn get_cached_fn_mut(&mut self, key: &CacheKey) -> Option<&mut (TypedCfg, JitFunction)> {
-        self.cache.get_mut(key)
-    }
 }
 
 pub fn compile_current_trace(vm: &mut Vm, allow_cache: bool) -> Result<(Trace, JitFunction), Error> {

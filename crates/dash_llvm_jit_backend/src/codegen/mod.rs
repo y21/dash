@@ -578,7 +578,7 @@ impl ValueStack {
     pub fn pop2(&mut self) -> (Value, Value) {
         let b = self.pop();
         let a = self.pop();
-        (b, a)
+        (a, b)
     }
 }
 

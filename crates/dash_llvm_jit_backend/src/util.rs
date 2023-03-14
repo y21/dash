@@ -65,7 +65,12 @@ impl<'a> DecodeCtxt<'a> {
     /// and do not care about the rest. For the other instructions, they can call this method.
     pub fn decode_ignore(&mut self, instr: Instruction) {
         match instr {
-            Instruction::Add | Instruction::Sub | Instruction::Mul | Instruction::Div | Instruction::Rem => {}
+            Instruction::Add
+            | Instruction::Sub
+            | Instruction::Mul
+            | Instruction::Div
+            | Instruction::Rem
+            | Instruction::BitAnd => {}
             Instruction::Constant => drop(self.next_byte()),
             Instruction::ConstantW => drop(self.next_wide()),
             Instruction::LdLocal => drop(self.next_byte()),
