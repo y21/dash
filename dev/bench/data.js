@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1678839549776,
+  "lastUpdate": 1678910550391,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -2013,6 +2013,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 94503,
             "range": "± 2071",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "5485af8e965e60d07d0d0e760108810c5a0741b9",
+          "message": "jit: simplify cache logic",
+          "timestamp": "2023-03-15T20:56:48+01:00",
+          "tree_id": "fce84e4e62c3b04740136b8912ddccb81aa30753",
+          "url": "https://github.com/y21/dash/commit/5485af8e965e60d07d0d0e760108810c5a0741b9"
+        },
+        "date": 1678910549463,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 3660459,
+            "range": "± 37704",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 313372,
+            "range": "± 5895",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 93742,
+            "range": "± 1942",
             "unit": "ns/iter"
           }
         ]
