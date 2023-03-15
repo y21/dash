@@ -582,6 +582,18 @@ impl ValueStack {
     }
 }
 
+impl Drop for ValueStack {
+    fn drop(&mut self) {
+        // if the stack of LLVM values is not empty (i.e. stack has leftover values)
+        // it implies that we somehow need to synchronize/push it to the VM stack
+        // in the epilogue.
+        // test case that shows the problem: 1 + (i % 2 == 0 ? 2 : 3)
+        // in one of the branches, we potentially need to return to the VM,
+        // and the VM will need the value `1`.
+        assert_eq!(self.0.len(), 0, "Value stack must be empty");
+    }
+}
+
 pub fn compile_typed_cfg<Q: CodegenQuery>(
     bytecode: &[u8],
     tcfg: &TypedCfg,
