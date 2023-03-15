@@ -5,13 +5,11 @@ use dash_middle::compiler::constant::Function;
 use dash_middle::compiler::instruction as inst;
 use indexmap::IndexMap;
 
+use crate::passes::bb_generation::ConditionalBranchAction;
+
 #[derive(Debug)]
 pub struct Trace {
-    /// The "parent" instruction pointer
-    ///
-    /// This is `Some` if this trace records a side exit and will contain the instruction pointer
-    /// of the predecessor trace
-    pub(crate) parent_ip: Option<usize>,
+    pub(crate) is_subtrace: bool,
     pub(crate) origin: *const Function,
     pub(crate) start: usize,
     pub(crate) end: usize,
@@ -20,26 +18,27 @@ pub struct Trace {
     ///
     /// Note for later: can change to HashSet<usize, bool> where usize is the IP if a trace
     /// is composed of multiple possible paths
-    pub(crate) conditional_jumps: Vec<bool>,
+    // pub(crate) conditional_jumps: Vec<bool>,
+    pub(crate) conditional_jumps: HashMap<usize, ConditionalBranchAction>,
 }
 
 impl Trace {
-    pub fn new(origin: *const Function, start: usize, end: usize, parent_ip: Option<usize>) -> Self {
+    pub fn new(origin: *const Function, start: usize, end: usize, is_subtrace: bool) -> Self {
         Self {
-            parent_ip,
             origin,
             start,
             end,
-            conditional_jumps: Vec::new(),
+            conditional_jumps: HashMap::new(),
+            is_subtrace,
         }
     }
 
-    pub fn get_conditional_jump(&self, id: usize) -> bool {
-        self.conditional_jumps[id]
+    pub fn get_conditional_jump(&self, id: usize) -> Option<ConditionalBranchAction> {
+        self.conditional_jumps.get(&id).copied()
     }
 
-    pub fn record_conditional_jump(&mut self, taken: bool) {
-        self.conditional_jumps.push(taken);
+    pub fn record_conditional_jump(&mut self, id: usize, action: ConditionalBranchAction) {
+        self.conditional_jumps.insert(id, action);
     }
 
     pub fn start(&self) -> usize {
@@ -52,5 +51,13 @@ impl Trace {
 
     pub fn origin(&self) -> *const Function {
         self.origin
+    }
+
+    pub fn set_subtrace(&mut self) {
+        self.is_subtrace = true;
+    }
+
+    pub fn is_subtrace(&self) -> bool {
+        self.is_subtrace
     }
 }

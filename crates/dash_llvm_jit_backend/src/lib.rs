@@ -5,13 +5,14 @@ use llvm_sys::target::LLVM_InitializeNativeAsmParser;
 use llvm_sys::target::LLVM_InitializeNativeAsmPrinter;
 use llvm_sys::target::LLVM_InitializeNativeTarget;
 
-pub mod backend;
+pub mod codegen;
 pub mod error;
-pub mod function;
+mod llvm_wrapper;
 pub mod passes;
 pub mod trace;
+pub mod typed_cfg;
+pub mod util;
 
-pub use backend::Backend;
 pub use trace::Trace;
 
 pub fn init() {

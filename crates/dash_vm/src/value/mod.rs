@@ -40,6 +40,10 @@ use self::{
     primitive::Symbol,
 };
 
+// Impl detail: must be repr(C) because we do
+// raw pointer arithmetic to access the data ptr/vtable ptr
+// directly from JIT code and we don't want the optimizer
+// to mess with it.
 use super::{local::LocalScope, Vm};
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(C)]

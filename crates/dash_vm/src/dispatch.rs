@@ -531,13 +531,16 @@ mod handlers {
     }
 
     pub fn jmpfalsep(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        #[cfg(feature = "jit")]
+        let ip = cx.active_frame().ip;
+
         let offset = cx.fetchw_and_inc_ip() as i16;
         let value = cx.pop_stack();
 
         let jump = !value.is_truthy();
 
         #[cfg(feature = "jit")]
-        cx.record_conditional_jump(jump);
+        cx.record_conditional_jump(ip, jump);
 
         if jump {
             let frame = cx.active_frame_mut();
@@ -553,13 +556,15 @@ mod handlers {
     }
 
     pub fn jmpfalsenp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        #[cfg(feature = "jit")]
+        let ip = cx.active_frame().ip;
         let offset = cx.fetchw_and_inc_ip() as i16;
         let value = cx.peek_stack();
 
         let jump = !value.is_truthy();
 
         #[cfg(feature = "jit")]
-        cx.record_conditional_jump(jump);
+        cx.record_conditional_jump(ip, jump);
 
         if jump {
             let frame = cx.active_frame_mut();
@@ -575,13 +580,16 @@ mod handlers {
     }
 
     pub fn jmptruep(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        #[cfg(feature = "jit")]
+        let ip = cx.active_frame().ip;
+
         let offset = cx.fetchw_and_inc_ip() as i16;
         let value = cx.pop_stack();
 
         let jump = value.is_truthy();
 
         #[cfg(feature = "jit")]
-        cx.record_conditional_jump(jump);
+        cx.record_conditional_jump(ip, jump);
 
         if jump {
             let frame = cx.active_frame_mut();
@@ -597,13 +605,15 @@ mod handlers {
     }
 
     pub fn jmptruenp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        #[cfg(feature = "jit")]
+        let ip = cx.active_frame().ip;
         let offset = cx.fetchw_and_inc_ip() as i16;
         let value = cx.peek_stack();
 
         let jump = value.is_truthy();
 
         #[cfg(feature = "jit")]
-        cx.record_conditional_jump(jump);
+        cx.record_conditional_jump(ip, jump);
 
         if jump {
             let frame = cx.active_frame_mut();
@@ -619,13 +629,15 @@ mod handlers {
     }
 
     pub fn jmpnullishp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        #[cfg(feature = "jit")]
+        let ip = cx.active_frame().ip;
         let offset = cx.fetchw_and_inc_ip() as i16;
         let value = cx.pop_stack();
 
         let jump = value.is_nullish();
 
         #[cfg(feature = "jit")]
-        cx.record_conditional_jump(jump);
+        cx.record_conditional_jump(ip, jump);
 
         if jump {
             let frame = cx.active_frame_mut();
@@ -641,13 +653,15 @@ mod handlers {
     }
 
     pub fn jmpnullishnp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        #[cfg(feature = "jit")]
+        let ip = cx.active_frame().ip;
         let offset = cx.fetchw_and_inc_ip() as i16;
         let value = cx.peek_stack();
 
         let jump = value.is_nullish();
 
         #[cfg(feature = "jit")]
-        cx.record_conditional_jump(jump);
+        cx.record_conditional_jump(ip, jump);
 
         if jump {
             let frame = cx.active_frame_mut();
@@ -663,6 +677,8 @@ mod handlers {
     }
 
     pub fn jmpundefinedp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        #[cfg(feature = "jit")]
+        let ip = cx.active_frame().ip;
         let offset = cx.fetchw_and_inc_ip() as i16;
         let value = cx.pop_stack();
 
@@ -675,7 +691,7 @@ mod handlers {
         };
 
         #[cfg(feature = "jit")]
-        cx.record_conditional_jump(jump);
+        cx.record_conditional_jump(ip, jump);
 
         if jump {
             let frame = cx.active_frame_mut();
@@ -691,6 +707,8 @@ mod handlers {
     }
 
     pub fn jmpundefinednp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        #[cfg(feature = "jit")]
+        let ip = cx.active_frame().ip;
         let offset = cx.fetchw_and_inc_ip() as i16;
         let value = cx.peek_stack();
 
@@ -703,7 +721,7 @@ mod handlers {
         };
 
         #[cfg(feature = "jit")]
-        cx.record_conditional_jump(jump);
+        cx.record_conditional_jump(ip, jump);
 
         if jump {
             let frame = cx.active_frame_mut();

@@ -1089,9 +1089,14 @@ impl Vm {
 
     // TODO: move these to DispatchContext.
     #[cfg(feature = "jit")]
-    pub(crate) fn record_conditional_jump(&mut self, did_jump: bool) {
+    pub(crate) fn record_conditional_jump(&mut self, ip: usize, did_jump: bool) {
+        use dash_llvm_jit_backend::passes::bb_generation::ConditionalBranchAction;
+
         if let Some(trace) = self.jit.recording_trace_mut() {
-            trace.record_conditional_jump(did_jump);
+            trace.record_conditional_jump(ip, match did_jump {
+                true => ConditionalBranchAction::Taken,
+                false => ConditionalBranchAction::NotTaken,
+            });
         }
     }
 }
