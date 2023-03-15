@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1678910805012,
+  "lastUpdate": 1678910807968,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -2093,6 +2093,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 82799,
             "range": "± 335",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "Timo",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fd526330e20bad6974447ea6c167153607cc7d0e",
+          "message": "Merge pull request #51 from y21/jit-bb\n\nadd cfg pass to jit",
+          "timestamp": "2023-03-15T21:02:01+01:00",
+          "tree_id": "fce84e4e62c3b04740136b8912ddccb81aa30753",
+          "url": "https://github.com/y21/dash/commit/fd526330e20bad6974447ea6c167153607cc7d0e"
+        },
+        "date": 1678910807193,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 3103377,
+            "range": "± 24172",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 272268,
+            "range": "± 220",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 81496,
+            "range": "± 424",
             "unit": "ns/iter"
           }
         ]
