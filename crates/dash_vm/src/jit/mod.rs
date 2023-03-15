@@ -11,8 +11,8 @@ use frontend::Trace;
 
 use crate::Vm;
 
-fn handle_loop_trace(vm: &mut Vm, jmp_instr_ip: usize, allow_cache: bool) {
-    let (mut trace, fun) = match frontend::compile_current_trace(vm, allow_cache) {
+fn handle_loop_trace(vm: &mut Vm, jmp_instr_ip: usize) {
+    let (mut trace, fun) = match frontend::compile_current_trace(vm) {
         Ok(v) => v,
         Err(err) => {
             error!("JIT compilation failed! {err:?}");
@@ -51,12 +51,9 @@ fn handle_loop_trace(vm: &mut Vm, jmp_instr_ip: usize, allow_cache: bool) {
 
 pub fn handle_loop_end(vm: &mut Vm, loop_end_ip: usize) {
     // We are jumping back to a loop header
-    if let Some(trace) = vm.jit.recording_trace() {
-        if trace.is_subtrace() {
-            handle_loop_trace(vm, loop_end_ip, false);
-        } else {
-            handle_loop_trace(vm, loop_end_ip, true);
-        }
+
+    if vm.jit.recording_trace().is_some() {
+        handle_loop_trace(vm, loop_end_ip);
     } else {
         handle_loop_counter_inc(vm, loop_end_ip, None);
     }

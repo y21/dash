@@ -62,7 +62,7 @@ impl Frontend {
     }
 }
 
-pub fn compile_current_trace(vm: &mut Vm, allow_cache: bool) -> Result<(Trace, JitFunction), Error> {
+pub fn compile_current_trace(vm: &mut Vm) -> Result<(Trace, JitFunction), Error> {
     let frame = vm.frames.last().unwrap();
     let trace = vm.jit.take_recording_trace().unwrap();
     let bytecode = &frame.function.buffer[trace.start()..trace.end()];
@@ -71,6 +71,7 @@ pub fn compile_current_trace(vm: &mut Vm, allow_cache: bool) -> Result<(Trace, J
 
     // only check cache if we are allowed to.
     // if not, recompile and recache.
+    let allow_cache = !trace.is_subtrace();
     if allow_cache {
         if let Some((_, fun)) = vm.jit.cache.get(&key) {
             return Ok((trace, *fun));
