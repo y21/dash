@@ -4,6 +4,14 @@ use std::collections::HashSet;
 use dash_middle::compiler::instruction::AssignKind;
 use dash_middle::compiler::instruction::Instruction;
 use dash_middle::compiler::instruction::IntrinsicOperation;
+use dash_typed_cfg::passes::bb_generation::BasicBlockKey;
+use dash_typed_cfg::passes::bb_generation::BasicBlockMap;
+use dash_typed_cfg::passes::bb_generation::BasicBlockSuccessor;
+use dash_typed_cfg::passes::bb_generation::ConditionalBranchAction;
+use dash_typed_cfg::passes::type_infer::Type;
+use dash_typed_cfg::passes::type_infer::TypeMap;
+use dash_typed_cfg::util::DecodeCtxt;
+use dash_typed_cfg::TypedCfg;
 use llvm_sys::execution_engine::LLVMExecutionEngineRef;
 use llvm_sys::execution_engine::LLVMGetFunctionAddress;
 use llvm_sys::prelude::LLVMBasicBlockRef;
@@ -19,14 +27,7 @@ use llvm_sys::LLVMTypeKind;
 use crate::error::Error;
 use crate::llvm_wrapper as llvm;
 use crate::llvm_wrapper::Value;
-use crate::passes::bb_generation::BasicBlockKey;
-use crate::passes::bb_generation::BasicBlockMap;
-use crate::passes::bb_generation::BasicBlockSuccessor;
-use crate::passes::bb_generation::ConditionalBranchAction;
-use crate::passes::type_infer::Type;
-use crate::passes::type_infer::TypeMap;
-use crate::typed_cfg::TypedCfg;
-use crate::util::DecodeCtxt;
+use dash_typed_cfg::error::Error as TcfgError;
 
 use cstr::cstr;
 
@@ -523,14 +524,14 @@ impl<'a, 'q, Q: CodegenQuery> CodegenCtxt<'a, 'q, Q> {
                             self.store_local(id.into(), &value);
                             stack.push(value);
                         }
-                        _ => return Err(Error::UnsupportedInstruction { instr }),
+                        _ => return Err(TcfgError::UnsupportedInstruction { instr }.into()),
                     }
                 }
                 Instruction::Ret => {
                     let _value = stack.pop();
                     let _c = dcx.next_wide();
                 }
-                _ => return Err(Error::UnsupportedInstruction { instr }),
+                _ => return Err(TcfgError::UnsupportedInstruction { instr }.into()),
             }
         }
 

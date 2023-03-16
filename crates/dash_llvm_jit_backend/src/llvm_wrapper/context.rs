@@ -2,6 +2,7 @@ use std::ffi::CStr;
 use std::ffi::CString;
 use std::fmt::format;
 
+use dash_typed_cfg::passes::type_infer::Type;
 use llvm_sys::core::LLVMAppendBasicBlockInContext;
 use llvm_sys::core::LLVMConstInt;
 use llvm_sys::core::LLVMConstReal;
@@ -18,8 +19,6 @@ use llvm_sys::core::LLVMPointerType;
 use llvm_sys::core::LLVMStructTypeInContext;
 use llvm_sys::core::LLVMVoidTypeInContext;
 use llvm_sys::prelude::LLVMContextRef;
-
-use crate::passes::type_infer::Type;
 
 use super::module::Module;
 use super::raw;

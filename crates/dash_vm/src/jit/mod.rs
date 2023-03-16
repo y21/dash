@@ -2,10 +2,10 @@ use std::rc::Rc;
 
 mod frontend;
 mod query;
-use dash_llvm_jit_backend::passes::bb_generation::ConditionalBranchAction;
 use dash_log::debug;
 use dash_log::error;
 use dash_log::warn;
+use dash_typed_cfg::passes::bb_generation::ConditionalBranchAction;
 pub use frontend::Frontend;
 use frontend::Trace;
 
@@ -92,13 +92,12 @@ mod tests {
     use dash_llvm_jit_backend::codegen;
     use dash_llvm_jit_backend::codegen::CodegenQuery;
     use dash_llvm_jit_backend::codegen::JitConstant;
-    use dash_llvm_jit_backend::passes::bb_generation::BBGenerationQuery;
-    use dash_llvm_jit_backend::passes::bb_generation::ConditionalBranchAction;
-    use dash_llvm_jit_backend::passes::type_infer::Type;
-    use dash_llvm_jit_backend::passes::type_infer::TypeInferQuery;
-    use dash_llvm_jit_backend::typed_cfg;
-    use dash_llvm_jit_backend::typed_cfg::TypedCfgQuery;
     use dash_optimizer::OptLevel;
+    use dash_typed_cfg::passes::bb_generation::BBGenerationQuery;
+    use dash_typed_cfg::passes::bb_generation::ConditionalBranchAction;
+    use dash_typed_cfg::passes::type_infer::Type;
+    use dash_typed_cfg::passes::type_infer::TypeInferQuery;
+    use dash_typed_cfg::TypedCfgQuery;
 
     use crate::value::primitive::Number;
     use crate::value::Value;
@@ -115,7 +114,7 @@ mod tests {
     }
 
     impl TypeInferQuery for TestQueryProvider {
-        fn type_of_constant(&self, index: u16) -> dash_llvm_jit_backend::passes::type_infer::Type {
+        fn type_of_constant(&self, index: u16) -> dash_typed_cfg::passes::type_infer::Type {
             match index {
                 0 | 1 | 2 => Type::I64,
                 _ => todo!("{index}"),
@@ -158,7 +157,7 @@ mod tests {
         .unwrap();
         let bytecode = &cr.instructions;
         let mut query = TestQueryProvider {};
-        let tcfg = typed_cfg::lower(bytecode, &mut query).unwrap();
+        let tcfg = dash_typed_cfg::lower(bytecode, &mut query).unwrap();
         dbg!(&tcfg);
 
         dash_llvm_jit_backend::init();

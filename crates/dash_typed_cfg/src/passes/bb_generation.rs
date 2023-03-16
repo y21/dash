@@ -1,14 +1,6 @@
 use std::collections::HashMap;
-use std::iter::Enumerate;
-use std::slice::Iter;
-use std::vec::IntoIter;
 
-use bitvec::bits;
-use bitvec::bitvec;
-use bitvec::vec::BitVec;
 use dash_middle::compiler::instruction::Instruction;
-use dash_middle::compiler::instruction::IntrinsicOperation;
-use thiserror::Error;
 
 use crate::error::Error;
 use crate::util::DecodeCtxt;
@@ -173,7 +165,7 @@ impl<'a, 'q, Q: BBGenerationQuery> BBGenerationCtxt<'a, 'q, Q> {
 
         while let Some((index, instr)) = dcx.next_instruction() {
             if index != 0 {
-                if let Some(label) = self.bbs.get(&index) {
+                if let Some(..) = self.bbs.get(&index) {
                     let current_bb = self.bbs.get_mut(&current_bb_ip).unwrap();
                     if let None = current_bb.successor {
                         current_bb.successor = Some(BasicBlockSuccessor::Unconditional(index));

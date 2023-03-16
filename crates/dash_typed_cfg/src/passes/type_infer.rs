@@ -7,8 +7,6 @@ use dash_middle::compiler::instruction::IntrinsicOperation;
 use crate::error::Error;
 use crate::util::DecodeCtxt;
 
-use super::bb_generation::BBGenerationCtxt;
-use super::bb_generation::BasicBlock;
 use super::bb_generation::BasicBlockKey;
 use super::bb_generation::BasicBlockMap;
 use super::bb_generation::BasicBlockSuccessor;
@@ -164,13 +162,13 @@ impl<'a, 'q, Q: TypeInferQuery> TypeInferCtxt<'a, 'q, Q> {
                 }
                 Instruction::Jmp => {
                     let count = dcx.next_wide_signed();
-                    let target_ip = usize::try_from(index as i16 + count + 3).unwrap();
+                    let _target_ip = usize::try_from(index as i16 + count + 3).unwrap();
 
                     let bb = &self.bbs[&bbk];
                     let Some(BasicBlockSuccessor::Unconditional(succ)) = bb.successor else {
                         panic!("unmatched basic block successor");
                     };
-                    self.resolve_types(ty_stack.clone(), succ);
+                    self.resolve_types(ty_stack.clone(), succ)?;
                     return Ok(());
                 }
                 Instruction::StrictEq => todo!(),
@@ -193,7 +191,7 @@ impl<'a, 'q, Q: TypeInferQuery> TypeInferCtxt<'a, 'q, Q> {
                         _ => {}
                     }
                     let count = dcx.next_wide_signed();
-                    let target_ip = usize::try_from(index as i16 + count + 3).unwrap();
+                    let _target_ip = usize::try_from(index as i16 + count + 3).unwrap();
 
                     let bb = &self.bbs[&bbk];
                     let Some(BasicBlockSuccessor::Conditional { true_ip: true_, false_ip: false_, action }) = bb.successor else {
@@ -201,11 +199,11 @@ impl<'a, 'q, Q: TypeInferQuery> TypeInferCtxt<'a, 'q, Q> {
                     };
 
                     if let Some(ConditionalBranchAction::Either | ConditionalBranchAction::Taken) = action {
-                        self.resolve_types(ty_stack.clone(), true_);
+                        self.resolve_types(ty_stack.clone(), true_)?;
                     }
 
                     if let Some(ConditionalBranchAction::Either | ConditionalBranchAction::NotTaken) = action {
-                        self.resolve_types(ty_stack.clone(), false_);
+                        self.resolve_types(ty_stack.clone(), false_)?;
                     }
 
                     return Ok(());
@@ -297,7 +295,7 @@ impl<'a, 'q, Q: TypeInferQuery> TypeInferCtxt<'a, 'q, Q> {
             let BasicBlockSuccessor::Unconditional(target) = succ else {
                 panic!("mismatching basic block successor");
             };
-            self.resolve_types(ty_stack.clone(), target);
+            self.resolve_types(ty_stack.clone(), target)?;
         }
 
         Ok(())

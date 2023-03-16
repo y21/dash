@@ -4,9 +4,8 @@ use dash_llvm_jit_backend::codegen;
 use dash_llvm_jit_backend::codegen::JitFunction;
 use dash_llvm_jit_backend::error::Error;
 use dash_llvm_jit_backend::init;
-use dash_llvm_jit_backend::typed_cfg;
-use dash_llvm_jit_backend::typed_cfg::TypedCfg;
 use dash_middle::compiler::constant::Function;
+use dash_typed_cfg::TypedCfg;
 
 use crate::Vm;
 
@@ -79,7 +78,7 @@ pub fn compile_current_trace(vm: &mut Vm) -> Result<(Trace, JitFunction), Error>
     }
 
     let mut query = QueryProvider { vm, trace: &trace };
-    let tcfg = typed_cfg::lower(bytecode, &mut query)?;
+    let tcfg = dash_typed_cfg::lower(bytecode, &mut query)?;
     let fun = codegen::compile_typed_cfg(bytecode, &tcfg, &mut query)?;
 
     vm.jit.cache.insert(key, (tcfg, fun));

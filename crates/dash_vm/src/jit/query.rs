@@ -1,13 +1,13 @@
 use dash_llvm_jit_backend::codegen::CodegenQuery;
 use dash_llvm_jit_backend::codegen::JitConstant;
-use dash_llvm_jit_backend::passes::bb_generation::BBGenerationQuery;
-use dash_llvm_jit_backend::passes::bb_generation::ConditionalBranchAction;
-use dash_llvm_jit_backend::passes::type_infer::Type;
-use dash_llvm_jit_backend::passes::type_infer::TypeInferQuery;
-use dash_llvm_jit_backend::typed_cfg::TypedCfgQuery;
 use dash_llvm_jit_backend::Trace;
 use dash_middle::compiler::constant::Constant;
 use dash_middle::util::is_integer;
+use dash_typed_cfg::passes::bb_generation::BBGenerationQuery;
+use dash_typed_cfg::passes::bb_generation::ConditionalBranchAction;
+use dash_typed_cfg::passes::type_infer::Type;
+use dash_typed_cfg::passes::type_infer::TypeInferQuery;
+use dash_typed_cfg::TypedCfgQuery;
 
 use crate::value::primitive::Number;
 use crate::value::Value;

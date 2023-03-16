@@ -4,7 +4,6 @@ use llvm_sys::core::LLVMGetTypeKind;
 use llvm_sys::prelude::LLVMTypeRef;
 use llvm_sys::LLVMTypeKind;
 
-use crate::passes::type_infer::Type;
 use crate::util::transmute_slice_mut;
 
 #[repr(transparent)]
