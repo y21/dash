@@ -360,6 +360,7 @@ dependencies = [
  "cstr",
  "dash_log",
  "dash_middle",
+ "dash_typed_cfg",
  "indexmap",
  "llvm-sys",
  "thiserror",
@@ -503,6 +504,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "dash_typed_cfg"
+version = "0.1.0"
+dependencies = [
+ "bitvec",
+ "dash_middle",
+ "thiserror",
+]
+
+[[package]]
 name = "dash_vm"
 version = "0.3.0"
 dependencies = [
@@ -517,6 +527,7 @@ dependencies = [
  "dash_parser",
  "dash_proc_macro",
  "dash_regex",
+ "dash_typed_cfg",
  "smallvec",
 ]
 
