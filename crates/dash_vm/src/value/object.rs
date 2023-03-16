@@ -1,4 +1,4 @@
-use std::{any::Any, borrow::Cow, cell::RefCell, collections::HashMap, fmt::Debug, ptr::addr_of};
+use std::{any::Any, borrow::Cow, cell::RefCell, fmt::Debug, ptr::addr_of};
 
 use bitflags::bitflags;
 use dash_proc_macro::Trace;
@@ -14,6 +14,8 @@ use super::{
     primitive::{PrimitiveCapabilities, Symbol},
     Typeof, Value, ValueContext,
 };
+
+pub type ObjectMap<K, V> = ahash::HashMap<K, V>;
 
 // only here for the time being, will be removed later
 fn __assert_trait_object_safety(_: Box<dyn Object>) {}
@@ -192,7 +194,7 @@ macro_rules! delegate {
 pub struct NamedObject {
     prototype: RefCell<Option<Handle<dyn Object>>>,
     constructor: RefCell<Option<Handle<dyn Object>>>,
-    values: RefCell<HashMap<PropertyKey<'static>, PropertyValue>>,
+    values: RefCell<ObjectMap<PropertyKey<'static>, PropertyValue>>,
 }
 
 // TODO: optimization opportunity: some kind of Number variant for faster indexing without .to_string()
@@ -428,10 +430,10 @@ impl<'a> PropertyKey<'a> {
 
 impl NamedObject {
     pub fn new(vm: &mut Vm) -> Self {
-        Self::with_values(vm, HashMap::new())
+        Self::with_values(vm, ObjectMap::default())
     }
 
-    pub fn with_values(vm: &mut Vm, values: HashMap<PropertyKey<'static>, PropertyValue>) -> Self {
+    pub fn with_values(vm: &mut Vm, values: ObjectMap<PropertyKey<'static>, PropertyValue>) -> Self {
         let objp = vm.statics.object_prototype.clone();
         let objc = vm.statics.object_ctor.clone(); // TODO: function_ctor instead
 
@@ -447,7 +449,7 @@ impl NamedObject {
         Self {
             prototype: RefCell::new(None),
             constructor: RefCell::new(None),
-            values: RefCell::new(HashMap::new()),
+            values: RefCell::new(ObjectMap::default()),
         }
     }
 
@@ -455,7 +457,7 @@ impl NamedObject {
         Self {
             constructor: RefCell::new(Some(ctor)),
             prototype: RefCell::new(Some(prototype)),
-            values: RefCell::new(HashMap::new()),
+            values: RefCell::new(ObjectMap::default()),
         }
     }
 

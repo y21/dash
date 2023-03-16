@@ -166,7 +166,6 @@ mod handlers {
     use dash_middle::compiler::ObjectMemberKind;
     use dash_middle::compiler::StaticImportKind;
     use std::borrow::Cow;
-    use std::collections::HashMap;
     use std::ops::Add;
     use std::ops::Div;
     use std::ops::Mul;
@@ -183,6 +182,7 @@ mod handlers {
     use crate::value::array::ArrayIterator;
     use crate::value::object::NamedObject;
     use crate::value::object::Object;
+    use crate::value::object::ObjectMap;
     use crate::value::object::PropertyKey;
     use crate::value::object::PropertyValue;
     use crate::value::object::PropertyValueKind;
@@ -849,7 +849,7 @@ mod handlers {
     pub fn objlit(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
         let len = cx.fetch_and_inc_ip() as usize;
 
-        let mut obj = HashMap::new();
+        let mut obj = ObjectMap::default();
         for _ in 0..len {
             let kind = ObjectMemberKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
 
