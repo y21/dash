@@ -17,6 +17,7 @@ use dash_middle::parser::statement::BlockStatement;
 use dash_middle::parser::statement::Class;
 use dash_middle::parser::statement::ClassMemberKind;
 use dash_middle::parser::statement::ClassProperty;
+use dash_middle::parser::statement::DoWhileLoop;
 use dash_middle::parser::statement::ExportKind;
 use dash_middle::parser::statement::ForInLoop;
 use dash_middle::parser::statement::ForLoop;
@@ -177,6 +178,10 @@ impl<'a, 'b> ConstFunctionEvalCtx<'a, 'b> {
                 self.visit_statement(body, func_id);
             }
             Loop::While(WhileLoop { condition, body }) => {
+                self.visit(condition, func_id);
+                self.visit_statement(body, func_id);
+            }
+            Loop::DoWhile(DoWhileLoop { body, condition }) => {
                 self.visit(condition, func_id);
                 self.visit_statement(body, func_id);
             }

@@ -108,7 +108,7 @@ pub enum JitConstant {
 impl JitConstant {
     pub fn to_llvm_value(&self, llcx: &llvm::Context) -> Value {
         match self {
-            Self::Boolean(b) => llcx.const_i1(*b),
+            JitConstant::Boolean(b) => llcx.const_i1(*b),
             JitConstant::I64(i) => llcx.const_i64(*i),
             JitConstant::F64(f) => llcx.const_f64(*f),
         }

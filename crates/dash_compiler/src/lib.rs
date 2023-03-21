@@ -25,7 +25,6 @@ use dash_middle::parser::expr::Seq;
 use dash_middle::parser::expr::UnaryExpr;
 use dash_middle::parser::expr::{ArrayLiteral, ObjectMemberKind};
 use dash_middle::parser::expr::{AssignmentExpr, AssignmentTarget};
-use dash_middle::parser::statement::ForLoop;
 use dash_middle::parser::statement::ReturnStatement;
 use dash_middle::parser::statement::SpecifierKind;
 use dash_middle::parser::statement::Statement;
@@ -37,6 +36,7 @@ use dash_middle::parser::statement::WhileLoop;
 use dash_middle::parser::statement::{BlockStatement, Loop};
 use dash_middle::parser::statement::{Class, Parameter};
 use dash_middle::parser::statement::{ClassMemberKind, ExportKind};
+use dash_middle::parser::statement::{DoWhileLoop, ForLoop};
 use dash_middle::parser::statement::{ForInLoop, ForOfLoop};
 use dash_middle::parser::statement::{FuncId, ImportKind};
 use dash_middle::parser::statement::{FunctionDeclaration, SwitchStatement};
@@ -435,6 +435,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             Statement::Loop(Loop::While(w)) => self.visit_while_loop(w),
             Statement::Loop(Loop::ForOf(f)) => self.visit_for_of_loop(f),
             Statement::Loop(Loop::ForIn(f)) => self.visit_for_in_loop(f),
+            Statement::Loop(Loop::DoWhile(d)) => self.visit_do_while_loop(d),
             Statement::Return(r) => self.visit_return_statement(r),
             Statement::Try(t) => self.visit_try_catch(t),
             Statement::Throw(t) => self.visit_throw(t),
@@ -896,6 +897,24 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         ib.build_jmp(Label::LoopCondition { loop_id }, false);
 
         ib.current_function_mut().add_global_label(Label::LoopEnd { loop_id });
+
+        ib.current_function_mut().exit_loop();
+
+        Ok(())
+    }
+
+    fn visit_do_while_loop(&mut self, DoWhileLoop { body, condition }: DoWhileLoop<'a>) -> Result<(), CompileError> {
+        let mut ib = InstructionBuilder::new(self);
+
+        let loop_id = ib.current_function_mut().prepare_loop();
+
+        ib.current_function_mut()
+            .add_global_label(Label::LoopCondition { loop_id });
+
+        ib.accept(*body)?;
+
+        ib.accept_expr(condition)?;
+        ib.build_jmptruep(Label::LoopCondition { loop_id }, false);
 
         ib.current_function_mut().exit_loop();
 
@@ -1878,7 +1897,6 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         ib.current_function_mut()
             .add_global_label(Label::SwitchEnd { switch_id });
         ib.current_function_mut().exit_switch();
-
         Ok(())
     }
 }

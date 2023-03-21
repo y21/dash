@@ -286,6 +286,9 @@ pub enum TokenType {
     #[display(fmt = "while")]
     While,
 
+    #[display(fmt = "do")]
+    Do,
+
     #[display(fmt = "in")]
     In,
 
@@ -407,6 +410,7 @@ impl From<&str> for TokenType {
             "yield" => Self::Yield,
             "new" => Self::New,
             "for" => Self::For,
+            "do" => Self::Do,
             "while" => Self::While,
             "in" => Self::In,
             "instanceof" => Self::Instanceof,

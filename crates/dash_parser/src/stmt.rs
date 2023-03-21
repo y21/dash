@@ -8,6 +8,7 @@ use dash_middle::parser::statement::Class;
 use dash_middle::parser::statement::ClassMember;
 use dash_middle::parser::statement::ClassMemberKind;
 use dash_middle::parser::statement::ClassProperty;
+use dash_middle::parser::statement::DoWhileLoop;
 use dash_middle::parser::statement::ExportKind;
 use dash_middle::parser::statement::ForInLoop;
 use dash_middle::parser::statement::ForLoop;
@@ -47,6 +48,7 @@ pub trait StatementParser<'a> {
     fn parse_return(&mut self) -> Option<ReturnStatement<'a>>;
     fn parse_for_loop(&mut self) -> Option<Loop<'a>>;
     fn parse_while_loop(&mut self) -> Option<Loop<'a>>;
+    fn parse_do_while_loop(&mut self) -> Option<Loop<'a>>;
     fn parse_block(&mut self) -> Option<BlockStatement<'a>>;
     fn parse_variable(&mut self) -> Option<VariableDeclarations<'a>>;
     fn parse_variable_binding_with_kind(&mut self, kind: VariableDeclarationKind) -> Option<VariableBinding<'a>>;
@@ -77,6 +79,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
             }
             TokenType::LeftBrace => self.parse_block().map(Statement::Block),
             TokenType::While => self.parse_while_loop().map(Statement::Loop),
+            TokenType::Do => self.parse_do_while_loop().map(Statement::Loop),
             TokenType::Try => self.parse_try().map(Statement::Try),
             TokenType::Throw => self.parse_throw().map(Statement::Throw),
             TokenType::Return => self.parse_return().map(Statement::Return),
@@ -347,6 +350,18 @@ impl<'a> StatementParser<'a> for Parser<'a> {
         let body = self.parse_statement()?;
 
         Some(WhileLoop::new(condition, body).into())
+    }
+
+    fn parse_do_while_loop(&mut self) -> Option<Loop<'a>> {
+        let body = self.parse_statement()?;
+
+        if !self.expect_and_skip(&[TokenType::While], true) {
+            return None;
+        }
+
+        let condition = self.parse_expression()?;
+
+        Some(DoWhileLoop::new(condition, body).into())
     }
 
     fn parse_block(&mut self) -> Option<BlockStatement<'a>> {

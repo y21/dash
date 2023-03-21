@@ -4,4 +4,5 @@ pub mod parser;
 pub mod tree;
 pub mod util;
 pub mod visitor;
-pub mod walker;
+// Unused for now.
+// pub mod walker;

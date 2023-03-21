@@ -14,6 +14,7 @@ use crate::parser::expr::Seq;
 use crate::parser::expr::UnaryExpr;
 use crate::parser::statement::BlockStatement;
 use crate::parser::statement::Class;
+use crate::parser::statement::DoWhileLoop;
 use crate::parser::statement::ExportKind;
 use crate::parser::statement::ForInLoop;
 use crate::parser::statement::ForLoop;
@@ -74,6 +75,9 @@ pub trait Visitor<'a, V> {
 
     /// Visits a while loop
     fn visit_while_loop(&mut self, l: WhileLoop<'a>) -> V;
+
+    /// Visits a do while loop
+    fn visit_do_while_loop(&mut self, d: DoWhileLoop<'a>) -> V;
 
     /// Visits an assignment expression
     fn visit_assignment_expression(&mut self, e: AssignmentExpr<'a>) -> V;
@@ -164,6 +168,7 @@ pub fn accept_default<'a, T, V: Visitor<'a, T>>(this: &mut V, s: Statement<'a>) 
         Statement::Loop(Loop::While(w)) => this.visit_while_loop(w),
         Statement::Loop(Loop::ForOf(f)) => this.visit_for_of_loop(f),
         Statement::Loop(Loop::ForIn(f)) => this.visit_for_in_loop(f),
+        Statement::Loop(Loop::DoWhile(d)) => this.visit_do_while_loop(d),
         Statement::Return(r) => this.visit_return_statement(r),
         Statement::Try(t) => this.visit_try_catch(t),
         Statement::Throw(t) => this.visit_throw(t),

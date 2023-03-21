@@ -214,6 +214,8 @@ pub enum Loop<'a> {
     ForIn(ForInLoop<'a>),
     /// A while loop
     While(WhileLoop<'a>),
+    /// A do..whiel loop
+    DoWhile(DoWhileLoop<'a>),
 }
 
 impl<'a> From<ForLoop<'a>> for Loop<'a> {
@@ -225,6 +227,29 @@ impl<'a> From<ForLoop<'a>> for Loop<'a> {
 impl<'a> From<WhileLoop<'a>> for Loop<'a> {
     fn from(f: WhileLoop<'a>) -> Self {
         Self::While(f)
+    }
+}
+
+impl<'a> From<DoWhileLoop<'a>> for Loop<'a> {
+    fn from(f: DoWhileLoop<'a>) -> Self {
+        Self::DoWhile(f)
+    }
+}
+
+#[derive(Debug, Clone, Display)]
+#[display(fmt = "do {} while ({})", body, condition)]
+pub struct DoWhileLoop<'a> {
+    pub body: Box<Statement<'a>>,
+    pub condition: Expr<'a>,
+}
+
+impl<'a> DoWhileLoop<'a> {
+    /// Creates a new do..while loop
+    pub fn new(condition: Expr<'a>, body: Statement<'a>) -> Self {
+        Self {
+            condition,
+            body: Box::new(body),
+        }
     }
 }
 
