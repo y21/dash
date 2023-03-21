@@ -916,6 +916,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         ib.accept_expr(condition)?;
         ib.build_jmptruep(Label::LoopCondition { loop_id }, false);
 
+        ib.current_function_mut().add_global_label(Label::LoopEnd { loop_id });
         ib.current_function_mut().exit_loop();
 
         Ok(())
@@ -1720,10 +1721,10 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             .ok_or(CompileError::IllegalBreak)?;
         match breakable {
             Breakable::Loop { loop_id } => {
-                ib.build_jmp(Label::LoopEnd { loop_id: loop_id }, false);
+                ib.build_jmp(Label::LoopEnd { loop_id }, false);
             }
             Breakable::Switch { switch_id } => {
-                ib.build_jmp(Label::SwitchEnd { switch_id: switch_id }, false);
+                ib.build_jmp(Label::SwitchEnd { switch_id }, false);
             }
         }
         Ok(())
