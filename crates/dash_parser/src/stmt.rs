@@ -364,6 +364,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
         Some(DoWhileLoop::new(condition, body).into())
     }
 
+    /// Parses a block. Assumes that the left brace `{` has already been consumed.
     fn parse_block(&mut self) -> Option<BlockStatement<'a>> {
         let mut stmts = Vec::new();
         while !self.expect_and_skip(&[TokenType::RightBrace], false) {

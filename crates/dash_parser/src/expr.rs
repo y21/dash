@@ -418,11 +418,27 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
 
                     match key {
                         ObjectMemberKind::Dynamic(..) | ObjectMemberKind::Static(..) => {
-                            let has_colon = self.expect_and_skip(&[TokenType::Colon], false);
-
-                            if has_colon {
+                            if self.expect_and_skip(&[TokenType::Colon], false) {
+                                // Normal property.
                                 let value = self.parse_expression()?;
                                 items.push((key, value));
+                            } else if self.expect_and_skip(&[TokenType::LeftParen], false) {
+                                // Method.
+                                let parameters = self.parse_parameter_list()?;
+                                self.expect_and_skip(&[TokenType::LeftBrace], true);
+                                let body = self.parse_block()?;
+                                let id = self.function_counter.next();
+                                items.push((
+                                    key,
+                                    Expr::function(FunctionDeclaration::new(
+                                        None,
+                                        id,
+                                        parameters,
+                                        body.0,
+                                        FunctionKind::Function,
+                                        false,
+                                    )),
+                                ));
                             } else {
                                 match key {
                                     ObjectMemberKind::Static(name) => {
