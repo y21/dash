@@ -3,13 +3,19 @@ name = "dash_rt_modules"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+http = ["dash_rt_http"]
+fs = ["dash_rt_fs"]
+fetch = ["dash_rt_fetch"]
+modules = ["dash_rt_script_modules"]
+timers = ["dash_rt_timers"]
+dll = ["dash_dlloader"]
 
 [dependencies]
 dash_rt = { path = "../dash_rt" }
-dash_rt_http = { path = "../dash_rt_http" }
-dash_rt_fs = { path = "../dash_rt_fs" }
-dash_rt_fetch = { path = "../dash_rt_fetch" }
-dash_rt_script_modules = { path = "../dash_rt_script_modules" }
-dash_rt_timers = { path = "../dash_rt_timers" }
-dash_dlloader = { path = "../dash_dlloader" }
+dash_rt_http = { path = "../dash_rt_http", optional = true }
+dash_rt_fs = { path = "../dash_rt_fs", optional = true }
+dash_rt_fetch = { path = "../dash_rt_fetch", optional = true }
+dash_rt_script_modules = { path = "../dash_rt_script_modules", optional = true }
+dash_rt_timers = { path = "../dash_rt_timers", optional = true }
+dash_dlloader = { path = "../dash_dlloader", optional = true }

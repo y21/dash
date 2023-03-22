@@ -4,6 +4,15 @@ use dash_middle::compiler::StaticImportKind;
 use dash_vm::local::LocalScope;
 use dash_vm::value::Value;
 
+#[derive(Debug)]
+pub struct NoopModule;
+
+impl ModuleLoader for NoopModule {
+    fn import(&self, _: &mut LocalScope, _: StaticImportKind, _: &str) -> Result<Option<Value>, Value> {
+        Ok(None)
+    }
+}
+
 pub trait ModuleLoader: Debug {
     fn import(&self, sc: &mut LocalScope, import_ty: StaticImportKind, path: &str) -> Result<Option<Value>, Value>;
 

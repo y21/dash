@@ -9,7 +9,6 @@ use dash_vm::params::VmParams;
 use dash_vm::throw;
 use dash_vm::value::Value;
 use dash_vm::Vm;
-use rand::Rng;
 use tokio::sync::mpsc;
 use tracing::info;
 
@@ -32,9 +31,14 @@ impl Runtime {
         let (etx, erx) = mpsc::unbounded_channel();
 
         let state = State::new(rt, EventSender::new(etx));
-        let mut params = VmParams::new()
-            .set_static_import_callback(import_callback)
-            .set_math_random_callback(random_callback)
+        let mut params = VmParams::new().set_static_import_callback(import_callback);
+
+        #[cfg(feature = "random")]
+        {
+            params = params.set_math_random_callback(random_callback);
+        }
+
+        params = params
             .set_time_millis_callback(time_callback)
             .set_state(Box::new(state));
 
@@ -87,7 +91,9 @@ impl Runtime {
     }
 }
 
+#[cfg(feature = "random")]
 fn random_callback(_: &mut Vm) -> Result<f64, Value> {
+    use rand::Rng;
     let mut rng = rand::thread_rng();
     Ok(rng.gen())
 }

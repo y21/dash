@@ -4,9 +4,12 @@ version = "0.3.0"
 edition = "2018"
 license = "MIT"
 
+[features]
+random = ["rand"]
+
 [dependencies]
 dash_core = { path = "../dash_core" }
-rand = { version = "0.8.4" }
+rand = { version = "0.8.4", optional = true }
 tokio = { version = "1.24.0", features = ["full"] }
 dash_vm = { path = "../dash_vm", features = [] }
 dash_optimizer = { path = "../dash_optimizer" }

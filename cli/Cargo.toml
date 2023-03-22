@@ -9,7 +9,7 @@ anyhow = "1.0"
 clap = { version = "3.0.0", features = ["std"], default-features = false }
 rustyline = "9.1.2"
 tokio = { version = "1.24.0", features = ["full"] }
-dash_rt = { path = "../crates/dash_rt" }
+dash_rt = { path = "../crates/dash_rt", features = ["random"] }
 dash_lexer = { path = "../crates/dash_lexer" }
 dash_parser = { path = "../crates/dash_parser" }
 dash_compiler = { path = "../crates/dash_compiler" }
@@ -17,7 +17,14 @@ dash_vm = { path = "../crates/dash_vm", features = [] }
 dash_middle = { path = "../crates/dash_middle", features = ["format"] }
 dash_optimizer = { path = "../crates/dash_optimizer" }
 dash_decompiler = { path = "../crates/dash_decompiler" }
-dash_rt_modules = { path = "../crates/dash_rt_modules" }
+dash_rt_modules = { path = "../crates/dash_rt_modules", features = [
+    # "http",
+    # "fs",
+    # "fetch",
+    # "modules",
+    # "timers",
+    # "dll",
+] }
 tracing-subscriber = "0.3.15"
 tracing = "0.1.36"
 colorful = "0.2.1"
