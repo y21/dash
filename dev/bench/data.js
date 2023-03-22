@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1679491136450,
+  "lastUpdate": 1679492078821,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -2345,6 +2345,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 95627,
             "range": "± 140",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "5a90278023d4a15a236b7e55837e115372bd8751",
+          "message": "rt: make all modules opt-in through features",
+          "timestamp": "2023-03-22T14:29:51+01:00",
+          "tree_id": "98485c3869a11f55688d7b65318e284984e96190",
+          "url": "https://github.com/y21/dash/commit/5a90278023d4a15a236b7e55837e115372bd8751"
+        },
+        "date": 1679492077569,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 3237955,
+            "range": "± 31254",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 278847,
+            "range": "± 415",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 82480,
+            "range": "± 107",
             "unit": "ns/iter"
           }
         ]
