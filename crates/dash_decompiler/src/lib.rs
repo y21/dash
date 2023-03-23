@@ -20,5 +20,5 @@ pub enum DecompileError {
 }
 
 pub fn decompile(constants: &[Constant], instructions: &[u8]) -> Result<String, DecompileError> {
-    FunctionDecompiler::new(&instructions, constants, "<main>").run()
+    FunctionDecompiler::new(instructions, constants, "<main>").run()
 }

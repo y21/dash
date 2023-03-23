@@ -56,7 +56,7 @@ impl fmt::Display for Error<'_> {
                 "unexpected token",
                 Some(Box::new(format!(
                     "expected one of: {}",
-                    expect.iter().map(|t| format!("`{}`", t)).collect::<Vec<_>>().join(", ")
+                    expect.iter().map(|t| format!("`{t}`")).collect::<Vec<_>>().join(", ")
                 ))),
             ),
             ErrorKind::ParseIntError(tok, err) => (tok, "int parsing failed", Some(Box::new(err))),

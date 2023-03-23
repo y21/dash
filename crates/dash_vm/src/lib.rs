@@ -71,7 +71,7 @@ pub struct Vm {
 impl Vm {
     pub fn new(params: VmParams) -> Self {
         debug!("create vm");
-        let mut gc = Gc::new();
+        let mut gc = Gc::default();
         let statics = Statics::new(&mut gc);
         // TODO: global __proto__ and constructor
         let global = gc.register(PureBuiltin::new(NamedObject::null())); 
@@ -85,7 +85,7 @@ impl Vm {
             stack: Vec::with_capacity(512),
             gc,
             global,
-            externals: Externals::new(),
+            externals: Externals::default(),
             statics: Box::new(statics),
             try_blocks: Vec::new(),
             params,

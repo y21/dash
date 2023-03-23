@@ -75,10 +75,10 @@ pub fn force_utf8_borrowed(s: &[u8]) -> &str {
 pub fn fmt_group<D: fmt::Display>(formatter: &mut fmt::Formatter<'_>, items: &[D], delim: &str) -> fmt::Result {
     for (index, item) in items.iter().enumerate() {
         if index > 0 {
-            write!(formatter, "{}", delim)?;
+            write!(formatter, "{delim}")?;
         }
 
-        write!(formatter, "{}", item)?;
+        write!(formatter, "{item}")?;
     }
     Ok(())
 }
@@ -180,11 +180,12 @@ impl<T> SharedOnce<T> {
     }
 }
 
+#[derive(Default)]
 pub struct LevelStack(SmallVec<[u8; 4]>);
 
 impl LevelStack {
     pub fn new() -> Self {
-        Self(SmallVec::new())
+        Self::default()
     }
 
     pub fn add_level(&mut self) {
@@ -224,12 +225,18 @@ macro_rules! timed {
 #[derive(Debug)]
 pub struct Counter<T>(usize, PhantomData<T>);
 
+impl<T> Default for Counter<T> {
+    fn default() -> Self {
+        Self(0, PhantomData)
+    }
+}
+
 impl<T> Counter<T>
 where
     T: From<usize>,
 {
     pub fn new() -> Self {
-        Self(0, PhantomData)
+        Self::default()
     }
 
     /// Returns the highest ID that is currently in use
@@ -245,6 +252,10 @@ where
         self.0
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.0 == 0
+    }
+
     pub fn with(start: T) -> Self
     where
         T: Into<usize>,
@@ -252,7 +263,7 @@ where
         Self(start.into(), PhantomData)
     }
 
-    pub fn next(&mut self) -> T {
+    pub fn advance(&mut self) -> T {
         let old = self.0;
         self.0 += 1;
         T::from(old)

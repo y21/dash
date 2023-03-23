@@ -54,8 +54,9 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
+    /// Creates a [`Parser`] from a string.
     #[cfg(feature = "from_string")]
-    pub fn from_str(input: &'a str) -> Result<Self, Vec<dash_middle::lexer::error::Error<'a>>> {
+    pub fn new_from_str(input: &'a str) -> Result<Self, Vec<dash_middle::lexer::error::Error<'a>>> {
         dash_lexer::Lexer::new(input)
             .scan_all()
             .map(|tok| Self::new(input, tok))

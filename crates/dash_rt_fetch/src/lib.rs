@@ -40,7 +40,7 @@ impl ModuleLoader for FetchModule {
     }
 }
 
-static REQWEST: Lazy<Client> = Lazy::new(|| Client::new());
+static REQWEST: Lazy<Client> = Lazy::new(Client::new);
 
 fn fetch(cx: CallContext) -> Result<Value, Value> {
     let url = match cx.args.first() {

@@ -190,7 +190,7 @@ impl<'a> TypeInferCtx<'a> {
                 self.visit_maybe_statement(init.as_deref(), func_id);
                 self.visit_maybe_expr(condition.as_ref(), func_id);
                 self.visit_maybe_expr(finalizer.as_ref(), func_id);
-                self.visit_statement(&body, func_id);
+                self.visit_statement(body, func_id);
             }
             Loop::ForOf(ForOfLoop { expr, body, binding }) => {
                 self.visit_variable_binding(binding, None, func_id);
@@ -534,10 +534,9 @@ impl<'a> TypeInferCtx<'a> {
         func_id: FuncId,
     ) -> Option<CompileValueType> {
         for (kind, expr) in expr {
-            match kind {
-                ObjectMemberKind::Dynamic(expr) => drop(self.visit(expr, func_id)),
-                _ => {}
-            };
+            if let ObjectMemberKind::Dynamic(expr) = kind {
+                self.visit(expr, func_id);
+            }
             self.visit(expr, func_id);
         }
         None

@@ -46,6 +46,10 @@ impl ArrayBuffer {
     pub fn len(&self) -> usize {
         self.storage.len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.storage.len() == 0
+    }
 }
 
 impl Object for ArrayBuffer {

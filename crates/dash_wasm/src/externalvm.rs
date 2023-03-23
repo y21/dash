@@ -47,10 +47,8 @@ fn math_random(_: &mut Vm) -> Result<f64, DashValue> {
     Ok(Math::random())
 }
 
-#[wasm_bindgen]
-impl ExternalVm {
-    #[wasm_bindgen(constructor)]
-    pub fn new() -> Self {
+impl Default for ExternalVm {
+    fn default() -> Self {
         let state = ExternalVmState::default();
         let vm = Vm::new(
             VmParams::default()
@@ -58,6 +56,14 @@ impl ExternalVm {
                 .set_state(Box::new(state)),
         );
         ExternalVm(vm)
+    }
+}
+
+#[wasm_bindgen]
+impl ExternalVm {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn global(&self) -> JsValue {
@@ -81,7 +87,7 @@ impl ExternalVm {
         let frame = Frame::from_compile_result(deserialized);
         match self.0.execute_frame(frame) {
             Ok(x) => Ok(JsValue::from(x.into_value())),
-            Err(err) => Err(format!("{:?}", err)),
+            Err(err) => Err(format!("{err:?}")),
         }
     }
 

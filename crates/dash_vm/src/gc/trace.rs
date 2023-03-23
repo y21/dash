@@ -11,6 +11,9 @@ use crate::value::primitive::Undefined;
 use crate::value::regex::RegExpInner;
 use crate::value::typedarray::TypedArrayKind;
 
+/// # Safety
+/// Implementors of this trait must provide a valid trace implementation
+/// by calling any possible, reachable [`super::Handle`]
 pub unsafe trait Trace {
     fn trace(&self);
 }
@@ -47,7 +50,7 @@ unsafe impl<T: Trace> Trace for HashSet<T> {
 
 unsafe impl<T: Trace + ?Sized> Trace for Rc<T> {
     fn trace(&self) {
-        T::trace(&self)
+        T::trace(self)
     }
 }
 

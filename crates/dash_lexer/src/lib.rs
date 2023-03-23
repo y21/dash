@@ -104,9 +104,9 @@ impl<'a> Lexer<'a> {
             let slice = self.safe_subslice(from, from + expect.len());
 
             if slice.eq(*expect) {
-                let tok = self.create_contextified_token(*token);
+                self.create_contextified_token(*token);
                 self.idx += expect.len();
-                return tok;
+                return;
             }
         }
 

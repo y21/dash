@@ -81,7 +81,7 @@ impl Constant {
         }
     }
 
-    pub fn from_literal<'a>(expr: &LiteralExpr<'a>) -> Self {
+    pub fn from_literal(expr: &LiteralExpr<'_>) -> Self {
         match expr {
             LiteralExpr::Number(n) => Self::Number(*n),
             LiteralExpr::Identifier(s) => Self::Identifier(s.as_ref().into()),
@@ -95,7 +95,7 @@ impl Constant {
 }
 
 #[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ConstantPool {
     constants: Vec<Constant>,
 }
@@ -103,7 +103,7 @@ pub struct ConstantPool {
 pub struct LimitExceededError;
 impl ConstantPool {
     pub fn new() -> Self {
-        Self { constants: Vec::new() }
+        Self::default()
     }
 
     pub fn add(&mut self, constant: Constant) -> Result<u16, LimitExceededError> {

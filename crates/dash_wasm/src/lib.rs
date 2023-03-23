@@ -64,7 +64,7 @@ pub fn evaluate(s: &str, opt: OptLevel, _context: Option<js_sys::Object>) -> Res
             }
         }
         Err(EvalError::Exception(val)) => fmt_value(val, &mut vm),
-        Err(e) => format!("{e:?}").into(),
+        Err(e) => format!("{e:?}"),
     };
 
     Ok(result)
@@ -80,7 +80,7 @@ pub fn fmt_value(value: Value, vm: &mut Vm) -> String {
 
 #[wasm_bindgen]
 pub fn debug(s: &str, o: OptLevel, em: Emit) -> String {
-    let parser = Parser::from_str(s).unwrap();
+    let parser = Parser::new_from_str(s).unwrap();
     let (mut ast, counter) = parser.parse_all().unwrap();
     let mut tcx = TypeInferCtx::new(counter);
 
@@ -94,21 +94,21 @@ pub fn debug(s: &str, o: OptLevel, em: Emit) -> String {
             cfx.visit_many_statements(&mut ast, FuncId::ROOT);
             let mut output = String::new();
             for node in ast {
-                let _ = write!(output, "{node}\n");
+                let _ = writeln!(output, "{node}");
             }
             output
         }
         Emit::Ast => {
             let mut output = String::new();
             for node in ast {
-                let _ = write!(output, "{node:?}\n");
+                let _ = writeln!(output, "{node:?}");
             }
             output
         }
         Emit::PrettyAst => {
             let mut output = String::new();
             for node in ast {
-                let _ = write!(output, "{node:#?}\n");
+                let _ = writeln!(output, "{node:#?}");
             }
             output
         }
@@ -129,7 +129,7 @@ pub fn compile(s: &str, o: OptLevel) -> Result<js_sys::Uint8Array, String> {
 
 #[wasm_bindgen]
 pub fn infer(s: &str) -> Result<JsValue, String> {
-    let (mut ast, counter) = Parser::from_str(s)
+    let (mut ast, counter) = Parser::new_from_str(s)
         .map_err(|err| format!("{err:?}"))?
         .parse_all()
         .map_err(|err| format!("{err:?}"))?;
@@ -143,7 +143,7 @@ pub fn infer(s: &str) -> Result<JsValue, String> {
     for local in tcx.scope_mut(FuncId::ROOT).locals() {
         if let VariableDeclarationName::Identifier(ident) = local.binding().name {
             let ty = local.inferred_type().borrow();
-            let _ = write!(out, "{ident}: {ty:?} \n");
+            let _ = writeln!(out, "{ident}: {ty:?} ");
         }
     }
 

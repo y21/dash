@@ -30,7 +30,7 @@ pub fn call(cx: CallContext) -> Result<Value, Value> {
 
     target_callee.apply(
         cx.scope,
-        target_this.unwrap_or_else(|| Value::undefined()),
+        target_this.unwrap_or_else(Value::undefined),
         target_args.unwrap_or_default(),
     )
 }

@@ -56,7 +56,7 @@ pub fn at(cx: CallContext) -> Result<Value, Value> {
     let mut index = cx.args.first().unwrap_or_undefined().to_integer_or_infinity(cx.scope)? as i64;
 
     if index < 0 {
-        index = len + index;
+        index += len;
     }
 
     if index < 0 || index >= len {
@@ -184,7 +184,7 @@ pub fn reduce(cx: CallContext) -> Result<Value, Value> {
         (_, None) => {
             let pkv = this.get_property(cx.scope, "0".into())?;
             let pkv2 = this.get_property(cx.scope, "1".into())?;
-            let args = vec![pkv, pkv2, Value::number(1 as f64)];
+            let args = vec![pkv, pkv2, Value::number(1_f64)];
             (2, callback.apply(cx.scope, Value::undefined(), args)?)
         }
     };
@@ -331,7 +331,7 @@ pub fn map(cx: CallContext) -> Result<Value, Value> {
     Ok(cx.scope.register(values).into())
 }
 
-pub fn pop(mut cx: CallContext) -> Result<Value, Value> {
+pub fn pop(cx: CallContext) -> Result<Value, Value> {
     let this = Value::Object(cx.this.to_object(cx.scope)?);
     let len = this.length_of_array_like(cx.scope)?;
 
@@ -340,9 +340,9 @@ pub fn pop(mut cx: CallContext) -> Result<Value, Value> {
     }
 
     let new_len = len - 1;
-    let value = this.delete_property(&mut cx.scope, new_len.to_string().into())?;
+    let value = this.delete_property(cx.scope, new_len.to_string().into())?;
     this.set_property(
-        &mut cx.scope,
+        cx.scope,
         "length".into(),
         PropertyValue::static_default(Value::number(new_len as f64)),
     )?;
@@ -350,7 +350,7 @@ pub fn pop(mut cx: CallContext) -> Result<Value, Value> {
     Ok(value)
 }
 
-pub fn push(mut cx: CallContext) -> Result<Value, Value> {
+pub fn push(cx: CallContext) -> Result<Value, Value> {
     let this = Value::Object(cx.this.to_object(cx.scope)?);
     let len = this.length_of_array_like(cx.scope)?;
 
@@ -358,7 +358,7 @@ pub fn push(mut cx: CallContext) -> Result<Value, Value> {
 
     if cx.args.is_empty() {
         this.set_property(
-            &mut cx.scope,
+            cx.scope,
             len.to_string().into(),
             PropertyValue::static_default(Value::undefined()),
         )?;
@@ -366,7 +366,7 @@ pub fn push(mut cx: CallContext) -> Result<Value, Value> {
 
     for (idx, arg) in cx.args.into_iter().enumerate() {
         last = arg.clone();
-        array::spec_array_set_property(&mut cx.scope, &this, idx + len, PropertyValue::static_default(arg))?;
+        array::spec_array_set_property(cx.scope, &this, idx + len, PropertyValue::static_default(arg))?;
     }
 
     Ok(last)
@@ -443,7 +443,7 @@ fn shift_array(
         let pkv = arr.get_property(scope, pk.as_str().into())?;
         arr.set_property(
             scope,
-            (k as isize + shift_by).to_string().into(),
+            (k + shift_by).to_string().into(),
             PropertyValue::static_default(pkv),
         )?;
     }
@@ -572,7 +572,7 @@ pub fn from(cx: CallContext) -> Result<Value, Value> {
 
     match items_iterator {
         Some(iterator) => {
-            let iterator = iterator.apply(cx.scope, items.clone(), Vec::new())?;
+            let iterator = iterator.apply(cx.scope, items, Vec::new())?;
             with_iterator(cx.scope, iterator, mapper)
         }
         None => with_array_like(cx.scope, items, mapper),

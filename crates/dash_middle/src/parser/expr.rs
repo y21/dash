@@ -281,7 +281,7 @@ impl<'a> fmt::Display for PropertyAccessExpr<'a> {
 
 /// A conditional expression
 #[derive(Debug, Clone, Display)]
-#[display(fmt = "{} ? {} : {}", condition, then, el)]
+#[display(fmt = "{condition} ? {then} : {el}")]
 pub struct ConditionalExpr<'a> {
     /// The first part of a conditional expression, the condition
     pub condition: Box<Expr<'a>>,
@@ -330,7 +330,7 @@ impl<'a> AssignmentTarget<'a> {
 
 /// An assignment expression
 #[derive(Debug, Clone, Display)]
-#[display(fmt = "{} {} {}", left, operator, right)]
+#[display(fmt = "{left} {operator} {right}")]
 pub struct AssignmentExpr<'a> {
     /// The lefthand side (place-expression)
     pub left: AssignmentTarget<'a>,
@@ -369,7 +369,7 @@ impl<'a> AssignmentExpr<'a> {
 
 /// Any binary expression
 #[derive(Debug, Clone, Display)]
-#[display(fmt = "{} {} {}", left, operator, right)]
+#[display(fmt = "{left} {operator} {right}")]
 pub struct BinaryExpr<'a> {
     /// Lefthand side
     pub left: Box<Expr<'a>>,
@@ -431,10 +431,7 @@ impl<'a> LiteralExpr<'a> {
     pub fn as_identifier_borrowed(&self) -> Option<&'a str> {
         match self {
             Self::Boolean(b) => Some(b.then(|| "true").unwrap_or("false")),
-            Self::Identifier(ident) => match ident {
-                Cow::Borrowed(i) => Some(i),
-                _ => None,
-            },
+            Self::Identifier(Cow::Borrowed(i)) => Some(i),
             Self::Undefined => Some("undefined"),
             Self::Null => Some("null"),
             Self::String(Cow::Borrowed(s)) => Some(s),
@@ -473,7 +470,7 @@ impl<'a> LiteralExpr<'a> {
 
 /// Unary expression
 #[derive(Debug, Clone, Display)]
-#[display(fmt = "{}{}", operator, expr)]
+#[display(fmt = "{operator}{expr}")]
 pub struct UnaryExpr<'a> {
     /// The operator that was used
     pub operator: TokenType,

@@ -96,7 +96,7 @@ impl Object for Array {
                     throw!(sc, RangeError, "Invalid array length");
                 }
 
-                items.resize(new_len as usize, PropertyValue::static_default(Value::undefined()));
+                items.resize(new_len, PropertyValue::static_default(Value::undefined()));
                 return Ok(());
             }
 

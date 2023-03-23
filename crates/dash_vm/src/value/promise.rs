@@ -296,6 +296,6 @@ pub fn wrap_promise(scope: &mut LocalScope, value: Value) -> Value {
         }
     }
 
-    let promise = Promise::resolved(scope, value.clone());
+    let promise = Promise::resolved(scope, value);
     Value::Object(scope.register(promise))
 }

@@ -427,7 +427,7 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
                                 let parameters = self.parse_parameter_list()?;
                                 self.expect_and_skip(&[TokenType::LeftBrace], true);
                                 let body = self.parse_block()?;
-                                let id = self.function_counter.next();
+                                let id = self.function_counter.advance();
                                 items.push((
                                     key,
                                     Expr::function(FunctionDeclaration::new(
@@ -485,7 +485,7 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
                             let BlockStatement(stmts) = self.parse_block()?;
 
                             // Desugar to function
-                            let func_id = self.function_counter.next();
+                            let func_id = self.function_counter.advance();
                             let fun =
                                 FunctionDeclaration::new(None, func_id, params, stmts, FunctionKind::Function, false);
                             items.push((key, Expr::function(fun)));
@@ -612,7 +612,7 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
 
         self.new_level_stack.pop_level().unwrap();
 
-        let func_id = self.function_counter.next();
+        let func_id = self.function_counter.advance();
         Some(FunctionDeclaration::new(
             name, func_id, arguments, statements, ty, is_async,
         ))
@@ -642,7 +642,7 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
             Statement::Return(ReturnStatement(self.parse_expression()?))
         };
 
-        let func_id = self.function_counter.next();
+        let func_id = self.function_counter.advance();
         Some(FunctionDeclaration::new(
             None,
             func_id,

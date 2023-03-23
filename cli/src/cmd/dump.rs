@@ -30,7 +30,7 @@ pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
         .map_err(|e| anyhow!("Failed to lex source string: {e:?}"))?;
 
     if dump_tokens {
-        println!("{:#?}", tokens);
+        println!("{tokens:#?}");
     }
 
     let (mut ast, counter) = dash_parser::Parser::new(&source, tokens)
@@ -61,7 +61,7 @@ pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
     }
 
     if dump_ast {
-        println!("{:#?}", ast);
+        println!("{ast:#?}");
     }
 
     if dump_js {

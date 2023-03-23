@@ -45,8 +45,8 @@ impl ModuleLoader for HttpModule {
     }
 }
 
-pub fn listen(mut cx: CallContext) -> Result<Value, Value> {
-    let port = cx.args.first().unwrap_or_undefined().to_int32(&mut cx.scope)?;
+pub fn listen(cx: CallContext) -> Result<Value, Value> {
+    let port = cx.args.first().unwrap_or_undefined().to_int32(cx.scope)?;
     let cb = match cx.args.get(1).cloned() {
         Some(Value::Object(o)) => o,
         _ => throw!(cx.scope, TypeError, "Expected callback function as second argument"),
@@ -55,7 +55,7 @@ pub fn listen(mut cx: CallContext) -> Result<Value, Value> {
     let addr = SocketAddr::from(([127, 0, 0, 1], port as u16));
 
     let (task_id, event_tx, rt) = {
-        let state = State::from_vm(&cx.scope);
+        let state = State::from_vm(cx.scope);
         let task_id = state.active_tasks().add();
         let event_tx = state.event_sender();
         let rt = state.rt_handle();
@@ -97,7 +97,7 @@ pub fn listen(mut cx: CallContext) -> Result<Value, Value> {
 
                     if let Err(err) = cb.apply(&mut scope, Value::undefined(), vec![ctx]) {
                         match err.to_string(&mut scope) {
-                            Ok(err) => eprintln!("Unhandled exception in HTTP handler! {}", err),
+                            Ok(err) => eprintln!("Unhandled exception in HTTP handler! {err}"),
                             Err(..) => eprintln!("Unhandled exception in exception toString method in HTTP handler!"),
                         }
                     }
@@ -178,7 +178,7 @@ fn ctx_respond(cx: CallContext) -> Result<Value, Value> {
 
     let message = cx.args.first().unwrap_or_undefined().to_string(cx.scope)?;
 
-    if let Err(_) = sender.send(Body::from(ToString::to_string(&message))) {
+    if sender.send(Body::from(ToString::to_string(&message))).is_err() {
         eprintln!("Failed to respond to HTTP event.");
     }
 

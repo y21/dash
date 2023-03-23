@@ -46,7 +46,7 @@ impl<'a> ScopeLocal<'a> {
 
 pub struct LimitExceededError;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 
 pub struct Scope<'a> {
     depth: u16,
@@ -58,11 +58,7 @@ pub struct Scope<'a> {
 
 impl<'a> Scope<'a> {
     pub fn new() -> Self {
-        Self {
-            depth: 0,
-            locals: Vec::new(),
-            externals: Vec::new(),
-        }
+        Self::default()
     }
 
     pub fn externals(&self) -> &[External] {

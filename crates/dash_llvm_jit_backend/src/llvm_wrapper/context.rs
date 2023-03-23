@@ -33,6 +33,15 @@ pub struct Context {
     cx: LLVMContextRef,
 }
 
+impl Default for Context {
+    fn default() -> Self {
+        Self {
+            module_count: 0,
+            cx: unsafe { LLVMContextCreate() },
+        }
+    }
+}
+
 impl Context {
     pub fn new() -> Self {
         Self {
@@ -98,7 +107,7 @@ impl Context {
     }
 
     pub fn const_f64(&self, val: f64) -> Value {
-        Value(unsafe { LLVMConstReal(self.f64_ty().0, val as f64) })
+        Value(unsafe { LLVMConstReal(self.f64_ty().0, val) })
     }
 
     pub fn f64_ty(&self) -> Ty {

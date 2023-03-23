@@ -21,7 +21,7 @@ pub fn run(args: &ArgMatches) -> anyhow::Result<()> {
     let source = fs::read_to_string(path).context("Failed to read source")?;
     let opt = util::opt_level_from_matches(args)?;
 
-    let before = args.is_present("timing").then(|| Instant::now());
+    let before = args.is_present("timing").then(Instant::now);
 
     let async_rt = tokio::runtime::Runtime::new()?;
     async_rt.block_on(inner(source, opt, args.is_present("quiet"), initial_gc_threshold))?;

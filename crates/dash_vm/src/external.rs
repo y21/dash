@@ -6,7 +6,7 @@ use crate::gc::trace::Trace;
 use super::local::LocalScope;
 use super::value::object::Object;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Externals(HashMap<*const (), Vec<Handle<dyn Object>>>);
 
 unsafe impl Trace for Externals {
@@ -19,7 +19,7 @@ unsafe impl Trace for Externals {
 
 impl Externals {
     pub fn new() -> Self {
-        Self(HashMap::new())
+        Self::default()
     }
 
     pub fn add(&mut self, sc: *const LocalScope, refs: Vec<Handle<dyn Object>>) {

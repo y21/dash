@@ -68,7 +68,7 @@ impl Object for ExternalFunction {
 
         match self.0.apply(&this, &args) {
             Ok(v) => dash_value_from_wasm_value(scope, v).map_err(|e| Value::String(e.into())),
-            Err(v) => return Err(dash_value_from_wasm_value(scope, v).map_err(|e| Value::String(e.into()))?),
+            Err(v) => Err(dash_value_from_wasm_value(scope, v).map_err(|e| Value::String(e.into()))?),
         }
     }
 

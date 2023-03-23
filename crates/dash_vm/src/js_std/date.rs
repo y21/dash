@@ -8,7 +8,7 @@ pub fn time_millis(cx: &mut CallContext) -> Result<u64, Value> {
         None => throw!(&mut cx.scope, Error, "Failed to get the current time"),
     };
 
-    callback(&mut cx.scope)
+    callback(cx.scope)
 }
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {

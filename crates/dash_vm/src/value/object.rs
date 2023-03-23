@@ -419,7 +419,7 @@ impl<'a> PropertyKey<'a> {
 
     pub fn from_value(sc: &mut LocalScope, value: Value) -> Result<Self, Value> {
         match value {
-            Value::Symbol(s) => Ok(Self::Symbol(s.into())),
+            Value::Symbol(s) => Ok(Self::Symbol(s)),
             other => {
                 let key = other.to_string(sc)?;
                 Ok(PropertyKey::String(ToString::to_string(&key).into()))
@@ -565,8 +565,12 @@ impl Object for NamedObject {
             Some(PropertyValueKind::Static(value)) => Ok(value),
             Some(PropertyValueKind::Trap { get, set }) => {
                 // Accessors need to be added to the LocalScope too
-                get.map(|v| sc.add_ref(v));
-                set.map(|v| sc.add_ref(v));
+                if let Some(v) = get {
+                    sc.add_ref(v)
+                }
+                if let Some(v) = set {
+                    sc.add_ref(v)
+                }
 
                 // Kind of unclear what to return here...
                 // We can't invoke the getters/setters

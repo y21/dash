@@ -54,10 +54,17 @@ impl<T> DerefMut for TreeNode<T> {
 pub struct Tree<T> {
     pool: Vec<TreeNode<T>>,
 }
+impl<T> Default for Tree<T> {
+    fn default() -> Self {
+        Self {
+            pool: Vec::new()
+        }
+    }
+}
 
 impl<T> Tree<T> {
     pub fn new() -> Self {
-        Self { pool: Vec::new() }
+        Self::default()
     }
 
     pub fn add(&mut self, parent: Option<TreeToken>, id: TreeToken, value: T) -> TreeToken {
@@ -73,7 +80,7 @@ impl<T> Tree<T> {
         TreeToken(id)
     }
 
-    pub fn iter_mut<'a>(&'a mut self) -> IterMut<'a, TreeNode<T>> {
+    pub fn iter_mut(&mut self) -> IterMut<'_, TreeNode<T>> {
         self.pool.iter_mut()
     }
 }

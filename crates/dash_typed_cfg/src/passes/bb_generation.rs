@@ -167,7 +167,7 @@ impl<'a, 'q, Q: BBGenerationQuery> BBGenerationCtxt<'a, 'q, Q> {
             if index != 0 {
                 if let Some(..) = self.bbs.get(&index) {
                     let current_bb = self.bbs.get_mut(&current_bb_ip).unwrap();
-                    if let None = current_bb.successor {
+                    if current_bb.successor.is_none() {
                         current_bb.successor = Some(BasicBlockSuccessor::Unconditional(index));
                     }
                     current_bb.end = index;

@@ -16,15 +16,17 @@ pub struct LinkedList<T: ?Sized> {
     len: usize,
 }
 
-impl<T: ?Sized> LinkedList<T> {
-    pub fn new() -> Self {
+impl<T: ?Sized> Default for LinkedList<T> {
+    fn default() -> Self {
         Self {
             head: None,
             tail: None,
             len: 0,
         }
     }
+}
 
+impl<T: ?Sized> LinkedList<T> {
     pub fn add(&mut self, value: Box<Node<T>>) -> *mut T {
         let ptr = Box::into_raw(value);
         let nptr = unsafe { NonNull::new_unchecked(ptr) };
@@ -64,12 +66,16 @@ impl<T: ?Sized> LinkedList<T> {
         &mut self.head
     }
 
-    pub unsafe fn dec_len(&mut self) {
+    pub fn dec_len(&mut self) {
         self.len -= 1;
     }
 
     pub fn len(&self) -> usize {
         self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
     }
 }
 

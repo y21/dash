@@ -24,9 +24,9 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
     let num = cx.this.to_number(cx.scope)? as u64;
 
     let re = match radix {
-        2 => format!("{:b}", num),
+        2 => format!("{num:b}"),
         10 => num.to_string(),
-        16 => format!("{:x}", num),
+        16 => format!("{num:x}"),
         _ => throw!(cx.scope, RangeError, "Invalid radix: {}", radix),
     };
 
@@ -71,7 +71,7 @@ pub fn to_fixed(cx: CallContext) -> Result<Value, Value> {
         .map(|n| n as usize)
         .unwrap_or(0);
 
-    let re = format!("{:.*}", decimals, num);
+    let re = format!("{num:.decimals$}");
 
     Ok(Value::String(re.into()))
 }

@@ -38,6 +38,8 @@ use crate::must_borrow_lexeme;
 use crate::types::TypeParser;
 use crate::Parser;
 
+type ParameterList<'a> = Option<Vec<(Parameter<'a>, Option<Expr<'a>>, Option<TypeSegment<'a>>)>>;
+
 pub trait StatementParser<'a> {
     fn parse_statement(&mut self) -> Option<Statement<'a>>;
     fn parse_class(&mut self) -> Option<Class<'a>>;
@@ -60,7 +62,7 @@ pub trait StatementParser<'a> {
     fn parse_switch(&mut self) -> Option<SwitchStatement<'a>>;
     /// Parses a list of parameters (identifier, followed by optional type segment) delimited by comma,
     /// assuming that the ( has already been consumed
-    fn parse_parameter_list(&mut self) -> Option<Vec<(Parameter<'a>, Option<Expr<'a>>, Option<TypeSegment<'a>>)>>;
+    fn parse_parameter_list(&mut self) -> ParameterList<'a>;
 }
 
 impl<'a> StatementParser<'a> for Parser<'a> {
@@ -135,7 +137,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
                 let arguments = self.parse_parameter_list()?;
                 let body = self.parse_statement()?;
 
-                let func_id = self.function_counter.next();
+                let func_id = self.function_counter.advance();
                 let func = FunctionDeclaration::new(
                     Some(name),
                     func_id,
@@ -432,7 +434,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
         Some(IfStatement::new(condition, then, branches, el))
     }
 
-    fn parse_parameter_list(&mut self) -> Option<Vec<(Parameter<'a>, Option<Expr<'a>>, Option<TypeSegment<'a>>)>> {
+    fn parse_parameter_list(&mut self) -> ParameterList<'a> {
         let mut parameters = Vec::new();
 
         while !self.expect_and_skip(&[TokenType::RightParen], false) {

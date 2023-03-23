@@ -11,29 +11,28 @@ use bitflags::bitflags;
 use super::trace::Trace;
 
 bitflags! {
+    #[derive(Default)]
     struct HandleFlagsInner: u8 {
         const MARKED_VISITED = 1 << 0;
         const VM_DETACHED = 1 << 1;
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 #[repr(transparent)]
 pub struct HandleFlags {
     flags: Cell<HandleFlagsInner>,
 }
 
 impl HandleFlags {
-    pub fn new() -> Self {
-        Self {
-            flags: Cell::new(HandleFlagsInner::empty()),
-        }
-    }
-
     pub fn mark(&self) {
         self.flags.set(self.flags.get() | HandleFlagsInner::MARKED_VISITED);
     }
 
+    /// # Safety
+    /// Unmarking a [`Handle`] makes it available for deallocation in the next cycle.
+    /// Calling this can introduce Undefined Behavior if a GC cycle triggers and this [`Handle`]
+    /// is still live.
     pub unsafe fn unmark(&self) {
         self.flags.set(!(self.flags.get() & HandleFlagsInner::MARKED_VISITED));
     }
@@ -83,6 +82,8 @@ impl<T: ?Sized> Clone for Handle<T> {
 }
 
 impl<T: ?Sized> Handle<T> {
+    /// # Safety
+    /// The given [`NonNull`] pointer must point to a valid [`InnerHandle`]
     pub unsafe fn new(ptr: NonNull<InnerHandle<T>>) -> Self {
         Handle(ptr)
     }

@@ -8,18 +8,12 @@ use dash_vm::value::Value;
 use dash_vm::Vm;
 use indexmap::IndexSet;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct ScriptModule {
     import_stack: RefCell<IndexSet<String>>,
 }
 
 impl ScriptModule {
-    pub fn new() -> Self {
-        Self {
-            import_stack: RefCell::new(IndexSet::new()),
-        }
-    }
-
     pub fn add_import(&self, sc: &mut LocalScope, name: &str) -> Result<(), Value> {
         let mut stack = self.import_stack.borrow_mut();
         if stack.contains(name) {

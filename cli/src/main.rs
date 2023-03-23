@@ -59,7 +59,7 @@ fn main() -> anyhow::Result<()> {
     std::panic::set_hook(Box::new(|info| {
         eprintln!("{}\n", "dash has unexpectedly panicked! this is a bug!".red().bold());
 
-        eprintln!("{}", info);
+        eprintln!("{info}");
 
         let backtrace = Backtrace::capture();
         match backtrace.status() {

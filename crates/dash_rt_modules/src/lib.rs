@@ -10,7 +10,7 @@ pub fn init_modules() -> Box<dyn ModuleLoader> {
     #[cfg(feature = "fetch")]
     let module = module.or(dash_rt_fetch::FetchModule);
     #[cfg(feature = "modules")]
-    let module = module.or(dash_rt_script_modules::ScriptModule::new());
+    let module = module.or(dash_rt_script_modules::ScriptModule::default());
     #[cfg(feature = "timers")]
     let module = module.or(dash_rt_timers::TimersModule);
     #[cfg(feature = "dll")]

@@ -20,6 +20,7 @@ macro_rules! typedarray {
                         if let Some(this) = this.downcast_ref::<ArrayBuffer>() {
                             const REQUIRED_ALIGN: usize = $kind.bytes_per_element();
 
+                            #[allow(clippy::modulo_one)]
                             if this.len() % REQUIRED_ALIGN != 0 {
                                 throw!(
                                     cx.scope,

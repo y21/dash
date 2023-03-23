@@ -489,7 +489,7 @@ impl<'a, 'b> fmt::Display for FormattableError<'a, 'b> {
 
         let column = self.loc.offset - offset;
 
-        write!(f, "error: {}\n", self.message)?;
+        writeln!(f, "error: {}", self.message)?;
         write!(f, "--> script.js:{}:{}\n\n", self.loc.line, column)?;
 
         let line = {
@@ -505,12 +505,12 @@ impl<'a, 'b> fmt::Display for FormattableError<'a, 'b> {
 
         let pointer_start = self.loc.offset - self.loc.line_offset;
 
-        write!(f, "{}\n", String::from_utf8_lossy(line))?;
+        writeln!(f, "{}", String::from_utf8_lossy(line))?;
         write!(f, "{}", " ".repeat(pointer_start))?;
         write!(f, "{}", "^".repeat(token_len))?;
 
         if let Some(help) = &self.help {
-            write!(f, "\n= help: {}", help)?;
+            write!(f, "\n= help: {help}")?;
         }
 
         Ok(())

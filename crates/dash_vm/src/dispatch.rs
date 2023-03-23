@@ -149,13 +149,13 @@ impl<'a> DispatchContext<'a> {
 impl<'a> Deref for DispatchContext<'a> {
     type Target = Vm;
     fn deref(&self) -> &Self::Target {
-        &self.vm
+        self.vm
     }
 }
 
 impl<'a> DerefMut for DispatchContext<'a> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.vm
+        self.vm
     }
 }
 
@@ -1452,7 +1452,6 @@ mod handlers {
             let case_value = cx.pop_stack();
             let case_offset = cx.fetchw_and_inc_ip() as usize;
             let ip = cx.active_frame().ip;
-            drop(cx);
 
             let is_eq = switch_expr.strict_eq(&case_value, &mut scope)?.to_boolean()?;
             let has_matching_case = target_ip.is_some();
@@ -1491,7 +1490,6 @@ mod handlers {
 
             let id = cx.number_constant(loc_id.into()) as usize;
             let ident = cx.identifier_constant(ident_id.into());
-            drop(cx);
 
             let prop = obj.get_property(&mut scope, PropertyKey::from(ident.as_ref()))?;
             scope.set_local(id, prop);
@@ -1510,7 +1508,6 @@ mod handlers {
             let loc_id = cx.fetchw_and_inc_ip();
 
             let id = cx.number_constant(loc_id.into()) as usize;
-            drop(cx);
 
             let prop = array.get_property(&mut scope, PropertyKey::from(i.to_string().as_ref()))?;
             scope.set_local(id, prop);

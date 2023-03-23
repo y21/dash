@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::sync::atomic::AtomicU64;
 use std::sync::Mutex;
 
+#[derive(Default)]
 pub struct TaskIds {
     tasks: Mutex<HashSet<u64>>,
     generator: AtomicU64,

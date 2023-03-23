@@ -12,6 +12,8 @@ macro_rules! cstrp {
     };
 }
 
+/// # Safety
+/// See [`slice::from_raw_parts_mut`]
 pub unsafe fn transmute_slice_mut<T, U>(slice: &mut [T]) -> &mut [U] {
     slice::from_raw_parts_mut(slice.as_mut_ptr().cast::<U>(), slice.len())
 }

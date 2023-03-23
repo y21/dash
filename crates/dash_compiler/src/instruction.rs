@@ -115,9 +115,11 @@ impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
     }
 
     pub fn build_local_store(&mut self, kind: AssignKind, id: u16, is_extern: bool) {
-        let (thin, wide) = is_extern
-            .then(|| (Instruction::StoreLocalExt, Instruction::StoreLocalExtW))
-            .unwrap_or((Instruction::StoreLocal, Instruction::StoreLocalW));
+        let (thin, wide) = if is_extern {
+            (Instruction::StoreLocalExt, Instruction::StoreLocalExtW)
+        } else {
+            (Instruction::StoreLocal, Instruction::StoreLocalW)
+        };
 
         self.write_wide_instr(thin, wide, id);
         self.write(kind as u8);
@@ -511,9 +513,11 @@ pub enum NamedExportKind {
 }
 
 pub fn compile_local_load_into(out: &mut Vec<u8>, index: u16, is_extern: bool) {
-    let (thin, wide) = is_extern
-        .then(|| (Instruction::LdLocalExt, Instruction::LdLocalExtW))
-        .unwrap_or((Instruction::LdLocal, Instruction::LdLocalW));
+    let (thin, wide) = if is_extern {
+        (Instruction::LdLocalExt, Instruction::LdLocalExtW)
+    } else {
+        (Instruction::LdLocal, Instruction::LdLocalW)
+    };
 
     if let Ok(index) = u8::try_from(index) {
         out.push(thin as u8);

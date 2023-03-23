@@ -15,7 +15,7 @@ use dash_middle::parser::statement::Statement;
 /// Implicitly patches the last expression to be returned from the function
 ///
 /// Or inserts `return undefined;` if there is no last expression
-pub fn ast_patch_implicit_return<'a>(ast: &mut Vec<Statement<'a>>) {
+pub fn ast_patch_implicit_return(ast: &mut Vec<Statement<'_>>) {
     match ast.last_mut() {
         Some(Statement::Return(..)) => {}
         Some(Statement::Expression(..)) => {
@@ -31,7 +31,7 @@ pub fn ast_patch_implicit_return<'a>(ast: &mut Vec<Statement<'a>>) {
     }
 }
 
-pub fn ast_insert_implicit_return<'a>(ast: &mut Vec<Statement<'a>>) {
+pub fn ast_insert_implicit_return(ast: &mut Vec<Statement<'_>>) {
     ast.push(Statement::Return(ReturnStatement::default()));
 }
 

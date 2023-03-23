@@ -21,12 +21,6 @@ use dash_vm::value::Value;
 #[derive(Debug)]
 pub struct TimersModule;
 
-impl TimersModule {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
 impl ModuleLoader for TimersModule {
     fn import(&self, sc: &mut LocalScope, _import_ty: StaticImportKind, path: &str) -> Result<Option<Value>, Value> {
         if path == "@std/timers" {
@@ -70,7 +64,7 @@ fn set_timeout(cx: CallContext) -> Result<Value, Value> {
             let callback = callback.get();
 
             if let Err(err) = callback.apply(&mut sc, Value::undefined(), Vec::new()) {
-                eprintln!("Unhandled error in timer callback: {:?}", err);
+                eprintln!("Unhandled error in timer callback: {err:?}");
             }
 
             tx2.send(EventMessage::RemoveTask(tid));

@@ -19,65 +19,66 @@ pub struct Gc<T: ?Sized> {
     list: LinkedList<InnerHandle<T>>,
 }
 
-impl<T: ?Sized + Trace> Gc<T> {
-    pub fn new() -> Self {
+impl<T: ?Sized> Default for Gc<T> {
+    fn default() -> Self {
         Self {
-            list: LinkedList::new(),
+            list: LinkedList::default(),
         }
     }
+}
 
+impl<T: ?Sized + Trace> Gc<T> {
     pub fn heap_size(&self) -> usize {
         self.list.len()
     }
 
+    /// # Safety
+    /// Calling this function while there are unmarked, live [`Handle`]s is Undefined Behavior.
+    /// Any unmarked node is deallocated during a sweep cycle.
     pub unsafe fn sweep(&mut self) {
         let mut previous = None;
         let mut node = self.list.tail();
 
-        loop {
-            if let Some(ptr) = node {
-                let (flags, refcount, next) = {
-                    let node = ptr.as_ref();
+        while let Some(ptr) = node {
+            let (flags, refcount, next) = {
+                let node = ptr.as_ref();
 
-                    (&node.value.flags, node.value.refcount.get(), node.next)
-                };
+                (&node.value.flags, node.value.refcount.get(), node.next)
+            };
 
-                node = next;
+            node = next;
 
-                debug!(flags = ?flags, refcount, ptr = ?ptr);
-                if !flags.is_marked() && refcount == 0 {
-                    // Reference did not get marked during GC trace and there are no Persistent<T> refs. Deallocate.
+            debug!(flags = ?flags, refcount, ptr = ?ptr);
+            if !flags.is_marked() && refcount == 0 {
+                // Reference did not get marked during GC trace and there are no Persistent<T> refs. Deallocate.
 
-                    // If this node is the tail (i.e. oldest/first node) or there is no tail,
-                    // set it to the next node.
-                    let tail = self.list.tail_mut();
-                    if tail.map_or(true, |p| p == ptr) {
-                        *tail = next;
-                    }
-
-                    // If this node is the head (i.e. newest/last node) or there is no head,
-                    // set it to the previous node.
-                    let head = self.list.head_mut();
-                    if head.map_or(true, |p| p == ptr) {
-                        *head = previous;
-                    }
-
-                    // Finally, deallocate the node.
-                    drop(Box::from_raw(ptr.as_ptr()));
-
-                    // Update previous node's next ptr to the next pointer
-                    if let Some(previous) = previous {
-                        (*previous.as_ptr()).next = next;
-                    }
-
-                    // There's one less node now, so decrement length.
-                    self.list.dec_len();
-                } else {
-                    flags.unmark();
-                    previous = Some(ptr);
+                // If this node is the tail (i.e. oldest/first node) or there is no tail,
+                // set it to the next node.
+                let tail = self.list.tail_mut();
+                if tail.map_or(true, |p| p == ptr) {
+                    *tail = next;
                 }
+
+                // If this node is the head (i.e. newest/last node) or there is no head,
+                // set it to the previous node.
+                let head = self.list.head_mut();
+                if head.map_or(true, |p| p == ptr) {
+                    *head = previous;
+                }
+
+                // Finally, deallocate the node.
+                drop(Box::from_raw(ptr.as_ptr()));
+
+                // Update previous node's next ptr to the next pointer
+                if let Some(previous) = previous {
+                    (*previous.as_ptr()).next = next;
+                }
+
+                // There's one less node now, so decrement length.
+                self.list.dec_len();
             } else {
-                break;
+                flags.unmark();
+                previous = Some(ptr);
             }
         }
     }
@@ -90,6 +91,9 @@ impl<T: ?Sized + Trace> Gc<T> {
     }
 }
 
+/// # Safety
+/// Implementors must provide a "correct" into_handle method
+/// by returning a valid [`Handle`] living in the given linked list.
 pub unsafe trait IntoHandle<T: ?Sized, U> {
     fn into_handle(self, link: &mut LinkedList<U>) -> Handle<T>;
 }
@@ -97,7 +101,7 @@ pub unsafe trait IntoHandle<T: ?Sized, U> {
 unsafe impl<T: Object + 'static> IntoHandle<dyn Object, InnerHandle<dyn Object>> for T {
     fn into_handle(self, link: &mut LinkedList<InnerHandle<dyn Object>>) -> Handle<dyn Object> {
         let handle: InnerHandle<dyn Object> = InnerHandle {
-            flags: HandleFlags::new(),
+            flags: HandleFlags::default(),
             value: Box::new(self),
             refcount: Cell::new(0),
         };

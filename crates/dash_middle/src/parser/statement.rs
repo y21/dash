@@ -174,7 +174,7 @@ impl<'a> fmt::Display for TryCatch<'a> {
         write!(f, "try {{ {} }} {}", self.try_, self.catch)?;
 
         if let Some(finally) = &self.finally {
-            write!(f, " finally {{ {} }}", finally)?;
+            write!(f, " finally {{ {finally} }}")?;
         }
 
         Ok(())
@@ -194,7 +194,7 @@ impl<'a> TryCatch<'a> {
 
 /// A return statement
 #[derive(Debug, Clone, Display)]
-#[display(fmt = "return {}", _0)]
+#[display(fmt = "return {_0}")]
 pub struct ReturnStatement<'a>(pub Expr<'a>);
 
 impl<'a> Default for ReturnStatement<'a> {
@@ -237,7 +237,7 @@ impl<'a> From<DoWhileLoop<'a>> for Loop<'a> {
 }
 
 #[derive(Debug, Clone, Display)]
-#[display(fmt = "do {} while ({})", body, condition)]
+#[display(fmt = "do {body} while ({condition})")]
 pub struct DoWhileLoop<'a> {
     pub body: Box<Statement<'a>>,
     pub condition: Expr<'a>,
@@ -255,7 +255,7 @@ impl<'a> DoWhileLoop<'a> {
 
 /// A for..of loop
 #[derive(Debug, Clone, Display)]
-#[display(fmt = "for ({} of {}) {{ {} }}", binding, expr, body)]
+#[display(fmt = "for ({binding} of {expr}) {{ {body} }}")]
 pub struct ForOfLoop<'a> {
     /// The binding of this loop
     pub binding: VariableBinding<'a>,
@@ -283,19 +283,19 @@ impl<'a> fmt::Display for ForLoop<'a> {
         write!(f, "for(")?;
 
         if let Some(init) = &self.init {
-            write!(f, "{}", init)?;
+            write!(f, "{init}")?;
         }
 
         write!(f, ";")?;
 
         if let Some(condition) = &self.condition {
-            write!(f, "{}", condition)?;
+            write!(f, "{condition}")?;
         }
 
         write!(f, ";")?;
 
         if let Some(finalizer) = &self.finalizer {
-            write!(f, "{}", finalizer)?;
+            write!(f, "{finalizer}")?;
         }
 
         write!(f, ") {{ {} }}", self.body)
@@ -321,7 +321,7 @@ impl<'a> ForLoop<'a> {
 
 /// A for..in loop
 #[derive(Debug, Clone, Display)]
-#[display(fmt = "for ({} in {}) {{ {} }}", binding, expr, body)]
+#[display(fmt = "for ({binding} in {expr}) {{ {body} }}")]
 pub struct ForInLoop<'a> {
     /// The binding of this loop
     pub binding: VariableBinding<'a>,
@@ -333,7 +333,7 @@ pub struct ForInLoop<'a> {
 
 /// A while loop
 #[derive(Debug, Clone, Display)]
-#[display(fmt = "while ({}) {{ {} }}", condition, body)]
+#[display(fmt = "while ({condition}) {{ {body} }}")]
 pub struct WhileLoop<'a> {
     /// The condition of this while loop, used to determine when to stop iterating
     pub condition: Expr<'a>,
@@ -345,7 +345,7 @@ impl<'a> WhileLoop<'a> {
     /// Creates a new while loop
     pub fn new(condition: Expr<'a>, body: Statement<'a>) -> Self {
         Self {
-            condition: condition,
+            condition,
             body: Box::new(body),
         }
     }
@@ -384,9 +384,9 @@ impl From<usize> for FuncId {
     }
 }
 
-impl Into<usize> for FuncId {
-    fn into(self) -> usize {
-        self.0
+impl From<FuncId> for usize {
+    fn from(val: FuncId) -> Self {
+        val.0
     }
 }
 
@@ -463,7 +463,7 @@ impl<'a> fmt::Display for FunctionDeclaration<'a> {
     }
 }
 
-pub fn fmt_list<'a, D>(f: &mut fmt::Formatter<'a>, it: &[D], delim: &str) -> fmt::Result
+pub fn fmt_list<D>(f: &mut fmt::Formatter<'_>, it: &[D], delim: &str) -> fmt::Result
 where
     D: fmt::Display,
 {
@@ -471,7 +471,7 @@ where
         if i > 0 {
             write!(f, "{delim} ")?;
         }
-        write!(f, "{}", expr)?;
+        write!(f, "{expr}")?;
     }
 
     Ok(())
@@ -578,17 +578,17 @@ impl<'a> fmt::Display for SwitchStatement<'a> {
         write!(f, "switch ({}) {{", self.expr)?;
 
         for case in self.cases.iter() {
-            write!(f, "case {}:\n", case.value)?;
+            writeln!(f, "case {}:", case.value)?;
 
             fmt_list(f, &case.body, "\n")?;
 
-            write!(f, "\n")?;
+            writeln!(f)?;
         }
 
         if let Some(default) = &self.default {
-            write!(f, "default:\n")?;
-            fmt_list(f, &default, "\n")?;
-            write!(f, "\n")?;
+            writeln!(f, "default:")?;
+            fmt_list(f, default, "\n")?;
+            writeln!(f)?;
         }
 
         write!(f, "}}")
@@ -646,7 +646,7 @@ pub enum VariableDeclarationName<'a> {
 impl<'a> fmt::Display for VariableDeclarationName<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            VariableDeclarationName::Identifier(name) => write!(f, "{}", name),
+            VariableDeclarationName::Identifier(name) => write!(f, "{name}"),
             VariableDeclarationName::ObjectDestructuring { fields, rest } => {
                 write!(f, "{{ ")?;
 
@@ -656,14 +656,14 @@ impl<'a> fmt::Display for VariableDeclarationName<'a> {
                     }
 
                     if let Some(alias) = alias {
-                        write!(f, "{}: {}", name, alias)?;
+                        write!(f, "{name}: {alias}")?;
                     } else {
-                        write!(f, "{}", name)?;
+                        write!(f, "{name}")?;
                     }
                 }
 
                 if let Some(rest) = rest {
-                    write!(f, ", ...{}", rest)?;
+                    write!(f, ", ...{rest}")?;
                 }
 
                 write!(f, " }}")
@@ -676,11 +676,11 @@ impl<'a> fmt::Display for VariableDeclarationName<'a> {
                         write!(f, ", ")?;
                     }
 
-                    write!(f, "{}", name)?;
+                    write!(f, "{name}")?;
                 }
 
                 if let Some(rest) = rest {
-                    write!(f, ", ...{}", rest)?;
+                    write!(f, ", ...{rest}")?;
                 }
 
                 write!(f, " ]")
@@ -708,7 +708,7 @@ impl From<TokenType> for VariableDeclarationKind {
 
 /// A variable binding
 #[derive(Debug, Clone, Display, PartialEq, PartialOrd)]
-#[display(fmt = "{} {}", kind, name)]
+#[display(fmt = "{kind} {name}")]
 pub struct VariableBinding<'a> {
     /// The name/identifier of this variable
     pub name: VariableDeclarationName<'a>,
@@ -752,7 +752,7 @@ impl<'a> fmt::Display for VariableDeclaration<'a> {
         write!(f, "{}", self.binding)?;
 
         if let Some(value) = &self.value {
-            write!(f, " = {}", value)?;
+            write!(f, " = {value}")?;
         }
 
         write!(f, ";")
@@ -784,10 +784,10 @@ impl<'a> fmt::Display for Class<'a> {
         write!(f, "class {}", self.name.unwrap_or_default())?;
 
         if let Some(extends) = &self.extends {
-            write!(f, " extends {}", extends)?;
+            write!(f, " extends {extends}")?;
         }
 
-        write!(f, " {{\n")?;
+        writeln!(f, " {{")?;
 
         fmt_list(f, &self.members, ";")?;
 
@@ -874,7 +874,7 @@ impl<'a> fmt::Display for ClassProperty<'a> {
         write!(f, "{}", self.name)?;
 
         if let Some(value) = &self.value {
-            write!(f, " = {}", value)?;
+            write!(f, " = {value}")?;
         }
 
         write!(f, ";")

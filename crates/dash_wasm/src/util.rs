@@ -78,7 +78,7 @@ pub fn dash_value_from_wasm_value(scope: &mut LocalScope, value: WasmValue) -> R
                 let promise = handle.promise.as_any().downcast_ref::<Promise>().unwrap();
                 handle
                     .scope
-                    .drive_promise(PromiseAction::Resolve, &promise, vec![value]);
+                    .drive_promise(PromiseAction::Resolve, promise, vec![value]);
                 handle.scope.process_async_tasks();
             }));
             let _ = promise.then(&closure);

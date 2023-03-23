@@ -32,7 +32,7 @@ fn run_inner(files: Vec<OsString>, verbose: bool) -> anyhow::Result<()> {
         let sta = std::fs::read_to_string("../test262/harness/sta.js")?;
         let assert = std::fs::read_to_string("../test262/harness/assert.js")?;
 
-        let code = format!("{};\n{};\n", sta, assert);
+        let code = format!("{sta};\n{assert};\n");
         code
     };
 

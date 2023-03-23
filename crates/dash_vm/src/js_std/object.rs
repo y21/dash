@@ -71,7 +71,7 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
 pub fn get_own_property_descriptor(cx: CallContext) -> Result<Value, Value> {
     let o = cx.args.first().unwrap_or_undefined();
     let o = match &o {
-        Value::Object(o) | Value::External(o) => &*o,
+        Value::Object(o) | Value::External(o) => o,
         _ => throw!(
             cx.scope,
             TypeError,
@@ -90,7 +90,7 @@ pub fn get_own_property_descriptor(cx: CallContext) -> Result<Value, Value> {
 pub fn get_own_property_descriptors(cx: CallContext) -> Result<Value, Value> {
     let o = cx.args.first().unwrap_or_undefined();
     let o = match &o {
-        Value::Object(o) | Value::External(o) => &*o,
+        Value::Object(o) | Value::External(o) => o,
         _ => throw!(
             cx.scope,
             TypeError,

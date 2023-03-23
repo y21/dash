@@ -29,8 +29,8 @@ impl ExecutionEngine {
         unsafe {
             let addr = LLVMGetFunctionAddress(self.0, name.as_ptr());
             assert!(addr != 0);
-            let fun = mem::transmute::<u64, JitFunction>(addr);
-            fun
+            
+            mem::transmute::<u64, JitFunction>(addr)
         }
     }
 }

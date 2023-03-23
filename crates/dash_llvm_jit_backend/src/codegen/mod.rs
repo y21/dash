@@ -155,7 +155,7 @@ impl<'a, 'q, Q: CodegenQuery> CodegenCtxt<'a, 'q, Q> {
         let exit_block = llcx.append_basic_block(&function, cstr!("exit"));
         let exit_guards = Vec::new();
 
-        register_llvm_bbs(&llcx, &function, &bb_map, &mut llvm_bbs, 0, &mut HashSet::new());
+        register_llvm_bbs(&llcx, &function, bb_map, &mut llvm_bbs, 0, &mut HashSet::new());
 
         Self {
             ty_map,
@@ -206,7 +206,7 @@ impl<'a, 'q, Q: CodegenQuery> CodegenCtxt<'a, 'q, Q> {
             }
             (Type::I64, Type::F64) => self.builder.build_si2fp(&self.llcx.f64_ty(), value),
             (Type::F64, Type::I64) => self.builder.build_fp2si(&self.llcx.i64_ty(), value),
-            _ => panic!("Invalid cast {:?} -> {:?}", from, to),
+            _ => panic!("Invalid cast {from:?} -> {to:?}"),
         }
     }
 
@@ -540,7 +540,7 @@ impl<'a, 'q, Q: CodegenQuery> CodegenCtxt<'a, 'q, Q> {
         // early not by a conditional jump but by another label
         if let Some(succ) = succ {
             let BasicBlockSuccessor::Unconditional(target) = succ else {
-                panic!("mismatching basic block successor {:?}", succ);
+                panic!("mismatching basic block successor {succ:?}");
             };
             let next_bb = &self.llvm_bbs[&target];
             self.builder.build_br(next_bb);

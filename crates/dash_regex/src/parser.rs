@@ -15,7 +15,8 @@ impl<'a> Parser<'a> {
         Self { index: 0, input }
     }
 
-    pub fn next(&mut self) -> Option<u8> {
+    /// Advances the index and returns the previous byte
+    pub fn next_byte(&mut self) -> Option<u8> {
         let byte = self.input.get(self.index);
         self.index += 1;
         byte.copied()
@@ -62,7 +63,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_primary(&mut self) -> Result<Node, Error> {
-        let mut node = match self.next() {
+        let mut node = match self.next_byte() {
             Some(b'.') => Ok(Node::AnyCharacter),
             Some(b'\\') => self.parse_escape(),
             Some(b'[') => self.parse_character_class(),
@@ -74,7 +75,7 @@ impl<'a> Parser<'a> {
             None => Err(Error::UnexpectedEof),
         }?;
 
-        match self.next() {
+        match self.next_byte() {
             Some(b'+') => node = Node::unbounded_max_repetition(node, 1),
             Some(b'*') => node = Node::unbounded_max_repetition(node, 0),
             Some(b'?') => node = Node::optional(node),
@@ -171,7 +172,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_escape(&mut self) -> Result<Node, Error> {
-        match self.next() {
+        match self.next_byte() {
             Some(b'd') => Ok(Node::MetaSequence(MetaSequence::Digit)),
             Some(b'w') => Ok(Node::MetaSequence(MetaSequence::Word)),
             Some(b's') => Ok(Node::MetaSequence(MetaSequence::Whitespace)),

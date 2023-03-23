@@ -47,7 +47,7 @@ impl fmt::Display for CompileError {
             Self::ObjectLitLimitExceeded => f.write_str("Maximum number of object literal properties exceedeed"),
             Self::DestructureLimitExceeded => f.write_str("Maximum number of object or array destructuring properties exceedeed"),
             Self::ConstAssignment => f.write_str("Cannot assign to constant"),
-            Self::Unimplemented(s) => write!(f, "Unimplemented: {}", s),
+            Self::Unimplemented(s) => write!(f, "Unimplemented: {s}"),
             Self::ParameterLimitExceeded => f.write_str("Maximum number of function parameters exceedeed"),
             Self::YieldOutsideGenerator => f.write_str("`yield` is only available in generator functions"),
             Self::ExportNameListLimitExceeded => f.write_str("Maximum number of export names exceedeed"),

@@ -69,14 +69,10 @@ impl LoopCounter {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct LoopCounterMap(BTreeMap<usize, LoopCounter>);
 
 impl LoopCounterMap {
-    pub fn new() -> Self {
-        Self(BTreeMap::new())
-    }
-
     pub fn get_or_insert(&mut self, id: usize) -> &mut LoopCounter {
         self.0.entry(id).or_insert_with(Default::default)
     }
@@ -114,7 +110,7 @@ impl Frame {
             sp: 0,
             extra_stack_space: inner.locals - uf.inner().params,
             state: FrameState::Function { is_constructor_call },
-            loop_counter: LoopCounterMap::new(),
+            loop_counter: LoopCounterMap::default(),
         }
     }
 
@@ -128,7 +124,7 @@ impl Frame {
             sp: 0,
             extra_stack_space: inner.locals - uf.inner().params,
             state: FrameState::Module(Exports::default()),
-            loop_counter: LoopCounterMap::new(),
+            loop_counter: LoopCounterMap::default(),
         }
     }
 
@@ -164,7 +160,7 @@ impl Frame {
             state: FrameState::Function {
                 is_constructor_call: false,
             },
-            loop_counter: LoopCounterMap::new(),
+            loop_counter: LoopCounterMap::default(),
         }
     }
 

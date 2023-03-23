@@ -1,6 +1,6 @@
 use derive_more::Display;
 
-fn fmt_segments<'a>(s: &[TypeSegment<'a>]) -> String {
+fn fmt_segments(s: &[TypeSegment<'_>]) -> String {
     s.iter().map(|s| s.to_string()).collect::<Vec<_>>().join(", ")
 }
 

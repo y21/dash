@@ -31,7 +31,7 @@ impl<'buf> FunctionDecompiler<'buf> {
     }
 
     fn handle_opless_instr(&mut self, name: &str) {
-        let _ = write!(self.out, "{:02x}  {}\n", self.instr_idx, name);
+        let _ = writeln!(self.out, "{:02x}  {}", self.instr_idx, name);
     }
 
     fn handle_op_instr(&mut self, name: &str, args: &[&dyn fmt::Display]) {
@@ -41,7 +41,7 @@ impl<'buf> FunctionDecompiler<'buf> {
                 let _ = write!(self.out, ", ");
             }
 
-            let _ = write!(self.out, "{}", arg);
+            let _ = write!(self.out, "{arg}");
         }
         let _ = self.out.write_char('\n');
     }
@@ -53,7 +53,7 @@ impl<'buf> FunctionDecompiler<'buf> {
                 let _ = write!(self.out, ", ");
             }
 
-            let _ = write!(self.out, "{}: {}", key, arg);
+            let _ = write!(self.out, "{key}: {arg}");
         }
         let _ = self.out.write_char('\n');
     }
@@ -434,9 +434,9 @@ struct DisplayConstant<'c>(&'c Constant);
 impl fmt::Display for DisplayConstant<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {
-            Constant::Number(n) => write!(f, "{}", n),
-            Constant::String(s) => write!(f, "\"{}\"", s),
-            Constant::Boolean(b) => write!(f, "{}", b),
+            Constant::Number(n) => write!(f, "{n}"),
+            Constant::String(s) => write!(f, "\"{s}\""),
+            Constant::Boolean(b) => write!(f, "{b}"),
             Constant::Identifier(ident) => write!(f, "{ident}"),
             Constant::Function(fun) => write!(f, "<function {}>", fun.name.as_deref().unwrap_or("<anonymous>")),
             Constant::Null => f.write_str("null"),

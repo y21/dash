@@ -19,12 +19,6 @@ type InitFunction = unsafe extern "C" fn(*mut CallContext, *mut Result<Value, Va
 #[derive(Debug)]
 pub struct DllModule;
 
-impl DllModule {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
 impl ModuleLoader for DllModule {
     fn import(&self, sc: &mut LocalScope, _: StaticImportKind, path: &str) -> Result<Option<Value>, Value> {
         if path != "@std/dlloader" {

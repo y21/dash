@@ -49,7 +49,7 @@ impl Module {
     pub fn print_module(&self) {
         let string = unsafe { CStr::from_ptr(LLVMPrintModuleToString(self.0)) };
         let rust_string = String::from_utf8_lossy(string.to_bytes());
-        println!("{}", rust_string);
+        println!("{rust_string}");
 
         unsafe { LLVMDisposeMessage(string.as_ptr() as *mut i8) }
     }

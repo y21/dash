@@ -33,16 +33,16 @@ impl<'a> fmt::Display for EvalError<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             EvalError::Lexer(errors) => {
-                util::fmt_group(f, &errors, "\n\n")?;
+                util::fmt_group(f, errors, "\n\n")?;
             }
             EvalError::Parser(errors) => {
-                util::fmt_group(f, &errors, "\n\n")?;
+                util::fmt_group(f, errors, "\n\n")?;
             }
             EvalError::Compiler(error) => {
-                writeln!(f, "{:?}", error)?;
+                writeln!(f, "{error:?}")?;
             }
             EvalError::Exception(value) => {
-                writeln!(f, "Exception: {:?}", value)?;
+                writeln!(f, "Exception: {value:?}")?;
             }
         }
 

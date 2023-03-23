@@ -64,18 +64,28 @@ impl<'a, 'b> ConstFunctionEvalCtx<'a, 'b> {
                 }
                 self.tcx.scope_mut(func_id).exit();
             }
-            Statement::Expression(expr) => drop(self.visit(expr, func_id)),
+            Statement::Expression(expr) => {
+                self.visit(expr, func_id);
+            }
             Statement::Variable(stmt) => self.visit_variable_declaration(stmt, func_id),
             Statement::If(stmt) => self.visit_if_statement(stmt, func_id),
-            Statement::Function(expr) => drop(self.visit_function_expression(expr, func_id)),
+            Statement::Function(expr) => {
+                self.visit_function_expression(expr, func_id);
+            }
             Statement::Loop(expr) => self.visit_loop_statement(expr, func_id),
             Statement::Return(stmt) => self.visit_return_statement(stmt, func_id),
             Statement::Try(stmt) => self.visit_try_statement(stmt, func_id),
-            Statement::Throw(expr) => drop(self.visit(expr, func_id)),
+            Statement::Throw(expr) => {
+                self.visit(expr, func_id);
+            }
             Statement::Import(ImportKind::AllAs(SpecifierKind::Ident(..), ..)) => {}
-            Statement::Import(ImportKind::Dynamic(expr)) => drop(self.visit(expr, func_id)),
+            Statement::Import(ImportKind::Dynamic(expr)) => {
+                self.visit(expr, func_id);
+            }
             Statement::Import(ImportKind::DefaultAs(SpecifierKind::Ident(..), ..)) => {}
-            Statement::Export(ExportKind::Default(expr)) => drop(self.visit(expr, func_id)),
+            Statement::Export(ExportKind::Default(expr)) => {
+                self.visit(expr, func_id);
+            }
             Statement::Export(ExportKind::Named(..)) => {}
             Statement::Export(ExportKind::NamedVar(stmt)) => self.visit_variable_declaration(stmt, func_id),
             Statement::Class(stmt) => self.visit_class_statement(stmt, func_id),
@@ -86,7 +96,7 @@ impl<'a, 'b> ConstFunctionEvalCtx<'a, 'b> {
             Statement::Empty => {}
         };
 
-        if !self.stmt_has_side_effects(statement) {
+        if !stmt_has_side_effects(statement) {
             *statement = Statement::Empty;
         }
     }
@@ -129,9 +139,11 @@ impl<'a, 'b> ConstFunctionEvalCtx<'a, 'b> {
         self.visit_maybe_expr(extends.as_mut(), func_id);
         for member in members {
             match &mut member.kind {
-                ClassMemberKind::Method(method) => drop(self.visit_function_expression(method, func_id)),
+                ClassMemberKind::Method(method) => {
+                    self.visit_function_expression(method, func_id);
+                }
                 ClassMemberKind::Property(ClassProperty { value, .. }) => {
-                    drop(self.visit_maybe_expr(value.as_mut(), func_id))
+                    self.visit_maybe_expr(value.as_mut(), func_id);
                 }
             }
         }
@@ -450,7 +462,7 @@ impl<'a, 'b> ConstFunctionEvalCtx<'a, 'b> {
             }
             (Literal(LiteralExpr::String(left)), Literal(LiteralExpr::String(right)), Plus) => {
                 let mut left = left.to_string();
-                left.push_str(&right);
+                left.push_str(right);
                 *binary_expr = Literal(LiteralExpr::String(left.into()));
             }
             _ => {}
@@ -489,60 +501,56 @@ impl<'a, 'b> ConstFunctionEvalCtx<'a, 'b> {
             self.visit_statement(stmt, sub_func_id);
         }
     }
+}
 
-    pub fn stmt_has_side_effects(&self, stmt: &Statement<'a>) -> bool {
-        match stmt {
-            Statement::Block(BlockStatement(block)) => block.iter().any(|s| self.stmt_has_side_effects(s)),
-            Statement::Break => true,
-            Statement::Class(Class { .. }) => true, // TODO: can possibly be SE-free
-            Statement::Empty => false,
-            Statement::Expression(expr) => self.expr_has_side_effects(expr),
-            Statement::Function(FunctionDeclaration { name, .. }) => {
-                // Only considered to have side-effects if it's an actual declaration
-                name.is_some()
-            }
-            Statement::If(IfStatement { .. }) => true,
-            _ => true,
+fn stmt_has_side_effects(stmt: &Statement<'_>) -> bool {
+    match stmt {
+        Statement::Block(BlockStatement(block)) => block.iter().any(stmt_has_side_effects),
+        Statement::Break => true,
+        Statement::Class(Class { .. }) => true, // TODO: can possibly be SE-free
+        Statement::Empty => false,
+        Statement::Expression(expr) => expr_has_side_effects(expr),
+        Statement::Function(FunctionDeclaration { name, .. }) => {
+            // Only considered to have side-effects if it's an actual declaration
+            name.is_some()
         }
+        Statement::If(IfStatement { .. }) => true,
+        _ => true,
     }
+}
 
-    pub fn expr_has_side_effects(&self, expr: &Expr<'a>) -> bool {
-        match expr {
-            Expr::Array(ArrayLiteral(array)) => array.iter().any(|e| self.expr_has_side_effects(e)),
-            Expr::Binary(BinaryExpr { left, right, .. }) => {
-                self.expr_has_side_effects(left) || self.expr_has_side_effects(right)
-            }
-            Expr::Conditional(ConditionalExpr { condition, then, el }) => {
-                self.expr_has_side_effects(condition)
-                    || self.expr_has_side_effects(then)
-                    || self.expr_has_side_effects(el)
-            }
-            Expr::Empty => false,
-            Expr::Function(..) => false,
-            Expr::Grouping(GroupingExpr(grouping)) => grouping.iter().any(|e| self.expr_has_side_effects(e)),
-            Expr::Literal(LiteralExpr::Boolean(..)) => false,
-            Expr::Literal(LiteralExpr::Identifier(..)) => true, // might invoke a global getter
-            Expr::Literal(LiteralExpr::Null) => false,
-            Expr::Literal(LiteralExpr::Undefined) => false,
-            Expr::Literal(LiteralExpr::Number(..)) => false,
-            Expr::Literal(LiteralExpr::Regex(..)) => false,
-            Expr::Literal(LiteralExpr::String(..)) => false,
-            Expr::Object(ObjectLiteral(object)) => object.iter().any(|(kind, expr)| {
-                if let ObjectMemberKind::Dynamic(dynamic) = kind {
-                    if self.expr_has_side_effects(dynamic) {
-                        return true;
-                    }
-                };
-                self.expr_has_side_effects(expr)
-            }),
-            Expr::Postfix((_, expr)) => self.expr_has_side_effects(expr),
-            Expr::Prefix((_, expr)) => self.expr_has_side_effects(expr),
-            Expr::PropertyAccess(PropertyAccessExpr { target, property, .. }) => {
-                self.expr_has_side_effects(target) || self.expr_has_side_effects(property)
-            }
-            Expr::Sequence((left, right)) => self.expr_has_side_effects(left) || self.expr_has_side_effects(right),
-            Expr::Unary(UnaryExpr { .. }) => true, // TODO: can special case +- literal
-            _ => true,
+fn expr_has_side_effects(expr: &Expr<'_>) -> bool {
+    match expr {
+        Expr::Array(ArrayLiteral(array)) => array.iter().any(expr_has_side_effects),
+        Expr::Binary(BinaryExpr { left, right, .. }) => expr_has_side_effects(left) || expr_has_side_effects(right),
+        Expr::Conditional(ConditionalExpr { condition, then, el }) => {
+            expr_has_side_effects(condition) || expr_has_side_effects(then) || expr_has_side_effects(el)
         }
+        Expr::Empty => false,
+        Expr::Function(..) => false,
+        Expr::Grouping(GroupingExpr(grouping)) => grouping.iter().any(expr_has_side_effects),
+        Expr::Literal(LiteralExpr::Boolean(..)) => false,
+        Expr::Literal(LiteralExpr::Identifier(..)) => true, // might invoke a global getter
+        Expr::Literal(LiteralExpr::Null) => false,
+        Expr::Literal(LiteralExpr::Undefined) => false,
+        Expr::Literal(LiteralExpr::Number(..)) => false,
+        Expr::Literal(LiteralExpr::Regex(..)) => false,
+        Expr::Literal(LiteralExpr::String(..)) => false,
+        Expr::Object(ObjectLiteral(object)) => object.iter().any(|(kind, expr)| {
+            if let ObjectMemberKind::Dynamic(dynamic) = kind {
+                if expr_has_side_effects(dynamic) {
+                    return true;
+                }
+            };
+            expr_has_side_effects(expr)
+        }),
+        Expr::Postfix((_, expr)) => expr_has_side_effects(expr),
+        Expr::Prefix((_, expr)) => expr_has_side_effects(expr),
+        Expr::PropertyAccess(PropertyAccessExpr { target, property, .. }) => {
+            expr_has_side_effects(target) || expr_has_side_effects(property)
+        }
+        Expr::Sequence((left, right)) => expr_has_side_effects(left) || expr_has_side_effects(right),
+        Expr::Unary(UnaryExpr { .. }) => true, // TODO: can special case +- literal
+        _ => true,
     }
 }
