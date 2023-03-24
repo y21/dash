@@ -32,6 +32,7 @@ pub mod eval;
 pub mod external;
 pub mod frame;
 pub mod gc;
+pub mod gc2;
 pub mod js_std;
 pub mod local;
 pub mod params;
