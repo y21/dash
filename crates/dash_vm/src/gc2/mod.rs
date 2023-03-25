@@ -38,6 +38,10 @@ impl Gc {
         }
     }
 
+    pub fn node_count(&self) -> usize {
+        self.node_count
+    }
+
     fn add(&mut self, value: Box<GcNode<dyn Object>>) -> Handle<dyn Object> {
         let ptr = NonNull::new(Box::into_raw(value)).unwrap();
 
@@ -57,6 +61,10 @@ impl Gc {
         self.node_count += 1;
 
         unsafe { Handle::from_raw(ptr) }
+    }
+
+    pub fn register<O: Object + 'static>(&mut self, value: O) -> Handle<dyn Object> {
+        value.into_handle(self)
     }
 
     /// # Safety
@@ -155,8 +163,13 @@ unsafe impl<T: Object + 'static> IntoHandle for T {
 
 #[cfg(test)]
 mod tests {
+    use std::any::Any;
+    use std::any::TypeId;
     use std::fmt::Display;
     use std::rc::Rc;
+
+    use crate::value::array::Array;
+    use crate::value::object::NamedObject;
 
     use super::*;
 
@@ -212,6 +225,28 @@ mod tests {
             assert!(!(*h3.as_ptr()).flags.is_marked());
             assert!(gc.node_count == 3);
 
+            // test handle casting
+            {
+                let h1_c = h1.cast_handle::<f64>();
+                assert_eq!(h1_c.as_deref(), Some(&123.0));
+
+                let h2_c = h2.cast_handle::<Rc<str>>();
+                assert_eq!(h2_c.as_ref().map(|x| &***x), Some("hi"));
+
+                let h3_c = h3.cast_handle::<bool>();
+                assert_eq!(h3_c.as_deref(), Some(&true));
+
+                // how about some invalid casts
+                assert_eq!(h1.cast_handle::<bool>(), None);
+                assert_eq!(h1.cast_handle::<Rc<str>>(), None);
+                assert_eq!(h2.cast_handle::<bool>(), None);
+                assert_eq!(h2.cast_handle::<Array>(), None);
+                assert_eq!(h3.cast_handle::<f64>(), None);
+                assert_eq!(h3.cast_handle::<NamedObject>(), None);
+            }
+
+            // ---
+
             // only mark second node
             (*h2.as_ptr()).flags.mark();
 
@@ -229,6 +264,15 @@ mod tests {
             assert!(gc.node_count == 0);
             assert!(gc.head.is_none());
             assert!(gc.tail.is_none());
+
+            // test that Handle::replace works
+            {
+                let h4 = register_gc!(gc, (Box::new(1.2345) as Box<dyn Object>));
+                let mut h4c = h4.cast_handle::<Box<dyn Object>>().unwrap();
+                h4c.replace(Box::new(Rc::from("hi!")));
+                let h4cc = (**h4c).as_any().downcast_ref::<Rc<str>>().cloned();
+                assert_eq!(h4cc.as_deref(), Some("hi!"));
+            } // TODOO: update references of replace and change Value::External to be Handle<Box<dyn Object>>
 
             // lastly, test if Gc::drop works correctly. run under miri to see possible leaks
             register_gc!(gc, Rc::from("test"));

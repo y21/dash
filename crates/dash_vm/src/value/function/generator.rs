@@ -4,8 +4,8 @@ use std::cell::RefCell;
 use dash_proc_macro::Trace;
 
 use crate::delegate;
-use crate::gc::handle::Handle;
-use crate::gc::trace::Trace;
+use crate::gc2::handle::Handle;
+use crate::gc2::trace::Trace;
 use crate::local::LocalScope;
 use crate::throw;
 use crate::value::object::NamedObject;

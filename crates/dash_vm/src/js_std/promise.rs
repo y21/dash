@@ -1,7 +1,7 @@
 use dash_proc_macro::Trace;
 
 use crate::delegate;
-use crate::gc::handle::Handle;
+use crate::gc2::handle::Handle;
 use crate::throw;
 use crate::value::function::bound::BoundFunction;
 use crate::value::function::native::CallContext;

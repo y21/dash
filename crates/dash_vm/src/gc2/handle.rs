@@ -1,10 +1,13 @@
 use std::cell::Cell;
+use std::hash::Hash;
 use std::ops::Deref;
 use std::ptr::NonNull;
 
 use bitflags::bitflags;
 
 use crate::value::object::Object;
+
+use super::trace::Trace;
 
 bitflags! {
     #[derive(Default)]
@@ -55,6 +58,8 @@ pub struct GcNode<T: ?Sized> {
     pub(crate) next: Option<NonNull<GcNode<dyn Object>>>,
     pub(crate) value: T,
 }
+
+#[derive(Debug)]
 pub struct Handle<T: ?Sized>(NonNull<GcNode<T>>);
 
 impl<T: ?Sized> Handle<T> {
@@ -64,6 +69,8 @@ impl<T: ?Sized> Handle<T> {
         Self(ptr)
     }
 }
+
+impl<T: ?Sized> Eq for Handle<T> {}
 
 impl<T: ?Sized> PartialEq for Handle<T> {
     fn eq(&self, other: &Self) -> bool {
@@ -90,11 +97,44 @@ impl<T: ?Sized> Handle<T> {
     pub fn as_ptr(&self) -> *mut GcNode<T> {
         self.0.as_ptr()
     }
+}
 
-    #[allow(clippy::boxed_local)]
-    pub fn replace(&mut self, new: Box<T>) {
-        todo!()
-        // let t = unsafe { self.0.as_mut() };
-        // t.value = new;
+impl Handle<dyn Object> {
+    pub fn cast_handle<U: 'static>(&self) -> Option<Handle<U>> {
+        if self.as_any().is::<U>() {
+            Some(Handle(self.0.cast()))
+        } else {
+            None
+        }
+    }
+}
+
+impl Handle<Box<dyn Object>> {
+    // FIXME: this is unsound, the mutable reference created inside of this function
+    // can alias.
+    pub fn replace(&mut self, new: Box<dyn Object>) {
+        let inner = unsafe { self.0.as_mut() };
+        inner.value = new;
+    }
+}
+
+impl<T: ?Sized> Hash for Handle<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.as_ptr().hash(state);
+    }
+}
+
+unsafe impl<T: ?Sized + Trace> Trace for Handle<T> {
+    fn trace(&self) {
+        unsafe {
+            let this = self.0.as_ref();
+            if this.flags.is_marked() {
+                // If already marked, do nothing to avoid getting stucked in an infinite loop
+                return;
+            }
+            this.flags.mark();
+        };
+
+        T::trace(self);
     }
 }

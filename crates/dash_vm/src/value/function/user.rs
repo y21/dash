@@ -5,7 +5,7 @@ use dash_proc_macro::Trace;
 
 use crate::dispatch::HandleResult;
 use crate::frame::Frame;
-use crate::gc::handle::Handle;
+use crate::gc2::handle::Handle;
 use crate::local::LocalScope;
 use crate::value::object::Object;
 use crate::value::Value;

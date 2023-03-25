@@ -23,7 +23,7 @@ use dash_proc_macro::Trace;
 
 use crate::{delegate, throw};
 use crate::{
-    gc::{handle::Handle, trace::Trace},
+    gc2::{handle::Handle, trace::Trace},
     value::{
         function::FunctionKind,
         primitive::{Null, Undefined},
@@ -63,8 +63,11 @@ pub enum Value {
     /// The object type
     Object(Handle<dyn Object>),
     /// An "external" value that is being used by other functions.
-    External(Handle<dyn Object>),
+    External(Handle<ExternalValue>),
 }
+
+#[derive(Debug)]
+pub struct ExternalValue(Box<dyn Object>);
 
 unsafe impl Trace for Value {
     fn trace(&self) {

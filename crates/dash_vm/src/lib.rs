@@ -2,8 +2,7 @@
 use std::{fmt, ops::RangeBounds, vec::Drain, mem};
 
 use crate::{
-    gc::{handle::Handle, trace::Trace, Gc},
-    value::function::Function, util::cold_path,
+    value::function::Function, util::cold_path, gc2::trace::Trace,
 };
 
 use self::{
@@ -21,6 +20,7 @@ use self::{
 
 use dash_log::{debug, error, span, Level};
 use dash_middle::compiler::instruction::Instruction;
+use gc2::{handle::Handle, Gc};
 use util::unlikely;
 use value::{promise::{Promise, PromiseState}, ValueContext, function::bound::BoundFunction, PureBuiltin, object::NamedObject};
 
@@ -31,7 +31,7 @@ pub mod dispatch;
 pub mod eval;
 pub mod external;
 pub mod frame;
-pub mod gc;
+// pub mod gc;
 pub mod gc2;
 pub mod js_std;
 pub mod local;
@@ -51,7 +51,7 @@ pub struct Vm {
     frames: Vec<Frame>,
     async_tasks: Vec<Handle<dyn Object>>,
     stack: Vec<Value>,
-    gc: Gc<dyn Object>,
+    gc: Gc,
     global: Handle<dyn Object>,
     externals: Externals,
     statics: Box<Statics>, // TODO: we should box this... maybe?
@@ -819,7 +819,8 @@ impl Vm {
         let sp = self.get_frame_sp();
         let idx = sp + id;
 
-        if let Value::External(o) = &mut self.stack[idx] {
+        if let Value::External(o) = &self.stack[idx] {
+            let mut o = o.cast_handle::<Box<dyn Object>>().unwrap();
             o.replace(value.into_boxed());
         } else {
             self.stack[idx] = value;
@@ -968,7 +969,7 @@ impl Vm {
         let fp = self.frames.len();
 
         loop {
-            if unlikely(self.gc.heap_size() > self.gc_object_threshold) {
+            if unlikely(self.gc.node_count() > self.gc_object_threshold) {
                 self.perform_gc();
             }
 
@@ -1001,13 +1002,13 @@ impl Vm {
         trace_roots.in_scope(|| self.trace_roots());
 
         // All reachable roots are marked.
-        debug!("object count before sweep: {}", self.gc.heap_size());
+        debug!("object count before sweep: {}", self.gc.node_count());
         let sweep = span!(Level::TRACE, "gc sweep");
         sweep.in_scope(|| unsafe { self.gc.sweep() });
-        debug!("object count after sweep: {}", self.gc.heap_size());
+        debug!("object count after sweep: {}", self.gc.node_count());
 
         // Adjust GC threshold
-        let new_object_count = self.gc.heap_size();
+        let new_object_count = self.gc.node_count();
         self.gc_object_threshold = new_object_count * 2;
         debug!("new threshold: {}", self.gc_object_threshold);
     }
@@ -1031,7 +1032,7 @@ impl Vm {
         &self.statics
     }
 
-    pub fn gc_mut(&mut self) -> &mut Gc<dyn Object> {
+    pub fn gc_mut(&mut self) -> &mut Gc {
         &mut self.gc
     }
 

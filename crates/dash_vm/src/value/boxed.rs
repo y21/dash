@@ -2,7 +2,7 @@ use super::ops::abstractions::conversions::PreferredType;
 use super::ops::abstractions::conversions::ValueConversion;
 use super::ops::equality::ValueEquality;
 use crate::delegate;
-use crate::gc::handle::Handle;
+use crate::gc2::handle::Handle;
 use crate::local::LocalScope;
 use crate::value::PropertyKey;
 use crate::PropertyValue;

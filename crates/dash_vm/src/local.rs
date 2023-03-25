@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use std::ops::DerefMut;
 
-use crate::gc::handle::Handle;
+use crate::gc2::handle::Handle;
 
 use super::value::object::Object;
 use super::value::Value;

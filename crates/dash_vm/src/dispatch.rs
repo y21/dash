@@ -5,7 +5,7 @@ use std::{
     vec::Drain,
 };
 
-use crate::{frame::Frame, gc::handle::Handle, local::LocalScope, value::object::Object};
+use crate::{frame::Frame, gc2::handle::Handle, local::LocalScope, value::object::Object};
 
 use super::{value::Value, Vm};
 use dash_middle::compiler::{constant::Constant, instruction::Instruction};
@@ -1140,11 +1140,9 @@ mod handlers {
     }
 
     fn assign_to_external(handle: &Handle<dyn Object>, value: Value) {
-        unsafe {
-            let value = value.into_boxed();
-            // NOTE: Make sure this does not alias!
-            (*handle.as_ptr()).value = value;
-        }
+        let value = value.into_boxed();
+        let mut handle = handle.cast_handle::<Box<dyn Object>>().expect("not an external");
+        handle.replace(value);
     }
 
     pub fn storelocalext(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {

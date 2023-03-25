@@ -1,13 +1,10 @@
 use std::{any::Any, borrow::Cow, cell::RefCell, fmt::Debug, ptr::addr_of};
 
+use crate::gc2::{persistent::Persistent, trace::Trace};
 use bitflags::bitflags;
 use dash_proc_macro::Trace;
 
-use crate::{
-    gc::{handle::Handle, persistent::Persistent, trace::Trace},
-    local::LocalScope,
-    throw, Vm,
-};
+use crate::{gc2::handle::Handle, local::LocalScope, throw, Vm};
 
 use super::{
     ops::abstractions::conversions::ValueConversion,
@@ -159,7 +156,7 @@ macro_rules! delegate {
         fn apply(
             &self,
             sc: &mut $crate::local::LocalScope,
-            handle: $crate::gc::handle::Handle<dyn Object>,
+            handle: $crate::gc2::handle::Handle<dyn Object>,
             this: $crate::value::Value,
             args: Vec<$crate::value::Value>,
         ) -> Result<$crate::value::Value, $crate::value::Value> {
@@ -170,7 +167,7 @@ macro_rules! delegate {
         fn construct(
             &self,
             sc: &mut $crate::local::LocalScope,
-            handle: $crate::gc::handle::Handle<dyn Object>,
+            handle: $crate::gc2::handle::Handle<dyn Object>,
             this: $crate::value::Value,
             args: Vec<$crate::value::Value>,
         ) -> Result<$crate::value::Value, $crate::value::Value> {
@@ -616,6 +613,80 @@ impl Object for NamedObject {
     fn own_keys(&self) -> Result<Vec<Value>, Value> {
         let values = self.values.borrow();
         Ok(values.keys().map(PropertyKey::as_value).collect())
+    }
+}
+
+impl Object for Box<dyn Object> {
+    fn get_own_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        (**self).get_own_property(sc, key)
+    }
+
+    fn get_own_property_descriptor(
+        &self,
+        sc: &mut LocalScope,
+        key: PropertyKey,
+    ) -> Result<Option<PropertyValue>, Value> {
+        (**self).get_own_property_descriptor(sc, key)
+    }
+
+    fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        (**self).get_property(sc, key)
+    }
+
+    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
+        (**self).get_property_descriptor(sc, key)
+    }
+
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
+        (**self).set_property(sc, key, value)
+    }
+
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        (**self).delete_property(sc, key)
+    }
+
+    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
+        (**self).set_prototype(sc, value)
+    }
+
+    fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
+        (**self).get_prototype(sc)
+    }
+
+    fn apply(
+        &self,
+        scope: &mut LocalScope,
+        callee: Handle<dyn Object>,
+        this: Value,
+        args: Vec<Value>,
+    ) -> Result<Value, Value> {
+        (**self).apply(scope, callee, this, args)
+    }
+
+    fn construct(
+        &self,
+        scope: &mut LocalScope,
+        callee: Handle<dyn Object>,
+        this: Value,
+        args: Vec<Value>,
+    ) -> Result<Value, Value> {
+        (**self).construct(scope, callee, this, args)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn own_keys(&self) -> Result<Vec<Value>, Value> {
+        (**self).own_keys()
+    }
+
+    fn type_of(&self) -> Typeof {
+        (**self).type_of()
+    }
+
+    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
+        (**self).as_primitive_capable()
     }
 }
 

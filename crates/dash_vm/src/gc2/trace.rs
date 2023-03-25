@@ -1,4 +1,5 @@
 use std::cell::Cell;
+use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
 
@@ -57,6 +58,18 @@ unsafe impl<T: Trace + ?Sized> Trace for Rc<T> {
 unsafe impl<T: Trace + Copy> Trace for Cell<T> {
     fn trace(&self) {
         Cell::get(self).trace();
+    }
+}
+
+unsafe impl<T: Trace + ?Sized> Trace for Box<T> {
+    fn trace(&self) {
+        T::trace(self)
+    }
+}
+
+unsafe impl<T: ?Sized + Trace> Trace for RefCell<T> {
+    fn trace(&self) {
+        T::trace(&RefCell::borrow(self));
     }
 }
 

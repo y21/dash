@@ -1,7 +1,7 @@
 use dash_proc_macro::Trace;
 
-use crate::gc::handle::Handle;
-use crate::gc::Gc;
+use crate::gc2::handle::Handle;
+use crate::gc2::Gc;
 use crate::js_std;
 use crate::value::error::AggregateError;
 use crate::value::error::EvalError;
@@ -244,21 +244,21 @@ pub struct Statics {
     pub date_now: Handle<dyn Object>,
 }
 
-fn builtin_object<O: Object + 'static>(gc: &mut Gc<dyn Object>, obj: O) -> Handle<dyn Object> {
+fn builtin_object<O: Object + 'static>(gc: &mut Gc, obj: O) -> Handle<dyn Object> {
     gc.register(PureBuiltin::new(obj))
 }
 
-fn empty_object(gc: &mut Gc<dyn Object>) -> Handle<dyn Object> {
+fn empty_object(gc: &mut Gc) -> Handle<dyn Object> {
     builtin_object(gc, NamedObject::null())
 }
 
-fn function(gc: &mut Gc<dyn Object>, name: &str, cb: NativeFunction) -> Handle<dyn Object> {
+fn function(gc: &mut Gc, name: &str, cb: NativeFunction) -> Handle<dyn Object> {
     let f = Function::with_obj(Some(name.into()), FunctionKind::Native(cb), NamedObject::null());
     gc.register(PureBuiltin::new(f))
 }
 
 impl Statics {
-    pub fn new(gc: &mut Gc<dyn Object>) -> Self {
+    pub fn new(gc: &mut Gc) -> Self {
         let empty_str: Rc<str> = "".into();
 
         Self {

@@ -6,7 +6,7 @@ use dash_middle::util::ThreadSafeStorage;
 use dash_rt::event::EventMessage;
 use dash_rt::module::ModuleLoader;
 use dash_rt::state::State;
-use dash_vm::gc::persistent::Persistent;
+use dash_vm::gc2::persistent::Persistent;
 use dash_vm::local::LocalScope;
 use dash_vm::throw;
 use dash_vm::value::function::native::CallContext;

@@ -1,5 +1,5 @@
-use dash_vm::gc::handle::Handle;
-use dash_vm::gc::trace::Trace;
+use dash_vm::gc2::handle::Handle;
+use dash_vm::gc2::trace::Trace;
 use dash_vm::local::LocalScope;
 use dash_vm::value::object::NamedObject;
 use dash_vm::value::object::Object;

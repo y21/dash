@@ -3,7 +3,7 @@ use std::any::Any;
 use dash_proc_macro::Trace;
 
 use crate::delegate;
-use crate::gc::handle::Handle;
+use crate::gc2::handle::Handle;
 use crate::value::object::NamedObject;
 use crate::value::object::Object;
 use crate::value::Typeof;
