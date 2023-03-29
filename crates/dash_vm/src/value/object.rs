@@ -9,7 +9,7 @@ use crate::{gc2::handle::Handle, local::LocalScope, throw, Vm};
 use super::{
     ops::abstractions::conversions::ValueConversion,
     primitive::{PrimitiveCapabilities, Symbol},
-    Typeof, Value, ValueContext,
+    ExternalValue, Typeof, Value, ValueContext,
 };
 
 pub type ObjectMap<K, V> = ahash::HashMap<K, V>;
@@ -39,7 +39,8 @@ pub trait Object: Debug + Trace {
         }
 
         match self.get_prototype(sc)? {
-            Value::Object(object) | Value::External(object) => object.get_property_descriptor(sc, key),
+            Value::Object(object) => object.get_property_descriptor(sc, key),
+            Value::External(object) => object.get_own_property_descriptor(sc, key),
             Value::Null(..) => Ok(None),
             _ => unreachable!(),
         }
@@ -177,6 +178,11 @@ macro_rules! delegate {
     (override $field:ident, type_of) => {
         fn type_of(&self) -> $crate::value::Typeof {
             self.$field.type_of()
+        }
+    };
+    (override $field:ident, as_primitive_capable) => {
+        fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
+            self.$field.as_primitive_capable()
         }
     };
 
@@ -528,13 +534,13 @@ impl Object for NamedObject {
                 )
             }
             Some("constructor") => {
-                match value.into_kind() {
-                    PropertyValueKind::Static(Value::Object(obj) | Value::External(obj)) => {
-                        self.constructor.replace(Some(obj));
-                        return Ok(());
-                    }
+                let obj = match value.kind {
+                    PropertyValueKind::Static(Value::Object(obj)) => obj,
+                    PropertyValueKind::Static(Value::External(obj)) => obj.inner.clone(),
                     _ => throw!(sc, TypeError, "constructor is not an object"), // TODO: it doesn't need to be
-                }
+                };
+                self.constructor.replace(Some(obj));
+                return Ok(());
             }
             _ => {}
         };
@@ -553,13 +559,11 @@ impl Object for NamedObject {
         let value = values.remove(key);
 
         match value.map(PropertyValue::into_kind) {
-            Some(PropertyValueKind::Static(ref value @ (Value::Object(ref o) | Value::External(ref o)))) => {
+            Some(PropertyValueKind::Static(value)) => {
                 // If a GC'd value is being removed, put it in the LocalScope so it doesn't get removed too early
-                sc.add_ref(o.clone());
-                Ok(value.clone())
+                sc.add_value(value.clone());
+                Ok(value)
             }
-            // Primitive values can just be returned normally
-            Some(PropertyValueKind::Static(value)) => Ok(value),
             Some(PropertyValueKind::Trap { get, set }) => {
                 // Accessors need to be added to the LocalScope too
                 if let Some(v) = get {
@@ -595,7 +599,7 @@ impl Object for NamedObject {
         match value {
             Value::Null(_) => self.prototype.replace(None),
             Value::Object(handle) => self.prototype.replace(Some(handle)),
-            Value::External(handle) => self.prototype.replace(Some(handle)), // TODO: check that handle is an object
+            Value::External(handle) => self.prototype.replace(Some(handle.inner.clone())), // TODO: check that handle is an object
             _ => throw!(sc, TypeError, "prototype must be an object"),
         };
 
@@ -761,6 +765,16 @@ impl Object for Handle<dyn Object> {
 
     fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
         (**self).as_primitive_capable()
+    }
+}
+
+impl Handle<ExternalValue> {
+    pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
+        self.inner.apply(sc, this, args)
+    }
+
+    pub fn construct(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
+        self.inner.construct(sc, this, args)
     }
 }
 

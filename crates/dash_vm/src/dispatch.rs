@@ -5,7 +5,12 @@ use std::{
     vec::Drain,
 };
 
-use crate::{frame::Frame, gc2::handle::Handle, local::LocalScope, value::object::Object};
+use crate::{
+    frame::Frame,
+    gc2::handle::Handle,
+    local::LocalScope,
+    value::{object::Object, ExternalValue},
+};
 
 use super::{value::Value, Vm};
 use dash_middle::compiler::{constant::Constant, instruction::Instruction};
@@ -45,7 +50,7 @@ impl<'a> DispatchContext<'a> {
             .expect("Bytecode attempted to reference invalid local")
     }
 
-    pub fn get_external(&mut self, index: usize) -> &Handle<dyn Object> {
+    pub fn get_external(&mut self, index: usize) -> &Handle<ExternalValue> {
         self.vm
             .get_external(index)
             .expect("Bytecode attempted to reference invalid external")
@@ -684,9 +689,8 @@ mod handlers {
 
         let jump = match value {
             Value::Undefined(..) => true,
-            Value::Object(obj) | Value::External(obj) => {
-                obj.as_primitive_capable().map(|p| p.is_undefined()).unwrap_or_default()
-            }
+            Value::Object(obj) => obj.as_primitive_capable().map(|p| p.is_undefined()).unwrap_or_default(),
+            Value::External(obj) => obj.as_primitive_capable().map(|p| p.is_undefined()).unwrap_or_default(),
             _ => false,
         };
 
@@ -714,9 +718,8 @@ mod handlers {
 
         let jump = match value {
             Value::Undefined(..) => true,
-            Value::Object(obj) | Value::External(obj) => {
-                obj.as_primitive_capable().map(|p| p.is_undefined()).unwrap_or_default()
-            }
+            Value::Object(obj) => obj.as_primitive_capable().map(|p| p.is_undefined()).unwrap_or_default(),
+            Value::External(obj) => obj.as_primitive_capable().map(|p| p.is_undefined()).unwrap_or_default(),
             _ => false,
         };
 
@@ -1139,10 +1142,11 @@ mod handlers {
         Ok(None)
     }
 
-    fn assign_to_external(handle: &Handle<dyn Object>, value: Value) {
-        let value = value.into_boxed();
-        let mut handle = handle.cast_handle::<Box<dyn Object>>().expect("not an external");
-        handle.replace(value);
+    fn assign_to_external(handle: &Handle<ExternalValue>, value: Value) {
+        todo!()
+        // let value = value.into_boxed();
+        // let mut handle = handle.cast_handle::<Box<dyn Object>>().expect("not an external");
+        // handle.replace(value);
     }
 
     pub fn storelocalext(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
@@ -1397,11 +1401,14 @@ mod handlers {
         let mut scope = cx.scope();
 
         let keys = match value {
-            Value::Object(obj) | Value::External(obj) => {
-                obj.own_keys()?.into_iter().map(PropertyValue::static_default).collect()
-            }
+            Value::Object(obj) => obj.own_keys()?,
+            Value::External(obj) => obj.own_keys()?,
             _ => Vec::new(),
-        };
+        }
+        .into_iter()
+        .map(PropertyValue::static_default)
+        .collect();
+
         let keys = Array::from_vec(&mut scope, keys);
         let keys = scope.register(keys);
         let iter = ArrayIterator::new(&mut scope, Value::Object(keys))?;

@@ -695,11 +695,16 @@ impl ValueEquality for Undefined {
     }
 
     fn eq(&self, other: &Value, _sc: &mut LocalScope) -> Result<Value, Value> {
+        let eq_object = |o: &dyn Object| {
+            Ok(Value::Boolean(
+                o.as_primitive_capable().map_or(false, |p| p.is_undefined()),
+            ))
+        };
+
         match other {
             Value::Undefined(_) => Ok(Value::Boolean(true)),
-            Value::Object(o) | Value::External(o) => Ok(Value::Boolean(
-                o.as_primitive_capable().map_or(false, |p| p.is_undefined()),
-            )),
+            Value::Object(o) => eq_object(o),
+            Value::External(o) => eq_object(&o.inner),
             _ => Ok(Value::Boolean(false)),
         }
     }

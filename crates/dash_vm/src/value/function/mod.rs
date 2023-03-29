@@ -222,7 +222,8 @@ impl Object for Function {
                 let prototype = NamedObject::new(scope);
                 scope.register(prototype)
             }
-            Value::Object(o) | Value::External(o) => o,
+            Value::Object(o) => o,
+            Value::External(o) => o.inner.clone(),
             _ => throw!(scope, TypeError, "prototype is not an object"),
         };
 

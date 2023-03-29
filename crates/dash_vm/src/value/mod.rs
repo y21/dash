@@ -14,6 +14,7 @@ pub mod regex;
 pub mod set;
 pub mod typedarray;
 
+use std::ops::Deref;
 use std::rc::Rc;
 
 use dash_middle::compiler::{constant::Constant, external::External};
@@ -66,15 +67,117 @@ pub enum Value {
     External(Handle<ExternalValue>),
 }
 
-#[derive(Debug)]
-pub struct ExternalValue(Box<dyn Object>);
+#[derive(Debug, Trace)]
+pub struct ExternalValue {
+    pub inner: Handle<dyn Object>,
+}
+
+impl ExternalValue {
+    pub fn new(b: Handle<dyn Object>) -> Self {
+        Self { inner: b }
+    }
+}
+
+impl Object for ExternalValue {
+    delegate!(
+        inner,
+        set_property,
+        delete_property,
+        set_prototype,
+        own_keys,
+        get_own_property_descriptor,
+        get_property,
+        get_property_descriptor,
+        get_prototype,
+        type_of,
+        as_primitive_capable
+    );
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn apply(
+        &self,
+        scope: &mut LocalScope,
+        callee: Handle<dyn Object>,
+        this: Value,
+        args: Vec<Value>,
+    ) -> Result<Value, Value> {
+        self.inner.apply(scope, this, args)
+    }
+
+    fn construct(
+        &self,
+        scope: &mut LocalScope,
+        callee: Handle<dyn Object>,
+        this: Value,
+        args: Vec<Value>,
+    ) -> Result<Value, Value> {
+        self.inner.construct(scope, this, args)
+    }
+}
+
+// impl Deref for ExternalValue {
+//     type Target = dyn Object;
+//     fn deref(&self) -> &Self::Target {
+//         &self.0
+//     }
+// }
 
 unsafe impl Trace for Value {
     fn trace(&self) {
-        if let Value::External(handle) | Value::Object(handle) = self {
-            handle.trace();
+        match self {
+            Value::Object(o) => o.trace(),
+            Value::External(e) => e.trace(),
+            _ => {}
         }
     }
+}
+
+fn register_function_externals(
+    function: &dash_middle::compiler::constant::Function,
+    vm: &mut Vm,
+) -> Vec<Handle<ExternalValue>> {
+    let mut externals = Vec::new();
+
+    for External { id, is_external } in function.externals.iter().copied() {
+        let id = usize::from(id);
+
+        let val = if is_external {
+            Value::External(vm.get_external(id).expect("Referenced local not found").clone())
+        } else {
+            vm.get_local(id).expect("Referenced local not found")
+        };
+
+        fn register<O: Object + 'static>(vm: &mut Vm, idx: usize, o: O) -> Handle<ExternalValue> {
+            // first indirection, to be able to reassign to the external
+            let boxed = vm.gc.register(o);
+            // second indirection, actual thing that can be shared
+            let handle = vm.gc.register(ExternalValue::new(boxed));
+            let handle = handle.cast_handle::<ExternalValue>().unwrap();
+            vm.set_local(idx, Value::External(handle.clone()));
+            handle
+        }
+
+        let obj = match val {
+            Value::Number(n) => register(vm, id, n),
+            Value::Boolean(b) => register(vm, id, b),
+            Value::String(s) => register(vm, id, s),
+            Value::Undefined(u) => register(vm, id, u),
+            Value::Null(n) => register(vm, id, n),
+            Value::Symbol(s) => register(vm, id, s),
+            Value::External(e) => e,
+            Value::Object(o) => {
+                // TODO: find a way to not double box?
+                register(vm, id, o)
+            }
+        };
+
+        externals.push(obj);
+    }
+
+    externals
 }
 
 impl Value {
@@ -90,39 +193,7 @@ impl Value {
                 Value::Object(vm.register(regex))
             }
             Constant::Function(f) => {
-                let mut externals = Vec::new();
-
-                for External { id, is_external } in f.externals.iter().copied() {
-                    let id = usize::from(id);
-
-                    let val = if is_external {
-                        Value::External(vm.get_external(id).expect("Referenced local not found").clone())
-                    } else {
-                        vm.get_local(id).expect("Referenced local not found")
-                    };
-
-                    fn register<O: Object + 'static>(vm: &mut Vm, idx: usize, o: O) -> Handle<dyn Object> {
-                        let handle = vm.gc.register(o);
-                        vm.set_local(idx, Value::External(handle.clone()));
-                        handle
-                    }
-
-                    let obj = match val {
-                        Value::Number(n) => register(vm, id, n),
-                        Value::Boolean(b) => register(vm, id, b),
-                        Value::String(s) => register(vm, id, s),
-                        Value::Undefined(u) => register(vm, id, u),
-                        Value::Null(n) => register(vm, id, n),
-                        Value::Symbol(s) => register(vm, id, s),
-                        Value::External(e) => e,
-                        Value::Object(o) => {
-                            vm.set_local(id, Value::External(o.clone()));
-                            o
-                        }
-                    };
-
-                    externals.push(obj);
-                }
+                let externals = register_function_externals(&f, vm);
 
                 let name: Option<Rc<str>> = f.name.as_deref().map(Into::into);
                 let ty = f.ty;
@@ -264,23 +335,7 @@ impl Value {
             Value::External(ext) => ext
                 .as_primitive_capable()
                 .map(|p| p.unbox())
-                .unwrap_or_else(|| Value::Object(ext)),
-        }
-    }
-
-    /// Boxes this value
-    ///
-    /// If this value already is an object, then this will wrap it in a new allocation
-    pub fn into_boxed(self) -> Box<dyn Object> {
-        match self {
-            Value::Boolean(b) => Box::new(b),
-            Value::Number(n) => Box::new(n),
-            Value::String(s) => Box::new(s),
-            Value::Null(n) => Box::new(n),
-            Value::Undefined(u) => Box::new(u),
-            Value::Object(o) => Box::new(o),
-            Value::External(o) => Box::new(o), // TODO: is this correct?
-            Value::Symbol(s) => Box::new(s),
+                .unwrap_or_else(|| Value::Object(ext.inner.clone())),
         }
     }
 
@@ -306,7 +361,8 @@ impl Value {
 
     pub fn instanceof(&self, ctor: &Self, sc: &mut LocalScope) -> Result<bool, Value> {
         let obj = match self {
-            Self::Object(obj) | Self::External(obj) => obj,
+            Self::Object(obj) => obj,
+            Self::External(obj) => &obj.inner,
             _ => return Ok(false),
         };
 
@@ -317,9 +373,13 @@ impl Value {
         Ok(this_proto == target_proto)
     }
 
+    /// Attempts to downcast this value to a concrete type `T`.
+    ///
+    /// NOTE: if this value is an external, it will call downcast_ref on the "lower level" handle (i.e. the wrapped object)
     pub fn downcast_ref<T: 'static>(&self) -> Option<&T> {
         match self {
-            Value::Object(obj) | Value::External(obj) => obj.as_any().downcast_ref(),
+            Value::Object(obj) => obj.as_any().downcast_ref(),
+            Value::External(obj) => obj.inner.as_any().downcast_ref(),
             _ => None,
         }
     }

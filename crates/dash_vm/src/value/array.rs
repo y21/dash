@@ -239,14 +239,13 @@ impl ArrayIterator {
 
 pub fn spec_array_get_property(scope: &mut LocalScope, target: &Value, index: usize) -> Result<Value, Value> {
     // specialize array path
-    if let Value::Object(obj) | Value::External(obj) = target {
-        if let Some(arr) = obj.as_any().downcast_ref::<Array>() {
-            let inner = arr.inner().borrow();
-            return match inner.get(index) {
-                Some(value) => value.get_or_apply(scope, Value::undefined()),
-                None => Ok(Value::undefined()),
-            };
-        }
+    // TODO: broken because of externals
+    if let Some(arr) = target.downcast_ref::<Array>() {
+        let inner = arr.inner().borrow();
+        return match inner.get(index) {
+            Some(value) => value.get_or_apply(scope, Value::undefined()),
+            None => Ok(Value::undefined()),
+        };
     }
 
     target.get_property(scope, index.to_string().into())
@@ -259,18 +258,16 @@ pub fn spec_array_set_property(
     value: PropertyValue,
 ) -> Result<(), Value> {
     // specialize array path
-    if let Value::Object(obj) | Value::External(obj) = target {
-        if let Some(arr) = obj.as_any().downcast_ref::<Array>() {
-            let mut inner = arr.inner().borrow_mut();
+    if let Some(arr) = target.downcast_ref::<Array>() {
+        let mut inner = arr.inner().borrow_mut();
 
-            if index < MAX_LENGTH {
-                if index >= inner.len() {
-                    inner.resize(index + 1, PropertyValue::static_default(Value::undefined()));
-                }
-
-                inner[index] = value;
-                return Ok(());
+        if index < MAX_LENGTH {
+            if index >= inner.len() {
+                inner.resize(index + 1, PropertyValue::static_default(Value::undefined()));
             }
+
+            inner[index] = value;
+            return Ok(());
         }
     }
 

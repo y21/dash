@@ -1,4 +1,5 @@
 use crate::local::LocalScope;
+use crate::value::object::Object;
 use crate::value::Typeof;
 use crate::value::Value;
 
@@ -109,16 +110,26 @@ macro_rules! delegate {
             Self::Undefined(u) => $func(u, $other, $sc),
             Self::Null(n) => $func(n, $other, $sc),
             Self::Symbol(s) => $func(s, $other, $sc),
-            Self::Object(o) | Self::External(o) => {
+            Self::Object(o) => {
                 if let Some(prim) = o.as_primitive_capable() {
                     $func(prim, $other, $sc)
                 } else {
-                    let is_eq = match $other {
-                        Self::Object(o2) | Self::External(o2) => std::ptr::eq(o.as_ptr(), o2.as_ptr()),
+                    Ok(Value::Boolean(match $other {
+                        Self::Object(o2) => std::ptr::eq(o.as_ptr(), o2.as_ptr()),
+                        Self::External(o2) => std::ptr::eq(o.as_ptr(), o2.inner.as_ptr()),
                         _ => false,
-                    };
-
-                    Ok(Value::Boolean(is_eq))
+                    }))
+                }
+            }
+            Self::External(o) => {
+                if let Some(prim) = o.as_primitive_capable() {
+                    $func(prim, $other, $sc)
+                } else {
+                    Ok(Value::Boolean(match $other {
+                        Self::Object(o2) => std::ptr::eq(o.inner.as_ptr(), o2.as_ptr()),
+                        Self::External(o2) => std::ptr::eq(o.inner.as_ptr(), o2.inner.as_ptr()),
+                        _ => false,
+                    }))
                 }
             }
         }

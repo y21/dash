@@ -68,6 +68,17 @@ impl<T: ?Sized> Handle<T> {
     pub unsafe fn from_raw(ptr: NonNull<GcNode<T>>) -> Self {
         Self(ptr)
     }
+
+    pub fn into_raw(ptr: Self) -> NonNull<GcNode<T>> {
+        ptr.0
+    }
+}
+impl<T: Object + 'static> Handle<T> {
+    pub fn into_dyn(self) -> Handle<dyn Object> {
+        let ptr = Handle::into_raw(self);
+        // SAFETY: `T: Object` bound makes this cast safe. once CoerceUnsized is stable, we can use that instead.
+        unsafe { Handle::<dyn Object>::from_raw(ptr) }
+    }
 }
 
 impl<T: ?Sized> Eq for Handle<T> {}

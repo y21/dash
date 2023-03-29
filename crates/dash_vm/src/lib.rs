@@ -22,7 +22,7 @@ use dash_log::{debug, error, span, Level};
 use dash_middle::compiler::instruction::Instruction;
 use gc2::{handle::Handle, Gc};
 use util::unlikely;
-use value::{promise::{Promise, PromiseState}, ValueContext, function::bound::BoundFunction, PureBuiltin, object::NamedObject};
+use value::{promise::{Promise, PromiseState}, ValueContext, function::bound::BoundFunction, PureBuiltin, object::NamedObject, ExternalValue};
 
 #[cfg(feature = "jit")]
 mod jit;
@@ -811,7 +811,7 @@ impl Vm {
         self.stack.get(self.get_frame_sp() + id).cloned()
     }
 
-    pub(crate) fn get_external(&self, id: usize) -> Option<&Handle<dyn Object>> {
+    pub(crate) fn get_external(&self, id: usize) -> Option<&Handle<ExternalValue>> {
         self.frames.last()?.externals.get(id)
     }
 
@@ -820,8 +820,9 @@ impl Vm {
         let idx = sp + id;
 
         if let Value::External(o) = &self.stack[idx] {
-            let mut o = o.cast_handle::<Box<dyn Object>>().unwrap();
-            o.replace(value.into_boxed());
+            // let mut o = o.cast_handle::<Box<dyn Object>>().unwrap();
+            // o.replace(value.into_boxed());
+            todo!()
         } else {
             self.stack[idx] = value;
         }
