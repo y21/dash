@@ -5,12 +5,7 @@ use std::{
     vec::Drain,
 };
 
-use crate::{
-    frame::Frame,
-    gc2::handle::Handle,
-    local::LocalScope,
-    value::{object::Object, ExternalValue},
-};
+use crate::{frame::Frame, gc2::handle::Handle, local::LocalScope, value::ExternalValue};
 
 use super::{value::Value, Vm};
 use dash_middle::compiler::{constant::Constant, instruction::Instruction};
@@ -1142,11 +1137,9 @@ mod handlers {
         Ok(None)
     }
 
-    fn assign_to_external(handle: &Handle<ExternalValue>, value: Value) {
-        todo!()
-        // let value = value.into_boxed();
-        // let mut handle = handle.cast_handle::<Box<dyn Object>>().expect("not an external");
-        // handle.replace(value);
+    fn assign_to_external(sc: &mut LocalScope, handle: &Handle<ExternalValue>, value: Value) {
+        let value = value.into_gc(sc);
+        unsafe { ExternalValue::replace(handle, value) };
     }
 
     pub fn storelocalext(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
@@ -1159,7 +1152,8 @@ mod handlers {
                 let right = cx.pop_stack();
                 let mut scope = cx.scope();
                 let res = $op(&value, &right, &mut scope)?;
-                assign_to_external(scope.get_external(id.into()).unwrap(), res.clone());
+                let external = scope.get_external(id.into()).unwrap().clone();
+                assign_to_external(&mut scope, &external, res.clone());
                 scope.stack.push(res);
             }};
         }
@@ -1170,7 +1164,8 @@ mod handlers {
                 let right = Value::number(1.0);
                 let mut scope = cx.scope();
                 let res = $op(&value, &right, &mut scope)?;
-                assign_to_external(scope.get_external(id.into()).unwrap(), res.clone());
+                let external = scope.get_external(id.into()).unwrap().clone();
+                assign_to_external(&mut scope, &external, res.clone());
                 scope.stack.push(res);
             }};
         }
@@ -1181,7 +1176,8 @@ mod handlers {
                 let right = Value::number(1.0);
                 let mut scope = cx.scope();
                 let res = $op(&value, &right, &mut scope)?;
-                assign_to_external(scope.get_external(id.into()).unwrap(), res);
+                let external = scope.get_external(id.into()).unwrap().clone();
+                assign_to_external(&mut scope, &external, res);
                 scope.stack.push(value);
             }};
         }
@@ -1189,8 +1185,10 @@ mod handlers {
         match kind {
             AssignKind::Assignment => {
                 let value = cx.pop_stack();
-                assign_to_external(cx.get_external(id.into()), value.clone());
-                cx.stack.push(value);
+                let mut scope = cx.scope();
+                let external = scope.get_external(id.into()).unwrap().clone();
+                assign_to_external(&mut scope, &external, value.clone());
+                scope.stack.push(value);
             }
             AssignKind::AddAssignment => op!(Value::add),
             AssignKind::SubAssignment => op!(Value::sub),

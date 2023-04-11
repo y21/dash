@@ -28,7 +28,10 @@ impl<'a> LocalScope<'a> {
     pub fn add_value(&mut self, value: Value) {
         match value {
             Value::Object(o) => self.add_ref(o),
-            Value::External(o) => self.add_ref(o.inner.clone()),
+            Value::External(o) => {
+                self.add_ref(o.inner.clone());
+                self.add_ref(o.into_dyn());
+            }
             _ => {}
         }
     }

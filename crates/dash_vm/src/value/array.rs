@@ -239,7 +239,7 @@ impl ArrayIterator {
 
 pub fn spec_array_get_property(scope: &mut LocalScope, target: &Value, index: usize) -> Result<Value, Value> {
     // specialize array path
-    // TODO: broken because of externals
+    // TODO: broken because of externals.. edit: is it?
     if let Some(arr) = target.downcast_ref::<Array>() {
         let inner = arr.inner().borrow();
         return match inner.get(index) {

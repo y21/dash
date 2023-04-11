@@ -13,8 +13,6 @@ pub mod promise;
 pub mod regex;
 pub mod set;
 pub mod typedarray;
-
-use std::ops::Deref;
 use std::rc::Rc;
 
 use dash_middle::compiler::{constant::Constant, external::External};
@@ -76,6 +74,16 @@ impl ExternalValue {
     pub fn new(b: Handle<dyn Object>) -> Self {
         Self { inner: b }
     }
+
+    /// # Safety
+    /// Callers must ensure that the handle being replaced does not have active borrows.
+    /// You also must not have any downcasted `Handle` (e.g. `Handle<str>`)
+    /// as the type might change with this replace
+    pub unsafe fn replace(this: &Handle<ExternalValue>, value: Handle<dyn Object>) {
+        // Even though it looks like we are assigning through a shared reference,
+        // this is ok because Handle has a mutable pointer to the GcNode on the heap
+        (*this.as_ptr()).value.inner = value;
+    }
 }
 
 impl Object for ExternalValue {
@@ -93,6 +101,10 @@ impl Object for ExternalValue {
         as_primitive_capable
     );
 
+    // NB: this intentionally does not delegate to self.inner.as_any() because
+    // we need to downcast to ExternalValue specifically in some places.
+    // for that reason, prefer calling downcast_ref not on handles directly
+    // but on values.
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -100,7 +112,7 @@ impl Object for ExternalValue {
     fn apply(
         &self,
         scope: &mut LocalScope,
-        callee: Handle<dyn Object>,
+        _callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Value, Value> {
@@ -110,7 +122,7 @@ impl Object for ExternalValue {
     fn construct(
         &self,
         scope: &mut LocalScope,
-        callee: Handle<dyn Object>,
+        _callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Value, Value> {
@@ -381,6 +393,33 @@ impl Value {
             Value::Object(obj) => obj.as_any().downcast_ref(),
             Value::External(obj) => obj.inner.as_any().downcast_ref(),
             _ => None,
+        }
+    }
+
+    pub fn into_gc(self, sc: &mut LocalScope) -> Handle<dyn Object> {
+        match self {
+            Value::Number(v) => sc.register(v),
+            Value::Boolean(v) => sc.register(v),
+            Value::String(v) => sc.register(v),
+            Value::Undefined(v) => sc.register(v),
+            Value::Null(v) => sc.register(v),
+            Value::Symbol(v) => sc.register(v),
+            Value::Object(v) => v,
+            Value::External(v) => v.into_dyn(),
+        }
+    }
+
+    /// Prefer into_gc over this where possible.
+    pub fn into_gc_vm(self, vm: &mut Vm) -> Handle<dyn Object> {
+        match self {
+            Value::Number(v) => vm.register(v),
+            Value::Boolean(v) => vm.register(v),
+            Value::String(v) => vm.register(v),
+            Value::Undefined(v) => vm.register(v),
+            Value::Null(v) => vm.register(v),
+            Value::Symbol(v) => vm.register(v),
+            Value::Object(v) => v,
+            Value::External(v) => v.into_dyn(),
         }
     }
 }

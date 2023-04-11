@@ -819,10 +819,9 @@ impl Vm {
         let sp = self.get_frame_sp();
         let idx = sp + id;
 
-        if let Value::External(o) = &self.stack[idx] {
-            // let mut o = o.cast_handle::<Box<dyn Object>>().unwrap();
-            // o.replace(value.into_boxed());
-            todo!()
+        if let Value::External(o) = self.stack[idx].clone() {
+            let value = value.into_gc_vm(self);
+            unsafe { ExternalValue::replace(&o, value) };
         } else {
             self.stack[idx] = value;
         }

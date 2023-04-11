@@ -120,15 +120,6 @@ impl Handle<dyn Object> {
     }
 }
 
-impl Handle<Box<dyn Object>> {
-    // FIXME: this is unsound, the mutable reference created inside of this function
-    // can alias.
-    pub fn replace(&mut self, new: Box<dyn Object>) {
-        let inner = unsafe { self.0.as_mut() };
-        inner.value = new;
-    }
-}
-
 impl<T: ?Sized> Hash for Handle<T> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.as_ptr().hash(state);

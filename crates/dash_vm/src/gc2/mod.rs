@@ -269,10 +269,11 @@ mod tests {
             {
                 let h4 = register_gc!(gc, (Box::new(1.2345) as Box<dyn Object>));
                 let mut h4c = h4.cast_handle::<Box<dyn Object>>().unwrap();
-                h4c.replace(Box::new(Rc::from("hi!")));
+                // h4c.replace(Box::new(Rc::from("hi!")));
+                todo!();
                 let h4cc = (**h4c).as_any().downcast_ref::<Rc<str>>().cloned();
                 assert_eq!(h4cc.as_deref(), Some("hi!"));
-            } // TODOO: update references of replace and change Value::External to be Handle<Box<dyn Object>>
+            }
 
             // lastly, test if Gc::drop works correctly. run under miri to see possible leaks
             register_gc!(gc, Rc::from("test"));

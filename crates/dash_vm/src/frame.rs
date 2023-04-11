@@ -13,7 +13,6 @@ use crate::gc2::trace::Trace;
 use crate::value::ExternalValue;
 
 use super::value::function::user::UserFunction;
-use super::value::object::Object;
 use super::value::Value;
 
 #[derive(Debug, Clone)]

@@ -124,6 +124,7 @@ impl<R: Read> Reader<R> {
 /// This allows moving `Value`s between threads (but not ever touching them), and eventually moving them back to the original thread.
 ///
 /// Dropping the ThreadSafeValue on a different thread than it was created on will panic, and not drop the contained value.
+//TODO: !! THIS SHOULD ABORT INSTEAD OF PANICKING FOR DROP !!
 pub struct ThreadSafeStorage<T> {
     value: ManuallyDrop<T>,
     thread_id: ThreadId,
