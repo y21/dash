@@ -17,11 +17,7 @@ const is = {
 
 function inner(value, depth) {
     if (is.string(value)) {
-        if (depth > 0) {
-            return '"' + value + '"';
-        } else {
-            return value;
-        }
+        return '"' + value + '"'; 
     }
 
     if (is.error(value)) {
