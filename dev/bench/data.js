@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1681252441292,
+  "lastUpdate": 1681253042404,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -2585,6 +2585,44 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 73074,
             "range": "± 309",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "name": "y21",
+            "username": "y21"
+          },
+          "id": "aad7fbf613da67a963b03be8db5dd7955e8b40a1",
+          "message": "rework gc to remove double indirection",
+          "timestamp": "2023-04-09T15:08:27Z",
+          "url": "https://github.com/y21/dash/pull/54/commits/aad7fbf613da67a963b03be8db5dd7955e8b40a1"
+        },
+        "date": 1681253040483,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 3189322,
+            "range": "± 44391",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 269645,
+            "range": "± 592",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 76411,
+            "range": "± 118",
             "unit": "ns/iter"
           }
         ]
