@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1680110668126,
+  "lastUpdate": 1681242356449,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -2459,6 +2459,48 @@ window.BENCHMARK_DATA = {
             "name": "interpreter",
             "value": 3699040,
             "range": "± 195872",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "Timo",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5a7ebd0249a00ada8bbdbbfe935dbe025a467723",
+          "message": "Merge pull request #53 from p2js/patch-1\n\nReturn strings in quotes regardless of depth",
+          "timestamp": "2023-04-11T21:41:10+02:00",
+          "tree_id": "6fde15b3d7e1def2e617ec1ded424749fd93613e",
+          "url": "https://github.com/y21/dash/commit/5a7ebd0249a00ada8bbdbbfe935dbe025a467723"
+        },
+        "date": 1681242355008,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 3705549,
+            "range": "± 181629",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 351396,
+            "range": "± 21067",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 111241,
+            "range": "± 4816",
             "unit": "ns/iter"
           }
         ]
