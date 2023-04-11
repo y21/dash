@@ -170,6 +170,7 @@ mod tests {
 
     use crate::value::array::Array;
     use crate::value::object::NamedObject;
+    use crate::value::ExternalValue;
 
     use super::*;
 
@@ -267,12 +268,13 @@ mod tests {
 
             // test that Handle::replace works
             {
-                let h4 = register_gc!(gc, (Box::new(1.2345) as Box<dyn Object>));
-                let mut h4c = h4.cast_handle::<Box<dyn Object>>().unwrap();
-                // h4c.replace(Box::new(Rc::from("hi!")));
-                todo!();
-                let h4cc = (**h4c).as_any().downcast_ref::<Rc<str>>().cloned();
-                assert_eq!(h4cc.as_deref(), Some("hi!"));
+                let h4i = register_gc!(gc, 123.0);
+                let h4 = register_gc!(gc, ExternalValue::new(h4i));
+                let mut h4c = h4.cast_handle::<ExternalValue>().unwrap();
+                let h4i2 = register_gc!(gc, 456.0);
+                ExternalValue::replace(&h4c, h4i2);
+                let inner = h4c.inner.as_any().downcast_ref::<f64>().unwrap();
+                assert_eq!(*inner, 456.0);
             }
 
             // lastly, test if Gc::drop works correctly. run under miri to see possible leaks
