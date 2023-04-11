@@ -33,10 +33,10 @@ pub fn trace(tt: TokenStream) -> TokenStream {
     };
 
     let found_crate = match crate_name("dash_vm").unwrap() {
-        FoundCrate::Itself => quote!(crate::gc2::trace::Trace),
+        FoundCrate::Itself => quote!(crate::gc::trace::Trace),
         FoundCrate::Name(crate_name) => {
             let ident = Ident::new(&crate_name, Span::call_site());
-            quote!(::#ident::gc2::trace::Trace)
+            quote!(::#ident::gc::trace::Trace)
         }
     };
 

@@ -2,7 +2,7 @@
 use std::{fmt, ops::RangeBounds, vec::Drain, mem};
 
 use crate::{
-    value::function::Function, util::cold_path, gc2::trace::Trace,
+    value::function::Function, util::cold_path, gc::trace::Trace,
 };
 
 use self::{
@@ -20,7 +20,7 @@ use self::{
 
 use dash_log::{debug, error, span, Level};
 use dash_middle::compiler::instruction::Instruction;
-use gc2::{handle::Handle, Gc};
+use gc::{handle::Handle, Gc};
 use util::unlikely;
 use value::{promise::{Promise, PromiseState}, ValueContext, function::bound::BoundFunction, PureBuiltin, object::NamedObject, ExternalValue};
 
@@ -32,7 +32,7 @@ pub mod eval;
 pub mod external;
 pub mod frame;
 // pub mod gc;
-pub mod gc2;
+pub mod gc;
 pub mod js_std;
 pub mod local;
 pub mod params;

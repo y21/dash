@@ -1,4 +1,4 @@
-use dash_vm::gc2::handle::Handle;
+use dash_vm::gc::handle::Handle;
 use dash_vm::local::LocalScope;
 use dash_vm::value::error::Error;
 use dash_vm::value::object::NamedObject;

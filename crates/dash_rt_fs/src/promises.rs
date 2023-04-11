@@ -2,7 +2,7 @@ use std::future::Future;
 
 use dash_rt::event::EventMessage;
 use dash_rt::state::State;
-use dash_vm::gc2::persistent::Persistent;
+use dash_vm::gc::persistent::Persistent;
 use dash_vm::local::LocalScope;
 use dash_vm::value::error::Error;
 use dash_vm::value::function::native::CallContext;

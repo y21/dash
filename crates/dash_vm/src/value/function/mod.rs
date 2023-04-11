@@ -10,7 +10,7 @@ use dash_proc_macro::Trace;
 
 use crate::{
     dispatch::HandleResult,
-    gc2::{handle::Handle, trace::Trace},
+    gc::{handle::Handle, trace::Trace},
     local::LocalScope,
     throw, Vm,
 };

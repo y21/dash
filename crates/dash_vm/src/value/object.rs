@@ -1,10 +1,10 @@
 use std::{any::Any, borrow::Cow, cell::RefCell, fmt::Debug, ptr::addr_of};
 
-use crate::gc2::{persistent::Persistent, trace::Trace};
+use crate::gc::{persistent::Persistent, trace::Trace};
 use bitflags::bitflags;
 use dash_proc_macro::Trace;
 
-use crate::{gc2::handle::Handle, local::LocalScope, throw, Vm};
+use crate::{gc::handle::Handle, local::LocalScope, throw, Vm};
 
 use super::{
     ops::abstractions::conversions::ValueConversion,
@@ -157,7 +157,7 @@ macro_rules! delegate {
         fn apply(
             &self,
             sc: &mut $crate::local::LocalScope,
-            handle: $crate::gc2::handle::Handle<dyn Object>,
+            handle: $crate::gc::handle::Handle<dyn Object>,
             this: $crate::value::Value,
             args: Vec<$crate::value::Value>,
         ) -> Result<$crate::value::Value, $crate::value::Value> {
@@ -168,7 +168,7 @@ macro_rules! delegate {
         fn construct(
             &self,
             sc: &mut $crate::local::LocalScope,
-            handle: $crate::gc2::handle::Handle<dyn Object>,
+            handle: $crate::gc::handle::Handle<dyn Object>,
             this: $crate::value::Value,
             args: Vec<$crate::value::Value>,
         ) -> Result<$crate::value::Value, $crate::value::Value> {

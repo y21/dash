@@ -5,7 +5,7 @@ use std::hash::Hasher;
 use std::iter;
 use std::rc::Rc;
 
-use crate::gc2::handle::Handle;
+use crate::gc::handle::Handle;
 use crate::local::LocalScope;
 use crate::throw;
 

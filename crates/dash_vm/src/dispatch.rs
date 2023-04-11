@@ -5,7 +5,7 @@ use std::{
     vec::Drain,
 };
 
-use crate::{frame::Frame, gc2::handle::Handle, local::LocalScope, value::ExternalValue};
+use crate::{frame::Frame, gc::handle::Handle, local::LocalScope, value::ExternalValue};
 
 use super::{value::Value, Vm};
 use dash_middle::compiler::{constant::Constant, instruction::Instruction};

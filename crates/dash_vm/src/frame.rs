@@ -8,8 +8,8 @@ use dash_middle::compiler::CompileResult;
 use dash_middle::parser::statement::FunctionKind;
 use dash_proc_macro::Trace;
 
-use crate::gc2::handle::Handle;
-use crate::gc2::trace::Trace;
+use crate::gc::handle::Handle;
+use crate::gc::trace::Trace;
 use crate::value::ExternalValue;
 
 use super::value::function::user::UserFunction;

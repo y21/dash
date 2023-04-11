@@ -1,4 +1,4 @@
-use crate::gc2::handle::Handle;
+use crate::gc::handle::Handle;
 
 use super::{object::Object, primitive::Symbol, Value};
 

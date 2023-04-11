@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use dash_vm::gc2::persistent::Persistent;
+use dash_vm::gc::persistent::Persistent;
 use dash_vm::value::object::Object;
 use dash_vm::Vm;
 

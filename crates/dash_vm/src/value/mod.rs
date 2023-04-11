@@ -22,7 +22,7 @@ use dash_proc_macro::Trace;
 
 use crate::{delegate, throw};
 use crate::{
-    gc2::{handle::Handle, trace::Trace},
+    gc::{handle::Handle, trace::Trace},
     value::{
         function::FunctionKind,
         primitive::{Null, Undefined},

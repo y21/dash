@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use crate::gc2::handle::Handle;
-use crate::gc2::trace::Trace;
+use crate::gc::handle::Handle;
+use crate::gc::trace::Trace;
 
 use super::local::LocalScope;
 use super::value::object::Object;
