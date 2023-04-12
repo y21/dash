@@ -494,6 +494,9 @@ mod handlers {
         let is_constructor = meta.is_constructor_call();
         let has_this = meta.is_object_call();
 
+        let callee = cx.pop_stack();
+        let this = if has_this { cx.pop_stack() } else { Value::undefined() };
+
         let (args, refs) = {
             let argc = argc.into();
             let mut args = Vec::with_capacity(argc);
@@ -511,10 +514,6 @@ mod handlers {
 
             (args, refs)
         };
-
-        let callee = cx.pop_stack();
-
-        let this = if has_this { cx.pop_stack() } else { Value::undefined() };
 
         let mut scope = cx.scope();
         let scope_ref = &scope as *const LocalScope;

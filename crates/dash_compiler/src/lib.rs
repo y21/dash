@@ -1186,14 +1186,6 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             return Ok(());
         }
 
-        let has_this = if let Expr::PropertyAccess(p) = *target {
-            ib.visit_property_access_expr(p, true)?;
-            true
-        } else {
-            ib.accept_expr(*target)?;
-            false
-        };
-
         let argc = arguments
             .len()
             .try_into()
@@ -1202,6 +1194,14 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         for arg in arguments {
             ib.accept_expr(arg)?;
         }
+
+        let has_this = if let Expr::PropertyAccess(p) = *target {
+            ib.visit_property_access_expr(p, true)?;
+            true
+        } else {
+            ib.accept_expr(*target)?;
+            false
+        };
 
         let meta = FunctionCallMetadata::new_checked(argc, constructor_call, has_this)
             .ok_or(CompileError::ParameterLimitExceeded)?;
