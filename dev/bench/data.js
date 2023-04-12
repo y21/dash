@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1681260034551,
+  "lastUpdate": 1681260494473,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -2703,6 +2703,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 71592,
             "range": "± 162",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "Timo",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8083d95d45f97150322778f1e313c5392eefe34d",
+          "message": "Merge pull request #54 from y21/gc-single-indirection\n\nrework gc to remove double indirection",
+          "timestamp": "2023-04-12T02:44:32+02:00",
+          "tree_id": "b87334b1cbde7d3479f582707148d35e64e5bb50",
+          "url": "https://github.com/y21/dash/commit/8083d95d45f97150322778f1e313c5392eefe34d"
+        },
+        "date": 1681260492883,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 3222915,
+            "range": "± 43992",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 270155,
+            "range": "± 365",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 75225,
+            "range": "± 164",
             "unit": "ns/iter"
           }
         ]
