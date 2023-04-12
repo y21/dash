@@ -7,7 +7,7 @@ use crate::dispatch::HandleResult;
 use crate::frame::Frame;
 use crate::gc::handle::Handle;
 use crate::local::LocalScope;
-use crate::value::object::Object;
+use crate::value::ExternalValue;
 use crate::value::Value;
 
 use super::extend_stack_from_args;
@@ -15,15 +15,15 @@ use super::extend_stack_from_args;
 #[derive(Debug, Clone, Trace)]
 pub struct UserFunction {
     inner: Rc<Function>,
-    externals: Rc<[Handle<dyn Object>]>,
+    externals: Rc<[Handle<ExternalValue>]>,
 }
 
 impl UserFunction {
-    pub fn new(inner: Rc<Function>, externals: Rc<[Handle<dyn Object>]>) -> Self {
+    pub fn new(inner: Rc<Function>, externals: Rc<[Handle<ExternalValue>]>) -> Self {
         Self { inner, externals }
     }
 
-    pub fn externals(&self) -> &Rc<[Handle<dyn Object>]> {
+    pub fn externals(&self) -> &Rc<[Handle<ExternalValue>]> {
         &self.externals
     }
 

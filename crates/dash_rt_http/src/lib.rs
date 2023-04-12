@@ -163,12 +163,8 @@ impl Object for HttpContext {
 }
 
 fn ctx_respond(cx: CallContext) -> Result<Value, Value> {
-    let this = match &cx.this {
-        Value::Object(this) | Value::External(this) => match this.as_any().downcast_ref::<HttpContext>() {
-            Some(ctx) => ctx,
-            None => throw!(cx.scope, TypeError, "Incompatible receiver"),
-        },
-        _ => throw!(cx.scope, TypeError, "Missing this"),
+    let Some(this) = cx.this.downcast_ref::<HttpContext>() else {
+        throw!(cx.scope, TypeError, "Missing this");
     };
 
     let sender = match this.sender.try_take() {

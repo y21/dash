@@ -56,9 +56,7 @@ pub struct Tree<T> {
 }
 impl<T> Default for Tree<T> {
     fn default() -> Self {
-        Self {
-            pool: Vec::new()
-        }
+        Self { pool: Vec::new() }
     }
 }
 

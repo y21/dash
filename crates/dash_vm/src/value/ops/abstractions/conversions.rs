@@ -95,7 +95,8 @@ impl ValueConversion for Value {
                 _ => Ok(s.parse::<f64>().unwrap_or(f64::NAN)),
             },
             Value::Symbol(_) => throw!(sc, TypeError, "Cannot convert symbol to number"),
-            Value::Object(o) | Value::External(o) => object_to_number(self, o, sc),
+            Value::Object(o) => object_to_number(self, o, sc),
+            Value::External(o) => object_to_number(self, &o.inner, sc),
         }
     }
 
@@ -128,46 +129,50 @@ impl ValueConversion for Value {
             Value::Null(n) => ValueConversion::to_string(n, sc),
             Value::Undefined(u) => ValueConversion::to_string(u, sc),
             Value::Number(n) => ValueConversion::to_string(n, sc),
-            Value::External(o) | Value::Object(o) => object_to_string(self, o, sc),
+            Value::Object(o) => object_to_string(self, o, sc),
+            Value::External(o) => object_to_string(self, &o.inner, sc),
             Value::Symbol(_) => throw!(sc, TypeError, "Cannot convert symbol to a string"),
         }
     }
 
     fn to_primitive(&self, sc: &mut LocalScope, preferred_type: Option<PreferredType>) -> Result<Value, Value> {
         // 1. If Type(input) is Object, then
-        if let Value::Object(obj) | Value::External(obj) = self {
-            if let Some(prim) = obj.as_primitive_capable() {
-                return prim.to_primitive(sc, preferred_type);
-            }
+        let obj = match self {
+            Value::Object(o) => o,
+            Value::External(o) => &o.inner,
+            _ => return Ok(self.clone()),
+        };
 
-            // a. Let exoticToPrim be ? GetMethod(input, @@toPrimitive).
-            let to_primitive = sc.statics.symbol_to_primitive.clone();
-            let exotic_to_prim = self.get_property(sc, to_primitive.into())?.into_option();
-
-            // i. If preferredType is not present, let hint be "default".
-            let preferred_type = preferred_type.unwrap_or(PreferredType::Default);
-
-            // b. If exoticToPrim is not undefined, then
-            if let Some(exotic_to_prim) = exotic_to_prim {
-                let preferred_type = preferred_type.to_value(sc);
-
-                // iv. Let result be ? Call(exoticToPrim, input, « hint »).
-                let result = exotic_to_prim.apply(sc, self.clone(), vec![preferred_type])?;
-
-                // If Type(result) is not Object, return result.
-                // TODO: this can still be an object if Value::External
-                if !matches!(result, Value::Object(_)) {
-                    return Ok(result);
-                }
-
-                // vi. Throw a TypeError exception.
-                throw!(sc, TypeError, "Failed to convert to primitive");
-            }
-
-            self.ordinary_to_primitive(sc, preferred_type)
-        } else {
-            Ok(self.clone())
+        if let Some(prim) = obj.as_primitive_capable() {
+            return prim.to_primitive(sc, preferred_type);
         }
+
+        // a. Let exoticToPrim be ? GetMethod(input, @@toPrimitive).
+        let to_primitive = sc.statics.symbol_to_primitive.clone();
+        let exotic_to_prim = self.get_property(sc, to_primitive.into())?.into_option();
+
+        // i. If preferredType is not present, let hint be "default".
+        let preferred_type = preferred_type.unwrap_or(PreferredType::Default);
+
+        // b. If exoticToPrim is not undefined, then
+        if let Some(exotic_to_prim) = exotic_to_prim {
+            let preferred_type = preferred_type.to_value(sc);
+
+            // iv. Let result be ? Call(exoticToPrim, input, « hint »).
+            let result = exotic_to_prim.apply(sc, self.clone(), vec![preferred_type])?;
+
+            // If Type(result) is not Object, return result.
+            // TODO: this can still be an object if Value::External
+            // TODO2: ^ can it? we usually unbox all locals on use, so you can't return an external
+            if !matches!(result, Value::Object(_)) {
+                return Ok(result);
+            }
+
+            // vi. Throw a TypeError exception.
+            throw!(sc, TypeError, "Failed to convert to primitive");
+        }
+
+        self.ordinary_to_primitive(sc, preferred_type)
     }
 
     fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value> {
@@ -191,7 +196,7 @@ impl ValueConversion for Value {
             Value::Symbol(s) => register_dyn(sc, |sc| BoxedSymbol::new(sc, s.clone())),
             Value::Number(Number(n)) => register_dyn(sc, |sc| BoxedNumber::new(sc, *n)),
             Value::String(s) => register_dyn(sc, |sc| BoxedString::new(sc, s.clone())),
-            Value::External(e) => Ok(e.clone()), // TODO: is this correct?
+            Value::External(e) => Ok(e.inner.clone()), // TODO: is this correct?
         }
     }
 }

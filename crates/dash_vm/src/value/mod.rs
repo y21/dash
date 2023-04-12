@@ -13,7 +13,6 @@ pub mod promise;
 pub mod regex;
 pub mod set;
 pub mod typedarray;
-
 use std::rc::Rc;
 
 use dash_middle::compiler::{constant::Constant, external::External};
@@ -63,15 +62,136 @@ pub enum Value {
     /// The object type
     Object(Handle<dyn Object>),
     /// An "external" value that is being used by other functions.
-    External(Handle<dyn Object>),
+    External(Handle<ExternalValue>),
 }
+
+#[derive(Debug, Trace)]
+pub struct ExternalValue {
+    pub inner: Handle<dyn Object>,
+}
+
+impl ExternalValue {
+    pub fn new(b: Handle<dyn Object>) -> Self {
+        Self { inner: b }
+    }
+
+    /// # Safety
+    /// Callers must ensure that the handle being replaced does not have active borrows.
+    /// You also must not have any downcasted `Handle` (e.g. `Handle<str>`)
+    /// as the type might change with this replace
+    pub unsafe fn replace(this: &Handle<ExternalValue>, value: Handle<dyn Object>) {
+        // Even though it looks like we are assigning through a shared reference,
+        // this is ok because Handle has a mutable pointer to the GcNode on the heap
+        (*this.as_ptr()).value.inner = value;
+    }
+}
+
+impl Object for ExternalValue {
+    delegate!(
+        inner,
+        set_property,
+        delete_property,
+        set_prototype,
+        own_keys,
+        get_own_property_descriptor,
+        get_property,
+        get_property_descriptor,
+        get_prototype,
+        type_of,
+        as_primitive_capable
+    );
+
+    // NB: this intentionally does not delegate to self.inner.as_any() because
+    // we need to downcast to ExternalValue specifically in some places.
+    // for that reason, prefer calling downcast_ref not on handles directly
+    // but on values.
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn apply(
+        &self,
+        scope: &mut LocalScope,
+        _callee: Handle<dyn Object>,
+        this: Value,
+        args: Vec<Value>,
+    ) -> Result<Value, Value> {
+        self.inner.apply(scope, this, args)
+    }
+
+    fn construct(
+        &self,
+        scope: &mut LocalScope,
+        _callee: Handle<dyn Object>,
+        this: Value,
+        args: Vec<Value>,
+    ) -> Result<Value, Value> {
+        self.inner.construct(scope, this, args)
+    }
+}
+
+// impl Deref for ExternalValue {
+//     type Target = dyn Object;
+//     fn deref(&self) -> &Self::Target {
+//         &self.0
+//     }
+// }
 
 unsafe impl Trace for Value {
     fn trace(&self) {
-        if let Value::External(handle) | Value::Object(handle) = self {
-            handle.trace();
+        match self {
+            Value::Object(o) => o.trace(),
+            Value::External(e) => e.trace(),
+            _ => {}
         }
     }
+}
+
+fn register_function_externals(
+    function: &dash_middle::compiler::constant::Function,
+    vm: &mut Vm,
+) -> Vec<Handle<ExternalValue>> {
+    let mut externals = Vec::new();
+
+    for External { id, is_external } in function.externals.iter().copied() {
+        let id = usize::from(id);
+
+        let val = if is_external {
+            Value::External(vm.get_external(id).expect("Referenced local not found").clone())
+        } else {
+            vm.get_local(id).expect("Referenced local not found")
+        };
+
+        /// "Boxes" the object and also registers it on the GC
+        fn rebox<O: Object + 'static>(vm: &mut Vm, idx: usize, o: O) -> Handle<ExternalValue> {
+            // first indirection, to be able to reassign to the external
+            let boxed = vm.gc.register(o);
+            // second indirection, actual thing that can be shared
+            let handle = vm.gc.register(ExternalValue::new(boxed));
+            let handle = handle.cast_handle::<ExternalValue>().unwrap();
+            vm.set_local(idx, Value::External(handle.clone()));
+            handle
+        }
+
+        let obj = match val {
+            Value::Number(n) => rebox(vm, id, n),
+            Value::Boolean(b) => rebox(vm, id, b),
+            Value::String(s) => rebox(vm, id, s),
+            Value::Undefined(u) => rebox(vm, id, u),
+            Value::Null(n) => rebox(vm, id, n),
+            Value::Symbol(s) => rebox(vm, id, s),
+            Value::External(e) => e,
+            Value::Object(o) => vm
+                .gc
+                .register(ExternalValue::new(o))
+                .cast_handle::<ExternalValue>()
+                .unwrap(),
+        };
+
+        externals.push(obj);
+    }
+
+    externals
 }
 
 impl Value {
@@ -87,39 +207,7 @@ impl Value {
                 Value::Object(vm.register(regex))
             }
             Constant::Function(f) => {
-                let mut externals = Vec::new();
-
-                for External { id, is_external } in f.externals.iter().copied() {
-                    let id = usize::from(id);
-
-                    let val = if is_external {
-                        Value::External(vm.get_external(id).expect("Referenced local not found").clone())
-                    } else {
-                        vm.get_local(id).expect("Referenced local not found")
-                    };
-
-                    fn register<O: Object + 'static>(vm: &mut Vm, idx: usize, o: O) -> Handle<dyn Object> {
-                        let handle = vm.gc.register(o);
-                        vm.set_local(idx, Value::External(handle.clone()));
-                        handle
-                    }
-
-                    let obj = match val {
-                        Value::Number(n) => register(vm, id, n),
-                        Value::Boolean(b) => register(vm, id, b),
-                        Value::String(s) => register(vm, id, s),
-                        Value::Undefined(u) => register(vm, id, u),
-                        Value::Null(n) => register(vm, id, n),
-                        Value::Symbol(s) => register(vm, id, s),
-                        Value::External(e) => e,
-                        Value::Object(o) => {
-                            vm.set_local(id, Value::External(o.clone()));
-                            o
-                        }
-                    };
-
-                    externals.push(obj);
-                }
+                let externals = register_function_externals(&f, vm);
 
                 let name: Option<Rc<str>> = f.name.as_deref().map(Into::into);
                 let ty = f.ty;
@@ -261,23 +349,7 @@ impl Value {
             Value::External(ext) => ext
                 .as_primitive_capable()
                 .map(|p| p.unbox())
-                .unwrap_or_else(|| Value::Object(ext)),
-        }
-    }
-
-    /// Boxes this value
-    ///
-    /// If this value already is an object, then this will wrap it in a new allocation
-    pub fn into_boxed(self) -> Box<dyn Object> {
-        match self {
-            Value::Boolean(b) => Box::new(b),
-            Value::Number(n) => Box::new(n),
-            Value::String(s) => Box::new(s),
-            Value::Null(n) => Box::new(n),
-            Value::Undefined(u) => Box::new(u),
-            Value::Object(o) => Box::new(o),
-            Value::External(o) => Box::new(o), // TODO: is this correct?
-            Value::Symbol(s) => Box::new(s),
+                .unwrap_or_else(|| Value::Object(ext.inner.clone())),
         }
     }
 
@@ -303,7 +375,8 @@ impl Value {
 
     pub fn instanceof(&self, ctor: &Self, sc: &mut LocalScope) -> Result<bool, Value> {
         let obj = match self {
-            Self::Object(obj) | Self::External(obj) => obj,
+            Self::Object(obj) => obj,
+            Self::External(obj) => &obj.inner,
             _ => return Ok(false),
         };
 
@@ -314,10 +387,41 @@ impl Value {
         Ok(this_proto == target_proto)
     }
 
+    /// Attempts to downcast this value to a concrete type `T`.
+    ///
+    /// NOTE: if this value is an external, it will call downcast_ref on the "lower level" handle (i.e. the wrapped object)
     pub fn downcast_ref<T: 'static>(&self) -> Option<&T> {
         match self {
-            Value::Object(obj) | Value::External(obj) => obj.as_any().downcast_ref(),
+            Value::Object(obj) => obj.as_any().downcast_ref(),
+            Value::External(obj) => obj.inner.as_any().downcast_ref(),
             _ => None,
+        }
+    }
+
+    pub fn into_gc(self, sc: &mut LocalScope) -> Handle<dyn Object> {
+        match self {
+            Value::Number(v) => sc.register(v),
+            Value::Boolean(v) => sc.register(v),
+            Value::String(v) => sc.register(v),
+            Value::Undefined(v) => sc.register(v),
+            Value::Null(v) => sc.register(v),
+            Value::Symbol(v) => sc.register(v),
+            Value::Object(v) => v,
+            Value::External(v) => v.into_dyn(),
+        }
+    }
+
+    /// Prefer into_gc over this where possible.
+    pub fn into_gc_vm(self, vm: &mut Vm) -> Handle<dyn Object> {
+        match self {
+            Value::Number(v) => vm.register(v),
+            Value::Boolean(v) => vm.register(v),
+            Value::String(v) => vm.register(v),
+            Value::Undefined(v) => vm.register(v),
+            Value::Null(v) => vm.register(v),
+            Value::Symbol(v) => vm.register(v),
+            Value::Object(v) => v,
+            Value::External(v) => v.into_dyn(),
         }
     }
 }

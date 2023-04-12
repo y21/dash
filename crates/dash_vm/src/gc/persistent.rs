@@ -1,6 +1,6 @@
 use std::ops::Deref;
 
-use super::handle::Handle;
+use super::Handle;
 
 pub struct Persistent<T: ?Sized>(Handle<T>);
 

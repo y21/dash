@@ -13,37 +13,27 @@ macro_rules! typedarray {
             use super::*;
 
             pub fn constructor(cx: CallContext) -> Result<Value, Value> {
-                let this = match cx.args.first() {
-                    Some(Value::Object(obj) | Value::External(obj)) => {
-                        let this = obj.as_any();
-
-                        if let Some(this) = this.downcast_ref::<ArrayBuffer>() {
-                            const REQUIRED_ALIGN: usize = $kind.bytes_per_element();
-
-                            #[allow(clippy::modulo_one)]
-                            if this.len() % REQUIRED_ALIGN != 0 {
-                                throw!(
-                                    cx.scope,
-                                    RangeError,
-                                    "Length of array buffer must be a multiple of {}",
-                                    REQUIRED_ALIGN
-                                );
-                            }
-
-                            Some(obj.clone())
-                        } else {
-                            None
-                        }
-                    }
-                    _ => None,
+                let arg = match cx.args.first() {
+                    Some(Value::Object(o)) => o,
+                    Some(Value::External(o)) => &o.inner,
+                    _ => throw!(cx.scope, TypeError, "Missing argument"),
                 };
+                let Some(this) = arg.as_any().downcast_ref::<ArrayBuffer>() else { throw!(cx.scope, TypeError, "Incompatible receiver") };
 
-                let this = match this {
-                    Some(this) => this,
-                    None => throw!(cx.scope, TypeError, "Incompatible receiver"),
-                };
+                const REQUIRED_ALIGN: usize = $kind.bytes_per_element();
 
-                let array = TypedArray::new(cx.scope, this, $kind);
+                #[allow(clippy::modulo_one)]
+                if this.len() % REQUIRED_ALIGN != 0 {
+                    throw!(
+                        cx.scope,
+                        RangeError,
+                        "Length of array buffer must be a multiple of {}",
+                        REQUIRED_ALIGN
+                    );
+                }
+
+                let array = TypedArray::new(cx.scope, arg.clone(), $kind);
+
                 Ok(cx.scope.register(array).into())
             }
         }

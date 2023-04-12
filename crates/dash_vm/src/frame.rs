@@ -10,9 +10,9 @@ use dash_proc_macro::Trace;
 
 use crate::gc::handle::Handle;
 use crate::gc::trace::Trace;
+use crate::value::ExternalValue;
 
 use super::value::function::user::UserFunction;
-use super::value::object::Object;
 use super::value::Value;
 
 #[derive(Debug, Clone)]
@@ -90,7 +90,7 @@ pub struct Frame {
     /// (excluding function parameters, as they are pushed onto the stack in Function::apply)
     pub extra_stack_space: usize,
     /// Contains local variable values from the outer scope
-    pub externals: Rc<[Handle<dyn Object>]>,
+    pub externals: Rc<[Handle<ExternalValue>]>,
     pub this: Option<Value>,
     pub sp: usize,
     pub state: FrameState,

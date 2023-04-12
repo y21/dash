@@ -149,12 +149,16 @@ fn run_test(setup: &str, path: &OsStr, verbose: bool) -> RunResult {
                         EvalError::Compiler(c) => c.to_string(),
                         EvalError::Lexer(l) => format!("{:?}", l[0].kind),
                         EvalError::Parser(p) => format!("{:?}", p[0].kind),
-                        EvalError::Exception(ex) => {
-                            let mut sc = LocalScope::new(&mut vm);
-                            match ex.to_string(&mut sc) {
-                                Ok(s) => ToString::to_string(&s),
-                                Err(err) => format!("{err:?}"),
-                            }
+                        EvalError::Exception(_ex) => {
+                            // let mut sc = LocalScope::new(&mut vm);
+                            // match ex.to_string(&mut sc) {
+                            //     Ok(s) => ToString::to_string(&s),
+                            //     Err(err) => format!("{err:?}"),
+                            // }
+
+                            // displaying certain JS error "structures" like above causes a weird stack overflow.
+                            // requires further investigation. for now just display some hardcoded string
+                            "<js error>".into()
                         }
                     };
                     println!("Error in {:?}: {s}", path.to_str());

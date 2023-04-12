@@ -5,7 +5,7 @@ use std::{
     vec::Drain,
 };
 
-use crate::{frame::Frame, gc::handle::Handle, local::LocalScope, value::object::Object};
+use crate::{frame::Frame, gc::handle::Handle, local::LocalScope, value::ExternalValue};
 
 use super::{value::Value, Vm};
 use dash_middle::compiler::{constant::Constant, instruction::Instruction};
@@ -45,7 +45,7 @@ impl<'a> DispatchContext<'a> {
             .expect("Bytecode attempted to reference invalid local")
     }
 
-    pub fn get_external(&mut self, index: usize) -> &Handle<dyn Object> {
+    pub fn get_external(&mut self, index: usize) -> &Handle<ExternalValue> {
         self.vm
             .get_external(index)
             .expect("Bytecode attempted to reference invalid external")
@@ -684,9 +684,8 @@ mod handlers {
 
         let jump = match value {
             Value::Undefined(..) => true,
-            Value::Object(obj) | Value::External(obj) => {
-                obj.as_primitive_capable().map(|p| p.is_undefined()).unwrap_or_default()
-            }
+            Value::Object(obj) => obj.as_primitive_capable().map(|p| p.is_undefined()).unwrap_or_default(),
+            Value::External(obj) => obj.as_primitive_capable().map(|p| p.is_undefined()).unwrap_or_default(),
             _ => false,
         };
 
@@ -714,9 +713,8 @@ mod handlers {
 
         let jump = match value {
             Value::Undefined(..) => true,
-            Value::Object(obj) | Value::External(obj) => {
-                obj.as_primitive_capable().map(|p| p.is_undefined()).unwrap_or_default()
-            }
+            Value::Object(obj) => obj.as_primitive_capable().map(|p| p.is_undefined()).unwrap_or_default(),
+            Value::External(obj) => obj.as_primitive_capable().map(|p| p.is_undefined()).unwrap_or_default(),
             _ => false,
         };
 
@@ -1139,12 +1137,9 @@ mod handlers {
         Ok(None)
     }
 
-    fn assign_to_external(handle: &Handle<dyn Object>, value: Value) {
-        unsafe {
-            let value = value.into_boxed();
-            // NOTE: Make sure this does not alias!
-            (*handle.as_ptr()).value = value;
-        }
+    fn assign_to_external(sc: &mut LocalScope, handle: &Handle<ExternalValue>, value: Value) {
+        let value = value.into_gc(sc);
+        unsafe { ExternalValue::replace(handle, value) };
     }
 
     pub fn storelocalext(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
@@ -1157,7 +1152,8 @@ mod handlers {
                 let right = cx.pop_stack();
                 let mut scope = cx.scope();
                 let res = $op(&value, &right, &mut scope)?;
-                assign_to_external(scope.get_external(id.into()).unwrap(), res.clone());
+                let external = scope.get_external(id.into()).unwrap().clone();
+                assign_to_external(&mut scope, &external, res.clone());
                 scope.stack.push(res);
             }};
         }
@@ -1168,7 +1164,8 @@ mod handlers {
                 let right = Value::number(1.0);
                 let mut scope = cx.scope();
                 let res = $op(&value, &right, &mut scope)?;
-                assign_to_external(scope.get_external(id.into()).unwrap(), res.clone());
+                let external = scope.get_external(id.into()).unwrap().clone();
+                assign_to_external(&mut scope, &external, res.clone());
                 scope.stack.push(res);
             }};
         }
@@ -1179,7 +1176,8 @@ mod handlers {
                 let right = Value::number(1.0);
                 let mut scope = cx.scope();
                 let res = $op(&value, &right, &mut scope)?;
-                assign_to_external(scope.get_external(id.into()).unwrap(), res);
+                let external = scope.get_external(id.into()).unwrap().clone();
+                assign_to_external(&mut scope, &external, res);
                 scope.stack.push(value);
             }};
         }
@@ -1187,8 +1185,10 @@ mod handlers {
         match kind {
             AssignKind::Assignment => {
                 let value = cx.pop_stack();
-                assign_to_external(cx.get_external(id.into()), value.clone());
-                cx.stack.push(value);
+                let mut scope = cx.scope();
+                let external = scope.get_external(id.into()).unwrap().clone();
+                assign_to_external(&mut scope, &external, value.clone());
+                scope.stack.push(value);
             }
             AssignKind::AddAssignment => op!(Value::add),
             AssignKind::SubAssignment => op!(Value::sub),
@@ -1399,11 +1399,14 @@ mod handlers {
         let mut scope = cx.scope();
 
         let keys = match value {
-            Value::Object(obj) | Value::External(obj) => {
-                obj.own_keys()?.into_iter().map(PropertyValue::static_default).collect()
-            }
+            Value::Object(obj) => obj.own_keys()?,
+            Value::External(obj) => obj.own_keys()?,
             _ => Vec::new(),
-        };
+        }
+        .into_iter()
+        .map(PropertyValue::static_default)
+        .collect();
+
         let keys = Array::from_vec(&mut scope, keys);
         let keys = scope.register(keys);
         let iter = ArrayIterator::new(&mut scope, Value::Object(keys))?;
