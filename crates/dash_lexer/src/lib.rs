@@ -239,6 +239,12 @@ impl<'a> Lexer<'a> {
                         });
                         self.advance();
                     }
+                    other if !other.is_ascii() => {
+                        // if the escaped character is non-ascii, decode UTF-8
+                        let (c, len) = util::next_char_in_bytes(&self.input[self.idx..]);
+                        lexeme.as_mut().unwrap().to_mut().push(c);
+                        self.advance_n(len);
+                    }
                     // TODO: handle \u, \x
                     other => {
                         lexeme.as_mut().unwrap().to_mut().push(other as char);

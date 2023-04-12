@@ -50,6 +50,13 @@ pub fn is_numeric(c: impl AsRef<str>) -> bool {
     c.as_ref().chars().all(|c| c.is_numeric())
 }
 
+pub fn next_char_in_bytes(b: &[u8]) -> (char, usize) {
+    let byte_count = b.iter().take_while(|b| !b.is_ascii()).count();
+    let bytes = &b[..byte_count];
+    let s = force_utf8_borrowed(bytes);
+    (s.chars().next().unwrap(), byte_count)
+}
+
 pub fn is_integer(n: f64) -> bool {
     n.fract() == 0.0
 }
