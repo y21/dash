@@ -162,7 +162,8 @@ fn register_function_externals(
             vm.get_local(id).expect("Referenced local not found")
         };
 
-        fn register<O: Object + 'static>(vm: &mut Vm, idx: usize, o: O) -> Handle<ExternalValue> {
+        /// "Boxes" the object and also registers it on the GC
+        fn rebox<O: Object + 'static>(vm: &mut Vm, idx: usize, o: O) -> Handle<ExternalValue> {
             // first indirection, to be able to reassign to the external
             let boxed = vm.gc.register(o);
             // second indirection, actual thing that can be shared
@@ -173,17 +174,18 @@ fn register_function_externals(
         }
 
         let obj = match val {
-            Value::Number(n) => register(vm, id, n),
-            Value::Boolean(b) => register(vm, id, b),
-            Value::String(s) => register(vm, id, s),
-            Value::Undefined(u) => register(vm, id, u),
-            Value::Null(n) => register(vm, id, n),
-            Value::Symbol(s) => register(vm, id, s),
+            Value::Number(n) => rebox(vm, id, n),
+            Value::Boolean(b) => rebox(vm, id, b),
+            Value::String(s) => rebox(vm, id, s),
+            Value::Undefined(u) => rebox(vm, id, u),
+            Value::Null(n) => rebox(vm, id, n),
+            Value::Symbol(s) => rebox(vm, id, s),
             Value::External(e) => e,
-            Value::Object(o) => {
-                // TODO: find a way to not double box?
-                register(vm, id, o)
-            }
+            Value::Object(o) => vm
+                .gc
+                .register(ExternalValue::new(o))
+                .cast_handle::<ExternalValue>()
+                .unwrap(),
         };
 
         externals.push(obj);
