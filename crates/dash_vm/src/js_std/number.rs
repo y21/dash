@@ -21,12 +21,13 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
         .map(|n| n as u8)
         .unwrap_or(10);
 
-    let num = cx.this.to_number(cx.scope)? as u64;
+    let num = cx.this.to_number(cx.scope)?;
 
     let re = match radix {
-        2 => format!("{num:b}"),
-        10 => num.to_string(),
-        16 => format!("{num:x}"),
+        2 => format!("{:b}", num as u64),
+        10 if num >= 1e21f64 || num <= -1e21f64 => format!("{num:e}"),
+        10 => ToString::to_string(&num),
+        16 => format!("{:x}", num as u64),
         _ => throw!(cx.scope, RangeError, "Invalid radix: {}", radix),
     };
 
