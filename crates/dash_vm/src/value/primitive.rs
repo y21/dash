@@ -8,6 +8,7 @@ use std::rc::Rc;
 use crate::gc::handle::Handle;
 use crate::local::LocalScope;
 use crate::throw;
+use crate::util::format_f64;
 
 use super::boxed::Boolean as BoxedBoolean;
 use super::boxed::Number as BoxedNumber;
@@ -514,8 +515,7 @@ impl ValueConversion for f64 {
     }
 
     fn to_string(&self, _sc: &mut LocalScope) -> Result<Rc<str>, Value> {
-        // TODO: optimize
-        Ok(ToString::to_string(self).into())
+        Ok(format_f64(*self).into())
     }
 
     fn length_of_array_like(&self, _sc: &mut LocalScope) -> Result<usize, Value> {

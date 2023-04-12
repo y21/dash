@@ -1,4 +1,5 @@
 use crate::throw;
+use crate::util::format_f64;
 use crate::value::function::native::CallContext;
 use crate::value::ops::abstractions::conversions::ValueConversion;
 use crate::value::primitive::Number;
@@ -25,8 +26,7 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
 
     let re = match radix {
         2 => format!("{:b}", num as u64),
-        10 if num >= 1e21f64 || num <= -1e21f64 => format!("{num:e}"),
-        10 => ToString::to_string(&num),
+        10 => format_f64(num),
         16 => format!("{:x}", num as u64),
         _ => throw!(cx.scope, RangeError, "Invalid radix: {}", radix),
     };

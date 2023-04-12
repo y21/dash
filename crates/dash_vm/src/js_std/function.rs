@@ -1,6 +1,7 @@
 use crate::throw;
 use crate::value::function::bound::BoundFunction;
 use crate::value::function::native::CallContext;
+use crate::value::function::Function;
 use crate::value::Typeof;
 use crate::value::Value;
 
@@ -33,4 +34,17 @@ pub fn call(cx: CallContext) -> Result<Value, Value> {
         target_this.unwrap_or_else(Value::undefined),
         target_args.unwrap_or_default(),
     )
+}
+
+pub fn to_string(cx: CallContext) -> Result<Value, Value> {
+    let Some(this) = cx.this.downcast_ref::<Function>() else {
+        throw!(cx.scope, TypeError, "Incompatible receiver");
+    };
+    Ok(Value::String(
+        format!(
+            "function {}() {{ [native code] }}",
+            this.name().as_deref().unwrap_or(&cx.scope.statics.empty_str)
+        )
+        .into(),
+    ))
 }
