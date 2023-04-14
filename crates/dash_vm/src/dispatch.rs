@@ -165,6 +165,7 @@ mod handlers {
     use dash_middle::compiler::FunctionCallMetadata;
     use dash_middle::compiler::ObjectMemberKind;
     use dash_middle::compiler::StaticImportKind;
+    use if_chain::if_chain;
     use std::borrow::Cow;
     use std::ops::Add;
     use std::ops::Div;
@@ -180,6 +181,10 @@ mod handlers {
     use crate::util::unlikely;
     use crate::value::array::Array;
     use crate::value::array::ArrayIterator;
+    use crate::value::function::adjust_stack_from_flat_call;
+    use crate::value::function::user::UserFunction;
+    use crate::value::function::Function;
+    use crate::value::function::FunctionKind;
     use crate::value::object::NamedObject;
     use crate::value::object::Object;
     use crate::value::object::ObjectMap;
@@ -359,20 +364,37 @@ mod handlers {
         match this.state {
             FrameState::Module(_) => {
                 // Put it back on the frame stack, because we'll need it in Vm::execute_module
-                cx.frames.push(this)
+                cx.frames.push(this);
+                Ok(Some(HandleResult::Return(value)))
             }
-            FrameState::Function { is_constructor_call } => {
-                // If this is a constructor call and the return value is not an object,
-                // return `this`
-                if is_constructor_call && !matches!(value, Value::Object(_) | Value::External(_)) {
-                    if let Frame { this: Some(this), .. } = this {
-                        return Ok(Some(HandleResult::Return(this)));
+            FrameState::Function {
+                is_constructor_call,
+                is_flat_call,
+            } => {
+                if_chain! {
+                    if is_constructor_call && !matches!(value, Value::Object(_) | Value::External(_));
+                    if let Frame { this: Some(this), .. } = this;
+                    then {
+                        // If this is a constructor call and the return value is not an object,
+                        // return `this`
+                        if is_flat_call {
+                            cx.stack.push(this);
+                            Ok(None)
+                        } else {
+                            Ok(Some(HandleResult::Return(this)))
+                        }
+                    }
+                    else {
+                        if is_flat_call {
+                            cx.stack.push(value);
+                            Ok(None)
+                        } else {
+                            Ok(Some(HandleResult::Return(value)))
+                        }
                     }
                 }
             }
         }
-
-        Ok(Some(HandleResult::Return(value)))
     }
 
     pub fn ldglobal(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
@@ -488,17 +510,53 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn call(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
-        let meta = FunctionCallMetadata::from(cx.fetch_and_inc_ip());
-        let argc = meta.value();
-        let is_constructor = meta.is_constructor_call();
-        let has_this = meta.is_object_call();
+    /// Calls a function in a "non-recursive" way
+    #[allow(clippy::too_many_arguments)]
+    fn call_flat(
+        mut cx: DispatchContext<'_>,
+        callee: &Value,
+        this: Value,
+        function: &Function,
+        user_function: &UserFunction,
+        argc: usize,
+        is_constructor: bool,
+    ) -> Result<Option<HandleResult>, Value> {
+        let sp = cx.stack.len() - argc;
+        let mut scope = cx.scope();
+        let Value::Object(callee) = callee else {
+            unreachable!("guaranteed by caller")
+        };
 
-        let callee = cx.pop_stack();
-        let this = if has_this { cx.pop_stack() } else { Value::undefined() };
+        let this = match is_constructor {
+            true => Value::Object(function.new_instance(callee.clone(), &mut scope)?),
+            false => this,
+        };
 
+        // NOTE: since we are in a "flat" call,
+        // we don't need to add objects to the external
+        // reference list since they stay on the VM stack
+        // and are reachable from there
+
+        adjust_stack_from_flat_call(&mut scope, user_function, sp, argc);
+
+        let mut frame = Frame::from_function(Some(this), user_function, is_constructor, true);
+        frame.set_sp(sp);
+
+        scope.pad_stack_for_frame(&frame);
+        scope.try_push_frame(frame).unwrap();
+
+        Ok(None)
+    }
+
+    /// Fallback for callable values that are not "function objects"
+    fn call_generic(
+        mut cx: DispatchContext<'_>,
+        callee: &Value,
+        this: Value,
+        argc: usize,
+        is_constructor: bool,
+    ) -> Result<Option<HandleResult>, Value> {
         let (args, refs) = {
-            let argc = argc.into();
             let mut args = Vec::with_capacity(argc);
             let mut refs = Vec::new();
 
@@ -527,6 +585,34 @@ mod handlers {
 
         scope.stack.push(ret);
         Ok(None)
+    }
+
+    pub fn call(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+        let meta = FunctionCallMetadata::from(cx.fetch_and_inc_ip());
+        let argc = usize::from(meta.value());
+        let is_constructor = meta.is_constructor_call();
+        let has_this = meta.is_object_call();
+
+        let stack_len = cx.stack.len();
+        let (callee, this) = if has_this {
+            cx.stack[stack_len - argc - 2..].rotate_left(2);
+            let (this, callee) = cx.pop_stack2();
+            (callee, this)
+        } else {
+            cx.stack[stack_len - argc - 1..].rotate_left(1);
+            let callee = cx.pop_stack();
+            (callee, Value::undefined())
+        };
+
+        if_chain! {
+            if let Some(function) = callee.downcast_ref::<Function>();
+            if let FunctionKind::User(user_function) = function.kind();
+            then {
+                call_flat(cx, &callee, this, function, user_function, argc, is_constructor)
+            } else {
+                call_generic(cx, &callee, this, argc, is_constructor)
+            }
+        }
     }
 
     pub fn jmpfalsep(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {

@@ -39,7 +39,7 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
         let current_sp = cx.scope.stack_size();
         cx.scope.try_extend_stack(old_stack)?;
 
-        let mut frame = Frame::from_function(None, function, false);
+        let mut frame = Frame::from_function(None, function, false, false);
         frame.set_ip(ip);
         frame.set_sp(current_sp);
 

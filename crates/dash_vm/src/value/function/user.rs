@@ -42,7 +42,7 @@ impl UserFunction {
 
         extend_stack_from_args(args, self.inner.params, scope, self.inner.rest_local.is_some());
 
-        let mut frame = Frame::from_function(Some(this), self, is_constructor_call);
+        let mut frame = Frame::from_function(Some(this), self, is_constructor_call, false);
         frame.set_sp(sp);
 
         scope.execute_frame(frame)

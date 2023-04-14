@@ -880,6 +880,8 @@ impl Vm {
             // Do not unwind further than we are allowed to. If the last try block is "outside" of
             // the frame that this execution context was instantiated in, then we can't jump there.
             if try_fp < max_fp {
+                // TODO: don't duplicate this code
+                self.frames.pop();
                 return Err(err);
             }
 
@@ -902,6 +904,18 @@ impl Vm {
         } else {
             self.frames.pop();
             Err(err)
+        }
+    }
+
+    /// Mostly useful for debugging
+    pub fn print_stack(&self) {
+        for (i, v) in self.stack.iter().enumerate() {
+            print!("{i}: ");
+            match v {
+                Value::Object(o) => println!("{:#?}", &**o),
+                Value::External(o) => println!("[[external]]: {:#?}", &*o.inner),
+                _ => println!("{v:?}")
+            }
         }
     }
 
@@ -958,7 +972,7 @@ impl Vm {
     }
 
     /// Executes a frame in this VM, without doing any sort of stack management
-    pub fn execute_frame_raw(&mut self, frame: Frame) -> Result<HandleResult, Value>
+    fn execute_frame_raw(&mut self, frame: Frame) -> Result<HandleResult, Value>
     {
         // TODO: if this fails, we MUST revert the stack management,
         // like reserving space for undefined values
