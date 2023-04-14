@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1681313949130,
+  "lastUpdate": 1681507677713,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -3035,6 +3035,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 76116,
             "range": "± 125",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "f9e7fc07ed6450c1a9b99943d3792def6514232a",
+          "message": "implement flat calls",
+          "timestamp": "2023-04-14T23:23:51+02:00",
+          "tree_id": "324f43ff03d56bb02e65ac1888e1127e97bcdb60",
+          "url": "https://github.com/y21/dash/commit/f9e7fc07ed6450c1a9b99943d3792def6514232a"
+        },
+        "date": 1681507676920,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 2608171,
+            "range": "± 11092",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 203521,
+            "range": "± 1853",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 72474,
+            "range": "± 57",
             "unit": "ns/iter"
           }
         ]
