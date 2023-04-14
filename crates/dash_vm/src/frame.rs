@@ -42,6 +42,8 @@ pub enum FrameState {
     Function {
         /// Whether the currently executing function is a constructor call
         is_constructor_call: bool,
+        /// Whether this frame is a flat function call
+        is_flat_call: bool,
     },
     /// Top level frame of a module
     Module(Exports),
@@ -100,7 +102,12 @@ pub struct Frame {
 }
 
 impl Frame {
-    pub fn from_function(this: Option<Value>, uf: &UserFunction, is_constructor_call: bool) -> Self {
+    pub fn from_function(
+        this: Option<Value>,
+        uf: &UserFunction,
+        is_constructor_call: bool,
+        is_flat_call: bool,
+    ) -> Self {
         let inner = uf.inner();
         Self {
             this,
@@ -109,7 +116,10 @@ impl Frame {
             ip: 0,
             sp: 0,
             extra_stack_space: inner.locals - uf.inner().params,
-            state: FrameState::Function { is_constructor_call },
+            state: FrameState::Function {
+                is_constructor_call,
+                is_flat_call,
+            },
             loop_counter: LoopCounterMap::default(),
         }
     }
@@ -159,6 +169,7 @@ impl Frame {
             extra_stack_space: cr.locals, /* - 0 params */
             state: FrameState::Function {
                 is_constructor_call: false,
+                is_flat_call: false,
             },
             loop_counter: LoopCounterMap::default(),
         }

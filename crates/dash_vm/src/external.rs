@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use crate::gc::handle::Handle;
 use crate::gc::trace::Trace;
@@ -7,7 +7,7 @@ use super::local::LocalScope;
 use super::value::object::Object;
 
 #[derive(Debug, Default)]
-pub struct Externals(HashMap<*const (), Vec<Handle<dyn Object>>>);
+pub struct Externals(FxHashMap<*const (), Vec<Handle<dyn Object>>>);
 
 unsafe impl Trace for Externals {
     fn trace(&self) {

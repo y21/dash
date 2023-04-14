@@ -8,9 +8,7 @@ use std::sync::Mutex;
 
 use clap::ArgMatches;
 use dash_vm::eval::EvalError;
-use dash_vm::local::LocalScope;
 use dash_vm::params::VmParams;
-use dash_vm::value::ops::abstractions::conversions::ValueConversion;
 use dash_vm::Vm;
 use once_cell::sync::Lazy;
 use serde::Deserialize;

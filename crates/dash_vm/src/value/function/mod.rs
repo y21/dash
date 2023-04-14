@@ -1,6 +1,7 @@
 use std::{
     any::Any,
     cell::RefCell,
+    cmp::Ordering,
     fmt::{self, Debug},
     iter,
     rc::Rc,
@@ -135,6 +136,37 @@ impl Function {
     pub fn set_fn_prototype(&self, prototype: Handle<dyn Object>) {
         self.prototype.replace(Some(prototype));
     }
+
+    pub fn get_fn_prototype(&self) -> Option<Handle<dyn Object>> {
+        self.prototype.borrow().clone()
+    }
+
+    pub fn get_or_set_prototype(&self, scope: &mut LocalScope) -> Result<Handle<dyn Object>, Value> {
+        // can make this faster if we need to by directly accessing the prototype
+        // without going through the property system
+        let prototype = match self.get_property(scope, "prototype".into())? {
+            Value::Undefined(_) => {
+                let prototype = NamedObject::new(scope);
+                scope.register(prototype)
+            }
+            Value::Object(o) => o,
+            Value::External(o) => o.inner.clone(),
+            _ => throw!(scope, TypeError, "prototype is not an object"),
+        };
+
+        Ok(prototype)
+    }
+
+    /// Creates a new instance of this function.
+    pub fn new_instance(
+        &self,
+        this_handle: Handle<dyn Object>,
+        scope: &mut LocalScope,
+    ) -> Result<Handle<dyn Object>, Value> {
+        let prototype = self.get_or_set_prototype(scope)?;
+        let this = scope.register(NamedObject::with_prototype_and_constructor(prototype, this_handle));
+        Ok(this)
+    }
 }
 
 fn handle_call(
@@ -217,18 +249,7 @@ impl Object for Function {
         _this: Value,
         args: Vec<Value>,
     ) -> Result<Value, Value> {
-        let prototype = match self.get_property(scope, "prototype".into())? {
-            Value::Undefined(_) => {
-                let prototype = NamedObject::new(scope);
-                scope.register(prototype)
-            }
-            Value::Object(o) => o,
-            Value::External(o) => o.inner.clone(),
-            _ => throw!(scope, TypeError, "prototype is not an object"),
-        };
-
-        let this = scope.register(NamedObject::with_prototype_and_constructor(prototype, callee.clone()));
-
+        let this = self.new_instance(callee.clone(), scope)?;
         handle_call(self, scope, callee, Value::Object(this), args, true)
     }
 
@@ -253,6 +274,49 @@ impl Object for Function {
     }
 }
 
+pub(crate) fn adjust_stack_from_flat_call(
+    scope: &mut LocalScope,
+    user_function: &UserFunction,
+    old_sp: usize,
+    argc: usize,
+) {
+    // Conveniently, the arguments are all on the stack, in the order
+    // we need it to be in, so we don't need to move anything there for that part.
+
+    let expected_args = user_function.inner().params;
+
+    // NB: Order is important, this needs to happen before pushing remaining
+    // missing undefined values and truncating
+    let rest = if user_function.inner().rest_local.is_some() {
+        let args = scope
+            .stack
+            .drain(old_sp + expected_args..)
+            .map(PropertyValue::static_default)
+            .collect();
+
+        let array = Array::from_vec(scope, args);
+        let array = scope.register(array);
+        Some(Value::Object(array))
+    } else {
+        None
+    };
+
+    match argc.cmp(&expected_args) {
+        Ordering::Less => {
+            scope
+                .stack
+                .extend(iter::repeat(Value::undefined()).take(expected_args - argc));
+        }
+        Ordering::Greater => {
+            scope.stack.truncate(old_sp + expected_args);
+        }
+        _ => {}
+    }
+
+    scope.stack.extend(rest);
+}
+
+/// Extends the VM stack with provided arguments
 pub(self) fn extend_stack_from_args(args: Vec<Value>, expected_args: usize, scope: &mut LocalScope, is_rest: bool) {
     // Insert at most [param_count] amount of provided arguments on the stack
     // In the compiler we allocate local space for every parameter
