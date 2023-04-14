@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1681508176854,
+  "lastUpdate": 1681508190872,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -3115,6 +3115,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 72262,
             "range": "± 273",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "Timo",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "748cf0af6651d7fbeee4e78eac327056695a7852",
+          "message": "Merge pull request #55 from y21/flat-recursion\n\ndon't use recursion for executing functions in VM land",
+          "timestamp": "2023-04-14T23:32:42+02:00",
+          "tree_id": "324f43ff03d56bb02e65ac1888e1127e97bcdb60",
+          "url": "https://github.com/y21/dash/commit/748cf0af6651d7fbeee4e78eac327056695a7852"
+        },
+        "date": 1681508189659,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 2825741,
+            "range": "± 57976",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 215866,
+            "range": "± 521",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 74947,
+            "range": "± 140",
             "unit": "ns/iter"
           }
         ]
