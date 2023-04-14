@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1681507677713,
+  "lastUpdate": 1681508176854,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -3077,6 +3077,44 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 72474,
             "range": "± 57",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "name": "y21",
+            "username": "y21"
+          },
+          "id": "f9e7fc07ed6450c1a9b99943d3792def6514232a",
+          "message": "don't use recursion for executing functions in VM land",
+          "timestamp": "2023-04-09T15:08:27Z",
+          "url": "https://github.com/y21/dash/pull/55/commits/f9e7fc07ed6450c1a9b99943d3792def6514232a"
+        },
+        "date": 1681508176059,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 2594250,
+            "range": "± 4846",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 199720,
+            "range": "± 524",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 72262,
+            "range": "± 273",
             "unit": "ns/iter"
           }
         ]
