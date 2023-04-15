@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1681508190872,
+  "lastUpdate": 1681522293980,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -3157,6 +3157,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 74947,
             "range": "± 140",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "2661e6f5cdf9490f166734dfed37d993ded7e31f",
+          "message": "implement Map and fix some Set tests",
+          "timestamp": "2023-04-15T03:27:36+02:00",
+          "tree_id": "c86a10ae6fcebf369c353138dc71b3b158ffde17",
+          "url": "https://github.com/y21/dash/commit/2661e6f5cdf9490f166734dfed37d993ded7e31f"
+        },
+        "date": 1681522293168,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 2622482,
+            "range": "± 27606",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 203348,
+            "range": "± 595",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 74884,
+            "range": "± 58",
             "unit": "ns/iter"
           }
         ]
