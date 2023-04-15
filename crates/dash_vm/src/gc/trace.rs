@@ -49,6 +49,15 @@ unsafe impl<T: Trace> Trace for HashSet<T> {
     }
 }
 
+unsafe impl<K: Trace, V: Trace> Trace for ahash::HashMap<K, V> {
+    fn trace(&self) {
+        for (k, v) in self.iter() {
+            k.trace();
+            v.trace();
+        }
+    }
+}
+
 unsafe impl<T: Trace + ?Sized> Trace for Rc<T> {
     fn trace(&self) {
         T::trace(self)
