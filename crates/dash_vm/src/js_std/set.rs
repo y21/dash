@@ -50,9 +50,9 @@ pub fn delete(cx: CallContext) -> Result<Value, Value> {
     };
 
     let item = cx.args.first().unwrap_or_undefined();
-    this.delete(&item);
+    let did_delete = this.delete(&item);
 
-    Ok(cx.this)
+    Ok(Value::Boolean(did_delete))
 }
 
 pub fn clear(cx: CallContext) -> Result<Value, Value> {
@@ -63,7 +63,7 @@ pub fn clear(cx: CallContext) -> Result<Value, Value> {
 
     this.clear();
 
-    Ok(cx.this)
+    Ok(Value::undefined())
 }
 
 pub fn size(cx: CallContext) -> Result<Value, Value> {

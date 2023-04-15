@@ -12,6 +12,7 @@ use crate::value::error::TypeError;
 use crate::value::error::URIError;
 use crate::value::function::Function;
 use crate::value::function::FunctionKind;
+use crate::value::map::Map;
 use crate::value::regex::RegExp;
 use crate::value::set::Set;
 use crate::value::PureBuiltin;
@@ -237,6 +238,14 @@ pub struct Statics {
     pub set_delete: Handle<dyn Object>,
     pub set_clear: Handle<dyn Object>,
     pub set_size: Handle<dyn Object>,
+    pub map_constructor: Handle<dyn Object>,
+    pub map_prototype: Handle<dyn Object>,
+    pub map_set: Handle<dyn Object>,
+    pub map_get: Handle<dyn Object>,
+    pub map_has: Handle<dyn Object>,
+    pub map_delete: Handle<dyn Object>,
+    pub map_clear: Handle<dyn Object>,
+    pub map_size: Handle<dyn Object>,
     pub regexp_ctor: Handle<dyn Object>,
     pub regexp_prototype: Handle<dyn Object>,
     pub regexp_test: Handle<dyn Object>,
@@ -475,6 +484,14 @@ impl Statics {
             set_prototype: builtin_object(gc, Set::with_obj(NamedObject::null())),
             set_clear: function(gc, "clear", js_std::set::clear),
             set_size: function(gc, "size", js_std::set::size),
+            map_constructor: function(gc, "Map", js_std::map::constructor),
+            map_set: function(gc, "set", js_std::map::set),
+            map_get: function(gc, "get", js_std::map::get),
+            map_has: function(gc, "has", js_std::map::has),
+            map_delete: function(gc, "delete", js_std::map::delete),
+            map_prototype: builtin_object(gc, Map::with_obj(NamedObject::null())),
+            map_clear: function(gc, "clear", js_std::map::clear),
+            map_size: function(gc, "size", js_std::map::size),
             regexp_ctor: function(gc, "RegExp", js_std::regex::constructor),
             regexp_prototype: builtin_object(gc, RegExp::empty()),
             regexp_test: function(gc, "test", js_std::regex::test),

@@ -38,8 +38,8 @@ impl Set {
         self.inner.borrow().contains(item)
     }
 
-    pub fn delete(&self, item: &Value) {
-        self.inner.borrow_mut().remove(item);
+    pub fn delete(&self, item: &Value) -> bool {
+        self.inner.borrow_mut().remove(item)
     }
 
     pub fn clear(&self) {

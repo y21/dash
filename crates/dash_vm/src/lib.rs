@@ -625,7 +625,26 @@ impl Vm {
             has: scope.statics.set_has;
             delete: scope.statics.set_delete;
             clear: scope.statics.set_clear;
-            // size: scope.statics.set_size; // TODO: getter, not a function
+            size: scope.statics.set_size; // TODO: getter, not a function
+        });
+
+        let map_ctor = register_builtin_type!(scope.statics.map_constructor, {
+            #[prototype] function_proto;
+            #[constructor] function_ctor;
+            #[fn_prototype] scope.statics.map_prototype;
+            #[fn_name] Map;
+        });
+
+        register_builtin_type!(scope.statics.map_prototype, {
+            #[prototype] object_proto;
+            #[constructor] map_ctor;
+            #[properties]
+            set: scope.statics.map_set;
+            get: scope.statics.map_get;
+            has: scope.statics.map_has;
+            delete: scope.statics.map_delete;
+            clear: scope.statics.map_clear;
+            size: scope.statics.map_size; // TODO: getter, not a function
         });
 
         let regexp_ctor = register_builtin_type!(scope.statics.regexp_ctor, {
@@ -773,6 +792,7 @@ impl Vm {
             String: string_ctor;
             Object: object_ctor;
             Set: set_ctor;
+            Map: map_ctor;
             console: console;
             Math: math;
             Number: number_ctor;
