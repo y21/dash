@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1681522423664,
+  "lastUpdate": 1681522485252,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -3237,6 +3237,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 74902,
             "range": "± 3204",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "Timo",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1be303d6f99f0a0004ef4feb08afd4f04c47d581",
+          "message": "Merge pull request #56 from y21/feature/map\n\nimplement `Map` and fix some `Set` tests",
+          "timestamp": "2023-04-15T03:29:58+02:00",
+          "tree_id": "c86a10ae6fcebf369c353138dc71b3b158ffde17",
+          "url": "https://github.com/y21/dash/commit/1be303d6f99f0a0004ef4feb08afd4f04c47d581"
+        },
+        "date": 1681522484011,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 3048305,
+            "range": "± 115002",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 252595,
+            "range": "± 9972",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 104081,
+            "range": "± 9767",
             "unit": "ns/iter"
           }
         ]
