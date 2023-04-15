@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1681522293980,
+  "lastUpdate": 1681522423664,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -3199,6 +3199,44 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 74884,
             "range": "± 58",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "name": "y21",
+            "username": "y21"
+          },
+          "id": "2661e6f5cdf9490f166734dfed37d993ded7e31f",
+          "message": "implement `Map` and fix some `Set` tests",
+          "timestamp": "2023-04-14T21:40:49Z",
+          "url": "https://github.com/y21/dash/pull/56/commits/2661e6f5cdf9490f166734dfed37d993ded7e31f"
+        },
+        "date": 1681522422681,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 2600180,
+            "range": "± 48980",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 202219,
+            "range": "± 1525",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 74902,
+            "range": "± 3204",
             "unit": "ns/iter"
           }
         ]
