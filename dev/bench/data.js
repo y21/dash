@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1681522485252,
+  "lastUpdate": 1681852538754,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -3279,6 +3279,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 104081,
             "range": "± 9767",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "Timo",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0263f16b4743174a69d43129a6e15d6c676aca38",
+          "message": "don't unwrap frame overflows",
+          "timestamp": "2023-04-18T23:10:06+02:00",
+          "tree_id": "8840b8b4f57a0d49b1e896f980f41611c6102995",
+          "url": "https://github.com/y21/dash/commit/0263f16b4743174a69d43129a6e15d6c676aca38"
+        },
+        "date": 1681852537294,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 3070364,
+            "range": "± 63987",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 241127,
+            "range": "± 5498",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 86736,
+            "range": "± 2421",
             "unit": "ns/iter"
           }
         ]
