@@ -543,7 +543,7 @@ mod handlers {
         frame.set_sp(sp);
 
         scope.pad_stack_for_frame(&frame);
-        scope.try_push_frame(frame).unwrap();
+        scope.try_push_frame(frame)?;
 
         Ok(None)
     }
