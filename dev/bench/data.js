@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1681852538754,
+  "lastUpdate": 1682336004832,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -3321,6 +3321,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 86736,
             "range": "± 2421",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "605db2eb69e335c78a98e9607a14e5aee6b62360",
+          "message": "Merge branch 'master' of https://github.com/y21/dash",
+          "timestamp": "2023-04-24T13:28:20+02:00",
+          "tree_id": "6a4f20280ceaa8318c21a2e2ec6e47e94ad8802f",
+          "url": "https://github.com/y21/dash/commit/605db2eb69e335c78a98e9607a14e5aee6b62360"
+        },
+        "date": 1682336003339,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 3071796,
+            "range": "± 196294",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 247213,
+            "range": "± 14489",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 101244,
+            "range": "± 5594",
             "unit": "ns/iter"
           }
         ]
