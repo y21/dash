@@ -217,3 +217,37 @@ pub fn random(cx: CallContext) -> Result<Value, Value> {
 
     Ok(Value::number(num))
 }
+
+pub fn max(cx: CallContext) -> Result<Value, Value> {
+    let mut max = -f64::INFINITY;
+
+    for arg in cx.args.iter() {
+        let n = arg.to_number(cx.scope)?;
+        if n.is_nan() {
+            return Ok(Value::number(f64::NAN));
+        }
+
+        if n > max {
+            max = n;
+        }
+    }
+
+    Ok(Value::number(max))
+}
+
+pub fn min(cx: CallContext) -> Result<Value, Value> {
+    let mut min = f64::INFINITY;
+
+    for arg in cx.args.iter() {
+        let n = arg.to_number(cx.scope)?;
+        if n.is_nan() {
+            return Ok(Value::number(f64::NAN));
+        }
+
+        if n < min {
+            min = n;
+        }
+    }
+
+    Ok(Value::number(min))
+}

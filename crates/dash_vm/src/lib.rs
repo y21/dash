@@ -272,6 +272,8 @@ impl Vm {
             tanh: scope.statics.math_tanh;
             trunc: scope.statics.math_trunc;
             random: scope.statics.math_random;
+            max: scope.statics.math_max;
+            min: scope.statics.math_min;
 
             #[fields]
             PI: Value::number(std::f64::consts::PI);
