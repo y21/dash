@@ -272,7 +272,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
 
     fn parse_return(&mut self) -> Option<ReturnStatement<'a>> {
         if self.expect_and_skip(&[TokenType::Semicolon], false) {
-            Some(ReturnStatement(Expr::undefined()))
+            Some(ReturnStatement(Expr::undefined_literal()))
         } else {
             let expr = self.parse_expression()?;
             Some(ReturnStatement(expr))
