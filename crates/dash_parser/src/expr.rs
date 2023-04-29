@@ -365,8 +365,8 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
         self.advance();
 
         let expr = match current.ty {
-            // TODO: ; shouldnt be a valid expression
-            TokenType::Semicolon => Expr::undefined_literal(),
+            // removed to resolve #58
+            // TokenType::Semicolon => Expr::undefined_literal(),
             TokenType::TemplateLiteral => {
                 let mut left = Expr::string_literal(current.full);
                 while !self.is_eof() {
