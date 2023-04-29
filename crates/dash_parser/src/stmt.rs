@@ -93,6 +93,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
             TokenType::Continue => Some(Statement::Continue),
             TokenType::Break => Some(Statement::Break),
             TokenType::Debugger => Some(Statement::Debugger),
+            TokenType::Semicolon => Some(Statement::Empty),
             _ => {
                 // We've skipped the current character because of the statement cases that skip the current token
                 // So we go back, as the skipped token belongs to this expression
@@ -271,8 +272,12 @@ impl<'a> StatementParser<'a> for Parser<'a> {
     }
 
     fn parse_return(&mut self) -> Option<ReturnStatement<'a>> {
-        let expr = self.parse_expression()?;
-        Some(ReturnStatement(expr))
+        if self.expect_and_skip(&[TokenType::Semicolon], false) {
+            Some(ReturnStatement(Expr::undefined_literal()))
+        } else {
+            let expr = self.parse_expression()?;
+            Some(ReturnStatement(expr))
+        }
     }
 
     fn parse_for_loop(&mut self) -> Option<Loop<'a>> {
