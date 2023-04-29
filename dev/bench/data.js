@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1682336004832,
+  "lastUpdate": 1682730664558,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -3363,6 +3363,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 101244,
             "range": "± 5594",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "Timo",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "020a8ae2c6f334386074470bf99fb75024a59dd0",
+          "message": "Merge pull request #60 from trueharuu/patch-1\n\nResolves #58",
+          "timestamp": "2023-04-29T03:05:56+02:00",
+          "tree_id": "85a5161ddb8885d682636d3d9e246cb2d22c2119",
+          "url": "https://github.com/y21/dash/commit/020a8ae2c6f334386074470bf99fb75024a59dd0"
+        },
+        "date": 1682730663328,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 3180765,
+            "range": "± 120056",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 261498,
+            "range": "± 10860",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 107023,
+            "range": "± 3972",
             "unit": "ns/iter"
           }
         ]
