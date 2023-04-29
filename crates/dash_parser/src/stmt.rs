@@ -93,6 +93,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
             TokenType::Continue => Some(Statement::Continue),
             TokenType::Break => Some(Statement::Break),
             TokenType::Debugger => Some(Statement::Debugger),
+            TokenType::Semicolon => Some(Statement::Empty),
             _ => {
                 // We've skipped the current character because of the statement cases that skip the current token
                 // So we go back, as the skipped token belongs to this expression
