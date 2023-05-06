@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1682730664558,
+  "lastUpdate": 1683391871608,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -3405,6 +3405,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 107023,
             "range": "± 3972",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "ec1dd46bda72c34e6e22b3ef28a7633d9776b21b",
+          "message": "rework dispatch to only create one localscope",
+          "timestamp": "2023-05-06T18:46:04+02:00",
+          "tree_id": "ab7d9f7347e6349b6eafa37d0c1d6641f96ea30d",
+          "url": "https://github.com/y21/dash/commit/ec1dd46bda72c34e6e22b3ef28a7633d9776b21b"
+        },
+        "date": 1683391870074,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 3210609,
+            "range": "± 29943",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 266704,
+            "range": "± 313",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 92472,
+            "range": "± 351",
             "unit": "ns/iter"
           }
         ]
