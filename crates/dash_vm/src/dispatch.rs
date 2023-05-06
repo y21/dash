@@ -565,7 +565,7 @@ mod handlers {
         };
 
         let scope_ref = cx.scope as *const LocalScope;
-        cx.externals.add(scope_ref, refs);
+        cx.externals.extend_from_scope(scope_ref, refs);
         // ^ rework this external stuff
 
         let ret = if is_constructor {
