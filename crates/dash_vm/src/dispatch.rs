@@ -1,3 +1,5 @@
+#![allow(clippy::needless_lifetimes)] // for now
+
 use dash_log::warn;
 use std::{
     ops::{Deref, DerefMut},
@@ -26,27 +28,27 @@ impl HandleResult {
     }
 }
 
-pub struct DispatchContext<'a> {
-    vm: &'a mut Vm,
+pub struct DispatchContext<'sc, 'vm> {
+    scope: &'sc mut LocalScope<'vm>,
 }
 
-impl<'a> DispatchContext<'a> {
-    pub fn new(vm: &'a mut Vm) -> Self {
-        Self { vm }
+impl<'sc, 'vm> DispatchContext<'sc, 'vm> {
+    pub fn new(scope: &'sc mut LocalScope<'vm>) -> Self {
+        Self { scope }
     }
 
-    pub fn scope(&mut self) -> LocalScope<'_> {
-        LocalScope::new(self)
-    }
+    // pub fn scope(&mut self) -> LocalScope<'_> {
+    //     LocalScope::new(self)
+    // }
 
     pub fn get_local(&mut self, index: usize) -> Value {
-        self.vm
+        self.scope
             .get_local(index)
             .expect("Bytecode attempted to reference invalid local")
     }
 
     pub fn get_external(&mut self, index: usize) -> &Handle<ExternalValue> {
-        self.vm
+        self.scope
             .get_external(index)
             .expect("Bytecode attempted to reference invalid external")
     }
@@ -100,12 +102,11 @@ impl<'a> DispatchContext<'a> {
         F: Fn(&Value, &Value, &mut LocalScope) -> Result<Value, Value>,
     {
         let (left, right) = self.pop_stack2();
-        let mut scope = self.scope();
 
-        scope.add_value(left.clone());
-        scope.add_value(right.clone());
-        let result = fun(&left, &right, &mut scope)?;
-        scope.stack.push(result);
+        self.add_value(left.clone());
+        self.add_value(right.clone());
+        let result = fun(&left, &right, self)?;
+        self.stack.push(result);
         Ok(None)
     }
 
@@ -146,16 +147,16 @@ impl<'a> DispatchContext<'a> {
     }
 }
 
-impl<'a> Deref for DispatchContext<'a> {
-    type Target = Vm;
+impl<'sc, 'vm> Deref for DispatchContext<'sc, 'vm> {
+    type Target = LocalScope<'vm>;
     fn deref(&self) -> &Self::Target {
-        self.vm
+        self.scope
     }
 }
 
-impl<'a> DerefMut for DispatchContext<'a> {
+impl<'sc, 'vm> DerefMut for DispatchContext<'sc, 'vm> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.vm
+        self.scope
     }
 }
 
@@ -196,7 +197,7 @@ mod handlers {
 
     use super::*;
 
-    fn constant_instruction(mut cx: DispatchContext<'_>, idx: usize) -> Result<(), Value> {
+    fn constant_instruction<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>, idx: usize) -> Result<(), Value> {
         let constant = cx.constant(idx);
 
         let value = Value::from_constant(constant, &mut cx);
@@ -204,152 +205,148 @@ mod handlers {
         Ok(())
     }
 
-    pub fn constant(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn constant<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let id = cx.fetch_and_inc_ip();
         constant_instruction(cx, id as usize)?;
         Ok(None)
     }
 
-    pub fn constantw(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn constantw<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let id = cx.fetchw_and_inc_ip();
         constant_instruction(cx, id as usize)?;
         Ok(None)
     }
 
-    pub fn add(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn add<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         cx.evaluate_binary_with_scope(Value::add)
     }
 
-    pub fn sub(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn sub<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         cx.evaluate_binary_with_scope(Value::sub)
     }
 
-    pub fn mul(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn mul<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         cx.evaluate_binary_with_scope(Value::mul)
     }
 
-    pub fn div(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn div<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         cx.evaluate_binary_with_scope(Value::div)
     }
 
-    pub fn rem(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn rem<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         cx.evaluate_binary_with_scope(Value::rem)
     }
 
-    pub fn pow(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn pow<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         cx.evaluate_binary_with_scope(Value::pow)
     }
 
-    pub fn bitor(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn bitor<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         cx.evaluate_binary_with_scope(Value::bitor)
     }
 
-    pub fn bitxor(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn bitxor<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         cx.evaluate_binary_with_scope(Value::bitxor)
     }
 
-    pub fn bitand(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn bitand<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         cx.evaluate_binary_with_scope(Value::bitand)
     }
 
-    pub fn bitshl(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn bitshl<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         cx.evaluate_binary_with_scope(Value::bitshl)
     }
 
-    pub fn bitshr(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn bitshr<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         cx.evaluate_binary_with_scope(Value::bitshr)
     }
 
-    pub fn bitushr(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn bitushr<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         cx.evaluate_binary_with_scope(Value::bitushr)
     }
 
-    pub fn bitnot(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn bitnot<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let value = cx.pop_stack();
-        let mut sc = cx.scope();
-        sc.add_value(value.clone());
-        let result = value.bitnot(&mut sc)?;
-        sc.stack.push(result);
+        cx.add_value(value.clone());
+        let result = value.bitnot(&mut cx)?;
+        cx.stack.push(result);
         Ok(None)
     }
 
-    pub fn objin(cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn objin<'sc, 'vm>(cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         throw!(cx, Error, "in keyword is unimplemented");
     }
 
-    pub fn instanceof(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn instanceof<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let (source, target) = cx.pop_stack2();
 
-        let mut sc = cx.scope();
-        sc.add_value(target.clone());
-        sc.add_value(source.clone());
+        cx.add_value(target.clone());
+        cx.add_value(source.clone());
 
-        let is_instanceof = source.instanceof(&target, &mut sc).map(Value::Boolean)?;
-        sc.stack.push(is_instanceof);
+        let is_instanceof = source.instanceof(&target, &mut cx).map(Value::Boolean)?;
+        cx.stack.push(is_instanceof);
         Ok(None)
     }
 
-    pub fn lt(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn lt<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         cx.evaluate_binary_with_scope(ValueEquality::lt)
     }
 
-    pub fn le(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn le<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         cx.evaluate_binary_with_scope(ValueEquality::le)
     }
 
-    pub fn gt(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn gt<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         cx.evaluate_binary_with_scope(ValueEquality::gt)
     }
 
-    pub fn ge(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn ge<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         cx.evaluate_binary_with_scope(ValueEquality::ge)
     }
 
-    pub fn eq(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn eq<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         cx.evaluate_binary_with_scope(ValueEquality::eq)
     }
 
-    pub fn ne(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn ne<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         cx.evaluate_binary_with_scope(ValueEquality::ne)
     }
 
-    pub fn strict_eq(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn strict_eq<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         cx.evaluate_binary_with_scope(ValueEquality::strict_eq)
     }
 
-    pub fn strict_ne(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn strict_ne<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         cx.evaluate_binary_with_scope(ValueEquality::strict_ne)
     }
 
-    pub fn neg(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn neg<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let value = cx.pop_stack();
-        let mut scope = cx.scope();
-        let result = value.to_number(&mut scope)?;
-        scope.stack.push(Value::number(-result));
+        let result = value.to_number(&mut cx)?;
+        cx.stack.push(Value::number(-result));
         Ok(None)
     }
 
-    pub fn pos(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn pos<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let value = cx.pop_stack();
-        let mut scope = cx.scope();
-        let result = value.to_number(&mut scope)?;
-        scope.stack.push(Value::number(result));
+        let result = value.to_number(&mut cx)?;
+        cx.stack.push(Value::number(result));
         Ok(None)
     }
 
-    pub fn not(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn not<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let value = cx.pop_stack();
         let result = value.not();
         cx.stack.push(result);
         Ok(None)
     }
 
-    pub fn pop(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn pop<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         cx.pop_stack();
         Ok(None)
     }
 
-    pub fn ret(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn ret<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let tc_depth = cx.fetchw_and_inc_ip();
         let value = cx.pop_stack();
         let this = cx.pop_frame();
@@ -397,24 +394,23 @@ mod handlers {
         }
     }
 
-    pub fn ldglobal(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn ldglobal<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let id = cx.fetch_and_inc_ip();
         let name = cx.identifier_constant(id.into());
-        let mut scope = cx.scope();
 
-        let value = match scope.global.as_any().downcast_ref::<NamedObject>() {
+        let value = match cx.global.as_any().downcast_ref::<NamedObject>() {
             Some(value) => match value.get_raw_property(name.as_ref().into()) {
-                Some(value) => value.kind().get_or_apply(&mut scope, Value::undefined())?,
-                None => throw!(&mut scope, ReferenceError, "{} is not defined", name),
+                Some(value) => value.kind().get_or_apply(&mut cx, Value::undefined())?,
+                None => throw!(&mut cx, ReferenceError, "{} is not defined", name),
             },
-            None => scope.global.clone().get_property(&mut scope, name.as_ref().into())?,
+            None => cx.global.clone().get_property(&mut cx, name.as_ref().into())?,
         };
 
-        scope.stack.push(value);
+        cx.stack.push(value);
         Ok(None)
     }
 
-    pub fn storeglobal(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn storeglobal<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let id = cx.fetch_and_inc_ip();
         let name = cx.identifier_constant(id.into());
         let kind = AssignKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
@@ -422,59 +418,56 @@ mod handlers {
         macro_rules! op {
             ($op:expr) => {{
                 let right = cx.pop_stack();
-                let mut scope = cx.scope();
-                let value = scope
+                let value = cx
                     .global
                     .clone()
-                    .get_property(&mut scope, PropertyKey::String(Cow::Borrowed(&name)))?;
+                    .get_property(&mut cx, PropertyKey::String(Cow::Borrowed(&name)))?;
 
-                let res = $op(&value, &right, &mut scope)?;
-                scope.global.clone().set_property(
-                    &mut scope,
+                let res = $op(&value, &right, &mut cx)?;
+                cx.global.clone().set_property(
+                    &mut cx,
                     ToString::to_string(&name).into(),
                     PropertyValue::static_default(res.clone()),
                 )?;
-                scope.stack.push(res);
+                cx.stack.push(res);
             }};
         }
 
         macro_rules! prefix {
             ($op:expr) => {{
-                let mut scope = cx.scope();
-                let value = scope
+                let value = cx
                     .global
                     .clone()
-                    .get_property(&mut scope, PropertyKey::String(Cow::Borrowed(&name)))?;
-                let value = Value::number(value.to_number(&mut scope)?);
+                    .get_property(&mut cx, PropertyKey::String(Cow::Borrowed(&name)))?;
+                let value = Value::number(value.to_number(&mut cx)?);
 
                 let right = Value::number(1.0);
-                let res = $op(&value, &right, &mut scope)?;
-                scope.global.clone().set_property(
-                    &mut scope,
+                let res = $op(&value, &right, &mut cx)?;
+                cx.global.clone().set_property(
+                    &mut cx,
                     ToString::to_string(&name).into(),
                     PropertyValue::static_default(res.clone()),
                 )?;
-                scope.stack.push(res);
+                cx.stack.push(res);
             }};
         }
 
         macro_rules! postfix {
             ($op:expr) => {{
-                let mut scope = cx.scope();
-                let value = scope
+                let value = cx
                     .global
                     .clone()
-                    .get_property(&mut scope, PropertyKey::String(Cow::Borrowed(&name)))?;
-                let value = Value::number(value.to_number(&mut scope)?);
+                    .get_property(&mut cx, PropertyKey::String(Cow::Borrowed(&name)))?;
+                let value = Value::number(value.to_number(&mut cx)?);
 
                 let right = Value::number(1.0);
-                let res = $op(&value, &right, &mut scope)?;
-                scope.global.clone().set_property(
-                    &mut scope,
+                let res = $op(&value, &right, &mut cx)?;
+                cx.global.clone().set_property(
+                    &mut cx,
                     ToString::to_string(&name).into(),
                     PropertyValue::static_default(res),
                 )?;
-                scope.stack.push(value);
+                cx.stack.push(value);
             }};
         }
 
@@ -482,13 +475,12 @@ mod handlers {
             AssignKind::Assignment => {
                 let value = cx.pop_stack();
 
-                let mut scope = cx.scope();
-                scope.global.clone().set_property(
-                    &mut scope,
+                cx.global.clone().set_property(
+                    &mut cx,
                     ToString::to_string(&name).into(),
                     PropertyValue::static_default(value.clone()),
                 )?;
-                scope.stack.push(value);
+                cx.stack.push(value);
             }
             AssignKind::AddAssignment => op!(Value::add),
             AssignKind::SubAssignment => op!(Value::sub),
@@ -512,8 +504,8 @@ mod handlers {
 
     /// Calls a function in a "non-recursive" way
     #[allow(clippy::too_many_arguments)]
-    fn call_flat(
-        mut cx: DispatchContext<'_>,
+    fn call_flat<'sc, 'vm>(
+        mut cx: DispatchContext<'sc, 'vm>,
         callee: &Value,
         this: Value,
         function: &Function,
@@ -522,13 +514,12 @@ mod handlers {
         is_constructor: bool,
     ) -> Result<Option<HandleResult>, Value> {
         let sp = cx.stack.len() - argc;
-        let mut scope = cx.scope();
         let Value::Object(callee) = callee else {
             unreachable!("guaranteed by caller")
         };
 
         let this = match is_constructor {
-            true => Value::Object(function.new_instance(callee.clone(), &mut scope)?),
+            true => Value::Object(function.new_instance(callee.clone(), &mut cx)?),
             false => this,
         };
 
@@ -537,20 +528,20 @@ mod handlers {
         // reference list since they stay on the VM stack
         // and are reachable from there
 
-        adjust_stack_from_flat_call(&mut scope, user_function, sp, argc);
+        adjust_stack_from_flat_call(&mut cx, user_function, sp, argc);
 
         let mut frame = Frame::from_function(Some(this), user_function, is_constructor, true);
         frame.set_sp(sp);
 
-        scope.pad_stack_for_frame(&frame);
-        scope.try_push_frame(frame)?;
+        cx.pad_stack_for_frame(&frame);
+        cx.try_push_frame(frame)?;
 
         Ok(None)
     }
 
     /// Fallback for callable values that are not "function objects"
-    fn call_generic(
-        mut cx: DispatchContext<'_>,
+    fn call_generic<'sc, 'vm>(
+        mut cx: DispatchContext<'sc, 'vm>,
         callee: &Value,
         this: Value,
         argc: usize,
@@ -573,21 +564,21 @@ mod handlers {
             (args, refs)
         };
 
-        let mut scope = cx.scope();
-        let scope_ref = &scope as *const LocalScope;
-        scope.externals.add(scope_ref, refs);
+        let scope_ref = cx.scope as *const LocalScope;
+        cx.externals.add(scope_ref, refs);
+        // ^ rework this external stuff
 
         let ret = if is_constructor {
-            callee.construct(&mut scope, this, args)?
+            callee.construct(&mut cx, this, args)?
         } else {
-            callee.apply(&mut scope, this, args)?
+            callee.apply(&mut cx, this, args)?
         };
 
-        scope.stack.push(ret);
+        cx.stack.push(ret);
         Ok(None)
     }
 
-    pub fn call(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn call<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let meta = FunctionCallMetadata::from(cx.fetch_and_inc_ip());
         let argc = usize::from(meta.value());
         let is_constructor = meta.is_constructor_call();
@@ -615,7 +606,7 @@ mod handlers {
         }
     }
 
-    pub fn jmpfalsep(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn jmpfalsep<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         #[cfg(feature = "jit")]
         let ip = cx.active_frame().ip;
 
@@ -640,7 +631,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn jmpfalsenp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn jmpfalsenp<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         #[cfg(feature = "jit")]
         let ip = cx.active_frame().ip;
         let offset = cx.fetchw_and_inc_ip() as i16;
@@ -664,7 +655,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn jmptruep(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn jmptruep<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         #[cfg(feature = "jit")]
         let ip = cx.active_frame().ip;
 
@@ -689,7 +680,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn jmptruenp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn jmptruenp<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         #[cfg(feature = "jit")]
         let ip = cx.active_frame().ip;
         let offset = cx.fetchw_and_inc_ip() as i16;
@@ -713,7 +704,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn jmpnullishp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn jmpnullishp<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         #[cfg(feature = "jit")]
         let ip = cx.active_frame().ip;
         let offset = cx.fetchw_and_inc_ip() as i16;
@@ -737,7 +728,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn jmpnullishnp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn jmpnullishnp<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         #[cfg(feature = "jit")]
         let ip = cx.active_frame().ip;
         let offset = cx.fetchw_and_inc_ip() as i16;
@@ -761,7 +752,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn jmpundefinedp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn jmpundefinedp<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         #[cfg(feature = "jit")]
         let ip = cx.active_frame().ip;
         let offset = cx.fetchw_and_inc_ip() as i16;
@@ -790,7 +781,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn jmpundefinednp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn jmpundefinednp<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         #[cfg(feature = "jit")]
         let ip = cx.active_frame().ip;
         let offset = cx.fetchw_and_inc_ip() as i16;
@@ -819,7 +810,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn jmp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn jmp<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let offset = cx.fetchw_and_inc_ip() as i16;
         let frame = cx.active_frame_mut();
 
@@ -842,7 +833,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn storelocal(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn storelocal<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let id = cx.fetch_and_inc_ip() as usize;
         let kind = AssignKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
 
@@ -850,34 +841,31 @@ mod handlers {
             ($op:expr) => {{
                 let value = cx.get_local(id);
                 let right = cx.pop_stack();
-                let mut scope = cx.scope();
-                let res = $op(&value, &right, &mut scope)?;
-                scope.set_local(id, res.clone());
-                scope.stack.push(res);
+                let res = $op(&value, &right, &mut cx)?;
+                cx.set_local(id, res.clone());
+                cx.stack.push(res);
             }};
         }
 
         macro_rules! prefix {
             ($op:expr) => {{
                 let value = cx.get_local(id);
-                let mut scope = cx.scope();
-                let value = Value::number(value.to_number(&mut scope)?);
+                let value = Value::number(value.to_number(&mut cx)?);
                 let one = Value::number(1.0);
-                let res = $op(&value, &one, &mut scope)?;
-                scope.set_local(id, res.clone());
-                scope.stack.push(res);
+                let res = $op(&value, &one, &mut cx)?;
+                cx.set_local(id, res.clone());
+                cx.stack.push(res);
             }};
         }
 
         macro_rules! postfix {
             ($op:expr) => {{
                 let value = cx.get_local(id);
-                let mut scope = cx.scope();
-                let value = Value::number(value.to_number(&mut scope)?);
+                let value = Value::number(value.to_number(&mut cx)?);
                 let one = Value::number(1.0);
-                let res = $op(&value, &one, &mut scope)?;
-                scope.set_local(id, res);
-                scope.stack.push(value);
+                let res = $op(&value, &one, &mut cx)?;
+                cx.set_local(id, res);
+                cx.stack.push(value);
             }};
         }
 
@@ -908,7 +896,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn ldlocal(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn ldlocal<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let id = cx.fetch_and_inc_ip();
         let value = cx.get_local(id.into()).unbox_external();
 
@@ -916,7 +904,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn arraylit(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn arraylit<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let len = cx.fetch_and_inc_ip() as usize;
 
         let elements = cx
@@ -929,7 +917,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn objlit(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn objlit<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let len = cx.fetch_and_inc_ip() as usize;
 
         let mut obj = ObjectMap::default();
@@ -943,7 +931,7 @@ mod handlers {
                     match cx.pop_stack() {
                         Value::Symbol(sym) => PropertyKey::Symbol(sym),
                         value => {
-                            let string = value.to_string(&mut cx.scope())?;
+                            let string = value.to_string(&mut cx)?;
                             // TODO: can PropertyKey::String be a Rc<str>?
                             let string = Cow::Owned(String::from(&*string));
                             PropertyKey::String(string)
@@ -997,16 +985,15 @@ mod handlers {
             };
         }
 
-        let mut scope = cx.scope();
-        let obj = NamedObject::with_values(&mut scope, obj);
+        let obj = NamedObject::with_values(&mut cx, obj);
 
-        let handle = scope.gc.register(obj);
-        scope.stack.push(handle.into());
+        let handle = cx.gc.register(obj);
+        cx.stack.push(handle.into());
 
         Ok(None)
     }
 
-    pub fn staticpropertyaccess(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn staticpropertyaccess<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let id = cx.fetch_and_inc_ip();
         let ident = cx.identifier_constant(id.into());
 
@@ -1014,15 +1001,15 @@ mod handlers {
 
         let target = if preserve_this { cx.peek_stack() } else { cx.pop_stack() };
 
-        let mut scope = cx.scope();
         // TODO: add scope to externals because calling get_property can invoke getters
+        // ^ what???
 
-        let value = target.get_property(&mut scope, ident.as_ref().into())?;
-        scope.stack.push(value);
+        let value = target.get_property(&mut cx, ident.as_ref().into())?;
+        cx.stack.push(value);
         Ok(None)
     }
 
-    pub fn staticpropertyassign(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn staticpropertyassign<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let kind = AssignKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
         let id = cx.fetchw_and_inc_ip();
         let key = cx.identifier_constant(id.into());
@@ -1031,64 +1018,59 @@ mod handlers {
             ($op:expr) => {{
                 let (target, value) = cx.pop_stack2();
 
-                let mut scope = cx.scope();
-
-                let p = target.get_property(&mut scope, PropertyKey::String(Cow::Borrowed(&key)))?;
-                let res = $op(&p, &value, &mut scope)?;
+                let p = target.get_property(&mut cx, PropertyKey::String(Cow::Borrowed(&key)))?;
+                let res = $op(&p, &value, &mut cx)?;
 
                 target.set_property(
-                    &mut scope,
+                    &mut cx,
                     ToString::to_string(&key).into(),
                     PropertyValue::static_default(res.clone()),
                 )?;
-                scope.stack.push(res);
+                cx.stack.push(res);
             }};
         }
 
         macro_rules! postfix {
             ($op:expr) => {{
                 let target = cx.pop_stack();
-                let mut scope = cx.scope();
-                let prop = target.get_property(&mut scope, PropertyKey::String(Cow::Borrowed(&key)))?;
-                let prop = Value::number(prop.to_number(&mut scope)?);
+                let prop = target.get_property(&mut cx, PropertyKey::String(Cow::Borrowed(&key)))?;
+                let prop = Value::number(prop.to_number(&mut cx)?);
                 let one = Value::number(1.0);
-                let res = $op(&prop, &one, &mut scope)?;
+                let res = $op(&prop, &one, &mut cx)?;
                 target.set_property(
-                    &mut scope,
+                    &mut cx,
                     ToString::to_string(&key).into(),
                     PropertyValue::static_default(res),
                 )?;
-                scope.stack.push(prop);
+                cx.stack.push(prop);
             }};
         }
 
         macro_rules! prefix {
             ($op:expr) => {{
                 let target = cx.pop_stack();
-                let mut scope = cx.scope();
-                let prop = target.get_property(&mut scope, PropertyKey::String(Cow::Borrowed(&key)))?;
-                let prop = Value::number(prop.to_number(&mut scope)?);
+                let prop = target.get_property(&mut cx, PropertyKey::String(Cow::Borrowed(&key)))?;
+                let prop = Value::number(prop.to_number(&mut cx)?);
                 let one = Value::number(1.0);
-                let res = $op(&prop, &one, &mut scope)?;
+                let res = $op(&prop, &one, &mut cx)?;
                 target.set_property(
-                    &mut scope,
+                    &mut cx,
                     ToString::to_string(&key).into(),
                     PropertyValue::static_default(res.clone()),
                 )?;
-                scope.stack.push(res);
+                cx.stack.push(res);
             }};
         }
 
         match kind {
             AssignKind::Assignment => {
                 let (target, value) = cx.pop_stack2();
-                let mut scope = cx.scope();
                 target.set_property(
-                    &mut scope,
+                    &mut cx,
                     ToString::to_string(&key).into(),
                     PropertyValue::static_default(value.clone()),
                 )?;
-                scope.stack.push(value);
+                cx.stack.push(value);
             }
             AssignKind::AddAssignment => op!(Value::add),
             AssignKind::SubAssignment => op!(Value::sub),
@@ -1111,49 +1093,46 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn dynamicpropertyassign(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn dynamicpropertyassign<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let kind = AssignKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
 
         macro_rules! op {
             ($op:expr) => {{
                 let (target, value, key) = cx.pop_stack3();
 
-                let mut scope = cx.scope();
-                let key = PropertyKey::from_value(&mut scope, key)?;
-                let prop = target.get_property(&mut scope, key.clone())?;
+                let key = PropertyKey::from_value(&mut cx, key)?;
+                let prop = target.get_property(&mut cx, key.clone())?;
 
-                let result = $op(&prop, &value, &mut scope)?;
+                let result = $op(&prop, &value, &mut cx)?;
 
-                target.set_property(&mut scope, key, PropertyValue::static_default(result.clone()))?;
-                scope.stack.push(result);
+                target.set_property(&mut cx, key, PropertyValue::static_default(result.clone()))?;
+                cx.stack.push(result);
             }};
         }
 
         macro_rules! postfix {
             ($op:expr) => {{
                 let (target, key) = cx.pop_stack2();
-                let mut scope = cx.scope();
-                let key = PropertyKey::from_value(&mut scope, key)?;
-                let prop = target.get_property(&mut scope, key.clone())?;
-                let prop = Value::number(prop.to_number(&mut scope)?);
+                let key = PropertyKey::from_value(&mut cx, key)?;
+                let prop = target.get_property(&mut cx, key.clone())?;
+                let prop = Value::number(prop.to_number(&mut cx)?);
                 let one = Value::number(1.0);
-                let res = $op(&prop, &one, &mut scope)?;
-                target.set_property(&mut scope, key, PropertyValue::static_default(res))?;
-                scope.stack.push(prop);
+                let res = $op(&prop, &one, &mut cx)?;
+                target.set_property(&mut cx, key, PropertyValue::static_default(res))?;
+                cx.stack.push(prop);
             }};
         }
 
         macro_rules! prefix {
             ($op:expr) => {{
                 let (target, key) = cx.pop_stack2();
-                let mut scope = cx.scope();
-                let key = PropertyKey::from_value(&mut scope, key)?;
-                let prop = target.get_property(&mut scope, key.clone())?;
-                let prop = Value::number(prop.to_number(&mut scope)?);
+                let key = PropertyKey::from_value(&mut cx, key)?;
+                let prop = target.get_property(&mut cx, key.clone())?;
+                let prop = Value::number(prop.to_number(&mut cx)?);
                 let one = Value::number(1.0);
-                let res = $op(&prop, &one, &mut scope)?;
-                target.set_property(&mut scope, key, PropertyValue::static_default(res.clone()))?;
-                scope.stack.push(res);
+                let res = $op(&prop, &one, &mut cx)?;
+                target.set_property(&mut cx, key, PropertyValue::static_default(res.clone()))?;
+                cx.stack.push(res);
             }};
         }
 
@@ -1161,11 +1140,10 @@ mod handlers {
             AssignKind::Assignment => {
                 let (target, value, key) = cx.pop_stack3();
 
-                let mut scope = cx.scope();
-                let key = PropertyKey::from_value(&mut scope, key)?;
+                let key = PropertyKey::from_value(&mut cx, key)?;
 
-                target.set_property(&mut scope, key, PropertyValue::static_default(value.clone()))?;
-                scope.stack.push(value);
+                target.set_property(&mut cx, key, PropertyValue::static_default(value.clone()))?;
+                cx.stack.push(value);
             }
             AssignKind::AddAssignment => op!(Value::add),
             AssignKind::SubAssignment => op!(Value::sub),
@@ -1188,30 +1166,30 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn dynamicpropertyaccess(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn dynamicpropertyaccess<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let key = cx.pop_stack();
 
         let preserve_this = cx.fetch_and_inc_ip() == 1;
 
-        let mut scope = cx.scope();
         // TODO: add scope to externals because calling get_property can invoke getters
+        // ^ ????
 
         let target = if preserve_this {
-            scope.stack.last().cloned()
+            cx.stack.last().cloned()
         } else {
-            scope.stack.pop()
+            cx.stack.pop()
         };
 
         let target = target.expect("Missing target");
 
-        let key = PropertyKey::from_value(&mut scope, key)?;
+        let key = PropertyKey::from_value(&mut cx, key)?;
 
-        let value = target.get_property(&mut scope, key)?;
-        scope.stack.push(value);
+        let value = target.get_property(&mut cx, key)?;
+        cx.stack.push(value);
         Ok(None)
     }
 
-    pub fn ldlocalext(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn ldlocalext<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let id = cx.fetch_and_inc_ip();
         let value = Value::External(cx.get_external(id.into()).clone());
 
@@ -1227,7 +1205,7 @@ mod handlers {
         unsafe { ExternalValue::replace(handle, value) };
     }
 
-    pub fn storelocalext(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn storelocalext<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let id = cx.fetch_and_inc_ip();
         let kind = AssignKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
 
@@ -1235,11 +1213,10 @@ mod handlers {
             ($op:expr) => {{
                 let value = Value::External(cx.get_external(id.into()).clone()).unbox_external();
                 let right = cx.pop_stack();
-                let mut scope = cx.scope();
-                let res = $op(&value, &right, &mut scope)?;
-                let external = scope.get_external(id.into()).unwrap().clone();
-                assign_to_external(&mut scope, &external, res.clone());
-                scope.stack.push(res);
+                let res = $op(&value, &right, &mut cx)?;
+                let external = cx.scope.get_external(id.into()).unwrap().clone();
+                assign_to_external(&mut cx, &external, res.clone());
+                cx.stack.push(res);
             }};
         }
 
@@ -1247,11 +1224,10 @@ mod handlers {
             ($op:expr) => {{
                 let value = Value::External(cx.get_external(id.into()).clone()).unbox_external();
                 let right = Value::number(1.0);
-                let mut scope = cx.scope();
-                let res = $op(&value, &right, &mut scope)?;
-                let external = scope.get_external(id.into()).unwrap().clone();
-                assign_to_external(&mut scope, &external, res.clone());
-                scope.stack.push(res);
+                let res = $op(&value, &right, &mut cx)?;
+                let external = cx.scope.get_external(id.into()).unwrap().clone();
+                assign_to_external(&mut cx, &external, res.clone());
+                cx.stack.push(res);
             }};
         }
 
@@ -1259,21 +1235,19 @@ mod handlers {
             ($op:expr) => {{
                 let value = Value::External(cx.get_external(id.into()).clone()).unbox_external();
                 let right = Value::number(1.0);
-                let mut scope = cx.scope();
-                let res = $op(&value, &right, &mut scope)?;
-                let external = scope.get_external(id.into()).unwrap().clone();
-                assign_to_external(&mut scope, &external, res);
-                scope.stack.push(value);
+                let res = $op(&value, &right, &mut cx)?;
+                let external = cx.scope.get_external(id.into()).unwrap().clone();
+                assign_to_external(&mut cx, &external, res);
+                cx.stack.push(value);
             }};
         }
 
         match kind {
             AssignKind::Assignment => {
                 let value = cx.pop_stack();
-                let mut scope = cx.scope();
-                let external = scope.get_external(id.into()).unwrap().clone();
-                assign_to_external(&mut scope, &external, value.clone());
-                scope.stack.push(value);
+                let external = cx.scope.get_external(id.into()).unwrap().clone();
+                assign_to_external(&mut cx, &external, value.clone());
+                cx.stack.push(value);
             }
             AssignKind::AddAssignment => op!(Value::add),
             AssignKind::SubAssignment => op!(Value::sub),
@@ -1302,7 +1276,7 @@ mod handlers {
         // Ok(None)
     }
 
-    pub fn try_block(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn try_block<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let ip = cx.active_frame().ip;
         let catch_offset = cx.fetchw_and_inc_ip() as usize;
         let catch_ip = ip + catch_offset + 2;
@@ -1313,32 +1287,32 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn try_end(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn try_end<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         cx.try_blocks.pop();
         Ok(None)
     }
 
-    pub fn throw(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn throw<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         Err(cx.pop_stack())
     }
 
-    pub fn type_of(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn type_of<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let value = cx.pop_stack();
         cx.stack.push(value.type_of().as_value());
         Ok(None)
     }
 
-    pub fn yield_(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn yield_<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let value = cx.pop_stack();
         Ok(Some(HandleResult::Yield(value)))
     }
 
-    pub fn await_(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn await_<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let value = cx.pop_stack();
         Ok(Some(HandleResult::Await(value)))
     }
 
-    pub fn import_dyn(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn import_dyn<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let value = cx.pop_stack();
 
         let _ret = match cx.params.dynamic_import_callback() {
@@ -1352,7 +1326,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn import_static(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn import_static<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let ty = StaticImportKind::from_repr(cx.fetch_and_inc_ip()).expect("Invalid import kind");
         let local_id = cx.fetchw_and_inc_ip();
         let path_id = cx.fetchw_and_inc_ip();
@@ -1369,7 +1343,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn export_default(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn export_default<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let value = cx.pop_stack();
         let frame = cx.active_frame_mut();
 
@@ -1383,7 +1357,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn export_named(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn export_named<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         // let mut sc = cx.scope();
         let count = cx.fetchw_and_inc_ip();
 
@@ -1406,7 +1380,7 @@ mod handlers {
                     let ident = cx.identifier_constant(ident_id.into());
 
                     let global = cx.global.clone();
-                    let value = global.get_property(&mut cx.scope(), ident.as_ref().into())?;
+                    let value = global.get_property(&mut cx, ident.as_ref().into())?;
 
                     (value, ident)
                 }
@@ -1423,7 +1397,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn debugger(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn debugger<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         if let Some(cb) = cx.params().debugger_callback() {
             cb(&mut cx)?;
         }
@@ -1431,7 +1405,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn this(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn this<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let this = cx
             .frames
             .iter()
@@ -1444,44 +1418,42 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn global_this(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn global_this<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let global = cx.global.clone();
         cx.stack.push(Value::Object(global));
         Ok(None)
     }
 
-    pub fn super_(cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn super_<'sc, 'vm>(cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         throw!(cx, SyntaxError, "`super` keyword unexpected in this context");
     }
 
-    pub fn undef(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn undef<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         cx.stack.push(Value::undefined());
         Ok(None)
     }
 
-    pub fn infinity(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn infinity<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         cx.stack.push(Value::number(f64::INFINITY));
         Ok(None)
     }
 
-    pub fn nan(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn nan<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         cx.stack.push(Value::number(f64::NAN));
         Ok(None)
     }
 
-    pub fn call_symbol_iterator(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn call_symbol_iterator<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let value = cx.pop_stack();
-        let mut scope = cx.scope();
-        let symbol_iterator = scope.statics.symbol_iterator.clone();
-        let iterable = value.get_property(&mut scope, PropertyKey::Symbol(symbol_iterator))?;
-        let iterator = iterable.apply(&mut scope, value, Vec::new())?;
-        scope.stack.push(iterator);
+        let symbol_iterator = cx.statics.symbol_iterator.clone();
+        let iterable = value.get_property(&mut cx, PropertyKey::Symbol(symbol_iterator))?;
+        let iterator = iterable.apply(&mut cx, value, Vec::new())?;
+        cx.stack.push(iterator);
         Ok(None)
     }
 
-    pub fn call_for_in_iterator(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn call_for_in_iterator<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let value = cx.pop_stack();
-        let mut scope = cx.scope();
 
         let keys = match value {
             Value::Object(obj) => obj.own_keys()?,
@@ -1492,41 +1464,39 @@ mod handlers {
         .map(PropertyValue::static_default)
         .collect();
 
-        let keys = Array::from_vec(&mut scope, keys);
-        let keys = scope.register(keys);
-        let iter = ArrayIterator::new(&mut scope, Value::Object(keys))?;
-        let iter = scope.register(iter);
-        scope.stack.push(Value::Object(iter));
+        let keys = Array::from_vec(&mut cx, keys);
+        let keys = cx.register(keys);
+        let iter = ArrayIterator::new(&mut cx, Value::Object(keys))?;
+        let iter = cx.register(iter);
+        cx.stack.push(Value::Object(iter));
         Ok(None)
     }
 
-    pub fn delete_property_dynamic(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn delete_property_dynamic<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let (property, target) = cx.pop_stack2();
-        let mut scope = cx.scope();
-        let key = PropertyKey::from_value(&mut scope, property)?;
-        let value = target.delete_property(&mut scope, key)?;
+        let key = PropertyKey::from_value(&mut cx, property)?;
+        let value = target.delete_property(&mut cx, key)?;
 
         // TODO: not correct, as `undefined` might have been the actual value
         let did_delete = !matches!(value, Value::Undefined(..));
-        scope.stack.push(Value::Boolean(did_delete));
+        cx.stack.push(Value::Boolean(did_delete));
         Ok(None)
     }
 
-    pub fn delete_property_static(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn delete_property_static<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let target = cx.pop_stack();
         let cid = cx.fetchw_and_inc_ip();
         let con = cx.identifier_constant(cid.into());
-        let mut scope = cx.scope();
         let key = PropertyKey::from(con.as_ref());
-        let value = target.delete_property(&mut scope, key)?;
+        let value = target.delete_property(&mut cx, key)?;
 
         // TODO: not correct, as `undefined` might have been the actual value
         let did_delete = !matches!(value, Value::Undefined(..));
-        scope.stack.push(Value::Boolean(did_delete));
+        cx.stack.push(Value::Boolean(did_delete));
         Ok(None)
     }
 
-    pub fn switch(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn switch<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let case_count = cx.fetchw_and_inc_ip();
         let has_default = cx.fetch_and_inc_ip() == 1;
 
@@ -1566,45 +1536,43 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn objdestruct(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn objdestruct<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let count = cx.fetchw_and_inc_ip();
         let obj = cx.pop_stack();
-        let mut scope = cx.scope();
 
         for _ in 0..count {
-            let mut cx = DispatchContext::new(&mut scope);
+            // let mut cx = DispatchContext::new(&mut cx);
             let loc_id = cx.fetchw_and_inc_ip();
             let ident_id = cx.fetchw_and_inc_ip();
 
             let id = cx.number_constant(loc_id.into()) as usize;
             let ident = cx.identifier_constant(ident_id.into());
 
-            let prop = obj.get_property(&mut scope, PropertyKey::from(ident.as_ref()))?;
-            scope.set_local(id, prop);
+            let prop = obj.get_property(&mut cx, PropertyKey::from(ident.as_ref()))?;
+            cx.set_local(id, prop);
         }
 
         Ok(None)
     }
 
-    pub fn arraydestruct(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn arraydestruct<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let count = cx.fetchw_and_inc_ip();
         let array = cx.pop_stack();
-        let mut scope = cx.scope();
 
         for i in 0..count {
-            let mut cx = DispatchContext::new(&mut scope);
+            // let mut cx = DispatchContext::new(&mut scope);
             let loc_id = cx.fetchw_and_inc_ip();
 
             let id = cx.number_constant(loc_id.into()) as usize;
 
-            let prop = array.get_property(&mut scope, PropertyKey::from(i.to_string().as_ref()))?;
-            scope.set_local(id, prop);
+            let prop = array.get_property(&mut cx, PropertyKey::from(i.to_string().as_ref()))?;
+            cx.set_local(id, prop);
         }
 
         Ok(None)
     }
 
-    pub fn intrinsic_op(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Value> {
+    pub fn intrinsic_op<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let op = IntrinsicOperation::from_repr(cx.fetch_and_inc_ip()).unwrap();
 
         macro_rules! lr_as_num_spec {
@@ -1702,20 +1670,20 @@ mod handlers {
                 let argc = cx.fetch_and_inc_ip();
                 let args = cx.pop_stack_many(argc.into()).collect::<Vec<_>>();
                 let fun = cx.statics.$fun.clone();
-                let mut sc = cx.scope();
 
-                if unlikely(!sc.builtins_purity()) {
+                if unlikely(!cx.builtins_purity()) {
+                    // TODO: don't warn here but when purity was violated
                     warn!("missed spec call due to impurity");
                     // Builtins impure, fallback to slow dynamic property lookup
-                    let global = sc.global.clone();
-                    let k = global.get_property(&mut sc, PropertyKey::from(stringify!($k)))?;
-                    let fun = k.get_property(&mut sc, PropertyKey::from(stringify!($v)))?;
-                    let result = fun.apply(&mut sc, Value::undefined(), args)?;
-                    sc.stack.push(result);
+                    let global = cx.global.clone();
+                    let k = global.get_property(&mut cx, PropertyKey::from(stringify!($k)))?;
+                    let fun = k.get_property(&mut cx, PropertyKey::from(stringify!($v)))?;
+                    let result = fun.apply(&mut cx, Value::undefined(), args)?;
+                    cx.stack.push(result);
                 } else {
                     // Fastpath: call builtin directly
-                    let result = fun.apply(&mut sc, Value::undefined(), args)?;
-                    sc.stack.push(result);
+                    let result = fun.apply(&mut cx, Value::undefined(), args)?;
+                    cx.stack.push(result);
                 }
             }};
         }
@@ -1786,7 +1754,11 @@ mod handlers {
 }
 
 pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResult>, Value> {
-    let cx = DispatchContext::new(vm);
+    // TODO: rework this
+    // let scope_ref = cx.scope as *const LocalScope;
+    // cx.externals.add(scope_ref, refs);
+    let mut scope = LocalScope::new(vm);
+    let cx = DispatchContext::new(&mut scope);
     match instruction {
         Instruction::Constant => handlers::constant(cx),
         Instruction::ConstantW => handlers::constantw(cx),
