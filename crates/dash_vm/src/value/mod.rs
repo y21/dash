@@ -13,6 +13,7 @@ pub mod promise;
 pub mod regex;
 pub mod set;
 pub mod typedarray;
+use std::marker::PhantomData;
 use std::rc::Rc;
 
 use dash_middle::compiler::{constant::Constant, external::External};
@@ -63,6 +64,16 @@ pub enum Value {
     Object(Handle<dyn Object>),
     /// An "external" value that is being used by other functions.
     External(Handle<ExternalValue>),
+}
+
+pub struct Unrooted<'vm> {
+    vm: PhantomData<&'vm mut Vm>,
+    value: Value,
+}
+
+pub struct Rooted<'sc, 'vm> {
+    scope: PhantomData<&'sc mut LocalScope<'vm>>,
+    value: Value,
 }
 
 #[derive(Debug, Trace)]
