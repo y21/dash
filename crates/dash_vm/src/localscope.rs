@@ -85,7 +85,6 @@ impl Default for LocalScopeList {
 
 #[derive(Clone, Debug)]
 pub struct ScopeData {
-    // TODO: idea, hold the elements inline
     refs: Vec<Handle<dyn Object>>,
     next: Option<NonNull<ScopeData>>,
 }

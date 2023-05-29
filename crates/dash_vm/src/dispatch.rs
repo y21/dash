@@ -60,13 +60,7 @@ impl<'sc, 'vm> DispatchContext<'sc, 'vm> {
             .expect("Bytecode attempted to pop frame, but no frames exist")
     }
 
-    pub fn pop_stack(&mut self) -> Value {
-        self.stack
-            .pop()
-            .expect("Bytecode attempted to pop stack value, but nothing was on the stack")
-    }
-
-    pub fn pop_stack_new(&mut self) -> Unrooted {
+    pub fn pop_stack(&mut self) -> Unrooted {
         self.scope.pop_stack_unwrap()
     }
 
@@ -301,7 +295,7 @@ mod handlers {
     }
 
     pub fn bitnot<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
-        let value = cx.pop_stack_new().root(cx.scope);
+        let value = cx.pop_stack_rooted();
         let result = value.bitnot(&mut cx)?;
         cx.stack.push(result);
         Ok(None)
@@ -355,28 +349,28 @@ mod handlers {
     }
 
     pub fn neg<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
-        let value = cx.pop_stack_new().root(cx.scope);
+        let value = cx.pop_stack_rooted();
         let result = value.to_number(&mut cx)?;
         cx.stack.push(Value::number(-result));
         Ok(None)
     }
 
     pub fn pos<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
-        let value = cx.pop_stack_new().root(cx.scope);
+        let value = cx.pop_stack_rooted();
         let result = value.to_number(&mut cx)?;
         cx.stack.push(Value::number(result));
         Ok(None)
     }
 
     pub fn not<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
-        let value = cx.pop_stack_new().root(cx.scope);
+        let value = cx.pop_stack_rooted();
         let result = value.not();
         cx.stack.push(result);
         Ok(None)
     }
 
     pub fn pop<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
-        cx.pop_stack_new();
+        cx.pop_stack();
         Ok(None)
     }
 
@@ -451,7 +445,7 @@ mod handlers {
 
         macro_rules! op {
             ($op:expr) => {{
-                let right = cx.pop_stack_new().root(cx.scope);
+                let right = cx.pop_stack_rooted();
                 let value = cx
                     .global
                     .clone()
@@ -600,7 +594,6 @@ mod handlers {
         };
 
         cx.scope.add_many(refs);
-        cx.scope.add_value(this.clone());
 
         let ret = if is_constructor {
             callee.construct(&mut cx, this, args)?
@@ -621,11 +614,12 @@ mod handlers {
         let stack_len = cx.stack.len();
         let (callee, this) = if has_this {
             cx.stack[stack_len - argc - 2..].rotate_left(2);
-            let (this, callee) = cx.pop_stack2();
+            let (this, callee) = cx.pop_stack2_rooted();
             (callee, this)
         } else {
             cx.stack[stack_len - argc - 1..].rotate_left(1);
-            let callee = cx.pop_stack(); // Does not need to be rooted for flat calls. `generic_call` manually roots it.
+            // NOTE: Does not need to be rooted for flat calls. `generic_call` manually roots it.
+            let callee = cx.pop_stack_rooted();
             (callee, Value::undefined())
         };
 
@@ -645,7 +639,7 @@ mod handlers {
         let ip = cx.active_frame().ip;
 
         let offset = cx.fetchw_and_inc_ip() as i16;
-        let value = cx.pop_stack();
+        let value = cx.pop_stack_rooted();
 
         let jump = !value.is_truthy();
 
@@ -694,7 +688,7 @@ mod handlers {
         let ip = cx.active_frame().ip;
 
         let offset = cx.fetchw_and_inc_ip() as i16;
-        let value = cx.pop_stack();
+        let value = cx.pop_stack_rooted();
 
         let jump = value.is_truthy();
 
@@ -742,7 +736,7 @@ mod handlers {
         #[cfg(feature = "jit")]
         let ip = cx.active_frame().ip;
         let offset = cx.fetchw_and_inc_ip() as i16;
-        let value = cx.pop_stack();
+        let value = cx.pop_stack_rooted();
 
         let jump = value.is_nullish();
 
@@ -790,7 +784,7 @@ mod handlers {
         #[cfg(feature = "jit")]
         let ip = cx.active_frame().ip;
         let offset = cx.fetchw_and_inc_ip() as i16;
-        let value = cx.pop_stack();
+        let value = cx.pop_stack_rooted();
 
         let jump = match value {
             Value::Undefined(..) => true,
@@ -874,7 +868,7 @@ mod handlers {
         macro_rules! op {
             ($op:expr) => {{
                 let value = cx.get_local(id);
-                let right = cx.pop_stack_new().root(cx.scope);
+                let right = cx.pop_stack_rooted();
                 let res = $op(&value, &right, &mut cx)?;
                 cx.set_local(id, res.clone());
                 cx.stack.push(res);
@@ -905,7 +899,8 @@ mod handlers {
 
         match kind {
             AssignKind::Assignment => {
-                let value = cx.pop_stack();
+                // NOTE: Does not need to be rooted.
+                let value = cx.pop_stack_rooted();
                 cx.set_local(id, value.clone());
                 cx.stack.push(value);
             }
@@ -962,7 +957,7 @@ mod handlers {
             let key = match kind {
                 // TODO: it might be a symbol, don't to_string it then!
                 ObjectMemberKind::Dynamic => {
-                    match cx.pop_stack_new().root(cx.scope) {
+                    match cx.pop_stack_rooted() {
                         Value::Symbol(sym) => PropertyKey::Symbol(sym),
                         value => {
                             let string = value.to_string(&mut cx)?;
@@ -1033,9 +1028,11 @@ mod handlers {
 
         let preserve_this = cx.fetch_and_inc_ip() == 1;
 
-        let target = if preserve_this { cx.peek_stack() } else { cx.pop_stack() };
-
-        cx.scope.add_value(target.clone());
+        let target = if preserve_this {
+            cx.peek_stack()
+        } else {
+            cx.pop_stack_rooted()
+        };
 
         let value = target.get_property(&mut cx, ident.as_ref().into())?;
         cx.stack.push(value);
@@ -1068,7 +1065,7 @@ mod handlers {
 
         macro_rules! postfix {
             ($op:expr) => {{
-                let target = cx.pop_stack_new().root(cx.scope);
+                let target = cx.pop_stack_rooted();
                 let prop = target.get_property(&mut cx, PropertyKey::String(Cow::Borrowed(&key)))?;
                 let prop = Value::number(prop.to_number(&mut cx)?);
                 let one = Value::number(1.0);
@@ -1084,7 +1081,7 @@ mod handlers {
 
         macro_rules! prefix {
             ($op:expr) => {{
-                let target = cx.pop_stack_new().root(cx.scope);
+                let target = cx.pop_stack_rooted();
                 let prop = target.get_property(&mut cx, PropertyKey::String(Cow::Borrowed(&key)))?;
                 let prop = Value::number(prop.to_number(&mut cx)?);
                 let one = Value::number(1.0);
@@ -1205,19 +1202,15 @@ mod handlers {
     }
 
     pub fn dynamicpropertyaccess<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
-        let key = cx.pop_stack();
+        let key = cx.pop_stack_rooted();
 
         let preserve_this = cx.fetch_and_inc_ip() == 1;
 
         let target = if preserve_this {
-            cx.stack.last().cloned()
+            cx.peek_stack()
         } else {
-            cx.stack.pop()
+            cx.pop_stack_rooted()
         };
-
-        let target = target.expect("Missing target");
-
-        cx.scope.add_value(target.clone());
 
         let key = PropertyKey::from_value(&mut cx, key)?;
 
@@ -1324,23 +1317,23 @@ mod handlers {
     }
 
     pub fn throw<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
-        Err(cx.pop_stack())
+        Err(cx.pop_stack_rooted())
     }
 
     pub fn type_of<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
-        // Does not need to be rooted. We don't call into JS.
-        let value = cx.pop_stack();
+        // NOTE: Does not need to be rooted. We don't call into JS.
+        let value = cx.pop_stack_rooted();
         cx.stack.push(value.type_of().as_value());
         Ok(None)
     }
 
     pub fn yield_<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
-        let value = cx.pop_stack();
+        let value = cx.pop_stack_rooted();
         Ok(Some(HandleResult::Yield(value)))
     }
 
     pub fn await_<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
-        let value = cx.pop_stack();
+        let value = cx.pop_stack_rooted();
         Ok(Some(HandleResult::Await(value)))
     }
 
@@ -1376,8 +1369,8 @@ mod handlers {
     }
 
     pub fn export_default<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
-        // Does not need to be rooted. Storing it in frame state counts as being rooted.
-        let value = cx.pop_stack();
+        // NOTE: Does not need to be rooted. Storing it in frame state counts as being rooted.
+        let value = cx.pop_stack_rooted();
         let frame = cx.active_frame_mut();
 
         match &mut frame.state {
@@ -1670,7 +1663,7 @@ mod handlers {
 
         macro_rules! bin_op_numl_constr {
             ($op:tt) => {{
-                let left = match cx.pop_stack() {
+                let left = match cx.pop_stack_rooted() {
                     Value::Number(n) => n.0,
                     _ => unreachable!(),
                 };
@@ -1681,7 +1674,7 @@ mod handlers {
 
         macro_rules! bin_op_numl_constr_n {
             ($op:tt, $ty:ty) => {{
-                let left = match cx.pop_stack() {
+                let left = match cx.pop_stack_rooted() {
                     Value::Number(n) => n.0,
                     _ => unreachable!(),
                 };
