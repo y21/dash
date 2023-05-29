@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1684411936879,
+  "lastUpdate": 1685371917187,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -3489,6 +3489,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 80375,
             "range": "± 151",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "382fcd812e4baf1740cb6b95fd0443a66d5b5870",
+          "message": "fix GC unsoundness, part 1",
+          "timestamp": "2023-05-29T16:42:51+02:00",
+          "tree_id": "98cd4de5e3032225e4ba480e448767d50083f24a",
+          "url": "https://github.com/y21/dash/commit/382fcd812e4baf1740cb6b95fd0443a66d5b5870"
+        },
+        "date": 1685371915686,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 3329720,
+            "range": "± 35532",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 276662,
+            "range": "± 2438",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 91814,
+            "range": "± 739",
             "unit": "ns/iter"
           }
         ]
