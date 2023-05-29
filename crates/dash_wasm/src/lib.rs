@@ -7,7 +7,7 @@ use dash_optimizer::type_infer::TypeInferCtx;
 use dash_parser::Parser;
 use dash_vm::eval::EvalError;
 use dash_vm::frame::Frame;
-use dash_vm::local::LocalScope;
+use dash_vm::localscope::LocalScope;
 use dash_vm::params::VmParams;
 use dash_vm::value::ops::abstractions::conversions::ValueConversion;
 use dash_vm::value::Value;
@@ -48,7 +48,7 @@ pub fn evaluate(s: &str, opt: OptLevel, _context: Option<js_sys::Object>) -> Res
 
     let result = match vm.eval(s, opt.into()) {
         Ok(value) => {
-            let mut scope = LocalScope::new(&mut vm);
+            let mut scope = vm.scope();
             let inspect = compile_inspect(&mut scope);
 
             let value = inspect
@@ -71,7 +71,7 @@ pub fn evaluate(s: &str, opt: OptLevel, _context: Option<js_sys::Object>) -> Res
 }
 
 pub fn fmt_value(value: Value, vm: &mut Vm) -> String {
-    let mut scope = LocalScope::new(vm);
+    let mut scope = vm.scope();
     value
         .to_string(&mut scope)
         .map(|s| ToString::to_string(&s))

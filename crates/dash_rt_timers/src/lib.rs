@@ -7,7 +7,7 @@ use dash_rt::event::EventMessage;
 use dash_rt::module::ModuleLoader;
 use dash_rt::state::State;
 use dash_vm::gc::persistent::Persistent;
-use dash_vm::local::LocalScope;
+use dash_vm::localscope::LocalScope;
 use dash_vm::throw;
 use dash_vm::value::function::native::CallContext;
 use dash_vm::value::function::Function;
@@ -60,7 +60,7 @@ fn set_timeout(cx: CallContext) -> Result<Value, Value> {
         tokio::time::sleep(Duration::from_millis(delay)).await;
 
         tx.send(EventMessage::ScheduleCallback(Box::new(move |rt| {
-            let mut sc = LocalScope::new(rt.vm_mut());
+            let mut sc = rt.vm_mut().scope();
             let callback = callback.get();
 
             if let Err(err) = callback.apply(&mut sc, Value::undefined(), Vec::new()) {

@@ -44,7 +44,7 @@ impl Object for BoundFunction {
 
     fn apply(
         &self,
-        scope: &mut crate::local::LocalScope,
+        scope: &mut crate::localscope::LocalScope,
         _callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,

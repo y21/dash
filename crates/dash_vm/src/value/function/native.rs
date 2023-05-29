@@ -1,4 +1,4 @@
-use crate::local::LocalScope;
+use crate::localscope::LocalScope;
 use crate::value::Value;
 
 pub type NativeFunction = fn(cx: CallContext) -> Result<Value, Value>;

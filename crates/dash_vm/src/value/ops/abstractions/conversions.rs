@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use crate::gc::handle::Handle;
-use crate::local::LocalScope;
+use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::boxed::Boolean;
 use crate::value::boxed::Number as BoxedNumber;

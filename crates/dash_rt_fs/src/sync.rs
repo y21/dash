@@ -1,4 +1,4 @@
-use dash_vm::local::LocalScope;
+use dash_vm::localscope::LocalScope;
 use dash_vm::value::error::Error;
 use dash_vm::value::function::native::CallContext;
 use dash_vm::value::function::Function;

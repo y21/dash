@@ -4,7 +4,7 @@ use crate::gc::{persistent::Persistent, trace::Trace};
 use bitflags::bitflags;
 use dash_proc_macro::Trace;
 
-use crate::{gc::handle::Handle, local::LocalScope, throw, Vm};
+use crate::{gc::handle::Handle, localscope::LocalScope, throw, Vm};
 
 use super::{
     ops::abstractions::conversions::ValueConversion,
@@ -90,7 +90,7 @@ macro_rules! delegate {
     (override $field:ident, get_own_property_descriptor) => {
         fn get_own_property_descriptor(
             &self,
-            sc: &mut $crate::local::LocalScope,
+            sc: &mut $crate::localscope::LocalScope,
             key: $crate::value::object::PropertyKey,
         ) -> Result<Option<$crate::value::object::PropertyValue>, $crate::value::Value> {
             self.$field.get_own_property_descriptor(sc, key)
@@ -99,7 +99,7 @@ macro_rules! delegate {
     (override $field:ident, get_property) => {
         fn get_property(
             &self,
-            sc: &mut $crate::local::LocalScope,
+            sc: &mut $crate::localscope::LocalScope,
             key: $crate::value::object::PropertyKey,
         ) -> Result<$crate::value::Value, $crate::value::Value> {
             self.$field.get_property(sc, key)
@@ -108,7 +108,7 @@ macro_rules! delegate {
     (override $field:ident, get_property_descriptor) => {
         fn get_property_descriptor(
             &self,
-            sc: &mut $crate::local::LocalScope,
+            sc: &mut $crate::localscope::LocalScope,
             key: $crate::value::object::PropertyKey,
         ) -> Result<Option<$crate::value::object::PropertyValue>, $crate::value::Value> {
             self.$field.get_property_descriptor(sc, key)
@@ -117,7 +117,7 @@ macro_rules! delegate {
     (override $field:ident, set_property) => {
         fn set_property(
             &self,
-            sc: &mut $crate::local::LocalScope,
+            sc: &mut $crate::localscope::LocalScope,
             key: $crate::value::object::PropertyKey<'static>,
             value: $crate::value::object::PropertyValue,
         ) -> Result<(), $crate::value::Value> {
@@ -127,19 +127,19 @@ macro_rules! delegate {
     (override $field:ident, delete_property) => {
         fn delete_property(
             &self,
-            sc: &mut $crate::local::LocalScope,
+            sc: &mut $crate::localscope::LocalScope,
             key: $crate::value::object::PropertyKey,
         ) -> Result<$crate::value::Value, $crate::value::Value> {
             self.$field.delete_property(sc, key)
         }
     };
     (override $field:ident, set_prototype) => {
-        fn set_prototype(&self, sc: &mut $crate::local::LocalScope, value: $crate::value::Value) -> Result<(), $crate::value::Value> {
+        fn set_prototype(&self, sc: &mut $crate::localscope::LocalScope, value: $crate::value::Value) -> Result<(), $crate::value::Value> {
             self.$field.set_prototype(sc, value)
         }
     };
     (override $field:ident, get_prototype) => {
-        fn get_prototype(&self, sc: &mut $crate::local::LocalScope) -> Result<$crate::value::Value, $crate::value::Value> {
+        fn get_prototype(&self, sc: &mut $crate::localscope::LocalScope) -> Result<$crate::value::Value, $crate::value::Value> {
             self.$field.get_prototype(sc)
         }
     };
@@ -156,7 +156,7 @@ macro_rules! delegate {
     (override $field:ident, apply) => {
         fn apply(
             &self,
-            sc: &mut $crate::local::LocalScope,
+            sc: &mut $crate::localscope::LocalScope,
             handle: $crate::gc::handle::Handle<dyn Object>,
             this: $crate::value::Value,
             args: Vec<$crate::value::Value>,
@@ -167,7 +167,7 @@ macro_rules! delegate {
     (override $field:ident, construct) => {
         fn construct(
             &self,
-            sc: &mut $crate::local::LocalScope,
+            sc: &mut $crate::localscope::LocalScope,
             handle: $crate::gc::handle::Handle<dyn Object>,
             this: $crate::value::Value,
             args: Vec<$crate::value::Value>,

@@ -13,7 +13,6 @@ pub mod promise;
 pub mod regex;
 pub mod set;
 pub mod typedarray;
-use std::marker::PhantomData;
 use std::rc::Rc;
 
 use dash_middle::compiler::{constant::Constant, external::External};
@@ -44,7 +43,7 @@ use self::{
 // raw pointer arithmetic to access the data ptr/vtable ptr
 // directly from JIT code and we don't want the optimizer
 // to mess with it.
-use super::{local::LocalScope, Vm};
+use super::{localscope::LocalScope, Vm};
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub enum Value {
@@ -66,14 +65,31 @@ pub enum Value {
     External(Handle<ExternalValue>),
 }
 
-pub struct Unrooted<'vm> {
-    vm: PhantomData<&'vm mut Vm>,
+// TODO: this is still not sound. we need to make sure that you cannot use an Unrooted
+// after using the vm
+pub struct Unrooted {
     value: Value,
 }
 
-pub struct Rooted<'sc, 'vm> {
-    scope: PhantomData<&'sc mut LocalScope<'vm>>,
-    value: Value,
+impl Unrooted {
+    pub fn new(value: Value) -> Self {
+        Self { value }
+    }
+
+    pub fn root(self, scope: &mut LocalScope<'_>) -> Value {
+        scope.add_value(self.value.clone());
+        self.value
+    }
+}
+
+#[macro_export]
+macro_rules! unroot {
+    ($scope:expr, $this:expr) => {{
+        let unrooted = $this;
+        let _temp =
+            unsafe { ::std::mem::transmute::<$crate::value::Unrooted<'_>, $crate::value::Unrooted<'static>>(unrooted) };
+        Unrooted::unroot(_temp, $scope)
+    }};
 }
 
 #[derive(Debug, Trace)]

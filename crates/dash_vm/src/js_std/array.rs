@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use crate::local::LocalScope;
+use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::array;
 use crate::value::array::Array;

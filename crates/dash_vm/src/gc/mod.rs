@@ -3,6 +3,7 @@
 use bitflags::bitflags;
 use std::borrow::Borrow;
 use std::cell::Cell;
+use std::fmt::Debug;
 use std::ops::Deref;
 use std::ptr::NonNull;
 
@@ -15,10 +16,11 @@ pub mod handle;
 pub mod persistent;
 pub mod trace;
 
+#[derive(Debug)]
 pub struct Gc {
     /// The very first node of this [`Gc`]
     head: Option<NonNull<GcNode<dyn Object>>>,
-    /// The last-inserted node of this [`Gc`]
+    /// The last (-inserted) node of this [`Gc`]
     tail: Option<NonNull<GcNode<dyn Object>>>,
     node_count: usize,
 }
@@ -173,6 +175,17 @@ mod tests {
     use crate::value::ExternalValue;
 
     use super::*;
+
+    #[test]
+    fn simple() {
+        unsafe {
+            let mut gc = Gc::new();
+            let h1 = register_gc!(gc, 123.4);
+            let h2 = register_gc!(gc, Rc::from("hi"));
+            gc.sweep();
+            gc.sweep();
+        }
+    }
 
     #[test]
     fn gc_works() {

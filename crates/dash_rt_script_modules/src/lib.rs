@@ -2,7 +2,7 @@ use std::cell::RefCell;
 
 use dash_middle::compiler::StaticImportKind;
 use dash_rt::module::ModuleLoader;
-use dash_vm::local::LocalScope;
+use dash_vm::localscope::LocalScope;
 use dash_vm::throw;
 use dash_vm::value::Value;
 use dash_vm::Vm;

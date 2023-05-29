@@ -4,7 +4,6 @@ use std::time::SystemTime;
 use dash_middle::compiler::StaticImportKind;
 use dash_optimizer::OptLevel;
 use dash_vm::eval::EvalError;
-use dash_vm::local::LocalScope;
 use dash_vm::params::VmParams;
 use dash_vm::throw;
 use dash_vm::value::Value;
@@ -106,7 +105,7 @@ fn time_callback(_: &mut Vm) -> Result<u64, Value> {
 }
 
 fn import_callback(vm: &mut Vm, import_ty: StaticImportKind, path: &str) -> Result<Value, Value> {
-    let mut sc = LocalScope::new(vm);
+    let mut sc = vm.scope();
 
     let root = State::from_vm(&sc).root_module().clone();
 

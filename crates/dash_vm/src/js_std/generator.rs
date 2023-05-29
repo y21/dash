@@ -2,7 +2,7 @@ use std::mem;
 
 use crate::dispatch::HandleResult;
 use crate::frame::Frame;
-use crate::local::LocalScope;
+use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::function::generator::as_generator;
 use crate::value::function::generator::GeneratorState;

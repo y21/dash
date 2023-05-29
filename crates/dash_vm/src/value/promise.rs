@@ -5,7 +5,7 @@ use dash_proc_macro::Trace;
 
 use crate::gc::handle::Handle;
 use crate::gc::trace::Trace;
-use crate::local::LocalScope;
+use crate::localscope::LocalScope;
 use crate::PromiseAction;
 use crate::Vm;
 
@@ -90,7 +90,7 @@ impl Object for Promise {
 
     fn set_property(
         &self,
-        sc: &mut crate::local::LocalScope,
+        sc: &mut crate::localscope::LocalScope,
         key: crate::value::object::PropertyKey<'static>,
         value: crate::value::object::PropertyValue,
     ) -> Result<(), Value> {
@@ -99,23 +99,23 @@ impl Object for Promise {
 
     fn delete_property(
         &self,
-        sc: &mut crate::local::LocalScope,
+        sc: &mut crate::localscope::LocalScope,
         key: crate::value::object::PropertyKey,
     ) -> Result<Value, Value> {
         self.obj.delete_property(sc, key)
     }
 
-    fn set_prototype(&self, sc: &mut crate::local::LocalScope, value: Value) -> Result<(), Value> {
+    fn set_prototype(&self, sc: &mut crate::localscope::LocalScope, value: Value) -> Result<(), Value> {
         self.obj.set_prototype(sc, value)
     }
 
-    fn get_prototype(&self, sc: &mut crate::local::LocalScope) -> Result<Value, Value> {
+    fn get_prototype(&self, sc: &mut crate::localscope::LocalScope) -> Result<Value, Value> {
         self.obj.get_prototype(sc)
     }
 
     fn apply(
         &self,
-        scope: &mut crate::local::LocalScope,
+        scope: &mut crate::localscope::LocalScope,
         callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
@@ -158,7 +158,7 @@ impl Object for PromiseResolver {
 
     fn set_property(
         &self,
-        sc: &mut crate::local::LocalScope,
+        sc: &mut crate::localscope::LocalScope,
         key: crate::value::object::PropertyKey<'static>,
         value: crate::value::object::PropertyValue,
     ) -> Result<(), Value> {
@@ -167,23 +167,23 @@ impl Object for PromiseResolver {
 
     fn delete_property(
         &self,
-        sc: &mut crate::local::LocalScope,
+        sc: &mut crate::localscope::LocalScope,
         key: crate::value::object::PropertyKey,
     ) -> Result<Value, Value> {
         self.obj.delete_property(sc, key)
     }
 
-    fn set_prototype(&self, sc: &mut crate::local::LocalScope, value: Value) -> Result<(), Value> {
+    fn set_prototype(&self, sc: &mut crate::localscope::LocalScope, value: Value) -> Result<(), Value> {
         self.obj.set_prototype(sc, value)
     }
 
-    fn get_prototype(&self, sc: &mut crate::local::LocalScope) -> Result<Value, Value> {
+    fn get_prototype(&self, sc: &mut crate::localscope::LocalScope) -> Result<Value, Value> {
         self.obj.get_prototype(sc)
     }
 
     fn apply(
         &self,
-        scope: &mut crate::local::LocalScope,
+        scope: &mut crate::localscope::LocalScope,
         _callee: Handle<dyn Object>,
         _this: Value,
         args: Vec<Value>,
@@ -236,7 +236,7 @@ impl Object for PromiseRejecter {
 
     fn set_property(
         &self,
-        sc: &mut crate::local::LocalScope,
+        sc: &mut crate::localscope::LocalScope,
         key: crate::value::object::PropertyKey<'static>,
         value: crate::value::object::PropertyValue,
     ) -> Result<(), Value> {
@@ -245,23 +245,23 @@ impl Object for PromiseRejecter {
 
     fn delete_property(
         &self,
-        sc: &mut crate::local::LocalScope,
+        sc: &mut crate::localscope::LocalScope,
         key: crate::value::object::PropertyKey,
     ) -> Result<Value, Value> {
         self.obj.delete_property(sc, key)
     }
 
-    fn set_prototype(&self, sc: &mut crate::local::LocalScope, value: Value) -> Result<(), Value> {
+    fn set_prototype(&self, sc: &mut crate::localscope::LocalScope, value: Value) -> Result<(), Value> {
         self.obj.set_prototype(sc, value)
     }
 
-    fn get_prototype(&self, sc: &mut crate::local::LocalScope) -> Result<Value, Value> {
+    fn get_prototype(&self, sc: &mut crate::localscope::LocalScope) -> Result<Value, Value> {
         self.obj.get_prototype(sc)
     }
 
     fn apply(
         &self,
-        scope: &mut crate::local::LocalScope,
+        scope: &mut crate::localscope::LocalScope,
         _callee: Handle<dyn Object>,
         _this: Value,
         args: Vec<Value>,

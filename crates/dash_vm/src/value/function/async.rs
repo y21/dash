@@ -2,7 +2,7 @@ use dash_proc_macro::Trace;
 
 use crate::delegate;
 use crate::gc::handle::Handle;
-use crate::local::LocalScope;
+use crate::localscope::LocalScope;
 use crate::value::object::NamedObject;
 use crate::value::object::Object;
 use crate::value::object::PropertyKey;
@@ -129,7 +129,7 @@ impl Object for ThenTask {
 
     fn apply(
         &self,
-        scope: &mut crate::local::LocalScope,
+        scope: &mut crate::localscope::LocalScope,
         _callee: Handle<dyn Object>,
         _this: Value,
         args: Vec<Value>,

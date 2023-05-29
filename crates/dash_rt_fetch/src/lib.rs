@@ -6,7 +6,7 @@ use dash_rt::state::State;
 use dash_vm::delegate;
 use dash_vm::gc::persistent::Persistent;
 use dash_vm::gc::trace::Trace;
-use dash_vm::local::LocalScope;
+use dash_vm::localscope::LocalScope;
 use dash_vm::throw;
 use dash_vm::value::error::Error;
 use dash_vm::value::function::native::CallContext;
@@ -71,7 +71,7 @@ fn fetch(cx: CallContext) -> Result<Value, Value> {
             .await;
 
         event_tx.send(EventMessage::ScheduleCallback(Box::new(move |rt| {
-            let mut sc = LocalScope::new(rt.vm_mut());
+            let mut sc = rt.vm_mut().scope();
             let promise = State::from_vm(&sc).take_promise(promise_id);
             let promise = promise.as_any().downcast_ref::<Promise>().unwrap();
 
@@ -139,7 +139,7 @@ fn http_response_text(cx: CallContext) -> Result<Value, Value> {
         let text = response.text().await;
 
         event_tx.send(EventMessage::ScheduleCallback(Box::new(move |rt| {
-            let mut sc = LocalScope::new(rt.vm_mut());
+            let mut sc = rt.vm_mut().scope();
             let promise = State::from_vm(&sc).take_promise(promise_id);
             let promise = promise.as_any().downcast_ref::<Promise>().unwrap();
 

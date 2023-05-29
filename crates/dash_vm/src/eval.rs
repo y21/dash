@@ -12,7 +12,7 @@ use dash_optimizer::OptLevel;
 use dash_parser::Parser;
 
 use crate::frame::Frame;
-use crate::local::LocalScope;
+use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::object::NamedObject;
 use crate::value::object::Object;

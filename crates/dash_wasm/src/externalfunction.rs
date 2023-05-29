@@ -1,6 +1,6 @@
 use dash_vm::gc::handle::Handle;
 use dash_vm::gc::trace::Trace;
-use dash_vm::local::LocalScope;
+use dash_vm::localscope::LocalScope;
 use dash_vm::value::object::NamedObject;
 use dash_vm::value::object::Object;
 use dash_vm::value::object::PropertyKey;

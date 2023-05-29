@@ -1,4 +1,4 @@
-use crate::local::LocalScope;
+use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::array::Array;
 use crate::value::array::ArrayIterator;

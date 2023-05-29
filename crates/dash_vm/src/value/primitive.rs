@@ -6,7 +6,7 @@ use std::iter;
 use std::rc::Rc;
 
 use crate::gc::handle::Handle;
-use crate::local::LocalScope;
+use crate::localscope::LocalScope;
 use crate::throw;
 use crate::util::format_f64;
 
