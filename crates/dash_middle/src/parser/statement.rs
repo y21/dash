@@ -423,6 +423,7 @@ pub struct FunctionDeclaration<'a> {
     pub statements: Vec<Statement<'a>>,
     /// The type of function
     pub ty: FunctionKind,
+    pub ty_segment: Option<TypeSegment<'a>>,
 }
 
 impl<'a> fmt::Display for FunctionDeclaration<'a> {
@@ -486,6 +487,7 @@ impl<'a> FunctionDeclaration<'a> {
         statements: Vec<Statement<'a>>,
         ty: FunctionKind,
         r#async: bool,
+        ty_segment: Option<TypeSegment<'a>>,
     ) -> Self {
         Self {
             id,
@@ -494,6 +496,7 @@ impl<'a> FunctionDeclaration<'a> {
             statements,
             ty,
             r#async,
+            ty_segment,
         }
     }
 }

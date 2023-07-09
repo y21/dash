@@ -14,6 +14,7 @@ use dash_middle::parser::statement::Statement;
 
 use crate::must_borrow_lexeme;
 use crate::stmt::StatementParser;
+use crate::types::TypeParser;
 use crate::Parser;
 
 pub trait ExpressionParser<'a> {
@@ -437,6 +438,7 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
                                         body.0,
                                         FunctionKind::Function,
                                         false,
+                                        None,
                                     )),
                                 ));
                             } else {
@@ -486,8 +488,15 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
 
                             // Desugar to function
                             let func_id = self.function_counter.advance();
-                            let fun =
-                                FunctionDeclaration::new(None, func_id, params, stmts, FunctionKind::Function, false);
+                            let fun = FunctionDeclaration::new(
+                                None,
+                                func_id,
+                                params,
+                                stmts,
+                                FunctionKind::Function,
+                                false,
+                                None,
+                            );
                             items.push((key, Expr::function(fun)));
                         }
                     }
@@ -602,6 +611,13 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
 
         let arguments = self.parse_parameter_list()?;
 
+        // Parse type param
+        let ty_seg = if self.expect_and_skip(&[TokenType::Colon], false) {
+            Some(self.parse_type_segment()?)
+        } else {
+            None
+        };
+
         if !self.expect_and_skip(&[TokenType::LeftBrace], true) {
             return None;
         }
@@ -614,7 +630,7 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
 
         let func_id = self.function_counter.advance();
         Some(FunctionDeclaration::new(
-            name, func_id, arguments, statements, ty, is_async,
+            name, func_id, arguments, statements, ty, is_async, ty_seg,
         ))
     }
 
@@ -650,6 +666,7 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
             vec![body],
             FunctionKind::Arrow,
             false,
+            None,
         ))
     }
 }

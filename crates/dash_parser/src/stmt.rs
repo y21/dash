@@ -136,6 +136,15 @@ impl<'a> StatementParser<'a> for Parser<'a> {
 
             if is_method {
                 let arguments = self.parse_parameter_list()?;
+
+                // Parse type param
+                // TODO: this should probably be part of parse_aprameter_list
+                let ty_seg = if self.expect_and_skip(&[TokenType::Colon], false) {
+                    Some(self.parse_type_segment()?)
+                } else {
+                    None
+                };
+
                 let body = self.parse_statement()?;
 
                 let func_id = self.function_counter.advance();
@@ -146,6 +155,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
                     vec![body],
                     FunctionKind::Function,
                     false,
+                    ty_seg,
                 );
 
                 members.push(ClassMember {

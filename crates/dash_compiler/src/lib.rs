@@ -1126,16 +1126,16 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         ) -> Result<bool, CompileError> {
             if let Expr::PropertyAccess(PropertyAccessExpr { target, property, .. }) = target {
                 let Some(target) = target.as_identifier() else {
-                        return Ok(false);
-                    };
+                    return Ok(false);
+                };
 
                 let Some(property) = property.as_identifier() else {
-                        return Ok(false);
-                    };
+                    return Ok(false);
+                };
 
                 let Ok(arg_len) = u8::try_from(arguments.len()) else {
-                        return Ok(false);
-                    };
+                    return Ok(false);
+                };
 
                 macro_rules! emit_spec {
                     ($spec:expr) => {{
@@ -1409,6 +1409,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             mut statements,
             ty,
             r#async,
+            ty_segment: _,
         }: FunctionDeclaration<'a>,
     ) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
@@ -1798,6 +1799,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             statements,
             ty: FunctionKind::Function,
             r#async: false,
+            ty_segment: None,
         };
 
         ib.visit_assignment_expression(AssignmentExpr::new_local_place(
