@@ -17,6 +17,7 @@ use crate::{
 use super::{value::Value, Vm};
 use dash_middle::compiler::{constant::Constant, instruction::Instruction};
 
+// TODO: all of these should be `Unrooted`
 pub enum HandleResult {
     Return(Value),
     Yield(Value),

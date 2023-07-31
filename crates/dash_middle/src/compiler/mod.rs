@@ -16,7 +16,7 @@ pub mod instruction_iter;
 pub mod scope;
 
 #[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CompileResult {
     pub instructions: Vec<u8>,
     pub cp: ConstantPool,
