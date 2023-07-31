@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1688919350781,
+  "lastUpdate": 1690834098524,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -3615,6 +3615,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 76338,
             "range": "± 246",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "281d72708171cf38eb55fff98df92c559d9a7fa6",
+          "message": "fix clippy warnings and use Unrooted API in more places",
+          "timestamp": "2023-07-31T22:04:43+02:00",
+          "tree_id": "a7a47b5503a11d96cb0251c718c0aadeb796fe33",
+          "url": "https://github.com/y21/dash/commit/281d72708171cf38eb55fff98df92c559d9a7fa6"
+        },
+        "date": 1690834097260,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 2956821,
+            "range": "± 40810",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 229846,
+            "range": "± 760",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 76357,
+            "range": "± 66",
             "unit": "ns/iter"
           }
         ]
