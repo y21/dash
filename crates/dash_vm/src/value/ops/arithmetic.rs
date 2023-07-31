@@ -1,4 +1,4 @@
-use crate::local::LocalScope;
+use crate::localscope::LocalScope;
 use crate::value::object::Object;
 use crate::value::Typeof;
 use crate::value::Value;

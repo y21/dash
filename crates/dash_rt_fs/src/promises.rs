@@ -3,7 +3,7 @@ use std::future::Future;
 use dash_rt::event::EventMessage;
 use dash_rt::state::State;
 use dash_vm::gc::persistent::Persistent;
-use dash_vm::local::LocalScope;
+use dash_vm::localscope::LocalScope;
 use dash_vm::value::error::Error;
 use dash_vm::value::function::native::CallContext;
 use dash_vm::value::function::Function;
@@ -72,7 +72,7 @@ where
 
         event_tx.send(EventMessage::ScheduleCallback(Box::new(move |rt| {
             let promise = State::from_vm(rt.vm()).take_promise(promise_id);
-            let mut scope = LocalScope::new(rt.vm_mut());
+            let mut scope = rt.vm_mut().scope();
             let promise = promise.as_any().downcast_ref::<Promise>().unwrap();
 
             let data = convert(&mut scope, data);

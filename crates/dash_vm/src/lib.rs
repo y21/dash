@@ -7,9 +7,8 @@ use crate::{
 
 use self::{
     dispatch::HandleResult,
-    external::Externals,
     frame::{Exports, Frame, FrameState, TryBlock},
-    local::LocalScope,
+    localscope::LocalScope,
     params::VmParams,
     statics::Statics,
     value::{
@@ -21,8 +20,9 @@ use self::{
 use dash_log::{debug, error, span, Level};
 use dash_middle::compiler::instruction::Instruction;
 use gc::{handle::Handle, Gc};
+use localscope::{LocalScopeList, scope};
 use util::unlikely;
-use value::{promise::{Promise, PromiseState}, ValueContext, function::bound::BoundFunction, PureBuiltin, object::NamedObject, ExternalValue};
+use value::{promise::{Promise, PromiseState}, ValueContext, function::bound::BoundFunction, PureBuiltin, object::NamedObject, ExternalValue, Unrooted};
 
 #[cfg(feature = "jit")]
 mod jit;
@@ -31,10 +31,9 @@ pub mod dispatch;
 pub mod eval;
 pub mod external;
 pub mod frame;
-// pub mod gc;
 pub mod gc;
 pub mod js_std;
-pub mod local;
+pub mod localscope;
 pub mod params;
 pub mod statics;
 pub mod util;
@@ -50,10 +49,12 @@ const DEFAULT_GC_OBJECT_COUNT_THRESHOLD: usize = 8192;
 pub struct Vm {
     frames: Vec<Frame>,
     async_tasks: Vec<Handle<dyn Object>>,
+    // TODO: the inner vec of the stack should be private for soundness
+    // popping from the stack must return `Unrooted`
     stack: Vec<Value>,
     gc: Gc,
     global: Handle<dyn Object>,
-    externals: Externals,
+    scopes: LocalScopeList,
     statics: Box<Statics>, // TODO: we should box this... maybe?
     try_blocks: Vec<TryBlock>,
     params: VmParams,
@@ -86,7 +87,8 @@ impl Vm {
             stack: Vec::with_capacity(512),
             gc,
             global,
-            externals: Externals::default(),
+            // externals: Externals::default(),
+            scopes: LocalScopeList::new(),
             statics: Box::new(statics),
             try_blocks: Vec::new(),
             params,
@@ -98,6 +100,10 @@ impl Vm {
         };
         vm.prepare();
         vm
+    }
+
+    pub fn scope(&mut self) -> LocalScope<'_> {
+        scope(self)
     }
 
     pub fn global(&self) -> Handle<dyn Object> {
@@ -114,7 +120,7 @@ impl Vm {
             fun.set_fn_prototype(proto.clone());
         }
 
-        let mut scope = LocalScope::new(self);
+        let mut scope = self.scope();
 
         let global = scope.global.clone();
 
@@ -883,11 +889,22 @@ impl Vm {
         self.frames.pop()
     }
 
+    // TODO: should actually yield iterator over Unrooted
     pub(crate) fn drain_stack<R>(&mut self, range: R) -> Drain<'_, Value>
     where
         R: RangeBounds<usize>,
     {
         self.stack.drain(range)
+    }
+
+    pub fn pop_stack(&mut self) -> Option<Unrooted> {
+        let value = self.stack.pop()?;
+        Some(Unrooted::new(value))
+    }
+
+    pub fn pop_stack_unwrap(&mut self) -> Unrooted {
+        let value = self.stack.pop().expect("Expected value on stack");
+        Unrooted::new(value)
     }
 
     fn handle_rt_error(&mut self, err: Value, max_fp: usize) -> Result<(), Value> {
@@ -958,7 +975,7 @@ impl Vm {
         while !self.async_tasks.is_empty() {
             let tasks = mem::take(&mut self.async_tasks);
 
-            let mut scope = LocalScope::new(self);
+            let mut scope = self.scope();
 
             for task in tasks {
                 debug!("process task {:?}", task);
@@ -1060,7 +1077,7 @@ impl Vm {
         debug!("trace globals");
         self.global.trace();
         debug!("trace externals");
-        self.externals.trace();
+        self.scopes.trace();
         debug!("trace statics");
         self.statics.trace();
     }

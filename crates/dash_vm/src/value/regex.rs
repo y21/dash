@@ -22,7 +22,7 @@ pub struct RegExp {
 }
 
 impl RegExp {
-    pub fn new(nodes: Vec<Node>, source: Rc<str>, vm: &mut Vm) -> Self {
+    pub fn new(nodes: Vec<Node>, source: Rc<str>, vm: &Vm) -> Self {
         let proto = vm.statics.regexp_prototype.clone();
         let ctor = vm.statics.regexp_ctor.clone();
 

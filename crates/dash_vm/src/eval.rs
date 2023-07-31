@@ -12,7 +12,7 @@ use dash_optimizer::OptLevel;
 use dash_parser::Parser;
 
 use crate::frame::Frame;
-use crate::local::LocalScope;
+use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::object::NamedObject;
 use crate::value::object::Object;
@@ -82,17 +82,13 @@ impl Vm {
         let exports = sc.execute_module(frame)?;
 
         let export_obj = match import_ty {
-            StaticImportKind::Default => {
-                let export_obj = match exports.default {
-                    Some(obj) => obj,
-                    None => {
-                        let o = NamedObject::new(sc);
-                        Value::Object(sc.register(o))
-                    }
-                };
-
-                export_obj
-            }
+            StaticImportKind::Default => match exports.default {
+                Some(obj) => obj,
+                None => {
+                    let o = NamedObject::new(sc);
+                    Value::Object(sc.register(o))
+                }
+            },
             StaticImportKind::All => {
                 let export_obj = NamedObject::new(sc);
 

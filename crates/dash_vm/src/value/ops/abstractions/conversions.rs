@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use crate::gc::handle::Handle;
-use crate::local::LocalScope;
+use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::boxed::Boolean;
 use crate::value::boxed::Number as BoxedNumber;
@@ -45,7 +45,7 @@ pub trait ValueConversion {
 
         // 3. If number is +∞𝔽, return +∞.
         // 4. If number is -∞𝔽, return -∞.
-        if number == f64::INFINITY || number == f64::NEG_INFINITY {
+        if number.is_infinite() {
             return Ok(number);
         }
 

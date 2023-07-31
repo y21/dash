@@ -6,7 +6,7 @@ use dash_proc_macro::Trace;
 
 use crate::delegate;
 use crate::gc::handle::Handle;
-use crate::local::LocalScope;
+use crate::localscope::LocalScope;
 use crate::throw;
 use crate::Vm;
 
@@ -17,6 +17,7 @@ use super::object::PropertyValue;
 use super::object::PropertyValueKind;
 use super::ops::abstractions::conversions::ValueConversion;
 use super::primitive::array_like_keys;
+use super::Unrooted;
 use super::Value;
 
 pub const MAX_LENGTH: usize = 4294967295;
@@ -27,19 +28,19 @@ pub struct Array {
     obj: NamedObject,
 }
 
-fn get_named_object(vm: &mut Vm) -> NamedObject {
+fn get_named_object(vm: &Vm) -> NamedObject {
     NamedObject::with_prototype_and_constructor(vm.statics.array_prototype.clone(), vm.statics.array_ctor.clone())
 }
 
 impl Array {
-    pub fn new(vm: &mut Vm) -> Self {
+    pub fn new(vm: &Vm) -> Self {
         Array {
             items: RefCell::new(Vec::new()),
             obj: get_named_object(vm),
         }
     }
 
-    pub fn from_vec(vm: &mut Vm, values: Vec<PropertyValue>) -> Self {
+    pub fn from_vec(vm: &Vm, values: Vec<PropertyValue>) -> Self {
         Array {
             items: RefCell::new(values),
             obj: get_named_object(vm),
@@ -115,10 +116,10 @@ impl Object for Array {
         self.obj.set_property(sc, key, value)
     }
 
-    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
         if let PropertyKey::String(key) = &key {
             if key == "length" {
-                return Ok(Value::undefined());
+                return Ok(Unrooted::new(Value::undefined()));
             }
 
             if let Ok(index) = key.parse::<usize>() {
@@ -126,10 +127,10 @@ impl Object for Array {
 
                 if let Some(item) = items.get_mut(index) {
                     let old = std::mem::replace(item, PropertyValue::static_default(Value::null()));
-                    return Ok(match old.into_kind() {
+                    return Ok(Unrooted::new(match old.into_kind() {
                         PropertyValueKind::Static(value) => value,
                         PropertyValueKind::Trap { .. } => Value::undefined(),
-                    });
+                    }));
                 }
             }
         }

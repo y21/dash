@@ -222,7 +222,7 @@ impl<'a> TypeInferCtx<'a> {
 
             debug!("discovered new variable {} of type {:?}", ident, ty);
 
-            if let Err(..) = self.scope_mut(func_id).add_local(ident, binding.kind, ty) {
+            if self.scope_mut(func_id).add_local(ident, binding.kind, ty).is_err() {
                 error!("failed to add variable");
             }
         }
@@ -486,9 +486,10 @@ impl<'a> TypeInferCtx<'a> {
         if let Some(name) = name {
             debug!("visit function {name}");
 
-            if let Err(..) = self
+            if self
                 .scope_mut(func_id)
                 .add_local(name, VariableDeclarationKind::Var, None)
+                .is_err()
             {
                 error!("failed to reserve local space for function");
             }
@@ -497,9 +498,10 @@ impl<'a> TypeInferCtx<'a> {
         for (param, expr, _) in parameters {
             match param {
                 Parameter::Identifier(ident) | Parameter::Spread(ident) => {
-                    if let Err(..) = self
+                    if self
                         .scope_mut(sub_func_id)
                         .add_local(ident, VariableDeclarationKind::Var, None)
+                        .is_err()
                     {
                         error!("failed to reserve space for parameter")
                     }

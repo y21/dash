@@ -2,7 +2,7 @@ use std::any::Any;
 
 use dash_middle::compiler::StaticImportKind;
 
-use crate::local::LocalScope;
+use crate::localscope::LocalScope;
 
 use super::value::Value;
 use super::Vm;

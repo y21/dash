@@ -16,7 +16,7 @@ macro_rules! define_other_error_constructors {
         $(
         pub fn $fun(mut cx: CallContext) -> Result<Value, Value> {
             let message = cx.args.first().unwrap_or_undefined().to_string(&mut cx.scope)?;
-            let error = $t::new(&mut cx.scope, message);
+            let error = $t::new(&cx.scope, message);
 
             Ok(cx.scope.register(error).into())
         }
@@ -34,12 +34,7 @@ define_other_error_constructors!(
 );
 
 pub fn error_constructor(cx: CallContext) -> Result<Value, Value> {
-    let message = cx
-        .args
-        .first()
-        .cloned()
-        .map(|v| v.to_string(cx.scope))
-        .transpose()?;
+    let message = cx.args.first().cloned().map(|v| v.to_string(cx.scope)).transpose()?;
 
     let err = Error::new(cx.scope, message.as_deref().unwrap_or_default());
 

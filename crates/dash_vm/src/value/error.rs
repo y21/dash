@@ -6,13 +6,14 @@ use dash_proc_macro::Trace;
 
 use crate::delegate;
 use crate::gc::handle::Handle;
-use crate::local::LocalScope;
+use crate::localscope::LocalScope;
 use crate::Vm;
 
 use super::object::NamedObject;
 use super::object::Object;
 use super::object::PropertyKey;
 use super::object::PropertyValue;
+use super::Unrooted;
 use super::Value;
 
 #[derive(Debug, Trace)]
@@ -35,14 +36,14 @@ fn get_stack_trace(name: &str, message: &str, vm: &Vm) -> Rc<str> {
 }
 
 impl Error {
-    pub fn new<S: Into<Rc<str>>>(vm: &mut Vm, message: S) -> Self {
+    pub fn new<S: Into<Rc<str>>>(vm: &Vm, message: S) -> Self {
         let ctor = vm.statics.error_ctor.clone();
         let proto = vm.statics.error_prototype.clone();
         Self::suberror(vm, "Error", message, ctor, proto)
     }
 
     pub fn suberror<S1: Into<Rc<str>>, S2: Into<Rc<str>>>(
-        vm: &mut Vm,
+        vm: &Vm,
         name: S1,
         message: S2,
         ctor: Handle<dyn Object>,
@@ -104,7 +105,7 @@ impl Object for Error {
         self.obj.set_property(sc, key, value)
     }
 
-    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
         // TODO: delete/clear property
         self.obj.delete_property(sc, key)
     }
@@ -146,7 +147,7 @@ macro_rules! define_error_type {
             }
 
             impl $t {
-                pub fn new<S: Into<Rc<str>>>(vm: &mut Vm, message: S) -> Self {
+                pub fn new<S: Into<Rc<str>>>(vm: &Vm, message: S) -> Self {
                     let ctor = vm.statics.$ctor.clone();
                     let proto = vm.statics.$proto.clone();
 

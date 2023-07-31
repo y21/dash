@@ -3,7 +3,7 @@ use std::any::Any;
 use dash_proc_macro::Trace;
 
 use crate::gc::handle::Handle;
-use crate::local::LocalScope;
+use crate::localscope::LocalScope;
 use crate::Vm;
 
 use super::arraybuffer::ArrayBuffer;
@@ -12,6 +12,7 @@ use super::object::Object;
 use super::object::PropertyKey;
 use super::object::PropertyValue;
 use super::ops::abstractions::conversions::ValueConversion;
+use super::Unrooted;
 use super::Value;
 
 #[derive(Debug, Copy, Clone)]
@@ -51,7 +52,7 @@ pub struct TypedArray {
 }
 
 impl TypedArray {
-    pub fn new(vm: &mut Vm, arraybuffer: Handle<dyn Object>, kind: TypedArrayKind) -> Self {
+    pub fn new(vm: &Vm, arraybuffer: Handle<dyn Object>, kind: TypedArrayKind) -> Self {
         let (proto, ctor) = match kind {
             TypedArrayKind::Uint8Array => (&vm.statics.uint8array_prototype, &vm.statics.uint8array_ctor),
             TypedArrayKind::Uint8ClampedArray => (&vm.statics.uint8array_prototype, &vm.statics.uint8array_ctor),
@@ -176,7 +177,7 @@ impl Object for TypedArray {
         self.obj.set_property(sc, key, value)
     }
 
-    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
         self.obj.delete_property(sc, key)
     }
 

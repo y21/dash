@@ -164,15 +164,13 @@ impl<'a, 'q, Q: BBGenerationQuery> BBGenerationCtxt<'a, 'q, Q> {
         let mut current_bb_ip = 0;
 
         while let Some((index, instr)) = dcx.next_instruction() {
-            if index != 0 {
-                if let Some(..) = self.bbs.get(&index) {
-                    let current_bb = self.bbs.get_mut(&current_bb_ip).unwrap();
-                    if current_bb.successor.is_none() {
-                        current_bb.successor = Some(BasicBlockSuccessor::Unconditional(index));
-                    }
-                    current_bb.end = index;
-                    current_bb_ip = index;
+            if index != 0 && self.bbs.contains_key(&index) {
+                let current_bb = self.bbs.get_mut(&current_bb_ip).unwrap();
+                if current_bb.successor.is_none() {
+                    current_bb.successor = Some(BasicBlockSuccessor::Unconditional(index));
                 }
+                current_bb.end = index;
+                current_bb_ip = index;
             }
 
             match instr {

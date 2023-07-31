@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use crate::local::LocalScope;
+use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::array;
 use crate::value::array::Array;
@@ -340,7 +340,9 @@ pub fn pop(cx: CallContext) -> Result<Value, Value> {
     }
 
     let new_len = len - 1;
-    let value = this.delete_property(cx.scope, new_len.to_string().into())?;
+    let value = this
+        .delete_property(cx.scope, new_len.to_string().into())?
+        .root(cx.scope);
     this.set_property(
         cx.scope,
         "length".into(),
@@ -397,7 +399,7 @@ pub fn shift(cx: CallContext) -> Result<Value, Value> {
         return Ok(Value::undefined());
     }
 
-    let prop = this.delete_property(cx.scope, "0".into())?;
+    let prop = this.delete_property(cx.scope, "0".into())?.root(cx.scope);
 
     for k in 1..len {
         let pk = k.to_string();

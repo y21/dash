@@ -11,7 +11,7 @@ use dash_rt::state::State;
 use dash_vm::delegate;
 use dash_vm::gc::persistent::Persistent;
 use dash_vm::gc::trace::Trace;
-use dash_vm::local::LocalScope;
+use dash_vm::localscope::LocalScope;
 use dash_vm::throw;
 use dash_vm::value::function::native::CallContext;
 use dash_vm::value::function::Function;
@@ -83,12 +83,12 @@ pub fn listen(cx: CallContext) -> Result<Value, Value> {
                 // Need to call cb here
                 etx.send(EventMessage::ScheduleCallback(Box::new(move |rt| {
                     let vm = rt.vm_mut();
-                    let mut scope = LocalScope::new(vm);
+                    let mut scope = vm.scope();
 
                     let cb = cb.get();
 
                     let ctx = HttpContext::new(&mut scope, req_tx);
-                    let fun = Function::new(&mut scope, Some("respond".into()), FunctionKind::Native(ctx_respond));
+                    let fun = Function::new(&scope, Some("respond".into()), FunctionKind::Native(ctx_respond));
                     let fun = scope.register(fun);
                     ctx.set_property(&mut scope, "respond".into(), PropertyValue::static_default(fun.into()))
                         .unwrap();

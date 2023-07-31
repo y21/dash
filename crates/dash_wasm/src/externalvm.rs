@@ -1,6 +1,6 @@
 use dash_vm::eval::EvalError;
 use dash_vm::frame::Frame;
-use dash_vm::local::LocalScope;
+use dash_vm::localscope::LocalScope;
 use dash_vm::params::VmParams;
 use dash_vm::value::Value as DashValue;
 use dash_vm::Vm;
@@ -38,7 +38,7 @@ impl ExternalVm {
     where
         F: FnOnce(&mut LocalScope) -> T,
     {
-        let mut scope = LocalScope::new(&mut self.0);
+        let mut scope = self.0.scope();
         fun(&mut scope)
     }
 }

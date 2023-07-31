@@ -512,7 +512,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             ($gen:expr, $spec: expr, $( $t:ty => $spec_const:expr ),*) => {{
                 match (left_type, right_type) {
                     (Some(CompileValueType::Number), Some(CompileValueType::Number)) => {
-                        fn try_const_spec<'cx, 'a>(ib: &mut InstructionBuilder<'cx, 'a>, right: &Expr<'a>) -> bool {
+                        fn try_const_spec<'a>(ib: &mut InstructionBuilder<'_, 'a>, right: &Expr<'a>) -> bool {
                             if let Expr::Literal(LiteralExpr::Number(n)) = right {
                                 let n = *n;
                                 // Using match to be able to expand type->spec metavars

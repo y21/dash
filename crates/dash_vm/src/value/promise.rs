@@ -5,13 +5,14 @@ use dash_proc_macro::Trace;
 
 use crate::gc::handle::Handle;
 use crate::gc::trace::Trace;
-use crate::local::LocalScope;
+use crate::localscope::LocalScope;
 use crate::PromiseAction;
 use crate::Vm;
 
 use super::object::NamedObject;
 use super::object::Object;
 use super::Typeof;
+use super::Unrooted;
 use super::Value;
 
 #[derive(Debug)]
@@ -44,7 +45,7 @@ pub struct Promise {
 }
 
 impl Promise {
-    pub fn new(vm: &mut Vm) -> Self {
+    pub fn new(vm: &Vm) -> Self {
         Self {
             state: RefCell::new(PromiseState::Pending {
                 reject: Vec::new(),
@@ -56,7 +57,7 @@ impl Promise {
             ),
         }
     }
-    pub fn resolved(vm: &mut Vm, value: Value) -> Self {
+    pub fn resolved(vm: &Vm, value: Value) -> Self {
         Self {
             state: RefCell::new(PromiseState::Resolved(value)),
             obj: NamedObject::with_prototype_and_constructor(
@@ -65,7 +66,7 @@ impl Promise {
             ),
         }
     }
-    pub fn rejected(vm: &mut Vm, value: Value) -> Self {
+    pub fn rejected(vm: &Vm, value: Value) -> Self {
         Self {
             state: RefCell::new(PromiseState::Rejected(value)),
             obj: NamedObject::with_prototype_and_constructor(
@@ -90,7 +91,7 @@ impl Object for Promise {
 
     fn set_property(
         &self,
-        sc: &mut crate::local::LocalScope,
+        sc: &mut crate::localscope::LocalScope,
         key: crate::value::object::PropertyKey<'static>,
         value: crate::value::object::PropertyValue,
     ) -> Result<(), Value> {
@@ -99,23 +100,23 @@ impl Object for Promise {
 
     fn delete_property(
         &self,
-        sc: &mut crate::local::LocalScope,
+        sc: &mut crate::localscope::LocalScope,
         key: crate::value::object::PropertyKey,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Value> {
         self.obj.delete_property(sc, key)
     }
 
-    fn set_prototype(&self, sc: &mut crate::local::LocalScope, value: Value) -> Result<(), Value> {
+    fn set_prototype(&self, sc: &mut crate::localscope::LocalScope, value: Value) -> Result<(), Value> {
         self.obj.set_prototype(sc, value)
     }
 
-    fn get_prototype(&self, sc: &mut crate::local::LocalScope) -> Result<Value, Value> {
+    fn get_prototype(&self, sc: &mut crate::localscope::LocalScope) -> Result<Value, Value> {
         self.obj.get_prototype(sc)
     }
 
     fn apply(
         &self,
-        scope: &mut crate::local::LocalScope,
+        scope: &mut crate::localscope::LocalScope,
         callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
@@ -139,7 +140,7 @@ pub struct PromiseResolver {
 }
 
 impl PromiseResolver {
-    pub fn new(vm: &mut Vm, promise: Handle<dyn Object>) -> Self {
+    pub fn new(vm: &Vm, promise: Handle<dyn Object>) -> Self {
         Self {
             promise,
             obj: NamedObject::new(vm),
@@ -158,7 +159,7 @@ impl Object for PromiseResolver {
 
     fn set_property(
         &self,
-        sc: &mut crate::local::LocalScope,
+        sc: &mut crate::localscope::LocalScope,
         key: crate::value::object::PropertyKey<'static>,
         value: crate::value::object::PropertyValue,
     ) -> Result<(), Value> {
@@ -167,23 +168,23 @@ impl Object for PromiseResolver {
 
     fn delete_property(
         &self,
-        sc: &mut crate::local::LocalScope,
+        sc: &mut crate::localscope::LocalScope,
         key: crate::value::object::PropertyKey,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Value> {
         self.obj.delete_property(sc, key)
     }
 
-    fn set_prototype(&self, sc: &mut crate::local::LocalScope, value: Value) -> Result<(), Value> {
+    fn set_prototype(&self, sc: &mut crate::localscope::LocalScope, value: Value) -> Result<(), Value> {
         self.obj.set_prototype(sc, value)
     }
 
-    fn get_prototype(&self, sc: &mut crate::local::LocalScope) -> Result<Value, Value> {
+    fn get_prototype(&self, sc: &mut crate::localscope::LocalScope) -> Result<Value, Value> {
         self.obj.get_prototype(sc)
     }
 
     fn apply(
         &self,
-        scope: &mut crate::local::LocalScope,
+        scope: &mut crate::localscope::LocalScope,
         _callee: Handle<dyn Object>,
         _this: Value,
         args: Vec<Value>,
@@ -217,7 +218,7 @@ pub struct PromiseRejecter {
 }
 
 impl PromiseRejecter {
-    pub fn new(vm: &mut Vm, promise: Handle<dyn Object>) -> Self {
+    pub fn new(vm: &Vm, promise: Handle<dyn Object>) -> Self {
         Self {
             promise,
             obj: NamedObject::new(vm),
@@ -236,7 +237,7 @@ impl Object for PromiseRejecter {
 
     fn set_property(
         &self,
-        sc: &mut crate::local::LocalScope,
+        sc: &mut crate::localscope::LocalScope,
         key: crate::value::object::PropertyKey<'static>,
         value: crate::value::object::PropertyValue,
     ) -> Result<(), Value> {
@@ -245,23 +246,23 @@ impl Object for PromiseRejecter {
 
     fn delete_property(
         &self,
-        sc: &mut crate::local::LocalScope,
+        sc: &mut crate::localscope::LocalScope,
         key: crate::value::object::PropertyKey,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Value> {
         self.obj.delete_property(sc, key)
     }
 
-    fn set_prototype(&self, sc: &mut crate::local::LocalScope, value: Value) -> Result<(), Value> {
+    fn set_prototype(&self, sc: &mut crate::localscope::LocalScope, value: Value) -> Result<(), Value> {
         self.obj.set_prototype(sc, value)
     }
 
-    fn get_prototype(&self, sc: &mut crate::local::LocalScope) -> Result<Value, Value> {
+    fn get_prototype(&self, sc: &mut crate::localscope::LocalScope) -> Result<Value, Value> {
         self.obj.get_prototype(sc)
     }
 
     fn apply(
         &self,
-        scope: &mut crate::local::LocalScope,
+        scope: &mut crate::localscope::LocalScope,
         _callee: Handle<dyn Object>,
         _this: Value,
         args: Vec<Value>,
