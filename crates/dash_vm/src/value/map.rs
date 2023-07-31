@@ -17,8 +17,8 @@ pub struct Map {
 }
 
 impl Map {
-    pub fn new(vm: &mut Vm) -> Self {
-        let prototype = vm.statics.map_prototype.clone();
+    pub fn new(vm: &Vm) -> Self {
+        let prototype: crate::gc::handle::Handle<dyn Object> = vm.statics.map_prototype.clone();
         let ctor = vm.statics.map_constructor.clone();
         Self::with_obj(NamedObject::with_prototype_and_constructor(prototype, ctor))
     }

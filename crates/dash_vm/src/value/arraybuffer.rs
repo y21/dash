@@ -19,11 +19,11 @@ pub struct ArrayBuffer {
 }
 
 impl ArrayBuffer {
-    pub fn new(vm: &mut Vm) -> Self {
+    pub fn new(vm: &Vm) -> Self {
         Self::with_capacity(vm, 0)
     }
 
-    pub fn with_capacity(vm: &mut Vm, capacity: usize) -> Self {
+    pub fn with_capacity(vm: &Vm, capacity: usize) -> Self {
         let (proto, ctor) = (&vm.statics.arraybuffer_prototype, &vm.statics.arraybuffer_ctor);
 
         Self {

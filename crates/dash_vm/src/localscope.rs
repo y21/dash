@@ -17,6 +17,12 @@ pub struct LocalScopeList {
     head: Option<NonNull<ScopeData>>,
 }
 
+// NOTE: we can optimize this quite a bit, by deferring the work
+// to `LocalScope::add_value` since we're creating a ton of scopes
+// and not always adding values,
+// but profiling and benchmarking has shown this to not bring
+// any significant improvements.
+// Maybe revisit later.
 pub fn scope(vm: &mut Vm) -> LocalScope<'_> {
     match vm.scopes.head {
         Some(ptr) => {
@@ -50,7 +56,7 @@ impl Drop for LocalScopeList {
             let data = unsafe { ptr.as_ref() };
             head = data.next;
             // SAFETY: ptr was created using Box::into_raw
-            unsafe { Box::from_raw(ptr.as_ptr()) };
+            unsafe { drop(Box::from_raw(ptr.as_ptr())) };
         }
     }
 }
@@ -139,6 +145,8 @@ impl<'vm> LocalScope<'vm> {
     }
 }
 
+// TODO: remove this Deref impl
+// It's too prone to bugs due to similar methods
 impl<'a> Deref for LocalScope<'a> {
     type Target = Vm;
 

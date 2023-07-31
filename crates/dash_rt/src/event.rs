@@ -19,7 +19,7 @@ impl EventSender {
     }
 
     pub fn send(&self, msg: EventMessage) {
-        if let Err(..) = self.0.send(msg) {
+        if self.0.send(msg).is_err() {
             tracing::error!("Failed to send message because event receiver was dropped");
         }
     }

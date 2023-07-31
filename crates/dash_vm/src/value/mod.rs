@@ -65,8 +65,18 @@ pub enum Value {
     External(Handle<ExternalValue>),
 }
 
+/// A wrapper type around JavaScript values that are not rooted.
+/// Before accessing a value, you must root it using a [`LocalScope`],
+/// to prevent a situation in which the garbage collector collects
+/// the value while it is still being used.
+///
 // TODO: this is still not sound. we need to make sure that you cannot use an Unrooted
-// after using the vm
+// after using the vm:
+// ```rs
+// let val: Unrooted = returns_unrooted_value();
+// call_js_function(); // this may trigger a GC cycle
+// val.root(&mut scope).do_something(); // this is UB, the GC cycle may have collected the value
+// ```
 pub struct Unrooted {
     value: Value,
 }
@@ -80,16 +90,6 @@ impl Unrooted {
         scope.add_value(self.value.clone());
         self.value
     }
-}
-
-#[macro_export]
-macro_rules! unroot {
-    ($scope:expr, $this:expr) => {{
-        let unrooted = $this;
-        let _temp =
-            unsafe { ::std::mem::transmute::<$crate::value::Unrooted<'_>, $crate::value::Unrooted<'static>>(unrooted) };
-        Unrooted::unroot(_temp, $scope)
-    }};
 }
 
 #[derive(Debug, Trace)]
@@ -156,13 +156,6 @@ impl Object for ExternalValue {
         self.inner.construct(scope, this, args)
     }
 }
-
-// impl Deref for ExternalValue {
-//     type Target = dyn Object;
-//     fn deref(&self) -> &Self::Target {
-//         &self.0
-//     }
-// }
 
 unsafe impl Trace for Value {
     fn trace(&self) {
@@ -291,7 +284,7 @@ impl Value {
         }
     }
 
-    pub fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+    pub fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
         match self {
             Self::Object(o) => o.delete_property(sc, key),
             Self::Number(n) => n.delete_property(sc, key),
@@ -600,7 +593,7 @@ impl<O: Object + 'static> Object for PureBuiltin<O> {
         self.inner.set_property(sc, key, value)
     }
 
-    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
         sc.impure_builtins();
         self.inner.delete_property(sc, key)
     }

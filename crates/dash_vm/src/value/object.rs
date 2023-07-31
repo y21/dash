@@ -9,7 +9,7 @@ use crate::{gc::handle::Handle, localscope::LocalScope, throw, Vm};
 use super::{
     ops::abstractions::conversions::ValueConversion,
     primitive::{PrimitiveCapabilities, Symbol},
-    ExternalValue, Typeof, Value, ValueContext,
+    ExternalValue, Typeof, Unrooted, Value, ValueContext,
 };
 
 pub type ObjectMap<K, V> = ahash::HashMap<K, V>;
@@ -48,7 +48,7 @@ pub trait Object: Debug + Trace {
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value>;
 
-    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value>;
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value>;
 
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value>;
 
@@ -129,7 +129,7 @@ macro_rules! delegate {
             &self,
             sc: &mut $crate::localscope::LocalScope,
             key: $crate::value::object::PropertyKey,
-        ) -> Result<$crate::value::Value, $crate::value::Value> {
+        ) -> Result<$crate::value::Unrooted, $crate::value::Value> {
             self.$field.delete_property(sc, key)
         }
     };
@@ -432,11 +432,11 @@ impl<'a> PropertyKey<'a> {
 }
 
 impl NamedObject {
-    pub fn new(vm: &mut Vm) -> Self {
+    pub fn new(vm: &Vm) -> Self {
         Self::with_values(vm, ObjectMap::default())
     }
 
-    pub fn with_values(vm: &mut Vm, values: ObjectMap<PropertyKey<'static>, PropertyValue>) -> Self {
+    pub fn with_values(vm: &Vm, values: ObjectMap<PropertyKey<'static>, PropertyValue>) -> Self {
         let objp = vm.statics.object_prototype.clone();
         let objc = vm.statics.object_ctor.clone(); // TODO: function_ctor instead
 
@@ -552,7 +552,7 @@ impl Object for NamedObject {
         Ok(())
     }
 
-    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
         let key = unsafe { &*addr_of!(key).cast::<PropertyKey<'static>>() };
 
         let mut values = self.values.borrow_mut();
@@ -561,8 +561,9 @@ impl Object for NamedObject {
         match value.map(PropertyValue::into_kind) {
             Some(PropertyValueKind::Static(value)) => {
                 // If a GC'd value is being removed, put it in the LocalScope so it doesn't get removed too early
-                sc.add_value(value.clone());
-                Ok(value)
+                // Actually, no need, now that we have `Unrooted`, which requires re-rooting at call site
+                // sc.add_value(value.clone());
+                Ok(Unrooted::new(value))
             }
             Some(PropertyValueKind::Trap { get, set }) => {
                 // Accessors need to be added to the LocalScope too
@@ -575,9 +576,9 @@ impl Object for NamedObject {
 
                 // Kind of unclear what to return here...
                 // We can't invoke the getters/setters
-                Ok(Value::undefined())
+                Ok(Unrooted::new(Value::undefined()))
             }
-            None => Ok(Value::undefined()),
+            None => Ok(Unrooted::new(Value::undefined())),
         }
     }
 
@@ -645,7 +646,7 @@ impl Object for Box<dyn Object> {
         (**self).set_property(sc, key, value)
     }
 
-    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
         (**self).delete_property(sc, key)
     }
 
@@ -719,7 +720,7 @@ impl Object for Handle<dyn Object> {
         (**self).set_property(sc, key, value)
     }
 
-    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
         (**self).delete_property(sc, key)
     }
 

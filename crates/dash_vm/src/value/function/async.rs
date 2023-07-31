@@ -104,7 +104,7 @@ pub struct ThenTask {
 }
 
 impl ThenTask {
-    pub fn new(vm: &mut Vm, generator_iter: Value, final_promise: Handle<dyn Object>) -> Self {
+    pub fn new(vm: &Vm, generator_iter: Value, final_promise: Handle<dyn Object>) -> Self {
         Self {
             generator_iter,
             obj: NamedObject::new(vm),

@@ -88,7 +88,7 @@ pub fn listen(cx: CallContext) -> Result<Value, Value> {
                     let cb = cb.get();
 
                     let ctx = HttpContext::new(&mut scope, req_tx);
-                    let fun = Function::new(&mut scope, Some("respond".into()), FunctionKind::Native(ctx_respond));
+                    let fun = Function::new(&scope, Some("respond".into()), FunctionKind::Native(ctx_respond));
                     let fun = scope.register(fun);
                     ctx.set_property(&mut scope, "respond".into(), PropertyValue::static_default(fun.into()))
                         .unwrap();

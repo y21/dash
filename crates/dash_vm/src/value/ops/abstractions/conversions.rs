@@ -45,7 +45,7 @@ pub trait ValueConversion {
 
         // 3. If number is +∞𝔽, return +∞.
         // 4. If number is -∞𝔽, return -∞.
-        if number == f64::INFINITY || number == f64::NEG_INFINITY {
+        if number.is_infinite() {
             return Ok(number);
         }
 

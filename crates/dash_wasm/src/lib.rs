@@ -7,7 +7,6 @@ use dash_optimizer::type_infer::TypeInferCtx;
 use dash_parser::Parser;
 use dash_vm::eval::EvalError;
 use dash_vm::frame::Frame;
-use dash_vm::localscope::LocalScope;
 use dash_vm::params::VmParams;
 use dash_vm::value::ops::abstractions::conversions::ValueConversion;
 use dash_vm::value::Value;

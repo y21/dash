@@ -1,7 +1,6 @@
 use anyhow::Context;
 use clap::ArgMatches;
 use dash_optimizer::OptLevel;
-use dash_vm::localscope::LocalScope;
 use dash_vm::value::ops::abstractions::conversions::ValueConversion;
 use dash_vm::value::Value;
 use dash_vm::Vm;

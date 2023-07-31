@@ -77,9 +77,8 @@ fn fetch(cx: CallContext) -> Result<Value, Value> {
 
             let (req, action) = match req {
                 Ok(resp) => {
-                    let obj = HttpResponse::new(resp, &mut sc);
-                    let text_fun =
-                        Function::new(&mut sc, Some("text".into()), FunctionKind::Native(http_response_text));
+                    let obj = HttpResponse::new(resp, &sc);
+                    let text_fun = Function::new(&sc, Some("text".into()), FunctionKind::Native(http_response_text));
                     let text_fun = Value::Object(sc.register(text_fun));
 
                     obj.set_property(
@@ -92,7 +91,7 @@ fn fetch(cx: CallContext) -> Result<Value, Value> {
                     (Value::Object(sc.register(obj)), PromiseAction::Resolve)
                 }
                 Err(err) => {
-                    let err = Error::new(&mut sc, err.to_string());
+                    let err = Error::new(&sc, err.to_string());
                     (Value::Object(sc.register(err)), PromiseAction::Reject)
                 }
             };
@@ -149,7 +148,7 @@ fn http_response_text(cx: CallContext) -> Result<Value, Value> {
                     (text, PromiseAction::Resolve)
                 }
                 Err(err) => {
-                    let err = Error::new(&mut sc, err.to_string());
+                    let err = Error::new(&sc, err.to_string());
                     let err = Value::Object(sc.register(err));
                     (err, PromiseAction::Reject)
                 }
@@ -170,7 +169,7 @@ struct HttpResponse {
 }
 
 impl HttpResponse {
-    pub fn new(response: reqwest::Response, vm: &mut Vm) -> Self {
+    pub fn new(response: reqwest::Response, vm: &Vm) -> Self {
         Self {
             response: SharedOnce::new(response),
             obj: NamedObject::new(vm),

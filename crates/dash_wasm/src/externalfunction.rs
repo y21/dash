@@ -6,6 +6,7 @@ use dash_vm::value::object::Object;
 use dash_vm::value::object::PropertyKey;
 use dash_vm::value::object::PropertyValue;
 use dash_vm::value::Typeof;
+use dash_vm::value::Unrooted;
 use dash_vm::value::Value;
 
 use crate::util::dash_value_from_wasm_value;
@@ -39,7 +40,7 @@ impl Object for ExternalFunction {
         self.1.set_property(sc, key, value)
     }
 
-    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
         self.1.delete_property(sc, key)
     }
 

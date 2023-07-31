@@ -19,7 +19,7 @@ pub struct BoundFunction {
 }
 
 impl BoundFunction {
-    pub fn new(vm: &mut Vm, callee: Handle<dyn Object>, this: Option<Value>, args: Option<Vec<Value>>) -> Self {
+    pub fn new(vm: &Vm, callee: Handle<dyn Object>, this: Option<Value>, args: Option<Vec<Value>>) -> Self {
         Self {
             callee,
             this,

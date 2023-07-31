@@ -12,6 +12,7 @@ use crate::Vm;
 use super::object::NamedObject;
 use super::object::Object;
 use super::Typeof;
+use super::Unrooted;
 use super::Value;
 
 #[derive(Debug)]
@@ -44,7 +45,7 @@ pub struct Promise {
 }
 
 impl Promise {
-    pub fn new(vm: &mut Vm) -> Self {
+    pub fn new(vm: &Vm) -> Self {
         Self {
             state: RefCell::new(PromiseState::Pending {
                 reject: Vec::new(),
@@ -56,7 +57,7 @@ impl Promise {
             ),
         }
     }
-    pub fn resolved(vm: &mut Vm, value: Value) -> Self {
+    pub fn resolved(vm: &Vm, value: Value) -> Self {
         Self {
             state: RefCell::new(PromiseState::Resolved(value)),
             obj: NamedObject::with_prototype_and_constructor(
@@ -65,7 +66,7 @@ impl Promise {
             ),
         }
     }
-    pub fn rejected(vm: &mut Vm, value: Value) -> Self {
+    pub fn rejected(vm: &Vm, value: Value) -> Self {
         Self {
             state: RefCell::new(PromiseState::Rejected(value)),
             obj: NamedObject::with_prototype_and_constructor(
@@ -101,7 +102,7 @@ impl Object for Promise {
         &self,
         sc: &mut crate::localscope::LocalScope,
         key: crate::value::object::PropertyKey,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Value> {
         self.obj.delete_property(sc, key)
     }
 
@@ -139,7 +140,7 @@ pub struct PromiseResolver {
 }
 
 impl PromiseResolver {
-    pub fn new(vm: &mut Vm, promise: Handle<dyn Object>) -> Self {
+    pub fn new(vm: &Vm, promise: Handle<dyn Object>) -> Self {
         Self {
             promise,
             obj: NamedObject::new(vm),
@@ -169,7 +170,7 @@ impl Object for PromiseResolver {
         &self,
         sc: &mut crate::localscope::LocalScope,
         key: crate::value::object::PropertyKey,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Value> {
         self.obj.delete_property(sc, key)
     }
 
@@ -217,7 +218,7 @@ pub struct PromiseRejecter {
 }
 
 impl PromiseRejecter {
-    pub fn new(vm: &mut Vm, promise: Handle<dyn Object>) -> Self {
+    pub fn new(vm: &Vm, promise: Handle<dyn Object>) -> Self {
         Self {
             promise,
             obj: NamedObject::new(vm),
@@ -247,7 +248,7 @@ impl Object for PromiseRejecter {
         &self,
         sc: &mut crate::localscope::LocalScope,
         key: crate::value::object::PropertyKey,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Value> {
         self.obj.delete_property(sc, key)
     }
 

@@ -60,7 +60,7 @@ pub fn dash_value_from_wasm_value(scope: &mut LocalScope, value: WasmValue) -> R
                 let scope = scope.scope();
                 let mut scope = unsafe { std::mem::transmute::<LocalScope<'_>, LocalScope<'static>>(scope) };
 
-                let promise = Promise::new(&mut scope);
+                let promise = Promise::new(&scope);
                 let promise = scope.register(promise);
 
                 let handle = ExternalHandle {

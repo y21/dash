@@ -21,6 +21,7 @@ use super::ops::abstractions::conversions::PreferredType;
 use super::ops::abstractions::conversions::ValueConversion;
 use super::ops::equality::ValueEquality;
 use super::Typeof;
+use super::Unrooted;
 use super::Value;
 
 pub const MAX_SAFE_INTEGER: u64 = 9007199254740991u64;
@@ -44,8 +45,8 @@ impl Object for f64 {
         Ok(())
     }
 
-    fn delete_property(&self, _sc: &mut LocalScope, _key: PropertyKey) -> Result<Value, Value> {
-        Ok(Value::undefined())
+    fn delete_property(&self, _sc: &mut LocalScope, _key: PropertyKey) -> Result<Unrooted, Value> {
+        Ok(Unrooted::new(Value::undefined()))
     }
 
     fn set_prototype(&self, _sc: &mut LocalScope, _value: Value) -> Result<(), Value> {
@@ -102,8 +103,8 @@ impl Object for bool {
         Ok(())
     }
 
-    fn delete_property(&self, _sc: &mut LocalScope, _key: PropertyKey) -> Result<Value, Value> {
-        Ok(Value::undefined())
+    fn delete_property(&self, _sc: &mut LocalScope, _key: PropertyKey) -> Result<Unrooted, Value> {
+        Ok(Unrooted::new(Value::undefined()))
     }
 
     fn set_prototype(&self, _sc: &mut LocalScope, _value: Value) -> Result<(), Value> {
@@ -160,8 +161,8 @@ impl Object for Rc<str> {
         Ok(())
     }
 
-    fn delete_property(&self, _sc: &mut LocalScope, _key: PropertyKey) -> Result<Value, Value> {
-        Ok(Value::undefined())
+    fn delete_property(&self, _sc: &mut LocalScope, _key: PropertyKey) -> Result<Unrooted, Value> {
+        Ok(Unrooted::new(Value::undefined()))
     }
 
     fn set_prototype(&self, _sc: &mut LocalScope, _value: Value) -> Result<(), Value> {
@@ -225,8 +226,8 @@ impl Object for Undefined {
         throw!(sc, TypeError, "Cannot set property {:?} of undefined", key)
     }
 
-    fn delete_property(&self, _sc: &mut LocalScope, _key: PropertyKey) -> Result<Value, Value> {
-        Ok(Value::undefined())
+    fn delete_property(&self, _sc: &mut LocalScope, _key: PropertyKey) -> Result<Unrooted, Value> {
+        Ok(Unrooted::new(Value::undefined()))
     }
 
     fn set_prototype(&self, sc: &mut LocalScope, _value: Value) -> Result<(), Value> {
@@ -277,8 +278,8 @@ impl Object for Null {
         throw!(sc, TypeError, "Cannot set property {:?} of null", key)
     }
 
-    fn delete_property(&self, _sc: &mut LocalScope, _key: PropertyKey) -> Result<Value, Value> {
-        Ok(Value::undefined())
+    fn delete_property(&self, _sc: &mut LocalScope, _key: PropertyKey) -> Result<Unrooted, Value> {
+        Ok(Unrooted::new(Value::undefined()))
     }
 
     fn set_prototype(&self, sc: &mut LocalScope, _value: Value) -> Result<(), Value> {
@@ -345,8 +346,8 @@ impl Object for str {
         Ok(())
     }
 
-    fn delete_property(&self, _sc: &mut LocalScope, _key: PropertyKey) -> Result<Value, Value> {
-        Ok(Value::undefined())
+    fn delete_property(&self, _sc: &mut LocalScope, _key: PropertyKey) -> Result<Unrooted, Value> {
+        Ok(Unrooted::new(Value::undefined()))
     }
 
     fn set_prototype(&self, _sc: &mut LocalScope, _value: Value) -> Result<(), Value> {
@@ -407,8 +408,8 @@ impl Object for Symbol {
         Ok(())
     }
 
-    fn delete_property(&self, _sc: &mut LocalScope, _key: PropertyKey) -> Result<Value, Value> {
-        Ok(Value::undefined())
+    fn delete_property(&self, _sc: &mut LocalScope, _key: PropertyKey) -> Result<Unrooted, Value> {
+        Ok(Unrooted::new(Value::undefined()))
     }
 
     fn set_prototype(&self, _sc: &mut LocalScope, _value: Value) -> Result<(), Value> {
@@ -892,7 +893,7 @@ impl Object for Number {
         self.0.set_property(sc, key, value)
     }
 
-    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
         self.0.delete_property(sc, key)
     }
 

@@ -116,6 +116,7 @@ mod tests {
     impl TypeInferQuery for TestQueryProvider {
         fn type_of_constant(&self, index: u16) -> dash_typed_cfg::passes::type_infer::Type {
             match index {
+                #[allow(clippy::manual_range_patterns)]
                 0 | 1 | 2 => Type::I64,
                 _ => todo!("{index}"),
             }

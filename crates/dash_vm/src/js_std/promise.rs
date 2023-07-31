@@ -108,7 +108,7 @@ struct ThenTask {
 
 impl ThenTask {
     pub fn new(
-        vm: &mut Vm,
+        vm: &Vm,
         then_promise: Handle<dyn Object>,
         handler: Handle<dyn Object>,
         resolver: Handle<dyn Object>,

@@ -26,7 +26,7 @@ use self::{
 use super::{
     array::Array,
     object::{NamedObject, Object, PropertyKey, PropertyValue},
-    Typeof, Value,
+    Typeof, Unrooted, Value,
 };
 
 pub mod r#async;
@@ -102,7 +102,7 @@ pub struct Function {
 }
 
 impl Function {
-    pub fn new(vm: &mut Vm, name: Option<Rc<str>>, kind: FunctionKind) -> Self {
+    pub fn new(vm: &Vm, name: Option<Rc<str>>, kind: FunctionKind) -> Self {
         let (proto, ctor) = (&vm.statics.function_proto, &vm.statics.function_ctor);
 
         Self::with_obj(
@@ -228,7 +228,7 @@ impl Object for Function {
         self.obj.set_property(sc, key, value)
     }
 
-    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
         self.obj.delete_property(sc, key)
     }
 
@@ -317,7 +317,7 @@ pub(crate) fn adjust_stack_from_flat_call(
 }
 
 /// Extends the VM stack with provided arguments
-pub(self) fn extend_stack_from_args(args: Vec<Value>, expected_args: usize, scope: &mut LocalScope, is_rest: bool) {
+fn extend_stack_from_args(args: Vec<Value>, expected_args: usize, scope: &mut LocalScope, is_rest: bool) {
     // Insert at most [param_count] amount of provided arguments on the stack
     // In the compiler we allocate local space for every parameter
     scope.stack.extend(args.iter().take(expected_args).cloned());

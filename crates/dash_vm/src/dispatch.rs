@@ -75,6 +75,7 @@ impl<'sc, 'vm> DispatchContext<'sc, 'vm> {
             .clone()
     }
 
+    // TODO: !! should return [Unrooted; N] !!
     fn pop_stack_const<const N: usize>(&mut self) -> [Value; N] {
         assert!(self.stack.len() >= N);
         // SAFETY: n pops are safe because we've checked the length
@@ -83,11 +84,6 @@ impl<'sc, 'vm> DispatchContext<'sc, 'vm> {
         let mut arr: [Value; N] = std::array::from_fn(|_| unsafe { self.stack.pop().unwrap_unchecked() });
         arr.reverse();
         arr
-    }
-
-    pub fn pop_stack2(&mut self) -> (Value, Value) {
-        let [a, b] = self.pop_stack_const();
-        (a, b)
     }
 
     pub fn pop_stack2_new(&mut self) -> (Unrooted, Unrooted) {
@@ -306,10 +302,7 @@ mod handlers {
     }
 
     pub fn instanceof<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
-        let (source, target) = cx.pop_stack2_new();
-
-        let source = source.root(cx.scope);
-        let target = target.root(cx.scope);
+        let (source, target) = cx.pop_stack2_rooted();
 
         let is_instanceof = source.instanceof(&target, &mut cx).map(Value::Boolean)?;
         cx.stack.push(is_instanceof);
@@ -941,7 +934,7 @@ mod handlers {
             .pop_stack_many(len)
             .map(PropertyValue::static_default)
             .collect::<Vec<_>>();
-        let array = Array::from_vec(&mut cx, elements);
+        let array = Array::from_vec(&cx, elements);
         let handle = cx.gc.register(array);
         cx.stack.push(Value::Object(handle));
         Ok(None)
@@ -1014,7 +1007,7 @@ mod handlers {
             };
         }
 
-        let obj = NamedObject::with_values(&mut cx, obj);
+        let obj = NamedObject::with_values(&cx, obj);
 
         let handle = cx.gc.register(obj);
         cx.stack.push(handle.into());
@@ -1489,7 +1482,7 @@ mod handlers {
         .map(PropertyValue::static_default)
         .collect();
 
-        let keys = Array::from_vec(&mut cx, keys);
+        let keys = Array::from_vec(&cx, keys);
         let keys = cx.register(keys);
         let iter = ArrayIterator::new(&mut cx, Value::Object(keys))?;
         let iter = cx.register(iter);
@@ -1503,7 +1496,7 @@ mod handlers {
         let value = target.delete_property(&mut cx, key)?;
 
         // TODO: not correct, as `undefined` might have been the actual value
-        let did_delete = !matches!(value, Value::Undefined(..));
+        let did_delete = !matches!(value.root(cx.scope), Value::Undefined(..));
         cx.stack.push(Value::Boolean(did_delete));
         Ok(None)
     }
@@ -1516,7 +1509,7 @@ mod handlers {
         let value = target.delete_property(&mut cx, key)?;
 
         // TODO: not correct, as `undefined` might have been the actual value
-        let did_delete = !matches!(value, Value::Undefined(..));
+        let did_delete = !matches!(value.root(cx.scope), Value::Undefined(..));
         cx.stack.push(Value::Boolean(did_delete));
         Ok(None)
     }
@@ -1595,11 +1588,11 @@ mod handlers {
     pub fn intrinsic_op<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
         let op = IntrinsicOperation::from_repr(cx.fetch_and_inc_ip()).unwrap();
 
-        // Unrooted is fine here, nothing can trigger a GC cycle
-
         macro_rules! lr_as_num_spec {
             () => {{
-                let (left, right) = cx.pop_stack2();
+                // Unrooted is technically fine here, nothing can trigger a GC cycle
+                // OK to remove if it turns out to be a useful opt
+                let (left, right) = cx.pop_stack2_rooted();
                 match (left, right) {
                     (Value::Number(l), Value::Number(r)) => (l.0, r.0),
                     _ => unreachable!(),
