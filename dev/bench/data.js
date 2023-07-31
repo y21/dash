@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1690835754328,
+  "lastUpdate": 1690835758469,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -3695,6 +3695,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 79735,
             "range": "± 283",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "Timo",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b5c1b48006552f34b46e6c9c9c30a9d4c07ea331",
+          "message": "Merge pull request #67 from y21/gc-soundness\n\nintroduce `Unrooted` API",
+          "timestamp": "2023-07-31T22:32:28+02:00",
+          "tree_id": "7a88f9c2938097fb3482fabdff951cf29f2a336a",
+          "url": "https://github.com/y21/dash/commit/b5c1b48006552f34b46e6c9c9c30a9d4c07ea331"
+        },
+        "date": 1690835757550,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 2958426,
+            "range": "± 9163",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 229150,
+            "range": "± 769",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 78382,
+            "range": "± 339",
             "unit": "ns/iter"
           }
         ]
