@@ -481,6 +481,7 @@ dependencies = [
  "dash_optimizer",
  "dash_vm",
  "rand",
+ "rustc-hash",
  "tokio",
  "tracing",
 ]
