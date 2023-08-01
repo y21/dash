@@ -10,10 +10,12 @@ fetch = ["dash_rt_fetch"]
 modules = ["dash_rt_script_modules"]
 timers = ["dash_rt_timers"]
 dll = ["dash_dlloader"]
+net = ["dash_rt_net"]
 
 [dependencies]
 dash_rt = { path = "../dash_rt" }
 dash_rt_http = { path = "../dash_rt_http", optional = true }
+dash_rt_net = { path = "../dash_rt_net", optional = true }
 dash_rt_fs = { path = "../dash_rt_fs", optional = true }
 dash_rt_fetch = { path = "../dash_rt_fetch", optional = true }
 dash_rt_script_modules = { path = "../dash_rt_script_modules", optional = true }

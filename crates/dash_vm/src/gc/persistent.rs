@@ -2,6 +2,10 @@ use std::ops::Deref;
 
 use super::Handle;
 
+// TODO: document this
+// TL;DR for now, `Persist<T>` adds reference counting to a `Handle<T>`,
+// allowing it to be held safely for longer than any LocalScope
+// NOTE: careful with cycles, this can leak
 pub struct Persistent<T: ?Sized>(Handle<T>);
 
 impl<T: ?Sized> Persistent<T> {
