@@ -83,7 +83,6 @@ pub enum Instruction {
     Global,
     Super,
     Undef,
-    Break,
     Await,
     Nan,
     Infinity,

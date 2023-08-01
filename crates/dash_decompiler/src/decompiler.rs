@@ -295,7 +295,6 @@ impl<'buf> FunctionDecompiler<'buf> {
                 Instruction::Global => self.handle_opless_instr("global"),
                 Instruction::Super => self.handle_opless_instr("super"),
                 Instruction::Undef => self.handle_opless_instr("undef"),
-                Instruction::Break => self.handle_opless_instr("break"),
                 Instruction::Await => self.handle_opless_instr("await"),
                 Instruction::Nan => self.handle_opless_instr("nan"),
                 Instruction::Infinity => self.handle_opless_instr("inf"),

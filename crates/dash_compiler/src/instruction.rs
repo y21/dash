@@ -74,7 +74,6 @@ impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
         build_infinity Instruction::Infinity,
         build_nan Instruction::Nan,
         build_undef Instruction::Undef,
-        build_break Instruction::Break,
         build_symbol_iterator Instruction::CallSymbolIterator,
         build_for_in_iterator Instruction::CallForInIterator,
         build_dynamic_delete Instruction::DeletePropertyDynamic
