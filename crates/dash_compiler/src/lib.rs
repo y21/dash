@@ -102,13 +102,13 @@ struct FunctionLocalState {
 }
 
 impl FunctionLocalState {
-    pub fn new(ty: FunctionKind, id: FuncId) -> Self {
+    pub fn new(ty: FunctionKind, id: FuncId, r#async: bool) -> Self {
         Self {
             buf: Vec::new(),
             cp: ConstantPool::new(),
             try_catch_depth: 0,
             ty,
-            r#async: false,
+            r#async,
             jc: JumpContainer::new(),
             breakables: Vec::new(),
             loop_counter: 0,
@@ -221,7 +221,7 @@ impl<'a> FunctionCompiler<'a> {
         });
 
         self.function_stack
-            .push(FunctionLocalState::new(FunctionKind::Function, FuncId::ROOT));
+            .push(FunctionLocalState::new(FunctionKind::Function, FuncId::ROOT, false));
 
         self.accept_multiple(ast)?;
 
@@ -1413,7 +1413,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         }: FunctionDeclaration<'a>,
     ) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
-        ib.function_stack.push(FunctionLocalState::new(ty, id));
+        ib.function_stack.push(FunctionLocalState::new(ty, id, r#async));
 
         let mut rest_local = None;
 
