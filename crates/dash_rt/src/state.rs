@@ -1,11 +1,11 @@
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use dash_vm::gc::persistent::Persistent;
 use dash_vm::value::object::Object;
 use dash_vm::Vm;
+use rustc_hash::FxHashMap;
 
 use crate::active_tasks::TaskIds;
 use crate::event::EventSender;
@@ -16,7 +16,7 @@ pub struct State {
     tx: EventSender,
     root_module: Rc<RefCell<Option<Box<dyn ModuleLoader>>>>,
     tasks: TaskIds,
-    promises: RefCell<HashMap<u64, Persistent<dyn Object>>>,
+    promises: RefCell<FxHashMap<u64, Persistent<dyn Object>>>,
 }
 
 impl State {
@@ -26,7 +26,7 @@ impl State {
             tx,
             root_module: Rc::new(RefCell::new(None)),
             tasks: TaskIds::new(),
-            promises: RefCell::new(HashMap::new()),
+            promises: RefCell::new(FxHashMap::default()),
         }
     }
 
