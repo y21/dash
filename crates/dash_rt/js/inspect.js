@@ -3,13 +3,7 @@ const is = {
     number: (value) => typeof value === 'number',
     boolean: (value) => typeof value === 'boolean',
     nullish: (value) => value === null || value === undefined,
-    error: (value) => [
-        Error,
-        TypeError,
-        RangeError,
-        SyntaxError,
-        ReferenceError
-    ].some(x => value instanceof x), // TODO: a silly bug prevents us from simply checking `value instanceof Error`
+    error: (value) => value instanceof Error,
     array: (value) => value instanceof Array, // TODO: Array.isArray
     function: (value) => typeof value === 'function',
     looseObject: function (value) {

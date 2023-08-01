@@ -400,11 +400,20 @@ impl Value {
             _ => return Ok(false),
         };
 
-        // TODO: repeat for all objects in prototype chain
         let target_proto = ctor.get_property(sc, "prototype".into())?;
-        let this_proto = obj.get_prototype(sc)?;
+        let mut this_proto = obj.get_prototype(sc)?;
+        // Look if self[prototype] == ctor.prototype, repeat for all objects in self's prototype chain
+        loop {
+            if this_proto == target_proto {
+                return Ok(true);
+            }
 
-        Ok(this_proto == target_proto)
+            this_proto = match this_proto {
+                Value::Object(obj) => obj.get_prototype(sc)?,
+                Value::External(obj) => obj.inner.get_prototype(sc)?,
+                _ => return Ok(false),
+            };
+        }
     }
 
     /// Attempts to downcast this value to a concrete type `T`.
