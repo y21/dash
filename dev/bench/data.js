@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1690912826842,
+  "lastUpdate": 1690926720612,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -3863,6 +3863,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 80404,
             "range": "± 325",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "87b3994fd10305948a0bce3bbe7263762886ea29",
+          "message": "fix incorrect AwaitOutsideAsync",
+          "timestamp": "2023-08-01T23:47:45+02:00",
+          "tree_id": "ba3a2e1f90ded0d66ba042b4f657f3178de032bb",
+          "url": "https://github.com/y21/dash/commit/87b3994fd10305948a0bce3bbe7263762886ea29"
+        },
+        "date": 1690926719178,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 3755425,
+            "range": "± 194305",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 306612,
+            "range": "± 10350",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 111912,
+            "range": "± 3042",
             "unit": "ns/iter"
           }
         ]
