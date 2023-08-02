@@ -142,6 +142,7 @@ impl Vm {
                     $( #[properties] $( $prop:ident: $prop_path:expr; )+ )?
                     $( #[symbols] $( $symbol:expr => $symbol_path:expr; )+ )?
                     $( #[fields] $( $field:ident: $value:expr; )+ )?
+                    $( #[getters] $( $getter:ident: $getter_value:expr; )+ )?
                 }
             ) => {{
                 let base = $base.clone();
@@ -164,6 +165,15 @@ impl Vm {
                             #[constructor] scope.statics.function_ctor;
                         });
                         base.set_property(&mut scope, method.into(), PropertyValue::static_default(path.into())).unwrap();
+                    })+
+                )?
+
+                // Getters
+                $(
+                    $({
+                        let method = stringify!($getter);
+                        let value = $getter_value.clone();
+                        base.set_property(&mut scope, method.into(), PropertyValue::getter_default(value.into())).unwrap();
                     })+
                 )?
 
@@ -487,6 +497,9 @@ impl Vm {
         register_builtin_type!(scope.statics.arraybuffer_prototype, {
             #[prototype] object_proto;
             #[constructor] arraybuffer_ctor;
+            #[properties]
+            byteLength: scope.statics.arraybuffer_byte_length; // TODO: should be a getter.
+                                                               // `this` in getters is currently broken (always undefined)
         });
 
         let u8array_ctor = register_builtin_type!(scope.statics.uint8array_ctor, {

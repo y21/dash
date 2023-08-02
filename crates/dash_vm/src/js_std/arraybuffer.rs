@@ -1,3 +1,4 @@
+use crate::throw;
 use crate::value::arraybuffer::ArrayBuffer;
 use crate::value::function::native::CallContext;
 use crate::value::ops::abstractions::conversions::ValueConversion;
@@ -11,4 +12,15 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
 
     let buf = ArrayBuffer::with_capacity(cx.scope, length);
     Ok(cx.scope.register(buf).into())
+}
+
+pub fn byte_length(cx: CallContext) -> Result<Value, Value> {
+    let Some(this) = cx.this.downcast_ref::<ArrayBuffer>() else {
+        throw!(
+            cx.scope,
+            TypeError,
+            "ArrayBuffer.prototype.byteLength called on non-ArrayBuffer"
+        )
+    };
+    Ok(Value::number(this.len() as f64))
 }

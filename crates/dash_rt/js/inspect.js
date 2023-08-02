@@ -6,6 +6,9 @@ const is = {
     error: (value) => value instanceof Error,
     array: (value) => value instanceof Array, // TODO: Array.isArray
     function: (value) => typeof value === 'function',
+    arraybuffer: function (value) {
+        return this.looseObject(value) && value.constructor.name === 'ArrayBuffer';
+    },
     looseObject: function (value) {
         return !this.nullish(value) && typeof value === 'object';
     },
@@ -22,6 +25,23 @@ function inner(value, depth) {
 
     if (is.error(value)) {
         return value.stack;
+    }
+
+    if (is.arraybuffer(value)) {
+        let length = value.byteLength(); // TODO: supposed to be a getter
+        let repr = `ArrayBuffer(${length}) { <`;
+        let view = new Uint8Array(value);
+        for (let i = 0; i < Math.min(length, 100); i++) {
+            if (i > 0) {
+                repr += ', ';
+            }
+            repr += view[i].toString(16);
+        }
+        if (length > 100) {
+            repr += `, ... ${length - 100} more`;
+        }
+        repr += '> }'
+        return repr;
     }
 
     if (is.strictObject(value)) {

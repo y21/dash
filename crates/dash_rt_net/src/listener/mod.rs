@@ -1,6 +1,9 @@
+use std::cell::Cell;
+
 use dash_proc_macro::Trace;
 use dash_rt::event::EventMessage;
 use dash_rt::state::State;
+use dash_rt::wrap_async;
 use dash_vm::delegate;
 use dash_vm::gc::persistent::Persistent;
 use dash_vm::gc::trace::Trace;
@@ -18,9 +21,11 @@ use dash_vm::value::promise::Promise;
 use dash_vm::value::Unrooted;
 use dash_vm::value::Value;
 use dash_vm::PromiseAction;
+use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
+use tokio::sync::oneshot;
 
 #[derive(Debug, Trace)]
 pub struct TcpListenerConstructor {}
@@ -103,11 +108,17 @@ impl Object for TcpListenerConstructor {
                 match message {
                     TcpListenerBridgeMessage::Accept { promise_id } => {
                         let (stream, _) = listener.accept().await.unwrap(); // TODO: handle correctly
-                        let (read_half, mut write_half) = stream.into_split();
+                        let (mut read_half, mut write_half) = stream.into_split();
 
                         let (writer_tx, mut writer_rx) = mpsc::unbounded_channel::<Box<[u8]>>();
+                        let (reader_tx, mut reader_rx) = mpsc::unbounded_channel::<oneshot::Sender<Box<[u8]>>>();
                         async_handle.spawn(async move {
                             // TcpStream reader end
+                            while let Some(reply) = reader_rx.recv().await {
+                                let mut buf = Vec::new();
+                                read_half.read_buf(&mut buf).await.unwrap();
+                                reply.send(buf.into_boxed_slice()).unwrap();
+                            }
                         });
                         async_handle.spawn(async move {
                             // TcpStream writer end
@@ -120,7 +131,7 @@ impl Object for TcpListenerConstructor {
                             let promise = State::from_vm(&scope).take_promise(promise_id);
                             let promise = promise.as_any().downcast_ref::<Promise>().unwrap();
 
-                            let stream_handle = TcpStreamHandle::new(&mut scope, writer_tx).unwrap();
+                            let stream_handle = TcpStreamHandle::new(&mut scope, writer_tx, reader_tx).unwrap();
                             let stream_handle = scope.register(stream_handle);
 
                             scope.drive_promise(PromiseAction::Resolve, promise, vec![Value::Object(stream_handle)]);
@@ -217,11 +228,16 @@ fn tcplistener_accept(cx: CallContext) -> Result<Value, Value> {
 #[derive(Debug)]
 struct TcpStreamHandle {
     object: NamedObject,
-    sender: mpsc::UnboundedSender<Box<[u8]>>,
+    writer_tx: mpsc::UnboundedSender<Box<[u8]>>,
+    reader_tx: mpsc::UnboundedSender<oneshot::Sender<Box<[u8]>>>,
 }
 
 impl TcpStreamHandle {
-    pub fn new(scope: &mut LocalScope, sender: mpsc::UnboundedSender<Box<[u8]>>) -> Result<Self, Value> {
+    pub fn new(
+        scope: &mut LocalScope,
+        writer_tx: mpsc::UnboundedSender<Box<[u8]>>,
+        reader_tx: mpsc::UnboundedSender<oneshot::Sender<Box<[u8]>>>,
+    ) -> Result<Self, Value> {
         let object = NamedObject::new(scope);
         let write_fn = Function::new(scope, Some("write".into()), FunctionKind::Native(tcpstream_write));
         let write_fn = scope.register(write_fn);
@@ -230,13 +246,28 @@ impl TcpStreamHandle {
             "write".into(),
             PropertyValue::static_default(Value::Object(write_fn)),
         )?;
-        Ok(Self { object, sender })
+        let read_fn = Function::new(scope, Some("read".into()), FunctionKind::Native(tcpstream_read));
+        let read_fn = scope.register(read_fn);
+        object.set_property(
+            scope,
+            "read".into(),
+            PropertyValue::static_default(Value::Object(read_fn)),
+        )?;
+        Ok(Self {
+            object,
+            writer_tx,
+            reader_tx,
+        })
     }
 }
 
 unsafe impl Trace for TcpStreamHandle {
     fn trace(&self) {
-        let Self { object, sender: _ } = self;
+        let Self {
+            object,
+            writer_tx: _,
+            reader_tx: _,
+        } = self;
         object.trace();
     }
 }
@@ -275,8 +306,26 @@ fn tcpstream_write(cx: CallContext) -> Result<Value, Value> {
         .collect::<Vec<u8>>()
         .into_boxed_slice();
 
-    handle.sender.send(buf).expect("TcpStream closed");
+    handle.writer_tx.send(buf).expect("TcpStream closed");
 
     // TODO: return value?
     Ok(Value::undefined())
+}
+
+fn tcpstream_read(cx: CallContext) -> Result<Value, Value> {
+    let Some(handle) = cx.this.downcast_ref::<TcpStreamHandle>() else {
+        throw!(cx.scope, TypeError, "TcpStream.write called on non-TcpStream object")
+    };
+
+    let (tx, rx) = oneshot::channel();
+
+    handle.reader_tx.send(tx).unwrap();
+
+    wrap_async(cx, rx, |sc, ret| {
+        let ret = ret.unwrap();
+        let buf = Vec::from(ret).into_iter().map(Cell::new).collect::<Vec<_>>();
+        let buf = ArrayBuffer::from_storage(sc, buf);
+
+        Ok(Value::Object(sc.register(buf)))
+    })
 }
