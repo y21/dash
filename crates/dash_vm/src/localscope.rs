@@ -15,6 +15,11 @@ use crate::gc::trace::Trace;
 #[derive(Debug)]
 pub struct LocalScopeList {
     head: Option<NonNull<ScopeData>>,
+    // This contains all pointers.
+    // Currently only exists so we can find all scopes at any time.
+    // The `head` field does not contain scopes that are currently in use.
+    // TODO: look into making this more efficient
+    list: Vec<NonNull<ScopeData>>,
 }
 
 // NOTE: we can optimize this quite a bit, by deferring the work
@@ -39,6 +44,7 @@ pub fn scope(vm: &mut Vm) -> LocalScope<'_> {
         None => {
             // No scope available.
             let scope_data = ScopeData::new(None);
+            vm.scopes.list.push(scope_data);
             LocalScope {
                 _p: PhantomData,
                 scope_data,
@@ -50,25 +56,36 @@ pub fn scope(vm: &mut Vm) -> LocalScope<'_> {
 
 impl Drop for LocalScopeList {
     fn drop(&mut self) {
-        let Self { mut head } = self;
+        let Self { mut head, list } = self;
 
+        let mut drop_count = 0;
         while let Some(ptr) = head {
             let data = unsafe { ptr.as_ref() };
             head = data.next;
             // SAFETY: ptr was created using Box::into_raw
             unsafe { drop(Box::from_raw(ptr.as_ptr())) };
+            drop_count += 1;
         }
+        assert_eq!(
+            drop_count,
+            list.len(),
+            "scope list corrupted: not all scopes were returned by the time LocalScopeList is dropped"
+        );
     }
 }
 
 unsafe impl Trace for LocalScopeList {
     fn trace(&self) {
-        let Self { mut head } = self;
+        let Self { list, head: _ } = self;
 
-        while let Some(ptr) = head {
+        // We need to use the list instead of head,
+        // because head may not contain all scopes
+        // (more specifically, used scopes are removed from the link,
+        // but remain in the list, so if we would use head,
+        // we would miss those scopes!).
+        for ptr in list {
             let data = unsafe { ptr.as_ref() };
             data.refs.trace();
-            head = data.next;
         }
     }
 }
@@ -79,7 +96,10 @@ impl LocalScopeList {
         let node2 = ScopeData::new(Some(node1));
         let node3 = ScopeData::new(Some(node2));
         let node4 = ScopeData::new(Some(node3));
-        Self { head: Some(node4) }
+        Self {
+            head: Some(node4),
+            list: vec![node1, node2, node3, node4],
+        }
     }
 }
 

@@ -188,7 +188,7 @@ fn handle_call(
         FunctionKind::User(fun) => fun
             .handle_function_call(scope, this, args, is_constructor_call)
             .map(|v| match v {
-                HandleResult::Return(v) => v,
+                HandleResult::Return(v) => v.root(scope),
                 HandleResult::Yield(..) | HandleResult::Await(..) => unreachable!(), // UserFunction cannot `yield`/`await`
             }),
         FunctionKind::Async(fun) => fun.handle_function_call(scope, callee, this, args, is_constructor_call),

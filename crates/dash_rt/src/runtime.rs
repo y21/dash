@@ -6,6 +6,7 @@ use dash_optimizer::OptLevel;
 use dash_vm::eval::EvalError;
 use dash_vm::params::VmParams;
 use dash_vm::throw;
+use dash_vm::value::Unrooted;
 use dash_vm::value::Value;
 use dash_vm::Vm;
 use tokio::sync::mpsc;
@@ -57,7 +58,7 @@ impl Runtime {
         State::from_vm(&self.vm).set_root_module(module_manager);
     }
 
-    pub fn eval<'i>(&mut self, code: &'i str, opt: OptLevel) -> Result<Value, EvalError<'i>> {
+    pub fn eval<'i>(&mut self, code: &'i str, opt: OptLevel) -> Result<Unrooted, EvalError<'i>> {
         self.vm.eval(code, opt)
     }
 

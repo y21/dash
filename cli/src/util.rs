@@ -7,9 +7,9 @@ use dash_middle::compiler::CompileResult;
 use dash_optimizer::OptLevel;
 use dash_vm::frame::Exports;
 use dash_vm::frame::Frame;
+use dash_vm::localscope::LocalScope;
 use dash_vm::value::ops::abstractions::conversions::ValueConversion;
 use dash_vm::value::Value;
-use dash_vm::Vm;
 
 pub fn opt_level_from_matches(args: &ArgMatches) -> anyhow::Result<OptLevel> {
     args.value_of("opt")
@@ -17,7 +17,7 @@ pub fn opt_level_from_matches(args: &ArgMatches) -> anyhow::Result<OptLevel> {
         .context("Invalid opt level")
 }
 
-pub fn print_value(value: Value, vm: &mut Vm) -> Result<(), Value> {
+pub fn print_value(value: Value, scope: &mut LocalScope) -> Result<(), Value> {
     thread_local! {
         // Cache bytecode so we can avoid recompiling it every time
         // We can be even smarter if we need to -- cache the whole value at callsite
@@ -35,16 +35,15 @@ pub fn print_value(value: Value, vm: &mut Vm) -> Result<(), Value> {
     let Exports {
         default: Some(inspect_fn),
         ..
-    } = vm.execute_module(Frame::from_compile_result(inspect_bc)).unwrap()
+    } = scope.execute_module(Frame::from_compile_result(inspect_bc)).unwrap()
     else {
         panic!("inspect module did not have a default export");
     };
 
-    let mut scope = vm.scope();
     let result = inspect_fn
-        .apply(&mut scope, Value::undefined(), vec![value])
+        .apply(scope, Value::undefined(), vec![value])
         .unwrap()
-        .to_string(&mut scope)
+        .to_string(scope)
         .unwrap();
 
     println!("{result}");

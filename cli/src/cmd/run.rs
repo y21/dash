@@ -39,24 +39,27 @@ async fn inner(source: String, opt: OptLevel, quiet: bool, initial_gc_threshold:
     let module = dash_rt_modules::init_modules();
     rt.set_module_manager(module);
 
-    let value = match rt.eval(&source, opt) {
-        Ok(val) | Err(EvalError::Exception(val)) => val,
+    let mut scope = rt.vm_mut().scope();
+    let value = match scope.eval(&source, opt) {
+        Ok(val) => val.root(&mut scope),
+        Err(EvalError::Exception(val)) => val, // TODO: this should really also be Unrooted
         Err(e) => {
             println!("{e}");
             return Ok(());
         }
     };
 
-    rt.vm_mut().process_async_tasks();
+    scope.process_async_tasks();
 
     // TODO: EvalError::VmError should probably bail too?
 
     if !quiet {
-        util::print_value(value, rt.vm_mut()).unwrap();
+        util::print_value(value, &mut scope).unwrap();
     }
 
-    let state = State::from_vm(rt.vm());
+    let state = State::from_vm(&scope);
     if state.needs_event_loop() {
+        drop(scope);
         rt.run_event_loop().await;
     }
 

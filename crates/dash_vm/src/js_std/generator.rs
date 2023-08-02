@@ -63,11 +63,14 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
     match result {
         HandleResult::Return(value) => {
             generator.state().replace(GeneratorState::Finished);
+            let value = value.root(cx.scope);
 
             create_generator_value(cx.scope, true, Some(value))
         }
         HandleResult::Yield(value) | HandleResult::Await(value) => {
             // Async functions are desugared to generators, so `await` is treated equivalent to `yield`, for now...
+            let value = value.root(cx.scope);
+
             let frame = cx.scope.pop_frame().expect("Generator frame is missing");
             let stack = cx.scope.drain_stack(frame.sp..).collect::<Vec<_>>();
 

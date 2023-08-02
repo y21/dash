@@ -9,6 +9,7 @@ pub fn repl() -> anyhow::Result<()> {
     let mut rl = Editor::<()>::new();
 
     let mut vm = Vm::new(Default::default());
+    let mut scope = vm.scope();
 
     while let Ok(input) = rl.readline("> ") {
         if input.is_empty() {
@@ -17,12 +18,13 @@ pub fn repl() -> anyhow::Result<()> {
 
         rl.add_history_entry(&input);
 
-        match vm.eval(&input, OptLevel::Aggressive) {
-            Ok(value) | Err(EvalError::Exception(value)) => util::print_value(value, &mut vm).unwrap(),
+        match scope.eval(&input, OptLevel::Aggressive) {
+            Ok(value) => util::print_value(value.root(&mut scope), &mut scope).unwrap(),
+            Err(EvalError::Exception(value)) => util::print_value(value, &mut scope).unwrap(),
             Err(e) => println!("{e}"),
         }
 
-        vm.process_async_tasks();
+        scope.process_async_tasks();
     }
 
     Ok(())

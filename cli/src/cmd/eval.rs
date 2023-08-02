@@ -10,13 +10,15 @@ pub fn eval(args: &ArgMatches) -> anyhow::Result<()> {
     let opt = util::opt_level_from_matches(args)?;
 
     let mut vm = Vm::new(Default::default());
+    let mut scope = vm.scope();
 
-    match vm.eval(source, opt) {
-        Ok(value) | Err(EvalError::Exception(value)) => util::print_value(value, &mut vm).unwrap(),
+    match scope.eval(source, opt) {
+        Ok(value) => util::print_value(value.root(&mut scope), &mut scope).unwrap(),
+        Err(EvalError::Exception(value)) => util::print_value(value, &mut scope).unwrap(),
         Err(e) => println!("{e}"),
     };
 
-    vm.process_async_tasks();
+    scope.process_async_tasks();
 
     Ok(())
 }

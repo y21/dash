@@ -17,6 +17,7 @@ use crate::throw;
 use crate::value::object::NamedObject;
 use crate::value::object::Object;
 use crate::value::object::PropertyValue;
+use crate::value::Unrooted;
 use crate::value::Value;
 use crate::Vm;
 use dash_compiler::from_string::CompileStrError;
@@ -51,7 +52,7 @@ impl<'a> fmt::Display for EvalError<'a> {
 }
 
 impl Vm {
-    pub fn eval<'a>(&mut self, input: &'a str, opt: OptLevel) -> Result<Value, EvalError<'a>> {
+    pub fn eval<'a>(&mut self, input: &'a str, opt: OptLevel) -> Result<Unrooted, EvalError<'a>> {
         let tokens = Lexer::new(input).scan_all().map_err(EvalError::Lexer)?;
         let (ast, counter) = Parser::new(input, tokens).parse_all().map_err(EvalError::Parser)?;
 

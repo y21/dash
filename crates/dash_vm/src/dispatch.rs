@@ -19,18 +19,27 @@ use dash_middle::compiler::{constant::Constant, instruction::Instruction};
 
 // TODO: all of these should be `Unrooted`
 pub enum HandleResult {
-    Return(Value),
-    Yield(Value),
-    Await(Value),
+    Return(Unrooted),
+    Yield(Unrooted),
+    Await(Unrooted),
 }
 
 impl HandleResult {
-    pub fn into_value(self) -> Value {
+    pub fn into_value(self) -> Unrooted {
         match self {
             HandleResult::Return(v) => v,
             HandleResult::Yield(v) => v,
             HandleResult::Await(v) => v,
         }
+    }
+
+    pub fn into_rooted(self, sc: &mut LocalScope) -> Value {
+        match self {
+            HandleResult::Return(v) => v,
+            HandleResult::Yield(v) => v,
+            HandleResult::Await(v) => v,
+        }
+        .root(sc)
     }
 }
 
@@ -384,7 +393,7 @@ mod handlers {
             FrameState::Module(_) => {
                 // Put it back on the frame stack, because we'll need it in Vm::execute_module
                 cx.frames.push(this);
-                Ok(Some(HandleResult::Return(value)))
+                Ok(Some(HandleResult::Return(Unrooted::new(value))))
             }
             FrameState::Function {
                 is_constructor_call,
@@ -400,7 +409,7 @@ mod handlers {
                             cx.stack.push(this);
                             Ok(None)
                         } else {
-                            Ok(Some(HandleResult::Return(this)))
+                            Ok(Some(HandleResult::Return(Unrooted::new(this))))
                         }
                     }
                     else {
@@ -408,7 +417,7 @@ mod handlers {
                             cx.stack.push(value);
                             Ok(None)
                         } else {
-                            Ok(Some(HandleResult::Return(value)))
+                            Ok(Some(HandleResult::Return(Unrooted::new(value))))
                         }
                     }
                 }
@@ -1322,12 +1331,12 @@ mod handlers {
     }
 
     pub fn yield_<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
-        let value = cx.pop_stack_rooted();
+        let value = cx.pop_stack();
         Ok(Some(HandleResult::Yield(value)))
     }
 
     pub fn await_<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Value> {
-        let value = cx.pop_stack_rooted();
+        let value = cx.pop_stack();
         Ok(Some(HandleResult::Await(value)))
     }
 

@@ -10,13 +10,14 @@ const INTERPRETER: &str = include_str!("interpreter.js");
 #[test]
 fn interpreter() {
     let mut vm = Vm::new(Default::default());
-    let value = vm.eval(INTERPRETER, OptLevel::Basic).unwrap();
+    let mut scope = vm.scope();
+    let value = scope.eval(INTERPRETER, OptLevel::Basic).unwrap().root(&mut scope);
 
-    assert_eq!(vm.stack.len(), 0);
-    assert_eq!(vm.frames.len(), 0);
+    assert_eq!(scope.stack.len(), 0);
+    assert_eq!(scope.frames.len(), 0);
     match value {
         Value::Number(Number(n)) => assert_eq!(n, 1275.0),
-        _ => unreachable!("{:?}", value),
+        other => unreachable!("{:?}", other),
     }
 }
 
@@ -24,17 +25,24 @@ fn interpreter() {
 #[test]
 fn simple() {
     let mut vm = Vm::new(Default::default());
-    vm.eval(
-        r#"
+    let mut scope = vm.scope();
+    scope
+        .eval(
+            r#"
         globalThis.x = [];
         for (let i = 0; i < 4; i++) x.push({i});
     "#,
-        OptLevel::Basic,
-    )
-    .unwrap();
-    vm.perform_gc();
-    let value = vm.eval("x[0].i + x[1].i + x[2].i + x[3].i", OptLevel::Basic).unwrap();
-    assert_eq!(vm.stack.len(), 0);
-    assert_eq!(vm.frames.len(), 0);
+            OptLevel::Basic,
+        )
+        .unwrap();
+    scope.perform_gc();
+    let array = scope
+        .eval("[x[0].i + x[1].i + x[2].i + x[3].i]", OptLevel::Basic)
+        .unwrap()
+        .root(&mut scope);
+    scope.perform_gc();
+    let value = array.get_property(&mut scope, "0".into()).unwrap();
+    assert_eq!(scope.stack.len(), 0);
+    assert_eq!(scope.frames.len(), 0);
     assert_eq!(value, Value::number(6.0));
 }
