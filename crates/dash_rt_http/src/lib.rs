@@ -63,7 +63,7 @@ pub fn listen(cx: CallContext) -> Result<Value, Value> {
     };
 
     let cb_ref = {
-        let p = Persistent::new(cb);
+        let p = Persistent::new(cx.scope, cb);
         Arc::new(ThreadSafeStorage::new(p))
     };
 

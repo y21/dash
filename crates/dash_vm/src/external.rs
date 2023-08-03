@@ -23,11 +23,11 @@ impl Externals {
     }
 
     pub fn extend_from_scope(&mut self, sc: *const LocalScope, mut refs: Vec<Handle<dyn Object>>) {
-        self.0.entry(sc.cast()).or_insert_with(Vec::new).append(&mut refs);
+        self.0.entry(sc.cast()).or_default().append(&mut refs);
     }
 
     pub fn add_single(&mut self, sc: *const LocalScope, re: Handle<dyn Object>) {
-        self.0.entry(sc.cast()).or_insert_with(Vec::new).push(re)
+        self.0.entry(sc.cast()).or_default().push(re)
     }
 
     pub fn remove(&mut self, sc: *const LocalScope) -> Option<Vec<Handle<dyn Object>>> {

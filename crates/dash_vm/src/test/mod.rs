@@ -1,5 +1,11 @@
+use std::rc::Rc;
+
 use dash_optimizer::OptLevel;
 
+use crate::gc::persistent::Persistent;
+use crate::value::object::NamedObject;
+use crate::value::object::Object;
+use crate::value::object::PropertyValue;
 use crate::value::primitive::Number;
 use crate::value::Value;
 use crate::Vm;
@@ -26,6 +32,12 @@ fn interpreter() {
 fn simple() {
     let mut vm = Vm::new(Default::default());
     let mut scope = vm.scope();
+    // Try nesting scopes, even more than the default
+    let mut scope = scope.scope();
+    let mut scope = scope.scope();
+    let mut scope = scope.scope();
+    let mut scope = scope.scope();
+    let mut scope = scope.scope();
     scope
         .eval(
             r#"
@@ -45,4 +57,45 @@ fn simple() {
     assert_eq!(scope.stack.len(), 0);
     assert_eq!(scope.frames.len(), 0);
     assert_eq!(value, Value::number(6.0));
+}
+
+#[test]
+fn persistent_trace() {
+    // This has caused issues in the past. Essentially,
+    // `Persistent<T>` is refcounted, but it used to not be traced,
+    // so its reachables could still be deallocated.
+
+    let mut vm = Vm::new(Default::default());
+    let object = {
+        let mut scope = vm.scope();
+        let dummy_string = scope.register(Rc::<str>::from("hi"));
+        let object = NamedObject::new(&scope);
+        object
+            .set_property(
+                &mut scope,
+                "foo".into(),
+                PropertyValue::static_default(Value::Object(dummy_string)),
+            )
+            .unwrap();
+        scope.register(object)
+    }; // scope dropped here
+
+    assert!(vm.external_refs.is_empty());
+    let p1 = Persistent::new(&mut vm, object.clone());
+    assert_eq!(p1.refcount(), 1);
+    assert!(vm.external_refs.len() == 1);
+    let p2 = Persistent::new(&mut vm, object.clone());
+    assert_eq!(p1.refcount(), 2);
+    assert!(vm.external_refs.len() == 1);
+    assert!(vm.external_refs.iter().next().unwrap().as_ptr() == object.as_ptr());
+    drop(p2);
+    assert_eq!(p1.refcount(), 1);
+    assert!(vm.external_refs.len() == 1);
+    vm.perform_gc();
+    assert_eq!(p1.refcount(), 1);
+    assert!(vm.external_refs.len() == 1);
+
+    // Check that p1 and object are still alive after GC.
+    let p = p1.get_property(&mut vm.scope(), "foo".into()).unwrap();
+    assert_eq!(p.downcast_ref::<Rc<str>>().unwrap().as_ref(), "hi");
 }

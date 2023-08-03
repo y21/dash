@@ -1,0 +1,11 @@
+[package]
+name = "dash_rt_net"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.24.25", features = ["net"] }
+dash_rt = { path = "../dash_rt" }
+dash_vm = { path = "../dash_vm" }
+dash_middle = { path = "../dash_middle" }
+dash_proc_macro = { path = "../dash_proc_macro" }

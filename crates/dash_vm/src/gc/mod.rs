@@ -88,6 +88,8 @@ impl Gc {
 
             cur = *next;
 
+            // TODO: this refcount check in the if is probably not even necessary anymore;
+            // we already trace existing `Persistent<T>`s, which marks them as visited.
             if !flags.is_marked() && refcount.get() == 0 {
                 // Reference did not get marked during mark phase
                 // Deallocate and unlink!

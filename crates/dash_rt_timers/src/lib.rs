@@ -44,7 +44,7 @@ fn set_timeout(cx: CallContext) -> Result<Value, Value> {
         _ => throw!(cx.scope, TypeError, "missing callback function argument"),
     };
 
-    let callback = Arc::new(ThreadSafeStorage::new(Persistent::new(callback)));
+    let callback = Arc::new(ThreadSafeStorage::new(Persistent::new(cx.scope, callback)));
 
     let delay = match cx.args.get(1) {
         Some(delay) => delay.to_int32(cx.scope)? as u64,

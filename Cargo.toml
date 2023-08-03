@@ -23,6 +23,7 @@ members = [
     "crates/dash_rt_script_modules",
     "crates/dash_rt_timers",
     "crates/dash_log",
+    "crates/dash_rt_net",
     "crates/dash_typed_cfg",
 ]
 

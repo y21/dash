@@ -527,8 +527,20 @@ dependencies = [
  "dash_rt_fetch",
  "dash_rt_fs",
  "dash_rt_http",
+ "dash_rt_net",
  "dash_rt_script_modules",
  "dash_rt_timers",
+]
+
+[[package]]
+name = "dash_rt_net"
+version = "0.1.0"
+dependencies = [
+ "dash_middle",
+ "dash_proc_macro",
+ "dash_rt",
+ "dash_vm",
+ "tokio",
 ]
 
 [[package]]
