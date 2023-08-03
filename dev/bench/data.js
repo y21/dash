@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1691087949677,
+  "lastUpdate": 1691095632983,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -4195,6 +4195,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 90994,
             "range": "± 1045",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "9b3302f070a1d8c873036b57caee53033547101c",
+          "message": "make more things `Unrooted`",
+          "timestamp": "2023-08-03T22:42:31+02:00",
+          "tree_id": "b9ca349c073f7b6048186ac04b1c073921414949",
+          "url": "https://github.com/y21/dash/commit/9b3302f070a1d8c873036b57caee53033547101c"
+        },
+        "date": 1691095631018,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 3845140,
+            "range": "± 187162",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 303039,
+            "range": "± 10563",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 112008,
+            "range": "± 5233",
             "unit": "ns/iter"
           }
         ]
