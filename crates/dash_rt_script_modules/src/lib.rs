@@ -37,7 +37,10 @@ impl ModuleLoader for ScriptModule {
             Ok(c) => c,
             Err(err) => throw!(sc, ReferenceError, "{}", err),
         };
-        let module = Vm::evaluate_module(sc, &contents, import_ty, Default::default());
+        let module = match Vm::evaluate_module(sc, &contents, import_ty, Default::default()) {
+            Ok(v) => Ok(v.root(sc)),
+            Err(err) => Err(err.root(sc)),
+        };
 
         self.pop_import();
 

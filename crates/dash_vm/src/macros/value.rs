@@ -6,7 +6,7 @@ macro_rules! throw {
             #[allow(unused_mut)]
             let mut vm = $vm;
             let err = $crate::value::error::$err::new(&vm, $msg);
-            vm.gc_mut().register(err).into()
+            Value::Object(vm.gc_mut().register(err)).into()
         })
     };
     ($vm:expr, $err:ident, $msg:expr, $($arg:expr),*) => {
@@ -15,7 +15,7 @@ macro_rules! throw {
             #[allow(unused_mut)]
             let mut vm = $vm;
             let err = $crate::value::error::$err::new(&vm, format!($msg, $($arg),*));
-            vm.gc_mut().register(err).into()
+            Value::Object(vm.gc_mut().register(err)).into()
         })
     };
 }

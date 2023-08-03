@@ -41,6 +41,7 @@ pub fn print_value(value: Value, scope: &mut LocalScope) -> Result<(), Value> {
     };
 
     let result = inspect_fn
+        .root(scope)
         .apply(scope, Value::undefined(), vec![value])
         .unwrap()
         .to_string(scope)

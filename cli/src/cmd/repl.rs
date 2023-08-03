@@ -20,7 +20,7 @@ pub fn repl() -> anyhow::Result<()> {
 
         match scope.eval(&input, OptLevel::Aggressive) {
             Ok(value) => util::print_value(value.root(&mut scope), &mut scope).unwrap(),
-            Err(EvalError::Exception(value)) => util::print_value(value, &mut scope).unwrap(),
+            Err(EvalError::Exception(value)) => util::print_value(value.root(&mut scope), &mut scope).unwrap(),
             Err(e) => println!("{e}"),
         }
 

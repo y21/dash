@@ -11,6 +11,7 @@ use crate::value::primitive::Symbol;
 use crate::value::primitive::Undefined;
 use crate::value::regex::RegExpInner;
 use crate::value::typedarray::TypedArrayKind;
+use crate::value::Unrooted;
 
 /// # Safety
 /// Implementors of this trait must provide a valid trace implementation
@@ -32,6 +33,11 @@ unsafe impl<T: Trace> Trace for Option<T> {
         if let Some(t) = self {
             t.trace();
         }
+    }
+}
+unsafe impl Trace for Unrooted {
+    fn trace(&self) {
+        unsafe { self.get().trace() }
     }
 }
 

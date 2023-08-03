@@ -11,6 +11,7 @@ use dash_proc_macro::Trace;
 use crate::gc::handle::Handle;
 use crate::gc::trace::Trace;
 use crate::value::ExternalValue;
+use crate::value::Unrooted;
 
 use super::value::function::user::UserFunction;
 use super::value::Value;
@@ -21,10 +22,11 @@ pub struct TryBlock {
     pub frame_ip: usize,
 }
 
+// TODO: these should be unrooted
 #[derive(Debug, Clone, Default)]
 pub struct Exports {
-    pub default: Option<Value>,
-    pub named: Vec<(Rc<str>, Value)>,
+    pub default: Option<Unrooted>,
+    pub named: Vec<(Rc<str>, Unrooted)>,
 }
 
 unsafe impl Trace for Exports {

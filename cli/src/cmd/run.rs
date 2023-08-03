@@ -42,7 +42,7 @@ async fn inner(source: String, opt: OptLevel, quiet: bool, initial_gc_threshold:
     let mut scope = rt.vm_mut().scope();
     let value = match scope.eval(&source, opt) {
         Ok(val) => val.root(&mut scope),
-        Err(EvalError::Exception(val)) => val, // TODO: this should really also be Unrooted
+        Err(EvalError::Exception(val)) => val.root(&mut scope),
         Err(e) => {
             println!("{e}");
             return Ok(());

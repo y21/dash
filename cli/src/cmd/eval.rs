@@ -14,7 +14,7 @@ pub fn eval(args: &ArgMatches) -> anyhow::Result<()> {
 
     match scope.eval(source, opt) {
         Ok(value) => util::print_value(value.root(&mut scope), &mut scope).unwrap(),
-        Err(EvalError::Exception(value)) => util::print_value(value, &mut scope).unwrap(),
+        Err(EvalError::Exception(value)) => util::print_value(value.root(&mut scope), &mut scope).unwrap(),
         Err(e) => println!("{e}"),
     };
 

@@ -866,9 +866,13 @@ impl Vm {
         self.frames.last()?.externals.get(id)
     }
 
-    pub(crate) fn set_local(&mut self, id: usize, value: Value) {
+    pub(crate) fn set_local(&mut self, id: usize, value: Unrooted) {
         let sp = self.get_frame_sp();
         let idx = sp + id;
+
+        // SAFETY: GC cannot trigger here
+        // and value will become a root here, therefore this is ok
+        let value = unsafe { value.into_value() };
 
         if let Value::External(o) = self.stack[idx].clone() {
             let value = value.into_gc_vm(self);
@@ -877,8 +881,14 @@ impl Vm {
             self.stack[idx] = value;
         }
     }
+    
+    pub(crate) fn push_stack(&mut self, value: Unrooted) {
+        // SAFETY: Value will become a root here, therefore we don't need to root with a scope
+        let value = unsafe { value.into_value() };
+        self.stack.push(value);
+    }
 
-    pub(crate) fn try_push_frame(&mut self, frame: Frame) -> Result<(), Value> {
+    pub(crate) fn try_push_frame(&mut self, frame: Frame) -> Result<(), Unrooted> {
         if self.frames.len() <= MAX_FRAME_STACK_SIZE {
             self.frames.push(frame);
         } else {
@@ -929,7 +939,7 @@ impl Vm {
         Unrooted::new(value)
     }
 
-    fn handle_rt_error(&mut self, err: Value, max_fp: usize) -> Result<(), Value> {
+    fn handle_rt_error(&mut self, err: Unrooted, max_fp: usize) -> Result<(), Unrooted> {
         debug!("handling rt error @{max_fp}");
         // Using .last() here instead of .pop() because there is a possibility that we
         // can't use this block (read the comment above the if statement try_fp < max_fp)
@@ -1014,7 +1024,7 @@ impl Vm {
     /// Executes a frame in this VM and initializes local variables (excluding parameters)
     /// 
     /// Parameters must be pushed onto the stack in the correct order by the caller before this function is called.
-    pub fn execute_frame(&mut self, frame: Frame) -> Result<HandleResult, Value> {
+    pub fn execute_frame(&mut self, frame: Frame) -> Result<HandleResult, Unrooted> {
         debug!("execute frame {:?}", frame.function.name);
         let span = span!(Level::TRACE, "vm frame");
         span.in_scope(|| {
@@ -1033,7 +1043,7 @@ impl Vm {
     }
 
     /// Executes a frame in this VM, without doing any sort of stack management
-    fn execute_frame_raw(&mut self, frame: Frame) -> Result<HandleResult, Value>
+    fn execute_frame_raw(&mut self, frame: Frame) -> Result<HandleResult, Unrooted>
     {
         // TODO: if this fails, we MUST revert the stack management,
         // like reserving space for undefined values
@@ -1041,7 +1051,7 @@ impl Vm {
         self.handle_instruction_loop()
     }
 
-    fn handle_instruction_loop(&mut self) -> Result<HandleResult, Value> {
+    fn handle_instruction_loop(&mut self) -> Result<HandleResult, Unrooted> {
         let fp = self.frames.len();
 
         loop {
@@ -1059,7 +1069,7 @@ impl Vm {
         }
     }
 
-    pub fn execute_module(&mut self, mut frame: Frame) -> Result<Exports, Value> {
+    pub fn execute_module(&mut self, mut frame: Frame) -> Result<Exports, Unrooted> {
         frame.state = FrameState::Module(Exports::default());
         frame.sp = self.stack.len();
         self.execute_frame(frame)?;

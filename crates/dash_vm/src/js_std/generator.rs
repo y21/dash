@@ -57,7 +57,10 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
     };
 
     // Generators work a bit different from normal functions, so we do the stack padding management ourselves here
-    let result = cx.scope.execute_frame_raw(frame)?;
+    let result = match cx.scope.execute_frame_raw(frame) {
+        Ok(v) => v,
+        Err(v) => return Err(v.root(cx.scope)),
+    };
     let generator = as_generator(cx.scope, &cx.this)?;
 
     match result {

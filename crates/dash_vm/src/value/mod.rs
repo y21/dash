@@ -77,7 +77,9 @@ pub enum Value {
 // call_js_function(); // this may trigger a GC cycle
 // val.root(&mut scope).do_something(); // this is UB, the GC cycle may have collected the value
 // ```
+#[derive(Debug, Clone)]
 pub struct Unrooted {
+    // Possible mini optimization: store a flag that indicates if the value is already rooted?
     value: Value,
 }
 
@@ -86,9 +88,25 @@ impl Unrooted {
         Self { value }
     }
 
+    /// Returns an unprotected, unrooted reference to the value.
+    pub unsafe fn get(&self) -> &Value {
+        &self.value
+    }
+
+    /// "Unwraps" the value, no longer protecting you from a GC sweep killing this value.
+    pub unsafe fn into_value(self) -> Value {
+        self.value
+    }
+
     pub fn root(self, scope: &mut LocalScope<'_>) -> Value {
         scope.add_value(self.value.clone());
         self.value
+    }
+}
+
+impl From<Value> for Unrooted {
+    fn from(value: Value) -> Self {
+        Self::new(value)
     }
 }
 
@@ -189,7 +207,7 @@ fn register_function_externals(
             // second indirection, actual thing that can be shared
             let handle = vm.gc.register(ExternalValue::new(boxed));
             let handle = handle.cast_handle::<ExternalValue>().unwrap();
-            vm.set_local(idx, Value::External(handle.clone()));
+            vm.set_local(idx, Value::External(handle.clone()).into());
             handle
         }
 

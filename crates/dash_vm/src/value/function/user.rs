@@ -45,6 +45,9 @@ impl UserFunction {
         let mut frame = Frame::from_function(Some(this), self, is_constructor_call, false);
         frame.set_sp(sp);
 
-        scope.execute_frame(frame)
+        match scope.execute_frame(frame) {
+            Ok(v) => Ok(v),
+            Err(err) => Err(err.root(scope)),
+        }
     }
 }

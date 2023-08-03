@@ -27,7 +27,7 @@ pub enum EvalError<'a> {
     Lexer(Vec<lexer::error::Error<'a>>),
     Parser(Vec<parser::error::Error<'a>>),
     Compiler(CompileError),
-    Exception(Value),
+    Exception(Unrooted),
 }
 
 impl<'a> fmt::Display for EvalError<'a> {
@@ -70,7 +70,7 @@ impl Vm {
         input: &str,
         import_ty: StaticImportKind,
         opt: OptLevel,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         let re = match FunctionCompiler::compile_str(input, opt) {
             Ok(re) => re,
             Err(CompileStrError::Compiler(ce)) => throw!(sc, SyntaxError, "Compile error: {:?}", ce),
@@ -84,7 +84,7 @@ impl Vm {
 
         let export_obj = match import_ty {
             StaticImportKind::Default => match exports.default {
-                Some(obj) => obj,
+                Some(obj) => obj.root(sc),
                 None => {
                     let o = NamedObject::new(sc);
                     Value::Object(sc.register(o))
@@ -94,6 +94,7 @@ impl Vm {
                 let export_obj = NamedObject::new(sc);
 
                 if let Some(default) = exports.default {
+                    let default = default.root(sc);
                     export_obj.set_property(sc, "default".into(), PropertyValue::static_default(default))?;
                 }
 
@@ -102,9 +103,10 @@ impl Vm {
         };
 
         for (k, v) in exports.named {
+            let v = v.root(sc);
             export_obj.set_property(sc, String::from(k.as_ref()).into(), PropertyValue::static_default(v))?;
         }
 
-        Ok(export_obj)
+        Ok(export_obj.into())
     }
 }
