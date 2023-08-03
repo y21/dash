@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1691087847946,
+  "lastUpdate": 1691087939090,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -4115,6 +4115,44 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 79516,
             "range": "± 213",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "name": "y21",
+            "username": "y21"
+          },
+          "id": "e75f48f1c6a2208980655b6295bbe58a86f18adc",
+          "message": "implement net module and consider external refs as roots",
+          "timestamp": "2023-04-14T21:40:49Z",
+          "url": "https://github.com/y21/dash/pull/69/commits/e75f48f1c6a2208980655b6295bbe58a86f18adc"
+        },
+        "date": 1691087937498,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 3495730,
+            "range": "± 223462",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 273782,
+            "range": "± 3352",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 91747,
+            "range": "± 2150",
             "unit": "ns/iter"
           }
         ]
