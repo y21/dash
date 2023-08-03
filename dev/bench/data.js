@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1691087939090,
+  "lastUpdate": 1691087949677,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -4153,6 +4153,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 91747,
             "range": "± 2150",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "Timo",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bfb52b2dc975964ce11689953f33a61fa1714060",
+          "message": "Merge pull request #69 from y21/net\n\nimplement net module and consider external refs as roots",
+          "timestamp": "2023-08-03T20:35:13+02:00",
+          "tree_id": "2896bd609804d0273223136fce72e234b79f30f5",
+          "url": "https://github.com/y21/dash/commit/bfb52b2dc975964ce11689953f33a61fa1714060"
+        },
+        "date": 1691087948272,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 3521921,
+            "range": "± 59166",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 269861,
+            "range": "± 1529",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 90994,
+            "range": "± 1045",
             "unit": "ns/iter"
           }
         ]
