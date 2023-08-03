@@ -111,8 +111,6 @@ impl Gc {
                     unsafe { previous.as_mut().next = *next };
                 }
 
-                // println!("Drop! {:?}", &ptr.as_ref().value);
-
                 // Deallocate node.
                 unsafe { drop(Box::from_raw(ptr.as_ptr())) };
 
