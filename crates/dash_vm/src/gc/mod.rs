@@ -88,6 +88,8 @@ impl Gc {
 
             cur = *next;
 
+            // TODO: this refcount check in the if is probably not even necessary anymore;
+            // we already trace existing `Persistent<T>`s, which marks them as visited.
             if !flags.is_marked() && refcount.get() == 0 {
                 // Reference did not get marked during mark phase
                 // Deallocate and unlink!
@@ -108,6 +110,8 @@ impl Gc {
                 if let Some(mut previous) = previous {
                     unsafe { previous.as_mut().next = *next };
                 }
+
+                // println!("Drop! {:?}", &ptr.as_ref().value);
 
                 // Deallocate node.
                 unsafe { drop(Box::from_raw(ptr.as_ptr())) };

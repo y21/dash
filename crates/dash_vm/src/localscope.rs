@@ -1,8 +1,14 @@
 use std::marker::PhantomData;
+use std::mem;
 use std::ops::Deref;
 use std::ops::DerefMut;
 
 use crate::gc::handle::Handle;
+use crate::value::function::bound::BoundFunction;
+use crate::value::promise::Promise;
+use crate::value::promise::PromiseState;
+use crate::value::ValueContext;
+use crate::PromiseAction;
 
 use super::value::object::Object;
 use super::value::Value;
@@ -162,6 +168,29 @@ impl<'vm> LocalScope<'vm> {
         let handle = self.deref_mut().register(obj);
         self.add_ref(handle.clone());
         handle
+    }
+
+    pub fn drive_promise(&mut self, action: PromiseAction, promise: &Promise, args: Vec<Value>) {
+        let arg = args.first().unwrap_or_undefined();
+        let mut state = promise.state().borrow_mut();
+
+        if let PromiseState::Pending { resolve, reject } = &mut *state {
+            let handlers = match action {
+                PromiseAction::Resolve => mem::take(resolve),
+                PromiseAction::Reject => mem::take(reject),
+            };
+
+            for handler in handlers {
+                let bf = BoundFunction::new(self, handler, None, Some(args.clone()));
+                let bf = self.register(bf);
+                self.add_async_task(bf);
+            }
+        }
+
+        *state = match action {
+            PromiseAction::Resolve => PromiseState::Resolved(arg),
+            PromiseAction::Reject => PromiseState::Rejected(arg),
+        };
     }
 }
 

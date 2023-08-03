@@ -59,7 +59,7 @@ fn fetch(cx: CallContext) -> Result<Value, Value> {
     let promise = cx.scope.register(promise);
 
     let promise_id = {
-        let persistent_promise = Persistent::new(promise.clone());
+        let persistent_promise = Persistent::new(cx.scope, promise.clone());
         State::from_vm(cx.scope).add_pending_promise(persistent_promise)
     };
 
@@ -130,7 +130,7 @@ fn http_response_text(cx: CallContext) -> Result<Value, Value> {
     let promise = cx.scope.register(promise);
 
     let promise_id = {
-        let persistent_promise = Persistent::new(promise.clone());
+        let persistent_promise = Persistent::new(cx.scope, promise.clone());
         State::from_vm(cx.scope).add_pending_promise(persistent_promise)
     };
 

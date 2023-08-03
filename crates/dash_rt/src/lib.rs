@@ -31,8 +31,8 @@ where
     };
 
     let (promise_id, rt) = {
+        let persistent_promise = Persistent::new(cx.scope, promise.clone());
         let state = State::from_vm(cx.scope);
-        let persistent_promise = Persistent::new(promise.clone());
         let pid = state.add_pending_promise(persistent_promise);
         let rt = state.rt_handle();
         (pid, rt)

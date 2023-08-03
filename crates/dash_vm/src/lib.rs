@@ -21,8 +21,9 @@ use dash_log::{debug, error, span, Level};
 use dash_middle::compiler::instruction::Instruction;
 use gc::{handle::Handle, Gc};
 use localscope::{LocalScopeList, scope};
+use rustc_hash::FxHashSet;
 use util::unlikely;
-use value::{promise::{Promise, PromiseState}, ValueContext, function::bound::BoundFunction, PureBuiltin, object::NamedObject, ExternalValue, Unrooted};
+use value::{PureBuiltin, object::NamedObject, ExternalValue, Unrooted};
 
 #[cfg(feature = "jit")]
 mod jit;
@@ -54,6 +55,14 @@ pub struct Vm {
     stack: Vec<Value>,
     gc: Gc,
     global: Handle<dyn Object>,
+    // "External refs" currently refers to existing `Persistent<T>`s.
+    // Persistent values already manage the reference count when cloning or dropping them
+    // and are stored in the Handle itself, but we still need to keep track of them so we can
+    // consider them as roots and also **trace** them (to reach their children).
+    //
+    // We insert into this in `Persistent::new`, and remove from it during the tracing phase.
+    // We can't do that in Persistent's Drop code, because we don't have access to the VM there.
+    external_refs: FxHashSet<Handle<dyn Object>>,
     scopes: LocalScopeList,
     statics: Box<Statics>, // TODO: we should box this... maybe?
     try_blocks: Vec<TryBlock>,
@@ -87,7 +96,7 @@ impl Vm {
             stack: Vec::with_capacity(512),
             gc,
             global,
-            // externals: Externals::default(),
+            external_refs: FxHashSet::default(),
             scopes: LocalScopeList::new(),
             statics: Box::new(statics),
             try_blocks: Vec::new(),
@@ -1089,8 +1098,24 @@ impl Vm {
         self.stack.trace();
         debug!("trace globals");
         self.global.trace();
-        debug!("trace externals");
+        debug!("trace scopes");
         self.scopes.trace();
+        
+        debug!("trace externals");
+        // we do two things here:
+        // remove Handles from external refs set that have a zero refcount (implying no active persistent refs)
+        // and trace if refcount > 0
+        self.external_refs.retain(|e| {
+            let refcount = unsafe { (*e.as_ptr()).refcount.get() };
+            if refcount == 0 {
+                false
+            } else {
+                // Non-zero refcount, retain object and trace
+                e.trace();
+                true
+            }
+        });
+
         debug!("trace statics");
         self.statics.trace();
     }
@@ -1103,6 +1128,8 @@ impl Vm {
         &mut self.gc
     }
 
+    // TODO: remove this function at all costs, this should never be called.
+    // Always call `register` on local scope
     pub fn register<O: Object + 'static>(&mut self, obj: O) -> Handle<dyn Object> {
         self.gc.register(obj)
     }
@@ -1113,29 +1140,6 @@ impl Vm {
 
     pub fn params_mut(&mut self) -> &mut VmParams {
         &mut self.params
-    }
-
-    pub fn drive_promise(&mut self, action: PromiseAction, promise: &Promise, args: Vec<Value>) {
-        let arg = args.first().unwrap_or_undefined();
-        let mut state = promise.state().borrow_mut();
-
-        if let PromiseState::Pending { resolve, reject } = &mut *state {
-            let handlers = match action {
-                PromiseAction::Resolve => mem::take(resolve),
-                PromiseAction::Reject => mem::take(reject)
-            };
-
-            for handler in handlers {
-                let bf = BoundFunction::new(self, handler, None, Some(args.clone()));
-                let bf = self.register(bf);
-                self.add_async_task(bf);
-            }
-        }
-
-        *state = match action {
-            PromiseAction::Resolve => PromiseState::Resolved(arg),
-            PromiseAction::Reject => PromiseState::Rejected(arg),
-        };
     }
 
     pub(crate) fn builtins_purity(&self) -> bool {

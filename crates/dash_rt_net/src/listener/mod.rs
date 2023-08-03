@@ -214,7 +214,8 @@ fn tcplistener_accept(cx: CallContext) -> Result<Value, Value> {
         let promise = Promise::new(cx.scope);
         cx.scope.register(promise)
     };
-    let persistent_promise = Persistent::new(promise.clone());
+
+    let persistent_promise = Persistent::new(cx.scope, promise.clone());
     let promise_id = State::from_vm(cx.scope).add_pending_promise(persistent_promise);
 
     handle

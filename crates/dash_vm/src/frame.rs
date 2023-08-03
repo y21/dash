@@ -76,7 +76,7 @@ pub struct LoopCounterMap(BTreeMap<usize, LoopCounter>);
 
 impl LoopCounterMap {
     pub fn get_or_insert(&mut self, id: usize) -> &mut LoopCounter {
-        self.0.entry(id).or_insert_with(Default::default)
+        self.0.entry(id).or_default()
     }
 }
 
