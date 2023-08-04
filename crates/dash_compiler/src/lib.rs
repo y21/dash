@@ -1,11 +1,11 @@
 use std::borrow::Cow;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::rc::Rc;
 use std::{convert::TryInto, usize};
 
 use dash_log::{debug, span, Level};
-use dash_middle::compiler::constant::{Constant, Function};
+use dash_middle::compiler::constant::{Buffer, Constant, Function};
 use dash_middle::compiler::instruction::{AssignKind, IntrinsicOperation};
 use dash_middle::compiler::scope::ScopeLocal;
 use dash_middle::compiler::scope::{CompileValueType, Scope};
@@ -1459,7 +1459,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         let locals = scope.locals().len();
 
         let function = Function {
-            buffer: cmp.buf.into(),
+            buffer: Buffer(Cell::new(cmp.buf.into())),
             constants: cmp.cp.into_vec().into(),
             locals,
             name: name.map(ToOwned::to_owned),
