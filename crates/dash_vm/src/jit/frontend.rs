@@ -64,7 +64,10 @@ impl Frontend {
 pub fn compile_current_trace(vm: &mut Vm) -> Result<(Trace, JitFunction), Error> {
     let frame = vm.frames.last().unwrap();
     let trace = vm.jit.take_recording_trace().unwrap();
-    let bytecode = &frame.function.buffer[trace.start()..trace.end()];
+    let bytecode = frame
+        .function
+        .buffer
+        .with(|buf| buf[trace.start()..trace.end()].to_vec()); // We can do better than cloning, but good enough for now.
 
     let key = CacheKey::from_trace(&trace);
 
@@ -78,8 +81,8 @@ pub fn compile_current_trace(vm: &mut Vm) -> Result<(Trace, JitFunction), Error>
     }
 
     let mut query = QueryProvider { vm, trace: &trace };
-    let tcfg = dash_typed_cfg::lower(bytecode, &mut query)?;
-    let fun = codegen::compile_typed_cfg(bytecode, &tcfg, &mut query)?;
+    let tcfg = dash_typed_cfg::lower(&bytecode, &mut query)?;
+    let fun = codegen::compile_typed_cfg(&bytecode, &tcfg, &mut query)?;
 
     vm.jit.cache.insert(key, (tcfg, fun));
 

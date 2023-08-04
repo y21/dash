@@ -1,8 +1,10 @@
+use std::cell::Cell;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::rc::Rc;
 
+use dash_middle::compiler::constant::Buffer;
 use dash_middle::compiler::constant::Function;
 use dash_middle::compiler::CompileResult;
 use dash_middle::parser::statement::FunctionKind;
@@ -150,7 +152,7 @@ impl Frame {
         debug_assert!(cr.externals.is_empty());
 
         let fun = Function {
-            buffer: cr.instructions.into(),
+            buffer: Buffer(Cell::new(cr.instructions.into())),
             constants: cr.cp.into_vec().into(),
             externals: Vec::new().into(),
             locals: cr.locals,

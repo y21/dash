@@ -839,16 +839,16 @@ impl Vm {
         let frame = self.frames.last_mut().expect("No frame");
         let ip = frame.ip;
         frame.ip += 1;
-        frame.function.buffer[ip]
+        frame.function.buffer.with(|buf| buf[ip])
     }
 
     /// Fetches a wide value (16-bit) in the currently executing frame
     /// and increments the instruction pointer
     pub(crate) fn fetchw_and_inc_ip(&mut self) -> u16 {
         let frame = self.frames.last_mut().expect("No frame");
-        let value: [u8; 2] = frame.function.buffer[frame.ip..frame.ip + 2]
+        let value: [u8; 2] = frame.function.buffer.with(|buf| buf[frame.ip..frame.ip + 2]
             .try_into()
-            .expect("Failed to get wide instruction");
+            .expect("Failed to get wide instruction"));
 
         frame.ip += 2;
         u16::from_ne_bytes(value)

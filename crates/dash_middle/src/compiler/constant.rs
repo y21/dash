@@ -1,3 +1,5 @@
+use core::fmt;
+use std::cell::Cell;
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::ops::Deref;
@@ -11,11 +13,62 @@ use crate::parser::statement::FunctionKind;
 
 use super::external::External;
 
+/// The instruction buffer.
+/// Uses interior mutability since we store it in a `Rc<Function>`
+/// and we want to be able to optimize the bytecode
+pub struct Buffer(pub Cell<Box<[u8]>>);
+
+impl Buffer {
+    pub fn with<R>(&self, fun: impl FnOnce(&[u8]) -> R) -> R {
+        let buf = self.0.take();
+        // this can genuinely happen for empty functions
+        // (which actually shouldn't happen because we implicitly always insert a `ret` instruction),
+        // but often is a bug due to calling `with` while
+        // already in a `with` closure (or after unwinding), so try to save a bunch of debugging time
+        debug_assert!(!buf.is_empty());
+        let ret = fun(&buf);
+        self.0.set(buf);
+        ret
+    }
+}
+
+#[cfg(feature = "format")]
+impl Serialize for Buffer {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.with(|buf| buf.serialize(serializer))
+    }
+}
+
+#[cfg(feature = "format")]
+impl<'de> Deserialize<'de> for Buffer {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Box::<[u8]>::deserialize(deserializer).map(|buf| Self(Cell::new(buf)))
+    }
+}
+
+impl fmt::Debug for Buffer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.with(|buf| buf.fmt(f))
+    }
+}
+
+impl Clone for Buffer {
+    fn clone(&self) -> Self {
+        self.with(|buf| Self(Cell::new(Box::from(buf))))
+    }
+}
+
 #[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Function {
     pub name: Option<String>,
-    pub buffer: Box<[u8]>,
+    pub buffer: Buffer,
     pub ty: FunctionKind,
     pub locals: usize,
     pub params: usize,
@@ -40,7 +93,7 @@ impl Function {
 }
 
 #[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Constant {
     Number(f64),
     String(Rc<str>),

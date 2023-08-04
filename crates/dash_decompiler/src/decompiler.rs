@@ -415,12 +415,14 @@ impl<'buf> FunctionDecompiler<'buf> {
         // Finally, append all other functions defined in this function
 
         for fun in functions {
-            let out = FunctionDecompiler::new(
-                &fun.buffer,
-                &fun.constants,
-                &format!("{}::{}", self.name, fun.name.as_deref().unwrap_or("<anon>")),
-            )
-            .run()?;
+            let out = fun.buffer.with(|buffer| {
+                FunctionDecompiler::new(
+                    buffer,
+                    &fun.constants,
+                    &format!("{}::{}", self.name, fun.name.as_deref().unwrap_or("<anon>")),
+                )
+                .run()
+            })?;
             self.out.push('\n');
             self.out.push_str(&out);
         }
