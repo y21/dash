@@ -431,6 +431,7 @@ impl Vm {
             push: scope.statics.array_push;
             reverse: scope.statics.array_reverse;
             shift: scope.statics.array_shift;
+            sort: scope.statics.array_sort;
             unshift: scope.statics.array_unshift;
             slice: scope.statics.array_slice;
             lastIndexOf: scope.statics.array_last_index_of;

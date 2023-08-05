@@ -24,7 +24,8 @@ impl Buffer {
         // this can genuinely happen for empty functions
         // (which actually shouldn't happen because we implicitly always insert a `ret` instruction),
         // but often is a bug due to calling `with` while
-        // already in a `with` closure (or after unwinding), so try to save a bunch of debugging time
+        // already in a `with` closure (or after unwinding), so try to save a bunch of debugging time.
+        // this should _really_ only be with debug assertions, as this is very hot code
         debug_assert!(!buf.is_empty());
         let ret = fun(&buf);
         self.0.set(buf);

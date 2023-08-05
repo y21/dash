@@ -48,6 +48,7 @@ fn run_inner(files: Vec<OsString>, verbose: bool) -> anyhow::Result<()> {
     tp.scope(|s| {
         for file in files {
             s.spawn(|_| {
+                #[allow(clippy::redundant_locals)] // it's not redundant
                 let file = file;
                 let result = run_test(&setup, &file, verbose);
 

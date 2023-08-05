@@ -580,3 +580,44 @@ pub fn from(cx: CallContext) -> Result<Value, Value> {
         None => with_array_like(cx.scope, items, mapper),
     }
 }
+
+// This implements an insertion sort for now since it's simple and okay for small arrays.
+// We can always improve it later.
+// It's worth noting that we unfortunately cannot use the sorting algorithm in the standard library,
+// since that must happen in a closure that needs to return an `Ordering`, without the ability to
+// return errors, but calling into JS can throw exceptions.
+pub fn sort(cx: CallContext) -> Result<Value, Value> {
+    let this = Value::Object(cx.this.to_object(cx.scope)?);
+    let len = this.length_of_array_like(cx.scope)?;
+
+    let Some(compare_fn) = cx.args.first().cloned() else {
+        throw!(
+            cx.scope,
+            Error,
+            "Array.prototype.sort currently requires an explicit compare function, try `.sort((a, b) => a - b)` to sort from lowest to highest"
+        );
+    };
+
+    for i in 1..len {
+        for j in (1..=i).rev() {
+            let previous = this.get_property(cx.scope, (j - 1).to_string().into())?;
+            let current = this.get_property(cx.scope, j.to_string().into())?;
+            let ordering = compare_fn
+                .apply(cx.scope, Value::undefined(), vec![previous.clone(), current.clone()])?
+                .to_int32(cx.scope)?;
+
+            if ordering > 0 {
+                this.set_property(
+                    cx.scope,
+                    (j - 1).to_string().into(),
+                    PropertyValue::static_default(current),
+                )?;
+                this.set_property(cx.scope, j.to_string().into(), PropertyValue::static_default(previous))?;
+            } else {
+                break;
+            }
+        }
+    }
+
+    Ok(cx.this)
+}
