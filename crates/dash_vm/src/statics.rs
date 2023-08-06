@@ -256,6 +256,8 @@ pub struct Statics {
     pub date_ctor: Handle<dyn Object>,
     pub date_prototype: Handle<dyn Object>,
     pub date_now: Handle<dyn Object>,
+    pub json_ctor: Handle<dyn Object>,
+    pub json_parse: Handle<dyn Object>,
 }
 
 fn builtin_object<O: Object + 'static>(gc: &mut Gc, obj: O) -> Handle<dyn Object> {
@@ -506,6 +508,8 @@ impl Statics {
             date_ctor: function(gc, "Date", js_std::date::constructor),
             date_prototype: builtin_object(gc, NamedObject::null()),
             date_now: function(gc, "now", js_std::date::now),
+            json_ctor: function(gc, "JSON", js_std::json::constructor),
+            json_parse: function(gc, "parse", js_std::json::parse),
         }
     }
 

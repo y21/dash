@@ -39,6 +39,7 @@ pub mod params;
 pub mod statics;
 pub mod util;
 pub mod value;
+pub mod json;
 mod macros;
 #[cfg(test)]
 mod test;
@@ -790,6 +791,13 @@ impl Vm {
             #[constructor] date_ctor;
         });
 
+        let json_ctor = register_builtin_type!(scope.statics.json_ctor, {
+            #[prototype] function_proto;
+            #[constructor] function_ctor;
+            #[properties]
+            parse: scope.statics.json_parse;
+        });
+
         register_builtin_type!(global, {
             #[prototype] object_proto;
             #[constructor] object_ctor;
@@ -829,6 +837,7 @@ impl Vm {
             Number: number_ctor;
             Boolean: boolean_ctor;
             Promise: promise_ctor;
+            JSON: json_ctor;
         });
 
         scope.builtins_pure = true;
@@ -1141,6 +1150,7 @@ impl Vm {
 
     // TODO: remove this function at all costs, this should never be called.
     // Always call `register` on local scope
+    // Or, rather, return Unrooted
     pub fn register<O: Object + 'static>(&mut self, obj: O) -> Handle<dyn Object> {
         self.gc.register(obj)
     }

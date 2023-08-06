@@ -10,6 +10,7 @@ pub mod error;
 pub mod function;
 pub mod generator;
 pub mod global;
+pub mod json;
 pub mod map;
 pub mod math;
 pub mod number;
