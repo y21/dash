@@ -188,6 +188,7 @@ impl<'a> FunctionCompiler<'a> {
         let compile_span = span!(Level::TRACE, "compile ast");
         let _enter = compile_span.enter();
 
+        transformations::hoist_declarations(&mut ast);
         if implicit_return {
             transformations::ast_patch_implicit_return(&mut ast);
         } else {
