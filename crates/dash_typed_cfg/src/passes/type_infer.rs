@@ -161,8 +161,9 @@ impl<'a, 'q, Q: TypeInferQuery> TypeInferCtxt<'a, 'q, Q> {
                     ty_stack.pop();
                 }
                 Instruction::Jmp => {
+                    let _state = dcx.next_byte();
                     let count = dcx.next_wide_signed();
-                    let _target_ip = usize::try_from(index as i16 + count + 3).unwrap();
+                    let _target_ip = usize::try_from(index as i16 + count + 4).unwrap();
 
                     let bb = &self.bbs[&bbk];
                     let Some(BasicBlockSuccessor::Unconditional(succ)) = bb.successor else {
@@ -194,7 +195,12 @@ impl<'a, 'q, Q: TypeInferQuery> TypeInferCtxt<'a, 'q, Q> {
                     let _target_ip = usize::try_from(index as i16 + count + 3).unwrap();
 
                     let bb = &self.bbs[&bbk];
-                    let Some(BasicBlockSuccessor::Conditional { true_ip: true_, false_ip: false_, action }) = bb.successor else {
+                    let Some(BasicBlockSuccessor::Conditional {
+                        true_ip: true_,
+                        false_ip: false_,
+                        action,
+                    }) = bb.successor
+                    else {
                         panic!("unmatched basic block successor");
                     };
 

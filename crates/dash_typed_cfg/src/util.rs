@@ -80,7 +80,10 @@ impl<'a> DecodeCtxt<'a> {
             | Instruction::Ne
             | Instruction::StrictEq
             | Instruction::StrictNe => {}
-            Instruction::Jmp => drop(self.next_wide()),
+            Instruction::Jmp => {
+                self.next_byte();
+                self.next_wide();
+            }
             Instruction::JmpFalseP | Instruction::JmpNullishP | Instruction::JmpTrueP | Instruction::JmpUndefinedP => {
                 panic!("Conditional jumps cannot be ignored")
             }

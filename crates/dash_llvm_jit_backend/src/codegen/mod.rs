@@ -349,6 +349,8 @@ impl<'a, 'q, Q: CodegenQuery> CodegenCtxt<'a, 'q, Q> {
                 }
                 Instruction::Pop => drop(stack.pop()),
                 Instruction::Jmp => {
+                    // TODO: do we not need to read the count and jump state?
+                    panic!();
                     let bb = &self.bb_map[&bbk];
                     let Some(BasicBlockSuccessor::Unconditional(target)) = &bb.successor else {
                         panic!("unmatched basic block successor");
@@ -378,7 +380,12 @@ impl<'a, 'q, Q: CodegenQuery> CodegenCtxt<'a, 'q, Q> {
                     let count = dcx.next_wide_signed();
                     let _target_ip = usize::try_from(index as i16 + count + 3).unwrap();
                     let bb = &self.bb_map[&bbk];
-                    let Some(BasicBlockSuccessor::Conditional { true_ip, false_ip, action: Some(action) }) = bb.successor else {
+                    let Some(BasicBlockSuccessor::Conditional {
+                        true_ip,
+                        false_ip,
+                        action: Some(action),
+                    }) = bb.successor
+                    else {
                         panic!("unmatched basic block successor");
                     };
 

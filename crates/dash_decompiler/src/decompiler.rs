@@ -159,6 +159,10 @@ impl<'buf> FunctionDecompiler<'buf> {
                 | Instruction::JmpTrueP
                 | Instruction::JmpUndefinedNP
                 | Instruction::JmpUndefinedP => {
+                    if let Instruction::Jmp = instr {
+                        let _jmp_state = self.read()?;
+                    }
+
                     let byte = self.read_i16()?;
                     let offset = (self.reader.offset() as isize) + byte as isize;
                     let arg = format!("@{offset:x}");

@@ -62,8 +62,9 @@ pub fn find_labels(bytecode: &[u8]) -> Result<Labels, Error> {
         match instr {
             // Instructions we care about:
             Instruction::Jmp => {
+                let _state = dcx.next_byte();
                 let count = dcx.next_wide_signed();
-                let target_ip = usize::try_from(index as i16 + count + 3).unwrap();
+                let target_ip = usize::try_from(index as i16 + count + 4).unwrap();
                 labels.push(LabelKind::UnconditionalJumpTarget { target: target_ip });
             }
             Instruction::JmpFalseP
@@ -176,8 +177,9 @@ impl<'a, 'q, Q: BBGenerationQuery> BBGenerationCtxt<'a, 'q, Q> {
             match instr {
                 // Instructions we care about:
                 Instruction::Jmp => {
+                    let _state = dcx.next_byte();
                     let count = dcx.next_wide_signed();
-                    let target_ip = usize::try_from(index as i16 + count + 3).unwrap();
+                    let target_ip = usize::try_from(index as i16 + count + 4).unwrap();
 
                     let this = self.bbs.get_mut(&current_bb_ip).unwrap();
                     assert!(this.successor.is_none());

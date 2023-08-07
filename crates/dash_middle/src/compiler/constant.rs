@@ -32,6 +32,14 @@ impl Buffer {
         self.0.set(buf);
         ret
     }
+    pub fn with_mut<R>(&self, fun: impl FnOnce(&mut [u8]) -> R) -> R {
+        let mut buf = self.0.take();
+        // see above
+        debug_assert!(!buf.is_empty());
+        let ret = fun(&mut buf);
+        self.0.set(buf);
+        ret
+    }
 }
 
 #[cfg(feature = "format")]

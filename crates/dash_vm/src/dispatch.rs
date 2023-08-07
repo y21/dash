@@ -899,6 +899,17 @@ mod handlers {
     }
 
     pub fn jmp<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+        let ip = cx.active_frame().ip;
+        let state = cx.fetch_and_inc_ip();
+        if state == 100 {
+            cx.active_frame().function.buffer.with_mut(|b| {
+                b[ip] = 0;
+            });
+        } else {
+            cx.active_frame().function.buffer.with_mut(|b| {
+                b[ip] += 1;
+            });
+        }
         let offset = cx.fetchw_and_inc_ip() as i16;
         let frame = cx.active_frame_mut();
 

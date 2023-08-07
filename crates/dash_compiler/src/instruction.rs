@@ -173,6 +173,7 @@ impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
 
     pub fn build_jmp(&mut self, label: Label, is_local_label: bool) {
         self.write_instr(Instruction::Jmp);
+        self.write(0);
         self.build_jmp_header(label, is_local_label);
     }
 
