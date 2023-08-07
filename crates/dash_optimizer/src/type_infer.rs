@@ -150,7 +150,13 @@ impl<'a> TypeInferCtx<'a> {
         self.visit_maybe_statement(finally.as_deref(), func_id);
     }
 
-    pub fn visit_class_statement(&mut self, Class { extends, members, .. }: &Class<'a>, func_id: FuncId) {
+    pub fn visit_class_statement(
+        &mut self,
+        Class {
+            extends, members, name, ..
+        }: &Class<'a>,
+        func_id: FuncId,
+    ) {
         self.visit_maybe_expr(extends.as_ref(), func_id);
         for member in members {
             match &member.kind {
@@ -159,6 +165,18 @@ impl<'a> TypeInferCtx<'a> {
                     drop(self.visit_maybe_expr(value.as_ref(), func_id))
                 }
             }
+        }
+
+        if let Some(name) = name {
+            self.visit_variable_binding(
+                &VariableBinding {
+                    name: VariableDeclarationName::Identifier(name),
+                    kind: VariableDeclarationKind::Var,
+                    ty: None,
+                },
+                None,
+                func_id,
+            )
         }
     }
 
