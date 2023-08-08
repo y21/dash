@@ -18,7 +18,7 @@ use super::primitive::Symbol as PrimitiveSymbol;
 use super::Value;
 
 macro_rules! boxed_primitive {
-    ($($name:ident: $t:ty),*) => {
+    ($($name:ident $prototype:ident $constructor:ident $t:ty),*) => {
         $(
             #[derive(Debug, Trace)]
             pub struct $name {
@@ -28,7 +28,9 @@ macro_rules! boxed_primitive {
 
             impl $name {
                 pub fn new(vm: &mut Vm, value: $t) -> Self {
-                    Self { inner: value, obj: NamedObject::new(vm) }
+                    let prototype = vm.statics.$prototype.clone();
+                    let ctor = vm.statics.$constructor.clone();
+                    Self { inner: value, obj: NamedObject::with_prototype_and_constructor(prototype, ctor) }
                 }
 
                 pub fn with_obj(value: $t, obj: NamedObject) -> Self {
@@ -138,10 +140,10 @@ macro_rules! boxed_primitive {
 }
 
 boxed_primitive! {
-    Number: f64, // TODO: should this store a primitive::Number?
-    Boolean: bool,
-    String: Rc<str>,
-    Symbol: PrimitiveSymbol
+    Number number_prototype number_ctor f64, // TODO: should this store a primitive::Number?
+    Boolean boolean_prototype boolean_ctor bool,
+    String string_prototype string_ctor Rc<str>,
+    Symbol symbol_prototype symbol_ctor PrimitiveSymbol
 }
 
 impl PrimitiveCapabilities for Number {
