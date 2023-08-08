@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1691528900564,
+  "lastUpdate": 1691530918111,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -4573,6 +4573,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 79743,
             "range": "± 83",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "9ab6e2cc29cc9b136a885408df8d1d293512931a",
+          "message": "set the prototype and constructor of boxed primitives",
+          "timestamp": "2023-08-08T23:38:24+02:00",
+          "tree_id": "076f6f900bf1da3fef2d41d853aee4144058c71c",
+          "url": "https://github.com/y21/dash/commit/9ab6e2cc29cc9b136a885408df8d1d293512931a"
+        },
+        "date": 1691530917307,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 3072536,
+            "range": "± 44868",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 241499,
+            "range": "± 1848",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 81797,
+            "range": "± 364",
             "unit": "ns/iter"
           }
         ]
