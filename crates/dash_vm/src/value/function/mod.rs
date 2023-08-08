@@ -13,7 +13,7 @@ use crate::{
     dispatch::HandleResult,
     gc::{handle::Handle, trace::Trace},
     localscope::LocalScope,
-    throw, Vm,
+    Vm,
 };
 
 use self::{
@@ -141,20 +141,14 @@ impl Function {
         self.prototype.borrow().clone()
     }
 
-    pub fn get_or_set_prototype(&self, scope: &mut LocalScope) -> Result<Handle<dyn Object>, Value> {
-        // can make this faster if we need to by directly accessing the prototype
-        // without going through the property system
-        let prototype = match self.get_property(scope, "prototype".into())? {
-            Value::Undefined(_) => {
-                let prototype = NamedObject::new(scope);
-                scope.register(prototype)
-            }
-            Value::Object(o) => o,
-            Value::External(o) => o.inner.clone(),
-            _ => throw!(scope, TypeError, "prototype is not an object"),
-        };
-
-        Ok(prototype)
+    pub fn get_or_set_prototype(&self, scope: &mut LocalScope) -> Handle<dyn Object> {
+        self.prototype
+            .borrow_mut()
+            .get_or_insert_with(|| {
+                let proto = NamedObject::new(scope);
+                scope.register(proto)
+            })
+            .clone()
     }
 
     /// Creates a new instance of this function.
@@ -163,7 +157,7 @@ impl Function {
         this_handle: Handle<dyn Object>,
         scope: &mut LocalScope,
     ) -> Result<Handle<dyn Object>, Value> {
-        let prototype = self.get_or_set_prototype(scope)?;
+        let prototype = self.get_or_set_prototype(scope);
         let this = scope.register(NamedObject::with_prototype_and_constructor(prototype, this_handle));
         Ok(this)
     }
@@ -209,12 +203,7 @@ impl Object for Function {
                     return Ok(Some(PropertyValue::static_default(Value::String(name))));
                 }
                 "prototype" => {
-                    let mut prototype = self.prototype.borrow_mut();
-
-                    let prototype = prototype.get_or_insert_with(|| {
-                        let proto = NamedObject::new(sc);
-                        sc.register(proto)
-                    });
+                    let prototype = self.get_or_set_prototype(sc);
                     return Ok(Some(PropertyValue::static_default(Value::Object(prototype.clone()))));
                 }
                 _ => {}

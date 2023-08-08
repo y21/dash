@@ -1026,7 +1026,7 @@ mod handlers {
                 }
                 ObjectMemberKind::Spread => {
                     let value = cx.pop_stack_rooted();
-                    if let Value::Object(target) = value {
+                    if let Value::Object(target) = &value {
                         for key in target.own_keys()? {
                             let key = match key {
                                 Value::Symbol(sym) => PropertyKey::Symbol(sym),
@@ -1434,8 +1434,7 @@ mod handlers {
 
                     let ident = cx.identifier_constant(ident_id.into());
 
-                    let global = cx.global.clone();
-                    let value = global.get_property(&mut cx, ident.as_ref().into())?;
+                    let value = cx.global.clone().get_property(&mut cx, ident.as_ref().into())?;
 
                     (value, ident)
                 }
@@ -1735,8 +1734,10 @@ mod handlers {
                     // TODO: don't warn here but when purity was violated
                     warn!("missed spec call due to impurity");
                     // Builtins impure, fallback to slow dynamic property lookup
-                    let global = cx.global.clone();
-                    let k = global.get_property(&mut cx, PropertyKey::from(stringify!($k)))?;
+                    let k = cx
+                        .global
+                        .clone()
+                        .get_property(&mut cx, PropertyKey::from(stringify!($k)))?;
                     let fun = k.get_property(&mut cx, PropertyKey::from(stringify!($v)))?;
                     let result = fun.apply(&mut cx, Value::undefined(), args)?;
                     cx.stack.push(result);

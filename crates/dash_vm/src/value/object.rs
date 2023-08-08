@@ -18,8 +18,8 @@ pub type ObjectMap<K, V> = ahash::HashMap<K, V>;
 fn __assert_trait_object_safety(_: Box<dyn Object>) {}
 
 pub trait Object: Debug + Trace {
-    fn get_own_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
-        delegate_get_own_property(self, sc, key)
+    fn get_own_property(&self, sc: &mut LocalScope, this: Value, key: PropertyKey) -> Result<Value, Value> {
+        delegate_get_own_property(self, this, sc, key)
     }
 
     fn get_own_property_descriptor(
@@ -28,8 +28,8 @@ pub trait Object: Debug + Trace {
         key: PropertyKey,
     ) -> Result<Option<PropertyValue>, Value>;
 
-    fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
-        delegate_get_property(self, sc, key)
+    fn get_property(&self, sc: &mut LocalScope, this: Value, key: PropertyKey) -> Result<Value, Value> {
+        delegate_get_property(self, this, sc, key)
     }
 
     fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
@@ -100,9 +100,10 @@ macro_rules! delegate {
         fn get_property(
             &self,
             sc: &mut $crate::localscope::LocalScope,
+            this: $crate::value::Value,
             key: $crate::value::object::PropertyKey,
         ) -> Result<$crate::value::Value, $crate::value::Value> {
-            self.$field.get_property(sc, key)
+            $crate::value::object::Object::get_property(&self.$field, sc, this, key)
         }
     };
     (override $field:ident, get_property_descriptor) => {
@@ -161,7 +162,7 @@ macro_rules! delegate {
             this: $crate::value::Value,
             args: Vec<$crate::value::Value>,
         ) -> Result<$crate::value::Value, $crate::value::Value> {
-            self.$field.apply(sc, handle, this, args)
+            $crate::value::object::Object::apply(&self.$field, sc, handle, this, args)
         }
     };
     (override $field:ident, construct) => {
@@ -172,7 +173,7 @@ macro_rules! delegate {
             this: $crate::value::Value,
             args: Vec<$crate::value::Value>,
         ) -> Result<$crate::value::Value, $crate::value::Value> {
-            self.$field.construct(sc, handle, this, args)
+            $crate::value::object::Object::construct(&self.$field, sc, handle, this, args)
         }
     };
     (override $field:ident, type_of) => {
@@ -666,8 +667,8 @@ impl Object for NamedObject {
 }
 
 impl Object for Box<dyn Object> {
-    fn get_own_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
-        (**self).get_own_property(sc, key)
+    fn get_own_property(&self, sc: &mut LocalScope, this: Value, key: PropertyKey) -> Result<Value, Value> {
+        (**self).get_own_property(sc, this, key)
     }
 
     fn get_own_property_descriptor(
@@ -678,8 +679,8 @@ impl Object for Box<dyn Object> {
         (**self).get_own_property_descriptor(sc, key)
     }
 
-    fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
-        (**self).get_property(sc, key)
+    fn get_property(&self, sc: &mut LocalScope, this: Value, key: PropertyKey) -> Result<Value, Value> {
+        (**self).get_property(sc, this, key)
     }
 
     fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
@@ -740,8 +741,8 @@ impl Object for Box<dyn Object> {
 }
 
 impl Object for Handle<dyn Object> {
-    fn get_own_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
-        (**self).get_own_property(sc, key)
+    fn get_own_property(&self, sc: &mut LocalScope, this: Value, key: PropertyKey) -> Result<Value, Value> {
+        (**self).get_own_property(sc, this, key)
     }
 
     fn get_own_property_descriptor(
@@ -752,8 +753,8 @@ impl Object for Handle<dyn Object> {
         (**self).get_own_property_descriptor(sc, key)
     }
 
-    fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
-        (**self).get_property(sc, key)
+    fn get_property(&self, sc: &mut LocalScope, this: Value, key: PropertyKey) -> Result<Value, Value> {
+        (**self).get_property(sc, this, key)
     }
 
     fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
@@ -814,6 +815,10 @@ impl Object for Handle<dyn Object> {
 }
 
 impl Handle<ExternalValue> {
+    pub fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        self.inner.get_property(sc, key)
+    }
+
     pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
         self.inner.apply(sc, this, args)
     }
@@ -824,6 +829,10 @@ impl Handle<ExternalValue> {
 }
 
 impl Handle<dyn Object> {
+    pub fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        (**self).get_property(sc, Value::Object(self.clone()), key)
+    }
+
     pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
         let callee = self.clone();
         (**self).apply(sc, callee, this, args)
@@ -836,6 +845,11 @@ impl Handle<dyn Object> {
 }
 
 impl Persistent<dyn Object> {
+    pub fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        let callee = self.handle().clone();
+        (**self).get_property(sc, Value::Object(callee), key)
+    }
+
     pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
         let callee = self.handle().clone();
         (**self).apply(sc, callee, this, args)
@@ -850,20 +864,22 @@ impl Persistent<dyn Object> {
 /// Delegates a get_property call to get_property_descriptor and converts the return value respectively
 pub fn delegate_get_property<T: Object + ?Sized>(
     this: &T,
+    this_value: Value,
     sc: &mut LocalScope,
     key: PropertyKey,
 ) -> Result<Value, Value> {
     this.get_property_descriptor(sc, key)
         .map(|x| x.unwrap_or_else(|| PropertyValue::static_default(Value::undefined())))
-        .and_then(|x| x.get_or_apply(sc, Value::undefined()))
+        .and_then(|x| x.get_or_apply(sc, this_value))
 }
 /// Delegates a get_property call to get_property_descriptor and converts the return value respectively
 pub fn delegate_get_own_property<T: Object + ?Sized>(
     this: &T,
+    this_value: Value,
     sc: &mut LocalScope,
     key: PropertyKey,
 ) -> Result<Value, Value> {
     this.get_own_property_descriptor(sc, key)
         .map(|x| x.unwrap_or_else(|| PropertyValue::static_default(Value::undefined())))
-        .and_then(|x| x.get_or_apply(sc, Value::undefined()))
+        .and_then(|x| x.get_or_apply(sc, this_value))
 }

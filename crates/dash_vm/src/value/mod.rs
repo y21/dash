@@ -292,13 +292,13 @@ impl Value {
     pub fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
         match self {
             Self::Object(o) => o.get_property(sc, key),
-            Self::Number(n) => n.get_property(sc, key),
-            Self::Boolean(b) => b.get_property(sc, key),
-            Self::String(s) => s.get_property(sc, key),
+            Self::Number(n) => n.get_property(sc, self.clone(), key),
+            Self::Boolean(b) => b.get_property(sc, self.clone(), key),
+            Self::String(s) => s.get_property(sc, self.clone(), key),
             Self::External(o) => o.get_property(sc, key),
-            Self::Undefined(u) => u.get_property(sc, key),
-            Self::Null(n) => n.get_property(sc, key),
-            Self::Symbol(s) => s.get_property(sc, key),
+            Self::Undefined(u) => u.get_property(sc, self.clone(), key),
+            Self::Null(n) => n.get_property(sc, self.clone(), key),
+            Self::Symbol(s) => s.get_property(sc, self.clone(), key),
         }
     }
 
