@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1691453964872,
+  "lastUpdate": 1691454683816,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -4405,6 +4405,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 106279,
             "range": "± 8165",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "2726d80280ab83f397ae72c0266bd91f649a6807",
+          "message": "hoist declarations in nested bodies",
+          "timestamp": "2023-08-08T02:28:02+02:00",
+          "tree_id": "9bd055a00a4f703e8ecb39ad486101e351b160e4",
+          "url": "https://github.com/y21/dash/commit/2726d80280ab83f397ae72c0266bd91f649a6807"
+        },
+        "date": 1691454682986,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 3202772,
+            "range": "± 17975",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 238002,
+            "range": "± 902",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 81940,
+            "range": "± 376",
             "unit": "ns/iter"
           }
         ]
