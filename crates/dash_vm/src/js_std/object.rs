@@ -1,13 +1,8 @@
-use std::any::Any;
-
+use crate::gc::handle::Handle;
+use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::array::Array;
-use crate::value::boxed::Boolean as BoxedBoolean;
-use crate::value::boxed::Number as BoxedNumber;
-use crate::value::boxed::String as BoxedString;
-use crate::value::error::Error;
 use crate::value::function::native::CallContext;
-use crate::value::function::Function;
 use crate::value::object::NamedObject;
 use crate::value::object::Object;
 use crate::value::object::PropertyKey;
@@ -39,33 +34,23 @@ pub fn keys(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn to_string(cx: CallContext) -> Result<Value, Value> {
-    fn to_string_inner(o: &dyn Any) -> &'static str {
-        if o.is::<Array>() {
-            "[object Array]"
-        } else if o.is::<Function>() {
-            "[object Function]"
-        } else if o.is::<Error>() {
-            "[object Error]"
-        } else if o.is::<BoxedBoolean>() {
-            "[object Boolean]"
-        } else if o.is::<BoxedNumber>() {
-            "[object Number]"
-        } else if o.is::<BoxedString>() {
-            "[object String]"
-        } else {
-            "[object Object]"
-        }
+    fn to_string_inner(scope: &mut LocalScope<'_>, o: &Handle<dyn Object>) -> Result<Value, Value> {
+        let constructor = o
+            .get_property(scope, "constructor".into())?
+            .get_property(scope, "name".into())?
+            .to_string(scope)?;
+        Ok(Value::String(format!("[object {constructor}]").into()))
     }
 
     let value = match &cx.this {
-        Value::Undefined(_) => "[object Undefined]",
-        Value::Null(_) => "[object Null]",
-        Value::Object(o) => to_string_inner(o.as_any()),
-        Value::External(o) => to_string_inner(o.as_any()),
+        Value::Undefined(_) => Value::String("[object Undefined]".into()),
+        Value::Null(_) => Value::String("[object Null]".into()),
+        Value::Object(o) => to_string_inner(cx.scope, o)?,
+        Value::External(o) => to_string_inner(cx.scope, &o.inner)?,
         _ => unreachable!(), // `this` is always object/null/undefined. TODO: wrong, `Object.prototype.toString..call('a')` crashes
     };
 
-    Ok(Value::String(value.into()))
+    Ok(value)
 }
 
 pub fn get_own_property_descriptor(cx: CallContext) -> Result<Value, Value> {
