@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1691506410023,
+  "lastUpdate": 1691523604771,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -4489,6 +4489,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 80289,
             "range": "± 513",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "6ff53bb90678f8670e28db25705e89ea1d899f0a",
+          "message": "set `this` in get accessors when reading property (fixes #71)",
+          "timestamp": "2023-08-08T21:35:51+02:00",
+          "tree_id": "cb0da499d88a6549cbb0216f5ab955d038089b95",
+          "url": "https://github.com/y21/dash/commit/6ff53bb90678f8670e28db25705e89ea1d899f0a"
+        },
+        "date": 1691523602101,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 3371749,
+            "range": "± 208213",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 292952,
+            "range": "± 16854",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 107603,
+            "range": "± 6126",
             "unit": "ns/iter"
           }
         ]
