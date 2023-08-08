@@ -1449,6 +1449,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             }
         }
 
+        transformations::hoist_declarations(&mut statements);
         transformations::ast_insert_implicit_return(&mut statements);
         for stmt in statements {
             ib.accept(stmt)?;
