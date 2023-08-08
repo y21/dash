@@ -322,6 +322,50 @@ impl PropertyValue {
 
         Ok(Value::Object(sc.register(obj)))
     }
+
+    pub fn from_descriptor_value(sc: &mut LocalScope<'_>, value: Value) -> Result<Self, Value> {
+        let mut flags = PropertyDataDescriptor::empty();
+        let configurable = value.get_property(sc, "configurable".into())?.into_option();
+        let enumerable = value.get_property(sc, "enumerable".into())?.into_option();
+        let writable = value.get_property(sc, "writable".into())?.into_option();
+
+        if configurable.map_or(true, |v| v.is_truthy()) {
+            flags |= PropertyDataDescriptor::CONFIGURABLE;
+        }
+        if enumerable.map_or(true, |v| v.is_truthy()) {
+            flags |= PropertyDataDescriptor::ENUMERABLE;
+        }
+        if writable.map_or(true, |v| v.is_truthy()) {
+            flags |= PropertyDataDescriptor::WRITABLE;
+        }
+
+        // TODO: make sure that if value is set, get/set are not
+
+        let static_value = value.get_property(sc, "value".into())?.into_option();
+        let kind = match static_value {
+            Some(static_value) => PropertyValueKind::Static(static_value),
+            None => {
+                let get = value
+                    .get_property(sc, "get".into())?
+                    .into_option()
+                    .and_then(|v| match v {
+                        Value::Object(o) => Some(o),
+                        _ => None,
+                    });
+                let set = value
+                    .get_property(sc, "set".into())?
+                    .into_option()
+                    .and_then(|v| match v {
+                        Value::Object(o) => Some(o),
+                        _ => None,
+                    });
+
+                PropertyValueKind::Trap { get, set }
+            }
+        };
+
+        Ok(Self::new(kind, flags))
+    }
 }
 
 #[derive(Debug, Clone)]

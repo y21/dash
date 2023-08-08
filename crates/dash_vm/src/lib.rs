@@ -246,6 +246,7 @@ impl Vm {
             keys: scope.statics.object_keys;
             getOwnPropertyDescriptor: scope.statics.object_get_own_property_descriptor;
             getOwnPropertyDescriptors: scope.statics.object_get_own_property_descriptors;
+            defineProperty: scope.statics.object_define_property;
         });
 
         let object_proto = register_builtin_type!(scope.statics.object_prototype, {

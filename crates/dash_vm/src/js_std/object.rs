@@ -62,7 +62,7 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
         Value::Null(_) => "[object Null]",
         Value::Object(o) => to_string_inner(o.as_any()),
         Value::External(o) => to_string_inner(o.as_any()),
-        _ => unreachable!(), // `this` is always object/null/undefined
+        _ => unreachable!(), // `this` is always object/null/undefined. TODO: wrong, `Object.prototype.toString..call('a')` crashes
     };
 
     Ok(Value::String(value.into()))
@@ -133,4 +133,33 @@ pub fn has_own_property(cx: CallContext) -> Result<Value, Value> {
     let key = PropertyKey::from_value(cx.scope, key)?;
     let desc = o.get_property_descriptor(cx.scope, key)?;
     Ok(Value::Boolean(desc.is_some()))
+}
+
+pub fn define_property(cx: CallContext) -> Result<Value, Value> {
+    let object = match cx.args.first() {
+        Some(Value::Object(o)) => o,
+        Some(Value::External(o)) => &o.inner,
+        _ => throw!(
+            cx.scope,
+            TypeError,
+            "Object.prototype.hasOwnProperty called on non-object"
+        ),
+    };
+
+    let property = match cx.args.get(1) {
+        Some(Value::Symbol(sym)) => PropertyKey::from(sym.clone()),
+        Some(other) => PropertyKey::from(ToString::to_string(&other.to_string(cx.scope)?)),
+        _ => throw!(cx.scope, TypeError, "Property must be a string or symbol"),
+    };
+    let descriptor = match cx.args.get(2) {
+        Some(Value::Object(o)) => o,
+        Some(Value::External(o)) => &o.inner,
+        _ => throw!(cx.scope, TypeError, "Property descriptor must be an object"),
+    };
+
+    let value = PropertyValue::from_descriptor_value(cx.scope, Value::Object(descriptor.clone()))?;
+
+    object.set_property(cx.scope, property, value)?;
+
+    Ok(Value::Object(object.clone()))
 }
