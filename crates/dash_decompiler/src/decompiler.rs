@@ -248,6 +248,9 @@ impl<'buf> FunctionDecompiler<'buf> {
                                 let cid = self.read()?;
                                 props.push(DisplayConstant(&self.constants[cid as usize]).to_string());
                             }
+                            ObjectMemberKind::Spread => {
+                                props.push(String::from("<spread>"));
+                            }
                         }
                     }
                     let props = props.iter().map(|v| v as &dyn fmt::Display).collect::<Vec<_>>();

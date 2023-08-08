@@ -234,8 +234,9 @@ impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
         for member in constants.into_iter().rev() {
             let kind_id = CompilerObjectMemberKind::from(&member) as u8;
             match member {
-                ObjectMemberKind::Dynamic(..) => self.write(CompilerObjectMemberKind::Dynamic as u8),
+                ObjectMemberKind::Dynamic(..) => self.write(kind_id),
                 ObjectMemberKind::Static(name) => compile_object_member_kind(self, name, kind_id)?,
+                ObjectMemberKind::Spread => self.write(kind_id),
                 ObjectMemberKind::Getter(name) | ObjectMemberKind::Setter(name) => {
                     compile_object_member_kind(self, &name, kind_id)?
                 }

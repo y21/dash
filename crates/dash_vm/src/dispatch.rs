@@ -198,6 +198,7 @@ impl<'sc, 'vm> DerefMut for DispatchContext<'sc, 'vm> {
 mod handlers {
     use dash_middle::compiler::instruction::AssignKind;
     use dash_middle::compiler::instruction::IntrinsicOperation;
+    use dash_middle::compiler::ArrayMemberKind;
     use dash_middle::compiler::FunctionCallMetadata;
     use dash_middle::compiler::ObjectMemberKind;
     use dash_middle::compiler::StaticImportKind;
@@ -940,11 +941,26 @@ mod handlers {
         let len = cx.fetch_and_inc_ip() as usize;
 
         // No need to root/unroot anything here, GC cant trigger
-        let elements = cx
-            .pop_stack_many(len)
-            .map(PropertyValue::static_default)
-            .collect::<Vec<_>>();
-        let array = Array::from_vec(&cx, elements);
+        let elements = cx.pop_stack_many(len).collect::<Vec<_>>();
+        let mut new_elements = Vec::with_capacity(elements.len());
+        for value in elements {
+            let id = ArrayMemberKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
+
+            match id {
+                ArrayMemberKind::Item => {
+                    new_elements.push(PropertyValue::static_default(value));
+                }
+                ArrayMemberKind::Spread => {
+                    // TODO: make this work for array-like values, not just arrays, by calling @@iterator on it
+                    let len = value.length_of_array_like(cx.scope)?;
+                    for i in 0..len {
+                        let value = value.get_property(cx.scope, i.to_string().into())?;
+                        new_elements.push(PropertyValue::static_default(value));
+                    }
+                }
+            }
+        }
+        let array = Array::from_vec(&cx, new_elements);
         let handle = cx.gc.register(array);
         cx.stack.push(Value::Object(handle));
         Ok(None)
@@ -957,10 +973,9 @@ mod handlers {
         for _ in 0..len {
             let kind = ObjectMemberKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
 
-            let key = match kind {
-                // TODO: it might be a symbol, don't to_string it then!
+            match kind {
                 ObjectMemberKind::Dynamic => {
-                    match cx.pop_stack_rooted() {
+                    let key = match cx.pop_stack_rooted() {
                         Value::Symbol(sym) => PropertyKey::Symbol(sym),
                         value => {
                             let string = value.to_string(&mut cx)?;
@@ -968,51 +983,59 @@ mod handlers {
                             let string = Cow::Owned(String::from(&*string));
                             PropertyKey::String(string)
                         }
-                    }
-                }
-                ObjectMemberKind::Getter | ObjectMemberKind::Setter | ObjectMemberKind::Static => {
-                    let id = cx.fetch_and_inc_ip();
+                    };
+                    let value = cx.pop_stack_rooted();
 
+                    obj.insert(key, PropertyValue::static_default(value));
+                }
+                ObjectMemberKind::Static => {
+                    let id = cx.fetch_and_inc_ip();
                     // TODO: optimization opportunity: do not reallocate string from Rc<str>
                     let key = String::from(cx.identifier_constant(id.into()).as_ref());
-                    PropertyKey::String(Cow::Owned(key))
-                }
-            };
-            let value = cx.pop_stack_rooted();
-
-            match kind {
-                ObjectMemberKind::Dynamic | ObjectMemberKind::Static => {
-                    drop(obj.insert(key, PropertyValue::static_default(value)))
+                    let value = cx.pop_stack_rooted();
+                    obj.insert(
+                        PropertyKey::String(Cow::Owned(key)),
+                        PropertyValue::static_default(value),
+                    );
                 }
                 ObjectMemberKind::Getter => {
-                    let value = match value {
-                        Value::Object(o) => o,
-                        _ => panic!("Getter is not an object"),
+                    let id = cx.fetch_and_inc_ip();
+                    let key = PropertyKey::String(Cow::Owned(String::from(cx.identifier_constant(id.into()).as_ref())));
+                    let Value::Object(value) = cx.pop_stack_rooted() else {
+                        panic!("Getter is not an object");
                     };
-
                     obj.entry(key)
                         .and_modify(|v| match v.kind_mut() {
-                            PropertyValueKind::Trap { get, .. } => {
-                                *get = Some(value.clone());
-                            }
+                            PropertyValueKind::Trap { get, .. } => *get = Some(value.clone()),
                             _ => *v = PropertyValue::getter_default(value.clone()),
                         })
-                        .or_insert_with(|| PropertyValue::getter_default(value));
+                        .or_insert_with(|| PropertyValue::getter_default(value.clone()));
                 }
                 ObjectMemberKind::Setter => {
-                    let value = match value {
-                        Value::Object(o) => o,
-                        _ => panic!("Setter is not an object"),
+                    let id = cx.fetch_and_inc_ip();
+                    let key = PropertyKey::String(Cow::Owned(String::from(cx.identifier_constant(id.into()).as_ref())));
+                    let Value::Object(value) = cx.pop_stack_rooted() else {
+                        panic!("Setter is not an object");
                     };
-
                     obj.entry(key)
                         .and_modify(|v| match v.kind_mut() {
-                            PropertyValueKind::Trap { set, .. } => {
-                                *set = Some(value.clone());
-                            }
+                            PropertyValueKind::Trap { set, .. } => *set = Some(value.clone()),
                             _ => *v = PropertyValue::setter_default(value.clone()),
                         })
-                        .or_insert_with(|| PropertyValue::setter_default(value));
+                        .or_insert_with(|| PropertyValue::setter_default(value.clone()));
+                }
+                ObjectMemberKind::Spread => {
+                    let value = cx.pop_stack_rooted();
+                    if let Value::Object(target) = value {
+                        for key in target.own_keys()? {
+                            let key = match key {
+                                Value::Symbol(sym) => PropertyKey::Symbol(sym),
+                                other => PropertyKey::String(Cow::Owned(String::from(&*other.to_string(cx.scope)?))),
+                            };
+                            let value = target.get_property(&mut cx, key.clone())?;
+                            obj.insert(key, PropertyValue::static_default(value));
+                        }
+                    }
                 }
             };
         }

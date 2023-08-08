@@ -31,6 +31,7 @@ pub enum ErrorKind<'a> {
     },
     MultipleRestInDestructuring(Token<'a>),
     RegexSyntaxError(Token<'a>, dash_regex::Error),
+    IncompleteSpread(Token<'a>),
 }
 
 /// An error that occurred during parsing
@@ -86,6 +87,11 @@ impl fmt::Display for Error<'_> {
             ErrorKind::MultipleRestInDestructuring(tok) => {
                 (tok, "a rest element must be last in a destructuring pattern", None)
             }
+            ErrorKind::IncompleteSpread(tok) => (
+                tok,
+                "incomplete spread element",
+                Some(Box::new("expected three dots, followed by an expression")),
+            ),
             ErrorKind::RegexSyntaxError(tok, err) => (tok, "regex parse error", Some(Box::new(err))),
         };
 

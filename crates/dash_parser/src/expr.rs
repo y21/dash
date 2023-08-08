@@ -3,6 +3,7 @@ use std::borrow::Cow;
 use dash_middle::lexer::token::TokenType;
 use dash_middle::lexer::token::ASSIGNMENT_TYPES;
 use dash_middle::parser::error::ErrorKind;
+use dash_middle::parser::expr::ArrayMemberKind;
 use dash_middle::parser::expr::Expr;
 use dash_middle::parser::expr::ObjectMemberKind;
 use dash_middle::parser::statement::BlockStatement;
@@ -395,7 +396,20 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
                 let mut items = Vec::new();
                 while !self.expect_and_skip(&[TokenType::RightSquareBrace], false) {
                     self.expect_and_skip(&[TokenType::Comma], false);
-                    items.push(self.parse_expression()?);
+                    // Parse spread operator);
+                    if self.expect_and_skip(&[TokenType::Dot], false) {
+                        for _ in 0..2 {
+                            let token = self.next()?;
+                            if !matches!(token.ty, TokenType::Dot) {
+                                let token = token.clone();
+                                self.create_error(ErrorKind::IncompleteSpread(token));
+                                return None;
+                            }
+                        }
+                        items.push(ArrayMemberKind::Spread(self.parse_expression()?));
+                    } else {
+                        items.push(ArrayMemberKind::Item(self.parse_expression()?));
+                    }
                 }
                 Expr::array_literal(items)
             }
@@ -414,10 +428,25 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
                             self.expect_and_skip(&[TokenType::RightSquareBrace], true);
                             o
                         }
+                        TokenType::Dot => {
+                            // `.` indicates spread operator `...expr`
+                            for _ in 0..2 {
+                                let token = self.next()?;
+                                if !matches!(token.ty, TokenType::Dot) {
+                                    let token = token.clone();
+                                    self.create_error(ErrorKind::IncompleteSpread(token));
+                                    return None;
+                                }
+                            }
+                            ObjectMemberKind::Spread
+                        }
                         _ => ObjectMemberKind::Static(must_borrow_lexeme!(self, &token)?),
                     };
 
                     match key {
+                        ObjectMemberKind::Spread => {
+                            items.push((key, self.parse_expression()?));
+                        }
                         ObjectMemberKind::Dynamic(..) | ObjectMemberKind::Static(..) => {
                             if self.expect_and_skip(&[TokenType::Colon], false) {
                                 // Normal property.

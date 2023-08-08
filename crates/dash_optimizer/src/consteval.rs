@@ -1,6 +1,7 @@
 use dash_log::debug;
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::expr::ArrayLiteral;
+use dash_middle::parser::expr::ArrayMemberKind;
 use dash_middle::parser::expr::AssignmentExpr;
 use dash_middle::parser::expr::AssignmentTarget;
 use dash_middle::parser::expr::BinaryExpr;
@@ -269,7 +270,12 @@ impl<'a, 'b> ConstFunctionEvalCtx<'a, 'b> {
             unreachable!()
         };
 
-        self.visit_many_exprs(array, func_id);
+        for expr in array {
+            match expr {
+                ArrayMemberKind::Spread(expr) => self.visit(expr, func_id),
+                ArrayMemberKind::Item(expr) => self.visit(expr, func_id),
+            }
+        }
     }
 
     fn visit_object_expression(&mut self, object_expr: &mut Expr<'a>, func_id: FuncId) {
@@ -345,7 +351,7 @@ impl<'a, 'b> ConstFunctionEvalCtx<'a, 'b> {
     }
 
     fn visit_call_expression(&mut self, call_expr: &mut Expr<'a>, func_id: FuncId) {
-        let Expr::Call(FunctionCall { target, arguments,.. }) = call_expr else {
+        let Expr::Call(FunctionCall { target, arguments, .. }) = call_expr else {
             unreachable!()
         };
 
@@ -521,7 +527,10 @@ fn stmt_has_side_effects(stmt: &Statement<'_>) -> bool {
 
 fn expr_has_side_effects(expr: &Expr<'_>) -> bool {
     match expr {
-        Expr::Array(ArrayLiteral(array)) => array.iter().any(expr_has_side_effects),
+        Expr::Array(ArrayLiteral(array)) => array.iter().any(|k| match k {
+            ArrayMemberKind::Item(e) => expr_has_side_effects(e),
+            ArrayMemberKind::Spread(e) => expr_has_side_effects(e),
+        }),
         Expr::Binary(BinaryExpr { left, right, .. }) => expr_has_side_effects(left) || expr_has_side_effects(right),
         Expr::Conditional(ConditionalExpr { condition, then, el }) => {
             expr_has_side_effects(condition) || expr_has_side_effects(then) || expr_has_side_effects(el)

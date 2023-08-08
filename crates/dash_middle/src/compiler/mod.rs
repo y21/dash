@@ -88,6 +88,7 @@ pub enum ObjectMemberKind {
     Setter,
     Static,
     Dynamic,
+    Spread,
 }
 
 use parser::expr::ObjectMemberKind as ParserObjectMemberKind;
@@ -99,6 +100,25 @@ impl From<&ParserObjectMemberKind<'_>> for ObjectMemberKind {
             ParserObjectMemberKind::Getter(..) => Self::Getter,
             ParserObjectMemberKind::Setter(..) => Self::Setter,
             ParserObjectMemberKind::Static(..) => Self::Static,
+            ParserObjectMemberKind::Spread => Self::Spread,
+        }
+    }
+}
+
+#[repr(u8)]
+#[derive(FromRepr, Debug)]
+pub enum ArrayMemberKind {
+    Item,
+    Spread,
+}
+
+use parser::expr::ArrayMemberKind as ParserArrayMemberKind;
+
+impl From<&ParserArrayMemberKind<'_>> for ArrayMemberKind {
+    fn from(v: &ParserArrayMemberKind<'_>) -> Self {
+        match v {
+            ParserArrayMemberKind::Item(..) => Self::Item,
+            ParserArrayMemberKind::Spread(..) => Self::Spread,
         }
     }
 }

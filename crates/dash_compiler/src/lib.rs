@@ -12,7 +12,6 @@ use dash_middle::compiler::scope::{CompileValueType, Scope};
 use dash_middle::compiler::{constant::ConstantPool, external::External};
 use dash_middle::compiler::{CompileResult, FunctionCallMetadata, StaticImportKind};
 use dash_middle::lexer::token::TokenType;
-use dash_middle::parser::expr::BinaryExpr;
 use dash_middle::parser::expr::ConditionalExpr;
 use dash_middle::parser::expr::Expr;
 use dash_middle::parser::expr::FunctionCall;
@@ -24,6 +23,7 @@ use dash_middle::parser::expr::PropertyAccessExpr;
 use dash_middle::parser::expr::Seq;
 use dash_middle::parser::expr::UnaryExpr;
 use dash_middle::parser::expr::{ArrayLiteral, ObjectMemberKind};
+use dash_middle::parser::expr::{ArrayMemberKind, BinaryExpr};
 use dash_middle::parser::expr::{AssignmentExpr, AssignmentTarget};
 use dash_middle::parser::statement::ReturnStatement;
 use dash_middle::parser::statement::SpecifierKind;
@@ -1488,11 +1488,24 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             .try_into()
             .map_err(|_| CompileError::ArrayLitLimitExceeded)?;
 
-        for expr in exprs {
-            ib.accept_expr(expr)?;
+        let kinds = exprs
+            .iter()
+            .map(|kind| dash_middle::compiler::ArrayMemberKind::from(kind) as u8)
+            .collect::<Vec<u8>>();
+
+        for kind in exprs {
+            match kind {
+                ArrayMemberKind::Item(expr) => {
+                    ib.accept_expr(expr)?;
+                }
+                ArrayMemberKind::Spread(expr) => {
+                    ib.accept_expr(expr)?;
+                }
+            }
         }
 
         ib.build_arraylit(len);
+        ib.write_all(&kinds);
         Ok(())
     }
 

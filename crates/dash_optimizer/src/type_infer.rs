@@ -5,6 +5,7 @@ use dash_middle::compiler::scope::Scope;
 use dash_middle::compiler::scope::ScopeLocal;
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::expr::ArrayLiteral;
+use dash_middle::parser::expr::ArrayMemberKind;
 use dash_middle::parser::expr::AssignmentExpr;
 use dash_middle::parser::expr::AssignmentTarget;
 use dash_middle::parser::expr::BinaryExpr;
@@ -542,8 +543,15 @@ impl<'a> TypeInferCtx<'a> {
         ArrayLiteral(expr): &ArrayLiteral<'a>,
         func_id: FuncId,
     ) -> Option<CompileValueType> {
-        for expr in expr {
-            self.visit(expr, func_id);
+        for kind in expr {
+            match kind {
+                ArrayMemberKind::Spread(expr) => {
+                    self.visit(expr, func_id);
+                }
+                ArrayMemberKind::Item(expr) => {
+                    self.visit(expr, func_id);
+                }
+            }
         }
         Some(CompileValueType::Array)
     }

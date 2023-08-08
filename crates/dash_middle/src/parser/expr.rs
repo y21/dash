@@ -95,7 +95,7 @@ impl<'a> Expr<'a> {
         Self::Literal(LiteralExpr::String(s))
     }
 
-    pub fn array_literal(a: Vec<Expr<'a>>) -> Self {
+    pub fn array_literal(a: Vec<ArrayMemberKind<'a>>) -> Self {
         Self::Array(ArrayLiteral(a))
     }
 
@@ -203,9 +203,27 @@ impl<'a> Expr<'a> {
         }
     }
 }
+
+#[derive(Debug, Clone)]
+pub enum ArrayMemberKind<'a> {
+    Item(Expr<'a>),
+    Spread(Expr<'a>),
+}
+impl<'a> fmt::Display for ArrayMemberKind<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ArrayMemberKind::Item(item) => fmt::Display::fmt(item, f),
+            ArrayMemberKind::Spread(item) => {
+                f.write_str("...")?;
+                fmt::Display::fmt(item, f)
+            }
+        }
+    }
+}
+
 /// An array literal expression (`[expr, expr]`)
 #[derive(Debug, Clone)]
-pub struct ArrayLiteral<'a>(pub Vec<Expr<'a>>);
+pub struct ArrayLiteral<'a>(pub Vec<ArrayMemberKind<'a>>);
 
 impl<'a> fmt::Display for ArrayLiteral<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -220,6 +238,7 @@ pub enum ObjectMemberKind<'a> {
     Getter(Cow<'a, str>),
     Setter(Cow<'a, str>),
     Static(&'a str),
+    Spread,
     Dynamic(Expr<'a>),
 }
 
@@ -230,6 +249,7 @@ impl<'a> fmt::Display for ObjectMemberKind<'a> {
             Self::Setter(name) => write!(f, "set {name}"),
             Self::Static(name) => f.write_str(name),
             Self::Dynamic(expr) => write!(f, "[{expr}]"),
+            Self::Spread => f.write_str("...<expression unavailable>"), // TODO: figure out a way to display it here
         }
     }
 }
