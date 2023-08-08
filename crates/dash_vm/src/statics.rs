@@ -192,6 +192,7 @@ pub struct Statics {
     pub array_slice: Handle<dyn Object>,
     pub array_last_index_of: Handle<dyn Object>,
     pub array_from: Handle<dyn Object>,
+    pub array_is_array: Handle<dyn Object>,
     pub generator_iterator_prototype: Handle<dyn Object>,
     pub generator_iterator_next: Handle<dyn Object>,
     pub error_ctor: Handle<dyn Object>,
@@ -442,6 +443,7 @@ impl Statics {
             array_slice: function(gc, "slice", js_std::array::slice),
             array_last_index_of: function(gc, "lastIndexOf", js_std::array::last_index_of),
             array_from: function(gc, "from", js_std::array::from),
+            array_is_array: function(gc, "isArray", js_std::array::is_array),
             generator_iterator_prototype: {
                 let obj = gc.register(NamedObject::null());
                 builtin_object(gc, GeneratorIterator::empty(obj))

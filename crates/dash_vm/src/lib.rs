@@ -403,6 +403,7 @@ impl Vm {
 
             #[properties]
             from: scope.statics.array_from;
+            isArray: scope.statics.array_is_array;
         });
         
         register_builtin_type!(scope.statics.array_prototype, {

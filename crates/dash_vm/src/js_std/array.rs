@@ -13,7 +13,9 @@ use crate::value::Value;
 use crate::value::ValueContext;
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
-    let array = Array::new(cx.scope);
+    let size = cx.args.first().unwrap_or_undefined().to_length_u(cx.scope)?;
+    // TODO: filling it with undefined values isn't right, but we don't have holey arrays yet.
+    let array = Array::from_vec(cx.scope, vec![PropertyValue::static_default(Value::undefined()); size]);
     Ok(cx.scope.gc_mut().register(array).into())
 }
 
@@ -519,6 +521,12 @@ pub fn slice(cx: CallContext) -> Result<Value, Value> {
     let values = Array::from_vec(cx.scope, values);
 
     Ok(cx.scope.register(values).into())
+}
+
+pub fn is_array(cx: CallContext) -> Result<Value, Value> {
+    Ok(Value::Boolean(
+        cx.args.first().unwrap_or_undefined().downcast_ref::<Array>().is_some(),
+    ))
 }
 
 pub fn from(cx: CallContext) -> Result<Value, Value> {
