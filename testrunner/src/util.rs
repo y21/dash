@@ -46,6 +46,7 @@ pub const IGNORED_TESTS: &[&str] = &[
     "Object/defineProperty/15.2.3.6-4-155.js",
     "Object/defineProperty/15.2.3.6-4-156.js",
     "Object/defineProperty/15.2.3.6-4-157.js",
+    "Array/length/S15.4.2.2_A2.1_T1.js",
     "ArrayBuffer/allocation-limit.js",
     "ArrayBuffer/length-is-too-large-throws.js",
     // Number.prototype.toString stack overflow

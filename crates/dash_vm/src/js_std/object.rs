@@ -148,3 +148,37 @@ pub fn define_property(cx: CallContext) -> Result<Value, Value> {
 
     Ok(Value::Object(object.clone()))
 }
+
+pub fn assign(cx: CallContext) -> Result<Value, Value> {
+    let mut args = cx.args.into_iter();
+    let to = args.next().unwrap_or_undefined().to_object(cx.scope)?;
+    for source in args {
+        let source = source.to_object(cx.scope)?;
+        for key in source.own_keys()? {
+            let key = PropertyKey::from_value(cx.scope, key)?;
+            let desc = source.get_own_property(cx.scope, key.clone())?;
+            to.set_property(cx.scope, key, PropertyValue::static_default(desc))?;
+        }
+    }
+    Ok(Value::Object(to))
+}
+
+pub fn entries(cx: CallContext) -> Result<Value, Value> {
+    let mut entries = Vec::new();
+    let obj = cx.args.first().unwrap_or_undefined().to_object(cx.scope)?;
+    for key in obj.own_keys()? {
+        let key = PropertyKey::from_value(cx.scope, key)?;
+        let value = obj.get_own_property(cx.scope, key.clone())?;
+        let entry = Array::from_vec(
+            cx.scope,
+            vec![
+                PropertyValue::static_default(key.as_value()),
+                PropertyValue::static_default(value),
+            ],
+        );
+        entries.push(PropertyValue::static_default(Value::Object(cx.scope.register(entry))));
+    }
+
+    let entries = Array::from_vec(cx.scope, entries);
+    Ok(Value::Object(cx.scope.register(entries)))
+}

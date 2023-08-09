@@ -833,6 +833,10 @@ impl Handle<dyn Object> {
         (**self).get_property(sc, Value::Object(self.clone()), key)
     }
 
+    pub fn get_own_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+        (**self).get_own_property(sc, Value::Object(self.clone()), key)
+    }
+
     pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
         let callee = self.clone();
         (**self).apply(sc, callee, this, args)

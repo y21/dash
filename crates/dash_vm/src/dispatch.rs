@@ -975,15 +975,8 @@ mod handlers {
 
             match kind {
                 ObjectMemberKind::Dynamic => {
-                    let key = match cx.pop_stack_rooted() {
-                        Value::Symbol(sym) => PropertyKey::Symbol(sym),
-                        value => {
-                            let string = value.to_string(&mut cx)?;
-                            // TODO: can PropertyKey::String be a Rc<str>?
-                            let string = Cow::Owned(String::from(&*string));
-                            PropertyKey::String(string)
-                        }
-                    };
+                    let key = cx.pop_stack_rooted();
+                    let key = PropertyKey::from_value(cx.scope, key)?;
                     let value = cx.pop_stack_rooted();
 
                     obj.insert(key, PropertyValue::static_default(value));
@@ -1028,10 +1021,7 @@ mod handlers {
                     let value = cx.pop_stack_rooted();
                     if let Value::Object(target) = &value {
                         for key in target.own_keys()? {
-                            let key = match key {
-                                Value::Symbol(sym) => PropertyKey::Symbol(sym),
-                                other => PropertyKey::String(Cow::Owned(String::from(&*other.to_string(cx.scope)?))),
-                            };
+                            let key = PropertyKey::from_value(cx.scope, key)?;
                             let value = target.get_property(&mut cx, key.clone())?;
                             obj.insert(key, PropertyValue::static_default(value));
                         }
