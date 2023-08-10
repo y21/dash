@@ -3,7 +3,7 @@ use std::{
     cell::RefCell,
     cmp::Ordering,
     fmt::{self, Debug},
-    iter,
+    iter::{self},
     rc::Rc,
 };
 

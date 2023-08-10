@@ -33,40 +33,14 @@ use dash_middle::parser::statement::VariableDeclarations;
 use dash_middle::parser::statement::WhileLoop;
 use dash_middle::parser::types::TypeSegment;
 
-use crate::expr::ExpressionParser;
 use crate::must_borrow_lexeme;
 use crate::types::TypeParser;
 use crate::Parser;
 
 type ParameterList<'a> = Option<Vec<(Parameter<'a>, Option<Expr<'a>>, Option<TypeSegment<'a>>)>>;
 
-pub trait StatementParser<'a> {
-    fn parse_statement(&mut self) -> Option<Statement<'a>>;
-    fn parse_class(&mut self) -> Option<Class<'a>>;
-    fn parse_export(&mut self) -> Option<ExportKind<'a>>;
-    fn parse_import(&mut self) -> Option<ImportKind<'a>>;
-    fn parse_throw(&mut self) -> Option<Expr<'a>>;
-    fn parse_try(&mut self) -> Option<TryCatch<'a>>;
-    fn parse_return(&mut self) -> Option<ReturnStatement<'a>>;
-    fn parse_for_loop(&mut self) -> Option<Loop<'a>>;
-    fn parse_while_loop(&mut self) -> Option<Loop<'a>>;
-    fn parse_do_while_loop(&mut self) -> Option<Loop<'a>>;
-    fn parse_block(&mut self) -> Option<BlockStatement<'a>>;
-    fn parse_variable(&mut self) -> Option<VariableDeclarations<'a>>;
-    fn parse_variable_binding_with_kind(&mut self, kind: VariableDeclarationKind) -> Option<VariableBinding<'a>>;
-    /// Parses a variable binding, i.e. `let x`
-    fn parse_variable_binding(&mut self) -> Option<VariableBinding<'a>>;
-    /// Parses the definition segment of a variable declaration statement, i.e. `= 5`
-    fn parse_variable_definition(&mut self) -> Option<Expr<'a>>;
-    fn parse_if(&mut self, parse_else: bool) -> Option<IfStatement<'a>>;
-    fn parse_switch(&mut self) -> Option<SwitchStatement<'a>>;
-    /// Parses a list of parameters (identifier, followed by optional type segment) delimited by comma,
-    /// assuming that the ( has already been consumed
-    fn parse_parameter_list(&mut self) -> ParameterList<'a>;
-}
-
-impl<'a> StatementParser<'a> for Parser<'a> {
-    fn parse_statement(&mut self) -> Option<Statement<'a>> {
+impl<'a> Parser<'a> {
+    pub fn parse_statement(&mut self) -> Option<Statement<'a>> {
         self.error_sync = false;
         let stmt = match self.next()?.ty {
             TokenType::Let | TokenType::Const | TokenType::Var => self.parse_variable().map(Statement::Variable),
@@ -382,7 +356,7 @@ impl<'a> StatementParser<'a> for Parser<'a> {
     }
 
     /// Parses a block. Assumes that the left brace `{` has already been consumed.
-    fn parse_block(&mut self) -> Option<BlockStatement<'a>> {
+    pub fn parse_block(&mut self) -> Option<BlockStatement<'a>> {
         let mut stmts = Vec::new();
         while !self.expect_and_skip(&[TokenType::RightBrace], false) {
             if self.is_eof() {
@@ -449,7 +423,9 @@ impl<'a> StatementParser<'a> for Parser<'a> {
         Some(IfStatement::new(condition, then, branches, el))
     }
 
-    fn parse_parameter_list(&mut self) -> ParameterList<'a> {
+    /// Parses a list of parameters (identifier, followed by optional type segment) delimited by comma,
+    /// assuming that the ( has already been consumed
+    pub fn parse_parameter_list(&mut self) -> ParameterList<'a> {
         let mut parameters = Vec::new();
 
         while !self.expect_and_skip(&[TokenType::RightParen], false) {
@@ -626,11 +602,13 @@ impl<'a> StatementParser<'a> for Parser<'a> {
         Some(VariableBinding { kind, name, ty })
     }
 
+    /// Parses a variable binding, i.e. `let x`
     fn parse_variable_binding(&mut self) -> Option<VariableBinding<'a>> {
         let kind: VariableDeclarationKind = self.previous()?.ty.into();
         self.parse_variable_binding_with_kind(kind)
     }
 
+    /// Parses the definition segment of a variable declaration statement, i.e. `= 5`
     fn parse_variable_definition(&mut self) -> Option<Expr<'a>> {
         // If the next char is `=`, we assume this declaration has a value
         let has_value = self.expect_and_skip(&[TokenType::Assignment], false);

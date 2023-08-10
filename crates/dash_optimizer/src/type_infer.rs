@@ -9,6 +9,7 @@ use dash_middle::parser::expr::ArrayMemberKind;
 use dash_middle::parser::expr::AssignmentExpr;
 use dash_middle::parser::expr::AssignmentTarget;
 use dash_middle::parser::expr::BinaryExpr;
+use dash_middle::parser::expr::CallArgumentKind;
 use dash_middle::parser::expr::ConditionalExpr;
 use dash_middle::parser::expr::Expr;
 use dash_middle::parser::expr::FunctionCall;
@@ -435,7 +436,10 @@ impl<'a> TypeInferCtx<'a> {
     ) -> Option<CompileValueType> {
         self.visit(target, func_id);
         for argument in arguments {
-            self.visit(argument, func_id);
+            match argument {
+                CallArgumentKind::Normal(expr) => drop(self.visit(expr, func_id)),
+                CallArgumentKind::Spread(expr) => drop(self.visit(expr, func_id)),
+            }
         }
         None
     }

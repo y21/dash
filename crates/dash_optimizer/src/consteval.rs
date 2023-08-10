@@ -5,6 +5,7 @@ use dash_middle::parser::expr::ArrayMemberKind;
 use dash_middle::parser::expr::AssignmentExpr;
 use dash_middle::parser::expr::AssignmentTarget;
 use dash_middle::parser::expr::BinaryExpr;
+use dash_middle::parser::expr::CallArgumentKind;
 use dash_middle::parser::expr::ConditionalExpr;
 use dash_middle::parser::expr::Expr;
 use dash_middle::parser::expr::FunctionCall;
@@ -356,7 +357,12 @@ impl<'a, 'b> ConstFunctionEvalCtx<'a, 'b> {
         };
 
         self.visit(target, func_id);
-        self.visit_many_exprs(arguments, func_id);
+        for expr in arguments {
+            match expr {
+                CallArgumentKind::Normal(expr) => self.visit(expr, func_id),
+                CallArgumentKind::Spread(expr) => self.visit(expr, func_id),
+            }
+        }
     }
 
     fn visit_assignment_expression(&mut self, assignment_expr: &mut Expr<'a>, func_id: FuncId) {

@@ -1,3 +1,4 @@
+#![warn(clippy::redundant_clone)]
 
 use std::{fmt, ops::RangeBounds, vec::Drain, mem};
 

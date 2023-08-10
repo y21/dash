@@ -124,9 +124,13 @@ impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
         self.write(kind as u8);
     }
 
-    pub fn build_call(&mut self, meta: FunctionCallMetadata) {
+    pub fn build_call(&mut self, meta: FunctionCallMetadata, spread_arg_indices: Vec<u8>) {
         self.write_instr(Instruction::Call);
         self.write(meta.into());
+        self.write(spread_arg_indices.len().try_into().unwrap());
+        for index in spread_arg_indices {
+            self.write(index);
+        }
     }
 
     pub fn build_jmpfalsep(&mut self, label: Label, is_local_label: bool) {

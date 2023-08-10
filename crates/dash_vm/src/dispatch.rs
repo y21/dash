@@ -203,6 +203,7 @@ mod handlers {
     use dash_middle::compiler::ObjectMemberKind;
     use dash_middle::compiler::StaticImportKind;
     use if_chain::if_chain;
+    use smallvec::SmallVec;
     use std::borrow::Cow;
     use std::ops::Add;
     use std::ops::Div;
@@ -556,6 +557,33 @@ mod handlers {
             false => this,
         };
 
+        let len = cx.fetch_and_inc_ip();
+        // If we have spread args, we need to "splice" values from iterables in.
+        // This is hopefully rather "rare" (compared to regular call arguments),
+        // so we can afford to do more work here in order to keep the common path fast.
+        if len > 0 {
+            let spread_indices: SmallVec<[_; 4]> = (0..len).map(|_| cx.fetch_and_inc_ip()).collect();
+            let mut spread_count = 0;
+
+            for spread_index in spread_indices {
+                let adjusted_spread_index = sp + spread_count + spread_index as usize;
+
+                let iterable = cx.stack[adjusted_spread_index].clone();
+                let length = iterable.length_of_array_like(cx.scope)?;
+
+                let mut splice_args = SmallVec::<[_; 4]>::new();
+
+                for i in 0..length {
+                    let value = iterable.get_property(&mut cx, i.to_string().into())?;
+                    splice_args.push(value);
+                }
+                cx.stack
+                    .splice(adjusted_spread_index..=adjusted_spread_index, splice_args);
+
+                spread_count += length.saturating_sub(1);
+            }
+        }
+
         // NOTE: since we are in a "flat" call,
         // we don't need to add objects to the external
         // reference list since they stay on the VM stack
@@ -584,14 +612,42 @@ mod handlers {
             let mut args = Vec::with_capacity(argc);
             let mut refs = Vec::new();
 
+            let len = cx.fetch_and_inc_ip();
+            let spread_indices: SmallVec<[_; 4]> = (0..len).map(|_| cx.fetch_and_inc_ip()).collect();
+
             let iter = cx.pop_stack_many(argc);
 
-            for value in iter {
-                if let Value::Object(handle) = &value {
-                    refs.push(handle.clone());
-                }
+            if len == 0 {
+                // Fast path for no spread arguments
+                for value in iter {
+                    if let Value::Object(handle) = &value {
+                        refs.push(handle.clone());
+                    }
 
-                args.push(value);
+                    args.push(value);
+                }
+            } else {
+                let raw_args: SmallVec<[_; 4]> = iter.collect();
+                let mut indices_iter = spread_indices.into_iter().peekable();
+
+                for (index, value) in raw_args.into_iter().enumerate() {
+                    if indices_iter.peek().is_some_and(|&v| usize::from(v) == index) {
+                        let len = value.length_of_array_like(cx.scope)?;
+                        for _ in 0..len {
+                            let value = value.get_property(&mut cx, index.to_string().into())?;
+                            if let Value::Object(handle) = &value {
+                                refs.push(handle.clone());
+                            }
+                            args.push(value);
+                        }
+                        indices_iter.next();
+                    } else {
+                        if let Value::Object(handle) = &value {
+                            refs.push(handle.clone());
+                        }
+                        args.push(value);
+                    }
+                }
             }
 
             (args, refs)

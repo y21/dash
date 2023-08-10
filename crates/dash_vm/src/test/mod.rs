@@ -99,3 +99,41 @@ fn persistent_trace() {
     let p = p1.get_property(&mut vm.scope(), "foo".into()).unwrap();
     assert_eq!(p.downcast_ref::<Rc<str>>().unwrap().as_ref(), "hi");
 }
+
+macro_rules! simple_test {
+    ($testname:ident, $code:expr, $expected:expr) => {
+        #[test]
+        fn $testname() {
+            let mut vm = Vm::new(Default::default());
+            let scope = &mut vm.scope();
+            let prelude = String::from(
+                r"
+            function assert(c, e) {
+                if (!c) {
+                    throw e;
+                }
+            }
+            ",
+            );
+            let value = scope
+                .eval(&(prelude + $code), Default::default())
+                .unwrap()
+                .root(scope);
+            assert_eq!(value, $expected);
+            assert!(scope.stack.is_empty());
+        }
+    };
+}
+
+simple_test!(
+    spread_argument_position,
+    r"
+function x(...v) {
+    assert(v.length === 12, 'Expected array length 12, got: ' + v.length);
+    for (let i = 0; i < 12; i++)
+        assert(v[i] === i, `Expected v[${i}] == ${i}, got: ${v[i]}`);
+}
+
+x(0,...[1,2],3,4,...[5,6],7,8,9,10,...[11]);",
+    Value::undefined()
+);

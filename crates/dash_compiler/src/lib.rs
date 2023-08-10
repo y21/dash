@@ -12,7 +12,6 @@ use dash_middle::compiler::scope::{CompileValueType, Scope};
 use dash_middle::compiler::{constant::ConstantPool, external::External};
 use dash_middle::compiler::{CompileResult, FunctionCallMetadata, StaticImportKind};
 use dash_middle::lexer::token::TokenType;
-use dash_middle::parser::expr::ConditionalExpr;
 use dash_middle::parser::expr::Expr;
 use dash_middle::parser::expr::FunctionCall;
 use dash_middle::parser::expr::GroupingExpr;
@@ -25,6 +24,7 @@ use dash_middle::parser::expr::UnaryExpr;
 use dash_middle::parser::expr::{ArrayLiteral, ObjectMemberKind};
 use dash_middle::parser::expr::{ArrayMemberKind, BinaryExpr};
 use dash_middle::parser::expr::{AssignmentExpr, AssignmentTarget};
+use dash_middle::parser::expr::{CallArgumentKind, ConditionalExpr};
 use dash_middle::parser::statement::ReturnStatement;
 use dash_middle::parser::statement::SpecifierKind;
 use dash_middle::parser::statement::Statement;
@@ -1123,7 +1123,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         fn try_spec_function_call<'a>(
             ib: &mut InstructionBuilder<'_, 'a>,
             target: &Expr<'a>,
-            arguments: &[Expr<'a>],
+            arguments: &[CallArgumentKind<'a>],
         ) -> Result<bool, CompileError> {
             if let Expr::PropertyAccess(PropertyAccessExpr { target, property, .. }) = target {
                 let Some(target) = target.as_identifier() else {
@@ -1141,8 +1141,13 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 macro_rules! emit_spec {
                     ($spec:expr) => {{
                         for arg in arguments {
-                            // TODO: we dont actually need to clone, we could take mem::take, if worth it
-                            ib.accept_expr(arg.clone())?;
+                            if let CallArgumentKind::Normal(arg) = arg {
+                                // TODO: we dont actually need to clone, we could take mem::take, if worth it
+                                ib.accept_expr(arg.clone())?;
+                            } else {
+                                // Can't specialize spread args for now
+                                return Ok(false);
+                            }
                         }
                         $spec(ib, arg_len);
                         return Ok(true);
@@ -1200,14 +1205,24 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             .try_into()
             .map_err(|_| CompileError::ParameterLimitExceeded)?;
 
-        for arg in arguments {
-            ib.accept_expr(arg)?;
+        let mut spread_arg_indices = Vec::new();
+
+        for (index, arg) in arguments.into_iter().enumerate() {
+            match arg {
+                CallArgumentKind::Normal(expr) => {
+                    ib.accept_expr(expr)?;
+                }
+                CallArgumentKind::Spread(expr) => {
+                    ib.accept_expr(expr)?;
+                    spread_arg_indices.push(index.try_into().unwrap());
+                }
+            }
         }
 
         let meta = FunctionCallMetadata::new_checked(argc, constructor_call, has_this)
             .ok_or(CompileError::ParameterLimitExceeded)?;
 
-        ib.build_call(meta);
+        ib.build_call(meta, spread_arg_indices);
 
         Ok(())
     }

@@ -123,7 +123,7 @@ impl<'a> Expr<'a> {
     }
 
     /// Creates a function call expression
-    pub fn function_call(target: Expr<'a>, arguments: Vec<Expr<'a>>, constructor_call: bool) -> Self {
+    pub fn function_call(target: Expr<'a>, arguments: Vec<CallArgumentKind<'a>>, constructor_call: bool) -> Self {
         Self::Call(FunctionCall {
             constructor_call,
             target: Box::new(target),
@@ -311,6 +311,26 @@ pub struct ConditionalExpr<'a> {
     pub el: Box<Expr<'a>>,
 }
 
+#[derive(Debug, Clone)]
+pub enum CallArgumentKind<'a> {
+    /// A normal argument
+    Normal(Expr<'a>),
+    /// A spread argument
+    Spread(Expr<'a>),
+}
+
+impl<'a> fmt::Display for CallArgumentKind<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CallArgumentKind::Normal(expr) => fmt::Display::fmt(expr, f),
+            CallArgumentKind::Spread(expr) => {
+                f.write_str("...")?;
+                fmt::Display::fmt(expr, f)
+            }
+        }
+    }
+}
+
 /// A function call expression
 #[derive(Debug, Clone)]
 pub struct FunctionCall<'a> {
@@ -319,7 +339,7 @@ pub struct FunctionCall<'a> {
     /// The target (callee)
     pub target: Box<Expr<'a>>,
     /// Function call arguments
-    pub arguments: Vec<Expr<'a>>,
+    pub arguments: Vec<CallArgumentKind<'a>>,
 }
 
 impl<'a> fmt::Display for FunctionCall<'a> {

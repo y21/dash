@@ -4,6 +4,7 @@ use dash_middle::lexer::token::TokenType;
 use dash_middle::lexer::token::ASSIGNMENT_TYPES;
 use dash_middle::parser::error::ErrorKind;
 use dash_middle::parser::expr::ArrayMemberKind;
+use dash_middle::parser::expr::CallArgumentKind;
 use dash_middle::parser::expr::Expr;
 use dash_middle::parser::expr::ObjectMemberKind;
 use dash_middle::parser::statement::BlockStatement;
@@ -14,47 +15,11 @@ use dash_middle::parser::statement::ReturnStatement;
 use dash_middle::parser::statement::Statement;
 
 use crate::must_borrow_lexeme;
-use crate::stmt::StatementParser;
 use crate::types::TypeParser;
 use crate::Parser;
 
-pub trait ExpressionParser<'a> {
-    fn parse_expression(&mut self) -> Option<Expr<'a>>;
-    fn parse_function(&mut self, is_async: bool) -> Option<FunctionDeclaration<'a>>;
-    fn parse_sequence(&mut self) -> Option<Expr<'a>>;
-    fn parse_yield(&mut self) -> Option<Expr<'a>>;
-    fn parse_assignment(&mut self) -> Option<Expr<'a>>;
-    fn parse_ternary(&mut self) -> Option<Expr<'a>>;
-    fn parse_nullish_coalescing(&mut self) -> Option<Expr<'a>>;
-    fn parse_logical_or(&mut self) -> Option<Expr<'a>>;
-    fn parse_logical_and(&mut self) -> Option<Expr<'a>>;
-    fn parse_bitwise_or(&mut self) -> Option<Expr<'a>>;
-    fn parse_bitwise_and(&mut self) -> Option<Expr<'a>>;
-    fn parse_bitwise_xor(&mut self) -> Option<Expr<'a>>;
-    fn parse_equality(&mut self) -> Option<Expr<'a>>;
-    fn parse_comparison(&mut self) -> Option<Expr<'a>>;
-    fn parse_bitwise_shift(&mut self) -> Option<Expr<'a>>;
-    fn parse_term(&mut self) -> Option<Expr<'a>>;
-    fn parse_factor(&mut self) -> Option<Expr<'a>>;
-    fn parse_pow(&mut self) -> Option<Expr<'a>>;
-    fn parse_unary(&mut self) -> Option<Expr<'a>>;
-    fn parse_postfix(&mut self) -> Option<Expr<'a>>;
-    fn parse_field_access(&mut self) -> Option<Expr<'a>>;
-    fn parse_primary_expr(&mut self) -> Option<Expr<'a>>;
-    /// Parses the end of an arrow functio, i.e. the expression, and transforms the preceding list of expressions
-    /// into the arrow function equivalent.
-    ///
-    /// Arrow functions are ambiguous and share the same beginning as grouping operator, *and* identifiers,
-    /// i.e. `a` can mean `a => 1`, or just `a`, and `(a, b)` can mean `(a, b) => 1` or `(a, b)`
-    /// so this can only be called when we have consumed =>
-    ///
-    /// Calling this will turn all parameters, which were parsed as if they were part of the grouping operator
-    /// into their arrow function parameter equivalent
-    fn parse_arrow_function_end(&mut self, prec: Vec<Expr<'a>>) -> Option<FunctionDeclaration<'a>>;
-}
-
-impl<'a> ExpressionParser<'a> for Parser<'a> {
-    fn parse_expression(&mut self) -> Option<Expr<'a>> {
+impl<'a> Parser<'a> {
+    pub fn parse_expression(&mut self) -> Option<Expr<'a>> {
         self.parse_sequence()
     }
 
@@ -333,7 +298,12 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
                     // TODO: refactor to `parse_expr_list`
                     while !self.expect_and_skip(&[TokenType::RightParen], false) {
                         self.expect_and_skip(&[TokenType::Comma], false);
-                        arguments.push(self.parse_expression()?);
+
+                        if let Some(spread) = self.parse_spread_operator(false) {
+                            arguments.push(CallArgumentKind::Spread(spread));
+                        } else {
+                            arguments.push(CallArgumentKind::Normal(self.parse_expression()?));
+                        }
                     }
 
                     // End of function call.
@@ -359,6 +329,23 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
         }
 
         Some(expr)
+    }
+
+    /// Tries to parse a spread operator (...<expr>). The argument specifies if it's required.
+    fn parse_spread_operator(&mut self, must_parse: bool) -> Option<Expr<'a>> {
+        if self.expect_and_skip(&[TokenType::Dot], must_parse) {
+            for _ in 0..2 {
+                let token = self.next()?;
+                if !matches!(token.ty, TokenType::Dot) {
+                    let token = token.clone();
+                    self.create_error(ErrorKind::IncompleteSpread(token));
+                    return None;
+                }
+            }
+            self.parse_expression()
+        } else {
+            None
+        }
     }
 
     fn parse_primary_expr(&mut self) -> Option<Expr<'a>> {
@@ -396,17 +383,8 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
                 let mut items = Vec::new();
                 while !self.expect_and_skip(&[TokenType::RightSquareBrace], false) {
                     self.expect_and_skip(&[TokenType::Comma], false);
-                    // Parse spread operator);
-                    if self.expect_and_skip(&[TokenType::Dot], false) {
-                        for _ in 0..2 {
-                            let token = self.next()?;
-                            if !matches!(token.ty, TokenType::Dot) {
-                                let token = token.clone();
-                                self.create_error(ErrorKind::IncompleteSpread(token));
-                                return None;
-                            }
-                        }
-                        items.push(ArrayMemberKind::Spread(self.parse_expression()?));
+                    if let Some(spread) = self.parse_spread_operator(false) {
+                        items.push(ArrayMemberKind::Spread(spread));
                     } else {
                         items.push(ArrayMemberKind::Item(self.parse_expression()?));
                     }
@@ -613,7 +591,7 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
         Some(expr)
     }
 
-    fn parse_function(&mut self, is_async: bool) -> Option<FunctionDeclaration<'a>> {
+    pub fn parse_function(&mut self, is_async: bool) -> Option<FunctionDeclaration<'a>> {
         let is_generator = self.expect_and_skip(&[TokenType::Star], false);
 
         let ty = if is_generator {
@@ -663,6 +641,15 @@ impl<'a> ExpressionParser<'a> for Parser<'a> {
         ))
     }
 
+    /// Parses the end of an arrow functio, i.e. the expression, and transforms the preceding list of expressions
+    /// into the arrow function equivalent.
+    ///
+    /// Arrow functions are ambiguous and share the same beginning as grouping operator, *and* identifiers,
+    /// i.e. `a` can mean `a => 1`, or just `a`, and `(a, b)` can mean `(a, b) => 1` or `(a, b)`
+    /// so this can only be called when we have consumed =>
+    ///
+    /// Calling this will turn all parameters, which were parsed as if they were part of the grouping operator
+    /// into their arrow function parameter equivalent
     fn parse_arrow_function_end(&mut self, prec: Vec<Expr<'a>>) -> Option<FunctionDeclaration<'a>> {
         let mut list = Vec::with_capacity(prec.len());
 

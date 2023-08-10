@@ -9,7 +9,6 @@ use dash_middle::parser::statement::FuncId;
 use dash_middle::parser::statement::Statement;
 use dash_middle::util::Counter;
 use dash_middle::util::LevelStack;
-use stmt::StatementParser;
 
 mod expr;
 mod stmt;
