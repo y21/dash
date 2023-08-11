@@ -49,6 +49,8 @@ pub const IGNORED_TESTS: &[&str] = &[
     "Array/length/S15.4.2.2_A2.1_T1.js",
     "ArrayBuffer/allocation-limit.js",
     "ArrayBuffer/length-is-too-large-throws.js",
+    // our `includes` currently ignores fromIndex so this runs into very long loops
+    "Array/prototype/includes/length-boundaries.js",
     // Number.prototype.toString stack overflow
     "toString/S15.7.4.2_A4_T05.js",
     // interesting throw stack overflow

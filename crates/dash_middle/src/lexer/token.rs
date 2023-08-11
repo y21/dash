@@ -30,9 +30,6 @@ pub enum TokenType {
     #[display(fmt = "]")]
     RightSquareBrace,
 
-    #[display(fmt = "[]")]
-    EmptySquareBrace,
-
     #[display(fmt = ",")]
     Comma,
 
@@ -451,6 +448,14 @@ impl TokenType {
 
     pub fn as_identifier_or_reserved_kw(&self) -> Option<Symbol> {
         self.as_identifier().or_else(|| self.as_reserved_keyword())
+    }
+
+    pub fn as_property_name(&self) -> Option<Symbol> {
+        self.as_identifier_or_reserved_kw().or(match self {
+            Self::String(s) => Some(*s),
+            Self::NumberDec(s) => Some(*s),
+            _ => None,
+        })
     }
 
     /// Returns a "dummy" identifier.

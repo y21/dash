@@ -374,7 +374,6 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             TokenType::NullLit => Expr::null_literal(),
             TokenType::UndefinedLit => Expr::undefined_literal(),
             TokenType::String(sym) => Expr::string_literal(sym),
-            TokenType::EmptySquareBrace => Expr::array_literal(Vec::new()),
             TokenType::LeftSquareBrace => {
                 let mut items = Vec::new();
                 while !self.expect_token_type_and_skip(&[TokenType::RightSquareBrace], false) {
@@ -421,7 +420,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                             ObjectMemberKind::Spread
                         }
                         other => {
-                            if let Some(ident) = other.as_identifier_or_reserved_kw() {
+                            if let Some(ident) = other.as_property_name() {
                                 ObjectMemberKind::Static(ident)
                             } else {
                                 self.create_error(ErrorKind::UnexpectedToken(token, TokenType::DUMMY_IDENTIFIER));

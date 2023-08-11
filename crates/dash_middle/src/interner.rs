@@ -205,10 +205,10 @@ impl StringInterner {
             hashbrown::HashMap::with_capacity_and_hasher(sym::PREINTERNED.len(), BuildHasherDefault::default());
 
         for (s, index) in sym::PREINTERNED {
-            let s = Rc::from(*s);
+            let s: Rc<str> = Rc::from(*s);
             debug_assert!(store.len() == index.0 as usize);
-            store.push(Rc::clone(&s));
-            mapping.insert(s, index.0);
+            mapping.insert(s.clone(), index.0);
+            store.push(s);
         }
 
         Self { store, mapping }

@@ -465,10 +465,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
                 //     self.read_template_literal_segment();
                 // }
             }
-            b'[' => self.create_contextified_conditional_token(
-                TokenType::LeftSquareBrace,
-                &[("]", TokenType::EmptySquareBrace)],
-            ),
+            b'[' => self.create_contextified_token(TokenType::LeftSquareBrace),
             b']' => self.create_contextified_token(TokenType::RightSquareBrace),
             b',' => self.create_contextified_token(TokenType::Comma),
             b'.' => self.create_contextified_token(TokenType::Dot),

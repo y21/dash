@@ -38,7 +38,8 @@ impl<'a, 'interner> Parser<'a, 'interner> {
     fn parse_postfix_array(&mut self) -> Option<TypeSegment> {
         let mut target = self.parse_generic_type()?;
 
-        while self.expect_token_type_and_skip(&[TokenType::EmptySquareBrace], false) {
+        while self.expect_token_type_and_skip(&[TokenType::LeftSquareBrace], false) {
+            self.expect_token_type_and_skip(&[TokenType::RightSquareBrace], true);
             target = TypeSegment::Array(Box::new(target));
         }
 
