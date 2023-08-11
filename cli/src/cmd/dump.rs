@@ -6,6 +6,7 @@ use anyhow::anyhow;
 use anyhow::Context;
 use clap::ArgMatches;
 use dash_compiler::transformations;
+use dash_middle::interner::StringInterner;
 use dash_middle::parser::statement::FuncId;
 use dash_middle::parser::statement::VariableDeclarationName;
 use dash_optimizer::consteval::ConstFunctionEvalCtx;
@@ -25,7 +26,9 @@ pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
     let path = arg.value_of("file").context("Missing file")?;
     let source = fs::read_to_string(path)?;
 
-    let tokens = dash_lexer::Lexer::new(&source)
+    let interner = &mut StringInterner::new();
+
+    let tokens = dash_lexer::Lexer::new(interner, &source)
         .scan_all()
         .map_err(|e| anyhow!("Failed to lex source string: {e:?}"))?;
 
@@ -33,7 +36,7 @@ pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
         println!("{tokens:#?}");
     }
 
-    let (mut ast, counter) = dash_parser::Parser::new(&source, tokens)
+    let (mut ast, counter) = dash_parser::Parser::new(interner, &source, tokens)
         .parse_all()
         .map_err(|_| anyhow!("Failed to parse source string"))?;
 
@@ -54,7 +57,7 @@ pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
     }
 
     if opt.enabled() {
-        let mut cfx = ConstFunctionEvalCtx::new(&mut tcx, opt);
+        let mut cfx = ConstFunctionEvalCtx::new(&mut tcx, interner, opt);
         for stmt in &mut ast {
             cfx.visit_statement(stmt, FuncId::ROOT);
         }
@@ -70,7 +73,7 @@ pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
         }
     }
 
-    let bytecode = dash_compiler::FunctionCompiler::new(opt, tcx)
+    let bytecode = dash_compiler::FunctionCompiler::new(opt, tcx, interner)
         .compile_ast(ast, true)
         .map_err(|_| anyhow!("Failed to compile source string"))?;
 

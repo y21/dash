@@ -1,41 +1,35 @@
 use std::fmt;
 
-use either::Either;
-
-use super::token::FormattableError;
-use super::token::Location;
+use crate::sourcemap::Span;
 
 /// An error that may occur during lexing
 #[derive(Debug)]
-pub struct Error<'a> {
+pub struct Error {
     /// The kind of error
     pub kind: ErrorKind,
     /// Where this error is located in the source string
-    pub loc: Location,
-    /// The input string
-    ///
-    /// Errors carry the input string with them because this is necessary
-    /// when formatting errors. In the future, we might be able to avoid storing
-    /// it here.
-    pub source: &'a [u8],
+    pub loc: Span,
+    // TODO: store the source string in a `struct LexerErrors<'buf>(Vec<Error>, &'buf [u8])`
 }
 
-impl fmt::Display for Error<'_> {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.kind {
-            ErrorKind::UnknownCharacter(c) => {
-                let format_err = FormattableError {
-                    source: self.source,
-                    loc: &self.loc,
-                    display_token: true,
-                    message: "unknown character",
-                    tok: Either::Right(*c as char),
-                    help: None,
-                };
-                format_err.fmt(f)
-            }
-            ErrorKind::UnexpectedEof => f.write_str("unexpected end of input"),
-        }
+        fmt::Debug::fmt(self, f)
+        // todo!()
+        // match &self.kind {
+        //     ErrorKind::UnknownCharacter(c) => {
+        //         let format_err = FormattableError {
+        //             source: self.source,
+        //             loc: &self.loc,
+        //             display_token: true,
+        //             message: "unknown character",
+        //             tok: Either::Right(*c as char),
+        //             help: None,
+        //         };
+        //         format_err.fmt(f)
+        //     }
+        //     ErrorKind::UnexpectedEof => f.write_str("unexpected end of input"),
+        // }
     }
 }
 

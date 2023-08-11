@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::convert::TryFrom;
 
+use crate::interner::Symbol;
 use crate::parser::statement::VariableBinding;
 use crate::parser::statement::VariableDeclarationKind;
 use crate::parser::statement::VariableDeclarationName;
@@ -22,15 +23,15 @@ pub enum CompileValueType {
 }
 
 #[derive(Debug, Clone)]
-pub struct ScopeLocal<'a> {
+pub struct ScopeLocal {
     /// The binding of this variable
-    binding: VariableBinding<'a>,
+    binding: VariableBinding,
     inferred_type: RefCell<Option<CompileValueType>>,
 }
 
-impl<'a> ScopeLocal<'a> {
+impl ScopeLocal {
     /// Returns the binding of this variable
-    pub fn binding(&self) -> &VariableBinding<'a> {
+    pub fn binding(&self) -> &VariableBinding {
         &self.binding
     }
 
@@ -48,15 +49,15 @@ pub struct LimitExceededError;
 
 #[derive(Debug, Default)]
 
-pub struct Scope<'a> {
+pub struct Scope {
     depth: u16,
     // length limited to u16
-    locals: Vec<ScopeLocal<'a>>,
+    locals: Vec<ScopeLocal>,
     /// A vector of external values
     externals: Vec<External>,
 }
 
-impl<'a> Scope<'a> {
+impl Scope {
     pub fn new() -> Self {
         Self::default()
     }
@@ -69,7 +70,7 @@ impl<'a> Scope<'a> {
         &mut self.externals
     }
 
-    pub fn find_local(&self, identifier: &str) -> Option<(u16, &ScopeLocal<'a>)> {
+    pub fn find_local(&self, identifier: Symbol) -> Option<(u16, &ScopeLocal)> {
         self.locals
             .iter()
             .enumerate()
@@ -86,7 +87,7 @@ impl<'a> Scope<'a> {
 
     pub fn add_local(
         &mut self,
-        name: &'a str,
+        name: Symbol,
         kind: VariableDeclarationKind,
         inferred_type: Option<CompileValueType>,
     ) -> Result<u16, LimitExceededError> {
@@ -107,7 +108,7 @@ impl<'a> Scope<'a> {
         u16::try_from(self.locals.len() - 1).map_err(|_| LimitExceededError)
     }
 
-    pub fn add_scope_local(&mut self, local: ScopeLocal<'a>) -> Result<u16, LimitExceededError> {
+    pub fn add_scope_local(&mut self, local: ScopeLocal) -> Result<u16, LimitExceededError> {
         // TODO: check if it exists already
         self.locals.push(local);
         u16::try_from(self.locals.len() - 1).map_err(|_| LimitExceededError)
@@ -129,11 +130,11 @@ impl<'a> Scope<'a> {
         self.depth
     }
 
-    pub fn locals(&self) -> &[ScopeLocal<'a>] {
+    pub fn locals(&self) -> &[ScopeLocal] {
         self.locals.as_ref()
     }
 
-    pub fn into_locals(self) -> Vec<ScopeLocal<'a>> {
+    pub fn into_locals(self) -> Vec<ScopeLocal> {
         self.locals
     }
 }

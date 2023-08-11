@@ -58,7 +58,7 @@ impl Runtime {
         State::from_vm(&self.vm).set_root_module(module_manager);
     }
 
-    pub fn eval<'i>(&mut self, code: &'i str, opt: OptLevel) -> Result<Unrooted, EvalError<'i>> {
+    pub fn eval(&mut self, code: &str, opt: OptLevel) -> Result<Unrooted, EvalError> {
         self.vm.eval(code, opt)
     }
 

@@ -1,43 +1,47 @@
-use std::{borrow::Cow, cell::RefCell, fmt};
+use std::{cell::RefCell, fmt};
 
 use derive_more::Display;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use crate::{lexer::token::TokenType, tree::TreeToken};
+use crate::{
+    interner::{sym, Symbol},
+    lexer::token::TokenType,
+    tree::TreeToken,
+};
 
 use super::{expr::Expr, types::TypeSegment};
 
 /// A JavaScript statement
 #[derive(Debug, Clone, Display)]
-pub enum Statement<'a> {
+pub enum Statement {
     /// Expression statement
     #[display(fmt = "{_0};")]
-    Expression(Expr<'a>),
+    Expression(Expr),
     /// Variable declaration
-    Variable(VariableDeclarations<'a>),
+    Variable(VariableDeclarations),
     /// If statement
-    If(IfStatement<'a>),
+    If(IfStatement),
     /// Block statement
-    Block(BlockStatement<'a>),
+    Block(BlockStatement),
     /// Function declaration
-    Function(FunctionDeclaration<'a>),
+    Function(FunctionDeclaration),
     /// Any loop
-    Loop(Loop<'a>),
+    Loop(Loop),
     /// Return statement
-    Return(ReturnStatement<'a>),
+    Return(ReturnStatement),
     /// Try catch block
-    Try(TryCatch<'a>),
+    Try(TryCatch),
     /// Throw statement
-    Throw(Expr<'a>),
+    Throw(Expr),
     /// Import statement
-    Import(ImportKind<'a>),
+    Import(ImportKind),
     /// Export statement
-    Export(ExportKind<'a>),
+    Export(ExportKind),
     /// Class declaration
-    Class(Class<'a>),
+    Class(Class),
     /// A switch statement
-    Switch(SwitchStatement<'a>),
+    Switch(SwitchStatement),
     /// Continue loop statement
     #[display(fmt = "continue;")]
     Continue,
@@ -55,7 +59,7 @@ pub enum Statement<'a> {
     Empty,
 }
 
-impl<'a> Statement<'a> {
+impl Statement {
     pub fn enters_scope(&self) -> bool {
         matches!(
             self,
@@ -69,46 +73,46 @@ impl<'a> Statement<'a> {
 /// This is used in import/export statements, as well as variable declaration
 /// in the future. When destructuring is implemented, this enum will make more sense.
 #[derive(Debug, Clone, Display)]
-pub enum SpecifierKind<'a> {
+pub enum SpecifierKind {
     /// A raw identifier
     #[display(fmt = "{_0}")]
-    Ident(&'a str),
+    Ident(Symbol),
 }
 
-impl<'a> SpecifierKind<'a> {
+impl SpecifierKind {
     /// Attempts to return self as an identifier
-    pub fn as_ident(&self) -> Option<&'a str> {
+    pub fn as_ident(&self) -> Option<Symbol> {
         match self {
-            Self::Ident(i) => Some(i),
+            Self::Ident(i) => Some(*i),
         }
     }
 }
 
 /// Type of import statement
 #[derive(Debug, Clone, Display)]
-pub enum ImportKind<'a> {
+pub enum ImportKind {
     #[display(fmt = "import({_0})")]
-    Dynamic(Expr<'a>),
+    Dynamic(Expr),
     /// import foo from "bar"
     #[display(fmt = "import {_0} from \"{_1}\"")]
-    DefaultAs(SpecifierKind<'a>, Cow<'a, str>),
+    DefaultAs(SpecifierKind, Symbol),
     /// import * as foo from "bar"
     #[display(fmt = "import * as {_0} from \"{_1}\"")]
-    AllAs(SpecifierKind<'a>, Cow<'a, str>),
+    AllAs(SpecifierKind, Symbol),
 }
 
 /// Type of export statement
 #[derive(Debug, Clone)]
-pub enum ExportKind<'a> {
+pub enum ExportKind {
     /// export default foo
-    Default(Expr<'a>),
+    Default(Expr),
     /// export { foo, bar }
-    Named(Vec<&'a str>),
+    Named(Vec<Symbol>),
     /// export let foo = "bar"
-    NamedVar(VariableDeclarations<'a>),
+    NamedVar(VariableDeclarations),
 }
 
-impl<'a> fmt::Display for ExportKind<'a> {
+impl fmt::Display for ExportKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Default(e) => write!(f, "export default {e}"),
@@ -126,9 +130,9 @@ impl<'a> fmt::Display for ExportKind<'a> {
     }
 }
 
-impl<'a> ImportKind<'a> {
+impl ImportKind {
     /// Attempts to return the underlying [SpecifierKind], if present
-    pub fn get_specifier(&self) -> Option<&SpecifierKind<'a>> {
+    pub fn get_specifier(&self) -> Option<&SpecifierKind> {
         match self {
             Self::Dynamic(_) => None,
             Self::DefaultAs(s, _) => Some(s),
@@ -139,17 +143,17 @@ impl<'a> ImportKind<'a> {
 
 /// A catch statement
 #[derive(Debug, Clone, Display)]
-#[display(fmt = "catch ({}) {{ {} }}", "ident.unwrap_or(\"_\")", "body")]
-pub struct Catch<'a> {
+#[display(fmt = "catch ({}) {{ {} }}", "ident.unwrap_or(sym::EMPTY)", "body")]
+pub struct Catch {
     /// The body of a catch statement
-    pub body: Box<Statement<'a>>,
+    pub body: Box<Statement>,
     /// The identifier of the variable that receives the thrown error
-    pub ident: Option<&'a str>,
+    pub ident: Option<Symbol>,
 }
 
-impl<'a> Catch<'a> {
+impl Catch {
     /// Creates a new catch statement
-    pub fn new(body: Statement<'a>, ident: Option<&'a str>) -> Self {
+    pub fn new(body: Statement, ident: Option<Symbol>) -> Self {
         Self {
             body: Box::new(body),
             ident,
@@ -159,17 +163,17 @@ impl<'a> Catch<'a> {
 
 /// A try catch statement
 #[derive(Debug, Clone)]
-pub struct TryCatch<'a> {
+pub struct TryCatch {
     /// The body of the try statement
-    pub try_: Box<Statement<'a>>,
+    pub try_: Box<Statement>,
     /// Catch statement
     // TODO: make this optional. a try can exist without catch (try finally)
-    pub catch: Catch<'a>,
+    pub catch: Catch,
     /// Optional finally block
-    pub finally: Option<Box<Statement<'a>>>,
+    pub finally: Option<Box<Statement>>,
 }
 
-impl<'a> fmt::Display for TryCatch<'a> {
+impl fmt::Display for TryCatch {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "try {{ {} }} {}", self.try_, self.catch)?;
 
@@ -181,9 +185,9 @@ impl<'a> fmt::Display for TryCatch<'a> {
     }
 }
 
-impl<'a> TryCatch<'a> {
+impl TryCatch {
     /// Creates a new try catch block
-    pub fn new(try_: Statement<'a>, catch: Catch<'a>, finally: Option<Statement<'a>>) -> Self {
+    pub fn new(try_: Statement, catch: Catch, finally: Option<Statement>) -> Self {
         Self {
             try_: Box::new(try_),
             catch,
@@ -195,9 +199,9 @@ impl<'a> TryCatch<'a> {
 /// A return statement
 #[derive(Debug, Clone, Display)]
 #[display(fmt = "return {_0}")]
-pub struct ReturnStatement<'a>(pub Expr<'a>);
+pub struct ReturnStatement(pub Expr);
 
-impl<'a> Default for ReturnStatement<'a> {
+impl Default for ReturnStatement {
     fn default() -> Self {
         Self(Expr::undefined_literal())
     }
@@ -205,47 +209,47 @@ impl<'a> Default for ReturnStatement<'a> {
 
 /// A loop statement
 #[derive(Debug, Clone, Display)]
-pub enum Loop<'a> {
+pub enum Loop {
     /// A for loop
-    For(ForLoop<'a>),
+    For(ForLoop),
     /// A for..of loop
-    ForOf(ForOfLoop<'a>),
+    ForOf(ForOfLoop),
     /// A for..in loop
-    ForIn(ForInLoop<'a>),
+    ForIn(ForInLoop),
     /// A while loop
-    While(WhileLoop<'a>),
+    While(WhileLoop),
     /// A do..whiel loop
-    DoWhile(DoWhileLoop<'a>),
+    DoWhile(DoWhileLoop),
 }
 
-impl<'a> From<ForLoop<'a>> for Loop<'a> {
-    fn from(f: ForLoop<'a>) -> Self {
+impl From<ForLoop> for Loop {
+    fn from(f: ForLoop) -> Self {
         Self::For(f)
     }
 }
 
-impl<'a> From<WhileLoop<'a>> for Loop<'a> {
-    fn from(f: WhileLoop<'a>) -> Self {
+impl From<WhileLoop> for Loop {
+    fn from(f: WhileLoop) -> Self {
         Self::While(f)
     }
 }
 
-impl<'a> From<DoWhileLoop<'a>> for Loop<'a> {
-    fn from(f: DoWhileLoop<'a>) -> Self {
+impl From<DoWhileLoop> for Loop {
+    fn from(f: DoWhileLoop) -> Self {
         Self::DoWhile(f)
     }
 }
 
 #[derive(Debug, Clone, Display)]
 #[display(fmt = "do {body} while ({condition})")]
-pub struct DoWhileLoop<'a> {
-    pub body: Box<Statement<'a>>,
-    pub condition: Expr<'a>,
+pub struct DoWhileLoop {
+    pub body: Box<Statement>,
+    pub condition: Expr,
 }
 
-impl<'a> DoWhileLoop<'a> {
+impl DoWhileLoop {
     /// Creates a new do..while loop
-    pub fn new(condition: Expr<'a>, body: Statement<'a>) -> Self {
+    pub fn new(condition: Expr, body: Statement) -> Self {
         Self {
             condition,
             body: Box::new(body),
@@ -256,29 +260,29 @@ impl<'a> DoWhileLoop<'a> {
 /// A for..of loop
 #[derive(Debug, Clone, Display)]
 #[display(fmt = "for ({binding} of {expr}) {{ {body} }}")]
-pub struct ForOfLoop<'a> {
+pub struct ForOfLoop {
     /// The binding of this loop
-    pub binding: VariableBinding<'a>,
+    pub binding: VariableBinding,
     /// The expression to iterate over
-    pub expr: Expr<'a>,
+    pub expr: Expr,
     /// The body of this loop
-    pub body: Box<Statement<'a>>,
+    pub body: Box<Statement>,
 }
 
 /// A for loop
 #[derive(Debug, Clone)]
-pub struct ForLoop<'a> {
+pub struct ForLoop {
     /// The initializer of a for loop
-    pub init: Option<Box<Statement<'a>>>,
+    pub init: Option<Box<Statement>>,
     /// The condition that is used to determine when iteration should stop
-    pub condition: Option<Expr<'a>>,
+    pub condition: Option<Expr>,
     /// Final expression, evaluated after each iteration
-    pub finalizer: Option<Expr<'a>>,
+    pub finalizer: Option<Expr>,
     /// The body of a for loop
-    pub body: Box<Statement<'a>>,
+    pub body: Box<Statement>,
 }
 
-impl<'a> fmt::Display for ForLoop<'a> {
+impl fmt::Display for ForLoop {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "for(")?;
 
@@ -302,14 +306,9 @@ impl<'a> fmt::Display for ForLoop<'a> {
     }
 }
 
-impl<'a> ForLoop<'a> {
+impl ForLoop {
     /// Creates a new for loop
-    pub fn new(
-        init: Option<Statement<'a>>,
-        condition: Option<Expr<'a>>,
-        finalizer: Option<Expr<'a>>,
-        body: Statement<'a>,
-    ) -> Self {
+    pub fn new(init: Option<Statement>, condition: Option<Expr>, finalizer: Option<Expr>, body: Statement) -> Self {
         Self {
             init: init.map(Box::new),
             condition,
@@ -322,28 +321,28 @@ impl<'a> ForLoop<'a> {
 /// A for..in loop
 #[derive(Debug, Clone, Display)]
 #[display(fmt = "for ({binding} in {expr}) {{ {body} }}")]
-pub struct ForInLoop<'a> {
+pub struct ForInLoop {
     /// The binding of this loop
-    pub binding: VariableBinding<'a>,
+    pub binding: VariableBinding,
     /// The expression to iterate over
-    pub expr: Expr<'a>,
+    pub expr: Expr,
     /// The body of this loop
-    pub body: Box<Statement<'a>>,
+    pub body: Box<Statement>,
 }
 
 /// A while loop
 #[derive(Debug, Clone, Display)]
 #[display(fmt = "while ({condition}) {{ {body} }}")]
-pub struct WhileLoop<'a> {
+pub struct WhileLoop {
     /// The condition of this while loop, used to determine when to stop iterating
-    pub condition: Expr<'a>,
+    pub condition: Expr,
     /// The body of this while loop
-    pub body: Box<Statement<'a>>,
+    pub body: Box<Statement>,
 }
 
-impl<'a> WhileLoop<'a> {
+impl WhileLoop {
     /// Creates a new while loop
-    pub fn new(condition: Expr<'a>, body: Statement<'a>) -> Self {
+    pub fn new(condition: Expr, body: Statement) -> Self {
         Self {
             condition,
             body: Box::new(body),
@@ -404,29 +403,29 @@ impl From<TreeToken> for FuncId {
 
 /// A function declaration
 #[derive(Debug, Clone)]
-pub struct FunctionDeclaration<'a> {
+pub struct FunctionDeclaration {
     pub id: FuncId,
     /// The name of this function, if present
-    pub name: Option<&'a str>,
+    pub name: Option<Symbol>,
     /// Whether this function is an async function
     pub r#async: bool,
     /// Function parameter names
     pub parameters: Vec<(
         // Parameter
-        Parameter<'a>,
+        Parameter,
         // Default value
-        Option<Expr<'a>>,
+        Option<Expr>,
         // Type segment
-        Option<TypeSegment<'a>>,
+        Option<TypeSegment>,
     )>,
     /// Function body
-    pub statements: Vec<Statement<'a>>,
+    pub statements: Vec<Statement>,
     /// The type of function
     pub ty: FunctionKind,
-    pub ty_segment: Option<TypeSegment<'a>>,
+    pub ty_segment: Option<TypeSegment>,
 }
 
-impl<'a> fmt::Display for FunctionDeclaration<'a> {
+impl fmt::Display for FunctionDeclaration {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // TODO: ty
 
@@ -478,16 +477,16 @@ where
     Ok(())
 }
 
-impl<'a> FunctionDeclaration<'a> {
+impl FunctionDeclaration {
     /// Creates a new function declaration
     pub fn new(
-        name: Option<&'a str>,
+        name: Option<Symbol>,
         id: FuncId,
-        parameters: Vec<(Parameter<'a>, Option<Expr<'a>>, Option<TypeSegment<'a>>)>,
-        statements: Vec<Statement<'a>>,
+        parameters: Vec<(Parameter, Option<Expr>, Option<TypeSegment>)>,
+        statements: Vec<Statement>,
         ty: FunctionKind,
         r#async: bool,
-        ty_segment: Option<TypeSegment<'a>>,
+        ty_segment: Option<TypeSegment>,
     ) -> Self {
         Self {
             id,
@@ -503,9 +502,9 @@ impl<'a> FunctionDeclaration<'a> {
 
 /// A block statement, primarily used to enter a new scope
 #[derive(Debug, Clone)]
-pub struct BlockStatement<'a>(pub Vec<Statement<'a>>);
+pub struct BlockStatement(pub Vec<Statement>);
 
-impl<'a> fmt::Display for BlockStatement<'a> {
+impl fmt::Display for BlockStatement {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "{{")?;
 
@@ -519,23 +518,23 @@ impl<'a> fmt::Display for BlockStatement<'a> {
 
 /// An if statement
 #[derive(Debug, Clone)]
-pub struct IfStatement<'a> {
+pub struct IfStatement {
     /// Condition of this if statement
-    pub condition: Expr<'a>,
+    pub condition: Expr,
     /// Body of this if statement
-    pub then: Box<Statement<'a>>,
+    pub then: Box<Statement>,
     /// Branches (`else if`'s)
     ///
     /// Compiler hackery requires branches to be a RefCell.
     /// The Visitor trait does not give us a mutable reference to IfStatement,
     /// so we need to interior mutability to be able to mutate branches from within
     /// the compiler
-    pub branches: RefCell<Vec<IfStatement<'a>>>,
+    pub branches: RefCell<Vec<IfStatement>>,
     /// Last else branch that executes if no other branch matches, if present
-    pub el: Option<Box<Statement<'a>>>,
+    pub el: Option<Box<Statement>>,
 }
 
-impl<'a> fmt::Display for IfStatement<'a> {
+impl fmt::Display for IfStatement {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "if ({}) {{ {} }} ", self.condition, self.then)?;
 
@@ -552,14 +551,9 @@ impl<'a> fmt::Display for IfStatement<'a> {
     }
 }
 
-impl<'a> IfStatement<'a> {
+impl IfStatement {
     /// Creates a new if statement
-    pub fn new(
-        condition: Expr<'a>,
-        then: Statement<'a>,
-        branches: Vec<IfStatement<'a>>,
-        el: Option<Box<Statement<'a>>>,
-    ) -> Self {
+    pub fn new(condition: Expr, then: Statement, branches: Vec<IfStatement>, el: Option<Box<Statement>>) -> Self {
         Self {
             condition,
             then: Box::new(then),
@@ -570,13 +564,13 @@ impl<'a> IfStatement<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub struct SwitchStatement<'a> {
-    pub expr: Expr<'a>,
-    pub cases: Vec<SwitchCase<'a>>,
-    pub default: Option<Vec<Statement<'a>>>,
+pub struct SwitchStatement {
+    pub expr: Expr,
+    pub cases: Vec<SwitchCase>,
+    pub default: Option<Vec<Statement>>,
 }
 
-impl<'a> fmt::Display for SwitchStatement<'a> {
+impl fmt::Display for SwitchStatement {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "switch ({}) {{", self.expr)?;
 
@@ -599,9 +593,9 @@ impl<'a> fmt::Display for SwitchStatement<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub struct SwitchCase<'a> {
-    pub value: Expr<'a>,
-    pub body: Vec<Statement<'a>>,
+pub struct SwitchCase {
+    pub value: Expr,
+    pub body: Vec<Statement>,
 }
 
 /// The type of a variable declaration
@@ -624,29 +618,29 @@ pub enum VariableDeclarationKind {
     Unnameable,
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
-pub enum VariableDeclarationName<'a> {
+#[derive(Debug, Clone, PartialEq)]
+pub enum VariableDeclarationName {
     /// Normal identifier
-    Identifier(&'a str),
+    Identifier(Symbol),
     /// Object destructuring: { a } = { a: 1 }
     ObjectDestructuring {
         /// Fields to destructure
         ///
         /// Destructured fields can also be aliased with ` { a: b } = { a: 3 } `
-        fields: Vec<(&'a str, Option<&'a str>)>,
+        fields: Vec<(Symbol, Option<Symbol>)>,
         /// The rest element, if present
-        rest: Option<&'a str>,
+        rest: Option<Symbol>,
     },
     /// Array destructuring: [ a ] = [ 1 ]
     ArrayDestructuring {
         /// Elements to destructure
-        fields: Vec<&'a str>,
+        fields: Vec<Symbol>,
         /// The rest element, if present
-        rest: Option<&'a str>,
+        rest: Option<Symbol>,
     },
 }
 
-impl<'a> fmt::Display for VariableDeclarationName<'a> {
+impl fmt::Display for VariableDeclarationName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             VariableDeclarationName::Identifier(name) => write!(f, "{name}"),
@@ -710,19 +704,19 @@ impl From<TokenType> for VariableDeclarationKind {
 }
 
 /// A variable binding
-#[derive(Debug, Clone, Display, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Display, PartialEq)]
 #[display(fmt = "{kind} {name}")]
-pub struct VariableBinding<'a> {
+pub struct VariableBinding {
     /// The name/identifier of this variable
-    pub name: VariableDeclarationName<'a>,
+    pub name: VariableDeclarationName,
     /// The type of this variable
     pub kind: VariableDeclarationKind,
     /// The type of a variable, if present
-    pub ty: Option<TypeSegment<'a>>,
+    pub ty: Option<TypeSegment>,
 }
 
-impl<'a> VariableBinding<'a> {
-    pub fn unnameable(name: &'a str) -> Self {
+impl VariableBinding {
+    pub fn unnameable(name: Symbol) -> Self {
         // TODO: we should somehow mangle `name`, otherwise nested for of loops in the same function will clash
         Self {
             name: VariableDeclarationName::Identifier(name),
@@ -733,9 +727,9 @@ impl<'a> VariableBinding<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub struct VariableDeclarations<'a>(pub Vec<VariableDeclaration<'a>>);
+pub struct VariableDeclarations(pub Vec<VariableDeclaration>);
 
-impl<'a> fmt::Display for VariableDeclarations<'a> {
+impl fmt::Display for VariableDeclarations {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt_list(f, &self.0, ", ")
     }
@@ -743,14 +737,14 @@ impl<'a> fmt::Display for VariableDeclarations<'a> {
 
 /// A variable declaration
 #[derive(Debug, Clone)]
-pub struct VariableDeclaration<'a> {
+pub struct VariableDeclaration {
     /// Variable bindings
-    pub binding: VariableBinding<'a>,
+    pub binding: VariableBinding,
     /// The value of this variable, if it was initialized
-    pub value: Option<Expr<'a>>,
+    pub value: Option<Expr>,
 }
 
-impl<'a> fmt::Display for VariableDeclaration<'a> {
+impl fmt::Display for VariableDeclaration {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.binding)?;
 
@@ -762,29 +756,29 @@ impl<'a> fmt::Display for VariableDeclaration<'a> {
     }
 }
 
-impl<'a> VariableDeclaration<'a> {
+impl VariableDeclaration {
     /// Creates a new variable declaration
-    pub fn new(binding: VariableBinding<'a>, value: Option<Expr<'a>>) -> Self {
+    pub fn new(binding: VariableBinding, value: Option<Expr>) -> Self {
         Self { binding, value }
     }
 }
 
 /// A JavaScript class
 #[derive(Debug, Clone)]
-pub struct Class<'a> {
+pub struct Class {
     /// The name of this class, if present
     ///
     /// Class expressions don't necessarily need to have a name
-    pub name: Option<&'a str>,
+    pub name: Option<Symbol>,
     /// The superclass of this class, if present
-    pub extends: Option<Expr<'a>>,
+    pub extends: Option<Expr>,
     /// Members of this class
-    pub members: Vec<ClassMember<'a>>,
+    pub members: Vec<ClassMember>,
 }
 
-impl<'a> fmt::Display for Class<'a> {
+impl fmt::Display for Class {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "class {}", self.name.unwrap_or_default())?;
+        write!(f, "class {}", self.name.unwrap_or(sym::EMPTY))?;
 
         if let Some(extends) = &self.extends {
             write!(f, " extends {extends}")?;
@@ -798,25 +792,25 @@ impl<'a> fmt::Display for Class<'a> {
     }
 }
 
-impl<'a> Class<'a> {
+impl Class {
     /// Returns a reference to the constructor, if present
-    pub fn constructor(&self) -> Option<&FunctionDeclaration<'a>> {
+    pub fn constructor(&self) -> Option<&FunctionDeclaration> {
         self.members.iter().find_map(|cm| cm.as_constructor())
     }
 }
 
 /// A JavaScript class member
 #[derive(Debug, Clone)]
-pub struct ClassMember<'a> {
+pub struct ClassMember {
     /// Whether this class member is declared as static
     pub static_: bool,
     /// Whether this class member is declared as private
     pub private: bool,
     /// The type of class member
-    pub kind: ClassMemberKind<'a>,
+    pub kind: ClassMemberKind,
 }
 
-impl<'a> fmt::Display for ClassMember<'a> {
+impl fmt::Display for ClassMember {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.static_ {
             write!(f, "static ")?;
@@ -830,22 +824,22 @@ impl<'a> fmt::Display for ClassMember<'a> {
     }
 }
 
-impl<'a> ClassMember<'a> {
+impl ClassMember {
     /// Returns the inner function if this member is the constructor
-    pub fn as_constructor(&self) -> Option<&FunctionDeclaration<'a>> {
+    pub fn as_constructor(&self) -> Option<&FunctionDeclaration> {
         // Constructor cannot be private or static
         if self.private || self.static_ {
             return None;
         }
 
         match &self.kind {
-            ClassMemberKind::Method(m) if m.name == Some("constructor") => Some(m),
+            ClassMemberKind::Method(m) if m.name == Some(sym::CONSTRUCTOR) => Some(m),
             _ => None,
         }
     }
 
     /// Returns the identifier of this class member
-    pub fn name(&self) -> &'a str {
+    pub fn name(&self) -> Symbol {
         match &self.kind {
             ClassMemberKind::Property(p) => p.name,
             // Methods *always* have names, so unwrapping is OK here
@@ -856,23 +850,23 @@ impl<'a> ClassMember<'a> {
 
 /// The type of class member
 #[derive(Debug, Clone, Display)]
-pub enum ClassMemberKind<'a> {
+pub enum ClassMemberKind {
     /// A class method
-    Method(FunctionDeclaration<'a>),
+    Method(FunctionDeclaration),
     /// A class property
-    Property(ClassProperty<'a>),
+    Property(ClassProperty),
 }
 
 /// A class property
 #[derive(Debug, Clone)]
-pub struct ClassProperty<'a> {
+pub struct ClassProperty {
     /// The name of this property
-    pub name: &'a str,
+    pub name: Symbol,
     /// The default value of this property, set when its constructor is called
-    pub value: Option<Expr<'a>>,
+    pub value: Option<Expr>,
 }
 
-impl<'a> fmt::Display for ClassProperty<'a> {
+impl fmt::Display for ClassProperty {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.name)?;
 
@@ -886,7 +880,7 @@ impl<'a> fmt::Display for ClassProperty<'a> {
 
 /// A function parameter
 #[derive(Debug, Clone, Display)]
-pub enum Parameter<'a> {
-    Identifier(&'a str),
-    Spread(&'a str),
+pub enum Parameter {
+    Identifier(Symbol),
+    Spread(Symbol),
 }

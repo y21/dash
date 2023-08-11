@@ -1,17 +1,21 @@
 use std::borrow::Cow;
 use std::ops::Range;
 
+use dash_middle::interner::{StringInterner, Symbol};
 use dash_middle::lexer::error::{Error, ErrorKind};
-use dash_middle::lexer::token::{Location, Token, TokenType};
+use dash_middle::lexer::token::{as_token, Token, TokenType};
+use dash_middle::sourcemap::Span;
 use dash_middle::util;
 
 /// A JavaScript source code lexer
 #[derive(Debug)]
-pub struct Lexer<'a> {
+pub struct Lexer<'a, 'interner> {
     input: &'a [u8],
 
-    tokens: Vec<Token<'a>>,
-    errors: Vec<Error<'a>>,
+    tokens: Vec<Token>,
+    errors: Vec<Error>,
+
+    interner: &'interner mut StringInterner,
 
     idx: usize,
     line: usize,
@@ -31,22 +35,24 @@ pub enum CommentKind {
 
 /// A lexer node (either a token or an error)
 #[derive(Debug)]
-pub enum Node<'a> {
+pub enum Node {
     /// A valid token
-    Token(Token<'a>),
+    Token(Token),
     /// An error
-    Error(Error<'a>),
+    Error(Error),
 }
 
-impl<'a> Lexer<'a> {
+impl<'a, 'interner> Lexer<'a, 'interner> {
     /// Creates a new lexer
-    pub fn new(source: &'a str) -> Self {
+    pub fn new(interner: &'interner mut StringInterner, source: &'a str) -> Self {
+        assert!(source.len() <= u32::MAX as usize);
         Self {
             input: source.as_bytes(),
             idx: 0,
             line: 1,
             start: 0,
             line_idx: 0,
+            interner,
             template_literal_depths_stack: Vec::new(),
             errors: Vec::new(),
             tokens: Vec::new(),
@@ -80,17 +86,17 @@ impl<'a> Lexer<'a> {
         self.input[self.idx]
     }
 
+    /// Creates a span based on the current location
+    fn span(&self) -> Span {
+        Span {
+            lo: self.start as u32,
+            hi: self.idx as u32,
+        }
+    }
+
     /// Creates a token based on the current location
     fn create_contextified_token(&mut self, ty: TokenType) {
-        let tok = Token {
-            ty,
-            loc: Location {
-                line: self.line,
-                offset: self.start,
-                line_offset: self.line_idx,
-            },
-            full: Cow::Borrowed(self.get_lexeme()),
-        };
+        let tok = Token { ty, span: self.span() };
         self.tokens.push(tok);
     }
 
@@ -120,35 +126,26 @@ impl<'a> Lexer<'a> {
 
     /// Creates a new error token
     fn create_error(&mut self, kind: ErrorKind) {
-        let err = Error {
-            loc: Location {
-                line: self.line,
-                offset: self.start,
-                line_offset: self.line_idx,
-            },
-            kind,
-            source: self.input,
-        };
+        let err = Error { loc: self.span(), kind };
         self.errors.push(err);
     }
 
-    /// Creates a token based on the current location and a given lexeme
-    fn create_contextified_token_with_lexeme(&mut self, ty: TokenType, lexeme: Cow<'a, str>) {
-        let tok = Token {
-            ty,
-            loc: Location {
-                line: self.line,
-                offset: match lexeme {
-                    Cow::Borrowed(lexeme) => lexeme.as_ptr() as usize - self.input.as_ptr() as usize,
-                    // TODO: Handle the Cow::Owned case properly, somehow
-                    _ => 0,
-                },
-                line_offset: self.line_idx,
-            },
-            full: lexeme,
-        };
-        self.tokens.push(tok);
-    }
+    // /// Creates a token based on the current location and a given lexeme
+    // fn create_contextified_token_with_lexeme(&mut self, ty: TokenType, lexeme: Cow<'a, str>) {
+    //     // TODO: can we get rid of the lexeme cow parameter and replace with a span?
+    //     let tok = Token {
+    //         ty,
+    //         span: match lexeme {
+    //             Cow::Borrowed(lexeme) => Span {
+    //                 lo: (lexeme.as_ptr() as usize - self.input.as_ptr() as usize) as u32,
+    //                 hi: (lexeme.as_ptr() as usize - self.input.as_ptr() as usize + lexeme.len()) as u32,
+    //             },
+    //             // TODO: handle Cow::Owned case properly
+    //             Cow::Owned(_) => self.span(),
+    //         },
+    //     };
+    //     self.tokens.push(tok);
+    // }
 
     /// Returns the current lexeme
     fn get_lexeme(&self) -> &'a str {
@@ -274,11 +271,12 @@ impl<'a> Lexer<'a> {
             return self.create_error(ErrorKind::UnexpectedEof);
         }
 
-        self.create_contextified_token_with_lexeme(TokenType::String, lexeme);
+        let sym = self.interner.intern(lexeme);
+        self.create_contextified_token(TokenType::String(sym));
     }
 
     /// Reads a prefixed number literal (0x, 0b, 0o)
-    fn read_prefixed_literal<P>(&mut self, ty: TokenType, predicate: P)
+    fn read_prefixed_literal<P>(&mut self, ty_ctor: fn(Symbol) -> TokenType, predicate: P)
     where
         P: Fn(u8) -> bool,
     {
@@ -295,7 +293,8 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        self.create_contextified_token(ty);
+        let sym = self.interner.intern(self.get_lexeme());
+        self.create_contextified_token(ty_ctor(sym));
     }
 
     /// Reads a number literal
@@ -335,8 +334,8 @@ impl<'a> Lexer<'a> {
 
             self.advance();
         }
-
-        self.create_contextified_token(TokenType::NumberDec)
+        let sym = self.interner.intern(self.get_lexeme());
+        self.create_contextified_token(TokenType::NumberDec(sym))
     }
 
     fn read_template_literal_segment(&mut self) {
@@ -378,8 +377,8 @@ impl<'a> Lexer<'a> {
             false => self.start + 1..self.idx - 1,
         };
 
-        let lexeme = util::force_utf8_borrowed(self.subslice(range));
-        self.create_contextified_token_with_lexeme(TokenType::TemplateLiteral, Cow::Borrowed(lexeme));
+        let sym = self.interner.intern(util::force_utf8_borrowed(self.subslice(range)));
+        self.create_contextified_token(TokenType::TemplateLiteral(sym)); // TODO: check if the spans created by this call are right!!
     }
 
     /// Reads an identifier and returns it as a node
@@ -394,8 +393,8 @@ impl<'a> Lexer<'a> {
             self.advance();
         }
 
-        let lexeme = self.get_lexeme();
-        self.create_contextified_token(lexeme.into());
+        let sym = self.interner.intern(self.get_lexeme());
+        self.create_contextified_token(as_token(sym));
     }
 
     /// Reads a regex literal, assuming the current cursor is one byte ahead of the `/`
@@ -412,8 +411,8 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        let lexeme = self.get_lexeme();
-        self.create_contextified_token_with_lexeme(TokenType::RegexLiteral, Cow::Borrowed(lexeme));
+        let sym = self.interner.intern(self.get_lexeme());
+        self.create_contextified_token(TokenType::RegexLiteral(sym));
     }
 
     /// Iterates through the input string and yields the next node
@@ -758,7 +757,7 @@ impl<'a> Lexer<'a> {
     /// Drives this lexer to completion
     ///
     /// Calling this function will exhaust the lexer and return all nodes
-    pub fn scan_all(mut self) -> Result<Vec<Token<'a>>, Vec<Error<'a>>> {
+    pub fn scan_all(mut self) -> Result<Vec<Token>, Vec<Error>> {
         while !self.is_eof() {
             self.scan_next();
         }

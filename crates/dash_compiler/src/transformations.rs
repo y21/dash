@@ -1,5 +1,4 @@
-use std::borrow::Cow;
-
+use dash_middle::interner::sym;
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::expr::AssignmentExpr;
 use dash_middle::parser::expr::AssignmentTarget;
@@ -16,7 +15,7 @@ use dash_middle::parser::statement::Statement;
 /// Implicitly patches the last expression to be returned from the function
 ///
 /// Or inserts `return undefined;` if there is no last expression
-pub fn ast_patch_implicit_return(ast: &mut Vec<Statement<'_>>) {
+pub fn ast_patch_implicit_return(ast: &mut Vec<Statement>) {
     match ast.last_mut() {
         Some(Statement::Return(..)) => {}
         Some(Statement::Expression(..)) => {
@@ -32,12 +31,12 @@ pub fn ast_patch_implicit_return(ast: &mut Vec<Statement<'_>>) {
     }
 }
 
-pub fn ast_insert_implicit_return(ast: &mut Vec<Statement<'_>>) {
+pub fn ast_insert_implicit_return(ast: &mut Vec<Statement>) {
     ast.push(Statement::Return(ReturnStatement::default()));
 }
 
 /// For every field property, insert a `this.fieldName = fieldValue` expression in the constructor
-pub fn insert_initializer_in_constructor<'a>(class: &Class<'a>, statements: &mut Vec<Statement<'a>>) {
+pub fn insert_initializer_in_constructor(class: &Class, statements: &mut Vec<Statement>) {
     let mut prestatements = Vec::new();
     for member in &class.members {
         if let ClassMemberKind::Property(ClassProperty {
@@ -48,8 +47,8 @@ pub fn insert_initializer_in_constructor<'a>(class: &Class<'a>, statements: &mut
             prestatements.push(Statement::Expression(Expr::Assignment(AssignmentExpr {
                 left: AssignmentTarget::Expr(Box::new(Expr::PropertyAccess(PropertyAccessExpr {
                     computed: false,
-                    property: Box::new(Expr::string_literal(Cow::Borrowed(name))),
-                    target: Box::new(Expr::identifier(Cow::Borrowed("this"))),
+                    property: Box::new(Expr::identifier(*name)),
+                    target: Box::new(Expr::identifier(sym::THIS)),
                 }))),
                 operator: TokenType::Assignment,
                 right: Box::new(value.clone()),
@@ -88,13 +87,13 @@ pub fn insert_initializer_in_constructor<'a>(class: &Class<'a>, statements: &mut
 ///    x = function x() { return 56; };
 /// }
 /// ```
-pub fn hoist_declarations(ast: &mut Vec<Statement<'_>>) {
+pub fn hoist_declarations(ast: &mut Vec<Statement>) {
     let mut prepend_function_assigns = Vec::new();
 
-    fn hoist_function_declaration<'a>(
+    fn hoist_function_declaration(
         // variable_bindings: &mut Vec<VariableBinding<'a>>,
-        prepend_function_assigns: &mut Vec<Statement<'a>>,
-        stmt: &mut Statement<'a>,
+        prepend_function_assigns: &mut Vec<Statement>,
+        stmt: &mut Statement,
     ) {
         match stmt {
             Statement::Function(function_decl) => {
@@ -105,7 +104,7 @@ pub fn hoist_declarations(ast: &mut Vec<Statement<'_>>) {
                 };
 
                 prepend_function_assigns.push(Statement::Expression(Expr::assignment(
-                    Expr::identifier(Cow::Borrowed(name)),
+                    Expr::identifier(name),
                     Expr::function(function_stmt),
                     TokenType::Assignment,
                 )));

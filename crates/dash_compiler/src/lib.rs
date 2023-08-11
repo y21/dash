@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::rc::Rc;
@@ -11,6 +10,7 @@ use dash_middle::compiler::scope::ScopeLocal;
 use dash_middle::compiler::scope::{CompileValueType, Scope};
 use dash_middle::compiler::{constant::ConstantPool, external::External};
 use dash_middle::compiler::{CompileResult, FunctionCallMetadata, StaticImportKind};
+use dash_middle::interner::{sym, StringInterner, Symbol};
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::expr::Expr;
 use dash_middle::parser::expr::FunctionCall;
@@ -163,26 +163,28 @@ impl FunctionLocalState {
 }
 
 #[derive(Debug)]
-pub struct FunctionCompiler<'a> {
+pub struct FunctionCompiler<'interner> {
     function_stack: Vec<FunctionLocalState>,
-    tcx: TypeInferCtx<'a>,
+    tcx: TypeInferCtx,
+    interner: &'interner mut StringInterner,
     /// Optimization level
     #[allow(unused)]
     opt_level: OptLevel,
 }
 
-impl<'a> FunctionCompiler<'a> {
-    pub fn new(opt_level: OptLevel, tcx: TypeInferCtx<'a>) -> Self {
+impl<'interner> FunctionCompiler<'interner> {
+    pub fn new(opt_level: OptLevel, tcx: TypeInferCtx, interner: &'interner mut StringInterner) -> Self {
         Self {
             opt_level,
             tcx,
+            interner,
             function_stack: Vec::new(),
         }
     }
 
     pub fn compile_ast(
         mut self,
-        mut ast: Vec<Statement<'a>>,
+        mut ast: Vec<Statement>,
         implicit_return: bool,
     ) -> Result<CompileResult, CompileError> {
         let compile_span = span!(Level::TRACE, "compile ast");
@@ -210,7 +212,7 @@ impl<'a> FunctionCompiler<'a> {
             let opt_level = self.opt_level;
             if opt_level.enabled() {
                 debug!("begin const eval, opt level: {:?}", opt_level);
-                let mut cfx = ConstFunctionEvalCtx::new(&mut self.tcx, opt_level);
+                let mut cfx = ConstFunctionEvalCtx::new(&mut self.tcx, self.interner, opt_level);
 
                 for stmt in &mut ast {
                     cfx.visit_statement(stmt, FuncId::ROOT);
@@ -240,7 +242,7 @@ impl<'a> FunctionCompiler<'a> {
         })
     }
 
-    pub fn accept_multiple(&mut self, stmts: Vec<Statement<'a>>) -> Result<(), CompileError> {
+    pub fn accept_multiple(&mut self, stmts: Vec<Statement>) -> Result<(), CompileError> {
         for stmt in stmts {
             self.accept(stmt)?;
         }
@@ -255,12 +257,12 @@ impl<'a> FunctionCompiler<'a> {
         self.function_stack.last_mut().expect("Function must be present")
     }
 
-    fn current_scope(&self) -> &Scope<'a> {
+    fn current_scope(&self) -> &Scope {
         let id = self.current_function().id;
         self.tcx.scope(id)
     }
 
-    fn current_scope_mut(&mut self) -> &mut Scope<'a> {
+    fn current_scope_mut(&mut self) -> &mut Scope {
         let id = self.current_function().id;
         self.tcx.scope_mut(id)
     }
@@ -285,7 +287,7 @@ impl<'a> FunctionCompiler<'a> {
         }
     }
 
-    fn find_local_in_scope(&mut self, ident: &str, func_id: FuncId) -> Option<(u16, ScopeLocal<'a>, bool)> {
+    fn find_local_in_scope(&mut self, ident: Symbol, func_id: FuncId) -> Option<(u16, ScopeLocal, bool)> {
         if let Some((id, local)) = self.tcx.scope(func_id).find_local(ident) {
             Some((id, local.clone(), false))
         } else {
@@ -301,7 +303,7 @@ impl<'a> FunctionCompiler<'a> {
     /// Tries to find a local in the current or surrounding scopes
     ///
     /// If a local variable is found in a parent scope, it is marked as an extern local
-    pub fn find_local(&mut self, ident: &str) -> Option<(u16, ScopeLocal<'a>, bool)> {
+    pub fn find_local(&mut self, ident: Symbol) -> Option<(u16, ScopeLocal, bool)> {
         let func_id = self.current_function().id;
         self.find_local_in_scope(ident, func_id)
     }
@@ -309,9 +311,9 @@ impl<'a> FunctionCompiler<'a> {
     fn visit_for_each_kinded_loop(
         &mut self,
         kind: ForEachLoopKind,
-        binding: VariableBinding<'a>,
-        expr: Expr<'a>,
-        mut body: Box<Statement<'a>>,
+        binding: VariableBinding,
+        expr: Expr,
+        mut body: Box<Statement>,
     ) -> Result<(), CompileError> {
         // For-Of Loop Desugaring:
 
@@ -344,11 +346,11 @@ impl<'a> FunctionCompiler<'a> {
         let mut ib = InstructionBuilder::new(self);
         let for_of_iter_id =
             ib.current_scope_mut()
-                .add_local("for_of_iter", VariableDeclarationKind::Unnameable, None)?;
+                .add_local(sym::FOR_OF_ITER, VariableDeclarationKind::Unnameable, None)?;
 
         let for_of_gen_step_id =
             ib.current_scope_mut()
-                .add_local("for_of_gen_step", VariableDeclarationKind::Unnameable, None)?;
+                .add_local(sym::FOR_OF_GEN_STEP, VariableDeclarationKind::Unnameable, None)?;
 
         ib.accept_expr(expr)?;
         match kind {
@@ -375,7 +377,7 @@ impl<'a> FunctionCompiler<'a> {
                     Some(Expr::property_access(
                         false,
                         Expr::compiled(gen_step),
-                        Expr::identifier(Cow::Borrowed("value")),
+                        Expr::identifier(sym::VALUE),
                     )),
                 )]));
 
@@ -402,14 +404,14 @@ impl<'a> FunctionCompiler<'a> {
                             Expr::property_access(
                                 false,
                                 Expr::compiled(for_of_iter_binding_bc),
-                                Expr::identifier(Cow::Borrowed("next")),
+                                Expr::identifier(sym::NEXT),
                             ),
                             Vec::new(),
                             false,
                         ),
                         TokenType::Assignment,
                     ),
-                    Expr::identifier(Cow::Borrowed("done")),
+                    Expr::identifier(sym::DONE),
                 ),
             ),
             body,
@@ -424,8 +426,8 @@ enum ForEachLoopKind {
     ForIn,
 }
 
-impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
-    fn accept(&mut self, stmt: Statement<'a>) -> Result<(), CompileError> {
+impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner> {
+    fn accept(&mut self, stmt: Statement) -> Result<(), CompileError> {
         match stmt {
             Statement::Expression(e) => self.visit_expression_statement(e),
             Statement::Variable(v) => self.visit_variable_declaration(v),
@@ -451,12 +453,12 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         }
     }
 
-    fn accept_expr(&mut self, expr: Expr<'a>) -> Result<(), CompileError> {
+    fn accept_expr(&mut self, expr: Expr) -> Result<(), CompileError> {
         match expr {
             Expr::Binary(e) => self.visit_binary_expression(e),
             Expr::Assignment(e) => self.visit_assignment_expression(e),
             Expr::Grouping(e) => self.visit_grouping_expression(e),
-            Expr::Literal(LiteralExpr::Identifier(i)) => self.visit_identifier_expression(&i),
+            Expr::Literal(LiteralExpr::Identifier(i)) => self.visit_identifier_expression(i),
             Expr::Literal(l) => self.visit_literal_expression(l),
             Expr::Unary(e) => self.visit_unary_expression(e),
             Expr::Call(e) => self.visit_function_call(e),
@@ -478,7 +480,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_binary_expression(
         &mut self,
-        BinaryExpr { left, right, operator }: BinaryExpr<'a>,
+        BinaryExpr { left, right, operator }: BinaryExpr,
     ) -> Result<(), CompileError> {
         let func_id = self.current_function().id;
         let left_type = self.tcx.visit(&left, func_id);
@@ -513,7 +515,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             ($gen:expr, $spec: expr, $( $t:ty => $spec_const:expr ),*) => {{
                 match (left_type, right_type) {
                     (Some(CompileValueType::Number), Some(CompileValueType::Number)) => {
-                        fn try_const_spec<'a>(ib: &mut InstructionBuilder<'_, 'a>, right: &Expr<'a>) -> bool {
+                        fn try_const_spec(ib: &mut InstructionBuilder<'_, '_>, right: &Expr) -> bool {
                             if let Expr::Literal(LiteralExpr::Number(n)) = right {
                                 let n = *n;
                                 // Using match to be able to expand type->spec metavars
@@ -619,13 +621,13 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn visit_expression_statement(&mut self, expr: Expr<'a>) -> Result<(), CompileError> {
+    fn visit_expression_statement(&mut self, expr: Expr) -> Result<(), CompileError> {
         self.accept_expr(expr)?;
         InstructionBuilder::new(self).build_pop();
         Ok(())
     }
 
-    fn visit_grouping_expression(&mut self, GroupingExpr(exprs): GroupingExpr<'a>) -> Result<(), CompileError> {
+    fn visit_grouping_expression(&mut self, GroupingExpr(exprs): GroupingExpr) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
 
         for expr in exprs {
@@ -638,30 +640,31 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn visit_literal_expression(&mut self, expr: LiteralExpr<'a>) -> Result<(), CompileError> {
-        InstructionBuilder::new(self).build_constant(Constant::from_literal(&expr))?;
+    fn visit_literal_expression(&mut self, expr: LiteralExpr) -> Result<(), CompileError> {
+        let constant = Constant::from_literal(self.interner, &expr);
+        InstructionBuilder::new(self).build_constant(constant)?;
         Ok(())
     }
 
-    fn visit_identifier_expression(&mut self, ident: &str) -> Result<(), CompileError> {
+    fn visit_identifier_expression(&mut self, ident: Symbol) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
 
         match ident {
-            "this" => ib.build_this(),
-            "super" => ib.build_super(),
-            "globalThis" => ib.build_global(),
-            "Infinity" => ib.build_infinity(),
-            "NaN" => ib.build_nan(),
+            sym::THIS => ib.build_this(),
+            sym::SUPER => ib.build_super(),
+            sym::GLOBAL_THIS => ib.build_global(),
+            sym::INFINITY => ib.build_infinity(),
+            sym::NAN => ib.build_nan(),
             ident => match ib.find_local(ident) {
                 Some((index, _, is_extern)) => ib.build_local_load(index, is_extern),
-                _ => ib.build_global_load(ident)?,
+                _ => ib.build_global_load(ib.interner.resolve(ident).clone())?,
             },
         };
 
         Ok(())
     }
 
-    fn visit_unary_expression(&mut self, UnaryExpr { operator, expr }: UnaryExpr<'a>) -> Result<(), CompileError> {
+    fn visit_unary_expression(&mut self, UnaryExpr { operator, expr }: UnaryExpr) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
 
         // Special case delete operator, as it works different from other unary operators
@@ -672,10 +675,10 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                     property,
                     target,
                 }) => match (*property, computed) {
-                    (Expr::Literal(lit), false) => {
+                    (Expr::Literal(LiteralExpr::Identifier(ident)), false) => {
                         ib.accept_expr(*target)?;
-                        let ident = lit.to_identifier();
-                        let id = ib.current_function_mut().cp.add(Constant::Identifier(ident.into()))?;
+                        let ident = ib.interner.resolve(ident).clone();
+                        let id = ib.current_function_mut().cp.add(Constant::Identifier(ident))?;
                         ib.build_static_delete(id);
                     }
                     (expr, _) => {
@@ -684,10 +687,10 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                         ib.build_dynamic_delete();
                     }
                 },
-                Expr::Literal(lit) => {
+                Expr::Literal(LiteralExpr::Identifier(ident)) => {
                     ib.build_global();
-                    let ident = lit.to_identifier();
-                    let id = ib.current_function_mut().cp.add(Constant::Identifier(ident.into()))?;
+                    let ident = ib.interner.resolve(ident).clone();
+                    let id = ib.current_function_mut().cp.add(Constant::Identifier(ident))?;
                     ib.build_static_delete(id);
                 }
                 _ => {
@@ -731,7 +734,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_variable_declaration(
         &mut self,
-        VariableDeclarations(declarations): VariableDeclarations<'a>,
+        VariableDeclarations(declarations): VariableDeclarations,
     ) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
 
@@ -766,9 +769,10 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                     for (name, alias) in fields {
                         let name = alias.unwrap_or(name);
                         let id = ib.current_scope_mut().add_local(name, binding.kind, None)?;
+                        let res_name = ib.interner.resolve(name).clone();
 
                         let var_id = ib.current_function_mut().cp.add(Constant::Number(id as f64))?;
-                        let ident_id = ib.current_function_mut().cp.add(Constant::Identifier(name.into()))?;
+                        let ident_id = ib.current_function_mut().cp.add(Constant::Identifier(res_name))?;
                         ib.writew(var_id);
                         ib.writew(ident_id);
                     }
@@ -809,7 +813,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             then,
             branches,
             el,
-        }: IfStatement<'a>,
+        }: IfStatement,
     ) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
 
@@ -858,7 +862,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn visit_block_statement(&mut self, BlockStatement(stmt): BlockStatement<'a>) -> Result<(), CompileError> {
+    fn visit_block_statement(&mut self, BlockStatement(stmt): BlockStatement) -> Result<(), CompileError> {
         self.current_scope_mut().enter();
         // Note: No `?` here because we need to always exit the scope
         let re = self.accept_multiple(stmt);
@@ -866,7 +870,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         re
     }
 
-    fn visit_function_declaration(&mut self, fun: FunctionDeclaration<'a>) -> Result<(), CompileError> {
+    fn visit_function_declaration(&mut self, fun: FunctionDeclaration) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
         let var_id = match fun.name {
             Some(name) => Some(
@@ -884,7 +888,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn visit_while_loop(&mut self, WhileLoop { condition, body }: WhileLoop<'a>) -> Result<(), CompileError> {
+    fn visit_while_loop(&mut self, WhileLoop { condition, body }: WhileLoop) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
 
         let loop_id = ib.current_function_mut().prepare_loop();
@@ -904,7 +908,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn visit_do_while_loop(&mut self, DoWhileLoop { body, condition }: DoWhileLoop<'a>) -> Result<(), CompileError> {
+    fn visit_do_while_loop(&mut self, DoWhileLoop { body, condition }: DoWhileLoop) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
 
         let loop_id = ib.current_function_mut().prepare_loop();
@@ -925,15 +929,14 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_assignment_expression(
         &mut self,
-        AssignmentExpr { left, right, operator }: AssignmentExpr<'a>,
+        AssignmentExpr { left, right, operator }: AssignmentExpr,
     ) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
 
         match left {
             AssignmentTarget::Expr(left) => match *left {
-                Expr::Literal(lit) => {
-                    let ident = lit.to_identifier();
-                    let local = ib.find_local(&ident);
+                Expr::Literal(LiteralExpr::Identifier(ident)) => {
+                    let local = ib.find_local(ident);
 
                     if let Some((id, local, is_extern)) = local {
                         if matches!(local.binding().kind, VariableDeclarationKind::Const) {
@@ -967,7 +970,8 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                         macro_rules! assign {
                             ($kind:expr) => {{
                                 ib.accept_expr(*right)?;
-                                ib.build_global_store($kind, &ident)?;
+                                let ident = ib.interner.resolve(ident).clone();
+                                ib.build_global_store($kind, ident)?;
                             }};
                         }
 
@@ -993,10 +997,10 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                     ib.accept_expr(*prop.target)?;
 
                     macro_rules! staticassign {
-                        ($lit:expr, $kind:expr) => {{
+                        ($ident:expr, $kind:expr) => {{
                             ib.accept_expr(*right)?;
-                            let ident = $lit.to_identifier();
-                            ib.build_static_prop_assign($kind, &ident)?;
+                            let ident = ib.interner.resolve($ident).clone();
+                            ib.build_static_prop_assign($kind, ident)?;
                         }};
                     }
                     macro_rules! dynamicassign {
@@ -1008,44 +1012,48 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                     }
 
                     match (*prop.property, prop.computed, operator) {
-                        (Expr::Literal(lit), false, TokenType::Assignment) => {
-                            staticassign!(lit, AssignKind::Assignment)
+                        (Expr::Literal(LiteralExpr::Identifier(ident)), false, TokenType::Assignment) => {
+                            staticassign!(ident, AssignKind::Assignment)
                         }
-                        (Expr::Literal(lit), false, TokenType::AdditionAssignment) => {
-                            staticassign!(lit, AssignKind::AddAssignment)
+                        (Expr::Literal(LiteralExpr::Identifier(ident)), false, TokenType::AdditionAssignment) => {
+                            staticassign!(ident, AssignKind::AddAssignment)
                         }
-                        (Expr::Literal(lit), false, TokenType::SubtractionAssignment) => {
-                            staticassign!(lit, AssignKind::SubAssignment)
+                        (Expr::Literal(LiteralExpr::Identifier(ident)), false, TokenType::SubtractionAssignment) => {
+                            staticassign!(ident, AssignKind::SubAssignment)
                         }
-                        (Expr::Literal(lit), false, TokenType::MultiplicationAssignment) => {
-                            staticassign!(lit, AssignKind::MulAssignment)
+                        (Expr::Literal(LiteralExpr::Identifier(ident)), false, TokenType::MultiplicationAssignment) => {
+                            staticassign!(ident, AssignKind::MulAssignment)
                         }
-                        (Expr::Literal(lit), false, TokenType::DivisionAssignment) => {
-                            staticassign!(lit, AssignKind::DivAssignment)
+                        (Expr::Literal(LiteralExpr::Identifier(ident)), false, TokenType::DivisionAssignment) => {
+                            staticassign!(ident, AssignKind::DivAssignment)
                         }
-                        (Expr::Literal(lit), false, TokenType::RemainderAssignment) => {
-                            staticassign!(lit, AssignKind::RemAssignment)
+                        (Expr::Literal(LiteralExpr::Identifier(ident)), false, TokenType::RemainderAssignment) => {
+                            staticassign!(ident, AssignKind::RemAssignment)
                         }
-                        (Expr::Literal(lit), false, TokenType::ExponentiationAssignment) => {
-                            staticassign!(lit, AssignKind::PowAssignment)
+                        (Expr::Literal(LiteralExpr::Identifier(ident)), false, TokenType::ExponentiationAssignment) => {
+                            staticassign!(ident, AssignKind::PowAssignment)
                         }
-                        (Expr::Literal(lit), false, TokenType::LeftShiftAssignment) => {
-                            staticassign!(lit, AssignKind::ShlAssignment)
+                        (Expr::Literal(LiteralExpr::Identifier(ident)), false, TokenType::LeftShiftAssignment) => {
+                            staticassign!(ident, AssignKind::ShlAssignment)
                         }
-                        (Expr::Literal(lit), false, TokenType::RightShiftAssignment) => {
-                            staticassign!(lit, AssignKind::ShrAssignment)
+                        (Expr::Literal(LiteralExpr::Identifier(ident)), false, TokenType::RightShiftAssignment) => {
+                            staticassign!(ident, AssignKind::ShrAssignment)
                         }
-                        (Expr::Literal(lit), false, TokenType::UnsignedRightShiftAssignment) => {
-                            staticassign!(lit, AssignKind::UshrAssignment)
+                        (
+                            Expr::Literal(LiteralExpr::Identifier(ident)),
+                            false,
+                            TokenType::UnsignedRightShiftAssignment,
+                        ) => {
+                            staticassign!(ident, AssignKind::UshrAssignment)
                         }
-                        (Expr::Literal(lit), false, TokenType::BitwiseAndAssignment) => {
-                            staticassign!(lit, AssignKind::BitAndAssignment)
+                        (Expr::Literal(LiteralExpr::Identifier(ident)), false, TokenType::BitwiseAndAssignment) => {
+                            staticassign!(ident, AssignKind::BitAndAssignment)
                         }
-                        (Expr::Literal(lit), false, TokenType::BitwiseOrAssignment) => {
-                            staticassign!(lit, AssignKind::BitOrAssignment)
+                        (Expr::Literal(LiteralExpr::Identifier(ident)), false, TokenType::BitwiseOrAssignment) => {
+                            staticassign!(ident, AssignKind::BitOrAssignment)
                         }
-                        (Expr::Literal(lit), false, TokenType::BitwiseXorAssignment) => {
-                            staticassign!(lit, AssignKind::BitXorAssignment)
+                        (Expr::Literal(LiteralExpr::Identifier(ident)), false, TokenType::BitwiseXorAssignment) => {
+                            staticassign!(ident, AssignKind::BitXorAssignment)
                         }
                         (prop, true, TokenType::Assignment) => dynamicassign!(prop, AssignKind::Assignment),
                         (prop, true, TokenType::AdditionAssignment) => {
@@ -1084,7 +1092,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                         (prop, true, TokenType::BitwiseXorAssignment) => {
                             dynamicassign!(prop, AssignKind::BitXorAssignment)
                         }
-                        _ => unimplementedc!("Assignment to computed property"),
+                        other => unimplementedc!("Assignment to computed property {other:?}"),
                     }
                 }
                 _ => unimplementedc!("Assignment to non-identifier"),
@@ -1104,7 +1112,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             constructor_call,
             target,
             arguments,
-        }: FunctionCall<'a>,
+        }: FunctionCall,
     ) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
         // TODO: this also needs to be specialized for assignment expressions with property access as target
@@ -1120,10 +1128,10 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         ///
         /// Math.max(1, 2); // *should* throw a TypeError, but will not without a guard
         /// ```
-        fn try_spec_function_call<'a>(
-            ib: &mut InstructionBuilder<'_, 'a>,
-            target: &Expr<'a>,
-            arguments: &[CallArgumentKind<'a>],
+        fn try_spec_function_call(
+            ib: &mut InstructionBuilder<'_, '_>,
+            target: &Expr,
+            arguments: &[CallArgumentKind],
         ) -> Result<bool, CompileError> {
             if let Expr::PropertyAccess(PropertyAccessExpr { target, property, .. }) = target {
                 let Some(target) = target.as_identifier() else {
@@ -1155,33 +1163,33 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 }
 
                 match (target, property) {
-                    ("Math", "exp") => emit_spec!(InstructionBuilder::build_exp),
-                    ("Math", "log2") => emit_spec!(InstructionBuilder::build_log2),
-                    ("Math", "expm1") => emit_spec!(InstructionBuilder::build_expm1),
-                    ("Math", "cbrt") => emit_spec!(InstructionBuilder::build_cbrt),
-                    ("Math", "clz32") => emit_spec!(InstructionBuilder::build_clz32),
-                    ("Math", "atanh") => emit_spec!(InstructionBuilder::build_atanh),
-                    ("Math", "atan2") => emit_spec!(InstructionBuilder::build_atanh2),
-                    ("Math", "round") => emit_spec!(InstructionBuilder::build_round),
-                    ("Math", "acosh") => emit_spec!(InstructionBuilder::build_acosh),
-                    ("Math", "abs") => emit_spec!(InstructionBuilder::build_abs),
-                    ("Math", "sinh") => emit_spec!(InstructionBuilder::build_sinh),
-                    ("Math", "sin") => emit_spec!(InstructionBuilder::build_sin),
-                    ("Math", "ceil") => emit_spec!(InstructionBuilder::build_ceil),
-                    ("Math", "tan") => emit_spec!(InstructionBuilder::build_tan),
-                    ("Math", "trunc") => emit_spec!(InstructionBuilder::build_trunc),
-                    ("Math", "asinh") => emit_spec!(InstructionBuilder::build_asinh),
-                    ("Math", "log10") => emit_spec!(InstructionBuilder::build_log10),
-                    ("Math", "asin") => emit_spec!(InstructionBuilder::build_asin),
-                    ("Math", "random") => emit_spec!(InstructionBuilder::build_random),
-                    ("Math", "log1p") => emit_spec!(InstructionBuilder::build_log1p),
-                    ("Math", "sqrt") => emit_spec!(InstructionBuilder::build_sqrt),
-                    ("Math", "atan") => emit_spec!(InstructionBuilder::build_atan),
-                    ("Math", "log") => emit_spec!(InstructionBuilder::build_log),
-                    ("Math", "floor") => emit_spec!(InstructionBuilder::build_floor),
-                    ("Math", "cosh") => emit_spec!(InstructionBuilder::build_cosh),
-                    ("Math", "acos") => emit_spec!(InstructionBuilder::build_acos),
-                    ("Math", "cos") => emit_spec!(InstructionBuilder::build_cos),
+                    (sym::MATH, sym::EXP) => emit_spec!(InstructionBuilder::build_exp),
+                    (sym::MATH, sym::LOG2) => emit_spec!(InstructionBuilder::build_log2),
+                    (sym::MATH, sym::EXPM1) => emit_spec!(InstructionBuilder::build_expm1),
+                    (sym::MATH, sym::CBRT) => emit_spec!(InstructionBuilder::build_cbrt),
+                    (sym::MATH, sym::CLZ32) => emit_spec!(InstructionBuilder::build_clz32),
+                    (sym::MATH, sym::ATANH) => emit_spec!(InstructionBuilder::build_atanh),
+                    (sym::MATH, sym::ATAN2) => emit_spec!(InstructionBuilder::build_atanh2),
+                    (sym::MATH, sym::ROUND) => emit_spec!(InstructionBuilder::build_round),
+                    (sym::MATH, sym::ACOSH) => emit_spec!(InstructionBuilder::build_acosh),
+                    (sym::MATH, sym::ABS) => emit_spec!(InstructionBuilder::build_abs),
+                    (sym::MATH, sym::SINH) => emit_spec!(InstructionBuilder::build_sinh),
+                    (sym::MATH, sym::SIN) => emit_spec!(InstructionBuilder::build_sin),
+                    (sym::MATH, sym::CEIL) => emit_spec!(InstructionBuilder::build_ceil),
+                    (sym::MATH, sym::TAN) => emit_spec!(InstructionBuilder::build_tan),
+                    (sym::MATH, sym::TRUNC) => emit_spec!(InstructionBuilder::build_trunc),
+                    (sym::MATH, sym::ASINH) => emit_spec!(InstructionBuilder::build_asinh),
+                    (sym::MATH, sym::LOG10) => emit_spec!(InstructionBuilder::build_log10),
+                    (sym::MATH, sym::ASIN) => emit_spec!(InstructionBuilder::build_asin),
+                    (sym::MATH, sym::RANDOM) => emit_spec!(InstructionBuilder::build_random),
+                    (sym::MATH, sym::LOG1P) => emit_spec!(InstructionBuilder::build_log1p),
+                    (sym::MATH, sym::SQRT) => emit_spec!(InstructionBuilder::build_sqrt),
+                    (sym::MATH, sym::ATAN) => emit_spec!(InstructionBuilder::build_atan),
+                    (sym::MATH, sym::LOG) => emit_spec!(InstructionBuilder::build_log),
+                    (sym::MATH, sym::FLOOR) => emit_spec!(InstructionBuilder::build_floor),
+                    (sym::MATH, sym::COSH) => emit_spec!(InstructionBuilder::build_cosh),
+                    (sym::MATH, sym::ACOS) => emit_spec!(InstructionBuilder::build_acos),
+                    (sym::MATH, sym::COS) => emit_spec!(InstructionBuilder::build_cos),
                     _ => {}
                 }
             }
@@ -1227,7 +1235,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn visit_return_statement(&mut self, ReturnStatement(stmt): ReturnStatement<'a>) -> Result<(), CompileError> {
+    fn visit_return_statement(&mut self, ReturnStatement(stmt): ReturnStatement) -> Result<(), CompileError> {
         let tc_depth = self.current_function().try_catch_depth;
         self.accept_expr(stmt)?;
         InstructionBuilder::new(self).build_ret(tc_depth);
@@ -1236,7 +1244,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_conditional_expr(
         &mut self,
-        ConditionalExpr { condition, then, el }: ConditionalExpr<'a>,
+        ConditionalExpr { condition, then, el }: ConditionalExpr,
     ) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
 
@@ -1259,7 +1267,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             computed,
             target,
             property,
-        }: PropertyAccessExpr<'a>,
+        }: PropertyAccessExpr,
         preserve_this: bool,
     ) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
@@ -1267,9 +1275,9 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         ib.accept_expr(*target)?;
 
         match (*property, computed) {
-            (Expr::Literal(lit), false) => {
-                let ident = lit.to_identifier();
-                ib.build_static_prop_access(&ident, preserve_this)?;
+            (Expr::Literal(LiteralExpr::Identifier(ident)), false) => {
+                let ident = ib.interner.resolve(ident).clone();
+                ib.build_static_prop_access(ident, preserve_this)?;
             }
             (e, _) => {
                 ib.accept_expr(e)?;
@@ -1280,7 +1288,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn visit_sequence_expr(&mut self, (expr1, expr2): Seq<'a>) -> Result<(), CompileError> {
+    fn visit_sequence_expr(&mut self, (expr1, expr2): Seq) -> Result<(), CompileError> {
         self.accept_expr(*expr1)?;
         InstructionBuilder::new(self).build_pop();
         self.accept_expr(*expr2)?;
@@ -1288,14 +1296,12 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn visit_postfix_expr(&mut self, (tt, expr): Postfix<'a>) -> Result<(), CompileError> {
+    fn visit_postfix_expr(&mut self, (tt, expr): Postfix) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
 
         match *expr {
-            Expr::Literal(lit) => {
-                let ident = lit.to_identifier();
-
-                if let Some((id, loc, is_extern)) = ib.find_local(&ident) {
+            Expr::Literal(LiteralExpr::Identifier(ident)) => {
+                if let Some((id, loc, is_extern)) = ib.find_local(ident) {
                     let ty = loc.inferred_type().borrow();
 
                     // Specialize guaranteed local number increment
@@ -1314,9 +1320,11 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                         _ => unreachable!("Token never emitted"),
                     }
                 } else {
+                    let ident = ib.interner.resolve(ident).clone();
+
                     match tt {
-                        TokenType::Increment => ib.build_global_store(AssignKind::PostfixIncrement, &ident)?,
-                        TokenType::Decrement => ib.build_global_store(AssignKind::PostfixDecrement, &ident)?,
+                        TokenType::Increment => ib.build_global_store(AssignKind::PostfixIncrement, ident)?,
+                        TokenType::Decrement => ib.build_global_store(AssignKind::PostfixDecrement, ident)?,
                         _ => unreachable!("Token never emitted"),
                     }
                 }
@@ -1325,15 +1333,11 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 ib.accept_expr(*prop.target)?;
 
                 match (*prop.property, prop.computed) {
-                    (Expr::Literal(lit), false) => {
-                        let ident = lit.to_identifier();
+                    (Expr::Literal(LiteralExpr::Identifier(ident)), false) => {
+                        let ident = ib.interner.resolve(ident).clone();
                         match tt {
-                            TokenType::Increment => {
-                                ib.build_static_prop_assign(AssignKind::PostfixIncrement, &ident)?
-                            }
-                            TokenType::Decrement => {
-                                ib.build_static_prop_assign(AssignKind::PostfixDecrement, &ident)?
-                            }
+                            TokenType::Increment => ib.build_static_prop_assign(AssignKind::PostfixIncrement, ident)?,
+                            TokenType::Decrement => ib.build_static_prop_assign(AssignKind::PostfixDecrement, ident)?,
                             _ => unreachable!("Token never emitted"),
                         }
                     }
@@ -1354,14 +1358,12 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn visit_prefix_expr(&mut self, (tt, expr): Postfix<'a>) -> Result<(), CompileError> {
+    fn visit_prefix_expr(&mut self, (tt, expr): Postfix) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
 
         match *expr {
-            Expr::Literal(lit) => {
-                let ident = lit.to_identifier();
-
-                if let Some((id, loc, is_extern)) = ib.find_local(&ident) {
+            Expr::Literal(LiteralExpr::Identifier(ident)) => {
+                if let Some((id, loc, is_extern)) = ib.find_local(ident) {
                     let ty = loc.inferred_type().borrow();
 
                     // Specialize guaranteed local number increment
@@ -1380,9 +1382,11 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                         _ => unreachable!("Token never emitted"),
                     }
                 } else {
+                    let ident = ib.interner.resolve(ident).clone();
+
                     match tt {
-                        TokenType::Increment => ib.build_global_store(AssignKind::PrefixIncrement, &ident)?,
-                        TokenType::Decrement => ib.build_global_store(AssignKind::PrefixDecrement, &ident)?,
+                        TokenType::Increment => ib.build_global_store(AssignKind::PrefixIncrement, ident)?,
+                        TokenType::Decrement => ib.build_global_store(AssignKind::PrefixDecrement, ident)?,
                         _ => unreachable!("Token never emitted"),
                     }
                 }
@@ -1391,11 +1395,11 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 ib.accept_expr(*prop.target)?;
 
                 match (*prop.property, prop.computed) {
-                    (Expr::Literal(lit), false) => {
-                        let ident = lit.to_identifier();
+                    (Expr::Literal(LiteralExpr::Identifier(ident)), false) => {
+                        let ident = ib.interner.resolve(ident).clone();
                         match tt {
-                            TokenType::Increment => ib.build_static_prop_assign(AssignKind::PrefixIncrement, &ident)?,
-                            TokenType::Decrement => ib.build_static_prop_assign(AssignKind::PrefixDecrement, &ident)?,
+                            TokenType::Increment => ib.build_static_prop_assign(AssignKind::PrefixIncrement, ident)?,
+                            TokenType::Decrement => ib.build_static_prop_assign(AssignKind::PrefixDecrement, ident)?,
                             _ => unreachable!("Token never emitted"),
                         }
                     }
@@ -1426,7 +1430,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             ty,
             r#async,
             ty_segment: _,
-        }: FunctionDeclaration<'a>,
+        }: FunctionDeclaration,
     ) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
         ib.function_stack.push(FunctionLocalState::new(ty, id, r#async));
@@ -1434,7 +1438,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         let mut rest_local = None;
 
         for (param, default, _ty) in &arguments {
-            let name = match param {
+            let name = match *param {
                 Parameter::Identifier(ident) => ident,
                 Parameter::Spread(ident) => ident,
             };
@@ -1479,7 +1483,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             buffer: Buffer(Cell::new(cmp.buf.into())),
             constants: cmp.cp.into_vec().into(),
             locals,
-            name: name.map(ToOwned::to_owned),
+            name: name.map(|sym| ib.interner.resolve(sym).clone()),
             ty,
             params: match arguments.last() {
                 Some((Parameter::Spread(..), ..)) => arguments.len() - 1,
@@ -1495,7 +1499,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn visit_array_literal(&mut self, ArrayLiteral(exprs): ArrayLiteral<'a>) -> Result<(), CompileError> {
+    fn visit_array_literal(&mut self, ArrayLiteral(exprs): ArrayLiteral) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
 
         let len = exprs
@@ -1524,7 +1528,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn visit_object_literal(&mut self, ObjectLiteral(exprs): ObjectLiteral<'a>) -> Result<(), CompileError> {
+    fn visit_object_literal(&mut self, ObjectLiteral(exprs): ObjectLiteral) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
 
         let mut members = Vec::with_capacity(exprs.len());
@@ -1544,7 +1548,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn visit_try_catch(&mut self, TryCatch { try_, catch, .. }: TryCatch<'a>) -> Result<(), CompileError> {
+    fn visit_try_catch(&mut self, TryCatch { try_, catch, .. }: TryCatch) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
 
         ib.build_try_block();
@@ -1585,7 +1589,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn visit_throw(&mut self, expr: Expr<'a>) -> Result<(), CompileError> {
+    fn visit_throw(&mut self, expr: Expr) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
         ib.accept_expr(expr)?;
         ib.build_throw();
@@ -1599,7 +1603,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             condition,
             finalizer,
             body,
-        }: ForLoop<'a>,
+        }: ForLoop,
     ) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
         ib.current_scope_mut().enter();
@@ -1638,15 +1642,15 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn visit_for_of_loop(&mut self, ForOfLoop { binding, expr, body }: ForOfLoop<'a>) -> Result<(), CompileError> {
+    fn visit_for_of_loop(&mut self, ForOfLoop { binding, expr, body }: ForOfLoop) -> Result<(), CompileError> {
         self.visit_for_each_kinded_loop(ForEachLoopKind::ForOf, binding, expr, body)
     }
 
-    fn visit_for_in_loop(&mut self, ForInLoop { binding, expr, body }: ForInLoop<'a>) -> Result<(), CompileError> {
+    fn visit_for_in_loop(&mut self, ForInLoop { binding, expr, body }: ForInLoop) -> Result<(), CompileError> {
         self.visit_for_each_kinded_loop(ForEachLoopKind::ForIn, binding, expr, body)
     }
 
-    fn visit_import_statement(&mut self, import: ImportKind<'a>) -> Result<(), CompileError> {
+    fn visit_import_statement(&mut self, import: ImportKind) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
 
         match import {
@@ -1654,19 +1658,18 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 ib.accept_expr(ex)?;
                 ib.build_dynamic_import();
             }
-            ref kind @ (ImportKind::DefaultAs(ref spec, ref path) | ImportKind::AllAs(ref spec, ref path)) => {
+            ref kind @ (ImportKind::DefaultAs(ref spec, path) | ImportKind::AllAs(ref spec, path)) => {
                 let local_id = ib.current_scope_mut().add_local(
                     match spec {
-                        SpecifierKind::Ident(id) => id,
+                        SpecifierKind::Ident(id) => *id,
                     },
                     VariableDeclarationKind::Var,
                     None,
                 )?;
 
-                let path_id = ib
-                    .current_function_mut()
-                    .cp
-                    .add(Constant::String(path.as_ref().into()))?;
+                let path = ib.interner.resolve(path).clone();
+
+                let path_id = ib.current_function_mut().cp.add(Constant::String(path))?;
 
                 ib.build_static_import(
                     match kind {
@@ -1683,7 +1686,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn visit_export_statement(&mut self, export: ExportKind<'a>) -> Result<(), CompileError> {
+    fn visit_export_statement(&mut self, export: ExportKind) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
 
         match export {
@@ -1695,7 +1698,9 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 let mut it = Vec::with_capacity(names.len());
 
                 for name in names.iter().copied() {
-                    let ident_id = ib.current_function_mut().cp.add(Constant::Identifier(name.into()))?;
+                    let res_name = ib.interner.resolve(name).clone();
+
+                    let ident_id = ib.current_function_mut().cp.add(Constant::Identifier(res_name))?;
 
                     match ib.find_local(name) {
                         Some((loc_id, _, is_extern)) => {
@@ -1713,17 +1718,17 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 ib.build_named_export(&it)?;
             }
             ExportKind::NamedVar(VariableDeclarations(vars)) => {
-                let mut it: Vec<&'a str> = Vec::with_capacity(vars.len());
+                let mut it = Vec::with_capacity(vars.len());
 
                 for var in &vars {
-                    match &var.binding.name {
+                    match var.binding.name {
                         VariableDeclarationName::Identifier(ident) => it.push(ident),
-                        VariableDeclarationName::ArrayDestructuring { fields, rest } => {
-                            it.extend(fields.iter());
+                        VariableDeclarationName::ArrayDestructuring { ref fields, rest } => {
+                            it.extend(fields.iter().copied());
                             it.extend(rest);
                         }
-                        VariableDeclarationName::ObjectDestructuring { fields, rest } => {
-                            it.extend(fields.iter().map(|(name, ident)| ident.unwrap_or(name)));
+                        VariableDeclarationName::ObjectDestructuring { ref fields, rest } => {
+                            it.extend(fields.iter().map(|&(name, ident)| ident.unwrap_or(name)));
                             it.extend(rest);
                         }
                     }
@@ -1786,7 +1791,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn visit_class_declaration(&mut self, class: Class<'a>) -> Result<(), CompileError> {
+    fn visit_class_declaration(&mut self, class: Class) -> Result<(), CompileError> {
         if class.extends.is_some() {
             unimplementedc!("Extending class");
         }
@@ -1795,7 +1800,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
         let constructor = class.members.iter().find_map(|member| {
             if let ClassMemberKind::Method(method) = &member.kind {
-                if method.name == Some("constructor") {
+                if method.name == Some(sym::CONSTRUCTOR) {
                     return Some(method.clone());
                 }
             }
@@ -1807,9 +1812,10 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             Some(name) => ib
                 .current_scope_mut()
                 .add_local(name, VariableDeclarationKind::Var, None)?,
-            None => ib
-                .current_scope_mut()
-                .add_local("DesugaredClass", VariableDeclarationKind::Unnameable, None)?,
+            None => {
+                ib.current_scope_mut()
+                    .add_local(sym::DESUGARED_CLASS, VariableDeclarationKind::Unnameable, None)?
+            }
         };
 
         let (parameters, mut statements, id) = match constructor {
@@ -1847,15 +1853,15 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                     left: AssignmentTarget::Expr(match member.static_ {
                         true => Box::new(Expr::PropertyAccess(PropertyAccessExpr {
                             computed: false,
-                            property: Box::new(Expr::string_literal(Cow::Borrowed(name))),
+                            property: Box::new(Expr::identifier(name)),
                             target: Box::new(load_class_binding.clone()),
                         })),
                         false => Box::new(Expr::PropertyAccess(PropertyAccessExpr {
                             computed: false,
-                            property: Box::new(Expr::string_literal(Cow::Borrowed(name))),
+                            property: Box::new(Expr::identifier(name)),
                             target: Box::new(Expr::PropertyAccess(PropertyAccessExpr {
                                 computed: false,
-                                property: Box::new(Expr::string_literal(Cow::Borrowed("prototype"))),
+                                property: Box::new(Expr::identifier(sym::PROTOTYPE)),
                                 target: Box::new(load_class_binding.clone()),
                             })),
                         })),
@@ -1871,7 +1877,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_switch_statement(
         &mut self,
-        SwitchStatement { expr, cases, default }: SwitchStatement<'a>,
+        SwitchStatement { expr, cases, default }: SwitchStatement,
     ) -> Result<(), CompileError> {
         let mut ib = InstructionBuilder::new(self);
 

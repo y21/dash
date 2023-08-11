@@ -47,6 +47,6 @@ pub fn add_jump(jc: &mut JumpContainer, label: Label, buf: &mut [u8]) {
         let pt = &mut buf[len as usize - 2..];
         pt.copy_from_slice(&i16::to_ne_bytes(offset));
     } else {
-        jc.jumps.entry(label).or_insert_with(Vec::new).push(buf.len() - 2);
+        jc.jumps.entry(label).or_default().push(buf.len() - 2);
     }
 }

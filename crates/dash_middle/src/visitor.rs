@@ -1,3 +1,4 @@
+use crate::interner::Symbol;
 use crate::parser::expr::ArrayLiteral;
 use crate::parser::expr::AssignmentExpr;
 use crate::parser::expr::BinaryExpr;
@@ -30,110 +31,110 @@ use crate::parser::statement::TryCatch;
 use crate::parser::statement::VariableDeclarations;
 use crate::parser::statement::WhileLoop;
 
-pub trait VisitorExt<'a>: Visitor<'a, ()> {
-    fn accept(&mut self, e: Statement<'a>);
-    fn accept_expr(&mut self, e: Statement<'a>);
+pub trait VisitorExt: Visitor<()> {
+    fn accept(&mut self, e: Statement);
+    fn accept_expr(&mut self, e: Statement);
 }
 
 /// A visitor trait that helps walking an AST
-pub trait Visitor<'a, V> {
+pub trait Visitor<V> {
     /// Accepts a parsed statement
-    fn accept(&mut self, e: Statement<'a>) -> V;
+    fn accept(&mut self, e: Statement) -> V;
 
     /// Accepts a parsed expression
-    fn accept_expr(&mut self, e: Expr<'a>) -> V;
+    fn accept_expr(&mut self, e: Expr) -> V;
 
     /// Visits an expression statement
-    fn visit_expression_statement(&mut self, e: Expr<'a>) -> V;
+    fn visit_expression_statement(&mut self, e: Expr) -> V;
 
     /// Visits a binary expression
-    fn visit_binary_expression(&mut self, e: BinaryExpr<'a>) -> V;
+    fn visit_binary_expression(&mut self, e: BinaryExpr) -> V;
 
     /// Visits a grouping expression
-    fn visit_grouping_expression(&mut self, e: GroupingExpr<'a>) -> V;
+    fn visit_grouping_expression(&mut self, e: GroupingExpr) -> V;
 
     /// Visits a literal expression
-    fn visit_literal_expression(&mut self, e: LiteralExpr<'a>) -> V;
+    fn visit_literal_expression(&mut self, e: LiteralExpr) -> V;
 
     /// Visits an identifier
-    fn visit_identifier_expression(&mut self, i: &str) -> V;
+    fn visit_identifier_expression(&mut self, i: Symbol) -> V;
 
     /// Visits an unary expression
-    fn visit_unary_expression(&mut self, e: UnaryExpr<'a>) -> V;
+    fn visit_unary_expression(&mut self, e: UnaryExpr) -> V;
 
     /// Visits a variable declaration
-    fn visit_variable_declaration(&mut self, v: VariableDeclarations<'a>) -> V;
+    fn visit_variable_declaration(&mut self, v: VariableDeclarations) -> V;
 
     /// Visits an if statement
-    fn visit_if_statement(&mut self, i: IfStatement<'a>) -> V;
+    fn visit_if_statement(&mut self, i: IfStatement) -> V;
 
     /// Visits a block statement
-    fn visit_block_statement(&mut self, b: BlockStatement<'a>) -> V;
+    fn visit_block_statement(&mut self, b: BlockStatement) -> V;
 
     /// Visits a function declaration
-    fn visit_function_declaration(&mut self, f: FunctionDeclaration<'a>) -> V;
+    fn visit_function_declaration(&mut self, f: FunctionDeclaration) -> V;
 
     /// Visits a while loop
-    fn visit_while_loop(&mut self, l: WhileLoop<'a>) -> V;
+    fn visit_while_loop(&mut self, l: WhileLoop) -> V;
 
     /// Visits a do while loop
-    fn visit_do_while_loop(&mut self, d: DoWhileLoop<'a>) -> V;
+    fn visit_do_while_loop(&mut self, d: DoWhileLoop) -> V;
 
     /// Visits an assignment expression
-    fn visit_assignment_expression(&mut self, e: AssignmentExpr<'a>) -> V;
+    fn visit_assignment_expression(&mut self, e: AssignmentExpr) -> V;
 
     /// Visits a function call
-    fn visit_function_call(&mut self, c: FunctionCall<'a>) -> V;
+    fn visit_function_call(&mut self, c: FunctionCall) -> V;
 
     /// Visits a return statement
-    fn visit_return_statement(&mut self, s: ReturnStatement<'a>) -> V;
+    fn visit_return_statement(&mut self, s: ReturnStatement) -> V;
 
     /// Visits a conditional expression
-    fn visit_conditional_expr(&mut self, c: ConditionalExpr<'a>) -> V;
+    fn visit_conditional_expr(&mut self, c: ConditionalExpr) -> V;
 
     /// Visits a property access expression
     ///
     /// This includes both computed access and static access
-    fn visit_property_access_expr(&mut self, e: PropertyAccessExpr<'a>, preserve_this: bool) -> V;
+    fn visit_property_access_expr(&mut self, e: PropertyAccessExpr, preserve_this: bool) -> V;
 
     /// Visits a sequence expression
-    fn visit_sequence_expr(&mut self, s: Seq<'a>) -> V;
+    fn visit_sequence_expr(&mut self, s: Seq) -> V;
 
     /// Visits any prefix expression
-    fn visit_prefix_expr(&mut self, p: Prefix<'a>) -> V;
+    fn visit_prefix_expr(&mut self, p: Prefix) -> V;
 
     /// Visits any postfix expression
-    fn visit_postfix_expr(&mut self, p: Postfix<'a>) -> V;
+    fn visit_postfix_expr(&mut self, p: Postfix) -> V;
 
     /// Visits a function expression
-    fn visit_function_expr(&mut self, f: FunctionDeclaration<'a>) -> V;
+    fn visit_function_expr(&mut self, f: FunctionDeclaration) -> V;
 
     /// Visits an array literal
-    fn visit_array_literal(&mut self, a: ArrayLiteral<'a>) -> V;
+    fn visit_array_literal(&mut self, a: ArrayLiteral) -> V;
 
     /// Visits an object literal
-    fn visit_object_literal(&mut self, o: ObjectLiteral<'a>) -> V;
+    fn visit_object_literal(&mut self, o: ObjectLiteral) -> V;
 
     /// Visits a try catch statement
-    fn visit_try_catch(&mut self, t: TryCatch<'a>) -> V;
+    fn visit_try_catch(&mut self, t: TryCatch) -> V;
 
     /// Visits a throw statement
-    fn visit_throw(&mut self, e: Expr<'a>) -> V;
+    fn visit_throw(&mut self, e: Expr) -> V;
 
     /// Visits a for loop
-    fn visit_for_loop(&mut self, f: ForLoop<'a>) -> V;
+    fn visit_for_loop(&mut self, f: ForLoop) -> V;
 
     /// Visits a for..of loop
-    fn visit_for_of_loop(&mut self, f: ForOfLoop<'a>) -> V;
+    fn visit_for_of_loop(&mut self, f: ForOfLoop) -> V;
 
     /// Visits a for..in loop
-    fn visit_for_in_loop(&mut self, f: ForInLoop<'a>) -> V;
+    fn visit_for_in_loop(&mut self, f: ForInLoop) -> V;
 
     /// Visits an import statement
-    fn visit_import_statement(&mut self, i: ImportKind<'a>) -> V;
+    fn visit_import_statement(&mut self, i: ImportKind) -> V;
 
     /// Visits an export statement
-    fn visit_export_statement(&mut self, e: ExportKind<'a>) -> V;
+    fn visit_export_statement(&mut self, e: ExportKind) -> V;
 
     /// Visits an empty statement
     fn visit_empty_statement(&mut self) -> V;
@@ -151,13 +152,13 @@ pub trait Visitor<'a, V> {
     fn visit_empty_expr(&mut self) -> V;
 
     /// Visits a class declaration
-    fn visit_class_declaration(&mut self, c: Class<'a>) -> V;
+    fn visit_class_declaration(&mut self, c: Class) -> V;
 
     /// Visits a switch statement
-    fn visit_switch_statement(&mut self, s: SwitchStatement<'a>) -> V;
+    fn visit_switch_statement(&mut self, s: SwitchStatement) -> V;
 }
 
-pub fn accept_default<'a, T, V: Visitor<'a, T>>(this: &mut V, s: Statement<'a>) -> T {
+pub fn accept_default<T, V: Visitor<T>>(this: &mut V, s: Statement) -> T {
     match s {
         Statement::Expression(e) => this.visit_expression_statement(e),
         Statement::Variable(v) => this.visit_variable_declaration(v),
@@ -183,7 +184,7 @@ pub fn accept_default<'a, T, V: Visitor<'a, T>>(this: &mut V, s: Statement<'a>) 
     }
 }
 
-pub fn accept_expr_default<'a, T, V: Visitor<'a, T>, F>(this: &mut V, e: Expr<'a>, on_empty: F) -> T
+pub fn accept_expr_default<T, V: Visitor<T>, F>(this: &mut V, e: Expr, on_empty: F) -> T
 where
     F: FnOnce(&mut V) -> T,
 {
@@ -191,7 +192,7 @@ where
         Expr::Binary(e) => this.visit_binary_expression(e),
         Expr::Assignment(e) => this.visit_assignment_expression(e),
         Expr::Grouping(e) => this.visit_grouping_expression(e),
-        Expr::Literal(LiteralExpr::Identifier(i)) => this.visit_identifier_expression(&i),
+        Expr::Literal(LiteralExpr::Identifier(i)) => this.visit_identifier_expression(i),
         Expr::Literal(l) => this.visit_literal_expression(l),
         Expr::Unary(e) => this.visit_unary_expression(e),
         Expr::Call(e) => this.visit_function_call(e),

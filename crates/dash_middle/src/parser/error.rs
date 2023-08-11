@@ -1,109 +1,43 @@
-use std::borrow::Cow;
 use std::fmt;
 use std::num::ParseIntError;
 
-use either::Either;
-
-use crate::lexer::token::FormattableError;
-use crate::lexer::token::Location;
 use crate::lexer::token::Token;
 use crate::lexer::token::TokenType;
 
 /// The type of parser error
 #[derive(Debug)]
-pub enum ErrorKind<'a> {
+pub enum ErrorKind {
     /// An unknown token was found
-    UnknownToken(Token<'a>),
-    /// An unexpected token was found
-    UnexpectedToken(Token<'a>, TokenType),
-    /// An unexpected token was found (one of many others)
-    UnexpectedTokenMultiple(Token<'a>, &'static [TokenType]),
+    UnknownToken(Token),
+    /// An token was found that we didn't expect, we expect a certain other token type
+    UnexpectedToken(Token, TokenType),
+    /// Same as UnexpectedToken, but we expected any of the given token types
+    UnexpectedTokenMultiple(Token, &'static [TokenType]),
     /// Unexpected end of file
     UnexpectedEof,
     /// Integer parsing failed
-    ParseIntError(Token<'a>, ParseIntError),
+    ParseIntError(Token, ParseIntError),
     /// More than one default clause in a switch statement
-    MultipleDefaultInSwitch(Token<'a>),
+    MultipleDefaultInSwitch(Token),
     InvalidAccessorParams {
         got: usize,
         expect: usize,
-        token: Token<'a>,
+        token: Token,
     },
-    MultipleRestInDestructuring(Token<'a>),
-    RegexSyntaxError(Token<'a>, dash_regex::Error),
-    IncompleteSpread(Token<'a>),
+    MultipleRestInDestructuring(Token),
+    RegexSyntaxError(Token, dash_regex::Error),
+    IncompleteSpread(Token),
 }
 
 /// An error that occurred during parsing
 #[derive(Debug)]
-pub struct Error<'a> {
+pub struct Error {
     /// The type of error
-    pub kind: ErrorKind<'a>,
-    /// The source code string
-    ///
-    /// We need to carry it in errors to be able to format locations
-    pub source: &'a [u8],
+    pub kind: ErrorKind,
 }
 
-impl fmt::Display for Error<'_> {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let (tok, message, help): (_, _, Option<Box<dyn fmt::Display + '_>>) = match &self.kind {
-            ErrorKind::UnknownToken(tok) => (tok, "unknown token", None),
-            ErrorKind::UnexpectedToken(tok, expect) => {
-                (tok, "unexpected token", Some(Box::new(format!("expected `{expect}`"))))
-            }
-            ErrorKind::UnexpectedTokenMultiple(tok, expect) => (
-                tok,
-                "unexpected token",
-                Some(Box::new(format!(
-                    "expected one of: {}",
-                    expect.iter().map(|t| format!("`{t}`")).collect::<Vec<_>>().join(", ")
-                ))),
-            ),
-            ErrorKind::ParseIntError(tok, err) => (tok, "int parsing failed", Some(Box::new(err))),
-            ErrorKind::UnexpectedEof => (
-                &Token {
-                    full: Cow::Borrowed(""),
-                    ty: TokenType::Eof,
-                    loc: Location {
-                        line: 0,
-                        line_offset: 0,
-                        offset: 0,
-                    },
-                },
-                "unexpected end of input",
-                Some(Box::new("more tokens are expected for this to be valid")),
-            ),
-            ErrorKind::MultipleDefaultInSwitch(tok) => (
-                tok,
-                "more than one default in a switch statement",
-                Some(Box::new("consider merging all default clauses into one")),
-            ),
-            ErrorKind::InvalidAccessorParams { got, expect, token } => (
-                token,
-                "invalid number of parameters in accessor",
-                Some(Box::new(format!("expected exactly {expect} parameters, got {got}"))),
-            ),
-            ErrorKind::MultipleRestInDestructuring(tok) => {
-                (tok, "a rest element must be last in a destructuring pattern", None)
-            }
-            ErrorKind::IncompleteSpread(tok) => (
-                tok,
-                "incomplete spread element",
-                Some(Box::new("expected three dots, followed by an expression")),
-            ),
-            ErrorKind::RegexSyntaxError(tok, err) => (tok, "regex parse error", Some(Box::new(err))),
-        };
-
-        let format_err = FormattableError {
-            source: self.source,
-            loc: &tok.loc,
-            display_token: true,
-            message,
-            tok: Either::Left(&tok.full),
-            help,
-        };
-
-        format_err.fmt(f)
+        fmt::Debug::fmt(self, f)
     }
 }

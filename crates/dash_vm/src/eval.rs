@@ -4,6 +4,7 @@ use dash_compiler::error::CompileError;
 use dash_compiler::FunctionCompiler;
 use dash_lexer::Lexer;
 use dash_middle::compiler::StaticImportKind;
+use dash_middle::interner::StringInterner;
 use dash_middle::lexer;
 use dash_middle::parser;
 use dash_middle::util;
@@ -23,14 +24,14 @@ use crate::Vm;
 use dash_compiler::from_string::CompileStrError;
 
 #[derive(Debug)]
-pub enum EvalError<'a> {
-    Lexer(Vec<lexer::error::Error<'a>>),
-    Parser(Vec<parser::error::Error<'a>>),
+pub enum EvalError {
+    Lexer(Vec<lexer::error::Error>),
+    Parser(Vec<parser::error::Error>),
     Compiler(CompileError),
     Exception(Unrooted),
 }
 
-impl<'a> fmt::Display for EvalError<'a> {
+impl fmt::Display for EvalError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             EvalError::Lexer(errors) => {
@@ -52,12 +53,19 @@ impl<'a> fmt::Display for EvalError<'a> {
 }
 
 impl Vm {
-    pub fn eval<'a>(&mut self, input: &'a str, opt: OptLevel) -> Result<Unrooted, EvalError<'a>> {
-        let tokens = Lexer::new(input).scan_all().map_err(EvalError::Lexer)?;
-        let (ast, counter) = Parser::new(input, tokens).parse_all().map_err(EvalError::Parser)?;
+    pub fn eval_with_interner(
+        &mut self,
+        interner: &mut StringInterner,
+        input: &str,
+        opt: OptLevel,
+    ) -> Result<Unrooted, EvalError> {
+        let tokens = Lexer::new(interner, input).scan_all().map_err(EvalError::Lexer)?;
+        let (ast, counter) = Parser::new(interner, input, tokens)
+            .parse_all()
+            .map_err(EvalError::Parser)?;
 
         let tcx = TypeInferCtx::new(counter);
-        let cr = FunctionCompiler::new(opt, tcx)
+        let cr = FunctionCompiler::new(opt, tcx, interner)
             .compile_ast(ast, true)
             .map_err(EvalError::Compiler)?;
         let frame = Frame::from_compile_result(cr);
@@ -65,13 +73,18 @@ impl Vm {
         Ok(val.into_value())
     }
 
-    pub fn evaluate_module(
+    pub fn eval(&mut self, input: &str, opt: OptLevel) -> Result<Unrooted, EvalError> {
+        self.eval_with_interner(&mut StringInterner::new(), input, opt)
+    }
+
+    pub fn evaluate_module_with_interner(
         sc: &mut LocalScope,
+        interner: &mut StringInterner,
         input: &str,
         import_ty: StaticImportKind,
         opt: OptLevel,
     ) -> Result<Unrooted, Unrooted> {
-        let re = match FunctionCompiler::compile_str(input, opt) {
+        let re = match FunctionCompiler::compile_str(interner, input, opt) {
             Ok(re) => re,
             Err(CompileStrError::Compiler(ce)) => throw!(sc, SyntaxError, "Compile error: {:?}", ce),
             Err(CompileStrError::Parser(pe)) => throw!(sc, SyntaxError, "Parse error: {:?}", pe),
@@ -108,5 +121,14 @@ impl Vm {
         }
 
         Ok(export_obj.into())
+    }
+
+    pub fn evaluate_module(
+        sc: &mut LocalScope,
+        input: &str,
+        import_ty: StaticImportKind,
+        opt: OptLevel,
+    ) -> Result<Unrooted, Unrooted> {
+        Self::evaluate_module_with_interner(sc, &mut StringInterner::new(), input, import_ty, opt)
     }
 }

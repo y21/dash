@@ -93,8 +93,8 @@ pub enum ObjectMemberKind {
 
 use parser::expr::ObjectMemberKind as ParserObjectMemberKind;
 
-impl From<&ParserObjectMemberKind<'_>> for ObjectMemberKind {
-    fn from(v: &ParserObjectMemberKind<'_>) -> Self {
+impl From<&ParserObjectMemberKind> for ObjectMemberKind {
+    fn from(v: &ParserObjectMemberKind) -> Self {
         match v {
             ParserObjectMemberKind::Dynamic(..) => Self::Dynamic,
             ParserObjectMemberKind::Getter(..) => Self::Getter,
@@ -114,8 +114,8 @@ pub enum ArrayMemberKind {
 
 use parser::expr::ArrayMemberKind as ParserArrayMemberKind;
 
-impl From<&ParserArrayMemberKind<'_>> for ArrayMemberKind {
-    fn from(v: &ParserArrayMemberKind<'_>) -> Self {
+impl From<&ParserArrayMemberKind> for ArrayMemberKind {
+    fn from(v: &ParserArrayMemberKind) -> Self {
         match v {
             ParserArrayMemberKind::Item(..) => Self::Item,
             ParserArrayMemberKind::Spread(..) => Self::Spread,

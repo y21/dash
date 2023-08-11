@@ -3,6 +3,7 @@ use dash_log::error;
 use dash_middle::compiler::scope::CompileValueType;
 use dash_middle::compiler::scope::Scope;
 use dash_middle::compiler::scope::ScopeLocal;
+use dash_middle::interner::Symbol;
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::expr::ArrayLiteral;
 use dash_middle::parser::expr::ArrayMemberKind;
@@ -51,33 +52,33 @@ use dash_middle::tree::TreeNode;
 use dash_middle::util::Counter;
 
 #[derive(Debug)]
-pub struct TypeInferCtx<'a> {
+pub struct TypeInferCtx {
     counter: Counter<FuncId>,
-    scopes: Tree<Scope<'a>>,
+    scopes: Tree<Scope>,
 }
 
-impl<'a> TypeInferCtx<'a> {
+impl TypeInferCtx {
     pub fn new(counter: Counter<FuncId>) -> Self {
         let scopes = (0..counter.len()).map(|_| TreeNode::new(Scope::new(), None)).collect();
         Self { scopes, counter }
     }
 
-    pub fn scope_mut(&mut self, func_id: FuncId) -> &mut Scope<'a> {
+    pub fn scope_mut(&mut self, func_id: FuncId) -> &mut Scope {
         // Scope not found implies a programmer error
         &mut self.scopes[func_id.into()]
     }
 
-    pub fn scope(&self, func_id: FuncId) -> &Scope<'a> {
+    pub fn scope(&self, func_id: FuncId) -> &Scope {
         // Scope not found implies a programmer error
         &self.scopes[func_id.into()]
     }
 
-    pub fn scope_node(&self, func_id: FuncId) -> &TreeNode<Scope<'a>> {
+    pub fn scope_node(&self, func_id: FuncId) -> &TreeNode<Scope> {
         // Scope not found implies a programmer error
         &self.scopes[func_id.into()]
     }
 
-    pub fn scope_node_mut(&mut self, func_id: FuncId) -> &mut TreeNode<Scope<'a>> {
+    pub fn scope_node_mut(&mut self, func_id: FuncId) -> &mut TreeNode<Scope> {
         // Scope not found implies a programmer error
         &mut self.scopes[func_id.into()]
     }
@@ -90,7 +91,7 @@ impl<'a> TypeInferCtx<'a> {
         self.scopes.push(parent.map(Into::into), Scope::new()).into()
     }
 
-    pub fn visit_statement(&mut self, statement: &Statement<'a>, func_id: FuncId) {
+    pub fn visit_statement(&mut self, statement: &Statement, func_id: FuncId) {
         match statement {
             Statement::Block(BlockStatement(stmt)) => {
                 self.scope_mut(func_id).enter();
@@ -122,19 +123,19 @@ impl<'a> TypeInferCtx<'a> {
         }
     }
 
-    pub fn visit_maybe_statement(&mut self, stmt: Option<&Statement<'a>>, func_id: FuncId) {
+    pub fn visit_maybe_statement(&mut self, stmt: Option<&Statement>, func_id: FuncId) {
         if let Some(stmt) = stmt {
             self.visit_statement(stmt, func_id);
         }
     }
 
-    pub fn visit_many_statements(&mut self, stmt: &[Statement<'a>], func_id: FuncId) {
+    pub fn visit_many_statements(&mut self, stmt: &[Statement], func_id: FuncId) {
         for stmt in stmt {
             self.visit_statement(stmt, func_id);
         }
     }
 
-    pub fn visit_maybe_expr(&mut self, expr: Option<&Expr<'a>>, func_id: FuncId) -> Option<CompileValueType> {
+    pub fn visit_maybe_expr(&mut self, expr: Option<&Expr>, func_id: FuncId) -> Option<CompileValueType> {
         if let Some(expr) = expr {
             self.visit(expr, func_id)
         } else {
@@ -142,11 +143,11 @@ impl<'a> TypeInferCtx<'a> {
         }
     }
 
-    pub fn visit_return_statement(&mut self, ReturnStatement(expr): &ReturnStatement<'a>, func_id: FuncId) {
+    pub fn visit_return_statement(&mut self, ReturnStatement(expr): &ReturnStatement, func_id: FuncId) {
         self.visit(expr, func_id);
     }
 
-    pub fn visit_try_statement(&mut self, TryCatch { try_, catch, finally }: &TryCatch<'a>, func_id: FuncId) {
+    pub fn visit_try_statement(&mut self, TryCatch { try_, catch, finally }: &TryCatch, func_id: FuncId) {
         self.visit_statement(try_, func_id);
         self.visit_statement(&catch.body, func_id);
         self.visit_maybe_statement(finally.as_deref(), func_id);
@@ -156,7 +157,7 @@ impl<'a> TypeInferCtx<'a> {
         &mut self,
         Class {
             extends, members, name, ..
-        }: &Class<'a>,
+        }: &Class,
         func_id: FuncId,
     ) {
         self.visit_maybe_expr(extends.as_ref(), func_id);
@@ -172,7 +173,7 @@ impl<'a> TypeInferCtx<'a> {
         if let Some(name) = name {
             self.visit_variable_binding(
                 &VariableBinding {
-                    name: VariableDeclarationName::Identifier(name),
+                    name: VariableDeclarationName::Identifier(*name),
                     kind: VariableDeclarationKind::Var,
                     ty: None,
                 },
@@ -184,7 +185,7 @@ impl<'a> TypeInferCtx<'a> {
 
     pub fn visit_switch_statement(
         &mut self,
-        SwitchStatement { expr, default, cases }: &SwitchStatement<'a>,
+        SwitchStatement { expr, default, cases }: &SwitchStatement,
         func_id: FuncId,
     ) {
         self.visit(expr, func_id);
@@ -199,7 +200,7 @@ impl<'a> TypeInferCtx<'a> {
         }
     }
 
-    pub fn visit_loop_statement(&mut self, loop_: &Loop<'a>, func_id: FuncId) {
+    pub fn visit_loop_statement(&mut self, loop_: &Loop, func_id: FuncId) {
         match loop_ {
             Loop::For(ForLoop {
                 init,
@@ -233,7 +234,7 @@ impl<'a> TypeInferCtx<'a> {
         }
     }
 
-    fn visit_variable_binding(&mut self, binding: &VariableBinding<'a>, value: Option<&Expr<'a>>, func_id: FuncId) {
+    fn visit_variable_binding(&mut self, binding: &VariableBinding, value: Option<&Expr>, func_id: FuncId) {
         if let VariableDeclarationName::Identifier(ident) = binding.name {
             let ty = match value {
                 Some(expr) => self.visit(expr, func_id),
@@ -250,7 +251,7 @@ impl<'a> TypeInferCtx<'a> {
 
     pub fn visit_variable_declaration(
         &mut self,
-        VariableDeclarations(declarations): &VariableDeclarations<'a>,
+        VariableDeclarations(declarations): &VariableDeclarations,
         func_id: FuncId,
     ) {
         for VariableDeclaration { binding, value } in declarations {
@@ -265,7 +266,7 @@ impl<'a> TypeInferCtx<'a> {
             then,
             branches,
             el,
-        }: &IfStatement<'a>,
+        }: &IfStatement,
         func_id: FuncId,
     ) {
         self.visit(condition, func_id);
@@ -279,7 +280,7 @@ impl<'a> TypeInferCtx<'a> {
         }
     }
 
-    pub fn visit(&mut self, expression: &Expr<'a>, func_id: FuncId) -> Option<CompileValueType> {
+    pub fn visit(&mut self, expression: &Expr, func_id: FuncId) -> Option<CompileValueType> {
         match expression {
             Expr::Binary(expr) => self.visit_binary_expression(expr, func_id),
             Expr::Grouping(expr) => self.visit_grouping_expression(expr, func_id),
@@ -302,7 +303,7 @@ impl<'a> TypeInferCtx<'a> {
 
     pub fn visit_binary_expression(
         &mut self,
-        BinaryExpr { left, right, operator }: &BinaryExpr<'a>,
+        BinaryExpr { left, right, operator }: &BinaryExpr,
         func_id: FuncId,
     ) -> Option<CompileValueType> {
         let left = self.visit(left, func_id);
@@ -327,7 +328,7 @@ impl<'a> TypeInferCtx<'a> {
 
     pub fn visit_grouping_expression(
         &mut self,
-        GroupingExpr(expression): &GroupingExpr<'a>,
+        GroupingExpr(expression): &GroupingExpr,
         func_id: FuncId,
     ) -> Option<CompileValueType> {
         let mut ty = None;
@@ -337,7 +338,7 @@ impl<'a> TypeInferCtx<'a> {
         ty
     }
 
-    pub fn find_local(&self, ident: &str, func_id: FuncId) -> Option<&ScopeLocal<'a>> {
+    pub fn find_local(&self, ident: Symbol, func_id: FuncId) -> Option<&ScopeLocal> {
         if let Some((_, local)) = self.scope(func_id).find_local(ident) {
             Some(local)
         } else {
@@ -348,14 +349,10 @@ impl<'a> TypeInferCtx<'a> {
         }
     }
 
-    pub fn visit_literal_expression(
-        &mut self,
-        expression: &LiteralExpr<'a>,
-        func_id: FuncId,
-    ) -> Option<CompileValueType> {
+    pub fn visit_literal_expression(&mut self, expression: &LiteralExpr, func_id: FuncId) -> Option<CompileValueType> {
         match expression {
             LiteralExpr::Boolean(..) => Some(CompileValueType::Boolean),
-            LiteralExpr::Identifier(identifier) => match self.find_local(identifier, func_id) {
+            LiteralExpr::Identifier(identifier) => match self.find_local(*identifier, func_id) {
                 Some(local) => local.inferred_type().borrow().clone(),
                 _ => None,
             },
@@ -369,7 +366,7 @@ impl<'a> TypeInferCtx<'a> {
 
     pub fn visit_unary_expression(
         &mut self,
-        UnaryExpr { expr, operator }: &UnaryExpr<'a>,
+        UnaryExpr { expr, operator }: &UnaryExpr,
         func_id: FuncId,
     ) -> Option<CompileValueType> {
         self.visit(expr, func_id);
@@ -382,7 +379,7 @@ impl<'a> TypeInferCtx<'a> {
 
     pub fn visit_assignment_expression(
         &mut self,
-        AssignmentExpr { left, right, .. }: &AssignmentExpr<'a>,
+        AssignmentExpr { left, right, .. }: &AssignmentExpr,
         func_id: FuncId,
     ) -> Option<CompileValueType> {
         let AssignmentTarget::Expr(left) = left else {
@@ -394,7 +391,7 @@ impl<'a> TypeInferCtx<'a> {
 
         // Also propagate assignment to target
         if let Expr::Literal(LiteralExpr::Identifier(ident)) = &**left {
-            if let Some(local) = self.find_local(ident, func_id) {
+            if let Some(local) = self.find_local(*ident, func_id) {
                 let left_type = local.inferred_type();
                 let left_type_ref = left_type.borrow();
 
@@ -431,7 +428,7 @@ impl<'a> TypeInferCtx<'a> {
 
     pub fn visit_call_expression(
         &mut self,
-        FunctionCall { target, arguments, .. }: &FunctionCall<'a>,
+        FunctionCall { target, arguments, .. }: &FunctionCall,
         func_id: FuncId,
     ) -> Option<CompileValueType> {
         self.visit(target, func_id);
@@ -446,7 +443,7 @@ impl<'a> TypeInferCtx<'a> {
 
     pub fn visit_conditional_expression(
         &mut self,
-        ConditionalExpr { then, el, condition }: &ConditionalExpr<'a>,
+        ConditionalExpr { then, el, condition }: &ConditionalExpr,
         func_id: FuncId,
     ) -> Option<CompileValueType> {
         self.visit(condition, func_id);
@@ -464,7 +461,7 @@ impl<'a> TypeInferCtx<'a> {
 
     pub fn visit_property_access_expression(
         &mut self,
-        PropertyAccessExpr { target, property, .. }: &PropertyAccessExpr<'a>,
+        PropertyAccessExpr { target, property, .. }: &PropertyAccessExpr,
         func_id: FuncId,
     ) -> Option<CompileValueType> {
         self.visit(target, func_id);
@@ -474,7 +471,7 @@ impl<'a> TypeInferCtx<'a> {
 
     pub fn visit_prefix_expression(
         &mut self,
-        expression: &Expr<'a>,
+        expression: &Expr,
         _: TokenType,
         func_id: FuncId,
     ) -> Option<CompileValueType> {
@@ -484,7 +481,7 @@ impl<'a> TypeInferCtx<'a> {
 
     pub fn visit_postfix_expression(
         &mut self,
-        expression: &Expr<'a>,
+        expression: &Expr,
         _: TokenType,
         func_id: FuncId,
     ) -> Option<CompileValueType> {
@@ -500,7 +497,7 @@ impl<'a> TypeInferCtx<'a> {
             id,
             name,
             ..
-        }: &FunctionDeclaration<'a>,
+        }: &FunctionDeclaration,
         func_id: FuncId,
     ) -> Option<CompileValueType> {
         let sub_func_id = *id;
@@ -511,7 +508,7 @@ impl<'a> TypeInferCtx<'a> {
 
             if self
                 .scope_mut(func_id)
-                .add_local(name, VariableDeclarationKind::Var, None)
+                .add_local(*name, VariableDeclarationKind::Var, None)
                 .is_err()
             {
                 error!("failed to reserve local space for function");
@@ -523,7 +520,7 @@ impl<'a> TypeInferCtx<'a> {
                 Parameter::Identifier(ident) | Parameter::Spread(ident) => {
                     if self
                         .scope_mut(sub_func_id)
-                        .add_local(ident, VariableDeclarationKind::Var, None)
+                        .add_local(*ident, VariableDeclarationKind::Var, None)
                         .is_err()
                     {
                         error!("failed to reserve space for parameter")
@@ -544,7 +541,7 @@ impl<'a> TypeInferCtx<'a> {
 
     pub fn visit_array_expression(
         &mut self,
-        ArrayLiteral(expr): &ArrayLiteral<'a>,
+        ArrayLiteral(expr): &ArrayLiteral,
         func_id: FuncId,
     ) -> Option<CompileValueType> {
         for kind in expr {
@@ -562,7 +559,7 @@ impl<'a> TypeInferCtx<'a> {
 
     pub fn visit_object_expression(
         &mut self,
-        ObjectLiteral(expr): &ObjectLiteral<'a>,
+        ObjectLiteral(expr): &ObjectLiteral,
         func_id: FuncId,
     ) -> Option<CompileValueType> {
         for (kind, expr) in expr {

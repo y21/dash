@@ -1,57 +1,57 @@
-use std::{
-    borrow::Cow,
-    fmt::{self, Debug},
-};
+use std::fmt::{self, Debug};
 
 use derive_more::Display;
 
-use crate::lexer::token::TokenType;
+use crate::{
+    interner::{sym, Symbol},
+    lexer::token::TokenType,
+};
 
 use super::statement::{fmt_list, FunctionDeclaration};
 
 /// The sequence operator (`expr, expr`)
-pub type Seq<'a> = (Box<Expr<'a>>, Box<Expr<'a>>);
+pub type Seq = (Box<Expr>, Box<Expr>);
 /// Any prefix expression, i.e. `++foo`
-pub type Prefix<'a> = (TokenType, Box<Expr<'a>>);
+pub type Prefix = (TokenType, Box<Expr>);
 /// Any postfix expression, i.e. `foo++`
-pub type Postfix<'a> = (TokenType, Box<Expr<'a>>);
+pub type Postfix = (TokenType, Box<Expr>);
 
 /// A parsed expression
 #[derive(Debug, Clone, Display)]
-pub enum Expr<'a> {
+pub enum Expr {
     /// Represents a binary expression
-    Binary(BinaryExpr<'a>),
+    Binary(BinaryExpr),
     /// Represents a grouping expression
-    Grouping(GroupingExpr<'a>),
+    Grouping(GroupingExpr),
     /// Represents a literal, i.e. `foo`
-    Literal(LiteralExpr<'a>),
+    Literal(LiteralExpr),
     /// Represents an unary expression, i.e. `-foo`, `+bar`, `await foo`
-    Unary(UnaryExpr<'a>),
+    Unary(UnaryExpr),
     /// An assignment expression, i.e. `foo = bar`
-    Assignment(AssignmentExpr<'a>),
+    Assignment(AssignmentExpr),
     /// A function call expression
-    Call(FunctionCall<'a>),
+    Call(FunctionCall),
     /// A conditional expression, i.e. `foo ? bar : baz`
-    Conditional(ConditionalExpr<'a>),
+    Conditional(ConditionalExpr),
     /// A property access expression, i.e. `foo.bar`
-    PropertyAccess(PropertyAccessExpr<'a>),
+    PropertyAccess(PropertyAccessExpr),
     /// A sequence expression, i.e. `foo, bar`
     #[display(fmt = "{}, {}", "_0.0", "_0.1")]
-    Sequence(Seq<'a>),
+    Sequence(Seq),
     /// Any prefix expression, i.e. `++foo`
     #[display(fmt = "{}{}", "_0.0", "_0.1")]
-    Prefix(Prefix<'a>),
+    Prefix(Prefix),
     /// Any postfix expression, i.e. `foo++`
     #[display(fmt = "{}{}", "_0.1", "_0.0")]
-    Postfix(Postfix<'a>),
+    Postfix(Postfix),
     /// An expression that evaluates to a function object
     ///
     /// This includes both normal functions and arrow functions
-    Function(FunctionDeclaration<'a>),
+    Function(FunctionDeclaration),
     /// An array literal expression
-    Array(ArrayLiteral<'a>),
+    Array(ArrayLiteral),
     /// An object literal expression
-    Object(ObjectLiteral<'a>),
+    Object(ObjectLiteral),
     /// Compiled bytecode
     #[display(fmt = "<compiled>")]
     Compiled(Vec<u8>),
@@ -59,24 +59,24 @@ pub enum Expr<'a> {
     Empty,
 }
 
-impl<'a> Expr<'a> {
+impl Expr {
     /// Creates a binary expression
-    pub fn binary(l: Expr<'a>, r: Expr<'a>, op: TokenType) -> Self {
+    pub fn binary(l: Expr, r: Expr, op: TokenType) -> Self {
         Self::Binary(BinaryExpr::new(l, r, op))
     }
 
     /// Creates a grouping expression
-    pub fn grouping(expr: Vec<Expr<'a>>) -> Self {
+    pub fn grouping(expr: Vec<Expr>) -> Self {
         Self::Grouping(GroupingExpr(expr))
     }
 
     /// Creates an assignment expression
-    pub fn assignment(l: Expr<'a>, r: Expr<'a>, op: TokenType) -> Self {
+    pub fn assignment(l: Expr, r: Expr, op: TokenType) -> Self {
         Self::Assignment(AssignmentExpr::new_expr_place(l, r, op))
     }
 
     /// Creates an assignment expression
-    pub fn assignment_local_space(l: u16, r: Expr<'a>, op: TokenType) -> Self {
+    pub fn assignment_local_space(l: u16, r: Expr, op: TokenType) -> Self {
         Self::Assignment(AssignmentExpr::new_local_place(l, r, op))
     }
 
@@ -91,20 +91,20 @@ impl<'a> Expr<'a> {
     }
 
     /// Creates a string literal expression
-    pub fn string_literal(s: Cow<'a, str>) -> Self {
+    pub fn string_literal(s: Symbol) -> Self {
         Self::Literal(LiteralExpr::String(s))
     }
 
-    pub fn array_literal(a: Vec<ArrayMemberKind<'a>>) -> Self {
+    pub fn array_literal(a: Vec<ArrayMemberKind>) -> Self {
         Self::Array(ArrayLiteral(a))
     }
 
-    pub fn object_literal(o: Vec<(ObjectMemberKind<'a>, Expr<'a>)>) -> Self {
+    pub fn object_literal(o: Vec<(ObjectMemberKind, Expr)>) -> Self {
         Self::Object(ObjectLiteral(o))
     }
 
     /// Creates an identifier literal expression
-    pub fn identifier(s: Cow<'a, str>) -> Self {
+    pub fn identifier(s: Symbol) -> Self {
         Self::Literal(LiteralExpr::Identifier(s))
     }
 
@@ -118,12 +118,12 @@ impl<'a> Expr<'a> {
         Self::Literal(LiteralExpr::Undefined)
     }
 
-    pub fn regex_literal(regex: dash_regex::Regex, source: &'a str) -> Self {
+    pub fn regex_literal(regex: dash_regex::Regex, source: Symbol) -> Self {
         Self::Literal(LiteralExpr::Regex(regex, source))
     }
 
     /// Creates a function call expression
-    pub fn function_call(target: Expr<'a>, arguments: Vec<CallArgumentKind<'a>>, constructor_call: bool) -> Self {
+    pub fn function_call(target: Expr, arguments: Vec<CallArgumentKind>, constructor_call: bool) -> Self {
         Self::Call(FunctionCall {
             constructor_call,
             target: Box::new(target),
@@ -132,7 +132,7 @@ impl<'a> Expr<'a> {
     }
 
     /// Creates a condition expression
-    pub fn conditional(condition: Expr<'a>, then: Expr<'a>, el: Expr<'a>) -> Self {
+    pub fn conditional(condition: Expr, then: Expr, el: Expr) -> Self {
         Self::Conditional(ConditionalExpr {
             condition: Box::new(condition),
             then: Box::new(then),
@@ -141,7 +141,7 @@ impl<'a> Expr<'a> {
     }
 
     /// Creates a property access expression
-    pub fn property_access(computed: bool, target: Expr<'a>, property: Expr<'a>) -> Self {
+    pub fn property_access(computed: bool, target: Expr, property: Expr) -> Self {
         Self::PropertyAccess(PropertyAccessExpr {
             computed,
             target: Box::new(target),
@@ -149,19 +149,19 @@ impl<'a> Expr<'a> {
         })
     }
 
-    pub fn unary(op: TokenType, expr: Expr<'a>) -> Self {
+    pub fn unary(op: TokenType, expr: Expr) -> Self {
         Self::Unary(UnaryExpr::new(op, expr))
     }
 
-    pub fn prefix(op: TokenType, expr: Expr<'a>) -> Self {
+    pub fn prefix(op: TokenType, expr: Expr) -> Self {
         Self::Prefix((op, Box::new(expr)))
     }
 
-    pub fn postfix(op: TokenType, expr: Expr<'a>) -> Self {
+    pub fn postfix(op: TokenType, expr: Expr) -> Self {
         Self::Postfix((op, Box::new(expr)))
     }
 
-    pub fn function(function: FunctionDeclaration<'a>) -> Self {
+    pub fn function(function: FunctionDeclaration) -> Self {
         Self::Function(function)
     }
 
@@ -172,7 +172,7 @@ impl<'a> Expr<'a> {
     /// Tries to convert an expression into a list of arrow function parameters
     ///
     /// We only know whether a value is an arrow function after parsing
-    pub fn to_arrow_function_parameter_list(&self) -> Option<Vec<&'a str>> {
+    pub fn to_arrow_function_parameter_list(&self) -> Option<Vec<Symbol>> {
         match &self {
             Expr::Grouping(g) => {
                 let mut list = Vec::with_capacity(g.0.len());
@@ -181,15 +181,15 @@ impl<'a> Expr<'a> {
                 }
                 Some(list)
             }
-            Expr::Literal(lit) => Some(vec![lit.as_identifier_borrowed()?]),
+            Expr::Literal(LiteralExpr::Identifier(ident)) => Some(vec![*ident]),
             _ => None,
         }
     }
 
     /// Tries to return the identifier that is associated to this expression
-    pub fn as_identifier(&self) -> Option<&'a str> {
+    pub fn as_identifier(&self) -> Option<Symbol> {
         match &self {
-            Expr::Literal(lit) => lit.as_identifier_borrowed(),
+            Expr::Literal(LiteralExpr::Identifier(ident)) => Some(*ident),
             _ => None,
         }
     }
@@ -205,11 +205,11 @@ impl<'a> Expr<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub enum ArrayMemberKind<'a> {
-    Item(Expr<'a>),
-    Spread(Expr<'a>),
+pub enum ArrayMemberKind {
+    Item(Expr),
+    Spread(Expr),
 }
-impl<'a> fmt::Display for ArrayMemberKind<'a> {
+impl fmt::Display for ArrayMemberKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ArrayMemberKind::Item(item) => fmt::Display::fmt(item, f),
@@ -223,9 +223,9 @@ impl<'a> fmt::Display for ArrayMemberKind<'a> {
 
 /// An array literal expression (`[expr, expr]`)
 #[derive(Debug, Clone)]
-pub struct ArrayLiteral<'a>(pub Vec<ArrayMemberKind<'a>>);
+pub struct ArrayLiteral(pub Vec<ArrayMemberKind>);
 
-impl<'a> fmt::Display for ArrayLiteral<'a> {
+impl fmt::Display for ArrayLiteral {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "[")?;
         fmt_list(f, &self.0, ",")?;
@@ -234,20 +234,20 @@ impl<'a> fmt::Display for ArrayLiteral<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub enum ObjectMemberKind<'a> {
-    Getter(Cow<'a, str>),
-    Setter(Cow<'a, str>),
-    Static(&'a str),
+pub enum ObjectMemberKind {
+    Getter(Symbol),
+    Setter(Symbol),
+    Static(Symbol),
     Spread,
-    Dynamic(Expr<'a>),
+    Dynamic(Expr),
 }
 
-impl<'a> fmt::Display for ObjectMemberKind<'a> {
+impl fmt::Display for ObjectMemberKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Getter(name) => write!(f, "get {name}"),
             Self::Setter(name) => write!(f, "set {name}"),
-            Self::Static(name) => f.write_str(name),
+            Self::Static(name) => write!(f, "{name}"),
             Self::Dynamic(expr) => write!(f, "[{expr}]"),
             Self::Spread => f.write_str("...<expression unavailable>"), // TODO: figure out a way to display it here
         }
@@ -256,9 +256,9 @@ impl<'a> fmt::Display for ObjectMemberKind<'a> {
 
 /// An object literal expression (`{ k: "v" }`)
 #[derive(Debug, Clone)]
-pub struct ObjectLiteral<'a>(pub Vec<(ObjectMemberKind<'a>, Expr<'a>)>);
+pub struct ObjectLiteral(pub Vec<(ObjectMemberKind, Expr)>);
 
-impl<'a> fmt::Display for ObjectLiteral<'a> {
+impl fmt::Display for ObjectLiteral {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{{")?;
 
@@ -276,16 +276,16 @@ impl<'a> fmt::Display for ObjectLiteral<'a> {
 
 /// A property access expression
 #[derive(Debug, Clone)]
-pub struct PropertyAccessExpr<'a> {
+pub struct PropertyAccessExpr {
     /// Whether this property access is computed
     pub computed: bool,
     /// The target object that is accessed
-    pub target: Box<Expr<'a>>,
+    pub target: Box<Expr>,
     /// The property of the object that is accessed
-    pub property: Box<Expr<'a>>,
+    pub property: Box<Expr>,
 }
 
-impl<'a> fmt::Display for PropertyAccessExpr<'a> {
+impl fmt::Display for PropertyAccessExpr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.target)?;
 
@@ -302,24 +302,24 @@ impl<'a> fmt::Display for PropertyAccessExpr<'a> {
 /// A conditional expression
 #[derive(Debug, Clone, Display)]
 #[display(fmt = "{condition} ? {then} : {el}")]
-pub struct ConditionalExpr<'a> {
+pub struct ConditionalExpr {
     /// The first part of a conditional expression, the condition
-    pub condition: Box<Expr<'a>>,
+    pub condition: Box<Expr>,
     /// The second part of a conditional expression, a then expression
-    pub then: Box<Expr<'a>>,
+    pub then: Box<Expr>,
     /// The last part of a conditional expression, an else expression
-    pub el: Box<Expr<'a>>,
+    pub el: Box<Expr>,
 }
 
 #[derive(Debug, Clone)]
-pub enum CallArgumentKind<'a> {
+pub enum CallArgumentKind {
     /// A normal argument
-    Normal(Expr<'a>),
+    Normal(Expr),
     /// A spread argument
-    Spread(Expr<'a>),
+    Spread(Expr),
 }
 
-impl<'a> fmt::Display for CallArgumentKind<'a> {
+impl fmt::Display for CallArgumentKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             CallArgumentKind::Normal(expr) => fmt::Display::fmt(expr, f),
@@ -333,16 +333,16 @@ impl<'a> fmt::Display for CallArgumentKind<'a> {
 
 /// A function call expression
 #[derive(Debug, Clone)]
-pub struct FunctionCall<'a> {
+pub struct FunctionCall {
     /// Whether this function call invokes the constructor (using `new` keyword)
     pub constructor_call: bool,
     /// The target (callee)
-    pub target: Box<Expr<'a>>,
+    pub target: Box<Expr>,
     /// Function call arguments
-    pub arguments: Vec<CallArgumentKind<'a>>,
+    pub arguments: Vec<CallArgumentKind>,
 }
 
-impl<'a> fmt::Display for FunctionCall<'a> {
+impl fmt::Display for FunctionCall {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}(", self.target)?;
         fmt_list(f, &self.arguments, ",")?;
@@ -352,15 +352,15 @@ impl<'a> fmt::Display for FunctionCall<'a> {
 
 /// The target of an assignment
 #[derive(Debug, Clone, Display)]
-pub enum AssignmentTarget<'a> {
+pub enum AssignmentTarget {
     /// Assignment to an expression-place
-    Expr(Box<Expr<'a>>),
+    Expr(Box<Expr>),
     /// Assignment to a local id (i.e. previously allocated stack space)
     LocalId(u16),
 }
 
-impl<'a> AssignmentTarget<'a> {
-    pub fn as_expr(&self) -> Option<&Expr<'a>> {
+impl AssignmentTarget {
+    pub fn as_expr(&self) -> Option<&Expr> {
         match self {
             Self::Expr(e) => Some(e),
             _ => None,
@@ -371,18 +371,18 @@ impl<'a> AssignmentTarget<'a> {
 /// An assignment expression
 #[derive(Debug, Clone, Display)]
 #[display(fmt = "{left} {operator} {right}")]
-pub struct AssignmentExpr<'a> {
+pub struct AssignmentExpr {
     /// The lefthand side (place-expression)
-    pub left: AssignmentTarget<'a>,
+    pub left: AssignmentTarget,
     /// The righthand side (value)
-    pub right: Box<Expr<'a>>,
+    pub right: Box<Expr>,
     /// The type of assignment, (`=`/`+=`/etc)
     pub operator: TokenType,
 }
 
-impl<'a> AssignmentExpr<'a> {
+impl AssignmentExpr {
     /// Creates a new assignment expression
-    pub fn new(l: AssignmentTarget<'a>, r: Expr<'a>, op: TokenType) -> Self {
+    pub fn new(l: AssignmentTarget, r: Expr, op: TokenType) -> Self {
         Self {
             left: l,
             right: Box::new(r),
@@ -390,7 +390,7 @@ impl<'a> AssignmentExpr<'a> {
         }
     }
     /// Convenient method for `AssignmentExpr::new(AssignmentTarget::Expr(Box::new(left)), right, op)`
-    pub fn new_expr_place(l: Expr<'a>, r: Expr<'a>, op: TokenType) -> Self {
+    pub fn new_expr_place(l: Expr, r: Expr, op: TokenType) -> Self {
         Self {
             left: AssignmentTarget::Expr(Box::new(l)),
             right: Box::new(r),
@@ -398,7 +398,7 @@ impl<'a> AssignmentExpr<'a> {
         }
     }
     /// Convenient method for `AssignmentExpr::new(AssignmentTarget::LocalId(left), right, op)`
-    pub fn new_local_place(l: u16, r: Expr<'a>, op: TokenType) -> Self {
+    pub fn new_local_place(l: u16, r: Expr, op: TokenType) -> Self {
         Self {
             left: AssignmentTarget::LocalId(l),
             right: Box::new(r),
@@ -410,18 +410,18 @@ impl<'a> AssignmentExpr<'a> {
 /// Any binary expression
 #[derive(Debug, Clone, Display)]
 #[display(fmt = "{left} {operator} {right}")]
-pub struct BinaryExpr<'a> {
+pub struct BinaryExpr {
     /// Lefthand side
-    pub left: Box<Expr<'a>>,
+    pub left: Box<Expr>,
     /// Righthand side
-    pub right: Box<Expr<'a>>,
+    pub right: Box<Expr>,
     /// Operator
     pub operator: TokenType,
 }
 
-impl<'a> BinaryExpr<'a> {
+impl BinaryExpr {
     /// Creates a new binary expression
-    pub fn new(l: Expr<'a>, r: Expr<'a>, op: TokenType) -> Self {
+    pub fn new(l: Expr, r: Expr, op: TokenType) -> Self {
         Self {
             left: Box::new(l),
             right: Box::new(r),
@@ -432,9 +432,9 @@ impl<'a> BinaryExpr<'a> {
 
 /// A grouping expression
 #[derive(Debug, Clone)]
-pub struct GroupingExpr<'a>(pub Vec<Expr<'a>>);
+pub struct GroupingExpr(pub Vec<Expr>);
 
-impl<'a> fmt::Display for GroupingExpr<'a> {
+impl fmt::Display for GroupingExpr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "(")?;
         fmt_list(f, &self.0, ",")?;
@@ -444,20 +444,20 @@ impl<'a> fmt::Display for GroupingExpr<'a> {
 
 /// A literal expression
 #[derive(Debug, Clone, Display)]
-pub enum LiteralExpr<'a> {
+pub enum LiteralExpr {
     /// Boolean literal
     Boolean(bool),
-    // Binding(VariableBinding<'a>),
+    // Binding(VariableBinding),
     /// Identifier literal (variable lookup)
-    Identifier(Cow<'a, str>),
+    Identifier(Symbol),
     /// Number literal
     Number(f64),
     /// String literal, borrowed from input string
     #[display(fmt = "\"{_0}\"")]
-    String(Cow<'a, str>),
+    String(Symbol),
 
     #[display(fmt = "/{_1}/")]
-    Regex(dash_regex::Regex, &'a str),
+    Regex(dash_regex::Regex, Symbol),
 
     #[display(fmt = "null")]
     Null,
@@ -466,32 +466,7 @@ pub enum LiteralExpr<'a> {
     Undefined,
 }
 
-impl<'a> LiteralExpr<'a> {
-    /// Tries to get the identifier of a literal, if present
-    pub fn as_identifier_borrowed(&self) -> Option<&'a str> {
-        match self {
-            Self::Boolean(b) => Some(b.then(|| "true").unwrap_or("false")),
-            Self::Identifier(Cow::Borrowed(i)) => Some(i),
-            Self::Undefined => Some("undefined"),
-            Self::Null => Some("null"),
-            Self::String(Cow::Borrowed(s)) => Some(s),
-            _ => None,
-        }
-    }
-
-    /// Converts the identifier of a literal
-    pub fn to_identifier(&self) -> Cow<'a, str> {
-        match self {
-            Self::Boolean(b) => Cow::Borrowed(b.then(|| "true").unwrap_or("false")),
-            Self::Identifier(ident) => ident.clone(),
-            Self::Undefined => Cow::Borrowed("undefined"),
-            Self::Null => Cow::Borrowed("null"),
-            Self::Number(n) => Cow::Owned(n.to_string()),
-            Self::String(s) => s.clone(),
-            Self::Regex(_, s) => Cow::Borrowed(*s),
-        }
-    }
-
+impl LiteralExpr {
     /// Checks whether this literal is always a truthy value
     ///
     /// The optimizer may use this for optimizing potential branches
@@ -500,7 +475,7 @@ impl<'a> LiteralExpr<'a> {
             Self::Boolean(b) => Some(*b),
             Self::Identifier(_) => None,
             Self::Number(n) => Some(*n != 0.0),
-            Self::String(s) => Some(!s.is_empty()),
+            Self::String(s) => Some(*s != sym::EMPTY),
             Self::Null => Some(false),
             Self::Undefined => Some(false),
             Self::Regex(..) => Some(true),
@@ -511,16 +486,16 @@ impl<'a> LiteralExpr<'a> {
 /// Unary expression
 #[derive(Debug, Clone, Display)]
 #[display(fmt = "{operator}{expr}")]
-pub struct UnaryExpr<'a> {
+pub struct UnaryExpr {
     /// The operator that was used
     pub operator: TokenType,
     /// Expression
-    pub expr: Box<Expr<'a>>,
+    pub expr: Box<Expr>,
 }
 
-impl<'a> UnaryExpr<'a> {
+impl UnaryExpr {
     /// Creates a new unary expression
-    pub fn new(op: TokenType, expr: Expr<'a>) -> Self {
+    pub fn new(op: TokenType, expr: Expr) -> Self {
         Self {
             operator: op,
             expr: Box::new(expr),
