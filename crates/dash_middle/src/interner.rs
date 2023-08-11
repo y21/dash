@@ -1,9 +1,11 @@
 use std::borrow;
 use std::fmt;
+use std::hash::BuildHasherDefault;
 use std::hash::Hash;
 use std::rc::Rc;
 
-use ahash::AHashMap;
+use hashbrown::hash_map::EntryRef;
+use rustc_hash::FxHasher;
 
 pub mod sym {
     use super::Symbol;
@@ -193,13 +195,14 @@ pub mod sym {
 #[derive(Default, Debug)]
 pub struct StringInterner {
     store: Vec<Rc<str>>,
-    mapping: AHashMap<Rc<str>, u32>,
+    mapping: hashbrown::HashMap<Rc<str>, RawSymbol, BuildHasherDefault<FxHasher>>,
 }
 
 impl StringInterner {
     pub fn new() -> Self {
         let mut store = Vec::with_capacity(sym::PREINTERNED.len());
-        let mut mapping = AHashMap::with_capacity(sym::PREINTERNED.len());
+        let mut mapping =
+            hashbrown::HashMap::with_capacity_and_hasher(sym::PREINTERNED.len(), BuildHasherDefault::default());
 
         for (s, index) in sym::PREINTERNED {
             let s = Rc::from(*s);
@@ -216,20 +219,23 @@ impl StringInterner {
     }
 
     pub fn intern(&mut self, value: impl borrow::Borrow<str>) -> Symbol {
-        if let Some(&id) = self.mapping.get(value.borrow()) {
-            Symbol(id)
-        } else {
-            let id = self.store.len() as u32;
-            let value = Rc::<str>::from(value.borrow());
-            self.store.push(value.clone());
-            self.mapping.insert(value, id);
-            Symbol(id)
+        match self.mapping.entry_ref(value.borrow()) {
+            EntryRef::Occupied(entry) => Symbol(*entry.get()),
+            EntryRef::Vacant(entry) => {
+                let id = self.store.len() as RawSymbol;
+                let value: Rc<str> = Rc::from(value.borrow());
+                self.store.push(value.clone());
+                entry.insert(id);
+                Symbol(id)
+            }
         }
     }
 }
 
+type RawSymbol = u32;
+
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
-pub struct Symbol(u32);
+pub struct Symbol(RawSymbol);
 
 impl fmt::Display for Symbol {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -242,9 +248,6 @@ impl fmt::Display for Symbol {
 }
 
 impl Symbol {
-    pub fn as_u32(self) -> u32 {
-        self.0
-    }
     pub fn is_keyword(self) -> bool {
         #![allow(clippy::absurd_extreme_comparisons)]
 
