@@ -6,7 +6,6 @@ use dash_middle::interner::Symbol;
 use dash_middle::lexer::token::Token;
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::error::Error;
-use dash_middle::parser::error::ErrorKind;
 use dash_middle::parser::statement::FuncId;
 use dash_middle::parser::statement::Statement;
 use dash_middle::sourcemap::SourceMap;
@@ -33,10 +32,7 @@ pub struct Parser<'a, 'interner> {
 impl<'a, 'interner> Parser<'a, 'interner> {
     /// Creates a [`Parser`] from a string.
     #[cfg(feature = "from_string")]
-    pub fn new_from_str(
-        interner: &'interner mut StringInterner,
-        input: &'a str,
-    ) -> Result<Self, Vec<dash_middle::lexer::error::Error>> {
+    pub fn new_from_str(interner: &'interner mut StringInterner, input: &'a str) -> Result<Self, Vec<Error>> {
         dash_lexer::Lexer::new(interner, input)
             .scan_all()
             .map(|tok| Self::new(interner, input, tok))
@@ -95,7 +91,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         match u64::from_str_radix(src, radix).map(|x| x as f64) {
             Ok(f) => Some(f),
             Err(e) => {
-                self.create_error(ErrorKind::ParseIntError(self.previous().cloned()?, e));
+                self.create_error(Error::ParseIntError(self.previous().cloned()?, e));
                 None
             }
         }
@@ -117,7 +113,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             Some(k) => k,
             None => {
                 if emit_error {
-                    self.create_error(ErrorKind::UnexpectedEof);
+                    self.create_error(Error::UnexpectedEof);
                 }
                 return false;
             }
@@ -127,7 +123,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
         if !ok && emit_error {
             let current = current.clone();
-            self.create_error(ErrorKind::UnexpectedTokenMultiple(current, ty));
+            self.create_error(Error::UnexpectedTokenMultiple(current, ty));
         }
 
         ok
@@ -147,7 +143,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             Some(k) => k,
             None => {
                 if emit_error {
-                    self.create_error(ErrorKind::UnexpectedEof);
+                    self.create_error(Error::UnexpectedEof);
                 }
                 return false;
             }
@@ -159,16 +155,16 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             self.advance();
         } else if emit_error {
             let current = current.clone();
-            self.create_error(ErrorKind::UnexpectedTokenMultiple(current, expected_ty));
+            self.create_error(Error::UnexpectedTokenMultiple(current, expected_ty));
         }
 
         ok
     }
 
-    fn create_error(&mut self, kind: ErrorKind) {
-        debug!("got error {:?}, recovering", kind);
+    fn create_error(&mut self, err: Error) {
+        debug!("got error {:?}, recovering", err);
         if !self.error_sync {
-            self.errors.push(Error { kind });
+            self.errors.push(err);
             self.error_sync = true;
         }
     }

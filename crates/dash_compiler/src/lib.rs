@@ -12,6 +12,7 @@ use dash_middle::compiler::{constant::ConstantPool, external::External};
 use dash_middle::compiler::{CompileResult, FunctionCallMetadata, StaticImportKind};
 use dash_middle::interner::{sym, StringInterner, Symbol};
 use dash_middle::lexer::token::TokenType;
+use dash_middle::parser::error::Error;
 use dash_middle::parser::expr::Expr;
 use dash_middle::parser::expr::FunctionCall;
 use dash_middle::parser::expr::GroupingExpr;
@@ -51,7 +52,7 @@ use jump_container::JumpContainer;
 
 use crate::builder::{InstructionBuilder, Label};
 
-use self::{error::CompileError, instruction::NamedExportKind};
+use self::instruction::NamedExportKind;
 
 pub mod builder;
 pub mod error;
@@ -65,7 +66,7 @@ mod jump_container;
 
 macro_rules! unimplementedc {
     ($($what:expr),*) => {
-        return Err(CompileError::Unimplemented(format_args!($($what),*).to_string()))
+        return Err(Error::Unimplemented(format_args!($($what),*).to_string()))
     };
 }
 
@@ -182,11 +183,7 @@ impl<'interner> FunctionCompiler<'interner> {
         }
     }
 
-    pub fn compile_ast(
-        mut self,
-        mut ast: Vec<Statement>,
-        implicit_return: bool,
-    ) -> Result<CompileResult, CompileError> {
+    pub fn compile_ast(mut self, mut ast: Vec<Statement>, implicit_return: bool) -> Result<CompileResult, Error> {
         let compile_span = span!(Level::TRACE, "compile ast");
         let _enter = compile_span.enter();
 
@@ -242,7 +239,7 @@ impl<'interner> FunctionCompiler<'interner> {
         })
     }
 
-    pub fn accept_multiple(&mut self, stmts: Vec<Statement>) -> Result<(), CompileError> {
+    pub fn accept_multiple(&mut self, stmts: Vec<Statement>) -> Result<(), Error> {
         for stmt in stmts {
             self.accept(stmt)?;
         }
@@ -314,7 +311,7 @@ impl<'interner> FunctionCompiler<'interner> {
         binding: VariableBinding,
         expr: Expr,
         mut body: Box<Statement>,
-    ) -> Result<(), CompileError> {
+    ) -> Result<(), Error> {
         // For-Of Loop Desugaring:
 
         // === ORIGINAL ===
@@ -426,8 +423,8 @@ enum ForEachLoopKind {
     ForIn,
 }
 
-impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner> {
-    fn accept(&mut self, stmt: Statement) -> Result<(), CompileError> {
+impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
+    fn accept(&mut self, stmt: Statement) -> Result<(), Error> {
         match stmt {
             Statement::Expression(e) => self.visit_expression_statement(e),
             Statement::Variable(v) => self.visit_variable_declaration(v),
@@ -453,7 +450,7 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
         }
     }
 
-    fn accept_expr(&mut self, expr: Expr) -> Result<(), CompileError> {
+    fn accept_expr(&mut self, expr: Expr) -> Result<(), Error> {
         match expr {
             Expr::Binary(e) => self.visit_binary_expression(e),
             Expr::Assignment(e) => self.visit_assignment_expression(e),
@@ -478,10 +475,7 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
         }
     }
 
-    fn visit_binary_expression(
-        &mut self,
-        BinaryExpr { left, right, operator }: BinaryExpr,
-    ) -> Result<(), CompileError> {
+    fn visit_binary_expression(&mut self, BinaryExpr { left, right, operator }: BinaryExpr) -> Result<(), Error> {
         let func_id = self.current_function().id;
         let left_type = self.tcx.visit(&left, func_id);
         let right_type = self.tcx.visit(&right, func_id);
@@ -621,13 +615,13 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
         Ok(())
     }
 
-    fn visit_expression_statement(&mut self, expr: Expr) -> Result<(), CompileError> {
+    fn visit_expression_statement(&mut self, expr: Expr) -> Result<(), Error> {
         self.accept_expr(expr)?;
         InstructionBuilder::new(self).build_pop();
         Ok(())
     }
 
-    fn visit_grouping_expression(&mut self, GroupingExpr(exprs): GroupingExpr) -> Result<(), CompileError> {
+    fn visit_grouping_expression(&mut self, GroupingExpr(exprs): GroupingExpr) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         for expr in exprs {
@@ -640,13 +634,13 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
         Ok(())
     }
 
-    fn visit_literal_expression(&mut self, expr: LiteralExpr) -> Result<(), CompileError> {
+    fn visit_literal_expression(&mut self, expr: LiteralExpr) -> Result<(), Error> {
         let constant = Constant::from_literal(self.interner, &expr);
         InstructionBuilder::new(self).build_constant(constant)?;
         Ok(())
     }
 
-    fn visit_identifier_expression(&mut self, ident: Symbol) -> Result<(), CompileError> {
+    fn visit_identifier_expression(&mut self, ident: Symbol) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         match ident {
@@ -664,7 +658,7 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
         Ok(())
     }
 
-    fn visit_unary_expression(&mut self, UnaryExpr { operator, expr }: UnaryExpr) -> Result<(), CompileError> {
+    fn visit_unary_expression(&mut self, UnaryExpr { operator, expr }: UnaryExpr) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         // Special case delete operator, as it works different from other unary operators
@@ -714,14 +708,14 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
             }
             TokenType::Yield => {
                 if !matches!(ib.current_function().ty, FunctionKind::Generator) {
-                    return Err(CompileError::YieldOutsideGenerator);
+                    return Err(Error::YieldOutsideGenerator);
                 }
 
                 ib.build_yield();
             }
             TokenType::Await => {
                 if !ib.current_function().r#async {
-                    return Err(CompileError::AwaitOutsideAsync);
+                    return Err(Error::AwaitOutsideAsync);
                 }
 
                 ib.build_await();
@@ -735,7 +729,7 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
     fn visit_variable_declaration(
         &mut self,
         VariableDeclarations(declarations): VariableDeclarations,
-    ) -> Result<(), CompileError> {
+    ) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         for VariableDeclaration { binding, value } in declarations {
@@ -755,13 +749,10 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
                         unimplementedc!("Rest operator in object destructuring");
                     }
 
-                    let field_count = fields
-                        .len()
-                        .try_into()
-                        .map_err(|_| CompileError::DestructureLimitExceeded)?;
+                    let field_count = fields.len().try_into().map_err(|_| Error::DestructureLimitExceeded)?;
 
                     // Unwrap ok; checked at parse time
-                    let value = value.ok_or(CompileError::MissingInitializerInDestructuring)?;
+                    let value = value.ok_or(Error::MissingInitializerInDestructuring)?;
                     ib.accept_expr(value)?;
 
                     ib.build_objdestruct(field_count);
@@ -782,10 +773,7 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
                         unimplementedc!("Rest operator in array destructuring");
                     }
 
-                    let field_count = fields
-                        .len()
-                        .try_into()
-                        .map_err(|_| CompileError::DestructureLimitExceeded)?;
+                    let field_count = fields.len().try_into().map_err(|_| Error::DestructureLimitExceeded)?;
 
                     // Unwrap ok; checked at parse time
                     let value = value.expect("Array destructuring requires a value");
@@ -814,7 +802,7 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
             branches,
             el,
         }: IfStatement,
-    ) -> Result<(), CompileError> {
+    ) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         // Desugar last `else` block into `else if(true)` for simplicity
@@ -862,7 +850,7 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
         Ok(())
     }
 
-    fn visit_block_statement(&mut self, BlockStatement(stmt): BlockStatement) -> Result<(), CompileError> {
+    fn visit_block_statement(&mut self, BlockStatement(stmt): BlockStatement) -> Result<(), Error> {
         self.current_scope_mut().enter();
         // Note: No `?` here because we need to always exit the scope
         let re = self.accept_multiple(stmt);
@@ -870,7 +858,7 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
         re
     }
 
-    fn visit_function_declaration(&mut self, fun: FunctionDeclaration) -> Result<(), CompileError> {
+    fn visit_function_declaration(&mut self, fun: FunctionDeclaration) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
         let var_id = match fun.name {
             Some(name) => Some(
@@ -888,7 +876,7 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
         Ok(())
     }
 
-    fn visit_while_loop(&mut self, WhileLoop { condition, body }: WhileLoop) -> Result<(), CompileError> {
+    fn visit_while_loop(&mut self, WhileLoop { condition, body }: WhileLoop) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         let loop_id = ib.current_function_mut().prepare_loop();
@@ -908,7 +896,7 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
         Ok(())
     }
 
-    fn visit_do_while_loop(&mut self, DoWhileLoop { body, condition }: DoWhileLoop) -> Result<(), CompileError> {
+    fn visit_do_while_loop(&mut self, DoWhileLoop { body, condition }: DoWhileLoop) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         let loop_id = ib.current_function_mut().prepare_loop();
@@ -930,7 +918,7 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
     fn visit_assignment_expression(
         &mut self,
         AssignmentExpr { left, right, operator }: AssignmentExpr,
-    ) -> Result<(), CompileError> {
+    ) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         match left {
@@ -940,7 +928,7 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
 
                     if let Some((id, local, is_extern)) = local {
                         if matches!(local.binding().kind, VariableDeclarationKind::Const) {
-                            return Err(CompileError::ConstAssignment);
+                            return Err(Error::ConstAssignment);
                         }
 
                         macro_rules! assign {
@@ -1113,7 +1101,7 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
             target,
             arguments,
         }: FunctionCall,
-    ) -> Result<(), CompileError> {
+    ) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
         // TODO: this also needs to be specialized for assignment expressions with property access as target
 
@@ -1132,7 +1120,7 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
             ib: &mut InstructionBuilder<'_, '_>,
             target: &Expr,
             arguments: &[CallArgumentKind],
-        ) -> Result<bool, CompileError> {
+        ) -> Result<bool, Error> {
             if let Expr::PropertyAccess(PropertyAccessExpr { target, property, .. }) = target {
                 let Some(target) = target.as_identifier() else {
                     return Ok(false);
@@ -1208,10 +1196,7 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
             false
         };
 
-        let argc = arguments
-            .len()
-            .try_into()
-            .map_err(|_| CompileError::ParameterLimitExceeded)?;
+        let argc = arguments.len().try_into().map_err(|_| Error::ParameterLimitExceeded)?;
 
         let mut spread_arg_indices = Vec::new();
 
@@ -1227,15 +1212,15 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
             }
         }
 
-        let meta = FunctionCallMetadata::new_checked(argc, constructor_call, has_this)
-            .ok_or(CompileError::ParameterLimitExceeded)?;
+        let meta =
+            FunctionCallMetadata::new_checked(argc, constructor_call, has_this).ok_or(Error::ParameterLimitExceeded)?;
 
         ib.build_call(meta, spread_arg_indices);
 
         Ok(())
     }
 
-    fn visit_return_statement(&mut self, ReturnStatement(stmt): ReturnStatement) -> Result<(), CompileError> {
+    fn visit_return_statement(&mut self, ReturnStatement(stmt): ReturnStatement) -> Result<(), Error> {
         let tc_depth = self.current_function().try_catch_depth;
         self.accept_expr(stmt)?;
         InstructionBuilder::new(self).build_ret(tc_depth);
@@ -1245,7 +1230,7 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
     fn visit_conditional_expr(
         &mut self,
         ConditionalExpr { condition, then, el }: ConditionalExpr,
-    ) -> Result<(), CompileError> {
+    ) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         ib.accept_expr(*condition)?;
@@ -1269,7 +1254,7 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
             property,
         }: PropertyAccessExpr,
         preserve_this: bool,
-    ) -> Result<(), CompileError> {
+    ) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         ib.accept_expr(*target)?;
@@ -1288,7 +1273,7 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
         Ok(())
     }
 
-    fn visit_sequence_expr(&mut self, (expr1, expr2): Seq) -> Result<(), CompileError> {
+    fn visit_sequence_expr(&mut self, (expr1, expr2): Seq) -> Result<(), Error> {
         self.accept_expr(*expr1)?;
         InstructionBuilder::new(self).build_pop();
         self.accept_expr(*expr2)?;
@@ -1296,7 +1281,7 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
         Ok(())
     }
 
-    fn visit_postfix_expr(&mut self, (tt, expr): Postfix) -> Result<(), CompileError> {
+    fn visit_postfix_expr(&mut self, (tt, expr): Postfix) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         match *expr {
@@ -1358,7 +1343,7 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
         Ok(())
     }
 
-    fn visit_prefix_expr(&mut self, (tt, expr): Postfix) -> Result<(), CompileError> {
+    fn visit_prefix_expr(&mut self, (tt, expr): Postfix) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         match *expr {
@@ -1431,7 +1416,7 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
             r#async,
             ty_segment: _,
         }: FunctionDeclaration,
-    ) -> Result<(), CompileError> {
+    ) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
         ib.function_stack.push(FunctionLocalState::new(ty, id, r#async));
 
@@ -1499,13 +1484,10 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
         Ok(())
     }
 
-    fn visit_array_literal(&mut self, ArrayLiteral(exprs): ArrayLiteral) -> Result<(), CompileError> {
+    fn visit_array_literal(&mut self, ArrayLiteral(exprs): ArrayLiteral) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
-        let len = exprs
-            .len()
-            .try_into()
-            .map_err(|_| CompileError::ArrayLitLimitExceeded)?;
+        let len = exprs.len().try_into().map_err(|_| Error::ArrayLitLimitExceeded)?;
 
         let kinds = exprs
             .iter()
@@ -1528,7 +1510,7 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
         Ok(())
     }
 
-    fn visit_object_literal(&mut self, ObjectLiteral(exprs): ObjectLiteral) -> Result<(), CompileError> {
+    fn visit_object_literal(&mut self, ObjectLiteral(exprs): ObjectLiteral) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         let mut members = Vec::with_capacity(exprs.len());
@@ -1548,7 +1530,7 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
         Ok(())
     }
 
-    fn visit_try_catch(&mut self, TryCatch { try_, catch, .. }: TryCatch) -> Result<(), CompileError> {
+    fn visit_try_catch(&mut self, TryCatch { try_, catch, .. }: TryCatch) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         ib.build_try_block();
@@ -1572,7 +1554,7 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
 
             if id == u16::MAX {
                 // Max u16 value is reserved for "no binding"
-                return Err(CompileError::LocalLimitExceeded);
+                return Err(Error::LocalLimitExceeded);
             }
 
             ib.writew(id);
@@ -1589,7 +1571,7 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
         Ok(())
     }
 
-    fn visit_throw(&mut self, expr: Expr) -> Result<(), CompileError> {
+    fn visit_throw(&mut self, expr: Expr) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
         ib.accept_expr(expr)?;
         ib.build_throw();
@@ -1604,7 +1586,7 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
             finalizer,
             body,
         }: ForLoop,
-    ) -> Result<(), CompileError> {
+    ) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
         ib.current_scope_mut().enter();
 
@@ -1642,15 +1624,15 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
         Ok(())
     }
 
-    fn visit_for_of_loop(&mut self, ForOfLoop { binding, expr, body }: ForOfLoop) -> Result<(), CompileError> {
+    fn visit_for_of_loop(&mut self, ForOfLoop { binding, expr, body }: ForOfLoop) -> Result<(), Error> {
         self.visit_for_each_kinded_loop(ForEachLoopKind::ForOf, binding, expr, body)
     }
 
-    fn visit_for_in_loop(&mut self, ForInLoop { binding, expr, body }: ForInLoop) -> Result<(), CompileError> {
+    fn visit_for_in_loop(&mut self, ForInLoop { binding, expr, body }: ForInLoop) -> Result<(), Error> {
         self.visit_for_each_kinded_loop(ForEachLoopKind::ForIn, binding, expr, body)
     }
 
-    fn visit_import_statement(&mut self, import: ImportKind) -> Result<(), CompileError> {
+    fn visit_import_statement(&mut self, import: ImportKind) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         match import {
@@ -1686,7 +1668,7 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
         Ok(())
     }
 
-    fn visit_export_statement(&mut self, export: ExportKind) -> Result<(), CompileError> {
+    fn visit_export_statement(&mut self, export: ExportKind) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         match export {
@@ -1741,17 +1723,13 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
         Ok(())
     }
 
-    fn visit_empty_statement(&mut self) -> Result<(), CompileError> {
+    fn visit_empty_statement(&mut self) -> Result<(), Error> {
         Ok(())
     }
 
-    fn visit_break(&mut self) -> Result<(), CompileError> {
+    fn visit_break(&mut self) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
-        let breakable = *ib
-            .current_function_mut()
-            .breakables
-            .last()
-            .ok_or(CompileError::IllegalBreak)?;
+        let breakable = *ib.current_function_mut().breakables.last().ok_or(Error::IllegalBreak)?;
         match breakable {
             Breakable::Loop { loop_id } => {
                 ib.build_jmp(Label::LoopEnd { loop_id }, false);
@@ -1763,13 +1741,9 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
         Ok(())
     }
 
-    fn visit_continue(&mut self) -> Result<(), CompileError> {
+    fn visit_continue(&mut self) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
-        let breakable = *ib
-            .current_function_mut()
-            .breakables
-            .last()
-            .ok_or(CompileError::IllegalBreak)?;
+        let breakable = *ib.current_function_mut().breakables.last().ok_or(Error::IllegalBreak)?;
         match breakable {
             Breakable::Loop { loop_id } => {
                 ib.build_jmp(Label::LoopIncrement { loop_id }, false);
@@ -1782,16 +1756,16 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
         Ok(())
     }
 
-    fn visit_debugger(&mut self) -> Result<(), CompileError> {
+    fn visit_debugger(&mut self) -> Result<(), Error> {
         InstructionBuilder::new(self).build_debugger();
         Ok(())
     }
 
-    fn visit_empty_expr(&mut self) -> Result<(), CompileError> {
+    fn visit_empty_expr(&mut self) -> Result<(), Error> {
         Ok(())
     }
 
-    fn visit_class_declaration(&mut self, class: Class) -> Result<(), CompileError> {
+    fn visit_class_declaration(&mut self, class: Class) -> Result<(), Error> {
         if class.extends.is_some() {
             unimplementedc!("Extending class");
         }
@@ -1878,7 +1852,7 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
     fn visit_switch_statement(
         &mut self,
         SwitchStatement { expr, cases, default }: SwitchStatement,
-    ) -> Result<(), CompileError> {
+    ) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         let switch_id = ib.current_function_mut().prepare_switch();
@@ -1895,9 +1869,7 @@ impl<'interner> Visitor<Result<(), CompileError>> for FunctionCompiler<'interner
         ib.accept_expr(expr)?;
 
         // Write switch metadata (case count, has default case)
-        let case_count = case_count
-            .try_into()
-            .map_err(|_| CompileError::SwitchCaseLimitExceeded)?;
+        let case_count = case_count.try_into().map_err(|_| Error::SwitchCaseLimitExceeded)?;
 
         ib.build_switch(case_count, has_default);
 

@@ -2,6 +2,7 @@ use std::fmt::Debug;
 use std::time::SystemTime;
 
 use dash_middle::compiler::StaticImportKind;
+use dash_middle::interner::StringInterner;
 use dash_optimizer::OptLevel;
 use dash_vm::eval::EvalError;
 use dash_vm::params::VmParams;
@@ -58,7 +59,7 @@ impl Runtime {
         State::from_vm(&self.vm).set_root_module(module_manager);
     }
 
-    pub fn eval(&mut self, code: &str, opt: OptLevel) -> Result<Unrooted, EvalError> {
+    pub fn eval(&mut self, code: &str, opt: OptLevel) -> Result<Unrooted, (EvalError, StringInterner)> {
         self.vm.eval(code, opt)
     }
 

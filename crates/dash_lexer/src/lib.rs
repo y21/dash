@@ -2,8 +2,8 @@ use std::borrow::Cow;
 use std::ops::Range;
 
 use dash_middle::interner::{StringInterner, Symbol};
-use dash_middle::lexer::error::{Error, ErrorKind};
 use dash_middle::lexer::token::{as_token, Token, TokenType};
+use dash_middle::parser::error::Error;
 use dash_middle::sourcemap::Span;
 use dash_middle::util;
 
@@ -125,8 +125,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
     }
 
     /// Creates a new error token
-    fn create_error(&mut self, kind: ErrorKind) {
-        let err = Error { loc: self.span(), kind };
+    fn create_error(&mut self, err: Error) {
         self.errors.push(err);
     }
 
@@ -266,7 +265,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
         };
 
         if !found_quote && self.is_eof() {
-            return self.create_error(ErrorKind::UnexpectedEof);
+            return self.create_error(Error::UnexpectedEof);
         }
 
         let sym = self.interner.intern(lexeme);
@@ -367,7 +366,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
         }
 
         if !found_end && self.is_eof() {
-            return self.create_error(ErrorKind::UnexpectedEof);
+            return self.create_error(Error::UnexpectedEof);
         }
 
         let range = match is_interpolated {
@@ -663,7 +662,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
                 } else if util::is_identifier_start(cur) {
                     self.read_identifier()
                 } else {
-                    self.create_error(ErrorKind::UnknownCharacter(cur));
+                    self.create_error(Error::UnknownCharacter(self.span(), cur));
                 }
             }
         };

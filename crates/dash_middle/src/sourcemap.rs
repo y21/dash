@@ -4,6 +4,19 @@ pub struct Span {
     pub hi: u32,
 }
 
+impl Span {
+    pub fn res(self, src: &str) -> &str {
+        &src[self.lo as usize..self.hi as usize]
+    }
+    pub fn to(self, other: Span) -> Span {
+        debug_assert!(other.hi >= self.lo);
+        Span {
+            lo: self.lo,
+            hi: other.hi,
+        }
+    }
+}
+
 pub struct SourceMap<'buf>(&'buf str);
 
 impl<'buf> SourceMap<'buf> {

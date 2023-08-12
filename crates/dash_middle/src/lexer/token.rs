@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::interner::sym;
 use crate::interner::Symbol;
 use crate::sourcemap::Span;
@@ -465,6 +467,20 @@ impl TokenType {
     /// Returns a "dummy" template literal.
     /// Should only be used in `ErrorKind`s.
     pub const DUMMY_TEMPLATE_LITERAL: Self = Self::TemplateLiteral(sym::EMPTY);
+
+    pub fn fmt_for_expected_tys(&self) -> impl fmt::Display + '_ {
+        struct DisplayExpectedTys<'a>(&'a TokenType);
+        impl<'a> fmt::Display for DisplayExpectedTys<'a> {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                match *self.0 {
+                    TokenType::DUMMY_IDENTIFIER => write!(f, "<identifier>"),
+                    TokenType::DUMMY_TEMPLATE_LITERAL => write!(f, "<template literal>"),
+                    other => write!(f, "{}", other),
+                }
+            }
+        }
+        DisplayExpectedTys(self)
+    }
 }
 
 pub fn as_token(s: Symbol) -> TokenType {

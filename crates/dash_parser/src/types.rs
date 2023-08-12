@@ -1,5 +1,5 @@
 use dash_middle::lexer::token::TokenType;
-use dash_middle::parser::error::ErrorKind;
+use dash_middle::parser::error::Error;
 use dash_middle::parser::types::LiteralType;
 use dash_middle::parser::types::TypeSegment;
 
@@ -76,7 +76,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             TokenType::Identifier(cur) => TypeSegment::Literal(LiteralType::Identifier(cur)),
             _ => {
                 let cur = self.previous().cloned()?;
-                self.create_error(ErrorKind::UnknownToken(cur));
+                self.create_error(Error::UnknownToken(cur));
                 return None;
             }
         };

@@ -144,11 +144,8 @@ fn run_test(setup: &str, path: &OsStr, verbose: bool) -> RunResult {
             (Ok(_), Some(..)) => RunResult::Fail,
             (Err(err), negative) => {
                 let result = match (&err, negative) {
-                    (
-                        EvalError::Compiler(..) | EvalError::Lexer(..) | EvalError::Parser(..),
-                        Some(NegativePhase::Parse | NegativePhase::Resolution),
-                    ) => RunResult::Pass,
-                    (EvalError::Compiler(..) | EvalError::Lexer(..) | EvalError::Parser(..), None) => RunResult::Fail,
+                    (EvalError::Middle(..), Some(NegativePhase::Parse | NegativePhase::Resolution)) => RunResult::Pass,
+                    (EvalError::Middle(..), None) => RunResult::Fail,
                     (EvalError::Exception(..), Some(NegativePhase::Runtime)) => RunResult::Pass,
                     (EvalError::Exception(..), None) => RunResult::Fail,
                     (_, Some(..)) => RunResult::Fail,
@@ -157,9 +154,7 @@ fn run_test(setup: &str, path: &OsStr, verbose: bool) -> RunResult {
                 if let RunResult::Fail = result {
                     if verbose {
                         let s = match &err {
-                            EvalError::Compiler(c) => c.to_string(),
-                            EvalError::Lexer(l) => format!("{:?}", l[0].kind),
-                            EvalError::Parser(p) => format!("{:?}", p[0].kind),
+                            EvalError::Middle(errs) => format!("{errs:?}"),
                             EvalError::Exception(_ex) => {
                                 // let mut sc = LocalScope::new(&mut vm);
                                 // match ex.to_string(&mut sc) {

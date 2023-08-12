@@ -1,6 +1,6 @@
 use dash_middle::lexer::token::TokenType;
 use dash_middle::lexer::token::VARIABLE_TYPES;
-use dash_middle::parser::error::ErrorKind;
+use dash_middle::parser::error::Error;
 use dash_middle::parser::expr::Expr;
 use dash_middle::parser::statement::BlockStatement;
 use dash_middle::parser::statement::Catch;
@@ -257,6 +257,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
     }
 
     fn parse_for_loop(&mut self) -> Option<Loop> {
+        let for_kw_span = self.previous()?.span;
         self.expect_token_type_and_skip(&[TokenType::LeftParen], true);
 
         let init = if self.expect_token_type_and_skip(&[TokenType::Semicolon], false) {
@@ -438,7 +439,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 // TODO: refactor to if let guards once stable
                 other if other.is_identifier() => Parameter::Identifier(other.as_identifier().unwrap()),
                 _ => {
-                    self.create_error(ErrorKind::UnexpectedToken(tok.clone(), TokenType::Comma));
+                    self.create_error(Error::UnexpectedToken(tok.clone(), TokenType::Comma));
                     return None;
                 }
             };
@@ -497,14 +498,14 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                         if let Some(sym) = name.ty.as_identifier() {
                             if rest.is_some() {
                                 // Only allow one rest operator
-                                self.create_error(ErrorKind::MultipleRestInDestructuring(name));
+                                self.create_error(Error::MultipleRestInDestructuring(name));
                                 return None;
                             }
 
                             rest = Some(sym);
                             self.advance();
                         } else {
-                            self.create_error(ErrorKind::UnexpectedToken(name, TokenType::DUMMY_IDENTIFIER));
+                            self.create_error(Error::UnexpectedToken(name, TokenType::DUMMY_IDENTIFIER));
                             return None;
                         }
                     }
@@ -518,7 +519,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                                 self.advance();
                                 Some(alias)
                             } else {
-                                self.create_error(ErrorKind::UnexpectedToken(alias, TokenType::DUMMY_IDENTIFIER));
+                                self.create_error(Error::UnexpectedToken(alias, TokenType::DUMMY_IDENTIFIER));
                                 return None;
                             }
                         } else {
@@ -527,7 +528,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                         fields.push((name, alias));
                     }
                     _ => {
-                        self.create_error(ErrorKind::UnexpectedToken(cur, TokenType::DUMMY_IDENTIFIER));
+                        self.create_error(Error::UnexpectedToken(cur, TokenType::DUMMY_IDENTIFIER));
                         return None;
                     }
                 }
@@ -556,14 +557,14 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                         if let Some(sym) = name.ty.as_identifier() {
                             if rest.is_some() {
                                 // Only allow one rest operator
-                                self.create_error(ErrorKind::MultipleRestInDestructuring(name));
+                                self.create_error(Error::MultipleRestInDestructuring(name));
                                 return None;
                             }
 
                             rest = Some(sym);
                             self.advance();
                         } else {
-                            self.create_error(ErrorKind::UnexpectedToken(name, TokenType::DUMMY_IDENTIFIER));
+                            self.create_error(Error::UnexpectedToken(name, TokenType::DUMMY_IDENTIFIER));
                             return None;
                         }
                     }
@@ -573,7 +574,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                         fields.push(name);
                     }
                     _ => {
-                        self.create_error(ErrorKind::UnexpectedToken(cur, TokenType::DUMMY_IDENTIFIER));
+                        self.create_error(Error::UnexpectedToken(cur, TokenType::DUMMY_IDENTIFIER));
                         return None;
                     }
                 }
@@ -649,12 +650,12 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                     }
 
                     if default.replace(body).is_some() {
-                        self.create_error(ErrorKind::MultipleDefaultInSwitch(cur));
+                        self.create_error(Error::MultipleDefaultInSwitch(cur.span));
                         return None;
                     }
                 }
                 _ => {
-                    self.create_error(ErrorKind::UnexpectedTokenMultiple(
+                    self.create_error(Error::UnexpectedTokenMultiple(
                         cur,
                         &[TokenType::Case, TokenType::Default],
                     ));

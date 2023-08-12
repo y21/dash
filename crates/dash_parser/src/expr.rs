@@ -1,6 +1,6 @@
 use dash_middle::lexer::token::TokenType;
 use dash_middle::lexer::token::ASSIGNMENT_TYPES;
-use dash_middle::parser::error::ErrorKind;
+use dash_middle::parser::error::Error;
 use dash_middle::parser::expr::ArrayMemberKind;
 use dash_middle::parser::expr::CallArgumentKind;
 use dash_middle::parser::expr::Expr;
@@ -334,7 +334,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 let token = self.next()?;
                 if !matches!(token.ty, TokenType::Dot) {
                     let token = token.clone();
-                    self.create_error(ErrorKind::IncompleteSpread(token));
+                    self.create_error(Error::IncompleteSpread(token));
                     return None;
                 }
             }
@@ -387,6 +387,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 Expr::array_literal(items)
             }
             TokenType::LeftBrace => {
+                let lbrace_span = current.span;
                 let mut items = Vec::new();
                 while !self.expect_token_type_and_skip(&[TokenType::RightBrace], false) {
                     self.expect_token_type_and_skip(&[TokenType::Comma], false);
@@ -413,7 +414,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                                 let token = self.next()?;
                                 if !matches!(token.ty, TokenType::Dot) {
                                     let token = token.clone();
-                                    self.create_error(ErrorKind::IncompleteSpread(token));
+                                    self.create_error(Error::IncompleteSpread(token));
                                     return None;
                                 }
                             }
@@ -423,7 +424,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                             if let Some(ident) = other.as_property_name() {
                                 ObjectMemberKind::Static(ident)
                             } else {
-                                self.create_error(ErrorKind::UnexpectedToken(token, TokenType::DUMMY_IDENTIFIER));
+                                self.create_error(Error::UnexpectedToken(token, TokenType::DUMMY_IDENTIFIER));
                                 return None;
                             }
                         }
@@ -460,7 +461,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                                 match key {
                                     ObjectMemberKind::Static(name) => items.push((key, Expr::identifier(name))),
                                     ObjectMemberKind::Dynamic(..) => {
-                                        self.create_error(ErrorKind::UnexpectedToken(token, TokenType::Colon));
+                                        self.create_error(Error::UnexpectedToken(token, TokenType::Colon));
                                         return None;
                                     }
                                     _ => unreachable!(),
@@ -475,7 +476,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                             match key {
                                 ObjectMemberKind::Setter(..) => {
                                     if params.len() != 1 {
-                                        self.create_error(ErrorKind::InvalidAccessorParams {
+                                        self.create_error(Error::InvalidAccessorParams {
                                             token,
                                             expect: 1,
                                             got: params.len(),
@@ -485,7 +486,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                                 }
                                 ObjectMemberKind::Getter(..) => {
                                     if !params.is_empty() {
-                                        self.create_error(ErrorKind::InvalidAccessorParams {
+                                        self.create_error(Error::InvalidAccessorParams {
                                             token,
                                             expect: 0,
                                             got: params.len(),
@@ -514,6 +515,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                         }
                     }
                 }
+                let rbrace_span = self.previous().unwrap().span;
                 Expr::object_literal(items)
             }
             // TODO: this unwrap is not safe
@@ -564,8 +566,8 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 let nodes = match dash_regex::Parser::new(full.as_bytes()).parse_all() {
                     Ok(nodes) => nodes,
                     Err(err) => {
-                        let tok = self.current().unwrap().clone();
-                        self.create_error(ErrorKind::RegexSyntaxError(tok, err));
+                        let tok = self.previous().unwrap().clone();
+                        self.create_error(Error::RegexSyntaxError(tok, err));
                         return None;
                     }
                 };
@@ -583,7 +585,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             }
             _ => {
                 let cur = self.previous().cloned()?;
-                self.create_error(ErrorKind::UnknownToken(cur));
+                self.create_error(Error::UnknownToken(cur));
                 return None;
             }
         };

@@ -5,6 +5,7 @@ use derive_more::Display;
 use crate::{
     interner::{sym, Symbol},
     lexer::token::TokenType,
+    sourcemap::Span,
 };
 
 use super::statement::{fmt_list, FunctionDeclaration};

@@ -1,5 +1,6 @@
 use anyhow::Context;
 use clap::ArgMatches;
+use dash_middle::parser::error::IntoFormattableErrors;
 use dash_vm::eval::EvalError;
 use dash_vm::Vm;
 
@@ -14,8 +15,8 @@ pub fn eval(args: &ArgMatches) -> anyhow::Result<()> {
 
     match scope.eval(source, opt) {
         Ok(value) => util::print_value(value.root(&mut scope), &mut scope).unwrap(),
-        Err(EvalError::Exception(value)) => util::print_value(value.root(&mut scope), &mut scope).unwrap(),
-        Err(e) => println!("{e}"),
+        Err((EvalError::Exception(value), _)) => util::print_value(value.root(&mut scope), &mut scope).unwrap(),
+        Err((EvalError::Middle(errs), interner)) => println!("{}", errs.formattable(&interner, source, true)),
     };
 
     scope.process_async_tasks();

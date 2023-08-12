@@ -6,13 +6,11 @@ use dash_middle::{
         instruction::{AssignKind, Instruction, IntrinsicOperation},
         FunctionCallMetadata, ObjectMemberKind as CompilerObjectMemberKind, StaticImportKind,
     },
-    parser::expr::ObjectMemberKind,
+    parser::{error::Error, expr::ObjectMemberKind},
+    sourcemap::Span,
 };
 
-use super::{
-    builder::{InstructionBuilder, Label},
-    error::CompileError,
-};
+use super::builder::{InstructionBuilder, Label};
 
 macro_rules! simple_instruction {
     ($($fname:ident $value:expr),*) => {
@@ -209,25 +207,24 @@ impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
         self.write_wide_instr(Instruction::ArrayLit, Instruction::ArrayLitW, len);
     }
 
-    pub fn build_objlit(&mut self, constants: Vec<ObjectMemberKind>) -> Result<(), CompileError> {
-        let len = constants
-            .len()
-            .try_into()
-            .map_err(|_| CompileError::ObjectLitLimitExceeded)?;
+    pub fn build_objlit(&mut self, constants: Vec<ObjectMemberKind>) -> Result<(), Error> {
+        let len = constants.len().try_into().map_err(|_| Error::ObjectLitLimitExceeded)?;
 
         self.write_wide_instr(Instruction::ObjLit, Instruction::ObjLitW, len);
 
         fn compile_object_member_kind(
             ib: &mut InstructionBuilder,
+            // span: Span, // TODO: this should not be the span of the obj literal but the member kind
             name: Rc<str>,
             kind_id: u8,
-        ) -> Result<(), CompileError> {
+        ) -> Result<(), Error> {
             let id = ib
                 .current_function_mut()
                 .cp
-                .add(Constant::Identifier(name))?
+                .add(Constant::Identifier(name))
+                .map_err(|_| Error::ConstantPoolLimitExceeded)?
                 .try_into()
-                .map_err(|_| CompileError::ConstantPoolLimitExceeded)?;
+                .map_err(|_| Error::ConstantPoolLimitExceeded)?;
 
             ib.write(kind_id);
             ib.write(id);
@@ -268,13 +265,10 @@ impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
         self.writew(id);
     }
 
-    pub fn build_named_export(&mut self, it: &[NamedExportKind]) -> Result<(), CompileError> {
+    pub fn build_named_export(&mut self, it: &[NamedExportKind]) -> Result<(), Error> {
         self.write_instr(Instruction::ExportNamed);
 
-        let len = it
-            .len()
-            .try_into()
-            .map_err(|_| CompileError::ExportNameListLimitExceeded)?;
+        let len = it.len().try_into().map_err(|_| Error::ExportNameListLimitExceeded)?;
 
         self.writew(len);
 
