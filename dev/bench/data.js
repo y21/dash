@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1691958857720,
+  "lastUpdate": 1691959137994,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -4905,6 +4905,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 88610,
             "range": "± 361",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "Timo",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "51e735a9e48226e06e33f4a4e0935478f8bf51d7",
+          "message": "Merge pull request #72 from y21/spans\n\nRework the AST",
+          "timestamp": "2023-08-13T22:34:49+02:00",
+          "tree_id": "20fb54d9a01de2f930e258635ff218e2eed84c83",
+          "url": "https://github.com/y21/dash/commit/51e735a9e48226e06e33f4a4e0935478f8bf51d7"
+        },
+        "date": 1691959136519,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 3873033,
+            "range": "± 147175",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 342095,
+            "range": "± 21445",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 120990,
+            "range": "± 8111",
             "unit": "ns/iter"
           }
         ]
