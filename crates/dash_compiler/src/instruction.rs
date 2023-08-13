@@ -207,14 +207,17 @@ impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
         self.write_wide_instr(Instruction::ArrayLit, Instruction::ArrayLitW, len);
     }
 
-    pub fn build_objlit(&mut self, constants: Vec<ObjectMemberKind>) -> Result<(), Error> {
-        let len = constants.len().try_into().map_err(|_| Error::ObjectLitLimitExceeded)?;
+    pub fn build_objlit(&mut self, span: Span, constants: Vec<ObjectMemberKind>) -> Result<(), Error> {
+        let len = constants
+            .len()
+            .try_into()
+            .map_err(|_| Error::ObjectLitLimitExceeded(span))?;
 
         self.write_wide_instr(Instruction::ObjLit, Instruction::ObjLitW, len);
 
         fn compile_object_member_kind(
             ib: &mut InstructionBuilder,
-            // span: Span, // TODO: this should not be the span of the obj literal but the member kind
+            span: Span, // TODO: this should not be the span of the obj literal but the member kind
             name: Rc<str>,
             kind_id: u8,
         ) -> Result<(), Error> {
@@ -222,9 +225,9 @@ impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
                 .current_function_mut()
                 .cp
                 .add(Constant::Identifier(name))
-                .map_err(|_| Error::ConstantPoolLimitExceeded)?
+                .map_err(|_| Error::ConstantPoolLimitExceeded(span))?
                 .try_into()
-                .map_err(|_| Error::ConstantPoolLimitExceeded)?;
+                .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
 
             ib.write(kind_id);
             ib.write(id);
@@ -237,11 +240,11 @@ impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
             match member {
                 ObjectMemberKind::Dynamic(..) => self.write(kind_id),
                 ObjectMemberKind::Static(name) => {
-                    compile_object_member_kind(self, self.interner.resolve(name).clone(), kind_id)?
+                    compile_object_member_kind(self, span, self.interner.resolve(name).clone(), kind_id)?
                 }
                 ObjectMemberKind::Spread => self.write(kind_id),
                 ObjectMemberKind::Getter(name) | ObjectMemberKind::Setter(name) => {
-                    compile_object_member_kind(self, self.interner.resolve(name).clone(), kind_id)?
+                    compile_object_member_kind(self, span, self.interner.resolve(name).clone(), kind_id)?
                 }
             }
         }
@@ -265,10 +268,13 @@ impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
         self.writew(id);
     }
 
-    pub fn build_named_export(&mut self, it: &[NamedExportKind]) -> Result<(), Error> {
+    pub fn build_named_export(&mut self, span: Span, it: &[NamedExportKind]) -> Result<(), Error> {
         self.write_instr(Instruction::ExportNamed);
 
-        let len = it.len().try_into().map_err(|_| Error::ExportNameListLimitExceeded)?;
+        let len = it
+            .len()
+            .try_into()
+            .map_err(|_| Error::ExportNameListLimitExceeded(span))?;
 
         self.writew(len);
 

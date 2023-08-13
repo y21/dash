@@ -4,7 +4,7 @@ use derive_more::Display;
 
 use crate::{
     interner::{sym, Symbol},
-    lexer::token::{Token, TokenType},
+    lexer::token::TokenType,
     sourcemap::Span,
 };
 

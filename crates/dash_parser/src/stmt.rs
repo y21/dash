@@ -269,7 +269,6 @@ impl<'a, 'interner> Parser<'a, 'interner> {
     }
 
     fn parse_for_loop(&mut self) -> Option<Loop> {
-        let for_kw_span = self.previous()?.span;
         self.expect_token_type_and_skip(&[TokenType::LeftParen], true);
 
         let init = if self.expect_token_type_and_skip(&[TokenType::Semicolon], false) {

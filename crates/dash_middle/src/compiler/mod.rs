@@ -45,7 +45,11 @@ impl From<FunctionCallMetadata> for u8 {
 }
 
 impl FunctionCallMetadata {
-    pub fn new_checked(mut value: u8, constructor: bool, object: bool) -> Option<Self> {
+    pub fn new_checked(value: usize, constructor: bool, object: bool) -> Option<Self> {
+        let Ok(mut value) = u8::try_from(value) else {
+            return None;
+        };
+
         if value & 0b11000000 == 0 {
             if constructor {
                 value |= 0b10000000;

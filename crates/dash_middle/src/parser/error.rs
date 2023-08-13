@@ -7,8 +7,6 @@ use memchr::memchr;
 use memchr::memmem::rfind;
 use owo_colors::OwoColorize;
 
-use crate::compiler::constant::LimitExceededError as ConstantLimitExceededError;
-use crate::compiler::scope::LimitExceededError as LocalLimitExceededError;
 use crate::interner::StringInterner;
 use crate::lexer::token::Token;
 use crate::lexer::token::TokenType;
@@ -41,61 +39,52 @@ pub enum Error {
     RegexSyntaxError(Token, dash_regex::Error),
     IncompleteSpread(Token),
     /* Compiler */
-    ConstantPoolLimitExceeded,
-    LocalLimitExceeded,
-    IfBranchLimitExceeded,
-    SwitchCaseLimitExceeded,
-    ArrayLitLimitExceeded,
-    ObjectLitLimitExceeded,
-    ExportNameListLimitExceeded,
-    DestructureLimitExceeded,
-    ConstAssignment,
-    Unimplemented(String),
-    ParameterLimitExceeded,
-    YieldOutsideGenerator,
-    AwaitOutsideAsync,
-    UnknownBinding,
-    IllegalBreak,
-    MissingInitializerInDestructuring,
+    ConstantPoolLimitExceeded(Span),
+    LocalLimitExceeded(Span),
+    IfBranchLimitExceeded(Span),
+    SwitchCaseLimitExceeded(Span),
+    ArrayLitLimitExceeded(Span),
+    ObjectLitLimitExceeded(Span),
+    ExportNameListLimitExceeded(Span),
+    DestructureLimitExceeded(Span),
+    ConstAssignment(Span),
+    Unimplemented(Span, String),
+    ParameterLimitExceeded(Span),
+    YieldOutsideGenerator {
+        yield_expr: Span,
+    },
+    AwaitOutsideAsync {
+        await_expr: Span,
+    },
+    IllegalBreak(Span),
+    MissingInitializerInDestructuring(Span),
 }
 
-impl From<ConstantLimitExceededError> for Error {
-    fn from(_: ConstantLimitExceededError) -> Self {
-        Self::ConstantPoolLimitExceeded
-    }
-}
-
-impl From<LocalLimitExceededError> for Error {
-    fn from(_: LocalLimitExceededError) -> Self {
-        Self::LocalLimitExceeded
-    }
-}
-
-struct FormattableError<'a, 'buf> {
+pub struct FormattableError<'a, 'buf> {
     error: &'a Error,
     interner: &'a StringInterner,
     source: &'buf str,
     color: bool,
 }
 
-enum DiagnosticKind {
+pub enum DiagnosticKind {
     Error,
     Warning,
 }
 
-enum NoteKind {
+pub enum NoteKind {
     Error,
     Warning,
     Help,
 }
 
-struct Note {
+pub struct Note {
     kind: NoteKind,
     span: Option<Span>,
     message: Cow<'static, str>,
 }
 
-struct DiagnosticBuilder<'f, 'a, 'buf> {
+pub struct DiagnosticBuilder<'f, 'a, 'buf> {
     fcx: &'f FormattableError<'a, 'buf>,
     kind: DiagnosticKind,
     message: Option<Cow<'static, str>>,
@@ -103,7 +92,7 @@ struct DiagnosticBuilder<'f, 'a, 'buf> {
 }
 
 impl<'f, 'a, 'buf> DiagnosticBuilder<'f, 'a, 'buf> {
-    fn error(fcx: &'f FormattableError<'a, 'buf>) -> Self {
+    pub fn error(fcx: &'f FormattableError<'a, 'buf>) -> Self {
         Self {
             fcx,
             message: None,
@@ -111,21 +100,28 @@ impl<'f, 'a, 'buf> DiagnosticBuilder<'f, 'a, 'buf> {
             kind: DiagnosticKind::Error,
         }
     }
-    fn message(&mut self, message: impl Into<Cow<'static, str>>) {
+    pub fn message(&mut self, message: impl Into<Cow<'static, str>>) {
         self.message = Some(message.into());
     }
-    fn span_error(&mut self, span: Span, message: impl Into<Cow<'static, str>>) {
+    pub fn span_error(&mut self, span: Span, message: impl Into<Cow<'static, str>>) {
         self.span_notes.push(Note {
             kind: NoteKind::Error,
             message: message.into(),
             span: Some(span),
         });
     }
-    fn help(&mut self, message: impl Into<Cow<'static, str>>) {
+    pub fn help(&mut self, message: impl Into<Cow<'static, str>>) {
         self.span_notes.push(Note {
             kind: NoteKind::Help,
             message: message.into(),
             span: None,
+        });
+    }
+    pub fn span_help(&mut self, span: Span, message: impl Into<Cow<'static, str>>) {
+        self.span_notes.push(Note {
+            kind: NoteKind::Help,
+            message: message.into(),
+            span: Some(span),
         });
     }
 }
@@ -161,6 +157,7 @@ impl<'f, 'a, 'buf> fmt::Display for DiagnosticBuilder<'f, 'a, 'buf> {
 
             match *span {
                 Some(span) => {
+                    assert!(span.is_user_span(), "compiler-generated span in diagnostic");
                     let LineData {
                         start_index: _,
                         end_index: _,
@@ -203,7 +200,7 @@ impl<'f, 'a, 'buf> fmt::Display for DiagnosticBuilder<'f, 'a, 'buf> {
                             write_style!(f, yellow bold, "warning: ")?;
                         }
                         NoteKind::Help => {
-                            write_style!(f, blue bold, "help: ")?;
+                            write_style!(f, cyan bold, "help: ")?;
                         }
                     }
                     f.write_str(message)?;
@@ -309,22 +306,71 @@ impl<'a, 'buf> fmt::Display for FormattableError<'a, 'buf> {
                 diag.message("incomplete spread operator");
                 diag.span_error(span, "expected `...`, followed by an expression");
             }
-            Error::ConstantPoolLimitExceeded => todo!(),
-            Error::LocalLimitExceeded => todo!(),
-            Error::IfBranchLimitExceeded => todo!(),
-            Error::SwitchCaseLimitExceeded => todo!(),
-            Error::ArrayLitLimitExceeded => todo!(),
-            Error::ObjectLitLimitExceeded => todo!(),
-            Error::ExportNameListLimitExceeded => todo!(),
-            Error::DestructureLimitExceeded => todo!(),
-            Error::ConstAssignment => todo!(),
-            Error::Unimplemented(_) => todo!(),
-            Error::ParameterLimitExceeded => todo!(),
-            Error::YieldOutsideGenerator => todo!(),
-            Error::AwaitOutsideAsync => todo!(),
-            Error::UnknownBinding => todo!(),
-            Error::IllegalBreak => todo!(),
-            Error::MissingInitializerInDestructuring => todo!(),
+            Error::ConstantPoolLimitExceeded(span) => {
+                diag.message("processing this node exceeded the constant pool size limit");
+                diag.span_error(span, "");
+                diag.help("consider splitting this function into smaller functions as a workaround");
+                // TODO: a note that mentions that this is a technical limitation
+            }
+            Error::LocalLimitExceeded(span) => {
+                diag.message("processing this local variable declaration exceeded the variable limit");
+                diag.span_error(span, "");
+            }
+            Error::IfBranchLimitExceeded(span) => {
+                diag.message("processing this conditional branch exceeded the branch limit");
+                diag.span_error(span, "");
+            }
+            Error::SwitchCaseLimitExceeded(span) => {
+                diag.message("processing this switch statement exceeded the case limit");
+                diag.span_error(span, "");
+            }
+            Error::ArrayLitLimitExceeded(span) => {
+                diag.message("processing this array literal exceeded the element count limit");
+                diag.span_error(span, "");
+            }
+            Error::ObjectLitLimitExceeded(span) => {
+                diag.message("processing this object literal exceeded the property count limit");
+                diag.span_error(span, "");
+            }
+            Error::ExportNameListLimitExceeded(span) => {
+                diag.message("processing this export statement exceeded the binding count limit");
+                diag.span_error(span, "");
+            }
+            Error::DestructureLimitExceeded(span) => {
+                diag.message("processing this destructuring pattern exceeded the binding count limit");
+                diag.span_error(span, "");
+            }
+            Error::ConstAssignment(span) => {
+                diag.message("attempted to reassign a value to a constant");
+                diag.span_error(span, "");
+                diag.help("consider changing `const` to `let` to allow reassigning");
+            }
+            Error::Unimplemented(span, ref msg) => {
+                diag.message(format!("unimplemented: {msg}"));
+                diag.span_error(span, "error occurred while processing this node");
+            }
+            Error::ParameterLimitExceeded(span) => {
+                diag.message("processing this function exceeded the parameter count limit");
+                diag.span_error(span, "");
+            }
+            Error::YieldOutsideGenerator { yield_expr } => {
+                diag.message("`yield` expression outside of a generator function");
+                diag.span_error(yield_expr, "expression yielded here");
+                diag.help("consider making this a generator function"); // TODO: use span of fn kw?
+            }
+            Error::AwaitOutsideAsync { await_expr } => {
+                diag.message("`await` expression outside of an async function");
+                diag.span_error(await_expr, "expression awaited here");
+                diag.help("consider marking this function as `async`");
+            }
+            Error::IllegalBreak(span) => {
+                diag.message("`break` or `continue` statement outside of iteration statement encountered");
+                diag.span_error(span, "");
+            }
+            Error::MissingInitializerInDestructuring(span) => {
+                diag.message("missing initializer in destructuring pattern");
+                diag.span_error(span, "consider adding an initializer to this variable declaration");
+            }
         }
         fmt::Display::fmt(&diag, f)
     }
