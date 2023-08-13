@@ -1919,11 +1919,11 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                                     span: Span::COMPILER_GENERATED,
                                     kind: ExprKind::property_access(
                                         false,
+                                        load_class_binding.clone(),
                                         Expr {
                                             span: Span::COMPILER_GENERATED,
                                             kind: ExprKind::identifier(name),
                                         },
-                                        load_class_binding.clone(),
                                     ),
                                 },
                                 false => Expr {
@@ -1932,9 +1932,19 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                                         false,
                                         Expr {
                                             span: Span::COMPILER_GENERATED,
-                                            kind: ExprKind::identifier(sym::PROTOTYPE),
+                                            kind: ExprKind::property_access(
+                                                false,
+                                                load_class_binding.clone(),
+                                                Expr {
+                                                    span: Span::COMPILER_GENERATED,
+                                                    kind: ExprKind::identifier(sym::PROTOTYPE),
+                                                },
+                                            ),
                                         },
-                                        load_class_binding.clone(),
+                                        Expr {
+                                            span: Span::COMPILER_GENERATED,
+                                            kind: ExprKind::identifier(name),
+                                        },
                                     ),
                                 },
                             })),

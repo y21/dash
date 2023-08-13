@@ -144,18 +144,20 @@ fn run_test(setup: &str, path: &OsStr, verbose: bool) -> RunResult {
             (Ok(_), Some(..)) => RunResult::Fail,
             (Err(err), negative) => {
                 let result = match (&err, negative) {
-                    (EvalError::Middle(..), Some(NegativePhase::Parse | NegativePhase::Resolution)) => RunResult::Pass,
-                    (EvalError::Middle(..), None) => RunResult::Fail,
-                    (EvalError::Exception(..), Some(NegativePhase::Runtime)) => RunResult::Pass,
-                    (EvalError::Exception(..), None) => RunResult::Fail,
+                    ((EvalError::Middle(..), _), Some(NegativePhase::Parse | NegativePhase::Resolution)) => {
+                        RunResult::Pass
+                    }
+                    ((EvalError::Middle(..), _), None) => RunResult::Fail,
+                    ((EvalError::Exception(..), _), Some(NegativePhase::Runtime)) => RunResult::Pass,
+                    ((EvalError::Exception(..), _), None) => RunResult::Fail,
                     (_, Some(..)) => RunResult::Fail,
                 };
 
                 if let RunResult::Fail = result {
                     if verbose {
                         let s = match &err {
-                            EvalError::Middle(errs) => format!("{errs:?}"),
-                            EvalError::Exception(_ex) => {
+                            (EvalError::Middle(errs), _) => format!("{errs:?}"),
+                            (EvalError::Exception(_ex), _) => {
                                 // let mut sc = LocalScope::new(&mut vm);
                                 // match ex.to_string(&mut sc) {
                                 //     Ok(s) => ToString::to_string(&s),
