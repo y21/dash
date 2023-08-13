@@ -6,9 +6,12 @@ use dash_middle::interner::Symbol;
 use dash_middle::lexer::token::Token;
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::error::Error;
+use dash_middle::parser::expr::Expr;
+use dash_middle::parser::expr::ExprKind;
 use dash_middle::parser::statement::FuncId;
 use dash_middle::parser::statement::Statement;
 use dash_middle::sourcemap::SourceMap;
+use dash_middle::sourcemap::Span;
 use dash_middle::util::Counter;
 use dash_middle::util::LevelStack;
 
@@ -86,10 +89,13 @@ impl<'a, 'interner> Parser<'a, 'interner> {
     }
 
     /// Parses a prefixed number literal (0x, 0o, 0b) and returns the number
-    pub fn parse_prefixed_number_literal(&mut self, full: Symbol, radix: u32) -> Option<f64> {
+    pub fn parse_prefixed_number_literal(&mut self, span: Span, full: Symbol, radix: u32) -> Option<Expr> {
         let src = &self.interner.resolve(full)[2..];
         match u64::from_str_radix(src, radix).map(|x| x as f64) {
-            Ok(f) => Some(f),
+            Ok(f) => Some(Expr {
+                span,
+                kind: ExprKind::number_literal(f),
+            }),
             Err(e) => {
                 self.create_error(Error::ParseIntError(self.previous().cloned()?, e));
                 None

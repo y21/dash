@@ -7,15 +7,21 @@ use serde::{Deserialize, Serialize};
 use crate::{
     interner::{sym, Symbol},
     lexer::token::TokenType,
+    sourcemap::Span,
     tree::TreeToken,
 };
 
-use super::{expr::Expr, types::TypeSegment};
+use super::{
+    expr::{Expr, ExprKind},
+    types::TypeSegment,
+};
 
 /// A JavaScript statement
 #[derive(Debug, Clone, Display)]
-pub enum Statement {
+pub enum StatementKind {
     /// Expression statement
+    // TODO: this could _technically_ be just ExprKind since the span is the exact same,
+    // but we wouldn't really save on anything because the enum is big either way
     #[display(fmt = "{_0};")]
     Expression(Expr),
     /// Variable declaration
@@ -59,11 +65,46 @@ pub enum Statement {
     Empty,
 }
 
+#[derive(Debug, Clone, Display)]
+#[display(fmt = "{kind}")]
+pub struct Statement {
+    pub kind: StatementKind,
+    pub span: Span,
+}
+
 impl Statement {
+    /// Creates a dummy empty statement.
+    /// This is usually used when const eval'ing a statement to nothing but still needing to have some kind of statement.
+    /// NOTE: this should not end up in diagnostics!
+    pub fn dummy_empty() -> Self {
+        Statement {
+            kind: StatementKind::Empty,
+            span: Span::COMPILER_GENERATED,
+        }
+    }
+
+    /// Creates a dummy return statement.
+    /// NOTE: this should not end up in diagnostics!
+    pub fn dummy_return() -> Self {
+        Statement {
+            kind: StatementKind::Return(ReturnStatement(Expr {
+                kind: ExprKind::undefined_literal(),
+                span: Span::COMPILER_GENERATED,
+            })),
+            span: Span::COMPILER_GENERATED,
+        }
+    }
+}
+
+impl StatementKind {
     pub fn enters_scope(&self) -> bool {
         matches!(
             self,
-            Statement::Block(_) | Statement::Function(_) | Statement::Loop(_) | Statement::Try(_) | Statement::Class(_)
+            StatementKind::Block(_)
+                | StatementKind::Function(_)
+                | StatementKind::Loop(_)
+                | StatementKind::Try(_)
+                | StatementKind::Class(_)
         )
     }
 }
@@ -200,12 +241,6 @@ impl TryCatch {
 #[derive(Debug, Clone, Display)]
 #[display(fmt = "return {_0}")]
 pub struct ReturnStatement(pub Expr);
-
-impl Default for ReturnStatement {
-    fn default() -> Self {
-        Self(Expr::undefined_literal())
-    }
-}
 
 /// A loop statement
 #[derive(Debug, Clone, Display)]

@@ -4,6 +4,7 @@ use crate::parser::expr::AssignmentExpr;
 use crate::parser::expr::BinaryExpr;
 use crate::parser::expr::ConditionalExpr;
 use crate::parser::expr::Expr;
+use crate::parser::expr::ExprKind;
 use crate::parser::expr::FunctionCall;
 use crate::parser::expr::GroupingExpr;
 use crate::parser::expr::LiteralExpr;
@@ -26,14 +27,15 @@ use crate::parser::statement::ImportKind;
 use crate::parser::statement::Loop;
 use crate::parser::statement::ReturnStatement;
 use crate::parser::statement::Statement;
+use crate::parser::statement::StatementKind;
 use crate::parser::statement::SwitchStatement;
 use crate::parser::statement::TryCatch;
 use crate::parser::statement::VariableDeclarations;
 use crate::parser::statement::WhileLoop;
 
 pub trait VisitorExt: Visitor<()> {
-    fn accept(&mut self, e: Statement);
-    fn accept_expr(&mut self, e: Statement);
+    fn accept(&mut self, e: StatementKind);
+    fn accept_expr(&mut self, e: StatementKind);
 }
 
 /// A visitor trait that helps walking an AST
@@ -158,53 +160,53 @@ pub trait Visitor<V> {
     fn visit_switch_statement(&mut self, s: SwitchStatement) -> V;
 }
 
-pub fn accept_default<T, V: Visitor<T>>(this: &mut V, s: Statement) -> T {
+pub fn accept_default<T, V: Visitor<T>>(this: &mut V, s: StatementKind) -> T {
     match s {
-        Statement::Expression(e) => this.visit_expression_statement(e),
-        Statement::Variable(v) => this.visit_variable_declaration(v),
-        Statement::If(i) => this.visit_if_statement(i),
-        Statement::Block(b) => this.visit_block_statement(b),
-        Statement::Function(f) => this.visit_function_declaration(f),
-        Statement::Loop(Loop::For(f)) => this.visit_for_loop(f),
-        Statement::Loop(Loop::While(w)) => this.visit_while_loop(w),
-        Statement::Loop(Loop::ForOf(f)) => this.visit_for_of_loop(f),
-        Statement::Loop(Loop::ForIn(f)) => this.visit_for_in_loop(f),
-        Statement::Loop(Loop::DoWhile(d)) => this.visit_do_while_loop(d),
-        Statement::Return(r) => this.visit_return_statement(r),
-        Statement::Try(t) => this.visit_try_catch(t),
-        Statement::Throw(t) => this.visit_throw(t),
-        Statement::Import(i) => this.visit_import_statement(i),
-        Statement::Export(e) => this.visit_export_statement(e),
-        Statement::Class(c) => this.visit_class_declaration(c),
-        Statement::Continue => this.visit_continue(),
-        Statement::Break => this.visit_break(),
-        Statement::Debugger => this.visit_debugger(),
-        Statement::Empty => this.visit_empty_statement(),
-        Statement::Switch(s) => this.visit_switch_statement(s),
+        StatementKind::Expression(e) => this.visit_expression_statement(e),
+        StatementKind::Variable(v) => this.visit_variable_declaration(v),
+        StatementKind::If(i) => this.visit_if_statement(i),
+        StatementKind::Block(b) => this.visit_block_statement(b),
+        StatementKind::Function(f) => this.visit_function_declaration(f),
+        StatementKind::Loop(Loop::For(f)) => this.visit_for_loop(f),
+        StatementKind::Loop(Loop::While(w)) => this.visit_while_loop(w),
+        StatementKind::Loop(Loop::ForOf(f)) => this.visit_for_of_loop(f),
+        StatementKind::Loop(Loop::ForIn(f)) => this.visit_for_in_loop(f),
+        StatementKind::Loop(Loop::DoWhile(d)) => this.visit_do_while_loop(d),
+        StatementKind::Return(r) => this.visit_return_statement(r),
+        StatementKind::Try(t) => this.visit_try_catch(t),
+        StatementKind::Throw(t) => this.visit_throw(t),
+        StatementKind::Import(i) => this.visit_import_statement(i),
+        StatementKind::Export(e) => this.visit_export_statement(e),
+        StatementKind::Class(c) => this.visit_class_declaration(c),
+        StatementKind::Continue => this.visit_continue(),
+        StatementKind::Break => this.visit_break(),
+        StatementKind::Debugger => this.visit_debugger(),
+        StatementKind::Empty => this.visit_empty_statement(),
+        StatementKind::Switch(s) => this.visit_switch_statement(s),
     }
 }
 
-pub fn accept_expr_default<T, V: Visitor<T>, F>(this: &mut V, e: Expr, on_empty: F) -> T
+pub fn accept_expr_default<T, V: Visitor<T>, F>(this: &mut V, e: ExprKind, on_empty: F) -> T
 where
     F: FnOnce(&mut V) -> T,
 {
     match e {
-        Expr::Binary(e) => this.visit_binary_expression(e),
-        Expr::Assignment(e) => this.visit_assignment_expression(e),
-        Expr::Grouping(e) => this.visit_grouping_expression(e),
-        Expr::Literal(LiteralExpr::Identifier(i)) => this.visit_identifier_expression(i),
-        Expr::Literal(l) => this.visit_literal_expression(l),
-        Expr::Unary(e) => this.visit_unary_expression(e),
-        Expr::Call(e) => this.visit_function_call(e),
-        Expr::Conditional(e) => this.visit_conditional_expr(e),
-        Expr::PropertyAccess(e) => this.visit_property_access_expr(e, false),
-        Expr::Sequence(e) => this.visit_sequence_expr(e),
-        Expr::Postfix(e) => this.visit_postfix_expr(e),
-        Expr::Prefix(e) => this.visit_prefix_expr(e),
-        Expr::Function(e) => this.visit_function_expr(e),
-        Expr::Array(e) => this.visit_array_literal(e),
-        Expr::Object(e) => this.visit_object_literal(e),
-        Expr::Compiled(..) => on_empty(this),
-        Expr::Empty => this.visit_empty_expr(),
+        ExprKind::Binary(e) => this.visit_binary_expression(e),
+        ExprKind::Assignment(e) => this.visit_assignment_expression(e),
+        ExprKind::Grouping(e) => this.visit_grouping_expression(e),
+        ExprKind::Literal(LiteralExpr::Identifier(i)) => this.visit_identifier_expression(i),
+        ExprKind::Literal(l) => this.visit_literal_expression(l),
+        ExprKind::Unary(e) => this.visit_unary_expression(e),
+        ExprKind::Call(e) => this.visit_function_call(e),
+        ExprKind::Conditional(e) => this.visit_conditional_expr(e),
+        ExprKind::PropertyAccess(e) => this.visit_property_access_expr(e, false),
+        ExprKind::Sequence(e) => this.visit_sequence_expr(e),
+        ExprKind::Postfix(e) => this.visit_postfix_expr(e),
+        ExprKind::Prefix(e) => this.visit_prefix_expr(e),
+        ExprKind::Function(e) => this.visit_function_expr(e),
+        ExprKind::Array(e) => this.visit_array_literal(e),
+        ExprKind::Object(e) => this.visit_object_literal(e),
+        ExprKind::Compiled(..) => on_empty(this),
+        ExprKind::Empty => this.visit_empty_expr(),
     }
 }

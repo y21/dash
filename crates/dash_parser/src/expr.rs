@@ -1,9 +1,11 @@
+use dash_middle::lexer::token::Token;
 use dash_middle::lexer::token::TokenType;
 use dash_middle::lexer::token::ASSIGNMENT_TYPES;
 use dash_middle::parser::error::Error;
 use dash_middle::parser::expr::ArrayMemberKind;
 use dash_middle::parser::expr::CallArgumentKind;
 use dash_middle::parser::expr::Expr;
+use dash_middle::parser::expr::ExprKind;
 use dash_middle::parser::expr::ObjectMemberKind;
 use dash_middle::parser::statement::BlockStatement;
 use dash_middle::parser::statement::FunctionDeclaration;
@@ -11,6 +13,8 @@ use dash_middle::parser::statement::FunctionKind;
 use dash_middle::parser::statement::Parameter;
 use dash_middle::parser::statement::ReturnStatement;
 use dash_middle::parser::statement::Statement;
+use dash_middle::parser::statement::StatementKind;
+use dash_middle::sourcemap::Span;
 
 use crate::Parser;
 
@@ -27,8 +31,12 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
     fn parse_yield(&mut self) -> Option<Expr> {
         if self.expect_token_type_and_skip(&[TokenType::Yield], false) {
+            let lo_span = self.previous()?.span;
             let right = self.parse_yield()?;
-            return Some(Expr::unary(TokenType::Yield, right));
+            return Some(Expr {
+                span: lo_span.to(right.span),
+                kind: ExprKind::unary(TokenType::Yield, right),
+            });
         }
 
         self.parse_assignment()
@@ -246,13 +254,20 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             ],
             false,
         ) {
-            let operator = self.previous()?.ty;
+            let Token { span, ty } = *self.previous()?;
             let rval = self.parse_unary()?;
+            let span = span.to(rval.span);
 
-            if [TokenType::Increment, TokenType::Decrement].contains(&operator) {
-                Some(Expr::prefix(operator, rval))
+            if [TokenType::Increment, TokenType::Decrement].contains(&ty) {
+                Some(Expr {
+                    span,
+                    kind: ExprKind::prefix(ty, rval),
+                })
             } else {
-                Some(Expr::unary(operator, rval))
+                Some(Expr {
+                    span,
+                    kind: ExprKind::unary(ty, rval),
+                })
             }
         } else {
             self.parse_postfix()
@@ -262,8 +277,11 @@ impl<'a, 'interner> Parser<'a, 'interner> {
     fn parse_postfix(&mut self) -> Option<Expr> {
         let expr = self.parse_field_access()?;
         if self.expect_token_type_and_skip(&[TokenType::Increment, TokenType::Decrement], false) {
-            let operator = self.previous()?.ty;
-            return Some(Expr::postfix(operator, expr));
+            let Token { span, ty } = *self.previous()?;
+            return Some(Expr {
+                span: expr.span.to(span),
+                kind: ExprKind::postfix(ty, expr),
+            });
         }
         Some(expr)
     }
@@ -309,16 +327,29 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                         self.new_level_stack.dec_level().expect("Missing `new` level stack");
                     }
 
-                    expr = Expr::function_call(expr, arguments, is_constructor_call);
+                    expr = Expr {
+                        span: expr.span.to(self.previous()?.span),
+                        kind: ExprKind::function_call(expr, arguments, is_constructor_call),
+                    };
                 }
                 TokenType::Dot => {
-                    let property = Expr::identifier(self.expect_identifier_or_reserved_kw(true)?);
-                    expr = Expr::property_access(false, expr, property);
+                    let ident = self.expect_identifier_or_reserved_kw(true)?;
+                    let property = Expr {
+                        span: self.previous()?.span,
+                        kind: ExprKind::identifier(ident),
+                    };
+                    expr = Expr {
+                        span: expr.span.to(property.span),
+                        kind: ExprKind::property_access(false, expr, property),
+                    };
                 }
                 TokenType::LeftSquareBrace => {
                     let property = self.parse_expression()?;
-                    self.expect_token_type_and_skip(&[TokenType::RightSquareBrace], false);
-                    expr = Expr::property_access(true, expr, property);
+                    self.expect_token_type_and_skip(&[TokenType::RightSquareBrace], true);
+                    expr = Expr {
+                        span: expr.span.to(property.span),
+                        kind: ExprKind::property_access(true, expr, property),
+                    };
                 }
                 _ => unreachable!(),
             }
@@ -351,9 +382,11 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
         let expr = match current.ty {
             // removed to resolve #58
-            // TokenType::Semicolon => Expr::undefined_literal(),
             TokenType::TemplateLiteral(sym) => {
-                let mut left = Expr::string_literal(sym);
+                let mut left = Expr {
+                    span: current.span,
+                    kind: ExprKind::string_literal(sym),
+                };
                 while !self.is_eof() {
                     if self.expect_token_type_and_skip(&[TokenType::Dollar], false) {
                         self.expect_token_type_and_skip(&[TokenType::LeftBrace], true);
@@ -361,7 +394,10 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                         self.expect_token_type_and_skip(&[TokenType::RightBrace], true);
                         left = Expr::binary(left, right, TokenType::Plus);
                     } else if let Some(sym) = self.expect_template_literal(false) {
-                        let right = Expr::string_literal(sym);
+                        let right = Expr {
+                            span: self.previous()?.span,
+                            kind: ExprKind::string_literal(sym),
+                        };
                         left = Expr::binary(left, right, TokenType::Plus);
                     } else {
                         break;
@@ -369,11 +405,26 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 }
                 left
             }
-            TokenType::FalseLit => Expr::bool_literal(false),
-            TokenType::TrueLit => Expr::bool_literal(true),
-            TokenType::NullLit => Expr::null_literal(),
-            TokenType::UndefinedLit => Expr::undefined_literal(),
-            TokenType::String(sym) => Expr::string_literal(sym),
+            TokenType::FalseLit => Expr {
+                span: current.span,
+                kind: ExprKind::bool_literal(false),
+            },
+            TokenType::TrueLit => Expr {
+                span: current.span,
+                kind: ExprKind::bool_literal(true),
+            },
+            TokenType::NullLit => Expr {
+                span: current.span,
+                kind: ExprKind::null_literal(),
+            },
+            TokenType::UndefinedLit => Expr {
+                span: current.span,
+                kind: ExprKind::undefined_literal(),
+            },
+            TokenType::String(sym) => Expr {
+                span: current.span,
+                kind: ExprKind::string_literal(sym),
+            },
             TokenType::LeftSquareBrace => {
                 let mut items = Vec::new();
                 while !self.expect_token_type_and_skip(&[TokenType::RightSquareBrace], false) {
@@ -384,10 +435,13 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                         items.push(ArrayMemberKind::Item(self.parse_expression()?));
                     }
                 }
-                Expr::array_literal(items)
+                let rbrace_span = self.previous()?.span;
+                Expr {
+                    span: current.span.to(rbrace_span),
+                    kind: ExprKind::array_literal(items),
+                }
             }
             TokenType::LeftBrace => {
-                let lbrace_span = current.span;
                 let mut items = Vec::new();
                 while !self.expect_token_type_and_skip(&[TokenType::RightBrace], false) {
                     self.expect_token_type_and_skip(&[TokenType::Comma], false);
@@ -447,19 +501,28 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                                 let id = self.function_counter.advance();
                                 items.push((
                                     key,
-                                    Expr::function(FunctionDeclaration::new(
-                                        None,
-                                        id,
-                                        parameters,
-                                        body.0,
-                                        FunctionKind::Function,
-                                        false,
-                                        None,
-                                    )),
+                                    Expr {
+                                        span: current.span.to(self.previous()?.span),
+                                        kind: ExprKind::function(FunctionDeclaration::new(
+                                            None,
+                                            id,
+                                            parameters,
+                                            body.0,
+                                            FunctionKind::Function,
+                                            false,
+                                            None,
+                                        )),
+                                    },
                                 ));
                             } else {
                                 match key {
-                                    ObjectMemberKind::Static(name) => items.push((key, Expr::identifier(name))),
+                                    ObjectMemberKind::Static(name) => items.push((
+                                        key,
+                                        Expr {
+                                            span: token.span,
+                                            kind: ExprKind::identifier(name),
+                                        },
+                                    )),
                                     ObjectMemberKind::Dynamic(..) => {
                                         self.create_error(Error::UnexpectedToken(token, TokenType::Colon));
                                         return None;
@@ -511,18 +574,30 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                                 false,
                                 None,
                             );
-                            items.push((key, Expr::function(fun)));
+                            items.push((
+                                key,
+                                Expr {
+                                    span: current.span.to(self.previous()?.span),
+                                    kind: ExprKind::function(fun),
+                                },
+                            ));
                         }
                     }
                 }
-                let rbrace_span = self.previous().unwrap().span;
-                Expr::object_literal(items)
+                let rbrace_span = self.previous()?.span;
+                Expr {
+                    span: current.span.to(rbrace_span),
+                    kind: ExprKind::object_literal(items),
+                }
             }
             // TODO: this unwrap is not safe
-            TokenType::NumberDec(sym) => Expr::number_literal(self.interner.resolve(sym).parse::<f64>().unwrap()),
-            TokenType::NumberHex(sym) => self.parse_prefixed_number_literal(sym, 16).map(Expr::number_literal)?,
-            TokenType::NumberBin(sym) => self.parse_prefixed_number_literal(sym, 2).map(Expr::number_literal)?,
-            TokenType::NumberOct(sym) => self.parse_prefixed_number_literal(sym, 8).map(Expr::number_literal)?,
+            TokenType::NumberDec(sym) => Expr {
+                span: current.span,
+                kind: ExprKind::number_literal(self.interner.resolve(sym).parse::<f64>().unwrap()),
+            },
+            TokenType::NumberHex(sym) => self.parse_prefixed_number_literal(current.span, sym, 16)?,
+            TokenType::NumberBin(sym) => self.parse_prefixed_number_literal(current.span, sym, 2)?,
+            TokenType::NumberOct(sym) => self.parse_prefixed_number_literal(current.span, sym, 8)?,
             TokenType::LeftParen => {
                 if self.expect_token_type_and_skip(&[TokenType::RightParen], false) {
                     // () MUST be followed by an arrow. Empty groups are not valid syntax
@@ -530,7 +605,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                         return None;
                     }
 
-                    return self.parse_arrow_function_end(Vec::new()).map(Expr::function);
+                    return self.parse_arrow_function_end(current.span, Vec::new());
                 }
 
                 self.new_level_stack.add_level();
@@ -544,7 +619,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
                 // This is an arrow function if the next token is an arrow (`=>`)
                 if self.expect_token_type_and_skip(&[TokenType::FatArrow], false) {
-                    return self.parse_arrow_function_end(exprs).map(Expr::function);
+                    return self.parse_arrow_function_end(current.span, exprs);
                 }
 
                 // If it's not an arrow function, then it is a group
@@ -556,9 +631,15 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 if !self.expect_token_type_and_skip(&[TokenType::Function], true) {
                     return None;
                 }
-                Expr::function(self.parse_function(true)?)
+                self.parse_function(true).map(|(f, span)| Expr {
+                    span,
+                    kind: ExprKind::function(f),
+                })?
             }
-            TokenType::Function => Expr::function(self.parse_function(false)?),
+            TokenType::Function => self.parse_function(false).map(|(f, span)| Expr {
+                span,
+                kind: ExprKind::function(f),
+            })?,
             TokenType::RegexLiteral(sym) => {
                 // Trim / prefix and suffix
                 let full = self.interner.resolve(sym);
@@ -571,14 +652,20 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                         return None;
                     }
                 };
-                Expr::regex_literal(nodes, sym)
+                Expr {
+                    span: current.span,
+                    kind: ExprKind::regex_literal(nodes, sym),
+                }
             }
             other if other.is_identifier() => {
-                let expr = Expr::identifier(other.as_identifier().unwrap());
+                let expr = Expr {
+                    span: current.span,
+                    kind: ExprKind::identifier(other.as_identifier().unwrap()),
+                };
 
                 // If this identifier is followed by an arrow, this is an arrow function
                 if self.expect_token_type_and_skip(&[TokenType::FatArrow], false) {
-                    return self.parse_arrow_function_end(vec![expr]).map(Expr::function);
+                    return self.parse_arrow_function_end(current.span, vec![expr]);
                 }
 
                 expr
@@ -593,7 +680,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         Some(expr)
     }
 
-    pub fn parse_function(&mut self, is_async: bool) -> Option<FunctionDeclaration> {
+    pub fn parse_function(&mut self, is_async: bool) -> Option<(FunctionDeclaration, Span)> {
         let is_generator = self.expect_token_type_and_skip(&[TokenType::Star], false);
 
         let ty = if is_generator {
@@ -638,8 +725,9 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         self.new_level_stack.pop_level().unwrap();
 
         let func_id = self.function_counter.advance();
-        Some(FunctionDeclaration::new(
-            name, func_id, arguments, statements, ty, is_async, ty_seg,
+        Some((
+            FunctionDeclaration::new(name, func_id, arguments, statements, ty, is_async, ty_seg),
+            self.previous()?.span,
         ))
     }
 
@@ -652,7 +740,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
     ///
     /// Calling this will turn all parameters, which were parsed as if they were part of the grouping operator
     /// into their arrow function parameter equivalent
-    fn parse_arrow_function_end(&mut self, prec: Vec<Expr>) -> Option<FunctionDeclaration> {
+    fn parse_arrow_function_end(&mut self, pre_span: Span, prec: Vec<Expr>) -> Option<Expr> {
         let mut list = Vec::with_capacity(prec.len());
 
         // If it is arrow function, we need to convert everything to their arrow func equivalents
@@ -662,7 +750,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             // we need to properly convert types here too
 
             // TODO2: handle parameter default values
-            list.push((Parameter::Identifier(expr.as_identifier()?), None, None));
+            list.push((Parameter::Identifier(expr.kind.as_identifier()?), None, None));
         }
 
         let is_statement = self.expect_token_type_and_skip(&[TokenType::LeftBrace], false);
@@ -673,18 +761,27 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
             self.parse_statement()?
         } else {
-            Statement::Return(ReturnStatement(self.parse_expression()?))
+            let lo_span = self.current()?.span;
+            let expr = self.parse_expression()?;
+            let hi_span = self.previous()?.span;
+            Statement {
+                kind: StatementKind::Return(ReturnStatement(expr)),
+                span: lo_span.to(hi_span),
+            }
         };
 
         let func_id = self.function_counter.advance();
-        Some(FunctionDeclaration::new(
-            None,
-            func_id,
-            list,
-            vec![body],
-            FunctionKind::Arrow,
-            false,
-            None,
-        ))
+        Some(Expr {
+            span: pre_span.to(body.span),
+            kind: ExprKind::function(FunctionDeclaration::new(
+                None,
+                func_id,
+                list,
+                vec![body],
+                FunctionKind::Arrow,
+                false,
+                None,
+            )),
+        })
     }
 }

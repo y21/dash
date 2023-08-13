@@ -4,7 +4,7 @@ use derive_more::Display;
 
 use crate::{
     interner::{sym, Symbol},
-    lexer::token::TokenType,
+    lexer::token::{Token, TokenType},
     sourcemap::Span,
 };
 
@@ -19,7 +19,7 @@ pub type Postfix = (TokenType, Box<Expr>);
 
 /// A parsed expression
 #[derive(Debug, Clone, Display)]
-pub enum Expr {
+pub enum ExprKind {
     /// Represents a binary expression
     Binary(BinaryExpr),
     /// Represents a grouping expression
@@ -60,7 +60,49 @@ pub enum Expr {
     Empty,
 }
 
+#[derive(Debug, Clone, Display)]
+#[display(fmt = "{kind}")]
+pub struct Expr {
+    pub kind: ExprKind,
+    pub span: Span,
+}
+
 impl Expr {
+    pub fn binary(l: Expr, r: Expr, op: TokenType) -> Self {
+        Self {
+            span: l.span.to(r.span),
+            kind: ExprKind::binary(l, r, op),
+        }
+    }
+
+    /// Creates a grouping expression
+    ///
+    /// NOTE: There must be at least one expression in the group
+    pub fn grouping(expr: Vec<Expr>) -> Self {
+        Self {
+            span: expr.first().unwrap().span.to(expr.last().unwrap().span),
+            kind: ExprKind::grouping(expr),
+        }
+    }
+
+    /// Creates an assignment expression
+    pub fn assignment(l: Expr, r: Expr, op: TokenType) -> Self {
+        Self {
+            span: l.span.to(r.span),
+            kind: ExprKind::assignment(l, r, op),
+        }
+    }
+
+    /// Creates a condition expression
+    pub fn conditional(condition: Expr, then: Expr, el: Expr) -> Self {
+        Self {
+            span: condition.span.to(el.span),
+            kind: ExprKind::conditional(condition, then, el),
+        }
+    }
+}
+
+impl ExprKind {
     /// Creates a binary expression
     pub fn binary(l: Expr, r: Expr, op: TokenType) -> Self {
         Self::Binary(BinaryExpr::new(l, r, op))
@@ -175,14 +217,14 @@ impl Expr {
     /// We only know whether a value is an arrow function after parsing
     pub fn to_arrow_function_parameter_list(&self) -> Option<Vec<Symbol>> {
         match &self {
-            Expr::Grouping(g) => {
+            ExprKind::Grouping(g) => {
                 let mut list = Vec::with_capacity(g.0.len());
                 for expr in &g.0 {
-                    list.push(expr.as_identifier()?);
+                    list.push(expr.kind.as_identifier()?);
                 }
                 Some(list)
             }
-            Expr::Literal(LiteralExpr::Identifier(ident)) => Some(vec![*ident]),
+            ExprKind::Literal(LiteralExpr::Identifier(ident)) => Some(vec![*ident]),
             _ => None,
         }
     }
@@ -190,16 +232,16 @@ impl Expr {
     /// Tries to return the identifier that is associated to this expression
     pub fn as_identifier(&self) -> Option<Symbol> {
         match &self {
-            Expr::Literal(LiteralExpr::Identifier(ident)) => Some(*ident),
+            ExprKind::Literal(LiteralExpr::Identifier(ident)) => Some(*ident),
             _ => None,
         }
     }
 
     pub fn is_truthy(&self) -> Option<bool> {
         match &self {
-            Expr::Literal(lit) => lit.is_truthy(),
-            Expr::Assignment(ass) => ass.right.is_truthy(),
-            Expr::Grouping(GroupingExpr(group)) => group.last().and_then(|e| e.is_truthy()),
+            ExprKind::Literal(lit) => lit.is_truthy(),
+            ExprKind::Assignment(ass) => ass.right.kind.is_truthy(),
+            ExprKind::Grouping(GroupingExpr(group)) => group.last().and_then(|e| e.kind.is_truthy()),
             _ => None,
         }
     }
@@ -210,6 +252,7 @@ pub enum ArrayMemberKind {
     Item(Expr),
     Spread(Expr),
 }
+
 impl fmt::Display for ArrayMemberKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

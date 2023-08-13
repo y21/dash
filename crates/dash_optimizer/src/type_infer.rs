@@ -13,6 +13,7 @@ use dash_middle::parser::expr::BinaryExpr;
 use dash_middle::parser::expr::CallArgumentKind;
 use dash_middle::parser::expr::ConditionalExpr;
 use dash_middle::parser::expr::Expr;
+use dash_middle::parser::expr::ExprKind;
 use dash_middle::parser::expr::FunctionCall;
 use dash_middle::parser::expr::GroupingExpr;
 use dash_middle::parser::expr::LiteralExpr;
@@ -38,6 +39,7 @@ use dash_middle::parser::statement::Parameter;
 use dash_middle::parser::statement::ReturnStatement;
 use dash_middle::parser::statement::SpecifierKind;
 use dash_middle::parser::statement::Statement;
+use dash_middle::parser::statement::StatementKind;
 use dash_middle::parser::statement::SwitchCase;
 use dash_middle::parser::statement::SwitchStatement;
 use dash_middle::parser::statement::TryCatch;
@@ -92,34 +94,34 @@ impl TypeInferCtx {
     }
 
     pub fn visit_statement(&mut self, statement: &Statement, func_id: FuncId) {
-        match statement {
-            Statement::Block(BlockStatement(stmt)) => {
+        match &statement.kind {
+            StatementKind::Block(BlockStatement(stmt)) => {
                 self.scope_mut(func_id).enter();
                 for stmt in stmt {
                     self.visit_statement(stmt, func_id);
                 }
                 self.scope_mut(func_id).exit();
             }
-            Statement::Expression(expr) => drop(self.visit(expr, func_id)),
-            Statement::Variable(stmt) => self.visit_variable_declaration(stmt, func_id),
-            Statement::If(stmt) => self.visit_if_statement(stmt, func_id),
-            Statement::Function(expr) => drop(self.visit_function_expression(expr, func_id)),
-            Statement::Loop(expr) => self.visit_loop_statement(expr, func_id),
-            Statement::Return(stmt) => self.visit_return_statement(stmt, func_id),
-            Statement::Try(stmt) => self.visit_try_statement(stmt, func_id),
-            Statement::Throw(expr) => drop(self.visit(expr, func_id)),
-            Statement::Import(ImportKind::AllAs(SpecifierKind::Ident(..), ..)) => {}
-            Statement::Import(ImportKind::Dynamic(expr)) => drop(self.visit(expr, func_id)),
-            Statement::Import(ImportKind::DefaultAs(SpecifierKind::Ident(..), ..)) => {}
-            Statement::Export(ExportKind::Default(expr)) => drop(self.visit(expr, func_id)),
-            Statement::Export(ExportKind::Named(..)) => {}
-            Statement::Export(ExportKind::NamedVar(stmt)) => self.visit_variable_declaration(stmt, func_id),
-            Statement::Class(stmt) => self.visit_class_statement(stmt, func_id),
-            Statement::Switch(stmt) => self.visit_switch_statement(stmt, func_id),
-            Statement::Continue => {}
-            Statement::Break => {}
-            Statement::Debugger => {}
-            Statement::Empty => {}
+            StatementKind::Expression(expr) => drop(self.visit(expr, func_id)),
+            StatementKind::Variable(stmt) => self.visit_variable_declaration(stmt, func_id),
+            StatementKind::If(stmt) => self.visit_if_statement(stmt, func_id),
+            StatementKind::Function(expr) => drop(self.visit_function_expression(expr, func_id)),
+            StatementKind::Loop(expr) => self.visit_loop_statement(expr, func_id),
+            StatementKind::Return(stmt) => self.visit_return_statement(stmt, func_id),
+            StatementKind::Try(stmt) => self.visit_try_statement(stmt, func_id),
+            StatementKind::Throw(expr) => drop(self.visit(expr, func_id)),
+            StatementKind::Import(ImportKind::AllAs(SpecifierKind::Ident(..), ..)) => {}
+            StatementKind::Import(ImportKind::Dynamic(expr)) => drop(self.visit(expr, func_id)),
+            StatementKind::Import(ImportKind::DefaultAs(SpecifierKind::Ident(..), ..)) => {}
+            StatementKind::Export(ExportKind::Default(expr)) => drop(self.visit(expr, func_id)),
+            StatementKind::Export(ExportKind::Named(..)) => {}
+            StatementKind::Export(ExportKind::NamedVar(stmt)) => self.visit_variable_declaration(stmt, func_id),
+            StatementKind::Class(stmt) => self.visit_class_statement(stmt, func_id),
+            StatementKind::Switch(stmt) => self.visit_switch_statement(stmt, func_id),
+            StatementKind::Continue => {}
+            StatementKind::Break => {}
+            StatementKind::Debugger => {}
+            StatementKind::Empty => {}
         }
     }
 
@@ -281,23 +283,23 @@ impl TypeInferCtx {
     }
 
     pub fn visit(&mut self, expression: &Expr, func_id: FuncId) -> Option<CompileValueType> {
-        match expression {
-            Expr::Binary(expr) => self.visit_binary_expression(expr, func_id),
-            Expr::Grouping(expr) => self.visit_grouping_expression(expr, func_id),
-            Expr::Literal(expr) => self.visit_literal_expression(expr, func_id),
-            Expr::Unary(expr) => self.visit_unary_expression(expr, func_id),
-            Expr::Assignment(expr) => self.visit_assignment_expression(expr, func_id),
-            Expr::Call(expr) => self.visit_call_expression(expr, func_id),
-            Expr::Conditional(expr) => self.visit_conditional_expression(expr, func_id),
-            Expr::PropertyAccess(expr) => self.visit_property_access_expression(expr, func_id),
-            Expr::Sequence(..) => panic!("Unemitted expr type: Sequence"),
-            Expr::Prefix((tt, expr)) => self.visit_prefix_expression(expr, *tt, func_id),
-            Expr::Postfix((tt, expr)) => self.visit_postfix_expression(expr, *tt, func_id),
-            Expr::Function(expr) => self.visit_function_expression(expr, func_id),
-            Expr::Array(expr) => self.visit_array_expression(expr, func_id),
-            Expr::Object(expr) => self.visit_object_expression(expr, func_id),
-            Expr::Compiled(..) => None,
-            Expr::Empty => None,
+        match &expression.kind {
+            ExprKind::Binary(expr) => self.visit_binary_expression(expr, func_id),
+            ExprKind::Grouping(expr) => self.visit_grouping_expression(expr, func_id),
+            ExprKind::Literal(expr) => self.visit_literal_expression(expr, func_id),
+            ExprKind::Unary(expr) => self.visit_unary_expression(expr, func_id),
+            ExprKind::Assignment(expr) => self.visit_assignment_expression(expr, func_id),
+            ExprKind::Call(expr) => self.visit_call_expression(expr, func_id),
+            ExprKind::Conditional(expr) => self.visit_conditional_expression(expr, func_id),
+            ExprKind::PropertyAccess(expr) => self.visit_property_access_expression(expr, func_id),
+            ExprKind::Sequence(..) => panic!("Unemitted expr type: Sequence"),
+            ExprKind::Prefix((tt, expr)) => self.visit_prefix_expression(expr, *tt, func_id),
+            ExprKind::Postfix((tt, expr)) => self.visit_postfix_expression(expr, *tt, func_id),
+            ExprKind::Function(expr) => self.visit_function_expression(expr, func_id),
+            ExprKind::Array(expr) => self.visit_array_expression(expr, func_id),
+            ExprKind::Object(expr) => self.visit_object_expression(expr, func_id),
+            ExprKind::Compiled(..) => None,
+            ExprKind::Empty => None,
         }
     }
 
@@ -390,7 +392,7 @@ impl TypeInferCtx {
         let right_type = self.visit(right, func_id);
 
         // Also propagate assignment to target
-        if let Expr::Literal(LiteralExpr::Identifier(ident)) = &**left {
+        if let ExprKind::Literal(LiteralExpr::Identifier(ident)) = &left.kind {
             if let Some(local) = self.find_local(*ident, func_id) {
                 let left_type = local.inferred_type();
                 let left_type_ref = left_type.borrow();

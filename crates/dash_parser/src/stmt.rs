@@ -2,6 +2,7 @@ use dash_middle::lexer::token::TokenType;
 use dash_middle::lexer::token::VARIABLE_TYPES;
 use dash_middle::parser::error::Error;
 use dash_middle::parser::expr::Expr;
+use dash_middle::parser::expr::ExprKind;
 use dash_middle::parser::statement::BlockStatement;
 use dash_middle::parser::statement::Catch;
 use dash_middle::parser::statement::Class;
@@ -22,6 +23,7 @@ use dash_middle::parser::statement::Parameter;
 use dash_middle::parser::statement::ReturnStatement;
 use dash_middle::parser::statement::SpecifierKind;
 use dash_middle::parser::statement::Statement;
+use dash_middle::parser::statement::StatementKind;
 use dash_middle::parser::statement::SwitchCase;
 use dash_middle::parser::statement::SwitchStatement;
 use dash_middle::parser::statement::TryCatch;
@@ -40,43 +42,49 @@ type ParameterList = Option<Vec<(Parameter, Option<Expr>, Option<TypeSegment>)>>
 impl<'a, 'interner> Parser<'a, 'interner> {
     pub fn parse_statement(&mut self) -> Option<Statement> {
         self.error_sync = false;
-        let stmt = match self.next()?.ty {
-            TokenType::Let | TokenType::Const | TokenType::Var => self.parse_variable().map(Statement::Variable),
-            TokenType::If => self.parse_if(true).map(Statement::If),
-            TokenType::Function => self.parse_function(false).map(Statement::Function),
+        let lo_span = self.current()?.span;
+        let kind = match self.next()?.ty {
+            TokenType::Let | TokenType::Const | TokenType::Var => self.parse_variable().map(StatementKind::Variable),
+            TokenType::If => self.parse_if(true).map(StatementKind::If),
+            TokenType::Function => self.parse_function(false).map(|(k, _)| StatementKind::Function(k)),
             TokenType::Async => {
                 // async must be followed by function (todo: or async () => {})
                 if !self.expect_token_type_and_skip(&[TokenType::Function], true) {
                     return None;
                 }
-                self.parse_function(true).map(Statement::Function)
+                self.parse_function(true).map(|(k, _)| StatementKind::Function(k))
             }
-            TokenType::LeftBrace => self.parse_block().map(Statement::Block),
-            TokenType::While => self.parse_while_loop().map(Statement::Loop),
-            TokenType::Do => self.parse_do_while_loop().map(Statement::Loop),
-            TokenType::Try => self.parse_try().map(Statement::Try),
-            TokenType::Throw => self.parse_throw().map(Statement::Throw),
-            TokenType::Return => self.parse_return().map(Statement::Return),
-            TokenType::For => self.parse_for_loop().map(Statement::Loop),
-            TokenType::Import => self.parse_import().map(Statement::Import),
-            TokenType::Export => self.parse_export().map(Statement::Export),
-            TokenType::Class => self.parse_class().map(Statement::Class),
-            TokenType::Switch => self.parse_switch().map(Statement::Switch),
-            TokenType::Continue => Some(Statement::Continue),
-            TokenType::Break => Some(Statement::Break),
-            TokenType::Debugger => Some(Statement::Debugger),
-            TokenType::Semicolon => Some(Statement::Empty),
+            TokenType::LeftBrace => self.parse_block().map(StatementKind::Block),
+            TokenType::While => self.parse_while_loop().map(StatementKind::Loop),
+            TokenType::Do => self.parse_do_while_loop().map(StatementKind::Loop),
+            TokenType::Try => self.parse_try().map(StatementKind::Try),
+            TokenType::Throw => self.parse_throw().map(StatementKind::Throw),
+            TokenType::Return => self.parse_return().map(StatementKind::Return),
+            TokenType::For => self.parse_for_loop().map(StatementKind::Loop),
+            TokenType::Import => self.parse_import().map(StatementKind::Import),
+            TokenType::Export => self.parse_export().map(StatementKind::Export),
+            TokenType::Class => self.parse_class().map(StatementKind::Class),
+            TokenType::Switch => self.parse_switch().map(StatementKind::Switch),
+            TokenType::Continue => Some(StatementKind::Continue),
+            TokenType::Break => Some(StatementKind::Break),
+            TokenType::Debugger => Some(StatementKind::Debugger),
+            TokenType::Semicolon => Some(StatementKind::Empty),
             _ => {
                 // We've skipped the current character because of the statement cases that skip the current token
                 // So we go back, as the skipped token belongs to this expression
                 self.advance_back();
-                Some(Statement::Expression(self.parse_expression()?))
+                Some(StatementKind::Expression(self.parse_expression()?))
             }
-        };
+        }?;
+
+        let hi_span = self.previous().unwrap().span;
 
         self.expect_token_type_and_skip(&[TokenType::Semicolon], false);
 
-        stmt
+        Some(Statement {
+            kind,
+            span: lo_span.to(hi_span),
+        })
     }
 
     fn parse_class(&mut self) -> Option<Class> {
@@ -248,8 +256,12 @@ impl<'a, 'interner> Parser<'a, 'interner> {
     }
 
     fn parse_return(&mut self) -> Option<ReturnStatement> {
+        let return_kw = self.previous()?.span;
         if self.expect_token_type_and_skip(&[TokenType::Semicolon], false) {
-            Some(ReturnStatement(Expr::undefined_literal()))
+            Some(ReturnStatement(Expr {
+                span: return_kw, /* `return;` intentionally has an implicit `undefined` with the same span as `return;` */
+                kind: ExprKind::undefined_literal(),
+            }))
         } else {
             let expr = self.parse_expression()?;
             Some(ReturnStatement(expr))
@@ -266,6 +278,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             let is_binding = self.expect_token_type_and_skip(VARIABLE_TYPES, false);
 
             if is_binding {
+                let binding_span_lo = self.previous()?.span;
                 let binding = self.parse_variable_binding()?;
                 let is_of_or_in = self.expect_token_type_and_skip(&[TokenType::Of, TokenType::In], false);
 
@@ -287,9 +300,14 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
                     self.expect_token_type_and_skip(&[TokenType::Semicolon], true);
 
-                    Some(Statement::Variable(VariableDeclarations(vec![
-                        VariableDeclaration::new(binding, value),
-                    ])))
+                    let binding_span_hi = self.previous()?.span;
+
+                    Some(Statement {
+                        kind: StatementKind::Variable(VariableDeclarations(vec![VariableDeclaration::new(
+                            binding, value,
+                        )])),
+                        span: binding_span_lo.to(binding_span_hi),
+                    })
                 }
             } else {
                 let stmt = self.parse_statement();
