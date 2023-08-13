@@ -38,13 +38,13 @@ pub enum Label {
     FinishParamDefaultValueInit,
 }
 
-pub struct InstructionBuilder<'cx, 'inp> {
-    inner: &'cx mut FunctionCompiler<'inp>,
+pub struct InstructionBuilder<'cx, 'interner> {
+    inner: &'cx mut FunctionCompiler<'interner>,
     jc: JumpContainer,
 }
 
-impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
-    pub fn new(fc: &'cx mut FunctionCompiler<'inp>) -> Self {
+impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
+    pub fn new(fc: &'cx mut FunctionCompiler<'interner>) -> Self {
         Self {
             inner: fc,
             jc: JumpContainer::new(),
@@ -102,14 +102,14 @@ impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
     }
 }
 
-impl<'cx, 'inp> Deref for InstructionBuilder<'cx, 'inp> {
-    type Target = FunctionCompiler<'inp>;
+impl<'cx, 'interner> Deref for InstructionBuilder<'cx, 'interner> {
+    type Target = FunctionCompiler<'interner>;
     fn deref(&self) -> &Self::Target {
         self.inner
     }
 }
 
-impl<'cx, 'inp> DerefMut for InstructionBuilder<'cx, 'inp> {
+impl<'cx, 'interner> DerefMut for InstructionBuilder<'cx, 'interner> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.inner
     }

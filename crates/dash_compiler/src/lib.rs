@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::rc::Rc;
@@ -11,8 +10,9 @@ use dash_middle::compiler::scope::ScopeLocal;
 use dash_middle::compiler::scope::{CompileValueType, Scope};
 use dash_middle::compiler::{constant::ConstantPool, external::External};
 use dash_middle::compiler::{CompileResult, FunctionCallMetadata, StaticImportKind};
+use dash_middle::interner::{sym, StringInterner, Symbol};
 use dash_middle::lexer::token::TokenType;
-use dash_middle::parser::expr::Expr;
+use dash_middle::parser::error::Error;
 use dash_middle::parser::expr::FunctionCall;
 use dash_middle::parser::expr::GroupingExpr;
 use dash_middle::parser::expr::LiteralExpr;
@@ -25,9 +25,9 @@ use dash_middle::parser::expr::{ArrayLiteral, ObjectMemberKind};
 use dash_middle::parser::expr::{ArrayMemberKind, BinaryExpr};
 use dash_middle::parser::expr::{AssignmentExpr, AssignmentTarget};
 use dash_middle::parser::expr::{CallArgumentKind, ConditionalExpr};
-use dash_middle::parser::statement::ReturnStatement;
+use dash_middle::parser::expr::{Expr, ExprKind};
 use dash_middle::parser::statement::SpecifierKind;
-use dash_middle::parser::statement::Statement;
+use dash_middle::parser::statement::StatementKind;
 use dash_middle::parser::statement::TryCatch;
 use dash_middle::parser::statement::VariableBinding;
 use dash_middle::parser::statement::VariableDeclaration;
@@ -42,6 +42,8 @@ use dash_middle::parser::statement::{FuncId, ImportKind};
 use dash_middle::parser::statement::{FunctionDeclaration, SwitchStatement};
 use dash_middle::parser::statement::{FunctionKind, VariableDeclarationName};
 use dash_middle::parser::statement::{IfStatement, VariableDeclarations};
+use dash_middle::parser::statement::{ReturnStatement, Statement};
+use dash_middle::sourcemap::Span;
 use dash_middle::visitor::Visitor;
 use dash_optimizer::consteval::ConstFunctionEvalCtx;
 use dash_optimizer::type_infer::TypeInferCtx;
@@ -51,7 +53,7 @@ use jump_container::JumpContainer;
 
 use crate::builder::{InstructionBuilder, Label};
 
-use self::{error::CompileError, instruction::NamedExportKind};
+use self::instruction::NamedExportKind;
 
 pub mod builder;
 pub mod error;
@@ -64,8 +66,8 @@ pub mod transformations;
 mod jump_container;
 
 macro_rules! unimplementedc {
-    ($($what:expr),*) => {
-        return Err(CompileError::Unimplemented(format_args!($($what),*).to_string()))
+    ($span:expr,$($what:expr),*) => {
+        return Err(Error::Unimplemented($span,format_args!($($what),*).to_string()))
     };
 }
 
@@ -163,28 +165,26 @@ impl FunctionLocalState {
 }
 
 #[derive(Debug)]
-pub struct FunctionCompiler<'a> {
+pub struct FunctionCompiler<'interner> {
     function_stack: Vec<FunctionLocalState>,
-    tcx: TypeInferCtx<'a>,
+    tcx: TypeInferCtx,
+    interner: &'interner mut StringInterner,
     /// Optimization level
     #[allow(unused)]
     opt_level: OptLevel,
 }
 
-impl<'a> FunctionCompiler<'a> {
-    pub fn new(opt_level: OptLevel, tcx: TypeInferCtx<'a>) -> Self {
+impl<'interner> FunctionCompiler<'interner> {
+    pub fn new(opt_level: OptLevel, tcx: TypeInferCtx, interner: &'interner mut StringInterner) -> Self {
         Self {
             opt_level,
             tcx,
+            interner,
             function_stack: Vec::new(),
         }
     }
 
-    pub fn compile_ast(
-        mut self,
-        mut ast: Vec<Statement<'a>>,
-        implicit_return: bool,
-    ) -> Result<CompileResult, CompileError> {
+    pub fn compile_ast(mut self, mut ast: Vec<Statement>, implicit_return: bool) -> Result<CompileResult, Error> {
         let compile_span = span!(Level::TRACE, "compile ast");
         let _enter = compile_span.enter();
 
@@ -210,7 +210,7 @@ impl<'a> FunctionCompiler<'a> {
             let opt_level = self.opt_level;
             if opt_level.enabled() {
                 debug!("begin const eval, opt level: {:?}", opt_level);
-                let mut cfx = ConstFunctionEvalCtx::new(&mut self.tcx, opt_level);
+                let mut cfx = ConstFunctionEvalCtx::new(&mut self.tcx, self.interner, opt_level);
 
                 for stmt in &mut ast {
                     cfx.visit_statement(stmt, FuncId::ROOT);
@@ -240,7 +240,7 @@ impl<'a> FunctionCompiler<'a> {
         })
     }
 
-    pub fn accept_multiple(&mut self, stmts: Vec<Statement<'a>>) -> Result<(), CompileError> {
+    pub fn accept_multiple(&mut self, stmts: Vec<Statement>) -> Result<(), Error> {
         for stmt in stmts {
             self.accept(stmt)?;
         }
@@ -255,12 +255,12 @@ impl<'a> FunctionCompiler<'a> {
         self.function_stack.last_mut().expect("Function must be present")
     }
 
-    fn current_scope(&self) -> &Scope<'a> {
+    fn current_scope(&self) -> &Scope {
         let id = self.current_function().id;
         self.tcx.scope(id)
     }
 
-    fn current_scope_mut(&mut self) -> &mut Scope<'a> {
+    fn current_scope_mut(&mut self) -> &mut Scope {
         let id = self.current_function().id;
         self.tcx.scope_mut(id)
     }
@@ -285,7 +285,7 @@ impl<'a> FunctionCompiler<'a> {
         }
     }
 
-    fn find_local_in_scope(&mut self, ident: &str, func_id: FuncId) -> Option<(u16, ScopeLocal<'a>, bool)> {
+    fn find_local_in_scope(&mut self, ident: Symbol, func_id: FuncId) -> Option<(u16, ScopeLocal, bool)> {
         if let Some((id, local)) = self.tcx.scope(func_id).find_local(ident) {
             Some((id, local.clone(), false))
         } else {
@@ -301,7 +301,7 @@ impl<'a> FunctionCompiler<'a> {
     /// Tries to find a local in the current or surrounding scopes
     ///
     /// If a local variable is found in a parent scope, it is marked as an extern local
-    pub fn find_local(&mut self, ident: &str) -> Option<(u16, ScopeLocal<'a>, bool)> {
+    pub fn find_local(&mut self, ident: Symbol) -> Option<(u16, ScopeLocal, bool)> {
         let func_id = self.current_function().id;
         self.find_local_in_scope(ident, func_id)
     }
@@ -309,10 +309,10 @@ impl<'a> FunctionCompiler<'a> {
     fn visit_for_each_kinded_loop(
         &mut self,
         kind: ForEachLoopKind,
-        binding: VariableBinding<'a>,
-        expr: Expr<'a>,
-        mut body: Box<Statement<'a>>,
-    ) -> Result<(), CompileError> {
+        binding: VariableBinding,
+        expr: Expr,
+        mut body: Box<Statement>,
+    ) -> Result<(), Error> {
         // For-Of Loop Desugaring:
 
         // === ORIGINAL ===
@@ -342,13 +342,15 @@ impl<'a> FunctionCompiler<'a> {
         // }
 
         let mut ib = InstructionBuilder::new(self);
-        let for_of_iter_id =
-            ib.current_scope_mut()
-                .add_local("for_of_iter", VariableDeclarationKind::Unnameable, None)?;
+        let for_of_iter_id = ib
+            .current_scope_mut()
+            .add_local(sym::FOR_OF_ITER, VariableDeclarationKind::Unnameable, None)
+            .map_err(|_| Error::LocalLimitExceeded(expr.span))?;
 
-        let for_of_gen_step_id =
-            ib.current_scope_mut()
-                .add_local("for_of_gen_step", VariableDeclarationKind::Unnameable, None)?;
+        let for_of_gen_step_id = ib
+            .current_scope_mut()
+            .add_local(sym::FOR_OF_GEN_STEP, VariableDeclarationKind::Unnameable, None)
+            .map_err(|_| Error::LocalLimitExceeded(expr.span))?;
 
         ib.accept_expr(expr)?;
         match kind {
@@ -359,25 +361,40 @@ impl<'a> FunctionCompiler<'a> {
         ib.build_pop();
 
         // Prepend variable assignment to body
-        if !matches!(&*body, Statement::Block(..)) {
-            let old_body = std::mem::replace(&mut *body, Statement::Empty);
+        if !matches!(body.kind, StatementKind::Block(..)) {
+            let old_body = std::mem::replace(&mut *body, Statement::dummy_empty());
 
-            *body = Statement::Block(BlockStatement(vec![old_body]));
+            *body = Statement {
+                span: old_body.span,
+                kind: StatementKind::Block(BlockStatement(vec![old_body])),
+            };
         }
 
         // Assign iterator value to binding at the very start of the for loop body
-        match &mut *body {
-            Statement::Block(BlockStatement(stmts)) => {
+        match &mut body.kind {
+            StatementKind::Block(BlockStatement(stmts)) => {
                 let gen_step = compile_local_load(for_of_gen_step_id, false);
 
-                let var = Statement::Variable(VariableDeclarations(vec![VariableDeclaration::new(
-                    binding,
-                    Some(Expr::property_access(
-                        false,
-                        Expr::compiled(gen_step),
-                        Expr::identifier(Cow::Borrowed("value")),
-                    )),
-                )]));
+                let var = Statement {
+                    span: Span::COMPILER_GENERATED,
+                    kind: StatementKind::Variable(VariableDeclarations(vec![VariableDeclaration::new(
+                        binding,
+                        Some(Expr {
+                            span: Span::COMPILER_GENERATED,
+                            kind: ExprKind::property_access(
+                                false,
+                                Expr {
+                                    span: Span::COMPILER_GENERATED,
+                                    kind: ExprKind::compiled(gen_step),
+                                },
+                                Expr {
+                                    span: Span::COMPILER_GENERATED,
+                                    kind: ExprKind::identifier(sym::VALUE),
+                                },
+                            ),
+                        }),
+                    )])),
+                };
 
                 if stmts.is_empty() {
                     stmts.push(var);
@@ -391,29 +408,56 @@ impl<'a> FunctionCompiler<'a> {
         let for_of_iter_binding_bc = compile_local_load(for_of_iter_id, false);
 
         // for..of -> while loop rewrite
-        ib.visit_while_loop(WhileLoop {
-            condition: Expr::unary(
-                TokenType::LogicalNot,
-                Expr::property_access(
-                    false,
-                    Expr::assignment_local_space(
-                        for_of_gen_step_id,
-                        Expr::function_call(
-                            Expr::property_access(
+        ib.visit_while_loop(
+            Span::COMPILER_GENERATED,
+            WhileLoop {
+                condition: Expr {
+                    span: Span::COMPILER_GENERATED,
+                    kind: ExprKind::unary(
+                        TokenType::LogicalNot,
+                        Expr {
+                            span: Span::COMPILER_GENERATED,
+                            kind: ExprKind::property_access(
                                 false,
-                                Expr::compiled(for_of_iter_binding_bc),
-                                Expr::identifier(Cow::Borrowed("next")),
+                                Expr {
+                                    span: Span::COMPILER_GENERATED,
+                                    kind: ExprKind::assignment_local_space(
+                                        for_of_gen_step_id,
+                                        Expr {
+                                            span: Span::COMPILER_GENERATED,
+                                            kind: ExprKind::function_call(
+                                                Expr {
+                                                    span: Span::COMPILER_GENERATED,
+                                                    kind: ExprKind::property_access(
+                                                        false,
+                                                        Expr {
+                                                            span: Span::COMPILER_GENERATED,
+                                                            kind: ExprKind::compiled(for_of_iter_binding_bc),
+                                                        },
+                                                        Expr {
+                                                            span: Span::COMPILER_GENERATED,
+                                                            kind: ExprKind::identifier(sym::NEXT),
+                                                        },
+                                                    ),
+                                                },
+                                                Vec::new(),
+                                                false,
+                                            ),
+                                        },
+                                        TokenType::Assignment,
+                                    ),
+                                },
+                                Expr {
+                                    span: Span::COMPILER_GENERATED,
+                                    kind: ExprKind::identifier(sym::DONE),
+                                },
                             ),
-                            Vec::new(),
-                            false,
-                        ),
-                        TokenType::Assignment,
+                        },
                     ),
-                    Expr::identifier(Cow::Borrowed("done")),
-                ),
-            ),
-            body,
-        })?;
+                },
+                body,
+            },
+        )?;
 
         Ok(())
     }
@@ -424,62 +468,63 @@ enum ForEachLoopKind {
     ForIn,
 }
 
-impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
-    fn accept(&mut self, stmt: Statement<'a>) -> Result<(), CompileError> {
-        match stmt {
-            Statement::Expression(e) => self.visit_expression_statement(e),
-            Statement::Variable(v) => self.visit_variable_declaration(v),
-            Statement::If(i) => self.visit_if_statement(i),
-            Statement::Block(b) => self.visit_block_statement(b),
-            Statement::Function(f) => self.visit_function_declaration(f),
-            Statement::Loop(Loop::For(f)) => self.visit_for_loop(f),
-            Statement::Loop(Loop::While(w)) => self.visit_while_loop(w),
-            Statement::Loop(Loop::ForOf(f)) => self.visit_for_of_loop(f),
-            Statement::Loop(Loop::ForIn(f)) => self.visit_for_in_loop(f),
-            Statement::Loop(Loop::DoWhile(d)) => self.visit_do_while_loop(d),
-            Statement::Return(r) => self.visit_return_statement(r),
-            Statement::Try(t) => self.visit_try_catch(t),
-            Statement::Throw(t) => self.visit_throw(t),
-            Statement::Import(i) => self.visit_import_statement(i),
-            Statement::Export(e) => self.visit_export_statement(e),
-            Statement::Class(c) => self.visit_class_declaration(c),
-            Statement::Continue => self.visit_continue(),
-            Statement::Break => self.visit_break(),
-            Statement::Debugger => self.visit_debugger(),
-            Statement::Empty => self.visit_empty_statement(),
-            Statement::Switch(s) => self.visit_switch_statement(s),
+impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
+    fn accept(&mut self, Statement { kind, span }: Statement) -> Result<(), Error> {
+        match kind {
+            StatementKind::Expression(e) => self.visit_expression_statement(e),
+            StatementKind::Variable(v) => self.visit_variable_declaration(span, v),
+            StatementKind::If(i) => self.visit_if_statement(span, i),
+            StatementKind::Block(b) => self.visit_block_statement(span, b),
+            StatementKind::Function(f) => self.visit_function_declaration(span, f),
+            StatementKind::Loop(Loop::For(f)) => self.visit_for_loop(span, f),
+            StatementKind::Loop(Loop::While(w)) => self.visit_while_loop(span, w),
+            StatementKind::Loop(Loop::ForOf(f)) => self.visit_for_of_loop(span, f),
+            StatementKind::Loop(Loop::ForIn(f)) => self.visit_for_in_loop(span, f),
+            StatementKind::Loop(Loop::DoWhile(d)) => self.visit_do_while_loop(span, d),
+            StatementKind::Return(r) => self.visit_return_statement(span, r),
+            StatementKind::Try(t) => self.visit_try_catch(span, t),
+            StatementKind::Throw(t) => self.visit_throw(span, t),
+            StatementKind::Import(i) => self.visit_import_statement(span, i),
+            StatementKind::Export(e) => self.visit_export_statement(span, e),
+            StatementKind::Class(c) => self.visit_class_declaration(span, c),
+            StatementKind::Continue => self.visit_continue(span),
+            StatementKind::Break => self.visit_break(span),
+            StatementKind::Debugger => self.visit_debugger(span),
+            StatementKind::Empty => self.visit_empty_statement(),
+            StatementKind::Switch(s) => self.visit_switch_statement(span, s),
         }
     }
 
-    fn accept_expr(&mut self, expr: Expr<'a>) -> Result<(), CompileError> {
-        match expr {
-            Expr::Binary(e) => self.visit_binary_expression(e),
-            Expr::Assignment(e) => self.visit_assignment_expression(e),
-            Expr::Grouping(e) => self.visit_grouping_expression(e),
-            Expr::Literal(LiteralExpr::Identifier(i)) => self.visit_identifier_expression(&i),
-            Expr::Literal(l) => self.visit_literal_expression(l),
-            Expr::Unary(e) => self.visit_unary_expression(e),
-            Expr::Call(e) => self.visit_function_call(e),
-            Expr::Conditional(e) => self.visit_conditional_expr(e),
-            Expr::PropertyAccess(e) => self.visit_property_access_expr(e, false),
-            Expr::Sequence(e) => self.visit_sequence_expr(e),
-            Expr::Postfix(e) => self.visit_postfix_expr(e),
-            Expr::Prefix(e) => self.visit_prefix_expr(e),
-            Expr::Function(e) => self.visit_function_expr(e),
-            Expr::Array(e) => self.visit_array_literal(e),
-            Expr::Object(e) => self.visit_object_literal(e),
-            Expr::Compiled(mut buf) => {
+    fn accept_expr(&mut self, Expr { kind, span }: Expr) -> Result<(), Error> {
+        match kind {
+            ExprKind::Binary(e) => self.visit_binary_expression(span, e),
+            ExprKind::Assignment(e) => self.visit_assignment_expression(span, e),
+            ExprKind::Grouping(e) => self.visit_grouping_expression(span, e),
+            ExprKind::Literal(LiteralExpr::Identifier(i)) => self.visit_identifier_expression(span, i),
+            ExprKind::Literal(l) => self.visit_literal_expression(span, l),
+            ExprKind::Unary(e) => self.visit_unary_expression(span, e),
+            ExprKind::Call(e) => self.visit_function_call(span, e),
+            ExprKind::Conditional(e) => self.visit_conditional_expr(span, e),
+            ExprKind::PropertyAccess(e) => self.visit_property_access_expr(span, e, false),
+            ExprKind::Sequence(e) => self.visit_sequence_expr(span, e),
+            ExprKind::Postfix(e) => self.visit_postfix_expr(span, e),
+            ExprKind::Prefix(e) => self.visit_prefix_expr(span, e),
+            ExprKind::Function(e) => self.visit_function_expr(span, e),
+            ExprKind::Array(e) => self.visit_array_literal(span, e),
+            ExprKind::Object(e) => self.visit_object_literal(span, e),
+            ExprKind::Compiled(mut buf) => {
                 self.current_function_mut().buf.append(&mut buf);
                 Ok(())
             }
-            Expr::Empty => self.visit_empty_expr(),
+            ExprKind::Empty => self.visit_empty_expr(),
         }
     }
 
     fn visit_binary_expression(
         &mut self,
-        BinaryExpr { left, right, operator }: BinaryExpr<'a>,
-    ) -> Result<(), CompileError> {
+        span: Span,
+        BinaryExpr { left, right, operator }: BinaryExpr,
+    ) -> Result<(), Error> {
         let func_id = self.current_function().id;
         let left_type = self.tcx.visit(&left, func_id);
         let right_type = self.tcx.visit(&right, func_id);
@@ -513,8 +558,8 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             ($gen:expr, $spec: expr, $( $t:ty => $spec_const:expr ),*) => {{
                 match (left_type, right_type) {
                     (Some(CompileValueType::Number), Some(CompileValueType::Number)) => {
-                        fn try_const_spec<'a>(ib: &mut InstructionBuilder<'_, 'a>, right: &Expr<'a>) -> bool {
-                            if let Expr::Literal(LiteralExpr::Number(n)) = right {
+                        fn try_const_spec(ib: &mut InstructionBuilder<'_, '_>, right: &ExprKind) -> bool {
+                            if let ExprKind::Literal(LiteralExpr::Number(n)) = right {
                                 let n = *n;
                                 // Using match to be able to expand type->spec metavars
                                 match n.floor() == n {
@@ -531,7 +576,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                             false
                         }
 
-                        if !try_const_spec(&mut ib, &right) {
+                        if !try_const_spec(&mut ib, &right.kind) {
                             // Less specialized: both sides are numbers, but dynamic values
                             ib.accept_expr(*right)?;
                             ib.build_intrinsic_op($spec);
@@ -613,19 +658,19 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 ib.accept_expr(*right)?;
                 ib.add_local_label(Label::IfEnd);
             }
-            other => unimplementedc!("Binary operator {:?}", other),
+            other => unimplementedc!(span, "binary operator {:?}", other),
         }
 
         Ok(())
     }
 
-    fn visit_expression_statement(&mut self, expr: Expr<'a>) -> Result<(), CompileError> {
+    fn visit_expression_statement(&mut self, expr: Expr) -> Result<(), Error> {
         self.accept_expr(expr)?;
         InstructionBuilder::new(self).build_pop();
         Ok(())
     }
 
-    fn visit_grouping_expression(&mut self, GroupingExpr(exprs): GroupingExpr<'a>) -> Result<(), CompileError> {
+    fn visit_grouping_expression(&mut self, _span: Span, GroupingExpr(exprs): GroupingExpr) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         for expr in exprs {
@@ -638,44 +683,59 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn visit_literal_expression(&mut self, expr: LiteralExpr<'a>) -> Result<(), CompileError> {
-        InstructionBuilder::new(self).build_constant(Constant::from_literal(&expr))?;
+    fn visit_literal_expression(&mut self, span: Span, expr: LiteralExpr) -> Result<(), Error> {
+        let constant = Constant::from_literal(self.interner, &expr);
+        InstructionBuilder::new(self)
+            .build_constant(constant)
+            .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
         Ok(())
     }
 
-    fn visit_identifier_expression(&mut self, ident: &str) -> Result<(), CompileError> {
+    fn visit_identifier_expression(&mut self, span: Span, ident: Symbol) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         match ident {
-            "this" => ib.build_this(),
-            "super" => ib.build_super(),
-            "globalThis" => ib.build_global(),
-            "Infinity" => ib.build_infinity(),
-            "NaN" => ib.build_nan(),
+            sym::THIS => ib.build_this(),
+            sym::SUPER => ib.build_super(),
+            sym::GLOBAL_THIS => ib.build_global(),
+            sym::INFINITY => ib.build_infinity(),
+            sym::NAN => ib.build_nan(),
             ident => match ib.find_local(ident) {
                 Some((index, _, is_extern)) => ib.build_local_load(index, is_extern),
-                _ => ib.build_global_load(ident)?,
+                _ => ib
+                    .build_global_load(ib.interner.resolve(ident).clone())
+                    .map_err(|_| Error::ConstantPoolLimitExceeded(span))?,
             },
         };
 
         Ok(())
     }
 
-    fn visit_unary_expression(&mut self, UnaryExpr { operator, expr }: UnaryExpr<'a>) -> Result<(), CompileError> {
+    fn visit_unary_expression(&mut self, span: Span, UnaryExpr { operator, expr }: UnaryExpr) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         // Special case delete operator, as it works different from other unary operators
         if let TokenType::Delete = operator {
-            match *expr {
-                Expr::PropertyAccess(PropertyAccessExpr {
+            match expr.kind {
+                ExprKind::PropertyAccess(PropertyAccessExpr {
                     computed,
                     property,
                     target,
                 }) => match (*property, computed) {
-                    (Expr::Literal(lit), false) => {
+                    (
+                        Expr {
+                            kind: ExprKind::Literal(LiteralExpr::Identifier(ident)),
+                            span,
+                        },
+                        false,
+                    ) => {
                         ib.accept_expr(*target)?;
-                        let ident = lit.to_identifier();
-                        let id = ib.current_function_mut().cp.add(Constant::Identifier(ident.into()))?;
+                        let ident = ib.interner.resolve(ident).clone();
+                        let id = ib
+                            .current_function_mut()
+                            .cp
+                            .add(Constant::Identifier(ident))
+                            .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
                         ib.build_static_delete(id);
                     }
                     (expr, _) => {
@@ -684,14 +744,19 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                         ib.build_dynamic_delete();
                     }
                 },
-                Expr::Literal(lit) => {
+                ExprKind::Literal(LiteralExpr::Identifier(ident)) => {
                     ib.build_global();
-                    let ident = lit.to_identifier();
-                    let id = ib.current_function_mut().cp.add(Constant::Identifier(ident.into()))?;
+                    let ident = ib.interner.resolve(ident).clone();
+                    let id = ib
+                        .current_function_mut()
+                        .cp
+                        .add(Constant::Identifier(ident))
+                        .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
                     ib.build_static_delete(id);
                 }
                 _ => {
-                    ib.build_constant(Constant::Boolean(true))?;
+                    ib.build_constant(Constant::Boolean(true))
+                        .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
                 }
             }
             return Ok(());
@@ -711,19 +776,19 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             }
             TokenType::Yield => {
                 if !matches!(ib.current_function().ty, FunctionKind::Generator) {
-                    return Err(CompileError::YieldOutsideGenerator);
+                    return Err(Error::YieldOutsideGenerator { yield_expr: span });
                 }
 
                 ib.build_yield();
             }
             TokenType::Await => {
                 if !ib.current_function().r#async {
-                    return Err(CompileError::AwaitOutsideAsync);
+                    return Err(Error::AwaitOutsideAsync { await_expr: span });
                 }
 
                 ib.build_await();
             }
-            _ => unimplementedc!("Unary operator {:?}", operator),
+            _ => unimplementedc!(span, "unary operator {:?}", operator),
         }
 
         Ok(())
@@ -731,8 +796,9 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_variable_declaration(
         &mut self,
-        VariableDeclarations(declarations): VariableDeclarations<'a>,
-    ) -> Result<(), CompileError> {
+        span: Span,
+        VariableDeclarations(declarations): VariableDeclarations,
+    ) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         for VariableDeclaration { binding, value } in declarations {
@@ -749,50 +815,67 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 }
                 VariableDeclarationName::ObjectDestructuring { fields, rest } => {
                     if rest.is_some() {
-                        unimplementedc!("Rest operator in object destructuring");
+                        unimplementedc!(span, "rest operator in object destructuring");
                     }
 
                     let field_count = fields
                         .len()
                         .try_into()
-                        .map_err(|_| CompileError::DestructureLimitExceeded)?;
+                        .map_err(|_| Error::DestructureLimitExceeded(span))?;
 
-                    // Unwrap ok; checked at parse time
-                    let value = value.ok_or(CompileError::MissingInitializerInDestructuring)?;
+                    let value = value.ok_or(Error::MissingInitializerInDestructuring(span))?;
                     ib.accept_expr(value)?;
 
                     ib.build_objdestruct(field_count);
 
                     for (name, alias) in fields {
                         let name = alias.unwrap_or(name);
-                        let id = ib.current_scope_mut().add_local(name, binding.kind, None)?;
+                        let id = ib
+                            .current_scope_mut()
+                            .add_local(name, binding.kind, None)
+                            .map_err(|_| Error::LocalLimitExceeded(span))?;
+                        let res_name = ib.interner.resolve(name).clone();
 
-                        let var_id = ib.current_function_mut().cp.add(Constant::Number(id as f64))?;
-                        let ident_id = ib.current_function_mut().cp.add(Constant::Identifier(name.into()))?;
+                        let var_id = ib
+                            .current_function_mut()
+                            .cp
+                            .add(Constant::Number(id as f64))
+                            .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
+                        let ident_id = ib
+                            .current_function_mut()
+                            .cp
+                            .add(Constant::Identifier(res_name))
+                            .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
                         ib.writew(var_id);
                         ib.writew(ident_id);
                     }
                 }
                 VariableDeclarationName::ArrayDestructuring { fields, rest } => {
                     if rest.is_some() {
-                        unimplementedc!("Rest operator in array destructuring");
+                        unimplementedc!(span, "rest operator in array destructuring");
                     }
 
                     let field_count = fields
                         .len()
                         .try_into()
-                        .map_err(|_| CompileError::DestructureLimitExceeded)?;
+                        .map_err(|_| Error::DestructureLimitExceeded(span))?;
 
-                    // Unwrap ok; checked at parse time
-                    let value = value.expect("Array destructuring requires a value");
+                    let value = value.ok_or(Error::MissingInitializerInDestructuring(span))?;
                     ib.accept_expr(value)?;
 
                     ib.build_arraydestruct(field_count);
 
                     for name in fields {
-                        let id = ib.current_scope_mut().add_local(name, binding.kind, None)?;
+                        let id = ib
+                            .current_scope_mut()
+                            .add_local(name, binding.kind, None)
+                            .map_err(|_| Error::LocalLimitExceeded(span))?;
 
-                        let var_id = ib.current_function_mut().cp.add(Constant::Number(id as f64))?;
+                        let var_id = ib
+                            .current_function_mut()
+                            .cp
+                            .add(Constant::Number(id as f64))
+                            .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
                         ib.writew(var_id);
                     }
                 }
@@ -804,13 +887,14 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_if_statement(
         &mut self,
+        _span: Span,
         IfStatement {
             condition,
             then,
             branches,
             el,
-        }: IfStatement<'a>,
-    ) -> Result<(), CompileError> {
+        }: IfStatement,
+    ) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         // Desugar last `else` block into `else if(true)` for simplicity
@@ -819,7 +903,10 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             let mut branches = branches.borrow_mut();
 
             branches.push(IfStatement::new(
-                Expr::bool_literal(true),
+                Expr {
+                    span: Span::COMPILER_GENERATED,
+                    kind: ExprKind::bool_literal(true),
+                },
                 then.clone(),
                 Vec::new(),
                 None,
@@ -858,25 +945,27 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn visit_block_statement(&mut self, BlockStatement(stmt): BlockStatement<'a>) -> Result<(), CompileError> {
+    fn visit_block_statement(&mut self, _span: Span, BlockStatement(stmt): BlockStatement) -> Result<(), Error> {
         self.current_scope_mut().enter();
+
         // Note: No `?` here because we need to always exit the scope
         let re = self.accept_multiple(stmt);
         self.current_scope_mut().exit();
         re
     }
 
-    fn visit_function_declaration(&mut self, fun: FunctionDeclaration<'a>) -> Result<(), CompileError> {
+    fn visit_function_declaration(&mut self, span: Span, fun: FunctionDeclaration) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
         let var_id = match fun.name {
             Some(name) => Some(
                 ib.current_scope_mut()
-                    .add_local(name, VariableDeclarationKind::Var, None)?,
+                    .add_local(name, VariableDeclarationKind::Var, None)
+                    .map_err(|_| Error::LocalLimitExceeded(span))?,
             ),
             None => None,
         };
 
-        ib.visit_function_expr(fun)?;
+        ib.visit_function_expr(span, fun)?;
         if let Some(var_id) = var_id {
             ib.build_local_store(AssignKind::Assignment, var_id, false);
         }
@@ -884,7 +973,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn visit_while_loop(&mut self, WhileLoop { condition, body }: WhileLoop<'a>) -> Result<(), CompileError> {
+    fn visit_while_loop(&mut self, _span: Span, WhileLoop { condition, body }: WhileLoop) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         let loop_id = ib.current_function_mut().prepare_loop();
@@ -904,7 +993,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn visit_do_while_loop(&mut self, DoWhileLoop { body, condition }: DoWhileLoop<'a>) -> Result<(), CompileError> {
+    fn visit_do_while_loop(&mut self, _span: Span, DoWhileLoop { body, condition }: DoWhileLoop) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         let loop_id = ib.current_function_mut().prepare_loop();
@@ -923,21 +1012,22 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
+    #[rustfmt::skip]
     fn visit_assignment_expression(
         &mut self,
-        AssignmentExpr { left, right, operator }: AssignmentExpr<'a>,
-    ) -> Result<(), CompileError> {
+        span: Span,
+        AssignmentExpr { left, right, operator }: AssignmentExpr,
+    ) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         match left {
-            AssignmentTarget::Expr(left) => match *left {
-                Expr::Literal(lit) => {
-                    let ident = lit.to_identifier();
-                    let local = ib.find_local(&ident);
+            AssignmentTarget::Expr(left) => match left.kind {
+                ExprKind::Literal(LiteralExpr::Identifier(ident)) => {
+                    let local = ib.find_local(ident);
 
                     if let Some((id, local, is_extern)) = local {
                         if matches!(local.binding().kind, VariableDeclarationKind::Const) {
-                            return Err(CompileError::ConstAssignment);
+                            return Err(Error::ConstAssignment(span));
                         }
 
                         macro_rules! assign {
@@ -961,13 +1051,15 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                             TokenType::BitwiseAndAssignment => assign!(AssignKind::BitAndAssignment),
                             TokenType::BitwiseOrAssignment => assign!(AssignKind::BitOrAssignment),
                             TokenType::BitwiseXorAssignment => assign!(AssignKind::BitXorAssignment),
-                            _ => unimplementedc!("Unknown operator"),
+                            _ => unimplementedc!(span, "unknown assignment operator {}", operator.fmt_for_expected_tys()),
                         }
                     } else {
                         macro_rules! assign {
                             ($kind:expr) => {{
                                 ib.accept_expr(*right)?;
-                                ib.build_global_store($kind, &ident)?;
+                                let ident = ib.interner.resolve(ident).clone();
+                                ib.build_global_store($kind, ident)
+                                    .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
                             }};
                         }
 
@@ -985,18 +1077,19 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                             TokenType::BitwiseAndAssignment => assign!(AssignKind::BitAndAssignment),
                             TokenType::BitwiseOrAssignment => assign!(AssignKind::BitOrAssignment),
                             TokenType::BitwiseXorAssignment => assign!(AssignKind::BitXorAssignment),
-                            _ => unimplementedc!("Unknown operator"),
+                            _ => unimplementedc!(span, "unknown assignment operator {}", operator.fmt_for_expected_tys()),
                         }
                     }
                 }
-                Expr::PropertyAccess(prop) => {
+                ExprKind::PropertyAccess(prop) => {
                     ib.accept_expr(*prop.target)?;
 
                     macro_rules! staticassign {
-                        ($lit:expr, $kind:expr) => {{
+                        ($ident:expr, $kind:expr) => {{
                             ib.accept_expr(*right)?;
-                            let ident = $lit.to_identifier();
-                            ib.build_static_prop_assign($kind, &ident)?;
+                            let ident = ib.interner.resolve($ident).clone();
+                            ib.build_static_prop_assign($kind, ident)
+                                .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
                         }};
                     }
                     macro_rules! dynamicassign {
@@ -1008,86 +1101,102 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                     }
 
                     match (*prop.property, prop.computed, operator) {
-                        (Expr::Literal(lit), false, TokenType::Assignment) => {
-                            staticassign!(lit, AssignKind::Assignment)
+                        (Expr { kind:ExprKind::Literal(LiteralExpr::Identifier(ident)), .. }, false, TokenType::Assignment) => {
+                            staticassign!(ident, AssignKind::Assignment)
                         }
-                        (Expr::Literal(lit), false, TokenType::AdditionAssignment) => {
-                            staticassign!(lit, AssignKind::AddAssignment)
+                        (Expr { kind:ExprKind::Literal(LiteralExpr::Identifier(ident)), .. }, false, TokenType::AdditionAssignment) => {
+                            staticassign!(ident, AssignKind::AddAssignment)
                         }
-                        (Expr::Literal(lit), false, TokenType::SubtractionAssignment) => {
-                            staticassign!(lit, AssignKind::SubAssignment)
+                        (
+                            Expr { kind:ExprKind::Literal(LiteralExpr::Identifier(ident)), .. },
+                            false,
+                            TokenType::SubtractionAssignment,
+                        ) => {
+                            staticassign!(ident, AssignKind::SubAssignment)
                         }
-                        (Expr::Literal(lit), false, TokenType::MultiplicationAssignment) => {
-                            staticassign!(lit, AssignKind::MulAssignment)
+                        (
+                            Expr { kind:ExprKind::Literal(LiteralExpr::Identifier(ident)), .. },
+                            false,
+                            TokenType::MultiplicationAssignment,
+                        ) => {
+                            staticassign!(ident, AssignKind::MulAssignment)
                         }
-                        (Expr::Literal(lit), false, TokenType::DivisionAssignment) => {
-                            staticassign!(lit, AssignKind::DivAssignment)
+                        (Expr { kind:ExprKind::Literal(LiteralExpr::Identifier(ident)), .. }, false, TokenType::DivisionAssignment) => {
+                            staticassign!(ident, AssignKind::DivAssignment)
                         }
-                        (Expr::Literal(lit), false, TokenType::RemainderAssignment) => {
-                            staticassign!(lit, AssignKind::RemAssignment)
+                        (Expr { kind:ExprKind::Literal(LiteralExpr::Identifier(ident)), .. }, false, TokenType::RemainderAssignment) => {
+                            staticassign!(ident, AssignKind::RemAssignment)
                         }
-                        (Expr::Literal(lit), false, TokenType::ExponentiationAssignment) => {
-                            staticassign!(lit, AssignKind::PowAssignment)
+                        (
+                            Expr { kind:ExprKind::Literal(LiteralExpr::Identifier(ident)), .. },
+                            false,
+                            TokenType::ExponentiationAssignment,
+                        ) => {
+                            staticassign!(ident, AssignKind::PowAssignment)
                         }
-                        (Expr::Literal(lit), false, TokenType::LeftShiftAssignment) => {
-                            staticassign!(lit, AssignKind::ShlAssignment)
+                        (Expr { kind:ExprKind::Literal(LiteralExpr::Identifier(ident)), .. }, false, TokenType::LeftShiftAssignment) => {
+                            staticassign!(ident, AssignKind::ShlAssignment)
                         }
-                        (Expr::Literal(lit), false, TokenType::RightShiftAssignment) => {
-                            staticassign!(lit, AssignKind::ShrAssignment)
+                        (Expr { kind:ExprKind::Literal(LiteralExpr::Identifier(ident)), .. }, false, TokenType::RightShiftAssignment) => {
+                            staticassign!(ident, AssignKind::ShrAssignment)
                         }
-                        (Expr::Literal(lit), false, TokenType::UnsignedRightShiftAssignment) => {
-                            staticassign!(lit, AssignKind::UshrAssignment)
+                        (
+                            Expr { kind:ExprKind::Literal(LiteralExpr::Identifier(ident)), .. },
+                            false,
+                            TokenType::UnsignedRightShiftAssignment,
+                        ) => {
+                            staticassign!(ident, AssignKind::UshrAssignment)
                         }
-                        (Expr::Literal(lit), false, TokenType::BitwiseAndAssignment) => {
-                            staticassign!(lit, AssignKind::BitAndAssignment)
+                        (Expr { kind:ExprKind::Literal(LiteralExpr::Identifier(ident)), .. }, false, TokenType::BitwiseAndAssignment) => {
+                            staticassign!(ident, AssignKind::BitAndAssignment)
                         }
-                        (Expr::Literal(lit), false, TokenType::BitwiseOrAssignment) => {
-                            staticassign!(lit, AssignKind::BitOrAssignment)
+                        (Expr { kind:ExprKind::Literal(LiteralExpr::Identifier(ident)), .. }, false, TokenType::BitwiseOrAssignment) => {
+                            staticassign!(ident, AssignKind::BitOrAssignment)
                         }
-                        (Expr::Literal(lit), false, TokenType::BitwiseXorAssignment) => {
-                            staticassign!(lit, AssignKind::BitXorAssignment)
+                        (Expr { kind:ExprKind::Literal(LiteralExpr::Identifier(ident)), .. }, false, TokenType::BitwiseXorAssignment) => {
+                            staticassign!(ident, AssignKind::BitXorAssignment)
                         }
-                        (prop, true, TokenType::Assignment) => dynamicassign!(prop, AssignKind::Assignment),
-                        (prop, true, TokenType::AdditionAssignment) => {
-                            dynamicassign!(prop, AssignKind::AddAssignment)
+                        (expr, true, TokenType::Assignment) => dynamicassign!(expr, AssignKind::Assignment),
+                        (expr, true, TokenType::AdditionAssignment) => {
+                            dynamicassign!(expr, AssignKind::AddAssignment)
                         }
-                        (prop, true, TokenType::SubtractionAssignment) => {
-                            dynamicassign!(prop, AssignKind::SubAssignment)
+                        (expr, true, TokenType::SubtractionAssignment) => {
+                            dynamicassign!(expr, AssignKind::SubAssignment)
                         }
-                        (prop, true, TokenType::MultiplicationAssignment) => {
-                            dynamicassign!(prop, AssignKind::MulAssignment)
+                        (expr, true, TokenType::MultiplicationAssignment) => {
+                            dynamicassign!(expr, AssignKind::MulAssignment)
                         }
-                        (prop, true, TokenType::DivisionAssignment) => {
-                            dynamicassign!(prop, AssignKind::DivAssignment)
+                        (expr, true, TokenType::DivisionAssignment) => {
+                            dynamicassign!(expr, AssignKind::DivAssignment)
                         }
-                        (prop, true, TokenType::RemainderAssignment) => {
-                            dynamicassign!(prop, AssignKind::RemAssignment)
+                        (expr, true, TokenType::RemainderAssignment) => {
+                            dynamicassign!(expr, AssignKind::RemAssignment)
                         }
-                        (prop, true, TokenType::ExponentiationAssignment) => {
-                            dynamicassign!(prop, AssignKind::PowAssignment)
+                        (expr, true, TokenType::ExponentiationAssignment) => {
+                            dynamicassign!(expr, AssignKind::PowAssignment)
                         }
-                        (prop, true, TokenType::LeftShiftAssignment) => {
-                            dynamicassign!(prop, AssignKind::ShlAssignment)
+                        (expr, true, TokenType::LeftShiftAssignment) => {
+                            dynamicassign!(expr, AssignKind::ShlAssignment)
                         }
-                        (prop, true, TokenType::RightShiftAssignment) => {
-                            dynamicassign!(prop, AssignKind::ShrAssignment)
+                        (expr, true, TokenType::RightShiftAssignment) => {
+                            dynamicassign!(expr, AssignKind::ShrAssignment)
                         }
-                        (prop, true, TokenType::UnsignedRightShiftAssignment) => {
-                            dynamicassign!(prop, AssignKind::UshrAssignment)
+                        (expr, true, TokenType::UnsignedRightShiftAssignment) => {
+                            dynamicassign!(expr, AssignKind::UshrAssignment)
                         }
-                        (prop, true, TokenType::BitwiseAndAssignment) => {
-                            dynamicassign!(prop, AssignKind::BitAndAssignment)
+                        (expr, true, TokenType::BitwiseAndAssignment) => {
+                            dynamicassign!(expr, AssignKind::BitAndAssignment)
                         }
-                        (prop, true, TokenType::BitwiseOrAssignment) => {
-                            dynamicassign!(prop, AssignKind::BitOrAssignment)
+                        (expr, true, TokenType::BitwiseOrAssignment) => {
+                            dynamicassign!(expr, AssignKind::BitOrAssignment)
                         }
-                        (prop, true, TokenType::BitwiseXorAssignment) => {
-                            dynamicassign!(prop, AssignKind::BitXorAssignment)
+                        (expr, true, TokenType::BitwiseXorAssignment) => {
+                            dynamicassign!(expr, AssignKind::BitXorAssignment)
                         }
-                        _ => unimplementedc!("Assignment to computed property"),
+                        other => unimplementedc!(span, "assignment to computed property {other:?}"),
                     }
                 }
-                _ => unimplementedc!("Assignment to non-identifier"),
+                _ => unimplementedc!(span, "assignment to non-identifier"),
             },
             AssignmentTarget::LocalId(id) => {
                 ib.accept_expr(*right)?;
@@ -1100,12 +1209,13 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_function_call(
         &mut self,
+        span: Span,
         FunctionCall {
             constructor_call,
             target,
             arguments,
-        }: FunctionCall<'a>,
-    ) -> Result<(), CompileError> {
+        }: FunctionCall,
+    ) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
         // TODO: this also needs to be specialized for assignment expressions with property access as target
 
@@ -1120,17 +1230,17 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         ///
         /// Math.max(1, 2); // *should* throw a TypeError, but will not without a guard
         /// ```
-        fn try_spec_function_call<'a>(
-            ib: &mut InstructionBuilder<'_, 'a>,
-            target: &Expr<'a>,
-            arguments: &[CallArgumentKind<'a>],
-        ) -> Result<bool, CompileError> {
-            if let Expr::PropertyAccess(PropertyAccessExpr { target, property, .. }) = target {
-                let Some(target) = target.as_identifier() else {
+        fn try_spec_function_call(
+            ib: &mut InstructionBuilder<'_, '_>,
+            target: &ExprKind,
+            arguments: &[CallArgumentKind],
+        ) -> Result<bool, Error> {
+            if let ExprKind::PropertyAccess(PropertyAccessExpr { target, property, .. }) = target {
+                let Some(target) = target.kind.as_identifier() else {
                     return Ok(false);
                 };
 
-                let Some(property) = property.as_identifier() else {
+                let Some(property) = property.kind.as_identifier() else {
                     return Ok(false);
                 };
 
@@ -1155,55 +1265,52 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 }
 
                 match (target, property) {
-                    ("Math", "exp") => emit_spec!(InstructionBuilder::build_exp),
-                    ("Math", "log2") => emit_spec!(InstructionBuilder::build_log2),
-                    ("Math", "expm1") => emit_spec!(InstructionBuilder::build_expm1),
-                    ("Math", "cbrt") => emit_spec!(InstructionBuilder::build_cbrt),
-                    ("Math", "clz32") => emit_spec!(InstructionBuilder::build_clz32),
-                    ("Math", "atanh") => emit_spec!(InstructionBuilder::build_atanh),
-                    ("Math", "atan2") => emit_spec!(InstructionBuilder::build_atanh2),
-                    ("Math", "round") => emit_spec!(InstructionBuilder::build_round),
-                    ("Math", "acosh") => emit_spec!(InstructionBuilder::build_acosh),
-                    ("Math", "abs") => emit_spec!(InstructionBuilder::build_abs),
-                    ("Math", "sinh") => emit_spec!(InstructionBuilder::build_sinh),
-                    ("Math", "sin") => emit_spec!(InstructionBuilder::build_sin),
-                    ("Math", "ceil") => emit_spec!(InstructionBuilder::build_ceil),
-                    ("Math", "tan") => emit_spec!(InstructionBuilder::build_tan),
-                    ("Math", "trunc") => emit_spec!(InstructionBuilder::build_trunc),
-                    ("Math", "asinh") => emit_spec!(InstructionBuilder::build_asinh),
-                    ("Math", "log10") => emit_spec!(InstructionBuilder::build_log10),
-                    ("Math", "asin") => emit_spec!(InstructionBuilder::build_asin),
-                    ("Math", "random") => emit_spec!(InstructionBuilder::build_random),
-                    ("Math", "log1p") => emit_spec!(InstructionBuilder::build_log1p),
-                    ("Math", "sqrt") => emit_spec!(InstructionBuilder::build_sqrt),
-                    ("Math", "atan") => emit_spec!(InstructionBuilder::build_atan),
-                    ("Math", "log") => emit_spec!(InstructionBuilder::build_log),
-                    ("Math", "floor") => emit_spec!(InstructionBuilder::build_floor),
-                    ("Math", "cosh") => emit_spec!(InstructionBuilder::build_cosh),
-                    ("Math", "acos") => emit_spec!(InstructionBuilder::build_acos),
-                    ("Math", "cos") => emit_spec!(InstructionBuilder::build_cos),
+                    (sym::MATH, sym::EXP) => emit_spec!(InstructionBuilder::build_exp),
+                    (sym::MATH, sym::LOG2) => emit_spec!(InstructionBuilder::build_log2),
+                    (sym::MATH, sym::EXPM1) => emit_spec!(InstructionBuilder::build_expm1),
+                    (sym::MATH, sym::CBRT) => emit_spec!(InstructionBuilder::build_cbrt),
+                    (sym::MATH, sym::CLZ32) => emit_spec!(InstructionBuilder::build_clz32),
+                    (sym::MATH, sym::ATANH) => emit_spec!(InstructionBuilder::build_atanh),
+                    (sym::MATH, sym::ATAN2) => emit_spec!(InstructionBuilder::build_atanh2),
+                    (sym::MATH, sym::ROUND) => emit_spec!(InstructionBuilder::build_round),
+                    (sym::MATH, sym::ACOSH) => emit_spec!(InstructionBuilder::build_acosh),
+                    (sym::MATH, sym::ABS) => emit_spec!(InstructionBuilder::build_abs),
+                    (sym::MATH, sym::SINH) => emit_spec!(InstructionBuilder::build_sinh),
+                    (sym::MATH, sym::SIN) => emit_spec!(InstructionBuilder::build_sin),
+                    (sym::MATH, sym::CEIL) => emit_spec!(InstructionBuilder::build_ceil),
+                    (sym::MATH, sym::TAN) => emit_spec!(InstructionBuilder::build_tan),
+                    (sym::MATH, sym::TRUNC) => emit_spec!(InstructionBuilder::build_trunc),
+                    (sym::MATH, sym::ASINH) => emit_spec!(InstructionBuilder::build_asinh),
+                    (sym::MATH, sym::LOG10) => emit_spec!(InstructionBuilder::build_log10),
+                    (sym::MATH, sym::ASIN) => emit_spec!(InstructionBuilder::build_asin),
+                    (sym::MATH, sym::RANDOM) => emit_spec!(InstructionBuilder::build_random),
+                    (sym::MATH, sym::LOG1P) => emit_spec!(InstructionBuilder::build_log1p),
+                    (sym::MATH, sym::SQRT) => emit_spec!(InstructionBuilder::build_sqrt),
+                    (sym::MATH, sym::ATAN) => emit_spec!(InstructionBuilder::build_atan),
+                    (sym::MATH, sym::LOG) => emit_spec!(InstructionBuilder::build_log),
+                    (sym::MATH, sym::FLOOR) => emit_spec!(InstructionBuilder::build_floor),
+                    (sym::MATH, sym::COSH) => emit_spec!(InstructionBuilder::build_cosh),
+                    (sym::MATH, sym::ACOS) => emit_spec!(InstructionBuilder::build_acos),
+                    (sym::MATH, sym::COS) => emit_spec!(InstructionBuilder::build_cos),
                     _ => {}
                 }
             }
             Ok(false)
         }
 
-        if try_spec_function_call(&mut ib, &target, &arguments)? {
+        if try_spec_function_call(&mut ib, &target.kind, &arguments)? {
             return Ok(());
         }
 
-        let has_this = if let Expr::PropertyAccess(p) = *target {
-            ib.visit_property_access_expr(p, true)?;
+        let has_this = if let ExprKind::PropertyAccess(p) = target.kind {
+            ib.visit_property_access_expr(target.span, p, true)?;
             true
         } else {
             ib.accept_expr(*target)?;
             false
         };
 
-        let argc = arguments
-            .len()
-            .try_into()
-            .map_err(|_| CompileError::ParameterLimitExceeded)?;
+        let argc = arguments.len();
 
         let mut spread_arg_indices = Vec::new();
 
@@ -1220,14 +1327,14 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         }
 
         let meta = FunctionCallMetadata::new_checked(argc, constructor_call, has_this)
-            .ok_or(CompileError::ParameterLimitExceeded)?;
+            .ok_or(Error::ParameterLimitExceeded(span))?;
 
         ib.build_call(meta, spread_arg_indices);
 
         Ok(())
     }
 
-    fn visit_return_statement(&mut self, ReturnStatement(stmt): ReturnStatement<'a>) -> Result<(), CompileError> {
+    fn visit_return_statement(&mut self, _span: Span, ReturnStatement(stmt): ReturnStatement) -> Result<(), Error> {
         let tc_depth = self.current_function().try_catch_depth;
         self.accept_expr(stmt)?;
         InstructionBuilder::new(self).build_ret(tc_depth);
@@ -1236,8 +1343,9 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_conditional_expr(
         &mut self,
-        ConditionalExpr { condition, then, el }: ConditionalExpr<'a>,
-    ) -> Result<(), CompileError> {
+        _span: Span,
+        ConditionalExpr { condition, then, el }: ConditionalExpr,
+    ) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         ib.accept_expr(*condition)?;
@@ -1255,21 +1363,29 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_property_access_expr(
         &mut self,
+        _span: Span,
         PropertyAccessExpr {
             computed,
             target,
             property,
-        }: PropertyAccessExpr<'a>,
+        }: PropertyAccessExpr,
         preserve_this: bool,
-    ) -> Result<(), CompileError> {
+    ) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         ib.accept_expr(*target)?;
 
         match (*property, computed) {
-            (Expr::Literal(lit), false) => {
-                let ident = lit.to_identifier();
-                ib.build_static_prop_access(&ident, preserve_this)?;
+            (
+                Expr {
+                    kind: ExprKind::Literal(LiteralExpr::Identifier(ident)),
+                    span,
+                },
+                false,
+            ) => {
+                let ident = ib.interner.resolve(ident).clone();
+                ib.build_static_prop_access(ident, preserve_this)
+                    .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
             }
             (e, _) => {
                 ib.accept_expr(e)?;
@@ -1280,7 +1396,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn visit_sequence_expr(&mut self, (expr1, expr2): Seq<'a>) -> Result<(), CompileError> {
+    fn visit_sequence_expr(&mut self, _span: Span, (expr1, expr2): Seq) -> Result<(), Error> {
         self.accept_expr(*expr1)?;
         InstructionBuilder::new(self).build_pop();
         self.accept_expr(*expr2)?;
@@ -1288,14 +1404,12 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn visit_postfix_expr(&mut self, (tt, expr): Postfix<'a>) -> Result<(), CompileError> {
+    fn visit_postfix_expr(&mut self, span: Span, (tt, expr): Postfix) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
-        match *expr {
-            Expr::Literal(lit) => {
-                let ident = lit.to_identifier();
-
-                if let Some((id, loc, is_extern)) = ib.find_local(&ident) {
+        match expr.kind {
+            ExprKind::Literal(LiteralExpr::Identifier(ident)) => {
+                if let Some((id, loc, is_extern)) = ib.find_local(ident) {
                     let ty = loc.inferred_type().borrow();
 
                     // Specialize guaranteed local number increment
@@ -1314,26 +1428,38 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                         _ => unreachable!("Token never emitted"),
                     }
                 } else {
+                    let ident = ib.interner.resolve(ident).clone();
+
                     match tt {
-                        TokenType::Increment => ib.build_global_store(AssignKind::PostfixIncrement, &ident)?,
-                        TokenType::Decrement => ib.build_global_store(AssignKind::PostfixDecrement, &ident)?,
+                        TokenType::Increment => ib
+                            .build_global_store(AssignKind::PostfixIncrement, ident)
+                            .map_err(|_| Error::ConstantPoolLimitExceeded(expr.span))?,
+                        TokenType::Decrement => ib
+                            .build_global_store(AssignKind::PostfixDecrement, ident)
+                            .map_err(|_| Error::ConstantPoolLimitExceeded(expr.span))?,
                         _ => unreachable!("Token never emitted"),
                     }
                 }
             }
-            Expr::PropertyAccess(prop) => {
+            ExprKind::PropertyAccess(prop) => {
                 ib.accept_expr(*prop.target)?;
 
                 match (*prop.property, prop.computed) {
-                    (Expr::Literal(lit), false) => {
-                        let ident = lit.to_identifier();
+                    (
+                        Expr {
+                            kind: ExprKind::Literal(LiteralExpr::Identifier(ident)),
+                            span,
+                        },
+                        false,
+                    ) => {
+                        let ident = ib.interner.resolve(ident).clone();
                         match tt {
-                            TokenType::Increment => {
-                                ib.build_static_prop_assign(AssignKind::PostfixIncrement, &ident)?
-                            }
-                            TokenType::Decrement => {
-                                ib.build_static_prop_assign(AssignKind::PostfixDecrement, &ident)?
-                            }
+                            TokenType::Increment => ib
+                                .build_static_prop_assign(AssignKind::PostfixIncrement, ident)
+                                .map_err(|_| Error::ConstantPoolLimitExceeded(span))?,
+                            TokenType::Decrement => ib
+                                .build_static_prop_assign(AssignKind::PostfixDecrement, ident)
+                                .map_err(|_| Error::ConstantPoolLimitExceeded(span))?,
                             _ => unreachable!("Token never emitted"),
                         }
                     }
@@ -1348,20 +1474,18 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                     _ => unreachable!("Static assignment was not a literal"),
                 }
             }
-            _ => unimplementedc!("Non-identifier postfix expression"),
+            _ => unimplementedc!(span, "non-identifier postfix expression"),
         }
 
         Ok(())
     }
 
-    fn visit_prefix_expr(&mut self, (tt, expr): Postfix<'a>) -> Result<(), CompileError> {
+    fn visit_prefix_expr(&mut self, span: Span, (tt, expr): Postfix) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
-        match *expr {
-            Expr::Literal(lit) => {
-                let ident = lit.to_identifier();
-
-                if let Some((id, loc, is_extern)) = ib.find_local(&ident) {
+        match expr.kind {
+            ExprKind::Literal(LiteralExpr::Identifier(ident)) => {
+                if let Some((id, loc, is_extern)) = ib.find_local(ident) {
                     let ty = loc.inferred_type().borrow();
 
                     // Specialize guaranteed local number increment
@@ -1380,22 +1504,38 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                         _ => unreachable!("Token never emitted"),
                     }
                 } else {
+                    let ident = ib.interner.resolve(ident).clone();
+
                     match tt {
-                        TokenType::Increment => ib.build_global_store(AssignKind::PrefixIncrement, &ident)?,
-                        TokenType::Decrement => ib.build_global_store(AssignKind::PrefixDecrement, &ident)?,
+                        TokenType::Increment => ib
+                            .build_global_store(AssignKind::PrefixIncrement, ident)
+                            .map_err(|_| Error::ConstantPoolLimitExceeded(expr.span))?,
+                        TokenType::Decrement => ib
+                            .build_global_store(AssignKind::PrefixDecrement, ident)
+                            .map_err(|_| Error::ConstantPoolLimitExceeded(expr.span))?,
                         _ => unreachable!("Token never emitted"),
                     }
                 }
             }
-            Expr::PropertyAccess(prop) => {
+            ExprKind::PropertyAccess(prop) => {
                 ib.accept_expr(*prop.target)?;
 
                 match (*prop.property, prop.computed) {
-                    (Expr::Literal(lit), false) => {
-                        let ident = lit.to_identifier();
+                    (
+                        Expr {
+                            kind: ExprKind::Literal(LiteralExpr::Identifier(ident)),
+                            span,
+                        },
+                        false,
+                    ) => {
+                        let ident = ib.interner.resolve(ident).clone();
                         match tt {
-                            TokenType::Increment => ib.build_static_prop_assign(AssignKind::PrefixIncrement, &ident)?,
-                            TokenType::Decrement => ib.build_static_prop_assign(AssignKind::PrefixDecrement, &ident)?,
+                            TokenType::Increment => ib
+                                .build_static_prop_assign(AssignKind::PrefixIncrement, ident)
+                                .map_err(|_| Error::ConstantPoolLimitExceeded(span))?,
+                            TokenType::Decrement => ib
+                                .build_static_prop_assign(AssignKind::PrefixDecrement, ident)
+                                .map_err(|_| Error::ConstantPoolLimitExceeded(span))?,
                             _ => unreachable!("Token never emitted"),
                         }
                     }
@@ -1410,7 +1550,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                     _ => unreachable!("Static assignment was not a literal"),
                 }
             }
-            _ => unimplementedc!("Non-identifier postfix expression"),
+            _ => unimplementedc!(span, "non-identifier postfix expression"),
         }
 
         Ok(())
@@ -1418,6 +1558,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_function_expr(
         &mut self,
+        span: Span,
         FunctionDeclaration {
             id,
             name,
@@ -1426,15 +1567,15 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             ty,
             r#async,
             ty_segment: _,
-        }: FunctionDeclaration<'a>,
-    ) -> Result<(), CompileError> {
+        }: FunctionDeclaration,
+    ) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
         ib.function_stack.push(FunctionLocalState::new(ty, id, r#async));
 
         let mut rest_local = None;
 
         for (param, default, _ty) in &arguments {
-            let name = match param {
+            let name = match *param {
                 Parameter::Identifier(ident) => ident,
                 Parameter::Spread(ident) => ident,
             };
@@ -1442,7 +1583,8 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             let id = ib
                 .tcx
                 .scope_mut(id)
-                .add_local(name, VariableDeclarationKind::Var, None)?;
+                .add_local(name, VariableDeclarationKind::Var, None)
+                .map_err(|_| Error::LocalLimitExceeded(span))?;
 
             if let Parameter::Spread(..) = param {
                 rest_local = Some(id);
@@ -1466,11 +1608,15 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
         transformations::hoist_declarations(&mut statements);
         transformations::ast_insert_implicit_return(&mut statements);
-        for stmt in statements {
-            ib.accept(stmt)?;
-        }
+        let res: Result<(), Error> = (|| {
+            for stmt in statements {
+                ib.accept(stmt)?;
+            }
+            Ok(())
+        })();
 
         let cmp = ib.function_stack.pop().expect("Missing function state");
+        res?; // Cannot early return error in the loop as we need to pop the function state in any case
         let scope = ib.tcx.scope(id);
         let externals = scope.externals();
         let locals = scope.locals().len();
@@ -1479,7 +1625,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             buffer: Buffer(Cell::new(cmp.buf.into())),
             constants: cmp.cp.into_vec().into(),
             locals,
-            name: name.map(ToOwned::to_owned),
+            name: name.map(|sym| ib.interner.resolve(sym).clone()),
             ty,
             params: match arguments.last() {
                 Some((Parameter::Spread(..), ..)) => arguments.len() - 1,
@@ -1490,18 +1636,16 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             rest_local,
             poison_ips: RefCell::new(HashSet::new()),
         };
-        ib.build_constant(Constant::Function(Rc::new(function)))?;
+        ib.build_constant(Constant::Function(Rc::new(function)))
+            .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
 
         Ok(())
     }
 
-    fn visit_array_literal(&mut self, ArrayLiteral(exprs): ArrayLiteral<'a>) -> Result<(), CompileError> {
+    fn visit_array_literal(&mut self, span: Span, ArrayLiteral(exprs): ArrayLiteral) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
-        let len = exprs
-            .len()
-            .try_into()
-            .map_err(|_| CompileError::ArrayLitLimitExceeded)?;
+        let len = exprs.len().try_into().map_err(|_| Error::ArrayLitLimitExceeded(span))?;
 
         let kinds = exprs
             .iter()
@@ -1524,7 +1668,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn visit_object_literal(&mut self, ObjectLiteral(exprs): ObjectLiteral<'a>) -> Result<(), CompileError> {
+    fn visit_object_literal(&mut self, span: Span, ObjectLiteral(exprs): ObjectLiteral) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         let mut members = Vec::with_capacity(exprs.len());
@@ -1540,20 +1684,21 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             }
         }
 
-        ib.build_objlit(members)?;
+        ib.build_objlit(span, members)?;
         Ok(())
     }
 
-    fn visit_try_catch(&mut self, TryCatch { try_, catch, .. }: TryCatch<'a>) -> Result<(), CompileError> {
+    fn visit_try_catch(&mut self, span: Span, TryCatch { try_, catch, .. }: TryCatch) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         ib.build_try_block();
 
         ib.current_function_mut().try_catch_depth += 1;
         ib.current_scope_mut().enter();
-        ib.accept(*try_)?;
+        let res = ib.accept(*try_); // TODO: some API for making this nicer
         ib.current_scope_mut().exit();
         ib.current_function_mut().try_catch_depth -= 1;
+        res?;
 
         ib.build_jmp(Label::TryEnd, true);
 
@@ -1564,11 +1709,12 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         if let Some(ident) = catch.ident {
             let id = ib
                 .current_scope_mut()
-                .add_local(ident, VariableDeclarationKind::Var, None)?;
+                .add_local(ident, VariableDeclarationKind::Var, None)
+                .map_err(|_| Error::LocalLimitExceeded(span))?;
 
             if id == u16::MAX {
                 // Max u16 value is reserved for "no binding"
-                return Err(CompileError::LocalLimitExceeded);
+                return Err(Error::LocalLimitExceeded(span));
             }
 
             ib.writew(id);
@@ -1585,7 +1731,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn visit_throw(&mut self, expr: Expr<'a>) -> Result<(), CompileError> {
+    fn visit_throw(&mut self, _span: Span, expr: Expr) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
         ib.accept_expr(expr)?;
         ib.build_throw();
@@ -1594,13 +1740,14 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_for_loop(
         &mut self,
+        _span: Span,
         ForLoop {
             init,
             condition,
             finalizer,
             body,
-        }: ForLoop<'a>,
-    ) -> Result<(), CompileError> {
+        }: ForLoop,
+    ) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
         ib.current_scope_mut().enter();
 
@@ -1638,15 +1785,15 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn visit_for_of_loop(&mut self, ForOfLoop { binding, expr, body }: ForOfLoop<'a>) -> Result<(), CompileError> {
+    fn visit_for_of_loop(&mut self, _span: Span, ForOfLoop { binding, expr, body }: ForOfLoop) -> Result<(), Error> {
         self.visit_for_each_kinded_loop(ForEachLoopKind::ForOf, binding, expr, body)
     }
 
-    fn visit_for_in_loop(&mut self, ForInLoop { binding, expr, body }: ForInLoop<'a>) -> Result<(), CompileError> {
+    fn visit_for_in_loop(&mut self, _span: Span, ForInLoop { binding, expr, body }: ForInLoop) -> Result<(), Error> {
         self.visit_for_each_kinded_loop(ForEachLoopKind::ForIn, binding, expr, body)
     }
 
-    fn visit_import_statement(&mut self, import: ImportKind<'a>) -> Result<(), CompileError> {
+    fn visit_import_statement(&mut self, span: Span, import: ImportKind) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         match import {
@@ -1654,19 +1801,25 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 ib.accept_expr(ex)?;
                 ib.build_dynamic_import();
             }
-            ref kind @ (ImportKind::DefaultAs(ref spec, ref path) | ImportKind::AllAs(ref spec, ref path)) => {
-                let local_id = ib.current_scope_mut().add_local(
-                    match spec {
-                        SpecifierKind::Ident(id) => id,
-                    },
-                    VariableDeclarationKind::Var,
-                    None,
-                )?;
+            ref kind @ (ImportKind::DefaultAs(ref spec, path) | ImportKind::AllAs(ref spec, path)) => {
+                let local_id = ib
+                    .current_scope_mut()
+                    .add_local(
+                        match spec {
+                            SpecifierKind::Ident(id) => *id,
+                        },
+                        VariableDeclarationKind::Var,
+                        None,
+                    )
+                    .map_err(|_| Error::LocalLimitExceeded(span))?;
+
+                let path = ib.interner.resolve(path).clone();
 
                 let path_id = ib
                     .current_function_mut()
                     .cp
-                    .add(Constant::String(path.as_ref().into()))?;
+                    .add(Constant::String(path))
+                    .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
 
                 ib.build_static_import(
                     match kind {
@@ -1683,7 +1836,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn visit_export_statement(&mut self, export: ExportKind<'a>) -> Result<(), CompileError> {
+    fn visit_export_statement(&mut self, span: Span, export: ExportKind) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         match export {
@@ -1695,7 +1848,13 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                 let mut it = Vec::with_capacity(names.len());
 
                 for name in names.iter().copied() {
-                    let ident_id = ib.current_function_mut().cp.add(Constant::Identifier(name.into()))?;
+                    let res_name = ib.interner.resolve(name).clone();
+
+                    let ident_id = ib
+                        .current_function_mut()
+                        .cp
+                        .add(Constant::Identifier(res_name))
+                        .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
 
                     match ib.find_local(name) {
                         Some((loc_id, _, is_extern)) => {
@@ -1710,43 +1869,44 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
                     }
                 }
 
-                ib.build_named_export(&it)?;
+                ib.build_named_export(span, &it)?;
             }
             ExportKind::NamedVar(VariableDeclarations(vars)) => {
-                let mut it: Vec<&'a str> = Vec::with_capacity(vars.len());
+                let mut it = Vec::with_capacity(vars.len());
 
                 for var in &vars {
-                    match &var.binding.name {
+                    match var.binding.name {
                         VariableDeclarationName::Identifier(ident) => it.push(ident),
-                        VariableDeclarationName::ArrayDestructuring { fields, rest } => {
-                            it.extend(fields.iter());
+                        VariableDeclarationName::ArrayDestructuring { ref fields, rest } => {
+                            it.extend(fields.iter().copied());
                             it.extend(rest);
                         }
-                        VariableDeclarationName::ObjectDestructuring { fields, rest } => {
-                            it.extend(fields.iter().map(|(name, ident)| ident.unwrap_or(name)));
+                        VariableDeclarationName::ObjectDestructuring { ref fields, rest } => {
+                            it.extend(fields.iter().map(|&(name, ident)| ident.unwrap_or(name)));
                             it.extend(rest);
                         }
                     }
                 }
 
-                self.visit_variable_declaration(VariableDeclarations(vars))?;
-                self.visit_export_statement(ExportKind::Named(it))?;
+                self.visit_variable_declaration(span, VariableDeclarations(vars))?;
+                self.visit_export_statement(span, ExportKind::Named(it))?;
             }
         };
         Ok(())
     }
 
-    fn visit_empty_statement(&mut self) -> Result<(), CompileError> {
+    fn visit_empty_statement(&mut self) -> Result<(), Error> {
         Ok(())
     }
 
-    fn visit_break(&mut self) -> Result<(), CompileError> {
+    fn visit_break(&mut self, span: Span) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
         let breakable = *ib
             .current_function_mut()
             .breakables
             .last()
-            .ok_or(CompileError::IllegalBreak)?;
+            .ok_or(Error::IllegalBreak(span))?;
+
         match breakable {
             Breakable::Loop { loop_id } => {
                 ib.build_jmp(Label::LoopEnd { loop_id }, false);
@@ -1758,44 +1918,45 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         Ok(())
     }
 
-    fn visit_continue(&mut self) -> Result<(), CompileError> {
+    fn visit_continue(&mut self, span: Span) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
         let breakable = *ib
             .current_function_mut()
             .breakables
             .last()
-            .ok_or(CompileError::IllegalBreak)?;
+            .ok_or(Error::IllegalBreak(span))?;
+
         match breakable {
             Breakable::Loop { loop_id } => {
                 ib.build_jmp(Label::LoopIncrement { loop_id }, false);
             }
             Breakable::Switch { .. } => {
                 // TODO: make it possible to use `continue` in loops even if its used in a switch
-                unimplementedc!("`continue` used inside of a switch statement");
+                unimplementedc!(span, "`continue` used inside of a switch statement");
             }
         }
         Ok(())
     }
 
-    fn visit_debugger(&mut self) -> Result<(), CompileError> {
+    fn visit_debugger(&mut self, _span: Span) -> Result<(), Error> {
         InstructionBuilder::new(self).build_debugger();
         Ok(())
     }
 
-    fn visit_empty_expr(&mut self) -> Result<(), CompileError> {
+    fn visit_empty_expr(&mut self) -> Result<(), Error> {
         Ok(())
     }
 
-    fn visit_class_declaration(&mut self, class: Class<'a>) -> Result<(), CompileError> {
+    fn visit_class_declaration(&mut self, span: Span, class: Class) -> Result<(), Error> {
         if class.extends.is_some() {
-            unimplementedc!("Extending class");
+            unimplementedc!(span, "extending classes");
         }
 
         let mut ib = InstructionBuilder::new(self);
 
         let constructor = class.members.iter().find_map(|member| {
             if let ClassMemberKind::Method(method) = &member.kind {
-                if method.name == Some("constructor") {
+                if method.name == Some(sym::CONSTRUCTOR) {
                     return Some(method.clone());
                 }
             }
@@ -1806,10 +1967,12 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         let binding_id = match class.name {
             Some(name) => ib
                 .current_scope_mut()
-                .add_local(name, VariableDeclarationKind::Var, None)?,
+                .add_local(name, VariableDeclarationKind::Var, None)
+                .map_err(|_| Error::LocalLimitExceeded(span))?,
             None => ib
                 .current_scope_mut()
-                .add_local("DesugaredClass", VariableDeclarationKind::Unnameable, None)?,
+                .add_local(sym::DESUGARED_CLASS, VariableDeclarationKind::Unnameable, None)
+                .map_err(|_| Error::LocalLimitExceeded(span))?,
         };
 
         let (parameters, mut statements, id) = match constructor {
@@ -1832,37 +1995,73 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
             ty_segment: None,
         };
 
-        ib.visit_assignment_expression(AssignmentExpr::new_local_place(
-            binding_id,
-            Expr::Function(desugared_class),
-            TokenType::Assignment,
-        ))?;
-        let load_class_binding = Expr::Compiled(compile_local_load(binding_id, false));
+        ib.visit_assignment_expression(
+            span,
+            AssignmentExpr::new_local_place(
+                binding_id,
+                Expr {
+                    span: Span::COMPILER_GENERATED, // TODO: we might have to use a real span here?
+                    kind: ExprKind::Function(desugared_class),
+                },
+                TokenType::Assignment,
+            ),
+        )?;
+        let load_class_binding = Expr {
+            span: Span::COMPILER_GENERATED,
+            kind: ExprKind::Compiled(compile_local_load(binding_id, false)),
+        };
 
         for member in class.members {
             if let ClassMemberKind::Method(method) = member.kind {
                 let name = method.name.expect("Class method did not have a name");
 
-                ib.accept(Statement::Expression(Expr::Assignment(AssignmentExpr {
-                    left: AssignmentTarget::Expr(match member.static_ {
-                        true => Box::new(Expr::PropertyAccess(PropertyAccessExpr {
-                            computed: false,
-                            property: Box::new(Expr::string_literal(Cow::Borrowed(name))),
-                            target: Box::new(load_class_binding.clone()),
-                        })),
-                        false => Box::new(Expr::PropertyAccess(PropertyAccessExpr {
-                            computed: false,
-                            property: Box::new(Expr::string_literal(Cow::Borrowed(name))),
-                            target: Box::new(Expr::PropertyAccess(PropertyAccessExpr {
-                                computed: false,
-                                property: Box::new(Expr::string_literal(Cow::Borrowed("prototype"))),
-                                target: Box::new(load_class_binding.clone()),
+                ib.accept(Statement {
+                    span: Span::COMPILER_GENERATED,
+                    kind: StatementKind::Expression(Expr {
+                        span: Span::COMPILER_GENERATED,
+                        kind: ExprKind::Assignment(AssignmentExpr {
+                            left: AssignmentTarget::Expr(Box::new(match member.static_ {
+                                true => Expr {
+                                    span: Span::COMPILER_GENERATED,
+                                    kind: ExprKind::property_access(
+                                        false,
+                                        load_class_binding.clone(),
+                                        Expr {
+                                            span: Span::COMPILER_GENERATED,
+                                            kind: ExprKind::identifier(name),
+                                        },
+                                    ),
+                                },
+                                false => Expr {
+                                    span: Span::COMPILER_GENERATED,
+                                    kind: ExprKind::property_access(
+                                        false,
+                                        Expr {
+                                            span: Span::COMPILER_GENERATED,
+                                            kind: ExprKind::property_access(
+                                                false,
+                                                load_class_binding.clone(),
+                                                Expr {
+                                                    span: Span::COMPILER_GENERATED,
+                                                    kind: ExprKind::identifier(sym::PROTOTYPE),
+                                                },
+                                            ),
+                                        },
+                                        Expr {
+                                            span: Span::COMPILER_GENERATED,
+                                            kind: ExprKind::identifier(name),
+                                        },
+                                    ),
+                                },
                             })),
-                        })),
+                            right: Box::new(Expr {
+                                span: Span::COMPILER_GENERATED,
+                                kind: ExprKind::Function(method),
+                            }),
+                            operator: TokenType::Assignment,
+                        }),
                     }),
-                    operator: TokenType::Assignment,
-                    right: Box::new(Expr::Function(method)),
-                })))?
+                })?;
             }
         }
 
@@ -1871,8 +2070,9 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
 
     fn visit_switch_statement(
         &mut self,
-        SwitchStatement { expr, cases, default }: SwitchStatement<'a>,
-    ) -> Result<(), CompileError> {
+        span: Span,
+        SwitchStatement { expr, cases, default }: SwitchStatement,
+    ) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         let switch_id = ib.current_function_mut().prepare_switch();
@@ -1891,7 +2091,7 @@ impl<'a> Visitor<'a, Result<(), CompileError>> for FunctionCompiler<'a> {
         // Write switch metadata (case count, has default case)
         let case_count = case_count
             .try_into()
-            .map_err(|_| CompileError::SwitchCaseLimitExceeded)?;
+            .map_err(|_| Error::SwitchCaseLimitExceeded(span))?;
 
         ib.build_switch(case_count, has_default);
 

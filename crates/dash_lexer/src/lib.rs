@@ -1,17 +1,21 @@
 use std::borrow::Cow;
 use std::ops::Range;
 
-use dash_middle::lexer::error::{Error, ErrorKind};
-use dash_middle::lexer::token::{Location, Token, TokenType};
+use dash_middle::interner::{StringInterner, Symbol};
+use dash_middle::lexer::token::{as_token, Token, TokenType};
+use dash_middle::parser::error::Error;
+use dash_middle::sourcemap::Span;
 use dash_middle::util;
 
 /// A JavaScript source code lexer
 #[derive(Debug)]
-pub struct Lexer<'a> {
-    input: &'a [u8],
+pub struct Lexer<'a, 'interner> {
+    input: &'a str,
 
-    tokens: Vec<Token<'a>>,
-    errors: Vec<Error<'a>>,
+    tokens: Vec<Token>,
+    errors: Vec<Error>,
+
+    interner: &'interner mut StringInterner,
 
     idx: usize,
     line: usize,
@@ -31,22 +35,24 @@ pub enum CommentKind {
 
 /// A lexer node (either a token or an error)
 #[derive(Debug)]
-pub enum Node<'a> {
+pub enum Node {
     /// A valid token
-    Token(Token<'a>),
+    Token(Token),
     /// An error
-    Error(Error<'a>),
+    Error(Error),
 }
 
-impl<'a> Lexer<'a> {
+impl<'a, 'interner> Lexer<'a, 'interner> {
     /// Creates a new lexer
-    pub fn new(source: &'a str) -> Self {
+    pub fn new(interner: &'interner mut StringInterner, source: &'a str) -> Self {
+        assert!(source.len() <= u32::MAX as usize);
         Self {
-            input: source.as_bytes(),
+            input: source,
             idx: 0,
             line: 1,
             start: 0,
             line_idx: 0,
+            interner,
             template_literal_depths_stack: Vec::new(),
             errors: Vec::new(),
             tokens: Vec::new(),
@@ -65,32 +71,37 @@ impl<'a> Lexer<'a> {
         Some(cur)
     }
 
+    /// Returns the byte at that index
+    fn at(&self, index: usize) -> Option<u8> {
+        self.input.as_bytes().get(index).copied()
+    }
+
     /// Returns the current byte
     fn current(&self) -> Option<u8> {
-        self.input.get(self.idx).copied()
+        self.at(self.idx)
     }
 
     /// Looks ahead by one and returns the next byte
     fn peek(&self) -> Option<u8> {
-        self.input.get(self.idx + 1).copied()
+        self.at(self.idx + 1)
     }
 
     /// Returns the current byte, without returning an Option
     fn current_real(&self) -> u8 {
-        self.input[self.idx]
+        self.at(self.idx).unwrap()
+    }
+
+    /// Creates a span based on the current location
+    fn span(&self) -> Span {
+        Span {
+            lo: self.start as u32,
+            hi: self.idx as u32,
+        }
     }
 
     /// Creates a token based on the current location
     fn create_contextified_token(&mut self, ty: TokenType) {
-        let tok = Token {
-            ty,
-            loc: Location {
-                line: self.line,
-                offset: self.start,
-                line_offset: self.line_idx,
-            },
-            full: Cow::Borrowed(self.get_lexeme()),
-        };
+        let tok = Token { ty, span: self.span() };
         self.tokens.push(tok);
     }
 
@@ -98,7 +109,7 @@ impl<'a> Lexer<'a> {
     ///
     /// A token may be multiple bytes wide, in which case this function can be used.
     /// This function can be seen as a helper function to create a token based on the next bytes.
-    fn create_contextified_conditional_token(&mut self, default: Option<TokenType>, tokens: &[(&[u8], TokenType)]) {
+    fn create_contextified_conditional_token(&mut self, default: TokenType, tokens: &[(&str, TokenType)]) {
         for (expect, token) in tokens {
             let from = self.idx;
             let slice = self.safe_subslice(from, from + expect.len());
@@ -110,58 +121,43 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        if let Some(tt) = default {
-            self.create_contextified_token(tt);
-        } else {
-            // TODO: can we actually reach this branch?
-            unreachable!()
-        }
+        self.create_contextified_token(default);
     }
 
     /// Creates a new error token
-    fn create_error(&mut self, kind: ErrorKind) {
-        let err = Error {
-            loc: Location {
-                line: self.line,
-                offset: self.start,
-                line_offset: self.line_idx,
-            },
-            kind,
-            source: self.input,
-        };
+    fn create_error(&mut self, err: Error) {
         self.errors.push(err);
     }
 
-    /// Creates a token based on the current location and a given lexeme
-    fn create_contextified_token_with_lexeme(&mut self, ty: TokenType, lexeme: Cow<'a, str>) {
-        let tok = Token {
-            ty,
-            loc: Location {
-                line: self.line,
-                offset: match lexeme {
-                    Cow::Borrowed(lexeme) => lexeme.as_ptr() as usize - self.input.as_ptr() as usize,
-                    // TODO: Handle the Cow::Owned case properly, somehow
-                    _ => 0,
-                },
-                line_offset: self.line_idx,
-            },
-            full: lexeme,
-        };
-        self.tokens.push(tok);
-    }
+    // /// Creates a token based on the current location and a given lexeme
+    // fn create_contextified_token_with_lexeme(&mut self, ty: TokenType, lexeme: Cow<'a, str>) {
+    //     // TODO: can we get rid of the lexeme cow parameter and replace with a span?
+    //     let tok = Token {
+    //         ty,
+    //         span: match lexeme {
+    //             Cow::Borrowed(lexeme) => Span {
+    //                 lo: (lexeme.as_ptr() as usize - self.input.as_ptr() as usize) as u32,
+    //                 hi: (lexeme.as_ptr() as usize - self.input.as_ptr() as usize + lexeme.len()) as u32,
+    //             },
+    //             // TODO: handle Cow::Owned case properly
+    //             Cow::Owned(_) => self.span(),
+    //         },
+    //     };
+    //     self.tokens.push(tok);
+    // }
 
     /// Returns the current lexeme
     fn get_lexeme(&self) -> &'a str {
-        util::force_utf8_borrowed(&self.input[self.start..self.idx])
+        &self.input[self.start..self.idx]
     }
 
     /// Slices into the source string
-    fn subslice(&self, r: Range<usize>) -> &'a [u8] {
+    fn subslice(&self, r: Range<usize>) -> &'a str {
         &self.input[r]
     }
 
     /// Slices into the source string, but makes sure no panic occurs
-    fn safe_subslice(&self, from: usize, to: usize) -> &'a [u8] {
+    fn safe_subslice(&self, from: usize, to: usize) -> &'a str {
         let from = from.max(0);
         let to = to.min(self.input.len());
         &self.input[from..to]
@@ -197,7 +193,7 @@ impl<'a> Lexer<'a> {
     ///
     /// This function expects to be one byte ahead of a quote
     fn read_string_literal(&mut self) {
-        let quote = self.input[self.idx - 1];
+        let quote = self.at(self.idx - 1).unwrap();
         let mut found_quote = false;
 
         let mut lexeme: Option<Cow<'a, str>> = None;
@@ -218,7 +214,7 @@ impl<'a> Lexer<'a> {
 
             if cur == b'\\' {
                 // Append borrowed segment since last escape sequence
-                let segment = util::force_utf8_borrowed(self.subslice(lexeme_starting_idx..self.idx));
+                let segment = self.subslice(lexeme_starting_idx..self.idx);
                 match &mut lexeme {
                     Some(lexeme) => lexeme.to_mut().push_str(segment),
                     None => lexeme = Some(Cow::Borrowed(segment)),
@@ -241,7 +237,7 @@ impl<'a> Lexer<'a> {
                     }
                     other if !other.is_ascii() => {
                         // if the escaped character is non-ascii, decode UTF-8
-                        let (c, len) = util::next_char_in_bytes(&self.input[self.idx..]);
+                        let (c, len) = util::next_char_in_bytes(&self.input.as_bytes()[self.idx..]);
                         lexeme.as_mut().unwrap().to_mut().push(c);
                         self.advance_n(len);
                     }
@@ -260,25 +256,24 @@ impl<'a> Lexer<'a> {
         }
 
         let lexeme = match lexeme {
-            None => Cow::Borrowed(util::force_utf8_borrowed(self.subslice(self.start + 1..self.idx - 1))),
+            None => Cow::Borrowed(self.subslice(self.start + 1..self.idx - 1)),
             Some(Cow::Owned(mut lexeme)) => {
-                lexeme.push_str(util::force_utf8_borrowed(
-                    self.subslice(lexeme_starting_idx..self.idx - 1),
-                ));
+                lexeme.push_str(self.subslice(lexeme_starting_idx..self.idx - 1));
                 Cow::Owned(lexeme)
             }
             Some(Cow::Borrowed(..)) => unreachable!("Lexeme cannot be borrowed at this point"),
         };
 
         if !found_quote && self.is_eof() {
-            return self.create_error(ErrorKind::UnexpectedEof);
+            return self.create_error(Error::UnexpectedEof);
         }
 
-        self.create_contextified_token_with_lexeme(TokenType::String, lexeme);
+        let sym = self.interner.intern(lexeme);
+        self.create_contextified_token(TokenType::String(sym));
     }
 
     /// Reads a prefixed number literal (0x, 0b, 0o)
-    fn read_prefixed_literal<P>(&mut self, ty: TokenType, predicate: P)
+    fn read_prefixed_literal<P>(&mut self, ty_ctor: fn(Symbol) -> TokenType, predicate: P)
     where
         P: Fn(u8) -> bool,
     {
@@ -295,7 +290,8 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        self.create_contextified_token(ty);
+        let sym = self.interner.intern(self.get_lexeme());
+        self.create_contextified_token(ty_ctor(sym));
     }
 
     /// Reads a number literal
@@ -335,8 +331,8 @@ impl<'a> Lexer<'a> {
 
             self.advance();
         }
-
-        self.create_contextified_token(TokenType::NumberDec)
+        let sym = self.interner.intern(self.get_lexeme());
+        self.create_contextified_token(TokenType::NumberDec(sym))
     }
 
     fn read_template_literal_segment(&mut self) {
@@ -370,7 +366,7 @@ impl<'a> Lexer<'a> {
         }
 
         if !found_end && self.is_eof() {
-            return self.create_error(ErrorKind::UnexpectedEof);
+            return self.create_error(Error::UnexpectedEof);
         }
 
         let range = match is_interpolated {
@@ -378,8 +374,8 @@ impl<'a> Lexer<'a> {
             false => self.start + 1..self.idx - 1,
         };
 
-        let lexeme = util::force_utf8_borrowed(self.subslice(range));
-        self.create_contextified_token_with_lexeme(TokenType::TemplateLiteral, Cow::Borrowed(lexeme));
+        let sym = self.interner.intern(self.subslice(range));
+        self.create_contextified_token(TokenType::TemplateLiteral(sym)); // TODO: check if the spans created by this call are right!!
     }
 
     /// Reads an identifier and returns it as a node
@@ -394,8 +390,8 @@ impl<'a> Lexer<'a> {
             self.advance();
         }
 
-        let lexeme = self.get_lexeme();
-        self.create_contextified_token(lexeme.into());
+        let sym = self.interner.intern(self.get_lexeme());
+        self.create_contextified_token(as_token(sym));
     }
 
     /// Reads a regex literal, assuming the current cursor is one byte ahead of the `/`
@@ -412,8 +408,8 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        let lexeme = self.get_lexeme();
-        self.create_contextified_token_with_lexeme(TokenType::RegexLiteral, Cow::Borrowed(lexeme));
+        let sym = self.interner.intern(self.get_lexeme());
+        self.create_contextified_token(TokenType::RegexLiteral(sym));
     }
 
     /// Iterates through the input string and yields the next node
@@ -468,71 +464,66 @@ impl<'a> Lexer<'a> {
                 //     self.read_template_literal_segment();
                 // }
             }
-            b'[' => self.create_contextified_conditional_token(
-                Some(TokenType::LeftSquareBrace),
-                &[(b"]", TokenType::EmptySquareBrace)],
-            ),
+            b'[' => self.create_contextified_token(TokenType::LeftSquareBrace),
             b']' => self.create_contextified_token(TokenType::RightSquareBrace),
             b',' => self.create_contextified_token(TokenType::Comma),
             b'.' => self.create_contextified_token(TokenType::Dot),
             b'-' => self.create_contextified_conditional_token(
-                Some(TokenType::Minus),
-                &[(b"-", TokenType::Decrement), (b"=", TokenType::SubtractionAssignment)],
+                TokenType::Minus,
+                &[("-", TokenType::Decrement), ("=", TokenType::SubtractionAssignment)],
             ),
             b'+' => self.create_contextified_conditional_token(
-                Some(TokenType::Plus),
-                &[(b"+", TokenType::Increment), (b"=", TokenType::AdditionAssignment)],
+                TokenType::Plus,
+                &[("+", TokenType::Increment), ("=", TokenType::AdditionAssignment)],
             ),
             b'*' => self.create_contextified_conditional_token(
-                Some(TokenType::Star),
+                TokenType::Star,
                 &[
-                    (b"*=", TokenType::ExponentiationAssignment),
-                    (b"*", TokenType::Exponentiation),
-                    (b"=", TokenType::MultiplicationAssignment),
+                    ("*=", TokenType::ExponentiationAssignment),
+                    ("*", TokenType::Exponentiation),
+                    ("=", TokenType::MultiplicationAssignment),
                 ],
             ),
             b'|' => self.create_contextified_conditional_token(
-                Some(TokenType::BitwiseOr),
+                TokenType::BitwiseOr,
                 &[
-                    (b"|=", TokenType::LogicalOrAssignment),
-                    (b"=", TokenType::BitwiseOrAssignment),
-                    (b"|", TokenType::LogicalOr),
+                    ("|=", TokenType::LogicalOrAssignment),
+                    ("=", TokenType::BitwiseOrAssignment),
+                    ("|", TokenType::LogicalOr),
                 ],
             ),
             b'^' => self.create_contextified_conditional_token(
-                Some(TokenType::BitwiseXor),
-                &[(b"=", TokenType::BitwiseXorAssignment)],
+                TokenType::BitwiseXor,
+                &[("=", TokenType::BitwiseXorAssignment)],
             ),
             b'&' => self.create_contextified_conditional_token(
-                Some(TokenType::BitwiseAnd),
+                TokenType::BitwiseAnd,
                 &[
-                    (b"&=", TokenType::LogicalAndAssignment),
-                    (b"=", TokenType::BitwiseAndAssignment),
-                    (b"&", TokenType::LogicalAnd),
+                    ("&=", TokenType::LogicalAndAssignment),
+                    ("=", TokenType::BitwiseAndAssignment),
+                    ("&", TokenType::LogicalAnd),
                 ],
             ),
             b'>' => self.create_contextified_conditional_token(
-                Some(TokenType::Greater),
+                TokenType::Greater,
                 &[
-                    (b">>=", TokenType::UnsignedRightShiftAssignment),
-                    (b">=", TokenType::RightShiftAssignment),
-                    (b">>", TokenType::UnsignedRightShift),
-                    (b"=", TokenType::GreaterEqual),
-                    (b">", TokenType::RightShift),
+                    (">>=", TokenType::UnsignedRightShiftAssignment),
+                    (">=", TokenType::RightShiftAssignment),
+                    (">>", TokenType::UnsignedRightShift),
+                    ("=", TokenType::GreaterEqual),
+                    (">", TokenType::RightShift),
                 ],
             ),
             b'<' => self.create_contextified_conditional_token(
-                Some(TokenType::Less),
+                TokenType::Less,
                 &[
-                    (b"<=", TokenType::LeftShiftAssignment),
-                    (b"=", TokenType::LessEqual),
-                    (b"<", TokenType::LeftShift),
+                    ("<=", TokenType::LeftShiftAssignment),
+                    ("=", TokenType::LessEqual),
+                    ("<", TokenType::LeftShift),
                 ],
             ),
-            b'%' => self.create_contextified_conditional_token(
-                Some(TokenType::Remainder),
-                &[(b"=", TokenType::RemainderAssignment)],
-            ),
+            b'%' => self
+                .create_contextified_conditional_token(TokenType::Remainder, &[("=", TokenType::RemainderAssignment)]),
             b'/' => {
                 // '/' is very ambiguous, probably the most ambiguous character in the grammar
                 // Comments (both single line and multi line) have already been checked for,
@@ -621,33 +612,33 @@ impl<'a> Lexer<'a> {
                     Some(token) if PRECEDING_TOKENS.contains(&token.ty) => self.read_regex_literal(),
                     None => self.read_regex_literal(),
                     _ => self.create_contextified_conditional_token(
-                        Some(TokenType::Slash),
-                        &[(b"=", TokenType::DivisionAssignment)],
+                        TokenType::Slash,
+                        &[("=", TokenType::DivisionAssignment)],
                     ),
                 }
             }
             b'!' => self.create_contextified_conditional_token(
-                Some(TokenType::LogicalNot),
-                &[(b"==", TokenType::StrictInequality), (b"=", TokenType::Inequality)],
+                TokenType::LogicalNot,
+                &[("==", TokenType::StrictInequality), ("=", TokenType::Inequality)],
             ),
             b'~' => self.create_contextified_token(TokenType::BitwiseNot),
             b'?' => self.create_contextified_conditional_token(
-                Some(TokenType::Conditional),
+                TokenType::Conditional,
                 &[
-                    (b"?=", TokenType::LogicalNullishAssignment),
-                    (b"?", TokenType::NullishCoalescing),
-                    (b".", TokenType::OptionalChaining),
+                    ("?=", TokenType::LogicalNullishAssignment),
+                    ("?", TokenType::NullishCoalescing),
+                    (".", TokenType::OptionalChaining),
                 ],
             ),
             b'#' => self.create_contextified_token(TokenType::Hash),
             b':' => self.create_contextified_token(TokenType::Colon),
             b';' => self.create_contextified_token(TokenType::Semicolon),
             b'=' => self.create_contextified_conditional_token(
-                Some(TokenType::Assignment),
+                TokenType::Assignment,
                 &[
-                    (b"==", TokenType::StrictEquality),
-                    (b"=", TokenType::Equality),
-                    (b">", TokenType::FatArrow),
+                    ("==", TokenType::StrictEquality),
+                    ("=", TokenType::Equality),
+                    (">", TokenType::FatArrow),
                 ],
             ),
             b'"' | b'\'' => self.read_string_literal(),
@@ -671,7 +662,7 @@ impl<'a> Lexer<'a> {
                 } else if util::is_identifier_start(cur) {
                     self.read_identifier()
                 } else {
-                    self.create_error(ErrorKind::UnknownCharacter(cur));
+                    self.create_error(Error::UnknownCharacter(self.span(), cur));
                 }
             }
         };
@@ -758,7 +749,7 @@ impl<'a> Lexer<'a> {
     /// Drives this lexer to completion
     ///
     /// Calling this function will exhaust the lexer and return all nodes
-    pub fn scan_all(mut self) -> Result<Vec<Token<'a>>, Vec<Error<'a>>> {
+    pub fn scan_all(mut self) -> Result<Vec<Token>, Vec<Error>> {
         while !self.is_eof() {
             self.scan_next();
         }

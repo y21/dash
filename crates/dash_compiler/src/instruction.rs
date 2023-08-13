@@ -1,4 +1,4 @@
-use std::convert::TryInto;
+use std::{convert::TryInto, rc::Rc};
 
 use dash_middle::{
     compiler::{
@@ -6,13 +6,11 @@ use dash_middle::{
         instruction::{AssignKind, Instruction, IntrinsicOperation},
         FunctionCallMetadata, ObjectMemberKind as CompilerObjectMemberKind, StaticImportKind,
     },
-    parser::expr::ObjectMemberKind,
+    parser::{error::Error, expr::ObjectMemberKind},
+    sourcemap::Span,
 };
 
-use super::{
-    builder::{InstructionBuilder, Label},
-    error::CompileError,
-};
+use super::builder::{InstructionBuilder, Label};
 
 macro_rules! simple_instruction {
     ($($fname:ident $value:expr),*) => {
@@ -100,14 +98,14 @@ impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
         compile_local_load_into(&mut self.current_function_mut().buf, index, is_extern);
     }
 
-    pub fn build_global_load(&mut self, ident: &str) -> Result<(), LimitExceededError> {
-        let id = self.current_function_mut().cp.add(Constant::Identifier(ident.into()))?;
+    pub fn build_global_load(&mut self, ident: Rc<str>) -> Result<(), LimitExceededError> {
+        let id = self.current_function_mut().cp.add(Constant::Identifier(ident))?;
         self.write_wide_instr(Instruction::LdGlobal, Instruction::LdGlobalW, id);
         Ok(())
     }
 
-    pub fn build_global_store(&mut self, kind: AssignKind, ident: &str) -> Result<(), LimitExceededError> {
-        let id = self.current_function_mut().cp.add(Constant::Identifier(ident.into()))?;
+    pub fn build_global_store(&mut self, kind: AssignKind, ident: Rc<str>) -> Result<(), LimitExceededError> {
+        let id = self.current_function_mut().cp.add(Constant::Identifier(ident))?;
         self.write_wide_instr(Instruction::StoreGlobal, Instruction::StoreGlobalW, id);
         self.write(kind as u8);
         Ok(())
@@ -178,8 +176,8 @@ impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
         self.build_jmp_header(label, is_local_label);
     }
 
-    pub fn build_static_prop_access(&mut self, ident: &str, preserve_this: bool) -> Result<(), LimitExceededError> {
-        let id = self.current_function_mut().cp.add(Constant::Identifier(ident.into()))?;
+    pub fn build_static_prop_access(&mut self, ident: Rc<str>, preserve_this: bool) -> Result<(), LimitExceededError> {
+        let id = self.current_function_mut().cp.add(Constant::Identifier(ident))?;
         self.write_wide_instr(Instruction::StaticPropAccess, Instruction::StaticPropAccessW, id);
         self.write(preserve_this.into());
 
@@ -191,8 +189,8 @@ impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
         self.write(preserve_this.into());
     }
 
-    pub fn build_static_prop_assign(&mut self, kind: AssignKind, ident: &str) -> Result<(), LimitExceededError> {
-        let id = self.current_function_mut().cp.add(Constant::Identifier(ident.into()))?;
+    pub fn build_static_prop_assign(&mut self, kind: AssignKind, ident: Rc<str>) -> Result<(), LimitExceededError> {
+        let id = self.current_function_mut().cp.add(Constant::Identifier(ident))?;
         self.write_instr(Instruction::StaticPropAssign);
         self.write(kind as u8);
         self.writew(id);
@@ -209,25 +207,27 @@ impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
         self.write_wide_instr(Instruction::ArrayLit, Instruction::ArrayLitW, len);
     }
 
-    pub fn build_objlit(&mut self, constants: Vec<ObjectMemberKind>) -> Result<(), CompileError> {
+    pub fn build_objlit(&mut self, span: Span, constants: Vec<ObjectMemberKind>) -> Result<(), Error> {
         let len = constants
             .len()
             .try_into()
-            .map_err(|_| CompileError::ObjectLitLimitExceeded)?;
+            .map_err(|_| Error::ObjectLitLimitExceeded(span))?;
 
         self.write_wide_instr(Instruction::ObjLit, Instruction::ObjLitW, len);
 
         fn compile_object_member_kind(
             ib: &mut InstructionBuilder,
-            name: &str,
+            span: Span, // TODO: this should not be the span of the obj literal but the member kind
+            name: Rc<str>,
             kind_id: u8,
-        ) -> Result<(), CompileError> {
+        ) -> Result<(), Error> {
             let id = ib
                 .current_function_mut()
                 .cp
-                .add(Constant::Identifier(name.into()))?
+                .add(Constant::Identifier(name))
+                .map_err(|_| Error::ConstantPoolLimitExceeded(span))?
                 .try_into()
-                .map_err(|_| CompileError::ConstantPoolLimitExceeded)?;
+                .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
 
             ib.write(kind_id);
             ib.write(id);
@@ -239,10 +239,12 @@ impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
             let kind_id = CompilerObjectMemberKind::from(&member) as u8;
             match member {
                 ObjectMemberKind::Dynamic(..) => self.write(kind_id),
-                ObjectMemberKind::Static(name) => compile_object_member_kind(self, name, kind_id)?,
+                ObjectMemberKind::Static(name) => {
+                    compile_object_member_kind(self, span, self.interner.resolve(name).clone(), kind_id)?
+                }
                 ObjectMemberKind::Spread => self.write(kind_id),
                 ObjectMemberKind::Getter(name) | ObjectMemberKind::Setter(name) => {
-                    compile_object_member_kind(self, &name, kind_id)?
+                    compile_object_member_kind(self, span, self.interner.resolve(name).clone(), kind_id)?
                 }
             }
         }
@@ -266,13 +268,13 @@ impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
         self.writew(id);
     }
 
-    pub fn build_named_export(&mut self, it: &[NamedExportKind]) -> Result<(), CompileError> {
+    pub fn build_named_export(&mut self, span: Span, it: &[NamedExportKind]) -> Result<(), Error> {
         self.write_instr(Instruction::ExportNamed);
 
         let len = it
             .len()
             .try_into()
-            .map_err(|_| CompileError::ExportNameListLimitExceeded)?;
+            .map_err(|_| Error::ExportNameListLimitExceeded(span))?;
 
         self.writew(len);
 

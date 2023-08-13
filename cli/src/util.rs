@@ -4,6 +4,7 @@ use anyhow::Context;
 use clap::ArgMatches;
 use dash_compiler::FunctionCompiler;
 use dash_middle::compiler::CompileResult;
+use dash_middle::interner::StringInterner;
 use dash_optimizer::OptLevel;
 use dash_vm::frame::Exports;
 use dash_vm::frame::Frame;
@@ -21,13 +22,18 @@ pub fn print_value(value: Value, scope: &mut LocalScope) -> Result<(), Value> {
     thread_local! {
         // Cache bytecode so we can avoid recompiling it every time
         // We can be even smarter if we need to -- cache the whole value at callsite
-        static INSPECT_BC: OnceCell<CompileResult> = OnceCell::new();
+        static INSPECT_BC: OnceCell<CompileResult> = const { OnceCell::new() };
     }
 
     let inspect_bc = INSPECT_BC.with(|tls| {
         let inspect = tls.get_or_init(|| {
-            FunctionCompiler::compile_str(include_str!("../../crates/dash_rt/js/inspect.js"), Default::default())
-                .unwrap()
+            FunctionCompiler::compile_str(
+                // TODO: can reuse a string interner if worth it
+                &mut StringInterner::new(),
+                include_str!("../../crates/dash_rt/js/inspect.js"),
+                Default::default(),
+            )
+            .unwrap()
         });
         inspect.clone()
     });

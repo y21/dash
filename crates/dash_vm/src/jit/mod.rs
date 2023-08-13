@@ -92,6 +92,7 @@ mod tests {
     use dash_llvm_jit_backend::codegen;
     use dash_llvm_jit_backend::codegen::CodegenQuery;
     use dash_llvm_jit_backend::codegen::JitConstant;
+    use dash_middle::interner::StringInterner;
     use dash_optimizer::OptLevel;
     use dash_typed_cfg::passes::bb_generation::BBGenerationQuery;
     use dash_typed_cfg::passes::bb_generation::ConditionalBranchAction;
@@ -147,6 +148,7 @@ mod tests {
     #[test]
     pub fn llvm() {
         let cr = FunctionCompiler::compile_str(
+            &mut StringInterner::new(),
             r"
 
         for (let i = 0; i < 10; i++) {

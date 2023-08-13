@@ -1,3 +1,4 @@
+use dash_middle::parser::error::IntoFormattableErrors;
 use dash_optimizer::OptLevel;
 use dash_vm::eval::EvalError;
 use dash_vm::Vm;
@@ -20,8 +21,8 @@ pub fn repl() -> anyhow::Result<()> {
 
         match scope.eval(&input, OptLevel::Aggressive) {
             Ok(value) => util::print_value(value.root(&mut scope), &mut scope).unwrap(),
-            Err(EvalError::Exception(value)) => util::print_value(value.root(&mut scope), &mut scope).unwrap(),
-            Err(e) => println!("{e}"),
+            Err((EvalError::Exception(value), _)) => util::print_value(value.root(&mut scope), &mut scope).unwrap(),
+            Err((EvalError::Middle(errs), interner)) => println!("{}", errs.formattable(&interner, &input, true)),
         }
 
         scope.process_async_tasks();

@@ -8,6 +8,7 @@ use std::rc::Rc;
 #[cfg(feature = "format")]
 use serde::{Deserialize, Serialize};
 
+use crate::interner::StringInterner;
 use crate::parser::expr::LiteralExpr;
 use crate::parser::statement::FunctionKind;
 
@@ -68,7 +69,7 @@ impl Clone for Buffer {
 #[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone)]
 pub struct Function {
-    pub name: Option<String>,
+    pub name: Option<Rc<str>>,
     pub buffer: Buffer,
     pub ty: FunctionKind,
     pub locals: usize,
@@ -135,15 +136,15 @@ impl Constant {
         }
     }
 
-    pub fn from_literal(expr: &LiteralExpr<'_>) -> Self {
+    pub fn from_literal(interner: &StringInterner, expr: &LiteralExpr) -> Self {
         match expr {
             LiteralExpr::Number(n) => Self::Number(*n),
-            LiteralExpr::Identifier(s) => Self::Identifier(s.as_ref().into()),
-            LiteralExpr::String(s) => Self::String(s.as_ref().into()),
+            LiteralExpr::Identifier(s) => Self::Identifier(interner.resolve(*s).clone()),
+            LiteralExpr::String(s) => Self::String(interner.resolve(*s).clone()),
             LiteralExpr::Boolean(b) => Self::Boolean(*b),
             LiteralExpr::Null => Self::Null,
             LiteralExpr::Undefined => Self::Undefined,
-            LiteralExpr::Regex(regex, source) => Self::Regex(regex.clone(), (*source).into()),
+            LiteralExpr::Regex(regex, source) => Self::Regex(regex.clone(), interner.resolve(*source).clone()),
         }
     }
 }

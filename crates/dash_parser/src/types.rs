@@ -1,39 +1,20 @@
 use dash_middle::lexer::token::TokenType;
-use dash_middle::parser::error::ErrorKind;
+use dash_middle::parser::error::Error;
 use dash_middle::parser::types::LiteralType;
 use dash_middle::parser::types::TypeSegment;
 
-use crate::must_borrow_lexeme;
 use crate::Parser;
 
-pub trait TypeParser<'a> {
-    fn parse_type_segment(&mut self) -> Option<TypeSegment<'a>>;
-
-    /// Parses a union type: foo | bar
-    fn parse_union_type(&mut self) -> Option<TypeSegment<'a>>;
-
-    /// Parses an intersection type: foo & bar
-    fn parse_intersection_type(&mut self) -> Option<TypeSegment<'a>>;
-
-    /// Parse postfix array notation: foo[], foo[][], foo[][][], ...
-    fn parse_postfix_array(&mut self) -> Option<TypeSegment<'a>>;
-
-    /// Parses a generic type: foo<bar>
-    fn parse_generic_type(&mut self) -> Option<TypeSegment<'a>>;
-
-    /// Parses a primary type: literals (true, false, Uint8Array)
-    fn parse_primary_type(&mut self) -> Option<TypeSegment<'a>>;
-}
-
-impl<'a> TypeParser<'a> for Parser<'a> {
-    fn parse_type_segment(&mut self) -> Option<TypeSegment<'a>> {
+impl<'a, 'interner> Parser<'a, 'interner> {
+    pub fn parse_type_segment(&mut self) -> Option<TypeSegment> {
         self.parse_union_type()
     }
 
-    fn parse_union_type(&mut self) -> Option<TypeSegment<'a>> {
+    /// Parses a union type: foo | bar
+    fn parse_union_type(&mut self) -> Option<TypeSegment> {
         let mut left = self.parse_intersection_type()?;
 
-        while self.expect_and_skip(&[TokenType::BitwiseOr], false) {
+        while self.expect_token_type_and_skip(&[TokenType::BitwiseOr], false) {
             let right = self.parse_intersection_type()?;
             left = TypeSegment::Union(Box::new(left), Box::new(right));
         }
@@ -41,10 +22,11 @@ impl<'a> TypeParser<'a> for Parser<'a> {
         Some(left)
     }
 
-    fn parse_intersection_type(&mut self) -> Option<TypeSegment<'a>> {
+    /// Parses an intersection type: foo & bar
+    fn parse_intersection_type(&mut self) -> Option<TypeSegment> {
         let mut left = self.parse_postfix_array()?;
 
-        while self.expect_and_skip(&[TokenType::BitwiseAnd], false) {
+        while self.expect_token_type_and_skip(&[TokenType::BitwiseAnd], false) {
             let right = self.parse_postfix_array()?;
             left = TypeSegment::Union(Box::new(left), Box::new(right));
         }
@@ -52,26 +34,29 @@ impl<'a> TypeParser<'a> for Parser<'a> {
         Some(left)
     }
 
-    fn parse_postfix_array(&mut self) -> Option<TypeSegment<'a>> {
+    /// Parse postfix array notation: foo[], foo[][], foo[][][], ...
+    fn parse_postfix_array(&mut self) -> Option<TypeSegment> {
         let mut target = self.parse_generic_type()?;
 
-        while self.expect_and_skip(&[TokenType::EmptySquareBrace], false) {
+        while self.expect_token_type_and_skip(&[TokenType::LeftSquareBrace], false) {
+            self.expect_token_type_and_skip(&[TokenType::RightSquareBrace], true);
             target = TypeSegment::Array(Box::new(target));
         }
 
         Some(target)
     }
 
-    fn parse_generic_type(&mut self) -> Option<TypeSegment<'a>> {
+    /// Parses a generic type: foo<bar>
+    fn parse_generic_type(&mut self) -> Option<TypeSegment> {
         let mut left = self.parse_primary_type()?;
 
-        while self.expect_and_skip(&[TokenType::Less], false) {
+        while self.expect_token_type_and_skip(&[TokenType::Less], false) {
             let mut args = Vec::new();
 
-            while !self.expect_and_skip(&[TokenType::Greater], false) {
+            while !self.expect_token_type_and_skip(&[TokenType::Greater], false) {
                 if !args.is_empty() {
                     // separate types by comma
-                    self.expect_and_skip(&[TokenType::Comma], true);
+                    self.expect_token_type_and_skip(&[TokenType::Comma], true);
                 }
 
                 args.push(self.parse_type_segment()?);
@@ -83,14 +68,15 @@ impl<'a> TypeParser<'a> for Parser<'a> {
         Some(left)
     }
 
-    fn parse_primary_type(&mut self) -> Option<TypeSegment<'a>> {
+    /// Parses a primary type: literals (true, false, Uint8Array)
+    fn parse_primary_type(&mut self) -> Option<TypeSegment> {
         let cur = self.next()?;
 
         let seg = match cur.ty {
-            TokenType::Identifier => TypeSegment::Literal(LiteralType::Identifier(must_borrow_lexeme!(self, cur)?)),
+            TokenType::Identifier(cur) => TypeSegment::Literal(LiteralType::Identifier(cur)),
             _ => {
                 let cur = self.previous().cloned()?;
-                self.create_error(ErrorKind::UnknownToken(cur));
+                self.create_error(Error::UnknownToken(cur));
                 return None;
             }
         };

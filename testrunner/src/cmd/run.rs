@@ -143,35 +143,37 @@ fn run_test(setup: &str, path: &OsStr, verbose: bool) -> RunResult {
             (Ok(_), None) => RunResult::Pass,
             (Ok(_), Some(..)) => RunResult::Fail,
             (Err(err), negative) => {
-                if verbose {
-                    let s = match &err {
-                        EvalError::Compiler(c) => c.to_string(),
-                        EvalError::Lexer(l) => format!("{:?}", l[0].kind),
-                        EvalError::Parser(p) => format!("{:?}", p[0].kind),
-                        EvalError::Exception(_ex) => {
-                            // let mut sc = LocalScope::new(&mut vm);
-                            // match ex.to_string(&mut sc) {
-                            //     Ok(s) => ToString::to_string(&s),
-                            //     Err(err) => format!("{err:?}"),
-                            // }
-
-                            // displaying certain JS error "structures" like above causes a weird stack overflow.
-                            // requires further investigation. for now just display some hardcoded string
-                            "<js error>".into()
-                        }
-                    };
-                    println!("Error in {:?}: {s}", path.to_str());
-                }
-                match (err, negative) {
-                    (
-                        EvalError::Compiler(..) | EvalError::Lexer(..) | EvalError::Parser(..),
-                        Some(NegativePhase::Parse | NegativePhase::Resolution),
-                    ) => RunResult::Pass,
-                    (EvalError::Compiler(..) | EvalError::Lexer(..) | EvalError::Parser(..), None) => RunResult::Fail,
-                    (EvalError::Exception(..), Some(NegativePhase::Runtime)) => RunResult::Pass,
-                    (EvalError::Exception(..), None) => RunResult::Fail,
+                let result = match (&err, negative) {
+                    ((EvalError::Middle(..), _), Some(NegativePhase::Parse | NegativePhase::Resolution)) => {
+                        RunResult::Pass
+                    }
+                    ((EvalError::Middle(..), _), None) => RunResult::Fail,
+                    ((EvalError::Exception(..), _), Some(NegativePhase::Runtime)) => RunResult::Pass,
+                    ((EvalError::Exception(..), _), None) => RunResult::Fail,
                     (_, Some(..)) => RunResult::Fail,
+                };
+
+                if let RunResult::Fail = result {
+                    if verbose {
+                        let s = match &err {
+                            (EvalError::Middle(errs), _) => format!("{errs:?}"),
+                            (EvalError::Exception(_ex), _) => {
+                                // let mut sc = LocalScope::new(&mut vm);
+                                // match ex.to_string(&mut sc) {
+                                //     Ok(s) => ToString::to_string(&s),
+                                //     Err(err) => format!("{err:?}"),
+                                // }
+
+                                // displaying certain JS error "structures" like above causes a weird stack overflow.
+                                // requires further investigation. for now just display some hardcoded string
+                                "<js error>".into()
+                            }
+                        };
+                        println!("Error in {:?}: {s}", path.to_str());
+                    }
                 }
+
+                result
             }
         }
     });
