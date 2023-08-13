@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1691958604968,
+  "lastUpdate": 1691958857720,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -4867,6 +4867,44 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 88928,
             "range": "± 244",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "name": "y21",
+            "username": "y21"
+          },
+          "id": "182fd2e3812993c90cdb3115de2d0429d8a00e98",
+          "message": "Rework the AST",
+          "timestamp": "2023-04-14T21:40:49Z",
+          "url": "https://github.com/y21/dash/pull/72/commits/182fd2e3812993c90cdb3115de2d0429d8a00e98"
+        },
+        "date": 1691958856315,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 2898616,
+            "range": "± 25046",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 252258,
+            "range": "± 1520",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 88610,
+            "range": "± 361",
             "unit": "ns/iter"
           }
         ]
