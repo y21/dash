@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1691875440676,
+  "lastUpdate": 1691896068485,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -4783,6 +4783,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 103846,
             "range": "± 319",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "e94995100d7269fde1a346917e79cf4b10ae6749",
+          "message": "fix buggy class member lowering",
+          "timestamp": "2023-08-13T05:04:18+02:00",
+          "tree_id": "3d4fea0fbb1b72e5fa9b5f86028558aa2d7ffe73",
+          "url": "https://github.com/y21/dash/commit/e94995100d7269fde1a346917e79cf4b10ae6749"
+        },
+        "date": 1691896067352,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 2901753,
+            "range": "± 4867",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 249874,
+            "range": "± 2127",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 88423,
+            "range": "± 294",
             "unit": "ns/iter"
           }
         ]
