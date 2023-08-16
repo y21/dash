@@ -83,6 +83,21 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
         }
     }
 
+    /// Same as [`write_wide_instr`], but accepts two values and uses the wide instruction if either of them is too large
+    pub fn write_wide_instr_double(&mut self, instr: Instruction, instrw: Instruction, value1: u16, value2: u16) {
+        let values = u8::try_from(value1).and_then(|v1| u8::try_from(value2).map(|v2| (v1, v2)));
+
+        if let Ok((value1, value2)) = values {
+            self.write_instr(instr);
+            self.write(value1);
+            self.write(value2);
+        } else {
+            self.write_instr(instrw);
+            self.writew(value1);
+            self.writew(value2);
+        }
+    }
+
     pub fn remove_pop_end(&mut self) {
         if let Some(&inst::POP) = self.current_function_mut().buf.last() {
             self.current_function_mut().buf.pop();

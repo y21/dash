@@ -446,6 +446,7 @@ impl fmt::Display for DisplayConstant<'_> {
             Constant::Null => f.write_str("null"),
             Constant::Undefined => f.write_str("undefined"),
             Constant::Regex(_, source) => write!(f, "{source}"),
+            Constant::Hash(h) => write!(f, "{h:x}"),
         }
     }
 }

@@ -244,6 +244,7 @@ impl Value {
                 let regex = RegExp::new(nodes, source, vm);
                 Value::Object(vm.register(regex))
             }
+            Constant::Hash(_) => panic!("cannot create value from hash"),
             Constant::Function(f) => {
                 let externals = register_function_externals(&f, vm);
 

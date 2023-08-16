@@ -8,3 +8,4 @@ pub mod util;
 pub mod visitor;
 // Unused for now.
 // pub mod walker;
+pub mod hash;

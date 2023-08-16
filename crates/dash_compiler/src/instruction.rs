@@ -6,6 +6,7 @@ use dash_middle::{
         instruction::{AssignKind, Instruction, IntrinsicOperation},
         FunctionCallMetadata, ObjectMemberKind as CompilerObjectMemberKind, StaticImportKind,
     },
+    hash::hash_property_key,
     parser::{error::Error, expr::ObjectMemberKind},
     sourcemap::Span,
 };
@@ -177,8 +178,20 @@ impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
     }
 
     pub fn build_static_prop_access(&mut self, ident: Rc<str>, preserve_this: bool) -> Result<(), LimitExceededError> {
-        let id = self.current_function_mut().cp.add(Constant::Identifier(ident))?;
-        self.write_wide_instr(Instruction::StaticPropAccess, Instruction::StaticPropAccessW, id);
+        // Precompute the hash for this identifier.
+        let hash_id = self
+            .current_function_mut()
+            .cp
+            .add(Constant::Hash(hash_property_key(ident.as_ref())))?;
+
+        let ident_id = self.current_function_mut().cp.add(Constant::Identifier(ident))?;
+
+        self.write_wide_instr_double(
+            Instruction::StaticPropAccess,
+            Instruction::StaticPropAccessW,
+            hash_id,
+            ident_id,
+        );
         self.write(preserve_this.into());
 
         Ok(())

@@ -161,6 +161,12 @@ impl<'sc, 'vm> DispatchContext<'sc, 'vm> {
         self.active_frame().function.constants[index].clone()
     }
 
+    pub fn hash_constant(&self, index: usize) -> u64 {
+        self.constant(index)
+            .as_hash()
+            .expect("Bytecode attempted to reference invalid hash constant")
+    }
+
     pub fn identifier_constant(&self, index: usize) -> Rc<str> {
         self.constant(index)
             .as_identifier()
@@ -202,6 +208,7 @@ mod handlers {
     use dash_middle::compiler::FunctionCallMetadata;
     use dash_middle::compiler::ObjectMemberKind;
     use dash_middle::compiler::StaticImportKind;
+    use dash_middle::hash::build_object_map;
     use if_chain::if_chain;
     use smallvec::SmallVec;
     use std::borrow::Cow;
@@ -225,7 +232,6 @@ mod handlers {
     use crate::value::function::FunctionKind;
     use crate::value::object::NamedObject;
     use crate::value::object::Object;
-    use crate::value::object::ObjectMap;
     use crate::value::object::PropertyKey;
     use crate::value::object::PropertyValue;
     use crate::value::object::PropertyValueKind;
@@ -1025,7 +1031,7 @@ mod handlers {
     pub fn objlit<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let len = cx.fetch_and_inc_ip() as usize;
 
-        let mut obj = ObjectMap::default();
+        let mut obj = build_object_map();
         for _ in 0..len {
             let kind = ObjectMemberKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
 
@@ -1095,19 +1101,78 @@ mod handlers {
     }
 
     pub fn staticpropertyaccess<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
-        let id = cx.fetch_and_inc_ip();
-        let ident = cx.identifier_constant(id.into());
+        let hash_id = cx.fetch_and_inc_ip();
+        let ident_id = cx.fetch_and_inc_ip();
+        let hash = cx.hash_constant(hash_id.into());
+        let ident = cx.identifier_constant(ident_id.into());
+        let ident = PropertyKey::String(ident.as_ref().into());
 
         let preserve_this = cx.fetch_and_inc_ip() == 1;
 
-        let target = if preserve_this {
+        let mut target = if preserve_this {
             cx.peek_stack()
         } else {
             cx.pop_stack_rooted()
         };
 
-        let value = target.get_property(&mut cx, ident.as_ref().into())?;
-        cx.stack.push(value);
+        enum GetResult {
+            NotFound,
+            NotSpecializable,
+            Found(Value),
+        }
+
+        fn get_key_by_hash(
+            scope: &mut LocalScope<'_>,
+            target: &Value,
+            hash: u64,
+            ident: &PropertyKey<'_>,
+        ) -> Result<GetResult, Value> {
+            let Some(value) = target.downcast_ref::<NamedObject>() else {
+                return Ok(GetResult::NotSpecializable);
+            };
+            let map = value.values.borrow();
+            match map.raw_entry().from_hash(hash, |k| k == ident) {
+                Some((_, value)) => {
+                    let value = value.get_or_apply(scope, Value::undefined())?;
+                    Ok(GetResult::Found(value))
+                }
+                None => Ok(GetResult::NotFound),
+            }
+        }
+
+        loop {
+            match get_key_by_hash(&mut cx, &target, hash, &ident) {
+                Ok(GetResult::Found(value)) => {
+                    cx.stack.push(value);
+                    break;
+                }
+                Ok(GetResult::NotFound) => {
+                    match &target {
+                        Value::Object(obj) => {
+                            target = obj.get_prototype(&mut cx)?;
+                            if matches!(target, Value::Null(_)) {
+                                cx.stack.push(Value::undefined());
+                                break;
+                            }
+                        }
+                        // TODO: external
+                        _ => {
+                            // Unspecialize.
+                            let value = target.get_property(&mut cx, ident.clone())?;
+                            cx.stack.push(value);
+                            break;
+                        }
+                    };
+                }
+                Ok(GetResult::NotSpecializable) => {
+                    let value = target.get_property(&mut cx, ident.clone())?;
+                    cx.stack.push(value);
+                    break;
+                }
+                Err(err) => return Err(err.into()),
+            }
+        }
+
         Ok(None)
     }
 

@@ -103,6 +103,10 @@ pub enum Constant {
     Boolean(bool),
     Function(Rc<Function>),
     Regex(dash_regex::Regex, Rc<str>),
+    /// Precomputed hash.
+    ///
+    /// Currently used for computing the hash of identifiers in static property access (i.e. the `b` in `a.b`) at comptime
+    Hash(u64),
     Null,
     Undefined,
 }
@@ -132,6 +136,13 @@ impl Constant {
     pub fn as_boolean(&self) -> Option<bool> {
         match self {
             Constant::Boolean(b) => Some(*b),
+            _ => None,
+        }
+    }
+
+    pub fn as_hash(&self) -> Option<u64> {
+        match self {
+            Constant::Hash(h) => Some(*h),
             _ => None,
         }
     }

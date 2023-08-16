@@ -2,6 +2,7 @@ use std::{any::Any, borrow::Cow, cell::RefCell, fmt::Debug, ptr::addr_of};
 
 use crate::gc::{persistent::Persistent, trace::Trace};
 use bitflags::bitflags;
+use dash_middle::hash::{build_object_map, ObjectMap};
 use dash_proc_macro::Trace;
 
 use crate::{gc::handle::Handle, localscope::LocalScope, throw, Vm};
@@ -11,8 +12,6 @@ use super::{
     primitive::{PrimitiveCapabilities, Symbol},
     ExternalValue, Typeof, Unrooted, Value, ValueContext,
 };
-
-pub type ObjectMap<K, V> = ahash::HashMap<K, V>;
 
 // only here for the time being, will be removed later
 fn __assert_trait_object_safety(_: Box<dyn Object>) {}
@@ -198,7 +197,7 @@ macro_rules! delegate {
 pub struct NamedObject {
     prototype: RefCell<Option<Handle<dyn Object>>>,
     constructor: RefCell<Option<Handle<dyn Object>>>,
-    values: RefCell<ObjectMap<PropertyKey<'static>, PropertyValue>>,
+    pub(crate) values: RefCell<ObjectMap<PropertyKey<'static>, PropertyValue>>,
 }
 
 // TODO: optimization opportunity: some kind of Number variant for faster indexing without .to_string()
@@ -478,7 +477,7 @@ impl<'a> PropertyKey<'a> {
 
 impl NamedObject {
     pub fn new(vm: &Vm) -> Self {
-        Self::with_values(vm, ObjectMap::default())
+        Self::with_values(vm, build_object_map())
     }
 
     pub fn with_values(vm: &Vm, values: ObjectMap<PropertyKey<'static>, PropertyValue>) -> Self {
@@ -497,7 +496,7 @@ impl NamedObject {
         Self {
             prototype: RefCell::new(None),
             constructor: RefCell::new(None),
-            values: RefCell::new(ObjectMap::default()),
+            values: RefCell::new(build_object_map()),
         }
     }
 
@@ -505,7 +504,7 @@ impl NamedObject {
         Self {
             constructor: RefCell::new(Some(ctor)),
             prototype: RefCell::new(Some(prototype)),
-            values: RefCell::new(ObjectMap::default()),
+            values: RefCell::new(build_object_map()),
         }
     }
 

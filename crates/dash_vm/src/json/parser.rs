@@ -2,12 +2,12 @@ use std::borrow::Cow;
 use std::num::ParseFloatError;
 use std::str::Utf8Error;
 
+use dash_middle::hash::build_object_map;
 use dash_middle::util;
 
 use crate::localscope::LocalScope;
 use crate::value::array::Array;
 use crate::value::object::NamedObject;
-use crate::value::object::ObjectMap;
 use crate::value::object::PropertyKey;
 use crate::value::object::PropertyValue;
 use crate::value::Value;
@@ -215,7 +215,7 @@ impl<'a, 'sc, 'vm> Parser<'a, 'sc, 'vm> {
                 Ok(Value::Object(self.sc.register(arr)))
             }
             b'{' => {
-                let mut obj = ObjectMap::default();
+                let mut obj = build_object_map();
 
                 self.idx += 1;
 
