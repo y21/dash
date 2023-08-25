@@ -1,3 +1,4 @@
+use dash_middle::interner::sym;
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::error::Error;
 use dash_middle::parser::types::LiteralType;
@@ -73,7 +74,20 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         let cur = self.next()?;
 
         let seg = match cur.ty {
-            TokenType::Identifier(cur) => TypeSegment::Literal(LiteralType::Identifier(cur)),
+            TokenType::Identifier(cur) => match cur {
+                sym::STRING => TypeSegment::String,
+                sym::NUMBER => TypeSegment::Number,
+                sym::BOOLEAN => TypeSegment::Boolean,
+                _ => TypeSegment::Literal(LiteralType::Identifier(cur)),
+            },
+            TokenType::NumberDec(num) => match self.interner.resolve(num).parse::<f64>() {
+                Ok(n) => TypeSegment::Literal(LiteralType::Number(n)),
+                Err(err) => {
+                    let cur = self.previous().cloned()?;
+                    self.create_error(Error::ParseFloatError(cur, err));
+                    return None;
+                }
+            },
             _ => {
                 let cur = self.previous().cloned()?;
                 self.create_error(Error::UnknownToken(cur));

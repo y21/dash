@@ -54,6 +54,11 @@ fn main() -> anyhow::Result<()> {
                 .arg(Arg::new("tokens").long("tokens").takes_value(false))
                 .arg(Arg::new("types").long("types").takes_value(false))
                 .arg(opt_level),
+        )
+        .subcommand(
+            Command::new("check")
+                .override_help("Runs the experimental type checker")
+                .arg(Arg::new("file").required(true)),
         );
 
     std::panic::set_hook(Box::new(|info| {
@@ -85,6 +90,7 @@ fn main() -> anyhow::Result<()> {
         Some(("run", args)) => cmd::run(args),
         Some(("repl", _)) => cmd::repl(),
         Some(("dump", args)) => cmd::dump(args),
+        Some(("check", args)) => cmd::check(args),
         _ => bail!("Unimplemented command"),
     }
 }

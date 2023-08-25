@@ -53,7 +53,7 @@ pub mod sym {
     pub const GET: Symbol = Symbol(39);
     pub const SET: Symbol = Symbol(40);
 
-    pub const PREINTERNED: &[(&str, Symbol); 84] = &[
+    pub const PREINTERNED: &[(&str, Symbol); 87] = &[
         ("if", IF),
         ("else", ELSE),
         ("function", FUNCTION),
@@ -138,6 +138,9 @@ pub mod sym {
         ("cos", COS),
         ("DesugaredClass", DESUGARED_CLASS),
         ("prototype", PROTOTYPE),
+        ("string", STRING),
+        ("number", NUMBER),
+        ("boolean", BOOLEAN),
     ];
 
     // ⚠️⚠️⚠️⚠️ Update these constants when adding a keyword.
@@ -191,6 +194,9 @@ pub mod sym {
     pub const COS: Symbol = Symbol(KEYWORD_END.0 + 41);
     pub const DESUGARED_CLASS: Symbol = Symbol(KEYWORD_END.0 + 42);
     pub const PROTOTYPE: Symbol = Symbol(KEYWORD_END.0 + 43);
+    pub const STRING: Symbol = Symbol(KEYWORD_END.0 + 44);
+    pub const NUMBER: Symbol = Symbol(KEYWORD_END.0 + 45);
+    pub const BOOLEAN: Symbol = Symbol(KEYWORD_END.0 + 46);
 }
 
 #[derive(Default, Debug)]

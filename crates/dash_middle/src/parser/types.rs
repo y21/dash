@@ -17,6 +17,22 @@ pub enum TypeSegment {
     #[display(fmt = "{_0}<{}>", "fmt_segments(_1)")]
     Generic(Box<TypeSegment>, Vec<TypeSegment>),
     Literal(LiteralType),
+    #[display(fmt = "_")]
+    Infer,
+    #[display(fmt = "any")]
+    Any,
+    #[display(fmt = "unknown")]
+    Unknown,
+    #[display(fmt = "never")]
+    Never,
+    #[display(fmt = "number")]
+    Number,
+    #[display(fmt = "string")]
+    String,
+    #[display(fmt = "boolean")]
+    Boolean,
+    Undefined,
+    Null,
 }
 
 #[derive(Debug, Clone, Display, PartialEq)]

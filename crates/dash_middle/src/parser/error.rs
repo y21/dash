@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Write;
+use std::num::ParseFloatError;
 use std::num::ParseIntError;
 
 use memchr::memchr;
@@ -11,6 +12,8 @@ use crate::interner::StringInterner;
 use crate::lexer::token::Token;
 use crate::lexer::token::TokenType;
 use crate::sourcemap::Span;
+
+use super::types::TypeSegment;
 
 /// An error that occurred during the "middle" stage of execution,
 /// i.e. lexing, parsing or compiling (perhaps counterintuitive with the module this is in...)
@@ -28,6 +31,8 @@ pub enum Error {
     UnexpectedEof,
     /// Integer parsing failed
     ParseIntError(Token, ParseIntError),
+    /// Float parsing failed
+    ParseFloatError(Token, ParseFloatError),
     /// More than one default clause in a switch statement
     MultipleDefaultInSwitch(Span),
     InvalidAccessorParams {
@@ -58,6 +63,12 @@ pub enum Error {
     },
     IllegalBreak(Span),
     MissingInitializerInDestructuring(Span),
+    /* Typecheck */
+    TypeMismatch {
+        span: Span,
+        got: TypeSegment,
+        expected: TypeSegment,
+    },
 }
 
 pub struct FormattableError<'a, 'buf> {
@@ -286,6 +297,10 @@ impl<'a, 'buf> fmt::Display for FormattableError<'a, 'buf> {
                 diag.message("number failed to parse");
                 diag.span_error(span, err.to_string());
             }
+            Error::ParseFloatError(Token { span, .. }, ref err) => {
+                diag.message("number failed to parse");
+                diag.span_error(span, err.to_string());
+            }
             Error::InvalidAccessorParams {
                 expect,
                 got,
@@ -370,6 +385,14 @@ impl<'a, 'buf> fmt::Display for FormattableError<'a, 'buf> {
             Error::MissingInitializerInDestructuring(span) => {
                 diag.message("missing initializer in destructuring pattern");
                 diag.span_error(span, "consider adding an initializer to this variable declaration");
+            }
+            Error::TypeMismatch {
+                span,
+                ref got,
+                ref expected,
+            } => {
+                diag.message("type mismatch");
+                diag.span_error(span, format!("expected type `{expected}`, got type `{got}`"));
             }
         }
         fmt::Display::fmt(&diag, f)
