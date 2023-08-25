@@ -2,9 +2,10 @@ use std::borrow;
 use std::fmt;
 use std::hash::BuildHasherDefault;
 use std::hash::Hash;
+use std::hash::Hasher;
 use std::rc::Rc;
 
-use hashbrown::hash_map::EntryRef;
+use hashbrown::hash_map::RawEntryMut;
 use rustc_hash::FxHasher;
 
 pub mod sym {
@@ -198,6 +199,12 @@ pub struct StringInterner {
     mapping: hashbrown::HashMap<Rc<str>, RawSymbol, BuildHasherDefault<FxHasher>>,
 }
 
+fn fxhash(s: &str) -> u64 {
+    let mut hasher = FxHasher::default();
+    s.hash(&mut hasher);
+    hasher.finish()
+}
+
 impl StringInterner {
     pub fn new() -> Self {
         let mut store = Vec::with_capacity(sym::PREINTERNED.len());
@@ -219,13 +226,16 @@ impl StringInterner {
     }
 
     pub fn intern(&mut self, value: impl borrow::Borrow<str>) -> Symbol {
-        match self.mapping.entry_ref(value.borrow()) {
-            EntryRef::Occupied(entry) => Symbol(*entry.get()),
-            EntryRef::Vacant(entry) => {
+        let value = value.borrow();
+        let hash = fxhash(value);
+
+        match self.mapping.raw_entry_mut().from_hash(hash, |k| &**k == value) {
+            RawEntryMut::Occupied(entry) => Symbol(*entry.get()),
+            RawEntryMut::Vacant(entry) => {
                 let id = self.store.len() as RawSymbol;
-                let value: Rc<str> = Rc::from(value.borrow());
-                self.store.push(value.clone());
-                entry.insert(id);
+                let value: Rc<str> = Rc::from(value);
+                self.store.push(Rc::clone(&value));
+                entry.insert_hashed_nocheck(hash, value, id);
                 Symbol(id)
             }
         }
