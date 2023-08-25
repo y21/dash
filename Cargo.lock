@@ -348,6 +348,7 @@ dependencies = [
  "dash_parser",
  "dash_rt",
  "dash_rt_modules",
+ "dash_typeck",
  "dash_vm",
  "rustyline",
  "tokio",
@@ -574,6 +575,13 @@ dependencies = [
  "dash_vm",
  "indexmap 1.9.3",
  "tokio",
+]
+
+[[package]]
+name = "dash_typeck"
+version = "0.1.0"
+dependencies = [
+ "dash_middle",
 ]
 
 [[package]]
