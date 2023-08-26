@@ -499,10 +499,17 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             let mut rest = None;
 
             while !self.expect_token_type_and_skip(&[TokenType::RightBrace], false) {
-                self.expect_token_type_and_skip(&[TokenType::Comma], false); // TODO: should be an error
+                if !fields.is_empty() {
+                    self.expect_token_type_and_skip(&[TokenType::Comma], true);
+                }
 
                 let cur = self.current()?.clone();
                 match cur.ty {
+                    TokenType::RightBrace => {
+                        // Trailing comma.
+                        self.advance();
+                        break;
+                    }
                     TokenType::Dot => {
                         // Skip the dot
                         self.advance();
@@ -558,10 +565,17 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             let mut rest = None;
 
             while !self.expect_token_type_and_skip(&[TokenType::RightSquareBrace], false) {
-                self.expect_token_type_and_skip(&[TokenType::Comma], false); // TODO: should be an error
+                if !fields.is_empty() {
+                    self.expect_token_type_and_skip(&[TokenType::Comma], true);
+                }
 
                 let cur = self.current()?.clone();
                 match cur.ty {
+                    TokenType::RightSquareBrace => {
+                        // Trailing comma.
+                        self.advance();
+                        break;
+                    }
                     TokenType::Dot => {
                         // Skip the dot
                         self.advance();

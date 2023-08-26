@@ -223,7 +223,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
                 self.advance();
                 let escape = self.current_real();
                 match escape {
-                    b'n' | b't' | b'r' | b'b' | b'f' | b'v' => {
+                    b'n' | b't' | b'r' | b'b' | b'f' | b'v' | b'0' => {
                         lexeme.as_mut().unwrap().to_mut().push(match escape {
                             b'n' => '\n',
                             b't' => '\t',
@@ -231,9 +231,29 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
                             b'b' => '\x08',
                             b'f' => '\x0C',
                             b'v' => '\x0B',
+                            b'0' => '\0',
                             _ => unreachable!(),
                         });
                         self.advance();
+                    }
+                    b'x' => {
+                        self.advance();
+                        match self
+                            .input
+                            .get(self.idx..self.idx + 2)
+                            .map(|hex| u8::from_str_radix(hex, 16))
+                        {
+                            Some(Ok(num)) => {
+                                lexeme.as_mut().unwrap().to_mut().push(num as char);
+                                self.advance_n(2);
+                            }
+                            Some(Err(_)) => {
+                                self.create_error(Error::InvalidEscapeSequence(self.span()));
+                            }
+                            None => {
+                                self.create_error(Error::UnexpectedEof);
+                            }
+                        };
                     }
                     other if !other.is_ascii() => {
                         // if the escaped character is non-ascii, decode UTF-8

@@ -20,6 +20,7 @@ pub enum Error {
     UnknownCharacter(Span, u8),
     /// An unknown token was found
     UnknownToken(Token),
+    InvalidEscapeSequence(Span),
     /// An token was found that we didn't expect, we expect a certain other token type
     UnexpectedToken(Token, TokenType),
     /// Same as UnexpectedToken, but we expected any of the given token types
@@ -277,6 +278,10 @@ impl<'a, 'buf> fmt::Display for FormattableError<'a, 'buf> {
                         acc
                     })
                 ))
+            }
+            Error::InvalidEscapeSequence(span) => {
+                diag.message("invalid escape sequence");
+                diag.span_error(span, "");
             }
             Error::UnexpectedEof => {
                 diag.message("unexpected end of file");
