@@ -1,3 +1,4 @@
+use dash_middle::interner::sym;
 use dash_middle::lexer::token::Token;
 use dash_middle::lexer::token::TokenType;
 use dash_middle::lexer::token::ASSIGNMENT_TYPES;
@@ -453,9 +454,32 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
                     let token = self.next()?.clone();
                     let key = match token.ty {
-                        // TODO: this breaks object literals with a normal property named "get"
-                        TokenType::Get => ObjectMemberKind::Getter(self.expect_identifier_or_reserved_kw(true)?),
-                        TokenType::Set => ObjectMemberKind::Setter(self.expect_identifier_or_reserved_kw(true)?),
+                        TokenType::Get => {
+                            if matches!(
+                                self.current(),
+                                Some(Token {
+                                    ty: TokenType::Colon | TokenType::LeftParen,
+                                    ..
+                                })
+                            ) {
+                                ObjectMemberKind::Static(sym::GET)
+                            } else {
+                                ObjectMemberKind::Getter(self.expect_identifier_or_reserved_kw(true)?)
+                            }
+                        }
+                        TokenType::Set => {
+                            if matches!(
+                                self.current(),
+                                Some(Token {
+                                    ty: TokenType::Colon | TokenType::LeftParen,
+                                    ..
+                                })
+                            ) {
+                                ObjectMemberKind::Static(sym::SET)
+                            } else {
+                                ObjectMemberKind::Setter(self.expect_identifier_or_reserved_kw(true)?)
+                            }
+                        }
                         TokenType::LeftSquareBrace => {
                             let t = self.parse_expression()?;
                             let o = ObjectMemberKind::Dynamic(t);
