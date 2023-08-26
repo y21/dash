@@ -458,7 +458,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                             if matches!(
                                 self.current(),
                                 Some(Token {
-                                    ty: TokenType::Colon | TokenType::LeftParen,
+                                    ty: TokenType::Colon | TokenType::LeftParen, // { get: .. } or { get(..) {..} }
                                     ..
                                 })
                             ) {

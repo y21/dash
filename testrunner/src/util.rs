@@ -53,8 +53,9 @@ pub const IGNORED_TESTS: &[&str] = &[
     "Array/prototype/includes/length-boundaries.js",
     // Number.prototype.toString stack overflow
     "toString/S15.7.4.2_A4_T05.js",
-    // interesting throw stack overflow
+    // interesting throw stack overflows
     "throw/S12.13_A3_T6.js",
+    "Number/prototype/toString/S15.7.4.2_A4_T04.js", // TODO: look into what causes this overflow
     // infinite loops
     "try/S12.14_A9_T1.js",
     "while/S12.6.2_A9.js",

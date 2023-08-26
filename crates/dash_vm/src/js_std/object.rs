@@ -12,7 +12,10 @@ use crate::value::Value;
 use crate::value::ValueContext;
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
-    throw!(cx.scope, Error, "unimplemented")
+    match cx.args.first() {
+        Some(v) => v.to_object(cx.scope).map(Value::Object),
+        None => Ok(Value::Object(cx.scope.register(NamedObject::new(cx.scope)))),
+    }
 }
 
 pub fn create(cx: CallContext) -> Result<Value, Value> {
