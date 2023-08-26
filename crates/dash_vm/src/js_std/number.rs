@@ -22,7 +22,9 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
         .map(|n| n as u8)
         .unwrap_or(10);
 
-    let num = cx.this.to_number(cx.scope)?;
+    let Value::Number(Number(num)) = cx.this else {
+        throw!(cx.scope, TypeError, "Number.prototype.toString called on non-number")
+    };
 
     let re = match radix {
         2 => format!("{:b}", num as u64),
