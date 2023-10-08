@@ -276,8 +276,7 @@ impl TypeInferCtx {
         if let Some(el) = el {
             self.visit_statement(el, func_id);
         }
-        let branches = branches.borrow();
-        for branch in branches.iter() {
+        for branch in branches {
             self.visit_if_statement(branch, func_id);
         }
     }

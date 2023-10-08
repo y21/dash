@@ -241,11 +241,9 @@ impl<'b, 'interner> ConstFunctionEvalCtx<'b, 'interner> {
         if let Some(el) = el {
             self.visit_statement(el, func_id);
         }
-        let mut branches = branches.borrow_mut();
-        for branch in branches.iter_mut() {
+        for branch in branches {
             self.visit_if_statement(branch, func_id);
         }
-        drop(branches);
     }
 
     pub fn visit(&mut self, expression: &mut Expr, func_id: FuncId) {

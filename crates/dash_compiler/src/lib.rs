@@ -891,7 +891,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
         IfStatement {
             condition,
             then,
-            branches,
+            mut branches,
             el,
         }: IfStatement,
     ) -> Result<(), Error> {
@@ -900,7 +900,6 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
         // Desugar last `else` block into `else if(true)` for simplicity
         if let Some(then) = &el {
             let then = &**then;
-            let mut branches = branches.borrow_mut();
 
             branches.push(IfStatement::new(
                 Expr {
@@ -913,7 +912,6 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             ));
         }
 
-        let branches = branches.into_inner();
         let len = branches.len();
 
         ib.accept_expr(condition)?;

@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::Cell;
 use std::fmt;
 use std::io::Read;
 use std::marker::PhantomData;
@@ -175,20 +175,24 @@ impl<T> Drop for ThreadSafeStorage<T> {
 }
 
 /// A type that allows moving a value out of a shared reference (once).
-#[derive(Debug, Clone)]
-pub struct SharedOnce<T>(RefCell<Option<T>>);
+pub struct SharedOnce<T>(Cell<Option<T>>);
 
 impl<T> SharedOnce<T> {
     pub fn new(value: T) -> Self {
-        Self(RefCell::new(Some(value)))
+        Self(Cell::new(Some(value)))
     }
 
     pub fn take(&self) -> T {
-        self.0.borrow_mut().take().expect("Already taken")
+        self.0.take().expect("Already taken")
     }
 
     pub fn try_take(&self) -> Option<T> {
-        self.0.borrow_mut().take()
+        self.0.take()
+    }
+}
+impl<T> fmt::Debug for SharedOnce<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SharedOnce").finish()
     }
 }
 

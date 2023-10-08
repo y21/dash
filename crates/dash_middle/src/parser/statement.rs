@@ -1,4 +1,4 @@
-use std::{cell::RefCell, fmt};
+use std::fmt;
 
 use derive_more::Display;
 #[cfg(feature = "serde")]
@@ -559,12 +559,7 @@ pub struct IfStatement {
     /// Body of this if statement
     pub then: Box<Statement>,
     /// Branches (`else if`'s)
-    ///
-    /// Compiler hackery requires branches to be a RefCell.
-    /// The Visitor trait does not give us a mutable reference to IfStatement,
-    /// so we need to interior mutability to be able to mutate branches from within
-    /// the compiler
-    pub branches: RefCell<Vec<IfStatement>>,
+    pub branches: Vec<IfStatement>,
     /// Last else branch that executes if no other branch matches, if present
     pub el: Option<Box<Statement>>,
 }
@@ -573,8 +568,7 @@ impl fmt::Display for IfStatement {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "if ({}) {{ {} }} ", self.condition, self.then)?;
 
-        let branches = self.branches.borrow();
-        for IfStatement { condition, then, .. } in branches.iter() {
+        for IfStatement { condition, then, .. } in &self.branches {
             write!(f, " else if ({condition}) {{ {then} }} ")?;
         }
 
@@ -592,7 +586,7 @@ impl IfStatement {
         Self {
             condition,
             then: Box::new(then),
-            branches: RefCell::new(branches),
+            branches,
             el,
         }
     }
