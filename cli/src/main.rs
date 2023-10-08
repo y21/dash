@@ -18,6 +18,8 @@ fn main() -> anyhow::Result<()> {
         .default_value("1")
         .possible_values(["0", "1", "2"]);
 
+    let nodejs = Arg::new("node").long("node").takes_value(false);
+
     let initial_gc_threshold = Arg::new("initial-gc-threshold")
         .help("Sets the initial GC object threshold, i.e. the object count at which the first GC cycle triggers.")
         .long("initial-gc-threshold")
@@ -40,6 +42,7 @@ fn main() -> anyhow::Result<()> {
                 .arg(Arg::new("timing").short('t').long("timing").takes_value(false))
                 .arg(Arg::new("quiet").short('q').long("quiet").takes_value(false))
                 .arg(opt_level.clone())
+                .arg(nodejs)
                 .arg(initial_gc_threshold.clone()),
         )
         .subcommand(Command::new("repl").override_help("Enter a JavaScript REPL"))

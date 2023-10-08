@@ -344,6 +344,7 @@ dependencies = [
  "dash_decompiler",
  "dash_lexer",
  "dash_middle",
+ "dash_node_impl",
  "dash_optimizer",
  "dash_parser",
  "dash_rt",
@@ -445,6 +446,21 @@ dependencies = [
  "smallvec",
  "strum",
  "strum_macros",
+]
+
+[[package]]
+name = "dash_node_impl"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dash_middle",
+ "dash_optimizer",
+ "dash_parser",
+ "dash_rt",
+ "dash_vm",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

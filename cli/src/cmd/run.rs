@@ -1,5 +1,7 @@
 use dash_middle::parser::error::IntoFormattableErrors;
+use dash_node_impl::run_with_nodejs_mnemnoics;
 use dash_optimizer::OptLevel;
+use dash_rt::format_value;
 use dash_rt::runtime::Runtime;
 use dash_rt::state::State;
 use dash_vm::eval::EvalError;
@@ -14,22 +16,32 @@ use crate::util;
 
 pub fn run(args: &ArgMatches) -> anyhow::Result<()> {
     let path = args.value_of("file").context("Missing source")?;
+    let nodejs = args.is_present("node");
     let initial_gc_threshold = args
         .value_of("initial-gc-threshold")
         .map(<usize as FromStr>::from_str)
         .transpose()?;
-
-    let source = fs::read_to_string(path).context("Failed to read source")?;
     let opt = util::opt_level_from_matches(args)?;
-
     let before = args.is_present("timing").then(Instant::now);
+    let quiet = args.is_present("quiet");
 
-    let async_rt = tokio::runtime::Runtime::new()?;
-    async_rt.block_on(inner(source, opt, args.is_present("quiet"), initial_gc_threshold))?;
+    if nodejs {
+        run_with_nodejs_mnemnoics(path, opt, initial_gc_threshold)?;
+    } else {
+        run_normal_mode(path, opt, quiet, initial_gc_threshold)?;
+    }
 
     if let Some(before) = before {
         println!("\n{:?}", before.elapsed());
     }
+
+    Ok(())
+}
+fn run_normal_mode(path: &str, opt: OptLevel, quiet: bool, initial_gc_threshold: Option<usize>) -> anyhow::Result<()> {
+    let source = fs::read_to_string(path).context("Failed to read source")?;
+
+    let async_rt = tokio::runtime::Runtime::new()?;
+    async_rt.block_on(inner(source, opt, quiet, initial_gc_threshold))?;
 
     Ok(())
 }
@@ -55,7 +67,7 @@ async fn inner(source: String, opt: OptLevel, quiet: bool, initial_gc_threshold:
     // TODO: EvalError::VmError should probably bail too?
 
     if !quiet {
-        util::print_value(value, &mut scope).unwrap();
+        println!("{}", format_value(value, &mut scope).unwrap());
     }
 
     let state = State::from_vm(&scope);
