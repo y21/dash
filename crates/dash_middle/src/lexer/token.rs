@@ -464,6 +464,9 @@ impl TokenType {
     /// Should only be used in `ErrorKind`s.
     pub const DUMMY_IDENTIFIER: Self = Self::Identifier(sym::EMPTY);
 
+    /// Returns a "dummy" string.
+    pub const DUMMY_STRING: Self = Self::String(sym::EMPTY);
+
     /// Returns a "dummy" template literal.
     /// Should only be used in `ErrorKind`s.
     pub const DUMMY_TEMPLATE_LITERAL: Self = Self::TemplateLiteral(sym::EMPTY);
@@ -475,6 +478,7 @@ impl TokenType {
                 match *self.0 {
                     TokenType::DUMMY_IDENTIFIER => write!(f, "<identifier>"),
                     TokenType::DUMMY_TEMPLATE_LITERAL => write!(f, "<template literal>"),
+                    TokenType::DUMMY_STRING => write!(f, "<string>"),
                     other => write!(f, "{}", other),
                 }
             }

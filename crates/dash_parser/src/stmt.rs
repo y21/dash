@@ -214,14 +214,14 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             let ident = self.expect_identifier(true)?;
             // TODO: enforce identifier be == b"from"
             self.expect_identifier(true);
-            let specifier = self.expect_identifier(true)?;
+            let specifier = self.expect_string(true)?;
             return Some(ImportKind::AllAs(SpecifierKind::Ident(ident), specifier));
         }
 
         // `import` followed by an identifier is considered a default import
         if let Some(default_import_ident) = self.expect_identifier(false) {
             self.expect_identifier(true); // TODO: enforce == from
-            let specifier = self.expect_identifier(true)?;
+            let specifier = self.expect_string(true)?;
             return Some(ImportKind::DefaultAs(
                 SpecifierKind::Ident(default_import_ident),
                 specifier,

@@ -219,6 +219,21 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         }
     }
 
+    pub fn expect_string(&mut self, emit_error: bool) -> Option<Symbol> {
+        if self.expect_token_and_skip(
+            |ty| matches!(ty, TokenType::String(_)),
+            &[TokenType::DUMMY_STRING],
+            emit_error,
+        ) {
+            match self.previous().unwrap().ty {
+                TokenType::String(sym) => Some(sym),
+                _ => unreachable!(),
+            }
+        } else {
+            None
+        }
+    }
+
     pub fn expect_identifier_or_reserved_kw(&mut self, emit_error: bool) -> Option<Symbol> {
         // TODO: this isn't quite right, it should always skip, even if it didn't match. also the argument is useless, we always call it with false
         if self.expect_token_and_skip(
