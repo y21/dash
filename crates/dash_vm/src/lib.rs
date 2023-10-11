@@ -3,7 +3,7 @@
 use std::{fmt, ops::RangeBounds, vec::Drain, mem};
 
 use crate::{
-    value::function::Function, util::cold_path, gc::trace::Trace,
+    value::{function::Function, primitive::Symbol}, util::cold_path, gc::trace::Trace,
 };
 
 use self::{
@@ -130,720 +130,1003 @@ impl Vm {
             fun.set_name(name.into());
             fun.set_fn_prototype(proto.clone());
         }
+        
+        // TODO: we currently recursively call this for each of the registered methods, so a lot of builtins are initialized multiple times
+        // we should have some sort of cache to avoid this
+        // (though we also populate function prototypes later on this way, so it's not so trivial)
+        fn register(
+            base: Handle<dyn Object>,
+            prototype: impl Into<Value>,
+            constructor: Handle<dyn Object>,
+            methods: impl IntoIterator<Item = (&'static str, Handle<dyn Object>)>,
+            symbols: impl IntoIterator<Item = (Symbol, Handle<dyn Object>)>,
+            fields: impl IntoIterator<Item = (&'static str, Value)>,
+            // Contrary to `prototype`, this optionally sets the function prototype. Should only be `Some`
+            // when base is a function
+            fn_prototype: Option<(&'static str, Handle<dyn Object>)>,
 
-        let mut scope = self.scope();
+            // LocalScope needs to be the last parameter because we don't have two phase borrows in user code
+            scope: &mut LocalScope<'_>,
+        ) -> Handle<dyn Object> {
+            base.set_property(scope, "constructor".into(), PropertyValue::static_default(constructor.into())).unwrap();
+            base.set_prototype(scope, prototype.into()).unwrap();
+            
+            for (key, value) in methods {
+                register(
+                    value.clone(),
+                    scope.statics.function_proto.clone(),
+                    scope.statics.function_ctor.clone(),
+                    [],
+                    [],
+                    [],
+                    None,
+                    scope,
+                );
+                base.set_property(scope, key.into(), PropertyValue::static_default(value.into())).unwrap();
+            }
 
-        let global = scope.global.clone();
+            for (key, value) in symbols {
+                register(
+                    value.clone(),
+                    scope.statics.function_proto.clone(),
+                    scope.statics.function_ctor.clone(),
+                    [],
+                    [],
+                    [],
+                    None,
+                    scope,
+                );
+                base.set_property(scope, key.into(), PropertyValue::static_default(value.into())).unwrap();
+            }
 
-        /// #[prototype] - Internal [[Prototype]] field for this value
-        /// #[fn_prototype] - Only valid on function values
-        ///                   This will set the [[Prototype]] field of the function
-        /// #[properties] - "Reference" properties (i.e. object of some kind)
-        /// #[symbols] - Symbol properties (e.g. @@iterator)
-        /// #[fields] - Primitive fields (e.g. PI: 3.1415)
-        macro_rules! register_builtin_type {
-            (
-                $base:expr, {
-                    #[prototype] $prototype:expr;
-                    #[constructor] $constructor:expr;
-                    $(
-                        #[fn_prototype] $fnprototype:expr;
-                        #[fn_name] $fnname:ident;
-                    )?
-                    $( #[properties] $( $prop:ident: $prop_path:expr; )+ )?
-                    $( #[symbols] $( $symbol:expr => $symbol_path:expr; )+ )?
-                    $( #[fields] $( $field:ident: $value:expr; )+ )?
-                    $( #[getters] $( $getter:ident: $getter_value:expr; )+ )?
-                }
-            ) => {{
-                let base = $base.clone();
+            for (key, value) in fields {
+                base.set_property(scope, key.into(), PropertyValue::static_default(value.into())).unwrap();
+            }
 
-                // Prototype
-                {
-                    let proto = $prototype.clone();
-                    let constructor = $constructor.clone();
-                    base.set_property(&mut scope, "constructor".into(), PropertyValue::static_default(constructor.into())).unwrap();
-                    base.set_prototype(&mut scope, proto.into()).unwrap();
-                }
+            if let Some((proto_name, proto_val)) = fn_prototype {
+                set_fn_prototype(&base, &proto_val, proto_name);
+            }
 
-                // Properties
-                $(
-                    $({
-                        let method = stringify!($prop);
-                        let path = $prop_path.clone();
-                        register_builtin_type!(path, {
-                            #[prototype] scope.statics.function_proto;
-                            #[constructor] scope.statics.function_ctor;
-                        });
-                        base.set_property(&mut scope, method.into(), PropertyValue::static_default(path.into())).unwrap();
-                    })+
-                )?
-
-                // Getters
-                $(
-                    $({
-                        let method = stringify!($getter);
-                        let value = $getter_value.clone();
-                        base.set_property(&mut scope, method.into(), PropertyValue::getter_default(value.into())).unwrap();
-                    })+
-                )?
-
-                // Symbols
-                $(
-                    $({
-                        let method = $symbol.clone();
-                        let path = $symbol_path.clone();
-                        register_builtin_type!(path, {
-                            #[prototype] scope.statics.function_proto;
-                            #[constructor] scope.statics.function_ctor;
-                        });
-                        base.set_property(&mut scope, method.into(), PropertyValue::static_default(path.into())).unwrap();
-                    })+
-                )?
-
-                // Fields
-                $(
-                    $({
-                        let method = stringify!($field);
-                        let value = $value.clone();
-                        base.set_property(&mut scope, method.into(), PropertyValue::static_default(value.into())).unwrap();
-                    })+
-                )?
-
-                // Function prototype
-                $(
-                    set_fn_prototype(&base, &$fnprototype, stringify!($fnname));
-                )?
-
-                base
-            }}            
+            base
         }
 
-        let function_ctor = register_builtin_type!(scope.statics.function_ctor, {
-            #[prototype] scope.statics.function_proto;
-            #[constructor] scope.statics.function_ctor;
-            #[fn_prototype] scope.statics.function_proto;
-            #[fn_name] Function;
-        });
+        let mut scope = self.scope();
+        let global = scope.global.clone();
 
-        let function_proto = register_builtin_type!(scope.statics.function_proto, {
-            #[prototype] scope.statics.object_prototype;
-            #[constructor] function_ctor;
+        let function_ctor = register(
+            scope.statics.function_ctor.clone(),
+            scope.statics.function_proto.clone(),
+            scope.statics.function_ctor.clone(),
+            [],
+            [],
+            [],
+            Some(("Function", scope.statics.function_proto.clone())),
+            &mut scope,
+        );
 
-            #[properties]
-            bind: scope.statics.function_bind;
-            call: scope.statics.function_call;
-            toString: scope.statics.function_to_string;
-        });
+        let function_proto = register(
+            scope.statics.function_proto.clone(),
+            scope.statics.object_prototype.clone(),
+            function_ctor.clone(),
+            [
+                ("bind", scope.statics.function_bind.clone()),
+                ("call", scope.statics.function_call.clone()),
+                ("toString", scope.statics.function_to_string.clone()),
+            ],
+            [],
+            [],
+            None,
+            &mut scope,
+        );
 
-        let object_ctor = register_builtin_type!(scope.statics.object_ctor, {
-            #[prototype] function_proto;
-            #[constructor] function_ctor;
-            #[fn_prototype] scope.statics.object_prototype;
-            #[fn_name] Object;
+        let object_ctor = register(
+            scope.statics.object_ctor.clone(),
+            function_proto.clone(),
+            function_ctor.clone(),
+            [
+                ("create", scope.statics.object_create.clone()),
+                ("keys", scope.statics.object_keys.clone()),
+                ("getOwnPropertyDescriptor", scope.statics.object_get_own_property_descriptor.clone()),
+                ("getOwnPropertyDescriptors", scope.statics.object_get_own_property_descriptors.clone()),
+                ("defineProperty", scope.statics.object_define_property.clone()),
+                ("entries", scope.statics.object_entries.clone()),
+                ("assign", scope.statics.object_assign.clone()),
+            ],
+            [],
+            [],
+            Some(("Object", scope.statics.object_prototype.clone())),
+            &mut scope,
+        );
 
-            #[properties]
-            create: scope.statics.object_create;
-            keys: scope.statics.object_keys;
-            getOwnPropertyDescriptor: scope.statics.object_get_own_property_descriptor;
-            getOwnPropertyDescriptors: scope.statics.object_get_own_property_descriptors;
-            defineProperty: scope.statics.object_define_property;
-            entries: scope.statics.object_entries;
-            assign: scope.statics.object_assign;
-        });
+        let object_proto = register(
+            scope.statics.object_prototype.clone(),
+            Value::null(),
+            object_ctor.clone(),
+            [
+                ("toString", scope.statics.object_to_string.clone()),
+                ("hasOwnProperty", scope.statics.object_has_own_property.clone()),
+            ],
+            [],
+            [],
+            None,
+            &mut scope,
+        );
 
-        let object_proto = register_builtin_type!(scope.statics.object_prototype, {
-            #[prototype] Value::null();
-            #[constructor] object_ctor;
+        let console = register(
+            scope.statics.console.clone(),
+            object_proto.clone(),
+            object_ctor.clone(),
+            [
+                ("log", scope.statics.console_log.clone()),
+            ],
+            [],
+            [],
+            None,
+            &mut scope,
+        );
 
-            #[properties]
-            toString: scope.statics.object_to_string;
-            hasOwnProperty: scope.statics.object_has_own_property;
-        });
+        let math = register(
+            scope.statics.math.clone(),
+            object_proto.clone(),
+            object_ctor.clone(),
+            [
+                ("floor", scope.statics.math_floor.clone()),
+                ("abs", scope.statics.math_abs.clone()),
+                ("acos", scope.statics.math_acos.clone()),
+                ("acosh", scope.statics.math_acosh.clone()),
+                ("asin", scope.statics.math_asin.clone()),
+                ("asinh", scope.statics.math_asinh.clone()),
+                ("atan", scope.statics.math_atan.clone()),
+                ("atanh", scope.statics.math_atanh.clone()),
+                ("atan2", scope.statics.math_atan2.clone()),
+                ("cbrt", scope.statics.math_cbrt.clone()),
+                ("ceil", scope.statics.math_ceil.clone()),
+                ("clz32", scope.statics.math_clz32.clone()),
+                ("cos", scope.statics.math_cos.clone()),
+                ("cosh", scope.statics.math_cosh.clone()),
+                ("exp", scope.statics.math_exp.clone()),
+                ("expm1", scope.statics.math_expm1.clone()),
+                ("log", scope.statics.math_log.clone()),
+                ("log1p", scope.statics.math_log1p.clone()),
+                ("log10", scope.statics.math_log10.clone()),
+                ("log2", scope.statics.math_log2.clone()),
+                ("round", scope.statics.math_round.clone()),
+                ("sin", scope.statics.math_sin.clone()),
+                ("sinh", scope.statics.math_sinh.clone()),
+                ("sqrt", scope.statics.math_sqrt.clone()),
+                ("tan", scope.statics.math_tan.clone()),
+                ("tanh", scope.statics.math_tanh.clone()),
+                ("trunc", scope.statics.math_trunc.clone()),
+                ("random", scope.statics.math_random.clone()),
+                ("max", scope.statics.math_max.clone()),
+                ("min", scope.statics.math_min.clone()),
+            ],
+            [],
+            [
+                ("PI", Value::number(std::f64::consts::PI)),
+            ],
+            None,
+            &mut scope,
+        );
 
-        let console = register_builtin_type!(scope.statics.console, {
-            #[prototype] scope.statics.object_prototype;
-            #[constructor] object_ctor;
+        let number_ctor = register(
+            scope.statics.number_ctor.clone(),
+            function_proto.clone(),
+            function_ctor.clone(),
+            [
+                ("isFinite", scope.statics.number_is_finite.clone()),
+                ("isNaN", scope.statics.number_is_nan.clone()),
+                ("isSafeInteger", scope.statics.number_is_safe_integer.clone()),
+            ],
+            [],
+            [],
+            Some(("Number", scope.statics.number_prototype.clone())),
+            &mut scope,
+        );
 
-            #[properties]
-            log: scope.statics.console_log;
-        });
+        register(
+            scope.statics.number_prototype.clone(),
+            object_proto.clone(),
+            number_ctor.clone(),
+            [
+                ("toString", scope.statics.number_tostring.clone()),
+                ("toFixed", scope.statics.number_to_fixed.clone()),
+            ],
+            [],
+            [],
+            None,
+            &mut scope,
+        );
 
-        let math = register_builtin_type!(scope.statics.math, {
-            #[prototype] scope.statics.object_prototype;
-            #[constructor] object_ctor;
+        let boolean_ctor = register(
+            scope.statics.boolean_ctor.clone(),
+            function_proto.clone(),
+            function_ctor.clone(),
+            [],
+            [],
+            [],
+            Some(("Boolean", scope.statics.boolean_prototype.clone())),
+            &mut scope,
+        );
 
-            #[properties]
-            floor: scope.statics.math_floor;
-            abs: scope.statics.math_abs;
-            acos: scope.statics.math_acos;
-            acosh: scope.statics.math_acosh;
-            asin: scope.statics.math_asin;
-            asinh: scope.statics.math_asinh;
-            atan: scope.statics.math_atan;
-            atanh: scope.statics.math_atanh;
-            atan2: scope.statics.math_atan2;
-            cbrt: scope.statics.math_cbrt;
-            ceil: scope.statics.math_ceil;
-            clz32: scope.statics.math_clz32;
-            cos: scope.statics.math_cos;
-            cosh: scope.statics.math_cosh;
-            exp: scope.statics.math_exp;
-            expm1: scope.statics.math_expm1;
-            log: scope.statics.math_log;
-            log1p: scope.statics.math_log1p;
-            log10: scope.statics.math_log10;
-            log2: scope.statics.math_log2;
-            round: scope.statics.math_round;
-            sin: scope.statics.math_sin;
-            sinh: scope.statics.math_sinh;
-            sqrt: scope.statics.math_sqrt;
-            tan: scope.statics.math_tan;
-            tanh: scope.statics.math_tanh;
-            trunc: scope.statics.math_trunc;
-            random: scope.statics.math_random;
-            max: scope.statics.math_max;
-            min: scope.statics.math_min;
-
-            #[fields]
-            PI: Value::number(std::f64::consts::PI);
-        });
-
-        let number_ctor = register_builtin_type!(scope.statics.number_ctor, {
-            #[prototype] function_proto;
-            #[constructor] function_ctor;
-            #[fn_prototype] scope.statics.number_prototype;
-            #[fn_name] Number;
-
-            #[properties]
-            isFinite: scope.statics.number_is_finite;
-            isNaN: scope.statics.number_is_nan;
-            isSafeInteger: scope.statics.number_is_safe_integer;
-        });
-
-        register_builtin_type!(scope.statics.number_prototype, {
-            #[prototype] object_proto;
-            #[constructor] number_ctor;
-            
-            #[properties]
-            toString: scope.statics.number_tostring;
-            toFixed: scope.statics.number_to_fixed;
-        });
-
-        let boolean_ctor = register_builtin_type!(scope.statics.boolean_ctor, {
-            #[prototype] function_proto;
-            #[constructor] function_ctor;
-            #[fn_prototype] scope.statics.boolean_prototype;
-            #[fn_name] Boolean;
-        });
-
-        register_builtin_type!(scope.statics.boolean_prototype, {
-            #[prototype] object_proto;
-            #[constructor] boolean_ctor;
-
-            #[properties]
-            toString: scope.statics.boolean_tostring;
-            valueOf: scope.statics.boolean_valueof;
-        });
-
-        let string_ctor = register_builtin_type!(scope.statics.string_ctor, {
-            #[prototype] function_proto;
-            #[constructor] function_ctor;
-            #[fn_prototype] scope.statics.string_prototype;
-            #[fn_name] String;
-            #[properties]
-            fromCharCode: scope.statics.string_from_char_code;
-        });
+        register(
+            scope.statics.boolean_prototype.clone(),
+            object_proto.clone(),
+            boolean_ctor.clone(),
+            [
+                ("toString", scope.statics.boolean_tostring.clone()),
+                ("valueOf", scope.statics.boolean_valueof.clone()),
+            ],
+            [],
+            [],
+            None,
+            &mut scope,
+        );
         
-        register_builtin_type!(scope.statics.string_prototype, {
-            #[prototype] object_proto;
-            #[constructor] string_ctor;
-
-            #[properties]
-            toString: scope.statics.string_tostring;
-            charAt: scope.statics.string_char_at;
-            charCodeAt: scope.statics.string_char_code_at;
-            concat: scope.statics.string_concat;
-            endsWith: scope.statics.string_ends_with;
-            startsWith: scope.statics.string_starts_with;
-            includes: scope.statics.string_includes;
-            indexOf: scope.statics.string_index_of;
-            lastIndexOf: scope.statics.string_last_index_of;
-            padEnd: scope.statics.string_pad_end;
-            padStart: scope.statics.string_pad_start;
-            repeat: scope.statics.string_repeat;
-            replace: scope.statics.string_replace;
-            replaceAll: scope.statics.string_replace_all;
-            split: scope.statics.string_split;
-            toLowerCase: scope.statics.string_to_lowercase;
-            toUpperCase: scope.statics.string_to_uppercase;
-            big: scope.statics.string_big;
-            blink: scope.statics.string_blink;
-            bold: scope.statics.string_bold;
-            fixed: scope.statics.string_fixed;
-            italics: scope.statics.string_italics;
-            strike: scope.statics.string_strike;
-            sub: scope.statics.string_sub;
-            sup: scope.statics.string_sup;
-            fontcolor: scope.statics.string_fontcolor;
-            fontsize: scope.statics.string_fontsize;
-            link: scope.statics.string_link;
-            trim: scope.statics.string_trim;
-            trimStart: scope.statics.string_trim_start;
-            trimEnd: scope.statics.string_trim_end;
-            substr: scope.statics.string_substr;
-            substring: scope.statics.string_substring;
-            
-            #[symbols]
-            scope.statics.symbol_iterator => scope.statics.string_iterator;
-        });
-
-        let array_ctor = register_builtin_type!(scope.statics.array_ctor, {
-            #[prototype] function_proto;
-            #[constructor] function_ctor;
-            #[fn_prototype] scope.statics.array_prototype;
-            #[fn_name] Array;
-
-            #[properties]
-            from: scope.statics.array_from;
-            isArray: scope.statics.array_is_array;
-        });
+        let string_ctor = register(
+            scope.statics.string_ctor.clone(),
+            function_proto.clone(),
+            function_ctor.clone(),
+            [
+                ("fromCharCode", scope.statics.string_from_char_code.clone()),
+            ],
+            [],
+            [],
+            Some(("String", scope.statics.string_prototype.clone())),
+            &mut scope,
+        );
         
-        register_builtin_type!(scope.statics.array_prototype, {
-            #[prototype] object_proto;
-            #[constructor] array_ctor;
+        register(
+           scope.statics.string_prototype.clone(),
+           scope.statics.object_prototype.clone(),
+           scope.statics.string_ctor.clone(),
+           [
+                ("toString", scope.statics.string_tostring.clone()),
+                ("charAt", scope.statics.string_char_at.clone()),
+                ("charCodeAt", scope.statics.string_char_code_at.clone()),
+                ("concat", scope.statics.string_concat.clone()),
+                ("endsWith", scope.statics.string_ends_with.clone()),
+                ("startsWith", scope.statics.string_starts_with.clone()),
+                ("includes", scope.statics.string_includes.clone()),
+                ("indexOf", scope.statics.string_index_of.clone()),
+                ("lastIndexOf", scope.statics.string_last_index_of.clone()),
+                ("padEnd", scope.statics.string_pad_end.clone()),
+                ("padStart", scope.statics.string_pad_start.clone()),
+                ("repeat", scope.statics.string_repeat.clone()),
+                ("replace", scope.statics.string_replace.clone()),
+                ("replaceAll", scope.statics.string_replace_all.clone()),
+                ("split", scope.statics.string_split.clone()),
+                ("toLowerCase", scope.statics.string_to_lowercase.clone()),
+                ("toUpperCase", scope.statics.string_to_uppercase.clone()),
+                ("big", scope.statics.string_big.clone()),
+                ("blink", scope.statics.string_blink.clone()),
+                ("bold", scope.statics.string_bold.clone()),
+                ("fixed", scope.statics.string_fixed.clone()),
+                ("italics", scope.statics.string_italics.clone()),
+                ("strike", scope.statics.string_strike.clone()),
+                ("sub", scope.statics.string_sub.clone()),
+                ("sup", scope.statics.string_sup.clone()),
+                ("fontcolor", scope.statics.string_fontcolor.clone()),
+                ("fontsize", scope.statics.string_fontsize.clone()),
+                ("link", scope.statics.string_link.clone()),
+                ("trim", scope.statics.string_trim.clone()),
+                ("trimStart", scope.statics.string_trim_start.clone()),
+                ("trimEnd", scope.statics.string_trim_end.clone()),
+                ("substr", scope.statics.string_substr.clone()),
+                ("substring", scope.statics.string_substring.clone()),
+            ],
+           [(scope.statics.symbol_iterator.clone(), scope.statics.string_iterator.clone())],
+           [],
+           None,
+           &mut scope,
+        );
 
-            #[properties]
-            toString: scope.statics.array_tostring;
-            join: scope.statics.array_join;
-            values: scope.statics.array_values;
-            at: scope.statics.array_at;
-            concat: scope.statics.array_concat;
-            entries: scope.statics.array_entries;
-            keys: scope.statics.array_keys;
-            every: scope.statics.array_every;
-            some: scope.statics.array_some;
-            fill: scope.statics.array_fill;
-            filter: scope.statics.array_filter;
-            reduce: scope.statics.array_reduce;
-            find: scope.statics.array_find;
-            findIndex: scope.statics.array_find_index;
-            flat: scope.statics.array_flat;
-            forEach: scope.statics.array_for_each;
-            includes: scope.statics.array_includes;
-            indexOf: scope.statics.array_index_of;
-            map: scope.statics.array_map;
-            pop: scope.statics.array_pop;
-            push: scope.statics.array_push;
-            reverse: scope.statics.array_reverse;
-            shift: scope.statics.array_shift;
-            sort: scope.statics.array_sort;
-            unshift: scope.statics.array_unshift;
-            slice: scope.statics.array_slice;
-            lastIndexOf: scope.statics.array_last_index_of;
+        let array_ctor = register(
+            scope.statics.array_ctor.clone(),
+            function_proto.clone(),
+            function_ctor.clone(),
+            [
+                ("from", scope.statics.array_from.clone()),
+                ("isArray", scope.statics.array_is_array.clone()),
+            ],
+            [],
+            [],
+            Some(("Array", scope.statics.array_prototype.clone())),
+            &mut scope,
+        );
 
-            #[symbols]
-            scope.statics.symbol_iterator => scope.statics.array_values;
-        });
+        register(
+            scope.statics.array_prototype.clone(),
+            object_proto.clone(),
+            array_ctor.clone(),
+            [
+                ("toString", scope.statics.array_tostring.clone()),
+                ("join", scope.statics.array_join.clone()),
+                ("values", scope.statics.array_values.clone()),
+                ("at", scope.statics.array_at.clone()),
+                ("concat", scope.statics.array_concat.clone()),
+                ("entries", scope.statics.array_entries.clone()),
+                ("keys", scope.statics.array_keys.clone()),
+                ("every", scope.statics.array_every.clone()),
+                ("some", scope.statics.array_some.clone()),
+                ("fill", scope.statics.array_fill.clone()),
+                ("filter", scope.statics.array_filter.clone()),
+                ("reduce", scope.statics.array_reduce.clone()),
+                ("find", scope.statics.array_find.clone()),
+                ("findIndex", scope.statics.array_find_index.clone()),
+                ("flat", scope.statics.array_flat.clone()),
+                ("forEach", scope.statics.array_for_each.clone()),
+                ("includes", scope.statics.array_includes.clone()),
+                ("indexOf", scope.statics.array_index_of.clone()),
+                ("map", scope.statics.array_map.clone()),
+                ("pop", scope.statics.array_pop.clone()),
+                ("push", scope.statics.array_push.clone()),
+                ("reverse", scope.statics.array_reverse.clone()),
+                ("shift", scope.statics.array_shift.clone()),
+                ("sort", scope.statics.array_sort.clone()),
+                ("unshift", scope.statics.array_unshift.clone()),
+                ("slice", scope.statics.array_slice.clone()),
+                ("lastIndexOf", scope.statics.array_last_index_of.clone()),
+            ],
+            [(scope.statics.symbol_iterator.clone(), scope.statics.array_values.clone())],
+            [],
+            None,
+            &mut scope,
+        );
 
-        register_builtin_type!(scope.statics.array_iterator_prototype, {
-            #[prototype] object_proto; // TODO: this is incorrect
-            #[constructor] function_ctor; // TODO: ^
+        register(
+            scope.statics.array_iterator_prototype.clone(),
+            object_proto.clone(), // TODO: wrong
+            function_ctor.clone(), // TODO: ^
+            [
+                ("next", scope.statics.array_iterator_next.clone()),
+            ],
+            [
+                (scope.statics.symbol_iterator.clone(), scope.statics.identity_this.clone()),
+            ],
+            [],
+            None,
+            &mut scope,
+        );
 
-            #[properties]
-            next: scope.statics.array_iterator_next;
+        register(
+            scope.statics.generator_iterator_prototype.clone(),
+            object_proto.clone(), // TODO: wrong
+            function_ctor.clone(), // TODO: ^
+            [
+                ("next", scope.statics.generator_iterator_next.clone()),
+            ],
+            [
+                (scope.statics.symbol_iterator.clone(), scope.statics.identity_this.clone()),
+            ],
+            [],
+            None,
+            &mut scope,
+        );
 
-            #[symbols]
-            scope.statics.symbol_iterator => scope.statics.identity_this;
-        });
+        let symbol_ctor = register(
+            scope.statics.symbol_ctor.clone(),
+            function_proto.clone(),
+            function_ctor.clone(),
+            [],
+            [],
+            [
+                ("asyncIterator",Value::Symbol( scope.statics.symbol_async_iterator.clone())),
+                ("hasInstance", Value::Symbol(scope.statics.symbol_has_instance.clone())),
+                ("iterator", Value::Symbol(scope.statics.symbol_iterator.clone())),
+                ("match", Value::Symbol(scope.statics.symbol_match.clone())),
+                ("matchAll", Value::Symbol(scope.statics.symbol_match_all.clone())),
+                ("replace", Value::Symbol(scope.statics.symbol_replace.clone())),
+                ("search", Value::Symbol(scope.statics.symbol_search.clone())),
+                ("species", Value::Symbol(scope.statics.symbol_species.clone())),
+                ("split", Value::Symbol(scope.statics.symbol_split.clone())),
+                ("toPrimitive", Value::Symbol(scope.statics.symbol_to_primitive.clone())),
+                ("toStringTag", Value::Symbol(scope.statics.symbol_to_string_tag.clone())),
+                ("unscopables", Value::Symbol(scope.statics.symbol_unscopables.clone())),
+            ],
+            Some(("Symbol", scope.statics.symbol_prototype.clone())),
+            &mut scope,
+        );
 
-        register_builtin_type!(scope.statics.generator_iterator_prototype, {
-            #[prototype] object_proto; // TODO: this is incorrect
-            #[constructor] function_ctor; // TODO: ^
+        let error_ctor = register(
+            scope.statics.error_ctor.clone(),
+            function_proto.clone(),
+            function_ctor.clone(),
+            [],
+            [],
+            [],
+            Some(("Error", scope.statics.error_prototype.clone())),
+            &mut scope,
+        );
 
-            #[properties]
-            next: scope.statics.generator_iterator_next;
+        register(
+            scope.statics.error_prototype.clone(),
+            object_proto.clone(),
+            error_ctor.clone(),
+            [
+                ("toString", scope.statics.error_to_string.clone()),
+            ],
+            [],
+            [],
+            None,
+            &mut scope,
+        );
 
-            #[symbols]
-            scope.statics.symbol_iterator => scope.statics.identity_this;
-        });
+        let arraybuffer_ctor = register(
+            scope.statics.arraybuffer_ctor.clone(),
+            function_proto.clone(),
+            function_ctor.clone(),
+            [],
+            [],
+            [],
+            Some(("ArrayBuffer", scope.statics.arraybuffer_prototype.clone())),
+            &mut scope,
+        );
 
-        let symbol_ctor = register_builtin_type!(scope.statics.symbol_ctor, {
-            #[prototype] function_proto;
-            #[constructor] function_ctor;
-            #[fn_prototype] scope.statics.symbol_prototype;
-            #[fn_name] Symbol;
+        register(
+            scope.statics.arraybuffer_prototype.clone(),
+            object_proto.clone(),
+            arraybuffer_ctor.clone(),
+            [
+                ("byteLength", scope.statics.arraybuffer_byte_length.clone()) // TODO: should be a getter really
+            ],
+            [],
+            [],
+            None,
+            &mut scope,
+        );
 
-            #[properties]
-            asyncIterator: scope.statics.symbol_async_iterator;
-            hasInstance: scope.statics.symbol_has_instance;
-            iterator: scope.statics.symbol_iterator;
-            match: scope.statics.symbol_match;
-            matchAll: scope.statics.symbol_match_all;
-            replace: scope.statics.symbol_replace;
-            search: scope.statics.symbol_search;
-            species: scope.statics.symbol_species;
-            split: scope.statics.symbol_split;
-            toPrimitive: scope.statics.symbol_to_primitive;
-            toStringTag: scope.statics.symbol_to_string_tag;
-            unscopables: scope.statics.symbol_unscopables;
-        });
+        let u8array_ctor = register(
+            scope.statics.uint8array_ctor.clone(),
+            function_proto.clone(),
+            function_ctor.clone(),
+            [],
+            [],
+            [],
+            Some(("Uint8Array", scope.statics.uint8array_prototype.clone())),
+            &mut scope,
+        );
 
-        let error_ctor = register_builtin_type!(scope.statics.error_ctor, {
-            #[prototype] function_proto;
-            #[constructor] function_ctor;
-            #[fn_prototype] scope.statics.error_prototype;
-            #[fn_name] Error;
-        });
+        register(
+            scope.statics.uint8array_prototype.clone(),
+            object_proto.clone(),
+            u8array_ctor.clone(),
+            [
+                ("fill", scope.statics.typedarray_fill.clone()),
+            ],
+            [],
+            [],
+            None,
+            &mut scope,
+        );
 
-        let error_proto = register_builtin_type!(scope.statics.error_prototype, {
-            #[prototype] object_proto;
-            #[constructor] error_ctor;
-            #[properties]
-            toString: scope.statics.error_to_string;
-        });
+        let i8array_ctor = register(
+            scope.statics.int8array_ctor.clone(),
+            function_proto.clone(),
+            function_ctor.clone(),
+            [],
+            [],
+            [],
+            Some(("Int8Array", scope.statics.int8array_prototype.clone())),
+            &mut scope,
+        );
 
-        let arraybuffer_ctor = register_builtin_type!(scope.statics.arraybuffer_ctor, {
-            #[prototype] function_proto;
-            #[constructor] function_ctor;
-            #[fn_prototype] scope.statics.arraybuffer_prototype;
-            #[fn_name] ArrayBuffer;
-        });
+        register(
+            scope.statics.int8array_prototype.clone(),
+            object_proto.clone(),
+            i8array_ctor.clone(),
+            [
+                ("fill", scope.statics.typedarray_fill.clone()),
+            ],
+            [],
+            [],
+            None,
+            &mut scope,
+        );
 
-        register_builtin_type!(scope.statics.arraybuffer_prototype, {
-            #[prototype] object_proto;
-            #[constructor] arraybuffer_ctor;
-            #[properties]
-            byteLength: scope.statics.arraybuffer_byte_length; // TODO: should be a getter.
-                                                               // `this` in getters is currently broken (always undefined)
-        });
+        let u16array_ctor = register(
+            scope.statics.uint16array_ctor.clone(),
+            function_proto.clone(),
+            function_ctor.clone(),
+            [],
+            [],
+            [],
+            Some(("Uint16Array", scope.statics.uint16array_prototype.clone())),
+            &mut scope,
+        );
 
-        let u8array_ctor = register_builtin_type!(scope.statics.uint8array_ctor, {
-            #[prototype] function_proto;
-            #[constructor] function_ctor;
-            #[fn_prototype] scope.statics.uint8array_prototype;
-            #[fn_name] Uint8Array;
-        });
+        register(
+            scope.statics.uint16array_prototype.clone(),
+            object_proto.clone(),
+            u16array_ctor.clone(),
+            [
+                ("fill", scope.statics.typedarray_fill.clone()),
+            ],
+            [],
+            [],
+            None,
+            &mut scope,
+        );
 
-        register_builtin_type!(scope.statics.uint8array_prototype, {
-            #[prototype] object_proto;
-            #[constructor] u8array_ctor;
-            #[properties]
-            fill: scope.statics.typedarray_fill;
-        });
+        let i16array_ctor = register(
+            scope.statics.int16array_ctor.clone(),
+            function_proto.clone(),
+            function_ctor.clone(),
+            [],
+            [],
+            [],
+            Some(("Int16Array", scope.statics.int16array_prototype.clone())),
+            &mut scope,
+        );
 
-        let i8array_ctor = register_builtin_type!(scope.statics.int8array_ctor, {
-            #[prototype] function_proto;
-            #[constructor] function_ctor;
-            #[fn_prototype] scope.statics.int8array_prototype;
-            #[fn_name] Int8Array;
-        });
+        register(
+            scope.statics.int16array_prototype.clone(),
+            object_proto.clone(),
+            i16array_ctor.clone(),
+            [
+                ("fill", scope.statics.typedarray_fill.clone()),
+            ],
+            [],
+            [],
+            None,
+            &mut scope,
+        );
 
-        register_builtin_type!(scope.statics.int8array_prototype, {
-            #[prototype] object_proto;
-            #[constructor] i8array_ctor;
-            #[properties]
-            fill: scope.statics.typedarray_fill;
-        });
+        let u32array_ctor = register(
+            scope.statics.uint32array_ctor.clone(),
+            function_proto.clone(),
+            function_ctor.clone(),
+            [],
+            [],
+            [],
+            Some(("Uint32Array", scope.statics.uint32array_prototype.clone())),
+            &mut scope,
+        );
 
-        let u16array_ctor = register_builtin_type!(scope.statics.uint16array_ctor, {
-            #[prototype] function_proto;
-            #[constructor] function_ctor;
-            #[fn_prototype] scope.statics.uint16array_prototype;
-            #[fn_name] Uint16Array;
-        });
+        register(
+            scope.statics.uint32array_prototype.clone(),
+            object_proto.clone(),
+            u32array_ctor.clone(),
+            [
+                ("fill", scope.statics.typedarray_fill.clone()),
+            ],
+            [],
+            [],
+            None,
+            &mut scope,
+        );
 
-        register_builtin_type!(scope.statics.uint16array_prototype, {
-            #[prototype] object_proto;
-            #[constructor] u16array_ctor;
-            #[properties]
-            fill: scope.statics.typedarray_fill;
-        });
+        let i32array_ctor = register(
+            scope.statics.int32array_ctor.clone(),
+            function_proto.clone(),
+            function_ctor.clone(),
+            [],
+            [],
+            [],
+            Some(("Int32Array", scope.statics.int32array_prototype.clone())),
+            &mut scope,
+        );
 
-        let i16array_ctor = register_builtin_type!(scope.statics.int16array_ctor, {
-            #[prototype] function_proto;
-            #[constructor] function_ctor;
-            #[fn_prototype] scope.statics.int16array_prototype;
-            #[fn_name] Int16Array;
-        });
+        register(
+            scope.statics.int32array_prototype.clone(),
+            object_proto.clone(),
+            i32array_ctor.clone(),
+            [
+                ("fill", scope.statics.typedarray_fill.clone()),
+            ],
+            [],
+            [],
+            None,
+            &mut scope,
+        );
 
-        register_builtin_type!(scope.statics.int16array_prototype, {
-            #[prototype] object_proto;
-            #[constructor] i16array_ctor;
-            #[properties]
-            fill: scope.statics.typedarray_fill;
-        });
+        let f32array_ctor = register(
+            scope.statics.float32array_ctor.clone(),
+            function_proto.clone(),
+            function_ctor.clone(),
+            [],
+            [],
+            [],
+            Some(("Float32Array", scope.statics.float32array_prototype.clone())),
+            &mut scope,
+        );
 
-        let u32array_ctor = register_builtin_type!(scope.statics.uint32array_ctor, {
-            #[prototype] function_proto;
-            #[constructor] function_ctor;
-            #[fn_prototype] scope.statics.uint32array_prototype;
-            #[fn_name] Uint32Array;
-        });
+        register(
+            scope.statics.float32array_prototype.clone(),
+            object_proto.clone(),
+            f32array_ctor.clone(),
+            [
+                ("fill", scope.statics.typedarray_fill.clone()),
+            ],
+            [],
+            [],
+            None,
+            &mut scope,
+        );
 
-        register_builtin_type!(scope.statics.uint32array_prototype, {
-            #[prototype] object_proto;
-            #[constructor] u32array_ctor;
-            #[properties]
-            fill: scope.statics.typedarray_fill;
-        });
+        let f64array_ctor = register(
+            scope.statics.float64array_ctor.clone(),
+            function_proto.clone(),
+            function_ctor.clone(),
+            [],
+            [],
+            [],
+            Some(("Float64Array", scope.statics.float64array_prototype.clone())),
+            &mut scope,
+        );
 
-        let i32array_ctor = register_builtin_type!(scope.statics.int32array_ctor, {
-            #[prototype] function_proto;
-            #[constructor] function_ctor;
-            #[fn_prototype] scope.statics.int32array_prototype;
-            #[fn_name] Int32Array;
-        });
+        register(
+            scope.statics.float64array_prototype.clone(),
+            object_proto.clone(),
+            f64array_ctor.clone(),
+            [
+                ("fill", scope.statics.typedarray_fill.clone()),
+            ],
+            [],
+            [],
+            None,
+            &mut scope,
+        );
 
-        register_builtin_type!(scope.statics.int32array_prototype, {
-            #[prototype] object_proto;
-            #[constructor] i32array_ctor;
-            #[properties]
-            fill: scope.statics.typedarray_fill;
-        });
+        let promise_ctor = register(
+            scope.statics.promise_ctor.clone(),
+            function_proto.clone(),
+            function_ctor.clone(),
+            [
+                ("resolve", scope.statics.promise_resolve.clone()),
+                ("reject", scope.statics.promise_reject.clone()),
+            ],
+            [],
+            [],
+            Some(("Promise", scope.statics.promise_proto.clone())),
+            &mut scope,
+        );
 
-        let f32array_ctor = register_builtin_type!(scope.statics.float32array_ctor, {
-            #[prototype] function_proto;
-            #[constructor] function_ctor;
-            #[fn_prototype] scope.statics.float32array_prototype;
-            #[fn_name] Float32Array;
-        });
+        register(
+            scope.statics.promise_proto.clone(),
+            object_proto.clone(),
+            promise_ctor.clone(),
+            [
+                ("then", scope.statics.promise_then.clone()),
+            ],
+            [],
+            [],
+            None,
+            &mut scope,
+        );
 
-        register_builtin_type!(scope.statics.float32array_prototype, {
-            #[prototype] object_proto;
-            #[constructor] f32array_ctor;
-            #[properties]
-            fill: scope.statics.typedarray_fill;
-        });
+        let set_ctor = register(
+            scope.statics.set_constructor.clone(),
+            function_proto.clone(),
+            function_ctor.clone(),
+            [],
+            [],
+            [],
+            Some(("Set", scope.statics.set_prototype.clone())),
+            &mut scope,
+        );
 
-        let f64array_ctor = register_builtin_type!(scope.statics.float64array_ctor, {
-            #[prototype] function_proto;
-            #[constructor] function_ctor;
-            #[fn_prototype] scope.statics.float64array_prototype;
-            #[fn_name] Float64Array;
-        });
+        register(
+            scope.statics.set_prototype.clone(),
+            object_proto.clone(),
+            set_ctor.clone(),
+            [
+                ("add", scope.statics.set_add.clone()),
+                ("has", scope.statics.set_has.clone()),
+                ("delete", scope.statics.set_delete.clone()),
+                ("clear", scope.statics.set_clear.clone()),
+                ("size", scope.statics.set_size.clone()),
+            ],
+            [],
+            [],
+            None,
+            &mut scope,
+        );
 
-        register_builtin_type!(scope.statics.float64array_prototype, {
-            #[prototype] object_proto;
-            #[constructor] f64array_ctor;
-            #[properties]
-            fill: scope.statics.typedarray_fill;
-        });
+        let map_ctor = register(
+            scope.statics.map_constructor.clone(),
+            function_proto.clone(),
+            function_ctor.clone(),
+            [],
+            [],
+            [],
+            Some(("Map", scope.statics.map_prototype.clone())),
+            &mut scope,
+        );
 
-        let promise_ctor = register_builtin_type!(scope.statics.promise_ctor, {
-            #[prototype] function_proto;
-            #[constructor] function_ctor;
-            #[fn_prototype] scope.statics.promise_proto;
-            #[fn_name] Promise;
-            #[properties]
-            resolve: scope.statics.promise_resolve;
-            reject: scope.statics.promise_reject;
-        });
+        register(
+            scope.statics.map_prototype.clone(),
+            object_proto.clone(),
+            map_ctor.clone(),
+            [
+                ("set", scope.statics.map_set.clone()),
+                ("get", scope.statics.map_get.clone()),
+                ("has", scope.statics.map_has.clone()),
+                ("delete", scope.statics.map_delete.clone()),
+                ("clear", scope.statics.map_clear.clone()),
+                ("size", scope.statics.map_size.clone()), // TODO: this should be a getter
+            ],
+            [],
+            [],
+            None,
+            &mut scope,
+        );
 
-        register_builtin_type!(scope.statics.promise_proto, {
-            #[prototype] object_proto;
-            #[constructor] promise_ctor;
-            #[properties]
-            then: scope.statics.promise_then;
-        });
+        let regexp_ctor = register(
+            scope.statics.regexp_ctor.clone(),
+            function_proto.clone(),
+            function_ctor.clone(),
+            [],
+            [],
+            [],
+            Some(("RegExp", scope.statics.regexp_prototype.clone())),
+            &mut scope,
+        );
 
-        let set_ctor = register_builtin_type!(scope.statics.set_constructor, {
-            #[prototype] function_proto;
-            #[constructor] function_ctor;
-            #[fn_prototype] scope.statics.set_prototype;
-            #[fn_name] Set;
-        });
+        register(
+            scope.statics.regexp_prototype.clone(),
+            object_proto.clone(),
+            regexp_ctor.clone(),
+            [
+                ("test", scope.statics.regexp_test.clone()),
+            ],
+            [],
+            [],
+            None,
+            &mut scope,
+        );
 
-        register_builtin_type!(scope.statics.set_prototype, {
-            #[prototype] object_proto;
-            #[constructor] set_ctor;
-            #[properties]
-            add: scope.statics.set_add;
-            has: scope.statics.set_has;
-            delete: scope.statics.set_delete;
-            clear: scope.statics.set_clear;
-            size: scope.statics.set_size; // TODO: getter, not a function
-        });
+        let eval_error_ctor = register(
+            scope.statics.eval_error_ctor.clone(),
+            function_proto.clone(),
+            function_ctor.clone(),
+            [],
+            [],
+            [],
+            Some(("EvalError", scope.statics.eval_error_prototype.clone())),
+            &mut scope,
+        );
 
-        let map_ctor = register_builtin_type!(scope.statics.map_constructor, {
-            #[prototype] function_proto;
-            #[constructor] function_ctor;
-            #[fn_prototype] scope.statics.map_prototype;
-            #[fn_name] Map;
-        });
+        register(
+            scope.statics.eval_error_prototype.clone(),
+            object_proto.clone(),
+            eval_error_ctor.clone(),
+            [
+                ("toString", scope.statics.error_to_string.clone()),
+            ],
+            [],
+            [],
+            None,
+            &mut scope,
+        );
 
-        register_builtin_type!(scope.statics.map_prototype, {
-            #[prototype] object_proto;
-            #[constructor] map_ctor;
-            #[properties]
-            set: scope.statics.map_set;
-            get: scope.statics.map_get;
-            has: scope.statics.map_has;
-            delete: scope.statics.map_delete;
-            clear: scope.statics.map_clear;
-            size: scope.statics.map_size; // TODO: getter, not a function
-        });
+        let range_error_ctor = register(
+            scope.statics.range_error_ctor.clone(),
+            function_proto.clone(),
+            function_ctor.clone(),
+            [],
+            [],
+            [],
+            Some(("RangeError", scope.statics.range_error_prototype.clone())),
+            &mut scope,
+        );
 
-        let regexp_ctor = register_builtin_type!(scope.statics.regexp_ctor, {
-            #[prototype] function_proto;
-            #[constructor] function_ctor;
-            #[fn_prototype] scope.statics.regexp_prototype;
-            #[fn_name] RegExp;
-        });
+        register(
+            scope.statics.range_error_prototype.clone(),
+            object_proto.clone(),
+            range_error_ctor.clone(),
+            [
+                ("toString", scope.statics.error_to_string.clone()),
+            ],
+            [],
+            [],
+            None,
+            &mut scope,
+        );
 
-        register_builtin_type!(scope.statics.regexp_prototype, {
-            #[prototype] object_proto;
-            #[constructor] regexp_ctor;
-            #[properties]
-            test: scope.statics.regexp_test;
-        });
+        let reference_error_ctor = register(
+            scope.statics.reference_error_ctor.clone(),
+            function_proto.clone(),
+            function_ctor.clone(),
+            [],
+            [],
+            [],
+            Some(("ReferenceError", scope.statics.reference_error_prototype.clone())),
+            &mut scope,
+        );
 
-        let eval_error_ctor = register_builtin_type!(scope.statics.eval_error_ctor, {
-            #[prototype] function_proto;
-            #[constructor] function_ctor;
-            #[fn_prototype] scope.statics.eval_error_prototype;
-            #[fn_name] EvalError;
-        });
+        register(
+            scope.statics.reference_error_prototype.clone(),
+            object_proto.clone(),
+            reference_error_ctor.clone(),
+            [
+                ("toString", scope.statics.error_to_string.clone()),
+            ],
+            [],
+            [],
+            None,
+            &mut scope,
+        );
 
-        register_builtin_type!(scope.statics.eval_error_prototype, {
-            #[prototype] error_proto;
-            #[constructor] eval_error_ctor;
-        });
+        let syntax_error_ctor = register(
+            scope.statics.syntax_error_ctor.clone(),
+            function_proto.clone(),
+            function_ctor.clone(),
+            [],
+            [],
+            [],
+            Some(("SyntaxError", scope.statics.syntax_error_prototype.clone())),
+            &mut scope,
+        );
 
-        let range_error_ctor = register_builtin_type!(scope.statics.range_error_ctor, {
-            #[prototype] function_proto;
-            #[constructor] function_ctor;
-            #[fn_prototype] scope.statics.range_error_prototype;
-            #[fn_name] RangeError;
-        });
+        register(
+            scope.statics.syntax_error_prototype.clone(),
+            object_proto.clone(),
+            syntax_error_ctor.clone(),
+            [
+                ("toString", scope.statics.error_to_string.clone()),
+            ],
+            [],
+            [],
+            None,
+            &mut scope,
+        );
 
-        register_builtin_type!(scope.statics.range_error_prototype, {
-            #[prototype] error_proto;
-            #[constructor] range_error_ctor;
-        });
+        let type_error_ctor = register(
+            scope.statics.type_error_ctor.clone(),
+            function_proto.clone(),
+            function_ctor.clone(),
+            [],
+            [],
+            [],
+            Some(("TypeError", scope.statics.type_error_prototype.clone())),
+            &mut scope,
+        );
 
-        let reference_error_ctor = register_builtin_type!(scope.statics.reference_error_ctor, {
-            #[prototype] function_proto;
-            #[constructor] function_ctor;
-            #[fn_prototype] scope.statics.reference_error_prototype;
-            #[fn_name] ReferenceError;
-        });
+        register(
+            scope.statics.type_error_prototype.clone(),
+            object_proto.clone(),
+            type_error_ctor.clone(),
+            [
+                ("toString", scope.statics.error_to_string.clone()),
+            ],
+            [],
+            [],
+            None,
+            &mut scope,
+        );
 
-        register_builtin_type!(scope.statics.reference_error_prototype, {
-            #[prototype] error_proto;
-            #[constructor] reference_error_ctor;
-        });
+        let uri_error_ctor = register(
+            scope.statics.uri_error_ctor.clone(),
+            function_proto.clone(),
+            function_ctor.clone(),
+            [],
+            [],
+            [],
+            Some(("URIError", scope.statics.uri_error_prototype.clone())),
+            &mut scope,
+        );
 
-        let syntax_error_ctor = register_builtin_type!(scope.statics.syntax_error_ctor, {
-            #[prototype] function_proto;
-            #[constructor] function_ctor;
-            #[fn_prototype] scope.statics.syntax_error_prototype;
-            #[fn_name] SyntaxError;
-        });
+        register(
+            scope.statics.uri_error_prototype.clone(),
+            object_proto.clone(),
+            uri_error_ctor.clone(),
+            [
+                ("toString", scope.statics.error_to_string.clone()),
+            ],
+            [],
+            [],
+            None,
+            &mut scope,
+        );
 
-        register_builtin_type!(scope.statics.syntax_error_prototype, {
-            #[prototype] error_proto;
-            #[constructor] syntax_error_ctor;
-        });
+        let aggregate_error_ctor = register(
+            scope.statics.aggregate_error_ctor.clone(),
+            function_proto.clone(),
+            function_ctor.clone(),
+            [],
+            [],
+            [],
+            Some(("AggregateError", scope.statics.aggregate_error_prototype.clone())),
+            &mut scope,
+        );
 
-        let type_error_ctor = register_builtin_type!(scope.statics.type_error_ctor, {
-            #[prototype] function_proto;
-            #[constructor] function_ctor;
-            #[fn_prototype] scope.statics.type_error_prototype;
-            #[fn_name] TypeError;
-        });
+        register(
+            scope.statics.aggregate_error_prototype.clone(),
+            scope.statics.error_prototype.clone(),
+            aggregate_error_ctor.clone(),
+            [
+                ("toString", scope.statics.error_to_string.clone()),
+            ],
+            [],
+            [],
+            None,
+            &mut scope,
+        );
 
-        register_builtin_type!(scope.statics.type_error_prototype, {
-            #[prototype] error_proto;
-            #[constructor] type_error_ctor;
-        });
+        let date_ctor = register(
+            scope.statics.date_ctor.clone(),
+            function_proto.clone(),
+            function_ctor.clone(),
+            [
+                ("now", scope.statics.date_now.clone()),
+            ],
+            [],
+            [],
+            Some(("Date", scope.statics.date_prototype.clone())),
+            &mut scope,
+        );
 
-        let uri_error_ctor = register_builtin_type!(scope.statics.uri_error_ctor, {
-            #[prototype] function_proto;
-            #[constructor] function_ctor;
-            #[fn_prototype] scope.statics.uri_error_prototype;
-            #[fn_name] URIError;
-        });
+        register(
+            scope.statics.date_prototype.clone(),
+            object_proto.clone(),
+            date_ctor.clone(),
+            [],
+            [],
+            [],
+            None,
+            &mut scope,
+        );
 
-        register_builtin_type!(scope.statics.uri_error_prototype, {
-            #[prototype] error_proto;
-            #[constructor] uri_error_ctor;
-        });
+        let json_ctor = register(
+            scope.statics.json_ctor.clone(),
+            function_proto.clone(),
+            function_ctor.clone(),
+            [
+                ("parse", scope.statics.json_parse.clone()),
+            ],
+            [],
+            [],
+            None,
+            &mut scope,
+        );
 
-        let aggregate_error_ctor = register_builtin_type!(scope.statics.aggregate_error_ctor, {
-            #[prototype] function_proto;
-            #[constructor] function_ctor;
-            #[fn_prototype] scope.statics.aggregate_error_prototype;
-            #[fn_name] AggregateError;
-        });
-
-        register_builtin_type!(scope.statics.aggregate_error_prototype, {
-            #[prototype] error_proto;
-            #[constructor] aggregate_error_ctor;
-        });
-
-        let date_ctor = register_builtin_type!(scope.statics.date_ctor, {
-            #[prototype] function_proto;
-            #[constructor] function_ctor;
-            #[fn_prototype] scope.statics.date_prototype;
-            #[fn_name] Date;
-            #[properties]
-            now: scope.statics.date_now;
-        });
-
-        register_builtin_type!(scope.statics.date_prototype, {
-            #[prototype] object_proto;
-            #[constructor] date_ctor;
-        });
-
-        let json_ctor = register_builtin_type!(scope.statics.json_ctor, {
-            #[prototype] function_proto;
-            #[constructor] function_ctor;
-            #[properties]
-            parse: scope.statics.json_parse;
-        });
-
-        register_builtin_type!(global, {
-            #[prototype] object_proto;
-            #[constructor] object_ctor;
-
-            #[properties]
-            isNaN: scope.statics.is_nan;
-            isFinite: scope.statics.is_finite;
-            parseFloat: scope.statics.parse_float;
-            parseInt: scope.statics.parse_int;
-            RegExp: regexp_ctor;
-            Symbol: symbol_ctor;
-            Date: date_ctor;
-            ArrayBuffer: arraybuffer_ctor;
-            Uint8Array: u8array_ctor;
-            Int8Array: i8array_ctor;
-            Uint16Array: u16array_ctor;
-            Int16Array: i16array_ctor;
-            Uint32Array: u32array_ctor;
-            Int32Array: i32array_ctor;
-            Float32Array: f32array_ctor;
-            Float64Array: f64array_ctor;
-            Array: array_ctor;
-            Error: error_ctor;
-            EvalError: eval_error_ctor;
-            RangeError: range_error_ctor;
-            ReferenceError: reference_error_ctor;
-            SyntaxError: syntax_error_ctor;
-            TypeError: type_error_ctor;
-            URIError: uri_error_ctor;
-            AggregateError: aggregate_error_ctor;
-            String: string_ctor;
-            Object: object_ctor;
-            Set: set_ctor;
-            Map: map_ctor;
-            console: console;
-            Math: math;
-            Number: number_ctor;
-            Boolean: boolean_ctor;
-            Promise: promise_ctor;
-            JSON: json_ctor;
-        });
+        register(
+            global,
+            object_proto,
+            object_ctor.clone(),
+            [
+                ("isNaN", scope.statics.is_nan.clone()),
+                ("isFinite", scope.statics.is_finite.clone()),
+                ("parseFloat", scope.statics.parse_float.clone()),
+                ("parseInt", scope.statics.parse_int.clone()),
+                ("RegExp", regexp_ctor.clone()),
+                ("Symbol", symbol_ctor.clone()),
+                ("Date", date_ctor.clone()),
+                ("ArrayBuffer", arraybuffer_ctor.clone()),
+                ("Uint8Array", u8array_ctor.clone()),
+                ("Int8Array", i8array_ctor.clone()),
+                ("Uint16Array", u16array_ctor.clone()),
+                ("Int16Array", i16array_ctor.clone()),
+                ("Uint32Array", u32array_ctor.clone()),
+                ("Int32Array", i32array_ctor.clone()),
+                ("Float32Array", f32array_ctor.clone()),
+                ("Float64Array", f64array_ctor.clone()),
+                ("Array", array_ctor.clone()),
+                ("Error", error_ctor.clone()),
+                ("EvalError", eval_error_ctor.clone()),
+                ("RangeError", range_error_ctor.clone()),
+                ("ReferenceError", reference_error_ctor.clone()),
+                ("SyntaxError", syntax_error_ctor.clone()),
+                ("TypeError", type_error_ctor.clone()),
+                ("URIError", uri_error_ctor.clone()),
+                ("AggregateError", aggregate_error_ctor.clone()),
+                ("String", string_ctor.clone()),
+                ("Object", object_ctor.clone()),
+                ("Set", set_ctor.clone()),
+                ("Map", map_ctor.clone()),
+                ("console", console.clone()),
+                ("Math", math.clone()),
+                ("Number", number_ctor.clone()),
+                ("Boolean", boolean_ctor.clone()),
+                ("Promise", promise_ctor.clone()),
+                ("JSON", json_ctor.clone()),
+            ],
+            [],
+            [],
+            None,
+            &mut scope
+        );
 
         scope.builtins_pure = true;
     }
