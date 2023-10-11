@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1696866295977,
+  "lastUpdate": 1697061125020,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -5367,6 +5367,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 84257,
             "range": "± 485",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "abcf758c7aa657367b98605bc9eb40485a472fdf",
+          "message": "refactor intrinsic register macro to fn",
+          "timestamp": "2023-10-11T23:48:23+02:00",
+          "tree_id": "5ee4fa7c3caebbb374125202af3015ebb5ac202b",
+          "url": "https://github.com/y21/dash/commit/abcf758c7aa657367b98605bc9eb40485a472fdf"
+        },
+        "date": 1697061123642,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 2789171,
+            "range": "± 10726",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 237159,
+            "range": "± 2053",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 83610,
+            "range": "± 256",
             "unit": "ns/iter"
           }
         ]
