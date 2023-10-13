@@ -98,6 +98,15 @@ pub enum Instruction {
     Nop,
 }
 
+impl Instruction {
+    pub fn is_pop_jmp(self) -> bool {
+        matches!(
+            self,
+            Instruction::JmpFalseP | Instruction::JmpTrueP | Instruction::JmpNullishP | Instruction::JmpUndefinedP
+        )
+    }
+}
+
 // Some instruction opcodes have a separate u8 constant to be used in for example match guards,
 // where `Instruction::Pop as u8` isn't allowed
 pub const POP: u8 = Instruction::Pop as u8;

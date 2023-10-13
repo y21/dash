@@ -694,192 +694,30 @@ mod handlers {
         }
     }
 
-    pub fn jmpfalsep<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
-        #[cfg(feature = "jit")]
-        let ip = cx.active_frame().ip;
-
-        let offset = cx.fetchw_and_inc_ip() as i16;
-        let value = cx.pop_stack_rooted();
-
-        let jump = !value.is_truthy();
-
-        #[cfg(feature = "jit")]
-        cx.record_conditional_jump(ip, jump);
-
-        if jump {
-            let frame = cx.active_frame_mut();
-
-            if offset.is_negative() {
-                frame.ip -= -offset as usize;
-            } else {
-                frame.ip += offset as usize;
-            }
-        }
-
-        Ok(None)
-    }
-
-    pub fn jmpfalsenp<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn conditional_jmp<'sc, 'vm>(
+        mut cx: DispatchContext<'sc, 'vm>,
+        instr: Instruction,
+    ) -> Result<Option<HandleResult>, Unrooted> {
         #[cfg(feature = "jit")]
         let ip = cx.active_frame().ip;
         let offset = cx.fetchw_and_inc_ip() as i16;
-        let value = cx.peek_stack();
-
-        let jump = !value.is_truthy();
-
-        #[cfg(feature = "jit")]
-        cx.record_conditional_jump(ip, jump);
-
-        if jump {
-            let frame = cx.active_frame_mut();
-
-            if offset.is_negative() {
-                frame.ip -= -offset as usize;
-            } else {
-                frame.ip += offset as usize;
-            }
-        }
-
-        Ok(None)
-    }
-
-    pub fn jmptruep<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
-        #[cfg(feature = "jit")]
-        let ip = cx.active_frame().ip;
-
-        let offset = cx.fetchw_and_inc_ip() as i16;
-        let value = cx.pop_stack_rooted();
-
-        let jump = value.is_truthy();
-
-        #[cfg(feature = "jit")]
-        cx.record_conditional_jump(ip, jump);
-
-        if jump {
-            let frame = cx.active_frame_mut();
-
-            if offset.is_negative() {
-                frame.ip -= -offset as usize;
-            } else {
-                frame.ip += offset as usize;
-            }
-        }
-
-        Ok(None)
-    }
-
-    pub fn jmptruenp<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
-        #[cfg(feature = "jit")]
-        let ip = cx.active_frame().ip;
-        let offset = cx.fetchw_and_inc_ip() as i16;
-        let value = cx.peek_stack();
-
-        let jump = value.is_truthy();
-
-        #[cfg(feature = "jit")]
-        cx.record_conditional_jump(ip, jump);
-
-        if jump {
-            let frame = cx.active_frame_mut();
-
-            if offset.is_negative() {
-                frame.ip -= -offset as usize;
-            } else {
-                frame.ip += offset as usize;
-            }
-        }
-
-        Ok(None)
-    }
-
-    pub fn jmpnullishp<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
-        #[cfg(feature = "jit")]
-        let ip = cx.active_frame().ip;
-        let offset = cx.fetchw_and_inc_ip() as i16;
-        let value = cx.pop_stack_rooted();
-
-        let jump = value.is_nullish();
-
-        #[cfg(feature = "jit")]
-        cx.record_conditional_jump(ip, jump);
-
-        if jump {
-            let frame = cx.active_frame_mut();
-
-            if offset.is_negative() {
-                frame.ip -= -offset as usize;
-            } else {
-                frame.ip += offset as usize;
-            }
-        }
-
-        Ok(None)
-    }
-
-    pub fn jmpnullishnp<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
-        #[cfg(feature = "jit")]
-        let ip = cx.active_frame().ip;
-        let offset = cx.fetchw_and_inc_ip() as i16;
-        let value = cx.peek_stack();
-
-        let jump = value.is_nullish();
-
-        #[cfg(feature = "jit")]
-        cx.record_conditional_jump(ip, jump);
-
-        if jump {
-            let frame = cx.active_frame_mut();
-
-            if offset.is_negative() {
-                frame.ip -= -offset as usize;
-            } else {
-                frame.ip += offset as usize;
-            }
-        }
-
-        Ok(None)
-    }
-
-    pub fn jmpundefinedp<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
-        #[cfg(feature = "jit")]
-        let ip = cx.active_frame().ip;
-        let offset = cx.fetchw_and_inc_ip() as i16;
-        let value = cx.pop_stack_rooted();
-
-        let jump = match value {
-            Value::Undefined(..) => true,
-            Value::Object(obj) => obj.as_primitive_capable().map(|p| p.is_undefined()).unwrap_or_default(),
-            Value::External(obj) => obj.as_primitive_capable().map(|p| p.is_undefined()).unwrap_or_default(),
-            _ => false,
+        let value = if instr.is_pop_jmp() {
+            cx.pop_stack_rooted()
+        } else {
+            cx.peek_stack()
         };
 
-        #[cfg(feature = "jit")]
-        cx.record_conditional_jump(ip, jump);
-
-        if jump {
-            let frame = cx.active_frame_mut();
-
-            if offset.is_negative() {
-                frame.ip -= -offset as usize;
-            } else {
-                frame.ip += offset as usize;
-            }
-        }
-
-        Ok(None)
-    }
-
-    pub fn jmpundefinednp<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
-        #[cfg(feature = "jit")]
-        let ip = cx.active_frame().ip;
-        let offset = cx.fetchw_and_inc_ip() as i16;
-        let value = cx.peek_stack();
-
-        let jump = match value {
-            Value::Undefined(..) => true,
-            Value::Object(obj) => obj.as_primitive_capable().map(|p| p.is_undefined()).unwrap_or_default(),
-            Value::External(obj) => obj.as_primitive_capable().map(|p| p.is_undefined()).unwrap_or_default(),
-            _ => false,
+        let jump = match instr {
+            Instruction::JmpFalseNP | Instruction::JmpFalseP => !value.is_truthy(),
+            Instruction::JmpTrueNP | Instruction::JmpTrueP => value.is_truthy(),
+            Instruction::JmpNullishNP | Instruction::JmpNullishP => value.is_nullish(),
+            Instruction::JmpUndefinedNP | Instruction::JmpUndefinedP => match value {
+                Value::Undefined(..) => true,
+                Value::Object(obj) => obj.as_primitive_capable().map(|p| p.is_undefined()).unwrap_or_default(),
+                Value::External(obj) => obj.as_primitive_capable().map(|p| p.is_undefined()).unwrap_or_default(),
+                _ => false,
+            },
+            _ => unreachable!("invalid instruction"),
         };
 
         #[cfg(feature = "jit")]
@@ -1910,7 +1748,7 @@ pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResu
         Instruction::LdGlobal => handlers::ldglobal(cx),
         Instruction::StoreGlobal => handlers::storeglobal(cx),
         Instruction::Call => handlers::call(cx),
-        Instruction::JmpFalseP => handlers::jmpfalsep(cx),
+        // Instruction::JmpFalseP => handlers::jmpfalsep(cx),
         Instruction::Jmp => handlers::jmp(cx),
         Instruction::StoreLocal => handlers::storelocal(cx),
         Instruction::LdLocal => handlers::ldlocal(cx),
@@ -1927,13 +1765,14 @@ pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResu
         Instruction::Throw => handlers::throw(cx),
         Instruction::TypeOf => handlers::type_of(cx),
         Instruction::Yield => handlers::yield_(cx),
-        Instruction::JmpFalseNP => handlers::jmpfalsenp(cx),
-        Instruction::JmpTrueP => handlers::jmptruep(cx),
-        Instruction::JmpTrueNP => handlers::jmptruenp(cx),
-        Instruction::JmpNullishP => handlers::jmpnullishp(cx),
-        Instruction::JmpNullishNP => handlers::jmpnullishnp(cx),
-        Instruction::JmpUndefinedP => handlers::jmpundefinedp(cx),
-        Instruction::JmpUndefinedNP => handlers::jmpundefinednp(cx),
+        Instruction::JmpFalseNP
+        | Instruction::JmpFalseP
+        | Instruction::JmpTrueNP
+        | Instruction::JmpTrueP
+        | Instruction::JmpNullishNP
+        | Instruction::JmpNullishP
+        | Instruction::JmpUndefinedNP
+        | Instruction::JmpUndefinedP => handlers::conditional_jmp(cx, instruction),
         Instruction::ImportDyn => handlers::import_dyn(cx),
         Instruction::ImportStatic => handlers::import_static(cx),
         Instruction::ExportDefault => handlers::export_default(cx),
