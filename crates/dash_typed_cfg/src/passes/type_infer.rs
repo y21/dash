@@ -22,8 +22,8 @@ pub enum Type {
 }
 
 pub trait TypeInferQuery {
-    fn type_of_local(&self, index: u16) -> Type;
-    fn type_of_constant(&self, index: u16) -> Type;
+    fn type_of_local(&self, index: u16) -> Option<Type>;
+    fn type_of_constant(&self, index: u16) -> Option<Type>;
 }
 
 #[derive(Clone, Default)]
@@ -56,13 +56,16 @@ pub struct TypeInferCtxt<'a, 'q, Q> {
 }
 
 impl<'a, 'q, Q: TypeInferQuery> TypeInferCtxt<'a, 'q, Q> {
-    fn get_or_insert_local_ty(&mut self, index: u16) -> Type {
+    fn get_or_insert_local_ty(&mut self, index: u16) -> Result<Type, Error> {
         match self.local_tys.get(&index) {
-            Some(ty) => ty.clone(),
+            Some(ty) => Ok(ty.clone()),
             None => {
-                let ty = self.query.type_of_local(index);
+                let ty = self
+                    .query
+                    .type_of_local(index)
+                    .ok_or(Error::UnknownLocalType { index })?;
                 self.local_tys.insert(index, ty.clone());
-                ty
+                Ok(ty)
             }
         }
     }
@@ -115,7 +118,7 @@ impl<'a, 'q, Q: TypeInferQuery> TypeInferCtxt<'a, 'q, Q> {
                         _ => unreachable!(),
                     };
 
-                    let ty = self.get_or_insert_local_ty(index);
+                    let ty = self.get_or_insert_local_ty(index)?;
                     ty_stack.push(ty);
                 }
                 Instruction::Constant | Instruction::ConstantW => {
@@ -125,7 +128,10 @@ impl<'a, 'q, Q: TypeInferQuery> TypeInferCtxt<'a, 'q, Q> {
                         _ => unreachable!(),
                     };
 
-                    let ty = self.query.type_of_constant(index);
+                    let ty = self
+                        .query
+                        .type_of_constant(index)
+                        .ok_or(Error::UnknownConstantType { index })?;
                     ty_stack.push(ty);
                 }
                 Instruction::StoreLocal | Instruction::StoreLocalW => {
@@ -137,7 +143,7 @@ impl<'a, 'q, Q: TypeInferQuery> TypeInferCtxt<'a, 'q, Q> {
                     let _kind = dcx.next_byte();
 
                     let ty = ty_stack.pop();
-                    let ty_local = self.get_or_insert_local_ty(index);
+                    let ty_local = self.get_or_insert_local_ty(index)?;
                     assert_eq!(ty, ty_local, "type must not change");
                     ty_stack.push(ty);
                     // Do nothing (for now); types cannot (must not) change in JIT
@@ -265,7 +271,7 @@ impl<'a, 'q, Q: TypeInferQuery> TypeInferCtxt<'a, 'q, Q> {
                         | IntrinsicOperation::PrefixIncLocalNum
                         | IntrinsicOperation::PrefixDecLocalNum => {
                             let id = dcx.next_byte();
-                            let ty = self.get_or_insert_local_ty(id.into());
+                            let ty = self.get_or_insert_local_ty(id.into())?;
                             ty_stack.push(ty);
                         }
 

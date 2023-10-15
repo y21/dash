@@ -24,7 +24,7 @@ pub struct TypedCfg {
 }
 
 pub fn lower<Q: TypedCfgQuery>(bytecode: &[u8], query: &mut Q) -> Result<TypedCfg, Error> {
-    let Labels(labels) = passes::bb_generation::find_labels(bytecode).unwrap();
+    let Labels(labels) = passes::bb_generation::find_labels(bytecode)?;
 
     let mut bcx = BBGenerationCtxt {
         bytecode,
@@ -33,7 +33,7 @@ pub fn lower<Q: TypedCfgQuery>(bytecode: &[u8], query: &mut Q) -> Result<TypedCf
         query,
     };
     bcx.find_bbs();
-    bcx.resolve_edges();
+    bcx.resolve_edges()?;
 
     let mut tycx = TypeInferCtxt {
         bbs: bcx.bbs,

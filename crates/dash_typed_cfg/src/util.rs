@@ -4,6 +4,8 @@ use std::slice::Iter;
 use dash_middle::compiler::instruction::Instruction;
 use dash_middle::compiler::instruction::IntrinsicOperation;
 
+use crate::error::Error;
+
 #[derive(Debug)]
 pub struct DecodeCtxt<'a> {
     iter: Enumerate<Iter<'a, u8>>,
@@ -51,7 +53,7 @@ impl<'a> DecodeCtxt<'a> {
     /// Decodes an instruction and does nothing with it apart from advancing the iterator.
     /// Useful for passes that are only interested in a few instructions
     /// and do not care about the rest. For the other instructions, they can call this method.
-    pub fn decode_ignore(&mut self, instr: Instruction) {
+    pub fn decode_ignore(&mut self, instr: Instruction) -> Result<(), Error> {
         match instr {
             Instruction::Add
             | Instruction::Sub
@@ -127,7 +129,8 @@ impl<'a> DecodeCtxt<'a> {
             }
             Instruction::Pop => {}
             Instruction::Ret => drop(self.next_wide()),
-            other => todo!("{other:?}"),
+            _ => return Err(Error::UnsupportedInstruction { instr }),
         }
+        Ok(())
     }
 }

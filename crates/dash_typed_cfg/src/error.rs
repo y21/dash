@@ -5,4 +5,8 @@ use thiserror::Error;
 pub enum Error {
     #[error("unsupported instruction")]
     UnsupportedInstruction { instr: Instruction },
+    #[error("unknown type of local {index}")]
+    UnknownLocalType { index: u16 },
+    #[error("unknown type of constant {index}")]
+    UnknownConstantType { index: u16 },
 }

@@ -202,7 +202,9 @@ mod handlers {
     use dash_middle::compiler::FunctionCallMetadata;
     use dash_middle::compiler::ObjectMemberKind;
     use dash_middle::compiler::StaticImportKind;
+    use dash_middle::util::is_integer;
     use dash_typed_cfg::passes::bb_generation::BBGenerationQuery;
+    use dash_typed_cfg::passes::bb_generation::ConditionalBranchAction;
     use dash_typed_cfg::passes::type_infer::Type;
     use dash_typed_cfg::passes::type_infer::TypeInferQuery;
     use dash_typed_cfg::TypedCfgQuery;
@@ -235,6 +237,7 @@ mod handlers {
     use crate::value::object::PropertyValueKind;
     use crate::value::ops::abstractions::conversions::ValueConversion;
     use crate::value::ops::equality::ValueEquality;
+    use crate::value::primitive::Number;
 
     use super::*;
 
@@ -776,27 +779,53 @@ mod handlers {
                 }
                 101 => {
                     // TODO: try opt
-                    let bc = frame.function.buffer.with(|buf| {
-                        struct Q<'a>(&'a Vm);
-                        impl<'a> TypeInferQuery for Q<'a> {
-                            fn type_of_local(&self, index: u16) -> Type {
-                                todo!()
-                            }
-                            fn type_of_constant(&self, index: u16) -> Type {
-                                todo!()
+                    let buf = frame.function.buffer.with(|buf| buf[frame.ip..ip + 3].to_owned());
+
+                    struct Q<'a>(&'a Vm);
+                    impl<'a> TypeInferQuery for Q<'a> {
+                        fn type_of_local(&self, index: u16) -> Option<Type> {
+                            match self.0.get_local(index.into()).unwrap() {
+                                Value::Boolean(..) => Some(Type::Boolean),
+                                Value::Number(Number(n)) => {
+                                    if is_integer(n) {
+                                        Some(Type::I64)
+                                    } else {
+                                        Some(Type::F64)
+                                    }
+                                }
+                                _ => None,
                             }
                         }
-                        impl<'a> BBGenerationQuery for Q<'a> {
-                            fn bb(&self, index: u16) -> &BasicBlock {
-                                todo!()
+                        fn type_of_constant(&self, index: u16) -> Option<Type> {
+                            let constant = &self.0.frames.last().unwrap().function.constants[usize::from(index)];
+                            match constant {
+                                Constant::Boolean(..) => Some(Type::Boolean),
+                                Constant::Number(n) => {
+                                    if is_integer(*n) {
+                                        Some(Type::I64)
+                                    } else {
+                                        Some(Type::F64)
+                                    }
+                                }
+                                _ => None,
                             }
                         }
-                        impl<'a> TypedCfgQuery for Q<'a> {}
-                        dash_typed_cfg::lower(&buf[frame.ip..ip], &mut Q(&cx));
-                        panic!();
-                        // buf[].to_owned()
-                    });
-                    // dash_typed_cfg::lower(bytecode, query);
+                    }
+                    impl<'a> BBGenerationQuery for Q<'a> {
+                        fn conditional_branch_at(&self, _ip: usize) -> Option<ConditionalBranchAction> {
+                            Some(ConditionalBranchAction::Either)
+                        }
+                    }
+                    impl<'a> TypedCfgQuery for Q<'a> {}
+                    match dash_typed_cfg::lower(&buf, &mut Q(&cx)) {
+                        Ok(_cfg) => {
+                            eprintln!("successfully lowered to typed cfg!");
+                        }
+                        Err(err) => {
+                            eprintln!("failed to lower bytecode to typed cfg: {:?}", err);
+                            cx.active_frame_mut().function.buffer.with_mut(|b| b[ip] = 255);
+                        }
+                    };
                 }
                 _ => {
                     frame.function.buffer.with_mut(|b| {

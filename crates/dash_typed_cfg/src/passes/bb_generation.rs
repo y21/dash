@@ -84,7 +84,7 @@ pub fn find_labels(bytecode: &[u8]) -> Result<Labels, Error> {
             }
 
             // Remaining instructions we do not care about but still need to decode
-            other => dcx.decode_ignore(other),
+            other => dcx.decode_ignore(other)?,
         }
     }
 
@@ -160,7 +160,7 @@ impl<'a, 'q, Q: BBGenerationQuery> BBGenerationCtxt<'a, 'q, Q> {
     }
 
     /// Resolves predecessors and successors of every basic block
-    pub fn resolve_edges(&mut self) {
+    pub fn resolve_edges(&mut self) -> Result<(), Error> {
         let mut dcx = DecodeCtxt::new(self.bytecode);
         let mut current_bb_ip = 0;
 
@@ -218,8 +218,9 @@ impl<'a, 'q, Q: BBGenerationQuery> BBGenerationCtxt<'a, 'q, Q> {
                 }
 
                 // Remaining instructions we do not care about but still need to decode
-                other => dcx.decode_ignore(other),
+                other => dcx.decode_ignore(other)?,
             }
         }
+        Ok(())
     }
 }

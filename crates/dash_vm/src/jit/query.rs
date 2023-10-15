@@ -27,9 +27,9 @@ impl<'a> BBGenerationQuery for QueryProvider<'a> {
 }
 
 impl<'a> TypeInferQuery for QueryProvider<'a> {
-    fn type_of_constant(&self, index: u16) -> Type {
+    fn type_of_constant(&self, index: u16) -> Option<Type> {
         let constant = &self.vm.frames.last().unwrap().function.constants[usize::from(index)];
-        match constant {
+        Some(match constant {
             Constant::Boolean(..) => Type::Boolean,
             Constant::Number(n) => {
                 if is_integer(*n) {
@@ -39,10 +39,10 @@ impl<'a> TypeInferQuery for QueryProvider<'a> {
                 }
             }
             _ => panic!("invalid jit type"),
-        }
+        })
     }
-    fn type_of_local(&self, index: u16) -> Type {
-        match self.vm.get_local(index.into()).unwrap() {
+    fn type_of_local(&self, index: u16) -> Option<Type> {
+        Some(match self.vm.get_local(index.into()).unwrap() {
             Value::Boolean(..) => Type::Boolean,
             Value::Number(Number(n)) => {
                 if is_integer(n) {
@@ -52,7 +52,7 @@ impl<'a> TypeInferQuery for QueryProvider<'a> {
                 }
             }
             _ => panic!("invalid jit type"),
-        }
+        })
     }
 }
 

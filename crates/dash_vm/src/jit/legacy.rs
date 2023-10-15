@@ -114,20 +114,20 @@ mod tests {
     }
 
     impl TypeInferQuery for TestQueryProvider {
-        fn type_of_constant(&self, index: u16) -> dash_typed_cfg::passes::type_infer::Type {
-            match index {
+        fn type_of_constant(&self, index: u16) -> Option<dash_typed_cfg::passes::type_infer::Type> {
+            Some(match index {
                 #[allow(clippy::manual_range_patterns)]
                 0 | 1 | 2 => Type::I64,
                 _ => todo!("{index}"),
-            }
+            })
         }
 
-        fn type_of_local(&self, index: u16) -> Type {
-            match index {
+        fn type_of_local(&self, index: u16) -> Option<Type> {
+            Some(match index {
                 0 => Type::I64,
                 1 => Type::Boolean,
                 o => todo!("{o}"),
-            }
+            })
         }
     }
 
