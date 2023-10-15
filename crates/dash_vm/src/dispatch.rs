@@ -202,6 +202,10 @@ mod handlers {
     use dash_middle::compiler::FunctionCallMetadata;
     use dash_middle::compiler::ObjectMemberKind;
     use dash_middle::compiler::StaticImportKind;
+    use dash_typed_cfg::passes::bb_generation::BBGenerationQuery;
+    use dash_typed_cfg::passes::type_infer::Type;
+    use dash_typed_cfg::passes::type_infer::TypeInferQuery;
+    use dash_typed_cfg::TypedCfgQuery;
     use if_chain::if_chain;
     use smallvec::SmallVec;
     use std::borrow::Cow;
@@ -739,15 +743,15 @@ mod handlers {
     pub fn jmp<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let ip = cx.active_frame().ip;
         let state = cx.fetch_and_inc_ip();
-        if state == 100 {
-            cx.active_frame().function.buffer.with_mut(|b| {
-                b[ip] = 0;
-            });
-        } else {
-            cx.active_frame().function.buffer.with_mut(|b| {
-                b[ip] += 1;
-            });
-        }
+        // if state == 100 {
+        //     cx.active_frame().function.buffer.with_mut(|b| {
+        //         b[ip] = 0;
+        //     });
+        // } else {
+        //     cx.active_frame().function.buffer.with_mut(|b| {
+        //         b[ip] += 1;
+        //     });
+        // }
         let offset = cx.fetchw_and_inc_ip() as i16;
         let frame = cx.active_frame_mut();
 
@@ -755,14 +759,51 @@ mod handlers {
 
         if offset.is_negative() {
             #[cfg(feature = "jit")]
-            let old_ip = frame.ip;
+            if true {
+                panic!("jit feature incompatible right now");
+            }
+            // let old_ip = frame.ip;
 
             frame.ip -= -offset as usize;
 
-            // Negative jumps are (currently) always also a marker for the end of a loop
-            // and we want to JIT compile loops that run often
-            #[cfg(feature = "jit")]
-            crate::jit::handle_loop_end(&mut cx, old_ip);
+            // // Negative jumps are (currently) always also a marker for the end of a loop
+            // // and we want to JIT compile loops that run often
+            // #[cfg(feature = "jit")]
+            // crate::jit::handle_loop_end(&mut cx, old_ip);
+            match state {
+                255 => {
+                    // unoptimizable.
+                }
+                101 => {
+                    // TODO: try opt
+                    let bc = frame.function.buffer.with(|buf| {
+                        struct Q<'a>(&'a Vm);
+                        impl<'a> TypeInferQuery for Q<'a> {
+                            fn type_of_local(&self, index: u16) -> Type {
+                                todo!()
+                            }
+                            fn type_of_constant(&self, index: u16) -> Type {
+                                todo!()
+                            }
+                        }
+                        impl<'a> BBGenerationQuery for Q<'a> {
+                            fn bb(&self, index: u16) -> &BasicBlock {
+                                todo!()
+                            }
+                        }
+                        impl<'a> TypedCfgQuery for Q<'a> {}
+                        dash_typed_cfg::lower(&buf[frame.ip..ip], &mut Q(&cx));
+                        panic!();
+                        // buf[].to_owned()
+                    });
+                    // dash_typed_cfg::lower(bytecode, query);
+                }
+                _ => {
+                    frame.function.buffer.with_mut(|b| {
+                        b[ip] = state + 1;
+                    });
+                }
+            }
         } else {
             frame.ip += offset as usize;
         }

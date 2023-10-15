@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-jit = ["dash_llvm_jit_backend", "dash_typed_cfg"]
+jit = ["dash_llvm_jit_backend"]
 
 [dependencies]
 dash_middle = { path = "../dash_middle" }
@@ -18,7 +18,7 @@ dash_optimizer = { path = "../dash_optimizer" }
 dash_regex = { path = "../dash_regex" }
 dash_log = { path = "../dash_log" }
 dash_llvm_jit_backend = { path = "../dash_llvm_jit_backend", optional = true }
-dash_typed_cfg = { path = "../dash_typed_cfg", optional = true }
+dash_typed_cfg = { path = "../dash_typed_cfg" }
 bitflags = "1.3.2"
 smallvec = { version = "1.9.0", features = ["const_generics"] }
 ahash = "0.8.3"
