@@ -31,7 +31,7 @@ pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
 
     let tokens = dash_lexer::Lexer::new(interner, &source)
         .scan_all()
-        .map_err(|e| anyhow!("{}", e.formattable(interner, &source, true)))?;
+        .map_err(|e| anyhow!("{}", e.formattable(&source, true)))?;
 
     if dump_tokens {
         println!("{tokens:#?}");
@@ -39,7 +39,7 @@ pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
 
     let (mut ast, counter) = dash_parser::Parser::new(interner, &source, tokens)
         .parse_all()
-        .map_err(|err| anyhow!("{}", err.formattable(interner, &source, true)))?;
+        .map_err(|err| anyhow!("{}", err.formattable(&source, true)))?;
 
     transformations::ast_patch_implicit_return(&mut ast);
 
@@ -76,7 +76,7 @@ pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
 
     let bytecode = dash_compiler::FunctionCompiler::new(opt, tcx, interner)
         .compile_ast(ast, true)
-        .map_err(|err| anyhow!("{}", [err].formattable(interner, &source, true)))?;
+        .map_err(|err| anyhow!("{}", [err].formattable(&source, true)))?;
 
     if dump_bytecode {
         let buffer = dash_middle::compiler::format::serialize(bytecode)?;

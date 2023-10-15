@@ -889,7 +889,7 @@ impl Vm {
 
         register(
             scope.statics.eval_error_prototype.clone(),
-            object_proto.clone(),
+            scope.statics.error_prototype.clone(),
             eval_error_ctor.clone(),
             [
                 ("toString", scope.statics.error_to_string.clone()),
@@ -913,7 +913,7 @@ impl Vm {
 
         register(
             scope.statics.range_error_prototype.clone(),
-            object_proto.clone(),
+            scope.statics.error_prototype.clone(),
             range_error_ctor.clone(),
             [
                 ("toString", scope.statics.error_to_string.clone()),
@@ -937,7 +937,7 @@ impl Vm {
 
         register(
             scope.statics.reference_error_prototype.clone(),
-            object_proto.clone(),
+            scope.statics.error_prototype.clone(),
             reference_error_ctor.clone(),
             [
                 ("toString", scope.statics.error_to_string.clone()),
@@ -961,7 +961,7 @@ impl Vm {
 
         register(
             scope.statics.syntax_error_prototype.clone(),
-            object_proto.clone(),
+            scope.statics.error_prototype.clone(),
             syntax_error_ctor.clone(),
             [
                 ("toString", scope.statics.error_to_string.clone()),
@@ -985,7 +985,7 @@ impl Vm {
 
         register(
             scope.statics.type_error_prototype.clone(),
-            object_proto.clone(),
+            scope.statics.error_prototype.clone(),
             type_error_ctor.clone(),
             [
                 ("toString", scope.statics.error_to_string.clone()),
@@ -1009,7 +1009,7 @@ impl Vm {
 
         register(
             scope.statics.uri_error_prototype.clone(),
-            object_proto.clone(),
+            scope.statics.error_prototype.clone(),
             uri_error_ctor.clone(),
             [
                 ("toString", scope.statics.error_to_string.clone()),

@@ -44,8 +44,8 @@ async fn inner(source: String, opt: OptLevel, quiet: bool, initial_gc_threshold:
     let value = match scope.eval(&source, opt) {
         Ok(val) => val.root(&mut scope),
         Err((EvalError::Exception(val), _)) => val.root(&mut scope),
-        Err((EvalError::Middle(errs), interner)) => {
-            println!("{}", errs.formattable(&interner, &source, true));
+        Err((EvalError::Middle(errs), _)) => {
+            println!("{}", errs.formattable(&source, true));
             return Ok(());
         }
     };

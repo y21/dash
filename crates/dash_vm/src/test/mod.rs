@@ -137,3 +137,16 @@ function x(...v) {
 x(0,...[1,2],3,4,...[5,6],7,8,9,10,...[11]);",
     Value::undefined()
 );
+
+simple_test!(
+    error_structure,
+    r#"
+    assert(new ReferenceError().constructor === ReferenceError);
+    assert(new ReferenceError().__proto__ === ReferenceError.prototype);
+    assert(new ReferenceError().__proto__.__proto__ === Error.prototype);
+    assert(new Error("foo").message === "foo");
+    assert(new ReferenceError("foo").toString().startsWith("ReferenceError: foo"));
+    assert(new Error("foo").toString().startsWith("Error: foo"));
+    "#,
+    Value::undefined()
+);

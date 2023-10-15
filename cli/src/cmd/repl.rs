@@ -22,7 +22,7 @@ pub fn repl() -> anyhow::Result<()> {
         match scope.eval(&input, OptLevel::Aggressive) {
             Ok(value) => util::print_value(value.root(&mut scope), &mut scope).unwrap(),
             Err((EvalError::Exception(value), _)) => util::print_value(value.root(&mut scope), &mut scope).unwrap(),
-            Err((EvalError::Middle(errs), interner)) => println!("{}", errs.formattable(&interner, &input, true)),
+            Err((EvalError::Middle(errs), _)) => println!("{}", errs.formattable(&input, true)),
         }
 
         scope.process_async_tasks();

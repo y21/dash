@@ -7,7 +7,6 @@ use memchr::memchr;
 use memchr::memmem::rfind;
 use owo_colors::OwoColorize;
 
-use crate::interner::StringInterner;
 use crate::lexer::token::Token;
 use crate::lexer::token::TokenType;
 use crate::sourcemap::Span;
@@ -63,7 +62,6 @@ pub enum Error {
 
 pub struct FormattableError<'a, 'buf> {
     error: &'a Error,
-    interner: &'a StringInterner,
     source: &'buf str,
     color: bool,
 }
@@ -160,8 +158,6 @@ impl<'f, 'a, 'buf> fmt::Display for DiagnosticBuilder<'f, 'a, 'buf> {
                 Some(span) => {
                     assert!(span.is_user_span(), "compiler-generated span in diagnostic");
                     let LineData {
-                        start_index: _,
-                        end_index: _,
                         relative_span_lo,
                         relative_span_hi,
                         line,
@@ -214,8 +210,6 @@ impl<'f, 'a, 'buf> fmt::Display for DiagnosticBuilder<'f, 'a, 'buf> {
 }
 
 struct LineData<'a> {
-    start_index: usize,
-    end_index: usize,
     relative_span_lo: usize,
     relative_span_hi: usize,
     line: &'a str,
@@ -235,8 +229,6 @@ fn line_data(source: &str, span: Span) -> LineData<'_> {
 
     let line = &source[start_index..end_index];
     LineData {
-        start_index,
-        end_index,
         relative_span_lo,
         relative_span_hi,
         line,
@@ -382,24 +374,13 @@ impl<'a, 'buf> fmt::Display for FormattableError<'a, 'buf> {
 }
 
 pub trait IntoFormattableErrors {
-    fn formattable<'a, 'buf>(
-        &'a self,
-        interner: &'a StringInterner,
-        source: &'buf str,
-        colors: bool,
-    ) -> FormattableErrors<'a, 'buf>;
+    fn formattable<'a, 'buf>(&'a self, source: &'buf str, colors: bool) -> FormattableErrors<'a, 'buf>;
 }
 
 impl IntoFormattableErrors for [Error] {
-    fn formattable<'a, 'buf>(
-        &'a self,
-        interner: &'a StringInterner,
-        source: &'buf str,
-        colors: bool,
-    ) -> FormattableErrors<'a, 'buf> {
+    fn formattable<'a, 'buf>(&'a self, source: &'buf str, colors: bool) -> FormattableErrors<'a, 'buf> {
         FormattableErrors {
             errors: self,
-            interner,
             source,
             colors,
         }
@@ -408,7 +389,6 @@ impl IntoFormattableErrors for [Error] {
 
 pub struct FormattableErrors<'a, 'buf> {
     errors: &'a [Error],
-    interner: &'a StringInterner,
     source: &'buf str,
     colors: bool,
 }
@@ -418,7 +398,6 @@ impl<'a, 'buf> fmt::Display for FormattableErrors<'a, 'buf> {
         for error in self.errors {
             FormattableError {
                 color: self.colors,
-                interner: self.interner,
                 source: self.source,
                 error,
             }
