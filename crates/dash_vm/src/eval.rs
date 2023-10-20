@@ -38,7 +38,8 @@ impl Vm {
         let cr = FunctionCompiler::new(opt, tcx, interner)
             .compile_ast(ast, true)
             .map_err(|err| EvalError::Middle(vec![err]))?;
-        let frame = Frame::from_compile_result(cr);
+        let mut frame = Frame::from_compile_result(cr);
+        frame.set_sp(self.stack_size());
         let val = self.execute_frame(frame).map_err(EvalError::Exception)?;
         Ok(val.into_value())
     }

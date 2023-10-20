@@ -1,5 +1,4 @@
 use dash_middle::parser::error::IntoFormattableErrors;
-use dash_node_impl::run_with_nodejs_mnemnoics;
 use dash_optimizer::OptLevel;
 use dash_rt::format_value;
 use dash_rt::runtime::Runtime;
@@ -26,7 +25,14 @@ pub fn run(args: &ArgMatches) -> anyhow::Result<()> {
     let quiet = args.is_present("quiet");
 
     if nodejs {
-        run_with_nodejs_mnemnoics(path, opt, initial_gc_threshold)?;
+        #[cfg(feature = "nodejs")]
+        {
+            dash_node_impl::run_with_nodejs_mnemnoics(path, opt, initial_gc_threshold)?;
+        }
+        #[cfg(not(feature = "nodejs"))]
+        {
+            anyhow::bail!("dash needs to be compiled with the `nodejs` feature to support node-compat mode");
+        }
     } else {
         run_normal_mode(path, opt, quiet, initial_gc_threshold)?;
     }
@@ -37,6 +43,7 @@ pub fn run(args: &ArgMatches) -> anyhow::Result<()> {
 
     Ok(())
 }
+
 fn run_normal_mode(path: &str, opt: OptLevel, quiet: bool, initial_gc_threshold: Option<usize>) -> anyhow::Result<()> {
     let source = fs::read_to_string(path).context("Failed to read source")?;
 

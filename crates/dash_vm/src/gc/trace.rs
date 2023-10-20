@@ -1,6 +1,7 @@
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::collections::HashSet;
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use dash_middle::compiler::constant::Function;
@@ -16,6 +17,8 @@ use crate::value::Unrooted;
 /// # Safety
 /// Implementors of this trait must provide a valid trace implementation
 /// by calling any possible, reachable [`super::Handle`]s
+///
+/// Consider deriving this trait using the derive macro provided by the `dash_proc_macro` crate
 pub unsafe trait Trace {
     fn trace(&self);
 }
@@ -111,5 +114,6 @@ unsafe_empty_trace!(
     Symbol,
     Number,
     RegExpInner,
-    TypedArrayKind
+    TypedArrayKind,
+    PathBuf
 );
