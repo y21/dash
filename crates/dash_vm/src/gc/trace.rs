@@ -1,5 +1,6 @@
 use std::cell::Cell;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -58,7 +59,7 @@ unsafe impl<T: Trace> Trace for HashSet<T> {
     }
 }
 
-unsafe impl<K: Trace, V: Trace> Trace for ahash::HashMap<K, V> {
+unsafe impl<K: Trace, V: Trace, S> Trace for HashMap<K, V, S> {
     fn trace(&self) {
         for (k, v) in self.iter() {
             k.trace();

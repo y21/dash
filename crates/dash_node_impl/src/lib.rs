@@ -1,4 +1,6 @@
+use std::cell::RefCell;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 use anyhow::Context;
 use anyhow::{anyhow, bail};
@@ -16,6 +18,7 @@ use dash_vm::value::object::PropertyValue;
 use dash_vm::value::Value;
 use dash_vm::{delegate, throw};
 use package::Package;
+use rustc_hash::FxHashMap;
 
 mod package;
 
@@ -46,7 +49,16 @@ async fn run_inner_fallible(path: &str, opt: OptLevel, initial_gc_threshold: Opt
 
     let mut rt = Runtime::new(initial_gc_threshold).await;
     let scope = &mut rt.vm_mut().scope();
-    execute_node_module(scope, path, &entry, opt).map_err(|err| match err {
+
+    execute_node_module(
+        scope,
+        path,
+        path,
+        &entry,
+        opt,
+        Rc::new(RefCell::new(FxHashMap::default())),
+    )
+    .map_err(|err| match err {
         (EvalError::Middle(errs), _) => anyhow!("{}", errs.formattable(&entry, true)),
         (EvalError::Exception(err), _) => anyhow!("{}", format_value(err.root(scope), scope).unwrap()),
     })?;
@@ -57,14 +69,17 @@ async fn run_inner_fallible(path: &str, opt: OptLevel, initial_gc_threshold: Opt
 /// Returns the `module` object
 fn execute_node_module(
     scope: &mut LocalScope,
-    directory: &Path,
+    dir_path: &Path,
+    file_path: &Path,
     source: &str,
     opt: OptLevel,
+    ongoing_requires: Rc<RefCell<FxHashMap<PathBuf, Value>>>,
 ) -> Result<Value, (EvalError, StringInterner)> {
     let exports = Value::Object(scope.register(NamedObject::new(scope)));
     let module = Value::Object(scope.register(NamedObject::new(scope)));
     let require = Value::Object(scope.register(RequireFunction {
-        dir: directory.to_owned(),
+        dir: dir_path.to_owned(),
+        ongoing_requires: ongoing_requires.clone(),
         object: NamedObject::new(scope),
     }));
     module
@@ -83,6 +98,10 @@ fn execute_node_module(
         .set_property(scope, "require".into(), PropertyValue::static_default(require))
         .unwrap();
 
+    ongoing_requires
+        .borrow_mut()
+        .insert(file_path.to_owned(), module.clone());
+
     scope.eval(source, opt)?;
 
     Ok(module)
@@ -91,6 +110,7 @@ fn execute_node_module(
 #[derive(Debug, Trace)]
 struct RequireFunction {
     dir: PathBuf,
+    ongoing_requires: Rc<RefCell<FxHashMap<PathBuf, Value>>>,
     object: NamedObject,
 }
 
@@ -120,16 +140,23 @@ impl Object for RequireFunction {
         let Some(Value::String(arg)) = args.first() else {
             throw!(scope, Error, "require() expects a string argument");
         };
+
         let is_path = matches!(arg.chars().next(), Some('.' | '/' | '~'));
         if is_path {
             let canonicalized_path = match self.dir.join(&**arg).canonicalize() {
                 Ok(v) => v,
                 Err(err) => throw!(scope, Error, err.to_string()),
             };
+
+            if let Some(module) = self.ongoing_requires.borrow().get(&canonicalized_path) {
+                return Ok(module.clone());
+            }
+
             let source = match std::fs::read_to_string(&canonicalized_path) {
                 Ok(v) => v,
                 Err(err) => throw!(scope, Error, err.to_string()),
             };
+
             let Some(parent_dir) = canonicalized_path.parent() else {
                 throw!(
                     scope,
@@ -139,7 +166,14 @@ impl Object for RequireFunction {
                 );
             };
 
-            let module = match execute_node_module(scope, parent_dir, &source, OptLevel::default()) {
+            let module = match execute_node_module(
+                scope,
+                parent_dir,
+                &canonicalized_path,
+                &source,
+                OptLevel::default(),
+                self.ongoing_requires.clone(),
+            ) {
                 Ok(v) => v,
                 Err((EvalError::Exception(value), _)) => return Err(value.root(scope)),
                 Err((EvalError::Middle(errs), _)) => {
