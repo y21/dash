@@ -2,6 +2,7 @@ use std::cell::Cell;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::path::Path;
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -116,5 +117,7 @@ unsafe_empty_trace!(
     Number,
     RegExpInner,
     TypedArrayKind,
-    PathBuf
+    PathBuf,
+    Path,
+    String
 );

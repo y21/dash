@@ -42,28 +42,36 @@ async fn run_inner_fallible(path: &str, opt: OptLevel, initial_gc_threshold: Opt
         bail!("Node project path currently needs to be a directory");
     }
 
-    let package = std::fs::read_to_string(path.join("package.json")).context("Failed to read package.json")?;
-    let package = serde_json::from_str::<Package>(&package)?;
+    let package_state = process_package_json(path)?;
+    let entry =
+        std::fs::read_to_string(path.join(&package_state.metadata.main)).context("Failed to read entry point")?;
 
-    let entry = std::fs::read_to_string(path.join(package.main)).context("Failed to read entry point")?;
+    let global_state = Rc::new(GlobalState {
+        node_modules_dir: path.join("node_modules"),
+        ongoing_requires: RefCell::new(FxHashMap::default()),
+    });
 
     let mut rt = Runtime::new(initial_gc_threshold).await;
     let scope = &mut rt.vm_mut().scope();
 
-    execute_node_module(
-        scope,
-        path,
-        path,
-        &entry,
-        opt,
-        Rc::new(RefCell::new(FxHashMap::default())),
-    )
-    .map_err(|err| match err {
-        (EvalError::Middle(errs), _) => anyhow!("{}", errs.formattable(&entry, true)),
-        (EvalError::Exception(err), _) => anyhow!("{}", format_value(err.root(scope), scope).unwrap()),
-    })?;
+    execute_node_module(scope, path, path, &entry, opt, global_state, Rc::new(package_state)).map_err(
+        |err| match err {
+            (EvalError::Middle(errs), _, entry) => anyhow!("{}", errs.formattable(&entry, true)),
+            (EvalError::Exception(err), ..) => anyhow!("{}", format_value(err.root(scope), scope).unwrap()),
+        },
+    )?;
 
     Ok(())
+}
+
+fn process_package_json(path: &Path) -> Result<PackageState, anyhow::Error> {
+    let package = std::fs::read_to_string(path.join("package.json")).context("Failed to read package.json")?;
+    let package = serde_json::from_str::<Package>(&package).context("Failed to parse package.json")?;
+    let base_dir = path.to_owned();
+    Ok(PackageState {
+        metadata: package,
+        base_dir,
+    })
 }
 
 /// Returns the `module` object
@@ -73,44 +81,60 @@ fn execute_node_module(
     file_path: &Path,
     source: &str,
     opt: OptLevel,
-    ongoing_requires: Rc<RefCell<FxHashMap<PathBuf, Value>>>,
-) -> Result<Value, (EvalError, StringInterner)> {
+    global_state: Rc<GlobalState>,
+    package: Rc<PackageState>,
+) -> Result<Value, (EvalError, Option<StringInterner>, String)> {
     let exports = Value::Object(scope.register(NamedObject::new(scope)));
     let module = Value::Object(scope.register(NamedObject::new(scope)));
     let require = Value::Object(scope.register(RequireFunction {
-        dir: dir_path.to_owned(),
-        ongoing_requires: ongoing_requires.clone(),
+        current_dir: dir_path.to_owned(),
+        state: global_state.clone(),
+        package,
         object: NamedObject::new(scope),
     }));
     module
         .set_property(scope, "exports".into(), PropertyValue::static_default(exports.clone()))
         .unwrap();
-    scope
-        .global()
-        .set_property(scope, "module".into(), PropertyValue::static_default(module.clone()))
-        .unwrap();
-    scope
-        .global()
-        .set_property(scope, "exports".into(), PropertyValue::static_default(exports.clone()))
-        .unwrap();
-    scope
-        .global()
-        .set_property(scope, "require".into(), PropertyValue::static_default(require))
-        .unwrap();
 
-    ongoing_requires
+    global_state
+        .ongoing_requires
         .borrow_mut()
         .insert(file_path.to_owned(), module.clone());
 
-    scope.eval(source, opt)?;
+    let mut code = String::from("(function(exports, module, require) {");
+    code += source;
+    code += "})";
+
+    let fun = match scope.eval(&code, opt) {
+        Ok(v) => v.root(scope),
+        Err((err, intern)) => return Err((err, Some(intern), code)),
+    };
+
+    fun.apply(scope, Value::undefined(), vec![exports, module.clone(), require])
+        .map_err(|err| (EvalError::Exception(err.into()), None, code))?;
 
     Ok(module)
 }
 
 #[derive(Debug, Trace)]
+struct PackageState {
+    metadata: Package,
+    /// Path to the base directory of the package
+    base_dir: PathBuf,
+}
+
+#[derive(Debug, Trace)]
+struct GlobalState {
+    node_modules_dir: PathBuf,
+    ongoing_requires: RefCell<FxHashMap<PathBuf, Value>>,
+}
+
+#[derive(Debug, Trace)]
 struct RequireFunction {
-    dir: PathBuf,
-    ongoing_requires: Rc<RefCell<FxHashMap<PathBuf, Value>>>,
+    /// Path to the current directory
+    current_dir: PathBuf,
+    package: Rc<PackageState>,
+    state: Rc<GlobalState>,
     object: NamedObject,
 }
 
@@ -143,12 +167,12 @@ impl Object for RequireFunction {
 
         let is_path = matches!(arg.chars().next(), Some('.' | '/' | '~'));
         if is_path {
-            let canonicalized_path = match self.dir.join(&**arg).canonicalize() {
+            let canonicalized_path = match self.current_dir.join(&**arg).canonicalize() {
                 Ok(v) => v,
                 Err(err) => throw!(scope, Error, err.to_string()),
             };
 
-            if let Some(module) = self.ongoing_requires.borrow().get(&canonicalized_path) {
+            if let Some(module) = self.state.ongoing_requires.borrow().get(&canonicalized_path) {
                 return Ok(module.clone());
             }
 
@@ -172,11 +196,12 @@ impl Object for RequireFunction {
                 &canonicalized_path,
                 &source,
                 OptLevel::default(),
-                self.ongoing_requires.clone(),
+                self.state.clone(),
+                self.package.clone(),
             ) {
                 Ok(v) => v,
-                Err((EvalError::Exception(value), _)) => return Err(value.root(scope)),
-                Err((EvalError::Middle(errs), _)) => {
+                Err((EvalError::Exception(value), ..)) => return Err(value.root(scope)),
+                Err((EvalError::Middle(errs), _, source)) => {
                     throw!(scope, SyntaxError, "{}", errs.formattable(&source, true))
                 }
             };
@@ -184,7 +209,28 @@ impl Object for RequireFunction {
             module.get_property(scope, "exports".into())
         } else {
             // Resolve dependency
-            todo!("Resolve external dependency");
+            let dir_path = self.state.node_modules_dir.join(&**arg);
+            let package_state = process_package_json(&dir_path).unwrap();
+            let file_path = dir_path.join(&package_state.metadata.main);
+            let source = std::fs::read_to_string(&file_path).unwrap();
+
+            let module = match execute_node_module(
+                scope,
+                &dir_path,
+                &file_path,
+                &source,
+                OptLevel::default(),
+                self.state.clone(),
+                Rc::new(package_state),
+            ) {
+                Ok(v) => v,
+                Err((EvalError::Exception(value), ..)) => return Err(value.root(scope)),
+                Err((EvalError::Middle(errs), _, source)) => {
+                    throw!(scope, SyntaxError, "{}", errs.formattable(&source, true))
+                }
+            };
+
+            module.get_property(scope, "exports".into())
         }
     }
 }

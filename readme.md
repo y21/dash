@@ -37,18 +37,13 @@ $ curl -sSf https://sh.rustup.rs | sh
 # Clone repo
 $ git clone https://github.com/y21/dash
 # Build cli
-$ cd dash/cli && cargo install --path .
+$ cargo install --path dash/cli
 # Optional: rename binary to `dashjs`
 $ mv ~/.cargo/bin/dash-cli ~/.cargo/bin/dashjs
 # Run the program (run with --help for help)
 $ dashjs run example.js
 ```
 Now open up your browser, navigate to http://localhost:3030, refresh a bunch of times and see the numbers go up.
-
-### JIT
-This engine has basic support for JIT compilation. It uses LLVM for optimizations and codegen, based on specialized type information and branches tracked by tracing iterations of hot loops.
-
-You can enable it by passing the `jit` feature flag to the dash_vm crate. Beware that it's a very early WIP, expect bugs and crashes!
 
 ### Embedding into a Rust application
 Note that the API is not stable. Things are constantly changing, so your code may break at any time when bumping the version, which is why it is highly recommended to lock in to a specific revision for now.
@@ -78,3 +73,7 @@ fn main() {
 }
 ```
 <sub>See `dash-cli/` for a more detailed example</sub>
+
+### Node compatibility
+There's experimental support for node compatibility. If you want to try it out, pass `--features nodejs` to the cargo install/build command.
+When running dash, you can then pass `--node` and various node-specific things will be available to the JS environment, such as the `require` function.
