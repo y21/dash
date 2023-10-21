@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1697830956250,
+  "lastUpdate": 1697932293936,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -5577,6 +5577,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 82182,
             "range": "± 272",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "cd6a1f87ea8f60669fd51b8b5f06bc1aa4102785",
+          "message": "make `require` local to modules instead of globals",
+          "timestamp": "2023-10-22T01:48:08+02:00",
+          "tree_id": "73b97dc2627f3ea01dba9bac26087a9214d1b1c2",
+          "url": "https://github.com/y21/dash/commit/cd6a1f87ea8f60669fd51b8b5f06bc1aa4102785"
+        },
+        "date": 1697932292687,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 2790682,
+            "range": "± 5723",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 232805,
+            "range": "± 827",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 82955,
+            "range": "± 712",
             "unit": "ns/iter"
           }
         ]
