@@ -3,6 +3,13 @@ use serde::{Deserialize, Serialize};
 
 #[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
+pub enum CharacterClassItem {
+    Node(Node),
+    Range(u8, u8),
+}
+
+#[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Node {
     AnyCharacter,
     MetaSequence(MetaSequence),
@@ -12,7 +19,7 @@ pub enum Node {
         max: Option<usize>,
     },
     LiteralCharacter(u8),
-    CharacterClass(Vec<Node>),
+    CharacterClass(Vec<CharacterClassItem>),
     Anchor(Anchor),
     Or(Vec<Node>, Vec<Node>),
     Optional(Box<Node>),

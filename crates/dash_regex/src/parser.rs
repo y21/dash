@@ -2,6 +2,7 @@ use std::mem;
 
 use crate::error::Error;
 use crate::node::Anchor;
+use crate::node::CharacterClassItem;
 use crate::node::MetaSequence;
 use crate::node::Node;
 
@@ -130,12 +131,24 @@ impl<'a> Parser<'a> {
         let mut nodes = Vec::new();
 
         while !self.is_eof() {
-            if let Some(b']') = self.current() {
-                self.advance();
-                break;
+            match self.current() {
+                Some(b']') => {
+                    self.advance();
+                    break;
+                }
+                Some(b'-') => {
+                    self.advance();
+                    match nodes.last() {
+                        Some(&CharacterClassItem::Node(Node::LiteralCharacter(start))) => {
+                            let end = self.next_byte().ok_or(Error::UnexpectedEof)?;
+                            nodes.pop();
+                            nodes.push(CharacterClassItem::Range(start, end));
+                        }
+                        _ => nodes.push(CharacterClassItem::Node(Node::LiteralCharacter(b'-'))),
+                    }
+                }
+                _ => nodes.push(CharacterClassItem::Node(self.parse_primary()?)),
             }
-
-            nodes.push(self.parse_primary()?);
         }
 
         Ok(Node::CharacterClass(nodes))

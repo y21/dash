@@ -1,4 +1,5 @@
 use crate::node::Anchor;
+use crate::node::CharacterClassItem;
 use crate::node::MetaSequence;
 use crate::node::Node;
 use crate::stream::BorrowedStream;
@@ -97,14 +98,18 @@ impl<'a> Visit<'a> for Node {
                 true
             }
             Node::CharacterClass(nodes) => {
-                let mut matches = false;
-                for node in nodes {
-                    if node.matches(s) {
-                        matches = true;
-                        break;
+                let Some(&cur) = s.current() else { return false };
+
+                nodes.iter().any(|node| match *node {
+                    CharacterClassItem::Node(ref node) => node.matches(s),
+                    CharacterClassItem::Range(start, end) => {
+                        let matches = (start..=end).contains(&cur);
+                        if matches {
+                            s.advance();
+                        }
+                        matches
                     }
-                }
-                matches
+                })
             }
         }
     }
