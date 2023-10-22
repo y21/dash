@@ -48,7 +48,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
         if self.expect_token_type_and_skip(ASSIGNMENT_TYPES, false) {
             let operator = self.previous()?.ty;
-            let rval = self.parse_assignment()?;
+            let rval = self.parse_yield()?;
             expr = Expr::assignment(expr, rval, operator);
         }
 
@@ -59,11 +59,11 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         let mut expr = self.parse_nullish_coalescing()?;
 
         while self.expect_token_type_and_skip(&[TokenType::Conditional], false) {
-            let then_branch = self.parse_ternary()?;
+            let then_branch = self.parse_yield()?;
             if !self.expect_token_type_and_skip(&[TokenType::Colon], true) {
                 return None;
             }
-            let else_branch = self.parse_ternary()?;
+            let else_branch = self.parse_yield()?;
             expr = Expr::conditional(expr, then_branch, else_branch);
         }
 

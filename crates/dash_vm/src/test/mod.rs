@@ -150,3 +150,90 @@ simple_test!(
     "#,
     Value::undefined()
 );
+
+simple_test!(
+    loops,
+    r#"
+    let sum = 0;
+    for (let i = 0; i < 10; i++) {
+        sum += i;
+    }
+    assert(sum === 45);
+
+    sum = 0;
+    for (let i = 10; i > 0; i--) {
+        sum += i;
+    }
+    assert(sum === 55);
+
+    sum = 0;
+    for (let i = 0; i < 10; i += 2) {
+        sum += i;
+    }
+    assert(sum === 20);
+
+    sum = 0;
+    for (let i = 0; i < 10; i++) {
+        if (i === 5) {
+            continue;
+        }
+        sum += i;
+    }
+    assert(sum === 40);
+
+    sum = 0;
+    for (let i = 0; i < 10; i++) {
+        if (i === 5) {
+            break;
+        }
+        sum += i;
+    }
+    assert(sum === 10);
+
+    sum = 0;
+    for (; false; ) {
+        sum += 1;
+    }
+    assert(sum === 0);
+
+    sum = 0;
+    let i = 0;
+    for (; i < 10; ) {
+        sum += i;
+        i++;
+    }
+    assert(sum === 45);
+
+    sum = 0;
+    i = 0;
+    for (; ; ) {
+        if (i >= 10) {
+            break;
+        }
+        sum += i;
+        i++;
+    }
+    assert(sum === 45);
+
+    sum = 0;
+    i = 0;
+    while (i < 10) {
+        sum += i;
+        i++;
+    }
+    assert(sum === 45);
+
+    "#,
+    Value::undefined()
+);
+
+simple_test!(
+    ternary_assignment_same_level,
+    r#"
+    let x = {};
+    true ? x.a = 1 : x.b = 2;
+    assert(x.a === 1);
+    assert(x.b === undefined);
+    "#,
+    Value::undefined()
+);
