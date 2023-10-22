@@ -25,6 +25,7 @@ members = [
     "crates/dash_log",
     "crates/dash_rt_net",
     "crates/dash_typed_cfg",
+    "crates/dash_node_impl",
 ]
 resolver = "2"
 
