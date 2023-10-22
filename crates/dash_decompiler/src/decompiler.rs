@@ -245,7 +245,7 @@ impl<'buf> FunctionDecompiler<'buf> {
                                 props.push(String::from("<dynamic>"));
                             }
                             ObjectMemberKind::Static | ObjectMemberKind::Getter | ObjectMemberKind::Setter => {
-                                let cid = self.read()?;
+                                let cid = self.read_u16()?;
                                 props.push(DisplayConstant(&self.constants[cid as usize]).to_string());
                             }
                             ObjectMemberKind::Spread => {

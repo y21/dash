@@ -1038,7 +1038,7 @@ mod handlers {
                     obj.insert(key, PropertyValue::static_default(value));
                 }
                 ObjectMemberKind::Static => {
-                    let id = cx.fetch_and_inc_ip();
+                    let id = cx.fetchw_and_inc_ip();
                     // TODO: optimization opportunity: do not reallocate string from Rc<str>
                     let key = String::from(cx.identifier_constant(id.into()).as_ref());
                     let value = cx.pop_stack_rooted();
@@ -1048,7 +1048,7 @@ mod handlers {
                     );
                 }
                 ObjectMemberKind::Getter => {
-                    let id = cx.fetch_and_inc_ip();
+                    let id = cx.fetchw_and_inc_ip();
                     let key = PropertyKey::String(Cow::Owned(String::from(cx.identifier_constant(id.into()).as_ref())));
                     let Value::Object(value) = cx.pop_stack_rooted() else {
                         panic!("Getter is not an object");
@@ -1061,7 +1061,7 @@ mod handlers {
                         .or_insert_with(|| PropertyValue::getter_default(value.clone()));
                 }
                 ObjectMemberKind::Setter => {
-                    let id = cx.fetch_and_inc_ip();
+                    let id = cx.fetchw_and_inc_ip();
                     let key = PropertyKey::String(Cow::Owned(String::from(cx.identifier_constant(id.into()).as_ref())));
                     let Value::Object(value) = cx.pop_stack_rooted() else {
                         panic!("Setter is not an object");

@@ -225,12 +225,10 @@ impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
                 .current_function_mut()
                 .cp
                 .add(Constant::Identifier(name))
-                .map_err(|_| Error::ConstantPoolLimitExceeded(span))?
-                .try_into()
                 .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
 
             ib.write(kind_id);
-            ib.write(id);
+            ib.writew(id);
             Ok(())
         }
 
