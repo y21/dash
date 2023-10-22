@@ -25,9 +25,14 @@ impl<'a, 'interner> Parser<'a, 'interner> {
     }
 
     fn parse_sequence(&mut self) -> Option<Expr> {
-        // TODO: sequence is currently ambiguous and we can't parse it
-        // i.e. x(1, 2) is ambiguous because it could mean x((1, 2)) or x(1, 2)
-        self.parse_yield()
+        let mut expr = self.parse_yield()?;
+
+        while self.expect_token_type_and_skip(&[TokenType::Comma], false) {
+            let right = self.parse_sequence()?;
+            expr = Expr::grouping(vec![expr, right]);
+        }
+
+        Some(expr)
     }
 
     fn parse_yield(&mut self) -> Option<Expr> {
@@ -317,7 +322,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                         if let Some(spread) = self.parse_spread_operator(false) {
                             arguments.push(CallArgumentKind::Spread(spread));
                         } else {
-                            arguments.push(CallArgumentKind::Normal(self.parse_expression()?));
+                            arguments.push(CallArgumentKind::Normal(self.parse_yield()?));
                         }
                     }
 
@@ -370,7 +375,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                     return None;
                 }
             }
-            self.parse_expression()
+            self.parse_yield()
         } else {
             None
         }
@@ -433,7 +438,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                     if let Some(spread) = self.parse_spread_operator(false) {
                         items.push(ArrayMemberKind::Spread(spread));
                     } else {
-                        items.push(ArrayMemberKind::Item(self.parse_expression()?));
+                        items.push(ArrayMemberKind::Item(self.parse_yield()?));
                     }
                 }
                 let rbrace_span = self.previous()?.span;
@@ -510,12 +515,12 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
                     match key {
                         ObjectMemberKind::Spread => {
-                            items.push((key, self.parse_expression()?));
+                            items.push((key, self.parse_yield()?));
                         }
                         ObjectMemberKind::Dynamic(..) | ObjectMemberKind::Static(..) => {
                             if self.expect_token_type_and_skip(&[TokenType::Colon], false) {
                                 // Normal property.
-                                let value = self.parse_expression()?;
+                                let value = self.parse_yield()?;
                                 items.push((key, value));
                             } else if self.expect_token_type_and_skip(&[TokenType::LeftParen], false) {
                                 // Method.
@@ -633,11 +638,13 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 }
 
                 self.new_level_stack.add_level();
-                let mut exprs = vec![self.parse_expression()?];
+                let mut exprs = Vec::new();
 
                 while !self.expect_token_type_and_skip(&[TokenType::RightParen], false) {
                     self.expect_token_type_and_skip(&[TokenType::Comma], false);
-                    exprs.push(self.parse_expression()?);
+                    // TODO: we can rewrite this to use the parse_sequence rule, but that will require
+                    // rewriting the arrow AST transformation to recursively fold sequences
+                    exprs.push(self.parse_yield()?);
                 }
                 self.new_level_stack.pop_level();
 
@@ -786,7 +793,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             self.parse_statement()?
         } else {
             let lo_span = self.current()?.span;
-            let expr = self.parse_expression()?;
+            let expr = self.parse_yield()?;
             let hi_span = self.previous()?.span;
             Statement {
                 kind: StatementKind::Return(ReturnStatement(expr)),

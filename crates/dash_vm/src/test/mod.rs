@@ -237,3 +237,34 @@ simple_test!(
     "#,
     Value::undefined()
 );
+
+simple_test!(
+    sequence_precedence,
+    r#"
+    let x = [...[1,2],[3,4]];
+    assert(x[0] === 1);
+    assert(x[1] === 2);
+    assert(x[2][0] === 3);
+    assert(x[2][1] === 4);
+    let o = {a:1,b:2,...{c:3,d:4},e:5};
+    
+    assert(o.a === 1);
+    assert(o.b === 2);
+    assert(o.c === 3);
+    assert(o.d === 4);
+    assert(o.e === 5);
+    assert(((a, b) => 1, 2) === 2);
+    let sum = (a, b, c, d) => a+b+c+d;
+    assert(sum(...[1, 2, ...[3, 4]]) === 10);
+
+    switch (2) {
+        case 1, 2: 'PASS'; break;
+        default: throw 'FAIL';
+    }
+
+    let v = 1, 2, 3;
+    assert(v === 3);
+    assert((() => 1+2)() === 3);
+    "#,
+    Value::undefined()
+);
