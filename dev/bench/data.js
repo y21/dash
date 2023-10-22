@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1697932690618,
+  "lastUpdate": 1697933141638,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -5657,6 +5657,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 83647,
             "range": "± 1095",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "Timo",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c90d51549a104ea990a04d7358c335eceef8ff01",
+          "message": "Merge pull request #73 from y21/node\n\ninitial node-compat mode",
+          "timestamp": "2023-10-22T02:02:16+02:00",
+          "tree_id": "b2285ec2916dc2f4513313b3dd22af90b15b22cb",
+          "url": "https://github.com/y21/dash/commit/c90d51549a104ea990a04d7358c335eceef8ff01"
+        },
+        "date": 1697933140856,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 2782892,
+            "range": "± 3341",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 236446,
+            "range": "± 1533",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 83138,
+            "range": "± 295",
             "unit": "ns/iter"
           }
         ]
