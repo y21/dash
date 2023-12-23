@@ -85,7 +85,7 @@ impl Object for Error {
         &self,
         sc: &mut LocalScope,
         key: PropertyKey,
-    ) -> Result<Option<PropertyValue>, Value> {
+    ) -> Result<Option<PropertyValue>, Unrooted> {
         match key {
             PropertyKey::String(s) if s == "name" => {
                 Ok(Some(PropertyValue::static_default(Value::String(self.name.clone()))))
@@ -116,7 +116,7 @@ impl Object for Error {
         callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         self.obj.apply(scope, callee, this, args)
     }
 

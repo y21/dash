@@ -12,6 +12,7 @@ use super::object::Object;
 use super::object::PropertyKey;
 use super::object::PropertyValue;
 use super::ops::abstractions::conversions::ValueConversion;
+use super::Root;
 use super::Unrooted;
 use super::Value;
 
@@ -86,7 +87,7 @@ impl Object for TypedArray {
         &self,
         sc: &mut LocalScope,
         key: PropertyKey,
-    ) -> Result<Option<PropertyValue>, Value> {
+    ) -> Result<Option<PropertyValue>, Unrooted> {
         if let Some(Ok(index)) = key.as_string().map(|k| k.parse::<usize>()) {
             let arraybuffer = self.arraybuffer.as_any().downcast_ref::<ArrayBuffer>();
 
@@ -136,7 +137,7 @@ impl Object for TypedArray {
             let arraybuffer = self.arraybuffer.as_any().downcast_ref::<ArrayBuffer>();
 
             // TODO: not undefined as this
-            let value = value.kind().get_or_apply(sc, Value::undefined())?;
+            let value = value.kind().get_or_apply(sc, Value::undefined()).root(sc)?;
             let value = value.to_number(sc)?;
             if let Some(arraybuffer) = arraybuffer {
                 let bytes = arraybuffer.storage();
@@ -195,7 +196,7 @@ impl Object for TypedArray {
         callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         self.obj.apply(scope, callee, this, args)
     }
 

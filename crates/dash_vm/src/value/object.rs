@@ -9,7 +9,7 @@ use crate::{gc::handle::Handle, localscope::LocalScope, throw, Vm};
 use super::{
     ops::abstractions::conversions::ValueConversion,
     primitive::{PrimitiveCapabilities, Symbol},
-    ExternalValue, Typeof, Unrooted, Value, ValueContext,
+    ExternalValue, Root, Typeof, Unrooted, Value, ValueContext,
 };
 
 pub type ObjectMap<K, V> = ahash::HashMap<K, V>;
@@ -18,7 +18,7 @@ pub type ObjectMap<K, V> = ahash::HashMap<K, V>;
 fn __assert_trait_object_safety(_: Box<dyn Object>) {}
 
 pub trait Object: Debug + Trace {
-    fn get_own_property(&self, sc: &mut LocalScope, this: Value, key: PropertyKey) -> Result<Value, Value> {
+    fn get_own_property(&self, sc: &mut LocalScope, this: Value, key: PropertyKey) -> Result<Unrooted, Unrooted> {
         delegate_get_own_property(self, this, sc, key)
     }
 
@@ -26,13 +26,17 @@ pub trait Object: Debug + Trace {
         &self,
         sc: &mut LocalScope,
         key: PropertyKey,
-    ) -> Result<Option<PropertyValue>, Value>;
+    ) -> Result<Option<PropertyValue>, Unrooted>;
 
-    fn get_property(&self, sc: &mut LocalScope, this: Value, key: PropertyKey) -> Result<Value, Value> {
+    fn get_property(&self, sc: &mut LocalScope, this: Value, key: PropertyKey) -> Result<Unrooted, Unrooted> {
         delegate_get_property(self, this, sc, key)
     }
 
-    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
+    fn get_property_descriptor(
+        &self,
+        sc: &mut LocalScope,
+        key: PropertyKey,
+    ) -> Result<Option<PropertyValue>, Unrooted> {
         let own_descriptor = self.get_own_property_descriptor(sc, key.clone())?;
         if own_descriptor.is_some() {
             return Ok(own_descriptor);
@@ -60,7 +64,7 @@ pub trait Object: Debug + Trace {
         callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
-    ) -> Result<Value, Value>;
+    ) -> Result<Unrooted, Unrooted>;
 
     fn construct(
         &self,
@@ -68,7 +72,7 @@ pub trait Object: Debug + Trace {
         callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         self.apply(scope, callee, this, args)
     }
 
@@ -92,7 +96,7 @@ macro_rules! delegate {
             &self,
             sc: &mut $crate::localscope::LocalScope,
             key: $crate::value::object::PropertyKey,
-        ) -> Result<Option<$crate::value::object::PropertyValue>, $crate::value::Value> {
+        ) -> Result<Option<$crate::value::object::PropertyValue>, $crate::value::Unrooted> {
             self.$field.get_own_property_descriptor(sc, key)
         }
     };
@@ -102,7 +106,7 @@ macro_rules! delegate {
             sc: &mut $crate::localscope::LocalScope,
             this: $crate::value::Value,
             key: $crate::value::object::PropertyKey,
-        ) -> Result<$crate::value::Value, $crate::value::Value> {
+        ) -> Result<$crate::value::Unrooted, $crate::value::Unrooted> {
             $crate::value::object::Object::get_property(&self.$field, sc, this, key)
         }
     };
@@ -111,7 +115,7 @@ macro_rules! delegate {
             &self,
             sc: &mut $crate::localscope::LocalScope,
             key: $crate::value::object::PropertyKey,
-        ) -> Result<Option<$crate::value::object::PropertyValue>, $crate::value::Value> {
+        ) -> Result<Option<$crate::value::object::PropertyValue>, $crate::value::Unrooted> {
             self.$field.get_property_descriptor(sc, key)
         }
     };
@@ -161,7 +165,7 @@ macro_rules! delegate {
             handle: $crate::gc::handle::Handle<dyn Object>,
             this: $crate::value::Value,
             args: Vec<$crate::value::Value>,
-        ) -> Result<$crate::value::Value, $crate::value::Value> {
+        ) -> Result<$crate::value::Unrooted, $crate::value::Unrooted> {
             $crate::value::object::Object::apply(&self.$field, sc, handle, this, args)
         }
     };
@@ -172,7 +176,7 @@ macro_rules! delegate {
             handle: $crate::gc::handle::Handle<dyn Object>,
             this: $crate::value::Value,
             args: Vec<$crate::value::Value>,
-        ) -> Result<$crate::value::Value, $crate::value::Value> {
+        ) -> Result<$crate::value::Unrooted, $crate::value::Unrooted> {
             $crate::value::object::Object::construct(&self.$field, sc, handle, this, args)
         }
     };
@@ -278,7 +282,7 @@ impl PropertyValue {
         self.kind
     }
 
-    pub fn get_or_apply(&self, sc: &mut LocalScope, this: Value) -> Result<Value, Value> {
+    pub fn get_or_apply(&self, sc: &mut LocalScope, this: Value) -> Result<Unrooted, Unrooted> {
         self.kind.get_or_apply(sc, this)
     }
 
@@ -326,9 +330,9 @@ impl PropertyValue {
 
     pub fn from_descriptor_value(sc: &mut LocalScope<'_>, value: Value) -> Result<Self, Value> {
         let mut flags = PropertyDataDescriptor::empty();
-        let configurable = value.get_property(sc, "configurable".into())?.into_option();
-        let enumerable = value.get_property(sc, "enumerable".into())?.into_option();
-        let writable = value.get_property(sc, "writable".into())?.into_option();
+        let configurable = value.get_property(sc, "configurable".into()).root(sc)?.into_option();
+        let enumerable = value.get_property(sc, "enumerable".into()).root(sc)?.into_option();
+        let writable = value.get_property(sc, "writable".into()).root(sc)?.into_option();
 
         if configurable.map_or(true, |v| v.is_truthy()) {
             flags |= PropertyDataDescriptor::CONFIGURABLE;
@@ -342,19 +346,21 @@ impl PropertyValue {
 
         // TODO: make sure that if value is set, get/set are not
 
-        let static_value = value.get_property(sc, "value".into())?.into_option();
+        let static_value = value.get_property(sc, "value".into()).root(sc)?.into_option();
         let kind = match static_value {
             Some(static_value) => PropertyValueKind::Static(static_value),
             None => {
                 let get = value
-                    .get_property(sc, "get".into())?
+                    .get_property(sc, "get".into())
+                    .root(sc)?
                     .into_option()
                     .and_then(|v| match v {
                         Value::Object(o) => Some(o),
                         _ => None,
                     });
                 let set = value
-                    .get_property(sc, "set".into())?
+                    .get_property(sc, "set".into())
+                    .root(sc)?
                     .into_option()
                     .and_then(|v| match v {
                         Value::Object(o) => Some(o),
@@ -369,6 +375,7 @@ impl PropertyValue {
     }
 }
 
+// TODO: these handles should be "hidden" behind something similar to the `Unrooted` value
 #[derive(Debug, Clone)]
 pub enum PropertyValueKind {
     /// Accessor property
@@ -403,12 +410,12 @@ impl PropertyValueKind {
         }
     }
 
-    pub fn get_or_apply(&self, sc: &mut LocalScope, this: Value) -> Result<Value, Value> {
+    pub fn get_or_apply(&self, sc: &mut LocalScope, this: Value) -> Result<Unrooted, Unrooted> {
         match self {
-            Self::Static(value) => Ok(value.clone()),
+            Self::Static(value) => Ok(value.clone().into()),
             Self::Trap { get, .. } => match get {
                 Some(handle) => handle.apply(sc, this, Vec::new()),
-                None => Ok(Value::undefined()),
+                None => Ok(Value::undefined().into()),
             },
         }
     }
@@ -538,7 +545,7 @@ impl Object for NamedObject {
         &self,
         sc: &mut LocalScope,
         key: PropertyKey,
-    ) -> Result<Option<PropertyValue>, Value> {
+    ) -> Result<Option<PropertyValue>, Unrooted> {
         if let PropertyKey::String(st) = &key {
             match st.as_ref() {
                 "__proto__" => return Ok(Some(PropertyValue::static_default(self.get_prototype(sc)?))),
@@ -633,8 +640,8 @@ impl Object for NamedObject {
         _handle: Handle<dyn Object>,
         _this: Value,
         _args: Vec<Value>,
-    ) -> Result<Value, Value> {
-        Ok(Value::undefined())
+    ) -> Result<Unrooted, Unrooted> {
+        Ok(Value::undefined().into())
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -667,7 +674,7 @@ impl Object for NamedObject {
 }
 
 impl Object for Box<dyn Object> {
-    fn get_own_property(&self, sc: &mut LocalScope, this: Value, key: PropertyKey) -> Result<Value, Value> {
+    fn get_own_property(&self, sc: &mut LocalScope, this: Value, key: PropertyKey) -> Result<Unrooted, Unrooted> {
         (**self).get_own_property(sc, this, key)
     }
 
@@ -675,15 +682,19 @@ impl Object for Box<dyn Object> {
         &self,
         sc: &mut LocalScope,
         key: PropertyKey,
-    ) -> Result<Option<PropertyValue>, Value> {
+    ) -> Result<Option<PropertyValue>, Unrooted> {
         (**self).get_own_property_descriptor(sc, key)
     }
 
-    fn get_property(&self, sc: &mut LocalScope, this: Value, key: PropertyKey) -> Result<Value, Value> {
+    fn get_property(&self, sc: &mut LocalScope, this: Value, key: PropertyKey) -> Result<Unrooted, Unrooted> {
         (**self).get_property(sc, this, key)
     }
 
-    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
+    fn get_property_descriptor(
+        &self,
+        sc: &mut LocalScope,
+        key: PropertyKey,
+    ) -> Result<Option<PropertyValue>, Unrooted> {
         (**self).get_property_descriptor(sc, key)
     }
 
@@ -709,7 +720,7 @@ impl Object for Box<dyn Object> {
         callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         (**self).apply(scope, callee, this, args)
     }
 
@@ -719,7 +730,7 @@ impl Object for Box<dyn Object> {
         callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         (**self).construct(scope, callee, this, args)
     }
 
@@ -741,7 +752,7 @@ impl Object for Box<dyn Object> {
 }
 
 impl Object for Handle<dyn Object> {
-    fn get_own_property(&self, sc: &mut LocalScope, this: Value, key: PropertyKey) -> Result<Value, Value> {
+    fn get_own_property(&self, sc: &mut LocalScope, this: Value, key: PropertyKey) -> Result<Unrooted, Unrooted> {
         (**self).get_own_property(sc, this, key)
     }
 
@@ -749,15 +760,19 @@ impl Object for Handle<dyn Object> {
         &self,
         sc: &mut LocalScope,
         key: PropertyKey,
-    ) -> Result<Option<PropertyValue>, Value> {
+    ) -> Result<Option<PropertyValue>, Unrooted> {
         (**self).get_own_property_descriptor(sc, key)
     }
 
-    fn get_property(&self, sc: &mut LocalScope, this: Value, key: PropertyKey) -> Result<Value, Value> {
+    fn get_property(&self, sc: &mut LocalScope, this: Value, key: PropertyKey) -> Result<Unrooted, Unrooted> {
         (**self).get_property(sc, this, key)
     }
 
-    fn get_property_descriptor(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Option<PropertyValue>, Value> {
+    fn get_property_descriptor(
+        &self,
+        sc: &mut LocalScope,
+        key: PropertyKey,
+    ) -> Result<Option<PropertyValue>, Unrooted> {
         (**self).get_property_descriptor(sc, key)
     }
 
@@ -783,7 +798,7 @@ impl Object for Handle<dyn Object> {
         callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         (**self).apply(scope, callee, this, args)
     }
 
@@ -793,7 +808,7 @@ impl Object for Handle<dyn Object> {
         callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         (**self).construct(scope, callee, this, args)
     }
 
@@ -815,54 +830,60 @@ impl Object for Handle<dyn Object> {
 }
 
 impl Handle<ExternalValue> {
-    pub fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+    pub fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Unrooted> {
         self.inner.get_property(sc, key)
     }
 
-    pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
+    pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
         self.inner.apply(sc, this, args)
     }
 
-    pub fn construct(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
+    pub fn construct(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
         self.inner.construct(sc, this, args)
     }
+
+    // FIXME: should override typeof, as_primitive_capable, etc.
 }
 
 impl Handle<dyn Object> {
-    pub fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+    pub fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Unrooted> {
         (**self).get_property(sc, Value::Object(self.clone()), key)
     }
 
-    pub fn get_own_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+    pub fn get_own_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Unrooted> {
         (**self).get_own_property(sc, Value::Object(self.clone()), key)
     }
 
-    pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
+    pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
         let callee = self.clone();
         (**self).apply(sc, callee, this, args)
     }
 
-    pub fn construct(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
+    pub fn construct(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
         let callee = self.clone();
         (**self).construct(sc, callee, this, args)
     }
+
+    // FIXME: should override typeof, as_primitive_capable, etc.
 }
 
 impl Persistent<dyn Object> {
-    pub fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+    pub fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Unrooted> {
         let callee = self.handle().clone();
         (**self).get_property(sc, Value::Object(callee), key)
     }
 
-    pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
+    pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
         let callee = self.handle().clone();
         (**self).apply(sc, callee, this, args)
     }
 
-    pub fn construct(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
+    pub fn construct(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
         let callee = self.handle().clone();
         (**self).construct(sc, callee, this, args)
     }
+
+    // FIXME: should override typeof, as_primitive_capable, etc.
 }
 
 /// Delegates a get_property call to get_property_descriptor and converts the return value respectively
@@ -871,7 +892,7 @@ pub fn delegate_get_property<T: Object + ?Sized>(
     this_value: Value,
     sc: &mut LocalScope,
     key: PropertyKey,
-) -> Result<Value, Value> {
+) -> Result<Unrooted, Unrooted> {
     this.get_property_descriptor(sc, key)
         .map(|x| x.unwrap_or_else(|| PropertyValue::static_default(Value::undefined())))
         .and_then(|x| x.get_or_apply(sc, this_value))
@@ -882,7 +903,7 @@ pub fn delegate_get_own_property<T: Object + ?Sized>(
     this_value: Value,
     sc: &mut LocalScope,
     key: PropertyKey,
-) -> Result<Value, Value> {
+) -> Result<Unrooted, Unrooted> {
     this.get_own_property_descriptor(sc, key)
         .map(|x| x.unwrap_or_else(|| PropertyValue::static_default(Value::undefined())))
         .and_then(|x| x.get_or_apply(sc, this_value))

@@ -4,6 +4,7 @@ use crate::value::function::native::CallContext;
 use crate::value::object::NamedObject;
 use crate::value::object::Object;
 use crate::value::object::PropertyValue;
+use crate::value::Root;
 use crate::value::Value;
 use crate::value::ValueContext;
 
@@ -13,7 +14,7 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
         None => throw!(cx.scope, TypeError, "Incompatible receiver"),
     };
 
-    let next = iterator.next(cx.scope)?;
+    let next = iterator.next(cx.scope).root(cx.scope)?;
     let done = next.is_none();
 
     let obj = NamedObject::new(cx.scope);

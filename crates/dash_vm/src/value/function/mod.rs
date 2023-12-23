@@ -170,23 +170,31 @@ fn handle_call(
     this: Value,
     args: Vec<Value>,
     is_constructor_call: bool,
-) -> Result<Value, Value> {
+) -> Result<Unrooted, Unrooted> {
     match &fun.kind {
         FunctionKind::Native(native) => {
             let cx = match is_constructor_call {
                 true => CallContext::constructor(args, scope, this),
                 false => CallContext::call(args, scope, this),
             };
-            native(cx)
+            match native(cx) {
+                Ok(v) => Ok(v.into()),
+                Err(v) => Err(v.into()),
+            }
         }
         FunctionKind::User(fun) => fun
             .handle_function_call(scope, this, args, is_constructor_call)
             .map(|v| match v {
-                HandleResult::Return(v) => v.root(scope),
+                HandleResult::Return(v) => v,
                 HandleResult::Yield(..) | HandleResult::Await(..) => unreachable!(), // UserFunction cannot `yield`/`await`
-            }),
-        FunctionKind::Async(fun) => fun.handle_function_call(scope, callee, this, args, is_constructor_call),
-        FunctionKind::Generator(fun) => fun.handle_function_call(scope, callee, this, args, is_constructor_call),
+            })
+            .map_err(Into::into),
+        FunctionKind::Async(fun) => fun
+            .handle_function_call(scope, callee, this, args, is_constructor_call)
+            .map(Into::into),
+        FunctionKind::Generator(fun) => fun
+            .handle_function_call(scope, callee, this, args, is_constructor_call)
+            .map(Into::into),
     }
 }
 
@@ -195,7 +203,7 @@ impl Object for Function {
         &self,
         sc: &mut LocalScope,
         key: PropertyKey,
-    ) -> Result<Option<PropertyValue>, Value> {
+    ) -> Result<Option<PropertyValue>, Unrooted> {
         if let Some(key) = key.as_string() {
             match key {
                 "name" => {
@@ -227,7 +235,7 @@ impl Object for Function {
         callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         handle_call(self, scope, callee, this, args, false)
     }
 
@@ -237,7 +245,7 @@ impl Object for Function {
         callee: Handle<dyn Object>,
         _this: Value,
         args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         let this = self.new_instance(callee.clone(), scope)?;
         handle_call(self, scope, callee, Value::Object(this), args, true)
     }

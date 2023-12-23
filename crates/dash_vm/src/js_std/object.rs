@@ -8,6 +8,8 @@ use crate::value::object::Object;
 use crate::value::object::PropertyKey;
 use crate::value::object::PropertyValue;
 use crate::value::ops::abstractions::conversions::ValueConversion;
+use crate::value::root_ext::RootErrExt;
+use crate::value::Root;
 use crate::value::Value;
 use crate::value::ValueContext;
 
@@ -39,9 +41,12 @@ pub fn keys(cx: CallContext) -> Result<Value, Value> {
 pub fn to_string(cx: CallContext) -> Result<Value, Value> {
     fn to_string_inner(scope: &mut LocalScope<'_>, o: &Handle<dyn Object>) -> Result<Value, Value> {
         let constructor = o
-            .get_property(scope, "constructor".into())?
-            .get_property(scope, "name".into())?
+            .get_property(scope, "constructor".into())
+            .root(scope)?
+            .get_property(scope, "name".into())
+            .root(scope)?
             .to_string(scope)?;
+
         Ok(Value::String(format!("[object {constructor}]").into()))
     }
 
@@ -70,7 +75,8 @@ pub fn get_own_property_descriptor(cx: CallContext) -> Result<Value, Value> {
     let k = cx.args.get(1).unwrap_or_undefined();
     let k = PropertyKey::from_value(cx.scope, k)?;
 
-    Ok(o.get_property_descriptor(cx.scope, k)?
+    Ok(o.get_property_descriptor(cx.scope, k)
+        .root_err(cx.scope)?
         .map(|d| d.to_descriptor_value(cx.scope))
         .transpose()?
         .unwrap_or_undefined())
@@ -94,7 +100,8 @@ pub fn get_own_property_descriptors(cx: CallContext) -> Result<Value, Value> {
     for key in keys {
         let key = PropertyKey::from_value(cx.scope, key)?;
         let descriptor = o
-            .get_property_descriptor(cx.scope, key)?
+            .get_property_descriptor(cx.scope, key)
+            .root_err(cx.scope)?
             .map(|d| d.to_descriptor_value(cx.scope))
             .transpose()?
             .unwrap_or_undefined();
@@ -119,7 +126,7 @@ pub fn has_own_property(cx: CallContext) -> Result<Value, Value> {
 
     let key = cx.args.first().unwrap_or_undefined();
     let key = PropertyKey::from_value(cx.scope, key)?;
-    let desc = o.get_property_descriptor(cx.scope, key)?;
+    let desc = o.get_property_descriptor(cx.scope, key).root_err(cx.scope)?;
     Ok(Value::Boolean(desc.is_some()))
 }
 
@@ -159,7 +166,7 @@ pub fn assign(cx: CallContext) -> Result<Value, Value> {
         let source = source.to_object(cx.scope)?;
         for key in source.own_keys()? {
             let key = PropertyKey::from_value(cx.scope, key)?;
-            let desc = source.get_own_property(cx.scope, key.clone())?;
+            let desc = source.get_own_property(cx.scope, key.clone()).root(cx.scope)?;
             to.set_property(cx.scope, key, PropertyValue::static_default(desc))?;
         }
     }
@@ -171,7 +178,7 @@ pub fn entries(cx: CallContext) -> Result<Value, Value> {
     let obj = cx.args.first().unwrap_or_undefined().to_object(cx.scope)?;
     for key in obj.own_keys()? {
         let key = PropertyKey::from_value(cx.scope, key)?;
-        let value = obj.get_own_property(cx.scope, key.clone())?;
+        let value = obj.get_own_property(cx.scope, key.clone()).root(cx.scope)?;
         let entry = Array::from_vec(
             cx.scope,
             vec![

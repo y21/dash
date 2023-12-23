@@ -3,6 +3,7 @@ use crate::value::function::native::CallContext;
 use crate::value::object::PropertyKey;
 use crate::value::ops::abstractions::conversions::ValueConversion;
 use crate::value::set::Set;
+use crate::value::Root;
 use crate::value::Value;
 use crate::value::ValueContext;
 
@@ -13,7 +14,10 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
 
         for i in 0..len {
             let i = i.to_string();
-            let item = iter.get_property(cx.scope, PropertyKey::String(i.into()))?;
+            let item = iter
+                .get_property(cx.scope, PropertyKey::String(i.into()))
+                .root(cx.scope)?;
+
             set.add(item);
         }
     }

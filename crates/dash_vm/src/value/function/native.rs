@@ -1,6 +1,7 @@
 use crate::localscope::LocalScope;
 use crate::value::Value;
 
+// TODO: return Unrooted?
 pub type NativeFunction = fn(cx: CallContext) -> Result<Value, Value>;
 
 #[derive(Debug)]

@@ -164,6 +164,7 @@ impl<'vm> LocalScope<'vm> {
         self.scope_data_mut().refs.append(&mut v);
     }
 
+    /// Registers an object and roots it.
     pub fn register<O: Object + 'static>(&mut self, obj: O) -> Handle<dyn Object> {
         let handle = self.deref_mut().register(obj);
         self.add_ref(handle.clone());

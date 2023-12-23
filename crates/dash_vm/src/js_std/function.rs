@@ -2,6 +2,7 @@ use crate::throw;
 use crate::value::function::bound::BoundFunction;
 use crate::value::function::native::CallContext;
 use crate::value::function::Function;
+use crate::value::Root;
 use crate::value::Typeof;
 use crate::value::Value;
 
@@ -29,11 +30,13 @@ pub fn call(cx: CallContext) -> Result<Value, Value> {
         _ => throw!(cx.scope, TypeError, "Bound value must be a function"),
     };
 
-    target_callee.apply(
-        cx.scope,
-        target_this.unwrap_or_else(Value::undefined),
-        target_args.unwrap_or_default(),
-    )
+    target_callee
+        .apply(
+            cx.scope,
+            target_this.unwrap_or_else(Value::undefined),
+            target_args.unwrap_or_default(),
+        )
+        .root(cx.scope)
 }
 
 pub fn to_string(cx: CallContext) -> Result<Value, Value> {

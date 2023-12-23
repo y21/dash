@@ -8,6 +8,7 @@ use crate::value::object::NamedObject;
 use crate::value::object::Object;
 use crate::value::object::PropertyValue;
 use crate::value::primitive::Number;
+use crate::value::Root;
 use crate::value::Value;
 use crate::Vm;
 
@@ -54,7 +55,7 @@ fn simple() {
         .unwrap()
         .root(&mut scope);
     scope.perform_gc();
-    let value = array.get_property(&mut scope, "0".into()).unwrap();
+    let value = array.get_property(&mut scope, "0".into()).unwrap().root(&mut scope);
     assert_eq!(scope.stack.len(), 0);
     assert_eq!(scope.frames.len(), 0);
     assert_eq!(value, Value::number(6.0));
@@ -100,7 +101,8 @@ fn persistent_trace() {
     assert!(vm.external_refs.len() == 1);
 
     // Check that p1 and object are still alive after GC.
-    let p = p1.get_property(&mut vm.scope(), "foo".into()).unwrap();
+    let mut scope = vm.scope();
+    let p = p1.get_property(&mut scope, "foo".into()).unwrap().root(&mut scope);
     assert_eq!(p.downcast_ref::<Rc<str>>().unwrap().as_ref(), "hi");
 }
 

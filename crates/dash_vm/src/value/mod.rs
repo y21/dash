@@ -38,14 +38,14 @@ use self::{
     object::{Object, PropertyKey},
     primitive::Symbol,
 };
+use super::{localscope::LocalScope, Vm};
 
 // Impl detail: must be repr(C) because we do
 // raw pointer arithmetic to access the data ptr/vtable ptr
 // directly from JIT code and we don't want the optimizer
 // to mess with it.
-use super::{localscope::LocalScope, Vm};
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[repr(C)]
+#[cfg_attr(feature = "jit", repr(C))]
 pub enum Value {
     /// The number type
     Number(Number),
@@ -97,10 +97,69 @@ impl Unrooted {
     pub unsafe fn into_value(self) -> Value {
         self.value
     }
+}
 
-    pub fn root(self, scope: &mut LocalScope<'_>) -> Value {
+pub trait Root {
+    type Rooted;
+    fn root(self, scope: &mut LocalScope<'_>) -> Self::Rooted;
+}
+
+pub mod root_ext {
+    use crate::localscope::LocalScope;
+
+    use super::Root;
+
+    pub trait RootOkExt<T: Root, E> {
+        fn root_ok(self, scope: &mut LocalScope<'_>) -> Result<T::Rooted, E>;
+    }
+
+    impl<T: Root, E> RootOkExt<T, E> for Result<T, E> {
+        fn root_ok(self, scope: &mut LocalScope<'_>) -> Result<T::Rooted, E> {
+            match self {
+                Ok(v) => Ok(v.root(scope)),
+                Err(e) => Err(e),
+            }
+        }
+    }
+
+    pub trait RootErrExt<T, E: Root> {
+        fn root_err(self, scope: &mut LocalScope<'_>) -> Result<T, E::Rooted>;
+    }
+
+    impl<T, E: Root> RootErrExt<T, E> for Result<T, E> {
+        fn root_err(self, scope: &mut LocalScope<'_>) -> Result<T, E::Rooted> {
+            match self {
+                Ok(v) => Ok(v),
+                Err(e) => Err(e.root(scope)),
+            }
+        }
+    }
+}
+
+impl Root for Unrooted {
+    type Rooted = Value;
+    fn root(self, scope: &mut LocalScope<'_>) -> Self::Rooted {
         scope.add_value(self.value.clone());
         self.value
+    }
+}
+
+impl<T: Root, E: Root> Root for Result<T, E> {
+    type Rooted = Result<T::Rooted, E::Rooted>;
+
+    fn root(self, scope: &mut LocalScope<'_>) -> Self::Rooted {
+        match self {
+            Ok(v) => Ok(v.root(scope)),
+            Err(e) => Err(e.root(scope)),
+        }
+    }
+}
+
+impl<T: Root> Root for Option<T> {
+    type Rooted = Option<T::Rooted>;
+
+    fn root(self, scope: &mut LocalScope<'_>) -> Self::Rooted {
+        self.map(|v| v.root(scope))
     }
 }
 
@@ -160,7 +219,7 @@ impl Object for ExternalValue {
         _callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         self.inner.apply(scope, this, args)
     }
 
@@ -170,7 +229,7 @@ impl Object for ExternalValue {
         _callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         self.inner.construct(scope, this, args)
     }
 }
@@ -289,7 +348,7 @@ impl Value {
         }
     }
 
-    pub fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Value, Value> {
+    pub fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Unrooted> {
         match self {
             Self::Object(o) => o.get_property(sc, key),
             Self::Number(n) => n.get_property(sc, self.clone(), key),
@@ -315,7 +374,7 @@ impl Value {
         }
     }
 
-    pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
+    pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
         match self {
             Self::Object(o) => o.apply(sc, this, args),
             Self::External(o) => o.apply(sc, this, args),
@@ -328,7 +387,7 @@ impl Value {
         }
     }
 
-    pub fn construct(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Value, Value> {
+    pub fn construct(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
         match self {
             Self::Object(o) => o.construct(sc, this, args),
             Self::External(o) => o.construct(sc, this, args),
@@ -418,7 +477,7 @@ impl Value {
             _ => return Ok(false),
         };
 
-        let target_proto = ctor.get_property(sc, "prototype".into())?;
+        let target_proto = ctor.get_property(sc, "prototype".into()).root(sc)?;
         let mut this_proto = obj.get_prototype(sc)?;
         // Look if self[prototype] == ctor.prototype, repeat for all objects in self's prototype chain
         loop {

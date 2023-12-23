@@ -11,7 +11,7 @@ use crate::{
     frame::Frame,
     gc::handle::Handle,
     localscope::LocalScope,
-    value::{ExternalValue, Unrooted},
+    value::{ExternalValue, Root, Unrooted},
 };
 
 use super::{value::Value, Vm};
@@ -439,7 +439,7 @@ mod handlers {
             None => cx.global.clone().get_property(&mut cx, name.as_ref().into())?,
         };
 
-        cx.stack.push(value);
+        cx.push_stack(value);
         Ok(None)
     }
 
@@ -454,8 +454,8 @@ mod handlers {
                 let value = cx
                     .global
                     .clone()
-                    .get_property(&mut cx, PropertyKey::String(Cow::Borrowed(&name)))?;
-                cx.scope.add_value(value.clone());
+                    .get_property(&mut cx, PropertyKey::String(Cow::Borrowed(&name)))
+                    .root(cx.scope)?;
 
                 let res = $op(&value, &right, &mut cx)?;
                 cx.global.clone().set_property(
@@ -472,7 +472,8 @@ mod handlers {
                 let value = cx
                     .global
                     .clone()
-                    .get_property(&mut cx, PropertyKey::String(Cow::Borrowed(&name)))?;
+                    .get_property(&mut cx, PropertyKey::String(Cow::Borrowed(&name)))
+                    .root(cx.scope)?;
                 let value = Value::number(value.to_number(&mut cx)?);
 
                 let right = Value::number(1.0);
@@ -491,7 +492,8 @@ mod handlers {
                 let value = cx
                     .global
                     .clone()
-                    .get_property(&mut cx, PropertyKey::String(Cow::Borrowed(&name)))?;
+                    .get_property(&mut cx, PropertyKey::String(Cow::Borrowed(&name)))
+                    .root(cx.scope)?;
                 let value = Value::number(value.to_number(&mut cx)?);
 
                 let right = Value::number(1.0);
@@ -571,10 +573,14 @@ mod handlers {
                 let iterable = cx.stack[adjusted_spread_index].clone();
                 let length = iterable.length_of_array_like(cx.scope)?;
 
-                let mut splice_args = SmallVec::<[_; 4]>::new();
+                let mut splice_args = SmallVec::<[_; 2]>::new();
 
                 for i in 0..length {
-                    let value = iterable.get_property(&mut cx, i.to_string().into())?;
+                    let value = unsafe {
+                        // SAFETY: Rooting is not necessary here because the values being pushed to `splice_args`
+                        // are directly "injected" into the value stack
+                        iterable.get_property(&mut cx, i.to_string().into())?.into_value()
+                    };
                     splice_args.push(value);
                 }
                 cx.stack
@@ -634,10 +640,8 @@ mod handlers {
                     if indices_iter.peek().is_some_and(|&v| usize::from(v) == index) {
                         let len = value.length_of_array_like(cx.scope)?;
                         for _ in 0..len {
-                            let value = value.get_property(&mut cx, index.to_string().into())?;
-                            if let Value::Object(handle) = &value {
-                                refs.push(handle.clone());
-                            }
+                            let value = value.get_property(&mut cx, index.to_string().into())?.root(cx.scope);
+                            // NB: no need to push into `refs` since we already rooted it
                             args.push(value);
                         }
                         indices_iter.next();
@@ -661,7 +665,8 @@ mod handlers {
             callee.apply(&mut cx, this, args)?
         };
 
-        cx.stack.push(ret);
+        // SAFETY: no need to root, we're directly pushing into the value stack which itself is a root
+        cx.push_stack(ret);
         Ok(None)
     }
 
@@ -1010,7 +1015,7 @@ mod handlers {
                     // TODO: make this work for array-like values, not just arrays, by calling @@iterator on it
                     let len = value.length_of_array_like(cx.scope)?;
                     for i in 0..len {
-                        let value = value.get_property(cx.scope, i.to_string().into())?;
+                        let value = value.get_property(cx.scope, i.to_string().into())?.root(cx.scope);
                         new_elements.push(PropertyValue::static_default(value));
                     }
                 }
@@ -1078,7 +1083,7 @@ mod handlers {
                     if let Value::Object(target) = &value {
                         for key in target.own_keys()? {
                             let key = PropertyKey::from_value(cx.scope, key)?;
-                            let value = target.get_property(&mut cx, key.clone())?;
+                            let value = target.get_property(&mut cx, key.clone())?.root(cx.scope);
                             obj.insert(key, PropertyValue::static_default(value));
                         }
                     }
@@ -1107,7 +1112,7 @@ mod handlers {
         };
 
         let value = target.get_property(&mut cx, ident.as_ref().into())?;
-        cx.stack.push(value);
+        cx.push_stack(value);
         Ok(None)
     }
 
@@ -1123,7 +1128,9 @@ mod handlers {
                 let target = target.root(cx.scope);
                 let value = value.root(cx.scope);
 
-                let p = target.get_property(&mut cx, PropertyKey::String(Cow::Borrowed(&key)))?;
+                let p = target
+                    .get_property(&mut cx, PropertyKey::String(Cow::Borrowed(&key)))?
+                    .root(cx.scope);
                 let res = $op(&p, &value, &mut cx)?;
 
                 target.set_property(
@@ -1138,7 +1145,9 @@ mod handlers {
         macro_rules! postfix {
             ($op:expr) => {{
                 let target = cx.pop_stack_rooted();
-                let prop = target.get_property(&mut cx, PropertyKey::String(Cow::Borrowed(&key)))?;
+                let prop = target
+                    .get_property(&mut cx, PropertyKey::String(Cow::Borrowed(&key)))?
+                    .root(cx.scope);
                 let prop = Value::number(prop.to_number(&mut cx)?);
                 let one = Value::number(1.0);
                 let res = $op(&prop, &one, &mut cx)?;
@@ -1154,7 +1163,9 @@ mod handlers {
         macro_rules! prefix {
             ($op:expr) => {{
                 let target = cx.pop_stack_rooted();
-                let prop = target.get_property(&mut cx, PropertyKey::String(Cow::Borrowed(&key)))?;
+                let prop = target
+                    .get_property(&mut cx, PropertyKey::String(Cow::Borrowed(&key)))?
+                    .root(cx.scope);
                 let prop = Value::number(prop.to_number(&mut cx)?);
                 let one = Value::number(1.0);
                 let res = $op(&prop, &one, &mut cx)?;
@@ -1210,7 +1221,7 @@ mod handlers {
                 let (target, value, key) = cx.pop_stack3_rooted();
 
                 let key = PropertyKey::from_value(&mut cx, key)?;
-                let prop = target.get_property(&mut cx, key.clone())?;
+                let prop = target.get_property(&mut cx, key.clone())?.root(cx.scope);
 
                 let result = $op(&prop, &value, &mut cx)?;
 
@@ -1223,7 +1234,7 @@ mod handlers {
             ($op:expr) => {{
                 let (target, key) = cx.pop_stack2_rooted();
                 let key = PropertyKey::from_value(&mut cx, key)?;
-                let prop = target.get_property(&mut cx, key.clone())?;
+                let prop = target.get_property(&mut cx, key.clone())?.root(cx.scope);
                 let prop = Value::number(prop.to_number(&mut cx)?);
                 let one = Value::number(1.0);
                 let res = $op(&prop, &one, &mut cx)?;
@@ -1236,7 +1247,7 @@ mod handlers {
             ($op:expr) => {{
                 let (target, key) = cx.pop_stack2_rooted();
                 let key = PropertyKey::from_value(&mut cx, key)?;
-                let prop = target.get_property(&mut cx, key.clone())?;
+                let prop = target.get_property(&mut cx, key.clone())?.root(cx.scope);
                 let prop = Value::number(prop.to_number(&mut cx)?);
                 let one = Value::number(1.0);
                 let res = $op(&prop, &one, &mut cx)?;
@@ -1291,7 +1302,7 @@ mod handlers {
         let key = PropertyKey::from_value(&mut cx, key)?;
 
         let value = target.get_property(&mut cx, key)?;
-        cx.stack.push(value);
+        cx.push_stack(value);
         Ok(None)
     }
 
@@ -1472,7 +1483,7 @@ mod handlers {
                     let value = cx.get_local(loc_id.into());
                     let ident = cx.identifier_constant(ident_id.into());
 
-                    (value, ident)
+                    (value.into(), ident)
                 }
                 1 => {
                     // Global variable
@@ -1546,9 +1557,11 @@ mod handlers {
     pub fn call_symbol_iterator<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let value = cx.pop_stack_rooted();
         let symbol_iterator = cx.statics.symbol_iterator.clone();
-        let iterable = value.get_property(&mut cx, PropertyKey::Symbol(symbol_iterator))?;
+        let iterable = value
+            .get_property(&mut cx, PropertyKey::Symbol(symbol_iterator))?
+            .root(cx.scope);
         let iterator = iterable.apply(&mut cx, value, Vec::new())?;
-        cx.stack.push(iterator);
+        cx.push_stack(iterator);
         Ok(None)
     }
 
@@ -1783,15 +1796,18 @@ mod handlers {
                     let k = cx
                         .global
                         .clone()
-                        .get_property(&mut cx, PropertyKey::from(stringify!($k)))?;
-                    let fun = k.get_property(&mut cx, PropertyKey::from(stringify!($v)))?;
+                        .get_property(&mut cx, PropertyKey::from(stringify!($k)))?
+                        .root(cx.scope);
+                    let fun = k
+                        .get_property(&mut cx, PropertyKey::from(stringify!($v)))?
+                        .root(cx.scope);
                     let result = fun.apply(&mut cx, Value::undefined(), args)?;
-                    cx.stack.push(result);
+                    cx.push_stack(result);
                 } else {
                     // Fastpath: call builtin directly
                     // TODO: should we add to externals?
                     let result = fun.apply(&mut cx, Value::undefined(), args)?;
-                    cx.stack.push(result);
+                    cx.push_stack(result);
                 }
             }};
         }

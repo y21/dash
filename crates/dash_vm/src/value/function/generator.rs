@@ -11,6 +11,7 @@ use crate::throw;
 use crate::value::object::NamedObject;
 use crate::value::object::Object;
 use crate::value::Typeof;
+use crate::value::Unrooted;
 use crate::value::Value;
 use crate::Vm;
 
@@ -38,7 +39,7 @@ impl GeneratorFunction {
         _this: Value,
         args: Vec<Value>,
         _is_constructor_call: bool,
-    ) -> Result<Value, Value> {
+    ) -> Result<Value, Unrooted> {
         // Handle edge cases such as provided_args != expected_args
         // by delegating to the usual arg handling logic that occurs with normal user functions
         let args = {
@@ -51,7 +52,7 @@ impl GeneratorFunction {
         };
 
         let iter = GeneratorIterator::new(callee, scope, args);
-        Ok(scope.register(iter).into())
+        Ok(Value::Object(scope.register(iter)).into())
     }
 }
 
@@ -146,7 +147,7 @@ impl Object for GeneratorIterator {
         callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         self.obj.apply(scope, callee, this, args)
     }
 

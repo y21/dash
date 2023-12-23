@@ -8,7 +8,10 @@ use crate::value::object::Object;
 use crate::value::object::PropertyKey;
 use crate::value::promise::wrap_promise;
 use crate::value::promise::Promise;
+use crate::value::root_ext::RootErrExt;
+use crate::value::Root;
 use crate::value::Typeof;
+use crate::value::Unrooted;
 use crate::value::Value;
 use crate::value::ValueContext;
 use crate::PromiseAction;
@@ -39,7 +42,7 @@ impl AsyncFunction {
         this: Value,
         args: Vec<Value>,
         is_constructor_call: bool,
-    ) -> Result<Value, Value> {
+    ) -> Result<Value, Unrooted> {
         let generator_iter = self
             .inner
             .handle_function_call(scope, callee, this, args, is_constructor_call)?;
@@ -49,7 +52,12 @@ impl AsyncFunction {
             .generator_iterator_next
             .clone()
             .apply(scope, generator_iter.clone(), Vec::new())
-            .and_then(|result| result.get_property(scope, PropertyKey::String("value".into())));
+            .root(scope)
+            .and_then(|result| {
+                result
+                    .get_property(scope, PropertyKey::String("value".into()))
+                    .root(scope)
+            });
 
         match &result {
             Ok(value) => {
@@ -69,21 +77,26 @@ impl AsyncFunction {
 
                     let promise = Value::Object(final_promise);
 
-                    scope.statics.promise_then.clone().apply(
-                        scope,
-                        match result {
-                            Ok(value) => value,
-                            Err(value) => value,
-                        },
-                        vec![Value::Object(then_task)],
-                    )?;
+                    scope
+                        .statics
+                        .promise_then
+                        .clone()
+                        .apply(
+                            scope,
+                            match result {
+                                Ok(value) => value,
+                                Err(value) => value,
+                            },
+                            vec![Value::Object(then_task)],
+                        )
+                        .root_err(scope)?;
 
                     Ok(promise)
                 }
             }
             Err(value) => {
                 let promise = wrap_promise(scope, value.clone());
-                Err(promise)
+                Err(promise.into())
             }
         }
     }
@@ -133,7 +146,7 @@ impl Object for ThenTask {
         _callee: Handle<dyn Object>,
         _this: Value,
         args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         let promise_value = args.first().unwrap_or_undefined();
 
         // Call GeneratorIterator.prototype.next on the generator of async function
@@ -143,7 +156,12 @@ impl Object for ThenTask {
             .generator_iterator_next
             .clone()
             .apply(scope, self.generator_iter.clone(), vec![promise_value])
-            .and_then(|result| result.get_property(scope, PropertyKey::String("value".into())));
+            .root(scope)
+            .and_then(|result| {
+                result
+                    .get_property(scope, PropertyKey::String("value".into()))
+                    .root(scope)
+            });
 
         // - Repeat what we are doing above.
         // Check if generator iterator is done:
@@ -186,7 +204,7 @@ impl Object for ThenTask {
             }
         }
 
-        Ok(Value::undefined())
+        Ok(Value::undefined().into())
     }
 
     fn type_of(&self) -> Typeof {

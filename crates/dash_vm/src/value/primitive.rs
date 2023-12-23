@@ -32,7 +32,7 @@ impl Object for f64 {
         &self,
         _sc: &mut LocalScope,
         _key: PropertyKey,
-    ) -> Result<Option<PropertyValue>, Value> {
+    ) -> Result<Option<PropertyValue>, Unrooted> {
         Ok(None)
     }
 
@@ -64,7 +64,7 @@ impl Object for f64 {
         _callee: Handle<dyn Object>,
         _this: Value,
         _args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         throw!(scope, TypeError, "number is not a function")
     }
 
@@ -90,7 +90,7 @@ impl Object for bool {
         &self,
         _sc: &mut LocalScope,
         _key: PropertyKey,
-    ) -> Result<Option<PropertyValue>, Value> {
+    ) -> Result<Option<PropertyValue>, Unrooted> {
         Ok(None)
     }
 
@@ -121,7 +121,7 @@ impl Object for bool {
         _callee: Handle<dyn Object>,
         _this: Value,
         _args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         throw!(scope, TypeError, "boolean is not a function")
     }
 
@@ -148,7 +148,7 @@ impl Object for Rc<str> {
         &self,
         sc: &mut LocalScope,
         key: PropertyKey,
-    ) -> Result<Option<PropertyValue>, Value> {
+    ) -> Result<Option<PropertyValue>, Unrooted> {
         str::get_own_property_descriptor(self, sc, key.clone())
     }
 
@@ -179,7 +179,7 @@ impl Object for Rc<str> {
         _callee: Handle<dyn Object>,
         _this: Value,
         _args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         throw!(scope, TypeError, "string is not a function")
     }
 
@@ -218,7 +218,7 @@ impl Object for Undefined {
         &self,
         sc: &mut LocalScope,
         key: PropertyKey,
-    ) -> Result<Option<PropertyValue>, Value> {
+    ) -> Result<Option<PropertyValue>, Unrooted> {
         throw!(sc, TypeError, "Cannot read property {:?} of undefined", key)
     }
 
@@ -244,7 +244,7 @@ impl Object for Undefined {
         _callee: Handle<dyn Object>,
         _this: Value,
         _args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         throw!(sc, TypeError, "undefined is not a function")
     }
 
@@ -270,7 +270,7 @@ impl Object for Null {
         &self,
         sc: &mut LocalScope,
         key: PropertyKey,
-    ) -> Result<Option<PropertyValue>, Value> {
+    ) -> Result<Option<PropertyValue>, Unrooted> {
         throw!(sc, TypeError, "Cannot read property {:?} of null", key)
     }
 
@@ -296,7 +296,7 @@ impl Object for Null {
         _callee: Handle<dyn Object>,
         _this: Value,
         _args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         throw!(sc, TypeError, "null is not a function")
     }
 
@@ -318,7 +318,7 @@ impl Object for str {
         &self,
         _sc: &mut LocalScope,
         key: PropertyKey,
-    ) -> Result<Option<PropertyValue>, Value> {
+    ) -> Result<Option<PropertyValue>, Unrooted> {
         if let PropertyKey::String(st) = key {
             if st == "length" {
                 return Ok(Some(PropertyValue::static_default(Value::number(self.len() as f64))));
@@ -364,7 +364,7 @@ impl Object for str {
         _callee: Handle<dyn Object>,
         _this: Value,
         _args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         throw!(scope, TypeError, "string is not a function")
     }
 
@@ -395,7 +395,7 @@ impl Object for Symbol {
         &self,
         _sc: &mut LocalScope,
         _key: PropertyKey,
-    ) -> Result<Option<PropertyValue>, Value> {
+    ) -> Result<Option<PropertyValue>, Unrooted> {
         Ok(None)
     }
 
@@ -426,7 +426,7 @@ impl Object for Symbol {
         _callee: Handle<dyn Object>,
         _this: Value,
         _args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         throw!(scope, TypeError, "symbol is not a function")
     }
 
@@ -885,7 +885,7 @@ impl Object for Number {
         &self,
         sc: &mut LocalScope,
         key: PropertyKey,
-    ) -> Result<Option<PropertyValue>, Value> {
+    ) -> Result<Option<PropertyValue>, Unrooted> {
         self.0.get_own_property_descriptor(sc, key)
     }
 
@@ -911,7 +911,7 @@ impl Object for Number {
         callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         self.0.apply(scope, callee, this, args)
     }
 

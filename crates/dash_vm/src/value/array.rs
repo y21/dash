@@ -17,6 +17,7 @@ use super::object::PropertyValue;
 use super::object::PropertyValueKind;
 use super::ops::abstractions::conversions::ValueConversion;
 use super::primitive::array_like_keys;
+use super::Root;
 use super::Unrooted;
 use super::Value;
 
@@ -64,7 +65,7 @@ impl Object for Array {
         &self,
         sc: &mut LocalScope,
         key: PropertyKey,
-    ) -> Result<Option<PropertyValue>, Value> {
+    ) -> Result<Option<PropertyValue>, Unrooted> {
         let items = self.items.borrow();
 
         if let PropertyKey::String(key) = &key {
@@ -90,7 +91,7 @@ impl Object for Array {
 
             if key == "length" {
                 // TODO: this shouldnt be undefined
-                let value = value.kind().get_or_apply(sc, Value::undefined())?;
+                let value = value.kind().get_or_apply(sc, Value::undefined()).root(sc)?;
                 let new_len = value.to_number(sc)? as usize;
 
                 if new_len > MAX_LENGTH {
@@ -144,7 +145,7 @@ impl Object for Array {
         callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         self.obj.apply(scope, callee, this, args)
     }
 
@@ -193,7 +194,7 @@ impl Object for ArrayIterator {
         callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         self.obj.apply(scope, callee, this, args)
     }
 
@@ -226,7 +227,7 @@ impl ArrayIterator {
         }
     }
 
-    pub fn next(&self, sc: &mut LocalScope) -> Result<Option<Value>, Value> {
+    pub fn next(&self, sc: &mut LocalScope) -> Result<Option<Unrooted>, Unrooted> {
         let index = self.index.get();
 
         if index < self.length {
@@ -238,18 +239,21 @@ impl ArrayIterator {
     }
 }
 
-pub fn spec_array_get_property(scope: &mut LocalScope, target: &Value, index: usize) -> Result<Value, Value> {
+pub fn spec_array_get_property(scope: &mut LocalScope, target: &Value, index: usize) -> Result<Unrooted, Unrooted> {
     // specialize array path
     // TODO: broken because of externals.. edit: is it?
     if let Some(arr) = target.downcast_ref::<Array>() {
         let inner = arr.inner().borrow();
         return match inner.get(index) {
             Some(value) => value.get_or_apply(scope, Value::undefined()),
-            None => Ok(Value::undefined()),
+            None => Ok(Value::undefined().into()),
         };
     }
 
-    target.get_property(scope, index.to_string().into())
+    match target.get_property(scope, index.to_string().into()) {
+        Ok(v) => Ok(v.into()),
+        Err(v) => Ok(v.into()),
+    }
 }
 
 pub fn spec_array_set_property(

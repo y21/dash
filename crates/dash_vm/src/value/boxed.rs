@@ -5,6 +5,7 @@ use crate::delegate;
 use crate::gc::handle::Handle;
 use crate::localscope::LocalScope;
 use crate::value::PropertyKey;
+use crate::value::Unrooted;
 use crate::PropertyValue;
 use crate::Vm;
 use dash_proc_macro::Trace;
@@ -58,7 +59,7 @@ macro_rules! boxed_primitive {
                     &self,
                     sc: &mut LocalScope,
                     key: PropertyKey,
-                ) -> Result<Option<PropertyValue>, Value> {
+                ) -> Result<Option<PropertyValue>, Unrooted> {
                     if let Some(x) = self.inner.get_own_property_descriptor(sc, key.clone())? {
                         return Ok(Some(x));
                     }

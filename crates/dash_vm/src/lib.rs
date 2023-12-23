@@ -3,7 +3,7 @@
 use std::{fmt, ops::RangeBounds, vec::Drain, mem};
 
 use crate::{
-    value::{function::Function, primitive::Symbol}, util::cold_path, gc::trace::Trace,
+    value::{function::Function, primitive::Symbol, Root}, util::cold_path, gc::trace::Trace,
 };
 
 use self::{
@@ -1311,6 +1311,7 @@ impl Vm {
                 debug!("process task {:?}", task);
                 if let Err(ex) = task.apply(&mut scope, Value::undefined(), Vec::new()) {
                     if let Some(callback) = scope.params.unhandled_task_exception_callback() {
+                        let ex = ex.root(&mut scope);
                         error!("uncaught async task exception");
                         callback(&mut scope, ex);
                     }

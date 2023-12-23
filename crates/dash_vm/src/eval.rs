@@ -12,6 +12,7 @@ use crate::throw;
 use crate::value::object::NamedObject;
 use crate::value::object::Object;
 use crate::value::object::PropertyValue;
+use crate::value::Root;
 use crate::value::Unrooted;
 use crate::value::Value;
 use crate::Vm;

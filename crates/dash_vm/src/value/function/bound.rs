@@ -7,6 +7,7 @@ use crate::gc::handle::Handle;
 use crate::value::object::NamedObject;
 use crate::value::object::Object;
 use crate::value::Typeof;
+use crate::value::Unrooted;
 use crate::value::Value;
 use crate::Vm;
 
@@ -48,7 +49,7 @@ impl Object for BoundFunction {
         _callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         let target_this = self.this.clone().unwrap_or(this);
 
         // TODO: args should be concatenated with self.args

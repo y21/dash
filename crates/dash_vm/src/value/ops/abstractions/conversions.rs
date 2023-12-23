@@ -10,6 +10,7 @@ use crate::value::boxed::Symbol as BoxedSymbol;
 use crate::value::object::Object;
 use crate::value::primitive::Number;
 use crate::value::primitive::MAX_SAFE_INTEGERF;
+use crate::value::Root;
 use crate::value::Typeof;
 use crate::value::Value;
 use crate::Vm;
@@ -149,7 +150,7 @@ impl ValueConversion for Value {
 
         // a. Let exoticToPrim be ? GetMethod(input, @@toPrimitive).
         let to_primitive = sc.statics.symbol_to_primitive.clone();
-        let exotic_to_prim = self.get_property(sc, to_primitive.into())?.into_option();
+        let exotic_to_prim = self.get_property(sc, to_primitive.into()).root(sc)?.into_option();
 
         // i. If preferredType is not present, let hint be "default".
         let preferred_type = preferred_type.unwrap_or(PreferredType::Default);
@@ -159,7 +160,7 @@ impl ValueConversion for Value {
             let preferred_type = preferred_type.to_value(sc);
 
             // iv. Let result be ? Call(exoticToPrim, input, « hint »).
-            let result = exotic_to_prim.apply(sc, self.clone(), vec![preferred_type])?;
+            let result = exotic_to_prim.apply(sc, self.clone(), vec![preferred_type]).root(sc)?;
 
             // If Type(result) is not Object, return result.
             // TODO: this can still be an object if Value::External
@@ -176,7 +177,7 @@ impl ValueConversion for Value {
     }
 
     fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value> {
-        self.get_property(sc, "length".into())?.to_length_u(sc)
+        self.get_property(sc, "length".into()).root(sc)?.to_length_u(sc)
     }
 
     fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value> {
@@ -227,10 +228,10 @@ impl Value {
         };
 
         for name in method_names {
-            let method = self.get_property(sc, name.into())?;
+            let method = self.get_property(sc, name.into()).root(sc)?;
             if matches!(method.type_of(), Typeof::Function) {
                 let this = self.clone();
-                let result = method.apply(sc, this, Vec::new())?;
+                let result = method.apply(sc, this, Vec::new()).root(sc)?;
                 if !matches!(result, Value::Object(_)) {
                     return Ok(result);
                 }

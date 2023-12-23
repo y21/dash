@@ -8,6 +8,7 @@ use crate::gc::handle::Handle;
 use crate::localscope::LocalScope;
 use crate::Vm;
 
+use super::Unrooted;
 use super::object::NamedObject;
 use super::object::Object;
 use super::Value;
@@ -80,7 +81,7 @@ impl Object for ArrayBuffer {
         callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         self.obj.apply(scope, callee, this, args)
     }
 

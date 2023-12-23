@@ -8,6 +8,7 @@ use crate::frame::Frame;
 use crate::gc::handle::Handle;
 use crate::localscope::LocalScope;
 use crate::value::ExternalValue;
+use crate::value::Root;
 use crate::value::Value;
 
 use super::extend_stack_from_args;

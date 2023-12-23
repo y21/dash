@@ -12,6 +12,7 @@ use crate::value::function::FunctionKind;
 use crate::value::object::NamedObject;
 use crate::value::object::Object;
 use crate::value::object::PropertyValue;
+use crate::value::Root;
 use crate::value::Value;
 use crate::value::ValueContext;
 

@@ -85,7 +85,7 @@ impl Object for Promise {
         &self,
         sc: &mut LocalScope,
         key: super::object::PropertyKey,
-    ) -> Result<Option<super::object::PropertyValue>, Value> {
+    ) -> Result<Option<super::object::PropertyValue>, Unrooted> {
         self.obj.get_own_property_descriptor(sc, key)
     }
 
@@ -120,7 +120,7 @@ impl Object for Promise {
         callee: Handle<dyn Object>,
         this: Value,
         args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         self.obj.apply(scope, callee, this, args)
     }
 
@@ -153,7 +153,7 @@ impl Object for PromiseResolver {
         &self,
         sc: &mut LocalScope,
         key: super::object::PropertyKey,
-    ) -> Result<Option<super::object::PropertyValue>, Value> {
+    ) -> Result<Option<super::object::PropertyValue>, Unrooted> {
         self.obj.get_own_property_descriptor(sc, key)
     }
 
@@ -188,14 +188,14 @@ impl Object for PromiseResolver {
         _callee: Handle<dyn Object>,
         _this: Value,
         args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         scope.drive_promise(
             PromiseAction::Resolve,
             self.promise.as_any().downcast_ref::<Promise>().unwrap(),
             args,
         );
 
-        Ok(Value::undefined())
+        Ok(Value::undefined().into())
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -231,7 +231,7 @@ impl Object for PromiseRejecter {
         &self,
         sc: &mut LocalScope,
         key: super::object::PropertyKey,
-    ) -> Result<Option<super::object::PropertyValue>, Value> {
+    ) -> Result<Option<super::object::PropertyValue>, Unrooted> {
         self.obj.get_own_property_descriptor(sc, key)
     }
 
@@ -266,14 +266,14 @@ impl Object for PromiseRejecter {
         _callee: Handle<dyn Object>,
         _this: Value,
         args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         scope.drive_promise(
             PromiseAction::Reject,
             self.promise.as_any().downcast_ref::<Promise>().unwrap(),
             args,
         );
 
-        Ok(Value::undefined())
+        Ok(Value::undefined().into())
     }
 
     fn as_any(&self) -> &dyn Any {

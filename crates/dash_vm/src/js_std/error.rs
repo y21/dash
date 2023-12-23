@@ -8,6 +8,7 @@ use crate::value::error::TypeError;
 use crate::value::error::URIError;
 use crate::value::function::native::CallContext;
 use crate::value::ops::abstractions::conversions::ValueConversion;
+use crate::value::Root;
 use crate::value::Value;
 use crate::value::ValueContext;
 
@@ -44,5 +45,6 @@ pub fn error_constructor(cx: CallContext) -> Result<Value, Value> {
 pub fn to_string(cx: CallContext) -> Result<Value, Value> {
     cx.this
         .get_property(cx.scope, "stack".into())
+        .root(cx.scope)
         .and_then(|v| v.to_string(cx.scope).map(Value::String))
 }

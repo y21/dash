@@ -12,7 +12,10 @@ use crate::value::promise::Promise;
 use crate::value::promise::PromiseRejecter;
 use crate::value::promise::PromiseResolver;
 use crate::value::promise::PromiseState;
+use crate::value::root_ext::RootErrExt;
+use crate::value::Root;
 use crate::value::Typeof;
+use crate::value::Unrooted;
 use crate::value::Value;
 use crate::value::ValueContext;
 use crate::Vm;
@@ -34,11 +37,13 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
         (cx.scope.register(r1), cx.scope.register(r2))
     };
 
-    initiator.apply(
-        cx.scope,
-        Value::undefined(),
-        vec![Value::Object(resolve), Value::Object(reject)],
-    )?;
+    initiator
+        .apply(
+            cx.scope,
+            Value::undefined(),
+            vec![Value::Object(resolve), Value::Object(reject)],
+        )
+        .root_err(cx.scope)?;
 
     Ok(Value::Object(cx.scope.register(promise)))
 }
@@ -142,11 +147,14 @@ impl Object for ThenTask {
         _callee: Handle<dyn Object>,
         _this: Value,
         args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         let resolved = args.first().unwrap_or_undefined();
-        let ret = self.handler.apply(scope, Value::undefined(), vec![resolved])?;
+        let ret = self
+            .handler
+            .apply(scope, Value::undefined(), vec![resolved])
+            .root(scope)?;
 
-        let ret_then = ret.get_property(scope, PropertyKey::String("then".into()))?;
+        let ret_then = ret.get_property(scope, PropertyKey::String("then".into()))?.root(scope);
 
         match ret_then {
             Value::Undefined(..) => {
@@ -161,6 +169,6 @@ impl Object for ThenTask {
             }
         }
 
-        Ok(Value::undefined())
+        Ok(Value::undefined().into())
     }
 }
