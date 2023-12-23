@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1703291595405,
+  "lastUpdate": 1703366116581,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -5867,6 +5867,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 57311,
             "range": "± 1227",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "afd8c9c099447daea2bd334ccd3914659378d7a8",
+          "message": "reformat code base and add stress_gc feature",
+          "timestamp": "2023-12-23T22:12:30+01:00",
+          "tree_id": "f60c0d1f98d7bea6f77b700d58827ffba5809a03",
+          "url": "https://github.com/y21/dash/commit/afd8c9c099447daea2bd334ccd3914659378d7a8"
+        },
+        "date": 1703366115949,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 2517312,
+            "range": "± 6552",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 228425,
+            "range": "± 951",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 58679,
+            "range": "± 2279",
             "unit": "ns/iter"
           }
         ]
