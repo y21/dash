@@ -1,3 +1,4 @@
+use std::ptr;
 use std::rc::Rc;
 
 use dash_optimizer::OptLevel;
@@ -87,7 +88,10 @@ fn persistent_trace() {
     let p2 = Persistent::new(&mut vm, object.clone());
     assert_eq!(p1.refcount(), 2);
     assert!(vm.external_refs.len() == 1);
-    assert!(vm.external_refs.iter().next().unwrap().as_ptr() == object.as_ptr());
+    assert!(ptr::eq(
+        vm.external_refs.iter().next().unwrap().as_ptr(),
+        object.as_ptr()
+    ));
     drop(p2);
     assert_eq!(p1.refcount(), 1);
     assert!(vm.external_refs.len() == 1);
@@ -265,6 +269,23 @@ simple_test!(
     let v = 1, 2, 3;
     assert(v === 3);
     assert((() => 1+2)() === 3);
+    "#,
+    Value::undefined()
+);
+
+simple_test!(
+    spread_operator,
+    r#"
+    assert(
+        ((...x) => x.length)(1) === 1
+            && ((...x) => x.length)(1, 2) === 2
+            && ((...x) => x.length)(1, 2, 3) === 3
+            && ((...x) => x.length)(...[1, 2, 3]) === 3
+            && ((w, ...x) => x.length)(1, 2, 3) === 2
+            && ((v, w, ...x) => x.length)(1, 2, 3) === 1
+    );
+    assert([...[1, 2, 3]].length === 3);
+    assert([...[1]].length === 1);
     "#,
     Value::undefined()
 );

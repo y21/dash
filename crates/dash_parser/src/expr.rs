@@ -1,4 +1,5 @@
 use dash_middle::interner::sym;
+use dash_middle::interner::Symbol;
 use dash_middle::lexer::token::Token;
 use dash_middle::lexer::token::TokenType;
 use dash_middle::lexer::token::ASSIGNMENT_TYPES;
@@ -628,20 +629,39 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             TokenType::NumberBin(sym) => self.parse_prefixed_number_literal(current.span, sym, 2)?,
             TokenType::NumberOct(sym) => self.parse_prefixed_number_literal(current.span, sym, 8)?,
             TokenType::LeftParen => {
+                // Parsing groups and closures
                 if self.expect_token_type_and_skip(&[TokenType::RightParen], false) {
                     // () MUST be followed by an arrow. Empty groups are not valid syntax
                     if !self.expect_token_type_and_skip(&[TokenType::FatArrow], true) {
                         return None;
                     }
 
-                    return self.parse_arrow_function_end(current.span, Vec::new());
+                    return self.parse_arrow_function_end(current.span, Vec::new(), None);
                 }
 
                 self.new_level_stack.add_level();
                 let mut exprs = Vec::new();
+                let mut rest_binding = None;
 
                 while !self.expect_token_type_and_skip(&[TokenType::RightParen], false) {
                     self.expect_token_type_and_skip(&[TokenType::Comma], false);
+
+                    if self.expect_token_type_and_skip(&[TokenType::Dot], false) {
+                        for _ in 0..2 {
+                            if !self.expect_token_type_and_skip(&[TokenType::Dot], true) {
+                                return None;
+                            }
+                        }
+
+                        let span = self.current()?.span;
+                        rest_binding = Some((self.expect_identifier(true)?, span));
+                        // Rest binding must be the last binding
+                        if !self.expect_token_type_and_skip(&[TokenType::RightParen], true) {
+                            return None;
+                        }
+                        break;
+                    }
+
                     // TODO: we can rewrite this to use the parse_sequence rule, but that will require
                     // rewriting the arrow AST transformation to recursively fold sequences
                     exprs.push(self.parse_yield()?);
@@ -650,10 +670,18 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
                 // This is an arrow function if the next token is an arrow (`=>`)
                 if self.expect_token_type_and_skip(&[TokenType::FatArrow], false) {
-                    return self.parse_arrow_function_end(current.span, exprs);
+                    return self.parse_arrow_function_end(current.span, exprs, rest_binding.map(|v| v.0));
                 }
 
                 // If it's not an arrow function, then it is a group
+                if let Some((sym, span)) = rest_binding {
+                    self.create_error(Error::UnknownToken(Token {
+                        span,
+                        ty: TokenType::Identifier(sym),
+                    }));
+                    return None;
+                }
+
                 Expr::grouping(exprs)
             }
             TokenType::Async => {
@@ -696,7 +724,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
                 // If this identifier is followed by an arrow, this is an arrow function
                 if self.expect_token_type_and_skip(&[TokenType::FatArrow], false) {
-                    return self.parse_arrow_function_end(current.span, vec![expr]);
+                    return self.parse_arrow_function_end(current.span, vec![expr], None);
                 }
 
                 expr
@@ -771,7 +799,12 @@ impl<'a, 'interner> Parser<'a, 'interner> {
     ///
     /// Calling this will turn all parameters, which were parsed as if they were part of the grouping operator
     /// into their arrow function parameter equivalent
-    fn parse_arrow_function_end(&mut self, pre_span: Span, prec: Vec<Expr>) -> Option<Expr> {
+    fn parse_arrow_function_end(
+        &mut self,
+        pre_span: Span,
+        prec: Vec<Expr>,
+        rest_binding: Option<Symbol>,
+    ) -> Option<Expr> {
         let mut list = Vec::with_capacity(prec.len());
 
         // If it is arrow function, we need to convert everything to their arrow func equivalents
@@ -782,6 +815,10 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
             // TODO2: handle parameter default values
             list.push((Parameter::Identifier(expr.kind.as_identifier()?), None, None));
+        }
+
+        if let Some(rest_binding) = rest_binding {
+            list.push((Parameter::Spread(rest_binding), None, None));
         }
 
         let is_statement = self.expect_token_type_and_skip(&[TokenType::LeftBrace], false);
