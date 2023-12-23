@@ -7,7 +7,7 @@ use dash_parser::Parser;
 use dash_vm::eval::EvalError;
 use dash_vm::frame::Frame;
 use dash_vm::params::VmParams;
-use dash_vm::value::ops::abstractions::conversions::ValueConversion;
+use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::Value;
 use dash_vm::Vm;
 use std::fmt::Write;

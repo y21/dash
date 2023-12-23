@@ -13,7 +13,7 @@ use crate::gc::handle::Handle;
 use crate::localscope::LocalScope;
 use crate::{throw, Vm};
 
-use super::ops::abstractions::conversions::ValueConversion;
+use super::ops::conversions::ValueConversion;
 use super::primitive::{PrimitiveCapabilities, Symbol};
 use super::{ExternalValue, Root, Typeof, Unrooted, Value, ValueContext};
 

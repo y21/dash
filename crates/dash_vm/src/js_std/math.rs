@@ -1,6 +1,6 @@
 use crate::throw;
 use crate::value::function::native::CallContext;
-use crate::value::ops::abstractions::conversions::ValueConversion;
+use crate::value::ops::conversions::ValueConversion;
 use crate::value::{Value, ValueContext};
 
 pub fn abs(cx: CallContext) -> Result<Value, Value> {

@@ -10,7 +10,7 @@ use crate::util::format_f64;
 
 use super::boxed::{Boolean as BoxedBoolean, Number as BoxedNumber, String as BoxedString, Symbol as BoxedSymbol};
 use super::object::{Object, PropertyKey, PropertyValue};
-use super::ops::abstractions::conversions::{PreferredType, ValueConversion};
+use super::ops::conversions::{PreferredType, ValueConversion};
 use super::ops::equality::ValueEquality;
 use super::{Typeof, Unrooted, Value};
 

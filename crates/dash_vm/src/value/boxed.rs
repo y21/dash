@@ -1,4 +1,4 @@
-use super::ops::abstractions::conversions::{PreferredType, ValueConversion};
+use super::ops::conversions::{PreferredType, ValueConversion};
 use super::ops::equality::ValueEquality;
 use crate::gc::handle::Handle;
 use crate::localscope::LocalScope;

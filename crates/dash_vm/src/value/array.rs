@@ -8,7 +8,7 @@ use crate::localscope::LocalScope;
 use crate::{delegate, throw, Vm};
 
 use super::object::{NamedObject, Object, PropertyKey, PropertyValue, PropertyValueKind};
-use super::ops::abstractions::conversions::ValueConversion;
+use super::ops::conversions::ValueConversion;
 use super::primitive::array_like_keys;
 use super::{Root, Unrooted, Value};
 

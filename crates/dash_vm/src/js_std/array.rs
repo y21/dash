@@ -5,7 +5,7 @@ use crate::throw;
 use crate::value::array::{Array, ArrayIterator};
 use crate::value::function::native::CallContext;
 use crate::value::object::PropertyValue;
-use crate::value::ops::abstractions::conversions::ValueConversion;
+use crate::value::ops::conversions::ValueConversion;
 use crate::value::ops::equality::ValueEquality;
 use crate::value::root_ext::RootErrExt;
 use crate::value::{array, Root, Value, ValueContext};

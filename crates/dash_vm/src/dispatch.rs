@@ -209,7 +209,7 @@ mod handlers {
     use crate::value::function::user::UserFunction;
     use crate::value::function::{adjust_stack_from_flat_call, Function, FunctionKind};
     use crate::value::object::{NamedObject, Object, ObjectMap, PropertyKey, PropertyValue, PropertyValueKind};
-    use crate::value::ops::abstractions::conversions::ValueConversion;
+    use crate::value::ops::conversions::ValueConversion;
     use crate::value::ops::equality::ValueEquality;
 
     use super::*;

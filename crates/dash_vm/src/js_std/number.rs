@@ -1,7 +1,7 @@
 use crate::throw;
 use crate::util::format_f64;
 use crate::value::function::native::CallContext;
-use crate::value::ops::abstractions::conversions::ValueConversion;
+use crate::value::ops::conversions::ValueConversion;
 use crate::value::primitive::{Number, MAX_SAFE_INTEGERF};
 use crate::value::{Value, ValueContext};
 

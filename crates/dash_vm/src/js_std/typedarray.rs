@@ -2,7 +2,7 @@ use crate::throw;
 use crate::value::arraybuffer::ArrayBuffer;
 use crate::value::function::native::CallContext;
 use crate::value::object::Object;
-use crate::value::ops::abstractions::conversions::ValueConversion;
+use crate::value::ops::conversions::ValueConversion;
 use crate::value::typedarray::{TypedArray, TypedArrayKind};
 use crate::value::Value;
 

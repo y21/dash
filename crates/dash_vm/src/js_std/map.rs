@@ -2,7 +2,7 @@ use crate::throw;
 use crate::value::function::native::CallContext;
 use crate::value::map::Map;
 use crate::value::object::PropertyKey;
-use crate::value::ops::abstractions::conversions::ValueConversion;
+use crate::value::ops::conversions::ValueConversion;
 use crate::value::{Root, Value, ValueContext};
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {

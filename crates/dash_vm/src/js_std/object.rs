@@ -4,7 +4,7 @@ use crate::throw;
 use crate::value::array::Array;
 use crate::value::function::native::CallContext;
 use crate::value::object::{NamedObject, Object, PropertyKey, PropertyValue};
-use crate::value::ops::abstractions::conversions::ValueConversion;
+use crate::value::ops::conversions::ValueConversion;
 use crate::value::root_ext::RootErrExt;
 use crate::value::{Root, Value, ValueContext};
 

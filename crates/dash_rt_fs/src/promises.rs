@@ -4,7 +4,7 @@ use dash_vm::value::error::Error;
 use dash_vm::value::function::native::CallContext;
 use dash_vm::value::function::{Function, FunctionKind};
 use dash_vm::value::object::{NamedObject, Object, PropertyKey, PropertyValue};
-use dash_vm::value::ops::abstractions::conversions::ValueConversion;
+use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::{Value, ValueContext};
 
 pub fn init_module(sc: &mut LocalScope) -> Result<Value, Value> {

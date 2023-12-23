@@ -8,7 +8,7 @@ use crate::Vm;
 
 use super::arraybuffer::ArrayBuffer;
 use super::object::{NamedObject, Object, PropertyKey, PropertyValue};
-use super::ops::abstractions::conversions::ValueConversion;
+use super::ops::conversions::ValueConversion;
 use super::{Root, Unrooted, Value};
 
 #[derive(Debug, Copy, Clone)]
