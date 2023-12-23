@@ -4,8 +4,7 @@ use dash_vm::localscope::LocalScope;
 use dash_vm::params::VmParams;
 use dash_vm::value::Value as DashValue;
 use dash_vm::Vm;
-use js_sys::Math;
-use js_sys::Uint8Array;
+use js_sys::{Math, Uint8Array};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 use crate::jsvalue::JsValue;

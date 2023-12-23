@@ -4,28 +4,20 @@ use dash_proc_macro::Trace;
 use dash_rt::event::EventMessage;
 use dash_rt::state::State;
 use dash_rt::wrap_async;
-use dash_vm::delegate;
 use dash_vm::gc::persistent::Persistent;
 use dash_vm::gc::trace::Trace;
 use dash_vm::localscope::LocalScope;
-use dash_vm::throw;
 use dash_vm::value::arraybuffer::ArrayBuffer;
 use dash_vm::value::function::native::CallContext;
-use dash_vm::value::function::Function;
-use dash_vm::value::function::FunctionKind;
-use dash_vm::value::object::NamedObject;
-use dash_vm::value::object::Object;
-use dash_vm::value::object::PropertyValue;
+use dash_vm::value::function::{Function, FunctionKind};
+use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::abstractions::conversions::ValueConversion;
 use dash_vm::value::promise::Promise;
-use dash_vm::value::Unrooted;
-use dash_vm::value::Value;
-use dash_vm::PromiseAction;
-use tokio::io::AsyncReadExt;
-use tokio::io::AsyncWriteExt;
+use dash_vm::value::{Unrooted, Value};
+use dash_vm::{delegate, throw, PromiseAction};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
-use tokio::sync::mpsc;
-use tokio::sync::oneshot;
+use tokio::sync::{mpsc, oneshot};
 
 #[derive(Debug, Trace)]
 pub struct TcpListenerConstructor {}
@@ -35,7 +27,7 @@ impl Object for TcpListenerConstructor {
         &self,
         _sc: &mut dash_vm::localscope::LocalScope,
         _key: dash_vm::value::object::PropertyKey,
-    ) -> Result<Option<dash_vm::value::object::PropertyValue>, dash_vm::value::Value> {
+    ) -> Result<Option<dash_vm::value::object::PropertyValue>, dash_vm::value::Unrooted> {
         Ok(None)
     }
 
@@ -77,7 +69,7 @@ impl Object for TcpListenerConstructor {
         _callee: dash_vm::gc::handle::Handle<dyn Object>,
         _this: dash_vm::value::Value,
         _args: Vec<dash_vm::value::Value>,
-    ) -> Result<dash_vm::value::Value, dash_vm::value::Value> {
+    ) -> Result<dash_vm::value::Unrooted, dash_vm::value::Unrooted> {
         throw!(scope, Error, "TcpListener should be called as a constructor")
     }
 
@@ -87,7 +79,7 @@ impl Object for TcpListenerConstructor {
         _callee: dash_vm::gc::handle::Handle<dyn Object>,
         _this: Value,
         args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         let Some(value) = args.first() else {
             throw!(
                 scope,
@@ -143,7 +135,7 @@ impl Object for TcpListenerConstructor {
         });
 
         let handle = TcpListenerHandle::new(tx, scope)?;
-        Ok(Value::Object(scope.register(handle)))
+        Ok(Value::Object(scope.register(handle)).into())
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

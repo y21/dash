@@ -1,6 +1,5 @@
 use core::fmt;
-use std::cell::Cell;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::ops::Deref;
 use std::rc::Rc;

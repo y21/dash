@@ -3,8 +3,7 @@ use crate::value::arraybuffer::ArrayBuffer;
 use crate::value::function::native::CallContext;
 use crate::value::object::Object;
 use crate::value::ops::abstractions::conversions::ValueConversion;
-use crate::value::typedarray::TypedArray;
-use crate::value::typedarray::TypedArrayKind;
+use crate::value::typedarray::{TypedArray, TypedArrayKind};
 use crate::value::Value;
 
 macro_rules! typedarray {
@@ -18,7 +17,9 @@ macro_rules! typedarray {
                     Some(Value::External(o)) => &o.inner,
                     _ => throw!(cx.scope, TypeError, "Missing argument"),
                 };
-                let Some(this) = arg.as_any().downcast_ref::<ArrayBuffer>() else { throw!(cx.scope, TypeError, "Incompatible receiver") };
+                let Some(this) = arg.as_any().downcast_ref::<ArrayBuffer>() else {
+                    throw!(cx.scope, TypeError, "Incompatible receiver")
+                };
 
                 const REQUIRED_ALIGN: usize = $kind.bytes_per_element();
 

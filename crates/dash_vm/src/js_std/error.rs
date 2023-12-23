@@ -1,16 +1,9 @@
-use crate::value::error::AggregateError;
-use crate::value::error::Error;
-use crate::value::error::EvalError;
-use crate::value::error::RangeError;
-use crate::value::error::ReferenceError;
-use crate::value::error::SyntaxError;
-use crate::value::error::TypeError;
-use crate::value::error::URIError;
+use crate::value::error::{
+    AggregateError, Error, EvalError, RangeError, ReferenceError, SyntaxError, TypeError, URIError,
+};
 use crate::value::function::native::CallContext;
 use crate::value::ops::abstractions::conversions::ValueConversion;
-use crate::value::Root;
-use crate::value::Value;
-use crate::value::ValueContext;
+use crate::value::{Root, Value, ValueContext};
 
 macro_rules! define_other_error_constructors {
     ( $( $fun:ident $t:ident ),* ) => {

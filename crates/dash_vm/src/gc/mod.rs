@@ -9,8 +9,7 @@ use std::ptr::NonNull;
 
 use crate::value::object::Object;
 
-use self::handle::GcNode;
-use self::handle::Handle;
+use self::handle::{GcNode, Handle};
 
 pub mod handle;
 pub mod persistent;
@@ -167,8 +166,7 @@ unsafe impl<T: Object + 'static> IntoHandle for T {
 
 #[cfg(test)]
 mod tests {
-    use std::any::Any;
-    use std::any::TypeId;
+    use std::any::{Any, TypeId};
     use std::fmt::Display;
     use std::rc::Rc;
 

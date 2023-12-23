@@ -1,16 +1,13 @@
 use dash_vm::gc::handle::Handle;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::error::Error;
-use dash_vm::value::object::NamedObject;
-use dash_vm::value::object::Object;
-use dash_vm::value::object::PropertyValue;
+use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::primitive::Number;
 use dash_vm::value::promise::Promise;
 use dash_vm::value::Value as DashValue;
 use dash_vm::PromiseAction;
 use wasm_bindgen::prelude::Closure;
-use wasm_bindgen::JsCast;
-use wasm_bindgen::JsValue as WasmValue;
+use wasm_bindgen::{JsCast, JsValue as WasmValue};
 
 use crate::externalfunction::ExternalFunction;
 use crate::jsvalue::JsValue;

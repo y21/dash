@@ -2,8 +2,7 @@ use std::iter::Enumerate;
 use std::slice;
 use std::slice::Iter;
 
-use dash_middle::compiler::instruction::Instruction;
-use dash_middle::compiler::instruction::IntrinsicOperation;
+use dash_middle::compiler::instruction::{Instruction, IntrinsicOperation};
 
 #[macro_export]
 macro_rules! cstrp {

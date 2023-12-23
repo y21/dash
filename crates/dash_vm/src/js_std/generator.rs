@@ -4,17 +4,11 @@ use crate::dispatch::HandleResult;
 use crate::frame::Frame;
 use crate::localscope::LocalScope;
 use crate::throw;
-use crate::value::function::generator::as_generator;
-use crate::value::function::generator::GeneratorState;
+use crate::value::function::generator::{as_generator, GeneratorState};
 use crate::value::function::native::CallContext;
-use crate::value::function::Function;
-use crate::value::function::FunctionKind;
-use crate::value::object::NamedObject;
-use crate::value::object::Object;
-use crate::value::object::PropertyValue;
-use crate::value::Root;
-use crate::value::Value;
-use crate::value::ValueContext;
+use crate::value::function::{Function, FunctionKind};
+use crate::value::object::{NamedObject, Object, PropertyValue};
+use crate::value::{Root, Value, ValueContext};
 
 pub fn next(cx: CallContext) -> Result<Value, Value> {
     let arg = cx.args.first().unwrap_or_undefined();

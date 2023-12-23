@@ -2,8 +2,7 @@ use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use anyhow::Context;
-use anyhow::{anyhow, bail};
+use anyhow::{anyhow, bail, Context};
 use dash_middle::interner::StringInterner;
 use dash_middle::parser::error::IntoFormattableErrors;
 use dash_optimizer::OptLevel;
@@ -12,10 +11,8 @@ use dash_rt::format_value;
 use dash_rt::runtime::Runtime;
 use dash_vm::eval::EvalError;
 use dash_vm::localscope::LocalScope;
-use dash_vm::value::object::NamedObject;
-use dash_vm::value::object::Object;
-use dash_vm::value::object::PropertyValue;
-use dash_vm::value::Value;
+use dash_vm::value::object::{NamedObject, Object, PropertyValue};
+use dash_vm::value::{Root, Unrooted, Value};
 use dash_vm::{delegate, throw};
 use package::Package;
 use rustc_hash::FxHashMap;
@@ -160,7 +157,7 @@ impl Object for RequireFunction {
         _callee: dash_vm::gc::handle::Handle<dyn Object>,
         _this: Value,
         args: Vec<Value>,
-    ) -> Result<Value, Value> {
+    ) -> Result<Unrooted, Unrooted> {
         let Some(Value::String(arg)) = args.first() else {
             throw!(scope, Error, "require() expects a string argument");
         };
@@ -173,7 +170,7 @@ impl Object for RequireFunction {
             };
 
             if let Some(module) = self.state.ongoing_requires.borrow().get(&canonicalized_path) {
-                return Ok(module.clone());
+                return Ok(module.clone().into());
             }
 
             let source = match std::fs::read_to_string(&canonicalized_path) {
@@ -200,7 +197,7 @@ impl Object for RequireFunction {
                 self.package.clone(),
             ) {
                 Ok(v) => v,
-                Err((EvalError::Exception(value), ..)) => return Err(value.root(scope)),
+                Err((EvalError::Exception(value), ..)) => return Err(value),
                 Err((EvalError::Middle(errs), _, source)) => {
                     throw!(scope, SyntaxError, "{}", errs.formattable(&source, true))
                 }
@@ -224,7 +221,7 @@ impl Object for RequireFunction {
                 Rc::new(package_state),
             ) {
                 Ok(v) => v,
-                Err((EvalError::Exception(value), ..)) => return Err(value.root(scope)),
+                Err((EvalError::Exception(value), ..)) => return Err(value),
                 Err((EvalError::Middle(errs), _, source)) => {
                     throw!(scope, SyntaxError, "{}", errs.formattable(&source, true))
                 }

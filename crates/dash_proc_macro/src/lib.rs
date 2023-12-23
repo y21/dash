@@ -1,12 +1,8 @@
 use proc_macro::TokenStream;
 use proc_macro2::Span;
-use proc_macro_crate::crate_name;
-use proc_macro_crate::FoundCrate;
+use proc_macro_crate::{crate_name, FoundCrate};
 use quote::quote;
-use syn::Data;
-use syn::DataStruct;
-use syn::Fields;
-use syn::Ident;
+use syn::{Data, DataStruct, Fields, Ident};
 
 macro_rules! error {
     ($msg:expr) => {

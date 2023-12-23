@@ -5,14 +5,13 @@ use std::rc::Rc;
 use dash_compiler::FunctionCompiler;
 use dash_middle::compiler::CompileResult;
 use dash_middle::interner::StringInterner;
-use dash_vm::frame::Exports;
-use dash_vm::frame::Frame;
+use dash_vm::frame::{Exports, Frame};
 use dash_vm::gc::persistent::Persistent;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::function::native::CallContext;
 use dash_vm::value::ops::abstractions::conversions::ValueConversion;
 use dash_vm::value::promise::Promise;
-use dash_vm::value::Value;
+use dash_vm::value::{Root, Value};
 use dash_vm::PromiseAction;
 use event::EventMessage;
 use state::State;
@@ -100,6 +99,7 @@ pub fn format_value(value: Value, scope: &mut LocalScope) -> Result<Rc<str>, Val
         .root(scope)
         .apply(scope, Value::undefined(), vec![value])
         .unwrap()
+        .root(scope)
         .to_string(scope)
         .unwrap();
 

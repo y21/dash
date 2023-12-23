@@ -1,7 +1,6 @@
 use dash_compiler::FunctionCompiler;
 use dash_middle::compiler::StaticImportKind;
-use dash_middle::parser::statement::FuncId;
-use dash_middle::parser::statement::VariableDeclarationName;
+use dash_middle::parser::statement::{FuncId, VariableDeclarationName};
 use dash_optimizer::consteval::ConstFunctionEvalCtx;
 use dash_optimizer::type_infer::TypeInferCtx;
 use dash_parser::Parser;

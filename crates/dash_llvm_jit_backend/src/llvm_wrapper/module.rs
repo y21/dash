@@ -1,22 +1,16 @@
 use std::ffi::CStr;
 use std::ptr;
 
-use llvm_sys::analysis::LLVMVerifierFailureAction;
-use llvm_sys::analysis::LLVMVerifyModule;
-use llvm_sys::core::LLVMAddFunction;
-use llvm_sys::core::LLVMDisposeMessage;
-use llvm_sys::core::LLVMPrintModuleToString;
-use llvm_sys::core::LLVMRunPassManager;
-use llvm_sys::core::LLVMSetInstructionCallConv;
+use llvm_sys::analysis::{LLVMVerifierFailureAction, LLVMVerifyModule};
+use llvm_sys::core::{
+    LLVMAddFunction, LLVMDisposeMessage, LLVMPrintModuleToString, LLVMRunPassManager, LLVMSetInstructionCallConv,
+};
 use llvm_sys::execution_engine::LLVMCreateExecutionEngineForModule;
 use llvm_sys::prelude::LLVMModuleRef;
 use llvm_sys::LLVMCallConv;
 
 use super::execution_engine::ExecutionEngine;
-use super::Function;
-use super::PassManager;
-use super::Ty;
-use super::Value;
+use super::{Function, PassManager, Ty, Value};
 
 pub struct Module(pub(super) LLVMModuleRef);
 

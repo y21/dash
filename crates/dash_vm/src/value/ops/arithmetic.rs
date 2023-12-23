@@ -1,7 +1,6 @@
 use crate::localscope::LocalScope;
 use crate::value::object::Object;
-use crate::value::Typeof;
-use crate::value::Value;
+use crate::value::{Typeof, Value};
 
 use super::abstractions::conversions::ValueConversion;
 use super::equality::ValueEquality;

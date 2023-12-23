@@ -1,9 +1,7 @@
-use std::backtrace::Backtrace;
-use std::backtrace::BacktraceStatus;
+use std::backtrace::{Backtrace, BacktraceStatus};
 
 use anyhow::bail;
-use clap::Arg;
-use clap::Command;
+use clap::{Arg, Command};
 use colorful::Colorful;
 
 mod cmd;

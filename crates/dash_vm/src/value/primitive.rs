@@ -1,28 +1,18 @@
 use std::any::Any;
-use std::fmt;
-use std::hash::Hash;
-use std::hash::Hasher;
-use std::iter;
+use std::hash::{Hash, Hasher};
 use std::rc::Rc;
+use std::{fmt, iter};
 
 use crate::gc::handle::Handle;
 use crate::localscope::LocalScope;
 use crate::throw;
 use crate::util::format_f64;
 
-use super::boxed::Boolean as BoxedBoolean;
-use super::boxed::Number as BoxedNumber;
-use super::boxed::String as BoxedString;
-use super::boxed::Symbol as BoxedSymbol;
-use super::object::Object;
-use super::object::PropertyKey;
-use super::object::PropertyValue;
-use super::ops::abstractions::conversions::PreferredType;
-use super::ops::abstractions::conversions::ValueConversion;
+use super::boxed::{Boolean as BoxedBoolean, Number as BoxedNumber, String as BoxedString, Symbol as BoxedSymbol};
+use super::object::{Object, PropertyKey, PropertyValue};
+use super::ops::abstractions::conversions::{PreferredType, ValueConversion};
 use super::ops::equality::ValueEquality;
-use super::Typeof;
-use super::Unrooted;
-use super::Value;
+use super::{Typeof, Unrooted, Value};
 
 pub const MAX_SAFE_INTEGER: u64 = 9007199254740991u64;
 pub const MAX_SAFE_INTEGERF: f64 = 9007199254740991f64;

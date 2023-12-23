@@ -1,25 +1,16 @@
 use std::any::Any;
-use std::cell::Cell;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 use dash_proc_macro::Trace;
 
-use crate::delegate;
 use crate::gc::handle::Handle;
 use crate::localscope::LocalScope;
-use crate::throw;
-use crate::Vm;
+use crate::{delegate, throw, Vm};
 
-use super::object::NamedObject;
-use super::object::Object;
-use super::object::PropertyKey;
-use super::object::PropertyValue;
-use super::object::PropertyValueKind;
+use super::object::{NamedObject, Object, PropertyKey, PropertyValue, PropertyValueKind};
 use super::ops::abstractions::conversions::ValueConversion;
 use super::primitive::array_like_keys;
-use super::Root;
-use super::Unrooted;
-use super::Value;
+use super::{Root, Unrooted, Value};
 
 pub const MAX_LENGTH: usize = 4294967295;
 

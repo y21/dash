@@ -2,14 +2,10 @@ use std::any::Any;
 
 use dash_proc_macro::Trace;
 
-use crate::delegate;
 use crate::gc::handle::Handle;
-use crate::value::object::NamedObject;
-use crate::value::object::Object;
-use crate::value::Typeof;
-use crate::value::Unrooted;
-use crate::value::Value;
-use crate::Vm;
+use crate::value::object::{NamedObject, Object};
+use crate::value::{Typeof, Unrooted, Value};
+use crate::{delegate, Vm};
 
 #[derive(Debug, Trace)]
 pub struct BoundFunction {

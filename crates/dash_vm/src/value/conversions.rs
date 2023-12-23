@@ -1,6 +1,8 @@
 use crate::gc::handle::Handle;
 
-use super::{object::Object, primitive::Symbol, Value};
+use super::object::Object;
+use super::primitive::Symbol;
+use super::Value;
 
 impl From<Handle<dyn Object>> for Value {
     fn from(object: Handle<dyn Object>) -> Self {

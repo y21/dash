@@ -1,41 +1,16 @@
-use llvm_sys::core::LLVMAddIncoming;
-use llvm_sys::core::LLVMBuildAdd;
-use llvm_sys::core::LLVMBuildAlloca;
-use llvm_sys::core::LLVMBuildBitCast;
-use llvm_sys::core::LLVMBuildBr;
-use llvm_sys::core::LLVMBuildCondBr;
-use llvm_sys::core::LLVMBuildFAdd;
-use llvm_sys::core::LLVMBuildFCmp;
-use llvm_sys::core::LLVMBuildFDiv;
-use llvm_sys::core::LLVMBuildFMul;
-use llvm_sys::core::LLVMBuildFPToSI;
-use llvm_sys::core::LLVMBuildFRem;
-use llvm_sys::core::LLVMBuildFSub;
-use llvm_sys::core::LLVMBuildGEP2;
-use llvm_sys::core::LLVMBuildICmp;
-use llvm_sys::core::LLVMBuildLoad2;
-use llvm_sys::core::LLVMBuildMul;
-use llvm_sys::core::LLVMBuildPhi;
-use llvm_sys::core::LLVMBuildRetVoid;
-use llvm_sys::core::LLVMBuildSDiv;
-use llvm_sys::core::LLVMBuildSExt;
-use llvm_sys::core::LLVMBuildSIToFP;
-use llvm_sys::core::LLVMBuildSRem;
-use llvm_sys::core::LLVMBuildStore;
-use llvm_sys::core::LLVMBuildSub;
-use llvm_sys::core::LLVMBuildTrunc;
-use llvm_sys::core::LLVMPositionBuilderAtEnd;
+use llvm_sys::core::{
+    LLVMAddIncoming, LLVMBuildAdd, LLVMBuildAlloca, LLVMBuildBitCast, LLVMBuildBr, LLVMBuildCondBr, LLVMBuildFAdd,
+    LLVMBuildFCmp, LLVMBuildFDiv, LLVMBuildFMul, LLVMBuildFPToSI, LLVMBuildFRem, LLVMBuildFSub, LLVMBuildGEP2,
+    LLVMBuildICmp, LLVMBuildLoad2, LLVMBuildMul, LLVMBuildPhi, LLVMBuildRetVoid, LLVMBuildSDiv, LLVMBuildSExt,
+    LLVMBuildSIToFP, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildTrunc, LLVMPositionBuilderAtEnd,
+};
 use llvm_sys::prelude::LLVMBuilderRef;
-use llvm_sys::LLVMIntPredicate;
-use llvm_sys::LLVMRealPredicate;
-use llvm_sys::LLVMTypeKind;
+use llvm_sys::{LLVMIntPredicate, LLVMRealPredicate, LLVMTypeKind};
 
 use crate::cstrp;
 
 use super::value::Phi;
-use super::BasicBlock;
-use super::Ty;
-use super::Value;
+use super::{BasicBlock, Ty, Value};
 
 pub enum Predicate {
     Lt,

@@ -1,15 +1,8 @@
-use std::collections::HashMap;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use error::Error;
-use passes::bb_generation::BBGenerationCtxt;
-use passes::bb_generation::BBGenerationQuery;
-use passes::bb_generation::BasicBlockMap;
-use passes::bb_generation::Labels;
-use passes::type_infer::TypeInferCtxt;
-use passes::type_infer::TypeInferQuery;
-use passes::type_infer::TypeMap;
-use passes::type_infer::TypeStack;
+use passes::bb_generation::{BBGenerationCtxt, BBGenerationQuery, BasicBlockMap, Labels};
+use passes::type_infer::{TypeInferCtxt, TypeInferQuery, TypeMap, TypeStack};
 
 pub mod error;
 pub mod passes;

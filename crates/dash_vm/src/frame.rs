@@ -1,19 +1,15 @@
-use std::cell::Cell;
-use std::cell::RefCell;
-use std::collections::BTreeMap;
-use std::collections::HashSet;
+use std::cell::{Cell, RefCell};
+use std::collections::{BTreeMap, HashSet};
 use std::rc::Rc;
 
-use dash_middle::compiler::constant::Buffer;
-use dash_middle::compiler::constant::Function;
+use dash_middle::compiler::constant::{Buffer, Function};
 use dash_middle::compiler::CompileResult;
 use dash_middle::parser::statement::FunctionKind;
 use dash_proc_macro::Trace;
 
 use crate::gc::handle::Handle;
 use crate::gc::trace::Trace;
-use crate::value::ExternalValue;
-use crate::value::Unrooted;
+use crate::value::{ExternalValue, Unrooted};
 
 use super::value::function::user::UserFunction;
 use super::value::Value;

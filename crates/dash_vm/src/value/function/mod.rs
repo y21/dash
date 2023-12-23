@@ -1,33 +1,26 @@
-use std::{
-    any::Any,
-    cell::RefCell,
-    cmp::Ordering,
-    fmt::{self, Debug},
-    iter::{self},
-    rc::Rc,
-};
+use std::any::Any;
+use std::cell::RefCell;
+use std::cmp::Ordering;
+use std::fmt::{self, Debug};
+use std::iter::{self};
+use std::rc::Rc;
 
 use dash_proc_macro::Trace;
 
-use crate::{
-    dispatch::HandleResult,
-    gc::{handle::Handle, trace::Trace},
-    localscope::LocalScope,
-    Vm,
-};
+use crate::dispatch::HandleResult;
+use crate::gc::handle::Handle;
+use crate::gc::trace::Trace;
+use crate::localscope::LocalScope;
+use crate::Vm;
 
-use self::{
-    generator::GeneratorFunction,
-    native::{CallContext, NativeFunction},
-    r#async::AsyncFunction,
-    user::UserFunction,
-};
+use self::r#async::AsyncFunction;
+use self::generator::GeneratorFunction;
+use self::native::{CallContext, NativeFunction};
+use self::user::UserFunction;
 
-use super::{
-    array::Array,
-    object::{NamedObject, Object, PropertyKey, PropertyValue},
-    Typeof, Unrooted, Value,
-};
+use super::array::Array;
+use super::object::{NamedObject, Object, PropertyKey, PropertyValue};
+use super::{Typeof, Unrooted, Value};
 
 pub mod r#async;
 pub mod bound;

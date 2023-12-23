@@ -4,6 +4,7 @@ use dash_rt::format_value;
 use dash_rt::runtime::Runtime;
 use dash_rt::state::State;
 use dash_vm::eval::EvalError;
+use dash_vm::value::Root;
 use std::fs;
 use std::str::FromStr;
 use std::time::Instant;

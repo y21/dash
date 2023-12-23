@@ -6,14 +6,10 @@ use dash_proc_macro::Trace;
 use crate::gc::handle::Handle;
 use crate::gc::trace::Trace;
 use crate::localscope::LocalScope;
-use crate::PromiseAction;
-use crate::Vm;
+use crate::{PromiseAction, Vm};
 
-use super::object::NamedObject;
-use super::object::Object;
-use super::Typeof;
-use super::Unrooted;
-use super::Value;
+use super::object::{NamedObject, Object};
+use super::{Typeof, Unrooted, Value};
 
 #[derive(Debug)]
 pub enum PromiseState {

@@ -257,11 +257,7 @@ where
 
     /// Returns the highest ID that is currently in use
     pub fn highest(&self) -> Option<T> {
-        if self.0 > 0 {
-            Some(T::from(self.0 - 1))
-        } else {
-            None
-        }
+        if self.0 > 0 { Some(T::from(self.0 - 1)) } else { None }
     }
 
     pub fn len(&self) -> usize {

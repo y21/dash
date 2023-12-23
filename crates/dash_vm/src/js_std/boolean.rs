@@ -1,8 +1,7 @@
 use crate::throw;
 use crate::value::function::native::CallContext;
 use crate::value::ops::abstractions::conversions::ValueConversion;
-use crate::value::Value;
-use crate::value::ValueContext;
+use crate::value::{Value, ValueContext};
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let value = cx.args.get(0).unwrap_or_undefined().to_boolean()?;

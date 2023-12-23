@@ -1,49 +1,17 @@
 use dash_log::debug;
 use dash_middle::interner::StringInterner;
 use dash_middle::lexer::token::TokenType;
-use dash_middle::parser::expr::ArrayLiteral;
-use dash_middle::parser::expr::ArrayMemberKind;
-use dash_middle::parser::expr::AssignmentExpr;
-use dash_middle::parser::expr::AssignmentTarget;
-use dash_middle::parser::expr::BinaryExpr;
-use dash_middle::parser::expr::CallArgumentKind;
-use dash_middle::parser::expr::ConditionalExpr;
-use dash_middle::parser::expr::Expr;
-use dash_middle::parser::expr::ExprKind;
-use dash_middle::parser::expr::FunctionCall;
-use dash_middle::parser::expr::GroupingExpr;
-use dash_middle::parser::expr::LiteralExpr;
-use dash_middle::parser::expr::ObjectLiteral;
-use dash_middle::parser::expr::ObjectMemberKind;
-use dash_middle::parser::expr::PropertyAccessExpr;
-use dash_middle::parser::expr::UnaryExpr;
-use dash_middle::parser::statement::BlockStatement;
-use dash_middle::parser::statement::Class;
-use dash_middle::parser::statement::ClassMemberKind;
-use dash_middle::parser::statement::ClassProperty;
-use dash_middle::parser::statement::DoWhileLoop;
-use dash_middle::parser::statement::ExportKind;
-use dash_middle::parser::statement::ForInLoop;
-use dash_middle::parser::statement::ForLoop;
-use dash_middle::parser::statement::ForOfLoop;
-use dash_middle::parser::statement::FuncId;
-use dash_middle::parser::statement::FunctionDeclaration;
-use dash_middle::parser::statement::IfStatement;
-use dash_middle::parser::statement::ImportKind;
-use dash_middle::parser::statement::Loop;
-use dash_middle::parser::statement::Parameter;
-use dash_middle::parser::statement::ReturnStatement;
-use dash_middle::parser::statement::SpecifierKind;
-use dash_middle::parser::statement::Statement;
-use dash_middle::parser::statement::StatementKind;
-use dash_middle::parser::statement::SwitchCase;
-use dash_middle::parser::statement::SwitchStatement;
-use dash_middle::parser::statement::TryCatch;
-use dash_middle::parser::statement::VariableBinding;
-use dash_middle::parser::statement::VariableDeclaration;
-use dash_middle::parser::statement::VariableDeclarationKind;
-use dash_middle::parser::statement::VariableDeclarations;
-use dash_middle::parser::statement::WhileLoop;
+use dash_middle::parser::expr::{
+    ArrayLiteral, ArrayMemberKind, AssignmentExpr, AssignmentTarget, BinaryExpr, CallArgumentKind, ConditionalExpr,
+    Expr, ExprKind, FunctionCall, GroupingExpr, LiteralExpr, ObjectLiteral, ObjectMemberKind, PropertyAccessExpr,
+    UnaryExpr,
+};
+use dash_middle::parser::statement::{
+    BlockStatement, Class, ClassMemberKind, ClassProperty, DoWhileLoop, ExportKind, ForInLoop, ForLoop, ForOfLoop,
+    FuncId, FunctionDeclaration, IfStatement, ImportKind, Loop, Parameter, ReturnStatement, SpecifierKind, Statement,
+    StatementKind, SwitchCase, SwitchStatement, TryCatch, VariableBinding, VariableDeclaration,
+    VariableDeclarationKind, VariableDeclarations, WhileLoop,
+};
 
 use crate::type_infer::TypeInferCtx;
 use crate::OptLevel;

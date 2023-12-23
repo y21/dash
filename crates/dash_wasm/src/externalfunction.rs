@@ -1,16 +1,10 @@
 use dash_vm::gc::handle::Handle;
 use dash_vm::gc::trace::Trace;
 use dash_vm::localscope::LocalScope;
-use dash_vm::value::object::NamedObject;
-use dash_vm::value::object::Object;
-use dash_vm::value::object::PropertyKey;
-use dash_vm::value::object::PropertyValue;
-use dash_vm::value::Typeof;
-use dash_vm::value::Unrooted;
-use dash_vm::value::Value;
+use dash_vm::value::object::{NamedObject, Object, PropertyKey, PropertyValue};
+use dash_vm::value::{Typeof, Unrooted, Value};
 
-use crate::util::dash_value_from_wasm_value;
-use crate::util::wasm_value_from_dash_value;
+use crate::util::{dash_value_from_wasm_value, wasm_value_from_dash_value};
 
 #[derive(Debug)]
 pub struct ExternalFunction(js_sys::Function, NamedObject);

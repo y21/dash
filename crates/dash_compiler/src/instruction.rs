@@ -1,14 +1,12 @@
-use std::{convert::TryInto, rc::Rc};
+use std::convert::TryInto;
+use std::rc::Rc;
 
-use dash_middle::{
-    compiler::{
-        constant::{Constant, LimitExceededError},
-        instruction::{AssignKind, Instruction, IntrinsicOperation},
-        FunctionCallMetadata, ObjectMemberKind as CompilerObjectMemberKind, StaticImportKind,
-    },
-    parser::{error::Error, expr::ObjectMemberKind},
-    sourcemap::Span,
-};
+use dash_middle::compiler::constant::{Constant, LimitExceededError};
+use dash_middle::compiler::instruction::{AssignKind, Instruction, IntrinsicOperation};
+use dash_middle::compiler::{FunctionCallMetadata, ObjectMemberKind as CompilerObjectMemberKind, StaticImportKind};
+use dash_middle::parser::error::Error;
+use dash_middle::parser::expr::ObjectMemberKind;
+use dash_middle::sourcemap::Span;
 
 use super::builder::{InstructionBuilder, Label};
 

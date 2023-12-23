@@ -1,37 +1,13 @@
 use crate::interner::Symbol;
-use crate::parser::expr::ArrayLiteral;
-use crate::parser::expr::AssignmentExpr;
-use crate::parser::expr::BinaryExpr;
-use crate::parser::expr::ConditionalExpr;
-use crate::parser::expr::Expr;
-use crate::parser::expr::ExprKind;
-use crate::parser::expr::FunctionCall;
-use crate::parser::expr::GroupingExpr;
-use crate::parser::expr::LiteralExpr;
-use crate::parser::expr::ObjectLiteral;
-use crate::parser::expr::Postfix;
-use crate::parser::expr::Prefix;
-use crate::parser::expr::PropertyAccessExpr;
-use crate::parser::expr::Seq;
-use crate::parser::expr::UnaryExpr;
-use crate::parser::statement::BlockStatement;
-use crate::parser::statement::Class;
-use crate::parser::statement::DoWhileLoop;
-use crate::parser::statement::ExportKind;
-use crate::parser::statement::ForInLoop;
-use crate::parser::statement::ForLoop;
-use crate::parser::statement::ForOfLoop;
-use crate::parser::statement::FunctionDeclaration;
-use crate::parser::statement::IfStatement;
-use crate::parser::statement::ImportKind;
-use crate::parser::statement::Loop;
-use crate::parser::statement::ReturnStatement;
-use crate::parser::statement::Statement;
-use crate::parser::statement::StatementKind;
-use crate::parser::statement::SwitchStatement;
-use crate::parser::statement::TryCatch;
-use crate::parser::statement::VariableDeclarations;
-use crate::parser::statement::WhileLoop;
+use crate::parser::expr::{
+    ArrayLiteral, AssignmentExpr, BinaryExpr, ConditionalExpr, Expr, ExprKind, FunctionCall, GroupingExpr, LiteralExpr,
+    ObjectLiteral, Postfix, Prefix, PropertyAccessExpr, Seq, UnaryExpr,
+};
+use crate::parser::statement::{
+    BlockStatement, Class, DoWhileLoop, ExportKind, ForInLoop, ForLoop, ForOfLoop, FunctionDeclaration, IfStatement,
+    ImportKind, Loop, ReturnStatement, Statement, StatementKind, SwitchStatement, TryCatch, VariableDeclarations,
+    WhileLoop,
+};
 use crate::sourcemap::Span;
 
 pub trait VisitorExt: Visitor<()> {

@@ -7,14 +7,9 @@ use crate::localscope::LocalScope;
 use crate::Vm;
 
 use super::arraybuffer::ArrayBuffer;
-use super::object::NamedObject;
-use super::object::Object;
-use super::object::PropertyKey;
-use super::object::PropertyValue;
+use super::object::{NamedObject, Object, PropertyKey, PropertyValue};
 use super::ops::abstractions::conversions::ValueConversion;
-use super::Root;
-use super::Unrooted;
-use super::Value;
+use super::{Root, Unrooted, Value};
 
 #[derive(Debug, Copy, Clone)]
 pub enum TypedArrayKind {

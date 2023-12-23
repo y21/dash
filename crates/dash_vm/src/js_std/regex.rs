@@ -2,8 +2,7 @@ use crate::throw;
 use crate::value::function::native::CallContext;
 use crate::value::ops::abstractions::conversions::ValueConversion;
 use crate::value::regex::RegExp;
-use crate::value::Value;
-use crate::value::ValueContext;
+use crate::value::{Value, ValueContext};
 use dash_regex::matcher::Matcher as RegexMatcher;
 use dash_regex::parser::Parser as RegexParser;
 

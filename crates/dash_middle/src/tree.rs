@@ -1,7 +1,4 @@
-use std::ops::Deref;
-use std::ops::DerefMut;
-use std::ops::Index;
-use std::ops::IndexMut;
+use std::ops::{Deref, DerefMut, Index, IndexMut};
 use std::slice::IterMut;
 
 #[derive(Debug, Clone, Copy)]

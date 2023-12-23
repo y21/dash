@@ -1,10 +1,7 @@
 use std::mem;
 
 use crate::error::Error;
-use crate::node::Anchor;
-use crate::node::CharacterClassItem;
-use crate::node::MetaSequence;
-use crate::node::Node;
+use crate::node::{Anchor, CharacterClassItem, MetaSequence, Node};
 
 pub struct Parser<'a> {
     index: usize,

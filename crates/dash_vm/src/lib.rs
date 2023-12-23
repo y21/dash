@@ -1,30 +1,31 @@
 #![warn(clippy::redundant_clone)]
 
-use std::{fmt, ops::RangeBounds, vec::Drain, mem};
+use std::ops::RangeBounds;
+use std::vec::Drain;
+use std::{fmt, mem};
 
-use crate::{
-    value::{function::Function, primitive::Symbol, Root}, util::cold_path, gc::trace::Trace,
-};
+use crate::gc::trace::Trace;
+use crate::util::cold_path;
+use crate::value::function::Function;
+use crate::value::primitive::Symbol;
+use crate::value::Root;
 
-use self::{
-    dispatch::HandleResult,
-    frame::{Exports, Frame, FrameState, TryBlock},
-    localscope::LocalScope,
-    params::VmParams,
-    statics::Statics,
-    value::{
-        object::{Object, PropertyValue},
-        Value,
-    },
-};
+use self::dispatch::HandleResult;
+use self::frame::{Exports, Frame, FrameState, TryBlock};
+use self::localscope::LocalScope;
+use self::params::VmParams;
+use self::statics::Statics;
+use self::value::object::{Object, PropertyValue};
+use self::value::Value;
 
 use dash_log::{debug, error, span, Level};
 use dash_middle::compiler::instruction::Instruction;
-use gc::{handle::Handle, Gc};
-use localscope::{LocalScopeList, scope};
+use gc::handle::Handle;
+use gc::Gc;
+use localscope::{scope, LocalScopeList};
 use rustc_hash::FxHashSet;
-use util::unlikely;
-use value::{PureBuiltin, object::NamedObject, ExternalValue, Unrooted};
+use value::object::NamedObject;
+use value::{ExternalValue, PureBuiltin, Unrooted};
 
 #[cfg(feature = "jit")]
 mod jit;
@@ -35,15 +36,15 @@ pub mod external;
 pub mod frame;
 pub mod gc;
 pub mod js_std;
+pub mod json;
 pub mod localscope;
+mod macros;
 pub mod params;
 pub mod statics;
-pub mod util;
-pub mod value;
-pub mod json;
-mod macros;
 #[cfg(test)]
 mod test;
+pub mod util;
+pub mod value;
 
 pub const MAX_FRAME_STACK_SIZE: usize = 1024;
 pub const MAX_STACK_SIZE: usize = 8192;
@@ -77,9 +78,8 @@ pub struct Vm {
     /// will disable many optimizations such as specialized intrinsics.
     builtins_pure: bool,
     #[cfg(feature = "jit")]
-    jit: jit::Frontend
+    jit: jit::Frontend,
 }
-
 
 impl Vm {
     pub fn new(params: VmParams) -> Self {
@@ -87,7 +87,7 @@ impl Vm {
         let mut gc = Gc::default();
         let statics = Statics::new(&mut gc);
         // TODO: global __proto__ and constructor
-        let global = gc.register(PureBuiltin::new(NamedObject::null())); 
+        let global = gc.register(PureBuiltin::new(NamedObject::null()));
         let gc_object_threshold = params
             .initial_gc_object_threshold()
             .unwrap_or(DEFAULT_GC_OBJECT_COUNT_THRESHOLD);
@@ -130,7 +130,7 @@ impl Vm {
             fun.set_name(name.into());
             fun.set_fn_prototype(proto.clone());
         }
-        
+
         // TODO: we currently recursively call this for each of the registered methods, so a lot of builtins are initialized multiple times
         // we should have some sort of cache to avoid this
         // (though we also populate function prototypes later on this way, so it's not so trivial)
@@ -150,7 +150,7 @@ impl Vm {
         ) -> Handle<dyn Object> {
             base.set_property(scope, "constructor".into(), PropertyValue::static_default(constructor.into())).unwrap();
             base.set_prototype(scope, prototype.into()).unwrap();
-            
+
             for (key, value) in methods {
                 register(
                     value.clone(),
@@ -362,7 +362,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         let string_ctor = register(
             scope.statics.string_ctor.clone(),
             function_proto.clone(),
@@ -375,7 +375,7 @@ impl Vm {
             Some(("String", scope.statics.string_prototype.clone())),
             &mut scope,
         );
-        
+
         register(
            scope.statics.string_prototype.clone(),
            scope.statics.object_prototype.clone(),
@@ -1144,9 +1144,11 @@ impl Vm {
     /// and increments the instruction pointer
     pub(crate) fn fetchw_and_inc_ip(&mut self) -> u16 {
         let frame = self.frames.last_mut().expect("No frame");
-        let value: [u8; 2] = frame.function.buffer.with(|buf| buf[frame.ip..frame.ip + 2]
-            .try_into()
-            .expect("Failed to get wide instruction"));
+        let value: [u8; 2] = frame.function.buffer.with(|buf| {
+            buf[frame.ip..frame.ip + 2]
+                .try_into()
+                .expect("Failed to get wide instruction")
+        });
 
         frame.ip += 2;
         u16::from_ne_bytes(value)
@@ -1179,7 +1181,7 @@ impl Vm {
             self.stack[idx] = value;
         }
     }
-    
+
     pub(crate) fn push_stack(&mut self, value: Unrooted) {
         // SAFETY: Value will become a root here, therefore we don't need to root with a scope
         let value = unsafe { value.into_value() };
@@ -1283,7 +1285,7 @@ impl Vm {
             match v {
                 Value::Object(o) => println!("{:#?}", &**o),
                 Value::External(o) => println!("[[external]]: {:#?}", &*o.inner),
-                _ => println!("{v:?}")
+                _ => println!("{v:?}"),
             }
         }
     }
@@ -1293,7 +1295,7 @@ impl Vm {
         self.async_tasks.push(fun);
     }
 
-    pub fn has_async_tasks(&self)  -> bool {
+    pub fn has_async_tasks(&self) -> bool {
         !self.async_tasks.is_empty()
     }
 
@@ -1321,7 +1323,7 @@ impl Vm {
     }
 
     /// Executes a frame in this VM and initializes local variables (excluding parameters)
-    /// 
+    ///
     /// Parameters must be pushed onto the stack in the correct order by the caller before this function is called.
     pub fn execute_frame(&mut self, frame: Frame) -> Result<HandleResult, Unrooted> {
         debug!("execute frame {:?}", frame.function.name);
@@ -1337,13 +1339,11 @@ impl Vm {
         let pad_to = self.stack.len() + frame.extra_stack_space;
         debug!(pad_to);
         // TODO: check that the stack space won't exceed our stack frame limit
-        self.stack
-            .resize(pad_to, Value::undefined());
+        self.stack.resize(pad_to, Value::undefined());
     }
 
     /// Executes a frame in this VM, without doing any sort of stack management
-    fn execute_frame_raw(&mut self, frame: Frame) -> Result<HandleResult, Unrooted>
-    {
+    fn execute_frame_raw(&mut self, frame: Frame) -> Result<HandleResult, Unrooted> {
         // TODO: if this fails, we MUST revert the stack management,
         // like reserving space for undefined values
         self.try_push_frame(frame)?;
@@ -1354,8 +1354,15 @@ impl Vm {
         let fp = self.frames.len();
 
         loop {
-            if unlikely(self.gc.node_count() > self.gc_object_threshold) {
+            #[cfg(feature = "stress_gc")]
+            {
                 self.perform_gc();
+            }
+            #[cfg(not(feature = "stress_gc"))]
+            {
+                if util::unlikely(self.gc.node_count() > self.gc_object_threshold) {
+                    self.perform_gc();
+                }
             }
 
             let instruction = Instruction::from_repr(self.fetch_and_inc_ip()).unwrap();
@@ -1409,7 +1416,7 @@ impl Vm {
         self.global.trace();
         debug!("trace scopes");
         self.scopes.trace();
-        
+
         debug!("trace externals");
         // we do two things here:
         // remove Handles from external refs set that have a zero refcount (implying no active persistent refs)
@@ -1476,17 +1483,20 @@ impl Vm {
         use dash_typed_cfg::passes::bb_generation::ConditionalBranchAction;
 
         if let Some(trace) = self.jit.recording_trace_mut() {
-            trace.record_conditional_jump(ip, match did_jump {
-                true => ConditionalBranchAction::Taken,
-                false => ConditionalBranchAction::NotTaken,
-            });
+            trace.record_conditional_jump(
+                ip,
+                match did_jump {
+                    true => ConditionalBranchAction::Taken,
+                    false => ConditionalBranchAction::NotTaken,
+                },
+            );
         }
     }
 }
 
 pub enum PromiseAction {
     Resolve,
-    Reject
+    Reject,
 }
 
 impl fmt::Debug for Vm {

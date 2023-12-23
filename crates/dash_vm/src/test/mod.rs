@@ -4,12 +4,9 @@ use std::rc::Rc;
 use dash_optimizer::OptLevel;
 
 use crate::gc::persistent::Persistent;
-use crate::value::object::NamedObject;
-use crate::value::object::Object;
-use crate::value::object::PropertyValue;
+use crate::value::object::{NamedObject, Object, PropertyValue};
 use crate::value::primitive::Number;
-use crate::value::Root;
-use crate::value::Value;
+use crate::value::{Root, Value};
 use crate::Vm;
 
 const INTERPRETER: &str = include_str!("interpreter.js");

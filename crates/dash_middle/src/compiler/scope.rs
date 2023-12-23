@@ -2,9 +2,7 @@ use std::cell::RefCell;
 use std::convert::TryFrom;
 
 use crate::interner::Symbol;
-use crate::parser::statement::VariableBinding;
-use crate::parser::statement::VariableDeclarationKind;
-use crate::parser::statement::VariableDeclarationName;
+use crate::parser::statement::{VariableBinding, VariableDeclarationKind, VariableDeclarationName};
 
 use super::external::External;
 

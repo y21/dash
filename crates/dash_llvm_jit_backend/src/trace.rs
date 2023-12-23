@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
-use dash_middle::compiler::constant::Constant;
-use dash_middle::compiler::constant::Function;
+use dash_middle::compiler::constant::{Constant, Function};
 use dash_middle::compiler::instruction as inst;
 use dash_typed_cfg::passes::bb_generation::ConditionalBranchAction;
 use indexmap::IndexMap;

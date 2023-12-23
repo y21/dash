@@ -6,10 +6,7 @@ use dash_middle::util;
 
 use crate::localscope::LocalScope;
 use crate::value::array::Array;
-use crate::value::object::NamedObject;
-use crate::value::object::ObjectMap;
-use crate::value::object::PropertyKey;
-use crate::value::object::PropertyValue;
+use crate::value::object::{NamedObject, ObjectMap, PropertyKey, PropertyValue};
 use crate::value::Value;
 
 /// An error that occurred during parsing JSON

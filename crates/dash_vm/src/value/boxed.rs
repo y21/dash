@@ -1,21 +1,15 @@
-use super::ops::abstractions::conversions::PreferredType;
-use super::ops::abstractions::conversions::ValueConversion;
+use super::ops::abstractions::conversions::{PreferredType, ValueConversion};
 use super::ops::equality::ValueEquality;
-use crate::delegate;
 use crate::gc::handle::Handle;
 use crate::localscope::LocalScope;
-use crate::value::PropertyKey;
-use crate::value::Unrooted;
-use crate::PropertyValue;
-use crate::Vm;
+use crate::value::{PropertyKey, Unrooted};
+use crate::{delegate, PropertyValue, Vm};
 use dash_proc_macro::Trace;
 use std::any::Any;
 use std::rc::Rc;
 
-use super::object::NamedObject;
-use super::object::Object;
-use super::primitive::PrimitiveCapabilities;
-use super::primitive::Symbol as PrimitiveSymbol;
+use super::object::{NamedObject, Object};
+use super::primitive::{PrimitiveCapabilities, Symbol as PrimitiveSymbol};
 use super::Value;
 
 macro_rules! boxed_primitive {

@@ -6,15 +6,12 @@ use dash_middle::interner::StringInterner;
 use dash_optimizer::OptLevel;
 use dash_vm::eval::EvalError;
 use dash_vm::params::VmParams;
-use dash_vm::throw;
-use dash_vm::value::Unrooted;
-use dash_vm::value::Value;
-use dash_vm::Vm;
+use dash_vm::value::{Unrooted, Value};
+use dash_vm::{throw, Vm};
 use tokio::sync::mpsc;
 use tracing::info;
 
-use crate::event::EventMessage;
-use crate::event::EventSender;
+use crate::event::{EventMessage, EventSender};
 use crate::module::ModuleLoader;
 use crate::state::State;
 

@@ -1,26 +1,16 @@
-use std::collections::HashMap;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
-use dash_middle::compiler::instruction::AssignKind;
-use dash_middle::compiler::instruction::Instruction;
-use dash_middle::compiler::instruction::IntrinsicOperation;
-use dash_typed_cfg::passes::bb_generation::BasicBlockKey;
-use dash_typed_cfg::passes::bb_generation::BasicBlockMap;
-use dash_typed_cfg::passes::bb_generation::BasicBlockSuccessor;
-use dash_typed_cfg::passes::bb_generation::ConditionalBranchAction;
-use dash_typed_cfg::passes::type_infer::Type;
-use dash_typed_cfg::passes::type_infer::TypeMap;
+use dash_middle::compiler::instruction::{AssignKind, Instruction, IntrinsicOperation};
+use dash_typed_cfg::passes::bb_generation::{
+    BasicBlockKey, BasicBlockMap, BasicBlockSuccessor, ConditionalBranchAction,
+};
+use dash_typed_cfg::passes::type_infer::{Type, TypeMap};
 use dash_typed_cfg::util::DecodeCtxt;
 use dash_typed_cfg::TypedCfg;
-use llvm_sys::execution_engine::LLVMExecutionEngineRef;
-use llvm_sys::execution_engine::LLVMGetFunctionAddress;
-use llvm_sys::prelude::LLVMBasicBlockRef;
-use llvm_sys::prelude::LLVMBuilderRef;
-use llvm_sys::prelude::LLVMContextRef;
-use llvm_sys::prelude::LLVMModuleRef;
-use llvm_sys::prelude::LLVMPassManagerRef;
-use llvm_sys::prelude::LLVMTypeRef;
-use llvm_sys::prelude::LLVMValueRef;
+use llvm_sys::execution_engine::{LLVMExecutionEngineRef, LLVMGetFunctionAddress};
+use llvm_sys::prelude::{
+    LLVMBasicBlockRef, LLVMBuilderRef, LLVMContextRef, LLVMModuleRef, LLVMPassManagerRef, LLVMTypeRef, LLVMValueRef,
+};
 use llvm_sys::target_machine::LLVMCodeGenOptLevel;
 use llvm_sys::LLVMTypeKind;
 
@@ -378,7 +368,12 @@ impl<'a, 'q, Q: CodegenQuery> CodegenCtxt<'a, 'q, Q> {
                     let count = dcx.next_wide_signed();
                     let _target_ip = usize::try_from(index as i16 + count + 3).unwrap();
                     let bb = &self.bb_map[&bbk];
-                    let Some(BasicBlockSuccessor::Conditional { true_ip, false_ip, action: Some(action) }) = bb.successor else {
+                    let Some(BasicBlockSuccessor::Conditional {
+                        true_ip,
+                        false_ip,
+                        action: Some(action),
+                    }) = bb.successor
+                    else {
                         panic!("unmatched basic block successor");
                     };
 

@@ -2,9 +2,7 @@ use std::rc::Rc;
 
 mod frontend;
 mod query;
-use dash_log::debug;
-use dash_log::error;
-use dash_log::warn;
+use dash_log::{debug, error, warn};
 use dash_typed_cfg::passes::bb_generation::ConditionalBranchAction;
 pub use frontend::Frontend;
 use frontend::Trace;
@@ -90,14 +88,11 @@ mod tests {
 
     use dash_compiler::FunctionCompiler;
     use dash_llvm_jit_backend::codegen;
-    use dash_llvm_jit_backend::codegen::CodegenQuery;
-    use dash_llvm_jit_backend::codegen::JitConstant;
+    use dash_llvm_jit_backend::codegen::{CodegenQuery, JitConstant};
     use dash_middle::interner::StringInterner;
     use dash_optimizer::OptLevel;
-    use dash_typed_cfg::passes::bb_generation::BBGenerationQuery;
-    use dash_typed_cfg::passes::bb_generation::ConditionalBranchAction;
-    use dash_typed_cfg::passes::type_infer::Type;
-    use dash_typed_cfg::passes::type_infer::TypeInferQuery;
+    use dash_typed_cfg::passes::bb_generation::{BBGenerationQuery, ConditionalBranchAction};
+    use dash_typed_cfg::passes::type_infer::{Type, TypeInferQuery};
     use dash_typed_cfg::TypedCfgQuery;
 
     use crate::value::primitive::Number;

@@ -1,6 +1,6 @@
-use crate::value::{
-    function::native::CallContext, ops::abstractions::conversions::ValueConversion, Value, ValueContext,
-};
+use crate::value::function::native::CallContext;
+use crate::value::ops::abstractions::conversions::ValueConversion;
+use crate::value::{Value, ValueContext};
 
 #[rustfmt::skip]
 pub fn is_nan(cx: CallContext) -> Result<Value, Value> {

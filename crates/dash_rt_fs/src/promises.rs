@@ -2,15 +2,10 @@ use dash_rt::wrap_async;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::error::Error;
 use dash_vm::value::function::native::CallContext;
-use dash_vm::value::function::Function;
-use dash_vm::value::function::FunctionKind;
-use dash_vm::value::object::NamedObject;
-use dash_vm::value::object::Object;
-use dash_vm::value::object::PropertyKey;
-use dash_vm::value::object::PropertyValue;
+use dash_vm::value::function::{Function, FunctionKind};
+use dash_vm::value::object::{NamedObject, Object, PropertyKey, PropertyValue};
 use dash_vm::value::ops::abstractions::conversions::ValueConversion;
-use dash_vm::value::Value;
-use dash_vm::value::ValueContext;
+use dash_vm::value::{Value, ValueContext};
 
 pub fn init_module(sc: &mut LocalScope) -> Result<Value, Value> {
     let read_file_value = Function::new(sc, Some("readFile".into()), FunctionKind::Native(read_file));

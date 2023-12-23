@@ -1,9 +1,6 @@
-use std::borrow;
-use std::fmt;
-use std::hash::BuildHasherDefault;
-use std::hash::Hash;
-use std::hash::Hasher;
+use std::hash::{BuildHasherDefault, Hash, Hasher};
 use std::rc::Rc;
+use std::{borrow, fmt};
 
 use hashbrown::hash_map::RawEntryMut;
 use rustc_hash::FxHasher;

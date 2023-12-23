@@ -1,7 +1,6 @@
 use dash_vm::value::object::PropertyValue;
 use dash_vm::value::ops::abstractions::conversions::ValueConversion;
-use dash_vm::value::Typeof;
-use dash_vm::value::Value as DashValue;
+use dash_vm::value::{Typeof, Value as DashValue};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 use crate::externalvm::ExternalVm;

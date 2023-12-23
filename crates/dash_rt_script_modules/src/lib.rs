@@ -3,9 +3,8 @@ use std::cell::RefCell;
 use dash_middle::compiler::StaticImportKind;
 use dash_rt::module::ModuleLoader;
 use dash_vm::localscope::LocalScope;
-use dash_vm::throw;
-use dash_vm::value::Value;
-use dash_vm::Vm;
+use dash_vm::value::{Root, Value};
+use dash_vm::{throw, Vm};
 use indexmap::IndexSet;
 
 #[derive(Debug, Default)]
@@ -37,10 +36,7 @@ impl ModuleLoader for ScriptModule {
             Ok(c) => c,
             Err(err) => throw!(sc, ReferenceError, "{}", err),
         };
-        let module = match Vm::evaluate_module(sc, &contents, import_ty, Default::default()) {
-            Ok(v) => Ok(v.root(sc)),
-            Err(err) => Err(err.root(sc)),
-        };
+        let module = Vm::evaluate_module(sc, &contents, import_ty, Default::default()).root(sc);
 
         self.pop_import();
 

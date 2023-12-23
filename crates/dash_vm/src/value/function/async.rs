@@ -1,25 +1,14 @@
 use dash_proc_macro::Trace;
 
-use crate::delegate;
 use crate::gc::handle::Handle;
 use crate::localscope::LocalScope;
-use crate::value::object::NamedObject;
-use crate::value::object::Object;
-use crate::value::object::PropertyKey;
-use crate::value::promise::wrap_promise;
-use crate::value::promise::Promise;
+use crate::value::object::{NamedObject, Object, PropertyKey};
+use crate::value::promise::{wrap_promise, Promise};
 use crate::value::root_ext::RootErrExt;
-use crate::value::Root;
-use crate::value::Typeof;
-use crate::value::Unrooted;
-use crate::value::Value;
-use crate::value::ValueContext;
-use crate::PromiseAction;
-use crate::Vm;
+use crate::value::{Root, Typeof, Unrooted, Value, ValueContext};
+use crate::{delegate, PromiseAction, Vm};
 
-use super::generator::as_generator;
-use super::generator::GeneratorFunction;
-use super::generator::GeneratorState;
+use super::generator::{as_generator, GeneratorFunction, GeneratorState};
 use super::user::UserFunction;
 
 #[derive(Debug, Trace)]

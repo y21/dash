@@ -10,11 +10,8 @@ use dash_vm::gc::persistent::Persistent;
 use dash_vm::localscope::LocalScope;
 use dash_vm::throw;
 use dash_vm::value::function::native::CallContext;
-use dash_vm::value::function::Function;
-use dash_vm::value::function::FunctionKind;
-use dash_vm::value::object::NamedObject;
-use dash_vm::value::object::Object;
-use dash_vm::value::object::PropertyValue;
+use dash_vm::value::function::{Function, FunctionKind};
+use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::abstractions::conversions::ValueConversion;
 use dash_vm::value::Value;
 

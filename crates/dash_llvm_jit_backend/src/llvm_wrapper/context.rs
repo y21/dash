@@ -1,32 +1,17 @@
-use std::ffi::CStr;
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::fmt::format;
 
 use dash_typed_cfg::passes::type_infer::Type;
-use llvm_sys::core::LLVMAppendBasicBlockInContext;
-use llvm_sys::core::LLVMConstInt;
-use llvm_sys::core::LLVMConstReal;
-use llvm_sys::core::LLVMContextCreate;
-use llvm_sys::core::LLVMCreateBuilderInContext;
-use llvm_sys::core::LLVMDoubleTypeInContext;
-use llvm_sys::core::LLVMFunctionType;
-use llvm_sys::core::LLVMInt1TypeInContext;
-use llvm_sys::core::LLVMInt32TypeInContext;
-use llvm_sys::core::LLVMInt64TypeInContext;
-use llvm_sys::core::LLVMInt8TypeInContext;
-use llvm_sys::core::LLVMModuleCreateWithNameInContext;
-use llvm_sys::core::LLVMPointerType;
-use llvm_sys::core::LLVMStructTypeInContext;
-use llvm_sys::core::LLVMVoidTypeInContext;
+use llvm_sys::core::{
+    LLVMAppendBasicBlockInContext, LLVMConstInt, LLVMConstReal, LLVMContextCreate, LLVMCreateBuilderInContext,
+    LLVMDoubleTypeInContext, LLVMFunctionType, LLVMInt1TypeInContext, LLVMInt32TypeInContext, LLVMInt64TypeInContext,
+    LLVMInt8TypeInContext, LLVMModuleCreateWithNameInContext, LLVMPointerType, LLVMStructTypeInContext,
+    LLVMVoidTypeInContext,
+};
 use llvm_sys::prelude::LLVMContextRef;
 
 use super::module::Module;
-use super::raw;
-use super::BasicBlock;
-use super::Builder;
-use super::Function;
-use super::Ty;
-use super::Value;
+use super::{raw, BasicBlock, Builder, Function, Ty, Value};
 
 pub struct Context {
     module_count: usize,

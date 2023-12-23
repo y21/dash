@@ -3,11 +3,9 @@ use std::rc::Rc;
 use dash_proc_macro::Trace;
 use dash_regex::node::Node;
 
-use crate::delegate;
-use crate::Vm;
+use crate::{delegate, Vm};
 
-use super::object::NamedObject;
-use super::object::Object;
+use super::object::{NamedObject, Object};
 
 #[derive(Debug)]
 pub struct RegExpInner {

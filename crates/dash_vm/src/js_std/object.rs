@@ -3,15 +3,10 @@ use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::array::Array;
 use crate::value::function::native::CallContext;
-use crate::value::object::NamedObject;
-use crate::value::object::Object;
-use crate::value::object::PropertyKey;
-use crate::value::object::PropertyValue;
+use crate::value::object::{NamedObject, Object, PropertyKey, PropertyValue};
 use crate::value::ops::abstractions::conversions::ValueConversion;
 use crate::value::root_ext::RootErrExt;
-use crate::value::Root;
-use crate::value::Value;
-use crate::value::ValueContext;
+use crate::value::{Root, Value, ValueContext};
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     match cx.args.first() {

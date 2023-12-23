@@ -1,38 +1,12 @@
-use dash_middle::lexer::token::TokenType;
-use dash_middle::lexer::token::VARIABLE_TYPES;
+use dash_middle::lexer::token::{TokenType, VARIABLE_TYPES};
 use dash_middle::parser::error::Error;
-use dash_middle::parser::expr::Expr;
-use dash_middle::parser::expr::ExprKind;
-use dash_middle::parser::statement::BlockStatement;
-use dash_middle::parser::statement::Catch;
-use dash_middle::parser::statement::Class;
-use dash_middle::parser::statement::ClassMember;
-use dash_middle::parser::statement::ClassMemberKind;
-use dash_middle::parser::statement::ClassProperty;
-use dash_middle::parser::statement::DoWhileLoop;
-use dash_middle::parser::statement::ExportKind;
-use dash_middle::parser::statement::ForInLoop;
-use dash_middle::parser::statement::ForLoop;
-use dash_middle::parser::statement::ForOfLoop;
-use dash_middle::parser::statement::FunctionDeclaration;
-use dash_middle::parser::statement::FunctionKind;
-use dash_middle::parser::statement::IfStatement;
-use dash_middle::parser::statement::ImportKind;
-use dash_middle::parser::statement::Loop;
-use dash_middle::parser::statement::Parameter;
-use dash_middle::parser::statement::ReturnStatement;
-use dash_middle::parser::statement::SpecifierKind;
-use dash_middle::parser::statement::Statement;
-use dash_middle::parser::statement::StatementKind;
-use dash_middle::parser::statement::SwitchCase;
-use dash_middle::parser::statement::SwitchStatement;
-use dash_middle::parser::statement::TryCatch;
-use dash_middle::parser::statement::VariableBinding;
-use dash_middle::parser::statement::VariableDeclaration;
-use dash_middle::parser::statement::VariableDeclarationKind;
-use dash_middle::parser::statement::VariableDeclarationName;
-use dash_middle::parser::statement::VariableDeclarations;
-use dash_middle::parser::statement::WhileLoop;
+use dash_middle::parser::expr::{Expr, ExprKind};
+use dash_middle::parser::statement::{
+    BlockStatement, Catch, Class, ClassMember, ClassMemberKind, ClassProperty, DoWhileLoop, ExportKind, ForInLoop,
+    ForLoop, ForOfLoop, FunctionDeclaration, FunctionKind, IfStatement, ImportKind, Loop, Parameter, ReturnStatement,
+    SpecifierKind, Statement, StatementKind, SwitchCase, SwitchStatement, TryCatch, VariableBinding,
+    VariableDeclaration, VariableDeclarationKind, VariableDeclarationName, VariableDeclarations, WhileLoop,
+};
 use dash_middle::parser::types::TypeSegment;
 
 use crate::Parser;

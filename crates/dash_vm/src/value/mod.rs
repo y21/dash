@@ -15,30 +15,27 @@ pub mod set;
 pub mod typedarray;
 use std::rc::Rc;
 
-use dash_middle::compiler::{constant::Constant, external::External};
+use dash_middle::compiler::constant::Constant;
+use dash_middle::compiler::external::External;
 use dash_middle::parser::statement::FunctionKind as ParserFunctionKind;
 use dash_middle::util::ThreadSafeStorage;
 use dash_proc_macro::Trace;
 
+use crate::gc::handle::Handle;
+use crate::gc::trace::Trace;
+use crate::value::function::FunctionKind;
+use crate::value::primitive::{Null, Undefined};
 use crate::{delegate, throw};
-use crate::{
-    gc::{handle::Handle, trace::Trace},
-    value::{
-        function::FunctionKind,
-        primitive::{Null, Undefined},
-    },
-};
 
 use self::function::r#async::AsyncFunction;
-use self::object::PropertyValue;
-use self::primitive::{Number, PrimitiveCapabilities};
+use self::function::generator::GeneratorFunction;
+use self::function::user::UserFunction;
+use self::function::Function;
+use self::object::{Object, PropertyKey, PropertyValue};
+use self::primitive::{Number, PrimitiveCapabilities, Symbol};
 use self::regex::RegExp;
-use self::{
-    function::{generator::GeneratorFunction, user::UserFunction, Function},
-    object::{Object, PropertyKey},
-    primitive::Symbol,
-};
-use super::{localscope::LocalScope, Vm};
+use super::localscope::LocalScope;
+use super::Vm;
 
 // Impl detail: must be repr(C) because we do
 // raw pointer arithmetic to access the data ptr/vtable ptr

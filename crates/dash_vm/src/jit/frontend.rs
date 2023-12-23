@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 
-use dash_llvm_jit_backend::codegen;
 use dash_llvm_jit_backend::codegen::JitFunction;
 use dash_llvm_jit_backend::error::Error;
-use dash_llvm_jit_backend::init;
+use dash_llvm_jit_backend::{codegen, init};
 use dash_middle::compiler::constant::Function;
 use dash_typed_cfg::TypedCfg;
 

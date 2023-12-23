@@ -2,17 +2,13 @@ use std::ops::Range;
 
 use crate::localscope::LocalScope;
 use crate::throw;
-use crate::value::array;
-use crate::value::array::Array;
-use crate::value::array::ArrayIterator;
+use crate::value::array::{Array, ArrayIterator};
 use crate::value::function::native::CallContext;
 use crate::value::object::PropertyValue;
 use crate::value::ops::abstractions::conversions::ValueConversion;
 use crate::value::ops::equality::ValueEquality;
 use crate::value::root_ext::RootErrExt;
-use crate::value::Root;
-use crate::value::Value;
-use crate::value::ValueContext;
+use crate::value::{array, Root, Value, ValueContext};
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let size = cx.args.first().unwrap_or_undefined().to_length_u(cx.scope)?;
@@ -501,11 +497,7 @@ pub fn unshift(cx: CallContext) -> Result<Value, Value> {
 fn to_slice_index(index: isize, len: usize) -> usize {
     if index < 0 {
         let new_index = len as isize + index;
-        if new_index < 0 {
-            0
-        } else {
-            new_index as usize
-        }
+        if new_index < 0 { 0 } else { new_index as usize }
     } else {
         index as usize
     }

@@ -1,7 +1,6 @@
 use std::ffi::CStr;
 
-use llvm_sys::core::LLVMGetParam;
-use llvm_sys::core::LLVMGetValueName2;
+use llvm_sys::core::{LLVMGetParam, LLVMGetValueName2};
 use llvm_sys::prelude::LLVMValueRef;
 
 use super::value::Value;
@@ -10,7 +9,7 @@ pub struct Function(pub(super) Value);
 
 impl Function {
     pub fn as_ptr(&self) -> LLVMValueRef {
-        self.0 .0
+        self.0.0
     }
 
     pub fn get_param(&self, param: u32) -> Value {

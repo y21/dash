@@ -1,17 +1,11 @@
-use std::cell::Cell;
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::path::Path;
-use std::path::PathBuf;
+use std::cell::{Cell, RefCell};
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use dash_middle::compiler::constant::Function;
 
-use crate::value::primitive::Null;
-use crate::value::primitive::Number;
-use crate::value::primitive::Symbol;
-use crate::value::primitive::Undefined;
+use crate::value::primitive::{Null, Number, Symbol, Undefined};
 use crate::value::regex::RegExpInner;
 use crate::value::typedarray::TypedArrayKind;
 use crate::value::Unrooted;

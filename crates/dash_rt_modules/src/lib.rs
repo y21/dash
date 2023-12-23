@@ -1,5 +1,4 @@
-use dash_rt::module::ModuleLoader;
-use dash_rt::module::NoopModule;
+use dash_rt::module::{ModuleLoader, NoopModule};
 
 pub fn init_modules() -> Box<dyn ModuleLoader> {
     let module = NoopModule;

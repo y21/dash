@@ -3,11 +3,9 @@ use std::cell::RefCell;
 use ahash::HashMap;
 use dash_proc_macro::Trace;
 
-use crate::delegate;
-use crate::Vm;
+use crate::{delegate, Vm};
 
-use super::object::NamedObject;
-use super::object::Object;
+use super::object::{NamedObject, Object};
 use super::Value;
 
 #[derive(Debug, Trace)]

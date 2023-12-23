@@ -1,9 +1,7 @@
-use crate::json;
-use crate::throw;
 use crate::value::function::native::CallContext;
 use crate::value::ops::abstractions::conversions::ValueConversion;
-use crate::value::Value;
-use crate::value::ValueContext;
+use crate::value::{Value, ValueContext};
+use crate::{json, throw};
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     throw!(cx.scope, TypeError, "JSON is not a constructor")

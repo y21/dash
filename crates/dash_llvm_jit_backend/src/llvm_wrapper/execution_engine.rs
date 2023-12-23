@@ -1,9 +1,7 @@
 use std::ffi::CStr;
 use std::mem;
 
-use llvm_sys::execution_engine::LLVMExecutionEngineRef;
-use llvm_sys::execution_engine::LLVMGetExecutionEngineTargetData;
-use llvm_sys::execution_engine::LLVMGetFunctionAddress;
+use llvm_sys::execution_engine::{LLVMExecutionEngineRef, LLVMGetExecutionEngineTargetData, LLVMGetFunctionAddress};
 use llvm_sys::target::LLVMSizeOfTypeInBits;
 
 use super::Ty;
@@ -29,7 +27,7 @@ impl ExecutionEngine {
         unsafe {
             let addr = LLVMGetFunctionAddress(self.0, name.as_ptr());
             assert!(addr != 0);
-            
+
             mem::transmute::<u64, JitFunction>(addr)
         }
     }

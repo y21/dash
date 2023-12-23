@@ -1,8 +1,6 @@
 use dash_middle::compiler::constant::Constant;
-use dash_middle::compiler::instruction::Instruction;
-use dash_middle::compiler::instruction::IntrinsicOperation;
-use dash_middle::compiler::FunctionCallMetadata;
-use dash_middle::compiler::ObjectMemberKind;
+use dash_middle::compiler::instruction::{Instruction, IntrinsicOperation};
+use dash_middle::compiler::{FunctionCallMetadata, ObjectMemberKind};
 use dash_middle::util::Reader;
 use std::fmt;
 use std::fmt::Write;

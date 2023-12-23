@@ -4,17 +4,12 @@ use std::rc::Rc;
 
 use dash_proc_macro::Trace;
 
-use crate::delegate;
 use crate::gc::handle::Handle;
 use crate::localscope::LocalScope;
-use crate::Vm;
+use crate::{delegate, Vm};
 
-use super::object::NamedObject;
-use super::object::Object;
-use super::object::PropertyKey;
-use super::object::PropertyValue;
-use super::Unrooted;
-use super::Value;
+use super::object::{NamedObject, Object, PropertyKey, PropertyValue};
+use super::{Unrooted, Value};
 
 #[derive(Debug, Trace)]
 pub struct Error {

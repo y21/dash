@@ -1,12 +1,10 @@
 use std::marker::PhantomData;
 use std::mem;
-use std::ops::Deref;
-use std::ops::DerefMut;
+use std::ops::{Deref, DerefMut};
 
 use crate::gc::handle::Handle;
 use crate::value::function::bound::BoundFunction;
-use crate::value::promise::Promise;
-use crate::value::promise::PromiseState;
+use crate::value::promise::{Promise, PromiseState};
 use crate::value::ValueContext;
 use crate::PromiseAction;
 

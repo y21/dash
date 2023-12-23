@@ -1,7 +1,6 @@
 use std::fmt;
 
-use crate::interner::sym;
-use crate::interner::Symbol;
+use crate::interner::{sym, Symbol};
 use crate::sourcemap::Span;
 use derive_more::Display;
 

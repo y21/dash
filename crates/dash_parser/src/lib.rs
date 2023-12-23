@@ -1,19 +1,11 @@
-use dash_log::debug;
-use dash_log::span;
-use dash_log::Level;
-use dash_middle::interner::StringInterner;
-use dash_middle::interner::Symbol;
-use dash_middle::lexer::token::Token;
-use dash_middle::lexer::token::TokenType;
+use dash_log::{debug, span, Level};
+use dash_middle::interner::{StringInterner, Symbol};
+use dash_middle::lexer::token::{Token, TokenType};
 use dash_middle::parser::error::Error;
-use dash_middle::parser::expr::Expr;
-use dash_middle::parser::expr::ExprKind;
-use dash_middle::parser::statement::FuncId;
-use dash_middle::parser::statement::Statement;
-use dash_middle::sourcemap::SourceMap;
-use dash_middle::sourcemap::Span;
-use dash_middle::util::Counter;
-use dash_middle::util::LevelStack;
+use dash_middle::parser::expr::{Expr, ExprKind};
+use dash_middle::parser::statement::{FuncId, Statement};
+use dash_middle::sourcemap::{SourceMap, Span};
+use dash_middle::util::{Counter, LevelStack};
 
 mod expr;
 mod stmt;

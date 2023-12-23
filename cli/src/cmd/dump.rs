@@ -1,15 +1,12 @@
-use std::fs;
-use std::io;
 use std::io::Write;
+use std::{fs, io};
 
-use anyhow::anyhow;
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use clap::ArgMatches;
 use dash_compiler::transformations;
 use dash_middle::interner::StringInterner;
 use dash_middle::parser::error::IntoFormattableErrors;
-use dash_middle::parser::statement::FuncId;
-use dash_middle::parser::statement::VariableDeclarationName;
+use dash_middle::parser::statement::{FuncId, VariableDeclarationName};
 use dash_optimizer::consteval::ConstFunctionEvalCtx;
 use dash_optimizer::type_infer::TypeInferCtx;
 

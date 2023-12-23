@@ -4,17 +4,13 @@ use derive_more::Display;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    interner::{sym, Symbol},
-    lexer::token::TokenType,
-    sourcemap::Span,
-    tree::TreeToken,
-};
+use crate::interner::{sym, Symbol};
+use crate::lexer::token::TokenType;
+use crate::sourcemap::Span;
+use crate::tree::TreeToken;
 
-use super::{
-    expr::{Expr, ExprKind},
-    types::TypeSegment,
-};
+use super::expr::{Expr, ExprKind};
+use super::types::TypeSegment;
 
 /// A JavaScript statement
 #[derive(Debug, Clone, Display)]

@@ -1,48 +1,29 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
+use std::convert::TryInto;
 use std::rc::Rc;
-use std::{convert::TryInto, usize};
+use std::usize;
 
 use dash_log::{debug, span, Level};
-use dash_middle::compiler::constant::{Buffer, Constant, Function};
+use dash_middle::compiler::constant::{Buffer, Constant, ConstantPool, Function};
+use dash_middle::compiler::external::External;
 use dash_middle::compiler::instruction::{AssignKind, IntrinsicOperation};
-use dash_middle::compiler::scope::ScopeLocal;
-use dash_middle::compiler::scope::{CompileValueType, Scope};
-use dash_middle::compiler::{constant::ConstantPool, external::External};
+use dash_middle::compiler::scope::{CompileValueType, Scope, ScopeLocal};
 use dash_middle::compiler::{CompileResult, FunctionCallMetadata, StaticImportKind};
 use dash_middle::interner::{sym, StringInterner, Symbol};
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::error::Error;
-use dash_middle::parser::expr::FunctionCall;
-use dash_middle::parser::expr::GroupingExpr;
-use dash_middle::parser::expr::LiteralExpr;
-use dash_middle::parser::expr::ObjectLiteral;
-use dash_middle::parser::expr::Postfix;
-use dash_middle::parser::expr::PropertyAccessExpr;
-use dash_middle::parser::expr::Seq;
-use dash_middle::parser::expr::UnaryExpr;
-use dash_middle::parser::expr::{ArrayLiteral, ObjectMemberKind};
-use dash_middle::parser::expr::{ArrayMemberKind, BinaryExpr};
-use dash_middle::parser::expr::{AssignmentExpr, AssignmentTarget};
-use dash_middle::parser::expr::{CallArgumentKind, ConditionalExpr};
-use dash_middle::parser::expr::{Expr, ExprKind};
-use dash_middle::parser::statement::SpecifierKind;
-use dash_middle::parser::statement::StatementKind;
-use dash_middle::parser::statement::TryCatch;
-use dash_middle::parser::statement::VariableBinding;
-use dash_middle::parser::statement::VariableDeclaration;
-use dash_middle::parser::statement::VariableDeclarationKind;
-use dash_middle::parser::statement::WhileLoop;
-use dash_middle::parser::statement::{BlockStatement, Loop};
-use dash_middle::parser::statement::{Class, Parameter};
-use dash_middle::parser::statement::{ClassMemberKind, ExportKind};
-use dash_middle::parser::statement::{DoWhileLoop, ForLoop};
-use dash_middle::parser::statement::{ForInLoop, ForOfLoop};
-use dash_middle::parser::statement::{FuncId, ImportKind};
-use dash_middle::parser::statement::{FunctionDeclaration, SwitchStatement};
-use dash_middle::parser::statement::{FunctionKind, VariableDeclarationName};
-use dash_middle::parser::statement::{IfStatement, VariableDeclarations};
-use dash_middle::parser::statement::{ReturnStatement, Statement};
+use dash_middle::parser::expr::{
+    ArrayLiteral, ArrayMemberKind, AssignmentExpr, AssignmentTarget, BinaryExpr, CallArgumentKind, ConditionalExpr,
+    Expr, ExprKind, FunctionCall, GroupingExpr, LiteralExpr, ObjectLiteral, ObjectMemberKind, Postfix,
+    PropertyAccessExpr, Seq, UnaryExpr,
+};
+use dash_middle::parser::statement::{
+    BlockStatement, Class, ClassMemberKind, DoWhileLoop, ExportKind, ForInLoop, ForLoop, ForOfLoop, FuncId,
+    FunctionDeclaration, FunctionKind, IfStatement, ImportKind, Loop, Parameter, ReturnStatement, SpecifierKind,
+    Statement, StatementKind, SwitchStatement, TryCatch, VariableBinding, VariableDeclaration, VariableDeclarationKind,
+    VariableDeclarationName, VariableDeclarations, WhileLoop,
+};
 use dash_middle::sourcemap::Span;
 use dash_middle::visitor::Visitor;
 use dash_optimizer::consteval::ConstFunctionEvalCtx;

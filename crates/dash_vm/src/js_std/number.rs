@@ -2,10 +2,8 @@ use crate::throw;
 use crate::util::format_f64;
 use crate::value::function::native::CallContext;
 use crate::value::ops::abstractions::conversions::ValueConversion;
-use crate::value::primitive::Number;
-use crate::value::primitive::MAX_SAFE_INTEGERF;
-use crate::value::Value;
-use crate::value::ValueContext;
+use crate::value::primitive::{Number, MAX_SAFE_INTEGERF};
+use crate::value::{Value, ValueContext};
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let value = cx.args.get(0).unwrap_or_undefined().to_number(cx.scope)?;

@@ -3,32 +3,22 @@ use dash_proc_macro::Trace;
 use crate::gc::handle::Handle;
 use crate::gc::Gc;
 use crate::js_std;
-use crate::value::error::AggregateError;
-use crate::value::error::EvalError;
-use crate::value::error::RangeError;
-use crate::value::error::ReferenceError;
-use crate::value::error::SyntaxError;
-use crate::value::error::TypeError;
-use crate::value::error::URIError;
-use crate::value::function::Function;
-use crate::value::function::FunctionKind;
+use crate::value::error::{AggregateError, EvalError, RangeError, ReferenceError, SyntaxError, TypeError, URIError};
+use crate::value::function::{Function, FunctionKind};
 use crate::value::map::Map;
 use crate::value::regex::RegExp;
 use crate::value::set::Set;
 use crate::value::PureBuiltin;
 
-use super::value::array::Array;
-use super::value::array::ArrayIterator;
+use super::value::array::{Array, ArrayIterator};
 use super::value::arraybuffer::ArrayBuffer;
-use super::value::boxed::Boolean as BoxedBoolean;
-use super::value::boxed::Number as BoxedNumber;
-use super::value::boxed::String as BoxedString;
-use super::value::boxed::Symbol as BoxedSymbol;
+use super::value::boxed::{
+    Boolean as BoxedBoolean, Number as BoxedNumber, String as BoxedString, Symbol as BoxedSymbol,
+};
 use super::value::error::Error;
 use super::value::function::generator::GeneratorIterator;
 use super::value::function::native::NativeFunction;
-use super::value::object::NamedObject;
-use super::value::object::Object;
+use super::value::object::{NamedObject, Object};
 use super::value::primitive::Symbol;
 
 use std::rc::Rc;

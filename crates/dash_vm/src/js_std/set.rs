@@ -3,9 +3,7 @@ use crate::value::function::native::CallContext;
 use crate::value::object::PropertyKey;
 use crate::value::ops::abstractions::conversions::ValueConversion;
 use crate::value::set::Set;
-use crate::value::Root;
-use crate::value::Value;
-use crate::value::ValueContext;
+use crate::value::{Root, Value, ValueContext};
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let set = Set::new(cx.scope);

@@ -1,14 +1,12 @@
 use std::convert::TryInto;
 use std::hash::Hash;
-use std::ops::Deref;
-use std::ops::DerefMut;
+use std::ops::{Deref, DerefMut};
 
 use dash_middle::compiler::instruction as inst;
 use dash_middle::compiler::instruction::Instruction;
 
-use crate::jump_container;
 use crate::jump_container::JumpContainer;
-use crate::FunctionCompiler;
+use crate::{jump_container, FunctionCompiler};
 
 #[derive(PartialOrd, Ord, Hash, Eq, PartialEq, Debug, Clone)]
 pub enum Label {

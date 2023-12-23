@@ -3,25 +3,20 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use dash_middle::compiler::StaticImportKind;
-use dash_middle::util::SharedOnce;
-use dash_middle::util::ThreadSafeStorage;
+use dash_middle::util::{SharedOnce, ThreadSafeStorage};
 use dash_rt::event::EventMessage;
 use dash_rt::module::ModuleLoader;
 use dash_rt::state::State;
-use dash_vm::delegate;
 use dash_vm::gc::persistent::Persistent;
 use dash_vm::gc::trace::Trace;
 use dash_vm::localscope::LocalScope;
-use dash_vm::throw;
 use dash_vm::value::function::native::CallContext;
-use dash_vm::value::function::Function;
-use dash_vm::value::function::FunctionKind;
-use dash_vm::value::object::NamedObject;
-use dash_vm::value::object::Object;
-use dash_vm::value::object::PropertyValue;
+use dash_vm::value::function::{Function, FunctionKind};
+use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::abstractions::conversions::ValueConversion;
-use dash_vm::value::Value;
-use dash_vm::value::ValueContext;
+use dash_vm::value::root_ext::RootErrExt;
+use dash_vm::value::{Value, ValueContext};
+use dash_vm::{delegate, throw};
 use hyper::Body;
 use tokio::sync::oneshot;
 use tokio::sync::oneshot::Sender;
@@ -95,7 +90,7 @@ pub fn listen(cx: CallContext) -> Result<Value, Value> {
 
                     let ctx = Value::Object(scope.register(ctx));
 
-                    if let Err(err) = cb.apply(&mut scope, Value::undefined(), vec![ctx]) {
+                    if let Err(err) = cb.apply(&mut scope, Value::undefined(), vec![ctx]).root_err(&mut scope) {
                         match err.to_string(&mut scope) {
                             Ok(err) => eprintln!("Unhandled exception in HTTP handler! {err}"),
                             Err(..) => eprintln!("Unhandled exception in exception toString method in HTTP handler!"),

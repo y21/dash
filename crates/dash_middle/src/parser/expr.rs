@@ -2,11 +2,9 @@ use std::fmt::{self, Debug};
 
 use derive_more::Display;
 
-use crate::{
-    interner::{sym, Symbol},
-    lexer::token::TokenType,
-    sourcemap::Span,
-};
+use crate::interner::{sym, Symbol};
+use crate::lexer::token::TokenType;
+use crate::sourcemap::Span;
 
 use super::statement::{fmt_list, FunctionDeclaration};
 

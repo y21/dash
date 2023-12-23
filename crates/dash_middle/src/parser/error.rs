@@ -7,8 +7,7 @@ use memchr::memchr;
 use memchr::memmem::rfind;
 use owo_colors::OwoColorize;
 
-use crate::lexer::token::Token;
-use crate::lexer::token::TokenType;
+use crate::lexer::token::{Token, TokenType};
 use crate::sourcemap::Span;
 
 /// An error that occurred during the "middle" stage of execution,

@@ -3,6 +3,7 @@ use clap::ArgMatches;
 use dash_middle::parser::error::IntoFormattableErrors;
 use dash_rt::format_value;
 use dash_vm::eval::EvalError;
+use dash_vm::value::Root;
 use dash_vm::Vm;
 
 use crate::util;

@@ -1,21 +1,10 @@
-use dash_middle::interner::sym;
-use dash_middle::interner::Symbol;
-use dash_middle::lexer::token::Token;
-use dash_middle::lexer::token::TokenType;
-use dash_middle::lexer::token::ASSIGNMENT_TYPES;
+use dash_middle::interner::{sym, Symbol};
+use dash_middle::lexer::token::{Token, TokenType, ASSIGNMENT_TYPES};
 use dash_middle::parser::error::Error;
-use dash_middle::parser::expr::ArrayMemberKind;
-use dash_middle::parser::expr::CallArgumentKind;
-use dash_middle::parser::expr::Expr;
-use dash_middle::parser::expr::ExprKind;
-use dash_middle::parser::expr::ObjectMemberKind;
-use dash_middle::parser::statement::BlockStatement;
-use dash_middle::parser::statement::FunctionDeclaration;
-use dash_middle::parser::statement::FunctionKind;
-use dash_middle::parser::statement::Parameter;
-use dash_middle::parser::statement::ReturnStatement;
-use dash_middle::parser::statement::Statement;
-use dash_middle::parser::statement::StatementKind;
+use dash_middle::parser::expr::{ArrayMemberKind, CallArgumentKind, Expr, ExprKind, ObjectMemberKind};
+use dash_middle::parser::statement::{
+    BlockStatement, FunctionDeclaration, FunctionKind, Parameter, ReturnStatement, Statement, StatementKind,
+};
 use dash_middle::sourcemap::Span;
 
 use crate::Parser;

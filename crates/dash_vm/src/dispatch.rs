@@ -1,21 +1,19 @@
 #![allow(clippy::needless_lifetimes)] // for now
 
 use dash_log::warn;
-use std::{
-    ops::{Deref, DerefMut},
-    rc::Rc,
-    vec::Drain,
-};
+use std::ops::{Deref, DerefMut};
+use std::rc::Rc;
+use std::vec::Drain;
 
-use crate::{
-    frame::Frame,
-    gc::handle::Handle,
-    localscope::LocalScope,
-    value::{ExternalValue, Root, Unrooted},
-};
+use crate::frame::Frame;
+use crate::gc::handle::Handle;
+use crate::localscope::LocalScope;
+use crate::value::{ExternalValue, Root, Unrooted};
 
-use super::{value::Value, Vm};
-use dash_middle::compiler::{constant::Constant, instruction::Instruction};
+use super::value::Value;
+use super::Vm;
+use dash_middle::compiler::constant::Constant;
+use dash_middle::compiler::instruction::Instruction;
 
 // TODO: all of these should be `Unrooted`
 pub enum HandleResult {
@@ -196,39 +194,21 @@ impl<'sc, 'vm> DerefMut for DispatchContext<'sc, 'vm> {
 }
 
 mod handlers {
-    use dash_middle::compiler::instruction::AssignKind;
-    use dash_middle::compiler::instruction::IntrinsicOperation;
-    use dash_middle::compiler::ArrayMemberKind;
-    use dash_middle::compiler::FunctionCallMetadata;
-    use dash_middle::compiler::ObjectMemberKind;
-    use dash_middle::compiler::StaticImportKind;
+    use dash_middle::compiler::instruction::{AssignKind, IntrinsicOperation};
+    use dash_middle::compiler::{ArrayMemberKind, FunctionCallMetadata, ObjectMemberKind, StaticImportKind};
     use if_chain::if_chain;
     use smallvec::SmallVec;
     use std::borrow::Cow;
-    use std::ops::Add;
-    use std::ops::Div;
-    use std::ops::Mul;
-    use std::ops::Rem;
-    use std::ops::Sub;
+    use std::ops::{Add, Div, Mul, Rem, Sub};
 
-    use crate::frame::Frame;
-    use crate::frame::FrameState;
-    use crate::frame::TryBlock;
+    use crate::frame::{Frame, FrameState, TryBlock};
     use crate::localscope::LocalScope;
     use crate::throw;
     use crate::util::unlikely;
-    use crate::value::array::Array;
-    use crate::value::array::ArrayIterator;
-    use crate::value::function::adjust_stack_from_flat_call;
+    use crate::value::array::{Array, ArrayIterator};
     use crate::value::function::user::UserFunction;
-    use crate::value::function::Function;
-    use crate::value::function::FunctionKind;
-    use crate::value::object::NamedObject;
-    use crate::value::object::Object;
-    use crate::value::object::ObjectMap;
-    use crate::value::object::PropertyKey;
-    use crate::value::object::PropertyValue;
-    use crate::value::object::PropertyValueKind;
+    use crate::value::function::{adjust_stack_from_flat_call, Function, FunctionKind};
+    use crate::value::object::{NamedObject, Object, ObjectMap, PropertyKey, PropertyValue, PropertyValueKind};
     use crate::value::ops::abstractions::conversions::ValueConversion;
     use crate::value::ops::equality::ValueEquality;
 

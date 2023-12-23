@@ -1,16 +1,11 @@
-use std::collections::HashMap;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
-use dash_middle::compiler::instruction::Instruction;
-use dash_middle::compiler::instruction::IntrinsicOperation;
+use dash_middle::compiler::instruction::{Instruction, IntrinsicOperation};
 
 use crate::error::Error;
 use crate::util::DecodeCtxt;
 
-use super::bb_generation::BasicBlockKey;
-use super::bb_generation::BasicBlockMap;
-use super::bb_generation::BasicBlockSuccessor;
-use super::bb_generation::ConditionalBranchAction;
+use super::bb_generation::{BasicBlockKey, BasicBlockMap, BasicBlockSuccessor, ConditionalBranchAction};
 
 pub type TypeMap = HashMap<u16, Type>;
 
@@ -194,7 +189,12 @@ impl<'a, 'q, Q: TypeInferQuery> TypeInferCtxt<'a, 'q, Q> {
                     let _target_ip = usize::try_from(index as i16 + count + 3).unwrap();
 
                     let bb = &self.bbs[&bbk];
-                    let Some(BasicBlockSuccessor::Conditional { true_ip: true_, false_ip: false_, action }) = bb.successor else {
+                    let Some(BasicBlockSuccessor::Conditional {
+                        true_ip: true_,
+                        false_ip: false_,
+                        action,
+                    }) = bb.successor
+                    else {
                         panic!("unmatched basic block successor");
                     };
 

@@ -1,13 +1,11 @@
 use crate::localscope::LocalScope;
 use crate::throw;
-use crate::value::array::Array;
-use crate::value::array::ArrayIterator;
+use crate::value::array::{Array, ArrayIterator};
 use crate::value::boxed::String as BoxedString;
 use crate::value::function::native::CallContext;
 use crate::value::object::PropertyValue;
 use crate::value::ops::abstractions::conversions::ValueConversion;
-use crate::value::Value;
-use crate::value::ValueContext;
+use crate::value::{Value, ValueContext};
 use std::borrow::Cow;
 use std::fmt::Write;
 use std::rc::Rc;

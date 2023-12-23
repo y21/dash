@@ -2,18 +2,11 @@ use std::rc::Rc;
 
 use crate::gc::handle::Handle;
 use crate::localscope::LocalScope;
-use crate::throw;
-use crate::value::boxed::Boolean;
-use crate::value::boxed::Number as BoxedNumber;
-use crate::value::boxed::String as BoxedString;
-use crate::value::boxed::Symbol as BoxedSymbol;
+use crate::value::boxed::{Boolean, Number as BoxedNumber, String as BoxedString, Symbol as BoxedSymbol};
 use crate::value::object::Object;
-use crate::value::primitive::Number;
-use crate::value::primitive::MAX_SAFE_INTEGERF;
-use crate::value::Root;
-use crate::value::Typeof;
-use crate::value::Value;
-use crate::Vm;
+use crate::value::primitive::{Number, MAX_SAFE_INTEGERF};
+use crate::value::{Root, Typeof, Value};
+use crate::{throw, Vm};
 
 pub trait ValueConversion {
     fn to_primitive(&self, sc: &mut LocalScope, preferred_type: Option<PreferredType>) -> Result<Value, Value>;
@@ -54,11 +47,7 @@ pub trait ValueConversion {
         let integer = number.abs().floor();
 
         // 6. If number < -0𝔽, set integer to -integer.
-        if number < 0.0 {
-            Ok(-integer)
-        } else {
-            Ok(integer)
-        }
+        if number < 0.0 { Ok(-integer) } else { Ok(integer) }
     }
 
     fn to_boolean(&self) -> Result<bool, Value>;

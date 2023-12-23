@@ -1,16 +1,21 @@
-use std::{any::Any, borrow::Cow, cell::RefCell, fmt::Debug, ptr::addr_of};
+use std::any::Any;
+use std::borrow::Cow;
+use std::cell::RefCell;
+use std::fmt::Debug;
+use std::ptr::addr_of;
 
-use crate::gc::{persistent::Persistent, trace::Trace};
+use crate::gc::persistent::Persistent;
+use crate::gc::trace::Trace;
 use bitflags::bitflags;
 use dash_proc_macro::Trace;
 
-use crate::{gc::handle::Handle, localscope::LocalScope, throw, Vm};
+use crate::gc::handle::Handle;
+use crate::localscope::LocalScope;
+use crate::{throw, Vm};
 
-use super::{
-    ops::abstractions::conversions::ValueConversion,
-    primitive::{PrimitiveCapabilities, Symbol},
-    ExternalValue, Root, Typeof, Unrooted, Value, ValueContext,
-};
+use super::ops::abstractions::conversions::ValueConversion;
+use super::primitive::{PrimitiveCapabilities, Symbol};
+use super::{ExternalValue, Root, Typeof, Unrooted, Value, ValueContext};
 
 pub type ObjectMap<K, V> = ahash::HashMap<K, V>;
 
@@ -583,7 +588,7 @@ impl Object for NamedObject {
                         PropertyValueKind::Static(value) => value,
                         _ => throw!(sc, TypeError, "Prototype cannot be a trap"),
                     },
-                )
+                );
             }
             Some("constructor") => {
                 let obj = match value.kind {

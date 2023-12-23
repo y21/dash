@@ -1,18 +1,9 @@
 use dash_middle::interner::sym;
 use dash_middle::lexer::token::TokenType;
-use dash_middle::parser::expr::AssignmentExpr;
-use dash_middle::parser::expr::AssignmentTarget;
-use dash_middle::parser::expr::Expr;
-use dash_middle::parser::expr::ExprKind;
-use dash_middle::parser::expr::PropertyAccessExpr;
-use dash_middle::parser::statement::BlockStatement;
-use dash_middle::parser::statement::Class;
-use dash_middle::parser::statement::ClassMemberKind;
-use dash_middle::parser::statement::ClassProperty;
-use dash_middle::parser::statement::Loop;
-use dash_middle::parser::statement::ReturnStatement;
-use dash_middle::parser::statement::Statement;
-use dash_middle::parser::statement::StatementKind;
+use dash_middle::parser::expr::{AssignmentExpr, AssignmentTarget, Expr, ExprKind, PropertyAccessExpr};
+use dash_middle::parser::statement::{
+    BlockStatement, Class, ClassMemberKind, ClassProperty, Loop, ReturnStatement, Statement, StatementKind,
+};
 use dash_middle::sourcemap::Span;
 
 /// Implicitly patches the last expression to be returned from the function
