@@ -1,3 +1,7 @@
+use std::ops::Range;
+
+use smallvec::{smallvec, SmallVec};
+
 use crate::node::Node;
 use crate::stream::BorrowedStream;
 use crate::visitor::Visit;
@@ -5,6 +9,11 @@ use crate::visitor::Visit;
 pub struct Matcher<'a> {
     nodes: BorrowedStream<'a, Node>,
     text: BorrowedStream<'a, u8>,
+}
+
+#[derive(Debug)]
+pub struct Match {
+    pub groups: SmallVec<[Range<usize>; 1]>,
 }
 
 impl<'a> Matcher<'a> {
@@ -15,13 +24,17 @@ impl<'a> Matcher<'a> {
         }
     }
 
-    pub fn matches(&mut self) -> bool {
+    pub fn matches(&mut self) -> Option<Match> {
         let mut index = self.text.index();
+
+        // TODO: what if text.len() == 0?
 
         while index < self.text.len() {
             if self.nodes.is_eof() {
                 // all regex nodes matched
-                return true;
+                return Some(Match {
+                    groups: smallvec![index..self.text.index()],
+                });
             }
 
             if !self.matches_single() {
@@ -31,7 +44,7 @@ impl<'a> Matcher<'a> {
             }
         }
 
-        false
+        None
     }
 
     pub fn matches_single(&mut self) -> bool {

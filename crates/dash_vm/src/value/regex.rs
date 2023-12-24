@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::rc::Rc;
 
 use dash_proc_macro::Trace;
@@ -9,8 +10,10 @@ use super::object::{NamedObject, Object};
 
 #[derive(Debug)]
 pub struct RegExpInner {
-    nodes: Vec<Node>,
-    source: Rc<str>,
+    pub nodes: Vec<Node>,
+    pub source: Rc<str>,
+    // TODO: this should only exist if the `g` flag is set (we currently don't even have regex flags)
+    pub last_index: Cell<usize>,
 }
 
 #[derive(Debug, Trace)]
@@ -25,7 +28,11 @@ impl RegExp {
         let ctor = vm.statics.regexp_ctor.clone();
 
         Self {
-            inner: Some(RegExpInner { nodes, source }),
+            inner: Some(RegExpInner {
+                nodes,
+                source,
+                last_index: Cell::new(0),
+            }),
             object: NamedObject::with_prototype_and_constructor(proto, ctor),
         }
     }
@@ -37,10 +44,8 @@ impl RegExp {
         }
     }
 
-    pub fn inner(&self) -> Option<(&[Node], &str)> {
-        self.inner
-            .as_ref()
-            .map(|inner| (inner.nodes.as_slice(), inner.source.as_ref()))
+    pub fn inner(&self) -> Option<&RegExpInner> {
+        self.inner.as_ref()
     }
 }
 

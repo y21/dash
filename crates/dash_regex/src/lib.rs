@@ -22,7 +22,7 @@ pub fn test() {
     fn matches(regex: &str, input: &str) -> bool {
         let nodes = Parser::new(regex.as_bytes()).parse_all().unwrap();
         let mut matcher = Matcher::new(&nodes, input.as_bytes());
-        matcher.matches()
+        matcher.matches().is_some()
     }
 
     const HEX_REGEX: &str = "^#?([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})$";

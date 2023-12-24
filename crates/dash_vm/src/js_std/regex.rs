@@ -1,7 +1,7 @@
 use crate::throw;
 use crate::value::function::native::CallContext;
 use crate::value::ops::conversions::ValueConversion;
-use crate::value::regex::RegExp;
+use crate::value::regex::{RegExp, RegExpInner};
 use crate::value::{Value, ValueContext};
 use dash_regex::matcher::Matcher as RegexMatcher;
 use dash_regex::parser::Parser as RegexParser;
@@ -27,11 +27,21 @@ pub fn test(cx: CallContext) -> Result<Value, Value> {
         None => throw!(cx.scope, TypeError, "Receiver must be a RegExp"),
     };
 
-    let (nodes, _) = match regex.inner() {
+    let RegExpInner { nodes, last_index, .. } = match regex.inner() {
         Some(nodes) => nodes,
         None => throw!(cx.scope, TypeError, "Receiver must be an initialized RegExp object"),
     };
 
-    let mut matcher = RegexMatcher::new(nodes, text.as_bytes());
-    Ok(Value::Boolean(matcher.matches()))
+    if last_index.get() >= text.len() {
+        last_index.set(0);
+        return Ok(Value::Boolean(false));
+    }
+
+    let mut matcher = RegexMatcher::new(nodes, text[last_index.get()..].as_bytes());
+    if let Some(m) = matcher.matches() {
+        last_index.set(last_index.get() + m.groups[0].end);
+        Ok(Value::Boolean(true))
+    } else {
+        Ok(Value::Boolean(false))
+    }
 }
