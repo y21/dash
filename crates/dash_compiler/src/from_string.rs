@@ -19,7 +19,7 @@ impl<'interner> FunctionCompiler<'interner> {
 
         let tcx = TypeInferCtx::new(counter);
 
-        Self::new(opt, tcx, interner)
+        Self::new(input, opt, tcx, interner)
             .compile_ast(ast, true)
             .map_err(|err| vec![err])
     }

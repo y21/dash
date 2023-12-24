@@ -593,6 +593,7 @@ mod handlers {
         this: Value,
         argc: usize,
         is_constructor: bool,
+        call_ip: u16,
     ) -> Result<Option<HandleResult>, Unrooted> {
         let (args, refs) = {
             let mut args = Vec::with_capacity(argc);
@@ -642,7 +643,7 @@ mod handlers {
         let ret = if is_constructor {
             callee.construct(&mut cx, this, args)?
         } else {
-            callee.apply(&mut cx, this, args)?
+            callee.apply_with_debug(&mut cx, this, args, call_ip)?
         };
 
         // SAFETY: no need to root, we're directly pushing into the value stack which itself is a root
@@ -651,6 +652,8 @@ mod handlers {
     }
 
     pub fn call<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+        let call_ip = cx.active_frame().ip as u16 - 1;
+
         let meta = FunctionCallMetadata::from(cx.fetch_and_inc_ip());
         let argc = usize::from(meta.value());
         let is_constructor = meta.is_constructor_call();
@@ -674,7 +677,7 @@ mod handlers {
             then {
                 call_flat(cx, &callee, this, function, user_function, argc, is_constructor)
             } else {
-                call_generic(cx, &callee, this, argc, is_constructor)
+                call_generic(cx, &callee, this, argc, is_constructor, call_ip)
             }
         }
     }

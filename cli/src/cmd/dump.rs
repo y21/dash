@@ -71,7 +71,7 @@ pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
         }
     }
 
-    let bytecode = dash_compiler::FunctionCompiler::new(opt, tcx, interner)
+    let bytecode = dash_compiler::FunctionCompiler::new(&source, opt, tcx, interner)
         .compile_ast(ast, true)
         .map_err(|err| anyhow!("{}", [err].formattable(&source, true)))?;
 

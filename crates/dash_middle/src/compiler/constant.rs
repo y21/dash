@@ -12,6 +12,7 @@ use crate::parser::expr::LiteralExpr;
 use crate::parser::statement::FunctionKind;
 
 use super::external::External;
+use super::DebugSymbols;
 
 /// The instruction buffer.
 /// Uses interior mutability since we store it in a `Rc<Function>`
@@ -81,6 +82,8 @@ pub struct Function {
     // JIT-poisoned code regions (instruction pointers)
     // TODO: refactor this a bit so this isn't "visible" to e.g. the bytecode compiler with builder pattern
     pub poison_ips: RefCell<HashSet<usize>>,
+    pub source: Rc<str>,
+    pub debug_symbols: DebugSymbols,
 }
 
 impl Function {

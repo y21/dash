@@ -20,7 +20,7 @@ macro_rules! simple_instruction {
     }
 }
 
-impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
+impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
     pub fn build_jmp_header(&mut self, label: Label, is_local_label: bool) {
         self.write_all(&[0, 0]);
         match is_local_label {
@@ -120,7 +120,11 @@ impl<'cx, 'inp> InstructionBuilder<'cx, 'inp> {
         self.write(kind as u8);
     }
 
-    pub fn build_call(&mut self, meta: FunctionCallMetadata, spread_arg_indices: Vec<u8>) {
+    pub fn build_call(&mut self, meta: FunctionCallMetadata, spread_arg_indices: Vec<u8>, target_span: Span) {
+        let ip = self.current_function().buf.len();
+        self.current_function_mut()
+            .debug_symbols
+            .add(ip.try_into().unwrap(), target_span);
         self.write_instr(Instruction::Call);
         self.write(meta.into());
         self.write(spread_arg_indices.len().try_into().unwrap());

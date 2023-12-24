@@ -9,7 +9,7 @@ use dash_middle::compiler::constant::{Buffer, Constant, ConstantPool, Function};
 use dash_middle::compiler::external::External;
 use dash_middle::compiler::instruction::{AssignKind, IntrinsicOperation};
 use dash_middle::compiler::scope::{CompileValueType, Scope, ScopeLocal};
-use dash_middle::compiler::{CompileResult, FunctionCallMetadata, StaticImportKind};
+use dash_middle::compiler::{CompileResult, DebugSymbols, FunctionCallMetadata, StaticImportKind};
 use dash_middle::interner::{sym, StringInterner, Symbol};
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::error::Error;
@@ -82,6 +82,7 @@ struct FunctionLocalState {
     /// Keeps track of the total number of loops to be able to have unique IDs
     switch_counter: usize,
     id: FuncId,
+    debug_symbols: DebugSymbols,
 }
 
 impl FunctionLocalState {
@@ -97,6 +98,7 @@ impl FunctionLocalState {
             loop_counter: 0,
             switch_counter: 0,
             id,
+            debug_symbols: DebugSymbols::default(),
         }
     }
 
@@ -153,15 +155,17 @@ pub struct FunctionCompiler<'interner> {
     /// Optimization level
     #[allow(unused)]
     opt_level: OptLevel,
+    source: Rc<str>,
 }
 
 impl<'interner> FunctionCompiler<'interner> {
-    pub fn new(opt_level: OptLevel, tcx: TypeInferCtx, interner: &'interner mut StringInterner) -> Self {
+    pub fn new(source: &str, opt_level: OptLevel, tcx: TypeInferCtx, interner: &'interner mut StringInterner) -> Self {
         Self {
             opt_level,
             tcx,
             interner,
             function_stack: Vec::new(),
+            source: Rc::from(source),
         }
     }
 
@@ -218,6 +222,8 @@ impl<'interner> FunctionCompiler<'interner> {
             cp: root.cp,
             locals,
             externals,
+            source: self.source.into(),
+            debug_symbols: root.debug_symbols,
         })
     }
 
@@ -1195,6 +1201,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             arguments,
         }: FunctionCall,
     ) -> Result<(), Error> {
+        let target_span = target.span;
         let mut ib = InstructionBuilder::new(self);
         // TODO: this also needs to be specialized for assignment expressions with property access as target
 
@@ -1308,7 +1315,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
         let meta = FunctionCallMetadata::new_checked(argc, constructor_call, has_this)
             .ok_or(Error::ParameterLimitExceeded(span))?;
 
-        ib.build_call(meta, spread_arg_indices);
+        ib.build_call(meta, spread_arg_indices, target_span);
 
         Ok(())
     }
@@ -1614,6 +1621,8 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             r#async,
             rest_local,
             poison_ips: RefCell::new(HashSet::new()),
+            debug_symbols: cmp.debug_symbols,
+            source: Rc::clone(&ib.source),
         };
         ib.build_constant(Constant::Function(Rc::new(function)))
             .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;

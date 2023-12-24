@@ -31,7 +31,7 @@ impl Vm {
             .map_err(EvalError::Middle)?;
 
         let tcx = TypeInferCtx::new(counter);
-        let cr = FunctionCompiler::new(opt, tcx, interner)
+        let cr = FunctionCompiler::new(input, opt, tcx, interner)
             .compile_ast(ast, true)
             .map_err(|err| EvalError::Middle(vec![err]))?;
         let mut frame = Frame::from_compile_result(cr);

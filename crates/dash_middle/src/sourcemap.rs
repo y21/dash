@@ -1,3 +1,7 @@
+#[cfg(feature = "format")]
+use serde::{Deserialize, Serialize};
+
+#[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Copy)]
 pub struct Span {
     pub lo: u32,
@@ -26,7 +30,7 @@ impl Span {
         &src[self.lo as usize..self.hi as usize]
     }
     pub fn to(self, other: Span) -> Span {
-        debug_assert!(other.hi >= self.lo);
+        debug_assert!(other.hi >= self.lo && self.is_user_span() && other.is_user_span());
         Span {
             lo: self.lo,
             hi: other.hi,

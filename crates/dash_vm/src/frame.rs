@@ -158,6 +158,8 @@ impl Frame {
             r#async: false,
             rest_local: None,
             poison_ips: RefCell::new(HashSet::new()),
+            source: cr.source,
+            debug_symbols: cr.debug_symbols,
         };
 
         Self {

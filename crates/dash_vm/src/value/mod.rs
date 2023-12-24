@@ -23,6 +23,7 @@ use dash_proc_macro::Trace;
 
 use crate::gc::handle::Handle;
 use crate::gc::trace::Trace;
+use crate::util::cold_path;
 use crate::value::function::FunctionKind;
 use crate::value::primitive::{Null, Undefined};
 use crate::{delegate, throw};
@@ -381,6 +382,33 @@ impl Value {
             Self::Undefined(_) => throw!(sc, TypeError, "undefined is not a function"),
             Self::Null(_) => throw!(sc, TypeError, "null is not a function"),
             Self::Symbol(s) => throw!(sc, TypeError, "{:?} is not a function", s),
+        }
+    }
+
+    /// Calls a function with debug information. This will print the function being attempted to call as written in the source code.
+    pub(crate) fn apply_with_debug(
+        &self,
+        sc: &mut LocalScope,
+        this: Value,
+        args: Vec<Value>,
+        ip: u16,
+    ) -> Result<Unrooted, Unrooted> {
+        match self {
+            Self::Object(o) => o.apply(sc, this, args),
+            Self::External(o) => o.apply(sc, this, args),
+            _ => {
+                cold_path();
+
+                let frame = sc.frames.last().unwrap();
+                let snippet = frame
+                    .function
+                    .debug_symbols
+                    .get(ip)
+                    .res(&frame.function.source)
+                    .to_owned();
+
+                throw!(sc, TypeError, "{} is not a function", snippet)
+            }
         }
     }
 
