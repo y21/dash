@@ -29,4 +29,8 @@ pub fn test() {
     assert!(matches(HEX_REGEX, "#aabbccdd"));
     assert!(!matches(HEX_REGEX, "#AAb"));
     assert!(matches(HEX_REGEX, "#aBcDEEf0"));
+
+    assert!(matches("\\d", "a1"));
+    assert!(matches("V\\dX", "aV1aVaXaV1Xs"));
+    assert!(!matches("V\\dX", "aV1aVaXaV?Xs"));
 }

@@ -26,6 +26,10 @@ impl<'a, T> BorrowedStream<'a, T> {
         self.index
     }
 
+    pub fn len(&self) -> usize {
+        self.source.len()
+    }
+
     pub fn set_index(&mut self, i: usize) {
         self.index = i;
     }

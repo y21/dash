@@ -16,12 +16,22 @@ impl<'a> Matcher<'a> {
     }
 
     pub fn matches(&mut self) -> bool {
-        while !self.nodes.is_eof() {
+        let mut index = self.text.index();
+
+        while index < self.text.len() {
+            if self.nodes.is_eof() {
+                // all regex nodes matched
+                return true;
+            }
+
             if !self.matches_single() {
-                return false;
+                index += 1;
+                self.nodes.set_index(0);
+                self.text.set_index(index);
             }
         }
-        true
+
+        false
     }
 
     pub fn matches_single(&mut self) -> bool {
