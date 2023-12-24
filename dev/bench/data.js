@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1703376069364,
+  "lastUpdate": 1703427438023,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -5951,6 +5951,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 59320,
             "range": "± 1331",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "4cd9cfdc2f174ecab86c42b5f5369670976b09d2",
+          "message": "show callee source code in \"is not a function\" errors\n\nFixes #75",
+          "timestamp": "2023-12-24T15:14:48+01:00",
+          "tree_id": "12d719900ba8af8df1e86744415b5fcf68e3ee11",
+          "url": "https://github.com/y21/dash/commit/4cd9cfdc2f174ecab86c42b5f5369670976b09d2"
+        },
+        "date": 1703427436562,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 2564527,
+            "range": "± 14352",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 234511,
+            "range": "± 3745",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 58750,
+            "range": "± 339",
             "unit": "ns/iter"
           }
         ]
