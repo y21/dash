@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1703446161360,
+  "lastUpdate": 1703455400907,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -6077,6 +6077,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 59765,
             "range": "± 676",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "4ae8aa11628f2091b1bc8d2caa0a78ceaa94b140",
+          "message": "implement non-capturing regex groups and properly reset `lastIndex` to 0",
+          "timestamp": "2023-12-24T23:00:39+01:00",
+          "tree_id": "fe6299da4e75b00f3d5754220581a8a495b401b2",
+          "url": "https://github.com/y21/dash/commit/4ae8aa11628f2091b1bc8d2caa0a78ceaa94b140"
+        },
+        "date": 1703455400240,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 2549561,
+            "range": "± 30803",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 230497,
+            "range": "± 905",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 57233,
+            "range": "± 687",
             "unit": "ns/iter"
           }
         ]
