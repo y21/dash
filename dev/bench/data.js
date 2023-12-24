@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1703366116581,
+  "lastUpdate": 1703376069364,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -5909,6 +5909,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 58679,
             "range": "± 2279",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "e4a83bf7c497ad5a90ea8d3a4bb434371f52af7e",
+          "message": "move `ValueConversions` to common mod, commit rustfmt.toml",
+          "timestamp": "2023-12-24T00:58:45+01:00",
+          "tree_id": "33b8367e2ad172aa7d1447cae36564659be16f63",
+          "url": "https://github.com/y21/dash/commit/e4a83bf7c497ad5a90ea8d3a4bb434371f52af7e"
+        },
+        "date": 1703376068703,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 2527513,
+            "range": "± 37067",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 228696,
+            "range": "± 2358",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 59320,
+            "range": "± 1331",
             "unit": "ns/iter"
           }
         ]
