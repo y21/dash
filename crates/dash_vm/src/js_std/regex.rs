@@ -42,6 +42,7 @@ pub fn test(cx: CallContext) -> Result<Value, Value> {
         last_index.set(last_index.get() + m.groups[0].end);
         Ok(Value::Boolean(true))
     } else {
+        last_index.set(0);
         Ok(Value::Boolean(false))
     }
 }

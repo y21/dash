@@ -5,6 +5,7 @@ edition = "2018"
 
 [features]
 nodejs = []
+stress_gc = ["dash_vm/stress_gc"]
 
 [dependencies]
 anyhow = "1.0"

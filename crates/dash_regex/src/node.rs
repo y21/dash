@@ -10,6 +10,15 @@ pub enum CharacterClassItem {
 
 #[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
+pub enum GroupCaptureMode {
+    /// `(?:...)`
+    None,
+    /// `(...)`
+    Id(usize),
+}
+
+#[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Node {
     AnyCharacter,
     MetaSequence(MetaSequence),
@@ -23,7 +32,7 @@ pub enum Node {
     Anchor(Anchor),
     Or(Vec<Node>, Vec<Node>),
     Optional(Box<Node>),
-    Group(Vec<Node>),
+    Group(GroupCaptureMode, Vec<Node>),
 }
 
 impl Node {

@@ -59,7 +59,7 @@ impl<'a> Visit<'a> for Node {
                 node.matches(s);
                 true
             }
-            Node::Group(group) => group.iter().all(|node| node.matches(s)),
+            Node::Group(_, group) => group.iter().all(|node| node.matches(s)),
             Node::Or(left, right) => {
                 let left_index = s.index();
                 let left_matches = left.iter().all(|node| node.matches(s));

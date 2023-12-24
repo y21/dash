@@ -1,16 +1,21 @@
 use std::mem;
 
 use crate::error::Error;
-use crate::node::{Anchor, CharacterClassItem, MetaSequence, Node};
+use crate::node::{Anchor, CharacterClassItem, GroupCaptureMode, MetaSequence, Node};
 
 pub struct Parser<'a> {
     index: usize,
     input: &'a [u8],
+    group_index: usize,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(input: &'a [u8]) -> Self {
-        Self { index: 0, input }
+        Self {
+            index: 0,
+            input,
+            group_index: 1, // 0 is the entire match
+        }
     }
 
     /// Advances the index and returns the previous byte
@@ -153,6 +158,19 @@ impl<'a> Parser<'a> {
 
     fn parse_group(&mut self) -> Result<Node, Error> {
         let mut nodes = Vec::new();
+        // ?: = non-capturing group
+        let capture_mode = if self.current() == Some(b'?') {
+            self.advance();
+            if self.current() == Some(b':') {
+                self.advance();
+                GroupCaptureMode::None
+            } else {
+                self.group_index += 1;
+                GroupCaptureMode::Id(self.group_index - 1)
+            }
+        } else {
+            GroupCaptureMode::None
+        };
 
         while !self.is_eof() {
             match self.current() {
@@ -178,7 +196,7 @@ impl<'a> Parser<'a> {
             }
         }
 
-        Ok(Node::Group(nodes))
+        Ok(Node::Group(capture_mode, nodes))
     }
 
     fn parse_escape(&mut self) -> Result<Node, Error> {
