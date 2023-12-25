@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use dash_proc_macro::Trace;
 
 use crate::gc::handle::Handle;
-use crate::gc::trace::Trace;
+use crate::gc::trace::{Trace, TraceCtxt};
 use crate::localscope::LocalScope;
 use crate::{PromiseAction, Vm};
 
@@ -22,14 +22,14 @@ pub enum PromiseState {
 }
 
 unsafe impl Trace for PromiseState {
-    fn trace(&self) {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
         match self {
             Self::Pending { resolve, reject } => {
-                resolve.trace();
-                reject.trace();
+                resolve.trace(cx);
+                reject.trace(cx);
             }
-            Self::Resolved(v) => v.trace(),
-            Self::Rejected(v) => v.trace(),
+            Self::Resolved(v) => v.trace(cx),
+            Self::Rejected(v) => v.trace(cx),
         }
     }
 }

@@ -5,7 +5,7 @@ use dash_rt::event::EventMessage;
 use dash_rt::state::State;
 use dash_rt::wrap_async;
 use dash_vm::gc::persistent::Persistent;
-use dash_vm::gc::trace::Trace;
+use dash_vm::gc::trace::{Trace, TraceCtxt};
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::arraybuffer::ArrayBuffer;
 use dash_vm::value::function::native::CallContext;
@@ -159,9 +159,9 @@ struct TcpListenerHandle {
 
 // SAFETY: all fields are recursively traced, enforced via pattern matching
 unsafe impl Trace for TcpListenerHandle {
-    fn trace(&self) {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
         let Self { object, sender: _ } = self;
-        object.trace();
+        object.trace(cx);
     }
 }
 
@@ -255,13 +255,13 @@ impl TcpStreamHandle {
 }
 
 unsafe impl Trace for TcpStreamHandle {
-    fn trace(&self) {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
         let Self {
             object,
             writer_tx: _,
             reader_tx: _,
         } = self;
-        object.trace();
+        object.trace(cx);
     }
 }
 

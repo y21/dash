@@ -7,7 +7,7 @@ use bitflags::bitflags;
 
 use crate::value::object::Object;
 
-use super::trace::Trace;
+use super::trace::{Trace, TraceCtxt};
 
 bitflags! {
     #[derive(Default)]
@@ -127,7 +127,7 @@ impl<T: ?Sized> Hash for Handle<T> {
 }
 
 unsafe impl<T: ?Sized + Trace> Trace for Handle<T> {
-    fn trace(&self) {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
         unsafe {
             let this = self.0.as_ref();
             if this.flags.is_marked() {
@@ -137,6 +137,6 @@ unsafe impl<T: ?Sized + Trace> Trace for Handle<T> {
             this.flags.mark();
         };
 
-        T::trace(self);
+        T::trace(self, cx);
     }
 }

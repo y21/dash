@@ -9,7 +9,7 @@ use dash_proc_macro::Trace;
 
 use crate::dispatch::HandleResult;
 use crate::gc::handle::Handle;
-use crate::gc::trace::Trace;
+use crate::gc::trace::{Trace, TraceCtxt};
 use crate::localscope::LocalScope;
 use crate::Vm;
 
@@ -35,11 +35,11 @@ pub enum FunctionKind {
 }
 
 unsafe impl Trace for FunctionKind {
-    fn trace(&self) {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
         match self {
-            Self::User(user) => user.trace(),
-            Self::Generator(generator) => generator.trace(),
-            Self::Async(async_) => async_.trace(),
+            Self::User(user) => user.trace(cx),
+            Self::Generator(generator) => generator.trace(cx),
+            Self::Async(async_) => async_.trace(cx),
             Self::Native(_) => {}
         }
     }

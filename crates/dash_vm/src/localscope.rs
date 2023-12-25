@@ -14,7 +14,7 @@ use super::Vm;
 
 use std::ptr::NonNull;
 
-use crate::gc::trace::Trace;
+use crate::gc::trace::{Trace, TraceCtxt};
 
 #[derive(Debug)]
 pub struct LocalScopeList {
@@ -79,7 +79,7 @@ impl Drop for LocalScopeList {
 }
 
 unsafe impl Trace for LocalScopeList {
-    fn trace(&self) {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
         let Self { list, head: _ } = self;
 
         // We need to use the list instead of head,
@@ -89,7 +89,7 @@ unsafe impl Trace for LocalScopeList {
         // we would miss those scopes!).
         for ptr in list {
             let data = unsafe { ptr.as_ref() };
-            data.refs.trace();
+            data.refs.trace(cx);
         }
     }
 }

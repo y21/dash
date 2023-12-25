@@ -22,7 +22,7 @@ use dash_middle::util::ThreadSafeStorage;
 use dash_proc_macro::Trace;
 
 use crate::gc::handle::Handle;
-use crate::gc::trace::Trace;
+use crate::gc::trace::{Trace, TraceCtxt};
 use crate::util::cold_path;
 use crate::value::function::FunctionKind;
 use crate::value::primitive::{Null, Undefined};
@@ -233,10 +233,11 @@ impl Object for ExternalValue {
 }
 
 unsafe impl Trace for Value {
-    fn trace(&self) {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
         match self {
-            Value::Object(o) => o.trace(),
-            Value::External(e) => e.trace(),
+            Value::Object(o) => o.trace(cx),
+            Value::External(e) => e.trace(cx),
+            Value::String(_) => todo!(),
             _ => {}
         }
     }

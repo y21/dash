@@ -4,7 +4,7 @@ use std::ops::RangeBounds;
 use std::vec::Drain;
 use std::{fmt, mem};
 
-use crate::gc::trace::Trace;
+use crate::gc::trace::{Trace, TraceCtxt};
 use crate::util::cold_path;
 use crate::value::function::Function;
 use crate::value::primitive::Symbol;
@@ -21,6 +21,7 @@ use self::value::Value;
 use dash_log::{debug, error, span, Level};
 use dash_middle::compiler::instruction::Instruction;
 use gc::handle::Handle;
+use gc::interner::StringInterner;
 use gc::Gc;
 use localscope::{scope, LocalScopeList};
 use rustc_hash::FxHashSet;
@@ -57,6 +58,7 @@ pub struct Vm {
     // popping from the stack must return `Unrooted`
     stack: Vec<Value>,
     gc: Gc,
+    interner: StringInterner,
     global: Handle<dyn Object>,
     // "External refs" currently refers to existing `Persistent<T>`s.
     // Persistent values already manage the reference count when cloning or dropping them
@@ -97,6 +99,7 @@ impl Vm {
             async_tasks: Vec::new(),
             stack: Vec::with_capacity(512),
             gc,
+            interner: StringInterner::new(),
             global,
             external_refs: FxHashSet::default(),
             scopes: LocalScopeList::new(),
@@ -1407,16 +1410,17 @@ impl Vm {
     }
 
     fn trace_roots(&mut self) {
+        let mut cx = TraceCtxt::new(&mut self.interner);
         debug!("trace frames");
-        self.frames.trace();
+        self.frames.trace(&mut cx);
         debug!("trace async tasks");
-        self.async_tasks.trace();
+        self.async_tasks.trace(&mut cx);
         debug!("trace stack");
-        self.stack.trace();
+        self.stack.trace(&mut cx);
         debug!("trace globals");
-        self.global.trace();
+        self.global.trace(&mut cx);
         debug!("trace scopes");
-        self.scopes.trace();
+        self.scopes.trace(&mut cx);
 
         debug!("trace externals");
         // we do two things here:
@@ -1428,13 +1432,13 @@ impl Vm {
                 false
             } else {
                 // Non-zero refcount, retain object and trace
-                e.trace();
+                e.trace(&mut cx);
                 true
             }
         });
 
         debug!("trace statics");
-        self.statics.trace();
+        self.statics.trace(&mut cx);
     }
 
     pub fn statics(&self) -> &Statics {

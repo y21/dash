@@ -4,7 +4,7 @@ use dash_rt::event::EventMessage;
 use dash_rt::module::ModuleLoader;
 use dash_rt::state::State;
 use dash_vm::gc::persistent::Persistent;
-use dash_vm::gc::trace::Trace;
+use dash_vm::gc::trace::{Trace, TraceCtxt};
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::error::Error;
 use dash_vm::value::function::native::CallContext;
@@ -170,8 +170,8 @@ impl HttpResponse {
 }
 
 unsafe impl Trace for HttpResponse {
-    fn trace(&self) {
-        self.obj.trace();
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
+        self.obj.trace(cx);
     }
 }
 

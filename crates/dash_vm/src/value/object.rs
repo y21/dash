@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use std::ptr::addr_of;
 
 use crate::gc::persistent::Persistent;
-use crate::gc::trace::Trace;
+use crate::gc::trace::{Trace, TraceCtxt};
 use bitflags::bitflags;
 use dash_proc_macro::Trace;
 
@@ -226,7 +226,7 @@ bitflags! {
 }
 
 unsafe impl Trace for PropertyDataDescriptor {
-    fn trace(&self) {}
+    fn trace(&self, _: &mut TraceCtxt<'_>) {}
 }
 
 impl Default for PropertyDataDescriptor {
@@ -427,15 +427,15 @@ impl PropertyValueKind {
 }
 
 unsafe impl Trace for PropertyValueKind {
-    fn trace(&self) {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
         match self {
-            Self::Static(value) => value.trace(),
+            Self::Static(value) => value.trace(cx),
             Self::Trap { get, set } => {
                 if let Some(get) = get {
-                    get.trace();
+                    get.trace(cx);
                 }
                 if let Some(set) = set {
-                    set.trace();
+                    set.trace(cx);
                 }
             }
         }
@@ -527,20 +527,20 @@ impl NamedObject {
 }
 
 unsafe impl Trace for NamedObject {
-    fn trace(&self) {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
         let values = self.values.borrow();
         for value in values.values() {
-            value.trace();
+            value.trace(cx);
         }
 
         let prototype = self.prototype.borrow();
         if let Some(prototype) = &*prototype {
-            prototype.trace();
+            prototype.trace(cx);
         }
 
         let constructor = self.constructor.borrow();
         if let Some(constructor) = &*constructor {
-            constructor.trace();
+            constructor.trace(cx);
         }
     }
 }

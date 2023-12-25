@@ -4,6 +4,7 @@ use std::rc::Rc;
 use std::{fmt, iter};
 
 use crate::gc::handle::Handle;
+use crate::gc::trace::{Trace, TraceCtxt};
 use crate::localscope::LocalScope;
 use crate::throw;
 use crate::util::format_f64;
@@ -377,6 +378,12 @@ pub struct Symbol(Rc<str>);
 impl Symbol {
     pub fn new(description: Rc<str>) -> Self {
         Symbol(description)
+    }
+}
+
+unsafe impl Trace for Symbol {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
+        todo!()
     }
 }
 
