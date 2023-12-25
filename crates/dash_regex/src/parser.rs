@@ -1,5 +1,7 @@
 use std::mem;
 
+use serde::{Deserialize, Serialize};
+
 use crate::error::Error;
 use crate::node::{Anchor, CharacterClassItem, GroupCaptureMode, MetaSequence, Node};
 
@@ -7,6 +9,13 @@ pub struct Parser<'a> {
     index: usize,
     input: &'a [u8],
     group_index: usize,
+}
+
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
+pub struct ParsedRegex {
+    pub nodes: Vec<Node>,
+    pub group_count: usize,
 }
 
 impl<'a> Parser<'a> {
@@ -41,7 +50,7 @@ impl<'a> Parser<'a> {
         self.index >= self.input.len()
     }
 
-    pub fn parse_all(mut self) -> Result<Vec<Node>, Error> {
+    pub fn parse_all(mut self) -> Result<ParsedRegex, Error> {
         let mut nodes = Vec::new();
         while !self.is_eof() {
             if let Some(b'|') = self.current() {
@@ -62,7 +71,10 @@ impl<'a> Parser<'a> {
                 nodes.push(self.parse_primary()?);
             }
         }
-        Ok(nodes)
+        Ok(ParsedRegex {
+            nodes,
+            group_count: self.group_index,
+        })
     }
 
     fn parse_primary(&mut self) -> Result<Node, Error> {
@@ -169,7 +181,8 @@ impl<'a> Parser<'a> {
                 GroupCaptureMode::Id(self.group_index - 1)
             }
         } else {
-            GroupCaptureMode::None
+            self.group_index += 1;
+            GroupCaptureMode::Id(self.group_index - 1)
         };
 
         while !self.is_eof() {

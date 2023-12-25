@@ -104,7 +104,7 @@ pub enum Constant {
     Identifier(Rc<str>),
     Boolean(bool),
     Function(Rc<Function>),
-    Regex(dash_regex::Regex, Rc<str>),
+    Regex(dash_regex::ParsedRegex, Rc<str>),
     Null,
     Undefined,
 }

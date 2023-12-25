@@ -1,12 +1,13 @@
-use crate::node::{Anchor, CharacterClassItem, MetaSequence, Node};
+use crate::matcher::Groups;
+use crate::node::{Anchor, CharacterClassItem, GroupCaptureMode, MetaSequence, Node};
 use crate::stream::BorrowedStream;
 
 pub trait Visit<'a> {
-    fn matches(&self, s: &mut BorrowedStream<'a, u8>) -> bool;
+    fn matches(&self, s: &mut BorrowedStream<'a, u8>, groups: &mut Groups) -> bool;
 }
 
 impl<'a> Visit<'a> for Anchor {
-    fn matches(&self, s: &mut BorrowedStream<'a, u8>) -> bool {
+    fn matches(&self, s: &mut BorrowedStream<'a, u8>, _: &mut Groups) -> bool {
         match self {
             Anchor::StartOfString => s.index() == 0,
             Anchor::EndOfString => s.is_eof(),
@@ -15,7 +16,7 @@ impl<'a> Visit<'a> for Anchor {
 }
 
 impl<'a> Visit<'a> for MetaSequence {
-    fn matches(&self, s: &mut BorrowedStream<'a, u8>) -> bool {
+    fn matches(&self, s: &mut BorrowedStream<'a, u8>, _: &mut Groups) -> bool {
         match self {
             Self::Digit => {
                 let is_digit = s.current().map(|c| c.is_ascii_digit()).unwrap_or(false);
@@ -46,7 +47,7 @@ impl<'a> Visit<'a> for MetaSequence {
 }
 
 impl<'a> Visit<'a> for Node {
-    fn matches(&self, s: &mut BorrowedStream<'a, u8>) -> bool {
+    fn matches(&self, s: &mut BorrowedStream<'a, u8>, groups: &mut Groups) -> bool {
         match self {
             Node::LiteralCharacter(lit) => {
                 let matches = s.current().map(|c| c == lit).unwrap_or(false);
@@ -56,21 +57,32 @@ impl<'a> Visit<'a> for Node {
                 matches
             }
             Node::Optional(node) => {
-                node.matches(s);
+                node.matches(s, groups);
                 true
             }
-            Node::Group(_, group) => group.iter().all(|node| node.matches(s)),
+            Node::Group(capture, group) => {
+                let before = s.index();
+                let all_matched = group.iter().all(|node| node.matches(s, groups));
+
+                match capture {
+                    GroupCaptureMode::Id(id) if all_matched => {
+                        groups.set(*id, before..s.index());
+                        true
+                    }
+                    _ => all_matched,
+                }
+            }
             Node::Or(left, right) => {
                 let left_index = s.index();
-                let left_matches = left.iter().all(|node| node.matches(s));
+                let left_matches = left.iter().all(|node| node.matches(s, groups));
                 if left_matches {
                     return true;
                 }
                 s.set_index(left_index);
-                right.iter().all(|node| node.matches(s))
+                right.iter().all(|node| node.matches(s, groups))
             }
-            Node::Anchor(anchor) => anchor.matches(s),
-            Node::MetaSequence(seq) => seq.matches(s),
+            Node::Anchor(anchor) => anchor.matches(s, groups),
+            Node::MetaSequence(seq) => seq.matches(s, groups),
             Node::Repetition { node, min, max } => {
                 let mut count = 0;
                 while !s.is_eof() {
@@ -80,7 +92,7 @@ impl<'a> Visit<'a> for Node {
                         }
                     }
 
-                    if !node.matches(s) {
+                    if !node.matches(s, groups) {
                         break;
                     }
                     count += 1;
@@ -98,7 +110,7 @@ impl<'a> Visit<'a> for Node {
                 let Some(&cur) = s.current() else { return false };
 
                 nodes.iter().any(|node| match *node {
-                    CharacterClassItem::Node(ref node) => node.matches(s),
+                    CharacterClassItem::Node(ref node) => node.matches(s, groups),
                     CharacterClassItem::Range(start, end) => {
                         let matches = (start..=end).contains(&cur);
                         if matches {

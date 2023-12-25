@@ -1,10 +1,8 @@
 use std::collections::HashMap;
-use std::ffi::OsStr;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::panic;
-use std::sync::atomic;
 use std::sync::atomic::AtomicU32;
-use std::sync::Mutex;
+use std::sync::{atomic, Mutex};
 
 use clap::ArgMatches;
 use dash_vm::eval::EvalError;

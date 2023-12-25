@@ -869,6 +869,7 @@ impl Vm {
             regexp_ctor.clone(),
             [
                 ("test", scope.statics.regexp_test.clone()),
+                ("exec", scope.statics.regexp_exec.clone())
             ],
             [],
             [],

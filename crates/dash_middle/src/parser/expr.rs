@@ -159,7 +159,7 @@ impl ExprKind {
         Self::Literal(LiteralExpr::Undefined)
     }
 
-    pub fn regex_literal(regex: dash_regex::Regex, source: Symbol) -> Self {
+    pub fn regex_literal(regex: dash_regex::ParsedRegex, source: Symbol) -> Self {
         Self::Literal(LiteralExpr::Regex(regex, source))
     }
 
@@ -499,7 +499,7 @@ pub enum LiteralExpr {
     String(Symbol),
 
     #[display(fmt = "/{_1}/")]
-    Regex(dash_regex::Regex, Symbol),
+    Regex(dash_regex::ParsedRegex, Symbol),
 
     #[display(fmt = "null")]
     Null,

@@ -2,7 +2,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use dash_proc_macro::Trace;
-use dash_regex::node::Node;
+use dash_regex::ParsedRegex;
 
 use crate::{delegate, Vm};
 
@@ -10,7 +10,7 @@ use super::object::{NamedObject, Object};
 
 #[derive(Debug)]
 pub struct RegExpInner {
-    pub nodes: Vec<Node>,
+    pub regex: ParsedRegex,
     pub source: Rc<str>,
     // TODO: this should only exist if the `g` flag is set (we currently don't even have regex flags)
     pub last_index: Cell<usize>,
@@ -23,13 +23,13 @@ pub struct RegExp {
 }
 
 impl RegExp {
-    pub fn new(nodes: Vec<Node>, source: Rc<str>, vm: &Vm) -> Self {
+    pub fn new(regex: ParsedRegex, source: Rc<str>, vm: &Vm) -> Self {
         let proto = vm.statics.regexp_prototype.clone();
         let ctor = vm.statics.regexp_ctor.clone();
 
         Self {
             inner: Some(RegExpInner {
-                nodes,
+                regex,
                 source,
                 last_index: Cell::new(0),
             }),
