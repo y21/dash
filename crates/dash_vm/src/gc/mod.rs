@@ -12,6 +12,7 @@ use crate::value::object::Object;
 use self::handle::{GcNode, Handle};
 
 pub mod handle;
+pub mod interner;
 pub mod persistent;
 pub mod trace;
 
