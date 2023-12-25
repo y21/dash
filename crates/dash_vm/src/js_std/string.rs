@@ -310,7 +310,14 @@ pub fn substr(cx: CallContext) -> Result<Value, Value> {
     let string = cx.this.to_string(cx.scope)?;
     let (start, end) = {
         let start = match cx.args.first() {
-            Some(arg) => arg.to_int32(cx.scope)? as usize,
+            Some(arg) => {
+                let num = arg.to_int32(cx.scope)?;
+                if num < 0 {
+                    (num + string.len() as i32) as usize
+                } else {
+                    num as usize
+                }
+            }
             None => 0,
         };
         let end = match cx.args.get(1) {
@@ -318,10 +325,10 @@ pub fn substr(cx: CallContext) -> Result<Value, Value> {
             None => string.len(),
         };
 
-        (start, end)
+        (start, start + end)
     };
 
-    let bytes = string.as_bytes().get(start..start + end).unwrap_or(&[]);
+    let bytes = string.as_bytes().get(start..end.min(string.len())).unwrap_or(&[]);
     let result = String::from_utf8_lossy(bytes).into_owned();
 
     Ok(Value::String(result.into()))
@@ -329,18 +336,22 @@ pub fn substr(cx: CallContext) -> Result<Value, Value> {
 
 pub fn substring(cx: CallContext) -> Result<Value, Value> {
     let string = cx.this.to_string(cx.scope)?;
-    let (start, end) = {
+    let (mut start, mut end) = {
         let start = match cx.args.first() {
-            Some(arg) => arg.to_int32(cx.scope)? as usize,
+            Some(arg) => arg.to_int32(cx.scope)?.max(0) as usize,
             None => 0,
         };
         let end = match cx.args.get(1) {
-            Some(arg) => arg.to_int32(cx.scope)? as usize,
+            Some(arg) => (arg.to_int32(cx.scope)? as usize).min(string.len()),
             None => string.len(),
         };
 
         (start, end)
     };
+
+    if start > end {
+        std::mem::swap(&mut start, &mut end);
+    }
 
     let bytes = string.as_bytes().get(start..end).unwrap_or(&[]);
     let result = String::from_utf8_lossy(bytes).into_owned();

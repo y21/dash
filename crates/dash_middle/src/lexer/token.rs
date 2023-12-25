@@ -2,6 +2,7 @@ use std::fmt;
 
 use crate::interner::{sym, Symbol};
 use crate::sourcemap::Span;
+use dash_regex::flags::Flags;
 use derive_more::Display;
 
 /// The type of a token
@@ -203,7 +204,7 @@ pub enum TokenType {
 
     /// Regex literal: /a+b/g
     #[display(fmt = "<regex literal>")]
-    RegexLiteral(Symbol),
+    RegexLiteral { literal: Symbol, flags: Flags },
 
     #[display(fmt = "0x")]
     NumberHex(Symbol),

@@ -104,7 +104,7 @@ pub enum Constant {
     Identifier(Rc<str>),
     Boolean(bool),
     Function(Rc<Function>),
-    Regex(dash_regex::ParsedRegex, Rc<str>),
+    Regex(dash_regex::ParsedRegex, dash_regex::Flags, Rc<str>),
     Null,
     Undefined,
 }
@@ -146,7 +146,9 @@ impl Constant {
             LiteralExpr::Boolean(b) => Self::Boolean(*b),
             LiteralExpr::Null => Self::Null,
             LiteralExpr::Undefined => Self::Undefined,
-            LiteralExpr::Regex(regex, source) => Self::Regex(regex.clone(), interner.resolve(*source).clone()),
+            LiteralExpr::Regex(regex, flags, source) => {
+                Self::Regex(regex.clone(), *flags, interner.resolve(*source).clone())
+            }
         }
     }
 }

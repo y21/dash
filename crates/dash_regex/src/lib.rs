@@ -4,12 +4,14 @@ pub use node::Node;
 pub use parser::Parser;
 
 pub mod error;
+pub mod flags;
 pub mod matcher;
 pub mod node;
 pub mod parser;
 mod stream;
 mod visitor;
 
+pub use flags::Flags;
 pub use parser::ParsedRegex;
 
 #[cfg(test)]

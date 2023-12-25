@@ -6,6 +6,7 @@ use dash_middle::lexer::token::{as_token, Token, TokenType};
 use dash_middle::parser::error::Error;
 use dash_middle::sourcemap::Span;
 use dash_middle::util;
+use dash_regex::flags::Flags;
 
 /// A JavaScript source code lexer
 #[derive(Debug)]
@@ -398,8 +399,9 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
         self.create_contextified_token(TokenType::TemplateLiteral(sym)); // TODO: check if the spans created by this call are right!!
     }
 
-    /// Reads an identifier and returns it as a node
-    fn read_identifier(&mut self) {
+    /// Assumes one character has already been read.
+    fn read_identifier_raw(&mut self) -> &'a str {
+        let start = self.idx - 1;
         while !self.is_eof() {
             let cur = self.current_real();
 
@@ -410,7 +412,13 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
             self.advance();
         }
 
-        let sym = self.interner.intern(self.get_lexeme());
+        self.subslice(start..self.idx)
+    }
+
+    /// Reads an identifier and returns it as a node
+    fn read_identifier(&mut self) {
+        let ident = self.read_identifier_raw();
+        let sym = self.interner.intern(ident);
         self.create_contextified_token(as_token(sym));
     }
 
@@ -428,8 +436,19 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
             }
         }
 
-        let sym = self.interner.intern(self.get_lexeme());
-        self.create_contextified_token(TokenType::RegexLiteral(sym));
+        let regex_sym = self.interner.intern(self.get_lexeme());
+
+        let flags = if self.current().is_some_and(util::is_alpha) {
+            self.advance(); // identifier reading requires one character to be read
+            self.read_identifier_raw().parse::<Flags>().unwrap() // TODO: handle error
+        } else {
+            Flags::empty()
+        };
+
+        self.create_contextified_token(TokenType::RegexLiteral {
+            literal: regex_sym,
+            flags,
+        });
     }
 
     /// Iterates through the input string and yields the next node

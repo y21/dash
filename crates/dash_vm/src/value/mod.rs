@@ -297,8 +297,8 @@ impl Value {
             Constant::String(s) => Value::String(s),
             Constant::Undefined => Value::undefined(),
             Constant::Null => Value::null(),
-            Constant::Regex(nodes, source) => {
-                let regex = RegExp::new(nodes, source, vm);
+            Constant::Regex(nodes, flags, source) => {
+                let regex = RegExp::new(nodes, flags, source, vm);
                 Value::Object(vm.register(regex))
             }
             Constant::Function(f) => {

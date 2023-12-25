@@ -159,8 +159,8 @@ impl ExprKind {
         Self::Literal(LiteralExpr::Undefined)
     }
 
-    pub fn regex_literal(regex: dash_regex::ParsedRegex, source: Symbol) -> Self {
-        Self::Literal(LiteralExpr::Regex(regex, source))
+    pub fn regex_literal(regex: dash_regex::ParsedRegex, flags: dash_regex::Flags, source: Symbol) -> Self {
+        Self::Literal(LiteralExpr::Regex(regex, flags, source))
     }
 
     /// Creates a function call expression
@@ -498,8 +498,8 @@ pub enum LiteralExpr {
     #[display(fmt = "\"{_0}\"")]
     String(Symbol),
 
-    #[display(fmt = "/{_1}/")]
-    Regex(dash_regex::ParsedRegex, Symbol),
+    #[display(fmt = "/{_2}/")]
+    Regex(dash_regex::ParsedRegex, dash_regex::Flags, Symbol),
 
     #[display(fmt = "null")]
     Null,

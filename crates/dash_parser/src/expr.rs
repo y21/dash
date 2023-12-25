@@ -688,9 +688,9 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 span,
                 kind: ExprKind::function(f),
             })?,
-            TokenType::RegexLiteral(sym) => {
+            TokenType::RegexLiteral { literal, flags } => {
                 // Trim / prefix and suffix
-                let full = self.interner.resolve(sym);
+                let full = self.interner.resolve(literal);
                 let full = &full[1..full.len() - 1];
                 let nodes = match dash_regex::Parser::new(full.as_bytes()).parse_all() {
                     Ok(nodes) => nodes,
@@ -702,7 +702,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 };
                 Expr {
                     span: current.span,
-                    kind: ExprKind::regex_literal(nodes, sym),
+                    kind: ExprKind::regex_literal(nodes, flags, literal),
                 }
             }
             other if other.is_identifier() => {

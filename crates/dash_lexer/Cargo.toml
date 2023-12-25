@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 either = "1.6.1"
 dash_middle = { path = "../dash_middle" }
+dash_regex = { path = "../dash_regex" }
