@@ -1,12 +1,11 @@
 use std::borrow::Cow;
 use std::ops::Range;
 
-use dash_middle::interner::{StringInterner, Symbol};
+use dash_middle::interner::{sym, StringInterner, Symbol};
 use dash_middle::lexer::token::{as_token, Token, TokenType};
 use dash_middle::parser::error::Error;
 use dash_middle::sourcemap::Span;
 use dash_middle::util;
-use dash_regex::flags::Flags;
 
 /// A JavaScript source code lexer
 #[derive(Debug)]
@@ -400,7 +399,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
     }
 
     /// Assumes one character has already been read.
-    fn read_identifier_raw(&mut self) -> &'a str {
+    fn read_identifier_raw(&mut self) -> Symbol {
         let start = self.idx - 1;
         while !self.is_eof() {
             let cur = self.current_real();
@@ -412,13 +411,13 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
             self.advance();
         }
 
-        self.subslice(start..self.idx)
+        let slice = self.subslice(start..self.idx);
+        self.interner.intern(slice)
     }
 
     /// Reads an identifier and returns it as a node
     fn read_identifier(&mut self) {
-        let ident = self.read_identifier_raw();
-        let sym = self.interner.intern(ident);
+        let sym = self.read_identifier_raw();
         self.create_contextified_token(as_token(sym));
     }
 
@@ -440,9 +439,9 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
 
         let flags = if self.current().is_some_and(util::is_alpha) {
             self.advance(); // identifier reading requires one character to be read
-            self.read_identifier_raw().parse::<Flags>().unwrap() // TODO: handle error
+            self.read_identifier_raw()
         } else {
-            Flags::empty()
+            sym::EMPTY
         };
 
         self.create_contextified_token(TokenType::RegexLiteral {

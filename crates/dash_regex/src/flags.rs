@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -12,8 +13,9 @@ bitflags! {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum Error {
+    #[error("unknown flag: {0}")]
     UnknownFlag(char),
 }
 

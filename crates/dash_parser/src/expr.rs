@@ -6,6 +6,7 @@ use dash_middle::parser::statement::{
     BlockStatement, FunctionDeclaration, FunctionKind, Parameter, ReturnStatement, Statement, StatementKind,
 };
 use dash_middle::sourcemap::Span;
+use dash_regex::Flags;
 
 use crate::Parser;
 
@@ -692,8 +693,14 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 // Trim / prefix and suffix
                 let full = self.interner.resolve(literal);
                 let full = &full[1..full.len() - 1];
-                let nodes = match dash_regex::Parser::new(full.as_bytes()).parse_all() {
-                    Ok(nodes) => nodes,
+                let (nodes, flags) = match dash_regex::Parser::new(full.as_bytes()).parse_all().and_then(|node| {
+                    self.interner
+                        .resolve(flags)
+                        .parse::<Flags>()
+                        .map_err(Into::into)
+                        .map(|flags| (node, flags))
+                }) {
+                    Ok((nodes, flags)) => (nodes, flags),
                     Err(err) => {
                         let tok = self.previous().unwrap().clone();
                         self.create_error(Error::RegexSyntaxError(tok, err));

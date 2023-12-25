@@ -204,7 +204,7 @@ pub enum TokenType {
 
     /// Regex literal: /a+b/g
     #[display(fmt = "<regex literal>")]
-    RegexLiteral { literal: Symbol, flags: Flags },
+    RegexLiteral { literal: Symbol, flags: Symbol },
 
     #[display(fmt = "0x")]
     NumberHex(Symbol),
