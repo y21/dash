@@ -1,3 +1,4 @@
+use crate::gc::interner::sym;
 use crate::throw;
 use crate::value::array::Array;
 use crate::value::function::native::CallContext;
@@ -10,20 +11,20 @@ use dash_regex::parser::Parser as RegexParser;
 use dash_regex::Flags;
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
-    let pattern = cx.args.first().unwrap_or_undefined().to_string(cx.scope)?;
+    let pattern = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
     let flags = match cx
         .args
         .get(1)
-        .map(|v| v.to_string(cx.scope))
+        .map(|v| v.to_js_string(cx.scope))
         .transpose()?
-        .map(|s| s.parse::<Flags>())
+        .map(|s| s.res(cx.scope).parse::<Flags>())
     {
         Some(Ok(flags)) => flags,
         Some(Err(err)) => throw!(cx.scope, SyntaxError, "Invalid RegExp flags: {:?}", err),
         None => Flags::empty(),
     };
 
-    let nodes = match RegexParser::new(pattern.as_bytes()).parse_all() {
+    let nodes = match RegexParser::new(pattern.res(cx.scope).as_bytes()).parse_all() {
         Ok(nodes) => nodes,
         Err(err) => throw!(cx.scope, SyntaxError, "Regex parser error: {}", err),
     };
@@ -34,7 +35,7 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn test(cx: CallContext) -> Result<Value, Value> {
-    let text = cx.args.first().unwrap_or_undefined().to_string(cx.scope)?;
+    let text = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
 
     let regex = match cx.this.downcast_ref::<RegExp>() {
         Some(regex) => regex,
@@ -51,6 +52,7 @@ pub fn test(cx: CallContext) -> Result<Value, Value> {
         None => throw!(cx.scope, TypeError, "Receiver must be an initialized RegExp object"),
     };
 
+    let text = text.res(cx.scope);
     let is_global = flags.contains(Flags::GLOBAL);
 
     if is_global && last_index.get() >= text.len() {
@@ -73,7 +75,7 @@ pub fn test(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn exec(cx: CallContext<'_, '_>) -> Result<Value, Value> {
-    let text = cx.args.first().unwrap_or_undefined().to_string(cx.scope)?;
+    let text = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
 
     let regex = match cx.this.downcast_ref::<RegExp>() {
         Some(regex) => regex,
@@ -90,6 +92,7 @@ pub fn exec(cx: CallContext<'_, '_>) -> Result<Value, Value> {
         None => throw!(cx.scope, TypeError, "Receiver must be an initialized RegExp object"),
     };
 
+    let text = text.res(cx.scope);
     let is_global = flags.contains(Flags::GLOBAL);
 
     if is_global && last_index.get() >= text.len() {
@@ -110,8 +113,8 @@ pub fn exec(cx: CallContext<'_, '_>) -> Result<Value, Value> {
                 .iter()
                 .map(|g| {
                     let sub = match g {
-                        Some(r) => text[r].into(),
-                        None => cx.scope.statics.null_str(),
+                        Some(r) => cx.scope.intern(&text[r]).into(),
+                        None => sym::NULL.into(),
                     };
                     PropertyValue::static_default(Value::String(sub))
                 })

@@ -3,12 +3,12 @@ use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::fmt::{self, Debug};
 use std::iter::{self};
-use std::rc::Rc;
 
 use dash_proc_macro::Trace;
 
 use crate::dispatch::HandleResult;
 use crate::gc::handle::Handle;
+use crate::gc::interner::sym;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::localscope::LocalScope;
 use crate::Vm;
@@ -20,6 +20,7 @@ use self::user::UserFunction;
 
 use super::array::Array;
 use super::object::{NamedObject, Object, PropertyKey, PropertyValue};
+use super::string::JsString;
 use super::{Typeof, Unrooted, Value};
 
 pub mod r#async;
@@ -88,14 +89,14 @@ impl fmt::Debug for FunctionKind {
 
 #[derive(Debug, Trace)]
 pub struct Function {
-    name: RefCell<Option<Rc<str>>>,
+    name: RefCell<Option<JsString>>,
     kind: FunctionKind,
     obj: NamedObject,
     prototype: RefCell<Option<Handle<dyn Object>>>,
 }
 
 impl Function {
-    pub fn new(vm: &Vm, name: Option<Rc<str>>, kind: FunctionKind) -> Self {
+    pub fn new(vm: &Vm, name: Option<JsString>, kind: FunctionKind) -> Self {
         let (proto, ctor) = (&vm.statics.function_proto, &vm.statics.function_ctor);
 
         Self::with_obj(
@@ -105,7 +106,7 @@ impl Function {
         )
     }
 
-    pub fn with_obj(name: Option<Rc<str>>, kind: FunctionKind, obj: NamedObject) -> Self {
+    pub fn with_obj(name: Option<JsString>, kind: FunctionKind, obj: NamedObject) -> Self {
         Self {
             name: RefCell::new(name),
             kind,
@@ -118,11 +119,11 @@ impl Function {
         &self.kind
     }
 
-    pub fn set_name(&self, name: Rc<str>) -> Option<Rc<str>> {
+    pub fn set_name(&self, name: JsString) -> Option<JsString> {
         self.name.borrow_mut().replace(name)
     }
 
-    pub fn name(&self) -> Option<Rc<str>> {
+    pub fn name(&self) -> Option<JsString> {
         self.name.borrow().clone()
     }
 
@@ -198,12 +199,12 @@ impl Object for Function {
         key: PropertyKey,
     ) -> Result<Option<PropertyValue>, Unrooted> {
         if let Some(key) = key.as_string() {
-            match key {
-                "name" => {
-                    let name = self.name().unwrap_or_else(|| sc.statics.empty_str());
+            match key.sym() {
+                sym::NAME => {
+                    let name = self.name().unwrap_or_else(|| sym::EMPTY.into());
                     return Ok(Some(PropertyValue::static_default(Value::String(name))));
                 }
-                "prototype" => {
+                sym::PROTOTYPE => {
                     let prototype = self.get_or_set_prototype(sc);
                     return Ok(Some(PropertyValue::static_default(Value::Object(prototype.clone()))));
                 }
@@ -214,7 +215,7 @@ impl Object for Function {
         self.obj.get_own_property_descriptor(sc, key)
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
         self.obj.set_property(sc, key, value)
     }
 
@@ -255,8 +256,8 @@ impl Object for Function {
         self.obj.get_prototype(sc)
     }
 
-    fn own_keys(&self) -> Result<Vec<Value>, Value> {
-        Ok(["length", "name"].iter().map(|&s| Value::String(s.into())).collect())
+    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+        Ok(vec![Value::String(sym::LENGTH.into()), Value::String(sym::NAME.into())])
     }
 
     fn type_of(&self) -> Typeof {

@@ -9,6 +9,7 @@ use dash_proc_macro::Trace;
 
 use crate::gc::handle::Handle;
 use crate::gc::trace::{Trace, TraceCtxt};
+use crate::value::string::JsString;
 use crate::value::{ExternalValue, Unrooted};
 
 use super::value::function::user::UserFunction;
@@ -24,7 +25,7 @@ pub struct TryBlock {
 #[derive(Debug, Clone, Default)]
 pub struct Exports {
     pub default: Option<Unrooted>,
-    pub named: Vec<(Rc<str>, Unrooted)>,
+    pub named: Vec<(JsString, Unrooted)>,
 }
 
 unsafe impl Trace for Exports {

@@ -349,7 +349,7 @@ mod handlers {
 
     pub fn not<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let value = cx.pop_stack_rooted();
-        let result = value.not();
+        let result = value.not(cx.scope);
         cx.stack.push(result);
         Ok(None)
     }
@@ -689,7 +689,7 @@ mod handlers {
         let offset = cx.fetchw_and_inc_ip() as i16;
         let value = cx.pop_stack_rooted();
 
-        let jump = !value.is_truthy();
+        let jump = !value.is_truthy(cx.scope);
 
         #[cfg(feature = "jit")]
         cx.record_conditional_jump(ip, jump);
@@ -713,7 +713,7 @@ mod handlers {
         let offset = cx.fetchw_and_inc_ip() as i16;
         let value = cx.peek_stack();
 
-        let jump = !value.is_truthy();
+        let jump = !value.is_truthy(cx.scope);
 
         #[cfg(feature = "jit")]
         cx.record_conditional_jump(ip, jump);
@@ -738,7 +738,7 @@ mod handlers {
         let offset = cx.fetchw_and_inc_ip() as i16;
         let value = cx.pop_stack_rooted();
 
-        let jump = value.is_truthy();
+        let jump = value.is_truthy(cx.scope);
 
         #[cfg(feature = "jit")]
         cx.record_conditional_jump(ip, jump);
@@ -762,7 +762,7 @@ mod handlers {
         let offset = cx.fetchw_and_inc_ip() as i16;
         let value = cx.peek_stack();
 
-        let jump = value.is_truthy();
+        let jump = value.is_truthy(cx.scope);
 
         #[cfg(feature = "jit")]
         cx.record_conditional_jump(ip, jump);
@@ -1064,7 +1064,7 @@ mod handlers {
                 ObjectMemberKind::Spread => {
                     let value = cx.pop_stack_rooted();
                     if let Value::Object(target) = &value {
-                        for key in target.own_keys()? {
+                        for key in target.own_keys(cx.scope)? {
                             let key = PropertyKey::from_value(cx.scope, key)?;
                             let value = target.get_property(&mut cx, key.clone())?.root(cx.scope);
                             obj.insert(key, PropertyValue::static_default(value));
@@ -1552,8 +1552,8 @@ mod handlers {
         let value = cx.pop_stack_rooted();
 
         let keys = match value {
-            Value::Object(obj) => obj.own_keys()?,
-            Value::External(obj) => obj.own_keys()?,
+            Value::Object(obj) => obj.own_keys(cx.scope)?,
+            Value::External(obj) => obj.own_keys(cx.scope)?,
             _ => Vec::new(),
         }
         .into_iter()
@@ -1609,7 +1609,7 @@ mod handlers {
             let case_offset = cx.fetchw_and_inc_ip() as usize;
             let ip = cx.active_frame().ip;
 
-            let is_eq = switch_expr.strict_eq(&case_value, cx.scope)?.to_boolean()?;
+            let is_eq = switch_expr.strict_eq(&case_value, cx.scope)?.to_boolean(cx.scope)?;
             let has_matching_case = target_ip.is_some();
 
             if is_eq && !has_matching_case {

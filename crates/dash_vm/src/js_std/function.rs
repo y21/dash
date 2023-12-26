@@ -41,11 +41,9 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
     let Some(this) = cx.this.downcast_ref::<Function>() else {
         throw!(cx.scope, TypeError, "Incompatible receiver");
     };
-    Ok(Value::String(
-        format!(
-            "function {}() {{ [native code] }}",
-            this.name().as_deref().unwrap_or(&cx.scope.statics.empty_str)
-        )
-        .into(),
-    ))
+    let name = format!(
+        "function {}() {{ [native code] }}",
+        this.name().map(|s| s.res(cx.scope)).unwrap_or_default()
+    );
+    Ok(Value::String(cx.scope.intern(name.as_ref()).into()))
 }

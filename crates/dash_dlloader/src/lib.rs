@@ -54,7 +54,7 @@ pub fn load_sync(mut cx: CallContext) -> Result<Value, Value> {
         None => throw!(cx.scope, ReferenceError, "Missing path to dynamic library"),
     };
 
-    let path = ValueConversion::to_string(path, cx.scope)?;
+    let path = ValueConversion::to_js_string(path, cx.scope)?;
 
     unsafe {
         let lib = match Library::new(path.as_ref()) {

@@ -91,7 +91,7 @@ pub fn listen(cx: CallContext) -> Result<Value, Value> {
                     let ctx = Value::Object(scope.register(ctx));
 
                     if let Err(err) = cb.apply(&mut scope, Value::undefined(), vec![ctx]).root_err(&mut scope) {
-                        match err.to_string(&mut scope) {
+                        match err.to_js_string(&mut scope) {
                             Ok(err) => eprintln!("Unhandled exception in HTTP handler! {err}"),
                             Err(..) => eprintln!("Unhandled exception in exception toString method in HTTP handler!"),
                         }
@@ -167,7 +167,7 @@ fn ctx_respond(cx: CallContext) -> Result<Value, Value> {
         None => throw!(cx.scope, Error, "Cannot respond twice"),
     };
 
-    let message = cx.args.first().unwrap_or_undefined().to_string(cx.scope)?;
+    let message = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
 
     if sender.send(Body::from(ToString::to_string(&message))).is_err() {
         eprintln!("Failed to respond to HTTP event.");

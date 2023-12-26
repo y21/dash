@@ -188,6 +188,9 @@ pub mod sym {
     pub const COS: Symbol = Symbol(KEYWORD_END.0 + 41);
     pub const DESUGARED_CLASS: Symbol = Symbol(KEYWORD_END.0 + 42);
     pub const PROTOTYPE: Symbol = Symbol(KEYWORD_END.0 + 43);
+
+    // ⚠️⚠️⚠️⚠️ Update these constants when adding a post-keyword symbol.
+    pub const PRE_VM_INTERNED: Symbol = PROTOTYPE;
 }
 
 #[derive(Default, Debug)]
@@ -255,6 +258,11 @@ impl fmt::Display for Symbol {
 }
 
 impl Symbol {
+    /// This should only be used if you *really* need to. Prefer `Symbol`s directly wherever possible.
+    pub fn raw(self) -> u32 {
+        self.0
+    }
+
     pub fn is_keyword(self) -> bool {
         #![allow(clippy::absurd_extreme_comparisons)]
 

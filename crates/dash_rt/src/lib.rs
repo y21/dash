@@ -100,7 +100,7 @@ pub fn format_value(value: Value, scope: &mut LocalScope) -> Result<Rc<str>, Val
         .apply(scope, Value::undefined(), vec![value])
         .unwrap()
         .root(scope)
-        .to_string(scope)
+        .to_js_string(scope)
         .unwrap();
 
     Ok(result)

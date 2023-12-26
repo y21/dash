@@ -71,7 +71,7 @@ pub fn evaluate(s: &str, opt: OptLevel, _context: Option<js_sys::Object>) -> Res
 pub fn fmt_value(value: Value, vm: &mut Vm) -> String {
     let mut scope = vm.scope();
     value
-        .to_string(&mut scope)
+        .to_js_string(&mut scope)
         .map(|s| ToString::to_string(&s))
         .unwrap_or_else(|_| "<exception>".into())
 }

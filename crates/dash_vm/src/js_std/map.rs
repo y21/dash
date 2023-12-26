@@ -1,3 +1,4 @@
+use crate::gc::interner::sym;
 use crate::throw;
 use crate::value::function::native::CallContext;
 use crate::value::map::Map;
@@ -11,15 +12,15 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
         let len = iter.length_of_array_like(cx.scope)?;
 
         for i in 0..len {
-            let i = i.to_string();
+            let i = cx.scope.intern_usize(i);
             let item = iter
                 .get_property(cx.scope, PropertyKey::String(i.into()))
                 .root(cx.scope)?;
             let k = item
-                .get_property(cx.scope, PropertyKey::String("0".into()))
+                .get_property(cx.scope, PropertyKey::String(sym::ZERO.into()))
                 .root(cx.scope)?;
             let v = item
-                .get_property(cx.scope, PropertyKey::String("1".into()))
+                .get_property(cx.scope, PropertyKey::String(sym::ONE.into()))
                 .root(cx.scope)?;
             map.set(k, v);
         }

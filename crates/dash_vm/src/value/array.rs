@@ -4,6 +4,7 @@ use std::cell::{Cell, RefCell};
 use dash_proc_macro::Trace;
 
 use crate::gc::handle::Handle;
+use crate::gc::interner::sym;
 use crate::localscope::LocalScope;
 use crate::{delegate, throw, Vm};
 
@@ -60,11 +61,11 @@ impl Object for Array {
         let items = self.items.borrow();
 
         if let PropertyKey::String(key) = &key {
-            if key == "length" {
+            if key.sym() == sym::LENGTH {
                 return Ok(Some(PropertyValue::static_default(Value::number(items.len() as f64))));
             }
 
-            if let Ok(index) = key.parse::<usize>() {
+            if let Ok(index) = key.res(sc).parse::<usize>() {
                 if index < MAX_LENGTH {
                     if let Some(element) = items.get(index).cloned() {
                         return Ok(Some(element));
@@ -76,11 +77,11 @@ impl Object for Array {
         self.obj.get_property_descriptor(sc, key)
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
         if let PropertyKey::String(key) = &key {
             let mut items = self.items.borrow_mut();
 
-            if key == "length" {
+            if key.sym() == sym::LENGTH {
                 // TODO: this shouldnt be undefined
                 let value = value.kind().get_or_apply(sc, Value::undefined()).root(sc)?;
                 let new_len = value.to_number(sc)? as usize;
@@ -93,7 +94,7 @@ impl Object for Array {
                 return Ok(());
             }
 
-            if let Ok(index) = key.parse::<usize>() {
+            if let Ok(index) = key.res(sc).parse::<usize>() {
                 if index < MAX_LENGTH {
                     if index >= items.len() {
                         items.resize(index + 1, PropertyValue::static_default(Value::undefined()));
@@ -110,11 +111,11 @@ impl Object for Array {
 
     fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
         if let PropertyKey::String(key) = &key {
-            if key == "length" {
+            if key.sym() == sym::LENGTH {
                 return Ok(Unrooted::new(Value::undefined()));
             }
 
-            if let Ok(index) = key.parse::<usize>() {
+            if let Ok(index) = key.res(sc).parse::<usize>() {
                 let mut items = self.items.borrow_mut();
 
                 if let Some(item) = items.get_mut(index) {
@@ -152,7 +153,7 @@ impl Object for Array {
         self.obj.get_prototype(sc)
     }
 
-    fn own_keys(&self) -> Result<Vec<Value>, Value> {
+    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         let items = self.items.borrow();
         Ok(array_like_keys(items.len()).collect())
     }
@@ -223,7 +224,8 @@ impl ArrayIterator {
 
         if index < self.length {
             self.index.set(index + 1);
-            self.value.get_property(sc, index.to_string().into()).map(Some)
+            let index = sc.intern_usize(index);
+            self.value.get_property(sc, index.into()).map(Some)
         } else {
             Ok(None)
         }
@@ -241,7 +243,8 @@ pub fn spec_array_get_property(scope: &mut LocalScope, target: &Value, index: us
         };
     }
 
-    match target.get_property(scope, index.to_string().into()) {
+    let index = scope.intern_usize(index);
+    match target.get_property(scope, index.into()) {
         Ok(v) => Ok(v.into()),
         Err(v) => Ok(v.into()),
     }
@@ -267,5 +270,6 @@ pub fn spec_array_set_property(
         }
     }
 
-    target.set_property(scope, index.to_string().into(), value)
+    let index = scope.intern_usize(index);
+    target.set_property(scope, index.into(), value)
 }

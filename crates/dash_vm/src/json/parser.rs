@@ -226,17 +226,14 @@ impl<'a, 'sc, 'vm> Parser<'a, 'sc, 'vm> {
                     self.skip_whitespaces();
 
                     let key = self.read_string_literal()?; // "key"
+                    let key = self
+                        .sc
+                        .intern(std::str::from_utf8(key).map_err(|err| JsonParseError::Utf8Error(err, self.idx))?);
+
                     self.skip_whitespaces(); // spaces
                     self.idx += 1; // :
                     let value = self.parse()?;
-                    obj.insert(
-                        PropertyKey::String(Cow::Owned(
-                            std::str::from_utf8(key)
-                                .map_err(|err| JsonParseError::Utf8Error(err, self.idx))?
-                                .to_owned(),
-                        )),
-                        PropertyValue::static_default(value),
-                    );
+                    obj.insert(PropertyKey::String(key.into()), PropertyValue::static_default(value));
                 }
 
                 let obj = NamedObject::with_values(self.sc, obj);
@@ -247,7 +244,7 @@ impl<'a, 'sc, 'vm> Parser<'a, 'sc, 'vm> {
                 let string = self.read_string_literal()?;
                 std::str::from_utf8(string)
                     .map_err(|err| JsonParseError::Utf8Error(err, self.idx))
-                    .map(|s| Value::String(s.into()))
+                    .map(|s| Value::String(self.sc.intern(s).into()))
             }
             _ if util::is_digit(cur) => {
                 let num = std::str::from_utf8(self.read_number_literal()?)

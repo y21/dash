@@ -1,5 +1,4 @@
 use std::cell::Cell;
-use std::rc::Rc;
 
 use dash_proc_macro::Trace;
 use dash_regex::{Flags, ParsedRegex};
@@ -7,12 +6,13 @@ use dash_regex::{Flags, ParsedRegex};
 use crate::{delegate, Vm};
 
 use super::object::{NamedObject, Object};
+use super::string::JsString;
 
 #[derive(Debug)]
 pub struct RegExpInner {
     pub regex: ParsedRegex,
     pub flags: Flags,
-    pub source: Rc<str>,
+    pub source: JsString,
     pub last_index: Cell<usize>,
 }
 
@@ -23,7 +23,7 @@ pub struct RegExp {
 }
 
 impl RegExp {
-    pub fn new(regex: ParsedRegex, flags: Flags, source: Rc<str>, vm: &Vm) -> Self {
+    pub fn new(regex: ParsedRegex, flags: Flags, source: JsString, vm: &Vm) -> Self {
         let proto = vm.statics.regexp_prototype.clone();
         let ctor = vm.statics.regexp_ctor.clone();
 

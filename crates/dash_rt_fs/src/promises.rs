@@ -22,7 +22,7 @@ pub fn init_module(sc: &mut LocalScope) -> Result<Value, Value> {
 }
 
 fn read_file(cx: CallContext) -> Result<Value, Value> {
-    let path = cx.args.first().unwrap_or_undefined().to_string(cx.scope)?;
+    let path = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
     let path = ToString::to_string(&path);
 
     wrap_async(cx, tokio::fs::read_to_string(path), |sc, res| match res {

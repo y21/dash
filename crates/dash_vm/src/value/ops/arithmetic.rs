@@ -14,9 +14,10 @@ impl Value {
         let rightstr = matches!(right.type_of(), Typeof::String);
 
         if leftstr || rightstr {
-            let lstr = left.to_string(scope)?;
-            let rstr = right.to_string(scope)?;
-            Ok(Value::String(format!("{lstr}{rstr}").into()))
+            let lstr = left.to_js_string(scope)?.res(scope);
+            let rstr = right.to_js_string(scope)?.res(scope);
+            let out = format!("{lstr}{rstr}");
+            Ok(Value::String(scope.intern(out).into()))
         } else {
             let lnum = left.to_number(scope)?;
             let rnum = right.to_number(scope)?;
@@ -54,8 +55,8 @@ impl Value {
         Ok(Value::number(lnum.powf(rnum)))
     }
 
-    pub fn not(&self) -> Value {
-        Value::Boolean(!self.is_truthy())
+    pub fn not(&self, sc: &mut LocalScope<'_>) -> Value {
+        Value::Boolean(!self.is_truthy(sc))
     }
 
     pub fn bitor(&self, other: &Self, scope: &mut LocalScope) -> Result<Value, Value> {

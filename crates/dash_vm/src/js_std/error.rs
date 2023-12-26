@@ -1,3 +1,4 @@
+use crate::gc::interner::sym;
 use crate::value::error::{
     AggregateError, Error, EvalError, RangeError, ReferenceError, SyntaxError, TypeError, URIError,
 };
@@ -8,13 +9,13 @@ use crate::value::{Root, Value, ValueContext};
 macro_rules! define_other_error_constructors {
     ( $( $fun:ident $t:ident ),* ) => {
         $(
-        pub fn $fun(mut cx: CallContext) -> Result<Value, Value> {
-            let message = cx.args.first().unwrap_or_undefined().to_string(&mut cx.scope)?;
-            let error = $t::new(&cx.scope, message);
+            pub fn $fun(mut cx: CallContext) -> Result<Value, Value> {
+                let message = cx.args.first().unwrap_or_undefined().to_js_string(&mut cx.scope)?;
+                let error = $t::new_with_js_string(cx.scope, message);
 
-            Ok(cx.scope.register(error).into())
-        }
-    )*
+                Ok(cx.scope.register(error).into())
+            }
+        )*
     };
 }
 define_other_error_constructors!(
@@ -28,16 +29,16 @@ define_other_error_constructors!(
 );
 
 pub fn error_constructor(cx: CallContext) -> Result<Value, Value> {
-    let message = cx.args.first().cloned().map(|v| v.to_string(cx.scope)).transpose()?;
+    let message = cx.args.first().cloned().map(|v| v.to_js_string(cx.scope)).transpose()?;
 
-    let err = Error::new(cx.scope, message.as_deref().unwrap_or_default());
+    let err = Error::new_with_js_string(cx.scope, message.unwrap_or(sym::EMPTY.into()));
 
     Ok(cx.scope.register(err).into())
 }
 
 pub fn to_string(cx: CallContext) -> Result<Value, Value> {
     cx.this
-        .get_property(cx.scope, "stack".into())
+        .get_property(cx.scope, sym::STACK.into())
         .root(cx.scope)
-        .and_then(|v| v.to_string(cx.scope).map(Value::String))
+        .and_then(|v| v.to_js_string(cx.scope).map(Value::String))
 }

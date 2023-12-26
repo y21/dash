@@ -7,6 +7,7 @@ use dash_optimizer::OptLevel;
 use dash_parser::Parser;
 
 use crate::frame::Frame;
+use crate::gc::interner::sym;
 use crate::localscope::LocalScope;
 use crate::value::object::{NamedObject, Object, PropertyValue};
 use crate::value::{Root, Unrooted, Value};
@@ -75,7 +76,7 @@ impl Vm {
 
                 if let Some(default) = exports.default {
                     let default = default.root(sc);
-                    export_obj.set_property(sc, "default".into(), PropertyValue::static_default(default))?;
+                    export_obj.set_property(sc, sym::DEFAULT.into(), PropertyValue::static_default(default))?;
                 }
 
                 Value::Object(sc.register(export_obj))
@@ -84,7 +85,7 @@ impl Vm {
 
         for (k, v) in exports.named {
             let v = v.root(sc);
-            export_obj.set_property(sc, String::from(k.as_ref()).into(), PropertyValue::static_default(v))?;
+            export_obj.set_property(sc, k.into(), PropertyValue::static_default(v))?;
         }
 
         Ok(export_obj.into())

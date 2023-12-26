@@ -87,7 +87,7 @@ impl Object for TcpListenerConstructor {
                 "TcpListener requires the first argument be the address"
             );
         };
-        let value = String::from(value.to_string(scope)?.as_ref());
+        let value = String::from(value.to_js_string(scope)?.as_ref());
 
         let (tx, mut rx) = mpsc::channel(1);
         let state = State::from_vm(scope);
