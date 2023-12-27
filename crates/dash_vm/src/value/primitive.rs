@@ -8,7 +8,7 @@ use crate::gc::interner::sym;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::localscope::LocalScope;
 use crate::throw;
-use crate::util::format_f64;
+use crate::util::{format_f64, Captures};
 
 use super::boxed::{Boolean as BoxedBoolean, Number as BoxedNumber, String as BoxedString, Symbol as BoxedSymbol};
 use super::object::{Object, PropertyKey, PropertyValue};
@@ -183,15 +183,14 @@ impl Object for bool {
 //     }
 // }
 
-pub fn array_like_keys(_len: usize) -> impl Iterator<Item = Value> {
-    if false {
-        todo!();
-    }
-    [].into_iter()
-    // (0..len)
-    //     .map(|i| i.to_string())
-    //     .chain(iter::once_with(|| "length".to_string()))
-    //     .map(|x| Value::String(x.as_str().into()))
+pub fn array_like_keys<'a, 'b>(
+    sc: &'a mut LocalScope<'b>,
+    len: usize,
+) -> impl Iterator<Item = Value> + Captures<'a> + Captures<'b> {
+    (0..len)
+        .map(|i| sc.intern_usize(i))
+        .chain(iter::once_with(|| sym::LENGTH))
+        .map(|x| Value::String(x.into()))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -300,67 +299,67 @@ impl Object for Null {
     }
 }
 
-impl Object for str {
-    fn get_own_property_descriptor(
-        &self,
-        sc: &mut LocalScope,
-        key: PropertyKey,
-    ) -> Result<Option<PropertyValue>, Unrooted> {
-        if let PropertyKey::String(st) = key {
-            if st.sym() == sym::LENGTH {
-                return Ok(Some(PropertyValue::static_default(Value::number(self.len() as f64))));
-            }
+// impl Object for str {
+//     fn get_own_property_descriptor(
+//         &self,
+//         sc: &mut LocalScope,
+//         key: PropertyKey,
+//     ) -> Result<Option<PropertyValue>, Unrooted> {
+//         if let PropertyKey::String(st) = key {
+//             if st.sym() == sym::LENGTH {
+//                 return Ok(Some(PropertyValue::static_default(Value::number(self.len() as f64))));
+//             }
 
-            if let Ok(index) = st.res(sc).parse::<usize>() {
-                let bytes = self.as_bytes();
-                if let Some(&byte) = bytes.get(index) {
-                    let s = sc.intern((byte as char).to_string().as_ref());
-                    return Ok(Some(PropertyValue::static_default(Value::String(s.into()))));
-                }
-            }
-        }
+//             if let Ok(index) = st.res(sc).parse::<usize>() {
+//                 let bytes = self.as_bytes();
+//                 if let Some(&byte) = bytes.get(index) {
+//                     let s = sc.intern((byte as char).to_string().as_ref());
+//                     return Ok(Some(PropertyValue::static_default(Value::String(s.into()))));
+//                 }
+//             }
+//         }
 
-        Ok(None)
-    }
+//         Ok(None)
+//     }
 
-    fn set_property(&self, _sc: &mut LocalScope, _key: PropertyKey, _value: PropertyValue) -> Result<(), Value> {
-        Ok(())
-    }
+//     fn set_property(&self, _sc: &mut LocalScope, _key: PropertyKey, _value: PropertyValue) -> Result<(), Value> {
+//         Ok(())
+//     }
 
-    fn delete_property(&self, _sc: &mut LocalScope, _key: PropertyKey) -> Result<Unrooted, Value> {
-        Ok(Unrooted::new(Value::undefined()))
-    }
+//     fn delete_property(&self, _sc: &mut LocalScope, _key: PropertyKey) -> Result<Unrooted, Value> {
+//         Ok(Unrooted::new(Value::undefined()))
+//     }
 
-    fn set_prototype(&self, _sc: &mut LocalScope, _value: Value) -> Result<(), Value> {
-        Ok(())
-    }
+//     fn set_prototype(&self, _sc: &mut LocalScope, _value: Value) -> Result<(), Value> {
+//         Ok(())
+//     }
 
-    fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
-        Ok(sc.statics.string_prototype.clone().into())
-    }
+//     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
+//         Ok(sc.statics.string_prototype.clone().into())
+//     }
 
-    fn apply(
-        &self,
-        scope: &mut LocalScope,
-        _callee: Handle<dyn Object>,
-        _this: Value,
-        _args: Vec<Value>,
-    ) -> Result<Unrooted, Unrooted> {
-        throw!(scope, TypeError, "string is not a function")
-    }
+//     fn apply(
+//         &self,
+//         scope: &mut LocalScope,
+//         _callee: Handle<dyn Object>,
+//         _this: Value,
+//         _args: Vec<Value>,
+//     ) -> Result<Unrooted, Unrooted> {
+//         throw!(scope, TypeError, "string is not a function")
+//     }
 
-    fn as_any(&self) -> &dyn Any {
-        panic!("cannot convert string to any")
-    }
+//     fn as_any(&self) -> &dyn Any {
+//         panic!("cannot convert string to any")
+//     }
 
-    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
-        Ok(array_like_keys(self.len()).collect())
-    }
+//     fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+//         Ok(array_like_keys(self.len()).collect())
+//     }
 
-    fn type_of(&self) -> Typeof {
-        Typeof::String
-    }
-}
+//     fn type_of(&self) -> Typeof {
+//         Typeof::String
+//     }
+// }
 
 // TODO: rename to JsSymbol
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]

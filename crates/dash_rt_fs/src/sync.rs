@@ -7,13 +7,14 @@ use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::{Value, ValueContext};
 
 pub fn init_module(sc: &mut LocalScope) -> Result<Value, Value> {
-    let read_file_value = Function::new(sc, Some("readFile".into()), FunctionKind::Native(read_file));
+    let name = sc.intern("readFile");
+    let read_file_value = Function::new(sc, Some(name.into()), FunctionKind::Native(read_file));
     let read_file_value = sc.register(read_file_value);
 
     let module = NamedObject::new(sc);
     module.set_property(
         sc,
-        PropertyKey::String("readFile".into()),
+        name.into(),
         PropertyValue::static_default(Value::Object(read_file_value)),
     )?;
 
@@ -21,11 +22,16 @@ pub fn init_module(sc: &mut LocalScope) -> Result<Value, Value> {
 }
 
 fn read_file(cx: CallContext) -> Result<Value, Value> {
-    let path = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
-    let path = ToString::to_string(&path);
+    let path = cx
+        .args
+        .first()
+        .unwrap_or_undefined()
+        .to_js_string(cx.scope)?
+        .res(cx.scope)
+        .to_owned();
 
     match std::fs::read_to_string(path) {
-        Ok(s) => Ok(Value::String(s.into())),
+        Ok(s) => Ok(Value::String(cx.scope.intern(s.as_ref()).into())),
         Err(err) => {
             let err = Error::new(cx.scope, err.to_string());
             Err(Value::Object(cx.scope.register(err)))

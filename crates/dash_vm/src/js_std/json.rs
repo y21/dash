@@ -9,8 +9,8 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
 
 pub fn parse(cx: CallContext) -> Result<Value, Value> {
     let value = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
-    let bytes = value.res(cx.scope).as_bytes(); // TODO: thsi is probably going to be a borrowck issue
-    let parse = match json::parser::Parser::new(bytes, cx.scope).parse() {
+    let bytes = value.res(cx.scope).as_bytes().to_owned();
+    let parse = match json::parser::Parser::new(&bytes, cx.scope).parse() {
         Ok(v) => v,
         Err(e) => {
             throw!(cx.scope, SyntaxError, "{}", e.to_string())

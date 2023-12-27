@@ -1,10 +1,8 @@
 use std::cell::OnceCell;
 use std::future::Future;
-use std::rc::Rc;
 
 use dash_compiler::FunctionCompiler;
 use dash_middle::compiler::CompileResult;
-use dash_middle::interner::StringInterner;
 use dash_vm::frame::{Exports, Frame};
 use dash_vm::gc::persistent::Persistent;
 use dash_vm::localscope::LocalScope;
@@ -67,7 +65,7 @@ where
     Ok(Value::Object(promise))
 }
 
-pub fn format_value(value: Value, scope: &mut LocalScope) -> Result<Rc<str>, Value> {
+pub fn format_value<'s>(value: Value, scope: &'s mut LocalScope) -> Result<&'s str, Value> {
     thread_local! {
         // Cache bytecode so we can avoid recompiling it every time
         // We can be even smarter if we need to -- cache the whole value at callsite
@@ -78,7 +76,7 @@ pub fn format_value(value: Value, scope: &mut LocalScope) -> Result<Rc<str>, Val
         let inspect = tls.get_or_init(|| {
             FunctionCompiler::compile_str(
                 // TODO: can reuse a string interner if worth it
-                &mut StringInterner::new(),
+                &mut scope.interner,
                 include_str!("../js/inspect.js"),
                 Default::default(),
             )
@@ -103,5 +101,5 @@ pub fn format_value(value: Value, scope: &mut LocalScope) -> Result<Rc<str>, Val
         .to_js_string(scope)
         .unwrap();
 
-    Ok(result)
+    Ok(result.res(scope))
 }

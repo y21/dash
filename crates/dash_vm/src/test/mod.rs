@@ -1,6 +1,7 @@
 use std::ptr;
 use std::rc::Rc;
 
+use dash_middle::interner::sym;
 use dash_optimizer::OptLevel;
 
 use crate::gc::persistent::Persistent;
@@ -52,7 +53,10 @@ fn simple() {
         .unwrap()
         .root(&mut scope);
     scope.perform_gc();
-    let value = array.get_property(&mut scope, "0".into()).unwrap().root(&mut scope);
+    let value = array
+        .get_property(&mut scope, sym::ZERO.into())
+        .unwrap()
+        .root(&mut scope);
     assert_eq!(scope.stack.len(), 0);
     assert_eq!(scope.frames.len(), 0);
     assert_eq!(value, Value::number(6.0));
@@ -67,12 +71,13 @@ fn persistent_trace() {
     let mut vm = Vm::new(Default::default());
     let object = {
         let mut scope = vm.scope();
-        let dummy_string = scope.register(Rc::<str>::from("hi"));
+        let dummy_string = scope.register(NamedObject::null());
         let object = NamedObject::new(&scope);
+        let key = scope.intern("foo");
         object
             .set_property(
                 &mut scope,
-                "foo".into(),
+                key.into(),
                 PropertyValue::static_default(Value::Object(dummy_string)),
             )
             .unwrap();
@@ -99,8 +104,9 @@ fn persistent_trace() {
 
     // Check that p1 and object are still alive after GC.
     let mut scope = vm.scope();
-    let p = p1.get_property(&mut scope, "foo".into()).unwrap().root(&mut scope);
-    assert_eq!(p.downcast_ref::<Rc<str>>().unwrap().as_ref(), "hi");
+    let key = scope.intern("foo");
+    let p = p1.get_property(&mut scope, key.into()).unwrap().root(&mut scope);
+    assert!(p.downcast_ref::<NamedObject>().is_some());
 }
 
 macro_rules! simple_test {

@@ -13,20 +13,27 @@ use dash_vm::value::function::native::CallContext;
 use dash_vm::value::function::{Function, FunctionKind};
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
+use dash_vm::value::string::JsString;
 use dash_vm::value::Value;
 
 #[derive(Debug)]
 pub struct TimersModule;
 
 impl ModuleLoader for TimersModule {
-    fn import(&self, sc: &mut LocalScope, _import_ty: StaticImportKind, path: &str) -> Result<Option<Value>, Value> {
-        if path == "@std/timers" {
+    fn import(
+        &self,
+        sc: &mut LocalScope,
+        _import_ty: StaticImportKind,
+        path: JsString,
+    ) -> Result<Option<Value>, Value> {
+        if path.res(sc) == "@std/timers" {
             let obj = NamedObject::new(sc);
 
-            let set_timeout = Function::new(sc, Some("setTimeout".into()), FunctionKind::Native(set_timeout));
+            let name = sc.intern("setTimeout");
+            let set_timeout = Function::new(sc, Some(name.into()), FunctionKind::Native(set_timeout));
             let set_timeout = Value::Object(sc.register(set_timeout));
 
-            obj.set_property(sc, "setTimeout".into(), PropertyValue::static_default(set_timeout))?;
+            obj.set_property(sc, name.into(), PropertyValue::static_default(set_timeout))?;
 
             Ok(Some(Value::Object(sc.register(obj))))
         } else {

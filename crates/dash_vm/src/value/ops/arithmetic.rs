@@ -14,9 +14,9 @@ impl Value {
         let rightstr = matches!(right.type_of(), Typeof::String);
 
         if leftstr || rightstr {
-            let lstr = left.to_js_string(scope)?.res(scope);
-            let rstr = right.to_js_string(scope)?.res(scope);
-            let out = format!("{lstr}{rstr}");
+            let lstr = left.to_js_string(scope)?;
+            let rstr = right.to_js_string(scope)?;
+            let out = format!("{}{}", lstr.res(scope), rstr.res(scope));
             Ok(Value::String(scope.intern(out).into()))
         } else {
             let lnum = left.to_number(scope)?;

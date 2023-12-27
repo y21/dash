@@ -92,7 +92,7 @@ pub fn exec(cx: CallContext<'_, '_>) -> Result<Value, Value> {
         None => throw!(cx.scope, TypeError, "Receiver must be an initialized RegExp object"),
     };
 
-    let text = text.res(cx.scope);
+    let text = text.res(cx.scope).to_owned();
     let is_global = flags.contains(Flags::GLOBAL);
 
     if is_global && last_index.get() >= text.len() {
@@ -106,20 +106,19 @@ pub fn exec(cx: CallContext<'_, '_>) -> Result<Value, Value> {
             last_index.set(last_index.get() + matcher.groups.get(0).unwrap().end);
         }
 
-        let groups = Array::from_vec(
-            cx.scope,
-            matcher
-                .groups
-                .iter()
-                .map(|g| {
-                    let sub = match g {
-                        Some(r) => cx.scope.intern(&text[r]).into(),
-                        None => sym::NULL.into(),
-                    };
-                    PropertyValue::static_default(Value::String(sub))
-                })
-                .collect(),
-        );
+        let groups = matcher
+            .groups
+            .iter()
+            .map(|g| {
+                let sub = match g {
+                    Some(r) => cx.scope.intern(&text[r]).into(),
+                    None => sym::NULL.into(),
+                };
+                PropertyValue::static_default(Value::String(sub))
+            })
+            .collect();
+
+        let groups = Array::from_vec(cx.scope, groups);
         Ok(Value::Object(cx.scope.register(groups)))
     } else {
         if is_global {

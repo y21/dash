@@ -31,7 +31,7 @@ fn create_html(
     attribute: Option<(&str, Value)>,
 ) -> Result<Value, Value> {
     // 2. Let S be ? ToString(str).
-    let s = string.to_js_string(sc)?.res(sc);
+    let s = string.to_js_string(sc)?;
 
     // 3. Let p1 be the string-concatenation of "<" and tag.
     let mut p1 = format!("<{tag}");
@@ -39,10 +39,10 @@ fn create_html(
     // 4. If attribute is not the empty String, then
     if let Some((key, value)) = attribute {
         // Let V be ? ToString(value).
-        let v = value.to_js_string(sc)?.res(sc);
+        let v = value.to_js_string(sc)?;
 
         // b. Let escapedV be the String value that is  ...
-        let escaped_v = v.replace('"', "&quot;");
+        let escaped_v = v.res(sc).replace('"', "&quot;");
 
         // c. Set p1 to the string-concatenation of: ...
         let _ = write!(p1, " {key}=\"{escaped_v}\"");
@@ -52,7 +52,7 @@ fn create_html(
     // 6. Let p3 be the string-concatenation of p2 and S.
     // Let p4 be the string-concatenation of p3, "</", tag, and ">".
     // 8. Return p4.
-    let _ = write!(p1, ">{s}</{tag}>");
+    let _ = write!(p1, ">{}</{tag}>", s.res(sc));
 
     Ok(Value::String(sc.intern(p1).into()))
 }
@@ -116,71 +116,49 @@ pub fn char_code_at(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn concat(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.to_js_string(cx.scope)?.res(cx.scope);
-    let other = cx
-        .args
-        .first()
-        .unwrap_or_undefined()
-        .to_js_string(cx.scope)?
-        .res(cx.scope);
-    let concat = String::from(this) + other;
+    let this = cx.this.to_js_string(cx.scope)?;
+    let other = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
+    let concat = String::from(this.res(cx.scope)) + other.res(cx.scope);
     Ok(Value::String(cx.scope.intern(concat.as_ref()).into()))
 }
 
 pub fn ends_with(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.to_js_string(cx.scope)?.res(cx.scope);
-    let other = cx
-        .args
-        .first()
-        .unwrap_or_undefined()
-        .to_js_string(cx.scope)?
-        .res(cx.scope);
-    Ok(Value::Boolean(this.ends_with(other)))
+    let this = cx.this.to_js_string(cx.scope)?;
+    let other = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
+    Ok(Value::Boolean(this.res(cx.scope).ends_with(other.res(cx.scope))))
 }
 
 pub fn starts_with(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.to_js_string(cx.scope)?.res(cx.scope);
-    let other = cx
-        .args
-        .first()
-        .unwrap_or_undefined()
-        .to_js_string(cx.scope)?
-        .res(cx.scope);
-    Ok(Value::Boolean(this.starts_with(other)))
+    let this = cx.this.to_js_string(cx.scope)?;
+    let other = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
+    Ok(Value::Boolean(this.res(cx.scope).starts_with(other.res(cx.scope))))
 }
 
 pub fn includes(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.to_js_string(cx.scope)?.res(cx.scope);
-    let other = cx
-        .args
-        .first()
-        .unwrap_or_undefined()
-        .to_js_string(cx.scope)?
-        .res(cx.scope);
-    Ok(Value::Boolean(this.contains(other)))
+    let this = cx.this.to_js_string(cx.scope)?;
+    let other = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
+    Ok(Value::Boolean(this.res(cx.scope).contains(other.res(cx.scope))))
 }
 
 pub fn index_of(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.to_js_string(cx.scope)?.res(cx.scope);
-    let other = cx
-        .args
-        .first()
-        .unwrap_or_undefined()
-        .to_js_string(cx.scope)?
-        .res(cx.scope);
-    let pos = this.find(other).map(|i| i as f64).unwrap_or(-1.0);
+    let this = cx.this.to_js_string(cx.scope)?;
+    let other = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
+    let pos = this
+        .res(cx.scope)
+        .find(other.res(cx.scope))
+        .map(|i| i as f64)
+        .unwrap_or(-1.0);
     Ok(Value::number(pos))
 }
 
 pub fn last_index_of(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.to_js_string(cx.scope)?.res(cx.scope);
-    let other = cx
-        .args
-        .first()
-        .unwrap_or_undefined()
-        .to_js_string(cx.scope)?
-        .res(cx.scope);
-    let pos = this.rfind(other).map(|i| i as f64).unwrap_or(-1.0);
+    let this = cx.this.to_js_string(cx.scope)?;
+    let other = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
+    let pos = this
+        .res(cx.scope)
+        .rfind(other.res(cx.scope))
+        .map(|i| i as f64)
+        .unwrap_or(-1.0);
     Ok(Value::number(pos))
 }
 
@@ -263,56 +241,45 @@ pub fn repeat(cx: CallContext) -> Result<Value, Value> {
 
 pub fn replace(cx: CallContext) -> Result<Value, Value> {
     // TODO: once we have regexp, we can properly implement this
-    let string = cx.this.to_js_string(cx.scope)?.res(cx.scope);
+    let string = cx.this.to_js_string(cx.scope)?;
 
-    let search_string = cx
-        .args
-        .first()
-        .unwrap_or_undefined()
-        .to_js_string(cx.scope)?
-        .res(cx.scope);
+    let search_string = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
 
-    let replace_value = cx
-        .args
-        .get(1)
-        .unwrap_or_undefined()
-        .to_js_string(cx.scope)?
-        .res(cx.scope);
+    let replace_value = cx.args.get(1).unwrap_or_undefined().to_js_string(cx.scope)?;
 
-    let string = string.replacen(search_string, replace_value, 1);
+    let string = string
+        .res(cx.scope)
+        .replacen(search_string.res(cx.scope), replace_value.res(cx.scope), 1);
 
     Ok(Value::String(cx.scope.intern(string).into()))
 }
 
 pub fn replace_all(cx: CallContext) -> Result<Value, Value> {
-    let string = cx.this.to_js_string(cx.scope)?.res(cx.scope);
+    let string = cx.this.to_js_string(cx.scope)?;
 
-    let search_string = cx
-        .args
-        .first()
-        .unwrap_or_undefined()
-        .to_js_string(cx.scope)?
-        .res(cx.scope);
+    let search_string = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
 
-    let replace_value = cx
-        .args
-        .get(1)
-        .unwrap_or_undefined()
-        .to_js_string(cx.scope)?
-        .res(cx.scope);
+    let replace_value = cx.args.get(1).unwrap_or_undefined().to_js_string(cx.scope)?;
 
-    let string = string.replace(search_string, replace_value);
+    let string = string
+        .res(cx.scope)
+        .replace(search_string.res(cx.scope), replace_value.res(cx.scope));
 
     Ok(Value::String(cx.scope.intern(string).into()))
 }
 
 pub fn split(cx: CallContext) -> Result<Value, Value> {
-    let string = cx.this.to_js_string(cx.scope)?;
-    let separator = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
+    let string = cx.this.to_js_string(cx.scope)?.res(cx.scope).to_owned();
+    let separator = cx
+        .args
+        .first()
+        .unwrap_or_undefined()
+        .to_js_string(cx.scope)?
+        .res(cx.scope)
+        .to_owned();
 
     let result = string
-        .res(cx.scope)
-        .split(separator.res(cx.scope))
+        .split(&separator)
         .map(|s| PropertyValue::static_default(Value::String(cx.scope.intern(s).into())))
         .collect();
 
@@ -334,20 +301,20 @@ pub fn to_lowercase(cx: CallContext) -> Result<Value, Value> {
 
 pub fn trim(cx: CallContext) -> Result<Value, Value> {
     let string = cx.this.to_js_string(cx.scope)?;
-    let result = string.res(cx.scope).trim();
-    Ok(Value::String(cx.scope.intern(result).into()))
+    let result = string.res(cx.scope).trim().to_owned();
+    Ok(Value::String(cx.scope.intern(result.as_ref()).into()))
 }
 
 pub fn trim_start(cx: CallContext) -> Result<Value, Value> {
     let string = cx.this.to_js_string(cx.scope)?;
-    let result = string.res(cx.scope).trim_start();
-    Ok(Value::String(cx.scope.intern(result).into()))
+    let result = string.res(cx.scope).trim_start().to_owned();
+    Ok(Value::String(cx.scope.intern(result.as_ref()).into()))
 }
 
 pub fn trim_end(cx: CallContext) -> Result<Value, Value> {
     let string = cx.this.to_js_string(cx.scope)?;
-    let result = string.res(cx.scope).trim_start();
-    Ok(Value::String(cx.scope.intern(result).into()))
+    let result = string.res(cx.scope).trim_start().to_owned();
+    Ok(Value::String(cx.scope.intern(result.as_ref()).into()))
 }
 
 pub fn from_char_code(cx: CallContext) -> Result<Value, Value> {
@@ -412,9 +379,8 @@ pub fn substring(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn iterator(cx: CallContext) -> Result<Value, Value> {
-    let string = cx.this.to_js_string(cx.scope)?;
+    let string = cx.this.to_js_string(cx.scope)?.res(cx.scope).to_owned();
     let chars = string
-        .res(cx.scope)
         .chars()
         .map(|c| cx.scope.intern_char(c).into())
         .map(Value::String)

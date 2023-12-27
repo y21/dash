@@ -155,7 +155,7 @@ impl Object for Array {
 
     fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         let items = self.items.borrow();
-        Ok(array_like_keys(items.len()).collect())
+        Ok(array_like_keys(sc, items.len()).collect())
     }
 }
 

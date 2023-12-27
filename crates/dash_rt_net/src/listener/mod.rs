@@ -34,7 +34,7 @@ impl Object for TcpListenerConstructor {
     fn set_property(
         &self,
         _sc: &mut dash_vm::localscope::LocalScope,
-        _key: dash_vm::value::object::PropertyKey<'static>,
+        _key: dash_vm::value::object::PropertyKey,
         _value: dash_vm::value::object::PropertyValue,
     ) -> Result<(), dash_vm::value::Value> {
         Ok(())
@@ -87,7 +87,7 @@ impl Object for TcpListenerConstructor {
                 "TcpListener requires the first argument be the address"
             );
         };
-        let value = String::from(value.to_js_string(scope)?.as_ref());
+        let value = String::from(value.to_js_string(scope)?.res(scope));
 
         let (tx, mut rx) = mpsc::channel(1);
         let state = State::from_vm(scope);
@@ -142,7 +142,7 @@ impl Object for TcpListenerConstructor {
         self
     }
 
-    fn own_keys(&self) -> Result<Vec<dash_vm::value::Value>, dash_vm::value::Value> {
+    fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<dash_vm::value::Value>, dash_vm::value::Value> {
         Ok(Vec::new())
     }
 }
@@ -168,13 +168,10 @@ unsafe impl Trace for TcpListenerHandle {
 impl TcpListenerHandle {
     pub fn new(sender: mpsc::Sender<TcpListenerBridgeMessage>, sc: &mut LocalScope) -> Result<Self, Value> {
         let object = NamedObject::new(sc);
-        let accept_fn = Function::new(sc, Some("accept".into()), FunctionKind::Native(tcplistener_accept));
+        let name = sc.intern("accept");
+        let accept_fn = Function::new(sc, Some(name.into()), FunctionKind::Native(tcplistener_accept));
         let accept_fn = sc.register(accept_fn);
-        object.set_property(
-            sc,
-            "accept".into(),
-            PropertyValue::static_default(Value::Object(accept_fn)),
-        )?;
+        object.set_property(sc, name.into(), PropertyValue::static_default(Value::Object(accept_fn)))?;
         Ok(Self { object, sender })
     }
 }
@@ -232,18 +229,20 @@ impl TcpStreamHandle {
         reader_tx: mpsc::UnboundedSender<oneshot::Sender<Box<[u8]>>>,
     ) -> Result<Self, Value> {
         let object = NamedObject::new(scope);
-        let write_fn = Function::new(scope, Some("write".into()), FunctionKind::Native(tcpstream_write));
+        let name = scope.intern("write");
+        let write_fn = Function::new(scope, Some(name.into()), FunctionKind::Native(tcpstream_write));
         let write_fn = scope.register(write_fn);
         object.set_property(
             scope,
-            "write".into(),
+            name.into(),
             PropertyValue::static_default(Value::Object(write_fn)),
         )?;
-        let read_fn = Function::new(scope, Some("read".into()), FunctionKind::Native(tcpstream_read));
+        let name = scope.intern("read");
+        let read_fn = Function::new(scope, Some(name.into()), FunctionKind::Native(tcpstream_read));
         let read_fn = scope.register(read_fn);
         object.set_property(
             scope,
-            "read".into(),
+            name.into(),
             PropertyValue::static_default(Value::Object(read_fn)),
         )?;
         Ok(Self {

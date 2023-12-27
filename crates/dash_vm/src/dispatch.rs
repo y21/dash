@@ -8,6 +8,7 @@ use std::vec::Drain;
 use crate::frame::Frame;
 use crate::gc::handle::Handle;
 use crate::localscope::LocalScope;
+use crate::value::string::JsString;
 use crate::value::{ExternalValue, Root, Unrooted};
 
 use super::value::Value;
@@ -159,18 +160,18 @@ impl<'sc, 'vm> DispatchContext<'sc, 'vm> {
         self.active_frame().function.constants[index].clone()
     }
 
-    pub fn identifier_constant(&self, index: usize) -> Rc<str> {
+    pub fn identifier_constant(&self, index: usize) -> JsString {
         self.constant(index)
             .as_identifier()
-            .cloned()
             .expect("Bytecode attempted to reference invalid identifier constant")
+            .into()
     }
 
-    pub fn string_constant(&self, index: usize) -> Rc<str> {
+    pub fn string_constant(&self, index: usize) -> JsString {
         self.constant(index)
             .as_string()
-            .cloned()
             .expect("Bytecode attempted to reference invalid string constant")
+            .into()
     }
 
     pub fn number_constant(&self, index: usize) -> f64 {
@@ -196,6 +197,7 @@ impl<'sc, 'vm> DerefMut for DispatchContext<'sc, 'vm> {
 mod handlers {
     use dash_middle::compiler::instruction::{AssignKind, IntrinsicOperation};
     use dash_middle::compiler::{ArrayMemberKind, FunctionCallMetadata, ObjectMemberKind, StaticImportKind};
+    use dash_middle::interner::sym;
     use if_chain::if_chain;
     use smallvec::SmallVec;
     use std::borrow::Cow;
@@ -412,11 +414,14 @@ mod handlers {
         let name = cx.identifier_constant(id.into());
 
         let value = match cx.global.as_any().downcast_ref::<NamedObject>() {
-            Some(value) => match value.get_raw_property(name.as_ref().into()) {
+            Some(value) => match value.get_raw_property(name.into()) {
                 Some(value) => value.kind().get_or_apply(&mut cx, Value::undefined())?,
-                None => throw!(&mut cx, ReferenceError, "{} is not defined", name),
+                None => {
+                    let name = name.res(cx.scope).to_owned();
+                    throw!(&mut cx, ReferenceError, "{} is not defined", name)
+                }
             },
-            None => cx.global.clone().get_property(&mut cx, name.as_ref().into())?,
+            None => cx.global.clone().get_property(&mut cx, name.into())?,
         };
 
         cx.push_stack(value);
@@ -434,15 +439,13 @@ mod handlers {
                 let value = cx
                     .global
                     .clone()
-                    .get_property(&mut cx, PropertyKey::String(Cow::Borrowed(&name)))
+                    .get_property(&mut cx, PropertyKey::String(name))
                     .root(cx.scope)?;
 
                 let res = $op(&value, &right, &mut cx)?;
-                cx.global.clone().set_property(
-                    &mut cx,
-                    ToString::to_string(&name).into(),
-                    PropertyValue::static_default(res.clone()),
-                )?;
+                cx.global
+                    .clone()
+                    .set_property(&mut cx, name.into(), PropertyValue::static_default(res.clone()))?;
                 cx.stack.push(res);
             }};
         }
@@ -452,17 +455,15 @@ mod handlers {
                 let value = cx
                     .global
                     .clone()
-                    .get_property(&mut cx, PropertyKey::String(Cow::Borrowed(&name)))
+                    .get_property(&mut cx, PropertyKey::String(name))
                     .root(cx.scope)?;
                 let value = Value::number(value.to_number(&mut cx)?);
 
                 let right = Value::number(1.0);
                 let res = $op(&value, &right, &mut cx)?;
-                cx.global.clone().set_property(
-                    &mut cx,
-                    ToString::to_string(&name).into(),
-                    PropertyValue::static_default(res.clone()),
-                )?;
+                cx.global
+                    .clone()
+                    .set_property(&mut cx, name.into(), PropertyValue::static_default(res.clone()))?;
                 cx.stack.push(res);
             }};
         }
@@ -472,17 +473,15 @@ mod handlers {
                 let value = cx
                     .global
                     .clone()
-                    .get_property(&mut cx, PropertyKey::String(Cow::Borrowed(&name)))
+                    .get_property(&mut cx, PropertyKey::String(name))
                     .root(cx.scope)?;
                 let value = Value::number(value.to_number(&mut cx)?);
 
                 let right = Value::number(1.0);
                 let res = $op(&value, &right, &mut cx)?;
-                cx.global.clone().set_property(
-                    &mut cx,
-                    ToString::to_string(&name).into(),
-                    PropertyValue::static_default(res),
-                )?;
+                cx.global
+                    .clone()
+                    .set_property(&mut cx, name.into(), PropertyValue::static_default(res))?;
                 cx.stack.push(value);
             }};
         }
@@ -491,11 +490,9 @@ mod handlers {
             AssignKind::Assignment => {
                 let value = cx.pop_stack_rooted();
 
-                cx.global.clone().set_property(
-                    &mut cx,
-                    ToString::to_string(&name).into(),
-                    PropertyValue::static_default(value.clone()),
-                )?;
+                cx.global
+                    .clone()
+                    .set_property(&mut cx, name.into(), PropertyValue::static_default(value.clone()))?;
                 cx.stack.push(value);
             }
             AssignKind::AddAssignment => op!(Value::add),
@@ -556,10 +553,11 @@ mod handlers {
                 let mut splice_args = SmallVec::<[_; 2]>::new();
 
                 for i in 0..length {
+                    let i = cx.scope.intern_usize(i);
                     let value = unsafe {
                         // SAFETY: Rooting is not necessary here because the values being pushed to `splice_args`
                         // are directly "injected" into the value stack
-                        iterable.get_property(&mut cx, i.to_string().into())?.into_value()
+                        iterable.get_property(&mut cx, i.into())?.into_value()
                     };
                     splice_args.push(value);
                 }
@@ -620,8 +618,9 @@ mod handlers {
                 for (index, value) in raw_args.into_iter().enumerate() {
                     if indices_iter.peek().is_some_and(|&v| usize::from(v) == index) {
                         let len = value.length_of_array_like(cx.scope)?;
+                        let index = cx.scope.intern_usize(index);
                         for _ in 0..len {
-                            let value = value.get_property(&mut cx, index.to_string().into())?.root(cx.scope);
+                            let value = value.get_property(&mut cx, index.into())?.root(cx.scope);
                             // NB: no need to push into `refs` since we already rooted it
                             args.push(value);
                         }
@@ -998,7 +997,8 @@ mod handlers {
                     // TODO: make this work for array-like values, not just arrays, by calling @@iterator on it
                     let len = value.length_of_array_like(cx.scope)?;
                     for i in 0..len {
-                        let value = value.get_property(cx.scope, i.to_string().into())?.root(cx.scope);
+                        let i = cx.scope.intern_usize(i);
+                        let value = value.get_property(cx.scope, i.into())?.root(cx.scope);
                         new_elements.push(PropertyValue::static_default(value));
                     }
                 }
@@ -1028,20 +1028,17 @@ mod handlers {
                 ObjectMemberKind::Static => {
                     let id = cx.fetchw_and_inc_ip();
                     // TODO: optimization opportunity: do not reallocate string from Rc<str>
-                    let key = String::from(cx.identifier_constant(id.into()).as_ref());
+                    let key = cx.identifier_constant(id.into());
                     let value = cx.pop_stack_rooted();
-                    obj.insert(
-                        PropertyKey::String(Cow::Owned(key)),
-                        PropertyValue::static_default(value),
-                    );
+                    obj.insert(key.into(), PropertyValue::static_default(value));
                 }
                 ObjectMemberKind::Getter => {
                     let id = cx.fetchw_and_inc_ip();
-                    let key = PropertyKey::String(Cow::Owned(String::from(cx.identifier_constant(id.into()).as_ref())));
+                    let key = cx.identifier_constant(id.into());
                     let Value::Object(value) = cx.pop_stack_rooted() else {
                         panic!("Getter is not an object");
                     };
-                    obj.entry(key)
+                    obj.entry(key.into())
                         .and_modify(|v| match v.kind_mut() {
                             PropertyValueKind::Trap { get, .. } => *get = Some(value.clone()),
                             _ => *v = PropertyValue::getter_default(value.clone()),
@@ -1050,11 +1047,11 @@ mod handlers {
                 }
                 ObjectMemberKind::Setter => {
                     let id = cx.fetchw_and_inc_ip();
-                    let key = PropertyKey::String(Cow::Owned(String::from(cx.identifier_constant(id.into()).as_ref())));
+                    let key = cx.identifier_constant(id.into());
                     let Value::Object(value) = cx.pop_stack_rooted() else {
                         panic!("Setter is not an object");
                     };
-                    obj.entry(key)
+                    obj.entry(key.into())
                         .and_modify(|v| match v.kind_mut() {
                             PropertyValueKind::Trap { set, .. } => *set = Some(value.clone()),
                             _ => *v = PropertyValue::setter_default(value.clone()),
@@ -1094,7 +1091,7 @@ mod handlers {
             cx.pop_stack_rooted()
         };
 
-        let value = target.get_property(&mut cx, ident.as_ref().into())?;
+        let value = target.get_property(&mut cx, ident.into())?;
         cx.push_stack(value);
         Ok(None)
     }
@@ -1111,16 +1108,10 @@ mod handlers {
                 let target = target.root(cx.scope);
                 let value = value.root(cx.scope);
 
-                let p = target
-                    .get_property(&mut cx, PropertyKey::String(Cow::Borrowed(&key)))?
-                    .root(cx.scope);
+                let p = target.get_property(&mut cx, key.into())?.root(cx.scope);
                 let res = $op(&p, &value, &mut cx)?;
 
-                target.set_property(
-                    &mut cx,
-                    ToString::to_string(&key).into(),
-                    PropertyValue::static_default(res.clone()),
-                )?;
+                target.set_property(&mut cx, key.into(), PropertyValue::static_default(res.clone()))?;
                 cx.stack.push(res);
             }};
         }
@@ -1128,17 +1119,11 @@ mod handlers {
         macro_rules! postfix {
             ($op:expr) => {{
                 let target = cx.pop_stack_rooted();
-                let prop = target
-                    .get_property(&mut cx, PropertyKey::String(Cow::Borrowed(&key)))?
-                    .root(cx.scope);
+                let prop = target.get_property(&mut cx, key.into())?.root(cx.scope);
                 let prop = Value::number(prop.to_number(&mut cx)?);
                 let one = Value::number(1.0);
                 let res = $op(&prop, &one, &mut cx)?;
-                target.set_property(
-                    &mut cx,
-                    ToString::to_string(&key).into(),
-                    PropertyValue::static_default(res),
-                )?;
+                target.set_property(&mut cx, key.into(), PropertyValue::static_default(res))?;
                 cx.stack.push(prop);
             }};
         }
@@ -1146,17 +1131,11 @@ mod handlers {
         macro_rules! prefix {
             ($op:expr) => {{
                 let target = cx.pop_stack_rooted();
-                let prop = target
-                    .get_property(&mut cx, PropertyKey::String(Cow::Borrowed(&key)))?
-                    .root(cx.scope);
+                let prop = target.get_property(&mut cx, key.into())?.root(cx.scope);
                 let prop = Value::number(prop.to_number(&mut cx)?);
                 let one = Value::number(1.0);
                 let res = $op(&prop, &one, &mut cx)?;
-                target.set_property(
-                    &mut cx,
-                    ToString::to_string(&key).into(),
-                    PropertyValue::static_default(res.clone()),
-                )?;
+                target.set_property(&mut cx, key.into(), PropertyValue::static_default(res.clone()))?;
                 cx.stack.push(res);
             }};
         }
@@ -1166,11 +1145,7 @@ mod handlers {
                 let (target, value) = cx.pop_stack2_new();
                 let target = target.root(cx.scope);
                 let value = value.root(cx.scope);
-                target.set_property(
-                    &mut cx,
-                    ToString::to_string(&key).into(),
-                    PropertyValue::static_default(value.clone()),
-                )?;
+                target.set_property(&mut cx, key.into(), PropertyValue::static_default(value.clone()))?;
                 cx.stack.push(value);
             }
             AssignKind::AddAssignment => op!(Value::add),
@@ -1429,7 +1404,7 @@ mod handlers {
         let path = cx.string_constant(path_id.into());
 
         let value = match cx.params.static_import_callback() {
-            Some(cb) => cb(&mut cx, ty, &path)?,
+            Some(cb) => cb(&mut cx, ty, path)?,
             None => throw!(cx, Error, "Static imports are disabled for this context."),
         };
 
@@ -1474,7 +1449,7 @@ mod handlers {
 
                     let ident = cx.identifier_constant(ident_id.into());
 
-                    let value = cx.global.clone().get_property(&mut cx, ident.as_ref().into())?;
+                    let value = cx.global.clone().get_property(&mut cx, ident.into())?;
 
                     (value, ident)
                 }
@@ -1587,8 +1562,7 @@ mod handlers {
         let target = cx.pop_stack_rooted();
         let cid = cx.fetchw_and_inc_ip();
         let con = cx.identifier_constant(cid.into());
-        let key = PropertyKey::from(con.as_ref());
-        let value = target.delete_property(&mut cx, key)?;
+        let value = target.delete_property(&mut cx, con.into())?;
 
         // TODO: not correct, as `undefined` might have been the actual value
         let did_delete = !matches!(value.root(cx.scope), Value::Undefined(..));
@@ -1644,7 +1618,7 @@ mod handlers {
             let id = cx.number_constant(loc_id.into()) as usize;
             let ident = cx.identifier_constant(ident_id.into());
 
-            let prop = obj.get_property(&mut cx, PropertyKey::from(ident.as_ref()))?;
+            let prop = obj.get_property(&mut cx, ident.into())?;
             cx.set_local(id, prop.into());
         }
 
@@ -1660,7 +1634,9 @@ mod handlers {
 
             let id = cx.number_constant(loc_id.into()) as usize;
 
-            let prop = array.get_property(&mut cx, PropertyKey::from(i.to_string().as_ref()))?;
+            let i = cx.scope.intern_usize(i.into());
+
+            let prop = array.get_property(&mut cx, i.into())?;
             cx.set_local(id, prop.into());
         }
 
@@ -1763,7 +1739,7 @@ mod handlers {
         }
 
         macro_rules! fn_call {
-            ($fun:ident, $k:ident, $v:ident) => {{
+            ($fun:ident, $k:expr, $v:expr) => {{
                 let argc = cx.fetch_and_inc_ip();
                 let args = cx.pop_stack_many(argc.into()).collect::<Vec<_>>();
                 let fun = cx.statics.$fun.clone();
@@ -1776,14 +1752,8 @@ mod handlers {
                     // TODO: don't warn here but when purity was violated
                     warn!("missed spec call due to impurity");
                     // Builtins impure, fallback to slow dynamic property lookup
-                    let k = cx
-                        .global
-                        .clone()
-                        .get_property(&mut cx, PropertyKey::from(stringify!($k)))?
-                        .root(cx.scope);
-                    let fun = k
-                        .get_property(&mut cx, PropertyKey::from(stringify!($v)))?
-                        .root(cx.scope);
+                    let k = cx.global.clone().get_property(&mut cx, $k.into())?.root(cx.scope);
+                    let fun = k.get_property(&mut cx, $v.into())?.root(cx.scope);
                     let result = fun.apply(&mut cx, Value::undefined(), args)?;
                     cx.push_stack(result);
                 } else {
@@ -1826,34 +1796,34 @@ mod handlers {
             IntrinsicOperation::GeNumLConstR32 => bin_op_numl_constr_n!(>=, u32),
             IntrinsicOperation::LtNumLConstR32 => bin_op_numl_constr_n!(<, u32),
             IntrinsicOperation::LeNumLConstR32 => bin_op_numl_constr_n!(<=, u32),
-            IntrinsicOperation::Exp => fn_call!(math_exp, Math, exp),
-            IntrinsicOperation::Log2 => fn_call!(math_log2, Math, log2),
-            IntrinsicOperation::Expm1 => fn_call!(math_expm1, Math, expm1),
-            IntrinsicOperation::Cbrt => fn_call!(math_cbrt, Math, cbrt),
-            IntrinsicOperation::Clz32 => fn_call!(math_clz32, Math, clz32),
-            IntrinsicOperation::Atanh => fn_call!(math_atanh, Math, atanh),
-            IntrinsicOperation::Atan2 => fn_call!(math_atan2, Math, atan2),
-            IntrinsicOperation::Round => fn_call!(math_round, Math, round),
-            IntrinsicOperation::Acosh => fn_call!(math_acosh, Math, acosh),
-            IntrinsicOperation::Abs => fn_call!(math_abs, Math, abs),
-            IntrinsicOperation::Sinh => fn_call!(math_sinh, Math, sinh),
-            IntrinsicOperation::Sin => fn_call!(math_sin, Math, sin),
-            IntrinsicOperation::Ceil => fn_call!(math_ceil, Math, ceil),
-            IntrinsicOperation::Tan => fn_call!(math_tan, Math, tan),
-            IntrinsicOperation::Trunc => fn_call!(math_trunc, Math, trunc),
-            IntrinsicOperation::Asinh => fn_call!(math_asinh, Math, asinh),
-            IntrinsicOperation::Log10 => fn_call!(math_log10, Math, log10),
-            IntrinsicOperation::Asin => fn_call!(math_asin, Math, asin),
-            IntrinsicOperation::Random => fn_call!(math_random, Math, random),
-            IntrinsicOperation::Log1p => fn_call!(math_log1p, Math, log1p),
-            IntrinsicOperation::Sqrt => fn_call!(math_sqrt, Math, sqrt),
-            IntrinsicOperation::Atan => fn_call!(math_atan, Math, atan),
-            IntrinsicOperation::Cos => fn_call!(math_cos, Math, cos),
-            IntrinsicOperation::Tanh => fn_call!(math_tanh, Math, tanh),
-            IntrinsicOperation::Log => fn_call!(math_log, Math, log),
-            IntrinsicOperation::Floor => fn_call!(math_floor, Math, floor),
-            IntrinsicOperation::Cosh => fn_call!(math_cosh, Math, cosh),
-            IntrinsicOperation::Acos => fn_call!(math_acos, Math, acos),
+            IntrinsicOperation::Exp => fn_call!(math_exp, sym::MATH, sym::EXP),
+            IntrinsicOperation::Log2 => fn_call!(math_log2, sym::MATH, sym::LOG2),
+            IntrinsicOperation::Expm1 => fn_call!(math_expm1, sym::MATH, sym::EXPM1),
+            IntrinsicOperation::Cbrt => fn_call!(math_cbrt, sym::MATH, sym::CBRT),
+            IntrinsicOperation::Clz32 => fn_call!(math_clz32, sym::MATH, sym::CLZ32),
+            IntrinsicOperation::Atanh => fn_call!(math_atanh, sym::MATH, sym::ATANH),
+            IntrinsicOperation::Atan2 => fn_call!(math_atan2, sym::MATH, sym::ATAN2),
+            IntrinsicOperation::Round => fn_call!(math_round, sym::MATH, sym::ROUND),
+            IntrinsicOperation::Acosh => fn_call!(math_acosh, sym::MATH, sym::ACOSH),
+            IntrinsicOperation::Abs => fn_call!(math_abs, sym::MATH, sym::ABS),
+            IntrinsicOperation::Sinh => fn_call!(math_sinh, sym::MATH, sym::SINH),
+            IntrinsicOperation::Sin => fn_call!(math_sin, sym::MATH, sym::SIN),
+            IntrinsicOperation::Ceil => fn_call!(math_ceil, sym::MATH, sym::CEIL),
+            IntrinsicOperation::Tan => fn_call!(math_tan, sym::MATH, sym::TAN),
+            IntrinsicOperation::Trunc => fn_call!(math_trunc, sym::MATH, sym::TRUNC),
+            IntrinsicOperation::Asinh => fn_call!(math_asinh, sym::MATH, sym::ASINH),
+            IntrinsicOperation::Log10 => fn_call!(math_log10, sym::MATH, sym::LOG10),
+            IntrinsicOperation::Asin => fn_call!(math_asin, sym::MATH, sym::ASIN),
+            IntrinsicOperation::Random => fn_call!(math_random, sym::MATH, sym::RANDOM),
+            IntrinsicOperation::Log1p => fn_call!(math_log1p, sym::MATH, sym::LOG1P),
+            IntrinsicOperation::Sqrt => fn_call!(math_sqrt, sym::MATH, sym::SQRT),
+            IntrinsicOperation::Atan => fn_call!(math_atan, sym::MATH, sym::ATAN),
+            IntrinsicOperation::Cos => fn_call!(math_cos, sym::MATH, sym::COS),
+            IntrinsicOperation::Tanh => fn_call!(math_tanh, sym::MATH, sym::TANH),
+            IntrinsicOperation::Log => fn_call!(math_log, sym::MATH, sym::LOG),
+            IntrinsicOperation::Floor => fn_call!(math_floor, sym::MATH, sym::FLOOR),
+            IntrinsicOperation::Cosh => fn_call!(math_cosh, sym::MATH, sym::COSH),
+            IntrinsicOperation::Acos => fn_call!(math_acos, sym::MATH, sym::ACOS),
         }
 
         Ok(None)

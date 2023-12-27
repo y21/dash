@@ -270,12 +270,15 @@ mod tests {
         let mut scope3 = scope2.scope();
         let mut scope4 = scope3.scope();
         let mut scope5 = scope4.scope();
-        scope5.register(JsString::from(scope5.intern("bar")));
+        let k = scope5.intern("bar");
+        scope5.register(JsString::from(k));
         let mut scope6 = scope5.scope();
         let mut scope7 = scope6.scope();
         let mut scope8 = scope7.scope();
-        scope8.register(JsString::from(scope8.intern("foo")));
+        let k = scope8.intern("foo");
+        scope8.register(JsString::from(k));
         let mut scope9 = scope8.scope();
-        scope9.register(JsString::from(scope9.intern("test")));
+        let k = scope9.intern("test");
+        scope9.register(JsString::from(k));
     }
 }

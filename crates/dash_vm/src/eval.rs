@@ -20,19 +20,16 @@ pub enum EvalError {
 }
 
 impl Vm {
-    pub fn eval_with_interner(
-        &mut self,
-        interner: &mut StringInterner,
-        input: &str,
-        opt: OptLevel,
-    ) -> Result<Unrooted, EvalError> {
-        let tokens = Lexer::new(interner, input).scan_all().map_err(EvalError::Middle)?;
-        let (ast, counter) = Parser::new(interner, input, tokens)
+    pub fn eval(&mut self, input: &str, opt: OptLevel) -> Result<Unrooted, EvalError> {
+        let tokens = Lexer::new(&mut self.interner, input)
+            .scan_all()
+            .map_err(EvalError::Middle)?;
+        let (ast, counter) = Parser::new(&mut self.interner, input, tokens)
             .parse_all()
             .map_err(EvalError::Middle)?;
 
         let tcx = TypeInferCtx::new(counter);
-        let cr = FunctionCompiler::new(input, opt, tcx, interner)
+        let cr = FunctionCompiler::new(input, opt, tcx, &mut self.interner)
             .compile_ast(ast, true)
             .map_err(|err| EvalError::Middle(vec![err]))?;
         let mut frame = Frame::from_compile_result(cr);
@@ -41,20 +38,13 @@ impl Vm {
         Ok(val.into_value())
     }
 
-    pub fn eval(&mut self, input: &str, opt: OptLevel) -> Result<Unrooted, (EvalError, StringInterner)> {
-        let mut interner = StringInterner::new();
-        self.eval_with_interner(&mut interner, input, opt)
-            .map_err(|err| (err, interner))
-    }
-
-    pub fn evaluate_module_with_interner(
+    pub fn evaluate_module(
         sc: &mut LocalScope,
-        interner: &mut StringInterner,
         input: &str,
         import_ty: StaticImportKind,
         opt: OptLevel,
     ) -> Result<Unrooted, Unrooted> {
-        let re = match FunctionCompiler::compile_str(interner, input, opt) {
+        let re = match FunctionCompiler::compile_str(&mut sc.interner, input, opt) {
             Ok(re) => re,
             Err(err) => throw!(sc, SyntaxError, "Middle error: {:?}", err),
         };
@@ -89,14 +79,5 @@ impl Vm {
         }
 
         Ok(export_obj.into())
-    }
-
-    pub fn evaluate_module(
-        sc: &mut LocalScope,
-        input: &str,
-        import_ty: StaticImportKind,
-        opt: OptLevel,
-    ) -> Result<Unrooted, Unrooted> {
-        Self::evaluate_module_with_interner(sc, &mut StringInterner::new(), input, import_ty, opt)
     }
 }

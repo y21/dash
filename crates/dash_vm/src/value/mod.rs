@@ -298,17 +298,17 @@ impl Value {
         match constant {
             Constant::Number(n) => Value::number(n),
             Constant::Boolean(b) => Value::Boolean(b),
-            Constant::String(s) => Value::String(s),
+            Constant::String(s) => Value::String(s.into()),
             Constant::Undefined => Value::undefined(),
             Constant::Null => Value::null(),
             Constant::Regex(nodes, flags, source) => {
-                let regex = RegExp::new(nodes, flags, source, vm);
+                let regex = RegExp::new(nodes, flags, source.into(), vm);
                 Value::Object(vm.register(regex))
             }
             Constant::Function(f) => {
                 let externals = register_function_externals(&f, vm);
 
-                let name: Option<Rc<str>> = f.name.as_deref().map(Into::into);
+                let name = f.name.map(Into::into);
                 let ty = f.ty;
                 let is_async = f.r#async;
 
@@ -378,7 +378,7 @@ impl Value {
             Self::Number(n) => throw!(sc, TypeError, "{} is not a function", n),
             Self::Boolean(b) => throw!(sc, TypeError, "{} is not a function", b),
             Self::String(s) => {
-                let s = s.res(sc);
+                let s = s.res(sc).to_owned();
                 throw!(sc, TypeError, "{} is not a function", s)
             }
             Self::Undefined(_) => throw!(sc, TypeError, "undefined is not a function"),
@@ -421,7 +421,7 @@ impl Value {
             Self::Number(n) => throw!(sc, TypeError, "{} is not a constructor", n),
             Self::Boolean(b) => throw!(sc, TypeError, "{} is not a constructor", b),
             Self::String(s) => {
-                let s = s.res(sc);
+                let s = s.res(sc).to_owned();
                 throw!(sc, TypeError, "{} is not a constructor", s)
             }
             Self::Undefined(_) => throw!(sc, TypeError, "undefined is not a constructor"),

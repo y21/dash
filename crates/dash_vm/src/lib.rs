@@ -59,7 +59,7 @@ pub struct Vm {
     // popping from the stack must return `Unrooted`
     stack: Vec<Value>,
     gc: Gc,
-    interner: StringInterner,
+    pub interner: StringInterner,
     global: Handle<dyn Object>,
     // "External refs" currently refers to existing `Persistent<T>`s.
     // Persistent values already manage the reference count when cloning or dropping them

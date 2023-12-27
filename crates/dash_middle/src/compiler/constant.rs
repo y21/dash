@@ -7,7 +7,7 @@ use std::rc::Rc;
 #[cfg(feature = "format")]
 use serde::{Deserialize, Serialize};
 
-use crate::interner::StringInterner;
+use crate::interner::Symbol;
 use crate::parser::expr::LiteralExpr;
 use crate::parser::statement::FunctionKind;
 
@@ -69,7 +69,7 @@ impl Clone for Buffer {
 #[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone)]
 pub struct Function {
-    pub name: Option<Rc<str>>,
+    pub name: Option<Symbol>,
     pub buffer: Buffer,
     pub ty: FunctionKind,
     pub locals: usize,
@@ -100,11 +100,11 @@ impl Function {
 #[derive(Debug, Clone)]
 pub enum Constant {
     Number(f64),
-    String(Rc<str>),
-    Identifier(Rc<str>),
+    String(Symbol),
+    Identifier(Symbol),
     Boolean(bool),
     Function(Rc<Function>),
-    Regex(dash_regex::ParsedRegex, dash_regex::Flags, Rc<str>),
+    Regex(dash_regex::ParsedRegex, dash_regex::Flags, Symbol),
     Null,
     Undefined,
 }
@@ -117,16 +117,16 @@ impl Constant {
         }
     }
 
-    pub fn as_string(&self) -> Option<&Rc<str>> {
+    pub fn as_string(&self) -> Option<Symbol> {
         match self {
-            Constant::String(s) => Some(s),
+            Constant::String(s) => Some(*s),
             _ => None,
         }
     }
 
-    pub fn as_identifier(&self) -> Option<&Rc<str>> {
+    pub fn as_identifier(&self) -> Option<Symbol> {
         match self {
-            Constant::Identifier(s) => Some(s),
+            Constant::Identifier(s) => Some(*s),
             _ => None,
         }
     }
@@ -138,17 +138,15 @@ impl Constant {
         }
     }
 
-    pub fn from_literal(interner: &StringInterner, expr: &LiteralExpr) -> Self {
+    pub fn from_literal(expr: &LiteralExpr) -> Self {
         match expr {
             LiteralExpr::Number(n) => Self::Number(*n),
-            LiteralExpr::Identifier(s) => Self::Identifier(interner.resolve(*s).clone()),
-            LiteralExpr::String(s) => Self::String(interner.resolve(*s).clone()),
+            LiteralExpr::Identifier(s) => Self::Identifier(*s),
+            LiteralExpr::String(s) => Self::String(*s),
             LiteralExpr::Boolean(b) => Self::Boolean(*b),
             LiteralExpr::Null => Self::Null,
             LiteralExpr::Undefined => Self::Undefined,
-            LiteralExpr::Regex(regex, flags, source) => {
-                Self::Regex(regex.clone(), *flags, interner.resolve(*source).clone())
-            }
+            LiteralExpr::Regex(regex, flags, source) => Self::Regex(regex.clone(), *flags, *source),
         }
     }
 }

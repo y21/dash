@@ -1,16 +1,18 @@
+use dash_middle::interner::sym;
 use dash_proc_macro::Trace;
 
-use crate::gc::interner::{StringInterner, Symbol};
+use crate::gc::interner::Symbol;
 use crate::localscope::LocalScope;
+use crate::throw;
 use crate::value::boxed::String as BoxedString;
 
-use super::object::Object;
+use super::object::{Object, PropertyKey, PropertyValue};
 use super::ops::conversions::{PreferredType, ValueConversion};
 use super::ops::equality::ValueEquality;
-use super::primitive::PrimitiveCapabilities;
-use super::Value;
+use super::primitive::{array_like_keys, PrimitiveCapabilities};
+use super::{Typeof, Unrooted, Value};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Trace)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Trace)]
 pub struct JsString {
     sym: Symbol,
 }
@@ -26,7 +28,7 @@ impl JsString {
         self.sym
     }
 
-    pub fn res<'a>(self, sc: &LocalScope<'a>) -> &'a str {
+    pub fn res<'a>(self, sc: &'a LocalScope<'_>) -> &'a str {
         sc.interner.resolve(self.sym)
     }
 
@@ -102,46 +104,69 @@ impl Object for JsString {
         sc: &mut LocalScope,
         key: super::object::PropertyKey,
     ) -> Result<Option<super::object::PropertyValue>, super::Unrooted> {
-        todo!()
+        if let PropertyKey::String(st) = key {
+            if st.sym() == sym::LENGTH {
+                return Ok(Some(PropertyValue::static_default(Value::number(self.len(sc) as f64))));
+            }
+
+            if let Ok(index) = st.res(sc).parse::<usize>() {
+                let bytes = self.res(sc).as_bytes();
+                if let Some(&byte) = bytes.get(index) {
+                    let s = sc.intern((byte as char).to_string().as_ref());
+                    return Ok(Some(PropertyValue::static_default(Value::String(s.into()))));
+                }
+            }
+        }
+
+        Ok(None)
     }
 
     fn set_property(
         &self,
-        sc: &mut LocalScope,
-        key: super::object::PropertyKey,
-        value: super::object::PropertyValue,
+        _: &mut LocalScope,
+        _: super::object::PropertyKey,
+        _: super::object::PropertyValue,
     ) -> Result<(), Value> {
-        todo!()
+        Ok(())
     }
 
-    fn delete_property(&self, sc: &mut LocalScope, key: super::object::PropertyKey) -> Result<super::Unrooted, Value> {
-        todo!()
+    fn delete_property(&self, sc: &mut LocalScope, _: super::object::PropertyKey) -> Result<super::Unrooted, Value> {
+        Ok(Unrooted::new(Value::undefined()))
     }
 
-    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
-        todo!()
+    fn set_prototype(&self, _: &mut LocalScope, _: Value) -> Result<(), Value> {
+        Ok(())
     }
 
     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
-        todo!()
+        Ok(sc.statics.string_prototype.clone().into())
     }
 
     fn apply(
         &self,
         scope: &mut LocalScope,
-        callee: crate::gc::handle::Handle<dyn Object>,
-        this: Value,
-        args: Vec<Value>,
+        _: crate::gc::handle::Handle<dyn Object>,
+        _: Value,
+        _: Vec<Value>,
     ) -> Result<super::Unrooted, super::Unrooted> {
-        todo!()
+        throw!(scope, TypeError, "string is not a function")
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
-        todo!()
+        self
     }
 
     fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
-        todo!()
+        let len = self.len(sc);
+        Ok(array_like_keys(sc, len).collect())
+    }
+
+    fn type_of(&self) -> Typeof {
+        Typeof::String
+    }
+
+    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
+        Some(self)
     }
 }
 

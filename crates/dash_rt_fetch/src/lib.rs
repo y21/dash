@@ -9,8 +9,9 @@ use dash_vm::localscope::LocalScope;
 use dash_vm::value::error::Error;
 use dash_vm::value::function::native::CallContext;
 use dash_vm::value::function::{Function, FunctionKind};
-use dash_vm::value::object::{NamedObject, Object, PropertyKey, PropertyValue};
+use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::promise::Promise;
+use dash_vm::value::string::JsString;
 use dash_vm::value::Value;
 use dash_vm::{delegate, throw, PromiseAction, Vm};
 use once_cell::sync::Lazy;
@@ -20,12 +21,18 @@ use reqwest::{Client, Method};
 pub struct FetchModule;
 
 impl ModuleLoader for FetchModule {
-    fn import(&self, sc: &mut LocalScope, _import_ty: StaticImportKind, path: &str) -> Result<Option<Value>, Value> {
-        if path != "@std/fetch" {
+    fn import(
+        &self,
+        sc: &mut LocalScope,
+        _import_ty: StaticImportKind,
+        path: JsString,
+    ) -> Result<Option<Value>, Value> {
+        if path.res(sc) != "@std/fetch" {
             return Ok(None);
         }
 
-        let fun = Function::new(sc, Some("fetch".into()), FunctionKind::Native(fetch));
+        let name = sc.intern("fetch");
+        let fun = Function::new(sc, Some(name.into()), FunctionKind::Native(fetch));
         let fun = sc.register(fun);
 
         Ok(Some(Value::Object(fun)))
@@ -36,7 +43,7 @@ static REQWEST: Lazy<Client> = Lazy::new(Client::new);
 
 fn fetch(cx: CallContext) -> Result<Value, Value> {
     let url = match cx.args.first() {
-        Some(Value::String(url)) => url.to_string(),
+        Some(Value::String(url)) => url.res(cx.scope).to_owned(),
         _ => throw!(cx.scope, TypeError, "Expected a string as the first argument"),
     };
 
@@ -70,20 +77,17 @@ fn fetch(cx: CallContext) -> Result<Value, Value> {
             let (req, action) = match req {
                 Ok(resp) => {
                     let obj = HttpResponse::new(resp, &sc);
-                    let text_fun = Function::new(&sc, Some("text".into()), FunctionKind::Native(http_response_text));
+                    let text = sc.intern("text");
+                    let text_fun = Function::new(&sc, Some(text.into()), FunctionKind::Native(http_response_text));
                     let text_fun = Value::Object(sc.register(text_fun));
 
-                    obj.set_property(
-                        &mut sc,
-                        PropertyKey::String("text".into()),
-                        PropertyValue::static_default(text_fun),
-                    )
-                    .unwrap();
+                    obj.set_property(&mut sc, text.into(), PropertyValue::static_default(text_fun))
+                        .unwrap();
 
                     (Value::Object(sc.register(obj)), PromiseAction::Resolve)
                 }
                 Err(err) => {
-                    let err = Error::new(&sc, err.to_string());
+                    let err = Error::new(&mut sc, err.to_string());
                     (Value::Object(sc.register(err)), PromiseAction::Reject)
                 }
             };
@@ -136,11 +140,11 @@ fn http_response_text(cx: CallContext) -> Result<Value, Value> {
 
             let (value, action) = match text {
                 Ok(text) => {
-                    let text = Value::String(text.into());
+                    let text = Value::String(sc.intern(text.as_ref()).into());
                     (text, PromiseAction::Resolve)
                 }
                 Err(err) => {
-                    let err = Error::new(&sc, err.to_string());
+                    let err = Error::new(&mut sc, err.to_string());
                     let err = Value::Object(sc.register(err));
                     (err, PromiseAction::Reject)
                 }

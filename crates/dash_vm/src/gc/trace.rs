@@ -111,6 +111,12 @@ macro_rules! unsafe_empty_trace {
     };
 }
 
+unsafe impl Trace for dash_middle::interner::Symbol {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
+        todo!("mark symbol")
+    }
+}
+
 unsafe_empty_trace!(
     Function,
     usize,

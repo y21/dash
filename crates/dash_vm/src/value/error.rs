@@ -20,12 +20,17 @@ pub struct Error {
     pub obj: NamedObject,
 }
 
-fn get_stack_trace(name: JsString, message: &str, sc: &mut LocalScope<'_>) -> JsString {
+fn get_stack_trace(name: JsString, message: JsString, sc: &mut LocalScope<'_>) -> JsString {
     let name = name.res(sc);
+    let message = message.res(sc);
     let mut stack = format!("{name}: {message}");
 
     for frame in sc.frames.iter().rev().take(10) {
-        let name = frame.function.name.as_deref().unwrap_or("<anonymous>");
+        let name = frame
+            .function
+            .name
+            .map(|s| sc.interner.resolve(s))
+            .unwrap_or("<anonymous>");
         let _ = write!(stack, "\n  at {name}");
     }
 
@@ -54,7 +59,7 @@ impl Error {
     ) -> Self {
         let name = name.into();
         let message = message.into();
-        let stack = get_stack_trace(name.clone(), message.res(sc), sc);
+        let stack = get_stack_trace(name.clone(), message, sc);
 
         Self {
             name,
@@ -72,12 +77,12 @@ impl Error {
         proto: Handle<dyn Object>,
     ) -> Self {
         let name = name.into();
-        let message = message.into();
-        let stack = get_stack_trace(name, &message, sc);
+        let message = sc.intern(message.into().as_ref()).into();
+        let stack = get_stack_trace(name, message, sc);
 
         Self {
             name,
-            message: sc.intern(message.as_ref()).into(),
+            message,
             stack,
             obj: NamedObject::with_prototype_and_constructor(proto, ctor),
         }

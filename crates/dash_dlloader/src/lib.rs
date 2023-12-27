@@ -8,6 +8,7 @@ use dash_vm::value::function::native::CallContext;
 use dash_vm::value::function::{Function, FunctionKind};
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
+use dash_vm::value::string::JsString;
 use dash_vm::value::Value;
 use libloading::Library;
 
@@ -17,19 +18,16 @@ type InitFunction = unsafe extern "C" fn(*mut CallContext, *mut Result<Value, Va
 pub struct DllModule;
 
 impl ModuleLoader for DllModule {
-    fn import(&self, sc: &mut LocalScope, _: StaticImportKind, path: &str) -> Result<Option<Value>, Value> {
-        if path != "@std/dlloader" {
+    fn import(&self, sc: &mut LocalScope, _: StaticImportKind, path: JsString) -> Result<Option<Value>, Value> {
+        if path.res(sc) != "@std/dlloader" {
             return Ok(None);
         }
 
         let object = NamedObject::new(sc);
-        let load_sync = Function::new(sc, Some("load".into()), FunctionKind::Native(load_sync));
+        let load = sc.intern("load");
+        let load_sync = Function::new(sc, Some(load.into()), FunctionKind::Native(load_sync));
         let load_sync = sc.register(load_sync);
-        object.set_property(
-            sc,
-            "load".into(),
-            PropertyValue::static_default(Value::Object(load_sync)),
-        )?;
+        object.set_property(sc, load.into(), PropertyValue::static_default(Value::Object(load_sync)))?;
 
         Ok(Some(Value::Object(sc.register(object))))
     }
@@ -57,7 +55,7 @@ pub fn load_sync(mut cx: CallContext) -> Result<Value, Value> {
     let path = ValueConversion::to_js_string(path, cx.scope)?;
 
     unsafe {
-        let lib = match Library::new(path.as_ref()) {
+        let lib = match Library::new(path.res(cx.scope)) {
             // TODO: Currently we (intentionally) leak all dlopen'd handles, because we don't know exactly when we should close it
             Ok(lib) => ManuallyDrop::new(lib),
             Err(err) => throw!(cx.scope, Error, "{}", err),

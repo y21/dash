@@ -671,7 +671,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
     }
 
     fn visit_literal_expression(&mut self, span: Span, expr: LiteralExpr) -> Result<(), Error> {
-        let constant = Constant::from_literal(self.interner, &expr);
+        let constant = Constant::from_literal(&expr);
         InstructionBuilder::new(self)
             .build_constant(constant)
             .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
@@ -690,7 +690,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             ident => match ib.find_local(ident) {
                 Some((index, _, is_extern)) => ib.build_local_load(index, is_extern),
                 _ => ib
-                    .build_global_load(ib.interner.resolve(ident).clone())
+                    .build_global_load(ident)
                     .map_err(|_| Error::ConstantPoolLimitExceeded(span))?,
             },
         };
@@ -717,7 +717,6 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                         false,
                     ) => {
                         ib.accept_expr(*target)?;
-                        let ident = ib.interner.resolve(ident).clone();
                         let id = ib
                             .current_function_mut()
                             .cp
@@ -733,7 +732,6 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                 },
                 ExprKind::Literal(LiteralExpr::Identifier(ident)) => {
                     ib.build_global();
-                    let ident = ib.interner.resolve(ident).clone();
                     let id = ib
                         .current_function_mut()
                         .cp
@@ -821,7 +819,6 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                             .current_scope_mut()
                             .add_local(name, binding.kind, None)
                             .map_err(|_| Error::LocalLimitExceeded(span))?;
-                        let res_name = ib.interner.resolve(name).clone();
 
                         let var_id = ib
                             .current_function_mut()
@@ -831,7 +828,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                         let ident_id = ib
                             .current_function_mut()
                             .cp
-                            .add(Constant::Identifier(res_name))
+                            .add(Constant::Identifier(name))
                             .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
                         ib.writew(var_id);
                         ib.writew(ident_id);
@@ -1042,7 +1039,6 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                         macro_rules! assign {
                             ($kind:expr) => {{
                                 ib.accept_expr(*right)?;
-                                let ident = ib.interner.resolve(ident).clone();
                                 ib.build_global_store($kind, ident)
                                     .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
                             }};
@@ -1072,8 +1068,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                     macro_rules! staticassign {
                         ($ident:expr, $kind:expr) => {{
                             ib.accept_expr(*right)?;
-                            let ident = ib.interner.resolve($ident).clone();
-                            ib.build_static_prop_assign($kind, ident)
+                            ib.build_static_prop_assign($kind, $ident)
                                 .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
                         }};
                     }
@@ -1369,7 +1364,6 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                 },
                 false,
             ) => {
-                let ident = ib.interner.resolve(ident).clone();
                 ib.build_static_prop_access(ident, preserve_this)
                     .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
             }
@@ -1414,8 +1408,6 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                         _ => unreachable!("Token never emitted"),
                     }
                 } else {
-                    let ident = ib.interner.resolve(ident).clone();
-
                     match tt {
                         TokenType::Increment => ib
                             .build_global_store(AssignKind::PostfixIncrement, ident)
@@ -1437,18 +1429,15 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                             span,
                         },
                         false,
-                    ) => {
-                        let ident = ib.interner.resolve(ident).clone();
-                        match tt {
-                            TokenType::Increment => ib
-                                .build_static_prop_assign(AssignKind::PostfixIncrement, ident)
-                                .map_err(|_| Error::ConstantPoolLimitExceeded(span))?,
-                            TokenType::Decrement => ib
-                                .build_static_prop_assign(AssignKind::PostfixDecrement, ident)
-                                .map_err(|_| Error::ConstantPoolLimitExceeded(span))?,
-                            _ => unreachable!("Token never emitted"),
-                        }
-                    }
+                    ) => match tt {
+                        TokenType::Increment => ib
+                            .build_static_prop_assign(AssignKind::PostfixIncrement, ident)
+                            .map_err(|_| Error::ConstantPoolLimitExceeded(span))?,
+                        TokenType::Decrement => ib
+                            .build_static_prop_assign(AssignKind::PostfixDecrement, ident)
+                            .map_err(|_| Error::ConstantPoolLimitExceeded(span))?,
+                        _ => unreachable!("Token never emitted"),
+                    },
                     (prop, true) => {
                         ib.accept_expr(prop)?;
                         match tt {
@@ -1490,8 +1479,6 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                         _ => unreachable!("Token never emitted"),
                     }
                 } else {
-                    let ident = ib.interner.resolve(ident).clone();
-
                     match tt {
                         TokenType::Increment => ib
                             .build_global_store(AssignKind::PrefixIncrement, ident)
@@ -1513,18 +1500,15 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                             span,
                         },
                         false,
-                    ) => {
-                        let ident = ib.interner.resolve(ident).clone();
-                        match tt {
-                            TokenType::Increment => ib
-                                .build_static_prop_assign(AssignKind::PrefixIncrement, ident)
-                                .map_err(|_| Error::ConstantPoolLimitExceeded(span))?,
-                            TokenType::Decrement => ib
-                                .build_static_prop_assign(AssignKind::PrefixDecrement, ident)
-                                .map_err(|_| Error::ConstantPoolLimitExceeded(span))?,
-                            _ => unreachable!("Token never emitted"),
-                        }
-                    }
+                    ) => match tt {
+                        TokenType::Increment => ib
+                            .build_static_prop_assign(AssignKind::PrefixIncrement, ident)
+                            .map_err(|_| Error::ConstantPoolLimitExceeded(span))?,
+                        TokenType::Decrement => ib
+                            .build_static_prop_assign(AssignKind::PrefixDecrement, ident)
+                            .map_err(|_| Error::ConstantPoolLimitExceeded(span))?,
+                        _ => unreachable!("Token never emitted"),
+                    },
                     (prop, true) => {
                         ib.accept_expr(prop)?;
                         match tt {
@@ -1611,7 +1595,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             buffer: Buffer(Cell::new(cmp.buf.into())),
             constants: cmp.cp.into_vec().into(),
             locals,
-            name: name.map(|sym| ib.interner.resolve(sym).clone()),
+            name,
             ty,
             params: match arguments.last() {
                 Some((Parameter::Spread(..), ..)) => arguments.len() - 1,
@@ -1801,8 +1785,6 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                     )
                     .map_err(|_| Error::LocalLimitExceeded(span))?;
 
-                let path = ib.interner.resolve(path).clone();
-
                 let path_id = ib
                     .current_function_mut()
                     .cp
@@ -1836,12 +1818,10 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                 let mut it = Vec::with_capacity(names.len());
 
                 for name in names.iter().copied() {
-                    let res_name = ib.interner.resolve(name).clone();
-
                     let ident_id = ib
                         .current_function_mut()
                         .cp
-                        .add(Constant::Identifier(res_name))
+                        .add(Constant::Identifier(name))
                         .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
 
                     match ib.find_local(name) {
