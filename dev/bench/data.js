@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1703708811189,
+  "lastUpdate": 1703714386687,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -6451,6 +6451,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 55760,
             "range": "± 505",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "cdf41f828542995c310384c58f92418c96b36a71",
+          "message": "pop class values correctly in class declaration statements",
+          "timestamp": "2023-12-27T22:57:14+01:00",
+          "tree_id": "e26ba0a0c1575fbcd4414cac5a4235a30b73a18a",
+          "url": "https://github.com/y21/dash/commit/cdf41f828542995c310384c58f92418c96b36a71"
+        },
+        "date": 1703714385386,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1887750,
+            "range": "± 30918",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 180685,
+            "range": "± 3192",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 57472,
+            "range": "± 2041",
             "unit": "ns/iter"
           }
         ]
