@@ -1,8 +1,6 @@
 use std::any::Any;
-use std::borrow::Cow;
 use std::cell::RefCell;
 use std::fmt::Debug;
-use std::ptr::addr_of;
 
 use crate::gc::interner::sym;
 use crate::gc::persistent::Persistent;

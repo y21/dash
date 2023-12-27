@@ -1,7 +1,6 @@
 use dash_compiler::FunctionCompiler;
 use dash_lexer::Lexer;
 use dash_middle::compiler::StaticImportKind;
-use dash_middle::interner::StringInterner;
 use dash_optimizer::type_infer::TypeInferCtx;
 use dash_optimizer::OptLevel;
 use dash_parser::Parser;

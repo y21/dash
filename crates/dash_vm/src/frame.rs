@@ -86,7 +86,7 @@ impl LoopCounterMap {
 }
 
 unsafe impl Trace for LoopCounterMap {
-    fn trace(&self, cx: &mut TraceCtxt<'_>) {}
+    fn trace(&self, _: &mut TraceCtxt<'_>) {}
 }
 
 #[derive(Debug, Clone, Trace)]

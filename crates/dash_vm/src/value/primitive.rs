@@ -1,6 +1,5 @@
 use std::any::Any;
 use std::hash::{Hash, Hasher};
-use std::rc::Rc;
 use std::{fmt, iter};
 
 use dash_middle::interner;
@@ -8,12 +7,11 @@ use dash_proc_macro::Trace;
 
 use crate::gc::handle::Handle;
 use crate::gc::interner::sym;
-use crate::gc::trace::{Trace, TraceCtxt};
 use crate::localscope::LocalScope;
 use crate::throw;
 use crate::util::{format_f64, Captures};
 
-use super::boxed::{Boolean as BoxedBoolean, Number as BoxedNumber, String as BoxedString, Symbol as BoxedSymbol};
+use super::boxed::{Boolean as BoxedBoolean, Number as BoxedNumber, Symbol as BoxedSymbol};
 use super::object::{Object, PropertyKey, PropertyValue};
 use super::ops::conversions::{PreferredType, ValueConversion};
 use super::ops::equality::ValueEquality;
@@ -63,7 +61,7 @@ impl Object for f64 {
         self
     }
 
-    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+    fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         Ok(Vec::new())
     }
 
@@ -115,7 +113,7 @@ impl Object for bool {
         self
     }
 
-    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+    fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         Ok(Vec::new())
     }
 
@@ -241,7 +239,7 @@ impl Object for Undefined {
         self
     }
 
-    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+    fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         Ok(Vec::new())
     }
 
@@ -293,7 +291,7 @@ impl Object for Null {
         self
     }
 
-    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+    fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         Ok(Vec::new())
     }
 
@@ -419,7 +417,7 @@ impl Object for Symbol {
         self
     }
 
-    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+    fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         Ok(Vec::new())
     }
 
@@ -496,7 +494,7 @@ impl ValueConversion for f64 {
         Ok(*self)
     }
 
-    fn to_boolean(&self, sc: &mut LocalScope<'_>) -> Result<bool, Value> {
+    fn to_boolean(&self, _: &mut LocalScope<'_>) -> Result<bool, Value> {
         Ok(*self != 0.0 && !self.is_nan())
     }
 
@@ -571,7 +569,7 @@ impl ValueConversion for bool {
         Ok(*self)
     }
 
-    fn to_js_string(&self, sc: &mut LocalScope) -> Result<JsString, Value> {
+    fn to_js_string(&self, _: &mut LocalScope) -> Result<JsString, Value> {
         Ok(if *self { sym::true_.into() } else { sym::false_.into() })
     }
 
@@ -709,7 +707,7 @@ impl ValueConversion for Undefined {
         Ok(false)
     }
 
-    fn to_js_string(&self, sc: &mut LocalScope) -> Result<JsString, Value> {
+    fn to_js_string(&self, _: &mut LocalScope) -> Result<JsString, Value> {
         Ok(sym::undefined.into())
     }
 
@@ -771,7 +769,7 @@ impl ValueConversion for Null {
         Ok(false)
     }
 
-    fn to_js_string(&self, sc: &mut LocalScope) -> Result<JsString, Value> {
+    fn to_js_string(&self, _: &mut LocalScope) -> Result<JsString, Value> {
         Ok(sym::null.into())
     }
 
@@ -825,7 +823,7 @@ impl ValueConversion for Symbol {
         throw!(sc, TypeError, "Cannot convert symbol to number");
     }
 
-    fn to_boolean(&self, sc: &mut LocalScope<'_>) -> Result<bool, Value> {
+    fn to_boolean(&self, _: &mut LocalScope<'_>) -> Result<bool, Value> {
         Ok(true)
     }
 

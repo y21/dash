@@ -62,7 +62,7 @@ impl ValueEquality for JsString {
         Ok(Value::Boolean(*self == other.to_js_string(sc)?))
     }
 
-    fn strict_eq(&self, other: &Value, sc: &mut LocalScope) -> Result<super::Value, super::Value> {
+    fn strict_eq(&self, other: &Value, _: &mut LocalScope) -> Result<super::Value, super::Value> {
         if let Value::String(other) = other {
             Ok(Value::Boolean(self == other))
         } else {
@@ -72,7 +72,7 @@ impl ValueEquality for JsString {
 }
 
 impl ValueConversion for JsString {
-    fn to_primitive(&self, sc: &mut LocalScope, preferred_type: Option<PreferredType>) -> Result<Value, Value> {
+    fn to_primitive(&self, _: &mut LocalScope, _: Option<PreferredType>) -> Result<Value, Value> {
         Ok(Value::String(self.clone()))
     }
 
@@ -84,7 +84,7 @@ impl ValueConversion for JsString {
         Ok(!self.res(sc).is_empty())
     }
 
-    fn to_js_string(&self, sc: &mut LocalScope) -> Result<JsString, Value> {
+    fn to_js_string(&self, _: &mut LocalScope) -> Result<JsString, Value> {
         Ok(self.clone())
     }
 
@@ -130,7 +130,7 @@ impl Object for JsString {
         Ok(())
     }
 
-    fn delete_property(&self, sc: &mut LocalScope, _: super::object::PropertyKey) -> Result<super::Unrooted, Value> {
+    fn delete_property(&self, _: &mut LocalScope, _: super::object::PropertyKey) -> Result<super::Unrooted, Value> {
         Ok(Unrooted::new(Value::undefined()))
     }
 

@@ -54,8 +54,8 @@ pub fn values(cx: CallContext) -> Result<Value, Value> {
 
 pub fn at(cx: CallContext) -> Result<Value, Value> {
     let this = Value::Object(cx.this.to_object(cx.scope)?);
-    let len = this.length_of_array_like(cx.scope)?;
-    let mut index = cx.args.first().unwrap_or_undefined().to_integer_or_infinity(cx.scope)? as usize;
+    let len = this.length_of_array_like(cx.scope)? as i64;
+    let mut index = cx.args.first().unwrap_or_undefined().to_integer_or_infinity(cx.scope)? as i64;
 
     if index < 0 {
         index += len;
@@ -65,7 +65,7 @@ pub fn at(cx: CallContext) -> Result<Value, Value> {
         return Ok(Value::undefined());
     }
 
-    let index = cx.scope.intern_usize(index);
+    let index = cx.scope.intern_usize(index as usize);
     this.get_property(cx.scope, index.into()).root(cx.scope)
 }
 

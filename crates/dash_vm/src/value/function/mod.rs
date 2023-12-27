@@ -256,7 +256,7 @@ impl Object for Function {
         self.obj.get_prototype(sc)
     }
 
-    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+    fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         Ok(vec![Value::String(sym::length.into()), Value::String(sym::name.into())])
     }
 

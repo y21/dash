@@ -6,7 +6,6 @@ use crate::value::{JsString, PropertyKey, Unrooted};
 use crate::{delegate, PropertyValue, Vm};
 use dash_proc_macro::Trace;
 use std::any::Any;
-use std::rc::Rc;
 
 use super::object::{NamedObject, Object};
 use super::primitive::{PrimitiveCapabilities, Symbol as PrimitiveSymbol};

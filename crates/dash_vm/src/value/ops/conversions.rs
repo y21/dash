@@ -1,12 +1,12 @@
 use crate::gc::handle::Handle;
 use crate::gc::interner::sym;
 use crate::localscope::LocalScope;
+use crate::throw;
 use crate::value::boxed::{Boolean, Number as BoxedNumber, String as BoxedString, Symbol as BoxedSymbol};
 use crate::value::object::Object;
 use crate::value::primitive::{Number, MAX_SAFE_INTEGERF};
 use crate::value::string::JsString;
 use crate::value::{Root, Typeof, Value};
-use crate::{throw, Vm};
 
 pub trait ValueConversion {
     fn to_primitive(&self, sc: &mut LocalScope, preferred_type: Option<PreferredType>) -> Result<Value, Value>;
@@ -146,7 +146,7 @@ impl ValueConversion for Value {
 
         // b. If exoticToPrim is not undefined, then
         if let Some(exotic_to_prim) = exotic_to_prim {
-            let preferred_type = preferred_type.to_value(sc);
+            let preferred_type = preferred_type.to_value();
 
             // iv. Let result be ? Call(exoticToPrim, input, « hint »).
             let result = exotic_to_prim.apply(sc, self.clone(), vec![preferred_type]).root(sc)?;
@@ -198,7 +198,7 @@ pub enum PreferredType {
 }
 
 impl PreferredType {
-    pub fn to_value(&self, vm: &Vm) -> Value {
+    pub fn to_value(&self) -> Value {
         let st = match self {
             PreferredType::Default => sym::default.into(),
             PreferredType::String => sym::string.into(),

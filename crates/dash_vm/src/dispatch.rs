@@ -2,7 +2,6 @@
 
 use dash_log::warn;
 use std::ops::{Deref, DerefMut};
-use std::rc::Rc;
 use std::vec::Drain;
 
 use crate::frame::Frame;
@@ -200,7 +199,6 @@ mod handlers {
     use dash_middle::interner::sym;
     use if_chain::if_chain;
     use smallvec::SmallVec;
-    use std::borrow::Cow;
     use std::ops::{Add, Div, Mul, Rem, Sub};
 
     use crate::frame::{Frame, FrameState, TryBlock};
@@ -593,9 +591,8 @@ mod handlers {
         is_constructor: bool,
         call_ip: u16,
     ) -> Result<Option<HandleResult>, Unrooted> {
-        let (args, refs) = {
+        let args = {
             let mut args = Vec::with_capacity(argc);
-            // let mut refs = Vec::new();
 
             let len = cx.fetch_and_inc_ip();
             let spread_indices: SmallVec<[_; 4]> = (0..len).map(|_| cx.fetch_and_inc_ip()).collect();
@@ -605,10 +602,6 @@ mod handlers {
             if len == 0 {
                 // Fast path for no spread arguments
                 for value in iter {
-                    // if let Value::Object(handle) = &value {
-                    //     refs.push(handle.clone());
-                    // }
-
                     args.push(value);
                 }
             } else {
@@ -626,15 +619,12 @@ mod handlers {
                         }
                         indices_iter.next();
                     } else {
-                        // if let Value::Object(handle) = &value {
-                        //     refs.push(handle.clone());
-                        // }
                         args.push(value);
                     }
                 }
             }
 
-            (args, ())
+            args
         };
 
         cx.scope.add_many(&args);

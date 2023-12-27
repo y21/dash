@@ -350,9 +350,8 @@ impl StringInterner {
     }
 
     pub fn intern_char(&mut self, val: char) -> Symbol {
-        // for now this just calls `intern`, but we might want to specialize this
-        let string = val.to_string();
-        self.intern(string.as_ref())
+        let mut buf = [0; 4];
+        self.intern(val.encode_utf8(&mut buf))
     }
 
     pub fn mark(&self, sym: Symbol) {

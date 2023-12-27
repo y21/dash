@@ -9,7 +9,6 @@ use crate::value::function::{Function, FunctionKind};
 use crate::value::map::Map;
 use crate::value::regex::RegExp;
 use crate::value::set::Set;
-use crate::value::string::JsString;
 use crate::value::PureBuiltin;
 
 use super::value::array::{Array, ArrayIterator};
@@ -22,8 +21,6 @@ use super::value::function::generator::GeneratorIterator;
 use super::value::function::native::NativeFunction;
 use super::value::object::{NamedObject, Object};
 use super::value::primitive::Symbol;
-
-use std::rc::Rc;
 
 #[derive(Trace)]
 pub struct Statics {
@@ -262,8 +259,6 @@ fn function(gc: &mut Gc, name: interner::Symbol, cb: NativeFunction) -> Handle<d
 
 impl Statics {
     pub fn new(gc: &mut Gc) -> Self {
-        let empty_str: Rc<str> = "".into();
-
         Self {
             function_proto: empty_object(gc),
             function_ctor: function(gc, sym::Function, js_std::function::constructor),

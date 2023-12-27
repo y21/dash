@@ -13,7 +13,6 @@ pub mod promise;
 pub mod regex;
 pub mod set;
 pub mod typedarray;
-use std::rc::Rc;
 
 use dash_middle::compiler::constant::Constant;
 use dash_middle::compiler::external::External;
