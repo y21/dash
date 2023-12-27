@@ -254,6 +254,8 @@ pub mod sym {
                 isConcatSpreadable,
                 zero: "0",
                 one: "1",
+                getPrototypeOf,
+                isPrototypeOf
             }
         ]
     }

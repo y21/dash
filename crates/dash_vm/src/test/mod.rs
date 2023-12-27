@@ -1,5 +1,4 @@
 use std::ptr;
-use std::rc::Rc;
 
 use dash_middle::interner::sym;
 use dash_optimizer::OptLevel;

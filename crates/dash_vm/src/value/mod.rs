@@ -565,7 +565,7 @@ impl Value {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Typeof {
     Undefined,
     Object,

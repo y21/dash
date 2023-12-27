@@ -7,7 +7,7 @@ use crate::value::function::native::CallContext;
 use crate::value::object::{NamedObject, Object, PropertyKey, PropertyValue};
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::root_ext::RootErrExt;
-use crate::value::{Root, Value, ValueContext};
+use crate::value::{Root, Typeof, Value, ValueContext};
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     match cx.args.first() {
@@ -189,4 +189,29 @@ pub fn entries(cx: CallContext) -> Result<Value, Value> {
 
     let entries = Array::from_vec(cx.scope, entries);
     Ok(Value::Object(cx.scope.register(entries)))
+}
+
+pub fn get_prototype_of(cx: CallContext) -> Result<Value, Value> {
+    let obj = cx.args.first().unwrap_or_undefined().to_object(cx.scope)?;
+    obj.get_prototype(cx.scope)
+}
+
+pub fn is_prototype_of(cx: CallContext) -> Result<Value, Value> {
+    let target_proto = Value::Object(cx.this.to_object(cx.scope)?);
+    let mut this_proto = cx.args.first().unwrap_or_undefined();
+    if this_proto.type_of() != Typeof::Object {
+        return Ok(Value::Boolean(false));
+    }
+
+    loop {
+        if this_proto == target_proto {
+            return Ok(Value::Boolean(true));
+        }
+
+        this_proto = match this_proto {
+            Value::Object(obj) => obj.get_prototype(cx.scope)?,
+            Value::External(obj) => obj.inner.get_prototype(cx.scope)?,
+            _ => return Ok(Value::Boolean(false)),
+        };
+    }
 }

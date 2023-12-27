@@ -235,6 +235,7 @@ impl Vm {
                 (sym::defineProperty, scope.statics.object_define_property.clone()),
                 (sym::entries, scope.statics.object_entries.clone()),
                 (sym::assign, scope.statics.object_assign.clone()),
+                (sym::getPrototypeOf, scope.statics.object_get_prototype_of.clone()),
             ],
             [],
             [],
@@ -249,6 +250,7 @@ impl Vm {
             [
                 (sym::toString, scope.statics.object_to_string.clone()),
                 (sym::hasOwnProperty, scope.statics.object_has_own_property.clone()),
+                (sym::isPrototypeOf, scope.statics.object_is_prototype_of.clone()),
             ],
             [],
             [],
