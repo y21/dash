@@ -1419,11 +1419,6 @@ impl Vm {
 
     fn trace_roots(&mut self) {
         let mut cx = TraceCtxt::new(&mut self.interner);
-        
-        debug!("trace preinterned symbols");
-        for (_, sym) in sym::PREINTERNED {
-            sym.trace(&mut cx);
-        }
 
         debug!("trace frames");
         self.frames.trace(&mut cx);

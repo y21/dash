@@ -1,6 +1,7 @@
 use crate::throw;
 use crate::value::function::native::CallContext;
 use crate::value::ops::conversions::ValueConversion;
+use crate::value::root_ext::RootErrExt;
 use crate::value::{Value, ValueContext};
 
 pub fn abs(cx: CallContext) -> Result<Value, Value> {
@@ -210,7 +211,7 @@ pub fn floor(cx: CallContext) -> Result<Value, Value> {
 
 pub fn random(cx: CallContext) -> Result<Value, Value> {
     let num = match cx.scope.params().math_random_callback() {
-        Some(cb) => cb(cx.scope)?,
+        Some(cb) => cb(cx.scope).root_err(cx.scope)?,
         None => throw!(cx.scope, Error, "Math.random is disabled for this context"),
     };
 

@@ -363,7 +363,8 @@ impl StringInterner {
     /// You must mark all reachable symbols before calling this.
     /// It won't cause undefined behavior if you don't (hence not unsafe), but it can lead to oddities such as panics.
     pub fn sweep(&mut self) {
-        for i in 0..self.store.len() {
+        // Preinterned symbols are always kept, since they can be referred to statically.
+        for i in sym::PREINTERNED.len()..self.store.len() {
             if let Some(data) = self.store[i].as_ref() {
                 if !data.visited.get() {
                     self.mapping.remove(&data.value);

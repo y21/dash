@@ -4,14 +4,15 @@ use dash_middle::compiler::StaticImportKind;
 
 use crate::localscope::LocalScope;
 use crate::value::string::JsString;
+use crate::value::Unrooted;
 
 use super::value::Value;
 use super::Vm;
 
-pub type MathRandomCallback = fn(vm: &mut Vm) -> Result<f64, Value>;
-pub type TimeMillisCallback = fn(vm: &mut Vm) -> Result<u64, Value>;
-pub type StaticImportCallback = fn(vm: &mut Vm, ty: StaticImportKind, path: JsString) -> Result<Value, Value>;
-pub type DynamicImportCallback = fn(vm: &mut Vm, val: Value) -> Result<Value, Value>;
+pub type MathRandomCallback = fn(vm: &mut Vm) -> Result<f64, Unrooted>;
+pub type TimeMillisCallback = fn(vm: &mut Vm) -> Result<u64, Unrooted>;
+pub type StaticImportCallback = fn(vm: &mut Vm, ty: StaticImportKind, path: JsString) -> Result<Unrooted, Unrooted>;
+pub type DynamicImportCallback = fn(vm: &mut Vm, val: Value) -> Result<Unrooted, Unrooted>;
 pub type DebuggerCallback = fn(vm: &mut Vm) -> Result<(), Value>;
 pub type UnhandledTaskException = fn(vm: &mut LocalScope, exception: Value);
 

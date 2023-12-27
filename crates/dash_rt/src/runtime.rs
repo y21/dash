@@ -90,29 +90,29 @@ impl Runtime {
 }
 
 #[cfg(feature = "random")]
-fn random_callback(_: &mut Vm) -> Result<f64, Value> {
+fn random_callback(_: &mut Vm) -> Result<f64, Unrooted> {
     use rand::Rng;
     let mut rng = rand::thread_rng();
     Ok(rng.gen())
 }
 
-fn time_callback(_: &mut Vm) -> Result<u64, Value> {
+fn time_callback(_: &mut Vm) -> Result<u64, Unrooted> {
     Ok(SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .expect("time() < UNIX_EPOCH")
         .as_millis() as u64)
 }
 
-fn import_callback(vm: &mut Vm, import_ty: StaticImportKind, path: JsString) -> Result<Value, Value> {
+fn import_callback(vm: &mut Vm, import_ty: StaticImportKind, path: JsString) -> Result<Unrooted, Unrooted> {
     let mut sc = vm.scope();
 
     let root = State::from_vm(&sc).root_module().clone();
 
     if let Some(module) = &*root.borrow() {
         match module.import(&mut sc, import_ty, path) {
-            Ok(Some(module)) => return Ok(module),
+            Ok(Some(module)) => return Ok(module.into()),
             Ok(None) => {}
-            Err(err) => return Err(err),
+            Err(err) => return Err(err.into()),
         }
     }
 

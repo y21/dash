@@ -1,5 +1,6 @@
 use crate::throw;
 use crate::value::function::native::CallContext;
+use crate::value::root_ext::RootErrExt;
 use crate::value::Value;
 
 pub fn time_millis(cx: &mut CallContext) -> Result<u64, Value> {
@@ -8,7 +9,7 @@ pub fn time_millis(cx: &mut CallContext) -> Result<u64, Value> {
         None => throw!(&mut cx.scope, Error, "Failed to get the current time"),
     };
 
-    callback(cx.scope)
+    callback(cx.scope).root_err(cx.scope)
 }
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
