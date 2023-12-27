@@ -31,7 +31,7 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
         _ => throw!(cx.scope, RangeError, "Invalid radix: {}", radix),
     };
 
-    Ok(Value::String(re.into()))
+    Ok(Value::String(cx.scope.intern(re.as_ref()).into()))
 }
 
 pub fn is_finite(cx: CallContext) -> Result<Value, Value> {
@@ -74,5 +74,5 @@ pub fn to_fixed(cx: CallContext) -> Result<Value, Value> {
 
     let re = format!("{num:.decimals$}");
 
-    Ok(Value::String(re.into()))
+    Ok(Value::String(cx.scope.intern(re.as_ref()).into()))
 }

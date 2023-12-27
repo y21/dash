@@ -17,10 +17,10 @@ pub fn eval(args: &ArgMatches) -> anyhow::Result<()> {
 
     match scope.eval(source, opt) {
         Ok(value) => println!("{}", format_value(value.root(&mut scope), &mut scope).unwrap()),
-        Err((EvalError::Exception(value), _)) => {
+        Err(EvalError::Exception(value)) => {
             println!("{}", format_value(value.root(&mut scope), &mut scope).unwrap())
         }
-        Err((EvalError::Middle(errs), _)) => println!("{}", errs.formattable(source, true)),
+        Err(EvalError::Middle(errs)) => println!("{}", errs.formattable(source, true)),
     };
 
     scope.process_async_tasks();

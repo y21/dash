@@ -458,7 +458,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                                     ..
                                 })
                             ) {
-                                ObjectMemberKind::Static(sym::GET)
+                                ObjectMemberKind::Static(sym::get)
                             } else {
                                 ObjectMemberKind::Getter(self.expect_identifier_or_reserved_kw(true)?)
                             }
@@ -471,7 +471,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                                     ..
                                 })
                             ) {
-                                ObjectMemberKind::Static(sym::SET)
+                                ObjectMemberKind::Static(sym::set)
                             } else {
                                 ObjectMemberKind::Setter(self.expect_identifier_or_reserved_kw(true)?)
                             }

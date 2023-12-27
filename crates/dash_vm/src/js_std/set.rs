@@ -11,7 +11,7 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
         let len = iter.length_of_array_like(cx.scope)?;
 
         for i in 0..len {
-            let i = i.to_string();
+            let i = cx.scope.intern_usize(i);
             let item = iter
                 .get_property(cx.scope, PropertyKey::String(i.into()))
                 .root(cx.scope)?;

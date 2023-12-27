@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use dash_proc_macro::Trace;
 
 use crate::gc::handle::Handle;
-use crate::gc::trace::Trace;
+use crate::gc::trace::{Trace, TraceCtxt};
 use crate::localscope::LocalScope;
 use crate::{PromiseAction, Vm};
 
@@ -22,14 +22,14 @@ pub enum PromiseState {
 }
 
 unsafe impl Trace for PromiseState {
-    fn trace(&self) {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
         match self {
             Self::Pending { resolve, reject } => {
-                resolve.trace();
-                reject.trace();
+                resolve.trace(cx);
+                reject.trace(cx);
             }
-            Self::Resolved(v) => v.trace(),
-            Self::Rejected(v) => v.trace(),
+            Self::Resolved(v) => v.trace(cx),
+            Self::Rejected(v) => v.trace(cx),
         }
     }
 }
@@ -88,7 +88,7 @@ impl Object for Promise {
     fn set_property(
         &self,
         sc: &mut crate::localscope::LocalScope,
-        key: crate::value::object::PropertyKey<'static>,
+        key: crate::value::object::PropertyKey,
         value: crate::value::object::PropertyValue,
     ) -> Result<(), Value> {
         self.obj.set_property(sc, key, value)
@@ -124,8 +124,8 @@ impl Object for Promise {
         self
     }
 
-    fn own_keys(&self) -> Result<Vec<Value>, Value> {
-        self.obj.own_keys()
+    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+        self.obj.own_keys(sc)
     }
 }
 
@@ -156,7 +156,7 @@ impl Object for PromiseResolver {
     fn set_property(
         &self,
         sc: &mut crate::localscope::LocalScope,
-        key: crate::value::object::PropertyKey<'static>,
+        key: crate::value::object::PropertyKey,
         value: crate::value::object::PropertyValue,
     ) -> Result<(), Value> {
         self.obj.set_property(sc, key, value)
@@ -198,8 +198,8 @@ impl Object for PromiseResolver {
         self
     }
 
-    fn own_keys(&self) -> Result<Vec<Value>, Value> {
-        self.obj.own_keys()
+    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+        self.obj.own_keys(sc)
     }
 
     fn type_of(&self) -> super::Typeof {
@@ -234,7 +234,7 @@ impl Object for PromiseRejecter {
     fn set_property(
         &self,
         sc: &mut crate::localscope::LocalScope,
-        key: crate::value::object::PropertyKey<'static>,
+        key: crate::value::object::PropertyKey,
         value: crate::value::object::PropertyValue,
     ) -> Result<(), Value> {
         self.obj.set_property(sc, key, value)
@@ -276,8 +276,8 @@ impl Object for PromiseRejecter {
         self
     }
 
-    fn own_keys(&self) -> Result<Vec<Value>, Value> {
-        self.obj.own_keys()
+    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+        self.obj.own_keys(sc)
     }
 
     fn type_of(&self) -> super::Typeof {

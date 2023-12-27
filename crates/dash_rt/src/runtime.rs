@@ -2,10 +2,10 @@ use std::fmt::Debug;
 use std::time::SystemTime;
 
 use dash_middle::compiler::StaticImportKind;
-use dash_middle::interner::StringInterner;
 use dash_optimizer::OptLevel;
 use dash_vm::eval::EvalError;
 use dash_vm::params::VmParams;
+use dash_vm::value::string::JsString;
 use dash_vm::value::{Unrooted, Value};
 use dash_vm::{throw, Vm};
 use tokio::sync::mpsc;
@@ -56,7 +56,7 @@ impl Runtime {
         State::from_vm(&self.vm).set_root_module(module_manager);
     }
 
-    pub fn eval(&mut self, code: &str, opt: OptLevel) -> Result<Unrooted, (EvalError, StringInterner)> {
+    pub fn eval(&mut self, code: &str, opt: OptLevel) -> Result<Unrooted, EvalError> {
         self.vm.eval(code, opt)
     }
 
@@ -103,7 +103,7 @@ fn time_callback(_: &mut Vm) -> Result<u64, Value> {
         .as_millis() as u64)
 }
 
-fn import_callback(vm: &mut Vm, import_ty: StaticImportKind, path: &str) -> Result<Value, Value> {
+fn import_callback(vm: &mut Vm, import_ty: StaticImportKind, path: JsString) -> Result<Value, Value> {
     let mut sc = vm.scope();
 
     let root = State::from_vm(&sc).root_module().clone();
@@ -117,5 +117,6 @@ fn import_callback(vm: &mut Vm, import_ty: StaticImportKind, path: &str) -> Resu
     }
 
     // If it got here, the module was not found
-    throw!(sc, RangeError, "Module not found: {}", path)
+    let path = path.res(&mut sc).to_owned();
+    throw!(&mut sc, RangeError, "Module not found: {}", path)
 }

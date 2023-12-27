@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use anyhow::{anyhow, bail, Context};
-use dash_middle::interner::StringInterner;
 use dash_middle::parser::error::IntoFormattableErrors;
 use dash_optimizer::OptLevel;
 use dash_proc_macro::Trace;
@@ -53,7 +52,7 @@ async fn run_inner_fallible(path: &str, opt: OptLevel, initial_gc_threshold: Opt
 
     execute_node_module(scope, path, path, &entry, opt, global_state, Rc::new(package_state)).map_err(
         |err| match err {
-            (EvalError::Middle(errs), _, entry) => anyhow!("{}", errs.formattable(&entry, true)),
+            (EvalError::Middle(errs), entry) => anyhow!("{}", errs.formattable(&entry, true)),
             (EvalError::Exception(err), ..) => anyhow!("{}", format_value(err.root(scope), scope).unwrap()),
         },
     )?;
@@ -80,7 +79,7 @@ fn execute_node_module(
     opt: OptLevel,
     global_state: Rc<GlobalState>,
     package: Rc<PackageState>,
-) -> Result<Value, (EvalError, Option<StringInterner>, String)> {
+) -> Result<Value, (EvalError, String)> {
     let exports = Value::Object(scope.register(NamedObject::new(scope)));
     let module = Value::Object(scope.register(NamedObject::new(scope)));
     let require = Value::Object(scope.register(RequireFunction {
@@ -89,8 +88,9 @@ fn execute_node_module(
         package,
         object: NamedObject::new(scope),
     }));
+    let key = scope.intern("exports");
     module
-        .set_property(scope, "exports".into(), PropertyValue::static_default(exports.clone()))
+        .set_property(scope, key.into(), PropertyValue::static_default(exports.clone()))
         .unwrap();
 
     global_state
@@ -104,11 +104,11 @@ fn execute_node_module(
 
     let fun = match scope.eval(&code, opt) {
         Ok(v) => v.root(scope),
-        Err((err, intern)) => return Err((err, Some(intern), code)),
+        Err(err) => return Err((err, code)),
     };
 
     fun.apply(scope, Value::undefined(), vec![exports, module.clone(), require])
-        .map_err(|err| (EvalError::Exception(err.into()), None, code))?;
+        .map_err(|err| (EvalError::Exception(err.into()), code))?;
 
     Ok(module)
 }
@@ -161,10 +161,12 @@ impl Object for RequireFunction {
         let Some(Value::String(arg)) = args.first() else {
             throw!(scope, Error, "require() expects a string argument");
         };
+        let exports = scope.intern("exports");
+        let arg = arg.res(scope);
 
         let is_path = matches!(arg.chars().next(), Some('.' | '/' | '~'));
         if is_path {
-            let canonicalized_path = match self.current_dir.join(&**arg).canonicalize() {
+            let canonicalized_path = match self.current_dir.join(arg).canonicalize() {
                 Ok(v) => v,
                 Err(err) => throw!(scope, Error, err.to_string()),
             };
@@ -198,15 +200,15 @@ impl Object for RequireFunction {
             ) {
                 Ok(v) => v,
                 Err((EvalError::Exception(value), ..)) => return Err(value),
-                Err((EvalError::Middle(errs), _, source)) => {
+                Err((EvalError::Middle(errs), source)) => {
                     throw!(scope, SyntaxError, "{}", errs.formattable(&source, true))
                 }
             };
 
-            module.get_property(scope, "exports".into())
+            module.get_property(scope, exports.into())
         } else {
             // Resolve dependency
-            let dir_path = self.state.node_modules_dir.join(&**arg);
+            let dir_path = self.state.node_modules_dir.join(arg);
             let package_state = process_package_json(&dir_path).unwrap();
             let file_path = dir_path.join(&package_state.metadata.main);
             let source = std::fs::read_to_string(&file_path).unwrap();
@@ -222,12 +224,12 @@ impl Object for RequireFunction {
             ) {
                 Ok(v) => v,
                 Err((EvalError::Exception(value), ..)) => return Err(value),
-                Err((EvalError::Middle(errs), _, source)) => {
+                Err((EvalError::Middle(errs), source)) => {
                     throw!(scope, SyntaxError, "{}", errs.formattable(&source, true))
                 }
             };
 
-            module.get_property(scope, "exports".into())
+            module.get_property(scope, exports.into())
         }
     }
 }

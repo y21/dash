@@ -1,3 +1,4 @@
+use crate::gc::interner::sym;
 use crate::throw;
 use crate::value::array::ArrayIterator;
 use crate::value::function::native::CallContext;
@@ -16,12 +17,12 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
     let obj = NamedObject::new(cx.scope);
     obj.set_property(
         cx.scope,
-        "value".into(),
+        sym::value.into(),
         PropertyValue::static_default(next.unwrap_or_undefined()),
     )?;
     obj.set_property(
         cx.scope,
-        "done".into(),
+        sym::done.into(),
         PropertyValue::static_default(Value::Boolean(done)),
     )?;
 

@@ -8,7 +8,8 @@ use dash_middle::parser::statement::FunctionKind;
 use dash_proc_macro::Trace;
 
 use crate::gc::handle::Handle;
-use crate::gc::trace::Trace;
+use crate::gc::trace::{Trace, TraceCtxt};
+use crate::value::string::JsString;
 use crate::value::{ExternalValue, Unrooted};
 
 use super::value::function::user::UserFunction;
@@ -24,14 +25,15 @@ pub struct TryBlock {
 #[derive(Debug, Clone, Default)]
 pub struct Exports {
     pub default: Option<Unrooted>,
-    pub named: Vec<(Rc<str>, Unrooted)>,
+    pub named: Vec<(JsString, Unrooted)>,
 }
 
 unsafe impl Trace for Exports {
-    fn trace(&self) {
-        self.default.trace();
-        for (_, v) in &self.named {
-            v.trace();
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
+        self.default.trace(cx);
+        for (k, v) in &self.named {
+            k.trace(cx);
+            v.trace(cx);
         }
     }
 }
@@ -50,10 +52,13 @@ pub enum FrameState {
 }
 
 unsafe impl Trace for FrameState {
-    fn trace(&self) {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
         match self {
-            Self::Module(exports) => exports.trace(),
-            Self::Function { .. } => {}
+            Self::Module(exports) => exports.trace(cx),
+            Self::Function {
+                is_constructor_call: _,
+                is_flat_call: _,
+            } => {}
         }
     }
 }
@@ -81,7 +86,7 @@ impl LoopCounterMap {
 }
 
 unsafe impl Trace for LoopCounterMap {
-    fn trace(&self) {}
+    fn trace(&self, _: &mut TraceCtxt<'_>) {}
 }
 
 #[derive(Debug, Clone, Trace)]

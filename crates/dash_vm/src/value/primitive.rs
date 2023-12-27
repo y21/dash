@@ -1,17 +1,21 @@
 use std::any::Any;
 use std::hash::{Hash, Hasher};
-use std::rc::Rc;
 use std::{fmt, iter};
 
+use dash_middle::interner;
+use dash_proc_macro::Trace;
+
 use crate::gc::handle::Handle;
+use crate::gc::interner::sym;
 use crate::localscope::LocalScope;
 use crate::throw;
-use crate::util::format_f64;
+use crate::util::{format_f64, Captures};
 
-use super::boxed::{Boolean as BoxedBoolean, Number as BoxedNumber, String as BoxedString, Symbol as BoxedSymbol};
+use super::boxed::{Boolean as BoxedBoolean, Number as BoxedNumber, Symbol as BoxedSymbol};
 use super::object::{Object, PropertyKey, PropertyValue};
 use super::ops::conversions::{PreferredType, ValueConversion};
 use super::ops::equality::ValueEquality;
+use super::string::JsString;
 use super::{Typeof, Unrooted, Value};
 
 pub const MAX_SAFE_INTEGER: u64 = 9007199254740991u64;
@@ -26,12 +30,7 @@ impl Object for f64 {
         Ok(None)
     }
 
-    fn set_property(
-        &self,
-        _sc: &mut LocalScope,
-        _key: PropertyKey<'static>,
-        _value: PropertyValue,
-    ) -> Result<(), Value> {
+    fn set_property(&self, _sc: &mut LocalScope, _key: PropertyKey, _value: PropertyValue) -> Result<(), Value> {
         Ok(())
     }
 
@@ -62,7 +61,7 @@ impl Object for f64 {
         self
     }
 
-    fn own_keys(&self) -> Result<Vec<Value>, Value> {
+    fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         Ok(Vec::new())
     }
 
@@ -84,12 +83,7 @@ impl Object for bool {
         Ok(None)
     }
 
-    fn set_property(
-        &self,
-        _sc: &mut LocalScope,
-        _key: PropertyKey<'static>,
-        _value: PropertyValue,
-    ) -> Result<(), Value> {
+    fn set_property(&self, _sc: &mut LocalScope, _key: PropertyKey, _value: PropertyValue) -> Result<(), Value> {
         Ok(())
     }
 
@@ -119,7 +113,7 @@ impl Object for bool {
         self
     }
 
-    fn own_keys(&self) -> Result<Vec<Value>, Value> {
+    fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         Ok(Vec::new())
     }
 
@@ -132,69 +126,72 @@ impl Object for bool {
     }
 }
 
-// TODO: impl<T: Deref<Target=O>, O: Object> Object for T  possible?
-impl Object for Rc<str> {
-    fn get_own_property_descriptor(
-        &self,
-        sc: &mut LocalScope,
-        key: PropertyKey,
-    ) -> Result<Option<PropertyValue>, Unrooted> {
-        str::get_own_property_descriptor(self, sc, key.clone())
-    }
+// // TODO: impl<T: Deref<Target=O>, O: Object> Object for T  possible?
+// impl Object for Rc<str> {
+//     fn get_own_property_descriptor(
+//         &self,
+//         sc: &mut LocalScope,
+//         key: PropertyKey,
+//     ) -> Result<Option<PropertyValue>, Unrooted> {
+//         str::get_own_property_descriptor(self, sc, key.clone())
+//     }
 
-    fn set_property(
-        &self,
-        _sc: &mut LocalScope,
-        _key: PropertyKey<'static>,
-        _value: PropertyValue,
-    ) -> Result<(), Value> {
-        Ok(())
-    }
+//     fn set_property(
+//         &self,
+//         _sc: &mut LocalScope,
+//         _key: PropertyKey<'static>,
+//         _value: PropertyValue,
+//     ) -> Result<(), Value> {
+//         Ok(())
+//     }
 
-    fn delete_property(&self, _sc: &mut LocalScope, _key: PropertyKey) -> Result<Unrooted, Value> {
-        Ok(Unrooted::new(Value::undefined()))
-    }
+//     fn delete_property(&self, _sc: &mut LocalScope, _key: PropertyKey) -> Result<Unrooted, Value> {
+//         Ok(Unrooted::new(Value::undefined()))
+//     }
 
-    fn set_prototype(&self, _sc: &mut LocalScope, _value: Value) -> Result<(), Value> {
-        Ok(())
-    }
+//     fn set_prototype(&self, _sc: &mut LocalScope, _value: Value) -> Result<(), Value> {
+//         Ok(())
+//     }
 
-    fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
-        Ok(sc.statics.string_prototype.clone().into())
-    }
+//     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
+//         Ok(sc.statics.string_prototype.clone().into())
+//     }
 
-    fn apply(
-        &self,
-        scope: &mut LocalScope,
-        _callee: Handle<dyn Object>,
-        _this: Value,
-        _args: Vec<Value>,
-    ) -> Result<Unrooted, Unrooted> {
-        throw!(scope, TypeError, "string is not a function")
-    }
+//     fn apply(
+//         &self,
+//         scope: &mut LocalScope,
+//         _callee: Handle<dyn Object>,
+//         _this: Value,
+//         _args: Vec<Value>,
+//     ) -> Result<Unrooted, Unrooted> {
+//         throw!(scope, TypeError, "string is not a function")
+//     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
+//     fn as_any(&self) -> &dyn Any {
+//         self
+//     }
 
-    fn own_keys(&self) -> Result<Vec<Value>, Value> {
-        str::own_keys(self)
-    }
+//     fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+//         str::own_keys(self, sc)
+//     }
 
-    fn type_of(&self) -> Typeof {
-        str::type_of(self)
-    }
+//     fn type_of(&self) -> Typeof {
+//         str::type_of(self)
+//     }
 
-    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
-        Some(self)
-    }
-}
+//     fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
+//         Some(self)
+//     }
+// }
 
-pub fn array_like_keys(len: usize) -> impl Iterator<Item = Value> {
+pub fn array_like_keys<'a, 'b>(
+    sc: &'a mut LocalScope<'b>,
+    len: usize,
+) -> impl Iterator<Item = Value> + Captures<'a> + Captures<'b> {
     (0..len)
-        .map(|i| i.to_string())
-        .chain(iter::once_with(|| "length".to_string()))
-        .map(|x| Value::String(x.as_str().into()))
+        .map(|i| sc.intern_usize(i))
+        .chain(iter::once_with(|| sym::length))
+        .map(|x| Value::String(x.into()))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -212,7 +209,7 @@ impl Object for Undefined {
         throw!(sc, TypeError, "Cannot read property {:?} of undefined", key)
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, _value: PropertyValue) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, _value: PropertyValue) -> Result<(), Value> {
         throw!(sc, TypeError, "Cannot set property {:?} of undefined", key)
     }
 
@@ -242,7 +239,7 @@ impl Object for Undefined {
         self
     }
 
-    fn own_keys(&self) -> Result<Vec<Value>, Value> {
+    fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         Ok(Vec::new())
     }
 
@@ -264,7 +261,7 @@ impl Object for Null {
         throw!(sc, TypeError, "Cannot read property {:?} of null", key)
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, _value: PropertyValue) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, _value: PropertyValue) -> Result<(), Value> {
         throw!(sc, TypeError, "Cannot set property {:?} of null", key)
     }
 
@@ -294,7 +291,7 @@ impl Object for Null {
         self
     }
 
-    fn own_keys(&self) -> Result<Vec<Value>, Value> {
+    fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         Ok(Vec::new())
     }
 
@@ -303,80 +300,81 @@ impl Object for Null {
     }
 }
 
-impl Object for str {
-    fn get_own_property_descriptor(
-        &self,
-        _sc: &mut LocalScope,
-        key: PropertyKey,
-    ) -> Result<Option<PropertyValue>, Unrooted> {
-        if let PropertyKey::String(st) = key {
-            if st == "length" {
-                return Ok(Some(PropertyValue::static_default(Value::number(self.len() as f64))));
-            }
+// impl Object for str {
+//     fn get_own_property_descriptor(
+//         &self,
+//         sc: &mut LocalScope,
+//         key: PropertyKey,
+//     ) -> Result<Option<PropertyValue>, Unrooted> {
+//         if let PropertyKey::String(st) = key {
+//             if st.sym() == sym::length {
+//                 return Ok(Some(PropertyValue::static_default(Value::number(self.len() as f64))));
+//             }
 
-            if let Ok(index) = st.parse::<usize>() {
-                let bytes = self.as_bytes();
-                if let Some(&byte) = bytes.get(index) {
-                    return Ok(Some(PropertyValue::static_default(Value::String(
-                        (byte as char).to_string().into(),
-                    ))));
-                }
-            }
-        }
+//             if let Ok(index) = st.res(sc).parse::<usize>() {
+//                 let bytes = self.as_bytes();
+//                 if let Some(&byte) = bytes.get(index) {
+//                     let s = sc.intern((byte as char).to_string().as_ref());
+//                     return Ok(Some(PropertyValue::static_default(Value::String(s.into()))));
+//                 }
+//             }
+//         }
 
-        Ok(None)
-    }
+//         Ok(None)
+//     }
 
-    fn set_property(
-        &self,
-        _sc: &mut LocalScope,
-        _key: PropertyKey<'static>,
-        _value: PropertyValue,
-    ) -> Result<(), Value> {
-        Ok(())
-    }
+//     fn set_property(&self, _sc: &mut LocalScope, _key: PropertyKey, _value: PropertyValue) -> Result<(), Value> {
+//         Ok(())
+//     }
 
-    fn delete_property(&self, _sc: &mut LocalScope, _key: PropertyKey) -> Result<Unrooted, Value> {
-        Ok(Unrooted::new(Value::undefined()))
-    }
+//     fn delete_property(&self, _sc: &mut LocalScope, _key: PropertyKey) -> Result<Unrooted, Value> {
+//         Ok(Unrooted::new(Value::undefined()))
+//     }
 
-    fn set_prototype(&self, _sc: &mut LocalScope, _value: Value) -> Result<(), Value> {
-        Ok(())
-    }
+//     fn set_prototype(&self, _sc: &mut LocalScope, _value: Value) -> Result<(), Value> {
+//         Ok(())
+//     }
 
-    fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
-        Ok(sc.statics.string_prototype.clone().into())
-    }
+//     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
+//         Ok(sc.statics.string_prototype.clone().into())
+//     }
 
-    fn apply(
-        &self,
-        scope: &mut LocalScope,
-        _callee: Handle<dyn Object>,
-        _this: Value,
-        _args: Vec<Value>,
-    ) -> Result<Unrooted, Unrooted> {
-        throw!(scope, TypeError, "string is not a function")
-    }
+//     fn apply(
+//         &self,
+//         scope: &mut LocalScope,
+//         _callee: Handle<dyn Object>,
+//         _this: Value,
+//         _args: Vec<Value>,
+//     ) -> Result<Unrooted, Unrooted> {
+//         throw!(scope, TypeError, "string is not a function")
+//     }
 
-    fn as_any(&self) -> &dyn Any {
-        panic!("cannot convert string to any")
-    }
+//     fn as_any(&self) -> &dyn Any {
+//         panic!("cannot convert string to any")
+//     }
 
-    fn own_keys(&self) -> Result<Vec<Value>, Value> {
-        Ok(array_like_keys(self.len()).collect())
-    }
+//     fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+//         Ok(array_like_keys(self.len()).collect())
+//     }
 
-    fn type_of(&self) -> Typeof {
-        Typeof::String
-    }
+//     fn type_of(&self) -> Typeof {
+//         Typeof::String
+//     }
+// }
+
+// TODO: rename to JsSymbol
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Trace)]
+pub struct Symbol {
+    description: JsString,
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct Symbol(Rc<str>);
-
 impl Symbol {
-    pub fn new(description: Rc<str>) -> Self {
-        Symbol(description)
+    pub fn sym(&self) -> interner::Symbol {
+        self.description.sym()
+    }
+
+    pub fn new(description: JsString) -> Self {
+        Symbol { description }
     }
 }
 
@@ -389,12 +387,7 @@ impl Object for Symbol {
         Ok(None)
     }
 
-    fn set_property(
-        &self,
-        _sc: &mut LocalScope,
-        _key: PropertyKey<'static>,
-        _value: PropertyValue,
-    ) -> Result<(), Value> {
+    fn set_property(&self, _sc: &mut LocalScope, _key: PropertyKey, _value: PropertyValue) -> Result<(), Value> {
         Ok(())
     }
 
@@ -424,7 +417,7 @@ impl Object for Symbol {
         self
     }
 
-    fn own_keys(&self) -> Result<Vec<Value>, Value> {
+    fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         Ok(Vec::new())
     }
 
@@ -438,7 +431,7 @@ impl Object for Symbol {
 }
 
 pub trait PrimitiveCapabilities: ValueConversion + ValueEquality + std::fmt::Debug {
-    fn as_string(&self) -> Option<Rc<str>> {
+    fn as_string(&self) -> Option<JsString> {
         None
     }
     fn as_number(&self) -> Option<f64> {
@@ -501,12 +494,12 @@ impl ValueConversion for f64 {
         Ok(*self)
     }
 
-    fn to_boolean(&self) -> Result<bool, Value> {
+    fn to_boolean(&self, _: &mut LocalScope<'_>) -> Result<bool, Value> {
         Ok(*self != 0.0 && !self.is_nan())
     }
 
-    fn to_string(&self, _sc: &mut LocalScope) -> Result<Rc<str>, Value> {
-        Ok(format_f64(*self).into())
+    fn to_js_string(&self, sc: &mut LocalScope) -> Result<JsString, Value> {
+        Ok(sc.intern(format_f64(*self).as_ref()).into())
     }
 
     fn length_of_array_like(&self, _sc: &mut LocalScope) -> Result<usize, Value> {
@@ -530,32 +523,32 @@ impl PrimitiveCapabilities for bool {
 }
 
 impl ValueEquality for bool {
-    fn lt(&self, other: &Value, _sc: &mut LocalScope) -> Result<Value, Value> {
+    fn lt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
         other
-            .to_boolean()
+            .to_boolean(sc)
             .map(|other| Value::Boolean((*self as u8) < other as u8))
     }
 
-    fn le(&self, other: &Value, _sc: &mut LocalScope) -> Result<Value, Value> {
+    fn le(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
         other
-            .to_boolean()
+            .to_boolean(sc)
             .map(|other| Value::Boolean((*self as u8) <= other as u8))
     }
 
-    fn gt(&self, other: &Value, _sc: &mut LocalScope) -> Result<Value, Value> {
+    fn gt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
         other
-            .to_boolean()
+            .to_boolean(sc)
             .map(|other| Value::Boolean((*self as u8) > other as u8))
     }
 
-    fn ge(&self, other: &Value, _sc: &mut LocalScope) -> Result<Value, Value> {
+    fn ge(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
         other
-            .to_boolean()
+            .to_boolean(sc)
             .map(|other| Value::Boolean((*self as u8) >= other as u8))
     }
 
-    fn eq(&self, other: &Value, _sc: &mut LocalScope) -> Result<Value, Value> {
-        other.to_boolean().map(|other| Value::Boolean(*self == other))
+    fn eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+        other.to_boolean(sc).map(|other| Value::Boolean(*self == other))
     }
 
     fn strict_eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
@@ -572,16 +565,12 @@ impl ValueConversion for bool {
         Ok(*self as u8 as f64)
     }
 
-    fn to_boolean(&self) -> Result<bool, Value> {
+    fn to_boolean(&self, _sc: &mut LocalScope<'_>) -> Result<bool, Value> {
         Ok(*self)
     }
 
-    fn to_string(&self, sc: &mut LocalScope) -> Result<Rc<str>, Value> {
-        Ok(if *self {
-            sc.statics().get_true()
-        } else {
-            sc.statics().get_false()
-        })
+    fn to_js_string(&self, _: &mut LocalScope) -> Result<JsString, Value> {
+        Ok(if *self { sym::true_.into() } else { sym::false_.into() })
     }
 
     fn length_of_array_like(&self, _sc: &mut LocalScope) -> Result<usize, Value> {
@@ -594,68 +583,68 @@ impl ValueConversion for bool {
     }
 }
 
-impl PrimitiveCapabilities for Rc<str> {
-    fn as_string(&self) -> Option<Rc<str>> {
-        Some(self.clone())
-    }
+// impl PrimitiveCapabilities for Rc<str> {
+//     fn as_string(&self) -> Option<JsString> {
+//         Some(self.clone())
+//     }
 
-    fn unbox(&self) -> Value {
-        Value::String(Rc::clone(self))
-    }
-}
+//     fn unbox(&self) -> Value {
+//         Value::String(Rc::clone(self))
+//     }
+// }
 
-impl ValueEquality for Rc<str> {
-    fn lt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        other.to_string(sc).map(|other| Value::Boolean(self < &other))
-    }
+// impl ValueEquality for Rc<str> {
+//     fn lt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+//         other.to_js_string(sc).map(|other| Value::Boolean(self < &other))
+//     }
 
-    fn le(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        other.to_string(sc).map(|other| Value::Boolean(self <= &other))
-    }
+//     fn le(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+//         other.to_js_string(sc).map(|other| Value::Boolean(self <= &other))
+//     }
 
-    fn gt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        other.to_string(sc).map(|other| Value::Boolean(self > &other))
-    }
+//     fn gt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+//         other.to_js_string(sc).map(|other| Value::Boolean(self > &other))
+//     }
 
-    fn ge(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        other.to_string(sc).map(|other| Value::Boolean(self >= &other))
-    }
+//     fn ge(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+//         other.to_js_string(sc).map(|other| Value::Boolean(self >= &other))
+//     }
 
-    fn eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        other.to_string(sc).map(|other| Value::Boolean(self == &other))
-    }
+//     fn eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+//         other.to_js_string(sc).map(|other| Value::Boolean(self == &other))
+//     }
 
-    fn strict_eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        ValueEquality::eq(self, other, sc)
-    }
-}
+//     fn strict_eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
+//         ValueEquality::eq(self, other, sc)
+//     }
+// }
 
-impl ValueConversion for Rc<str> {
-    fn to_primitive(&self, _sc: &mut LocalScope, _preferred_type: Option<PreferredType>) -> Result<Value, Value> {
-        Ok(Value::String(Rc::clone(self)))
-    }
+// impl ValueConversion for Rc<str> {
+//     fn to_primitive(&self, _sc: &mut LocalScope, _preferred_type: Option<PreferredType>) -> Result<Value, Value> {
+//         Ok(Value::String(Rc::clone(self)))
+//     }
 
-    fn to_number(&self, _sc: &mut LocalScope) -> Result<f64, Value> {
-        Ok(self.parse().unwrap_or(f64::NAN))
-    }
+//     fn to_number(&self, _sc: &mut LocalScope) -> Result<f64, Value> {
+//         Ok(self.parse().unwrap_or(f64::NAN))
+//     }
 
-    fn to_boolean(&self) -> Result<bool, Value> {
-        Ok(!self.is_empty())
-    }
+//     fn to_boolean(&self) -> Result<bool, Value> {
+//         Ok(!self.is_empty())
+//     }
 
-    fn to_string(&self, _sc: &mut LocalScope) -> Result<Rc<str>, Value> {
-        Ok(Rc::clone(self))
-    }
+//     fn to_js_string(&self, _sc: &mut LocalScope) -> Result<Rc<str>, Value> {
+//         Ok(Rc::clone(self))
+//     }
 
-    fn length_of_array_like(&self, _sc: &mut LocalScope) -> Result<usize, Value> {
-        Ok(self.len())
-    }
+//     fn length_of_array_like(&self, _sc: &mut LocalScope) -> Result<usize, Value> {
+//         Ok(self.len())
+//     }
 
-    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value> {
-        let bool = BoxedString::new(sc, self.clone());
-        Ok(sc.register(bool))
-    }
-}
+//     fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value> {
+//         let bool = BoxedString::new(sc, self.clone());
+//         Ok(sc.register(bool))
+//     }
+// }
 
 impl PrimitiveCapabilities for Undefined {
     fn is_undefined(&self) -> bool {
@@ -714,12 +703,12 @@ impl ValueConversion for Undefined {
         Ok(f64::NAN)
     }
 
-    fn to_boolean(&self) -> Result<bool, Value> {
+    fn to_boolean(&self, _sc: &mut LocalScope<'_>) -> Result<bool, Value> {
         Ok(false)
     }
 
-    fn to_string(&self, sc: &mut LocalScope) -> Result<Rc<str>, Value> {
-        Ok(sc.statics().undefined_str())
+    fn to_js_string(&self, _: &mut LocalScope) -> Result<JsString, Value> {
+        Ok(sym::undefined.into())
     }
 
     fn length_of_array_like(&self, _sc: &mut LocalScope) -> Result<usize, Value> {
@@ -776,12 +765,12 @@ impl ValueConversion for Null {
         Ok(0.0)
     }
 
-    fn to_boolean(&self) -> Result<bool, Value> {
+    fn to_boolean(&self, _sc: &mut LocalScope<'_>) -> Result<bool, Value> {
         Ok(false)
     }
 
-    fn to_string(&self, sc: &mut LocalScope) -> Result<Rc<str>, Value> {
-        Ok(sc.statics().null_str())
+    fn to_js_string(&self, _: &mut LocalScope) -> Result<JsString, Value> {
+        Ok(sym::null.into())
     }
 
     fn length_of_array_like(&self, _sc: &mut LocalScope) -> Result<usize, Value> {
@@ -834,11 +823,11 @@ impl ValueConversion for Symbol {
         throw!(sc, TypeError, "Cannot convert symbol to number");
     }
 
-    fn to_boolean(&self) -> Result<bool, Value> {
+    fn to_boolean(&self, _: &mut LocalScope<'_>) -> Result<bool, Value> {
         Ok(true)
     }
 
-    fn to_string(&self, sc: &mut LocalScope) -> Result<Rc<str>, Value> {
+    fn to_js_string(&self, sc: &mut LocalScope) -> Result<JsString, Value> {
         throw!(sc, TypeError, "Cannot convert symbol to string");
     }
 
@@ -879,7 +868,7 @@ impl Object for Number {
         self.0.get_own_property_descriptor(sc, key)
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
         self.0.set_property(sc, key, value)
     }
 
@@ -909,8 +898,8 @@ impl Object for Number {
         self
     }
 
-    fn own_keys(&self) -> Result<Vec<Value>, Value> {
-        self.0.own_keys()
+    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+        self.0.own_keys(sc)
     }
 
     fn type_of(&self) -> Typeof {
@@ -966,12 +955,12 @@ impl ValueConversion for Number {
         self.0.to_number(sc)
     }
 
-    fn to_boolean(&self) -> Result<bool, Value> {
-        self.0.to_boolean()
+    fn to_boolean(&self, sc: &mut LocalScope<'_>) -> Result<bool, Value> {
+        self.0.to_boolean(sc)
     }
 
-    fn to_string(&self, sc: &mut LocalScope) -> Result<Rc<str>, Value> {
-        ValueConversion::to_string(&self.0, sc)
+    fn to_js_string(&self, sc: &mut LocalScope) -> Result<JsString, Value> {
+        ValueConversion::to_js_string(&self.0, sc)
     }
 
     fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value> {

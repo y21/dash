@@ -9,9 +9,9 @@ pub trait ValueEquality {
     fn eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value>;
     fn strict_eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value>;
     fn ne(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        self.eq(other, sc).map(|v| v.not())
+        self.eq(other, sc).map(|v| v.not(sc))
     }
     fn strict_ne(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        self.strict_eq(other, sc).map(|v| v.not())
+        self.strict_eq(other, sc).map(|v| v.not(sc))
     }
 }

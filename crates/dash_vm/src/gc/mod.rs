@@ -12,6 +12,7 @@ use crate::value::object::Object;
 use self::handle::{GcNode, Handle};
 
 pub mod handle;
+pub mod interner;
 pub mod persistent;
 pub mod trace;
 
@@ -181,7 +182,7 @@ mod tests {
         unsafe {
             let mut gc = Gc::new();
             let h1 = register_gc!(gc, 123.4);
-            let h2 = register_gc!(gc, Rc::from("hi"));
+            let h1 = register_gc!(gc, true);
             gc.sweep();
             gc.sweep();
         }
@@ -204,7 +205,7 @@ mod tests {
             assert!(!(*h1.as_ptr()).flags.is_marked());
             assert!(gc.node_count == 1);
 
-            let h2 = register_gc!(gc, Rc::from("hi"));
+            let h2 = register_gc!(gc, 123.4);
 
             assert!(gc.head == NonNull::new(h1.as_ptr()));
             assert!(gc.tail == NonNull::new(h2.as_ptr()));
@@ -243,9 +244,6 @@ mod tests {
             {
                 let h1_c = h1.cast_handle::<f64>();
                 assert_eq!(h1_c.as_deref(), Some(&123.0));
-
-                let h2_c = h2.cast_handle::<Rc<str>>();
-                assert_eq!(h2_c.as_ref().map(|x| &***x), Some("hi"));
 
                 let h3_c = h3.cast_handle::<bool>();
                 assert_eq!(h3_c.as_deref(), Some(&true));
@@ -291,7 +289,7 @@ mod tests {
             }
 
             // lastly, test if Gc::drop works correctly. run under miri to see possible leaks
-            register_gc!(gc, Rc::from("test"));
+            register_gc!(gc, false);
         }
     }
 }

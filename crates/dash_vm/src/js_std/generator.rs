@@ -2,12 +2,14 @@ use std::mem;
 
 use crate::dispatch::HandleResult;
 use crate::frame::Frame;
+use crate::gc::interner::sym;
 use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::function::generator::{as_generator, GeneratorState};
 use crate::value::function::native::CallContext;
 use crate::value::function::{Function, FunctionKind};
 use crate::value::object::{NamedObject, Object, PropertyValue};
+use crate::value::root_ext::RootErrExt;
 use crate::value::{Root, Value, ValueContext};
 
 pub fn next(cx: CallContext) -> Result<Value, Value> {
@@ -32,7 +34,7 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
         };
 
         let current_sp = cx.scope.stack_size();
-        cx.scope.try_extend_stack(old_stack)?;
+        cx.scope.try_extend_stack(old_stack).root_err(cx.scope)?;
 
         let mut frame = Frame::from_function(None, function, false, false);
         frame.set_ip(ip);
@@ -83,10 +85,10 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
 
 fn create_generator_value(scope: &mut LocalScope, done: bool, value: Option<Value>) -> Result<Value, Value> {
     let obj = NamedObject::new(scope);
-    obj.set_property(scope, "done".into(), PropertyValue::static_default(done.into()))?;
+    obj.set_property(scope, sym::done.into(), PropertyValue::static_default(done.into()))?;
     obj.set_property(
         scope,
-        "value".into(),
+        sym::value.into(),
         PropertyValue::static_default(value.unwrap_or_undefined()),
     )?;
     Ok(scope.register(obj).into())

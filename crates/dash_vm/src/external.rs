@@ -1,7 +1,7 @@
 use rustc_hash::FxHashMap;
 
 use crate::gc::handle::Handle;
-use crate::gc::trace::Trace;
+use crate::gc::trace::{Trace, TraceCtxt};
 
 use super::localscope::LocalScope;
 use super::value::object::Object;
@@ -10,9 +10,9 @@ use super::value::object::Object;
 pub struct Externals(FxHashMap<*const (), Vec<Handle<dyn Object>>>);
 
 unsafe impl Trace for Externals {
-    fn trace(&self) {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
         for ext in self.0.values() {
-            ext.trace();
+            ext.trace(cx);
         }
     }
 }

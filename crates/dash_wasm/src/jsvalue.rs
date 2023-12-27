@@ -53,7 +53,7 @@ impl JsValue {
     }
 
     pub fn to_js_string(&self, vm: &mut ExternalVm) -> Result<String, JsValue> {
-        vm.with_scope(|scope| self.0.to_string(scope).map_err(JsValue).map(|s| s.as_ref().into()))
+        vm.with_scope(|scope| self.0.to_js_string(scope).map_err(JsValue).map(|s| s.as_ref().into()))
     }
 
     pub fn set_property(&self, vm: &mut ExternalVm, key: String, value: JsValue) -> Result<(), JsValue> {

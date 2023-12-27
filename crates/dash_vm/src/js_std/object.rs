@@ -1,4 +1,5 @@
 use crate::gc::handle::Handle;
+use crate::gc::interner::sym;
 use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::array::Array;
@@ -28,7 +29,7 @@ pub fn create(cx: CallContext) -> Result<Value, Value> {
 
 pub fn keys(cx: CallContext) -> Result<Value, Value> {
     let obj = cx.args.first().unwrap_or_undefined().to_object(cx.scope)?;
-    let keys = obj.own_keys()?;
+    let keys = obj.own_keys(cx.scope)?;
     let array = Array::from_vec(cx.scope, keys.into_iter().map(PropertyValue::static_default).collect());
     Ok(cx.scope.gc_mut().register(array).into())
 }
@@ -36,18 +37,20 @@ pub fn keys(cx: CallContext) -> Result<Value, Value> {
 pub fn to_string(cx: CallContext) -> Result<Value, Value> {
     fn to_string_inner(scope: &mut LocalScope<'_>, o: &Handle<dyn Object>) -> Result<Value, Value> {
         let constructor = o
-            .get_property(scope, "constructor".into())
+            .get_property(scope, sym::constructor.into())
             .root(scope)?
-            .get_property(scope, "name".into())
+            .get_property(scope, sym::name.into())
             .root(scope)?
-            .to_string(scope)?;
+            .to_js_string(scope)?;
 
-        Ok(Value::String(format!("[object {constructor}]").into()))
+        let constructor = format!("[object {}]", constructor.res(scope));
+
+        Ok(Value::String(scope.intern(constructor).into()))
     }
 
     let value = match &cx.this {
-        Value::Undefined(_) => Value::String("[object Undefined]".into()),
-        Value::Null(_) => Value::String("[object Null]".into()),
+        Value::Undefined(_) => Value::String(cx.scope.intern("[object Undefined]").into()),
+        Value::Null(_) => Value::String(cx.scope.intern("[object Null]").into()),
         Value::Object(o) => to_string_inner(cx.scope, o)?,
         Value::External(o) => to_string_inner(cx.scope, &o.inner)?,
         _ => unreachable!(), // `this` is always object/null/undefined. TODO: wrong, `Object.prototype.toString..call('a')` crashes
@@ -90,7 +93,7 @@ pub fn get_own_property_descriptors(cx: CallContext) -> Result<Value, Value> {
     };
 
     let mut descriptors = Vec::new();
-    let keys = o.own_keys()?;
+    let keys = o.own_keys(cx.scope)?;
 
     for key in keys {
         let key = PropertyKey::from_value(cx.scope, key)?;
@@ -138,7 +141,7 @@ pub fn define_property(cx: CallContext) -> Result<Value, Value> {
 
     let property = match cx.args.get(1) {
         Some(Value::Symbol(sym)) => PropertyKey::from(sym.clone()),
-        Some(other) => PropertyKey::from(ToString::to_string(&other.to_string(cx.scope)?)),
+        Some(other) => PropertyKey::from(other.to_js_string(cx.scope)?),
         _ => throw!(cx.scope, TypeError, "Property must be a string or symbol"),
     };
     let descriptor = match cx.args.get(2) {
@@ -159,7 +162,7 @@ pub fn assign(cx: CallContext) -> Result<Value, Value> {
     let to = args.next().unwrap_or_undefined().to_object(cx.scope)?;
     for source in args {
         let source = source.to_object(cx.scope)?;
-        for key in source.own_keys()? {
+        for key in source.own_keys(cx.scope)? {
             let key = PropertyKey::from_value(cx.scope, key)?;
             let desc = source.get_own_property(cx.scope, key.clone()).root(cx.scope)?;
             to.set_property(cx.scope, key, PropertyValue::static_default(desc))?;
@@ -171,7 +174,7 @@ pub fn assign(cx: CallContext) -> Result<Value, Value> {
 pub fn entries(cx: CallContext) -> Result<Value, Value> {
     let mut entries = Vec::new();
     let obj = cx.args.first().unwrap_or_undefined().to_object(cx.scope)?;
-    for key in obj.own_keys()? {
+    for key in obj.own_keys(cx.scope)? {
         let key = PropertyKey::from_value(cx.scope, key)?;
         let value = obj.get_own_property(cx.scope, key.clone()).root(cx.scope)?;
         let entry = Array::from_vec(

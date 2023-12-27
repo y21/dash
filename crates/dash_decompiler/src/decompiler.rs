@@ -417,12 +417,7 @@ impl<'buf> FunctionDecompiler<'buf> {
 
         for fun in functions {
             let out = fun.buffer.with(|buffer| {
-                FunctionDecompiler::new(
-                    buffer,
-                    &fun.constants,
-                    &format!("{}::{}", self.name, fun.name.as_deref().unwrap_or("<anon>")),
-                )
-                .run()
+                FunctionDecompiler::new(buffer, &fun.constants, &format!("{}::{:?}", self.name, fun.name)).run()
             })?;
             self.out.push('\n');
             self.out.push_str(&out);
@@ -440,7 +435,7 @@ impl fmt::Display for DisplayConstant<'_> {
             Constant::String(s) => write!(f, "\"{s}\""),
             Constant::Boolean(b) => write!(f, "{b}"),
             Constant::Identifier(ident) => write!(f, "{ident}"),
-            Constant::Function(fun) => write!(f, "<function {}>", fun.name.as_deref().unwrap_or("<anonymous>")),
+            Constant::Function(fun) => write!(f, "<function {:?}>", fun.name),
             Constant::Null => f.write_str("null"),
             Constant::Undefined => f.write_str("undefined"),
             Constant::Regex(_, _, source) => write!(f, "{source}"),

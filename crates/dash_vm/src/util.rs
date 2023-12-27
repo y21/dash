@@ -12,6 +12,13 @@ pub fn unlikely(b: bool) -> bool {
     b
 }
 
+/// https://doc.rust-lang.org/beta/nightly-rustc/rustc_data_structures/captures/trait.Captures.html
+/// and
+/// https://github.com/rust-lang/rust/issues/34511#issuecomment-373423999
+pub trait Captures<'a> {}
+
+impl<'a, T: ?Sized> Captures<'a> for T {}
+
 pub fn format_f64(n: f64) -> String {
     // TODO: specialize zero, infinity, NaN by "interning" them in vm.statics
     match n.classify() {

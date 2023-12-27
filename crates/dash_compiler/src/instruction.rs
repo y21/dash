@@ -1,9 +1,9 @@
 use std::convert::TryInto;
-use std::rc::Rc;
 
 use dash_middle::compiler::constant::{Constant, LimitExceededError};
 use dash_middle::compiler::instruction::{AssignKind, Instruction, IntrinsicOperation};
 use dash_middle::compiler::{FunctionCallMetadata, ObjectMemberKind as CompilerObjectMemberKind, StaticImportKind};
+use dash_middle::interner::Symbol;
 use dash_middle::parser::error::Error;
 use dash_middle::parser::expr::ObjectMemberKind;
 use dash_middle::sourcemap::Span;
@@ -96,13 +96,13 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
         compile_local_load_into(&mut self.current_function_mut().buf, index, is_extern);
     }
 
-    pub fn build_global_load(&mut self, ident: Rc<str>) -> Result<(), LimitExceededError> {
+    pub fn build_global_load(&mut self, ident: Symbol) -> Result<(), LimitExceededError> {
         let id = self.current_function_mut().cp.add(Constant::Identifier(ident))?;
         self.write_wide_instr(Instruction::LdGlobal, Instruction::LdGlobalW, id);
         Ok(())
     }
 
-    pub fn build_global_store(&mut self, kind: AssignKind, ident: Rc<str>) -> Result<(), LimitExceededError> {
+    pub fn build_global_store(&mut self, kind: AssignKind, ident: Symbol) -> Result<(), LimitExceededError> {
         let id = self.current_function_mut().cp.add(Constant::Identifier(ident))?;
         self.write_wide_instr(Instruction::StoreGlobal, Instruction::StoreGlobalW, id);
         self.write(kind as u8);
@@ -178,7 +178,7 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
         self.build_jmp_header(label, is_local_label);
     }
 
-    pub fn build_static_prop_access(&mut self, ident: Rc<str>, preserve_this: bool) -> Result<(), LimitExceededError> {
+    pub fn build_static_prop_access(&mut self, ident: Symbol, preserve_this: bool) -> Result<(), LimitExceededError> {
         let id = self.current_function_mut().cp.add(Constant::Identifier(ident))?;
         self.write_wide_instr(Instruction::StaticPropAccess, Instruction::StaticPropAccessW, id);
         self.write(preserve_this.into());
@@ -191,7 +191,7 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
         self.write(preserve_this.into());
     }
 
-    pub fn build_static_prop_assign(&mut self, kind: AssignKind, ident: Rc<str>) -> Result<(), LimitExceededError> {
+    pub fn build_static_prop_assign(&mut self, kind: AssignKind, ident: Symbol) -> Result<(), LimitExceededError> {
         let id = self.current_function_mut().cp.add(Constant::Identifier(ident))?;
         self.write_instr(Instruction::StaticPropAssign);
         self.write(kind as u8);
@@ -220,7 +220,7 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
         fn compile_object_member_kind(
             ib: &mut InstructionBuilder,
             span: Span, // TODO: this should not be the span of the obj literal but the member kind
-            name: Rc<str>,
+            name: Symbol,
             kind_id: u8,
         ) -> Result<(), Error> {
             let id = ib
@@ -239,12 +239,10 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
             let kind_id = CompilerObjectMemberKind::from(&member) as u8;
             match member {
                 ObjectMemberKind::Dynamic(..) => self.write(kind_id),
-                ObjectMemberKind::Static(name) => {
-                    compile_object_member_kind(self, span, self.interner.resolve(name).clone(), kind_id)?
-                }
+                ObjectMemberKind::Static(name) => compile_object_member_kind(self, span, name, kind_id)?,
                 ObjectMemberKind::Spread => self.write(kind_id),
                 ObjectMemberKind::Getter(name) | ObjectMemberKind::Setter(name) => {
-                    compile_object_member_kind(self, span, self.interner.resolve(name).clone(), kind_id)?
+                    compile_object_member_kind(self, span, name, kind_id)?
                 }
             }
         }

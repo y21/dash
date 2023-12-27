@@ -3,6 +3,7 @@ use std::mem;
 use std::ops::{Deref, DerefMut};
 
 use crate::gc::handle::Handle;
+use crate::gc::interner::Symbol;
 use crate::value::function::bound::BoundFunction;
 use crate::value::promise::{Promise, PromiseState};
 use crate::value::ValueContext;
@@ -14,7 +15,7 @@ use super::Vm;
 
 use std::ptr::NonNull;
 
-use crate::gc::trace::Trace;
+use crate::gc::trace::{Trace, TraceCtxt};
 
 #[derive(Debug)]
 pub struct LocalScopeList {
@@ -79,7 +80,7 @@ impl Drop for LocalScopeList {
 }
 
 unsafe impl Trace for LocalScopeList {
-    fn trace(&self) {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
         let Self { list, head: _ } = self;
 
         // We need to use the list instead of head,
@@ -89,7 +90,8 @@ unsafe impl Trace for LocalScopeList {
         // we would miss those scopes!).
         for ptr in list {
             let data = unsafe { ptr.as_ref() };
-            data.refs.trace();
+            data.refs.trace(cx);
+            data.strings.trace(cx);
         }
     }
 }
@@ -116,6 +118,7 @@ impl Default for LocalScopeList {
 #[derive(Clone, Debug)]
 pub struct ScopeData {
     refs: Vec<Handle<dyn Object>>,
+    strings: Vec<Symbol>,
     next: Option<NonNull<ScopeData>>,
 }
 
@@ -123,6 +126,7 @@ impl ScopeData {
     pub fn new(next: Option<NonNull<Self>>) -> NonNull<Self> {
         NonNull::new(Box::into_raw(Box::new(Self {
             refs: Vec::with_capacity(4),
+            strings: Vec::with_capacity(4),
             next,
         })))
         .unwrap()
@@ -154,12 +158,20 @@ impl<'vm> LocalScope<'vm> {
                 self.add_ref(o.inner.clone());
                 self.add_ref(o.into_dyn());
             }
+            Value::String(s) => {
+                self.scope_data_mut().strings.push(s.sym());
+            }
+            Value::Symbol(s) => {
+                self.scope_data_mut().strings.push(s.sym());
+            }
             _ => {}
         }
     }
 
-    pub fn add_many(&mut self, mut v: Vec<Handle<dyn Object>>) {
-        self.scope_data_mut().refs.append(&mut v);
+    pub fn add_many(&mut self, v: &[Value]) {
+        for val in v {
+            self.add_value(val.clone());
+        }
     }
 
     /// Registers an object and roots it.
@@ -191,6 +203,30 @@ impl<'vm> LocalScope<'vm> {
             PromiseAction::Reject => PromiseState::Rejected(arg),
         };
     }
+
+    pub fn intern(&mut self, s: impl std::borrow::Borrow<str>) -> Symbol {
+        let sym = self.interner.intern(s);
+        self.scope_data_mut().strings.push(sym);
+        sym
+    }
+
+    pub fn intern_usize(&mut self, n: usize) -> Symbol {
+        let sym = self.interner.intern_usize(n);
+        self.scope_data_mut().strings.push(sym);
+        sym
+    }
+
+    pub fn intern_isize(&mut self, n: isize) -> Symbol {
+        let sym = self.interner.intern_isize(n);
+        self.scope_data_mut().strings.push(sym);
+        sym
+    }
+
+    pub fn intern_char(&mut self, v: char) -> Symbol {
+        let sym = self.interner.intern_char(v);
+        self.scope_data_mut().strings.push(sym);
+        sym
+    }
 }
 
 // TODO: remove this Deref impl
@@ -221,8 +257,7 @@ impl<'vm> Drop for LocalScope<'vm> {
 
 #[cfg(test)]
 mod tests {
-    use std::rc::Rc;
-
+    use crate::value::string::JsString;
     use crate::Vm;
 
     #[test]
@@ -230,7 +265,8 @@ mod tests {
         let mut vm = Vm::new(Default::default());
         let mut scope = vm.scope();
         for _ in 0..20 {
-            scope.register(Rc::from("test") as Rc<str>);
+            let val = scope.intern("test");
+            scope.register(JsString::from(val));
         }
     }
 
@@ -243,12 +279,15 @@ mod tests {
         let mut scope3 = scope2.scope();
         let mut scope4 = scope3.scope();
         let mut scope5 = scope4.scope();
-        scope5.register(Rc::from("bar") as Rc<str>);
+        let k = scope5.intern("bar");
+        scope5.register(JsString::from(k));
         let mut scope6 = scope5.scope();
         let mut scope7 = scope6.scope();
         let mut scope8 = scope7.scope();
-        scope8.register(Rc::from("foo") as Rc<str>);
+        let k = scope8.intern("foo");
+        scope8.register(JsString::from(k));
         let mut scope9 = scope8.scope();
-        scope9.register(Rc::from("test") as Rc<str>);
+        let k = scope9.intern("test");
+        scope9.register(JsString::from(k));
     }
 }

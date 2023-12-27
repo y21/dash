@@ -2,11 +2,10 @@ use super::ops::conversions::{PreferredType, ValueConversion};
 use super::ops::equality::ValueEquality;
 use crate::gc::handle::Handle;
 use crate::localscope::LocalScope;
-use crate::value::{PropertyKey, Unrooted};
+use crate::value::{JsString, PropertyKey, Unrooted};
 use crate::{delegate, PropertyValue, Vm};
 use dash_proc_macro::Trace;
 use std::any::Any;
-use std::rc::Rc;
 
 use super::object::{NamedObject, Object};
 use super::primitive::{PrimitiveCapabilities, Symbol as PrimitiveSymbol};
@@ -114,12 +113,12 @@ macro_rules! boxed_primitive {
                     ValueConversion::to_number(&self.inner, sc)
                 }
 
-                fn to_boolean(&self) -> Result<bool, Value> {
-                    ValueConversion::to_boolean(&self.inner)
+                fn to_boolean(&self, sc: &mut LocalScope<'_>) -> Result<bool, Value> {
+                    ValueConversion::to_boolean(&self.inner, sc)
                 }
 
-                fn to_string(&self, sc: &mut LocalScope) -> Result<Rc<str>, Value> {
-                    ValueConversion::to_string(&self.inner, sc)
+                fn to_js_string(&self, sc: &mut LocalScope) -> Result<JsString, Value> {
+                    ValueConversion::to_js_string(&self.inner, sc)
                 }
 
                 fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value> {
@@ -137,7 +136,7 @@ macro_rules! boxed_primitive {
 boxed_primitive! {
     Number number_prototype number_ctor f64, // TODO: should this store a primitive::Number?
     Boolean boolean_prototype boolean_ctor bool,
-    String string_prototype string_ctor Rc<str>,
+    String string_prototype string_ctor JsString,
     Symbol symbol_prototype symbol_ctor PrimitiveSymbol
 }
 
@@ -162,12 +161,12 @@ impl PrimitiveCapabilities for Boolean {
 }
 
 impl PrimitiveCapabilities for String {
-    fn as_string(&self) -> Option<Rc<str>> {
+    fn as_string(&self) -> Option<JsString> {
         Some(self.inner.clone())
     }
 
     fn unbox(&self) -> Value {
-        Value::String(Rc::clone(&self.inner))
+        Value::String(self.inner.clone())
     }
 }
 

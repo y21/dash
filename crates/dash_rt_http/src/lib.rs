@@ -8,13 +8,14 @@ use dash_rt::event::EventMessage;
 use dash_rt::module::ModuleLoader;
 use dash_rt::state::State;
 use dash_vm::gc::persistent::Persistent;
-use dash_vm::gc::trace::Trace;
+use dash_vm::gc::trace::{Trace, TraceCtxt};
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::function::native::CallContext;
 use dash_vm::value::function::{Function, FunctionKind};
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::root_ext::RootErrExt;
+use dash_vm::value::string::JsString;
 use dash_vm::value::{Value, ValueContext};
 use dash_vm::{delegate, throw};
 use hyper::Body;
@@ -25,15 +26,21 @@ use tokio::sync::oneshot::Sender;
 pub struct HttpModule;
 
 impl ModuleLoader for HttpModule {
-    fn import(&self, sc: &mut LocalScope, _import_ty: StaticImportKind, path: &str) -> Result<Option<Value>, Value> {
-        if path != "@std/http" {
+    fn import(
+        &self,
+        sc: &mut LocalScope,
+        _import_ty: StaticImportKind,
+        path: JsString,
+    ) -> Result<Option<Value>, Value> {
+        if path.res(sc) != "@std/http" {
             return Ok(None);
         }
 
         let module = NamedObject::new(sc);
         let listen = Function::new(sc, None, FunctionKind::Native(listen));
         let listen = sc.register(listen);
-        module.set_property(sc, "listen".into(), PropertyValue::static_default(listen.into()))?;
+        let key = sc.intern("listen");
+        module.set_property(sc, key.into(), PropertyValue::static_default(listen.into()))?;
 
         let module = sc.register(module);
         Ok(Some(module.into()))
@@ -83,16 +90,17 @@ pub fn listen(cx: CallContext) -> Result<Value, Value> {
                     let cb = cb.get();
 
                     let ctx = HttpContext::new(&mut scope, req_tx);
-                    let fun = Function::new(&scope, Some("respond".into()), FunctionKind::Native(ctx_respond));
+                    let name = scope.intern("respond");
+                    let fun = Function::new(&scope, Some(name.into()), FunctionKind::Native(ctx_respond));
                     let fun = scope.register(fun);
-                    ctx.set_property(&mut scope, "respond".into(), PropertyValue::static_default(fun.into()))
+                    ctx.set_property(&mut scope, name.into(), PropertyValue::static_default(fun.into()))
                         .unwrap();
 
                     let ctx = Value::Object(scope.register(ctx));
 
                     if let Err(err) = cb.apply(&mut scope, Value::undefined(), vec![ctx]).root_err(&mut scope) {
-                        match err.to_string(&mut scope) {
-                            Ok(err) => eprintln!("Unhandled exception in HTTP handler! {err}"),
+                        match err.to_js_string(&mut scope) {
+                            Ok(err) => eprintln!("Unhandled exception in HTTP handler! {}", err.res(&scope)),
                             Err(..) => eprintln!("Unhandled exception in exception toString method in HTTP handler!"),
                         }
                     }
@@ -127,8 +135,8 @@ struct HttpContext {
 }
 
 unsafe impl Trace for HttpContext {
-    fn trace(&self) {
-        self.obj.trace();
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
+        self.obj.trace(cx);
     }
 }
 
@@ -167,9 +175,9 @@ fn ctx_respond(cx: CallContext) -> Result<Value, Value> {
         None => throw!(cx.scope, Error, "Cannot respond twice"),
     };
 
-    let message = cx.args.first().unwrap_or_undefined().to_string(cx.scope)?;
+    let message = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
 
-    if sender.send(Body::from(ToString::to_string(&message))).is_err() {
+    if sender.send(Body::from(message.res(cx.scope).to_owned())).is_err() {
         eprintln!("Failed to respond to HTTP event.");
     }
 

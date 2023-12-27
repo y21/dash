@@ -1,6 +1,7 @@
 use dash_proc_macro::Trace;
 
 use crate::gc::handle::Handle;
+use crate::gc::interner::sym;
 use crate::localscope::LocalScope;
 use crate::value::object::{NamedObject, Object, PropertyKey};
 use crate::value::promise::{wrap_promise, Promise};
@@ -44,7 +45,7 @@ impl AsyncFunction {
             .root(scope)
             .and_then(|result| {
                 result
-                    .get_property(scope, PropertyKey::String("value".into()))
+                    .get_property(scope, PropertyKey::String(sym::value.into()))
                     .root(scope)
             });
 
@@ -148,7 +149,7 @@ impl Object for ThenTask {
             .root(scope)
             .and_then(|result| {
                 result
-                    .get_property(scope, PropertyKey::String("value".into()))
+                    .get_property(scope, PropertyKey::String(sym::value.into()))
                     .root(scope)
             });
 

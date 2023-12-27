@@ -437,6 +437,7 @@ version = "0.3.0"
 dependencies = [
  "ahash",
  "bincode",
+ "dash_proc_macro",
  "dash_regex",
  "derive_more",
  "either",
@@ -625,6 +626,7 @@ dependencies = [
  "dash_proc_macro",
  "dash_regex",
  "dash_typed_cfg",
+ "hashbrown 0.14.0",
  "if_chain",
  "rustc-hash",
  "smallvec",

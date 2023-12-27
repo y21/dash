@@ -13,7 +13,6 @@ pub mod promise;
 pub mod regex;
 pub mod set;
 pub mod typedarray;
-use std::rc::Rc;
 
 use dash_middle::compiler::constant::Constant;
 use dash_middle::compiler::external::External;
@@ -21,8 +20,10 @@ use dash_middle::parser::statement::FunctionKind as ParserFunctionKind;
 use dash_middle::util::ThreadSafeStorage;
 use dash_proc_macro::Trace;
 
+pub mod string;
 use crate::gc::handle::Handle;
-use crate::gc::trace::Trace;
+use crate::gc::interner::sym;
+use crate::gc::trace::{Trace, TraceCtxt};
 use crate::util::cold_path;
 use crate::value::function::FunctionKind;
 use crate::value::primitive::{Null, Undefined};
@@ -35,6 +36,7 @@ use self::function::Function;
 use self::object::{Object, PropertyKey, PropertyValue};
 use self::primitive::{Number, PrimitiveCapabilities, Symbol};
 use self::regex::RegExp;
+use self::string::JsString;
 use super::localscope::LocalScope;
 use super::Vm;
 
@@ -50,7 +52,7 @@ pub enum Value {
     /// The boolean type
     Boolean(bool),
     /// The string type
-    String(Rc<str>),
+    String(JsString),
     /// The undefined type
     Undefined(Undefined),
     /// The null type
@@ -233,11 +235,16 @@ impl Object for ExternalValue {
 }
 
 unsafe impl Trace for Value {
-    fn trace(&self) {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
         match self {
-            Value::Object(o) => o.trace(),
-            Value::External(e) => e.trace(),
-            _ => {}
+            Value::Object(o) => o.trace(cx),
+            Value::External(e) => e.trace(cx),
+            Value::String(s) => s.trace(cx),
+            Value::Number(_) => {}
+            Value::Boolean(_) => {}
+            Value::Undefined(_) => {}
+            Value::Null(_) => {}
+            Value::Symbol(s) => s.trace(cx),
         }
     }
 }
@@ -294,17 +301,17 @@ impl Value {
         match constant {
             Constant::Number(n) => Value::number(n),
             Constant::Boolean(b) => Value::Boolean(b),
-            Constant::String(s) => Value::String(s),
+            Constant::String(s) => Value::String(s.into()),
             Constant::Undefined => Value::undefined(),
             Constant::Null => Value::null(),
             Constant::Regex(nodes, flags, source) => {
-                let regex = RegExp::new(nodes, flags, source, vm);
+                let regex = RegExp::new(nodes, flags, source.into(), vm);
                 Value::Object(vm.register(regex))
             }
             Constant::Function(f) => {
                 let externals = register_function_externals(&f, vm);
 
-                let name: Option<Rc<str>> = f.name.as_deref().map(Into::into);
+                let name = f.name.map(Into::into);
                 let ty = f.ty;
                 let is_async = f.r#async;
 
@@ -328,12 +335,7 @@ impl Value {
         }
     }
 
-    pub fn set_property(
-        &self,
-        sc: &mut LocalScope,
-        key: PropertyKey<'static>,
-        value: PropertyValue,
-    ) -> Result<(), Value> {
+    pub fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
         match self {
             Self::Object(h) => h.set_property(sc, key, value),
             Self::Number(n) => n.set_property(sc, key, value),
@@ -378,7 +380,10 @@ impl Value {
             Self::External(o) => o.apply(sc, this, args),
             Self::Number(n) => throw!(sc, TypeError, "{} is not a function", n),
             Self::Boolean(b) => throw!(sc, TypeError, "{} is not a function", b),
-            Self::String(s) => throw!(sc, TypeError, "{} is not a function", s),
+            Self::String(s) => {
+                let s = s.res(sc).to_owned();
+                throw!(sc, TypeError, "{} is not a function", s)
+            }
             Self::Undefined(_) => throw!(sc, TypeError, "undefined is not a function"),
             Self::Null(_) => throw!(sc, TypeError, "null is not a function"),
             Self::Symbol(s) => throw!(sc, TypeError, "{:?} is not a function", s),
@@ -418,17 +423,20 @@ impl Value {
             Self::External(o) => o.construct(sc, this, args),
             Self::Number(n) => throw!(sc, TypeError, "{} is not a constructor", n),
             Self::Boolean(b) => throw!(sc, TypeError, "{} is not a constructor", b),
-            Self::String(s) => throw!(sc, TypeError, "{} is not a constructor", s),
+            Self::String(s) => {
+                let s = s.res(sc).to_owned();
+                throw!(sc, TypeError, "{} is not a constructor", s)
+            }
             Self::Undefined(_) => throw!(sc, TypeError, "undefined is not a constructor"),
             Self::Null(_) => throw!(sc, TypeError, "null is not a constructor"),
             Self::Symbol(s) => throw!(sc, TypeError, "{:?} is not a constructor", s),
         }
     }
 
-    pub fn is_truthy(&self) -> bool {
+    pub fn is_truthy(&self, sc: &mut LocalScope<'_>) -> bool {
         match self {
             Value::Boolean(b) => *b,
-            Value::String(s) => !s.is_empty(),
+            Value::String(s) => !s.res(sc).is_empty(),
             Value::Number(Number(n)) => *n != 0.0 && !n.is_nan(),
             Value::Symbol(_) => true,
             Value::Object(_) => true,
@@ -502,7 +510,7 @@ impl Value {
             _ => return Ok(false),
         };
 
-        let target_proto = ctor.get_property(sc, "prototype".into()).root(sc)?;
+        let target_proto = ctor.get_property(sc, sym::prototype.into()).root(sc)?;
         let mut this_proto = obj.get_prototype(sc)?;
         // Look if self[prototype] == ctor.prototype, repeat for all objects in self's prototype chain
         loop {
@@ -572,14 +580,14 @@ pub enum Typeof {
 impl Typeof {
     pub fn as_value(&self) -> Value {
         match self {
-            Self::Undefined => Value::String("undefined".into()),
-            Self::Object => Value::String("object".into()),
-            Self::Boolean => Value::String("boolean".into()),
-            Self::Number => Value::String("number".into()),
-            Self::Bigint => Value::String("bigint".into()),
-            Self::String => Value::String("string".into()),
-            Self::Symbol => Value::String("symbol".into()),
-            Self::Function => Value::String("function".into()),
+            Self::Undefined => Value::String(sym::undefined.into()),
+            Self::Object => Value::String(sym::object.into()),
+            Self::Boolean => Value::String(sym::boolean.into()),
+            Self::Number => Value::String(sym::number.into()),
+            Self::Bigint => Value::String(sym::bigint.into()),
+            Self::String => Value::String(sym::string.into()),
+            Self::Symbol => Value::String(sym::symbol.into()),
+            Self::Function => Value::String(sym::function.into()),
         }
     }
 }
@@ -699,7 +707,7 @@ impl<O: Object + 'static> Object for PureBuiltin<O> {
         type_of
     );
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
         sc.impure_builtins();
         self.inner.set_property(sc, key, value)
     }
@@ -718,8 +726,8 @@ impl<O: Object + 'static> Object for PureBuiltin<O> {
         &self.inner
     }
 
-    fn own_keys(&self) -> Result<Vec<Value>, Value> {
-        self.inner.own_keys()
+    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+        self.inner.own_keys(sc)
     }
 
     fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {

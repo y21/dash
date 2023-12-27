@@ -1,11 +1,10 @@
 use std::any::Any;
-use std::borrow::Cow;
 use std::cell::RefCell;
 use std::fmt::Debug;
-use std::ptr::addr_of;
 
+use crate::gc::interner::sym;
 use crate::gc::persistent::Persistent;
-use crate::gc::trace::Trace;
+use crate::gc::trace::{Trace, TraceCtxt};
 use bitflags::bitflags;
 use dash_proc_macro::Trace;
 
@@ -15,6 +14,7 @@ use crate::{throw, Vm};
 
 use super::ops::conversions::ValueConversion;
 use super::primitive::{PrimitiveCapabilities, Symbol};
+use super::string::JsString;
 use super::{ExternalValue, Root, Typeof, Unrooted, Value, ValueContext};
 
 pub type ObjectMap<K, V> = ahash::HashMap<K, V>;
@@ -55,7 +55,7 @@ pub trait Object: Debug + Trace {
         }
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value>;
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value>;
 
     fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value>;
 
@@ -87,7 +87,7 @@ pub trait Object: Debug + Trace {
         None
     }
 
-    fn own_keys(&self) -> Result<Vec<Value>, Value>;
+    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value>;
 
     fn type_of(&self) -> Typeof {
         Typeof::Object
@@ -128,7 +128,7 @@ macro_rules! delegate {
         fn set_property(
             &self,
             sc: &mut $crate::localscope::LocalScope,
-            key: $crate::value::object::PropertyKey<'static>,
+            key: $crate::value::object::PropertyKey,
             value: $crate::value::object::PropertyValue,
         ) -> Result<(), $crate::value::Value> {
             self.$field.set_property(sc, key, value)
@@ -159,8 +159,8 @@ macro_rules! delegate {
         }
     };
     (override $field:ident, own_keys) => {
-        fn own_keys(&self) -> Result<Vec<$crate::value::Value>, $crate::value::Value> {
-            self.$field.own_keys()
+        fn own_keys(&self, sc: &mut $crate::localscope::LocalScope<'_>) -> Result<Vec<$crate::value::Value>, $crate::value::Value> {
+            self.$field.own_keys(sc)
         }
     };
     (override $field:ident, apply) => {
@@ -207,14 +207,23 @@ macro_rules! delegate {
 pub struct NamedObject {
     prototype: RefCell<Option<Handle<dyn Object>>>,
     constructor: RefCell<Option<Handle<dyn Object>>>,
-    values: RefCell<ObjectMap<PropertyKey<'static>, PropertyValue>>,
+    values: RefCell<ObjectMap<PropertyKey, PropertyValue>>,
 }
 
 // TODO: optimization opportunity: some kind of Number variant for faster indexing without .to_string()
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub enum PropertyKey<'a> {
-    String(Cow<'a, str>),
+pub enum PropertyKey {
+    String(JsString),
     Symbol(Symbol),
+}
+
+unsafe impl Trace for PropertyKey {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
+        match self {
+            PropertyKey::String(s) => s.trace(cx),
+            PropertyKey::Symbol(s) => s.trace(cx),
+        }
+    }
 }
 
 bitflags! {
@@ -226,7 +235,7 @@ bitflags! {
 }
 
 unsafe impl Trace for PropertyDataDescriptor {
-    fn trace(&self) {}
+    fn trace(&self, _: &mut TraceCtxt<'_>) {}
 }
 
 impl Default for PropertyDataDescriptor {
@@ -296,19 +305,19 @@ impl PropertyValue {
 
         match &self.kind {
             PropertyValueKind::Static(value) => {
-                obj.set_property(sc, "value".into(), PropertyValue::static_default(value.clone()))?;
+                obj.set_property(sc, sym::value.into(), PropertyValue::static_default(value.clone()))?;
             }
             PropertyValueKind::Trap { get, set } => {
                 let get = get.as_ref().map(|v| Value::Object(v.clone())).unwrap_or_undefined();
                 let set = set.as_ref().map(|v| Value::Object(v.clone())).unwrap_or_undefined();
-                obj.set_property(sc, "get".into(), PropertyValue::static_default(get))?;
-                obj.set_property(sc, "set".into(), PropertyValue::static_default(set))?;
+                obj.set_property(sc, sym::get.into(), PropertyValue::static_default(get))?;
+                obj.set_property(sc, sym::set.into(), PropertyValue::static_default(set))?;
             }
         }
 
         obj.set_property(
             sc,
-            "writable".into(),
+            sym::writable.into(),
             PropertyValue::static_default(Value::Boolean(
                 self.descriptor.contains(PropertyDataDescriptor::WRITABLE),
             )),
@@ -316,7 +325,7 @@ impl PropertyValue {
 
         obj.set_property(
             sc,
-            "enumerable".into(),
+            sym::enumerable.into(),
             PropertyValue::static_default(Value::Boolean(
                 self.descriptor.contains(PropertyDataDescriptor::ENUMERABLE),
             )),
@@ -324,7 +333,7 @@ impl PropertyValue {
 
         obj.set_property(
             sc,
-            "configurable".into(),
+            sym::configurable.into(),
             PropertyValue::static_default(Value::Boolean(
                 self.descriptor.contains(PropertyDataDescriptor::CONFIGURABLE),
             )),
@@ -335,28 +344,28 @@ impl PropertyValue {
 
     pub fn from_descriptor_value(sc: &mut LocalScope<'_>, value: Value) -> Result<Self, Value> {
         let mut flags = PropertyDataDescriptor::empty();
-        let configurable = value.get_property(sc, "configurable".into()).root(sc)?.into_option();
-        let enumerable = value.get_property(sc, "enumerable".into()).root(sc)?.into_option();
-        let writable = value.get_property(sc, "writable".into()).root(sc)?.into_option();
+        let configurable = value.get_property(sc, sym::configurable.into()).root(sc)?.into_option();
+        let enumerable = value.get_property(sc, sym::enumerable.into()).root(sc)?.into_option();
+        let writable = value.get_property(sc, sym::writable.into()).root(sc)?.into_option();
 
-        if configurable.map_or(true, |v| v.is_truthy()) {
+        if configurable.map_or(true, |v| v.is_truthy(sc)) {
             flags |= PropertyDataDescriptor::CONFIGURABLE;
         }
-        if enumerable.map_or(true, |v| v.is_truthy()) {
+        if enumerable.map_or(true, |v| v.is_truthy(sc)) {
             flags |= PropertyDataDescriptor::ENUMERABLE;
         }
-        if writable.map_or(true, |v| v.is_truthy()) {
+        if writable.map_or(true, |v| v.is_truthy(sc)) {
             flags |= PropertyDataDescriptor::WRITABLE;
         }
 
         // TODO: make sure that if value is set, get/set are not
 
-        let static_value = value.get_property(sc, "value".into()).root(sc)?.into_option();
+        let static_value = value.get_property(sc, sym::value.into()).root(sc)?.into_option();
         let kind = match static_value {
             Some(static_value) => PropertyValueKind::Static(static_value),
             None => {
                 let get = value
-                    .get_property(sc, "get".into())
+                    .get_property(sc, sym::get.into())
                     .root(sc)?
                     .into_option()
                     .and_then(|v| match v {
@@ -364,7 +373,7 @@ impl PropertyValue {
                         _ => None,
                     });
                 let set = value
-                    .get_property(sc, "set".into())
+                    .get_property(sc, sym::set.into())
                     .root(sc)?
                     .into_option()
                     .and_then(|v| match v {
@@ -427,52 +436,51 @@ impl PropertyValueKind {
 }
 
 unsafe impl Trace for PropertyValueKind {
-    fn trace(&self) {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
         match self {
-            Self::Static(value) => value.trace(),
+            Self::Static(value) => value.trace(cx),
             Self::Trap { get, set } => {
                 if let Some(get) = get {
-                    get.trace();
+                    get.trace(cx);
                 }
                 if let Some(set) = set {
-                    set.trace();
+                    set.trace(cx);
                 }
             }
         }
     }
 }
 
-impl<'a> PropertyKey<'a> {
-    pub fn as_string(&self) -> Option<&str> {
+impl PropertyKey {
+    pub fn as_string(&self) -> Option<JsString> {
         match self {
-            PropertyKey::String(s) => Some(s.as_ref()),
+            PropertyKey::String(s) => Some(s.clone()),
             _ => None,
         }
     }
 }
 
-impl<'a> From<&'a str> for PropertyKey<'a> {
-    fn from(s: &'a str) -> Self {
-        PropertyKey::String(Cow::Borrowed(s))
+impl From<JsString> for PropertyKey {
+    fn from(value: JsString) -> Self {
+        PropertyKey::String(value)
+    }
+}
+impl From<crate::gc::interner::Symbol> for PropertyKey {
+    fn from(value: crate::gc::interner::Symbol) -> Self {
+        PropertyKey::String(value.into())
     }
 }
 
-impl From<String> for PropertyKey<'static> {
-    fn from(s: String) -> Self {
-        PropertyKey::String(Cow::Owned(s))
-    }
-}
-
-impl From<Symbol> for PropertyKey<'static> {
+impl From<Symbol> for PropertyKey {
     fn from(s: Symbol) -> Self {
         PropertyKey::Symbol(s)
     }
 }
 
-impl<'a> PropertyKey<'a> {
+impl PropertyKey {
     pub fn as_value(&self) -> Value {
         match self {
-            PropertyKey::String(s) => Value::String(s.as_ref().into()),
+            PropertyKey::String(s) => Value::String(s.clone()),
             PropertyKey::Symbol(s) => Value::Symbol(s.clone()),
         }
     }
@@ -480,10 +488,7 @@ impl<'a> PropertyKey<'a> {
     pub fn from_value(sc: &mut LocalScope, value: Value) -> Result<Self, Value> {
         match value {
             Value::Symbol(s) => Ok(Self::Symbol(s)),
-            other => {
-                let key = other.to_string(sc)?;
-                Ok(PropertyKey::String(ToString::to_string(&key).into()))
-            }
+            other => Ok(PropertyKey::String(other.to_js_string(sc)?)),
         }
     }
 }
@@ -493,7 +498,7 @@ impl NamedObject {
         Self::with_values(vm, ObjectMap::default())
     }
 
-    pub fn with_values(vm: &Vm, values: ObjectMap<PropertyKey<'static>, PropertyValue>) -> Self {
+    pub fn with_values(vm: &Vm, values: ObjectMap<PropertyKey, PropertyValue>) -> Self {
         let objp = vm.statics.object_prototype.clone();
         let objc = vm.statics.object_ctor.clone(); // TODO: function_ctor instead
 
@@ -527,21 +532,15 @@ impl NamedObject {
 }
 
 unsafe impl Trace for NamedObject {
-    fn trace(&self) {
-        let values = self.values.borrow();
-        for value in values.values() {
-            value.trace();
-        }
-
-        let prototype = self.prototype.borrow();
-        if let Some(prototype) = &*prototype {
-            prototype.trace();
-        }
-
-        let constructor = self.constructor.borrow();
-        if let Some(constructor) = &*constructor {
-            constructor.trace();
-        }
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
+        let Self {
+            prototype,
+            constructor,
+            values,
+        } = self;
+        values.trace(cx);
+        prototype.trace(cx);
+        constructor.trace(cx);
     }
 }
 
@@ -552,9 +551,9 @@ impl Object for NamedObject {
         key: PropertyKey,
     ) -> Result<Option<PropertyValue>, Unrooted> {
         if let PropertyKey::String(st) = &key {
-            match st.as_ref() {
-                "__proto__" => return Ok(Some(PropertyValue::static_default(self.get_prototype(sc)?))),
-                "constructor" => {
+            match st.sym() {
+                sym::__proto__ => return Ok(Some(PropertyValue::static_default(self.get_prototype(sc)?))),
+                sym::constructor => {
                     return Ok(Some(PropertyValue::static_default(
                         self.constructor
                             .borrow()
@@ -579,9 +578,9 @@ impl Object for NamedObject {
         Ok(None)
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
-        match key.as_string() {
-            Some("__proto__") => {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
+        match key.as_string().map(JsString::sym) {
+            Some(sym::__proto__) => {
                 return self.set_prototype(
                     sc,
                     match value.into_kind() {
@@ -590,7 +589,7 @@ impl Object for NamedObject {
                     },
                 );
             }
-            Some("constructor") => {
+            Some(sym::constructor) => {
                 let obj = match value.kind {
                     PropertyValueKind::Static(Value::Object(obj)) => obj,
                     PropertyValueKind::Static(Value::External(obj)) => obj.inner.clone(),
@@ -610,10 +609,8 @@ impl Object for NamedObject {
     }
 
     fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
-        let key = unsafe { &*addr_of!(key).cast::<PropertyKey<'static>>() };
-
         let mut values = self.values.borrow_mut();
-        let value = values.remove(key);
+        let value = values.remove(&key);
 
         match value.map(PropertyValue::into_kind) {
             Some(PropertyValueKind::Static(value)) => {
@@ -672,7 +669,7 @@ impl Object for NamedObject {
         }
     }
 
-    fn own_keys(&self) -> Result<Vec<Value>, Value> {
+    fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         let values = self.values.borrow();
         Ok(values.keys().map(PropertyKey::as_value).collect())
     }
@@ -703,7 +700,7 @@ impl Object for Box<dyn Object> {
         (**self).get_property_descriptor(sc, key)
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
         (**self).set_property(sc, key, value)
     }
 
@@ -743,8 +740,8 @@ impl Object for Box<dyn Object> {
         self
     }
 
-    fn own_keys(&self) -> Result<Vec<Value>, Value> {
-        (**self).own_keys()
+    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+        (**self).own_keys(sc)
     }
 
     fn type_of(&self) -> Typeof {
@@ -781,7 +778,7 @@ impl Object for Handle<dyn Object> {
         (**self).get_property_descriptor(sc, key)
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
         (**self).set_property(sc, key, value)
     }
 
@@ -821,8 +818,8 @@ impl Object for Handle<dyn Object> {
         (**self).as_any()
     }
 
-    fn own_keys(&self) -> Result<Vec<Value>, Value> {
-        (**self).own_keys()
+    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+        (**self).own_keys(sc)
     }
 
     fn type_of(&self) -> Typeof {

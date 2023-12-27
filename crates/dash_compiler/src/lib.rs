@@ -331,12 +331,12 @@ impl<'interner> FunctionCompiler<'interner> {
         let mut ib = InstructionBuilder::new(self);
         let for_of_iter_id = ib
             .current_scope_mut()
-            .add_local(sym::FOR_OF_ITER, VariableDeclarationKind::Unnameable, None)
+            .add_local(sym::for_of_iter, VariableDeclarationKind::Unnameable, None)
             .map_err(|_| Error::LocalLimitExceeded(expr.span))?;
 
         let for_of_gen_step_id = ib
             .current_scope_mut()
-            .add_local(sym::FOR_OF_GEN_STEP, VariableDeclarationKind::Unnameable, None)
+            .add_local(sym::for_of_gen_step, VariableDeclarationKind::Unnameable, None)
             .map_err(|_| Error::LocalLimitExceeded(expr.span))?;
 
         ib.accept_expr(expr)?;
@@ -376,7 +376,7 @@ impl<'interner> FunctionCompiler<'interner> {
                                 },
                                 Expr {
                                     span: Span::COMPILER_GENERATED,
-                                    kind: ExprKind::identifier(sym::VALUE),
+                                    kind: ExprKind::identifier(sym::value),
                                 },
                             ),
                         }),
@@ -423,7 +423,7 @@ impl<'interner> FunctionCompiler<'interner> {
                                                         },
                                                         Expr {
                                                             span: Span::COMPILER_GENERATED,
-                                                            kind: ExprKind::identifier(sym::NEXT),
+                                                            kind: ExprKind::identifier(sym::next),
                                                         },
                                                     ),
                                                 },
@@ -436,7 +436,7 @@ impl<'interner> FunctionCompiler<'interner> {
                                 },
                                 Expr {
                                     span: Span::COMPILER_GENERATED,
-                                    kind: ExprKind::identifier(sym::DONE),
+                                    kind: ExprKind::identifier(sym::done),
                                 },
                             ),
                         },
@@ -671,7 +671,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
     }
 
     fn visit_literal_expression(&mut self, span: Span, expr: LiteralExpr) -> Result<(), Error> {
-        let constant = Constant::from_literal(self.interner, &expr);
+        let constant = Constant::from_literal(&expr);
         InstructionBuilder::new(self)
             .build_constant(constant)
             .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
@@ -682,15 +682,15 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
         let mut ib = InstructionBuilder::new(self);
 
         match ident {
-            sym::THIS => ib.build_this(),
-            sym::SUPER => ib.build_super(),
-            sym::GLOBAL_THIS => ib.build_global(),
-            sym::INFINITY => ib.build_infinity(),
-            sym::NAN => ib.build_nan(),
+            sym::this => ib.build_this(),
+            sym::super_ => ib.build_super(),
+            sym::globalThis => ib.build_global(),
+            sym::Infinity => ib.build_infinity(),
+            sym::NaN => ib.build_nan(),
             ident => match ib.find_local(ident) {
                 Some((index, _, is_extern)) => ib.build_local_load(index, is_extern),
                 _ => ib
-                    .build_global_load(ib.interner.resolve(ident).clone())
+                    .build_global_load(ident)
                     .map_err(|_| Error::ConstantPoolLimitExceeded(span))?,
             },
         };
@@ -717,7 +717,6 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                         false,
                     ) => {
                         ib.accept_expr(*target)?;
-                        let ident = ib.interner.resolve(ident).clone();
                         let id = ib
                             .current_function_mut()
                             .cp
@@ -733,7 +732,6 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                 },
                 ExprKind::Literal(LiteralExpr::Identifier(ident)) => {
                     ib.build_global();
-                    let ident = ib.interner.resolve(ident).clone();
                     let id = ib
                         .current_function_mut()
                         .cp
@@ -821,7 +819,6 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                             .current_scope_mut()
                             .add_local(name, binding.kind, None)
                             .map_err(|_| Error::LocalLimitExceeded(span))?;
-                        let res_name = ib.interner.resolve(name).clone();
 
                         let var_id = ib
                             .current_function_mut()
@@ -831,7 +828,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                         let ident_id = ib
                             .current_function_mut()
                             .cp
-                            .add(Constant::Identifier(res_name))
+                            .add(Constant::Identifier(name))
                             .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
                         ib.writew(var_id);
                         ib.writew(ident_id);
@@ -1042,7 +1039,6 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                         macro_rules! assign {
                             ($kind:expr) => {{
                                 ib.accept_expr(*right)?;
-                                let ident = ib.interner.resolve(ident).clone();
                                 ib.build_global_store($kind, ident)
                                     .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
                             }};
@@ -1072,8 +1068,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                     macro_rules! staticassign {
                         ($ident:expr, $kind:expr) => {{
                             ib.accept_expr(*right)?;
-                            let ident = ib.interner.resolve($ident).clone();
-                            ib.build_static_prop_assign($kind, ident)
+                            ib.build_static_prop_assign($kind, $ident)
                                 .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
                         }};
                     }
@@ -1251,33 +1246,33 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                 }
 
                 match (target, property) {
-                    (sym::MATH, sym::EXP) => emit_spec!(InstructionBuilder::build_exp),
-                    (sym::MATH, sym::LOG2) => emit_spec!(InstructionBuilder::build_log2),
-                    (sym::MATH, sym::EXPM1) => emit_spec!(InstructionBuilder::build_expm1),
-                    (sym::MATH, sym::CBRT) => emit_spec!(InstructionBuilder::build_cbrt),
-                    (sym::MATH, sym::CLZ32) => emit_spec!(InstructionBuilder::build_clz32),
-                    (sym::MATH, sym::ATANH) => emit_spec!(InstructionBuilder::build_atanh),
-                    (sym::MATH, sym::ATAN2) => emit_spec!(InstructionBuilder::build_atanh2),
-                    (sym::MATH, sym::ROUND) => emit_spec!(InstructionBuilder::build_round),
-                    (sym::MATH, sym::ACOSH) => emit_spec!(InstructionBuilder::build_acosh),
-                    (sym::MATH, sym::ABS) => emit_spec!(InstructionBuilder::build_abs),
-                    (sym::MATH, sym::SINH) => emit_spec!(InstructionBuilder::build_sinh),
-                    (sym::MATH, sym::SIN) => emit_spec!(InstructionBuilder::build_sin),
-                    (sym::MATH, sym::CEIL) => emit_spec!(InstructionBuilder::build_ceil),
-                    (sym::MATH, sym::TAN) => emit_spec!(InstructionBuilder::build_tan),
-                    (sym::MATH, sym::TRUNC) => emit_spec!(InstructionBuilder::build_trunc),
-                    (sym::MATH, sym::ASINH) => emit_spec!(InstructionBuilder::build_asinh),
-                    (sym::MATH, sym::LOG10) => emit_spec!(InstructionBuilder::build_log10),
-                    (sym::MATH, sym::ASIN) => emit_spec!(InstructionBuilder::build_asin),
-                    (sym::MATH, sym::RANDOM) => emit_spec!(InstructionBuilder::build_random),
-                    (sym::MATH, sym::LOG1P) => emit_spec!(InstructionBuilder::build_log1p),
-                    (sym::MATH, sym::SQRT) => emit_spec!(InstructionBuilder::build_sqrt),
-                    (sym::MATH, sym::ATAN) => emit_spec!(InstructionBuilder::build_atan),
-                    (sym::MATH, sym::LOG) => emit_spec!(InstructionBuilder::build_log),
-                    (sym::MATH, sym::FLOOR) => emit_spec!(InstructionBuilder::build_floor),
-                    (sym::MATH, sym::COSH) => emit_spec!(InstructionBuilder::build_cosh),
-                    (sym::MATH, sym::ACOS) => emit_spec!(InstructionBuilder::build_acos),
-                    (sym::MATH, sym::COS) => emit_spec!(InstructionBuilder::build_cos),
+                    (sym::Math, sym::exp) => emit_spec!(InstructionBuilder::build_exp),
+                    (sym::Math, sym::log2) => emit_spec!(InstructionBuilder::build_log2),
+                    (sym::Math, sym::expm1) => emit_spec!(InstructionBuilder::build_expm1),
+                    (sym::Math, sym::cbrt) => emit_spec!(InstructionBuilder::build_cbrt),
+                    (sym::Math, sym::clz32) => emit_spec!(InstructionBuilder::build_clz32),
+                    (sym::Math, sym::atanh) => emit_spec!(InstructionBuilder::build_atanh),
+                    (sym::Math, sym::atan2) => emit_spec!(InstructionBuilder::build_atanh2),
+                    (sym::Math, sym::round) => emit_spec!(InstructionBuilder::build_round),
+                    (sym::Math, sym::acosh) => emit_spec!(InstructionBuilder::build_acosh),
+                    (sym::Math, sym::abs) => emit_spec!(InstructionBuilder::build_abs),
+                    (sym::Math, sym::sinh) => emit_spec!(InstructionBuilder::build_sinh),
+                    (sym::Math, sym::sin) => emit_spec!(InstructionBuilder::build_sin),
+                    (sym::Math, sym::ceil) => emit_spec!(InstructionBuilder::build_ceil),
+                    (sym::Math, sym::tan) => emit_spec!(InstructionBuilder::build_tan),
+                    (sym::Math, sym::trunc) => emit_spec!(InstructionBuilder::build_trunc),
+                    (sym::Math, sym::asinh) => emit_spec!(InstructionBuilder::build_asinh),
+                    (sym::Math, sym::log10) => emit_spec!(InstructionBuilder::build_log10),
+                    (sym::Math, sym::asin) => emit_spec!(InstructionBuilder::build_asin),
+                    (sym::Math, sym::random) => emit_spec!(InstructionBuilder::build_random),
+                    (sym::Math, sym::log1p) => emit_spec!(InstructionBuilder::build_log1p),
+                    (sym::Math, sym::sqrt) => emit_spec!(InstructionBuilder::build_sqrt),
+                    (sym::Math, sym::atan) => emit_spec!(InstructionBuilder::build_atan),
+                    (sym::Math, sym::log) => emit_spec!(InstructionBuilder::build_log),
+                    (sym::Math, sym::floor) => emit_spec!(InstructionBuilder::build_floor),
+                    (sym::Math, sym::cosh) => emit_spec!(InstructionBuilder::build_cosh),
+                    (sym::Math, sym::acos) => emit_spec!(InstructionBuilder::build_acos),
+                    (sym::Math, sym::cos) => emit_spec!(InstructionBuilder::build_cos),
                     _ => {}
                 }
             }
@@ -1369,7 +1364,6 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                 },
                 false,
             ) => {
-                let ident = ib.interner.resolve(ident).clone();
                 ib.build_static_prop_access(ident, preserve_this)
                     .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
             }
@@ -1414,8 +1408,6 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                         _ => unreachable!("Token never emitted"),
                     }
                 } else {
-                    let ident = ib.interner.resolve(ident).clone();
-
                     match tt {
                         TokenType::Increment => ib
                             .build_global_store(AssignKind::PostfixIncrement, ident)
@@ -1437,18 +1429,15 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                             span,
                         },
                         false,
-                    ) => {
-                        let ident = ib.interner.resolve(ident).clone();
-                        match tt {
-                            TokenType::Increment => ib
-                                .build_static_prop_assign(AssignKind::PostfixIncrement, ident)
-                                .map_err(|_| Error::ConstantPoolLimitExceeded(span))?,
-                            TokenType::Decrement => ib
-                                .build_static_prop_assign(AssignKind::PostfixDecrement, ident)
-                                .map_err(|_| Error::ConstantPoolLimitExceeded(span))?,
-                            _ => unreachable!("Token never emitted"),
-                        }
-                    }
+                    ) => match tt {
+                        TokenType::Increment => ib
+                            .build_static_prop_assign(AssignKind::PostfixIncrement, ident)
+                            .map_err(|_| Error::ConstantPoolLimitExceeded(span))?,
+                        TokenType::Decrement => ib
+                            .build_static_prop_assign(AssignKind::PostfixDecrement, ident)
+                            .map_err(|_| Error::ConstantPoolLimitExceeded(span))?,
+                        _ => unreachable!("Token never emitted"),
+                    },
                     (prop, true) => {
                         ib.accept_expr(prop)?;
                         match tt {
@@ -1490,8 +1479,6 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                         _ => unreachable!("Token never emitted"),
                     }
                 } else {
-                    let ident = ib.interner.resolve(ident).clone();
-
                     match tt {
                         TokenType::Increment => ib
                             .build_global_store(AssignKind::PrefixIncrement, ident)
@@ -1513,18 +1500,15 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                             span,
                         },
                         false,
-                    ) => {
-                        let ident = ib.interner.resolve(ident).clone();
-                        match tt {
-                            TokenType::Increment => ib
-                                .build_static_prop_assign(AssignKind::PrefixIncrement, ident)
-                                .map_err(|_| Error::ConstantPoolLimitExceeded(span))?,
-                            TokenType::Decrement => ib
-                                .build_static_prop_assign(AssignKind::PrefixDecrement, ident)
-                                .map_err(|_| Error::ConstantPoolLimitExceeded(span))?,
-                            _ => unreachable!("Token never emitted"),
-                        }
-                    }
+                    ) => match tt {
+                        TokenType::Increment => ib
+                            .build_static_prop_assign(AssignKind::PrefixIncrement, ident)
+                            .map_err(|_| Error::ConstantPoolLimitExceeded(span))?,
+                        TokenType::Decrement => ib
+                            .build_static_prop_assign(AssignKind::PrefixDecrement, ident)
+                            .map_err(|_| Error::ConstantPoolLimitExceeded(span))?,
+                        _ => unreachable!("Token never emitted"),
+                    },
                     (prop, true) => {
                         ib.accept_expr(prop)?;
                         match tt {
@@ -1611,7 +1595,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             buffer: Buffer(Cell::new(cmp.buf.into())),
             constants: cmp.cp.into_vec().into(),
             locals,
-            name: name.map(|sym| ib.interner.resolve(sym).clone()),
+            name,
             ty,
             params: match arguments.last() {
                 Some((Parameter::Spread(..), ..)) => arguments.len() - 1,
@@ -1801,8 +1785,6 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                     )
                     .map_err(|_| Error::LocalLimitExceeded(span))?;
 
-                let path = ib.interner.resolve(path).clone();
-
                 let path_id = ib
                     .current_function_mut()
                     .cp
@@ -1836,12 +1818,10 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                 let mut it = Vec::with_capacity(names.len());
 
                 for name in names.iter().copied() {
-                    let res_name = ib.interner.resolve(name).clone();
-
                     let ident_id = ib
                         .current_function_mut()
                         .cp
-                        .add(Constant::Identifier(res_name))
+                        .add(Constant::Identifier(name))
                         .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
 
                     match ib.find_local(name) {
@@ -1944,7 +1924,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
 
         let constructor = class.members.iter().find_map(|member| {
             if let ClassMemberKind::Method(method) = &member.kind {
-                if method.name == Some(sym::CONSTRUCTOR) {
+                if method.name == Some(sym::constructor) {
                     return Some(method.clone());
                 }
             }
@@ -1959,7 +1939,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                 .map_err(|_| Error::LocalLimitExceeded(span))?,
             None => ib
                 .current_scope_mut()
-                .add_local(sym::DESUGARED_CLASS, VariableDeclarationKind::Unnameable, None)
+                .add_local(sym::DesugaredClass, VariableDeclarationKind::Unnameable, None)
                 .map_err(|_| Error::LocalLimitExceeded(span))?,
         };
 
@@ -2031,7 +2011,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                                                 load_class_binding.clone(),
                                                 Expr {
                                                     span: Span::COMPILER_GENERATED,
-                                                    kind: ExprKind::identifier(sym::PROTOTYPE),
+                                                    kind: ExprKind::identifier(sym::prototype),
                                                 },
                                             ),
                                         },

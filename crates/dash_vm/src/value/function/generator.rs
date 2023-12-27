@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use dash_proc_macro::Trace;
 
 use crate::gc::handle::Handle;
-use crate::gc::trace::Trace;
+use crate::gc::trace::{Trace, TraceCtxt};
 use crate::localscope::LocalScope;
 use crate::value::object::{NamedObject, Object};
 use crate::value::{Typeof, Unrooted, Value};
@@ -76,9 +76,12 @@ impl Default for GeneratorState {
 }
 
 unsafe impl Trace for GeneratorState {
-    fn trace(&self) {
-        if let GeneratorState::Running { ref stack, .. } = self {
-            stack.trace();
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
+        match self {
+            GeneratorState::Finished => {}
+            GeneratorState::Running { ip: _, stack } => {
+                stack.trace(cx);
+            }
         }
     }
 }

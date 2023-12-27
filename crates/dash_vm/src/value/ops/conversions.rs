@@ -1,12 +1,12 @@
-use std::rc::Rc;
-
 use crate::gc::handle::Handle;
+use crate::gc::interner::sym;
 use crate::localscope::LocalScope;
+use crate::throw;
 use crate::value::boxed::{Boolean, Number as BoxedNumber, String as BoxedString, Symbol as BoxedSymbol};
 use crate::value::object::Object;
 use crate::value::primitive::{Number, MAX_SAFE_INTEGERF};
+use crate::value::string::JsString;
 use crate::value::{Root, Typeof, Value};
-use crate::{throw, Vm};
 
 pub trait ValueConversion {
     fn to_primitive(&self, sc: &mut LocalScope, preferred_type: Option<PreferredType>) -> Result<Value, Value>;
@@ -50,9 +50,9 @@ pub trait ValueConversion {
         if number < 0.0 { Ok(-integer) } else { Ok(integer) }
     }
 
-    fn to_boolean(&self) -> Result<bool, Value>;
+    fn to_boolean(&self, sc: &mut LocalScope<'_>) -> Result<bool, Value>;
 
-    fn to_string(&self, sc: &mut LocalScope) -> Result<Rc<str>, Value>;
+    fn to_js_string(&self, sc: &mut LocalScope) -> Result<JsString, Value>;
 
     fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value>;
 
@@ -80,9 +80,9 @@ impl ValueConversion for Value {
             Value::Undefined(_) => Ok(f64::NAN),
             Value::Null(_) => Ok(0.0),
             Value::Boolean(b) => Ok(*b as i8 as f64),
-            Value::String(s) => match s.len() {
+            Value::String(s) => match s.len(sc) {
                 0 => Ok(0.0),
-                _ => Ok(s.parse::<f64>().unwrap_or(f64::NAN)),
+                _ => Ok(s.res(sc).parse::<f64>().unwrap_or(f64::NAN)),
             },
             Value::Symbol(_) => throw!(sc, TypeError, "Cannot convert symbol to number"),
             Value::Object(o) => object_to_number(self, o, sc),
@@ -90,35 +90,35 @@ impl ValueConversion for Value {
         }
     }
 
-    fn to_boolean(&self) -> Result<bool, Value> {
+    fn to_boolean(&self, sc: &mut LocalScope<'_>) -> Result<bool, Value> {
         match self {
             Value::Boolean(b) => Ok(*b),
             Value::Undefined(_) => Ok(false),
             Value::Null(_) => Ok(false),
             Value::Number(Number(n)) => Ok(*n != 0.0 && !n.is_nan()),
-            Value::String(s) => Ok(!s.is_empty()),
+            Value::String(s) => Ok(!s.res(sc).is_empty()),
             Value::Symbol(_) => Ok(true),
             Value::Object(_) => Ok(true),
             _ => todo!(), // TODO: implement other cases
         }
     }
 
-    fn to_string(&self, sc: &mut LocalScope) -> Result<Rc<str>, Value> {
-        fn object_to_string(this: &Value, obj: &dyn Object, sc: &mut LocalScope) -> Result<Rc<str>, Value> {
+    fn to_js_string(&self, sc: &mut LocalScope) -> Result<JsString, Value> {
+        fn object_to_string(this: &Value, obj: &dyn Object, sc: &mut LocalScope) -> Result<JsString, Value> {
             if let Some(prim) = obj.as_primitive_capable() {
-                ValueConversion::to_string(prim, sc)
+                ValueConversion::to_js_string(prim, sc)
             } else {
                 let prim_value = this.to_primitive(sc, Some(PreferredType::String))?;
-                prim_value.to_string(sc)
+                prim_value.to_js_string(sc)
             }
         }
 
         match self {
-            Value::String(s) => ValueConversion::to_string(s, sc),
-            Value::Boolean(b) => ValueConversion::to_string(b, sc),
-            Value::Null(n) => ValueConversion::to_string(n, sc),
-            Value::Undefined(u) => ValueConversion::to_string(u, sc),
-            Value::Number(n) => ValueConversion::to_string(n, sc),
+            Value::String(s) => ValueConversion::to_js_string(s, sc),
+            Value::Boolean(b) => ValueConversion::to_js_string(b, sc),
+            Value::Null(n) => ValueConversion::to_js_string(n, sc),
+            Value::Undefined(u) => ValueConversion::to_js_string(u, sc),
+            Value::Number(n) => ValueConversion::to_js_string(n, sc),
             Value::Object(o) => object_to_string(self, o, sc),
             Value::External(o) => object_to_string(self, &o.inner, sc),
             Value::Symbol(_) => throw!(sc, TypeError, "Cannot convert symbol to a string"),
@@ -146,7 +146,7 @@ impl ValueConversion for Value {
 
         // b. If exoticToPrim is not undefined, then
         if let Some(exotic_to_prim) = exotic_to_prim {
-            let preferred_type = preferred_type.to_value(sc);
+            let preferred_type = preferred_type.to_value();
 
             // iv. Let result be ? Call(exoticToPrim, input, « hint »).
             let result = exotic_to_prim.apply(sc, self.clone(), vec![preferred_type]).root(sc)?;
@@ -166,7 +166,7 @@ impl ValueConversion for Value {
     }
 
     fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value> {
-        self.get_property(sc, "length".into()).root(sc)?.to_length_u(sc)
+        self.get_property(sc, sym::length.into()).root(sc)?.to_length_u(sc)
     }
 
     fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value> {
@@ -198,11 +198,11 @@ pub enum PreferredType {
 }
 
 impl PreferredType {
-    pub fn to_value(&self, vm: &Vm) -> Value {
+    pub fn to_value(&self) -> Value {
         let st = match self {
-            PreferredType::Default => vm.statics.default_str.clone(),
-            PreferredType::String => vm.statics.string_str.clone(),
-            PreferredType::Number => vm.statics.number_str.clone(),
+            PreferredType::Default => sym::default.into(),
+            PreferredType::String => sym::string.into(),
+            PreferredType::Number => sym::number.into(),
         };
 
         Value::String(st)
@@ -212,8 +212,8 @@ impl PreferredType {
 impl Value {
     pub fn ordinary_to_primitive(&self, sc: &mut LocalScope, preferred_type: PreferredType) -> Result<Value, Value> {
         let method_names = match preferred_type {
-            PreferredType::String => ["toString", "valueOf"],
-            PreferredType::Number | PreferredType::Default => ["valueOf", "toString"],
+            PreferredType::String => [sym::toString, sym::valueOf],
+            PreferredType::Number | PreferredType::Default => [sym::valueOf, sym::toString],
         };
 
         for name in method_names {

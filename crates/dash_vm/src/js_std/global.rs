@@ -13,8 +13,8 @@ pub fn is_nan(cx: CallContext) -> Result<Value, Value> {
 
 pub fn log(cx: CallContext) -> Result<Value, Value> {
     for arg in cx.args {
-        let tstr = arg.to_string(cx.scope)?;
-        println!("{tstr} ");
+        let tstr = arg.to_js_string(cx.scope)?;
+        println!("{} ", tstr.res(cx.scope));
     }
 
     Ok(Value::undefined())
@@ -30,9 +30,9 @@ pub fn is_finite(cx: CallContext) -> Result<Value, Value> {
 
 pub fn parse_float(cx: CallContext) -> Result<Value, Value> {
     // 1. Let inputString be ? ToString(string).
-    let input_string = cx.args.first().unwrap_or_undefined().to_string(cx.scope)?;
+    let input_string = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
     // 2. Let trimmedString be ! TrimString(inputString, start).
-    let trimmed_string = input_string.trim();
+    let trimmed_string = input_string.res(cx.scope).trim();
 
     // TODO: follow spec
     let num = Value::number(trimmed_string.parse().unwrap_or(f64::NAN));
@@ -41,8 +41,7 @@ pub fn parse_float(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn parse_int(cx: CallContext) -> Result<Value, Value> {
-    let input_string = cx.args.first().unwrap_or_undefined().to_string(cx.scope)?;
-    let trimmed_string = input_string.trim();
+    let input_string = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
     let radix = cx
         .args
         .get(1)
@@ -51,6 +50,8 @@ pub fn parse_int(cx: CallContext) -> Result<Value, Value> {
         .transpose()?
         .map(|r| r as u32)
         .unwrap_or(10);
+
+    let trimmed_string = input_string.res(cx.scope).trim();
 
     // TODO: follow spec
     let num = Value::number(

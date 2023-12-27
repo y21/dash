@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::hash::{BuildHasherDefault, Hash, Hasher};
 use std::rc::Rc;
 use std::{borrow, fmt};
@@ -5,195 +6,271 @@ use std::{borrow, fmt};
 use hashbrown::hash_map::RawEntryMut;
 use rustc_hash::FxHasher;
 
+#[cfg(feature = "format")]
+use serde::{Deserialize, Serialize};
+
 pub mod sym {
+    #![allow(non_upper_case_globals)]
+
     use super::Symbol;
 
-    pub const IF: Symbol = Symbol(0);
-    pub const ELSE: Symbol = Symbol(1);
-    pub const FUNCTION: Symbol = Symbol(2);
-    pub const VAR: Symbol = Symbol(3);
-    pub const LET: Symbol = Symbol(4);
-    pub const CONST: Symbol = Symbol(5);
-    pub const RETURN: Symbol = Symbol(6);
-    pub const THROW: Symbol = Symbol(7);
-    pub const TRY: Symbol = Symbol(8);
-    pub const CATCH: Symbol = Symbol(9);
-    pub const FINALLY: Symbol = Symbol(10);
-    pub const TRUE_LIT: Symbol = Symbol(11);
-    pub const FALSE_LIT: Symbol = Symbol(12);
-    pub const NULL_LIT: Symbol = Symbol(13);
-    pub const UNDEFINED_LIT: Symbol = Symbol(14);
-    pub const YIELD: Symbol = Symbol(15);
-    pub const NEW: Symbol = Symbol(16);
-    pub const FOR: Symbol = Symbol(17);
-    pub const DO: Symbol = Symbol(18);
-    pub const WHILE: Symbol = Symbol(19);
-    pub const IN: Symbol = Symbol(20);
-    pub const INSTANCEOF: Symbol = Symbol(21);
-    pub const ASYNC: Symbol = Symbol(22);
-    pub const AWAIT: Symbol = Symbol(23);
-    pub const DELETE: Symbol = Symbol(24);
-    pub const VOID: Symbol = Symbol(25);
-    pub const TYPEOF: Symbol = Symbol(26);
-    pub const CONTINUE: Symbol = Symbol(27);
-    pub const BREAK: Symbol = Symbol(28);
-    pub const IMPORT: Symbol = Symbol(29);
-    pub const EXPORT: Symbol = Symbol(30);
-    pub const DEFAULT: Symbol = Symbol(31);
-    pub const DEBUGGER: Symbol = Symbol(32);
-    pub const OF: Symbol = Symbol(33);
-    pub const CLASS: Symbol = Symbol(34);
-    pub const EXTENDS: Symbol = Symbol(35);
-    pub const STATIC: Symbol = Symbol(36);
-    pub const SWITCH: Symbol = Symbol(37);
-    pub const CASE: Symbol = Symbol(38);
-    pub const GET: Symbol = Symbol(39);
-    pub const SET: Symbol = Symbol(40);
+    dash_proc_macro::define_symbols! {
+        [
+            // Keywords, defined separately so that they can be contiguous in the symbol table
+            // and we can easily check if a symbol is a keyword with a simple range check.
+            Keywords {
+                if_: "if",
+                else_: "else",
+                function,
+                var,
+                let_: "let",
+                const_: "const",
+                return_: "return",
+                throw,
+                try_: "try",
+                catch,
+                finally,
+                true_: "true",
+                false_: "false",
+                null,
+                undefined,
+                yield_: "yield",
+                new,
+                for_: "for",
+                do_: "do",
+                while_: "while",
+                in_: "in",
+                instanceof,
+                async_: "async",
+                await_: "await",
+                delete,
+                void,
+                typeof_: "typeof",
+                continue_: "continue",
+                break_: "break",
+                import,
+                export,
+                default,
+                debugger,
+                of,
+                class,
+                extends,
+                static_: "static",
+                switch,
+                case,
+                get,
+                set
+            },
+            // Other preinterned symbols that can be referred to statically
+            Symbols {
+                dollar: "$",
+                empty: "",
+                constructor,
+                this,
+                for_of_iter,
+                for_of_gen_step,
+                value,
+                done,
+                next,
+                super_: "super",
+                globalThis,
+                Infinity,
+                NaN,
+                Math,
+                exp,
+                log2,
+                expm1,
+                cbrt,
+                clz32,
+                atanh,
+                atan2,
+                round,
+                acosh,
+                abs,
+                sinh,
+                sin,
+                ceil,
+                tan,
+                trunc,
+                asinh,
+                log10,
+                asin,
+                random,
+                log1p,
+                sqrt,
+                atan,
+                log,
+                floor,
+                cosh,
+                acos,
+                cos,
+                DesugaredClass,
+                prototype,
+                name,
+                length,
+                message,
+                stack,
+                Error,
+                toString,
+                valueOf,
+                object,
+                boolean,
+                number,
+                bigint,
+                string,
+                symbol,
+                comma: ",",
+                writable,
+                enumerable,
+                configurable,
+                __proto__,
+                EvalError,
+                RangeError,
+                ReferenceError,
+                SyntaxError,
+                TypeError,
+                URIError,
+                AggregateError,
+                Function,
+                bind,
+                call,
+                create,
+                keys,
+                getOwnPropertyDescriptor,
+                getOwnPropertyDescriptors,
+                defineProperty,
+                entries,
+                assign,
+                Object,
+                hasOwnProperty,
+                tanh,
+                max,
+                min,
+                PI,
+                isFinite,
+                isNaN,
+                isSafeInteger,
+                Number,
+                toFixed,
+                Boolean,
+                fromCharCode,
+                String,
+                charAt,
+                charCodeAt,
+                concat,
+                endsWith,
+                startsWith,
+                includes,
+                indexOf,
+                lastIndexOf,
+                padEnd,
+                padStart,
+                repeat,
+                replace,
+                replaceAll,
+                split,
+                toLowerCase,
+                toUpperCase,
+                big,
+                blink,
+                bold,
+                fixed,
+                italics,
+                strike,
+                sub,
+                sup,
+                fontcolor,
+                fontsize,
+                link,
+                trim,
+                trimStart,
+                trimEnd,
+                substr,
+                substring,
+                from,
+                isArray,
+                Array,
+                join,
+                values,
+                at,
+                every,
+                some,
+                fill,
+                filter,
+                reduce,
+                find,
+                findIndex,
+                flat,
+                forEach,
+                map,
+                pop,
+                push,
+                reverse,
+                shift,
+                sort,
+                unshift,
+                slice,
+                asyncIterator,
+                hasInstance,
+                iterator,
+                match_: "match",
+                matchAll,
+                search,
+                species,
+                toPrimitive,
+                toStringTag,
+                unscopables,
+                JsSymbol: "Symbol",
+                ArrayBuffer,
+                byteLength,
+                Uint8Array,
+                Int8Array,
+                Uint16Array,
+                Int16Array,
+                Uint32Array,
+                Int32Array,
+                Float32Array,
+                Float64Array,
+                resolve,
+                reject,
+                Promise,
+                then,
+                Set,
+                add,
+                has,
+                clear,
+                size,
+                Map,
+                RegExp,
+                test,
+                exec,
+                now,
+                Date,
+                parse,
+                parseFloat,
+                parseInt,
+                console,
+                JSON,
+                isConcatSpreadable,
+                zero: "0",
+                one: "1",
+            }
+        ]
+    }
+}
 
-    pub const PREINTERNED: &[(&str, Symbol); 84] = &[
-        ("if", IF),
-        ("else", ELSE),
-        ("function", FUNCTION),
-        ("var", VAR),
-        ("let", LET),
-        ("const", CONST),
-        ("return", RETURN),
-        ("throw", THROW),
-        ("try", TRY),
-        ("catch", CATCH),
-        ("finally", FINALLY),
-        ("true", TRUE_LIT),
-        ("false", FALSE_LIT),
-        ("null", NULL_LIT),
-        ("undefined", UNDEFINED_LIT),
-        ("yield", YIELD),
-        ("new", NEW),
-        ("for", FOR),
-        ("do", DO),
-        ("while", WHILE),
-        ("in", IN),
-        ("instanceof", INSTANCEOF),
-        ("async", ASYNC),
-        ("await", AWAIT),
-        ("delete", DELETE),
-        ("void", VOID),
-        ("typeof", TYPEOF),
-        ("continue", CONTINUE),
-        ("break", BREAK),
-        ("import", IMPORT),
-        ("export", EXPORT),
-        ("default", DEFAULT),
-        ("debugger", DEBUGGER),
-        ("of", OF),
-        ("class", CLASS),
-        ("extends", EXTENDS),
-        ("static", STATIC),
-        ("switch", SWITCH),
-        ("case", CASE),
-        ("get", GET),
-        ("set", SET),
-        ("$", DOLLAR),
-        ("", EMPTY),
-        ("constructor", CONSTRUCTOR),
-        ("this", THIS),
-        ("for_of_iter", FOR_OF_ITER),
-        ("for_of_gen_step", FOR_OF_GEN_STEP),
-        ("value", VALUE),
-        ("done", DONE),
-        ("next", NEXT),
-        ("super", SUPER),
-        ("globalThis", GLOBAL_THIS),
-        ("Infinity", INFINITY),
-        ("NaN", NAN),
-        ("Math", MATH),
-        ("exp", EXP),
-        ("log2", LOG2),
-        ("expm1", EXPM1),
-        ("cbrt", CBRT),
-        ("clz32", CLZ32),
-        ("atanh", ATANH),
-        ("atan2", ATAN2),
-        ("round", ROUND),
-        ("acosh", ACOSH),
-        ("abs", ABS),
-        ("sinh", SINH),
-        ("sin", SIN),
-        ("ceil", CEIL),
-        ("tan", TAN),
-        ("trunc", TRUNC),
-        ("asinh", ASINH),
-        ("log10", LOG10),
-        ("asin", ASIN),
-        ("random", RANDOM),
-        ("log1p", LOG1P),
-        ("sqrt", SQRT),
-        ("atan", ATAN),
-        ("log", LOG),
-        ("floor", FLOOR),
-        ("cosh", COSH),
-        ("acos", ACOS),
-        ("cos", COS),
-        ("DesugaredClass", DESUGARED_CLASS),
-        ("prototype", PROTOTYPE),
-    ];
-
-    // ⚠️⚠️⚠️⚠️ Update these constants when adding a keyword.
-    // We rely on the fact that the keywords are contiguous in the symbol table,
-    // making it very easy and cheap to check if a symbol is a keyword.
-    // TODO: automate this with a proc macro or sorts.
-    pub const KEYWORD_START: Symbol = IF;
-    pub const KEYWORD_END: Symbol = SET;
-
-    // Other non-keyword preinterned symbols
-    pub const DOLLAR: Symbol = Symbol(KEYWORD_END.0 + 1);
-    pub const EMPTY: Symbol = Symbol(KEYWORD_END.0 + 2);
-    pub const CONSTRUCTOR: Symbol = Symbol(KEYWORD_END.0 + 3);
-    pub const THIS: Symbol = Symbol(KEYWORD_END.0 + 4);
-    pub const FOR_OF_ITER: Symbol = Symbol(KEYWORD_END.0 + 5);
-    pub const FOR_OF_GEN_STEP: Symbol = Symbol(KEYWORD_END.0 + 6);
-    pub const VALUE: Symbol = Symbol(KEYWORD_END.0 + 7);
-    pub const DONE: Symbol = Symbol(KEYWORD_END.0 + 8);
-    pub const NEXT: Symbol = Symbol(KEYWORD_END.0 + 9);
-    pub const SUPER: Symbol = Symbol(KEYWORD_END.0 + 10);
-    pub const GLOBAL_THIS: Symbol = Symbol(KEYWORD_END.0 + 11);
-    pub const INFINITY: Symbol = Symbol(KEYWORD_END.0 + 12);
-    pub const NAN: Symbol = Symbol(KEYWORD_END.0 + 13);
-    pub const MATH: Symbol = Symbol(KEYWORD_END.0 + 14);
-    pub const EXP: Symbol = Symbol(KEYWORD_END.0 + 15);
-    pub const LOG2: Symbol = Symbol(KEYWORD_END.0 + 16);
-    pub const EXPM1: Symbol = Symbol(KEYWORD_END.0 + 17);
-    pub const CBRT: Symbol = Symbol(KEYWORD_END.0 + 18);
-    pub const CLZ32: Symbol = Symbol(KEYWORD_END.0 + 19);
-    pub const ATANH: Symbol = Symbol(KEYWORD_END.0 + 20);
-    pub const ATAN2: Symbol = Symbol(KEYWORD_END.0 + 21);
-    pub const ROUND: Symbol = Symbol(KEYWORD_END.0 + 22);
-    pub const ACOSH: Symbol = Symbol(KEYWORD_END.0 + 23);
-    pub const ABS: Symbol = Symbol(KEYWORD_END.0 + 24);
-    pub const SINH: Symbol = Symbol(KEYWORD_END.0 + 25);
-    pub const SIN: Symbol = Symbol(KEYWORD_END.0 + 26);
-    pub const CEIL: Symbol = Symbol(KEYWORD_END.0 + 27);
-    pub const TAN: Symbol = Symbol(KEYWORD_END.0 + 28);
-    pub const TRUNC: Symbol = Symbol(KEYWORD_END.0 + 29);
-    pub const ASINH: Symbol = Symbol(KEYWORD_END.0 + 30);
-    pub const LOG10: Symbol = Symbol(KEYWORD_END.0 + 31);
-    pub const ASIN: Symbol = Symbol(KEYWORD_END.0 + 32);
-    pub const RANDOM: Symbol = Symbol(KEYWORD_END.0 + 33);
-    pub const LOG1P: Symbol = Symbol(KEYWORD_END.0 + 34);
-    pub const SQRT: Symbol = Symbol(KEYWORD_END.0 + 35);
-    pub const ATAN: Symbol = Symbol(KEYWORD_END.0 + 36);
-    pub const LOG: Symbol = Symbol(KEYWORD_END.0 + 37);
-    pub const FLOOR: Symbol = Symbol(KEYWORD_END.0 + 38);
-    pub const COSH: Symbol = Symbol(KEYWORD_END.0 + 39);
-    pub const ACOS: Symbol = Symbol(KEYWORD_END.0 + 40);
-    pub const COS: Symbol = Symbol(KEYWORD_END.0 + 41);
-    pub const DESUGARED_CLASS: Symbol = Symbol(KEYWORD_END.0 + 42);
-    pub const PROTOTYPE: Symbol = Symbol(KEYWORD_END.0 + 43);
+#[derive(Debug)]
+struct StringData {
+    visited: Cell<bool>,
+    value: Rc<str>,
 }
 
 #[derive(Default, Debug)]
 pub struct StringInterner {
-    store: Vec<Rc<str>>,
+    store: Vec<Option<StringData>>,
     mapping: hashbrown::HashMap<Rc<str>, RawSymbol, BuildHasherDefault<FxHasher>>,
+    /// List of free indices in the storage
+    free: Vec<RawSymbol>,
 }
 
 fn fxhash(s: &str) -> u64 {
@@ -212,16 +289,25 @@ impl StringInterner {
             let s: Rc<str> = Rc::from(*s);
             debug_assert!(store.len() == index.0 as usize);
             mapping.insert(s.clone(), index.0);
-            store.push(s);
+            store.push(Some(StringData {
+                visited: Cell::new(false),
+                value: s,
+            }));
         }
 
-        Self { store, mapping }
+        Self {
+            store,
+            mapping,
+            free: Vec::new(),
+        }
     }
 
-    pub fn resolve(&self, symbol: Symbol) -> &Rc<str> {
-        &self.store[symbol.0 as usize]
+    pub fn resolve(&self, symbol: Symbol) -> &str {
+        self.store[symbol.0 as usize].as_ref().unwrap().value.as_ref()
     }
 
+    // TODO: perf improvement idea: use interior mutability and allow calling with just a `&self`
+    // would save a bunch of useless clones
     pub fn intern(&mut self, value: impl borrow::Borrow<str>) -> Symbol {
         let value = value.borrow();
         let hash = fxhash(value);
@@ -229,11 +315,61 @@ impl StringInterner {
         match self.mapping.raw_entry_mut().from_hash(hash, |k| &**k == value) {
             RawEntryMut::Occupied(entry) => Symbol(*entry.get()),
             RawEntryMut::Vacant(entry) => {
-                let id = self.store.len() as RawSymbol;
-                let value: Rc<str> = Rc::from(value);
-                self.store.push(Rc::clone(&value));
-                entry.insert_hashed_nocheck(hash, value, id);
-                Symbol(id)
+                if let Some(id) = self.free.pop() {
+                    let value: Rc<str> = Rc::from(value);
+                    self.store[id as usize] = Some(StringData {
+                        value: Rc::clone(&value),
+                        visited: Cell::new(false),
+                    });
+                    entry.insert_hashed_nocheck(hash, value, id);
+                    Symbol(id)
+                } else {
+                    let id = self.store.len() as RawSymbol;
+                    let value: Rc<str> = Rc::from(value);
+                    self.store.push(Some(StringData {
+                        value: Rc::clone(&value),
+                        visited: Cell::new(false),
+                    }));
+                    entry.insert_hashed_nocheck(hash, value, id);
+                    Symbol(id)
+                }
+            }
+        }
+    }
+
+    pub fn intern_usize(&mut self, val: usize) -> Symbol {
+        // for now this just calls `intern`, but we might want to specialize this
+        let string = val.to_string();
+        self.intern(string.as_ref())
+    }
+
+    pub fn intern_isize(&mut self, val: isize) -> Symbol {
+        // for now this just calls `intern`, but we might want to specialize this
+        let string = val.to_string();
+        self.intern(string.as_ref())
+    }
+
+    pub fn intern_char(&mut self, val: char) -> Symbol {
+        let mut buf = [0; 4];
+        self.intern(val.encode_utf8(&mut buf))
+    }
+
+    pub fn mark(&self, sym: Symbol) {
+        self.store[sym.0 as usize].as_ref().unwrap().visited.set(true);
+    }
+
+    /// You must mark all reachable symbols before calling this.
+    /// It won't cause undefined behavior if you don't (hence not unsafe), but it can lead to oddities such as panics.
+    pub fn sweep(&mut self) {
+        for i in 0..self.store.len() {
+            if let Some(data) = self.store[i].as_ref() {
+                if !data.visited.get() {
+                    self.mapping.remove(&data.value);
+                    self.store[i] = None;
+                    self.free.push(i as RawSymbol);
+                } else {
+                    data.visited.set(false);
+                }
             }
         }
     }
@@ -242,6 +378,7 @@ impl StringInterner {
 type RawSymbol = u32;
 
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
+#[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
 pub struct Symbol(RawSymbol);
 
 impl fmt::Display for Symbol {
@@ -255,9 +392,14 @@ impl fmt::Display for Symbol {
 }
 
 impl Symbol {
+    /// This should only be used if you *really* need to. Prefer `Symbol`s directly wherever possible.
+    pub fn raw(self) -> u32 {
+        self.0
+    }
+
     pub fn is_keyword(self) -> bool {
         #![allow(clippy::absurd_extreme_comparisons)]
 
-        self.0 >= sym::KEYWORD_START.0 && self.0 <= sym::KEYWORD_END.0
+        self.0 >= sym::KEYWORD_START && self.0 <= sym::KEYWORD_END
     }
 }

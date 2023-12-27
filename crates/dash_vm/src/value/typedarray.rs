@@ -83,7 +83,7 @@ impl Object for TypedArray {
         sc: &mut LocalScope,
         key: PropertyKey,
     ) -> Result<Option<PropertyValue>, Unrooted> {
-        if let Some(Ok(index)) = key.as_string().map(|k| k.parse::<usize>()) {
+        if let Some(Ok(index)) = key.as_string().map(|k| k.res(sc).parse::<usize>()) {
             let arraybuffer = self.arraybuffer.as_any().downcast_ref::<ArrayBuffer>();
 
             if let Some(arraybuffer) = arraybuffer {
@@ -127,8 +127,8 @@ impl Object for TypedArray {
         self.obj.get_own_property_descriptor(sc, key)
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey<'static>, value: PropertyValue) -> Result<(), Value> {
-        if let Some(Ok(index)) = key.as_string().map(|k| k.parse::<usize>()) {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
+        if let Some(Ok(index)) = key.as_string().map(|k| k.res(sc).parse::<usize>()) {
             let arraybuffer = self.arraybuffer.as_any().downcast_ref::<ArrayBuffer>();
 
             // TODO: not undefined as this
@@ -199,7 +199,7 @@ impl Object for TypedArray {
         self
     }
 
-    fn own_keys(&self) -> Result<Vec<Value>, Value> {
-        self.obj.own_keys()
+    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+        self.obj.own_keys(sc)
     }
 }

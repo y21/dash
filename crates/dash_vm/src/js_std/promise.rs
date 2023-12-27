@@ -1,6 +1,7 @@
 use dash_proc_macro::Trace;
 
 use crate::gc::handle::Handle;
+use crate::gc::interner::sym;
 use crate::value::function::bound::BoundFunction;
 use crate::value::function::native::CallContext;
 use crate::value::object::{NamedObject, Object, PropertyKey};
@@ -143,7 +144,9 @@ impl Object for ThenTask {
             .apply(scope, Value::undefined(), vec![resolved])
             .root(scope)?;
 
-        let ret_then = ret.get_property(scope, PropertyKey::String("then".into()))?.root(scope);
+        let ret_then = ret
+            .get_property(scope, PropertyKey::String(sym::then.into()))?
+            .root(scope);
 
         match ret_then {
             Value::Undefined(..) => {

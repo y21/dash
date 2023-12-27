@@ -63,8 +63,8 @@ async fn inner(source: String, opt: OptLevel, quiet: bool, initial_gc_threshold:
     let mut scope = rt.vm_mut().scope();
     let value = match scope.eval(&source, opt) {
         Ok(val) => val.root(&mut scope),
-        Err((EvalError::Exception(val), _)) => val.root(&mut scope),
-        Err((EvalError::Middle(errs), _)) => {
+        Err(EvalError::Exception(val)) => val.root(&mut scope),
+        Err(EvalError::Middle(errs)) => {
             println!("{}", errs.formattable(&source, true));
             return Ok(());
         }
