@@ -2032,6 +2032,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                 })?;
             }
         }
+        ib.build_pop();
 
         Ok(())
     }
