@@ -240,8 +240,12 @@ unsafe impl Trace for Value {
         match self {
             Value::Object(o) => o.trace(cx),
             Value::External(e) => e.trace(cx),
-            Value::String(_) => todo!(),
-            _ => {}
+            Value::String(s) => s.trace(cx),
+            Value::Number(_) => {}
+            Value::Boolean(_) => {}
+            Value::Undefined(_) => {}
+            Value::Null(_) => {}
+            Value::Symbol(s) => s.trace(cx),
         }
     }
 }

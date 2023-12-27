@@ -3,6 +3,7 @@ use std::cell::Cell;
 use dash_proc_macro::Trace;
 use dash_regex::{Flags, ParsedRegex};
 
+use crate::gc::trace::{Trace, TraceCtxt};
 use crate::{delegate, Vm};
 
 use super::object::{NamedObject, Object};
@@ -14,6 +15,18 @@ pub struct RegExpInner {
     pub flags: Flags,
     pub source: JsString,
     pub last_index: Cell<usize>,
+}
+
+unsafe impl Trace for RegExpInner {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
+        let Self {
+            regex: _,
+            flags: _,
+            source,
+            last_index: _,
+        } = self;
+        source.trace(cx);
+    }
 }
 
 #[derive(Debug, Trace)]

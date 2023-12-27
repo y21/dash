@@ -3,6 +3,9 @@ use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 use std::{fmt, iter};
 
+use dash_middle::interner;
+use dash_proc_macro::Trace;
+
 use crate::gc::handle::Handle;
 use crate::gc::interner::sym;
 use crate::gc::trace::{Trace, TraceCtxt};
@@ -362,18 +365,18 @@ impl Object for Null {
 // }
 
 // TODO: rename to JsSymbol
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct Symbol(JsString);
-
-impl Symbol {
-    pub fn new(description: JsString) -> Self {
-        Symbol(description)
-    }
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Trace)]
+pub struct Symbol {
+    description: JsString,
 }
 
-unsafe impl Trace for Symbol {
-    fn trace(&self, cx: &mut TraceCtxt<'_>) {
-        todo!()
+impl Symbol {
+    pub fn sym(&self) -> interner::Symbol {
+        self.description.sym()
+    }
+
+    pub fn new(description: JsString) -> Self {
+        Symbol { description }
     }
 }
 

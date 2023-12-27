@@ -595,7 +595,7 @@ mod handlers {
     ) -> Result<Option<HandleResult>, Unrooted> {
         let (args, refs) = {
             let mut args = Vec::with_capacity(argc);
-            let mut refs = Vec::new();
+            // let mut refs = Vec::new();
 
             let len = cx.fetch_and_inc_ip();
             let spread_indices: SmallVec<[_; 4]> = (0..len).map(|_| cx.fetch_and_inc_ip()).collect();
@@ -605,9 +605,9 @@ mod handlers {
             if len == 0 {
                 // Fast path for no spread arguments
                 for value in iter {
-                    if let Value::Object(handle) = &value {
-                        refs.push(handle.clone());
-                    }
+                    // if let Value::Object(handle) = &value {
+                    //     refs.push(handle.clone());
+                    // }
 
                     args.push(value);
                 }
@@ -626,18 +626,18 @@ mod handlers {
                         }
                         indices_iter.next();
                     } else {
-                        if let Value::Object(handle) = &value {
-                            refs.push(handle.clone());
-                        }
+                        // if let Value::Object(handle) = &value {
+                        //     refs.push(handle.clone());
+                        // }
                         args.push(value);
                     }
                 }
             }
 
-            (args, refs)
+            (args, ())
         };
 
-        cx.scope.add_many(refs);
+        cx.scope.add_many(&args);
 
         let ret = if is_constructor {
             callee.construct(&mut cx, this, args)?

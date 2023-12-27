@@ -1,5 +1,5 @@
 use dash_vm::gc::handle::Handle;
-use dash_vm::gc::trace::Trace;
+use dash_vm::gc::trace::{Trace, TraceCtxt};
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::object::{NamedObject, Object, PropertyKey, PropertyValue};
 use dash_vm::value::{Typeof, Unrooted, Value};
@@ -16,8 +16,8 @@ impl ExternalFunction {
 }
 
 unsafe impl Trace for ExternalFunction {
-    fn trace(&self) {
-        self.1.trace();
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
+        self.1.trace(cx);
     }
 }
 

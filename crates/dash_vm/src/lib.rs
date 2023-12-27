@@ -1406,6 +1406,9 @@ impl Vm {
         sweep.in_scope(|| unsafe { self.gc.sweep() });
         debug!("object count after sweep: {}", self.gc.node_count());
 
+        debug!("sweep interner");
+        self.interner.sweep();
+
         // Adjust GC threshold
         let new_object_count = self.gc.node_count();
         self.gc_object_threshold = new_object_count * 2;
@@ -1414,6 +1417,12 @@ impl Vm {
 
     fn trace_roots(&mut self) {
         let mut cx = TraceCtxt::new(&mut self.interner);
+        
+        debug!("trace preinterned symbols");
+        for (_, sym) in sym::PREINTERNED {
+            sym.trace(&mut cx);
+        }
+
         debug!("trace frames");
         self.frames.trace(&mut cx);
         debug!("trace async tasks");

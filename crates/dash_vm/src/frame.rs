@@ -31,7 +31,8 @@ pub struct Exports {
 unsafe impl Trace for Exports {
     fn trace(&self, cx: &mut TraceCtxt<'_>) {
         self.default.trace(cx);
-        for (_, v) in &self.named {
+        for (k, v) in &self.named {
+            k.trace(cx);
             v.trace(cx);
         }
     }

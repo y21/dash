@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use dash_middle::compiler::constant::Function;
+use dash_middle::compiler::constant::{Constant, Function};
 
 use crate::value::function::native::CallContext;
 use crate::value::primitive::{Null, Number, Symbol, Undefined};
@@ -14,12 +14,16 @@ use crate::value::Unrooted;
 use super::interner::StringInterner;
 
 pub struct TraceCtxt<'vm> {
-    interner: &'vm mut StringInterner,
+    pub interner: &'vm mut StringInterner,
 }
 
 impl<'vm> TraceCtxt<'vm> {
     pub fn new(interner: &'vm mut StringInterner) -> Self {
         Self { interner }
+    }
+
+    pub fn mark_symbol(&self, symbol: dash_middle::interner::Symbol) {
+        self.interner.mark(symbol);
     }
 }
 
@@ -113,12 +117,47 @@ macro_rules! unsafe_empty_trace {
 
 unsafe impl Trace for dash_middle::interner::Symbol {
     fn trace(&self, cx: &mut TraceCtxt<'_>) {
-        todo!("mark symbol")
+        cx.mark_symbol(*self);
+    }
+}
+
+unsafe impl Trace for dash_middle::compiler::constant::Function {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
+        let Self {
+            name,
+            buffer: _,
+            ty: _,
+            locals: _,
+            params: _,
+            constants,
+            externals: _,
+            r#async: _,
+            rest_local: _,
+            poison_ips: _,
+            source: _,
+            debug_symbols: _,
+        } = self;
+        name.trace(cx);
+        constants.trace(cx);
+    }
+}
+
+unsafe impl Trace for Constant {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
+        match self {
+            Constant::Number(_) => {}
+            Constant::String(sym) => sym.trace(cx),
+            Constant::Identifier(sym) => sym.trace(cx),
+            Constant::Boolean(_) => {}
+            Constant::Function(func) => func.trace(cx),
+            Constant::Regex(_, _, sym) => sym.trace(cx),
+            Constant::Null => {}
+            Constant::Undefined => {}
+        }
     }
 }
 
 unsafe_empty_trace!(
-    Function,
     usize,
     u8,
     f64,
@@ -128,7 +167,6 @@ unsafe_empty_trace!(
     Null,
     // Symbol,
     Number,
-    RegExpInner,
     TypedArrayKind,
     PathBuf,
     Path,

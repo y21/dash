@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::hash::{BuildHasherDefault, Hash, Hasher};
 use std::rc::Rc;
 use std::{borrow, fmt};
@@ -256,9 +257,15 @@ pub mod sym {
     }
 }
 
+#[derive(Debug)]
+struct StringData {
+    visited: Cell<bool>,
+    value: Rc<str>,
+}
+
 #[derive(Default, Debug)]
 pub struct StringInterner {
-    store: Vec<Option<Rc<str>>>,
+    store: Vec<Option<StringData>>,
     mapping: hashbrown::HashMap<Rc<str>, RawSymbol, BuildHasherDefault<FxHasher>>,
     /// List of free indices in the storage
     free: Vec<RawSymbol>,
@@ -280,7 +287,10 @@ impl StringInterner {
             let s: Rc<str> = Rc::from(*s);
             debug_assert!(store.len() == index.0 as usize);
             mapping.insert(s.clone(), index.0);
-            store.push(Some(s));
+            store.push(Some(StringData {
+                visited: Cell::new(false),
+                value: s,
+            }));
         }
 
         Self {
@@ -291,7 +301,7 @@ impl StringInterner {
     }
 
     pub fn resolve(&self, symbol: Symbol) -> &str {
-        self.store[symbol.0 as usize].as_ref().unwrap()
+        self.store[symbol.0 as usize].as_ref().unwrap().value.as_ref()
     }
 
     // TODO: perf improvement idea: use interior mutability and allow calling with just a `&self`
@@ -305,13 +315,19 @@ impl StringInterner {
             RawEntryMut::Vacant(entry) => {
                 if let Some(id) = self.free.pop() {
                     let value: Rc<str> = Rc::from(value);
-                    self.store[id as usize] = Some(Rc::clone(&value));
+                    self.store[id as usize] = Some(StringData {
+                        value: Rc::clone(&value),
+                        visited: Cell::new(false),
+                    });
                     entry.insert_hashed_nocheck(hash, value, id);
                     Symbol(id)
                 } else {
                     let id = self.store.len() as RawSymbol;
                     let value: Rc<str> = Rc::from(value);
-                    self.store.push(Some(Rc::clone(&value)));
+                    self.store.push(Some(StringData {
+                        value: Rc::clone(&value),
+                        visited: Cell::new(false),
+                    }));
                     entry.insert_hashed_nocheck(hash, value, id);
                     Symbol(id)
                 }
@@ -337,10 +353,25 @@ impl StringInterner {
         self.intern(string.as_ref())
     }
 
-    // pub fn remove(&mut self, symbol: Symbol) {
-    //     self.storage[symbol.0 as usize] = None;
-    //     self.free.push(symbol.0);
-    // }
+    pub fn mark(&self, sym: Symbol) {
+        self.store[sym.0 as usize].as_ref().unwrap().visited.set(true);
+    }
+
+    /// You must mark all reachable symbols before calling this.
+    /// It won't cause undefined behavior if you don't (hence not unsafe), but it can lead to oddities such as panics.
+    pub fn sweep(&mut self) {
+        for i in 0..self.store.len() {
+            if let Some(data) = self.store[i].as_ref() {
+                if !data.visited.get() {
+                    self.mapping.remove(&data.value);
+                    self.store[i] = None;
+                    self.free.push(i as RawSymbol);
+                } else {
+                    data.visited.set(false);
+                }
+            }
+        }
+    }
 }
 
 type RawSymbol = u32;

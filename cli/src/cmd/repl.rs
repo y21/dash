@@ -21,10 +21,10 @@ pub fn repl() -> anyhow::Result<()> {
 
         match scope.eval(&input, OptLevel::Aggressive) {
             Ok(value) => println!("{}", format_value(value.root(&mut scope), &mut scope).unwrap()),
-            Err((EvalError::Exception(value), _)) => {
+            Err(EvalError::Exception(value)) => {
                 println!("{}", format_value(value.root(&mut scope), &mut scope).unwrap())
             }
-            Err((EvalError::Middle(errs), _)) => println!("{}", errs.formattable(&input, true)),
+            Err(EvalError::Middle(errs)) => println!("{}", errs.formattable(&input, true)),
         }
 
         scope.process_async_tasks();

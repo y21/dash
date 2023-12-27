@@ -91,6 +91,7 @@ unsafe impl Trace for LocalScopeList {
         for ptr in list {
             let data = unsafe { ptr.as_ref() };
             data.refs.trace(cx);
+            data.strings.trace(cx);
         }
     }
 }
@@ -157,12 +158,20 @@ impl<'vm> LocalScope<'vm> {
                 self.add_ref(o.inner.clone());
                 self.add_ref(o.into_dyn());
             }
+            Value::String(s) => {
+                self.scope_data_mut().strings.push(s.sym());
+            }
+            Value::Symbol(s) => {
+                self.scope_data_mut().strings.push(s.sym());
+            }
             _ => {}
         }
     }
 
-    pub fn add_many(&mut self, mut v: Vec<Handle<dyn Object>>) {
-        self.scope_data_mut().refs.append(&mut v);
+    pub fn add_many(&mut self, v: &[Value]) {
+        for val in v {
+            self.add_value(val.clone());
+        }
     }
 
     /// Registers an object and roots it.

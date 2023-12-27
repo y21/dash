@@ -437,6 +437,7 @@ version = "0.3.0"
 dependencies = [
  "ahash",
  "bincode",
+ "dash_proc_macro",
  "dash_regex",
  "derive_more",
  "either",

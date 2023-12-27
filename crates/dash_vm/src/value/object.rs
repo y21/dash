@@ -219,6 +219,15 @@ pub enum PropertyKey {
     Symbol(Symbol),
 }
 
+unsafe impl Trace for PropertyKey {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
+        match self {
+            PropertyKey::String(s) => s.trace(cx),
+            PropertyKey::Symbol(s) => s.trace(cx),
+        }
+    }
+}
+
 bitflags! {
     pub struct PropertyDataDescriptor: u8 {
         const CONFIGURABLE = 1 << 0;
@@ -526,20 +535,14 @@ impl NamedObject {
 
 unsafe impl Trace for NamedObject {
     fn trace(&self, cx: &mut TraceCtxt<'_>) {
-        let values = self.values.borrow();
-        for value in values.values() {
-            value.trace(cx);
-        }
-
-        let prototype = self.prototype.borrow();
-        if let Some(prototype) = &*prototype {
-            prototype.trace(cx);
-        }
-
-        let constructor = self.constructor.borrow();
-        if let Some(constructor) = &*constructor {
-            constructor.trace(cx);
-        }
+        let Self {
+            prototype,
+            constructor,
+            values,
+        } = self;
+        values.trace(cx);
+        prototype.trace(cx);
+        constructor.trace(cx);
     }
 }
 
