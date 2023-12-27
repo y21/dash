@@ -31,14 +31,14 @@ define_other_error_constructors!(
 pub fn error_constructor(cx: CallContext) -> Result<Value, Value> {
     let message = cx.args.first().cloned().map(|v| v.to_js_string(cx.scope)).transpose()?;
 
-    let err = Error::new_with_js_string(cx.scope, message.unwrap_or(sym::EMPTY.into()));
+    let err = Error::new_with_js_string(cx.scope, message.unwrap_or(sym::empty.into()));
 
     Ok(cx.scope.register(err).into())
 }
 
 pub fn to_string(cx: CallContext) -> Result<Value, Value> {
     cx.this
-        .get_property(cx.scope, sym::STACK.into())
+        .get_property(cx.scope, sym::stack.into())
         .root(cx.scope)
         .and_then(|v| v.to_js_string(cx.scope).map(Value::String))
 }

@@ -517,7 +517,7 @@ impl LiteralExpr {
             Self::Boolean(b) => Some(*b),
             Self::Identifier(_) => None,
             Self::Number(n) => Some(*n != 0.0),
-            Self::String(s) => Some(*s != sym::EMPTY),
+            Self::String(s) => Some(*s != sym::empty),
             Self::Null => Some(false),
             Self::Undefined => Some(false),
             Self::Regex(..) => Some(true),

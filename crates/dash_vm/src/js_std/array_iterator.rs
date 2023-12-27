@@ -17,12 +17,12 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
     let obj = NamedObject::new(cx.scope);
     obj.set_property(
         cx.scope,
-        sym::VALUE.into(),
+        sym::value.into(),
         PropertyValue::static_default(next.unwrap_or_undefined()),
     )?;
     obj.set_property(
         cx.scope,
-        sym::DONE.into(),
+        sym::done.into(),
         PropertyValue::static_default(Value::Boolean(done)),
     )?;
 

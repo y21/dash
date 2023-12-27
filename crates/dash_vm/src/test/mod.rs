@@ -54,7 +54,7 @@ fn simple() {
         .root(&mut scope);
     scope.perform_gc();
     let value = array
-        .get_property(&mut scope, sym::ZERO.into())
+        .get_property(&mut scope, sym::zero.into())
         .unwrap()
         .root(&mut scope);
     assert_eq!(scope.stack.len(), 0);

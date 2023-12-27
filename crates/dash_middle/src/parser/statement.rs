@@ -180,7 +180,7 @@ impl ImportKind {
 
 /// A catch statement
 #[derive(Debug, Clone, Display)]
-#[display(fmt = "catch ({}) {{ {} }}", "ident.unwrap_or(sym::EMPTY)", "body")]
+#[display(fmt = "catch ({}) {{ {} }}", "ident.unwrap_or(sym::empty)", "body")]
 pub struct Catch {
     /// The body of a catch statement
     pub body: Box<Statement>,
@@ -803,7 +803,7 @@ pub struct Class {
 
 impl fmt::Display for Class {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "class {}", self.name.unwrap_or(sym::EMPTY))?;
+        write!(f, "class {}", self.name.unwrap_or(sym::empty))?;
 
         if let Some(extends) = &self.extends {
             write!(f, " extends {extends}")?;
@@ -858,7 +858,7 @@ impl ClassMember {
         }
 
         match &self.kind {
-            ClassMemberKind::Method(m) if m.name == Some(sym::CONSTRUCTOR) => Some(m),
+            ClassMemberKind::Method(m) if m.name == Some(sym::constructor) => Some(m),
             _ => None,
         }
     }

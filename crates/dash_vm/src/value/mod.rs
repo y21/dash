@@ -507,7 +507,7 @@ impl Value {
             _ => return Ok(false),
         };
 
-        let target_proto = ctor.get_property(sc, sym::PROTOTYPE.into()).root(sc)?;
+        let target_proto = ctor.get_property(sc, sym::prototype.into()).root(sc)?;
         let mut this_proto = obj.get_prototype(sc)?;
         // Look if self[prototype] == ctor.prototype, repeat for all objects in self's prototype chain
         loop {
@@ -577,14 +577,14 @@ pub enum Typeof {
 impl Typeof {
     pub fn as_value(&self) -> Value {
         match self {
-            Self::Undefined => Value::String(sym::UNDEFINED.into()),
-            Self::Object => Value::String(sym::LO_OBJECT.into()),
-            Self::Boolean => Value::String(sym::LO_BOOLEAN.into()),
-            Self::Number => Value::String(sym::LO_NUMBER.into()),
-            Self::Bigint => Value::String(sym::LO_BIGINT.into()),
-            Self::String => Value::String(sym::LO_STRING.into()),
-            Self::Symbol => Value::String(sym::LO_SYMBOL.into()),
-            Self::Function => Value::String(sym::LO_FUNCTION.into()),
+            Self::Undefined => Value::String(sym::undefined.into()),
+            Self::Object => Value::String(sym::object.into()),
+            Self::Boolean => Value::String(sym::boolean.into()),
+            Self::Number => Value::String(sym::number.into()),
+            Self::Bigint => Value::String(sym::bigint.into()),
+            Self::String => Value::String(sym::string.into()),
+            Self::Symbol => Value::String(sym::symbol.into()),
+            Self::Function => Value::String(sym::function.into()),
         }
     }
 }

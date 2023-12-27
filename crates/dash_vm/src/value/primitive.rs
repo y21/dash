@@ -189,7 +189,7 @@ pub fn array_like_keys<'a, 'b>(
 ) -> impl Iterator<Item = Value> + Captures<'a> + Captures<'b> {
     (0..len)
         .map(|i| sc.intern_usize(i))
-        .chain(iter::once_with(|| sym::LENGTH))
+        .chain(iter::once_with(|| sym::length))
         .map(|x| Value::String(x.into()))
 }
 
@@ -306,7 +306,7 @@ impl Object for Null {
 //         key: PropertyKey,
 //     ) -> Result<Option<PropertyValue>, Unrooted> {
 //         if let PropertyKey::String(st) = key {
-//             if st.sym() == sym::LENGTH {
+//             if st.sym() == sym::length {
 //                 return Ok(Some(PropertyValue::static_default(Value::number(self.len() as f64))));
 //             }
 
@@ -497,9 +497,8 @@ impl ValueConversion for f64 {
         Ok(*self != 0.0 && !self.is_nan())
     }
 
-    fn to_js_string(&self, _sc: &mut LocalScope) -> Result<JsString, Value> {
-        // Ok(format_f64(*self).into())
-        todo!()
+    fn to_js_string(&self, sc: &mut LocalScope) -> Result<JsString, Value> {
+        Ok(sc.intern(format_f64(*self).as_ref()).into())
     }
 
     fn length_of_array_like(&self, _sc: &mut LocalScope) -> Result<usize, Value> {
@@ -570,7 +569,7 @@ impl ValueConversion for bool {
     }
 
     fn to_js_string(&self, sc: &mut LocalScope) -> Result<JsString, Value> {
-        Ok(if *self { sym::TRUE.into() } else { sym::FALSE.into() })
+        Ok(if *self { sym::true_.into() } else { sym::false_.into() })
     }
 
     fn length_of_array_like(&self, _sc: &mut LocalScope) -> Result<usize, Value> {
@@ -708,7 +707,7 @@ impl ValueConversion for Undefined {
     }
 
     fn to_js_string(&self, sc: &mut LocalScope) -> Result<JsString, Value> {
-        Ok(sym::UNDEFINED.into())
+        Ok(sym::undefined.into())
     }
 
     fn length_of_array_like(&self, _sc: &mut LocalScope) -> Result<usize, Value> {
@@ -770,7 +769,7 @@ impl ValueConversion for Null {
     }
 
     fn to_js_string(&self, sc: &mut LocalScope) -> Result<JsString, Value> {
-        Ok(sym::NULL.into())
+        Ok(sym::null.into())
     }
 
     fn length_of_array_like(&self, _sc: &mut LocalScope) -> Result<usize, Value> {

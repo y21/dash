@@ -61,7 +61,7 @@ impl Object for Array {
         let items = self.items.borrow();
 
         if let PropertyKey::String(key) = &key {
-            if key.sym() == sym::LENGTH {
+            if key.sym() == sym::length {
                 return Ok(Some(PropertyValue::static_default(Value::number(items.len() as f64))));
             }
 
@@ -81,7 +81,7 @@ impl Object for Array {
         if let PropertyKey::String(key) = &key {
             let mut items = self.items.borrow_mut();
 
-            if key.sym() == sym::LENGTH {
+            if key.sym() == sym::length {
                 // TODO: this shouldnt be undefined
                 let value = value.kind().get_or_apply(sc, Value::undefined()).root(sc)?;
                 let new_len = value.to_number(sc)? as usize;
@@ -111,7 +111,7 @@ impl Object for Array {
 
     fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
         if let PropertyKey::String(key) = &key {
-            if key.sym() == sym::LENGTH {
+            if key.sym() == sym::length {
                 return Ok(Unrooted::new(Value::undefined()));
             }
 

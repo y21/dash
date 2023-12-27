@@ -166,7 +166,7 @@ impl ValueConversion for Value {
     }
 
     fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value> {
-        self.get_property(sc, sym::LENGTH.into()).root(sc)?.to_length_u(sc)
+        self.get_property(sc, sym::length.into()).root(sc)?.to_length_u(sc)
     }
 
     fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value> {
@@ -200,9 +200,9 @@ pub enum PreferredType {
 impl PreferredType {
     pub fn to_value(&self, vm: &Vm) -> Value {
         let st = match self {
-            PreferredType::Default => sym::DEFAULT.into(),
-            PreferredType::String => sym::LO_STRING.into(),
-            PreferredType::Number => sym::LO_NUMBER.into(),
+            PreferredType::Default => sym::default.into(),
+            PreferredType::String => sym::string.into(),
+            PreferredType::Number => sym::number.into(),
         };
 
         Value::String(st)
@@ -212,8 +212,8 @@ impl PreferredType {
 impl Value {
     pub fn ordinary_to_primitive(&self, sc: &mut LocalScope, preferred_type: PreferredType) -> Result<Value, Value> {
         let method_names = match preferred_type {
-            PreferredType::String => [sym::TO_STRING, sym::VALUE_OF],
-            PreferredType::Number | PreferredType::Default => [sym::VALUE_OF, sym::TO_STRING],
+            PreferredType::String => [sym::toString, sym::valueOf],
+            PreferredType::Number | PreferredType::Default => [sym::valueOf, sym::toString],
         };
 
         for name in method_names {

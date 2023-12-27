@@ -441,7 +441,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
             self.advance(); // identifier reading requires one character to be read
             self.read_identifier_raw()
         } else {
-            sym::EMPTY
+            sym::empty
         };
 
         self.create_contextified_token(TokenType::RegexLiteral {

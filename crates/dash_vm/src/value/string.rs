@@ -105,7 +105,7 @@ impl Object for JsString {
         key: super::object::PropertyKey,
     ) -> Result<Option<super::object::PropertyValue>, super::Unrooted> {
         if let PropertyKey::String(st) = key {
-            if st.sym() == sym::LENGTH {
+            if st.sym() == sym::length {
                 return Ok(Some(PropertyValue::static_default(Value::number(self.len(sc) as f64))));
             }
 

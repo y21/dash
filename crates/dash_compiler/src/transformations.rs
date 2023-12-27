@@ -56,7 +56,7 @@ pub fn insert_initializer_in_constructor(class: &Class, statements: &mut Vec<Sta
                                 }),
                                 target: Box::new(Expr {
                                     span: Span::COMPILER_GENERATED,
-                                    kind: ExprKind::identifier(sym::THIS),
+                                    kind: ExprKind::identifier(sym::this),
                                 }),
                             }),
                         })),

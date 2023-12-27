@@ -112,7 +112,7 @@ pub fn exec(cx: CallContext<'_, '_>) -> Result<Value, Value> {
             .map(|g| {
                 let sub = match g {
                     Some(r) => cx.scope.intern(&text[r]).into(),
-                    None => sym::NULL.into(),
+                    None => sym::null.into(),
                 };
                 PropertyValue::static_default(Value::String(sub))
             })

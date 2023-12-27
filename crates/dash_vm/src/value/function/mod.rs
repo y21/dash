@@ -200,11 +200,11 @@ impl Object for Function {
     ) -> Result<Option<PropertyValue>, Unrooted> {
         if let Some(key) = key.as_string() {
             match key.sym() {
-                sym::NAME => {
-                    let name = self.name().unwrap_or_else(|| sym::EMPTY.into());
+                sym::name => {
+                    let name = self.name().unwrap_or_else(|| sym::empty.into());
                     return Ok(Some(PropertyValue::static_default(Value::String(name))));
                 }
-                sym::PROTOTYPE => {
+                sym::prototype => {
                     let prototype = self.get_or_set_prototype(sc);
                     return Ok(Some(PropertyValue::static_default(Value::Object(prototype.clone()))));
                 }
@@ -257,7 +257,7 @@ impl Object for Function {
     }
 
     fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
-        Ok(vec![Value::String(sym::LENGTH.into()), Value::String(sym::NAME.into())])
+        Ok(vec![Value::String(sym::length.into()), Value::String(sym::name.into())])
     }
 
     fn type_of(&self) -> Typeof {

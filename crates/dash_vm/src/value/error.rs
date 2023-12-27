@@ -41,13 +41,13 @@ impl Error {
     pub fn new<S: Into<String>>(sc: &mut LocalScope<'_>, message: S) -> Self {
         let ctor = sc.statics.error_ctor.clone();
         let proto = sc.statics.error_prototype.clone();
-        Self::suberror(sc, sym::ERROR, message, ctor, proto)
+        Self::suberror(sc, sym::Error, message, ctor, proto)
     }
 
     pub fn new_with_js_string<S: Into<JsString>>(sc: &mut LocalScope<'_>, message: S) -> Self {
         let ctor = sc.statics.error_ctor.clone();
         let proto = sc.statics.error_prototype.clone();
-        Self::suberror_with_js_string(sc, sym::ERROR, message, ctor, proto)
+        Self::suberror_with_js_string(sc, sym::Error, message, ctor, proto)
     }
 
     pub fn suberror_with_js_string<S1: Into<JsString>, S2: Into<JsString>>(
@@ -90,9 +90,9 @@ impl Error {
 
     pub fn empty() -> Self {
         Self {
-            name: sym::ERROR.into(),
-            message: sym::EMPTY.into(),
-            stack: sym::EMPTY.into(),
+            name: sym::Error.into(),
+            message: sym::empty.into(),
+            stack: sym::empty.into(),
             obj: NamedObject::null(),
         }
     }
@@ -100,8 +100,8 @@ impl Error {
     pub fn empty_with_name<S: Into<JsString>>(name: S) -> Self {
         Self {
             name: name.into(),
-            message: sym::EMPTY.into(),
-            stack: sym::EMPTY.into(),
+            message: sym::empty.into(),
+            stack: sym::empty.into(),
             obj: NamedObject::null(),
         }
     }
@@ -114,13 +114,13 @@ impl Object for Error {
         key: PropertyKey,
     ) -> Result<Option<PropertyValue>, Unrooted> {
         match key {
-            PropertyKey::String(s) if s.sym() == sym::NAME => {
+            PropertyKey::String(s) if s.sym() == sym::name => {
                 Ok(Some(PropertyValue::static_default(Value::String(self.name.clone()))))
             }
-            PropertyKey::String(s) if s.sym() == sym::MESSAGE => {
+            PropertyKey::String(s) if s.sym() == sym::message => {
                 Ok(Some(PropertyValue::static_default(Value::String(self.message.clone()))))
             }
-            PropertyKey::String(s) if s.sym() == sym::STACK => {
+            PropertyKey::String(s) if s.sym() == sym::stack => {
                 Ok(Some(PropertyValue::static_default(Value::String(self.stack.clone()))))
             }
             _ => self.obj.get_property_descriptor(sc, key),
@@ -219,11 +219,11 @@ macro_rules! define_error_type {
 }
 
 define_error_type!(
-    EvalError, sym::EVAL_ERROR, eval_error_prototype, eval_error_ctor;
-    RangeError, sym::RANGE_ERROR, range_error_prototype, range_error_ctor;
-    ReferenceError, sym::REFERENCE_ERROR, reference_error_prototype, reference_error_ctor;
-    SyntaxError, sym::SYNTAX_ERROR, syntax_error_prototype, syntax_error_ctor;
-    TypeError, sym::TYPE_ERROR, type_error_prototype, type_error_ctor;
-    URIError, sym::URI_ERROR, uri_error_prototype, uri_error_ctor;
-    AggregateError, sym::AGGREGATE_ERROR, aggregate_error_prototype, aggregate_error_ctor
+    EvalError, sym::EvalError, eval_error_prototype, eval_error_ctor;
+    RangeError, sym::RangeError, range_error_prototype, range_error_ctor;
+    ReferenceError, sym::ReferenceError, reference_error_prototype, reference_error_ctor;
+    SyntaxError, sym::SyntaxError, syntax_error_prototype, syntax_error_ctor;
+    TypeError, sym::TypeError, type_error_prototype, type_error_ctor;
+    URIError, sym::URIError, uri_error_prototype, uri_error_ctor;
+    AggregateError, sym::AggregateError, aggregate_error_prototype, aggregate_error_ctor
 );

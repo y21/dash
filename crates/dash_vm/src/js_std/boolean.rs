@@ -11,7 +11,7 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
 
 pub fn to_string(cx: CallContext) -> Result<Value, Value> {
     if let Value::Boolean(b) = cx.this {
-        let s = b.then(|| sym::TRUE.into()).unwrap_or_else(|| sym::FALSE.into());
+        let s = b.then(|| sym::true_.into()).unwrap_or_else(|| sym::false_.into());
 
         Ok(Value::String(s))
     } else {

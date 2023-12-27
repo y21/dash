@@ -2,7 +2,6 @@ use std::fmt;
 
 use crate::interner::{sym, Symbol};
 use crate::sourcemap::Span;
-use dash_regex::flags::Flags;
 use derive_more::Display;
 
 /// The type of a token
@@ -395,7 +394,7 @@ impl TokenType {
     pub fn as_identifier(&self) -> Option<Symbol> {
         match self {
             Self::Identifier(sym) => Some(*sym),
-            Self::Dollar => Some(sym::DOLLAR),
+            Self::Dollar => Some(sym::dollar),
             _ => None,
         }
     }
@@ -403,47 +402,47 @@ impl TokenType {
     /// This is the reverse operation of `as_token(Symol)`
     pub fn as_reserved_keyword(&self) -> Option<Symbol> {
         match self {
-            Self::If => Some(sym::IF),
-            Self::Else => Some(sym::ELSE),
-            Self::Function => Some(sym::FUNCTION),
-            Self::Var => Some(sym::VAR),
-            Self::Let => Some(sym::LET),
-            Self::Const => Some(sym::CONST),
-            Self::Return => Some(sym::RETURN),
-            Self::Throw => Some(sym::THROW),
-            Self::Try => Some(sym::TRY),
-            Self::Catch => Some(sym::CATCH),
-            Self::Finally => Some(sym::FINALLY),
-            Self::TrueLit => Some(sym::TRUE_LIT),
-            Self::FalseLit => Some(sym::FALSE_LIT),
-            Self::NullLit => Some(sym::NULL_LIT),
-            Self::UndefinedLit => Some(sym::UNDEFINED_LIT),
-            Self::Yield => Some(sym::YIELD),
-            Self::New => Some(sym::NEW),
-            Self::For => Some(sym::FOR),
-            Self::Do => Some(sym::DO),
-            Self::While => Some(sym::WHILE),
-            Self::In => Some(sym::IN),
-            Self::Instanceof => Some(sym::INSTANCEOF),
-            Self::Async => Some(sym::ASYNC),
-            Self::Await => Some(sym::AWAIT),
-            Self::Delete => Some(sym::DELETE),
-            Self::Void => Some(sym::VOID),
-            Self::Typeof => Some(sym::TYPEOF),
-            Self::Continue => Some(sym::CONTINUE),
-            Self::Break => Some(sym::BREAK),
-            Self::Import => Some(sym::IMPORT),
-            Self::Export => Some(sym::EXPORT),
-            Self::Default => Some(sym::DEFAULT),
-            Self::Debugger => Some(sym::DEBUGGER),
-            Self::Of => Some(sym::OF),
-            Self::Class => Some(sym::CLASS),
-            Self::Extends => Some(sym::EXTENDS),
-            Self::Static => Some(sym::STATIC),
-            Self::Switch => Some(sym::SWITCH),
-            Self::Case => Some(sym::CASE),
-            Self::Get => Some(sym::GET),
-            Self::Set => Some(sym::SET),
+            Self::If => Some(sym::if_),
+            Self::Else => Some(sym::else_),
+            Self::Function => Some(sym::function),
+            Self::Var => Some(sym::var),
+            Self::Let => Some(sym::let_),
+            Self::Const => Some(sym::const_),
+            Self::Return => Some(sym::return_),
+            Self::Throw => Some(sym::throw),
+            Self::Try => Some(sym::try_),
+            Self::Catch => Some(sym::catch),
+            Self::Finally => Some(sym::finally),
+            Self::TrueLit => Some(sym::true_),
+            Self::FalseLit => Some(sym::false_),
+            Self::NullLit => Some(sym::null),
+            Self::UndefinedLit => Some(sym::undefined),
+            Self::Yield => Some(sym::yield_),
+            Self::New => Some(sym::new),
+            Self::For => Some(sym::for_),
+            Self::Do => Some(sym::do_),
+            Self::While => Some(sym::while_),
+            Self::In => Some(sym::in_),
+            Self::Instanceof => Some(sym::instanceof),
+            Self::Async => Some(sym::async_),
+            Self::Await => Some(sym::await_),
+            Self::Delete => Some(sym::delete),
+            Self::Void => Some(sym::void),
+            Self::Typeof => Some(sym::typeof_),
+            Self::Continue => Some(sym::continue_),
+            Self::Break => Some(sym::break_),
+            Self::Import => Some(sym::import),
+            Self::Export => Some(sym::export),
+            Self::Default => Some(sym::default),
+            Self::Debugger => Some(sym::debugger),
+            Self::Of => Some(sym::of),
+            Self::Class => Some(sym::class),
+            Self::Extends => Some(sym::extends),
+            Self::Static => Some(sym::static_),
+            Self::Switch => Some(sym::switch),
+            Self::Case => Some(sym::case),
+            Self::Get => Some(sym::get),
+            Self::Set => Some(sym::set),
             _ => None,
         }
     }
@@ -462,14 +461,14 @@ impl TokenType {
 
     /// Returns a "dummy" identifier.
     /// Should only be used in `ErrorKind`s.
-    pub const DUMMY_IDENTIFIER: Self = Self::Identifier(sym::EMPTY);
+    pub const DUMMY_IDENTIFIER: Self = Self::Identifier(sym::empty);
 
     /// Returns a "dummy" string.
-    pub const DUMMY_STRING: Self = Self::String(sym::EMPTY);
+    pub const DUMMY_STRING: Self = Self::String(sym::empty);
 
     /// Returns a "dummy" template literal.
     /// Should only be used in `ErrorKind`s.
-    pub const DUMMY_TEMPLATE_LITERAL: Self = Self::TemplateLiteral(sym::EMPTY);
+    pub const DUMMY_TEMPLATE_LITERAL: Self = Self::TemplateLiteral(sym::empty);
 
     pub fn fmt_for_expected_tys(&self) -> impl fmt::Display + '_ {
         struct DisplayExpectedTys<'a>(&'a TokenType);
@@ -489,47 +488,47 @@ impl TokenType {
 
 pub fn as_token(s: Symbol) -> TokenType {
     match s {
-        sym::IF => TokenType::If,
-        sym::ELSE => TokenType::Else,
-        sym::FUNCTION => TokenType::Function,
-        sym::VAR => TokenType::Var,
-        sym::LET => TokenType::Let,
-        sym::CONST => TokenType::Const,
-        sym::RETURN => TokenType::Return,
-        sym::THROW => TokenType::Throw,
-        sym::TRY => TokenType::Try,
-        sym::CATCH => TokenType::Catch,
-        sym::FINALLY => TokenType::Finally,
-        sym::TRUE_LIT => TokenType::TrueLit,
-        sym::FALSE_LIT => TokenType::FalseLit,
-        sym::NULL_LIT => TokenType::NullLit,
-        sym::UNDEFINED_LIT => TokenType::UndefinedLit,
-        sym::YIELD => TokenType::Yield,
-        sym::NEW => TokenType::New,
-        sym::FOR => TokenType::For,
-        sym::DO => TokenType::Do,
-        sym::WHILE => TokenType::While,
-        sym::IN => TokenType::In,
-        sym::INSTANCEOF => TokenType::Instanceof,
-        sym::ASYNC => TokenType::Async,
-        sym::AWAIT => TokenType::Await,
-        sym::DELETE => TokenType::Delete,
-        sym::VOID => TokenType::Void,
-        sym::TYPEOF => TokenType::Typeof,
-        sym::CONTINUE => TokenType::Continue,
-        sym::BREAK => TokenType::Break,
-        sym::IMPORT => TokenType::Import,
-        sym::EXPORT => TokenType::Export,
-        sym::DEFAULT => TokenType::Default,
-        sym::DEBUGGER => TokenType::Debugger,
-        sym::OF => TokenType::Of,
-        sym::CLASS => TokenType::Class,
-        sym::EXTENDS => TokenType::Extends,
-        sym::STATIC => TokenType::Static,
-        sym::SWITCH => TokenType::Switch,
-        sym::CASE => TokenType::Case,
-        sym::GET => TokenType::Get,
-        sym::SET => TokenType::Set,
+        sym::if_ => TokenType::If,
+        sym::else_ => TokenType::Else,
+        sym::function => TokenType::Function,
+        sym::var => TokenType::Var,
+        sym::let_ => TokenType::Let,
+        sym::const_ => TokenType::Const,
+        sym::return_ => TokenType::Return,
+        sym::throw => TokenType::Throw,
+        sym::try_ => TokenType::Try,
+        sym::catch => TokenType::Catch,
+        sym::finally => TokenType::Finally,
+        sym::true_ => TokenType::TrueLit,
+        sym::false_ => TokenType::FalseLit,
+        sym::null => TokenType::NullLit,
+        sym::undefined => TokenType::UndefinedLit,
+        sym::yield_ => TokenType::Yield,
+        sym::new => TokenType::New,
+        sym::for_ => TokenType::For,
+        sym::do_ => TokenType::Do,
+        sym::while_ => TokenType::While,
+        sym::in_ => TokenType::In,
+        sym::instanceof => TokenType::Instanceof,
+        sym::async_ => TokenType::Async,
+        sym::await_ => TokenType::Await,
+        sym::delete => TokenType::Delete,
+        sym::void => TokenType::Void,
+        sym::typeof_ => TokenType::Typeof,
+        sym::continue_ => TokenType::Continue,
+        sym::break_ => TokenType::Break,
+        sym::import => TokenType::Import,
+        sym::export => TokenType::Export,
+        sym::default => TokenType::Default,
+        sym::debugger => TokenType::Debugger,
+        sym::of => TokenType::Of,
+        sym::class => TokenType::Class,
+        sym::extends => TokenType::Extends,
+        sym::static_ => TokenType::Static,
+        sym::switch => TokenType::Switch,
+        sym::case => TokenType::Case,
+        sym::get => TokenType::Get,
+        sym::set => TokenType::Set,
         _ => TokenType::Identifier(s),
     }
 }

@@ -45,7 +45,7 @@ impl AsyncFunction {
             .root(scope)
             .and_then(|result| {
                 result
-                    .get_property(scope, PropertyKey::String(sym::VALUE.into()))
+                    .get_property(scope, PropertyKey::String(sym::value.into()))
                     .root(scope)
             });
 
@@ -149,7 +149,7 @@ impl Object for ThenTask {
             .root(scope)
             .and_then(|result| {
                 result
-                    .get_property(scope, PropertyKey::String(sym::VALUE.into()))
+                    .get_property(scope, PropertyKey::String(sym::value.into()))
                     .root(scope)
             });
 

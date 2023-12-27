@@ -17,10 +17,10 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
                 .get_property(cx.scope, PropertyKey::String(i.into()))
                 .root(cx.scope)?;
             let k = item
-                .get_property(cx.scope, PropertyKey::String(sym::ZERO.into()))
+                .get_property(cx.scope, PropertyKey::String(sym::zero.into()))
                 .root(cx.scope)?;
             let v = item
-                .get_property(cx.scope, PropertyKey::String(sym::ONE.into()))
+                .get_property(cx.scope, PropertyKey::String(sym::one.into()))
                 .root(cx.scope)?;
             map.set(k, v);
         }

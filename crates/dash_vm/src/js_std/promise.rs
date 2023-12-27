@@ -145,7 +145,7 @@ impl Object for ThenTask {
             .root(scope)?;
 
         let ret_then = ret
-            .get_property(scope, PropertyKey::String(sym::THEN.into()))?
+            .get_property(scope, PropertyKey::String(sym::then.into()))?
             .root(scope);
 
         match ret_then {

@@ -298,19 +298,19 @@ impl PropertyValue {
 
         match &self.kind {
             PropertyValueKind::Static(value) => {
-                obj.set_property(sc, sym::VALUE.into(), PropertyValue::static_default(value.clone()))?;
+                obj.set_property(sc, sym::value.into(), PropertyValue::static_default(value.clone()))?;
             }
             PropertyValueKind::Trap { get, set } => {
                 let get = get.as_ref().map(|v| Value::Object(v.clone())).unwrap_or_undefined();
                 let set = set.as_ref().map(|v| Value::Object(v.clone())).unwrap_or_undefined();
-                obj.set_property(sc, sym::GET.into(), PropertyValue::static_default(get))?;
-                obj.set_property(sc, sym::LO_SET.into(), PropertyValue::static_default(set))?;
+                obj.set_property(sc, sym::get.into(), PropertyValue::static_default(get))?;
+                obj.set_property(sc, sym::set.into(), PropertyValue::static_default(set))?;
             }
         }
 
         obj.set_property(
             sc,
-            sym::WRITABLE.into(),
+            sym::writable.into(),
             PropertyValue::static_default(Value::Boolean(
                 self.descriptor.contains(PropertyDataDescriptor::WRITABLE),
             )),
@@ -318,7 +318,7 @@ impl PropertyValue {
 
         obj.set_property(
             sc,
-            sym::ENUMERABLE.into(),
+            sym::enumerable.into(),
             PropertyValue::static_default(Value::Boolean(
                 self.descriptor.contains(PropertyDataDescriptor::ENUMERABLE),
             )),
@@ -326,7 +326,7 @@ impl PropertyValue {
 
         obj.set_property(
             sc,
-            sym::CONFIGURABLE.into(),
+            sym::configurable.into(),
             PropertyValue::static_default(Value::Boolean(
                 self.descriptor.contains(PropertyDataDescriptor::CONFIGURABLE),
             )),
@@ -337,9 +337,9 @@ impl PropertyValue {
 
     pub fn from_descriptor_value(sc: &mut LocalScope<'_>, value: Value) -> Result<Self, Value> {
         let mut flags = PropertyDataDescriptor::empty();
-        let configurable = value.get_property(sc, sym::CONFIGURABLE.into()).root(sc)?.into_option();
-        let enumerable = value.get_property(sc, sym::ENUMERABLE.into()).root(sc)?.into_option();
-        let writable = value.get_property(sc, sym::WRITABLE.into()).root(sc)?.into_option();
+        let configurable = value.get_property(sc, sym::configurable.into()).root(sc)?.into_option();
+        let enumerable = value.get_property(sc, sym::enumerable.into()).root(sc)?.into_option();
+        let writable = value.get_property(sc, sym::writable.into()).root(sc)?.into_option();
 
         if configurable.map_or(true, |v| v.is_truthy(sc)) {
             flags |= PropertyDataDescriptor::CONFIGURABLE;
@@ -353,12 +353,12 @@ impl PropertyValue {
 
         // TODO: make sure that if value is set, get/set are not
 
-        let static_value = value.get_property(sc, sym::VALUE.into()).root(sc)?.into_option();
+        let static_value = value.get_property(sc, sym::value.into()).root(sc)?.into_option();
         let kind = match static_value {
             Some(static_value) => PropertyValueKind::Static(static_value),
             None => {
                 let get = value
-                    .get_property(sc, sym::GET.into())
+                    .get_property(sc, sym::get.into())
                     .root(sc)?
                     .into_option()
                     .and_then(|v| match v {
@@ -366,7 +366,7 @@ impl PropertyValue {
                         _ => None,
                     });
                 let set = value
-                    .get_property(sc, sym::LO_SET.into())
+                    .get_property(sc, sym::set.into())
                     .root(sc)?
                     .into_option()
                     .and_then(|v| match v {
@@ -551,8 +551,8 @@ impl Object for NamedObject {
     ) -> Result<Option<PropertyValue>, Unrooted> {
         if let PropertyKey::String(st) = &key {
             match st.sym() {
-                sym::PROTO => return Ok(Some(PropertyValue::static_default(self.get_prototype(sc)?))),
-                sym::CONSTRUCTOR => {
+                sym::__proto__ => return Ok(Some(PropertyValue::static_default(self.get_prototype(sc)?))),
+                sym::constructor => {
                     return Ok(Some(PropertyValue::static_default(
                         self.constructor
                             .borrow()
@@ -579,7 +579,7 @@ impl Object for NamedObject {
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
         match key.as_string().map(JsString::sym) {
-            Some(sym::PROTO) => {
+            Some(sym::__proto__) => {
                 return self.set_prototype(
                     sc,
                     match value.into_kind() {
@@ -588,7 +588,7 @@ impl Object for NamedObject {
                     },
                 );
             }
-            Some(sym::CONSTRUCTOR) => {
+            Some(sym::constructor) => {
                 let obj = match value.kind {
                     PropertyValueKind::Static(Value::Object(obj)) => obj,
                     PropertyValueKind::Static(Value::External(obj)) => obj.inner.clone(),

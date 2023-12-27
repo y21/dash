@@ -37,9 +37,9 @@ pub fn keys(cx: CallContext) -> Result<Value, Value> {
 pub fn to_string(cx: CallContext) -> Result<Value, Value> {
     fn to_string_inner(scope: &mut LocalScope<'_>, o: &Handle<dyn Object>) -> Result<Value, Value> {
         let constructor = o
-            .get_property(scope, sym::CONSTRUCTOR.into())
+            .get_property(scope, sym::constructor.into())
             .root(scope)?
-            .get_property(scope, sym::NAME.into())
+            .get_property(scope, sym::name.into())
             .root(scope)?
             .to_js_string(scope)?;
 
