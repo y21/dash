@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1703656216253,
+  "lastUpdate": 1703656743980,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -6283,6 +6283,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 55084,
             "range": "± 1212",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "Timo",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5f16becff01a9f8e71ccd0302249ce78f105a02c",
+          "message": "Merge pull request #76 from y21/intern-strings-vm-2\n\ndynamically intern strings at runtime",
+          "timestamp": "2023-12-27T06:56:32+01:00",
+          "tree_id": "662a8e6d1813e2f4cd292a0a71bc449f348bbea0",
+          "url": "https://github.com/y21/dash/commit/5f16becff01a9f8e71ccd0302249ce78f105a02c"
+        },
+        "date": 1703656742645,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1885939,
+            "range": "± 12498",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 175098,
+            "range": "± 1470",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 55075,
+            "range": "± 2993",
             "unit": "ns/iter"
           }
         ]
