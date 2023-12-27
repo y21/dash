@@ -5,6 +5,8 @@ use std::{borrow, fmt};
 
 use hashbrown::hash_map::RawEntryMut;
 use rustc_hash::FxHasher;
+
+#[cfg(feature = "format")]
 use serde::{Deserialize, Serialize};
 
 pub mod sym {

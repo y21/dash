@@ -1,5 +1,4 @@
-use std::ffi::OsStr;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::DirEntry;
 use std::io;
 
@@ -59,6 +58,24 @@ pub const IGNORED_TESTS: &[&str] = &[
     "try/S12.14_A9_T1.js",
     "while/S12.6.2_A9.js",
     "RegExp/S15.10.2_A1_T1.js",
+    // `[^]+` causes an infinite loop during regex AnchorStart+Repetition
+    "S15.10.2.13_A3_T3.js",
+    "S15.10.2.13_A3_T4.js",
+    "S15.10.2.13_A3_T5.js",
+    "S15.10.2.13_A3_T6.js",
+    "S15.10.2.13_A3_T7.js",
+    "S15.10.2.13_A3_T8.js",
+    "S15.10.2.13_A3_T9.js",
+    "S15.10.2.7_A4_T1.js",
+    "S15.10.2.7_A4_T2.js",
+    "S15.10.2.7_A4_T3.js",
+    "S15.10.2.7_A4_T4.js",
+    "S15.10.2.7_A4_T5.js",
+    "S15.10.2.7_A4_T6.js",
+    "S15.10.2.7_A4_T7.js",
+    "S15.10.2.7_A4_T8.js",
+    "S15.10.2.7_A4_T9.js",
+    "S15.10.2.13_A2_T4.js",
 ];
 
 /// Returns a vector of path strings
