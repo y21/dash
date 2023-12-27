@@ -306,6 +306,9 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 TokenType::LeftParen => {
                     let mut arguments = Vec::new();
 
+                    // Disassociate any new expressions in arguments such that `new x(() => x());`
+                    // is parsed as having the `new` operator only apply to the `x` identifier.
+                    self.new_level_stack.add_level();
                     // TODO: refactor to `parse_expr_list`
                     while !self.expect_token_type_and_skip(&[TokenType::RightParen], false) {
                         self.expect_token_type_and_skip(&[TokenType::Comma], false);
@@ -316,6 +319,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                             arguments.push(CallArgumentKind::Normal(self.parse_yield()?));
                         }
                     }
+                    self.new_level_stack.pop_level().expect("Missing `new` level stack");
 
                     // End of function call.
                     let level = self.new_level_stack.cur_level().expect("Missing `new` level stack");

@@ -196,7 +196,7 @@ impl<T> fmt::Debug for SharedOnce<T> {
     }
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct LevelStack(SmallVec<[u8; 4]>);
 
 impl LevelStack {
