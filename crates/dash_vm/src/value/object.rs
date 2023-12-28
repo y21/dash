@@ -1,12 +1,14 @@
 use std::any::Any;
 use std::cell::RefCell;
 use std::fmt::Debug;
+use std::hash::BuildHasherDefault;
 
 use crate::gc::interner::sym;
 use crate::gc::persistent::Persistent;
 use crate::gc::trace::{Trace, TraceCtxt};
 use bitflags::bitflags;
 use dash_proc_macro::Trace;
+use rustc_hash::FxHasher;
 
 use crate::gc::handle::Handle;
 use crate::localscope::LocalScope;
@@ -17,7 +19,7 @@ use super::primitive::{PrimitiveCapabilities, Symbol};
 use super::string::JsString;
 use super::{ExternalValue, Root, Typeof, Unrooted, Value, ValueContext};
 
-pub type ObjectMap<K, V> = ahash::HashMap<K, V>;
+pub type ObjectMap<K, V> = hashbrown::HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
 // only here for the time being, will be removed later
 fn __assert_trait_object_safety(_: Box<dyn Object>) {}

@@ -80,6 +80,15 @@ unsafe impl<K: Trace, V: Trace, S> Trace for HashMap<K, V, S> {
     }
 }
 
+unsafe impl<K: Trace, V: Trace, S> Trace for hashbrown::HashMap<K, V, S> {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
+        for (k, v) in self.iter() {
+            k.trace(cx);
+            v.trace(cx);
+        }
+    }
+}
+
 unsafe impl<T: Trace + ?Sized> Trace for Rc<T> {
     fn trace(&self, cx: &mut TraceCtxt<'_>) {
         T::trace(self, cx)
