@@ -339,10 +339,28 @@ impl StringInterner {
         }
     }
 
-    pub fn intern_usize(&mut self, val: usize) -> Symbol {
-        // for now this just calls `intern`, but we might want to specialize this
-        let string = val.to_string();
-        self.intern(string.as_ref())
+    pub fn intern_usize(&mut self, mut val: usize) -> Symbol {
+        const _: () = assert!(std::mem::size_of::<usize>() <= 8);
+        // `usize::MAX` is at most 20 digits long
+        let mut buf = [0; 20];
+
+        let mut from_index = 19;
+        loop {
+            let digit = val % 10;
+            val /= 10;
+            buf[from_index] = (digit as u8) + b'0';
+            if val == 0 || from_index == 0 {
+                break;
+            } else {
+                from_index -= 1;
+            }
+        }
+
+        debug_assert!(std::str::from_utf8(&buf).is_ok());
+
+        // SAFETY: `buf` always contains values in the range `b'0'..=b'9'`, which are valid UTF-8
+        // this could use `std::ascii::Char` once stable
+        self.intern(unsafe { std::str::from_utf8_unchecked(&buf[from_index..]) })
     }
 
     pub fn intern_isize(&mut self, val: isize) -> Symbol {
@@ -404,5 +422,29 @@ impl Symbol {
         #![allow(clippy::absurd_extreme_comparisons)]
 
         self.0 >= sym::KEYWORD_START && self.0 <= sym::KEYWORD_END
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::StringInterner;
+
+    #[test]
+    fn interning() {
+        let interner = &mut StringInterner::new();
+        let k1 = interner.intern_usize(usize::MAX);
+        assert_eq!(interner.resolve(k1), usize::MAX.to_string());
+
+        let k2 = interner.intern_usize(usize::MIN);
+        assert_eq!(interner.resolve(k2), usize::MIN.to_string());
+
+        let k2 = interner.intern_usize(10);
+        assert_eq!(interner.resolve(k2), "10");
+
+        let k3 = interner.intern_usize(192837465123);
+        assert_eq!(interner.resolve(k3), 192837465123usize.to_string());
+
+        let k4 = interner.intern_char('ä');
+        assert_eq!(interner.resolve(k4), "ä");
     }
 }
