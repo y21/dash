@@ -1,5 +1,6 @@
 use dash_middle::compiler::constant::Constant;
 use dash_middle::compiler::instruction::Instruction;
+use dash_middle::interner::StringInterner;
 use decompiler::FunctionDecompiler;
 use thiserror::Error;
 
@@ -19,6 +20,10 @@ pub enum DecompileError {
     InvalidIntrinsicOp(u8),
 }
 
-pub fn decompile(constants: &[Constant], instructions: &[u8]) -> Result<String, DecompileError> {
-    FunctionDecompiler::new(instructions, constants, "<main>").run()
+pub fn decompile(
+    interner: &StringInterner,
+    constants: &[Constant],
+    instructions: &[u8],
+) -> Result<String, DecompileError> {
+    FunctionDecompiler::new(interner, instructions, constants, "<main>").run()
 }

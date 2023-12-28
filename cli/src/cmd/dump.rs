@@ -82,7 +82,7 @@ pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
     }
 
     if dump_ir {
-        let out = dash_decompiler::decompile(&bytecode.cp, &bytecode.instructions)?;
+        let out = dash_decompiler::decompile(interner, &bytecode.cp, &bytecode.instructions)?;
         println!("{out}");
     }
 

@@ -1,6 +1,7 @@
 use dash_middle::compiler::constant::Constant;
 use dash_middle::compiler::instruction::{Instruction, IntrinsicOperation};
 use dash_middle::compiler::{FunctionCallMetadata, ObjectMemberKind};
+use dash_middle::interner::StringInterner;
 use dash_middle::util::Reader;
 use std::fmt;
 use std::fmt::Write;
@@ -8,7 +9,8 @@ use std::rc::Rc;
 
 use crate::DecompileError;
 
-pub struct FunctionDecompiler<'buf> {
+pub struct FunctionDecompiler<'interner, 'buf> {
+    interner: &'interner StringInterner,
     reader: Reader<&'buf [u8]>,
     constants: &'buf [Constant],
     name: &'buf str,
@@ -17,11 +19,17 @@ pub struct FunctionDecompiler<'buf> {
     instr_idx: usize,
 }
 
-impl<'buf> FunctionDecompiler<'buf> {
-    pub fn new(buf: &'buf [u8], constants: &'buf [Constant], name: &'buf str) -> Self {
+impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
+    pub fn new(
+        interner: &'interner StringInterner,
+        buf: &'buf [u8],
+        constants: &'buf [Constant],
+        name: &'buf str,
+    ) -> Self {
         Self {
             reader: Reader::new(buf),
             constants,
+            interner,
             out: format!("function {name}:\n"),
             name,
             instr_idx: 0,
@@ -102,6 +110,10 @@ impl<'buf> FunctionDecompiler<'buf> {
         self.reader.read_u32_ne().ok_or(DecompileError::AbruptEof)
     }
 
+    fn display(&self, constant: &'buf Constant) -> DisplayConstant<'interner, 'buf> {
+        DisplayConstant(self.interner, constant)
+    }
+
     pub fn run(mut self) -> Result<String, DecompileError> {
         let mut functions = Vec::new();
 
@@ -132,7 +144,7 @@ impl<'buf> FunctionDecompiler<'buf> {
                     if let Constant::Function(fun) = constant {
                         functions.push(Rc::clone(fun));
                     }
-                    self.handle_op_instr("constant", &[&DisplayConstant(constant)]);
+                    self.handle_op_instr("constant", &[&self.display(constant)]);
                 }
                 Instruction::ConstantW => {
                     let b = self.read_u16()?;
@@ -140,7 +152,7 @@ impl<'buf> FunctionDecompiler<'buf> {
                     if let Constant::Function(fun) = constant {
                         functions.push(Rc::clone(fun));
                     }
-                    self.handle_op_instr("constant", &[&DisplayConstant(constant)]);
+                    self.handle_op_instr("constant", &[&self.display(constant)]);
                 }
                 Instruction::LdLocal => {
                     let b = self.read()?;
@@ -178,11 +190,11 @@ impl<'buf> FunctionDecompiler<'buf> {
                 }
                 Instruction::LdGlobal => {
                     let b = self.read()?;
-                    self.handle_op_instr("ldglobal", &[&DisplayConstant(&self.constants[b as usize])]);
+                    self.handle_op_instr("ldglobal", &[&self.display(&self.constants[b as usize])]);
                 }
                 Instruction::LdGlobalW => {
                     let b = self.read_u16()?;
-                    self.handle_op_instr("ldglobalw", &[&DisplayConstant(&self.constants[b as usize])]);
+                    self.handle_op_instr("ldglobalw", &[&self.display(&self.constants[b as usize])]);
                 }
                 Instruction::StoreLocal => self.handle_inc_op_instr2("storelocal")?,
                 Instruction::StoreLocalW => self.handle_inc_op_instr2("storelocalw")?,
@@ -199,12 +211,12 @@ impl<'buf> FunctionDecompiler<'buf> {
                 Instruction::StaticPropAccess => {
                     let b = self.read()?;
                     let _preserve_this = self.read()?;
-                    self.handle_op_instr("staticpropaccess", &[&DisplayConstant(&self.constants[b as usize])]);
+                    self.handle_op_instr("staticpropaccess", &[&self.display(&self.constants[b as usize])]);
                 }
                 Instruction::StaticPropAccessW => {
                     let b = self.read_u16()?;
                     let _preserve_this = self.read()?;
-                    self.handle_op_instr("staticpropaccessw", &[&DisplayConstant(&self.constants[b as usize])]);
+                    self.handle_op_instr("staticpropaccessw", &[&self.display(&self.constants[b as usize])]);
                 }
                 Instruction::Ret => {
                     self.read_u16()?; // intentionally ignored
@@ -218,12 +230,12 @@ impl<'buf> FunctionDecompiler<'buf> {
                 Instruction::StoreGlobal => {
                     let b = self.read()?;
                     let _kind = self.read();
-                    self.handle_op_instr("storeglobal", &[&DisplayConstant(&self.constants[b as usize])]);
+                    self.handle_op_instr("storeglobal", &[&self.display(&self.constants[b as usize])]);
                 }
                 Instruction::StoreGlobalW => {
                     let b = self.read_u16()?;
                     let _kind = self.read();
-                    self.handle_op_instr("storeglobalw", &[&DisplayConstant(&self.constants[b as usize])]);
+                    self.handle_op_instr("storeglobalw", &[&self.display(&self.constants[b as usize])]);
                 }
                 Instruction::DynamicPropAccess => {
                     let b = self.read()?;
@@ -244,7 +256,7 @@ impl<'buf> FunctionDecompiler<'buf> {
                             }
                             ObjectMemberKind::Static | ObjectMemberKind::Getter | ObjectMemberKind::Setter => {
                                 let cid = self.read_u16()?;
-                                props.push(DisplayConstant(&self.constants[cid as usize]).to_string());
+                                props.push(self.display(&self.constants[cid as usize]).to_string());
                             }
                             ObjectMemberKind::Spread => {
                                 props.push(String::from("<spread>"));
@@ -259,7 +271,7 @@ impl<'buf> FunctionDecompiler<'buf> {
                 Instruction::StaticPropAssign => {
                     let _k = self.read()?;
                     let b = self.read_u16()?;
-                    self.handle_op_instr("staticpropassign", &[&DisplayConstant(&self.constants[b as usize])]);
+                    self.handle_op_instr("staticpropassign", &[&self.display(&self.constants[b as usize])]);
                 }
                 Instruction::DynamicPropAssign => {
                     let _k = self.read()?;
@@ -417,7 +429,13 @@ impl<'buf> FunctionDecompiler<'buf> {
 
         for fun in functions {
             let out = fun.buffer.with(|buffer| {
-                FunctionDecompiler::new(buffer, &fun.constants, &format!("{}::{:?}", self.name, fun.name)).run()
+                FunctionDecompiler::new(
+                    self.interner,
+                    buffer,
+                    &fun.constants,
+                    &format!("{}::{:?}", self.name, fun.name),
+                )
+                .run()
             })?;
             self.out.push('\n');
             self.out.push_str(&out);
@@ -427,15 +445,19 @@ impl<'buf> FunctionDecompiler<'buf> {
     }
 }
 
-struct DisplayConstant<'c>(&'c Constant);
-impl fmt::Display for DisplayConstant<'_> {
+struct DisplayConstant<'i, 'a>(&'i StringInterner, &'a Constant);
+impl fmt::Display for DisplayConstant<'_, '_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.0 {
+        match self.1 {
             Constant::Number(n) => write!(f, "{n}"),
-            Constant::String(s) => write!(f, "\"{s}\""),
+            Constant::String(s) => write!(f, "\"{}\"", self.0.resolve(*s)),
             Constant::Boolean(b) => write!(f, "{b}"),
-            Constant::Identifier(ident) => write!(f, "{ident}"),
-            Constant::Function(fun) => write!(f, "<function {:?}>", fun.name),
+            Constant::Identifier(ident) => write!(f, "{}", self.0.resolve(*ident)),
+            Constant::Function(fun) => write!(
+                f,
+                "<function {}>",
+                fun.name.map(|v| self.0.resolve(v)).unwrap_or("<anon>")
+            ),
             Constant::Null => f.write_str("null"),
             Constant::Undefined => f.write_str("undefined"),
             Constant::Regex(_, _, source) => write!(f, "{source}"),
