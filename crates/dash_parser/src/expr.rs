@@ -15,6 +15,12 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         self.parse_sequence()
     }
 
+    /// Parses an expression without the comma operator.
+    pub fn parse_expression_no_comma(&mut self) -> Option<Expr> {
+        // Impl detail of the expression parser: comma has a lower precedence than yield, so start by parsing yield exprs
+        self.parse_yield()
+    }
+
     fn parse_sequence(&mut self) -> Option<Expr> {
         let mut expr = self.parse_yield()?;
 

@@ -616,7 +616,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             return None;
         }
 
-        self.parse_expression()
+        self.parse_expression_no_comma()
     }
 
     fn parse_switch(&mut self) -> Option<SwitchStatement> {
