@@ -270,8 +270,12 @@ simple_test!(
         default: throw 'FAIL';
     }
 
-    let v = 1, 2, 3;
+    let v = (1, 2, 3);
+    let x1 = 1, x2 = 2, x3;
     assert(v === 3);
+    assert(x1 == 1);
+    assert(x2 == 2);
+    assert(x3 === undefined);
     assert((() => 1+2)() === 3);
     "#,
     Value::undefined()
