@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1703782065766,
+  "lastUpdate": 1703783054787,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -6619,6 +6619,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 52940,
             "range": "± 2916",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "b008b8ac08d3cdf0d1e08c1d8185ef69c1806a93",
+          "message": "fix sequence precedence test and add tests for multi variable declaration",
+          "timestamp": "2023-12-28T18:01:43+01:00",
+          "tree_id": "5ed713eddd0b205dbb2995bf454f29a4d2e0a22b",
+          "url": "https://github.com/y21/dash/commit/b008b8ac08d3cdf0d1e08c1d8185ef69c1806a93"
+        },
+        "date": 1703783054127,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1780533,
+            "range": "± 13641",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 161913,
+            "range": "± 359",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 52193,
+            "range": "± 1685",
             "unit": "ns/iter"
           }
         ]
