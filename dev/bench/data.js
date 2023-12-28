@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1703714386687,
+  "lastUpdate": 1703729845706,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -6493,6 +6493,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 57472,
             "range": "± 2041",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "487273cfb88f135494e4c90a7a3904e7dec2e610",
+          "message": "use fxhash for object maps\n\nall strings are interned now and are represented using `u32`s, so `FxHash` works well here",
+          "timestamp": "2023-12-28T03:14:49+01:00",
+          "tree_id": "7551c4f7d083887dde5b4da9fc115661f9ba689b",
+          "url": "https://github.com/y21/dash/commit/487273cfb88f135494e4c90a7a3904e7dec2e610"
+        },
+        "date": 1703729844273,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1849651,
+            "range": "± 50994",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 163615,
+            "range": "± 812",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 51926,
+            "range": "± 2526",
             "unit": "ns/iter"
           }
         ]
