@@ -56,7 +56,7 @@ pub trait ValueConversion {
 
     fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value>;
 
-    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value>;
+    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle, Value>;
 
     fn to_int32(&self, sc: &mut LocalScope) -> Result<i32, Value> {
         let n = self.to_number(sc)?;
@@ -169,11 +169,11 @@ impl ValueConversion for Value {
         self.get_property(sc, sym::length.into()).root(sc)?.to_length_u(sc)
     }
 
-    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value> {
+    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle, Value> {
         fn register_dyn<O: Object + 'static, F: Fn(&mut LocalScope) -> O>(
             sc: &mut LocalScope,
             fun: F,
-        ) -> Result<Handle<dyn Object>, Value> {
+        ) -> Result<Handle, Value> {
             let obj = fun(sc);
             Ok(sc.register(obj))
         }

@@ -42,13 +42,13 @@ impl TypedArrayKind {
 
 #[derive(Debug, Trace)]
 pub struct TypedArray {
-    arraybuffer: Handle<dyn Object>,
+    arraybuffer: Handle,
     kind: TypedArrayKind,
     obj: NamedObject,
 }
 
 impl TypedArray {
-    pub fn new(vm: &Vm, arraybuffer: Handle<dyn Object>, kind: TypedArrayKind) -> Self {
+    pub fn new(vm: &Vm, arraybuffer: Handle, kind: TypedArrayKind) -> Self {
         let (proto, ctor) = match kind {
             TypedArrayKind::Uint8Array => (&vm.statics.uint8array_prototype, &vm.statics.uint8array_ctor),
             TypedArrayKind::Uint8ClampedArray => (&vm.statics.uint8array_prototype, &vm.statics.uint8array_ctor),
@@ -72,8 +72,8 @@ impl TypedArray {
         self.kind
     }
 
-    pub fn buffer(&self) -> &Handle<dyn Object> {
-        &self.arraybuffer
+    pub fn buffer(&self) -> Handle {
+        self.arraybuffer.clone()
     }
 }
 
@@ -188,7 +188,7 @@ impl Object for TypedArray {
     fn apply(
         &self,
         scope: &mut LocalScope,
-        callee: Handle<dyn Object>,
+        callee: Handle,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {

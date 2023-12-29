@@ -1,17 +1,21 @@
+use std::any::Any;
 use std::cell::Cell;
+use std::fmt::Debug;
 use std::hash::Hash;
-use std::ops::Deref;
-use std::ptr::NonNull;
+use std::ptr::{addr_of, NonNull};
 
 use bitflags::bitflags;
 
-use crate::value::object::Object;
+use crate::localscope::LocalScope;
+use crate::value::object::{PropertyKey, PropertyValue};
+use crate::value::primitive::PrimitiveCapabilities;
+use crate::value::{Typeof, Unrooted, Value};
 
 use super::trace::{Trace, TraceCtxt};
 
 bitflags! {
     #[derive(Default)]
-    struct HandleFlagsInner: u8 {
+    pub struct HandleFlagsInner: u8 {
         /// Whether the node has been visited in the last mark phase or not.
         const MARKED_VISITED = 1 << 0;
         const VM_DETACHED = 1 << 1;
@@ -50,83 +54,112 @@ impl HandleFlags {
     }
 }
 
-pub struct GcNode<T: ?Sized> {
+#[repr(C)]
+pub struct ObjectVTable {
+    pub(crate) drop_boxed_gcnode: unsafe fn(*mut GcNode<()>),
+    pub(crate) trace: unsafe fn(*const (), &mut TraceCtxt<'_>),
+    pub(crate) debug_fmt: unsafe fn(*const (), &mut core::fmt::Formatter<'_>) -> core::fmt::Result,
+    pub(crate) js_get_own_property:
+        unsafe fn(*const (), &mut LocalScope<'_>, Value, PropertyKey) -> Result<Unrooted, Unrooted>,
+    pub(crate) js_get_own_property_descriptor:
+        unsafe fn(*const (), &mut LocalScope<'_>, PropertyKey) -> Result<Option<PropertyValue>, Unrooted>,
+    pub(crate) js_get_property: unsafe fn(*const (), &mut LocalScope, Value, PropertyKey) -> Result<Unrooted, Unrooted>,
+    pub(crate) js_get_property_descriptor:
+        unsafe fn(*const (), &mut LocalScope<'_>, PropertyKey) -> Result<Option<PropertyValue>, Unrooted>,
+    pub(crate) js_set_property:
+        unsafe fn(*const (), &mut LocalScope<'_>, PropertyKey, PropertyValue) -> Result<(), Value>,
+    pub(crate) js_delete_property: unsafe fn(*const (), &mut LocalScope<'_>, PropertyKey) -> Result<Unrooted, Value>,
+    pub(crate) js_set_prototype: unsafe fn(*const (), &mut LocalScope<'_>, Value) -> Result<(), Value>,
+    pub(crate) js_get_prototype: unsafe fn(*const (), &mut LocalScope<'_>) -> Result<Value, Value>,
+    pub(crate) js_apply:
+        unsafe fn(*const (), &mut LocalScope<'_>, Handle, Value, Vec<Value>) -> Result<Unrooted, Unrooted>,
+    pub(crate) js_construct:
+        unsafe fn(*const (), &mut LocalScope<'_>, Handle, Value, Vec<Value>) -> Result<Unrooted, Unrooted>,
+    pub(crate) js_as_any: unsafe fn(*const ()) -> *const dyn Any,
+    pub(crate) js_as_primitive_capable: unsafe fn(*const ()) -> Option<*const dyn PrimitiveCapabilities>,
+    pub(crate) js_own_keys: unsafe fn(*const (), sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value>,
+    pub(crate) js_type_of: unsafe fn(*const ()) -> Typeof,
+}
+
+#[repr(C)]
+pub struct GcNode<T> {
+    pub(crate) vtable: &'static ObjectVTable,
     pub(crate) flags: HandleFlags,
     /// Persistent<T> reference count
     pub(crate) refcount: Cell<u64>,
     /// The next pointer in the linked list of nodes
-    pub(crate) next: Option<NonNull<GcNode<dyn Object>>>,
+    pub(crate) next: Option<NonNull<GcNode<()>>>,
     pub(crate) value: T,
 }
 
-#[derive(Debug)]
-pub struct Handle<T: ?Sized>(NonNull<GcNode<T>>);
+#[repr(C)]
+#[derive(Eq, PartialEq, Clone, Hash)]
+pub struct Handle(NonNull<GcNode<()>>);
 
-impl<T: ?Sized> Handle<T> {
+impl Debug for Handle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        unsafe { (self.vtable().debug_fmt)(addr_of!((*self.0.as_ptr()).value), f) }
+    }
+}
+
+impl Handle {
     /// # Safety
-    /// The given [`NonNull`] pointer must point to a valid [`InnerHandle`]
-    pub unsafe fn from_raw(ptr: NonNull<GcNode<T>>) -> Self {
+    /// The given [`NonNull`] pointer must point to a valid [`GcNode`]
+    pub unsafe fn from_raw(ptr: NonNull<GcNode<()>>) -> Self {
         Self(ptr)
     }
-
-    pub fn into_raw(ptr: Self) -> NonNull<GcNode<T>> {
-        ptr.0
-    }
-}
-impl<T: Object + 'static> Handle<T> {
-    pub fn into_dyn(self) -> Handle<dyn Object> {
-        let ptr = Handle::into_raw(self);
-        // SAFETY: `T: Object` bound makes this cast safe. once CoerceUnsized is stable, we can use that instead.
-        unsafe { Handle::<dyn Object>::from_raw(ptr) }
-    }
 }
 
-impl<T: ?Sized> Eq for Handle<T> {}
-
-impl<T: ?Sized> PartialEq for Handle<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
+impl Handle {
+    pub fn as_ptr<U>(&self) -> *mut GcNode<U> {
+        self.0.as_ptr().cast()
     }
-}
 
-impl<T: ?Sized> Clone for Handle<T> {
-    fn clone(&self) -> Self {
-        Self(self.0)
-    }
-}
-
-// FIXME: this is severly unsound and hard to fix: this Handle can be smuggled because it's not tied to any reference
-// and later, when its GC goes out of scope, it will be freed, even though it's still alive
-impl<T: ?Sized> Deref for Handle<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        unsafe { &(*self.as_ptr()).value }
-    }
-}
-
-impl<T: ?Sized> Handle<T> {
-    pub fn as_ptr(&self) -> *mut GcNode<T> {
+    pub fn as_erased_ptr(&self) -> *mut GcNode<()> {
         self.0.as_ptr()
     }
-}
 
-impl<T: ?Sized> Hash for Handle<T> {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.as_ptr().hash(state);
+    pub fn erased_value(&self) -> *const () {
+        unsafe { addr_of!((*self.0.as_ptr()).value) }
+    }
+
+    pub fn vtable(&self) -> &'static ObjectVTable {
+        unsafe { &(*self.0.as_ptr()).vtable }
+    }
+
+    /// Returns the `Persistent<T>` refcount.
+    pub fn refcount(&self) -> u64 {
+        unsafe { (*self.0.as_ptr()).refcount.get() }
+    }
+
+    pub unsafe fn set_refcount(&self, refcount: u64) {
+        (*self.0.as_ptr()).refcount.set(refcount);
+    }
+
+    pub fn next(&self) -> Option<NonNull<GcNode<()>>> {
+        unsafe { (*self.0.as_ptr()).next }
+    }
+
+    pub fn flags(&self) -> HandleFlagsInner {
+        unsafe { (*self.0.as_ptr()).flags.flags.get() }
+    }
+
+    pub fn interior_flags(&self) -> &HandleFlags {
+        unsafe { &(*self.0.as_ptr()).flags }
     }
 }
 
-unsafe impl<T: ?Sized + Trace> Trace for Handle<T> {
+unsafe impl Trace for Handle {
     fn trace(&self, cx: &mut TraceCtxt<'_>) {
         unsafe {
-            let this = self.0.as_ref();
-            if this.flags.is_marked() {
+            let flags = &(*self.0.as_ptr()).flags;
+            if flags.is_marked() {
                 // If already marked, do nothing to avoid getting stucked in an infinite loop
                 return;
             }
-            this.flags.mark();
-        };
+            flags.mark();
 
-        T::trace(self, cx);
+            (self.vtable().trace)(self.erased_value(), cx)
+        };
     }
 }

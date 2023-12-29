@@ -1,6 +1,5 @@
 use std::ops::Deref;
 
-use crate::value::object::Object;
 use crate::Vm;
 
 use super::Handle;
@@ -9,10 +8,10 @@ use super::Handle;
 // TL;DR for now, `Persist<T>` adds reference counting to a `Handle<T>`,
 // allowing it to be held safely for longer than any LocalScope
 // NOTE: careful with cycles, this can leak
-pub struct Persistent<T: ?Sized>(Handle<T>);
+pub struct Persistent(Handle);
 
-impl Persistent<dyn Object> {
-    pub fn new(vm: &mut Vm, handle: Handle<dyn Object>) -> Self {
+impl Persistent {
+    pub fn new(vm: &mut Vm, handle: Handle) -> Self {
         let this = Self(handle.clone());
         // This function creates a strong reference, so increment
         this.inc_refcount();
@@ -24,49 +23,42 @@ impl Persistent<dyn Object> {
     }
 }
 
-impl<T: ?Sized> Persistent<T> {
-    pub(crate) fn handle(&self) -> &Handle<T> {
-        &self.0
-    }
-
+impl Persistent {
     // Used in tests
     #[allow(unused)]
     pub(crate) fn refcount(&self) -> u64 {
-        let inner = unsafe { &*self.0.as_ptr() };
-        inner.refcount.get()
+        self.0.refcount()
     }
 
     fn inc_refcount(&self) -> u64 {
-        let inner = unsafe { &*self.0.as_ptr() };
-        let refcount = inner.refcount.get().checked_add(1).expect("Reference count overflowed");
-        inner.refcount.set(refcount);
+        let refcount = self.0.refcount().checked_add(1).expect("Reference count overflowed");
+        unsafe { self.0.set_refcount(refcount) };
         refcount
     }
 
     unsafe fn dec_refcount(&self) -> u64 {
-        let inner = &*self.0.as_ptr();
-        let refcount = inner.refcount.get().checked_sub(1).expect("Reference count overflowed");
-        inner.refcount.set(refcount);
+        let refcount = self.0.refcount().checked_sub(1).expect("Reference count underflowed");
+        self.0.set_refcount(refcount);
         refcount
     }
 }
 
-impl<T: ?Sized> Deref for Persistent<T> {
-    type Target = <Handle<T> as Deref>::Target;
+impl Deref for Persistent {
+    type Target = Handle;
 
     fn deref(&self) -> &Self::Target {
-        self.0.deref()
+        &self.0
     }
 }
 
-impl<T: ?Sized> Clone for Persistent<T> {
+impl Clone for Persistent {
     fn clone(&self) -> Self {
         self.inc_refcount();
         Self(self.0.clone())
     }
 }
 
-impl<T: ?Sized> Drop for Persistent<T> {
+impl Drop for Persistent {
     fn drop(&mut self) {
         unsafe { self.dec_refcount() };
 

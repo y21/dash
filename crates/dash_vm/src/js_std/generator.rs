@@ -22,12 +22,8 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
             GeneratorState::Running { ip, stack } => (*ip, mem::take(stack)),
         };
 
-        let function = match generator
-            .function()
-            .as_any()
-            .downcast_ref::<Function>()
-            .map(|fun| fun.kind())
-        {
+        let function = generator.function();
+        let function = match function.as_any().downcast_ref::<Function>().map(|fun| fun.kind()) {
             Some(FunctionKind::Generator(gen)) => gen.function(),
             Some(FunctionKind::Async(fun)) => fun.inner().function(),
             _ => throw!(cx.scope, TypeError, "Incompatible generator function"),

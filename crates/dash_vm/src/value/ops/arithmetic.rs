@@ -115,8 +115,8 @@ macro_rules! delegate {
                     $func(prim, $other, $sc)
                 } else {
                     Ok(Value::Boolean(match $other {
-                        Self::Object(o2) => std::ptr::eq(o.as_ptr(), o2.as_ptr()),
-                        Self::External(o2) => std::ptr::eq(o.as_ptr(), o2.inner.as_ptr()),
+                        Self::Object(o2) => std::ptr::eq(o.as_erased_ptr(), o2.as_erased_ptr()),
+                        Self::External(o2) => std::ptr::eq(o.as_erased_ptr(), o2.inner.as_erased_ptr()),
                         _ => false,
                     }))
                 }
@@ -126,8 +126,8 @@ macro_rules! delegate {
                     $func(prim, $other, $sc)
                 } else {
                     Ok(Value::Boolean(match $other {
-                        Self::Object(o2) => std::ptr::eq(o.inner.as_ptr(), o2.as_ptr()),
-                        Self::External(o2) => std::ptr::eq(o.inner.as_ptr(), o2.inner.as_ptr()),
+                        Self::Object(o2) => std::ptr::eq(o.inner.as_erased_ptr(), o2.as_erased_ptr()),
+                        Self::External(o2) => std::ptr::eq(o.inner.as_erased_ptr(), o2.inner.as_erased_ptr()),
                         _ => false,
                     }))
                 }

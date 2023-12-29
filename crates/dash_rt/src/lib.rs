@@ -7,6 +7,7 @@ use dash_vm::frame::{Exports, Frame};
 use dash_vm::gc::persistent::Persistent;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::function::native::CallContext;
+use dash_vm::value::object::Object;
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::promise::Promise;
 use dash_vm::value::{Root, Value};

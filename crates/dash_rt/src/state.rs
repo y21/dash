@@ -3,7 +3,6 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use dash_vm::gc::persistent::Persistent;
-use dash_vm::value::object::Object;
 use dash_vm::Vm;
 use rustc_hash::FxHashMap;
 
@@ -16,7 +15,7 @@ pub struct State {
     tx: EventSender,
     root_module: Rc<RefCell<Option<Box<dyn ModuleLoader>>>>,
     tasks: TaskIds,
-    promises: RefCell<FxHashMap<u64, Persistent<dyn Object>>>,
+    promises: RefCell<FxHashMap<u64, Persistent>>,
 }
 
 impl State {
@@ -65,19 +64,19 @@ impl State {
         self.rt.clone()
     }
 
-    pub fn add_pending_promise(&self, promise: Persistent<dyn Object>) -> u64 {
+    pub fn add_pending_promise(&self, promise: Persistent) -> u64 {
         static NEXT_PROMISE_ID: AtomicU64 = AtomicU64::new(0);
         let id = NEXT_PROMISE_ID.fetch_add(1, Ordering::Relaxed);
         self.promises.borrow_mut().insert(id, promise);
         id
     }
 
-    pub fn take_promise(&self, id: u64) -> Persistent<dyn Object> {
+    pub fn take_promise(&self, id: u64) -> Persistent {
         self.try_take_promise(id)
             .expect("Attempted to take a promise that was already taken")
     }
 
-    pub fn try_take_promise(&self, id: u64) -> Option<Persistent<dyn Object>> {
+    pub fn try_take_promise(&self, id: u64) -> Option<Persistent> {
         self.promises.borrow_mut().remove(&id)
     }
 }

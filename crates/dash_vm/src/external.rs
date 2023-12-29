@@ -4,10 +4,9 @@ use crate::gc::handle::Handle;
 use crate::gc::trace::{Trace, TraceCtxt};
 
 use super::localscope::LocalScope;
-use super::value::object::Object;
 
 #[derive(Debug, Default)]
-pub struct Externals(FxHashMap<*const (), Vec<Handle<dyn Object>>>);
+pub struct Externals(FxHashMap<*const (), Vec<Handle>>);
 
 unsafe impl Trace for Externals {
     fn trace(&self, cx: &mut TraceCtxt<'_>) {
@@ -22,15 +21,15 @@ impl Externals {
         Self::default()
     }
 
-    pub fn extend_from_scope(&mut self, sc: *const LocalScope, mut refs: Vec<Handle<dyn Object>>) {
+    pub fn extend_from_scope(&mut self, sc: *const LocalScope, mut refs: Vec<Handle>) {
         self.0.entry(sc.cast()).or_default().append(&mut refs);
     }
 
-    pub fn add_single(&mut self, sc: *const LocalScope, re: Handle<dyn Object>) {
+    pub fn add_single(&mut self, sc: *const LocalScope, re: Handle) {
         self.0.entry(sc.cast()).or_default().push(re)
     }
 
-    pub fn remove(&mut self, sc: *const LocalScope) -> Option<Vec<Handle<dyn Object>>> {
+    pub fn remove(&mut self, sc: *const LocalScope) -> Option<Vec<Handle>> {
         self.0.remove(&sc.cast())
     }
 }

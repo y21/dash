@@ -95,19 +95,14 @@ pub fn then(cx: CallContext) -> Result<Value, Value> {
 #[derive(Debug, Trace)]
 struct ThenTask {
     // TODO: make a type like CastHandle<Promise> that implements Deref by downcasting
-    then_promise: Handle<dyn Object>,
-    handler: Handle<dyn Object>,
-    resolver: Handle<dyn Object>,
+    then_promise: Handle,
+    handler: Handle,
+    resolver: Handle,
     obj: NamedObject,
 }
 
 impl ThenTask {
-    pub fn new(
-        vm: &Vm,
-        then_promise: Handle<dyn Object>,
-        handler: Handle<dyn Object>,
-        resolver: Handle<dyn Object>,
-    ) -> Self {
+    pub fn new(vm: &Vm, then_promise: Handle, handler: Handle, resolver: Handle) -> Self {
         Self {
             then_promise,
             handler,
@@ -134,7 +129,7 @@ impl Object for ThenTask {
     fn apply(
         &self,
         scope: &mut crate::localscope::LocalScope,
-        _callee: Handle<dyn Object>,
+        _callee: Handle,
         _this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {

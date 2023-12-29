@@ -154,7 +154,7 @@ impl Object for RequireFunction {
     fn apply(
         &self,
         scope: &mut LocalScope,
-        _callee: dash_vm::gc::handle::Handle<dyn Object>,
+        _callee: dash_vm::gc::handle::Handle,
         _this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {

@@ -2,6 +2,7 @@ use crate::throw;
 use crate::value::function::bound::BoundFunction;
 use crate::value::function::native::CallContext;
 use crate::value::function::Function;
+use crate::value::object::Object;
 use crate::value::{Root, Typeof, Value};
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {

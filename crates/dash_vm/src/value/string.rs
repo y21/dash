@@ -92,7 +92,7 @@ impl ValueConversion for JsString {
         Ok(self.res(sc).len())
     }
 
-    fn to_object(&self, sc: &mut LocalScope) -> Result<crate::gc::handle::Handle<dyn super::object::Object>, Value> {
+    fn to_object(&self, sc: &mut LocalScope) -> Result<crate::gc::handle::Handle, Value> {
         let bx = BoxedString::new(sc, self.clone());
         Ok(sc.register(bx))
     }
@@ -145,7 +145,7 @@ impl Object for JsString {
     fn apply(
         &self,
         scope: &mut LocalScope,
-        _: crate::gc::handle::Handle<dyn Object>,
+        _: crate::gc::handle::Handle,
         _: Value,
         _: Vec<Value>,
     ) -> Result<super::Unrooted, super::Unrooted> {

@@ -54,13 +54,13 @@ const DEFAULT_GC_OBJECT_COUNT_THRESHOLD: usize = 8192;
 
 pub struct Vm {
     frames: Vec<Frame>,
-    async_tasks: Vec<Handle<dyn Object>>,
+    async_tasks: Vec<Handle>,
     // TODO: the inner vec of the stack should be private for soundness
     // popping from the stack must return `Unrooted`
     stack: Vec<Value>,
     gc: Gc,
     pub interner: StringInterner,
-    global: Handle<dyn Object>,
+    global: Handle,
     // "External refs" currently refers to existing `Persistent<T>`s.
     // Persistent values already manage the reference count when cloning or dropping them
     // and are stored in the Handle itself, but we still need to keep track of them so we can
@@ -68,7 +68,7 @@ pub struct Vm {
     //
     // We insert into this in `Persistent::new`, and remove from it during the tracing phase.
     // We can't do that in Persistent's Drop code, because we don't have access to the VM there.
-    external_refs: FxHashSet<Handle<dyn Object>>,
+    external_refs: FxHashSet<Handle>,
     scopes: LocalScopeList,
     statics: Box<Statics>, // TODO: we should box this... maybe?
     try_blocks: Vec<TryBlock>,
@@ -121,7 +121,7 @@ impl Vm {
         scope(self)
     }
 
-    pub fn global(&self) -> Handle<dyn Object> {
+    pub fn global(&self) -> Handle {
         self.global.clone()
     }
 
@@ -129,7 +129,7 @@ impl Vm {
     #[rustfmt::skip]
     fn prepare(&mut self) {
         debug!("initialize vm intrinsics");
-        fn set_fn_prototype(v: &dyn Object, proto: &Handle<dyn Object>, name: interner::Symbol) {
+        fn set_fn_prototype(v: &dyn Object, proto: Handle, name: interner::Symbol) {
             let fun = v.as_any().downcast_ref::<Function>().unwrap();
             fun.set_name(name.into());
             fun.set_fn_prototype(proto.clone());
@@ -139,19 +139,19 @@ impl Vm {
         // we should have some sort of cache to avoid this
         // (though we also populate function prototypes later on this way, so it's not so trivial)
         fn register(
-            base: Handle<dyn Object>,
+            base: Handle,
             prototype: impl Into<Value>,
-            constructor: Handle<dyn Object>,
-            methods: impl IntoIterator<Item = (interner::Symbol, Handle<dyn Object>)>,
-            symbols: impl IntoIterator<Item = (Symbol, Handle<dyn Object>)>,
+            constructor: Handle,
+            methods: impl IntoIterator<Item = (interner::Symbol, Handle)>,
+            symbols: impl IntoIterator<Item = (Symbol, Handle)>,
             fields: impl IntoIterator<Item = (interner::Symbol, Value)>,
             // Contrary to `prototype`, this optionally sets the function prototype. Should only be `Some`
             // when base is a function
-            fn_prototype: Option<(interner::Symbol, Handle<dyn Object>)>,
+            fn_prototype: Option<(interner::Symbol, Handle)>,
 
             // LocalScope needs to be the last parameter because we don't have two phase borrows in user code
             scope: &mut LocalScope<'_>,
-        ) -> Handle<dyn Object> {
+        ) -> Handle {
             base.set_property(scope, sym::constructor.into(), PropertyValue::static_default(constructor.into())).unwrap();
             base.set_prototype(scope, prototype.into()).unwrap();
 
@@ -188,7 +188,7 @@ impl Vm {
             }
 
             if let Some((proto_name, proto_val)) = fn_prototype {
-                set_fn_prototype(&base, &proto_val, proto_name);
+                set_fn_prototype(&base, proto_val, proto_name);
             }
 
             base
@@ -1300,7 +1300,7 @@ impl Vm {
         for (i, v) in self.stack.iter().enumerate() {
             print!("{i}: ");
             match v {
-                Value::Object(o) => println!("{:#?}", &**o),
+                Value::Object(o) => println!("{:#?}", &*o),
                 Value::External(o) => println!("[[external]]: {:#?}", o.inner()),
                 _ => println!("{v:?}"),
             }
@@ -1308,7 +1308,7 @@ impl Vm {
     }
 
     /// Adds a function to the async task queue.
-    pub fn add_async_task(&mut self, fun: Handle<dyn Object>) {
+    pub fn add_async_task(&mut self, fun: Handle) {
         self.async_tasks.push(fun);
     }
 
@@ -1444,7 +1444,7 @@ impl Vm {
         // remove Handles from external refs set that have a zero refcount (implying no active persistent refs)
         // and trace if refcount > 0
         self.external_refs.retain(|e| {
-            let refcount = unsafe { (*e.as_ptr()).refcount.get() };
+            let refcount = e.refcount();
             if refcount == 0 {
                 false
             } else {
@@ -1469,7 +1469,7 @@ impl Vm {
     // TODO: remove this function at all costs, this should never be called.
     // Always call `register` on local scope
     // Or, rather, return Unrooted
-    pub fn register<O: Object + 'static>(&mut self, obj: O) -> Handle<dyn Object> {
+    pub fn register<O: Object + 'static>(&mut self, obj: O) -> Handle {
         self.gc.register(obj)
     }
 

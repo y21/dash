@@ -92,7 +92,7 @@ pub struct Function {
     name: RefCell<Option<JsString>>,
     kind: FunctionKind,
     obj: NamedObject,
-    prototype: RefCell<Option<Handle<dyn Object>>>,
+    prototype: RefCell<Option<Handle>>,
 }
 
 impl Function {
@@ -127,15 +127,15 @@ impl Function {
         self.name.borrow().clone()
     }
 
-    pub fn set_fn_prototype(&self, prototype: Handle<dyn Object>) {
+    pub fn set_fn_prototype(&self, prototype: Handle) {
         self.prototype.replace(Some(prototype));
     }
 
-    pub fn get_fn_prototype(&self) -> Option<Handle<dyn Object>> {
+    pub fn get_fn_prototype(&self) -> Option<Handle> {
         self.prototype.borrow().clone()
     }
 
-    pub fn get_or_set_prototype(&self, scope: &mut LocalScope) -> Handle<dyn Object> {
+    pub fn get_or_set_prototype(&self, scope: &mut LocalScope) -> Handle {
         self.prototype
             .borrow_mut()
             .get_or_insert_with(|| {
@@ -146,11 +146,7 @@ impl Function {
     }
 
     /// Creates a new instance of this function.
-    pub fn new_instance(
-        &self,
-        this_handle: Handle<dyn Object>,
-        scope: &mut LocalScope,
-    ) -> Result<Handle<dyn Object>, Value> {
+    pub fn new_instance(&self, this_handle: Handle, scope: &mut LocalScope) -> Result<Handle, Value> {
         let prototype = self.get_or_set_prototype(scope);
         let this = scope.register(NamedObject::with_prototype_and_constructor(prototype, this_handle));
         Ok(this)
@@ -160,7 +156,7 @@ impl Function {
 fn handle_call(
     fun: &Function,
     scope: &mut LocalScope,
-    callee: Handle<dyn Object>,
+    callee: Handle,
     this: Value,
     args: Vec<Value>,
     is_constructor_call: bool,
@@ -226,7 +222,7 @@ impl Object for Function {
     fn apply(
         &self,
         scope: &mut LocalScope,
-        callee: Handle<dyn Object>,
+        callee: Handle,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
@@ -236,7 +232,7 @@ impl Object for Function {
     fn construct(
         &self,
         scope: &mut LocalScope,
-        callee: Handle<dyn Object>,
+        callee: Handle,
         _this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {

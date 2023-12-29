@@ -125,7 +125,7 @@ macro_rules! boxed_primitive {
                     ValueConversion::length_of_array_like(&self.inner, sc)
                 }
 
-                fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value> {
+                fn to_object(&self, sc: &mut LocalScope) -> Result<Handle, Value> {
                     ValueConversion::to_object(&self.inner, sc)
                 }
             }

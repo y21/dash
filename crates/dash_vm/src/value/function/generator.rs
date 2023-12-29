@@ -30,7 +30,7 @@ impl GeneratorFunction {
     pub(crate) fn handle_function_call(
         &self,
         scope: &mut LocalScope,
-        callee: Handle<dyn Object>,
+        callee: Handle,
         _this: Value,
         args: Vec<Value>,
         _is_constructor_call: bool,
@@ -88,13 +88,13 @@ unsafe impl Trace for GeneratorState {
 
 #[derive(Debug, Trace)]
 pub struct GeneratorIterator {
-    function: Handle<dyn Object>,
+    function: Handle,
     obj: NamedObject,
     state: RefCell<GeneratorState>,
 }
 
 impl GeneratorIterator {
-    pub fn new(function: Handle<dyn Object>, vm: &Vm, stack: Vec<Value>) -> Self {
+    pub fn new(function: Handle, vm: &Vm, stack: Vec<Value>) -> Self {
         let proto = vm.statics.generator_iterator_prototype.clone();
         let ctor = function.clone();
 
@@ -105,7 +105,7 @@ impl GeneratorIterator {
         }
     }
 
-    pub fn empty(function: Handle<dyn Object>) -> Self {
+    pub fn empty(function: Handle) -> Self {
         Self {
             function,
             obj: NamedObject::null(),
@@ -117,8 +117,8 @@ impl GeneratorIterator {
         &self.state
     }
 
-    pub fn function(&self) -> &Handle<dyn Object> {
-        &self.function
+    pub fn function(&self) -> Handle {
+        self.function.clone()
     }
 
     pub fn did_run(&self) -> bool {
@@ -142,7 +142,7 @@ impl Object for GeneratorIterator {
     fn apply(
         &self,
         scope: &mut LocalScope,
-        callee: Handle<dyn Object>,
+        callee: Handle,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {

@@ -117,7 +117,7 @@ impl Default for LocalScopeList {
 
 #[derive(Clone, Debug)]
 pub struct ScopeData {
-    refs: Vec<Handle<dyn Object>>,
+    refs: Vec<Handle>,
     strings: Vec<Symbol>,
     next: Option<NonNull<ScopeData>>,
 }
@@ -146,7 +146,7 @@ impl<'vm> LocalScope<'vm> {
         unsafe { self.scope_data.as_mut() }
     }
 
-    pub fn add_ref(&mut self, obj: Handle<dyn Object>) {
+    pub fn add_ref(&mut self, obj: Handle) {
         self.scope_data_mut().refs.push(obj);
     }
 
@@ -157,7 +157,7 @@ impl<'vm> LocalScope<'vm> {
                 // Two things to add: the inner object, and the external itself
                 // TODO: do we really need to add the inner object, considering that the inner will be traversed during tracing
                 self.add_value(o.inner().clone());
-                self.add_ref(o.as_gc_handle().clone());
+                self.add_ref(o.as_gc_handle());
             }
             Value::String(s) => {
                 self.scope_data_mut().strings.push(s.sym());
@@ -176,7 +176,7 @@ impl<'vm> LocalScope<'vm> {
     }
 
     /// Registers an object and roots it.
-    pub fn register<O: Object + 'static>(&mut self, obj: O) -> Handle<dyn Object> {
+    pub fn register<O: Object + 'static>(&mut self, obj: O) -> Handle {
         let handle = self.deref_mut().register(obj);
         self.add_ref(handle.clone());
         handle

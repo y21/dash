@@ -17,7 +17,7 @@ use crate::{throw, Vm};
 use super::ops::conversions::ValueConversion;
 use super::primitive::{PrimitiveCapabilities, Symbol};
 use super::string::JsString;
-use super::{ExternalValue, Root, Typeof, Unrooted, Value, ValueContext};
+use super::{Root, Typeof, Unrooted, Value, ValueContext};
 
 pub type ObjectMap<K, V> = hashbrown::HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
@@ -68,7 +68,7 @@ pub trait Object: Debug + Trace {
     fn apply(
         &self,
         scope: &mut LocalScope,
-        callee: Handle<dyn Object>,
+        callee: Handle,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted>;
@@ -76,7 +76,7 @@ pub trait Object: Debug + Trace {
     fn construct(
         &self,
         scope: &mut LocalScope,
-        callee: Handle<dyn Object>,
+        callee: Handle,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
@@ -169,7 +169,7 @@ macro_rules! delegate {
         fn apply(
             &self,
             sc: &mut $crate::localscope::LocalScope,
-            handle: $crate::gc::handle::Handle<dyn Object>,
+            handle: $crate::gc::handle::Handle,
             this: $crate::value::Value,
             args: Vec<$crate::value::Value>,
         ) -> Result<$crate::value::Unrooted, $crate::value::Unrooted> {
@@ -180,7 +180,7 @@ macro_rules! delegate {
         fn construct(
             &self,
             sc: &mut $crate::localscope::LocalScope,
-            handle: $crate::gc::handle::Handle<dyn Object>,
+            handle: $crate::gc::handle::Handle,
             this: $crate::value::Value,
             args: Vec<$crate::value::Value>,
         ) -> Result<$crate::value::Unrooted, $crate::value::Unrooted> {
@@ -207,8 +207,8 @@ macro_rules! delegate {
 
 #[derive(Debug, Clone)]
 pub struct NamedObject {
-    prototype: RefCell<Option<Handle<dyn Object>>>,
-    constructor: RefCell<Option<Handle<dyn Object>>>,
+    prototype: RefCell<Option<Handle>>,
+    constructor: RefCell<Option<Handle>>,
     values: RefCell<ObjectMap<PropertyKey, PropertyValue>>,
 }
 
@@ -262,7 +262,7 @@ impl PropertyValue {
         Self::new(PropertyValueKind::Static(value), Default::default())
     }
 
-    pub fn getter_default(value: Handle<dyn Object>) -> Self {
+    pub fn getter_default(value: Handle) -> Self {
         Self::new(
             PropertyValueKind::Trap {
                 get: Some(value),
@@ -272,7 +272,7 @@ impl PropertyValue {
         )
     }
 
-    pub fn setter_default(value: Handle<dyn Object>) -> Self {
+    pub fn setter_default(value: Handle) -> Self {
         Self::new(
             PropertyValueKind::Trap {
                 get: None,
@@ -395,24 +395,21 @@ impl PropertyValue {
 #[derive(Debug, Clone)]
 pub enum PropertyValueKind {
     /// Accessor property
-    Trap {
-        get: Option<Handle<dyn Object>>,
-        set: Option<Handle<dyn Object>>,
-    },
+    Trap { get: Option<Handle>, set: Option<Handle> },
     /// Static value property
     Static(Value),
     // TODO: magic property that appears "static" but is actually computed, e.g. array.length
 }
 
 impl PropertyValueKind {
-    pub fn getter(get: Handle<dyn Object>) -> Self {
+    pub fn getter(get: Handle) -> Self {
         Self::Trap {
             get: Some(get),
             set: None,
         }
     }
 
-    pub fn setter(set: Handle<dyn Object>) -> Self {
+    pub fn setter(set: Handle) -> Self {
         Self::Trap {
             set: Some(set),
             get: None,
@@ -520,7 +517,7 @@ impl NamedObject {
         }
     }
 
-    pub fn with_prototype_and_constructor(prototype: Handle<dyn Object>, ctor: Handle<dyn Object>) -> Self {
+    pub fn with_prototype_and_constructor(prototype: Handle, ctor: Handle) -> Self {
         Self {
             constructor: RefCell::new(Some(ctor)),
             prototype: RefCell::new(Some(prototype)),
@@ -641,7 +638,7 @@ impl Object for NamedObject {
     fn apply(
         &self,
         _sc: &mut LocalScope,
-        _handle: Handle<dyn Object>,
+        _handle: Handle,
         _this: Value,
         _args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
@@ -721,7 +718,7 @@ impl Object for Box<dyn Object> {
     fn apply(
         &self,
         scope: &mut LocalScope,
-        callee: Handle<dyn Object>,
+        callee: Handle,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
@@ -731,7 +728,7 @@ impl Object for Box<dyn Object> {
     fn construct(
         &self,
         scope: &mut LocalScope,
-        callee: Handle<dyn Object>,
+        callee: Handle,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
@@ -755,9 +752,9 @@ impl Object for Box<dyn Object> {
     }
 }
 
-impl Object for Handle<dyn Object> {
+impl Object for Handle {
     fn get_own_property(&self, sc: &mut LocalScope, this: Value, key: PropertyKey) -> Result<Unrooted, Unrooted> {
-        (**self).get_own_property(sc, this, key)
+        unsafe { (self.vtable().js_get_own_property)(self.erased_value(), sc, this, key) }
     }
 
     fn get_own_property_descriptor(
@@ -765,11 +762,11 @@ impl Object for Handle<dyn Object> {
         sc: &mut LocalScope,
         key: PropertyKey,
     ) -> Result<Option<PropertyValue>, Unrooted> {
-        (**self).get_own_property_descriptor(sc, key)
+        unsafe { (self.vtable().js_get_own_property_descriptor)(self.erased_value(), sc, key) }
     }
 
     fn get_property(&self, sc: &mut LocalScope, this: Value, key: PropertyKey) -> Result<Unrooted, Unrooted> {
-        (**self).get_property(sc, this, key)
+        unsafe { (self.vtable().js_get_property)(self.erased_value(), sc, this, key) }
     }
 
     fn get_property_descriptor(
@@ -777,114 +774,93 @@ impl Object for Handle<dyn Object> {
         sc: &mut LocalScope,
         key: PropertyKey,
     ) -> Result<Option<PropertyValue>, Unrooted> {
-        (**self).get_property_descriptor(sc, key)
+        unsafe { (self.vtable().js_get_property_descriptor)(self.erased_value(), sc, key) }
     }
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
-        (**self).set_property(sc, key, value)
+        unsafe { (self.vtable().js_set_property)(self.erased_value(), sc, key, value) }
     }
 
     fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
-        (**self).delete_property(sc, key)
+        unsafe { (self.vtable().js_delete_property)(self.erased_value(), sc, key) }
     }
 
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
-        (**self).set_prototype(sc, value)
+        unsafe { (self.vtable().js_set_prototype)(self.erased_value(), sc, value) }
     }
 
     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
-        (**self).get_prototype(sc)
+        unsafe { (self.vtable().js_get_prototype)(self.erased_value(), sc) }
     }
 
     fn apply(
         &self,
         scope: &mut LocalScope,
-        callee: Handle<dyn Object>,
+        callee: Handle,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
-        (**self).apply(scope, callee, this, args)
+        unsafe { (self.vtable().js_apply)(self.erased_value(), scope, callee, this, args) }
     }
 
     fn construct(
         &self,
         scope: &mut LocalScope,
-        callee: Handle<dyn Object>,
+        callee: Handle,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
-        (**self).construct(scope, callee, this, args)
+        unsafe { (self.vtable().js_construct)(self.erased_value(), scope, callee, this, args) }
     }
 
     fn as_any(&self) -> &dyn Any {
-        (**self).as_any()
+        unsafe { &*(self.vtable().js_as_any)(self.erased_value()) }
     }
 
     fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
-        (**self).own_keys(sc)
+        unsafe { (self.vtable().js_own_keys)(self.erased_value(), sc) }
     }
 
     fn type_of(&self) -> Typeof {
-        (**self).type_of()
+        unsafe { (self.vtable().js_type_of)(self.erased_value()) }
     }
 
     fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
-        (**self).as_primitive_capable()
+        unsafe { (self.vtable().js_as_primitive_capable)(self.erased_value()).map(|v| &*v) }
     }
 }
 
-impl Handle<ExternalValue> {
+impl Handle {
     pub fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Unrooted> {
-        self.inner.get_property(sc, key)
-    }
-
-    pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
-        self.inner.apply(sc, this, args)
-    }
-
-    pub fn construct(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
-        self.inner.construct(sc, this, args)
-    }
-
-    // FIXME: should override typeof, as_primitive_capable, etc.
-}
-
-impl Handle<dyn Object> {
-    pub fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Unrooted> {
-        (**self).get_property(sc, Value::Object(self.clone()), key)
+        Object::get_property(self, sc, Value::Object(self.clone()), key)
     }
 
     pub fn get_own_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Unrooted> {
-        (**self).get_own_property(sc, Value::Object(self.clone()), key)
+        Object::get_own_property(self, sc, Value::Object(self.clone()), key)
     }
 
     pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
         let callee = self.clone();
-        (**self).apply(sc, callee, this, args)
+        Object::apply(self, sc, callee, this, args)
     }
 
     pub fn construct(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
         let callee = self.clone();
-        (**self).construct(sc, callee, this, args)
+        Object::construct(self, sc, callee, this, args)
     }
-
-    // FIXME: should override typeof, as_primitive_capable, etc.
 }
 
-impl Persistent<dyn Object> {
+impl Persistent {
     pub fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Unrooted> {
-        let callee = self.handle().clone();
-        (**self).get_property(sc, Value::Object(callee), key)
+        (**self).get_property(sc, key)
     }
 
     pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
-        let callee = self.handle().clone();
-        (**self).apply(sc, callee, this, args)
+        (**self).apply(sc, this, args)
     }
 
     pub fn construct(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
-        let callee = self.handle().clone();
-        (**self).construct(sc, callee, this, args)
+        (**self).construct(sc, this, args)
     }
 
     // FIXME: should override typeof, as_primitive_capable, etc.

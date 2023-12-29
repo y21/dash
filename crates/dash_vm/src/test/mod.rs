@@ -91,8 +91,8 @@ fn persistent_trace() {
     assert_eq!(p1.refcount(), 2);
     assert!(vm.external_refs.len() == 1);
     assert!(ptr::eq(
-        vm.external_refs.iter().next().unwrap().as_ptr(),
-        object.as_ptr()
+        vm.external_refs.iter().next().unwrap().as_erased_ptr(),
+        object.as_erased_ptr()
     ));
     drop(p2);
     assert_eq!(p1.refcount(), 1);

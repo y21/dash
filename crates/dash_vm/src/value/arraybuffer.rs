@@ -75,7 +75,7 @@ impl Object for ArrayBuffer {
     fn apply(
         &self,
         scope: &mut LocalScope,
-        callee: Handle<dyn Object>,
+        callee: Handle,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {

@@ -28,7 +28,7 @@ impl AsyncFunction {
     pub(crate) fn handle_function_call(
         &self,
         scope: &mut LocalScope,
-        callee: Handle<dyn Object>,
+        callee: Handle,
         this: Value,
         args: Vec<Value>,
         is_constructor_call: bool,
@@ -102,12 +102,12 @@ impl AsyncFunction {
 pub struct ThenTask {
     /// The inner generator iterator of the async function
     generator_iter: Value,
-    final_promise: Handle<dyn Object>,
+    final_promise: Handle,
     obj: NamedObject,
 }
 
 impl ThenTask {
-    pub fn new(vm: &Vm, generator_iter: Value, final_promise: Handle<dyn Object>) -> Self {
+    pub fn new(vm: &Vm, generator_iter: Value, final_promise: Handle) -> Self {
         Self {
             generator_iter,
             obj: NamedObject::new(vm),
@@ -133,7 +133,7 @@ impl Object for ThenTask {
     fn apply(
         &self,
         scope: &mut crate::localscope::LocalScope,
-        _callee: Handle<dyn Object>,
+        _callee: Handle,
         _this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {

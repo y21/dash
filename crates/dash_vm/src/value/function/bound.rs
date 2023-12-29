@@ -9,14 +9,14 @@ use crate::{delegate, Vm};
 
 #[derive(Debug, Trace)]
 pub struct BoundFunction {
-    callee: Handle<dyn Object>,
+    callee: Handle,
     this: Option<Value>,
     args: Option<Vec<Value>>,
     obj: NamedObject,
 }
 
 impl BoundFunction {
-    pub fn new(vm: &Vm, callee: Handle<dyn Object>, this: Option<Value>, args: Option<Vec<Value>>) -> Self {
+    pub fn new(vm: &Vm, callee: Handle, this: Option<Value>, args: Option<Vec<Value>>) -> Self {
         Self {
             callee,
             this,
@@ -42,7 +42,7 @@ impl Object for BoundFunction {
     fn apply(
         &self,
         scope: &mut crate::localscope::LocalScope,
-        _callee: Handle<dyn Object>,
+        _callee: Handle,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {

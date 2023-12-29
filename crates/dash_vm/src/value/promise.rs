@@ -13,10 +13,7 @@ use super::{Typeof, Unrooted, Value};
 
 #[derive(Debug)]
 pub enum PromiseState {
-    Pending {
-        resolve: Vec<Handle<dyn Object>>,
-        reject: Vec<Handle<dyn Object>>,
-    },
+    Pending { resolve: Vec<Handle>, reject: Vec<Handle> },
     Resolved(Value),
     Rejected(Value),
 }
@@ -113,7 +110,7 @@ impl Object for Promise {
     fn apply(
         &self,
         scope: &mut crate::localscope::LocalScope,
-        callee: Handle<dyn Object>,
+        callee: Handle,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
@@ -131,12 +128,12 @@ impl Object for Promise {
 
 #[derive(Debug, Trace)]
 pub struct PromiseResolver {
-    promise: Handle<dyn Object>,
+    promise: Handle,
     obj: NamedObject,
 }
 
 impl PromiseResolver {
-    pub fn new(vm: &Vm, promise: Handle<dyn Object>) -> Self {
+    pub fn new(vm: &Vm, promise: Handle) -> Self {
         Self {
             promise,
             obj: NamedObject::new(vm),
@@ -181,7 +178,7 @@ impl Object for PromiseResolver {
     fn apply(
         &self,
         scope: &mut crate::localscope::LocalScope,
-        _callee: Handle<dyn Object>,
+        _callee: Handle,
         _this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
@@ -209,12 +206,12 @@ impl Object for PromiseResolver {
 
 #[derive(Debug, Trace)]
 pub struct PromiseRejecter {
-    promise: Handle<dyn Object>,
+    promise: Handle,
     obj: NamedObject,
 }
 
 impl PromiseRejecter {
-    pub fn new(vm: &Vm, promise: Handle<dyn Object>) -> Self {
+    pub fn new(vm: &Vm, promise: Handle) -> Self {
         Self {
             promise,
             obj: NamedObject::new(vm),
@@ -259,7 +256,7 @@ impl Object for PromiseRejecter {
     fn apply(
         &self,
         scope: &mut crate::localscope::LocalScope,
-        _callee: Handle<dyn Object>,
+        _callee: Handle,
         _this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {

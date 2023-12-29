@@ -35,7 +35,7 @@ pub fn keys(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn to_string(cx: CallContext) -> Result<Value, Value> {
-    fn to_string_inner(scope: &mut LocalScope<'_>, o: &Handle<dyn Object>) -> Result<Value, Value> {
+    fn to_string_inner(scope: &mut LocalScope<'_>, o: Handle) -> Result<Value, Value> {
         let constructor = o
             .get_property(scope, sym::constructor.into())
             .root(scope)?
@@ -51,7 +51,7 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
     let value = match &cx.this {
         Value::Undefined(_) => Value::String(cx.scope.intern("[object Undefined]").into()),
         Value::Null(_) => Value::String(cx.scope.intern("[object Null]").into()),
-        Value::Object(o) => to_string_inner(cx.scope, o)?,
+        Value::Object(o) => to_string_inner(cx.scope, o.clone())?,
         _ => unreachable!(), // `this` is always object/null/undefined. TODO: wrong, `Object.prototype.toString..call('a')` crashes
     };
 

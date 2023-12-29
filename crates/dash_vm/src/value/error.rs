@@ -54,8 +54,8 @@ impl Error {
         sc: &mut LocalScope<'_>,
         name: S1,
         message: S2,
-        ctor: Handle<dyn Object>,
-        proto: Handle<dyn Object>,
+        ctor: Handle,
+        proto: Handle,
     ) -> Self {
         let name = name.into();
         let message = message.into();
@@ -73,8 +73,8 @@ impl Error {
         sc: &mut LocalScope<'_>,
         name: S1,
         message: S2,
-        ctor: Handle<dyn Object>,
-        proto: Handle<dyn Object>,
+        ctor: Handle,
+        proto: Handle,
     ) -> Self {
         let name = name.into();
         let message = sc.intern(message.into().as_ref()).into();
@@ -140,7 +140,7 @@ impl Object for Error {
     fn apply(
         &self,
         scope: &mut LocalScope,
-        callee: Handle<dyn Object>,
+        callee: Handle,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {

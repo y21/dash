@@ -49,7 +49,7 @@ pub fn dash_value_from_wasm_value(scope: &mut LocalScope, value: WasmValue) -> R
 
             struct ExternalHandle {
                 scope: LocalScope<'static>,
-                promise: Handle<dyn Object>,
+                promise: Handle,
             }
             unsafe impl Send for ExternalHandle {}
             unsafe impl Sync for ExternalHandle {}

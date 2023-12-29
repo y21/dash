@@ -50,7 +50,7 @@ impl Object for f64 {
     fn apply(
         &self,
         scope: &mut LocalScope,
-        _callee: Handle<dyn Object>,
+        _callee: Handle,
         _this: Value,
         _args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
@@ -102,7 +102,7 @@ impl Object for bool {
     fn apply(
         &self,
         scope: &mut LocalScope,
-        _callee: Handle<dyn Object>,
+        _callee: Handle,
         _this: Value,
         _args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
@@ -160,7 +160,7 @@ impl Object for bool {
 //     fn apply(
 //         &self,
 //         scope: &mut LocalScope,
-//         _callee: Handle<dyn Object>,
+//         _callee: Handle,
 //         _this: Value,
 //         _args: Vec<Value>,
 //     ) -> Result<Unrooted, Unrooted> {
@@ -228,7 +228,7 @@ impl Object for Undefined {
     fn apply(
         &self,
         sc: &mut LocalScope,
-        _callee: Handle<dyn Object>,
+        _callee: Handle,
         _this: Value,
         _args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
@@ -280,7 +280,7 @@ impl Object for Null {
     fn apply(
         &self,
         sc: &mut LocalScope,
-        _callee: Handle<dyn Object>,
+        _callee: Handle,
         _this: Value,
         _args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
@@ -342,7 +342,7 @@ impl Object for Null {
 //     fn apply(
 //         &self,
 //         scope: &mut LocalScope,
-//         _callee: Handle<dyn Object>,
+//         _callee: Handle,
 //         _this: Value,
 //         _args: Vec<Value>,
 //     ) -> Result<Unrooted, Unrooted> {
@@ -406,7 +406,7 @@ impl Object for Symbol {
     fn apply(
         &self,
         scope: &mut LocalScope,
-        _callee: Handle<dyn Object>,
+        _callee: Handle,
         _this: Value,
         _args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
@@ -506,7 +506,7 @@ impl ValueConversion for f64 {
         todo!() // TODO
     }
 
-    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value> {
+    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle, Value> {
         let num = BoxedNumber::new(sc, *self);
         Ok(sc.register(num))
     }
@@ -577,7 +577,7 @@ impl ValueConversion for bool {
         todo!() // TODO
     }
 
-    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value> {
+    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle, Value> {
         let bool = BoxedBoolean::new(sc, *self);
         Ok(sc.register(bool))
     }
@@ -640,7 +640,7 @@ impl ValueConversion for bool {
 //         Ok(self.len())
 //     }
 
-//     fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value> {
+//     fn to_object(&self, sc: &mut LocalScope) -> Result<Handle, Value> {
 //         let bool = BoxedString::new(sc, self.clone());
 //         Ok(sc.register(bool))
 //     }
@@ -715,7 +715,7 @@ impl ValueConversion for Undefined {
         todo!() // TODO: throw?
     }
 
-    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value> {
+    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle, Value> {
         throw!(sc, TypeError, "Cannot convert undefined to object")
     }
 }
@@ -777,7 +777,7 @@ impl ValueConversion for Null {
         todo!() // TODO: throw?
     }
 
-    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value> {
+    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle, Value> {
         throw!(sc, TypeError, "Cannot convert null to object");
     }
 }
@@ -835,7 +835,7 @@ impl ValueConversion for Symbol {
         todo!() // TODO: throw?
     }
 
-    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value> {
+    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle, Value> {
         let sym = BoxedSymbol::new(sc, self.clone());
         Ok(sc.register(sym))
     }
@@ -887,7 +887,7 @@ impl Object for Number {
     fn apply(
         &self,
         scope: &mut LocalScope,
-        callee: Handle<dyn Object>,
+        callee: Handle,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
@@ -967,7 +967,7 @@ impl ValueConversion for Number {
         self.0.length_of_array_like(sc)
     }
 
-    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle<dyn Object>, Value> {
+    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle, Value> {
         self.0.to_object(sc)
     }
 }

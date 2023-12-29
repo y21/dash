@@ -62,7 +62,7 @@ pub enum Value {
     /// The symbol type
     Symbol(Symbol),
     /// The object type
-    Object(Handle<dyn Object>),
+    Object(Handle),
     /// An "external" value that is being used by other functions.
     External(ExternalValue),
 }
@@ -119,13 +119,7 @@ impl Object for Value {
         }
     }
 
-    fn apply(
-        &self,
-        scope: &mut LocalScope,
-        _: Handle<dyn Object>,
-        this: Value,
-        args: Vec<Value>,
-    ) -> Result<Unrooted, Unrooted> {
+    fn apply(&self, scope: &mut LocalScope, _: Handle, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
         self.apply(scope, this, args)
     }
 
@@ -258,13 +252,13 @@ pub struct ExternalValue {
     // The `dyn Object` is always `Value` (an invariant of this type).
     // It's currently type-erased, but there's no real reason for this. This should make the transition
     // to a thin `Handle` with its vtable in the allocation easier.
-    inner: Handle<dyn Object>,
+    inner: Handle,
 }
 
 impl ExternalValue {
     /// The `dyn Object` *must* be `Value`.
     // can we make this type safe?
-    pub fn new(inner: Handle<dyn Object>) -> Self {
+    pub fn new(inner: Handle) -> Self {
         Self { inner }
     }
 
@@ -275,8 +269,8 @@ impl ExternalValue {
             .expect("invariant violated: ExternalValue did not contain a Value")
     }
 
-    pub fn as_gc_handle(&self) -> &Handle<dyn Object> {
-        &self.inner
+    pub fn as_gc_handle(&self) -> Handle {
+        self.inner.clone()
     }
 
     /// Assigns a new value to this external.
@@ -298,9 +292,9 @@ impl ExternalValue {
         // this is ok because Handle has a mutable pointer to the GcNode on the heap
 
         assert_eq!(this.inner.as_any().type_id(), TypeId::of::<Value>());
-        // SAFETY: casting from *mut GcNode<dyn Object> to *mut GcNode<Value>, then dereferencing + writing
+        // SAFETY: casting to *mut GcNode<Value>, then dereferencing + writing
         // to said pointer is safe, because it is asserted on the previous line that the type is correct
-        (*this.inner.as_ptr().cast::<crate::gc::handle::GcNode<Value>>()).value = value;
+        (*this.inner.as_ptr::<Value>()).value = value;
     }
 }
 
@@ -330,7 +324,7 @@ impl Object for ExternalValue {
     fn apply(
         &self,
         scope: &mut LocalScope,
-        _callee: Handle<dyn Object>,
+        _callee: Handle,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
@@ -340,7 +334,7 @@ impl Object for ExternalValue {
     fn construct(
         &self,
         scope: &mut LocalScope,
-        _callee: Handle<dyn Object>,
+        _callee: Handle,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
@@ -380,7 +374,7 @@ fn register_function_externals(
             match v {
                 Value::External(v) => v,
                 other => {
-                    // TODO: comment what's happening here -- Value -> Handle<dyn Object> -> ExternaValue(..)
+                    // TODO: comment what's happening here -- Value -> Handle -> ExternaValue(..)
                     let ext = ExternalValue::new(vm.register(other));
                     vm.set_local(id, Value::External(ext.clone()).into());
                     ext
