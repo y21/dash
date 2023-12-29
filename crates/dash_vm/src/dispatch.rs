@@ -1712,7 +1712,7 @@ mod handlers {
 
         macro_rules! bin_op_numl_constr_n {
             ($op:tt, $ty:ty) => {{
-                let left = match cx.pop_stack_rooted() {
+                let left = match cx.stack.last().unwrap() {
                     Value::Number(n) => n.0,
                     _ => unreachable!(),
                 };
@@ -1721,7 +1721,7 @@ mod handlers {
                     *byte = cx.fetch_and_inc_ip();
                 }
                 let right = <$ty>::from_ne_bytes(right_bytes) as f64;
-                cx.stack.push(Value::Boolean(left $op right));
+                *cx.stack.last_mut().unwrap() = Value::Boolean(left $op right);
             }};
         }
 
