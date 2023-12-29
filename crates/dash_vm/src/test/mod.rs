@@ -297,3 +297,44 @@ simple_test!(
     "#,
     Value::undefined()
 );
+
+simple_test!(
+    externals,
+    r#"
+    let x = 1;
+    let y = 2;
+    let z = 3;
+
+    (function() {
+        assert(x === 1);
+        assert(y === 2);
+        (function() {
+            assert(y === 2);
+            assert(z === 3);
+            (function() {
+                assert(x === 1);
+                assert(y === 2);
+                assert(z === 3);
+            })();
+        })();
+    })();
+    
+    (function() {
+        (function() {
+            x = [1, 2];
+            x.map(() => y = 5);
+        })();
+        
+        assert(y === 5);
+    })();
+
+    let getX = () => x;
+    getX().push(3);
+    assert(getX().toString() === '1,2,3');
+    (function() {
+        x = 4;
+    })();
+    assert(getX() === 4);
+    "#,
+    Value::undefined()
+);

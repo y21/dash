@@ -149,7 +149,8 @@ impl Object for JsString {
         _: Value,
         _: Vec<Value>,
     ) -> Result<super::Unrooted, super::Unrooted> {
-        throw!(scope, TypeError, "string is not a function")
+        let v = self.res(scope).to_owned();
+        throw!(scope, TypeError, "'{}' is not a function", v)
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

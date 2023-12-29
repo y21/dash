@@ -5,7 +5,6 @@ use std::ops::{Deref, DerefMut};
 use std::vec::Drain;
 
 use crate::frame::Frame;
-use crate::gc::handle::Handle;
 use crate::localscope::LocalScope;
 use crate::value::string::JsString;
 use crate::value::{ExternalValue, Root, Unrooted};
@@ -56,7 +55,7 @@ impl<'sc, 'vm> DispatchContext<'sc, 'vm> {
             .expect("Bytecode attempted to reference invalid local")
     }
 
-    pub fn get_external(&mut self, index: usize) -> &Handle<ExternalValue> {
+    pub fn get_external(&mut self, index: usize) -> &ExternalValue {
         self.scope
             .get_external(index)
             .expect("Bytecode attempted to reference invalid external")
@@ -202,7 +201,6 @@ mod handlers {
     use std::ops::{Add, Div, Mul, Rem, Sub};
 
     use crate::frame::{Frame, FrameState, TryBlock};
-    use crate::localscope::LocalScope;
     use crate::throw;
     use crate::util::unlikely;
     use crate::value::array::{Array, ArrayIterator};
@@ -964,7 +962,7 @@ mod handlers {
 
     pub fn ldlocal<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let id = cx.fetch_and_inc_ip();
-        let value = cx.get_local(id.into()).unbox_external();
+        let value = cx.get_local(id.into());
 
         cx.stack.push(value);
         Ok(None)
@@ -1265,8 +1263,7 @@ mod handlers {
         Ok(None)
     }
 
-    fn assign_to_external(sc: &mut LocalScope, handle: &Handle<ExternalValue>, value: Value) {
-        let value = value.into_gc(sc);
+    fn assign_to_external(handle: &ExternalValue, value: Value) {
         unsafe { ExternalValue::replace(handle, value) };
     }
 
@@ -1280,7 +1277,7 @@ mod handlers {
                 let right = cx.pop_stack_rooted();
                 let res = $op(&value, &right, &mut cx)?;
                 let external = cx.scope.get_external(id.into()).unwrap().clone();
-                assign_to_external(&mut cx, &external, res.clone());
+                assign_to_external(&external, res.clone());
                 cx.stack.push(res);
             }};
         }
@@ -1291,7 +1288,7 @@ mod handlers {
                 let right = Value::number(1.0);
                 let res = $op(&value, &right, &mut cx)?;
                 let external = cx.scope.get_external(id.into()).unwrap().clone();
-                assign_to_external(&mut cx, &external, res.clone());
+                assign_to_external(&external, res.clone());
                 cx.stack.push(res);
             }};
         }
@@ -1302,7 +1299,7 @@ mod handlers {
                 let right = Value::number(1.0);
                 let res = $op(&value, &right, &mut cx)?;
                 let external = cx.scope.get_external(id.into()).unwrap().clone();
-                assign_to_external(&mut cx, &external, res);
+                assign_to_external(&external, res);
                 cx.stack.push(value);
             }};
         }
@@ -1311,7 +1308,7 @@ mod handlers {
             AssignKind::Assignment => {
                 let value = cx.pop_stack_rooted();
                 let external = cx.scope.get_external(id.into()).unwrap().clone();
-                assign_to_external(&mut cx, &external, value.clone());
+                assign_to_external(&external, value.clone());
                 cx.stack.push(value);
             }
             AssignKind::AddAssignment => op!(Value::add),

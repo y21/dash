@@ -282,7 +282,7 @@ pub fn split(cx: CallContext) -> Result<Value, Value> {
         .collect();
 
     let array = Array::from_vec(cx.scope, result);
-    Ok(cx.scope.gc_mut().register(array).into())
+    Ok(cx.scope.register(array).into())
 }
 
 pub fn to_uppercase(cx: CallContext) -> Result<Value, Value> {

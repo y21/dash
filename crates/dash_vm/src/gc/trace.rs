@@ -3,11 +3,9 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use dash_middle::compiler::constant::{Constant, Function};
+use dash_middle::compiler::constant::Constant;
 
-use crate::value::function::native::CallContext;
-use crate::value::primitive::{Null, Number, Symbol, Undefined};
-use crate::value::regex::RegExpInner;
+use crate::value::primitive::{Null, Number, Undefined};
 use crate::value::typedarray::TypedArrayKind;
 use crate::value::Unrooted;
 

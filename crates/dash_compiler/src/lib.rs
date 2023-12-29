@@ -256,16 +256,19 @@ impl<'interner> FunctionCompiler<'interner> {
     /// and returns its ID
     fn add_external_to_func(&mut self, func_id: FuncId, external_id: u16, is_nested_external: bool) -> usize {
         let externals = self.tcx.scope_mut(func_id).externals_mut();
-        let id = externals
-            .iter()
-            .position(|External { id, is_external }| *id == external_id && *is_external == is_nested_external);
+        let id = externals.iter().position(
+            |External {
+                 id,
+                 is_nested_external: is_external,
+             }| *id == external_id && *is_external == is_nested_external,
+        );
 
         match id {
             Some(id) => id,
             None => {
                 externals.push(External {
                     id: external_id,
-                    is_external: is_nested_external,
+                    is_nested_external,
                 });
                 externals.len() - 1
             }

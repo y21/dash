@@ -1,10 +1,4 @@
-#![allow(unused)]
-
-use bitflags::bitflags;
-use std::borrow::Borrow;
-use std::cell::Cell;
 use std::fmt::Debug;
-use std::ops::Deref;
 use std::ptr::NonNull;
 
 use crate::value::object::Object;
@@ -167,13 +161,8 @@ unsafe impl<T: Object + 'static> IntoHandle for T {
 
 #[cfg(test)]
 mod tests {
-    use std::any::{Any, TypeId};
-    use std::fmt::Display;
-    use std::rc::Rc;
-
-    use crate::value::array::Array;
-    use crate::value::object::NamedObject;
-    use crate::value::ExternalValue;
+    use crate::value::primitive::Number;
+    use crate::value::{ExternalValue, Value};
 
     use super::*;
 
@@ -181,8 +170,8 @@ mod tests {
     fn simple() {
         unsafe {
             let mut gc = Gc::new();
-            let h1 = register_gc!(gc, 123.4);
-            let h1 = register_gc!(gc, true);
+            let _ = register_gc!(gc, 123.4);
+            let _ = register_gc!(gc, true);
             gc.sweep();
             gc.sweep();
         }
@@ -240,23 +229,6 @@ mod tests {
             assert!(!(*h3.as_ptr()).flags.is_marked());
             assert!(gc.node_count == 3);
 
-            // test handle casting
-            {
-                let h1_c = h1.cast_handle::<f64>();
-                assert_eq!(h1_c.as_deref(), Some(&123.0));
-
-                let h3_c = h3.cast_handle::<bool>();
-                assert_eq!(h3_c.as_deref(), Some(&true));
-
-                // how about some invalid casts
-                assert_eq!(h1.cast_handle::<bool>(), None);
-                assert_eq!(h1.cast_handle::<Rc<str>>(), None);
-                assert_eq!(h2.cast_handle::<bool>(), None);
-                assert_eq!(h2.cast_handle::<Array>(), None);
-                assert_eq!(h3.cast_handle::<f64>(), None);
-                assert_eq!(h3.cast_handle::<NamedObject>(), None);
-            }
-
             // ---
 
             // only mark second node
@@ -277,15 +249,13 @@ mod tests {
             assert!(gc.head.is_none());
             assert!(gc.tail.is_none());
 
-            // test that Handle::replace works
+            // test that ExternalValue::replace works
             {
-                let h4i = register_gc!(gc, 123.0);
-                let h4 = register_gc!(gc, ExternalValue::new(h4i));
-                let mut h4c = h4.cast_handle::<ExternalValue>().unwrap();
-                let h4i2 = register_gc!(gc, 456.0);
-                ExternalValue::replace(&h4c, h4i2);
-                let inner = h4c.inner.as_any().downcast_ref::<f64>().unwrap();
-                assert_eq!(*inner, 456.0);
+                let h4i: Handle<dyn Object> = register_gc!(gc, Value::Number(Number(123.4)));
+                let ext = ExternalValue::new(h4i);
+                assert_eq!(ext.inner(), &Value::Number(Number(123.4)));
+                ExternalValue::replace(&ext, Value::Boolean(true));
+                assert_eq!(ext.inner(), &Value::Boolean(true));
             }
 
             // lastly, test if Gc::drop works correctly. run under miri to see possible leaks

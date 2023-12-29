@@ -110,16 +110,6 @@ impl<T: ?Sized> Handle<T> {
     }
 }
 
-impl Handle<dyn Object> {
-    pub fn cast_handle<U: 'static>(&self) -> Option<Handle<U>> {
-        if self.as_any().is::<U>() {
-            Some(Handle(self.0.cast()))
-        } else {
-            None
-        }
-    }
-}
-
 impl<T: ?Sized> Hash for Handle<T> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.as_ptr().hash(state);

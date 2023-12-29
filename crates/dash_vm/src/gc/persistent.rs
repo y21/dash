@@ -30,6 +30,7 @@ impl<T: ?Sized> Persistent<T> {
     }
 
     // Used in tests
+    #[allow(unused)]
     pub(crate) fn refcount(&self) -> u64 {
         let inner = unsafe { &*self.0.as_ptr() };
         inner.refcount.get()

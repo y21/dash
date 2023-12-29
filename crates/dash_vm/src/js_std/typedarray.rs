@@ -14,7 +14,6 @@ macro_rules! typedarray {
             pub fn constructor(cx: CallContext) -> Result<Value, Value> {
                 let arg = match cx.args.first() {
                     Some(Value::Object(o)) => o,
-                    Some(Value::External(o)) => &o.inner,
                     _ => throw!(cx.scope, TypeError, "Missing argument"),
                 };
                 let Some(this) = arg.as_any().downcast_ref::<ArrayBuffer>() else {

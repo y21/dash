@@ -16,7 +16,7 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let size = cx.args.first().unwrap_or_undefined().to_length_u(cx.scope)?;
     // TODO: filling it with undefined values isn't right, but we don't have holey arrays yet.
     let array = Array::from_vec(cx.scope, vec![PropertyValue::static_default(Value::undefined()); size]);
-    Ok(cx.scope.gc_mut().register(array).into())
+    Ok(cx.scope.register(array).into())
 }
 
 fn join_inner(sc: &mut LocalScope, array: Value, separator: JsString) -> Result<Value, Value> {

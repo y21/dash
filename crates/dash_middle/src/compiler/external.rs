@@ -11,5 +11,5 @@ pub struct External {
     /// This tells the VM where to load the value from
     /// If this is false, it will load it from the local store
     /// If this is true, it will load it from the externals store
-    pub is_external: bool,
+    pub is_nested_external: bool,
 }

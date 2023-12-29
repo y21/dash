@@ -7,7 +7,6 @@ use dash_middle::compiler::CompileResult;
 use dash_middle::parser::statement::FunctionKind;
 use dash_proc_macro::Trace;
 
-use crate::gc::handle::Handle;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::value::string::JsString;
 use crate::value::{ExternalValue, Unrooted};
@@ -97,7 +96,7 @@ pub struct Frame {
     /// (excluding function parameters, as they are pushed onto the stack in Function::apply)
     pub extra_stack_space: usize,
     /// Contains local variable values from the outer scope
-    pub externals: Rc<[Handle<ExternalValue>]>,
+    pub externals: Rc<[ExternalValue]>,
     pub this: Option<Value>,
     pub sp: usize,
     pub state: FrameState,

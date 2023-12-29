@@ -5,7 +5,6 @@ use dash_proc_macro::Trace;
 
 use crate::dispatch::HandleResult;
 use crate::frame::Frame;
-use crate::gc::handle::Handle;
 use crate::localscope::LocalScope;
 use crate::value::{ExternalValue, Root, Value};
 
@@ -14,15 +13,15 @@ use super::extend_stack_from_args;
 #[derive(Debug, Clone, Trace)]
 pub struct UserFunction {
     inner: Rc<Function>,
-    externals: Rc<[Handle<ExternalValue>]>,
+    externals: Rc<[ExternalValue]>,
 }
 
 impl UserFunction {
-    pub fn new(inner: Rc<Function>, externals: Rc<[Handle<ExternalValue>]>) -> Self {
+    pub fn new(inner: Rc<Function>, externals: Rc<[ExternalValue]>) -> Self {
         Self { inner, externals }
     }
 
-    pub fn externals(&self) -> &Rc<[Handle<ExternalValue>]> {
+    pub fn externals(&self) -> &Rc<[ExternalValue]> {
         &self.externals
     }
 

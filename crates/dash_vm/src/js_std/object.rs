@@ -24,14 +24,14 @@ pub fn create(cx: CallContext) -> Result<Value, Value> {
 
     // TODO: second argument: ObjectDefineProperties
 
-    Ok(cx.scope.gc_mut().register(obj).into())
+    Ok(cx.scope.register(obj).into())
 }
 
 pub fn keys(cx: CallContext) -> Result<Value, Value> {
     let obj = cx.args.first().unwrap_or_undefined().to_object(cx.scope)?;
     let keys = obj.own_keys(cx.scope)?;
     let array = Array::from_vec(cx.scope, keys.into_iter().map(PropertyValue::static_default).collect());
-    Ok(cx.scope.gc_mut().register(array).into())
+    Ok(cx.scope.register(array).into())
 }
 
 pub fn to_string(cx: CallContext) -> Result<Value, Value> {
@@ -52,7 +52,6 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
         Value::Undefined(_) => Value::String(cx.scope.intern("[object Undefined]").into()),
         Value::Null(_) => Value::String(cx.scope.intern("[object Null]").into()),
         Value::Object(o) => to_string_inner(cx.scope, o)?,
-        Value::External(o) => to_string_inner(cx.scope, &o.inner)?,
         _ => unreachable!(), // `this` is always object/null/undefined. TODO: wrong, `Object.prototype.toString..call('a')` crashes
     };
 
@@ -63,7 +62,6 @@ pub fn get_own_property_descriptor(cx: CallContext) -> Result<Value, Value> {
     let o = cx.args.first().unwrap_or_undefined();
     let o = match &o {
         Value::Object(o) => o,
-        Value::External(o) => &o.inner,
         _ => throw!(
             cx.scope,
             TypeError,
@@ -84,7 +82,6 @@ pub fn get_own_property_descriptors(cx: CallContext) -> Result<Value, Value> {
     let o = cx.args.first().unwrap_or_undefined();
     let o = match &o {
         Value::Object(o) => o,
-        Value::External(o) => &o.inner,
         _ => throw!(
             cx.scope,
             TypeError,
@@ -114,7 +111,6 @@ pub fn get_own_property_descriptors(cx: CallContext) -> Result<Value, Value> {
 pub fn has_own_property(cx: CallContext) -> Result<Value, Value> {
     let o = match &cx.this {
         Value::Object(o) => o,
-        Value::External(o) => &o.inner,
         _ => throw!(
             cx.scope,
             TypeError,
@@ -131,7 +127,6 @@ pub fn has_own_property(cx: CallContext) -> Result<Value, Value> {
 pub fn define_property(cx: CallContext) -> Result<Value, Value> {
     let object = match cx.args.first() {
         Some(Value::Object(o)) => o,
-        Some(Value::External(o)) => &o.inner,
         _ => throw!(
             cx.scope,
             TypeError,
@@ -146,7 +141,6 @@ pub fn define_property(cx: CallContext) -> Result<Value, Value> {
     };
     let descriptor = match cx.args.get(2) {
         Some(Value::Object(o)) => o,
-        Some(Value::External(o)) => &o.inner,
         _ => throw!(cx.scope, TypeError, "Property descriptor must be an object"),
     };
 
@@ -210,7 +204,6 @@ pub fn is_prototype_of(cx: CallContext) -> Result<Value, Value> {
 
         this_proto = match this_proto {
             Value::Object(obj) => obj.get_prototype(cx.scope)?,
-            Value::External(obj) => obj.inner.get_prototype(cx.scope)?,
             _ => return Ok(Value::Boolean(false)),
         };
     }

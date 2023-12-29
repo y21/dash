@@ -155,8 +155,9 @@ impl<'vm> LocalScope<'vm> {
             Value::Object(o) => self.add_ref(o),
             Value::External(o) => {
                 // Two things to add: the inner object, and the external itself
-                self.add_ref(o.inner.clone());
-                self.add_ref(o.into_dyn());
+                // TODO: do we really need to add the inner object, considering that the inner will be traversed during tracing
+                self.add_value(o.inner().clone());
+                self.add_ref(o.as_gc_handle().clone());
             }
             Value::String(s) => {
                 self.scope_data_mut().strings.push(s.sym());

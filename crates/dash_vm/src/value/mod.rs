@@ -14,6 +14,8 @@ pub mod regex;
 pub mod set;
 pub mod typedarray;
 
+use std::any::TypeId;
+
 use dash_middle::compiler::constant::Constant;
 use dash_middle::compiler::external::External;
 use dash_middle::parser::statement::FunctionKind as ParserFunctionKind;
@@ -62,7 +64,87 @@ pub enum Value {
     /// The object type
     Object(Handle<dyn Object>),
     /// An "external" value that is being used by other functions.
-    External(Handle<ExternalValue>),
+    External(ExternalValue),
+}
+
+impl Object for Value {
+    fn get_own_property_descriptor(
+        &self,
+        sc: &mut LocalScope,
+        key: PropertyKey,
+    ) -> Result<Option<PropertyValue>, Unrooted> {
+        match self {
+            Value::Number(n) => n.get_own_property_descriptor(sc, key),
+            Value::Boolean(b) => b.get_own_property_descriptor(sc, key),
+            Value::String(s) => s.get_own_property_descriptor(sc, key),
+            Value::Undefined(u) => u.get_own_property_descriptor(sc, key),
+            Value::Null(n) => n.get_own_property_descriptor(sc, key),
+            Value::Symbol(s) => s.get_own_property_descriptor(sc, key),
+            Value::Object(o) => o.get_own_property_descriptor(sc, key),
+            Value::External(e) => e.get_own_property_descriptor(sc, key),
+        }
+    }
+
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
+        self.set_property(sc, key, value)
+    }
+
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
+        self.delete_property(sc, key)
+    }
+
+    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
+        match self {
+            Value::Number(n) => n.set_prototype(sc, value),
+            Value::Boolean(b) => b.set_prototype(sc, value),
+            Value::String(s) => s.set_prototype(sc, value),
+            Value::Undefined(u) => u.set_prototype(sc, value),
+            Value::Null(n) => n.set_prototype(sc, value),
+            Value::Symbol(s) => s.set_prototype(sc, value),
+            Value::Object(o) => o.set_prototype(sc, value),
+            Value::External(e) => e.set_prototype(sc, value),
+        }
+    }
+
+    fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
+        match self {
+            Value::Number(n) => n.get_prototype(sc),
+            Value::Boolean(b) => b.get_prototype(sc),
+            Value::String(s) => s.get_prototype(sc),
+            Value::Undefined(u) => u.get_prototype(sc),
+            Value::Null(n) => n.get_prototype(sc),
+            Value::Symbol(s) => s.get_prototype(sc),
+            Value::Object(o) => o.get_prototype(sc),
+            Value::External(e) => e.get_prototype(sc),
+        }
+    }
+
+    fn apply(
+        &self,
+        scope: &mut LocalScope,
+        _: Handle<dyn Object>,
+        this: Value,
+        args: Vec<Value>,
+    ) -> Result<Unrooted, Unrooted> {
+        self.apply(scope, this, args)
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+        match self {
+            Value::Number(n) => n.own_keys(sc),
+            Value::Boolean(b) => b.own_keys(sc),
+            Value::String(s) => s.own_keys(sc),
+            Value::Undefined(u) => u.own_keys(sc),
+            Value::Null(n) => n.own_keys(sc),
+            Value::Symbol(s) => s.own_keys(sc),
+            Value::Object(o) => o.own_keys(sc),
+            Value::External(e) => e.own_keys(sc),
+        }
+    }
 }
 
 /// A wrapper type around JavaScript values that are not rooted.
@@ -169,24 +251,56 @@ impl From<Value> for Unrooted {
     }
 }
 
-#[derive(Debug, Trace)]
+/// Usually you do not need to worry about this type in e.g. JS handler functions,
+/// since we unbox values on use in the Vm directly.
+#[derive(Debug, Trace, Clone, PartialEq, Eq, Hash)]
 pub struct ExternalValue {
-    pub inner: Handle<dyn Object>,
+    // The `dyn Object` is always `Value` (an invariant of this type).
+    // It's currently type-erased, but there's no real reason for this. This should make the transition
+    // to a thin `Handle` with its vtable in the allocation easier.
+    inner: Handle<dyn Object>,
 }
 
 impl ExternalValue {
-    pub fn new(b: Handle<dyn Object>) -> Self {
-        Self { inner: b }
+    /// The `dyn Object` *must* be `Value`.
+    // can we make this type safe?
+    pub fn new(inner: Handle<dyn Object>) -> Self {
+        Self { inner }
     }
 
+    pub fn inner(&self) -> &Value {
+        self.inner
+            .as_any()
+            .downcast_ref()
+            .expect("invariant violated: ExternalValue did not contain a Value")
+    }
+
+    pub fn as_gc_handle(&self) -> &Handle<dyn Object> {
+        &self.inner
+    }
+
+    /// Assigns a new value to this external.
+    ///
     /// # Safety
-    /// Callers must ensure that the handle being replaced does not have active borrows.
+    /// Callers must ensure that the value being replaced does not have active borrows.
     /// You also must not have any downcasted `Handle` (e.g. `Handle<str>`)
-    /// as the type might change with this replace
-    pub unsafe fn replace(this: &Handle<ExternalValue>, value: Handle<dyn Object>) {
+    /// as the type might change with this replace.
+    ///
+    /// For example, this usage is Undefined Behavior:
+    /// ```ignore
+    /// let ext = ExternalValue::new(...);
+    /// let r: &Value = ext.inner();
+    /// ExternalValue::replace(&ext, Value::Number(4.0)); // UB, writing to the inner value while a borrow is live
+    /// use_borrow(r);
+    /// ```
+    pub unsafe fn replace(this: &ExternalValue, value: Value) {
         // Even though it looks like we are assigning through a shared reference,
         // this is ok because Handle has a mutable pointer to the GcNode on the heap
-        (*this.as_ptr()).value.inner = value;
+
+        assert_eq!(this.inner.as_any().type_id(), TypeId::of::<Value>());
+        // SAFETY: casting from *mut GcNode<dyn Object> to *mut GcNode<Value>, then dereferencing + writing
+        // to said pointer is safe, because it is asserted on the previous line that the type is correct
+        (*this.inner.as_ptr().cast::<crate::gc::handle::GcNode<Value>>()).value = value;
     }
 }
 
@@ -252,45 +366,29 @@ unsafe impl Trace for Value {
 fn register_function_externals(
     function: &dash_middle::compiler::constant::Function,
     vm: &mut Vm,
-) -> Vec<Handle<ExternalValue>> {
+) -> Vec<ExternalValue> {
     let mut externals = Vec::new();
 
-    for External { id, is_external } in function.externals.iter().copied() {
+    for External { id, is_nested_external } in function.externals.iter().copied() {
         let id = usize::from(id);
 
-        let val = if is_external {
-            Value::External(vm.get_external(id).expect("Referenced local not found").clone())
+        let val = if is_nested_external {
+            vm.get_external(id).expect("Referenced local not found").clone()
         } else {
-            vm.get_local(id).expect("Referenced local not found")
+            let v = vm.get_local_raw(id).expect("Referenced local not found");
+
+            match v {
+                Value::External(v) => v,
+                other => {
+                    // TODO: comment what's happening here -- Value -> Handle<dyn Object> -> ExternaValue(..)
+                    let ext = ExternalValue::new(vm.register(other));
+                    vm.set_local(id, Value::External(ext.clone()).into());
+                    ext
+                }
+            }
         };
 
-        /// "Boxes" the object and also registers it on the GC
-        fn rebox<O: Object + 'static>(vm: &mut Vm, idx: usize, o: O) -> Handle<ExternalValue> {
-            // first indirection, to be able to reassign to the external
-            let boxed = vm.gc.register(o);
-            // second indirection, actual thing that can be shared
-            let handle = vm.gc.register(ExternalValue::new(boxed));
-            let handle = handle.cast_handle::<ExternalValue>().unwrap();
-            vm.set_local(idx, Value::External(handle.clone()).into());
-            handle
-        }
-
-        let obj = match val {
-            Value::Number(n) => rebox(vm, id, n),
-            Value::Boolean(b) => rebox(vm, id, b),
-            Value::String(s) => rebox(vm, id, s),
-            Value::Undefined(u) => rebox(vm, id, u),
-            Value::Null(n) => rebox(vm, id, n),
-            Value::Symbol(s) => rebox(vm, id, s),
-            Value::External(e) => e,
-            Value::Object(o) => vm
-                .gc
-                .register(ExternalValue::new(o))
-                .cast_handle::<ExternalValue>()
-                .unwrap(),
-        };
-
-        externals.push(obj);
+        externals.push(val);
     }
 
     externals
@@ -354,7 +452,7 @@ impl Value {
             Self::Number(n) => n.get_property(sc, self.clone(), key),
             Self::Boolean(b) => b.get_property(sc, self.clone(), key),
             Self::String(s) => s.get_property(sc, self.clone(), key),
-            Self::External(o) => o.get_property(sc, key),
+            Self::External(o) => o.inner().get_property(sc, key),
             Self::Undefined(u) => u.get_property(sc, self.clone(), key),
             Self::Null(n) => n.get_property(sc, self.clone(), key),
             Self::Symbol(s) => s.get_property(sc, self.clone(), key),
@@ -377,7 +475,7 @@ impl Value {
     pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
         match self {
             Self::Object(o) => o.apply(sc, this, args),
-            Self::External(o) => o.apply(sc, this, args),
+            Self::External(o) => o.inner().apply(sc, this, args),
             Self::Number(n) => throw!(sc, TypeError, "{} is not a function", n),
             Self::Boolean(b) => throw!(sc, TypeError, "{} is not a function", b),
             Self::String(s) => {
@@ -400,7 +498,7 @@ impl Value {
     ) -> Result<Unrooted, Unrooted> {
         match self {
             Self::Object(o) => o.apply(sc, this, args),
-            Self::External(o) => o.apply(sc, this, args),
+            Self::External(o) => o.inner().apply(sc, this, args),
             _ => {
                 cold_path();
 
@@ -420,7 +518,7 @@ impl Value {
     pub fn construct(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
         match self {
             Self::Object(o) => o.construct(sc, this, args),
-            Self::External(o) => o.construct(sc, this, args),
+            Self::External(o) => o.inner().construct(sc, this, args),
             Self::Number(n) => throw!(sc, TypeError, "{} is not a constructor", n),
             Self::Boolean(b) => throw!(sc, TypeError, "{} is not a constructor", b),
             Self::String(s) => {
@@ -469,17 +567,8 @@ impl Value {
 
     pub fn unbox_external(self) -> Value {
         match self {
-            Value::Boolean(b) => b.unbox(),
-            Value::String(s) => s.unbox(),
-            Value::Number(n) => n.unbox(),
-            Value::Symbol(s) => s.unbox(),
-            Value::Object(o) => Value::Object(o),
-            Value::Undefined(u) => u.unbox(),
-            Value::Null(n) => n.unbox(),
-            Value::External(ext) => ext
-                .as_primitive_capable()
-                .map(|p| p.unbox())
-                .unwrap_or_else(|| Value::Object(ext.inner.clone())),
+            Value::External(e) => e.inner().clone(),
+            _ => self,
         }
     }
 
@@ -534,33 +623,6 @@ impl Value {
             Value::Object(obj) => obj.as_any().downcast_ref(),
             Value::External(obj) => obj.inner.as_any().downcast_ref(),
             _ => None,
-        }
-    }
-
-    pub fn into_gc(self, sc: &mut LocalScope) -> Handle<dyn Object> {
-        match self {
-            Value::Number(v) => sc.register(v),
-            Value::Boolean(v) => sc.register(v),
-            Value::String(v) => sc.register(v),
-            Value::Undefined(v) => sc.register(v),
-            Value::Null(v) => sc.register(v),
-            Value::Symbol(v) => sc.register(v),
-            Value::Object(v) => v,
-            Value::External(v) => v.into_dyn(),
-        }
-    }
-
-    /// Prefer into_gc over this where possible.
-    pub fn into_gc_vm(self, vm: &mut Vm) -> Handle<dyn Object> {
-        match self {
-            Value::Number(v) => vm.register(v),
-            Value::Boolean(v) => vm.register(v),
-            Value::String(v) => vm.register(v),
-            Value::Undefined(v) => vm.register(v),
-            Value::Null(v) => vm.register(v),
-            Value::Symbol(v) => vm.register(v),
-            Value::Object(v) => v,
-            Value::External(v) => v.into_dyn(),
         }
     }
 }

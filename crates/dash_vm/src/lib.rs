@@ -1163,11 +1163,20 @@ impl Vm {
         self.frames.last().map(|frame| frame.sp).expect("No frame")
     }
 
-    pub(crate) fn get_local(&self, id: usize) -> Option<Value> {
+    /// Fetches a local, while also preserving external values
+    pub(crate) fn get_local_raw(&self, id: usize) -> Option<Value> {
         self.stack.get(self.get_frame_sp() + id).cloned()
     }
 
-    pub(crate) fn get_external(&self, id: usize) -> Option<&Handle<ExternalValue>> {
+    /// Fetches a local and unboxes any externals.
+    /// 
+    /// This is usually the method you want to use, since handling externals specifically is not
+    /// typically useful.
+    pub(crate) fn get_local(&self, id: usize) -> Option<Value> {
+        self.stack.get(self.get_frame_sp() + id).cloned().map(|v| v.unbox_external())
+    }
+
+    pub(crate) fn get_external(&self, id: usize) -> Option<&ExternalValue> {
         self.frames.last()?.externals.get(id)
     }
 
@@ -1180,7 +1189,6 @@ impl Vm {
         let value = unsafe { value.into_value() };
 
         if let Value::External(o) = self.stack[idx].clone() {
-            let value = value.into_gc_vm(self);
             unsafe { ExternalValue::replace(&o, value) };
         } else {
             self.stack[idx] = value;
@@ -1293,7 +1301,7 @@ impl Vm {
             print!("{i}: ");
             match v {
                 Value::Object(o) => println!("{:#?}", &**o),
-                Value::External(o) => println!("[[external]]: {:#?}", &*o.inner),
+                Value::External(o) => println!("[[external]]: {:#?}", o.inner()),
                 _ => println!("{v:?}"),
             }
         }
