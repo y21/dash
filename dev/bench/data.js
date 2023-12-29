@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1703811472054,
+  "lastUpdate": 1703871460854,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -6703,6 +6703,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 53661,
             "range": "± 2992",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "46445aca1e067694c90a7b2ea81caa5ec42b8cd9",
+          "message": "make `Handle` and `Persistent` the size of a machine pointer",
+          "timestamp": "2023-12-29T18:35:10+01:00",
+          "tree_id": "8bbbb7d13bc6a577d0d66686b33d9b1b817e2223",
+          "url": "https://github.com/y21/dash/commit/46445aca1e067694c90a7b2ea81caa5ec42b8cd9"
+        },
+        "date": 1703871460167,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1747551,
+            "range": "± 19443",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 175373,
+            "range": "± 1060",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 54623,
+            "range": "± 1929",
             "unit": "ns/iter"
           }
         ]
