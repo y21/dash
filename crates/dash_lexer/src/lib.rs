@@ -213,62 +213,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
             }
 
             if cur == b'\\' {
-                // Append borrowed segment since last escape sequence
-                let segment = self.subslice(lexeme_starting_idx..self.idx);
-                match &mut lexeme {
-                    Some(lexeme) => lexeme.to_mut().push_str(segment),
-                    None => lexeme = Some(Cow::Borrowed(segment)),
-                };
-
-                self.advance();
-                let escape = self.current_real();
-                match escape {
-                    b'n' | b't' | b'r' | b'b' | b'f' | b'v' | b'0' => {
-                        lexeme.as_mut().unwrap().to_mut().push(match escape {
-                            b'n' => '\n',
-                            b't' => '\t',
-                            b'r' => '\r',
-                            b'b' => '\x08',
-                            b'f' => '\x0C',
-                            b'v' => '\x0B',
-                            b'0' => '\0',
-                            _ => unreachable!(),
-                        });
-                        self.advance();
-                    }
-                    b'x' => {
-                        self.advance();
-                        match self
-                            .input
-                            .get(self.idx..self.idx + 2)
-                            .map(|hex| u8::from_str_radix(hex, 16))
-                        {
-                            Some(Ok(num)) => {
-                                lexeme.as_mut().unwrap().to_mut().push(num as char);
-                                self.advance_n(2);
-                            }
-                            Some(Err(_)) => {
-                                self.create_error(Error::InvalidEscapeSequence(self.span()));
-                            }
-                            None => {
-                                self.create_error(Error::UnexpectedEof);
-                            }
-                        };
-                    }
-                    other if !other.is_ascii() => {
-                        // if the escaped character is non-ascii, decode UTF-8
-                        let (c, len) = util::next_char_in_bytes(&self.input.as_bytes()[self.idx..]);
-                        lexeme.as_mut().unwrap().to_mut().push(c);
-                        self.advance_n(len);
-                    }
-                    // TODO: handle \u, \x
-                    other => {
-                        lexeme.as_mut().unwrap().to_mut().push(other as char);
-                        self.advance();
-                    }
-                }
-                lexeme_starting_idx = self.idx;
-
+                self.read_escape_character(&mut lexeme_starting_idx, &mut lexeme);
                 continue;
             }
 
@@ -355,9 +300,72 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
         self.create_contextified_token(TokenType::NumberDec(sym))
     }
 
+    fn read_escape_character(&mut self, lexeme_starting_idx: &mut usize, lexeme: &mut Option<Cow<'a, str>>) {
+        // Append borrowed segment since last escape sequence
+        let segment = self.subslice(*lexeme_starting_idx..self.idx);
+        match lexeme {
+            Some(lexeme) => lexeme.to_mut().push_str(segment),
+            None => *lexeme = Some(Cow::Borrowed(segment)),
+        };
+
+        self.advance();
+        let escape = self.current_real();
+        match escape {
+            b'n' | b't' | b'r' | b'b' | b'f' | b'v' | b'0' => {
+                lexeme.as_mut().unwrap().to_mut().push(match escape {
+                    b'n' => '\n',
+                    b't' => '\t',
+                    b'r' => '\r',
+                    b'b' => '\x08',
+                    b'f' => '\x0C',
+                    b'v' => '\x0B',
+                    b'0' => '\0',
+                    _ => unreachable!(),
+                });
+                self.advance();
+            }
+            b'x' => {
+                self.advance();
+                match self
+                    .input
+                    .get(self.idx..self.idx + 2)
+                    .map(|hex| u8::from_str_radix(hex, 16))
+                {
+                    Some(Ok(num)) => {
+                        lexeme.as_mut().unwrap().to_mut().push(num as char);
+                        self.advance_n(2);
+                    }
+                    Some(Err(_)) => {
+                        self.create_error(Error::InvalidEscapeSequence(self.span()));
+                        return;
+                    }
+                    None => {
+                        self.create_error(Error::UnexpectedEof);
+                        return;
+                    }
+                };
+            }
+            other if !other.is_ascii() => {
+                // if the escaped character is non-ascii, decode UTF-8
+                let (c, len) = util::next_char_in_bytes(&self.input.as_bytes()[self.idx..]);
+                lexeme.as_mut().unwrap().to_mut().push(c);
+                self.advance_n(len);
+            }
+            // TODO: handle \u, \x
+            other => {
+                lexeme.as_mut().unwrap().to_mut().push(other as char);
+                self.advance();
+            }
+        }
+        *lexeme_starting_idx = self.idx;
+    }
+
     fn read_template_literal_segment(&mut self) {
         let mut found_end = false;
         let mut is_interpolated = false;
+
+        let mut lexeme: Option<Cow<'a, str>> = None;
+        let mut lexeme_starting_idx = self.idx;
 
         while !self.is_eof() {
             let cur = self.current_real();
@@ -365,6 +373,11 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
                 self.advance();
                 found_end = true;
                 break;
+            }
+
+            if cur == b'\\' {
+                self.read_escape_character(&mut lexeme_starting_idx, &mut lexeme);
+                continue;
             }
 
             if cur == b'$' {
@@ -389,12 +402,21 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
             return self.create_error(Error::UnexpectedEof);
         }
 
-        let range = match is_interpolated {
-            true => self.start + 1..self.idx,
-            false => self.start + 1..self.idx - 1,
+        let end = match is_interpolated {
+            true => self.idx,
+            false => self.idx - 1,
         };
 
-        let sym = self.interner.intern(self.subslice(range));
+        let lexeme = match lexeme {
+            None => Cow::Borrowed(self.subslice(self.start + 1..end)),
+            Some(Cow::Owned(mut lexeme)) => {
+                lexeme.push_str(self.subslice(lexeme_starting_idx..end));
+                Cow::Owned(lexeme)
+            }
+            Some(Cow::Borrowed(..)) => unreachable!("Lexeme cannot be borrowed at this point"),
+        };
+
+        let sym = self.interner.intern(lexeme);
         self.create_contextified_token(TokenType::TemplateLiteral(sym)); // TODO: check if the spans created by this call are right!!
     }
 
