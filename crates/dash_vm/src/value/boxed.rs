@@ -90,9 +90,12 @@ macro_rules! boxed_primitive {
                     ValueEquality::eq(&self.inner, other, sc)
                 }
 
-                fn strict_eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-                    // TODO: compare pointers
-                    ValueEquality::strict_eq(&self.inner, other, sc)
+                fn strict_eq(&self, other: &Value, _: &mut LocalScope) -> Result<Value, Value> {
+                    if let Value::Object(obj) = other {
+                        Ok(Value::Boolean(std::ptr::eq(self, obj.erased_value().cast::<$name>())))
+                    } else {
+                        Ok(Value::Boolean(false))
+                    }
                 }
 
                 fn ne(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {

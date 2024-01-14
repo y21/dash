@@ -3,11 +3,16 @@ use crate::util::format_f64;
 use crate::value::function::native::CallContext;
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::primitive::{Number, MAX_SAFE_INTEGERF};
-use crate::value::{Value, ValueContext};
+use crate::value::{boxed, Value, ValueContext};
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let value = cx.args.get(0).unwrap_or_undefined().to_number(cx.scope)?;
-    Ok(Value::number(value))
+    if cx.is_constructor_call {
+        let value = boxed::Number::new(cx.scope, value);
+        Ok(Value::Object(cx.scope.register(value).into()))
+    } else {
+        Ok(Value::number(value))
+    }
 }
 
 pub fn to_string(cx: CallContext) -> Result<Value, Value> {

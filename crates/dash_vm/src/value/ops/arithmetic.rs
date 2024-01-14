@@ -158,6 +158,19 @@ impl ValueEquality for Value {
     }
 
     fn strict_eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        delegate!(self, other, sc, ValueEquality::strict_eq)
+        Ok(Value::Boolean(match (self, other) {
+            (Value::Number(l), Value::Number(r)) => l == r,
+            (Value::Boolean(l), Value::Boolean(r)) => l == r,
+            (Value::String(l), Value::String(r)) => l == r,
+            (Value::Undefined(_), Value::Undefined(_)) => true,
+            (Value::Null(_), Value::Null(_)) => true,
+            (Value::Symbol(l), Value::Symbol(r)) => l == r,
+            (Value::Object(l), Value::Object(r)) => l == r,
+            (Value::External(l), Value::External(r)) => {
+                // TODO: this branch should be unreachable, check if true
+                matches!(l.inner().strict_eq(r.inner(), sc)?, Value::Boolean(true))
+            }
+            _ => false,
+        }))
     }
 }
