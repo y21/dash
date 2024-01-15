@@ -104,7 +104,9 @@ pub enum Constant {
     Identifier(Symbol),
     Boolean(bool),
     Function(Rc<Function>),
-    Regex(dash_regex::ParsedRegex, dash_regex::Flags, Symbol),
+    // Boxed because this otherwise bloats the enum way too much.
+    // This makes evaluating regex constants slower but they're *far* less common than e.g. number literals
+    Regex(Box<(dash_regex::ParsedRegex, dash_regex::Flags, Symbol)>),
     Null,
     Undefined,
 }
@@ -146,7 +148,7 @@ impl Constant {
             LiteralExpr::Boolean(b) => Self::Boolean(*b),
             LiteralExpr::Null => Self::Null,
             LiteralExpr::Undefined => Self::Undefined,
-            LiteralExpr::Regex(regex, flags, source) => Self::Regex(regex.clone(), *flags, *source),
+            LiteralExpr::Regex(regex, flags, source) => Self::Regex(Box::new((regex.clone(), *flags, *source))),
         }
     }
 }

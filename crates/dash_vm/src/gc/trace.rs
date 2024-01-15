@@ -157,7 +157,10 @@ unsafe impl Trace for Constant {
             Constant::Identifier(sym) => sym.trace(cx),
             Constant::Boolean(_) => {}
             Constant::Function(func) => func.trace(cx),
-            Constant::Regex(_, _, sym) => sym.trace(cx),
+            Constant::Regex(s) => {
+                let (_, _, sym) = &**s;
+                sym.trace(cx);
+            }
             Constant::Null => {}
             Constant::Undefined => {}
         }

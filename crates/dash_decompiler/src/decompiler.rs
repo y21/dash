@@ -460,7 +460,10 @@ impl fmt::Display for DisplayConstant<'_, '_> {
             ),
             Constant::Null => f.write_str("null"),
             Constant::Undefined => f.write_str("undefined"),
-            Constant::Regex(_, _, source) => write!(f, "{source}"),
+            Constant::Regex(regex) => {
+                let (_, _, sym) = &**regex;
+                write!(f, "{}", self.0.resolve(*sym))
+            }
         }
     }
 }
