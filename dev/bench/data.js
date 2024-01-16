@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1705279453954,
+  "lastUpdate": 1705431724943,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -6955,6 +6955,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 53979,
             "range": "± 1774",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "08928db7f3dbee2de970ad75cc79ec3ae42399f3",
+          "message": "lower `switch` using if-else instead of its own opcode\n\nthe previous lowering was wrong, this fixes it",
+          "timestamp": "2024-01-16T19:59:33+01:00",
+          "tree_id": "9db17d1323baa57b32f2f782a8983f4cbcac0283",
+          "url": "https://github.com/y21/dash/commit/08928db7f3dbee2de970ad75cc79ec3ae42399f3"
+        },
+        "date": 1705431723365,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1747951,
+            "range": "± 25896",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 165822,
+            "range": "± 653",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 53978,
+            "range": "± 1342",
             "unit": "ns/iter"
           }
         ]
