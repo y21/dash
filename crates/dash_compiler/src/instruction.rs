@@ -293,12 +293,6 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
         Ok(())
     }
 
-    pub fn build_switch(&mut self, case_count: u16, has_default: bool) {
-        self.write(Instruction::Switch as u8);
-        self.writew(case_count);
-        self.write(has_default.into());
-    }
-
     pub fn build_objdestruct(&mut self, count: u16) {
         self.write_instr(Instruction::ObjDestruct);
         self.writew(count);

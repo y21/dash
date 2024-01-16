@@ -24,7 +24,10 @@ pub enum Label {
     LoopIncrement {
         loop_id: usize,
     },
-    SwitchCase {
+    SwitchCaseCondition {
+        case_id: u16,
+    },
+    SwitchCaseCode {
         case_id: u16,
     },
     SwitchEnd {

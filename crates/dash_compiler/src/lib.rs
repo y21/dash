@@ -21,8 +21,8 @@ use dash_middle::parser::expr::{
 use dash_middle::parser::statement::{
     BlockStatement, Class, ClassMemberKind, DoWhileLoop, ExportKind, ForInLoop, ForLoop, ForOfLoop, FuncId,
     FunctionDeclaration, FunctionKind, IfStatement, ImportKind, Loop, Parameter, ReturnStatement, SpecifierKind,
-    Statement, StatementKind, SwitchStatement, TryCatch, VariableBinding, VariableDeclaration, VariableDeclarationKind,
-    VariableDeclarationName, VariableDeclarations, WhileLoop,
+    Statement, StatementKind, SwitchCase, SwitchStatement, TryCatch, VariableBinding, VariableDeclaration,
+    VariableDeclarationKind, VariableDeclarationName, VariableDeclarations, WhileLoop,
 };
 use dash_middle::sourcemap::Span;
 use dash_middle::visitor::Visitor;
@@ -2046,59 +2046,113 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
         SwitchStatement { expr, cases, default }: SwitchStatement,
     ) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
-
         let switch_id = ib.current_function_mut().prepare_switch();
-        let has_default = default.is_some();
-        let case_count = cases.len();
 
-        // First, compile all case expressions in reverse order, so that the first pop() in the vm
-        // will be the first case value
-        for case in cases.iter().rev() {
-            ib.accept_expr(case.value.clone())?;
-        }
-
-        // Then, compile switch expression
-        ib.accept_expr(expr)?;
-
-        // Write switch metadata (case count, has default case)
-        let case_count = case_count
-            .try_into()
-            .map_err(|_| Error::SwitchCaseLimitExceeded(span))?;
-
-        ib.build_switch(case_count, has_default);
-
-        // Then, build jump headers for every case
-        for (case_id, ..) in cases.iter().enumerate() {
-            ib.build_jmp_header(
-                Label::SwitchCase {
-                    case_id: case_id as u16,
-                },
-                true,
-            );
-        }
-        if has_default {
-            ib.build_jmp_header(Label::SwitchCase { case_id: case_count }, true);
-        }
-
-        // If no case matches, then jump to SwitchEnd
-        ib.build_jmp(Label::SwitchEnd { switch_id }, false);
-
-        // Finally, compile case bodies
-        // All of the case bodies must be adjacent because of fallthrough
-        for (case_id, case) in cases.into_iter().enumerate() {
-            ib.add_local_label(Label::SwitchCase {
-                case_id: case_id as u16,
-            });
-            ib.accept_multiple(case.body)?;
-        }
-        if let Some(default) = default {
-            ib.add_local_label(Label::SwitchCase { case_id: case_count });
-            ib.accept_multiple(default)?;
-        }
+        // TODO: this currently always calls the naive implementation.
+        // We can be smarter in certain cases, such as if all cases are literals,
+        // we can create some kind of table.
+        compile_switch_naive(&mut ib, span, expr, cases, default)?;
 
         ib.current_function_mut()
             .add_global_label(Label::SwitchEnd { switch_id });
         ib.current_function_mut().exit_switch();
+
         Ok(())
     }
+}
+
+/// "Naive" switch lowering:
+/// ```js
+/// switch(1) {
+///     case w: /* FALLTHROUGH */
+///     case x:
+///         return 'case 1';
+///         break;
+///     case y:
+///         return 'case 2';
+///         break;
+///     default:
+///         return 'default';
+/// }
+/// ```
+/// to
+/// ```
+/// _1 = condition
+///
+/// case_w_cond:
+///     eq (ld _1 ld w)
+///     jmpfalsep case_x_cond
+///     # code for case w
+///		# if there's a break anywhere in here, jump to end of switch
+///     jmp case_x
+///
+///	case_x_cond:
+///		eq (ld_1 ld x)
+///		jmpfalsep case_y_cond
+///  case_x:
+///     # code for case x
+///		constant 'case 1'
+///		ret
+///		jmp case_y
+///
+/// case_x_code:
+///     ...
+/// case_y_cond:
+///		eq (ld_1 ld y)
+///		jmpfalsep default
+///	case y:
+/// 	...
+///		jmp default
+///
+/// default:
+///     ...
+/// ```
+fn compile_switch_naive(
+    ib: &mut InstructionBuilder<'_, '_>,
+    span: Span,
+    condition: Expr,
+    cases: Vec<SwitchCase>,
+    default: Option<Vec<Statement>>,
+) -> Result<(), Error> {
+    let condition_id = ib
+        .current_scope_mut()
+        .add_local(sym::switch_cond_desugar, VariableDeclarationKind::Unnameable, None)
+        .map_err(|_| Error::LocalLimitExceeded(span))?;
+
+    // Store condition in temporary
+    ib.accept_expr(condition)?;
+    ib.build_local_store(AssignKind::Assignment, condition_id, false);
+    ib.build_pop();
+
+    let local_load = compile_local_load(condition_id, false);
+
+    let case_count = cases.len().try_into().unwrap();
+
+    for (case_id, case) in cases.into_iter().enumerate() {
+        let case_id = u16::try_from(case_id).unwrap();
+        ib.add_local_label(Label::SwitchCaseCondition { case_id });
+
+        let eq = Expr::binary(
+            Expr {
+                kind: ExprKind::compiled(local_load.clone()),
+                span,
+            },
+            case.value,
+            TokenType::Equality,
+        );
+        ib.accept_expr(eq)?;
+        ib.build_jmpfalsep(Label::SwitchCaseCondition { case_id: case_id + 1 }, true);
+
+        ib.add_local_label(Label::SwitchCaseCode { case_id });
+        ib.accept_multiple(case.body)?;
+        ib.build_jmp(Label::SwitchCaseCode { case_id: case_id + 1 }, true);
+    }
+
+    ib.add_local_label(Label::SwitchCaseCondition { case_id: case_count });
+    ib.add_local_label(Label::SwitchCaseCode { case_id: case_count });
+    if let Some(default) = default {
+        ib.accept_multiple(default)?;
+    }
+
+    Ok(())
 }

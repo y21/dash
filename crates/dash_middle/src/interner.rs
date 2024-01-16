@@ -69,6 +69,7 @@ pub mod sym {
                 this,
                 for_of_iter,
                 for_of_gen_step,
+                switch_cond_desugar,
                 value,
                 done,
                 next,

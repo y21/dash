@@ -392,20 +392,6 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                 Instruction::CallForInIterator => self.handle_opless_instr("@@forInIterator"),
                 Instruction::DeletePropertyStatic => self.handle_incw_op_instr("deletepropertystatic")?,
                 Instruction::DeletePropertyDynamic => self.handle_opless_instr("deletepropertydynamic"),
-                Instruction::Switch => {
-                    let case_count = self.read_u16()?;
-                    let has_default = self.read()? == 1;
-
-                    for _ in 0..case_count {
-                        self.read_u16()?; // discard case offsets for now..
-                    }
-
-                    if has_default {
-                        self.read_u16()?;
-                    }
-
-                    self.handle_op_map_instr("switch", &[("case_count", &case_count), ("has_default", &has_default)])
-                }
                 Instruction::ObjDestruct => {
                     let count = self.read_u16()?;
                     for _ in 0..count {

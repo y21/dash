@@ -91,7 +91,6 @@ pub enum Instruction {
     CallForInIterator,
     DeletePropertyStatic,
     DeletePropertyDynamic,
-    Switch,
     ObjDestruct,
     ArrayDestruct,
     // Nop exists solely for the sake of benchmarking the raw throughput of the VM dispatch loop

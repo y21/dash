@@ -106,6 +106,8 @@ pub enum Constant {
     Function(Rc<Function>),
     // Boxed because this otherwise bloats the enum way too much.
     // This makes evaluating regex constants slower but they're *far* less common than e.g. number literals
+    // TODO: avoid cloning `Constant`s when turning them into Values,
+    // because there's no point in cloning this box
     Regex(Box<(dash_regex::ParsedRegex, dash_regex::Flags, Symbol)>),
     Null,
     Undefined,

@@ -1557,43 +1557,6 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn switch<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
-        let case_count = cx.fetchw_and_inc_ip();
-        let has_default = cx.fetch_and_inc_ip() == 1;
-
-        let switch_expr = cx.pop_stack_rooted();
-
-        let mut target_ip = None;
-
-        for _ in 0..case_count {
-            let case_value = cx.pop_stack_rooted();
-            let case_offset = cx.fetchw_and_inc_ip() as usize;
-            let ip = cx.active_frame().ip;
-
-            let is_eq = switch_expr.strict_eq(&case_value, cx.scope)?.to_boolean(cx.scope)?;
-            let has_matching_case = target_ip.is_some();
-
-            if is_eq && !has_matching_case {
-                target_ip = Some(ip + case_offset);
-            }
-        }
-
-        if has_default {
-            let default_offset = cx.fetchw_and_inc_ip() as usize;
-            let ip = cx.active_frame().ip;
-
-            if target_ip.is_none() {
-                target_ip = Some(ip + default_offset);
-            }
-        }
-
-        if let Some(target_ip) = target_ip {
-            cx.active_frame_mut().ip = target_ip;
-        }
-
-        Ok(None)
-    }
-
     pub fn objdestruct<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let count = cx.fetchw_and_inc_ip();
         let obj = cx.pop_stack_rooted();
@@ -1897,7 +1860,6 @@ pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResu
         Instruction::CallForInIterator => handlers::call_for_in_iterator(cx),
         Instruction::DeletePropertyDynamic => handlers::delete_property_dynamic(cx),
         Instruction::DeletePropertyStatic => handlers::delete_property_static(cx),
-        Instruction::Switch => handlers::switch(cx),
         Instruction::ObjDestruct => handlers::objdestruct(cx),
         Instruction::ArrayDestruct => handlers::arraydestruct(cx),
         Instruction::Nop => Ok(None),
