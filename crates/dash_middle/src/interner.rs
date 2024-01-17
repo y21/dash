@@ -256,7 +256,8 @@ pub mod sym {
                 zero: "0",
                 one: "1",
                 getPrototypeOf,
-                isPrototypeOf
+                isPrototypeOf,
+                arguments
             }
         ]
     }

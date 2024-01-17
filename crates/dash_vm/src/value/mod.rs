@@ -1,3 +1,4 @@
+pub mod arguments;
 pub mod array;
 pub mod arraybuffer;
 pub mod boxed;

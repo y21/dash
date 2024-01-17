@@ -11,6 +11,7 @@ use crate::gc::handle::Handle;
 use crate::gc::interner::sym;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::localscope::LocalScope;
+use crate::value::arguments::Arguments;
 use crate::Vm;
 
 use self::r#async::AsyncFunction;
@@ -261,12 +262,22 @@ impl Object for Function {
     }
 }
 
+/// Returns the `arguments` object, iff the function needs it.
 pub(crate) fn adjust_stack_from_flat_call(
     scope: &mut LocalScope,
     user_function: &UserFunction,
     old_sp: usize,
     argc: usize,
-) {
+) -> Option<Handle> {
+    let mut arguments = None;
+    if user_function.inner().references_arguments {
+        let args = scope.stack[old_sp..].to_vec();
+        debug_assert_eq!(args.len(), argc);
+        let args = Arguments::new(scope, args);
+        let args = scope.register(args);
+        arguments = Some(args);
+    }
+
     // Conveniently, the arguments are all on the stack, in the order
     // we need it to be in, so we don't need to move anything there for that part.
 
@@ -301,6 +312,7 @@ pub(crate) fn adjust_stack_from_flat_call(
     }
 
     scope.stack.extend(rest);
+    arguments
 }
 
 /// Extends the VM stack with provided arguments

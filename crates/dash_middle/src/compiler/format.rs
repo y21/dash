@@ -1,6 +1,6 @@
 use super::CompileResult;
 
-const BYTECODE_VERSION: u32 = 2;
+const BYTECODE_VERSION: u32 = 3;
 
 pub fn serialize(cr: CompileResult) -> bincode::Result<Vec<u8>> {
     let mut buffer = BYTECODE_VERSION.to_le_bytes().to_vec();

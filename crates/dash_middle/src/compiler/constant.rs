@@ -84,6 +84,7 @@ pub struct Function {
     pub poison_ips: RefCell<HashSet<usize>>,
     pub source: Rc<str>,
     pub debug_symbols: DebugSymbols,
+    pub references_arguments: bool,
 }
 
 impl Function {

@@ -17,9 +17,9 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
     let frame = {
         let generator = as_generator(cx.scope, &cx.this)?;
 
-        let (ip, old_stack) = match &mut *generator.state().borrow_mut() {
+        let (ip, old_stack, arguments) = match &mut *generator.state().borrow_mut() {
             GeneratorState::Finished => return create_generator_value(cx.scope, true, None),
-            GeneratorState::Running { ip, stack } => (*ip, mem::take(stack)),
+            GeneratorState::Running { ip, stack, arguments } => (*ip, mem::take(stack), arguments.take()),
         };
 
         let function = generator.function();
@@ -32,7 +32,7 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
         let current_sp = cx.scope.stack_size();
         cx.scope.try_extend_stack(old_stack).root_err(cx.scope)?;
 
-        let mut frame = Frame::from_function(None, function, false, false);
+        let mut frame = Frame::from_function(None, function, false, false, arguments);
         frame.set_ip(ip);
         frame.set_sp(current_sp);
 
@@ -52,6 +52,7 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
     // Generators work a bit different from normal functions, so we do the stack padding management ourselves here
     let result = match cx.scope.execute_frame_raw(frame) {
         Ok(v) => v,
+        // TODO: this should not early return because we never reset the temporarily broken generator state
         Err(v) => return Err(v.root(cx.scope)),
     };
     let generator = as_generator(cx.scope, &cx.this)?;
@@ -70,9 +71,11 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
             let frame = cx.scope.pop_frame().expect("Generator frame is missing");
             let stack = cx.scope.drain_stack(frame.sp..).collect::<Vec<_>>();
 
-            generator
-                .state()
-                .replace(GeneratorState::Running { ip: frame.ip, stack });
+            generator.state().replace(GeneratorState::Running {
+                ip: frame.ip,
+                stack,
+                arguments: frame.arguments,
+            });
 
             create_generator_value(cx.scope, false, Some(value))
         }

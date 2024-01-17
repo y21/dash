@@ -6,6 +6,7 @@ use dash_proc_macro::Trace;
 use crate::gc::handle::Handle;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::localscope::LocalScope;
+use crate::value::arguments::Arguments;
 use crate::value::object::{NamedObject, Object};
 use crate::value::{Typeof, Unrooted, Value};
 use crate::{delegate, throw, Vm};
@@ -35,6 +36,13 @@ impl GeneratorFunction {
         args: Vec<Value>,
         _is_constructor_call: bool,
     ) -> Result<Value, Unrooted> {
+        let mut arguments = None;
+        if self.function.inner().references_arguments {
+            let args = Arguments::new(scope, args.iter().cloned());
+            let args = scope.register(args);
+            arguments = Some(args);
+        }
+
         // Handle edge cases such as provided_args != expected_args
         // by delegating to the usual arg handling logic that occurs with normal user functions
         let args = {
@@ -46,7 +54,7 @@ impl GeneratorFunction {
             scope.stack.drain(sp..).collect::<Vec<_>>()
         };
 
-        let iter = GeneratorIterator::new(callee, scope, args);
+        let iter = GeneratorIterator::new(callee, scope, args, arguments);
         Ok(Value::Object(scope.register(iter)).into())
     }
 }
@@ -54,7 +62,11 @@ impl GeneratorFunction {
 #[derive(Debug, Clone)]
 pub enum GeneratorState {
     Finished,
-    Running { ip: usize, stack: Vec<Value> },
+    Running {
+        ip: usize,
+        stack: Vec<Value>,
+        arguments: Option<Handle>,
+    },
 }
 
 impl GeneratorState {
@@ -66,21 +78,17 @@ impl GeneratorState {
     }
 }
 
-impl Default for GeneratorState {
-    fn default() -> Self {
-        Self::Running {
-            ip: 0,
-            stack: Vec::new(),
-        }
-    }
-}
-
 unsafe impl Trace for GeneratorState {
     fn trace(&self, cx: &mut TraceCtxt<'_>) {
         match self {
             GeneratorState::Finished => {}
-            GeneratorState::Running { ip: _, stack } => {
+            GeneratorState::Running {
+                ip: _,
+                stack,
+                arguments,
+            } => {
                 stack.trace(cx);
+                arguments.trace(cx);
             }
         }
     }
@@ -94,14 +102,18 @@ pub struct GeneratorIterator {
 }
 
 impl GeneratorIterator {
-    pub fn new(function: Handle, vm: &Vm, stack: Vec<Value>) -> Self {
+    pub fn new(function: Handle, vm: &Vm, stack: Vec<Value>, arguments: Option<Handle>) -> Self {
         let proto = vm.statics.generator_iterator_prototype.clone();
         let ctor = function.clone();
 
         Self {
             function,
             obj: NamedObject::with_prototype_and_constructor(proto, ctor),
-            state: RefCell::new(GeneratorState::Running { ip: 0, stack }),
+            state: RefCell::new(GeneratorState::Running {
+                ip: 0,
+                stack,
+                arguments,
+            }),
         }
     }
 
@@ -109,7 +121,7 @@ impl GeneratorIterator {
         Self {
             function,
             obj: NamedObject::null(),
-            state: RefCell::new(GeneratorState::default()),
+            state: RefCell::new(GeneratorState::Finished),
         }
     }
 

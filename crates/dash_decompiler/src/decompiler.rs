@@ -188,6 +188,7 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                         &[&arg],
                     );
                 }
+                Instruction::Arguments => self.handle_opless_instr("arguments"),
                 Instruction::LdGlobal => {
                     let b = self.read()?;
                     self.handle_op_instr("ldglobal", &[&self.display(&self.constants[b as usize])]);

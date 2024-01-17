@@ -517,6 +517,14 @@ impl NamedObject {
         }
     }
 
+    pub fn null_with_values(values: ObjectMap<PropertyKey, PropertyValue>) -> Self {
+        Self {
+            prototype: RefCell::new(None),
+            constructor: RefCell::new(None),
+            values: RefCell::new(values),
+        }
+    }
+
     pub fn with_prototype_and_constructor(prototype: Handle, ctor: Handle) -> Self {
         Self {
             constructor: RefCell::new(Some(ctor)),

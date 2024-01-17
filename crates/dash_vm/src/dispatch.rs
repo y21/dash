@@ -569,9 +569,9 @@ mod handlers {
         // reference list since they stay on the VM stack
         // and are reachable from there
 
-        adjust_stack_from_flat_call(&mut cx, user_function, sp, argc);
+        let arguments = adjust_stack_from_flat_call(&mut cx, user_function, sp, argc);
 
-        let mut frame = Frame::from_function(Some(this), user_function, is_constructor, true);
+        let mut frame = Frame::from_function(Some(this), user_function, is_constructor, true, arguments);
         frame.set_sp(sp);
 
         cx.pad_stack_for_frame(&frame);
@@ -1778,6 +1778,16 @@ mod handlers {
 
         Ok(None)
     }
+
+    pub fn arguments<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+        let arguments = cx
+            .active_frame()
+            .arguments
+            .clone()
+            .expect("`arguments` was never set despite being referenced in bytecode");
+        cx.stack.push(Value::Object(arguments));
+        Ok(None)
+    }
 }
 
 pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResult>, Unrooted> {
@@ -1864,6 +1874,7 @@ pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResu
         Instruction::ArrayDestruct => handlers::arraydestruct(cx),
         Instruction::Nop => Ok(None),
         Instruction::IntrinsicOp => handlers::intrinsic_op(cx),
+        Instruction::Arguments => handlers::arguments(cx),
         _ => unimplemented!("{:?}", instruction),
     }
 }

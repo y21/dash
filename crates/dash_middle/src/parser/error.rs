@@ -57,6 +57,7 @@ pub enum Error {
     },
     IllegalBreak(Span),
     MissingInitializerInDestructuring(Span),
+    ArgumentsInRoot(Span),
 }
 
 pub struct FormattableError<'a, 'buf> {
@@ -366,6 +367,11 @@ impl<'a, 'buf> fmt::Display for FormattableError<'a, 'buf> {
             Error::MissingInitializerInDestructuring(span) => {
                 diag.message("missing initializer in destructuring pattern");
                 diag.span_error(span, "consider adding an initializer to this variable declaration");
+            }
+            Error::ArgumentsInRoot(span) => {
+                diag.message("referencing `arguments` in the root function");
+                diag.span_error(span, "");
+                diag.help("this function is in the root context and is never called");
             }
         }
         fmt::Display::fmt(&diag, f)

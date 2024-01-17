@@ -143,6 +143,7 @@ unsafe impl Trace for dash_middle::compiler::constant::Function {
             poison_ips: _,
             source: _,
             debug_symbols: _,
+            references_arguments: _,
         } = self;
         name.trace(cx);
         constants.trace(cx);

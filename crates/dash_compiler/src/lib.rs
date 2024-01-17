@@ -37,7 +37,6 @@ use crate::builder::{InstructionBuilder, Label};
 use self::instruction::NamedExportKind;
 
 pub mod builder;
-pub mod error;
 #[cfg(feature = "from_string")]
 pub mod from_string;
 pub mod instruction;
@@ -83,6 +82,10 @@ struct FunctionLocalState {
     switch_counter: usize,
     id: FuncId,
     debug_symbols: DebugSymbols,
+    /// Whether this function references `arguments` anywhere in its body
+    ///
+    /// Also tracks the span for error reporting, but is discarded past the compiler stage.
+    references_arguments: Option<Span>,
 }
 
 impl FunctionLocalState {
@@ -99,6 +102,7 @@ impl FunctionLocalState {
             switch_counter: 0,
             id,
             debug_symbols: DebugSymbols::default(),
+            references_arguments: None,
         }
     }
 
@@ -213,6 +217,9 @@ impl<'interner> FunctionCompiler<'interner> {
 
         let root = self.function_stack.pop().expect("No root function");
         assert_eq!(root.id, FuncId::ROOT, "Function must be the root function");
+        if let Some(span) = root.references_arguments {
+            return Err(Error::ArgumentsInRoot(span));
+        }
         let root_scope = self.tcx.scope(root.id);
         let locals = root_scope.locals().len();
         let externals = root_scope.externals().to_owned();
@@ -690,6 +697,10 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             sym::globalThis => ib.build_global(),
             sym::Infinity => ib.build_infinity(),
             sym::NaN => ib.build_nan(),
+            sym::arguments => {
+                ib.current_function_mut().references_arguments = Some(span);
+                ib.build_arguments();
+            }
             ident => match ib.find_local(ident) {
                 Some((index, _, is_extern)) => ib.build_local_load(index, is_extern),
                 _ => ib
@@ -1610,6 +1621,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             poison_ips: RefCell::new(HashSet::new()),
             debug_symbols: cmp.debug_symbols,
             source: Rc::clone(&ib.source),
+            references_arguments: cmp.references_arguments.is_some(),
         };
         ib.build_constant(Constant::Function(Rc::new(function)))
             .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;

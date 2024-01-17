@@ -7,6 +7,7 @@ use dash_middle::compiler::CompileResult;
 use dash_middle::parser::statement::FunctionKind;
 use dash_proc_macro::Trace;
 
+use crate::gc::handle::Handle;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::value::string::JsString;
 use crate::value::{ExternalValue, Unrooted};
@@ -101,6 +102,11 @@ pub struct Frame {
     pub sp: usize,
     pub state: FrameState,
 
+    /// The `arguments` object.
+    /// For optimization purposes, this is `None` in frames whose function never references `arguments`,
+    /// because there's no reason to construct it in those cases.
+    pub arguments: Option<Handle>,
+
     /// Counts the number of backjumps to a particular loop header, to find hot loops
     pub loop_counter: LoopCounterMap,
 }
@@ -111,6 +117,7 @@ impl Frame {
         uf: &UserFunction,
         is_constructor_call: bool,
         is_flat_call: bool,
+        arguments: Option<Handle>,
     ) -> Self {
         let inner = uf.inner();
         Self {
@@ -125,10 +132,11 @@ impl Frame {
                 is_flat_call,
             },
             loop_counter: LoopCounterMap::default(),
+            arguments,
         }
     }
 
-    pub fn from_module(this: Option<Value>, uf: &UserFunction) -> Self {
+    pub fn from_module(this: Option<Value>, uf: &UserFunction, arguments: Option<Handle>) -> Self {
         let inner = uf.inner();
         Self {
             this,
@@ -139,6 +147,7 @@ impl Frame {
             extra_stack_space: inner.locals - uf.inner().params,
             state: FrameState::Module(Exports::default()),
             loop_counter: LoopCounterMap::default(),
+            arguments,
         }
     }
 
@@ -164,6 +173,7 @@ impl Frame {
             poison_ips: RefCell::new(HashSet::new()),
             source: cr.source,
             debug_symbols: cr.debug_symbols,
+            references_arguments: false,
         };
 
         Self {
@@ -178,6 +188,8 @@ impl Frame {
                 is_flat_call: false,
             },
             loop_counter: LoopCounterMap::default(),
+            // Root function never has arguments
+            arguments: None,
         }
     }
 
