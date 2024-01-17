@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1705522413627,
+  "lastUpdate": 1705527227730,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -7039,6 +7039,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 54817,
             "range": "± 2212",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "a51af38c57bc2c8957b078c8d47d6fba87f18f0c",
+          "message": "parse multiple variable declarations in for loop correctly",
+          "timestamp": "2024-01-17T22:31:16+01:00",
+          "tree_id": "70b0a1e456137c79a9bdfd8a44d1b6e6ffdda205",
+          "url": "https://github.com/y21/dash/commit/a51af38c57bc2c8957b078c8d47d6fba87f18f0c"
+        },
+        "date": 1705527226425,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1730612,
+            "range": "± 86301",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 171884,
+            "range": "± 1231",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 54777,
+            "range": "± 280",
             "unit": "ns/iter"
           }
         ]
