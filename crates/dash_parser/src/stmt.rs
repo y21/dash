@@ -253,6 +253,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             if is_binding {
                 let binding_span_lo = self.previous()?.span;
                 let binding = self.parse_variable_binding()?;
+                let binding_kind = binding.kind;
                 let is_of_or_in = self.expect_token_type_and_skip(&[TokenType::Of, TokenType::In], false);
 
                 if is_of_or_in {
@@ -271,14 +272,18 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 } else {
                     let value = self.parse_variable_definition();
 
-                    self.expect_token_type_and_skip(&[TokenType::Semicolon], true);
+                    let mut decls = vec![VariableDeclaration::new(binding, value)];
+                    while self.expect_token_type_and_skip(&[TokenType::Comma], false) {
+                        let binding = self.parse_variable_binding_with_kind(binding_kind)?;
+                        let def = self.parse_variable_definition();
+                        decls.push(VariableDeclaration::new(binding, def));
+                    }
 
+                    self.expect_token_type_and_skip(&[TokenType::Semicolon], true);
                     let binding_span_hi = self.previous()?.span;
 
                     Some(Statement {
-                        kind: StatementKind::Variable(VariableDeclarations(vec![VariableDeclaration::new(
-                            binding, value,
-                        )])),
+                        kind: StatementKind::Variable(VariableDeclarations(decls)),
                         span: binding_span_lo.to(binding_span_hi),
                     })
                 }
@@ -466,6 +471,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         Some(parameters)
     }
 
+    /// Parses the `x` in `let x = 1`, `[x, y]` in `let [x, y] = [1, 2]`, etc.
     fn parse_variable_binding_with_kind(&mut self, kind: VariableDeclarationKind) -> Option<VariableBinding> {
         let name = if self.expect_token_type_and_skip(&[TokenType::LeftBrace], false) {
             // Object destructuring
