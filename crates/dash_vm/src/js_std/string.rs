@@ -276,10 +276,17 @@ pub fn split(cx: CallContext) -> Result<Value, Value> {
         .res(cx.scope)
         .to_owned();
 
-    let result = string
-        .split(&separator)
-        .map(|s| PropertyValue::static_default(Value::String(cx.scope.intern(s).into())))
-        .collect();
+    let result = if separator.is_empty() {
+        string
+            .chars()
+            .map(|c| PropertyValue::static_default(Value::String(cx.scope.intern_char(c).into())))
+            .collect()
+    } else {
+        string
+            .split(&separator)
+            .map(|s| PropertyValue::static_default(Value::String(cx.scope.intern(s).into())))
+            .collect()
+    };
 
     let array = Array::from_vec(cx.scope, result);
     Ok(cx.scope.register(array).into())
