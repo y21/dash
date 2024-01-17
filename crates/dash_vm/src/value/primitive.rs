@@ -206,7 +206,11 @@ impl Object for Undefined {
         sc: &mut LocalScope,
         key: PropertyKey,
     ) -> Result<Option<PropertyValue>, Unrooted> {
-        throw!(sc, TypeError, "Cannot read property {:?} of undefined", key)
+        let key = match key {
+            PropertyKey::String(s) => s.res(sc).to_owned(),
+            PropertyKey::Symbol(s) => sc.interner.resolve(s.sym()).to_owned(),
+        };
+        throw!(sc, TypeError, "Cannot read property {} of undefined", key)
     }
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, _value: PropertyValue) -> Result<(), Value> {
@@ -258,7 +262,11 @@ impl Object for Null {
         sc: &mut LocalScope,
         key: PropertyKey,
     ) -> Result<Option<PropertyValue>, Unrooted> {
-        throw!(sc, TypeError, "Cannot read property {:?} of null", key)
+        let key = match key {
+            PropertyKey::String(s) => s.res(sc).to_owned(),
+            PropertyKey::Symbol(s) => sc.interner.resolve(s.sym()).to_owned(),
+        };
+        throw!(sc, TypeError, "Cannot read property {} of null", key)
     }
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, _value: PropertyValue) -> Result<(), Value> {

@@ -172,7 +172,7 @@ impl Object for RequireFunction {
             };
 
             if let Some(module) = self.state.ongoing_requires.borrow().get(&canonicalized_path) {
-                return Ok(module.clone().into());
+                return module.get_property(scope, exports.into());
             }
 
             let source = match std::fs::read_to_string(&canonicalized_path) {
