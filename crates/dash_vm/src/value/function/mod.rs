@@ -21,8 +21,9 @@ use self::user::UserFunction;
 
 use super::array::Array;
 use super::object::{NamedObject, Object, PropertyKey, PropertyValue};
+use super::ops::conversions::ValueConversion;
 use super::string::JsString;
-use super::{Typeof, Unrooted, Value};
+use super::{Root, Typeof, Unrooted, Value};
 
 pub mod r#async;
 pub mod bound;
@@ -213,6 +214,13 @@ impl Object for Function {
     }
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
+        if let Some(sym::prototype) = key.as_string().map(JsString::sym) {
+            let prototype = value.get_or_apply(sc, Value::undefined()).root(sc)?;
+            // TODO: function prototype does not need to be an object
+            *self.prototype.borrow_mut() = Some(prototype.to_object(sc)?);
+            return Ok(());
+        }
+
         self.obj.set_property(sc, key, value)
     }
 
