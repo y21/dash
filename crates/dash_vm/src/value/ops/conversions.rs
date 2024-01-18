@@ -185,7 +185,7 @@ impl ValueConversion for Value {
             Value::Boolean(b) => register_dyn(sc, |sc| Boolean::new(sc, *b)),
             Value::Symbol(s) => register_dyn(sc, |sc| BoxedSymbol::new(sc, s.clone())),
             Value::Number(Number(n)) => register_dyn(sc, |sc| BoxedNumber::new(sc, *n)),
-            Value::String(s) => register_dyn(sc, |sc| BoxedString::new(sc, s.clone())),
+            Value::String(s) => register_dyn(sc, |sc| BoxedString::new(sc, *s)),
             Value::External(e) => Ok(e.inner.clone()), // TODO: is this correct?
         }
     }

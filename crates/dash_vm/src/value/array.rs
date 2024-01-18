@@ -245,8 +245,8 @@ pub fn spec_array_get_property(scope: &mut LocalScope, target: &Value, index: us
 
     let index = scope.intern_usize(index);
     match target.get_property(scope, index.into()) {
-        Ok(v) => Ok(v.into()),
-        Err(v) => Ok(v.into()),
+        Ok(v) => Ok(v),
+        Err(v) => Ok(v),
     }
 }
 

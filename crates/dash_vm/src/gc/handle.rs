@@ -55,6 +55,7 @@ impl HandleFlags {
 }
 
 #[repr(C)]
+#[allow(clippy::type_complexity)]
 pub struct ObjectVTable {
     pub(crate) drop_boxed_gcnode: unsafe fn(*mut GcNode<()>),
     pub(crate) trace: unsafe fn(*const (), &mut TraceCtxt<'_>),
@@ -124,7 +125,7 @@ impl Handle {
     }
 
     pub fn vtable(&self) -> &'static ObjectVTable {
-        unsafe { &(*self.0.as_ptr()).vtable }
+        unsafe { (*self.0.as_ptr()).vtable }
     }
 
     /// Returns the `Persistent<T>` refcount.
@@ -132,6 +133,9 @@ impl Handle {
         unsafe { (*self.0.as_ptr()).refcount.get() }
     }
 
+    /// # Safety
+    /// The updated refcount must not be updated to a value such that a drop
+    /// causes the refcount to drop zero while there are active `Handle`s
     pub unsafe fn set_refcount(&self, refcount: u64) {
         (*self.0.as_ptr()).refcount.set(refcount);
     }

@@ -166,11 +166,19 @@ impl Unrooted {
     }
 
     /// Returns an unprotected, unrooted reference to the value.
+    ///
+    /// # Safety
+    /// The contained value will be returned without first rooting it, so you must ensure that a GC cycle will not
+    /// occur.
     pub unsafe fn get(&self) -> &Value {
         &self.value
     }
 
     /// "Unwraps" the value, no longer protecting you from a GC sweep killing this value.
+    ///
+    /// # Safety
+    /// The contained value will be returned without first rooting it, so you must ensure that a GC cycle will not
+    /// occur.
     pub unsafe fn into_value(self) -> Value {
         self.value
     }

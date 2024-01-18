@@ -55,7 +55,7 @@ impl GeneratorFunction {
         };
 
         let iter = GeneratorIterator::new(callee, scope, args, arguments);
-        Ok(Value::Object(scope.register(iter)).into())
+        Ok(Value::Object(scope.register(iter)))
     }
 }
 

@@ -125,7 +125,7 @@ impl Function {
     }
 
     pub fn name(&self) -> Option<JsString> {
-        self.name.borrow().clone()
+        *self.name.borrow()
     }
 
     pub fn set_fn_prototype(&self, prototype: Handle) {
@@ -203,7 +203,7 @@ impl Object for Function {
                 }
                 sym::prototype => {
                     let prototype = self.get_or_set_prototype(sc);
-                    return Ok(Some(PropertyValue::static_default(Value::Object(prototype.clone()))));
+                    return Ok(Some(PropertyValue::static_default(Value::Object(prototype))));
                 }
                 _ => {}
             }

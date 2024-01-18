@@ -9,7 +9,7 @@ use crate::value::{Value, ValueContext};
 use std::fmt::Write;
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
-    let value = cx.args.get(0).unwrap_or_undefined().to_js_string(cx.scope)?;
+    let value = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
     if cx.is_constructor_call {
         let boxed = BoxedString::new(cx.scope, value);
         Ok(Value::Object(cx.scope.register(boxed)))

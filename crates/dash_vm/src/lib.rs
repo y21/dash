@@ -132,12 +132,13 @@ impl Vm {
         fn set_fn_prototype(v: &dyn Object, proto: Handle, name: interner::Symbol) {
             let fun = v.as_any().downcast_ref::<Function>().unwrap();
             fun.set_name(name.into());
-            fun.set_fn_prototype(proto.clone());
+            fun.set_fn_prototype(proto);
         }
 
         // TODO: we currently recursively call this for each of the registered methods, so a lot of builtins are initialized multiple times
         // we should have some sort of cache to avoid this
         // (though we also populate function prototypes later on this way, so it's not so trivial)
+        #[allow(clippy::too_many_arguments)]
         fn register(
             base: Handle,
             prototype: impl Into<Value>,
@@ -184,7 +185,7 @@ impl Vm {
             }
 
             for (key, value) in fields {
-                base.set_property(scope, key.into(), PropertyValue::static_default(value.into())).unwrap();
+                base.set_property(scope, key.into(), PropertyValue::static_default(value)).unwrap();
             }
 
             if let Some((proto_name, proto_val)) = fn_prototype {
@@ -1087,8 +1088,8 @@ impl Vm {
         
         let json_ctor = register(
             scope.statics.json_ctor.clone(),
-            function_proto.clone(),
-            function_ctor.clone(),
+            function_proto,
+            function_ctor,
             [
                 (sym::parse, scope.statics.json_parse.clone()),
             ],
@@ -1108,37 +1109,37 @@ impl Vm {
                 (sym::isFinite, scope.statics.is_finite.clone()),
                 (sym::parseFloat, scope.statics.parse_float.clone()),
                 (sym::parseInt, scope.statics.parse_int.clone()),
-                (sym::RegExp, regexp_ctor.clone()),
-                (sym::JsSymbol, symbol_ctor.clone()),
-                (sym::Date, date_ctor.clone()),
-                (sym::ArrayBuffer, arraybuffer_ctor.clone()),
-                (sym::Uint8Array, u8array_ctor.clone()),
-                (sym::Int8Array, i8array_ctor.clone()),
-                (sym::Uint16Array, u16array_ctor.clone()),
-                (sym::Int16Array, i16array_ctor.clone()),
-                (sym::Uint32Array, u32array_ctor.clone()),
-                (sym::Int32Array, i32array_ctor.clone()),
-                (sym::Float32Array, f32array_ctor.clone()),
-                (sym::Float64Array, f64array_ctor.clone()),
-                (sym::Array, array_ctor.clone()),
-                (sym::Error, error_ctor.clone()),
-                (sym::EvalError, eval_error_ctor.clone()),
-                (sym::RangeError, range_error_ctor.clone()),
-                (sym::ReferenceError, reference_error_ctor.clone()),
-                (sym::SyntaxError, syntax_error_ctor.clone()),
-                (sym::TypeError, type_error_ctor.clone()),
-                (sym::URIError, uri_error_ctor.clone()),
-                (sym::AggregateError, aggregate_error_ctor.clone()),
-                (sym::String, string_ctor.clone()),
-                (sym::Object, object_ctor.clone()),
-                (sym::Set, set_ctor.clone()),
-                (sym::Map, map_ctor.clone()),
-                (sym::console, console.clone()),
-                (sym::Math, math.clone()),
-                (sym::Number, number_ctor.clone()),
-                (sym::Boolean, boolean_ctor.clone()),
-                (sym::Promise, promise_ctor.clone()),
-                (sym::JSON, json_ctor.clone()),
+                (sym::RegExp, regexp_ctor),
+                (sym::JsSymbol, symbol_ctor),
+                (sym::Date, date_ctor),
+                (sym::ArrayBuffer, arraybuffer_ctor),
+                (sym::Uint8Array, u8array_ctor),
+                (sym::Int8Array, i8array_ctor),
+                (sym::Uint16Array, u16array_ctor),
+                (sym::Int16Array, i16array_ctor),
+                (sym::Uint32Array, u32array_ctor),
+                (sym::Int32Array, i32array_ctor),
+                (sym::Float32Array, f32array_ctor),
+                (sym::Float64Array, f64array_ctor),
+                (sym::Array, array_ctor),
+                (sym::Error, error_ctor),
+                (sym::EvalError, eval_error_ctor),
+                (sym::RangeError, range_error_ctor),
+                (sym::ReferenceError, reference_error_ctor),
+                (sym::SyntaxError, syntax_error_ctor),
+                (sym::TypeError, type_error_ctor),
+                (sym::URIError, uri_error_ctor),
+                (sym::AggregateError, aggregate_error_ctor),
+                (sym::String, string_ctor),
+                (sym::Object, object_ctor),
+                (sym::Set, set_ctor),
+                (sym::Map, map_ctor),
+                (sym::console, console),
+                (sym::Math, math),
+                (sym::Number, number_ctor),
+                (sym::Boolean, boolean_ctor),
+                (sym::Promise, promise_ctor),
+                (sym::JSON, json_ctor),
             ],
             [],
             [],
@@ -1311,7 +1312,7 @@ impl Vm {
         for (i, v) in self.stack.iter().enumerate() {
             print!("{i}: ");
             match v {
-                Value::Object(o) => println!("{:#?}", &*o),
+                Value::Object(o) => println!("{:#?}", o),
                 Value::External(o) => println!("[[external]]: {:#?}", o.inner()),
                 _ => println!("{v:?}"),
             }

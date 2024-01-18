@@ -33,29 +33,29 @@ impl JsString {
     }
 
     pub fn len(self, sc: &mut LocalScope<'_>) -> usize {
-        self.res(&sc).len()
+        self.res(sc).len()
     }
 }
 
 impl ValueEquality for JsString {
     fn lt(&self, other: &super::Value, sc: &mut LocalScope) -> Result<super::Value, super::Value> {
         let other = other.to_js_string(sc)?;
-        Ok(Value::Boolean(self.res(&sc) < other.res(&sc)))
+        Ok(Value::Boolean(self.res(sc) < other.res(sc)))
     }
 
     fn le(&self, other: &super::Value, sc: &mut LocalScope) -> Result<super::Value, super::Value> {
         let other = other.to_js_string(sc)?;
-        Ok(Value::Boolean(self.res(&sc) <= other.res(&sc)))
+        Ok(Value::Boolean(self.res(sc) <= other.res(sc)))
     }
 
     fn gt(&self, other: &super::Value, sc: &mut LocalScope) -> Result<super::Value, super::Value> {
         let other = other.to_js_string(sc)?;
-        Ok(Value::Boolean(self.res(&sc) > other.res(&sc)))
+        Ok(Value::Boolean(self.res(sc) > other.res(sc)))
     }
 
     fn ge(&self, other: &super::Value, sc: &mut LocalScope) -> Result<super::Value, super::Value> {
         let other = other.to_js_string(sc)?;
-        Ok(Value::Boolean(self.res(&sc) >= other.res(&sc)))
+        Ok(Value::Boolean(self.res(sc) >= other.res(sc)))
     }
 
     fn eq(&self, other: &super::Value, sc: &mut LocalScope) -> Result<super::Value, super::Value> {
@@ -73,7 +73,7 @@ impl ValueEquality for JsString {
 
 impl ValueConversion for JsString {
     fn to_primitive(&self, _: &mut LocalScope, _: Option<PreferredType>) -> Result<Value, Value> {
-        Ok(Value::String(self.clone()))
+        Ok(Value::String(*self))
     }
 
     fn to_number(&self, sc: &mut LocalScope) -> Result<f64, Value> {
@@ -85,7 +85,7 @@ impl ValueConversion for JsString {
     }
 
     fn to_js_string(&self, _: &mut LocalScope) -> Result<JsString, Value> {
-        Ok(self.clone())
+        Ok(*self)
     }
 
     fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value> {
@@ -93,7 +93,7 @@ impl ValueConversion for JsString {
     }
 
     fn to_object(&self, sc: &mut LocalScope) -> Result<crate::gc::handle::Handle, Value> {
-        let bx = BoxedString::new(sc, self.clone());
+        let bx = BoxedString::new(sc, *self);
         Ok(sc.register(bx))
     }
 }
@@ -173,10 +173,10 @@ impl Object for JsString {
 
 impl PrimitiveCapabilities for JsString {
     fn as_string(&self) -> Option<JsString> {
-        Some(self.clone())
+        Some(*self)
     }
 
     fn unbox(&self) -> Value {
-        Value::String(self.clone())
+        Value::String(*self)
     }
 }

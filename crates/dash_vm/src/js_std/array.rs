@@ -502,7 +502,7 @@ pub fn slice(cx: CallContext) -> Result<Value, Value> {
     let this = Value::Object(cx.this.to_object(cx.scope)?);
     let len = this.length_of_array_like(cx.scope)?;
 
-    let start = match cx.args.get(0) {
+    let start = match cx.args.first() {
         Some(v) => to_slice_index(v.to_int32(cx.scope)? as isize, len),
         None => 0,
     };

@@ -5,10 +5,10 @@ use crate::value::ops::conversions::ValueConversion;
 use crate::value::{boxed, Value, ValueContext};
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
-    let value = cx.args.get(0).unwrap_or_undefined().to_boolean(cx.scope)?;
+    let value = cx.args.first().unwrap_or_undefined().to_boolean(cx.scope)?;
     if cx.is_constructor_call {
         let value = boxed::Boolean::new(cx.scope, value);
-        Ok(Value::Object(cx.scope.register(value).into()))
+        Ok(Value::Object(cx.scope.register(value)))
     } else {
         Ok(Value::Boolean(value))
     }

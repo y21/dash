@@ -6,10 +6,10 @@ use crate::value::primitive::{Number, MAX_SAFE_INTEGERF};
 use crate::value::{boxed, Value, ValueContext};
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
-    let value = cx.args.get(0).unwrap_or_undefined().to_number(cx.scope)?;
+    let value = cx.args.first().unwrap_or_undefined().to_number(cx.scope)?;
     if cx.is_constructor_call {
         let value = boxed::Number::new(cx.scope, value);
-        Ok(Value::Object(cx.scope.register(value).into()))
+        Ok(Value::Object(cx.scope.register(value)))
     } else {
         Ok(Value::number(value))
     }

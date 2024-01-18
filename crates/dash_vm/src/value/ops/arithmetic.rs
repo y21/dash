@@ -157,6 +157,7 @@ impl ValueEquality for Value {
         delegate!(self, other, sc, ValueEquality::eq)
     }
 
+    #[allow(clippy::only_used_in_recursion)] // in a trait impl
     fn strict_eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
         Ok(Value::Boolean(match (self, other) {
             (Value::Number(l), Value::Number(r)) => l == r,

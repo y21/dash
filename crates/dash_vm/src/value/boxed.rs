@@ -165,11 +165,11 @@ impl PrimitiveCapabilities for Boolean {
 
 impl PrimitiveCapabilities for String {
     fn as_string(&self) -> Option<JsString> {
-        Some(self.inner.clone())
+        Some(self.inner)
     }
 
     fn unbox(&self) -> Value {
-        Value::String(self.inner.clone())
+        Value::String(self.inner)
     }
 }
 

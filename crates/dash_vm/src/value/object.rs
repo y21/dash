@@ -453,7 +453,7 @@ unsafe impl Trace for PropertyValueKind {
 impl PropertyKey {
     pub fn as_string(&self) -> Option<JsString> {
         match self {
-            PropertyKey::String(s) => Some(s.clone()),
+            PropertyKey::String(s) => Some(*s),
             _ => None,
         }
     }
@@ -479,7 +479,7 @@ impl From<Symbol> for PropertyKey {
 impl PropertyKey {
     pub fn as_value(&self) -> Value {
         match self {
-            PropertyKey::String(s) => Value::String(s.clone()),
+            PropertyKey::String(s) => Value::String(*s),
             PropertyKey::Symbol(s) => Value::Symbol(s.clone()),
         }
     }
@@ -599,7 +599,7 @@ impl Object for NamedObject {
             Some(sym::constructor) => {
                 let obj = match value.kind {
                     PropertyValueKind::Static(Value::Object(obj)) => obj,
-                    PropertyValueKind::Static(Value::External(obj)) => obj.inner.clone(),
+                    PropertyValueKind::Static(Value::External(obj)) => obj.inner,
                     _ => throw!(sc, TypeError, "constructor is not an object"), // TODO: it doesn't need to be
                 };
                 self.constructor.replace(Some(obj));
@@ -661,7 +661,7 @@ impl Object for NamedObject {
         match value {
             Value::Null(_) => self.prototype.replace(None),
             Value::Object(handle) => self.prototype.replace(Some(handle)),
-            Value::External(handle) => self.prototype.replace(Some(handle.inner.clone())), // TODO: check that handle is an object
+            Value::External(handle) => self.prototype.replace(Some(handle.inner)), // TODO: check that handle is an object
             _ => throw!(sc, TypeError, "prototype must be an object"),
         };
 

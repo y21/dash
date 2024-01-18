@@ -1395,7 +1395,7 @@ mod handlers {
             None => throw!(cx, Error, "Static imports are disabled for this context."),
         };
 
-        cx.set_local(local_id.into(), value.into());
+        cx.set_local(local_id.into(), value);
 
         Ok(None)
     }
@@ -1445,7 +1445,7 @@ mod handlers {
 
             let frame = cx.active_frame_mut();
             match &mut frame.state {
-                FrameState::Module(exports) => exports.named.push((ident, value.into())),
+                FrameState::Module(exports) => exports.named.push((ident, value)),
                 _ => throw!(cx, Error, "Export is only available at the top level in modules"),
             }
         }
@@ -1569,7 +1569,7 @@ mod handlers {
             let ident = cx.identifier_constant(ident_id.into());
 
             let prop = obj.get_property(&mut cx, ident.into())?;
-            cx.set_local(id, prop.into());
+            cx.set_local(id, prop);
         }
 
         Ok(None)
@@ -1587,7 +1587,7 @@ mod handlers {
             let i = cx.scope.intern_usize(i.into());
 
             let prop = array.get_property(&mut cx, i.into())?;
-            cx.set_local(id, prop.into());
+            cx.set_local(id, prop);
         }
 
         Ok(None)

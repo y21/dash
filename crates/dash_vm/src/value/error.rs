@@ -59,7 +59,7 @@ impl Error {
     ) -> Self {
         let name = name.into();
         let message = message.into();
-        let stack = get_stack_trace(name.clone(), message, sc);
+        let stack = get_stack_trace(name, message, sc);
 
         Self {
             name,
@@ -115,13 +115,13 @@ impl Object for Error {
     ) -> Result<Option<PropertyValue>, Unrooted> {
         match key {
             PropertyKey::String(s) if s.sym() == sym::name => {
-                Ok(Some(PropertyValue::static_default(Value::String(self.name.clone()))))
+                Ok(Some(PropertyValue::static_default(Value::String(self.name))))
             }
             PropertyKey::String(s) if s.sym() == sym::message => {
-                Ok(Some(PropertyValue::static_default(Value::String(self.message.clone()))))
+                Ok(Some(PropertyValue::static_default(Value::String(self.message))))
             }
             PropertyKey::String(s) if s.sym() == sym::stack => {
-                Ok(Some(PropertyValue::static_default(Value::String(self.stack.clone()))))
+                Ok(Some(PropertyValue::static_default(Value::String(self.stack))))
             }
             _ => self.obj.get_property_descriptor(sc, key),
         }

@@ -229,7 +229,7 @@ impl<'interner> FunctionCompiler<'interner> {
             cp: root.cp,
             locals,
             externals,
-            source: self.source.into(),
+            source: self.source,
             debug_symbols: root.debug_symbols,
         })
     }
@@ -2095,26 +2095,26 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
 ///     eq (ld _1 ld w)
 ///     jmpfalsep case_x_cond
 ///     # code for case w
-///		# if there's a break anywhere in here, jump to end of switch
+///     # if there's a break anywhere in here, jump to end of switch
 ///     jmp case_x
 ///
-///	case_x_cond:
-///		eq (ld_1 ld x)
-///		jmpfalsep case_y_cond
+/// case_x_cond:
+///     eq (ld_1 ld x)
+///     jmpfalsep case_y_cond
 ///  case_x:
 ///     # code for case x
-///		constant 'case 1'
-///		ret
-///		jmp case_y
+///     constant 'case 1'
+///     ret
+///     jmp case_y
 ///
 /// case_x_code:
 ///     ...
 /// case_y_cond:
-///		eq (ld_1 ld y)
-///		jmpfalsep default
-///	case y:
-/// 	...
-///		jmp default
+///     eq (ld_1 ld y)
+///     jmpfalsep default
+/// case y:
+///     ...
+///     jmp default
 ///
 /// default:
 ///     ...
