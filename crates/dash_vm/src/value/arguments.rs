@@ -17,7 +17,7 @@ pub struct Arguments {
 impl Arguments {
     pub fn new(vm: &mut LocalScope, args: impl IntoIterator<IntoIter = impl ExactSizeIterator<Item = Value>>) -> Self {
         let args = args.into_iter();
-        let len = vm.interner.intern_usize(args.len());
+        let len = args.len();
 
         Self {
             object: NamedObject::null_with_values(
@@ -30,7 +30,7 @@ impl Arguments {
                     })
                     .chain([(
                         PropertyKey::String(sym::length.into()),
-                        PropertyValue::static_default(Value::String(len.into())),
+                        PropertyValue::static_default(Value::number(len as f64)),
                     )])
                     .collect(),
             ),

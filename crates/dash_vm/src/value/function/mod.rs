@@ -272,6 +272,7 @@ pub(crate) fn adjust_stack_from_flat_call(
     let mut arguments = None;
     if user_function.inner().references_arguments {
         let args = scope.stack[old_sp..].to_vec();
+        // TODO: this assertion is wrong for (function(){ return arguments })(...[1, 2]). args.len() is correct
         debug_assert_eq!(args.len(), argc);
         let args = Arguments::new(scope, args);
         let args = scope.register(args);

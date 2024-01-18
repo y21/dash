@@ -325,7 +325,17 @@ impl Vm {
                 (sym::isSafeInteger, scope.statics.number_is_safe_integer.clone()),
             ],
             [],
-            [],
+            [
+                (sym::EPSILON, Value::number(f64::EPSILON)),
+                (sym::MAX_SAFE_INTEGER, Value::number(value::primitive::MAX_SAFE_INTEGERF)),
+                (sym::MAX_VALUE, Value::number(f64::MAX)),
+                (sym::MIN_SAFE_INTEGER, Value::number(value::primitive::MIN_SAFE_INTEGERF)),
+                (sym::MIN_VALUE, Value::number(f64::MIN)),
+                (sym::NEGATIVE_INFINITY, Value::number(f64::NEG_INFINITY)),
+                (sym::POSITIVE_INFINITY, Value::number(f64::INFINITY)),
+                // TODO: this needs to be writable: false, causes test262 language/types/number/S8.5_A14_T1.js to fail
+                (sym::NaN, Value::number(f64::NAN))
+            ],
             Some((sym::Number, scope.statics.number_prototype.clone())),
             &mut scope,
         );
