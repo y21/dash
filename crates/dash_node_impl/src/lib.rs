@@ -162,10 +162,13 @@ impl Object for RequireFunction {
             throw!(scope, Error, "require() expects a string argument");
         };
         let exports = scope.intern("exports");
-        let arg = arg.res(scope);
-
+        let mut arg = arg.res(scope).to_owned();
         let is_path = matches!(arg.chars().next(), Some('.' | '/' | '~'));
         if is_path {
+            if !arg.ends_with(".js") {
+                arg += ".js";
+            }
+
             let canonicalized_path = match self.current_dir.join(arg).canonicalize() {
                 Ok(v) => v,
                 Err(err) => throw!(scope, Error, err.to_string()),
