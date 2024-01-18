@@ -286,9 +286,10 @@ pub(crate) fn adjust_stack_from_flat_call(
     // NB: Order is important, this needs to happen before pushing remaining
     // missing undefined values and truncating
     let rest = if user_function.inner().rest_local.is_some() {
+        let stack_len = scope.stack.len();
         let args = scope
             .stack
-            .drain(old_sp + expected_args..)
+            .drain((old_sp + expected_args).min(stack_len)..)
             .map(PropertyValue::static_default)
             .collect();
 

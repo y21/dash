@@ -435,12 +435,12 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             TokenType::LeftSquareBrace => {
                 let mut items = Vec::new();
                 while !self.expect_token_type_and_skip(&[TokenType::RightSquareBrace], false) {
-                    self.expect_token_type_and_skip(&[TokenType::Comma], false);
                     if let Some(spread) = self.parse_spread_operator(false) {
                         items.push(ArrayMemberKind::Spread(spread));
                     } else {
                         items.push(ArrayMemberKind::Item(self.parse_yield()?));
                     }
+                    self.expect_token_type_and_skip(&[TokenType::Comma], false);
                 }
                 let rbrace_span = self.previous()?.span;
                 Expr {

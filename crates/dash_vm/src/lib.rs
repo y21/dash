@@ -1094,6 +1094,7 @@ impl Vm {
             object_ctor.clone(),
             [
                 (sym::isNaN, scope.statics.is_nan.clone()),
+                (sym::eval, scope.statics.eval.clone()),
                 (sym::isFinite, scope.statics.is_finite.clone()),
                 (sym::parseFloat, scope.statics.parse_float.clone()),
                 (sym::parseInt, scope.statics.parse_int.clone()),

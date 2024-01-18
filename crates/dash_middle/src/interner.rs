@@ -150,6 +150,7 @@ pub mod sym {
                 PI,
                 isFinite,
                 isNaN,
+                eval,
                 isSafeInteger,
                 Number,
                 toFixed,

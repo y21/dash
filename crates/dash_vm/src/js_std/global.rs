@@ -1,14 +1,30 @@
+use dash_middle::parser::error::IntoFormattableErrors;
+
+use crate::eval::EvalError;
+use crate::throw;
 use crate::value::function::native::CallContext;
 use crate::value::ops::conversions::ValueConversion;
-use crate::value::{Value, ValueContext};
+use crate::value::{Root, Value, ValueContext};
 
-#[rustfmt::skip]
 pub fn is_nan(cx: CallContext) -> Result<Value, Value> {
     // 1. Let num be ? ToNumber(number).
     let num = cx.args.first().unwrap_or_undefined().to_number(cx.scope)?;
     // 2. If num is NaN, return true.
     // 3. Otherwise, return false.
     Ok(Value::Boolean(num.is_nan()))
+}
+
+pub fn eval(cx: CallContext) -> Result<Value, Value> {
+    let source = match cx.args.first().unwrap_or_undefined() {
+        Value::String(s) => s.res(cx.scope).to_owned(),
+        other => return Ok(other),
+    };
+
+    match cx.scope.eval(&source, Default::default()) {
+        Ok(v) => Ok(v.root(cx.scope)),
+        Err(EvalError::Exception(ex)) => Err(ex.root(cx.scope)),
+        Err(EvalError::Middle(err)) => throw!(cx.scope, SyntaxError, "{}", err.formattable(&source, true)),
+    }
 }
 
 pub fn log(cx: CallContext) -> Result<Value, Value> {
