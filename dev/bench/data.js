@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1705617868404,
+  "lastUpdate": 1705620209323,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -7207,6 +7207,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 55786,
             "range": "± 864",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "fbbebb2b1cac119d3ad36c522a2016e1e70d5061",
+          "message": "node: support implicit js extensions in path resolution",
+          "timestamp": "2024-01-19T00:20:53+01:00",
+          "tree_id": "839f5bb116e2804ecd305ce22ec99a8e059b27cc",
+          "url": "https://github.com/y21/dash/commit/fbbebb2b1cac119d3ad36c522a2016e1e70d5061"
+        },
+        "date": 1705620207873,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1730846,
+            "range": "± 11437",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 164105,
+            "range": "± 1182",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 55060,
+            "range": "± 2010",
             "unit": "ns/iter"
           }
         ]
