@@ -208,7 +208,7 @@ mod handlers {
     use crate::value::function::{adjust_stack_from_flat_call, Function, FunctionKind};
     use crate::value::object::{NamedObject, Object, ObjectMap, PropertyKey, PropertyValue, PropertyValueKind};
     use crate::value::ops::conversions::ValueConversion;
-    use crate::value::ops::equality::ValueEquality;
+    use crate::value::ops::equality;
 
     use super::*;
 
@@ -300,35 +300,35 @@ mod handlers {
     }
 
     pub fn lt<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(ValueEquality::lt)
+        cx.evaluate_binary_with_scope(|l, r, sc| equality::lt(l, r, sc).map(Value::Boolean))
     }
 
     pub fn le<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(ValueEquality::le)
+        cx.evaluate_binary_with_scope(|l, r, sc| equality::le(l, r, sc).map(Value::Boolean))
     }
 
     pub fn gt<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(ValueEquality::gt)
+        cx.evaluate_binary_with_scope(|l, r, sc| equality::gt(l, r, sc).map(Value::Boolean))
     }
 
     pub fn ge<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(ValueEquality::ge)
+        cx.evaluate_binary_with_scope(|l, r, sc| equality::ge(l, r, sc).map(Value::Boolean))
     }
 
     pub fn eq<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(ValueEquality::eq)
+        cx.evaluate_binary_with_scope(|l, r, sc| equality::eq(l, r, sc).map(Value::Boolean))
     }
 
     pub fn ne<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(ValueEquality::ne)
+        cx.evaluate_binary_with_scope(|l, r, sc| equality::ne(l, r, sc).map(Value::Boolean))
     }
 
     pub fn strict_eq<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(ValueEquality::strict_eq)
+        cx.evaluate_binary_with_scope(|l, r, _| Ok(Value::Boolean(equality::strict_eq(l, r))))
     }
 
     pub fn strict_ne<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(ValueEquality::strict_ne)
+        cx.evaluate_binary_with_scope(|l, r, _| Ok(Value::Boolean(equality::strict_ne(l, r))))
     }
 
     pub fn neg<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {

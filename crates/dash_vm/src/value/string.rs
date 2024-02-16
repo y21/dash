@@ -8,7 +8,6 @@ use crate::value::boxed::String as BoxedString;
 
 use super::object::{Object, PropertyKey, PropertyValue};
 use super::ops::conversions::{PreferredType, ValueConversion};
-use super::ops::equality::ValueEquality;
 use super::primitive::{array_like_keys, PrimitiveCapabilities};
 use super::{Typeof, Unrooted, Value};
 
@@ -37,47 +36,17 @@ impl JsString {
     }
 }
 
-impl ValueEquality for JsString {
-    fn lt(&self, other: &super::Value, sc: &mut LocalScope) -> Result<super::Value, super::Value> {
-        let other = other.to_js_string(sc)?;
-        Ok(Value::Boolean(self.res(sc) < other.res(sc)))
-    }
-
-    fn le(&self, other: &super::Value, sc: &mut LocalScope) -> Result<super::Value, super::Value> {
-        let other = other.to_js_string(sc)?;
-        Ok(Value::Boolean(self.res(sc) <= other.res(sc)))
-    }
-
-    fn gt(&self, other: &super::Value, sc: &mut LocalScope) -> Result<super::Value, super::Value> {
-        let other = other.to_js_string(sc)?;
-        Ok(Value::Boolean(self.res(sc) > other.res(sc)))
-    }
-
-    fn ge(&self, other: &super::Value, sc: &mut LocalScope) -> Result<super::Value, super::Value> {
-        let other = other.to_js_string(sc)?;
-        Ok(Value::Boolean(self.res(sc) >= other.res(sc)))
-    }
-
-    fn eq(&self, other: &super::Value, sc: &mut LocalScope) -> Result<super::Value, super::Value> {
-        Ok(Value::Boolean(*self == other.to_js_string(sc)?))
-    }
-
-    fn strict_eq(&self, other: &Value, _: &mut LocalScope) -> Result<super::Value, super::Value> {
-        if let Value::String(other) = other {
-            Ok(Value::Boolean(self == other))
-        } else {
-            Ok(Value::Boolean(false))
-        }
-    }
-}
-
 impl ValueConversion for JsString {
     fn to_primitive(&self, _: &mut LocalScope, _: Option<PreferredType>) -> Result<Value, Value> {
         Ok(Value::String(*self))
     }
 
     fn to_number(&self, sc: &mut LocalScope) -> Result<f64, Value> {
-        Ok(self.res(sc).parse().unwrap_or(f64::NAN))
+        if self.sym == sym::empty {
+            Ok(0.0)
+        } else {
+            Ok(self.res(sc).parse().unwrap_or(f64::NAN))
+        }
     }
 
     fn to_boolean(&self, sc: &mut LocalScope<'_>) -> Result<bool, Value> {

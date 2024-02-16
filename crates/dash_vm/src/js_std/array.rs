@@ -7,7 +7,7 @@ use crate::value::array::{Array, ArrayIterator};
 use crate::value::function::native::CallContext;
 use crate::value::object::PropertyValue;
 use crate::value::ops::conversions::ValueConversion;
-use crate::value::ops::equality::ValueEquality;
+use crate::value::ops::equality::strict_eq;
 use crate::value::root_ext::RootErrExt;
 use crate::value::string::JsString;
 use crate::value::{array, Root, Value, ValueContext};
@@ -281,7 +281,7 @@ pub fn includes(cx: CallContext) -> Result<Value, Value> {
     for k in 0..len {
         let pk = cx.scope.intern_usize(k);
         let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
-        if pkv.strict_eq(&search_element, cx.scope)?.is_truthy(cx.scope) {
+        if strict_eq(&pkv, &search_element) {
             return Ok(true.into());
         }
     }
@@ -297,7 +297,7 @@ pub fn index_of(cx: CallContext) -> Result<Value, Value> {
     for k in 0..len {
         let pk = cx.scope.intern_usize(k);
         let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
-        if pkv.strict_eq(&search_element, cx.scope)?.is_truthy(cx.scope) {
+        if strict_eq(&pkv, &search_element) {
             return Ok(Value::number(k as f64));
         }
     }
@@ -319,7 +319,7 @@ pub fn last_index_of(cx: CallContext) -> Result<Value, Value> {
     for k in (0..from_index).rev() {
         let pk = cx.scope.intern_usize(k);
         let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
-        if pkv.strict_eq(&search_element, cx.scope)?.is_truthy(cx.scope) {
+        if strict_eq(&pkv, &search_element) {
             return Ok(Value::number(k as f64));
         }
     }

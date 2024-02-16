@@ -14,7 +14,6 @@ use crate::util::{format_f64, Captures};
 use super::boxed::{Boolean as BoxedBoolean, Number as BoxedNumber, Symbol as BoxedSymbol};
 use super::object::{Object, PropertyKey, PropertyValue};
 use super::ops::conversions::{PreferredType, ValueConversion};
-use super::ops::equality::ValueEquality;
 use super::string::JsString;
 use super::{Typeof, Unrooted, Value};
 
@@ -439,7 +438,7 @@ impl Object for Symbol {
     }
 }
 
-pub trait PrimitiveCapabilities: ValueConversion + ValueEquality + std::fmt::Debug {
+pub trait PrimitiveCapabilities: ValueConversion + std::fmt::Debug {
     fn as_string(&self) -> Option<JsString> {
         None
     }
@@ -465,32 +464,6 @@ impl PrimitiveCapabilities for f64 {
 
     fn unbox(&self) -> Value {
         Value::number(*self)
-    }
-}
-
-impl ValueEquality for f64 {
-    fn lt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        other.to_number(sc).map(|other| Value::Boolean(*self < other))
-    }
-
-    fn le(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        other.to_number(sc).map(|other| Value::Boolean(*self <= other))
-    }
-
-    fn gt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        other.to_number(sc).map(|other| Value::Boolean(*self > other))
-    }
-
-    fn ge(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        other.to_number(sc).map(|other| Value::Boolean(*self >= other))
-    }
-
-    fn eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        other.to_number(sc).map(|other| Value::Boolean(*self == other))
-    }
-
-    fn strict_eq(&self, other: &Value, _: &mut LocalScope) -> Result<Value, Value> {
-        Ok(Value::Boolean(other == &Value::number(*self)))
     }
 }
 
@@ -531,40 +504,6 @@ impl PrimitiveCapabilities for bool {
     }
 }
 
-impl ValueEquality for bool {
-    fn lt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        other
-            .to_boolean(sc)
-            .map(|other| Value::Boolean((*self as u8) < other as u8))
-    }
-
-    fn le(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        other
-            .to_boolean(sc)
-            .map(|other| Value::Boolean((*self as u8) <= other as u8))
-    }
-
-    fn gt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        other
-            .to_boolean(sc)
-            .map(|other| Value::Boolean((*self as u8) > other as u8))
-    }
-
-    fn ge(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        other
-            .to_boolean(sc)
-            .map(|other| Value::Boolean((*self as u8) >= other as u8))
-    }
-
-    fn eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        other.to_boolean(sc).map(|other| Value::Boolean(*self == other))
-    }
-
-    fn strict_eq(&self, other: &Value, _: &mut LocalScope) -> Result<Value, Value> {
-        Ok(Value::Boolean(other == &Value::Boolean(*self)))
-    }
-}
-
 impl ValueConversion for bool {
     fn to_primitive(&self, _sc: &mut LocalScope, _preferred_type: Option<PreferredType>) -> Result<Value, Value> {
         Ok(Value::Boolean(*self))
@@ -599,44 +538,6 @@ impl PrimitiveCapabilities for Undefined {
 
     fn unbox(&self) -> Value {
         Value::undefined()
-    }
-}
-
-impl ValueEquality for Undefined {
-    fn lt(&self, _other: &Value, _sc: &mut LocalScope) -> Result<Value, Value> {
-        // TODO: invoke toString
-        Ok(Value::Boolean(false))
-    }
-
-    fn le(&self, _other: &Value, _sc: &mut LocalScope) -> Result<Value, Value> {
-        Ok(Value::Boolean(false))
-    }
-
-    fn gt(&self, _other: &Value, _sc: &mut LocalScope) -> Result<Value, Value> {
-        Ok(Value::Boolean(false))
-    }
-
-    fn ge(&self, _other: &Value, _sc: &mut LocalScope) -> Result<Value, Value> {
-        Ok(Value::Boolean(false))
-    }
-
-    fn eq(&self, other: &Value, _sc: &mut LocalScope) -> Result<Value, Value> {
-        let eq_object = |o: &dyn Object| {
-            Ok(Value::Boolean(
-                o.as_primitive_capable().map_or(false, |p| p.is_undefined()),
-            ))
-        };
-
-        match other {
-            Value::Undefined(_) => Ok(Value::Boolean(true)),
-            Value::Object(o) => eq_object(o),
-            Value::External(o) => eq_object(&o.inner),
-            _ => Ok(Value::Boolean(false)),
-        }
-    }
-
-    fn strict_eq(&self, other: &Value, _: &mut LocalScope) -> Result<Value, Value> {
-        Ok(Value::Boolean(matches!(other, Value::Undefined(_))))
     }
 }
 
@@ -676,32 +577,6 @@ impl PrimitiveCapabilities for Null {
     }
 }
 
-impl ValueEquality for Null {
-    fn lt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        other.to_number(sc).map(|other| Value::Boolean(0.0 < other))
-    }
-
-    fn le(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        other.to_number(sc).map(|other| Value::Boolean(0.0 <= other))
-    }
-
-    fn gt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        other.to_number(sc).map(|other| Value::Boolean(0.0 > other))
-    }
-
-    fn ge(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        other.to_number(sc).map(|other| Value::Boolean(0.0 >= other))
-    }
-
-    fn eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        other.to_number(sc).map(|other| Value::Boolean(0.0 == other))
-    }
-
-    fn strict_eq(&self, other: &Value, _: &mut LocalScope) -> Result<Value, Value> {
-        Ok(Value::Boolean(matches!(other, Value::Null(_))))
-    }
-}
-
 impl ValueConversion for Null {
     fn to_primitive(&self, _sc: &mut LocalScope, _preferred_type: Option<PreferredType>) -> Result<Value, Value> {
         Ok(Value::null())
@@ -731,32 +606,6 @@ impl ValueConversion for Null {
 impl PrimitiveCapabilities for Symbol {
     fn unbox(&self) -> Value {
         Value::Symbol(self.clone())
-    }
-}
-
-impl ValueEquality for Symbol {
-    fn lt(&self, _other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        throw!(sc, TypeError, "Cannot convert a Symbol value to a number")
-    }
-
-    fn le(&self, _other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        throw!(sc, TypeError, "Cannot convert a Symbol value to a number")
-    }
-
-    fn gt(&self, _other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        throw!(sc, TypeError, "Cannot convert a Symbol value to a number")
-    }
-
-    fn ge(&self, _other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        throw!(sc, TypeError, "Cannot convert a Symbol value to a number")
-    }
-
-    fn eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        other.to_number(sc).map(|other| Value::Boolean(0.0 == other))
-    }
-
-    fn strict_eq(&self, other: &Value, _: &mut LocalScope) -> Result<Value, Value> {
-        Ok(Value::Boolean(other == &Value::Symbol(self.clone())))
     }
 }
 
@@ -790,6 +639,15 @@ impl ValueConversion for Symbol {
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(transparent)]
 pub struct Number(pub f64);
+
+impl From<bool> for Number {
+    fn from(value: bool) -> Self {
+        match value {
+            true => Self(1.0),
+            false => Self(0.0),
+        }
+    }
+}
 
 impl Eq for Number {}
 
@@ -863,32 +721,6 @@ impl PrimitiveCapabilities for Number {
 
     fn unbox(&self) -> Value {
         Value::Number(*self)
-    }
-}
-
-impl ValueEquality for Number {
-    fn lt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        ValueEquality::lt(&self.0, other, sc)
-    }
-
-    fn le(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        ValueEquality::le(&self.0, other, sc)
-    }
-
-    fn gt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        ValueEquality::gt(&self.0, other, sc)
-    }
-
-    fn ge(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        ValueEquality::ge(&self.0, other, sc)
-    }
-
-    fn eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-        ValueEquality::eq(&self.0, other, sc)
-    }
-
-    fn strict_eq(&self, other: &Value, _: &mut LocalScope) -> Result<Value, Value> {
-        Ok(Value::Boolean(other == &Value::Number(*self)))
     }
 }
 

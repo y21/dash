@@ -1,5 +1,4 @@
 use super::ops::conversions::{PreferredType, ValueConversion};
-use super::ops::equality::ValueEquality;
 use crate::gc::handle::Handle;
 use crate::localscope::LocalScope;
 use crate::value::{JsString, PropertyKey, Unrooted};
@@ -66,44 +65,6 @@ macro_rules! boxed_primitive {
 
                 fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
                     Some(self)
-                }
-            }
-
-            impl ValueEquality for $name {
-                fn lt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-                    ValueEquality::lt(&self.inner, other, sc)
-                }
-
-                fn le(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-                    ValueEquality::le(&self.inner, other, sc)
-                }
-
-                fn gt(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-                    ValueEquality::gt(&self.inner, other, sc)
-                }
-
-                fn ge(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-                    ValueEquality::ge(&self.inner, other, sc)
-                }
-
-                fn eq(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-                    ValueEquality::eq(&self.inner, other, sc)
-                }
-
-                fn strict_eq(&self, other: &Value, _: &mut LocalScope) -> Result<Value, Value> {
-                    if let Value::Object(obj) = other {
-                        Ok(Value::Boolean(std::ptr::eq(self, obj.erased_value().cast::<$name>())))
-                    } else {
-                        Ok(Value::Boolean(false))
-                    }
-                }
-
-                fn ne(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-                    ValueEquality::ne(&self.inner, other, sc)
-                }
-
-                fn strict_ne(&self, other: &Value, sc: &mut LocalScope) -> Result<Value, Value> {
-                    ValueEquality::strict_ne(&self.inner, other, sc)
                 }
             }
 
