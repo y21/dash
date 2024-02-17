@@ -8,6 +8,7 @@ use crate::gc::interner::{self, sym};
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::util::cold_path;
 use crate::value::function::Function;
+use crate::value::object::{PropertyDataDescriptor, PropertyValueKind};
 use crate::value::primitive::Symbol;
 use crate::value::Root;
 
@@ -145,11 +146,10 @@ impl Vm {
             constructor: Handle,
             methods: impl IntoIterator<Item = (interner::Symbol, Handle)>,
             symbols: impl IntoIterator<Item = (Symbol, Handle)>,
-            fields: impl IntoIterator<Item = (interner::Symbol, Value)>,
+            fields: impl IntoIterator<Item = (interner::Symbol, Value, Option<PropertyDataDescriptor>)>,
             // Contrary to `prototype`, this optionally sets the function prototype. Should only be `Some`
             // when base is a function
             fn_prototype: Option<(interner::Symbol, Handle)>,
-
             // LocalScope needs to be the last parameter because we don't have two phase borrows in user code
             scope: &mut LocalScope<'_>,
         ) -> Handle {
@@ -184,8 +184,12 @@ impl Vm {
                 base.set_property(scope, key.into(), PropertyValue::static_default(value.into())).unwrap();
             }
 
-            for (key, value) in fields {
-                base.set_property(scope, key.into(), PropertyValue::static_default(value)).unwrap();
+            for (key, value, descriptor) in fields {
+                let value = PropertyValue {
+                    kind: PropertyValueKind::Static(value),
+                    descriptor: descriptor.unwrap_or_default()
+                };
+                base.set_property(scope, key.into(), value).unwrap();
             }
 
             if let Some((proto_name, proto_val)) = fn_prototype {
@@ -310,7 +314,7 @@ impl Vm {
             ],
             [],
             [
-                (sym::PI, Value::number(std::f64::consts::PI)),
+                (sym::PI, Value::number(std::f64::consts::PI), Some(PropertyDataDescriptor::empty())),
             ],
             None,
             &mut scope,
@@ -327,15 +331,15 @@ impl Vm {
             ],
             [],
             [
-                (sym::EPSILON, Value::number(f64::EPSILON)),
-                (sym::MAX_SAFE_INTEGER, Value::number(value::primitive::MAX_SAFE_INTEGERF)),
-                (sym::MAX_VALUE, Value::number(f64::MAX)),
-                (sym::MIN_SAFE_INTEGER, Value::number(value::primitive::MIN_SAFE_INTEGERF)),
-                (sym::MIN_VALUE, Value::number(f64::MIN)),
-                (sym::NEGATIVE_INFINITY, Value::number(f64::NEG_INFINITY)),
-                (sym::POSITIVE_INFINITY, Value::number(f64::INFINITY)),
+                (sym::EPSILON, Value::number(f64::EPSILON), Some(PropertyDataDescriptor::empty())),
+                (sym::MAX_SAFE_INTEGER, Value::number(value::primitive::MAX_SAFE_INTEGERF), Some(PropertyDataDescriptor::empty())),
+                (sym::MAX_VALUE, Value::number(f64::MAX), Some(PropertyDataDescriptor::empty())),
+                (sym::MIN_SAFE_INTEGER, Value::number(value::primitive::MIN_SAFE_INTEGERF), Some(PropertyDataDescriptor::empty())),
+                (sym::MIN_VALUE, Value::number(f64::MIN), Some(PropertyDataDescriptor::empty())),
+                (sym::NEGATIVE_INFINITY, Value::number(f64::NEG_INFINITY), Some(PropertyDataDescriptor::empty())),
+                (sym::POSITIVE_INFINITY, Value::number(f64::INFINITY), Some(PropertyDataDescriptor::empty())),
                 // TODO: this needs to be writable: false, causes test262 language/types/number/S8.5_A14_T1.js to fail
-                (sym::NaN, Value::number(f64::NAN))
+                (sym::NaN, Value::number(f64::NAN), Some(PropertyDataDescriptor::empty()))
             ],
             Some((sym::Number, scope.statics.number_prototype.clone())),
             &mut scope,
@@ -528,18 +532,18 @@ impl Vm {
             [],
             [],
             [
-                (sym::asyncIterator,Value::Symbol( scope.statics.symbol_async_iterator.clone())),
-                (sym::hasInstance, Value::Symbol(scope.statics.symbol_has_instance.clone())),
-                (sym::iterator, Value::Symbol(scope.statics.symbol_iterator.clone())),
-                (sym::match_, Value::Symbol(scope.statics.symbol_match.clone())),
-                (sym::matchAll, Value::Symbol(scope.statics.symbol_match_all.clone())),
-                (sym::replace, Value::Symbol(scope.statics.symbol_replace.clone())),
-                (sym::search, Value::Symbol(scope.statics.symbol_search.clone())),
-                (sym::species, Value::Symbol(scope.statics.symbol_species.clone())),
-                (sym::split, Value::Symbol(scope.statics.symbol_split.clone())),
-                (sym::toPrimitive, Value::Symbol(scope.statics.symbol_to_primitive.clone())),
-                (sym::toStringTag, Value::Symbol(scope.statics.symbol_to_string_tag.clone())),
-                (sym::unscopables, Value::Symbol(scope.statics.symbol_unscopables.clone())),
+                (sym::asyncIterator,Value::Symbol( scope.statics.symbol_async_iterator.clone()), Some(PropertyDataDescriptor::empty())),
+                (sym::hasInstance, Value::Symbol(scope.statics.symbol_has_instance.clone()), Some(PropertyDataDescriptor::empty())),
+                (sym::iterator, Value::Symbol(scope.statics.symbol_iterator.clone()), Some(PropertyDataDescriptor::empty())),
+                (sym::match_, Value::Symbol(scope.statics.symbol_match.clone()), Some(PropertyDataDescriptor::empty())),
+                (sym::matchAll, Value::Symbol(scope.statics.symbol_match_all.clone()), Some(PropertyDataDescriptor::empty())),
+                (sym::replace, Value::Symbol(scope.statics.symbol_replace.clone()), Some(PropertyDataDescriptor::empty())),
+                (sym::search, Value::Symbol(scope.statics.symbol_search.clone()), Some(PropertyDataDescriptor::empty())),
+                (sym::species, Value::Symbol(scope.statics.symbol_species.clone()), Some(PropertyDataDescriptor::empty())),
+                (sym::split, Value::Symbol(scope.statics.symbol_split.clone()), Some(PropertyDataDescriptor::empty())),
+                (sym::toPrimitive, Value::Symbol(scope.statics.symbol_to_primitive.clone()), Some(PropertyDataDescriptor::empty())),
+                (sym::toStringTag, Value::Symbol(scope.statics.symbol_to_string_tag.clone()), Some(PropertyDataDescriptor::empty())),
+                (sym::unscopables, Value::Symbol(scope.statics.symbol_unscopables.clone()), Some(PropertyDataDescriptor::empty())),
             ],
             Some((sym::JsSymbol, scope.statics.symbol_prototype.clone())),
             &mut scope,

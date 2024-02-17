@@ -8,6 +8,7 @@ use crate::gc::persistent::Persistent;
 use crate::gc::trace::{Trace, TraceCtxt};
 use bitflags::bitflags;
 use dash_proc_macro::Trace;
+use hashbrown::hash_map::Entry;
 use rustc_hash::FxHasher;
 
 use crate::gc::handle::Handle;
@@ -248,8 +249,8 @@ impl Default for PropertyDataDescriptor {
 
 #[derive(Debug, Clone, Trace)]
 pub struct PropertyValue {
-    kind: PropertyValueKind,
-    descriptor: PropertyDataDescriptor,
+    pub kind: PropertyValueKind,
+    pub descriptor: PropertyDataDescriptor,
 }
 
 impl PropertyValue {
@@ -578,10 +579,6 @@ impl Object for NamedObject {
             return Ok(Some(value));
         }
 
-        // if let Some(prototype) = self.prototype.borrow().as_ref() {
-        //     return prototype.get_property_descriptor(sc, key);
-        // }
-
         Ok(None)
     }
 
@@ -611,7 +608,14 @@ impl Object for NamedObject {
         // TODO: check if we are invoking a setter
 
         let mut map = self.values.borrow_mut();
-        map.insert(key, value);
+        match map.entry(key) {
+            Entry::Occupied(mut entry) => {
+                if entry.get().descriptor.contains(PropertyDataDescriptor::WRITABLE) {
+                    entry.insert(value);
+                }
+            }
+            Entry::Vacant(vacant) => drop(vacant.insert(value)),
+        }
         Ok(())
     }
 
