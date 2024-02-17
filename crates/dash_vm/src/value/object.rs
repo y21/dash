@@ -263,6 +263,19 @@ impl PropertyValue {
         Self::new(PropertyValueKind::Static(value), Default::default())
     }
 
+    /// Convenience function for creating a static property with an empty descriptor (all bits set to 0)
+    pub fn static_empty(value: Value) -> Self {
+        Self::new(PropertyValueKind::Static(value), PropertyDataDescriptor::empty())
+    }
+
+    /// Convenience function for creating a static, non-enumerable property
+    pub fn static_non_enumerable(value: Value) -> Self {
+        Self::new(
+            PropertyValueKind::Static(value),
+            PropertyDataDescriptor::WRITABLE | PropertyDataDescriptor::CONFIGURABLE,
+        )
+    }
+
     pub fn getter_default(value: Handle) -> Self {
         Self::new(
             PropertyValueKind::Trap {

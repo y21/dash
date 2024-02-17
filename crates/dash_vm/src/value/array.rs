@@ -6,6 +6,7 @@ use dash_proc_macro::Trace;
 use crate::gc::handle::Handle;
 use crate::gc::interner::sym;
 use crate::localscope::LocalScope;
+use crate::value::object::PropertyDataDescriptor;
 use crate::{delegate, throw, Vm};
 
 use super::object::{NamedObject, Object, PropertyKey, PropertyValue, PropertyValueKind};
@@ -62,7 +63,10 @@ impl Object for Array {
 
         if let PropertyKey::String(key) = &key {
             if key.sym() == sym::length {
-                return Ok(Some(PropertyValue::static_default(Value::number(items.len() as f64))));
+                return Ok(Some(PropertyValue {
+                    kind: PropertyValueKind::Static(Value::number(items.len() as f64)),
+                    descriptor: PropertyDataDescriptor::WRITABLE,
+                }));
             }
 
             if let Ok(index) = key.res(sc).parse::<usize>() {

@@ -153,7 +153,7 @@ impl Vm {
             // LocalScope needs to be the last parameter because we don't have two phase borrows in user code
             scope: &mut LocalScope<'_>,
         ) -> Handle {
-            base.set_property(scope, sym::constructor.into(), PropertyValue::static_default(constructor.into())).unwrap();
+            base.set_property(scope, sym::constructor.into(), PropertyValue::static_non_enumerable(constructor.into())).unwrap();
             base.set_prototype(scope, prototype.into()).unwrap();
 
             for (key, value) in methods {
@@ -167,7 +167,7 @@ impl Vm {
                     None,
                     scope,
                 );
-                base.set_property(scope, key.into(), PropertyValue::static_default(value.into())).unwrap();
+                base.set_property(scope, key.into(), PropertyValue::static_non_enumerable(value.into())).unwrap();
             }
 
             for (key, value) in symbols {
@@ -181,7 +181,7 @@ impl Vm {
                     None,
                     scope,
                 );
-                base.set_property(scope, key.into(), PropertyValue::static_default(value.into())).unwrap();
+                base.set_property(scope, key.into(), PropertyValue::static_empty(value.into())).unwrap();
             }
 
             for (key, value, descriptor) in fields {

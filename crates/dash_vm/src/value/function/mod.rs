@@ -20,7 +20,7 @@ use self::native::{CallContext, NativeFunction};
 use self::user::UserFunction;
 
 use super::array::Array;
-use super::object::{NamedObject, Object, PropertyKey, PropertyValue};
+use super::object::{NamedObject, Object, PropertyDataDescriptor, PropertyKey, PropertyValue, PropertyValueKind};
 use super::ops::conversions::ValueConversion;
 use super::string::JsString;
 use super::{Root, Typeof, Unrooted, Value};
@@ -200,11 +200,14 @@ impl Object for Function {
             match key.sym() {
                 sym::name => {
                     let name = self.name().unwrap_or_else(|| sym::empty.into());
-                    return Ok(Some(PropertyValue::static_default(Value::String(name))));
+                    return Ok(Some(PropertyValue {
+                        kind: PropertyValueKind::Static(Value::String(name)),
+                        descriptor: PropertyDataDescriptor::CONFIGURABLE,
+                    }));
                 }
                 sym::prototype => {
                     let prototype = self.get_or_set_prototype(sc);
-                    return Ok(Some(PropertyValue::static_default(Value::Object(prototype))));
+                    return Ok(Some(PropertyValue::static_empty(Value::Object(prototype))));
                 }
                 _ => {}
             }

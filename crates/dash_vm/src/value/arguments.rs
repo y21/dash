@@ -25,7 +25,7 @@ impl Arguments {
                     .map(|(i, v)| {
                         (
                             PropertyKey::String(vm.interner.intern_usize(i).into()),
-                            PropertyValue::static_default(v),
+                            PropertyValue::static_non_enumerable(v),
                         )
                     })
                     .chain([(

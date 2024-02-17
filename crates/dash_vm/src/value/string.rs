@@ -75,14 +75,14 @@ impl Object for JsString {
     ) -> Result<Option<super::object::PropertyValue>, super::Unrooted> {
         if let PropertyKey::String(st) = key {
             if st.sym() == sym::length {
-                return Ok(Some(PropertyValue::static_default(Value::number(self.len(sc) as f64))));
+                return Ok(Some(PropertyValue::static_empty(Value::number(self.len(sc) as f64))));
             }
 
             if let Ok(index) = st.res(sc).parse::<usize>() {
                 let bytes = self.res(sc).as_bytes();
                 if let Some(&byte) = bytes.get(index) {
                     let s = sc.intern((byte as char).to_string().as_ref());
-                    return Ok(Some(PropertyValue::static_default(Value::String(s.into()))));
+                    return Ok(Some(PropertyValue::static_non_enumerable(Value::String(s.into()))));
                 }
             }
         }
