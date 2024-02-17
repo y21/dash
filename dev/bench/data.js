@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1708181755595,
+  "lastUpdate": 1708189647916,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -7459,6 +7459,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 54962,
             "range": "± 1923",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "44799f86cc5860edec5176d147ddcae34908ae55",
+          "message": "implement `Object.prototype.propertyIsEnumerable`\n\nrequired by test262's propertyHelper.js",
+          "timestamp": "2024-02-17T18:05:01+01:00",
+          "tree_id": "9686e75c646edbf88ed7da1ba452db1ff9506a15",
+          "url": "https://github.com/y21/dash/commit/44799f86cc5860edec5176d147ddcae34908ae55"
+        },
+        "date": 1708189646650,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1661147,
+            "range": "± 89915",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 168225,
+            "range": "± 8582",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 55386,
+            "range": "± 193",
             "unit": "ns/iter"
           }
         ]
