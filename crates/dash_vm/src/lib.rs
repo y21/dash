@@ -256,6 +256,7 @@ impl Vm {
                 (sym::toString, scope.statics.object_to_string.clone()),
                 (sym::hasOwnProperty, scope.statics.object_has_own_property.clone()),
                 (sym::isPrototypeOf, scope.statics.object_is_prototype_of.clone()),
+                (sym::propertyIsEnumerable, scope.statics.object_property_is_enumerable.clone())
             ],
             [],
             [],

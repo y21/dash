@@ -486,6 +486,7 @@ impl PropertyKey {
     }
 
     pub fn from_value(sc: &mut LocalScope, value: Value) -> Result<Self, Value> {
+        // TODO: call ToPrimitive as specified by ToPropertyKey in the spec?
         match value {
             Value::Symbol(s) => Ok(Self::Symbol(s)),
             other => Ok(PropertyKey::String(other.to_js_string(sc)?)),

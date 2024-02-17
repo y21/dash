@@ -265,7 +265,8 @@ pub mod sym {
                 one: "1",
                 getPrototypeOf,
                 isPrototypeOf,
-                arguments
+                arguments,
+                propertyIsEnumerable
             }
         ]
     }

@@ -4,7 +4,7 @@ use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::array::Array;
 use crate::value::function::native::CallContext;
-use crate::value::object::{NamedObject, Object, PropertyKey, PropertyValue};
+use crate::value::object::{NamedObject, Object, PropertyDataDescriptor, PropertyKey, PropertyValue};
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::root_ext::RootErrExt;
 use crate::value::{Root, Typeof, Value, ValueContext};
@@ -207,4 +207,13 @@ pub fn is_prototype_of(cx: CallContext) -> Result<Value, Value> {
             _ => return Ok(Value::Boolean(false)),
         };
     }
+}
+
+pub fn property_is_enumerable(cx: CallContext) -> Result<Value, Value> {
+    let prop = PropertyKey::from_value(cx.scope, cx.args.first().unwrap_or_undefined())?;
+    let obj = cx.this.to_object(cx.scope)?;
+    let desc = obj.get_own_property_descriptor(cx.scope, prop).root_err(cx.scope)?;
+    Ok(Value::Boolean(desc.is_some_and(|val| {
+        val.descriptor.contains(PropertyDataDescriptor::ENUMERABLE)
+    })))
 }
