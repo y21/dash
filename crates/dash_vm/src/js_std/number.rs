@@ -1,5 +1,5 @@
 use crate::throw;
-use crate::util::format_f64;
+use crate::util::intern_f64;
 use crate::value::function::native::CallContext;
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::primitive::{Number, MAX_SAFE_INTEGERF};
@@ -30,13 +30,13 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
     };
 
     let re = match radix {
-        2 => format!("{:b}", num as u64),
-        10 => format_f64(num),
-        16 => format!("{:x}", num as u64),
+        2 => cx.scope.intern(format!("{:b}", num as u64).as_ref()),
+        10 => intern_f64(cx.scope, num),
+        16 => cx.scope.intern(format!("{:x}", num as u64)),
         _ => throw!(cx.scope, RangeError, "Invalid radix: {}", radix),
     };
 
-    Ok(Value::String(cx.scope.intern(re.as_ref()).into()))
+    Ok(Value::String(re.into()))
 }
 
 pub fn is_finite(cx: CallContext) -> Result<Value, Value> {

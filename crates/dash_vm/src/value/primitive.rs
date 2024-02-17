@@ -9,7 +9,7 @@ use crate::gc::handle::Handle;
 use crate::gc::interner::sym;
 use crate::localscope::LocalScope;
 use crate::throw;
-use crate::util::{format_f64, Captures};
+use crate::util::{intern_f64, Captures};
 
 use super::boxed::{Boolean as BoxedBoolean, Number as BoxedNumber, Symbol as BoxedSymbol};
 use super::object::{Object, PropertyKey, PropertyValue};
@@ -481,7 +481,7 @@ impl ValueConversion for f64 {
     }
 
     fn to_js_string(&self, sc: &mut LocalScope) -> Result<JsString, Value> {
-        Ok(sc.intern(format_f64(*self).as_ref()).into())
+        Ok(intern_f64(sc, *self).into())
     }
 
     fn length_of_array_like(&self, _sc: &mut LocalScope) -> Result<usize, Value> {

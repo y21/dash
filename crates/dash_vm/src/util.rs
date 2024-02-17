@@ -1,5 +1,9 @@
 use std::num::FpCategory;
 
+use dash_middle::interner::{sym, Symbol};
+
+use crate::localscope::LocalScope;
+
 /// Marks the code path leading to this call as cold, or "unlikely"
 #[cold]
 pub fn cold_path() {}
@@ -19,11 +23,16 @@ pub trait Captures<'a> {}
 
 impl<'a, T: ?Sized> Captures<'a> for T {}
 
-pub fn format_f64(n: f64) -> String {
-    // TODO: specialize zero, infinity, NaN by "interning" them in vm.statics
+pub fn intern_f64(sc: &mut LocalScope, n: f64) -> Symbol {
+    if n.trunc() == n && n >= 0.0 && n <= usize::MAX as f64 {
+        // Happy path: no fractional part and fits in a usize
+        // This can use the specialized usize interner
+        return sc.intern_usize(n as usize);
+    }
+
     match n.classify() {
-        FpCategory::Infinite => "Infinity".into(),
-        FpCategory::Nan => "NaN".into(),
+        FpCategory::Infinite => sym::Infinity,
+        FpCategory::Nan => sym::NaN,
         _ if n >= 1e21f64 || n <= -1e21f64 => {
             let mut digits = 0;
             let mut n = n;
@@ -35,8 +44,8 @@ pub fn format_f64(n: f64) -> String {
                 n /= 10f64;
                 digits += 1;
             }
-            format!("{n:.0}e+{digits}")
+            sc.intern(format!("{n:.0}e+{digits}").as_ref())
         }
-        _ => format!("{n}"),
+        _ => sc.intern(n.to_string().as_ref()),
     }
 }
