@@ -3,7 +3,7 @@ use dash_middle::lexer::token::{Token, TokenType, ASSIGNMENT_TYPES};
 use dash_middle::parser::error::Error;
 use dash_middle::parser::expr::{ArrayMemberKind, CallArgumentKind, Expr, ExprKind, ObjectMemberKind};
 use dash_middle::parser::statement::{
-    BlockStatement, FunctionDeclaration, FunctionKind, Parameter, ReturnStatement, Statement, StatementKind,
+    Asyncness, BlockStatement, FunctionDeclaration, FunctionKind, Parameter, ReturnStatement, Statement, StatementKind,
 };
 use dash_middle::sourcemap::Span;
 use dash_regex::Flags;
@@ -538,8 +538,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                                             id,
                                             parameters,
                                             body.0,
-                                            FunctionKind::Function,
-                                            false,
+                                            FunctionKind::Function(Asyncness::No),
                                             None,
                                         )),
                                     },
@@ -600,8 +599,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                                 func_id,
                                 params,
                                 stmts,
-                                FunctionKind::Function,
-                                false,
+                                FunctionKind::Function(Asyncness::No),
                                 None,
                             );
                             items.push((
@@ -749,9 +747,15 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         let is_generator = self.expect_token_type_and_skip(&[TokenType::Star], false);
 
         let ty = if is_generator {
+            if is_async {
+                let star_span = self.previous().unwrap().span;
+                self.create_error(Error::Unimplemented(star_span, "async generator".into()));
+                return None;
+            }
+
             FunctionKind::Generator
         } else {
-            FunctionKind::Function
+            FunctionKind::Function(is_async.into())
         };
 
         let name = {
@@ -791,7 +795,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
         let func_id = self.function_counter.advance();
         Some((
-            FunctionDeclaration::new(name, func_id, arguments, statements, ty, is_async, ty_seg),
+            FunctionDeclaration::new(name, func_id, arguments, statements, ty, ty_seg),
             self.previous()?.span,
         ))
     }
@@ -853,7 +857,6 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 list,
                 vec![body],
                 FunctionKind::Arrow,
-                false,
                 None,
             )),
         })
