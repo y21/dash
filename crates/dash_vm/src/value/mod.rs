@@ -424,7 +424,7 @@ impl Value {
                     ParserFunctionKind::Function(Asyncness::No) => FunctionKind::User(fun),
                     ParserFunctionKind::Arrow => FunctionKind::Closure(Closure {
                         fun,
-                        this: vm.frames.last().unwrap().this.clone().unwrap_or_undefined(),
+                        this: vm.active_frame().this.clone().unwrap_or_undefined(),
                     }),
                     ParserFunctionKind::Generator => FunctionKind::Generator(GeneratorFunction::new(fun)),
                 };
@@ -505,7 +505,7 @@ impl Value {
             _ => {
                 cold_path();
 
-                let frame = sc.frames.last().unwrap();
+                let frame = sc.active_frame();
                 let snippet = frame
                     .function
                     .debug_symbols

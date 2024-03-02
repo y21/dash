@@ -25,7 +25,7 @@ impl<'a> BBGenerationQuery for QueryProvider<'a> {
 
 impl<'a> TypeInferQuery for QueryProvider<'a> {
     fn type_of_constant(&self, index: u16) -> Type {
-        let constant = &self.vm.frames.last().unwrap().function.constants[usize::from(index)];
+        let constant = &self.vm.active_frame().function.constants[usize::from(index)];
         match constant {
             Constant::Boolean(..) => Type::Boolean,
             Constant::Number(n) => {
@@ -55,7 +55,7 @@ impl<'a> TypeInferQuery for QueryProvider<'a> {
 
 impl<'a> CodegenQuery for QueryProvider<'a> {
     fn get_constant(&self, id: u16) -> JitConstant {
-        let constant = &self.vm.frames.last().unwrap().function.constants[usize::from(id)];
+        let constant = &self.vm.active_frame().function.constants[usize::from(id)];
         match constant {
             Constant::Boolean(b) => JitConstant::Boolean(*b),
             Constant::Number(n) => {

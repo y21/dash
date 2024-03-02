@@ -1153,10 +1153,17 @@ impl Vm {
         );
     }
 
+    pub(crate) fn active_frame(&self) -> &Frame {
+        self.frames.last().expect("frames stack is empty")
+    }
+    pub(crate) fn active_frame_mut(&mut self) -> &mut Frame {
+        self.frames.last_mut().expect("frames stack is empty")
+    }
+
     /// Fetches the current instruction/value in the currently executing frame
     /// and increments the instruction pointer
     pub(crate) fn fetch_and_inc_ip(&mut self) -> u8 {
-        let frame = self.frames.last_mut().expect("No frame");
+        let frame = self.active_frame_mut();
         let ip = frame.ip;
         frame.ip += 1;
         frame.function.buffer.with(|buf| buf[ip])
@@ -1165,7 +1172,7 @@ impl Vm {
     /// Fetches a wide value (16-bit) in the currently executing frame
     /// and increments the instruction pointer
     pub(crate) fn fetchw_and_inc_ip(&mut self) -> u16 {
-        let frame = self.frames.last_mut().expect("No frame");
+        let frame = self.active_frame_mut();
         let value: [u8; 2] = frame.function.buffer.with(|buf| {
             buf[frame.ip..frame.ip + 2]
                 .try_into()
@@ -1177,7 +1184,7 @@ impl Vm {
     }
 
     pub(crate) fn get_frame_sp(&self) -> usize {
-        self.frames.last().map(|frame| frame.sp).expect("No frame")
+        self.active_frame().sp
     }
 
     /// Fetches a local, while also preserving external values
@@ -1194,7 +1201,7 @@ impl Vm {
     }
 
     pub(crate) fn get_external(&self, id: usize) -> Option<&ExternalValue> {
-        self.frames.last()?.externals.get(id)
+        self.active_frame().externals.get(id)
     }
 
     pub(crate) fn set_local(&mut self, id: usize, value: Unrooted) {
@@ -1296,8 +1303,7 @@ impl Vm {
             // Unwind frames
             drop(self.frames.drain(try_fp..));
 
-            let frame = self.frames.last_mut().expect("No frame");
-            frame.ip = catch_ip;
+            self.active_frame_mut().ip = catch_ip;
 
             let catch_ip = self.fetchw_and_inc_ip();
             if catch_ip != u16::MAX {
@@ -1513,7 +1519,7 @@ impl Vm {
     #[cfg(feature = "jit")]
     pub(crate) fn poison_ip(&mut self, ip: usize) {
         dash_log::warn!("ip poisoned: {}", ip);
-        self.frames.last().unwrap().function.poison_ip(ip);
+        self.active_frame().function.poison_ip(ip);
     }
 
     // TODO: move these to DispatchContext.
