@@ -609,9 +609,9 @@ mod handlers {
                 for (index, value) in raw_args.into_iter().enumerate() {
                     if indices_iter.peek().is_some_and(|&v| usize::from(v) == index) {
                         let len = value.length_of_array_like(cx.scope)?;
-                        let index = cx.scope.intern_usize(index);
-                        for _ in 0..len {
-                            let value = value.get_property(&mut cx, index.into())?.root(cx.scope);
+                        for i in 0..len {
+                            let i = cx.scope.intern_usize(i);
+                            let value = value.get_property(&mut cx, i.into())?.root(cx.scope);
                             // NB: no need to push into `refs` since we already rooted it
                             args.push(value);
                         }
@@ -658,14 +658,17 @@ mod handlers {
             (callee, Value::undefined())
         };
 
-        if_chain! {
-            if let Some(function) = callee.downcast_ref::<Function>();
-            if let FunctionKind::User(user_function) = function.kind();
-            then {
-                call_flat(cx, &callee, this, function, user_function, argc, is_constructor)
-            } else {
-                call_generic(cx, &callee, this, argc, is_constructor, call_ip)
+        if let Some(function) = callee.downcast_ref::<Function>() {
+            match function.kind() {
+                FunctionKind::User(user) => call_flat(cx, &callee, this, function, user, argc, is_constructor),
+                FunctionKind::Closure(closure) => {
+                    let bound_this = closure.this.clone();
+                    call_flat(cx, &callee, bound_this, function, &closure.fun, argc, is_constructor)
+                }
+                _ => call_generic(cx, &callee, this, argc, is_constructor, call_ip),
             }
+        } else {
+            call_generic(cx, &callee, this, argc, is_constructor, call_ip)
         }
     }
 

@@ -386,7 +386,7 @@ impl WhileLoop {
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum FunctionKind {
     /// A normal function
-    Function,
+    Function(Asyncness),
     /// A generator function
     Generator,
     /// An arrow function
@@ -432,14 +432,28 @@ impl From<TreeToken> for FuncId {
     }
 }
 
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum Asyncness {
+    Yes,
+    No,
+}
+
+impl From<bool> for Asyncness {
+    fn from(value: bool) -> Self {
+        match value {
+            true => Asyncness::Yes,
+            false => Asyncness::No,
+        }
+    }
+}
+
 /// A function declaration
 #[derive(Debug, Clone)]
 pub struct FunctionDeclaration {
     pub id: FuncId,
     /// The name of this function, if present
     pub name: Option<Symbol>,
-    /// Whether this function is an async function
-    pub r#async: bool,
     /// Function parameter names
     pub parameters: Vec<(
         // Parameter
@@ -516,7 +530,6 @@ impl FunctionDeclaration {
         parameters: Vec<(Parameter, Option<Expr>, Option<TypeSegment>)>,
         statements: Vec<Statement>,
         ty: FunctionKind,
-        r#async: bool,
         ty_segment: Option<TypeSegment>,
     ) -> Self {
         Self {
@@ -525,7 +538,6 @@ impl FunctionDeclaration {
             parameters,
             statements,
             ty,
-            r#async,
             ty_segment,
         }
     }

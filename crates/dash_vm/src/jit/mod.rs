@@ -19,10 +19,7 @@ fn handle_loop_trace(vm: &mut Vm, jmp_instr_ip: usize) {
         }
     };
 
-    let frame_sp = {
-        let frame = vm.frames.last().unwrap();
-        frame.sp
-    };
+    let frame_sp = vm.get_frame_sp();
 
     let offset_ip = trace.start();
     let mut target_ip = 0;
@@ -44,7 +41,7 @@ fn handle_loop_trace(vm: &mut Vm, jmp_instr_ip: usize) {
     }
 
     // `target_ip` is not the "real" IP, there may be some extra instructions before the loop header
-    vm.frames.last_mut().unwrap().ip = target_ip as usize;
+    vm.active_frame_mut().ip = target_ip as usize;
 }
 
 pub fn handle_loop_end(vm: &mut Vm, loop_end_ip: usize) {
@@ -58,7 +55,7 @@ pub fn handle_loop_end(vm: &mut Vm, loop_end_ip: usize) {
 }
 
 fn handle_loop_counter_inc(vm: &mut Vm, loop_end_ip: usize, parent_ip: Option<usize>) {
-    let frame = vm.frames.last_mut().unwrap();
+    let frame = vm.active_frame_mut();
     let origin = Rc::as_ptr(&frame.function);
     let counter = frame.loop_counter.get_or_insert(frame.ip);
 

@@ -138,7 +138,6 @@ unsafe impl Trace for dash_middle::compiler::constant::Function {
             params: _,
             constants,
             externals: _,
-            r#async: _,
             rest_local: _,
             poison_ips: _,
             source: _,

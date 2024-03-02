@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use dash_middle::compiler::constant::{Buffer, Function};
 use dash_middle::compiler::CompileResult;
-use dash_middle::parser::statement::FunctionKind;
+use dash_middle::parser::statement::{Asyncness, FunctionKind};
 use dash_proc_macro::Trace;
 
 use crate::gc::handle::Handle;
@@ -167,8 +167,7 @@ impl Frame {
             locals: cr.locals,
             name: None,
             params: 0,
-            ty: FunctionKind::Function,
-            r#async: false,
+            ty: FunctionKind::Function(Asyncness::No),
             rest_local: None,
             poison_ips: RefCell::new(HashSet::new()),
             source: cr.source,

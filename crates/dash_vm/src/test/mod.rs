@@ -284,6 +284,13 @@ simple_test!(
 simple_test!(
     spread_operator,
     r#"
+    function* generator() {
+        let arr = [...arguments];
+        assert(arr.length === 5);
+        [0, 1, 2, 3, 4].forEach((v, i) => assert(arr[i] === v));
+    }
+    generator(0, ...[1, 2, 3], 4).next();
+    
     assert(
         ((...x) => x.length)(1) === 1
             && ((...x) => x.length)(1, 2) === 2

@@ -15,6 +15,7 @@ use crate::value::arguments::Arguments;
 use crate::Vm;
 
 use self::r#async::AsyncFunction;
+use self::closure::Closure;
 use self::generator::GeneratorFunction;
 use self::native::{CallContext, NativeFunction};
 use self::user::UserFunction;
@@ -27,14 +28,17 @@ use super::{Root, Typeof, Unrooted, Value};
 
 pub mod r#async;
 pub mod bound;
+pub mod closure;
 pub mod generator;
 pub mod native;
 pub mod user;
+
 pub enum FunctionKind {
     Native(NativeFunction),
     User(UserFunction),
     Generator(GeneratorFunction),
     Async(AsyncFunction),
+    Closure(Closure),
 }
 
 unsafe impl Trace for FunctionKind {
@@ -44,6 +48,7 @@ unsafe impl Trace for FunctionKind {
             Self::Generator(generator) => generator.trace(cx),
             Self::Async(async_) => async_.trace(cx),
             Self::Native(_) => {}
+            Self::Closure(user) => user.trace(cx),
         }
     }
 }
@@ -85,6 +90,7 @@ impl fmt::Debug for FunctionKind {
             Self::User(..) => f.write_str("UserFunction"),
             Self::Generator(..) => f.write_str("GeneratorFunction"),
             Self::Async(..) => f.write_str("AsyncFunction"),
+            Self::Closure(..) => f.write_str("closure"),
         }
     }
 }
@@ -187,6 +193,7 @@ fn handle_call(
         FunctionKind::Generator(fun) => fun
             .handle_function_call(scope, callee, this, args, is_constructor_call)
             .map(Into::into),
+        FunctionKind::Closure(fun) => fun.handle_function_call(scope, this, args, is_constructor_call),
     }
 }
 

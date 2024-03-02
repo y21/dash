@@ -2,9 +2,9 @@ use dash_middle::lexer::token::{TokenType, VARIABLE_TYPES};
 use dash_middle::parser::error::Error;
 use dash_middle::parser::expr::{Expr, ExprKind};
 use dash_middle::parser::statement::{
-    BlockStatement, Catch, Class, ClassMember, ClassMemberKind, ClassProperty, DoWhileLoop, ExportKind, ForInLoop,
-    ForLoop, ForOfLoop, FunctionDeclaration, FunctionKind, IfStatement, ImportKind, Loop, Parameter, ReturnStatement,
-    SpecifierKind, Statement, StatementKind, SwitchCase, SwitchStatement, TryCatch, VariableBinding,
+    Asyncness, BlockStatement, Catch, Class, ClassMember, ClassMemberKind, ClassProperty, DoWhileLoop, ExportKind,
+    ForInLoop, ForLoop, ForOfLoop, FunctionDeclaration, FunctionKind, IfStatement, ImportKind, Loop, Parameter,
+    ReturnStatement, SpecifierKind, Statement, StatementKind, SwitchCase, SwitchStatement, TryCatch, VariableBinding,
     VariableDeclaration, VariableDeclarationKind, VariableDeclarationName, VariableDeclarations, WhileLoop,
 };
 use dash_middle::parser::types::TypeSegment;
@@ -102,8 +102,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                     func_id,
                     arguments,
                     vec![body],
-                    FunctionKind::Function,
-                    false,
+                    FunctionKind::Function(Asyncness::No),
                     ty_seg,
                 );
 

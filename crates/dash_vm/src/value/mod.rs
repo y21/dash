@@ -19,7 +19,7 @@ use std::any::TypeId;
 
 use dash_middle::compiler::constant::Constant;
 use dash_middle::compiler::external::External;
-use dash_middle::parser::statement::FunctionKind as ParserFunctionKind;
+use dash_middle::parser::statement::{Asyncness, FunctionKind as ParserFunctionKind};
 use dash_middle::util::ThreadSafeStorage;
 use dash_proc_macro::Trace;
 
@@ -33,6 +33,7 @@ use crate::value::primitive::{Null, Undefined};
 use crate::{delegate, throw};
 
 use self::function::r#async::AsyncFunction;
+use self::function::closure::Closure;
 use self::function::generator::GeneratorFunction;
 use self::function::user::UserFunction;
 use self::function::Function;
@@ -415,18 +416,16 @@ impl Value {
 
                 let name = f.name.map(Into::into);
                 let ty = f.ty;
-                let is_async = f.r#async;
 
                 let fun = UserFunction::new(f, externals.into());
 
                 let kind = match ty {
-                    ParserFunctionKind::Function | ParserFunctionKind::Arrow => {
-                        if is_async {
-                            FunctionKind::Async(AsyncFunction::new(fun))
-                        } else {
-                            FunctionKind::User(fun)
-                        }
-                    }
+                    ParserFunctionKind::Function(Asyncness::Yes) => FunctionKind::Async(AsyncFunction::new(fun)),
+                    ParserFunctionKind::Function(Asyncness::No) => FunctionKind::User(fun),
+                    ParserFunctionKind::Arrow => FunctionKind::Closure(Closure {
+                        fun,
+                        this: vm.active_frame().this.clone().unwrap_or_undefined(),
+                    }),
                     ParserFunctionKind::Generator => FunctionKind::Generator(GeneratorFunction::new(fun)),
                 };
 
@@ -506,7 +505,7 @@ impl Value {
             _ => {
                 cold_path();
 
-                let frame = sc.frames.last().unwrap();
+                let frame = sc.active_frame();
                 let snippet = frame
                     .function
                     .debug_symbols

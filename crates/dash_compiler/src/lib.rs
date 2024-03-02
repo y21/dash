@@ -19,7 +19,7 @@ use dash_middle::parser::expr::{
     PropertyAccessExpr, Seq, UnaryExpr,
 };
 use dash_middle::parser::statement::{
-    BlockStatement, Class, ClassMemberKind, DoWhileLoop, ExportKind, ForInLoop, ForLoop, ForOfLoop, FuncId,
+    Asyncness, BlockStatement, Class, ClassMemberKind, DoWhileLoop, ExportKind, ForInLoop, ForLoop, ForOfLoop, FuncId,
     FunctionDeclaration, FunctionKind, IfStatement, ImportKind, Loop, Parameter, ReturnStatement, SpecifierKind,
     Statement, StatementKind, SwitchCase, SwitchStatement, TryCatch, VariableBinding, VariableDeclaration,
     VariableDeclarationKind, VariableDeclarationName, VariableDeclarations, WhileLoop,
@@ -70,8 +70,6 @@ struct FunctionLocalState {
     try_catch_depth: u16,
     /// The type of function that this FunctionCompiler compiles
     ty: FunctionKind,
-    /// Whether the function being compiled is async
-    r#async: bool,
     /// Container, used for storing global labels that can be jumped to
     jc: JumpContainer,
     /// A stack of breakable labels (loop/switch)
@@ -89,13 +87,12 @@ struct FunctionLocalState {
 }
 
 impl FunctionLocalState {
-    pub fn new(ty: FunctionKind, id: FuncId, r#async: bool) -> Self {
+    pub fn new(ty: FunctionKind, id: FuncId) -> Self {
         Self {
             buf: Vec::new(),
             cp: ConstantPool::new(),
             try_catch_depth: 0,
             ty,
-            r#async,
             jc: JumpContainer::new(),
             breakables: Vec::new(),
             loop_counter: 0,
@@ -148,6 +145,13 @@ impl FunctionLocalState {
     /// Jumps to a label that was previously (or will be) created by a call to `add_global_label`
     fn add_global_jump(&mut self, label: Label) {
         jump_container::add_jump(&mut self.jc, label, &mut self.buf)
+    }
+
+    pub fn is_async(&self) -> bool {
+        match self.ty {
+            FunctionKind::Function(a) => matches!(a, Asyncness::Yes),
+            FunctionKind::Generator | FunctionKind::Arrow => false,
+        }
     }
 }
 
@@ -210,8 +214,10 @@ impl<'interner> FunctionCompiler<'interner> {
             }
         });
 
-        self.function_stack
-            .push(FunctionLocalState::new(FunctionKind::Function, FuncId::ROOT, false));
+        self.function_stack.push(FunctionLocalState::new(
+            FunctionKind::Function(Asyncness::No),
+            FuncId::ROOT,
+        ));
 
         self.accept_multiple(ast)?;
 
@@ -781,7 +787,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                 ib.build_yield();
             }
             TokenType::Await => {
-                if !ib.current_function().r#async {
+                if !ib.current_function().is_async() {
                     return Err(Error::AwaitOutsideAsync { await_expr: span });
                 }
 
@@ -1549,12 +1555,11 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             parameters: arguments,
             mut statements,
             ty,
-            r#async,
             ty_segment: _,
         }: FunctionDeclaration,
     ) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
-        ib.function_stack.push(FunctionLocalState::new(ty, id, r#async));
+        ib.function_stack.push(FunctionLocalState::new(ty, id));
 
         let mut rest_local = None;
 
@@ -1616,7 +1621,6 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                 _ => arguments.len(),
             },
             externals: externals.into(),
-            r#async,
             rest_local,
             poison_ips: RefCell::new(HashSet::new()),
             debug_symbols: cmp.debug_symbols,
@@ -1973,8 +1977,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             name: class.name,
             parameters,
             statements,
-            ty: FunctionKind::Function,
-            r#async: false,
+            ty: FunctionKind::Function(Asyncness::No),
             ty_segment: None,
         };
 
