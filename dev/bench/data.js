@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1709410627704,
+  "lastUpdate": 1709411051835,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -7623,6 +7623,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 54807,
             "range": "± 725",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "Timo",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "530e010bdacbeba81871bec334f2853bac351399",
+          "message": "Merge pull request #79 from y21/closure-this\n\nPreserve `this` in closures",
+          "timestamp": "2024-03-02T21:21:46+01:00",
+          "tree_id": "a0bbd65df0b6ed1ccb66a7b32fc60328b7728447",
+          "url": "https://github.com/y21/dash/commit/530e010bdacbeba81871bec334f2853bac351399"
+        },
+        "date": 1709411051159,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1651838,
+            "range": "± 65318",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 165643,
+            "range": "± 442",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 55803,
+            "range": "± 993",
             "unit": "ns/iter"
           }
         ]
