@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1709411051835,
+  "lastUpdate": 1709472415487,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -7665,6 +7665,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 55803,
             "range": "± 993",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "e352f58812eee69dd686b8e7b3dbf2f37d82125d",
+          "message": "require object types to have an alignment of 8 for computing offsets\n\nfixes #80",
+          "timestamp": "2024-03-03T14:24:19+01:00",
+          "tree_id": "8f46fd39c409c2bcd2af868f3d034e494ca550ef",
+          "url": "https://github.com/y21/dash/commit/e352f58812eee69dd686b8e7b3dbf2f37d82125d"
+        },
+        "date": 1709472414573,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1648490,
+            "range": "± 78700",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 168751,
+            "range": "± 3065",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 54267,
+            "range": "± 573",
             "unit": "ns/iter"
           }
         ]
