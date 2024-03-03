@@ -139,6 +139,13 @@ unsafe fn drop_erased_gc_node(s: *mut GcNode<()>) {
 
 macro_rules! register_gc {
     ($ty:ty, $gc:expr, $val:expr) => {{
+        assert!(
+            std::mem::align_of::<$ty>() <= 8,
+            "cannot register object of type {} because its alignment is {}",
+            std::any::type_name::<$ty>(),
+            std::mem::align_of::<$ty>()
+        );
+
         let value: $ty = $val;
         #[allow(unused_unsafe)]
         let node = GcNode {
@@ -187,7 +194,7 @@ macro_rules! register_gc {
             flags: Default::default(),
             refcount: Default::default(),
             next: None,
-            value,
+            value: $crate::gc::handle::Align8(value),
         };
         let ptr: *mut GcNode<()> = Box::into_raw(Box::new(node)).cast();
 

@@ -82,6 +82,10 @@ pub struct ObjectVTable {
     pub(crate) js_type_of: unsafe fn(*const ()) -> Typeof,
 }
 
+#[repr(C, align(8))]
+#[doc(hidden)]
+pub struct Align8<T>(pub T);
+
 #[repr(C)]
 pub struct GcNode<T> {
     pub(crate) vtable: &'static ObjectVTable,
@@ -90,7 +94,17 @@ pub struct GcNode<T> {
     pub(crate) refcount: Cell<u64>,
     /// The next pointer in the linked list of nodes
     pub(crate) next: Option<NonNull<GcNode<()>>>,
-    pub(crate) value: T,
+
+    /// The value. Typically seen in its type-erased form `()`.
+    ///
+    /// IMPORTANT: since we are using `GcNode<()>` for offsetting the `value` field
+    /// but we've previously allocated the `GcNode` with a concrete type, we must make
+    /// sure that the alignment is <= the max alignment of all other fields, since
+    /// that could otherwise cause `value` in `GcNode<Concrete>` to have a different offset.
+    /// `Align8` on its own does not guarantee a maximum alignment, instead this condition is checked in `register_gc!`.
+    ///
+    /// It must also be the last field, since offsetting the other fields would be wrong. This `T` is really `!Sized` in disguise
+    pub(crate) value: Align8<T>,
 }
 
 #[repr(C)]
@@ -99,7 +113,7 @@ pub struct Handle(NonNull<GcNode<()>>);
 
 impl Debug for Handle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        unsafe { (self.vtable().debug_fmt)(addr_of!((*self.0.as_ptr()).value), f) }
+        unsafe { (self.vtable().debug_fmt)(addr_of!((*self.0.as_ptr()).value.0), f) }
     }
 }
 
@@ -121,7 +135,7 @@ impl Handle {
     }
 
     pub fn erased_value(&self) -> *const () {
-        unsafe { addr_of!((*self.0.as_ptr()).value) }
+        unsafe { addr_of!((*self.0.as_ptr()).value.0) }
     }
 
     pub fn vtable(&self) -> &'static ObjectVTable {

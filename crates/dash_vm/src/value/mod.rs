@@ -304,7 +304,7 @@ impl ExternalValue {
         assert_eq!(this.inner.as_any().type_id(), TypeId::of::<Value>());
         // SAFETY: casting to *mut GcNode<Value>, then dereferencing + writing
         // to said pointer is safe, because it is asserted on the previous line that the type is correct
-        (*this.inner.as_ptr::<Value>()).value = value;
+        (*this.inner.as_ptr::<Value>()).value.0 = value;
     }
 }
 
