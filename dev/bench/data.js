@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1709472415487,
+  "lastUpdate": 1710682995299,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -7707,6 +7707,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 54267,
             "range": "± 573",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "2b9024403f4e989d564751464bb3ee63e1a739c3",
+          "message": "implement experimental support for holey arrays",
+          "timestamp": "2024-03-17T14:35:33+01:00",
+          "tree_id": "4893c9320c51a5484c0c5b4ff1fcea2b91dfd1b5",
+          "url": "https://github.com/y21/dash/commit/2b9024403f4e989d564751464bb3ee63e1a739c3"
+        },
+        "date": 1710682994467,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1689241,
+            "range": "± 23405",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 173398,
+            "range": "± 985",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 58274,
+            "range": "± 1018",
             "unit": "ns/iter"
           }
         ]
