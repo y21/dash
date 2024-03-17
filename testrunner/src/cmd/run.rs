@@ -16,7 +16,11 @@ use crate::util;
 pub fn run(matches: &ArgMatches) -> anyhow::Result<()> {
     let path = matches.value_of("path").unwrap_or("../test262/test");
     let verbose = matches.is_present("verbose");
-    let files = util::get_all_files(OsStr::new(path))?;
+    let files = if path.ends_with(".js") {
+        vec![OsString::from(path)]
+    } else {
+        util::get_all_files(OsStr::new(path))?
+    };
 
     run_inner(files, verbose)?;
 

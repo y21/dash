@@ -721,7 +721,18 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
     fn visit_unary_expression(&mut self, span: Span, UnaryExpr { operator, expr }: UnaryExpr) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
-        // Special case delete operator, as it works different from other unary operators
+        // Typeof operator evaluates its operand differently if it's an identifier and there is no such local variable, so special case it here
+        // `typeof x` does not throw an error if the variable does not exist,
+        // `typeof x.a` does throw an error
+        if let TokenType::Typeof = operator {
+            if let ExprKind::Literal(LiteralExpr::Identifier(ident)) = expr.kind {
+                if ib.find_local(ident).is_none() {
+                    return ib.build_typeof_global_ident(span, ident);
+                }
+            }
+        }
+
+        // Delete operator works different from other unary operators
         if let TokenType::Delete = operator {
             match expr.kind {
                 ExprKind::PropertyAccess(PropertyAccessExpr {

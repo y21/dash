@@ -225,6 +225,10 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                 }
                 Instruction::Pos => self.handle_opless_instr("pos"),
                 Instruction::Neg => self.handle_opless_instr("neg"),
+                Instruction::TypeOfGlobalIdent => {
+                    let id = self.read_u16()?;
+                    self.handle_op_instr("typeof", &[&self.display(&self.constants[id as usize])]);
+                }
                 Instruction::TypeOf => self.handle_opless_instr("typeof"),
                 Instruction::BitNot => self.handle_opless_instr("bitnot"),
                 Instruction::Not => self.handle_opless_instr("not"),

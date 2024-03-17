@@ -1356,9 +1356,21 @@ mod handlers {
     }
 
     pub fn type_of<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
-        // NOTE: Does not need to be rooted. We don't call into JS.
         let value = cx.pop_stack_rooted();
         cx.stack.push(value.type_of().as_value());
+        Ok(None)
+    }
+
+    pub fn type_of_ident<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+        let id = cx.fetchw_and_inc_ip();
+        let constant = cx.identifier_constant(id.into());
+        let prop = cx
+            .global
+            .clone()
+            .get_property(cx.scope, constant.into())?
+            .root(cx.scope);
+
+        cx.stack.push(prop.type_of().as_value());
         Ok(None)
     }
 
@@ -1820,6 +1832,7 @@ pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResu
         Instruction::Pos => handlers::pos(cx),
         Instruction::Neg => handlers::neg(cx),
         Instruction::TypeOf => handlers::type_of(cx),
+        Instruction::TypeOfGlobalIdent => handlers::type_of_ident(cx),
         Instruction::BitNot => handlers::bitnot(cx),
         Instruction::Not => handlers::not(cx),
         Instruction::StoreLocal => handlers::storelocal(cx),

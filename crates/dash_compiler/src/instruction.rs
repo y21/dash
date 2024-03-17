@@ -503,6 +503,17 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
         self.build_intrinsic_op(IntrinsicOperation::Cos);
         self.write(args);
     }
+
+    pub fn build_typeof_global_ident(&mut self, at: Span, ident: Symbol) -> Result<(), Error> {
+        let id = self
+            .current_function_mut()
+            .cp
+            .add(Constant::Identifier(ident))
+            .map_err(|_| Error::ConstantPoolLimitExceeded(at))?;
+        self.write_instr(Instruction::TypeOfGlobalIdent);
+        self.writew(id);
+        Ok(())
+    }
 }
 
 #[derive(Copy, Clone)]

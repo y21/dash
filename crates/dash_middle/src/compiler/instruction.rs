@@ -28,6 +28,9 @@ pub enum Instruction {
     Pos,
     Neg,
     TypeOf,
+    /// Same as `typeof`, but always accepts an identifier constant and tries to look it up in the global namespace.
+    /// This is different from `TypeOf` in that it does not throw for undefined variables.
+    TypeOfGlobalIdent,
     BitNot,
     Not,
     StoreLocal,
