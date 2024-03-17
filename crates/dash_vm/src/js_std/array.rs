@@ -14,8 +14,7 @@ use crate::value::{array, Root, Value, ValueContext};
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let size = cx.args.first().unwrap_or_undefined().to_length_u(cx.scope)?;
-    // TODO: filling it with undefined values isn't right, but we don't have holey arrays yet.
-    let array = Array::from_vec(cx.scope, vec![PropertyValue::static_default(Value::undefined()); size]);
+    let array = Array::with_hole(cx.scope, size);
     Ok(cx.scope.register(array).into())
 }
 
@@ -146,8 +145,12 @@ pub fn fill(cx: CallContext) -> Result<Value, Value> {
     let value = cx.args.first().unwrap_or_undefined();
 
     for i in 0..len {
-        let pk = cx.scope.intern_usize(i);
-        this.set_property(cx.scope, pk.into(), PropertyValue::static_default(value.clone()))?;
+        array::spec_array_set_property(cx.scope, &this, i, PropertyValue::static_default(value.clone()))?;
+    }
+
+    if let Some(arr) = cx.this.downcast_ref::<Array>() {
+        // all holes were replaced with values, so there cannot be holes
+        arr.force_convert_to_non_holey();
     }
 
     Ok(this)
