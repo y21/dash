@@ -272,13 +272,13 @@ pub mod sym {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct StringData {
     visited: Cell<bool>,
     value: Rc<str>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Clone, Debug)]
 pub struct StringInterner {
     store: Vec<Option<StringData>>,
     mapping: hashbrown::HashMap<Rc<str>, RawSymbol, BuildHasherDefault<FxHasher>>,

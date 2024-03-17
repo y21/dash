@@ -29,6 +29,8 @@ if_chain = "1.0.2"
 
 [dev-dependencies]
 criterion = "0.4.0"
+# for tinycolor2 benchmark
+ureq = "2.9.6"
 
 [[bench]]
 name = "full"
