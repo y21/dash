@@ -61,6 +61,13 @@ unsafe impl<T: Trace> Trace for Vec<T> {
     }
 }
 
+unsafe impl<A: Trace, B: Trace> Trace for (A, B) {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
+        self.0.trace(cx);
+        self.1.trace(cx);
+    }
+}
+
 unsafe impl<T: Trace> Trace for HashSet<T> {
     fn trace(&self, cx: &mut TraceCtxt<'_>) {
         for t in self.iter() {

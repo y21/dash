@@ -247,7 +247,7 @@ impl Default for PropertyDataDescriptor {
     }
 }
 
-#[derive(Debug, Clone, Trace)]
+#[derive(Debug, Clone, Trace, PartialEq, Eq)]
 pub struct PropertyValue {
     pub kind: PropertyValueKind,
     pub descriptor: PropertyDataDescriptor,
@@ -406,7 +406,7 @@ impl PropertyValue {
 }
 
 // TODO: these handles should be "hidden" behind something similar to the `Unrooted` value
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PropertyValueKind {
     /// Accessor property
     Trap { get: Option<Handle>, set: Option<Handle> },

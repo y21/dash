@@ -5,11 +5,6 @@ use std::io;
 // This is a list of tests that cannot be run currently, because they abort the process or run into an infinite loop
 pub const IGNORED_TESTS: &[&str] = &[
     // very very large arrays
-    "Array/15.4.5.1-5-1.js",
-    "Array/15.4.5.1-5-2.js",
-    "Array/length/15.4.5.1-3.d-3.js",
-    "Array/length/S15.4.5.1_A1.1_T1.js",
-    "Array/length/S15.4.5.2_A3_T4.js",
     "Array/prototype/indexOf/length-near-integer-limit.js",
     "Array/prototype/includes/length-boundaries.js",
     "Array/prototype/concat/arg-length-exceeding-integer-limit.js",
