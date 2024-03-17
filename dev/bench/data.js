@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1710683202167,
+  "lastUpdate": 1710684020906,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -7787,6 +7787,48 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 58880,
             "range": "± 833",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "Timo",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "61a0ba34f59e7d1a0b841b1599f8c89ddba113bf",
+          "message": "Merge pull request #81 from y21/holey-arrays\n\nExperimental support for holey arrays",
+          "timestamp": "2024-03-17T14:58:00+01:00",
+          "tree_id": "4893c9320c51a5484c0c5b4ff1fcea2b91dfd1b5",
+          "url": "https://github.com/y21/dash/commit/61a0ba34f59e7d1a0b841b1599f8c89ddba113bf"
+        },
+        "date": 1710684019972,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1672290,
+            "range": "± 15916",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 195998,
+            "range": "± 1278",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 58381,
+            "range": "± 347",
             "unit": "ns/iter"
           }
         ]
