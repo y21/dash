@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1710684020906,
+  "lastUpdate": 1710687988909,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -7829,6 +7829,60 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 58381,
             "range": "± 347",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "74d4b38b496b175d74f3fe89e9f5fe903c851a2a",
+          "message": "fix CI",
+          "timestamp": "2024-03-17T16:02:43+01:00",
+          "tree_id": "2a3fae15e4baab8e211b40a5855643d319900451",
+          "url": "https://github.com/y21/dash/commit/74d4b38b496b175d74f3fe89e9f5fe903c851a2a"
+        },
+        "date": 1710687988209,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1650486,
+            "range": "± 27264",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 174485,
+            "range": "± 3673",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 59109,
+            "range": "± 1515",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse+compile tinycolor2",
+            "value": 1691728,
+            "range": "± 17373",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "exec tinycolor2 parse hex+toFilter",
+            "value": 37656461,
+            "range": "± 1126391",
             "unit": "ns/iter"
           }
         ]
