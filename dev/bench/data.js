@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1710682995299,
+  "lastUpdate": 1710683202167,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -7749,6 +7749,44 @@ window.BENCHMARK_DATA = {
             "name": "fib_iterative(12)",
             "value": 58274,
             "range": "± 1018",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "name": "y21",
+            "username": "y21"
+          },
+          "id": "2b9024403f4e989d564751464bb3ee63e1a739c3",
+          "message": "Experimental support for holey arrays",
+          "timestamp": "2024-02-20T02:40:11Z",
+          "url": "https://github.com/y21/dash/pull/81/commits/2b9024403f4e989d564751464bb3ee63e1a739c3"
+        },
+        "date": 1710683201535,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1671612,
+            "range": "± 31211",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 176217,
+            "range": "± 1188",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 58880,
+            "range": "± 833",
             "unit": "ns/iter"
           }
         ]
