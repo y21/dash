@@ -1,3 +1,5 @@
+use dash_middle::interner::sym;
+
 use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::array::{Array, ArrayIterator};
@@ -9,7 +11,10 @@ use crate::value::{Value, ValueContext};
 use std::fmt::Write;
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
-    let value = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
+    let value = match cx.args.first() {
+        Some(arg) => arg.to_js_string(cx.scope)?,
+        None => sym::empty.into(),
+    };
     if cx.is_constructor_call {
         let boxed = BoxedString::new(cx.scope, value);
         Ok(Value::Object(cx.scope.register(boxed)))
