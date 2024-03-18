@@ -150,6 +150,7 @@ impl From<&ParserObjectMemberKind> for ObjectMemberKind {
 #[derive(FromRepr, Debug)]
 pub enum ArrayMemberKind {
     Item,
+    Empty,
     Spread,
 }
 
@@ -159,6 +160,7 @@ impl From<&ParserArrayMemberKind> for ArrayMemberKind {
     fn from(v: &ParserArrayMemberKind) -> Self {
         match v {
             ParserArrayMemberKind::Item(..) => Self::Item,
+            ParserArrayMemberKind::Empty => Self::Empty,
             ParserArrayMemberKind::Spread(..) => Self::Spread,
         }
     }

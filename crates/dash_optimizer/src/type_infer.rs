@@ -516,6 +516,7 @@ impl TypeInferCtx {
                 ArrayMemberKind::Item(expr) => {
                     self.visit(expr, func_id);
                 }
+                ArrayMemberKind::Empty => {}
             }
         }
         Some(CompileValueType::Array)

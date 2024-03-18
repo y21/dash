@@ -1654,18 +1654,23 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             .map(|kind| dash_middle::compiler::ArrayMemberKind::from(kind) as u8)
             .collect::<Vec<u8>>();
 
+        let mut stack_values = 0;
+
         for kind in exprs {
             match kind {
                 ArrayMemberKind::Item(expr) => {
                     ib.accept_expr(expr)?;
+                    stack_values += 1;
                 }
                 ArrayMemberKind::Spread(expr) => {
                     ib.accept_expr(expr)?;
+                    stack_values += 1;
                 }
+                ArrayMemberKind::Empty => {}
             }
         }
 
-        ib.build_arraylit(len);
+        ib.build_arraylit(len, stack_values);
         ib.write_all(&kinds);
         Ok(())
     }

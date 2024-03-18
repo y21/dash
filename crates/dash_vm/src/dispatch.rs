@@ -14,7 +14,6 @@ use super::Vm;
 use dash_middle::compiler::constant::Constant;
 use dash_middle::compiler::instruction::Instruction;
 
-// TODO: all of these should be `Unrooted`
 pub enum HandleResult {
     Return(Unrooted),
     Yield(Unrooted),
@@ -203,7 +202,7 @@ mod handlers {
     use crate::frame::{Frame, FrameState, TryBlock};
     use crate::throw;
     use crate::util::unlikely;
-    use crate::value::array::{Array, ArrayIterator};
+    use crate::value::array::{Array, ArrayIterator, Element};
     use crate::value::function::user::UserFunction;
     use crate::value::function::{adjust_stack_from_flat_call, Function, FunctionKind};
     use crate::value::object::{NamedObject, Object, ObjectMap, PropertyKey, PropertyValue, PropertyValueKind};
@@ -971,31 +970,74 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn arraylit<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
-        let len = cx.fetch_and_inc_ip() as usize;
+    enum ArrayLiteralElement {
+        Value(Value),
+        Empty,
+    }
 
-        // No need to root/unroot anything here, GC cant trigger
-        let elements = cx.pop_stack_many(len).collect::<Vec<_>>();
-        let mut new_elements = Vec::with_capacity(elements.len());
-        for value in elements {
+    fn with_arraylit_elements(
+        cx: &mut DispatchContext<'_, '_>,
+        len: usize,
+        stack_values: usize,
+        mut fun: impl FnMut(ArrayLiteralElement),
+    ) -> Result<(), Unrooted> {
+        let mut elements = cx.pop_stack_many(stack_values).collect::<Vec<_>>().into_iter();
+        let mut next_element = || elements.next().unwrap();
+        for _ in 0..len {
             let id = ArrayMemberKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
 
             match id {
                 ArrayMemberKind::Item => {
-                    new_elements.push(PropertyValue::static_default(value));
+                    fun(ArrayLiteralElement::Value(next_element()));
                 }
                 ArrayMemberKind::Spread => {
                     // TODO: make this work for array-like values, not just arrays, by calling @@iterator on it
+                    let value = next_element();
                     let len = value.length_of_array_like(cx.scope)?;
                     for i in 0..len {
                         let i = cx.scope.intern_usize(i);
                         let value = value.get_property(cx.scope, i.into())?.root(cx.scope);
-                        new_elements.push(PropertyValue::static_default(value));
+                        fun(ArrayLiteralElement::Value(value));
                     }
+                }
+                ArrayMemberKind::Empty => {
+                    fun(ArrayLiteralElement::Empty);
                 }
             }
         }
-        let array = Array::from_vec(&cx, new_elements);
+        assert!(elements.next().is_none());
+        Ok(())
+    }
+
+    fn arraylit_holey(cx: &mut DispatchContext<'_, '_>, len: usize, stack_values: usize) -> Result<Array, Unrooted> {
+        let mut new_elements = Vec::with_capacity(stack_values);
+        with_arraylit_elements(cx, len, stack_values, |element| match element {
+            ArrayLiteralElement::Empty => new_elements.push(Element::Hole { count: 1 }),
+            ArrayLiteralElement::Value(v) => new_elements.push(Element::Value(PropertyValue::static_default(v))),
+        })?;
+        Ok(Array::from_possibly_holey(cx.scope, new_elements))
+    }
+
+    fn arraylit_dense(cx: &mut DispatchContext<'_, '_>, len: usize) -> Result<Array, Unrooted> {
+        // Dense implies len == stack_values
+        let mut new_elements = Vec::with_capacity(len);
+        with_arraylit_elements(cx, len, len, |element| match element {
+            ArrayLiteralElement::Empty => unreachable!(),
+            ArrayLiteralElement::Value(v) => new_elements.push(PropertyValue::static_default(v)),
+        })?;
+        Ok(Array::from_vec(cx.scope, new_elements))
+    }
+
+    pub fn arraylit(mut cx: DispatchContext<'_, '_>) -> Result<Option<HandleResult>, Unrooted> {
+        let len = cx.fetch_and_inc_ip() as usize;
+        let stack_values = cx.fetch_and_inc_ip() as usize;
+        // Split up into two functions as a non-holey array literal can be evaluated more efficiently
+        let array = if len == stack_values {
+            arraylit_dense(&mut cx, len)?
+        } else {
+            arraylit_holey(&mut cx, len, stack_values)?
+        };
+
         let handle = cx.gc.register(array);
         cx.stack.push(Value::Object(handle));
         Ok(None)

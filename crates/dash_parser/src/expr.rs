@@ -435,7 +435,11 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             TokenType::LeftSquareBrace => {
                 let mut items = Vec::new();
                 while !self.expect_token_type_and_skip(&[TokenType::RightSquareBrace], false) {
-                    if let Some(spread) = self.parse_spread_operator(false) {
+                    if self.expect_token_type_and_skip(&[TokenType::Comma], false) {
+                        items.push(ArrayMemberKind::Empty);
+                        // don't consume following comma as a separator
+                        continue;
+                    } else if let Some(spread) = self.parse_spread_operator(false) {
                         items.push(ArrayMemberKind::Spread(spread));
                     } else {
                         items.push(ArrayMemberKind::Item(self.parse_yield()?));

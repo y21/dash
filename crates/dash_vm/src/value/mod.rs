@@ -269,6 +269,7 @@ impl ExternalValue {
     /// The `dyn Object` *must* be `Value`.
     // can we make this type safe?
     pub fn new(inner: Handle) -> Self {
+        debug_assert!(inner.as_any().downcast_ref::<Value>().is_some());
         Self { inner }
     }
 

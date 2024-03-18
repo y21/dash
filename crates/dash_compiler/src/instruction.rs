@@ -206,8 +206,16 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
         self.write(kind as u8);
     }
 
-    pub fn build_arraylit(&mut self, len: u16) {
-        self.write_wide_instr(Instruction::ArrayLit, Instruction::ArrayLitW, len);
+    pub fn build_arraylit(&mut self, len: u16, stack_values: u16) {
+        if let (Ok(len), Ok(stack_values)) = (u8::try_from(len), u8::try_from(stack_values)) {
+            self.write_instr(Instruction::ArrayLit);
+            self.write(len);
+            self.write(stack_values);
+        } else {
+            self.write_instr(Instruction::ArrayLitW);
+            self.writew(len);
+            self.writew(stack_values);
+        }
     }
 
     pub fn build_objlit(&mut self, span: Span, constants: Vec<ObjectMemberKind>) -> Result<(), Error> {

@@ -244,6 +244,7 @@ impl<'b, 'interner> ConstFunctionEvalCtx<'b, 'interner> {
             match expr {
                 ArrayMemberKind::Spread(expr) => self.visit(expr, func_id),
                 ArrayMemberKind::Item(expr) => self.visit(expr, func_id),
+                ArrayMemberKind::Empty => {}
             }
         }
     }
@@ -506,6 +507,7 @@ fn expr_has_side_effects(expr: &Expr) -> bool {
         ExprKind::Array(ArrayLiteral(array)) => array.iter().any(|k| match k {
             ArrayMemberKind::Item(e) => expr_has_side_effects(e),
             ArrayMemberKind::Spread(e) => expr_has_side_effects(e),
+            ArrayMemberKind::Empty => false,
         }),
         ExprKind::Binary(BinaryExpr { left, right, .. }) => expr_has_side_effects(left) || expr_has_side_effects(right),
         ExprKind::Conditional(ConditionalExpr { condition, then, el }) => {

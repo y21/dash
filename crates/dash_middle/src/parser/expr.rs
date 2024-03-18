@@ -249,6 +249,7 @@ impl ExprKind {
 pub enum ArrayMemberKind {
     Item(Expr),
     Spread(Expr),
+    Empty,
 }
 
 impl fmt::Display for ArrayMemberKind {
@@ -259,6 +260,7 @@ impl fmt::Display for ArrayMemberKind {
                 f.write_str("...")?;
                 fmt::Display::fmt(item, f)
             }
+            ArrayMemberKind::Empty => f.write_str("<empty>"),
         }
     }
 }

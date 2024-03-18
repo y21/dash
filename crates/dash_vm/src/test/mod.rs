@@ -345,3 +345,14 @@ simple_test!(
     "#,
     Value::undefined()
 );
+
+simple_test!(
+    holey_array_literal,
+    r#"
+assert([,].length === 1);
+assert([1,].length === 1);
+assert([1,,].length === 1);
+assert([,,].length === 2);
+"#,
+    Value::undefined()
+);

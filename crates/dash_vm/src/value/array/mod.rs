@@ -12,7 +12,7 @@ use crate::localscope::LocalScope;
 use crate::value::object::PropertyDataDescriptor;
 use crate::{delegate, throw, Vm};
 
-use self::holey::{Element, HoleyArray};
+pub use self::holey::{Element, HoleyArray};
 
 use super::object::{NamedObject, Object, PropertyKey, PropertyValue, PropertyValueKind};
 use super::ops::conversions::ValueConversion;
@@ -145,6 +145,13 @@ impl Array {
     pub fn from_vec(vm: &Vm, items: Vec<PropertyValue>) -> Self {
         Self {
             items: RefCell::new(ArrayInner::NonHoley(items)),
+            obj: get_named_object(vm),
+        }
+    }
+
+    pub fn from_possibly_holey(vm: &Vm, elements: Vec<Element<PropertyValue>>) -> Self {
+        Self {
+            items: RefCell::new(ArrayInner::Holey(elements.into())),
             obj: get_named_object(vm),
         }
     }
