@@ -970,16 +970,11 @@ mod handlers {
         Ok(None)
     }
 
-    enum ArrayLiteralElement {
-        Value(Value),
-        Empty,
-    }
-
     fn with_arraylit_elements(
         cx: &mut DispatchContext<'_, '_>,
         len: usize,
         stack_values: usize,
-        mut fun: impl FnMut(ArrayLiteralElement),
+        mut fun: impl FnMut(Element<PropertyValue>),
     ) -> Result<(), Unrooted> {
         let mut elements = cx.pop_stack_many(stack_values).collect::<Vec<_>>().into_iter();
         let mut next_element = || elements.next().unwrap();
@@ -988,7 +983,7 @@ mod handlers {
 
             match id {
                 ArrayMemberKind::Item => {
-                    fun(ArrayLiteralElement::Value(next_element()));
+                    fun(Element::Value(PropertyValue::static_default(next_element())));
                 }
                 ArrayMemberKind::Spread => {
                     // TODO: make this work for array-like values, not just arrays, by calling @@iterator on it
@@ -997,11 +992,12 @@ mod handlers {
                     for i in 0..len {
                         let i = cx.scope.intern_usize(i);
                         let value = value.get_property(cx.scope, i.into())?.root(cx.scope);
-                        fun(ArrayLiteralElement::Value(value));
+                        fun(Element::Value(PropertyValue::static_default(value)));
                     }
                 }
                 ArrayMemberKind::Empty => {
-                    fun(ArrayLiteralElement::Empty);
+                    let count = cx.fetch_and_inc_ip();
+                    fun(Element::Hole { count: count.into() });
                 }
             }
         }
@@ -1011,10 +1007,7 @@ mod handlers {
 
     fn arraylit_holey(cx: &mut DispatchContext<'_, '_>, len: usize, stack_values: usize) -> Result<Array, Unrooted> {
         let mut new_elements = Vec::with_capacity(stack_values);
-        with_arraylit_elements(cx, len, stack_values, |element| match element {
-            ArrayLiteralElement::Empty => new_elements.push(Element::Hole { count: 1 }),
-            ArrayLiteralElement::Value(v) => new_elements.push(Element::Value(PropertyValue::static_default(v))),
-        })?;
+        with_arraylit_elements(cx, len, stack_values, |element| new_elements.push(element))?;
         Ok(Array::from_possibly_holey(cx.scope, new_elements))
     }
 
@@ -1022,8 +1015,8 @@ mod handlers {
         // Dense implies len == stack_values
         let mut new_elements = Vec::with_capacity(len);
         with_arraylit_elements(cx, len, len, |element| match element {
-            ArrayLiteralElement::Empty => unreachable!(),
-            ArrayLiteralElement::Value(v) => new_elements.push(PropertyValue::static_default(v)),
+            Element::Hole { .. } => unreachable!(),
+            Element::Value(v) => new_elements.push(v),
         })?;
         Ok(Array::from_vec(cx.scope, new_elements))
     }

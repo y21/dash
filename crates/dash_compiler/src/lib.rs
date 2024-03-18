@@ -1644,19 +1644,17 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
         Ok(())
     }
 
-    fn visit_array_literal(&mut self, span: Span, ArrayLiteral(exprs): ArrayLiteral) -> Result<(), Error> {
+    fn visit_array_literal(&mut self, _: Span, ArrayLiteral(exprs): ArrayLiteral) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
-        let len = exprs.len().try_into().map_err(|_| Error::ArrayLitLimitExceeded(span))?;
-
-        let kinds = exprs
-            .iter()
-            .map(|kind| dash_middle::compiler::ArrayMemberKind::from(kind) as u8)
-            .collect::<Vec<u8>>();
-
+        let mut component_count = 0;
         let mut stack_values = 0;
+        let mut kinds = Vec::with_capacity(exprs.len());
+        let mut exprs = exprs.into_iter().peekable();
 
-        for kind in exprs {
+        while let Some(kind) = exprs.next() {
+            kinds.push(dash_middle::compiler::ArrayMemberKind::from(&kind) as u8);
+
             match kind {
                 ArrayMemberKind::Item(expr) => {
                     ib.accept_expr(expr)?;
@@ -1666,11 +1664,20 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                     ib.accept_expr(expr)?;
                     stack_values += 1;
                 }
-                ArrayMemberKind::Empty => {}
+                ArrayMemberKind::Empty => {
+                    // merge consecutive holes
+                    let mut holes = 1;
+                    while exprs.next_if(|v| matches!(v, ArrayMemberKind::Empty)).is_some() {
+                        holes += 1;
+                    }
+
+                    kinds.push(holes);
+                }
             }
+            component_count += 1;
         }
 
-        ib.build_arraylit(len, stack_values);
+        ib.build_arraylit(component_count, stack_values);
         ib.write_all(&kinds);
         Ok(())
     }
