@@ -351,7 +351,7 @@ simple_test!(
     r#"
 assert([,].length === 1);
 assert([1,].length === 1);
-assert([1,,].length === 1);
+assert([1,,].length === 2);
 assert([,,].length === 2);
 "#,
     Value::undefined()
