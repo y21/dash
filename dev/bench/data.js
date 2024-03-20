@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1710809891947,
+  "lastUpdate": 1710974780411,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -8045,6 +8045,60 @@ window.BENCHMARK_DATA = {
             "name": "exec tinycolor2 parse hex+toFilter",
             "value": 36711899,
             "range": "± 698335",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "Timo",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "38a0503e3902d40879f69735d6780e19021f2f6a",
+          "message": "Merge pull request #82 from Jacherr/function_apply\n\nadd method `Function#apply`",
+          "timestamp": "2024-03-20T23:43:05+01:00",
+          "tree_id": "6ea70bb20817ea10e2820deae2cb35e8e0f204e5",
+          "url": "https://github.com/y21/dash/commit/38a0503e3902d40879f69735d6780e19021f2f6a"
+        },
+        "date": 1710974779757,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1676408,
+            "range": "± 19398",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 177992,
+            "range": "± 862",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 58211,
+            "range": "± 2854",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse+compile tinycolor2",
+            "value": 1711729,
+            "range": "± 16458",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "exec tinycolor2 parse hex+toFilter",
+            "value": 37122296,
+            "range": "± 691235",
             "unit": "ns/iter"
           }
         ]
