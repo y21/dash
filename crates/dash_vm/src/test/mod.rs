@@ -356,3 +356,15 @@ assert([,,].length === 2);
 "#,
     Value::undefined()
 );
+
+simple_test!(
+    function_apply,
+    r#"
+function sum(...args) { return args.reduce((p,c)=>p+c,0); }
+assert(sum.apply(null, [1,2,3]) === 6);
+assert(sum.apply(null) === 0);
+assert(sum.apply(null, null) === 0);
+assert(sum.apply(null, 0) === 0);
+    "#,
+    Value::undefined()
+);

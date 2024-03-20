@@ -3,10 +3,40 @@ use crate::value::function::bound::BoundFunction;
 use crate::value::function::native::CallContext;
 use crate::value::function::Function;
 use crate::value::object::Object;
-use crate::value::{Root, Typeof, Value};
+use crate::value::ops::conversions::ValueConversion;
+use crate::value::{Root, Typeof, Value, ValueContext};
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     throw!(cx.scope, Error, "Dynamic code compilation is currently not supported")
+}
+
+pub fn apply(cx: CallContext) -> Result<Value, Value> {
+    let target_this = cx.args.first().cloned();
+    let target_args = if let Some(array) = cx.args.get(1).cloned() {
+        if array.is_nullish() {
+            vec![]
+        } else {
+            let mut target_args = vec![];
+            for i in 0..array.length_of_array_like(cx.scope)? {
+                let sym = cx.scope.intern_usize(i).into();
+
+                let arg_i = array.get_property(cx.scope, sym).root(cx.scope)?;
+                target_args.push(arg_i);
+            }
+            target_args
+        }
+    } else {
+        vec![]
+    };
+
+    let target_callee = match cx.this {
+        Value::Object(o) if matches!(o.type_of(), Typeof::Function) => o,
+        _ => throw!(cx.scope, TypeError, "Bound value must be a function"),
+    };
+
+    target_callee
+        .apply(cx.scope, target_this.unwrap_or_undefined(), target_args)
+        .root(cx.scope)
 }
 
 pub fn bind(cx: CallContext) -> Result<Value, Value> {
@@ -32,7 +62,7 @@ pub fn call(cx: CallContext) -> Result<Value, Value> {
     target_callee
         .apply(
             cx.scope,
-            target_this.unwrap_or_else(Value::undefined),
+            target_this.unwrap_or_undefined(),
             target_args.unwrap_or_default(),
         )
         .root(cx.scope)

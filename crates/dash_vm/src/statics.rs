@@ -26,6 +26,7 @@ use super::value::primitive::Symbol;
 pub struct Statics {
     pub function_proto: Handle,
     pub function_ctor: Handle,
+    pub function_apply: Handle,
     pub function_bind: Handle,
     pub function_call: Handle,
     pub function_to_string: Handle,
@@ -266,6 +267,7 @@ impl Statics {
         Self {
             function_proto: empty_object(gc),
             function_ctor: function(gc, sym::Function, js_std::function::constructor),
+            function_apply: function(gc, sym::apply, js_std::function::apply),
             function_bind: function(gc, sym::bind, js_std::function::bind),
             function_call: function(gc, sym::call, js_std::function::call),
             function_to_string: function(gc, sym::toString, js_std::function::to_string),
