@@ -218,6 +218,7 @@ impl Vm {
             scope.statics.object_prototype.clone(),
             function_ctor.clone(),
             [
+                (sym::apply, scope.statics.function_apply.clone()),
                 (sym::bind, scope.statics.function_bind.clone()),
                 (sym::call, scope.statics.function_call.clone()),
                 (sym::toString, scope.statics.function_to_string.clone()),
