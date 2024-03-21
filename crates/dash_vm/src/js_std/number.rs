@@ -2,7 +2,7 @@ use crate::throw;
 use crate::util::intern_f64;
 use crate::value::function::native::CallContext;
 use crate::value::ops::conversions::ValueConversion;
-use crate::value::primitive::{Number, MAX_SAFE_INTEGERF};
+use crate::value::primitive::{Number, MAX_SAFE_INTEGERF, MIN_SAFE_INTEGERF};
 use crate::value::{boxed, Value, ValueContext};
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
@@ -63,7 +63,7 @@ pub fn is_safe_integer(cx: CallContext) -> Result<Value, Value> {
         _ => return Ok(Value::Boolean(false)),
     };
 
-    Ok(Value::Boolean(*num < MAX_SAFE_INTEGERF))
+    Ok(Value::Boolean(*num <= MAX_SAFE_INTEGERF && *num >= MIN_SAFE_INTEGERF))
 }
 
 pub fn to_fixed(cx: CallContext) -> Result<Value, Value> {
@@ -76,6 +76,14 @@ pub fn to_fixed(cx: CallContext) -> Result<Value, Value> {
         .transpose()?
         .map(|n| n as usize)
         .unwrap_or(0);
+
+    if decimals > 100 {
+        throw!(
+            cx.scope,
+            RangeError,
+            "toFixed() fractional digits must be between 0 and 100 inclusive"
+        )
+    };
 
     let re = format!("{num:.decimals$}");
 

@@ -31,7 +31,8 @@ pub fn intern_f64(sc: &mut LocalScope, n: f64) -> Symbol {
     }
 
     match n.classify() {
-        FpCategory::Infinite => sym::Infinity,
+        FpCategory::Infinite if n.is_sign_positive() => sym::Infinity,
+        FpCategory::Infinite => sym::NegInfinity,
         FpCategory::Nan => sym::NaN,
         _ if n >= 1e21f64 || n <= -1e21f64 => {
             let mut digits = 0;

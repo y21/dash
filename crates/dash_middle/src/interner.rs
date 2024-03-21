@@ -76,6 +76,7 @@ pub mod sym {
                 super_: "super",
                 globalThis,
                 Infinity,
+                NegInfinity: "-Infinity",
                 NaN,
                 Math,
                 exp,
