@@ -117,6 +117,6 @@ fn import_callback(vm: &mut Vm, import_ty: StaticImportKind, path: JsString) -> 
     }
 
     // If it got here, the module was not found
-    let path = path.res(&mut sc).to_owned();
+    let path = path.res(&sc).to_owned();
     throw!(&mut sc, RangeError, "Module not found: {}", path)
 }

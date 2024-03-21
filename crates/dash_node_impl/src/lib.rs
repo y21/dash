@@ -108,7 +108,7 @@ fn execute_node_module(
     };
 
     fun.apply(scope, Value::undefined(), vec![exports, module.clone(), require])
-        .map_err(|err| (EvalError::Exception(err.into()), code))?;
+        .map_err(|err| (EvalError::Exception(err), code))?;
 
     Ok(module)
 }

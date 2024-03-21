@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::convert::TryFrom;
 
 use crate::interner::Symbol;
 use crate::parser::statement::{VariableBinding, VariableDeclarationKind, VariableDeclarationName};

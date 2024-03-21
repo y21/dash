@@ -199,7 +199,7 @@ mod handlers {
     use smallvec::SmallVec;
     use std::ops::{Add, Div, Mul, Rem, Sub};
 
-    use crate::frame::{Frame, FrameState, TryBlock};
+    use crate::frame::{FrameState, TryBlock};
     use crate::throw;
     use crate::util::unlikely;
     use crate::value::array::{Array, ArrayIterator, Element};

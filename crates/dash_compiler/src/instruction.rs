@@ -1,5 +1,3 @@
-use std::convert::TryInto;
-
 use dash_middle::compiler::constant::{Constant, LimitExceededError};
 use dash_middle::compiler::instruction::{AssignKind, Instruction, IntrinsicOperation};
 use dash_middle::compiler::{FunctionCallMetadata, ObjectMemberKind as CompilerObjectMemberKind, StaticImportKind};
