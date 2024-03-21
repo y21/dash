@@ -12,3 +12,14 @@ pub struct Package {
     #[serde(default)]
     pub dependencies: HashMap<String, String>,
 }
+impl Package {
+    pub fn default_with_entry(entry: String) -> Self {
+        Package {
+            name: String::default(),
+            version: String::default(),
+            description: String::default(),
+            main: entry,
+            dependencies: HashMap::default(),
+        }
+    }
+}
