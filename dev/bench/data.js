@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1711035031232,
+  "lastUpdate": 1711061330914,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -8153,6 +8153,60 @@ window.BENCHMARK_DATA = {
             "name": "exec tinycolor2 parse hex+toFilter",
             "value": 38004160,
             "range": "± 523255",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "3732c7298b9a4e07a36d2439a7e0b5cf459a6309",
+          "message": "fix rustc and clippy warnings",
+          "timestamp": "2024-03-21T23:45:34+01:00",
+          "tree_id": "e9f2f7c49360b413ba75352787fcacbe6e0a1a3f",
+          "url": "https://github.com/y21/dash/commit/3732c7298b9a4e07a36d2439a7e0b5cf459a6309"
+        },
+        "date": 1711061330255,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1684601,
+            "range": "± 74217",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 174303,
+            "range": "± 864",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 57130,
+            "range": "± 805",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse+compile tinycolor2",
+            "value": 1729632,
+            "range": "± 12933",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "exec tinycolor2 parse hex+toFilter",
+            "value": 38992842,
+            "range": "± 626119",
             "unit": "ns/iter"
           }
         ]
