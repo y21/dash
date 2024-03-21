@@ -77,6 +77,14 @@ pub fn to_fixed(cx: CallContext) -> Result<Value, Value> {
         .map(|n| n as usize)
         .unwrap_or(0);
 
+    if decimals > 100 {
+        throw!(
+            cx.scope,
+            RangeError,
+            "toFixed() fractional digits must be between 0 and 100 inclusive"
+        )
+    };
+
     let re = format!("{num:.decimals$}");
 
     Ok(Value::String(cx.scope.intern(re.as_ref()).into()))
