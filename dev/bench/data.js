@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1710974780411,
+  "lastUpdate": 1711035031232,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -8099,6 +8099,60 @@ window.BENCHMARK_DATA = {
             "name": "exec tinycolor2 parse hex+toFilter",
             "value": 37122296,
             "range": "± 691235",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "Timo",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "99072d0cbc427ba51d1e132e4c82eb8af2106fd3",
+          "message": "Merge pull request #83 from Jacherr/minor-regressions\n\nFix small issues in stdlib",
+          "timestamp": "2024-03-21T16:27:14+01:00",
+          "tree_id": "a370f222957d2f524b6a8d7c01dc5713205d6454",
+          "url": "https://github.com/y21/dash/commit/99072d0cbc427ba51d1e132e4c82eb8af2106fd3"
+        },
+        "date": 1711035030513,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1675055,
+            "range": "± 67943",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 193547,
+            "range": "± 1070",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 58035,
+            "range": "± 377",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse+compile tinycolor2",
+            "value": 1741563,
+            "range": "± 26915",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "exec tinycolor2 parse hex+toFilter",
+            "value": 38004160,
+            "range": "± 523255",
             "unit": "ns/iter"
           }
         ]
