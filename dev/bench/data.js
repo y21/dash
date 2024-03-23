@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1711158029799,
+  "lastUpdate": 1711218120577,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -8261,6 +8261,60 @@ window.BENCHMARK_DATA = {
             "name": "exec tinycolor2 parse hex+toFilter",
             "value": 38095110,
             "range": "± 855926",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "Timo",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1ad268c184aa82b4e9b4dfc16b920dff6159029c",
+          "message": "Merge pull request #84 from Jacherr/node-compat-run-file\n\nsupport node module file execution",
+          "timestamp": "2024-03-23T19:18:45+01:00",
+          "tree_id": "e9cb2aac4539266daf1275c970d0761093eadd4d",
+          "url": "https://github.com/y21/dash/commit/1ad268c184aa82b4e9b4dfc16b920dff6159029c"
+        },
+        "date": 1711218119920,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1705703,
+            "range": "± 22168",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 174616,
+            "range": "± 3954",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 56694,
+            "range": "± 507",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse+compile tinycolor2",
+            "value": 1727814,
+            "range": "± 11798",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "exec tinycolor2 parse hex+toFilter",
+            "value": 39045174,
+            "range": "± 756512",
             "unit": "ns/iter"
           }
         ]
