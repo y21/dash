@@ -1,8 +1,9 @@
 use std::cell::RefCell;
+use std::env;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use anyhow::{anyhow, bail, Context};
+use anyhow::{anyhow, Context};
 use dash_middle::parser::error::IntoFormattableErrors;
 use dash_optimizer::OptLevel;
 use dash_proc_macro::Trace;
@@ -32,18 +33,23 @@ pub fn run_with_nodejs_mnemnoics(path: &str, opt: OptLevel, initial_gc_threshold
 
 async fn run_inner_fallible(path: &str, opt: OptLevel, initial_gc_threshold: Option<usize>) -> anyhow::Result<()> {
     let path = Path::new(path);
-    if !path.is_dir() {
-        // TODO: make it also work with paths to files. need to adjust the execute_node_module call too,
-        // since that needs a dir path
-        bail!("Node project path currently needs to be a directory");
-    }
+    let package_state = if path.is_dir() {
+        process_package_json(path)?
+    } else {
+        PackageState {
+            base_dir: path.parent().unwrap_or(&env::current_dir()?).into(),
+            metadata: Package::default_with_entry(path.into()),
+        }
+    };
 
-    let package_state = process_package_json(path)?;
-    let entry =
-        std::fs::read_to_string(path.join(&package_state.metadata.main)).context("Failed to read entry point")?;
+    let entry = if path.is_dir() {
+        std::fs::read_to_string(path.join(&package_state.metadata.main))
+    } else {
+        std::fs::read_to_string(&package_state.metadata.main)
+    }?;
 
     let global_state = Rc::new(GlobalState {
-        node_modules_dir: path.join("node_modules"),
+        node_modules_dir: package_state.base_dir.join("node_modules"),
         ongoing_requires: RefCell::new(FxHashMap::default()),
     });
 
@@ -211,8 +217,12 @@ impl Object for RequireFunction {
             module.get_property(scope, exports.into())
         } else {
             // Resolve dependency
-            let dir_path = self.state.node_modules_dir.join(arg);
-            let package_state = process_package_json(&dir_path).unwrap();
+            let dir_path = self.state.node_modules_dir.join(&arg);
+
+            let package_state = match process_package_json(&dir_path) {
+                Ok(p) => p,
+                Err(e) => throw!(scope, Error, "Failed to load module {arg}: {}", e),
+            };
             let file_path = dir_path.join(&package_state.metadata.main);
             let source = std::fs::read_to_string(&file_path).unwrap();
 
