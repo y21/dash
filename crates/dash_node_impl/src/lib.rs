@@ -34,15 +34,11 @@ pub fn run_with_nodejs_mnemnoics(path: &str, opt: OptLevel, initial_gc_threshold
 async fn run_inner_fallible(path: &str, opt: OptLevel, initial_gc_threshold: Option<usize>) -> anyhow::Result<()> {
     let path = Path::new(path);
     let package_state = if path.is_dir() {
-        // TODO: make it also work with paths to files. need to adjust the execute_node_module call too,
-        // since that needs a dir path
         process_package_json(path)?
     } else {
         PackageState {
             base_dir: path.parent().unwrap_or(&env::current_dir()?).into(),
-            metadata: Package::default_with_entry(
-                String::from_utf8_lossy(path.to_str().unwrap_or_default().as_bytes()).to_string(),
-            ),
+            metadata: Package::default_with_entry(path.into()),
         }
     };
 
