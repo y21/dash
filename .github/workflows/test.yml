@@ -25,6 +25,7 @@ jobs:
       - name: Benchmark VM
         run:  eval $(cargo test --release --benches -p dash_vm |& grep -o -P 'target/release/deps/full-[^\)]+') --bench --output-format bencher | tee output.txt
       - name: Store output
+        if: github.ref == 'refs/heads/master'
         uses: benchmark-action/github-action-benchmark@v1.15.0
         with:
           name: Benchmarks
