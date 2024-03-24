@@ -177,6 +177,7 @@ impl<'vm> LocalScope<'vm> {
 
     /// Registers an object and roots it.
     pub fn register<O: Object + 'static>(&mut self, obj: O) -> Handle {
+        #[allow(clippy::disallowed_methods)] // ok, we immediately root the handle
         let handle = self.deref_mut().register(obj);
         self.add_ref(handle.clone());
         handle

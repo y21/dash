@@ -1,4 +1,5 @@
 #![warn(clippy::redundant_clone)]
+#![deny(clippy::disallowed_methods)]
 
 use std::ops::RangeBounds;
 use std::vec::Drain;

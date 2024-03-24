@@ -16,6 +16,7 @@ pub mod set;
 pub mod typedarray;
 
 use std::any::TypeId;
+use std::ops::ControlFlow;
 
 use dash_middle::compiler::constant::Constant;
 use dash_middle::compiler::external::External;
@@ -370,7 +371,7 @@ unsafe impl Trace for Value {
 
 fn register_function_externals(
     function: &dash_middle::compiler::constant::Function,
-    vm: &mut Vm,
+    sc: &mut LocalScope<'_>,
 ) -> Vec<ExternalValue> {
     let mut externals = Vec::new();
 
@@ -378,16 +379,16 @@ fn register_function_externals(
         let id = usize::from(id);
 
         let val = if is_nested_external {
-            vm.get_external(id).expect("Referenced local not found").clone()
+            sc.get_external(id).expect("Referenced local not found").clone()
         } else {
-            let v = vm.get_local_raw(id).expect("Referenced local not found");
+            let v = sc.get_local_raw(id).expect("Referenced local not found");
 
             match v {
                 Value::External(v) => v,
                 other => {
                     // TODO: comment what's happening here -- Value -> Handle -> ExternaValue(..)
-                    let ext = ExternalValue::new(vm.register(other));
-                    vm.set_local(id, Value::External(ext.clone()).into());
+                    let ext = ExternalValue::new(sc.register(other));
+                    sc.set_local(id, Value::External(ext.clone()).into());
                     ext
                 }
             }
@@ -400,7 +401,7 @@ fn register_function_externals(
 }
 
 impl Value {
-    pub fn from_constant(constant: Constant, vm: &mut Vm) -> Self {
+    pub fn from_constant(constant: Constant, sc: &mut LocalScope<'_>) -> Self {
         match constant {
             Constant::Number(n) => Value::number(n),
             Constant::Boolean(b) => Value::Boolean(b),
@@ -409,11 +410,11 @@ impl Value {
             Constant::Null => Value::null(),
             Constant::Regex(regex) => {
                 let (nodes, flags, source) = *regex;
-                let regex = RegExp::new(nodes, flags, source.into(), vm);
-                Value::Object(vm.register(regex))
+                let regex = RegExp::new(nodes, flags, source.into(), sc);
+                Value::Object(sc.register(regex))
             }
             Constant::Function(f) => {
-                let externals = register_function_externals(&f, vm);
+                let externals = register_function_externals(&f, sc);
 
                 let name = f.name.map(Into::into);
                 let ty = f.ty;
@@ -425,13 +426,13 @@ impl Value {
                     ParserFunctionKind::Function(Asyncness::No) => FunctionKind::User(fun),
                     ParserFunctionKind::Arrow => FunctionKind::Closure(Closure {
                         fun,
-                        this: vm.active_frame().this.clone().unwrap_or_undefined(),
+                        this: sc.active_frame().this.clone().unwrap_or_undefined(),
                     }),
                     ParserFunctionKind::Generator => FunctionKind::Generator(GeneratorFunction::new(fun)),
                 };
 
-                let function = Function::new(vm, name, kind);
-                vm.gc.register(function).into()
+                let function = Function::new(sc, name, kind);
+                sc.register(function).into()
             }
             Constant::Identifier(_) => unreachable!(),
         }
@@ -596,27 +597,36 @@ impl Value {
         }
     }
 
-    pub fn instanceof(&self, ctor: &Self, sc: &mut LocalScope) -> Result<bool, Value> {
-        let obj = match self {
-            Self::Object(obj) => obj,
-            Self::External(obj) => &obj.inner,
-            _ => return Ok(false),
-        };
-
-        let target_proto = ctor.get_property(sc, sym::prototype.into()).root(sc)?;
-        let mut this_proto = obj.get_prototype(sc)?;
-        // Look if self[prototype] == ctor.prototype, repeat for all objects in self's prototype chain
-        loop {
-            if this_proto == target_proto {
-                return Ok(true);
+    pub fn for_each_prototype<T>(
+        &self,
+        sc: &mut LocalScope<'_>,
+        mut fun: impl FnMut(&mut LocalScope<'_>, &Value) -> Result<ControlFlow<T>, Value>,
+    ) -> Result<ControlFlow<T>, Value> {
+        let mut this = self.clone();
+        while !matches!(this, Value::Null(_)) {
+            if let ControlFlow::Break(b) = fun(sc, &this)? {
+                return Ok(ControlFlow::Break(b));
             }
-
-            this_proto = match this_proto {
-                Value::Object(obj) => obj.get_prototype(sc)?,
-                Value::External(obj) => obj.inner.get_prototype(sc)?,
-                _ => return Ok(false),
-            };
+            this = this.get_prototype(sc)?;
         }
+        Ok(ControlFlow::Continue(()))
+    }
+
+    pub fn instanceof(&self, ctor: &Self, sc: &mut LocalScope) -> Result<bool, Value> {
+        if !matches!(self, Value::Object(_)) {
+            return Ok(false);
+        }
+
+        // Look if self[prototype] == ctor.prototype, repeat for all objects in self's prototype chain
+        let target_proto = ctor.get_property(sc, sym::prototype.into()).root(sc)?;
+        self.for_each_prototype(sc, |_, proto| {
+            Ok(if proto == &target_proto {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
+            })
+        })
+        .map(|c| c.is_break())
     }
 
     /// Attempts to downcast this value to a concrete type `T`.
@@ -678,13 +688,6 @@ impl ValueContext for Option<Value> {
             None => Value::null(),
         }
     }
-
-    // fn context<S: Into<Rc<str>>>(self, vm: &mut Vm, message: S) -> Result<Value, Value> {
-    //     match self {
-    //         Some(x) => Ok(x),
-    //         None => throw!(vm, message),
-    //     }
-    // }
 }
 
 impl ValueContext for Option<&Value> {
@@ -701,13 +704,6 @@ impl ValueContext for Option<&Value> {
             None => Value::null(),
         }
     }
-
-    // fn context<S: Into<Rc<str>>>(self, vm: &mut Vm, message: S) -> Result<Value, Value> {
-    //     match self {
-    //         Some(x) => Ok(x.clone()),
-    //         None => throw!(vm, message),
-    //     }
-    // }
 }
 
 impl<E> ValueContext for Result<Value, E> {
@@ -724,13 +720,6 @@ impl<E> ValueContext for Result<Value, E> {
             Err(_) => Value::null(),
         }
     }
-
-    // fn context<S: Into<Rc<str>>>(self, vm: &mut Vm, message: S) -> Result<Value, Value> {
-    //     match self {
-    //         Ok(x) => Ok(x),
-    //         Err(_) => throw!(vm, message),
-    //     }
-    // }
 }
 
 pub type ThreadSafeValue = ThreadSafeStorage<Value>;

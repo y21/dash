@@ -1,3 +1,5 @@
+use std::ops::ControlFlow;
+
 use crate::gc::handle::Handle;
 use crate::gc::interner::sym;
 use crate::localscope::LocalScope;
@@ -192,21 +194,22 @@ pub fn get_prototype_of(cx: CallContext) -> Result<Value, Value> {
 
 pub fn is_prototype_of(cx: CallContext) -> Result<Value, Value> {
     let target_proto = Value::Object(cx.this.to_object(cx.scope)?);
-    let mut this_proto = cx.args.first().unwrap_or_undefined();
+    let this_proto = cx.args.first().unwrap_or_undefined();
     if this_proto.type_of() != Typeof::Object {
         return Ok(Value::Boolean(false));
     }
 
-    loop {
-        if this_proto == target_proto {
-            return Ok(Value::Boolean(true));
-        }
-
-        this_proto = match this_proto {
-            Value::Object(obj) => obj.get_prototype(cx.scope)?,
-            _ => return Ok(Value::Boolean(false)),
-        };
-    }
+    Ok(Value::Boolean(
+        this_proto
+            .for_each_prototype(cx.scope, |_, proto| {
+                if proto == &target_proto {
+                    Ok(ControlFlow::Break(()))
+                } else {
+                    Ok(ControlFlow::Continue(()))
+                }
+            })?
+            .is_break(),
+    ))
 }
 
 pub fn property_is_enumerable(cx: CallContext) -> Result<Value, Value> {
