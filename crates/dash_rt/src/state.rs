@@ -14,8 +14,8 @@ pub struct State {
     rt: tokio::runtime::Handle,
     tx: EventSender,
     root_module: Rc<RefCell<Option<Box<dyn ModuleLoader>>>>,
-    tasks: TaskIds,
-    promises: RefCell<FxHashMap<u64, Persistent>>,
+    pub tasks: TaskIds,
+    promises: FxHashMap<u64, Persistent>,
 }
 
 impl State {
@@ -25,7 +25,7 @@ impl State {
             tx,
             root_module: Rc::new(RefCell::new(None)),
             tasks: TaskIds::new(),
-            promises: RefCell::new(FxHashMap::default()),
+            promises: FxHashMap::default(),
         }
     }
 
@@ -37,22 +37,18 @@ impl State {
         &self.root_module
     }
 
-    pub fn active_tasks(&self) -> &TaskIds {
-        &self.tasks
-    }
-
     pub fn needs_event_loop(&self) -> bool {
-        self.tasks.has_tasks() || !self.promises.borrow().is_empty()
+        self.tasks.has_tasks() || !self.promises.is_empty()
     }
 
-    pub fn try_from_vm(vm: &Vm) -> Option<&Self> {
-        vm.params().state()
+    pub fn try_from_vm(vm: &mut Vm) -> Option<&mut Self> {
+        vm.params_mut().state_mut()
     }
 
     /// Same as try_from_vm, but panics if state failed to downcast (i.e. Vm was not created by a runtime, or was changed at runtime)
     ///
     /// Usually it is a programmer error if downcasting fails, so this method is preferred
-    pub fn from_vm(vm: &Vm) -> &Self {
+    pub fn from_vm(vm: &mut Vm) -> &mut Self {
         Self::try_from_vm(vm).unwrap()
     }
 
@@ -64,19 +60,19 @@ impl State {
         self.rt.clone()
     }
 
-    pub fn add_pending_promise(&self, promise: Persistent) -> u64 {
+    pub fn add_pending_promise(&mut self, promise: Persistent) -> u64 {
         static NEXT_PROMISE_ID: AtomicU64 = AtomicU64::new(0);
         let id = NEXT_PROMISE_ID.fetch_add(1, Ordering::Relaxed);
-        self.promises.borrow_mut().insert(id, promise);
+        self.promises.insert(id, promise);
         id
     }
 
-    pub fn take_promise(&self, id: u64) -> Persistent {
+    pub fn take_promise(&mut self, id: u64) -> Persistent {
         self.try_take_promise(id)
             .expect("Attempted to take a promise that was already taken")
     }
 
-    pub fn try_take_promise(&self, id: u64) -> Option<Persistent> {
-        self.promises.borrow_mut().remove(&id)
+    pub fn try_take_promise(&mut self, id: u64) -> Option<Persistent> {
+        self.promises.remove(&id)
     }
 }

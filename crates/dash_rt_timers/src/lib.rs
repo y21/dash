@@ -57,7 +57,7 @@ fn set_timeout(cx: CallContext) -> Result<Value, Value> {
 
     let state = State::from_vm(cx.scope);
     let tx = state.event_sender();
-    let tid = state.active_tasks().add();
+    let tid = state.tasks.add();
 
     state.rt_handle().spawn(async move {
         let tx2 = tx.clone();

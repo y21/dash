@@ -120,7 +120,7 @@ impl Object for TcpListenerConstructor {
                         });
                         event_tx.send(EventMessage::ScheduleCallback(Box::new(move |rt| {
                             let mut scope = rt.vm_mut().scope();
-                            let promise = State::from_vm(&scope).take_promise(promise_id);
+                            let promise = State::from_vm(&mut scope).take_promise(promise_id);
                             let promise = promise.as_any().downcast_ref::<Promise>().unwrap();
 
                             let stream_handle = TcpStreamHandle::new(&mut scope, writer_tx, reader_tx).unwrap();

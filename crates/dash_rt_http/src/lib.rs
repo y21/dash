@@ -58,7 +58,7 @@ pub fn listen(cx: CallContext) -> Result<Value, Value> {
 
     let (task_id, event_tx, rt) = {
         let state = State::from_vm(cx.scope);
-        let task_id = state.active_tasks().add();
+        let task_id = state.tasks.add();
         let event_tx = state.event_sender();
         let rt = state.rt_handle();
         (task_id, event_tx, rt)

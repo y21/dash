@@ -20,6 +20,7 @@ pub mod event;
 pub mod module;
 pub mod runtime;
 pub mod state;
+pub mod typemap;
 
 // TODO: move elsewhere? util module?
 pub fn wrap_async<Fut, Fun, T, E>(cx: CallContext, fut: Fut, convert: Fun) -> Result<Value, Value>
@@ -48,7 +49,7 @@ where
         let data = fut.await;
 
         event_tx.send(EventMessage::ScheduleCallback(Box::new(move |rt| {
-            let promise = State::from_vm(rt.vm()).take_promise(promise_id);
+            let promise = State::from_vm(rt.vm_mut()).take_promise(promise_id);
             let mut scope = rt.vm_mut().scope();
             let promise = promise.as_any().downcast_ref::<Promise>().unwrap();
 

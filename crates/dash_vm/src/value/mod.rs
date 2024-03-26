@@ -43,7 +43,6 @@ use self::primitive::{Number, PrimitiveCapabilities, Symbol};
 use self::regex::RegExp;
 use self::string::JsString;
 use super::localscope::LocalScope;
-use super::Vm;
 
 // Impl detail: must be repr(C) because we do
 // raw pointer arithmetic to access the data ptr/vtable ptr

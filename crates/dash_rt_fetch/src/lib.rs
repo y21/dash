@@ -71,7 +71,7 @@ fn fetch(cx: CallContext) -> Result<Value, Value> {
 
         event_tx.send(EventMessage::ScheduleCallback(Box::new(move |rt| {
             let mut sc = rt.vm_mut().scope();
-            let promise = State::from_vm(&sc).take_promise(promise_id);
+            let promise = State::from_vm(&mut sc).take_promise(promise_id);
             let promise = promise.as_any().downcast_ref::<Promise>().unwrap();
 
             let (req, action) = match req {
@@ -135,7 +135,7 @@ fn http_response_text(cx: CallContext) -> Result<Value, Value> {
 
         event_tx.send(EventMessage::ScheduleCallback(Box::new(move |rt| {
             let mut sc = rt.vm_mut().scope();
-            let promise = State::from_vm(&sc).take_promise(promise_id);
+            let promise = State::from_vm(&mut sc).take_promise(promise_id);
             let promise = promise.as_any().downcast_ref::<Promise>().unwrap();
 
             let (value, action) = match text {

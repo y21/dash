@@ -64,6 +64,10 @@ impl VmParams {
         self.state.as_ref().and_then(|s| s.downcast_ref::<T>())
     }
 
+    pub fn state_mut<T: 'static>(&mut self) -> Option<&mut T> {
+        self.state.as_mut().and_then(|s| s.downcast_mut::<T>())
+    }
+
     pub fn state_raw(&self) -> Option<&dyn Any> {
         self.state.as_deref()
     }

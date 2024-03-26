@@ -17,3 +17,4 @@ dash_middle = { path = "../dash_middle" }
 dash_compiler = { path = "../dash_compiler", features = ["from_string"] }
 tracing = "0.1.36"
 rustc-hash = "1.1.0"
+nohash = "0.2.0"
