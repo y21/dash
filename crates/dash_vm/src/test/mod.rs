@@ -108,6 +108,30 @@ fn persistent_trace() {
     assert!(p.downcast_ref::<NamedObject>().is_some());
 }
 
+#[test]
+fn async_tasks() {
+    let mut vm = Vm::new(Default::default());
+    vm.eval(
+        r#"
+    (async function() {
+        for (let i = 0,j = 0; i < 5; i++, j++) {
+            const res = await Promise.resolve(i);
+            if (res != j) {
+                throw "Promise resolved to wrong value";
+            }
+        }
+    })();
+    "#,
+        Default::default(),
+    )
+    .unwrap();
+    assert!(vm.async_tasks.len() == 1);
+    vm.perform_gc();
+    vm.process_async_tasks();
+    assert!(vm.async_tasks.is_empty());
+    assert!(vm.stack.is_empty());
+}
+
 macro_rules! simple_test {
     ($testname:ident, $code:expr, $expected:expr) => {
         #[test]

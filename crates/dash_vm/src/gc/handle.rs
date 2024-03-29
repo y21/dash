@@ -108,14 +108,8 @@ pub struct GcNode<T> {
 }
 
 #[repr(C)]
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, Debug, PartialEq, Clone, Hash)]
 pub struct Handle(NonNull<GcNode<()>>);
-
-impl Debug for Handle {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        unsafe { (self.vtable().debug_fmt)(addr_of!((*self.0.as_ptr()).value.0), f) }
-    }
-}
 
 impl Handle {
     /// # Safety

@@ -176,6 +176,7 @@ impl<'vm> LocalScope<'vm> {
     }
 
     /// Registers an object and roots it.
+    #[cfg_attr(feature = "stress_gc", track_caller)]
     pub fn register<O: Object + 'static>(&mut self, obj: O) -> Handle {
         #[allow(clippy::disallowed_methods)] // ok, we immediately root the handle
         let handle = self.deref_mut().register(obj);

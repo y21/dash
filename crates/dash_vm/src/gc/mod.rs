@@ -1,6 +1,8 @@
 use std::fmt::Debug;
 use std::ptr::NonNull;
 
+use dash_log::debug;
+
 use crate::value::object::Object;
 
 use self::handle::{GcNode, Handle};
@@ -38,7 +40,9 @@ impl Gc {
         self.node_count
     }
 
+    #[cfg_attr(feature = "stress_gc", track_caller)]
     unsafe fn add(&mut self, ptr: NonNull<GcNode<()>>) -> Handle {
+        debug!(?ptr, "alloc");
         // insert head if this is the very first node
         if self.head.is_none() {
             self.head = Some(ptr);
@@ -57,6 +61,7 @@ impl Gc {
         unsafe { Handle::from_raw(ptr) }
     }
 
+    #[cfg_attr(feature = "stress_gc", track_caller)]
     pub fn register<O: Object + 'static>(&mut self, value: O) -> Handle {
         value.into_handle(self)
     }
@@ -102,6 +107,8 @@ impl Gc {
                 }
 
                 // Deallocate node.
+                debug!(?ptr, "dealloc");
+
                 unsafe {
                     drop_erased_gc_node(ptr.as_ptr());
                 }
@@ -209,10 +216,12 @@ macro_rules! register_gc {
 /// Implementors must provide a "correct" into_handle method
 /// by returning a valid [`Handle`] living in the given linked list.
 pub unsafe trait IntoHandle {
+    #[cfg_attr(feature = "stress_gc", track_caller)]
     fn into_handle(self, gc: &mut Gc) -> Handle;
 }
 
 unsafe impl<T: Object + 'static> IntoHandle for T {
+    #[cfg_attr(feature = "stress_gc", track_caller)]
     fn into_handle(self, gc: &mut Gc) -> Handle {
         register_gc!(Self, gc, self)
     }

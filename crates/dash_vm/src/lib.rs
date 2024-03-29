@@ -3,7 +3,7 @@
 
 use std::ops::RangeBounds;
 use std::vec::Drain;
-use std::{fmt, mem};
+use std::fmt;
 
 use crate::gc::interner::{self, sym};
 use crate::gc::trace::{Trace, TraceCtxt};
@@ -1346,19 +1346,17 @@ impl Vm {
         debug!("process async tasks");
         debug!(async_task_count = %self.async_tasks.len());
 
-        while !self.async_tasks.is_empty() {
-            let tasks = mem::take(&mut self.async_tasks);
-
+        while let Some(task) = self.async_tasks.pop() {
             let mut scope = self.scope();
 
-            for task in tasks {
-                debug!("process task {:?}", task);
-                if let Err(ex) = task.apply(&mut scope, Value::undefined(), Vec::new()) {
-                    if let Some(callback) = scope.params.unhandled_task_exception_callback() {
-                        let ex = ex.root(&mut scope);
-                        error!("uncaught async task exception");
-                        callback(&mut scope, ex);
-                    }
+            scope.add_ref(task.clone());
+
+            debug!("process task {:?}", task);
+            if let Err(ex) = task.apply(&mut scope, Value::undefined(), Vec::new()) {
+                if let Some(callback) = scope.params.unhandled_task_exception_callback() {
+                    let ex = ex.root(&mut scope);
+                    error!("uncaught async task exception");
+                    callback(&mut scope, ex);
                 }
             }
         }
@@ -1503,6 +1501,7 @@ impl Vm {
     // TODO: remove this function at all costs, this should never be called.
     // Always call `register` on local scope
     // Or, rather, return Unrooted
+    #[cfg_attr(feature = "stress_gc", track_caller)]
     pub fn register<O: Object + 'static>(&mut self, obj: O) -> Handle {
         self.gc.register(obj)
     }
