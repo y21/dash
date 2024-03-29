@@ -460,7 +460,7 @@ macro_rules! define_symbol_set {
 
         $(#[$($meta)*])?
         pub struct $name {
-            $(pub $sym: Symbol),*
+            $(#[allow(non_snake_case)] pub $sym: Symbol),*
         }
         impl $name {
             pub fn new(interner: &mut StringInterner) -> Self {

@@ -6,7 +6,7 @@ use dash_rt::typemap::Key;
 use dash_vm::value::Value;
 use dash_vm::Vm;
 
-define_symbol_set!(#[derive(Trace)] NodeSymbols => [fs, fetch, path, parse, dir]);
+define_symbol_set!(#[derive(Trace)] NodeSymbols => [fs, fetch, path, parse, dir, events, EventEmitter, on, emit]);
 
 #[derive(Trace)]
 pub struct State {

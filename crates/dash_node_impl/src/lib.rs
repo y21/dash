@@ -20,6 +20,7 @@ use package::Package;
 use rustc_hash::FxHashMap;
 use state::Nodejs;
 
+mod events;
 mod native;
 mod package;
 mod path;
