@@ -22,6 +22,12 @@ impl From<Symbol> for JsString {
     }
 }
 
+impl PartialEq<Symbol> for JsString {
+    fn eq(&self, other: &Symbol) -> bool {
+        self.sym == *other
+    }
+}
+
 impl JsString {
     pub fn sym(self) -> Symbol {
         self.sym

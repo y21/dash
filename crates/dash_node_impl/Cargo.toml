@@ -17,3 +17,5 @@ serde = { version = "1.0", features = ["derive"] }
 tokio = { version = "1.24.0", features = ["full"] }
 dash_proc_macro = { path = "../dash_proc_macro" }
 rustc-hash = "1.1.0"
+dash_rt_fs = { path = "../dash_rt_fs" }
+dash_rt_fetch = { path = "../dash_rt_fetch" }

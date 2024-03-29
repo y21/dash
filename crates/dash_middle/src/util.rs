@@ -281,3 +281,22 @@ where
         T::from(old)
     }
 }
+
+#[macro_export]
+macro_rules! if_match {
+    ($scrutinee:expr => {
+        $($sym:expr => $code:expr),+,
+        $(_ => $fallback:expr)?
+    }) => {{
+        let scrutinee = $scrutinee;
+        if false { loop {} }
+        $(
+            else if scrutinee == $sym {
+                $code
+            }
+        )*
+        $(
+            else { $fallback }
+        )?
+    }};
+}

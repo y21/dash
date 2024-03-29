@@ -9,6 +9,7 @@ use dash_optimizer::OptLevel;
 use dash_proc_macro::Trace;
 use dash_rt::format_value;
 use dash_rt::runtime::Runtime;
+use dash_rt::state::State;
 use dash_vm::eval::EvalError;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
@@ -16,8 +17,11 @@ use dash_vm::value::{Root, Unrooted, Value};
 use dash_vm::{delegate, throw};
 use package::Package;
 use rustc_hash::FxHashMap;
+use state::Nodejs;
 
+mod native;
 mod package;
+mod state;
 
 pub fn run_with_nodejs_mnemnoics(path: &str, opt: OptLevel, initial_gc_threshold: Option<usize>) -> anyhow::Result<()> {
     let tokio_rt = tokio::runtime::Runtime::new()?;
@@ -54,14 +58,23 @@ async fn run_inner_fallible(path: &str, opt: OptLevel, initial_gc_threshold: Opt
     });
 
     let mut rt = Runtime::new(initial_gc_threshold).await;
-    let scope = &mut rt.vm_mut().scope();
+    let state = state::State::new(rt.vm_mut());
+    State::from_vm_mut(rt.vm_mut()).store.insert(Nodejs, state);
 
-    execute_node_module(scope, path, path, &entry, opt, global_state, Rc::new(package_state)).map_err(
-        |err| match err {
-            (EvalError::Middle(errs), entry) => anyhow!("{}", errs.formattable(&entry, true)),
-            (EvalError::Exception(err), ..) => anyhow!("{}", format_value(err.root(scope), scope).unwrap()),
-        },
-    )?;
+    rt.vm_mut().with_scope(|scope| {
+        anyhow::Ok(
+            execute_node_module(scope, path, path, &entry, opt, global_state, Rc::new(package_state)).map_err(
+                |err| match err {
+                    (EvalError::Middle(errs), entry) => anyhow!("{}", errs.formattable(&entry, true)),
+                    (EvalError::Exception(err), ..) => anyhow!("{}", format_value(err.root(scope), scope).unwrap()),
+                },
+            )?,
+        )
+    })?;
+
+    if rt.state().needs_event_loop() {
+        rt.run_event_loop().await;
+    }
 
     Ok(())
 }
@@ -168,6 +181,7 @@ impl Object for RequireFunction {
             throw!(scope, Error, "require() expects a string argument");
         };
         let exports = scope.intern("exports");
+        let raw_arg = arg;
         let mut arg = arg.res(scope).to_owned();
         let is_path = matches!(arg.chars().next(), Some('.' | '/' | '~'));
         if is_path {
@@ -215,8 +229,10 @@ impl Object for RequireFunction {
             };
 
             module.get_property(scope, exports.into())
+        } else if let Some(o) = native::load_native_module(scope, *raw_arg)? {
+            Ok(o.into())
         } else {
-            // Resolve dependency
+            // Resolve dependency in node_modules
             let dir_path = self.state.node_modules_dir.join(&arg);
 
             let package_state = match process_package_json(&dir_path) {

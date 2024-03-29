@@ -1,4 +1,5 @@
-use std::cell::{Cell, RefCell};
+use std::any::TypeId;
+use std::cell::{Cell, OnceCell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -106,6 +107,14 @@ unsafe impl<T: Trace + Copy> Trace for Cell<T> {
     }
 }
 
+unsafe impl<T: Trace> Trace for OnceCell<T> {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
+        if let Some(value) = self.get() {
+            value.trace(cx);
+        }
+    }
+}
+
 unsafe impl<T: Trace + ?Sized> Trace for Box<T> {
     fn trace(&self, cx: &mut TraceCtxt<'_>) {
         T::trace(self, cx)
@@ -177,15 +186,18 @@ unsafe impl Trace for Constant {
 unsafe_empty_trace!(
     usize,
     u8,
+    u64,
     f64,
     bool,
     str,
     Undefined,
     Null,
-    // Symbol,
     Number,
     TypedArrayKind,
     PathBuf,
     Path,
-    String
+    String,
+    &str,
+    (),
+    TypeId
 );

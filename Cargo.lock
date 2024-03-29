@@ -460,6 +460,8 @@ dependencies = [
  "dash_parser",
  "dash_proc_macro",
  "dash_rt",
+ "dash_rt_fetch",
+ "dash_rt_fs",
  "dash_vm",
  "rustc-hash",
  "serde",
@@ -513,7 +515,9 @@ dependencies = [
  "dash_core",
  "dash_middle",
  "dash_optimizer",
+ "dash_proc_macro",
  "dash_vm",
+ "nohash",
  "rand",
  "rustc-hash",
  "tokio",
@@ -1182,6 +1186,12 @@ dependencies = [
  "libc",
  "memoffset",
 ]
+
+[[package]]
+name = "nohash"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0f889fb66f7acdf83442c35775764b51fed3c606ab9cee51500dbde2cf528ca"
 
 [[package]]
 name = "nu-ansi-term"

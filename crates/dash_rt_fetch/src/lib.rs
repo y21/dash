@@ -3,7 +3,6 @@ use dash_middle::util::SharedOnce;
 use dash_rt::event::EventMessage;
 use dash_rt::module::ModuleLoader;
 use dash_rt::state::State;
-use dash_vm::gc::persistent::Persistent;
 use dash_vm::gc::trace::{Trace, TraceCtxt};
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::error::Error;
@@ -31,15 +30,19 @@ impl ModuleLoader for FetchModule {
             return Ok(None);
         }
 
-        let name = sc.intern("fetch");
-        let fun = Function::new(sc, Some(name.into()), FunctionKind::Native(fetch));
-        let fun = sc.register(fun);
-
-        Ok(Some(Value::Object(fun)))
+        init_module(sc).map(Some)
     }
 }
 
 static REQWEST: Lazy<Client> = Lazy::new(Client::new);
+
+pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let name = sc.intern("fetch");
+    let fun = Function::new(sc, Some(name.into()), FunctionKind::Native(fetch));
+    let fun = sc.register(fun);
+
+    Ok(Value::Object(fun))
+}
 
 fn fetch(cx: CallContext) -> Result<Value, Value> {
     let url = match cx.args.first() {
@@ -48,7 +51,7 @@ fn fetch(cx: CallContext) -> Result<Value, Value> {
     };
 
     let (rt, event_tx) = {
-        let state = State::from_vm(cx.scope);
+        let state = State::from_vm_mut(cx.scope);
         let etx = state.event_sender();
         let rt = state.rt_handle();
         (rt, etx)
@@ -57,10 +60,7 @@ fn fetch(cx: CallContext) -> Result<Value, Value> {
     let promise = Promise::new(cx.scope);
     let promise = cx.scope.register(promise);
 
-    let promise_id = {
-        let persistent_promise = Persistent::new(cx.scope, promise.clone());
-        State::from_vm(cx.scope).add_pending_promise(persistent_promise)
-    };
+    let promise_id = State::from_vm_mut(cx.scope).add_pending_promise(promise.clone());
 
     rt.spawn(async move {
         let req = REQWEST
@@ -71,7 +71,7 @@ fn fetch(cx: CallContext) -> Result<Value, Value> {
 
         event_tx.send(EventMessage::ScheduleCallback(Box::new(move |rt| {
             let mut sc = rt.vm_mut().scope();
-            let promise = State::from_vm(&mut sc).take_promise(promise_id);
+            let promise = State::from_vm_mut(&mut sc).take_promise(promise_id);
             let promise = promise.as_any().downcast_ref::<Promise>().unwrap();
 
             let (req, action) = match req {
@@ -111,7 +111,7 @@ fn http_response_text(cx: CallContext) -> Result<Value, Value> {
     };
 
     let (rt, event_tx) = {
-        let state = State::from_vm(cx.scope);
+        let state = State::from_vm_mut(cx.scope);
         let etx = state.event_sender();
         let rt = state.rt_handle();
         (rt, etx)
@@ -125,17 +125,14 @@ fn http_response_text(cx: CallContext) -> Result<Value, Value> {
     let promise = Promise::new(cx.scope);
     let promise = cx.scope.register(promise);
 
-    let promise_id = {
-        let persistent_promise = Persistent::new(cx.scope, promise.clone());
-        State::from_vm(cx.scope).add_pending_promise(persistent_promise)
-    };
+    let promise_id = State::from_vm_mut(cx.scope).add_pending_promise(promise.clone());
 
     rt.spawn(async move {
         let text = response.text().await;
 
         event_tx.send(EventMessage::ScheduleCallback(Box::new(move |rt| {
             let mut sc = rt.vm_mut().scope();
-            let promise = State::from_vm(&mut sc).take_promise(promise_id);
+            let promise = State::from_vm_mut(&mut sc).take_promise(promise_id);
             let promise = promise.as_any().downcast_ref::<Promise>().unwrap();
 
             let (value, action) = match text {

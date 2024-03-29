@@ -13,6 +13,7 @@ rand = { version = "0.8.4", optional = true }
 tokio = { version = "1.24.25", features = ["full"] }
 dash_vm = { path = "../dash_vm", features = [] }
 dash_optimizer = { path = "../dash_optimizer" }
+dash_proc_macro = { path = "../dash_proc_macro" }
 dash_middle = { path = "../dash_middle" }
 dash_compiler = { path = "../dash_compiler", features = ["from_string"] }
 tracing = "0.1.36"

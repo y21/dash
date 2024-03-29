@@ -7,8 +7,8 @@ use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::{Value, ValueContext};
 
 pub fn init_module(sc: &mut LocalScope) -> Result<Value, Value> {
-    let name = sc.intern("readFile");
-    let read_file_value = Function::new(sc, Some(name.into()), FunctionKind::Native(read_file));
+    let name = sc.intern("readFileSync");
+    let read_file_value = Function::new(sc, Some(name.into()), FunctionKind::Native(read_file_sync));
     let read_file_value = sc.register(read_file_value);
 
     let module = NamedObject::new(sc);
@@ -21,7 +21,7 @@ pub fn init_module(sc: &mut LocalScope) -> Result<Value, Value> {
     Ok(Value::Object(sc.register(module)))
 }
 
-fn read_file(cx: CallContext) -> Result<Value, Value> {
+fn read_file_sync(cx: CallContext) -> Result<Value, Value> {
     let path = cx
         .args
         .first()

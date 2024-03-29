@@ -438,6 +438,42 @@ impl Symbol {
     }
 }
 
+#[doc(hidden)]
+#[macro_export]
+macro_rules! expand {
+    ($interner:ident $sym:ident : $val:expr) => {
+        let $sym = $interner.intern($val);
+    };
+    ($interner:ident $sym:ident) => {
+        let $sym = $interner.intern(stringify!($sym));
+    };
+}
+
+#[macro_export]
+macro_rules! define_symbol_set {
+    (
+        $(#[$($meta:meta)*])?
+        $name:ident => [$($sym:ident$(: $val:expr)?),*]
+    ) => {
+        use $crate::interner::Symbol;
+        use $crate::interner::StringInterner;
+
+        $(#[$($meta)*])?
+        pub struct $name {
+            $(pub $sym: Symbol),*
+        }
+        impl $name {
+            pub fn new(interner: &mut StringInterner) -> Self {
+                $($crate::expand!(interner $sym $(: $val)?);)*
+
+                Self {
+                    $($sym),*
+                }
+            }
+        }
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use super::StringInterner;

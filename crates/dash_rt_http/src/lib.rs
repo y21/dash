@@ -57,7 +57,7 @@ pub fn listen(cx: CallContext) -> Result<Value, Value> {
     let addr = SocketAddr::from(([127, 0, 0, 1], port as u16));
 
     let (task_id, event_tx, rt) = {
-        let state = State::from_vm(cx.scope);
+        let state = State::from_vm_mut(cx.scope);
         let task_id = state.tasks.add();
         let event_tx = state.event_sender();
         let rt = state.rt_handle();

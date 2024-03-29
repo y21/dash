@@ -53,7 +53,7 @@ impl Runtime {
     }
 
     pub fn set_module_manager(&mut self, module_manager: Box<dyn ModuleLoader>) {
-        State::from_vm(&mut self.vm).set_root_module(module_manager);
+        State::from_vm_mut(&mut self.vm).set_root_module(module_manager);
     }
 
     pub fn eval(&mut self, code: &str, opt: OptLevel) -> Result<Unrooted, EvalError> {
@@ -75,16 +75,24 @@ impl Runtime {
                     fun(&mut self);
                 }
                 EventMessage::RemoveTask(id) => {
-                    State::from_vm(&mut self.vm).tasks.remove(id);
+                    State::from_vm_mut(&mut self.vm).tasks.remove(id);
                 }
             }
 
-            let state = State::from_vm(&mut self.vm);
+            let state = State::from_vm_mut(&mut self.vm);
             if !state.needs_event_loop() {
                 info!("Event loop finished");
                 return;
             }
         }
+    }
+
+    pub fn state_mut(&mut self) -> &mut State {
+        State::from_vm_mut(&mut self.vm)
+    }
+
+    pub fn state(&self) -> &State {
+        State::from_vm(&self.vm)
     }
 }
 
@@ -105,7 +113,7 @@ fn time_callback(_: &mut Vm) -> Result<u64, Unrooted> {
 fn import_callback(vm: &mut Vm, import_ty: StaticImportKind, path: JsString) -> Result<Unrooted, Unrooted> {
     let mut sc = vm.scope();
 
-    let root = State::from_vm(&mut sc).root_module().clone();
+    let root = State::from_vm_mut(&mut sc).root_module().clone();
 
     if let Some(module) = &*root.borrow() {
         match module.import(&mut sc, import_ty, path) {

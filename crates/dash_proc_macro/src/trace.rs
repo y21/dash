@@ -19,11 +19,24 @@ pub fn trace_impl(tt: TokenStream) -> TokenStream {
         Data::Struct(DataStruct {
             fields: Fields::Named(ref fields),
             ..
-        }) => fields
-            .named
-            .iter()
-            .map(|x| x.ident.as_ref().unwrap())
-            .map(|x| quote! { self.#x.trace(cx); }),
+        }) => Box::new(
+            fields
+                .named
+                .iter()
+                .map(|x| x.ident.as_ref().unwrap())
+                .map(|x| quote! { self.#x.trace(cx); }),
+        ) as Box<dyn Iterator<Item = _>>,
+        Data::Struct(DataStruct {
+            fields: Fields::Unnamed(ref fields),
+            ..
+        }) => Box::new(
+            fields
+                .unnamed
+                .iter()
+                .enumerate()
+                .map(|(x, _)| syn::Index::from(x))
+                .map(|x| quote! { self.#x.trace(cx); }),
+        ) as Box<dyn Iterator<Item = _>>,
         _ => error!("#[derive(Trace)] can only be used on structs"),
     };
 

@@ -55,7 +55,7 @@ fn set_timeout(cx: CallContext) -> Result<Value, Value> {
         None => throw!(cx.scope, TypeError, "Missing delay argument"),
     };
 
-    let state = State::from_vm(cx.scope);
+    let state = State::from_vm_mut(cx.scope);
     let tx = state.event_sender();
     let tid = state.tasks.add();
 

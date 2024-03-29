@@ -2,6 +2,7 @@ use std::any::Any;
 
 use dash_middle::compiler::StaticImportKind;
 
+use crate::gc::trace::Trace;
 use crate::localscope::LocalScope;
 use crate::value::string::JsString;
 use crate::value::Unrooted;
@@ -16,6 +17,20 @@ pub type DynamicImportCallback = fn(vm: &mut Vm, val: Value) -> Result<Unrooted,
 pub type DebuggerCallback = fn(vm: &mut Vm) -> Result<(), Value>;
 pub type UnhandledTaskException = fn(vm: &mut LocalScope, exception: Value);
 
+pub trait State: Any + Trace {
+    fn as_any(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+}
+impl<T: Any + Trace> State for T {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+}
+
 #[derive(Default)]
 pub struct VmParams {
     math_random_callback: Option<MathRandomCallback>,
@@ -25,7 +40,7 @@ pub struct VmParams {
     debugger_callback: Option<DebuggerCallback>,
     unhandled_task_exception_callback: Option<UnhandledTaskException>,
     initial_gc_object_threshold: Option<usize>,
-    state: Option<Box<dyn Any>>,
+    state: Option<Box<dyn State>>,
 }
 
 impl VmParams {
@@ -51,24 +66,24 @@ impl VmParams {
         self.dynamic_import_callback
     }
 
-    pub fn set_state(mut self, state: Box<dyn Any>) -> Self {
+    pub fn set_state(mut self, state: Box<dyn State>) -> Self {
         self.state = Some(state);
         self
     }
 
-    pub fn update_state(&mut self, state: Box<dyn Any>) {
+    pub fn update_state(&mut self, state: Box<dyn State>) {
         self.state = Some(state);
     }
 
     pub fn state<T: 'static>(&self) -> Option<&T> {
-        self.state.as_ref().and_then(|s| s.downcast_ref::<T>())
+        self.state.as_ref().and_then(|s| (**s).as_any().downcast_ref::<T>())
     }
 
     pub fn state_mut<T: 'static>(&mut self) -> Option<&mut T> {
-        self.state.as_mut().and_then(|s| s.downcast_mut::<T>())
+        self.state.as_mut().and_then(|s| (**s).as_any_mut().downcast_mut::<T>())
     }
 
-    pub fn state_raw(&self) -> Option<&dyn Any> {
+    pub fn state_raw(&self) -> Option<&dyn State> {
         self.state.as_deref()
     }
 

@@ -4,7 +4,6 @@ use std::future::Future;
 use dash_compiler::FunctionCompiler;
 use dash_middle::compiler::CompileResult;
 use dash_vm::frame::{Exports, Frame};
-use dash_vm::gc::persistent::Persistent;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::function::native::CallContext;
 use dash_vm::value::object::Object;
@@ -30,7 +29,7 @@ where
     T: Send + Sync + 'static,
     E: Send + Sync + 'static,
 {
-    let event_tx = State::from_vm(cx.scope).event_sender();
+    let event_tx = State::from_vm_mut(cx.scope).event_sender();
 
     let promise = {
         let promise = Promise::new(cx.scope);
@@ -38,9 +37,9 @@ where
     };
 
     let (promise_id, rt) = {
-        let persistent_promise = Persistent::new(cx.scope, promise.clone());
-        let state = State::from_vm(cx.scope);
-        let pid = state.add_pending_promise(persistent_promise);
+        let promise = promise.clone();
+        let state = State::from_vm_mut(cx.scope);
+        let pid = state.add_pending_promise(promise);
         let rt = state.rt_handle();
         (pid, rt)
     };
@@ -49,7 +48,7 @@ where
         let data = fut.await;
 
         event_tx.send(EventMessage::ScheduleCallback(Box::new(move |rt| {
-            let promise = State::from_vm(rt.vm_mut()).take_promise(promise_id);
+            let promise = State::from_vm_mut(rt.vm_mut()).take_promise(promise_id);
             let mut scope = rt.vm_mut().scope();
             let promise = promise.as_any().downcast_ref::<Promise>().unwrap();
 

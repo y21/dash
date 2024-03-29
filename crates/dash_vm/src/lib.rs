@@ -1429,6 +1429,11 @@ impl Vm {
         })
     }
 
+    pub fn with_scope<R>(&mut self, f: impl FnOnce(&mut LocalScope<'_>) -> R) -> R {
+        let mut scope = self.scope();
+        f(&mut scope)
+    }
+
     pub fn perform_gc(&mut self) {
         debug!("gc cycle triggered");
 
@@ -1463,6 +1468,10 @@ impl Vm {
         self.global.trace(&mut cx);
         debug!("trace scopes");
         self.scopes.trace(&mut cx);
+        if let Some(state) = self.params.state_raw() {
+            debug!("trace state");
+            state.trace(&mut cx);
+        }
 
         debug!("trace externals");
         // we do two things here:

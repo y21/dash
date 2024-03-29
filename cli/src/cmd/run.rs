@@ -78,7 +78,7 @@ async fn inner(source: String, opt: OptLevel, quiet: bool, initial_gc_threshold:
         println!("{}", format_value(value, &mut scope).unwrap());
     }
 
-    let state = State::from_vm(&mut scope);
+    let state = State::from_vm_mut(&mut scope);
     if state.needs_event_loop() {
         drop(scope);
         rt.run_event_loop().await;

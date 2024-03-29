@@ -4,7 +4,6 @@ use dash_proc_macro::Trace;
 use dash_rt::event::EventMessage;
 use dash_rt::state::State;
 use dash_rt::wrap_async;
-use dash_vm::gc::persistent::Persistent;
 use dash_vm::gc::trace::{Trace, TraceCtxt};
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::arraybuffer::ArrayBuffer;
@@ -90,7 +89,7 @@ impl Object for TcpListenerConstructor {
         let value = String::from(value.to_js_string(scope)?.res(scope));
 
         let (tx, mut rx) = mpsc::channel(1);
-        let state = State::from_vm(scope);
+        let state = State::from_vm_mut(scope);
         let event_tx = state.event_sender();
         let async_handle = state.rt_handle();
         async_handle.clone().spawn(async move {
@@ -120,7 +119,7 @@ impl Object for TcpListenerConstructor {
                         });
                         event_tx.send(EventMessage::ScheduleCallback(Box::new(move |rt| {
                             let mut scope = rt.vm_mut().scope();
-                            let promise = State::from_vm(&mut scope).take_promise(promise_id);
+                            let promise = State::from_vm_mut(&mut scope).take_promise(promise_id);
                             let promise = promise.as_any().downcast_ref::<Promise>().unwrap();
 
                             let stream_handle = TcpStreamHandle::new(&mut scope, writer_tx, reader_tx).unwrap();
@@ -204,8 +203,7 @@ fn tcplistener_accept(cx: CallContext) -> Result<Value, Value> {
         cx.scope.register(promise)
     };
 
-    let persistent_promise = Persistent::new(cx.scope, promise.clone());
-    let promise_id = State::from_vm(cx.scope).add_pending_promise(persistent_promise);
+    let promise_id = State::from_vm_mut(cx.scope).add_pending_promise(promise.clone());
 
     handle
         .sender

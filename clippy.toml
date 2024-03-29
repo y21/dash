@@ -1,0 +1,3 @@
+[[disallowed-methods]]
+path = "dash_vm::Vm::register"
+reason = "use LocalScope::register instead"

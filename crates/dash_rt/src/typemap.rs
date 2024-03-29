@@ -3,45 +3,68 @@ use std::collections::HashMap;
 use std::ops::{Index, IndexMut};
 use std::ptr;
 
+use dash_proc_macro::Trace;
+use dash_vm::gc::trace::Trace;
 use nohash::BuildNoHashHasher;
 
 pub trait Key: Any {
-    type State: 'static;
+    type State: ErasedValue;
 }
 
-#[derive(Default)]
-pub struct TypeMap(HashMap<TypeId, Box<dyn Any>, BuildNoHashHasher<u64>>);
-
-unsafe fn downcast_mut_unchecked<T: 'static>(v: &mut dyn Any) -> &mut T {
-    debug_assert!(v.is::<T>());
-    &mut *ptr::from_mut::<dyn Any>(v).cast::<T>()
+pub trait ErasedValue: Trace + Any {
+    fn as_any(&self) -> &dyn Any;
 }
 
-unsafe fn downcast_unchecked<T: 'static>(v: &dyn Any) -> &T {
-    debug_assert!(v.is::<T>());
-    &*ptr::from_ref::<dyn Any>(v).cast::<T>()
+impl<T: Trace + Any> ErasedValue for T {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
+
+impl dyn ErasedValue {
+    fn is<T: 'static>(&self) -> bool {
+        self.as_any().is::<T>()
+    }
+
+    #[track_caller]
+    unsafe fn downcast_unchecked<T: 'static>(&self) -> &T {
+        debug_assert!(self.is::<T>());
+        &*ptr::from_ref::<dyn ErasedValue>(self).cast::<T>()
+    }
+
+    #[track_caller]
+    unsafe fn downcast_mut_unchecked<T: 'static>(&mut self) -> &mut T {
+        debug_assert!(self.is::<T>());
+        &mut *ptr::from_mut::<dyn ErasedValue>(self).cast::<T>()
+    }
+}
+
+#[derive(Default, Trace)]
+pub struct TypeMap(HashMap<TypeId, Box<dyn ErasedValue>, BuildNoHashHasher<u64>>);
 
 impl TypeMap {
     pub fn insert<K: Key>(&mut self, k: K, v: K::State) {
         let type_id = k.type_id();
-        self.0.insert(type_id, Box::<K::State>::new(v));
+        let value = Box::new(v) as Box<dyn ErasedValue>;
+        self.0.insert(type_id, value);
     }
 
+    #[track_caller]
     pub fn get<K: Key>(&self, k: K) -> Option<&K::State> {
         let type_id = k.type_id();
 
-        let value = self.0.get(&type_id)?;
+        let value = &**self.0.get(&type_id)?;
         // SAFETY: we only ever insert into the map with K::State
-        Some(unsafe { downcast_unchecked(&**value) })
+        Some(unsafe { value.downcast_unchecked() })
     }
 
+    #[track_caller]
     pub fn get_mut<K: Key>(&mut self, k: K) -> Option<&mut K::State> {
         let type_id = k.type_id();
 
-        let value = self.0.get_mut(&type_id)?;
-        // SAFETY: we only ever insert into the map in the branch below
-        Some(unsafe { downcast_mut_unchecked(&mut **value) })
+        let value = &mut **self.0.get_mut(&type_id)?;
+        // SAFETY: we only ever insert into the map with K::State
+        Some(unsafe { value.downcast_mut_unchecked() })
     }
 }
 
