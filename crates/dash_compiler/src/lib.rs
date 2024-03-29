@@ -698,7 +698,8 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
 
         match ident {
             sym::this => ib.build_this(),
-            sym::super_ => ib.build_super(),
+            // super() handled specifically in call visitor
+            sym::super_ => unimplementedc!(span, "super keyword outside of a call"),
             sym::globalThis => ib.build_global(),
             sym::Infinity => ib.build_infinity(),
             sym::NaN => ib.build_nan(),
@@ -1310,6 +1311,117 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
         }
 
         if try_spec_function_call(&mut ib, &target.kind, &arguments)? {
+            return Ok(());
+        }
+
+        if let ExprKind::Literal(LiteralExpr::Identifier(sym::super_)) = target.kind {
+            // super() call lowering
+            let super_id = ib
+                .current_scope_mut()
+                .add_local(sym::super_, VariableDeclarationKind::Unnameable, None)
+                .map_err(|_| Error::LocalLimitExceeded(span))?;
+
+            // __super = new this.constructor.__proto__()
+            let superclass_constructor_call = Expr {
+                span: Span::COMPILER_GENERATED,
+                kind: ExprKind::function_call(
+                    Expr {
+                        span: Span::COMPILER_GENERATED,
+                        kind: ExprKind::property_access(
+                            false,
+                            Expr {
+                                span: Span::COMPILER_GENERATED,
+                                kind: ExprKind::property_access(
+                                    false,
+                                    Expr {
+                                        span: Span::COMPILER_GENERATED,
+                                        kind: ExprKind::identifier(sym::this),
+                                    },
+                                    Expr {
+                                        span: Span::COMPILER_GENERATED,
+                                        kind: ExprKind::identifier(sym::constructor),
+                                    },
+                                ),
+                            },
+                            Expr {
+                                span: Span::COMPILER_GENERATED,
+                                kind: ExprKind::identifier(sym::__proto__),
+                            },
+                        ),
+                    },
+                    arguments,
+                    true,
+                ),
+            };
+
+            ib.visit_expression_statement(Expr {
+                span: Span::COMPILER_GENERATED,
+                kind: ExprKind::assignment_local_space(super_id, superclass_constructor_call, TokenType::Assignment),
+            })?;
+
+            // __super.__proto__ = this.__proto__
+            ib.visit_expression_statement(Expr {
+                span: Span::COMPILER_GENERATED,
+                kind: ExprKind::assignment(
+                    Expr {
+                        span: Span::COMPILER_GENERATED,
+                        kind: ExprKind::property_access(
+                            false,
+                            Expr {
+                                span: Span::COMPILER_GENERATED,
+                                kind: ExprKind::compiled(compile_local_load(super_id, false)),
+                            },
+                            Expr {
+                                span: Span::COMPILER_GENERATED,
+                                kind: ExprKind::identifier(sym::__proto__),
+                            },
+                        ),
+                    },
+                    Expr {
+                        span: Span::COMPILER_GENERATED,
+                        kind: ExprKind::property_access(
+                            false,
+                            Expr {
+                                span: Span::COMPILER_GENERATED,
+                                kind: ExprKind::Literal(LiteralExpr::Identifier(sym::this)),
+                            },
+                            Expr {
+                                span: Span::COMPILER_GENERATED,
+                                kind: ExprKind::identifier(sym::__proto__),
+                            },
+                        ),
+                    },
+                    TokenType::Assignment,
+                ),
+            })?;
+
+            // this.__proto__ = __super
+            ib.visit_assignment_expression(
+                Span::COMPILER_GENERATED,
+                AssignmentExpr::new_expr_place(
+                    Expr {
+                        span: Span::COMPILER_GENERATED,
+                        kind: ExprKind::property_access(
+                            false,
+                            Expr {
+                                span: Span::COMPILER_GENERATED,
+                                kind: ExprKind::Literal(LiteralExpr::Identifier(sym::this)),
+                            },
+                            Expr {
+                                span: Span::COMPILER_GENERATED,
+                                kind: ExprKind::identifier(sym::__proto__),
+                            },
+                        ),
+                    },
+                    Expr {
+                        span: Span::COMPILER_GENERATED,
+                        kind: ExprKind::compiled(compile_local_load(super_id, false)),
+                    },
+                    TokenType::Assignment,
+                ),
+            )?;
+            // Assignment expression leaves `super` on the stack, as it is needed by expressions
+
             return Ok(());
         }
 
@@ -1957,12 +2069,32 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
     }
 
     fn visit_class_declaration(&mut self, span: Span, class: Class) -> Result<(), Error> {
-        if class.extends.is_some() {
-            unimplementedc!(span, "extending classes");
-        }
-
         let mut ib = InstructionBuilder::new(self);
 
+        let load_super_class = match &class.extends {
+            Some(expr) => {
+                let extend_id = ib
+                    .current_scope_mut()
+                    .add_local(sym::DesugaredClass, VariableDeclarationKind::Unnameable, None)
+                    .map_err(|_| Error::LocalLimitExceeded(span))?;
+
+                // __super = <class extend expression>
+                ib.visit_expression_statement(Expr {
+                    span: Span::COMPILER_GENERATED,
+                    kind: ExprKind::Assignment(AssignmentExpr {
+                        left: AssignmentTarget::LocalId(extend_id),
+                        right: Box::new(expr.clone()),
+                        operator: TokenType::Assignment,
+                    }),
+                })?;
+
+                Some(Expr {
+                    span: Span::COMPILER_GENERATED,
+                    kind: ExprKind::Compiled(compile_local_load(extend_id, false)),
+                })
+            }
+            None => None,
+        };
         let constructor = class.members.iter().find_map(|member| {
             if let ClassMemberKind::Method(method) = &member.kind {
                 if method.name == Some(sym::constructor) {
@@ -2019,49 +2151,44 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             kind: ExprKind::Compiled(compile_local_load(binding_id, false)),
         };
 
+        // Class.prototype
+        let class_prototype = Expr {
+            span: Span::COMPILER_GENERATED,
+            kind: ExprKind::property_access(
+                false,
+                load_class_binding.clone(),
+                Expr {
+                    span: Span::COMPILER_GENERATED,
+                    kind: ExprKind::identifier(sym::prototype),
+                },
+            ),
+        };
+
         for member in class.members {
             if let ClassMemberKind::Method(method) = member.kind {
                 let name = method.name.expect("Class method did not have a name");
 
+                // Either Class.name or Class.prototype.name
+                let assign_target = Expr {
+                    span: Span::COMPILER_GENERATED,
+                    kind: ExprKind::property_access(
+                        false,
+                        match member.static_ {
+                            true => load_class_binding.clone(),
+                            false => class_prototype.clone(),
+                        },
+                        Expr {
+                            span: Span::COMPILER_GENERATED,
+                            kind: ExprKind::identifier(name),
+                        },
+                    ),
+                };
                 ib.accept(Statement {
                     span: Span::COMPILER_GENERATED,
                     kind: StatementKind::Expression(Expr {
                         span: Span::COMPILER_GENERATED,
                         kind: ExprKind::Assignment(AssignmentExpr {
-                            left: AssignmentTarget::Expr(Box::new(match member.static_ {
-                                true => Expr {
-                                    span: Span::COMPILER_GENERATED,
-                                    kind: ExprKind::property_access(
-                                        false,
-                                        load_class_binding.clone(),
-                                        Expr {
-                                            span: Span::COMPILER_GENERATED,
-                                            kind: ExprKind::identifier(name),
-                                        },
-                                    ),
-                                },
-                                false => Expr {
-                                    span: Span::COMPILER_GENERATED,
-                                    kind: ExprKind::property_access(
-                                        false,
-                                        Expr {
-                                            span: Span::COMPILER_GENERATED,
-                                            kind: ExprKind::property_access(
-                                                false,
-                                                load_class_binding.clone(),
-                                                Expr {
-                                                    span: Span::COMPILER_GENERATED,
-                                                    kind: ExprKind::identifier(sym::prototype),
-                                                },
-                                            ),
-                                        },
-                                        Expr {
-                                            span: Span::COMPILER_GENERATED,
-                                            kind: ExprKind::identifier(name),
-                                        },
-                                    ),
-                                },
-                            })),
+                            left: AssignmentTarget::Expr(Box::new(assign_target)),
                             right: Box::new(Expr {
                                 span: Span::COMPILER_GENERATED,
                                 kind: ExprKind::Function(method),
@@ -2073,6 +2200,61 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             }
         }
         ib.build_pop();
+
+        if let Some(super_id) = load_super_class {
+            // Add the superclass' prototype to our prototype chain
+            // Class.prototype.__proto__ = Superclass.prototype
+
+            ib.visit_expression_statement(Expr {
+                span: Span::COMPILER_GENERATED,
+                kind: ExprKind::assignment(
+                    Expr {
+                        span: Span::COMPILER_GENERATED,
+                        kind: ExprKind::property_access(
+                            false,
+                            class_prototype.clone(),
+                            Expr {
+                                span: Span::COMPILER_GENERATED,
+                                kind: ExprKind::identifier(sym::__proto__),
+                            },
+                        ),
+                    },
+                    Expr {
+                        span: Span::COMPILER_GENERATED,
+                        kind: ExprKind::property_access(
+                            false,
+                            super_id.clone(),
+                            Expr {
+                                span: Span::COMPILER_GENERATED,
+                                kind: ExprKind::identifier(sym::prototype),
+                            },
+                        ),
+                    },
+                    TokenType::Assignment,
+                ),
+            })?;
+
+            // Set the [[Prototype]] of this class to its superclass
+            // Class.__proto__ = Superclass
+            ib.visit_expression_statement(Expr {
+                span: Span::COMPILER_GENERATED,
+                kind: ExprKind::assignment(
+                    Expr {
+                        span: Span::COMPILER_GENERATED,
+                        kind: ExprKind::property_access(
+                            false,
+                            load_class_binding.clone(),
+                            Expr {
+                                span: Span::COMPILER_GENERATED,
+                                kind: ExprKind::identifier(sym::__proto__),
+                            },
+                        ),
+                    },
+                    super_id,
+                    TokenType::Assignment,
+                ),
+            })?;
+        }
 
         Ok(())
     }
