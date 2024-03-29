@@ -4,7 +4,7 @@ version = "0.3.0"
 edition = "2018"
 
 [features]
-nodejs = []
+nodejs = ["dash_node_impl"]
 stress_gc = ["dash_vm/stress_gc"]
 
 [dependencies]
@@ -20,7 +20,10 @@ dash_vm = { path = "../crates/dash_vm", features = [] }
 dash_middle = { path = "../crates/dash_middle", features = ["format"] }
 dash_optimizer = { path = "../crates/dash_optimizer" }
 dash_decompiler = { path = "../crates/dash_decompiler" }
-dash_node_impl = { path = "../crates/dash_node_impl" }
+dash_node_impl = { path = "../crates/dash_node_impl", optional = true, features = [
+    "fs",
+    "fetch",
+] }
 dash_rt_modules = { path = "../crates/dash_rt_modules", features = [
     # "http",
     # "fs",
