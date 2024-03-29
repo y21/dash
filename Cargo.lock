@@ -455,6 +455,7 @@ name = "dash_node_impl"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "dash_log",
  "dash_middle",
  "dash_optimizer",
  "dash_parser",

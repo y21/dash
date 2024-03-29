@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use anyhow::{anyhow, Context};
+use dash_log::debug;
 use dash_middle::parser::error::IntoFormattableErrors;
 use dash_optimizer::OptLevel;
 use dash_proc_macro::Trace;
@@ -21,6 +22,7 @@ use state::Nodejs;
 
 mod native;
 mod package;
+mod path;
 mod state;
 
 pub fn run_with_nodejs_mnemnoics(path: &str, opt: OptLevel, initial_gc_threshold: Option<usize>) -> anyhow::Result<()> {
@@ -183,6 +185,8 @@ impl Object for RequireFunction {
         let exports = scope.intern("exports");
         let raw_arg = arg;
         let mut arg = arg.res(scope).to_owned();
+        debug!(%arg, "require node module");
+
         let is_path = matches!(arg.chars().next(), Some('.' | '/' | '~'));
         if is_path {
             if !arg.ends_with(".js") {

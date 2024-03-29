@@ -41,6 +41,8 @@ pub fn load_native_module(sc: &mut LocalScope<'_>, arg: JsString) -> Result<Opti
         #[cfg(feature = "fs")]
         state.sym.fs => (state_mut(sc).fs_cache, dash_rt_fs::sync::init_module),
         #[cfg(feature = "fetch")]
-        state.sym.fetch => (state_mut(sc).fetch_cache, dash_rt_fetch::init_module)
+        state.sym.fetch => (state_mut(sc).fetch_cache, dash_rt_fetch::init_module),
+        #[cfg(feature = "path")]
+        state.sym.path => (state_mut(sc).path_cache, crate::path::init_module)
     }
 }
