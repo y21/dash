@@ -90,6 +90,7 @@ pub trait Object: Debug + Trace {
         None
     }
 
+    // TODO: change this to Vec<JsString>
     fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value>;
 
     fn type_of(&self) -> Typeof {

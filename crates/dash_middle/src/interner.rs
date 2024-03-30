@@ -455,22 +455,28 @@ macro_rules! define_symbol_set {
         $(#[$($meta:meta)*])?
         $name:ident => [$($sym:ident$(: $val:expr)?),*]
     ) => {
-        use $crate::interner::Symbol;
-        use $crate::interner::StringInterner;
+        mod inner {
+            #![allow(non_snake_case)]
+            use super::*;
 
-        $(#[$($meta)*])?
-        pub struct $name {
-            $(#[allow(non_snake_case)] pub $sym: Symbol),*
-        }
-        impl $name {
-            pub fn new(interner: &mut StringInterner) -> Self {
-                $($crate::expand!(interner $sym $(: $val)?);)*
+            use $crate::interner::Symbol;
+            use $crate::interner::StringInterner;
 
-                Self {
-                    $($sym),*
+            $(#[$($meta)*])?
+            pub struct $name {
+                $(pub $sym: Symbol),*
+            }
+            impl $name {
+                pub fn new(interner: &mut StringInterner) -> Self {
+                    $($crate::expand!(interner $sym $(: $val)?);)*
+
+                    Self {
+                        $($sym),*
+                    }
                 }
             }
         }
+        pub use inner::*;
     };
 }
 

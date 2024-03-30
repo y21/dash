@@ -102,6 +102,7 @@ fn execute_node_module(
     global_state: Rc<GlobalState>,
     package: Rc<PackageState>,
 ) -> Result<Value, (EvalError, String)> {
+    debug!(?dir_path, ?file_path);
     let exports = Value::Object(scope.register(NamedObject::new(scope)));
     let module = Value::Object(scope.register(NamedObject::new(scope)));
     let require = Value::Object(scope.register(RequireFunction {
@@ -120,9 +121,9 @@ fn execute_node_module(
         .borrow_mut()
         .insert(file_path.to_owned(), module.clone());
 
-    let mut code = String::from("(function(exports, module, require) {");
+    let mut code = String::from("(function(exports, module, require) {\n");
     code += source;
-    code += "})";
+    code += "\n})";
 
     let fun = match scope.eval(&code, opt) {
         Ok(v) => v.root(scope),
@@ -189,12 +190,12 @@ impl Object for RequireFunction {
         debug!(%arg, "require node module");
 
         let is_path = matches!(arg.chars().next(), Some('.' | '/' | '~'));
-        if is_path {
+        let result = if is_path {
             if !arg.ends_with(".js") {
                 arg += ".js";
             }
 
-            let canonicalized_path = match self.current_dir.join(arg).canonicalize() {
+            let canonicalized_path = match self.current_dir.join(&arg).canonicalize() {
                 Ok(v) => v,
                 Err(err) => throw!(scope, Error, err.to_string()),
             };
@@ -208,18 +209,9 @@ impl Object for RequireFunction {
                 Err(err) => throw!(scope, Error, err.to_string()),
             };
 
-            let Some(parent_dir) = canonicalized_path.parent() else {
-                throw!(
-                    scope,
-                    Error,
-                    "Failed to get parent dir of {}",
-                    canonicalized_path.display()
-                );
-            };
-
             let module = match execute_node_module(
                 scope,
-                parent_dir,
+                canonicalized_path.parent().unwrap(),
                 &canonicalized_path,
                 &source,
                 OptLevel::default(),
@@ -249,7 +241,7 @@ impl Object for RequireFunction {
 
             let module = match execute_node_module(
                 scope,
-                &dir_path,
+                file_path.parent().unwrap(),
                 &file_path,
                 &source,
                 OptLevel::default(),
@@ -264,6 +256,8 @@ impl Object for RequireFunction {
             };
 
             module.get_property(scope, exports.into())
-        }
+        };
+        debug!(%arg, "resolved module");
+        result
     }
 }

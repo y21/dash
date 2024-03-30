@@ -830,9 +830,10 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                     }
                 }
                 VariableDeclarationName::ObjectDestructuring { fields, rest } => {
-                    if rest.is_some() {
-                        unimplementedc!(span, "rest operator in object destructuring");
-                    }
+                    let rest_id = rest
+                        .map(|rest| ib.current_scope_mut().add_local(rest, binding.kind, None))
+                        .transpose()
+                        .map_err(|_| Error::LocalLimitExceeded(span))?;
 
                     let field_count = fields
                         .len()
@@ -842,7 +843,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                     let value = value.ok_or(Error::MissingInitializerInDestructuring(span))?;
                     ib.accept_expr(value)?;
 
-                    ib.build_objdestruct(field_count);
+                    ib.build_objdestruct(field_count, rest_id);
 
                     for (name, alias) in fields {
                         let name = alias.unwrap_or(name);

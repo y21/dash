@@ -1609,7 +1609,13 @@ mod handlers {
 
     pub fn objdestruct<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let count = cx.fetchw_and_inc_ip();
+        let rest_id = match cx.fetchw_and_inc_ip() {
+            u16::MAX => None,
+            n => Some(n),
+        };
         let obj = cx.pop_stack_rooted();
+
+        let mut idents = Vec::new();
 
         for _ in 0..count {
             let loc_id = cx.fetchw_and_inc_ip();
@@ -1617,9 +1623,32 @@ mod handlers {
 
             let id = cx.number_constant(loc_id.into()) as usize;
             let ident = cx.identifier_constant(ident_id.into());
+            if rest_id.is_some() {
+                idents.push(ident);
+            }
 
             let prop = obj.get_property(&mut cx, ident.into())?;
             cx.set_local(id, prop);
+        }
+
+        if let Some(rest_id) = rest_id {
+            let keys = obj
+                .own_keys(cx.scope)?
+                .into_iter()
+                .filter_map(|s| match s {
+                    Value::String(s) => (!idents.contains(&s)).then_some(s),
+                    _ => unreachable!("own_keys returned non-string"),
+                })
+                .collect::<Vec<_>>();
+
+            let rest = NamedObject::new(cx.scope);
+            let rest = cx.scope.register(rest);
+            for key in keys {
+                let value = obj.get_property(cx.scope, key.into())?.root(cx.scope);
+                rest.set_property(cx.scope, key.into(), PropertyValue::static_default(value))?;
+            }
+
+            cx.set_local(rest_id.into(), Value::Object(rest).into());
         }
 
         Ok(None)

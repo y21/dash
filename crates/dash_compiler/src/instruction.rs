@@ -300,9 +300,17 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
         Ok(())
     }
 
-    pub fn build_objdestruct(&mut self, count: u16) {
+    // TODO: encode this using Option<NonMaxU16>
+    pub fn build_objdestruct(&mut self, count: u16, rest: Option<u16>) {
         self.write_instr(Instruction::ObjDestruct);
         self.writew(count);
+        self.writew(rest.map_or_else(
+            || u16::MAX,
+            |v| {
+                assert!(v != u16::MAX);
+                v
+            },
+        ))
     }
 
     pub fn build_arraydestruct(&mut self, count: u16) {
