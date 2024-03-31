@@ -78,6 +78,11 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         while !self.expect_token_type_and_skip(&[TokenType::RightBrace], false) {
             let is_static = self.expect_token_type_and_skip(&[TokenType::Static], false);
             let is_private = self.expect_token_type_and_skip(&[TokenType::Hash], false);
+            let asyncness = match self.expect_token_type_and_skip(&[TokenType::Async], false) {
+                true => Asyncness::Yes,
+                false => Asyncness::No,
+            };
+            let is_generator = self.expect_token_type_and_skip(&[TokenType::Star], false);
 
             let key = if self.expect_token_type_and_skip(&[TokenType::LeftSquareBrace], false) {
                 let expr = self.parse_expression()?;
@@ -112,7 +117,10 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                     func_id,
                     arguments,
                     vec![body],
-                    FunctionKind::Function(Asyncness::No),
+                    match is_generator {
+                        true => FunctionKind::Generator,
+                        false => FunctionKind::Function(asyncness),
+                    },
                     ty_seg,
                 );
 
