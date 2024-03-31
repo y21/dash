@@ -18,10 +18,10 @@ use dash_middle::parser::expr::{
     PropertyAccessExpr, Seq, UnaryExpr,
 };
 use dash_middle::parser::statement::{
-    Asyncness, BlockStatement, Class, ClassMemberKind, DoWhileLoop, ExportKind, ForInLoop, ForLoop, ForOfLoop, FuncId,
-    FunctionDeclaration, FunctionKind, IfStatement, ImportKind, Loop, Parameter, ReturnStatement, SpecifierKind,
-    Statement, StatementKind, SwitchCase, SwitchStatement, TryCatch, VariableBinding, VariableDeclaration,
-    VariableDeclarationKind, VariableDeclarationName, VariableDeclarations, WhileLoop,
+    Asyncness, BlockStatement, Class, ClassMemberKey, ClassMemberValue, DoWhileLoop, ExportKind, ForInLoop, ForLoop,
+    ForOfLoop, FuncId, FunctionDeclaration, FunctionKind, IfStatement, ImportKind, Loop, Parameter, ReturnStatement,
+    SpecifierKind, Statement, StatementKind, SwitchCase, SwitchStatement, TryCatch, VariableBinding,
+    VariableDeclaration, VariableDeclarationKind, VariableDeclarationName, VariableDeclarations, WhileLoop,
 };
 use dash_middle::sourcemap::Span;
 use dash_middle::visitor::Visitor;
@@ -2096,15 +2096,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             }
             None => None,
         };
-        let constructor = class.members.iter().find_map(|member| {
-            if let ClassMemberKind::Method(method) = &member.kind {
-                if method.name == Some(sym::constructor) {
-                    return Some(method.clone());
-                }
-            }
-
-            None
-        });
+        let constructor = class.constructor();
 
         let binding_id = match class.name {
             Some(name) => ib
@@ -2141,7 +2133,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             AssignmentExpr::new_local_place(
                 binding_id,
                 Expr {
-                    span: Span::COMPILER_GENERATED, // TODO: we might have to use a real span here?
+                    span: Span::COMPILER_GENERATED,
                     kind: ExprKind::Function(desugared_class),
                 },
                 TokenType::Assignment,
@@ -2166,21 +2158,22 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
         };
 
         for member in class.members {
-            if let ClassMemberKind::Method(method) = member.kind {
-                let name = method.name.expect("Class method did not have a name");
-
+            if let ClassMemberValue::Method(method) = member.value {
                 // Either Class.name or Class.prototype.name
                 let assign_target = Expr {
                     span: Span::COMPILER_GENERATED,
                     kind: ExprKind::property_access(
-                        false,
+                        matches!(member.key, ClassMemberKey::Computed(_)),
                         match member.static_ {
                             true => load_class_binding.clone(),
                             false => class_prototype.clone(),
                         },
-                        Expr {
-                            span: Span::COMPILER_GENERATED,
-                            kind: ExprKind::identifier(name),
+                        match member.key {
+                            ClassMemberKey::Computed(ref expr) => expr.clone(),
+                            ClassMemberKey::Named(name) => Expr {
+                                span: Span::COMPILER_GENERATED,
+                                kind: ExprKind::identifier(name),
+                            },
                         },
                     ),
                 };

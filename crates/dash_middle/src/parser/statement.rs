@@ -1,4 +1,4 @@
-use std::fmt;
+use std::fmt::{self, Write};
 
 use derive_more::Display;
 #[cfg(feature = "serde")]
@@ -830,10 +830,18 @@ impl fmt::Display for Class {
 }
 
 impl Class {
-    /// Returns a reference to the constructor, if present
-    pub fn constructor(&self) -> Option<&FunctionDeclaration> {
-        self.members.iter().find_map(|cm| cm.as_constructor())
+    /// Returns the constructor, if present
+    pub fn constructor(&self) -> Option<FunctionDeclaration> {
+        self.members.iter().find_map(|cm| cm.as_constructor()).cloned()
     }
+}
+
+#[derive(Debug, Clone)]
+pub enum ClassMemberKey {
+    /// [Key] = Value
+    Computed(Expr),
+    /// Key = Value
+    Named(Symbol),
 }
 
 /// A JavaScript class member
@@ -843,8 +851,9 @@ pub struct ClassMember {
     pub static_: bool,
     /// Whether this class member is declared as private
     pub private: bool,
+    pub key: ClassMemberKey,
     /// The type of class member
-    pub kind: ClassMemberKind,
+    pub value: ClassMemberValue,
 }
 
 impl fmt::Display for ClassMember {
@@ -857,7 +866,16 @@ impl fmt::Display for ClassMember {
             write!(f, "private ")?;
         }
 
-        write!(f, "{}", self.kind)
+        match &self.key {
+            ClassMemberKey::Computed(c) => write!(f, "[{c}]")?,
+            ClassMemberKey::Named(n) => write!(f, "{n}")?,
+        }
+
+        match &self.value {
+            ClassMemberValue::Method(method) => write!(f, "{method}"),
+            ClassMemberValue::Field(Some(field)) => write!(f, "= {field};"),
+            ClassMemberValue::Field(None) => f.write_char(';'),
+        }
     }
 }
 
@@ -869,50 +887,21 @@ impl ClassMember {
             return None;
         }
 
-        match &self.kind {
-            ClassMemberKind::Method(m) if m.name == Some(sym::constructor) => Some(m),
+        match &self.value {
+            ClassMemberValue::Method(m) if m.name == Some(sym::constructor) => Some(m),
             _ => None,
         }
     }
-
-    /// Returns the identifier of this class member
-    pub fn name(&self) -> Symbol {
-        match &self.kind {
-            ClassMemberKind::Property(p) => p.name,
-            // Methods *always* have names, so unwrapping is OK here
-            ClassMemberKind::Method(m) => m.name.unwrap(),
-        }
-    }
 }
 
-/// The type of class member
-#[derive(Debug, Clone, Display)]
-pub enum ClassMemberKind {
+/// The value of a class member
+#[derive(Debug, Clone)]
+pub enum ClassMemberValue {
     /// A class method
     Method(FunctionDeclaration),
-    /// A class property
-    Property(ClassProperty),
-}
-
-/// A class property
-#[derive(Debug, Clone)]
-pub struct ClassProperty {
-    /// The name of this property
-    pub name: Symbol,
-    /// The default value of this property, set when its constructor is called
-    pub value: Option<Expr>,
-}
-
-impl fmt::Display for ClassProperty {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.name)?;
-
-        if let Some(value) = &self.value {
-            write!(f, " = {value}")?;
-        }
-
-        write!(f, ";")
-    }
+    /// A class field.
+    /// The value can be `None` for `class V { Key; }`
+    Field(Option<Expr>),
 }
 
 /// A function parameter

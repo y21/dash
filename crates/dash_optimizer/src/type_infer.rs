@@ -8,8 +8,8 @@ use dash_middle::parser::expr::{
     UnaryExpr,
 };
 use dash_middle::parser::statement::{
-    BlockStatement, Class, ClassMemberKind, ClassProperty, DoWhileLoop, ExportKind, ForInLoop, ForLoop, ForOfLoop,
-    FuncId, FunctionDeclaration, IfStatement, ImportKind, Loop, Parameter, ReturnStatement, SpecifierKind, Statement,
+    BlockStatement, Class, ClassMemberValue, DoWhileLoop, ExportKind, ForInLoop, ForLoop, ForOfLoop, FuncId,
+    FunctionDeclaration, IfStatement, ImportKind, Loop, Parameter, ReturnStatement, SpecifierKind, Statement,
     StatementKind, SwitchCase, SwitchStatement, TryCatch, VariableBinding, VariableDeclaration,
     VariableDeclarationKind, VariableDeclarationName, VariableDeclarations, WhileLoop,
 };
@@ -127,11 +127,9 @@ impl TypeInferCtx {
     ) {
         self.visit_maybe_expr(extends.as_ref(), func_id);
         for member in members {
-            match &member.kind {
-                ClassMemberKind::Method(method) => drop(self.visit_function_expression(method, func_id)),
-                ClassMemberKind::Property(ClassProperty { value, .. }) => {
-                    drop(self.visit_maybe_expr(value.as_ref(), func_id))
-                }
+            match &member.value {
+                ClassMemberValue::Method(method) => drop(self.visit_function_expression(method, func_id)),
+                ClassMemberValue::Field(field) => drop(self.visit_maybe_expr(field.as_ref(), func_id)),
             }
         }
 

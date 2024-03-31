@@ -2,7 +2,7 @@ use dash_middle::lexer::token::{TokenType, VARIABLE_TYPES};
 use dash_middle::parser::error::Error;
 use dash_middle::parser::expr::{Expr, ExprKind};
 use dash_middle::parser::statement::{
-    Asyncness, BlockStatement, Catch, Class, ClassMember, ClassMemberKind, ClassProperty, DoWhileLoop, ExportKind,
+    Asyncness, BlockStatement, Catch, Class, ClassMember, ClassMemberKey, ClassMemberValue, DoWhileLoop, ExportKind,
     ForInLoop, ForLoop, ForOfLoop, FunctionDeclaration, FunctionKind, IfStatement, ImportKind, Loop, Parameter,
     ReturnStatement, SpecifierKind, Statement, StatementKind, SwitchCase, SwitchStatement, TryCatch, VariableBinding,
     VariableDeclaration, VariableDeclarationKind, VariableDeclarationName, VariableDeclarations, WhileLoop,
@@ -79,7 +79,13 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             let is_static = self.expect_token_type_and_skip(&[TokenType::Static], false);
             let is_private = self.expect_token_type_and_skip(&[TokenType::Hash], false);
 
-            let name = self.expect_identifier_or_reserved_kw(true)?;
+            let key = if self.expect_token_type_and_skip(&[TokenType::LeftSquareBrace], false) {
+                let expr = self.parse_expression()?;
+                self.expect_token_type_and_skip(&[TokenType::RightSquareBrace], true);
+                ClassMemberKey::Computed(expr)
+            } else {
+                ClassMemberKey::Named(self.expect_identifier_or_reserved_kw(true)?)
+            };
 
             let is_method = self.expect_token_type_and_skip(&[TokenType::LeftParen], false);
 
@@ -98,7 +104,11 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
                 let func_id = self.function_counter.advance();
                 let func = FunctionDeclaration::new(
-                    Some(name),
+                    match key {
+                        ClassMemberKey::Named(name) => Some(name),
+                        // TODO: not correct, `class V { ['a']() {} }` should have its name set to 'a'
+                        ClassMemberKey::Computed(_) => None,
+                    },
                     func_id,
                     arguments,
                     vec![body],
@@ -109,7 +119,8 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 members.push(ClassMember {
                     private: is_private,
                     static_: is_static,
-                    kind: ClassMemberKind::Method(func),
+                    key,
+                    value: ClassMemberValue::Method(func),
                 });
             } else {
                 let kind = self.next()?.ty;
@@ -130,7 +141,8 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 members.push(ClassMember {
                     private: is_private,
                     static_: is_static,
-                    kind: ClassMemberKind::Property(ClassProperty { name, value }),
+                    key,
+                    value: ClassMemberValue::Field(value),
                 });
             };
         }

@@ -2,7 +2,7 @@ use dash_middle::interner::sym;
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::expr::{AssignmentExpr, AssignmentTarget, Expr, ExprKind, PropertyAccessExpr};
 use dash_middle::parser::statement::{
-    BlockStatement, Class, ClassMemberKind, ClassProperty, Loop, ReturnStatement, Statement, StatementKind,
+    BlockStatement, Class, ClassMemberKey, ClassMemberValue, Loop, ReturnStatement, Statement, StatementKind,
 };
 use dash_middle::sourcemap::Span;
 
@@ -36,11 +36,7 @@ pub fn ast_insert_implicit_return(ast: &mut Vec<Statement>) {
 pub fn insert_initializer_in_constructor(class: &Class, statements: &mut Vec<Statement>) {
     let mut prestatements = Vec::new();
     for member in &class.members {
-        if let ClassMemberKind::Property(ClassProperty {
-            name,
-            value: Some(value),
-        }) = &member.kind
-        {
+        if let ClassMemberValue::Field(field) = &member.value {
             prestatements.push(Statement {
                 span: Span::COMPILER_GENERATED,
                 kind: StatementKind::Expression(Expr {
@@ -49,10 +45,13 @@ pub fn insert_initializer_in_constructor(class: &Class, statements: &mut Vec<Sta
                         left: AssignmentTarget::Expr(Box::new(Expr {
                             span: Span::COMPILER_GENERATED,
                             kind: ExprKind::PropertyAccess(PropertyAccessExpr {
-                                computed: false,
-                                property: Box::new(Expr {
-                                    span: Span::COMPILER_GENERATED,
-                                    kind: ExprKind::identifier(*name),
+                                computed: matches!(member.key, ClassMemberKey::Computed(_)),
+                                property: Box::new(match member.key {
+                                    ClassMemberKey::Computed(ref expr) => expr.clone(),
+                                    ClassMemberKey::Named(name) => Expr {
+                                        span: Span::COMPILER_GENERATED,
+                                        kind: ExprKind::identifier(name),
+                                    },
                                 }),
                                 target: Box::new(Expr {
                                     span: Span::COMPILER_GENERATED,
@@ -61,7 +60,13 @@ pub fn insert_initializer_in_constructor(class: &Class, statements: &mut Vec<Sta
                             }),
                         })),
                         operator: TokenType::Assignment,
-                        right: Box::new(value.clone()),
+                        right: Box::new(match field {
+                            Some(field) => field.clone(),
+                            None => Expr {
+                                span: Span::COMPILER_GENERATED,
+                                kind: ExprKind::undefined_literal(),
+                            },
+                        }),
                     }),
                 }),
             });

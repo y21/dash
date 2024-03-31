@@ -7,8 +7,8 @@ use dash_middle::parser::expr::{
     UnaryExpr,
 };
 use dash_middle::parser::statement::{
-    BlockStatement, Class, ClassMemberKind, ClassProperty, DoWhileLoop, ExportKind, ForInLoop, ForLoop, ForOfLoop,
-    FuncId, FunctionDeclaration, IfStatement, ImportKind, Loop, Parameter, ReturnStatement, SpecifierKind, Statement,
+    BlockStatement, Class, ClassMemberValue, DoWhileLoop, ExportKind, ForInLoop, ForLoop, ForOfLoop, FuncId,
+    FunctionDeclaration, IfStatement, ImportKind, Loop, Parameter, ReturnStatement, SpecifierKind, Statement,
     StatementKind, SwitchCase, SwitchStatement, TryCatch, VariableBinding, VariableDeclaration,
     VariableDeclarationKind, VariableDeclarations, WhileLoop,
 };
@@ -116,12 +116,12 @@ impl<'b, 'interner> ConstFunctionEvalCtx<'b, 'interner> {
     pub fn visit_class_statement(&mut self, Class { extends, members, .. }: &mut Class, func_id: FuncId) {
         self.visit_maybe_expr(extends.as_mut(), func_id);
         for member in members {
-            match &mut member.kind {
-                ClassMemberKind::Method(method) => {
+            match &mut member.value {
+                ClassMemberValue::Method(method) => {
                     self.visit_function_expression(method, func_id);
                 }
-                ClassMemberKind::Property(ClassProperty { value, .. }) => {
-                    self.visit_maybe_expr(value.as_mut(), func_id);
+                ClassMemberValue::Field(field) => {
+                    self.visit_maybe_expr(field.as_mut(), func_id);
                 }
             }
         }
