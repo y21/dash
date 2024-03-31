@@ -295,9 +295,25 @@ pub fn includes(cx: CallContext) -> Result<Value, Value> {
 pub fn index_of(cx: CallContext) -> Result<Value, Value> {
     let this = Value::Object(cx.this.to_object(cx.scope)?);
     let len = this.length_of_array_like(cx.scope)?;
-    let search_element = cx.args.first().unwrap_or_undefined();
+    if len == 0 {
+        return Ok(Value::number(-1.));
+    }
 
-    for k in 0..len {
+    let search_element = cx.args.first().unwrap_or_undefined();
+    let from_index = cx.args.get(1).unwrap_or_undefined().to_integer_or_infinity(cx.scope)?;
+    if from_index == f64::INFINITY {
+        return Ok(Value::number(-1.));
+    } else if from_index == f64::NEG_INFINITY {
+        return Ok(Value::number(0.));
+    }
+    let from_index = if from_index.is_sign_positive() {
+        from_index as usize
+    } else {
+        let k = len as isize + from_index as isize;
+        usize::try_from(k).unwrap_or_default()
+    };
+
+    for k in from_index..len {
         let pk = cx.scope.intern_usize(k);
         let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
         if strict_eq(&pkv, &search_element) {
@@ -311,15 +327,25 @@ pub fn index_of(cx: CallContext) -> Result<Value, Value> {
 pub fn last_index_of(cx: CallContext) -> Result<Value, Value> {
     let this = Value::Object(cx.this.to_object(cx.scope)?);
     let len = this.length_of_array_like(cx.scope)?;
-    let search_element = cx.args.first().unwrap_or_undefined();
-    let from_index = cx
-        .args
-        .get(1)
-        .map(|x| x.to_length_u(cx.scope))
-        .transpose()?
-        .unwrap_or(len);
+    if len == 0 {
+        return Ok(Value::number(-1.));
+    }
 
-    for k in (0..from_index).rev() {
+    let search_element = cx.args.first().unwrap_or_undefined();
+    let from_index = if let Some(from_index) = cx.args.get(1) {
+        from_index.to_integer_or_infinity(cx.scope)?
+    } else {
+        -1.
+    };
+    let from_index = if from_index == f64::NEG_INFINITY {
+        return Ok(Value::number(-1.));
+    } else if from_index.is_sign_positive() {
+        (from_index as usize).min(len - 1)
+    } else {
+        usize::try_from(len as isize + from_index as isize).unwrap_or_default()
+    };
+
+    for k in (0..=from_index).rev() {
         let pk = cx.scope.intern_usize(k);
         let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
         if strict_eq(&pkv, &search_element) {
