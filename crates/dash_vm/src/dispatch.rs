@@ -197,7 +197,7 @@ mod handlers {
     use dash_middle::interner::sym;
     use if_chain::if_chain;
     use smallvec::SmallVec;
-    use std::ops::{Add, Div, Mul, Rem, Sub};
+    use std::ops::{Add, ControlFlow, Div, Mul, Rem, Sub};
 
     use crate::frame::{FrameState, TryBlock};
     use crate::throw;
@@ -286,8 +286,26 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn objin<'sc, 'vm>(cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
-        throw!(cx, Error, "in keyword is unimplemented");
+    pub fn objin<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+        cx.evaluate_binary_with_scope(|property, target, sc| {
+            let property = property.to_js_string(sc)?;
+            let found = target
+                .for_each_prototype(sc, |sc, target| {
+                    let contains = target
+                        .own_keys(sc)?
+                        .iter()
+                        .any(|v| matches!(v, Value::String(s) if *s == property));
+
+                    if contains {
+                        Ok(ControlFlow::Break(()))
+                    } else {
+                        Ok(ControlFlow::Continue(()))
+                    }
+                })?
+                .is_break();
+
+            Ok(Value::Boolean(found))
+        })
     }
 
     pub fn instanceof<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
