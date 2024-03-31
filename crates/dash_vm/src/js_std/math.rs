@@ -218,6 +218,12 @@ pub fn random(cx: CallContext) -> Result<Value, Value> {
     Ok(Value::number(num))
 }
 
+pub fn pow(cx: CallContext) -> Result<Value, Value> {
+    let base = cx.args.first().unwrap_or_undefined().to_number(cx.scope)?;
+    let exponent = cx.args.get(1).unwrap_or_undefined().to_number(cx.scope)?;
+    Ok(Value::number(base.powf(exponent)))
+}
+
 pub fn max(cx: CallContext) -> Result<Value, Value> {
     let mut max = -f64::INFINITY;
 

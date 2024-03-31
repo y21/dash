@@ -314,6 +314,7 @@ impl Vm {
                 (sym::random, scope.statics.math_random.clone()),
                 (sym::max, scope.statics.math_max.clone()),
                 (sym::min, scope.statics.math_min.clone()),
+                (sym::pow, scope.statics.math_pow.clone()),
             ],
             [],
             [

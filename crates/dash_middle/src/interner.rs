@@ -148,6 +148,7 @@ pub mod sym {
                 tanh,
                 max,
                 min,
+                pow,
                 PI,
                 isFinite,
                 isNaN,
