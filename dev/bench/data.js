@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1711750006856,
+  "lastUpdate": 1711852343699,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -8639,6 +8639,60 @@ window.BENCHMARK_DATA = {
             "name": "exec tinycolor2 parse hex+toFilter",
             "value": 37002947,
             "range": "± 799685",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "8ba2f19d391b6423b9de229a46c1ca9ea780a7d8",
+          "message": "support computed class members",
+          "timestamp": "2024-03-31T04:29:01+02:00",
+          "tree_id": "fa0091977957c758a9b1465c05ea8819b1de934b",
+          "url": "https://github.com/y21/dash/commit/8ba2f19d391b6423b9de229a46c1ca9ea780a7d8"
+        },
+        "date": 1711852342189,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1655877,
+            "range": "± 40258",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 169709,
+            "range": "± 1029",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 56412,
+            "range": "± 1690",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse+compile tinycolor2",
+            "value": 1726713,
+            "range": "± 13042",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "exec tinycolor2 parse hex+toFilter",
+            "value": 37222963,
+            "range": "± 521705",
             "unit": "ns/iter"
           }
         ]
