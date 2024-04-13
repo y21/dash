@@ -252,8 +252,10 @@ impl<'vm> Drop for LocalScope<'vm> {
     fn drop(&mut self) {
         let head = self.scopes.head;
         let data = self.scope_data_mut();
-        data.refs.clear();
-        data.next = head;
+        let ScopeData { refs, strings, next } = data;
+        refs.clear();
+        strings.clear();
+        *next = head;
         self.scopes.head = Some(self.scope_data);
     }
 }
