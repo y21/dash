@@ -1,5 +1,4 @@
-use clap::Arg;
-use clap::Command;
+use clap::{Arg, Command};
 
 mod cmd;
 mod util;
@@ -12,6 +11,7 @@ fn main() -> anyhow::Result<()> {
             Command::new("run")
                 .override_help("Runs the testrunner")
                 .arg(Arg::new("path").long("path").takes_value(true))
+                .arg(Arg::new("disable-threads").long("disable-threads").required(false))
                 .arg(Arg::new("verbose").long("verbose").takes_value(false)),
         );
 

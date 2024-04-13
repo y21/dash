@@ -16,18 +16,19 @@ use crate::util;
 pub fn run(matches: &ArgMatches) -> anyhow::Result<()> {
     let path = matches.value_of("path").unwrap_or("../test262/test");
     let verbose = matches.is_present("verbose");
+    let single_threaded = matches.is_present("disable-threads");
     let files = if path.ends_with(".js") {
         vec![OsString::from(path)]
     } else {
         util::get_all_files(OsStr::new(path))?
     };
 
-    run_inner(files, verbose)?;
+    run_inner(files, verbose, single_threaded)?;
 
     Ok(())
 }
 
-fn run_inner(files: Vec<OsString>, verbose: bool) -> anyhow::Result<()> {
+fn run_inner(files: Vec<OsString>, verbose: bool, single_threaded: bool) -> anyhow::Result<()> {
     let setup: String = {
         let sta = std::fs::read_to_string("../test262/harness/sta.js")?;
         let assert = std::fs::read_to_string("../test262/harness/assert.js")?;
@@ -46,24 +47,32 @@ fn run_inner(files: Vec<OsString>, verbose: bool) -> anyhow::Result<()> {
     let counter = Counter::default();
     let file_count = files.len();
 
-    let tp = rayon::ThreadPoolBuilder::default().stack_size(8_000_000).build()?;
-    tp.scope(|s| {
+    let run_file = |file: &OsString| {
+        let result = run_test(&setup, file, verbose);
+
+        let counter = match result {
+            RunResult::Pass => &counter.passes,
+            RunResult::Fail => &counter.fails,
+            RunResult::Panic => &counter.panics,
+        };
+
+        counter.fetch_add(1, atomic::Ordering::Relaxed);
+    };
+
+    if single_threaded {
         for file in files {
-            s.spawn(|_| {
-                #[allow(clippy::redundant_locals)] // it's not redundant
-                let file = file;
-                let result = run_test(&setup, &file, verbose);
-
-                let counter = match result {
-                    RunResult::Pass => &counter.passes,
-                    RunResult::Fail => &counter.fails,
-                    RunResult::Panic => &counter.panics,
-                };
-
-                counter.fetch_add(1, atomic::Ordering::Relaxed);
-            });
+            run_file(&file);
         }
-    });
+    } else {
+        let tp = rayon::ThreadPoolBuilder::default().stack_size(8_000_000).build()?;
+        tp.scope(|s| {
+            for file in files {
+                s.spawn(move |_| {
+                    run_file(&file);
+                });
+            }
+        });
+    }
 
     let passes = counter.passes.load(atomic::Ordering::Relaxed);
     let fails = counter.fails.load(atomic::Ordering::Relaxed);
