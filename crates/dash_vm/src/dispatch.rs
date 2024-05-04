@@ -199,7 +199,6 @@ mod extract {
     use dash_middle::iterator_with::IteratorWith;
 
     use crate::gc::handle::Handle;
-    use crate::util::Captures;
     use crate::value::object::{PropertyKey, PropertyValue};
     use crate::value::ops::conversions::ValueConversion;
     use crate::value::string::JsString;
@@ -253,22 +252,6 @@ mod extract {
                 back: BackwardSequence::from_len(iter_len),
                 stack_index: cx.stack.len() - stack_len,
             }
-        }
-
-        pub fn into_infallible_front_iter<'cx, 'sc, 'vm>(
-            mut self,
-            cx: &'cx mut DispatchContext<'sc, 'vm>,
-        ) -> impl Iterator<Item = T> + Captures<'cx> + Captures<'sc> + Captures<'vm>
-        where
-            T: ExtractFront<Error = Infallible>,
-        {
-            std::iter::from_fn(move || self.next_front_infallible(cx))
-        }
-    }
-
-    impl<T: ExtractFront<Error = Infallible>> ForwardSequence<T> {
-        pub fn next_front_infallible(&mut self, cx: &mut DispatchContext<'_, '_>) -> Option<T> {
-            self.next_front(cx).map(|res| res.unwrap_or_else(|err| match err {}))
         }
     }
 
@@ -466,7 +449,7 @@ mod extract {
     #[derive(Debug)]
     pub enum ArrayElement {
         Single(Value),
-        Multiple(ForwardSequence<Value>),
+        Spread(Value, usize),
         Hole(usize),
     }
 
@@ -483,7 +466,7 @@ mod extract {
                     let value: Value = extract_front(seq, cx);
                     // TODO: make this work for array-like values, not just arrays, by calling @@iterator on it
                     let len = value.length_of_array_like(cx.scope)?;
-                    ArrayElement::Multiple(ForwardSequence::from_len(cx, len, len))
+                    ArrayElement::Spread(value, len)
                 }
                 ArrayMemberKind::Empty => {
                     let count = cx.fetch_and_inc_ip();
@@ -1348,8 +1331,11 @@ mod handlers {
         while let Some(element) = iter.next_front(cx) {
             match element? {
                 ArrayElement::Single(value) => fun(Element::Value(PropertyValue::static_default(value))),
-                ArrayElement::Multiple(multi) => {
-                    for value in multi.into_infallible_front_iter(cx) {
+                ArrayElement::Spread(source, len) => {
+                    for i in 0..len {
+                        let i = cx.scope.intern_usize(i);
+
+                        let value = source.get_property(cx.scope, i.into())?.root(cx.scope);
                         fun(Element::Value(PropertyValue::static_default(value)));
                     }
                 }
@@ -1359,7 +1345,7 @@ mod handlers {
         let truncate_to = cx.stack.len() - stack_values;
         cx.stack.truncate(truncate_to);
 
-        assert!(iter.next_front(cx).is_none());
+        debug_assert!(iter.next_front(cx).is_none());
         Ok(())
     }
 
