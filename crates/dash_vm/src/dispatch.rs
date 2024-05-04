@@ -191,10 +191,362 @@ impl<'sc, 'vm> DerefMut for DispatchContext<'sc, 'vm> {
     }
 }
 
+mod extract {
+    use std::convert::Infallible;
+    use std::marker::PhantomData;
+
+    use dash_middle::compiler::{ArrayMemberKind, ExportPropertyKind, ObjectMemberKind};
+    use dash_middle::iterator_with::IteratorWith;
+
+    use crate::gc::handle::Handle;
+    use crate::util::Captures;
+    use crate::value::object::{PropertyKey, PropertyValue};
+    use crate::value::ops::conversions::ValueConversion;
+    use crate::value::string::JsString;
+    use crate::value::{Unrooted, Value};
+
+    use super::DispatchContext;
+
+    #[derive(Debug)]
+    pub struct BackwardSequence<T> {
+        index: usize,
+        len: usize,
+        _p: PhantomData<T>,
+    }
+
+    impl<T> BackwardSequence<T> {
+        pub fn new_u8(cx: &mut DispatchContext<'_, '_>) -> Self {
+            let len = cx.fetch_and_inc_ip();
+            Self {
+                index: 0,
+                len: len as usize,
+                _p: PhantomData,
+            }
+        }
+        pub fn new_u16(cx: &mut DispatchContext<'_, '_>) -> Self {
+            let len = cx.fetchw_and_inc_ip();
+            Self {
+                index: 0,
+                len: len as usize,
+                _p: PhantomData,
+            }
+        }
+        pub fn from_len(len: usize) -> Self {
+            Self {
+                index: 0,
+                len,
+                _p: PhantomData,
+            }
+        }
+    }
+
+    /// A sequence with extra capability to go forwards.
+    #[derive(Debug)]
+    pub struct ForwardSequence<T> {
+        back: BackwardSequence<T>,
+        stack_index: usize,
+    }
+
+    impl<T> ForwardSequence<T> {
+        pub fn from_len(cx: &mut DispatchContext<'_, '_>, iter_len: usize, stack_len: usize) -> Self {
+            Self {
+                back: BackwardSequence::from_len(iter_len),
+                stack_index: cx.stack.len() - stack_len,
+            }
+        }
+
+        pub fn into_infallible_front_iter<'cx, 'sc, 'vm>(
+            mut self,
+            cx: &'cx mut DispatchContext<'sc, 'vm>,
+        ) -> impl Iterator<Item = T> + Captures<'cx> + Captures<'sc> + Captures<'vm>
+        where
+            T: ExtractFront<Error = Infallible>,
+        {
+            std::iter::from_fn(move || self.next_front_infallible(cx))
+        }
+    }
+
+    impl<T: ExtractFront<Error = Infallible>> ForwardSequence<T> {
+        pub fn next_front_infallible(&mut self, cx: &mut DispatchContext<'_, '_>) -> Option<T> {
+            self.next_front(cx).map(|res| res.unwrap_or_else(|err| match err {}))
+        }
+    }
+
+    impl<'sc, 'vm, T: ExtractBack> IteratorWith<&mut DispatchContext<'sc, 'vm>> for BackwardSequence<T> {
+        type Item = Result<T, T::Exception>;
+
+        fn next(&mut self, cx: &mut DispatchContext<'sc, 'vm>) -> Option<Self::Item> {
+            if self.index == self.len {
+                None
+            } else {
+                let item = T::extract(cx);
+                self.index += 1;
+                Some(item)
+            }
+        }
+    }
+
+    pub trait FrontIteratorWith<Args> {
+        type Item;
+
+        fn next_front(&mut self, args: Args) -> Option<Self::Item>;
+    }
+    impl<'sc, 'vm, T: ExtractFront> FrontIteratorWith<&mut DispatchContext<'sc, 'vm>> for ForwardSequence<T> {
+        type Item = Result<T, T::Error>;
+        fn next_front(&mut self, cx: &mut DispatchContext<'sc, 'vm>) -> Option<Self::Item> {
+            if self.back.index == self.back.len {
+                None
+            } else {
+                let item = T::extract_front(self, cx);
+                self.back.index += 1;
+                Some(item)
+            }
+        }
+    }
+
+    pub trait ExtractBack: Sized {
+        /// A note on errors: even though quite often errors are technically possible in implementations,
+        /// we'll still use `Infallible`, because they're relying on bytecode invariants
+        /// that, if they fail, indicate a bug elsewhere so there is no point in
+        /// considering them errors that need to be handled.
+        ///
+        /// JS Exceptions on the other hand use `type Error = Value;` because they must be propagated
+        type Exception;
+
+        fn extract(cx: &mut DispatchContext<'_, '_>) -> Result<Self, Self::Exception>;
+    }
+
+    pub trait ExtractFront: Sized {
+        type Error;
+
+        /// Extracts the value from the "front", as opposed to popping it off the back.
+        /// The implementation is allowed to reorder the stack (e.g. via `swap_remove`)
+        /// insofar everything behind the sequence is unaffected.
+        fn extract_front<U>(
+            seq: &mut ForwardSequence<U>,
+            cx: &mut DispatchContext<'_, '_>,
+        ) -> Result<Self, Self::Error>;
+    }
+
+    pub enum ObjectProperty {
+        Static { key: PropertyKey, value: PropertyValue },
+        Getter { key: PropertyKey, value: Handle },
+        Setter { key: PropertyKey, value: Handle },
+        Spread(Value),
+    }
+
+    pub struct IdentW(pub JsString);
+
+    impl ExtractBack for IdentW {
+        type Exception = Infallible;
+
+        fn extract(cx: &mut DispatchContext<'_, '_>) -> Result<Self, Self::Exception> {
+            let id = cx.fetchw_and_inc_ip();
+            Ok(Self(cx.identifier_constant(id.into())))
+        }
+    }
+
+    pub struct NumberWConstant(pub f64);
+
+    impl ExtractBack for NumberWConstant {
+        type Exception = Infallible;
+
+        fn extract(cx: &mut DispatchContext<'_, '_>) -> Result<Self, Self::Exception> {
+            let id = cx.fetchw_and_inc_ip();
+            Ok(Self(cx.number_constant(id.into())))
+        }
+    }
+
+    pub struct Object(pub Handle);
+    impl ExtractBack for Object {
+        type Exception = Infallible;
+
+        fn extract(cx: &mut DispatchContext<'_, '_>) -> Result<Self, Self::Exception> {
+            match cx.pop_stack_rooted() {
+                Value::Object(o) => Ok(Self(o)),
+                _ => panic!("stack top must contain an object"),
+            }
+        }
+    }
+
+    impl ExtractBack for ObjectMemberKind {
+        type Exception = Infallible;
+
+        fn extract(cx: &mut DispatchContext<'_, '_>) -> Result<Self, Self::Exception> {
+            Ok(ObjectMemberKind::from_repr(cx.fetch_and_inc_ip()).unwrap())
+        }
+    }
+
+    impl ExtractBack for Value {
+        type Exception = Infallible;
+
+        fn extract(cx: &mut DispatchContext<'_, '_>) -> Result<Self, Self::Exception> {
+            Ok(cx.pop_stack_rooted())
+        }
+    }
+    impl ExtractFront for Value {
+        type Error = Infallible;
+
+        fn extract_front<U>(
+            seq: &mut ForwardSequence<U>,
+            cx: &mut DispatchContext<'_, '_>,
+        ) -> Result<Self, Self::Error> {
+            seq.stack_index += 1;
+            let value = cx.stack[seq.stack_index - 1].clone();
+            cx.scope.add_value(value.clone());
+            Ok(value)
+        }
+    }
+
+    /// Convenience function for infallibly extracting a `T`
+    pub fn extract<T: ExtractBack<Exception = Infallible>>(cx: &mut DispatchContext<'_, '_>) -> T {
+        match T::extract(cx) {
+            Ok(v) => v,
+            Err(err) => match err {},
+        }
+    }
+
+    /// Convenience function for infallibly extracting a `T`
+    pub fn extract_front<T: ExtractFront<Error = Infallible>, U>(
+        seq: &mut ForwardSequence<U>,
+        cx: &mut DispatchContext<'_, '_>,
+    ) -> T {
+        match T::extract_front(seq, cx) {
+            Ok(v) => v,
+            Err(err) => match err {},
+        }
+    }
+
+    impl<E, A: ExtractBack<Exception = E>, B: ExtractBack<Exception = E>> ExtractBack for (A, B) {
+        type Exception = E;
+
+        fn extract(cx: &mut DispatchContext<'_, '_>) -> Result<Self, Self::Exception> {
+            Ok((A::extract(cx)?, B::extract(cx)?))
+        }
+    }
+
+    impl ExtractBack for ObjectProperty {
+        type Exception = Value;
+
+        fn extract(cx: &mut DispatchContext<'_, '_>) -> Result<Self, Self::Exception> {
+            Ok(match extract(cx) {
+                ObjectMemberKind::Getter => {
+                    let key = extract::<IdentW>(cx).0;
+                    let value = extract::<Object>(cx).0;
+                    Self::Getter { key: key.into(), value }
+                }
+                ObjectMemberKind::Setter => {
+                    let key = extract::<IdentW>(cx).0;
+                    let value = extract::<Object>(cx).0;
+                    Self::Setter { key: key.into(), value }
+                }
+                ObjectMemberKind::Static => {
+                    let key = extract::<IdentW>(cx).0;
+                    let value = extract(cx);
+
+                    Self::Static {
+                        key: key.into(),
+                        value: PropertyValue::static_default(value),
+                    }
+                }
+                ObjectMemberKind::Dynamic => {
+                    let key = extract(cx);
+                    let value = extract(cx);
+
+                    Self::Static {
+                        key: PropertyKey::from_value(cx.scope, key)?,
+                        value: PropertyValue::static_default(value),
+                    }
+                }
+                ObjectMemberKind::Spread => Self::Spread(extract(cx)),
+            })
+        }
+    }
+
+    #[derive(Debug)]
+    pub enum ArrayElement {
+        Single(Value),
+        Multiple(ForwardSequence<Value>),
+        Hole(usize),
+    }
+
+    impl ExtractFront for ArrayElement {
+        type Error = Value;
+
+        fn extract_front<U>(
+            seq: &mut ForwardSequence<U>,
+            cx: &mut DispatchContext<'_, '_>,
+        ) -> Result<Self, Self::Error> {
+            Ok(match extract::<ArrayMemberKind>(cx) {
+                ArrayMemberKind::Item => ArrayElement::Single(extract_front(seq, cx)),
+                ArrayMemberKind::Spread => {
+                    let value: Value = extract_front(seq, cx);
+                    // TODO: make this work for array-like values, not just arrays, by calling @@iterator on it
+                    let len = value.length_of_array_like(cx.scope)?;
+                    ArrayElement::Multiple(ForwardSequence::from_len(cx, len, len))
+                }
+                ArrayMemberKind::Empty => {
+                    let count = cx.fetch_and_inc_ip();
+                    ArrayElement::Hole(count.into())
+                }
+            })
+        }
+    }
+
+    impl ExtractBack for ArrayMemberKind {
+        type Exception = Infallible;
+
+        fn extract(cx: &mut DispatchContext<'_, '_>) -> Result<Self, Self::Exception> {
+            Ok(ArrayMemberKind::from_repr(cx.fetch_and_inc_ip()).unwrap())
+        }
+    }
+
+    pub struct LocalW(pub Value);
+    impl ExtractBack for LocalW {
+        type Exception = Infallible;
+
+        fn extract(cx: &mut DispatchContext<'_, '_>) -> Result<Self, Self::Exception> {
+            let local_id = cx.fetchw_and_inc_ip();
+            Ok(Self(cx.get_local(local_id.into())))
+        }
+    }
+
+    impl ExtractBack for ExportPropertyKind {
+        type Exception = Infallible;
+
+        fn extract(cx: &mut DispatchContext<'_, '_>) -> Result<Self, Self::Exception> {
+            Ok(Self::from_repr(cx.fetch_and_inc_ip()).unwrap())
+        }
+    }
+
+    pub struct ExportProperty(pub Unrooted, pub JsString);
+    impl ExtractBack for ExportProperty {
+        type Exception = Unrooted;
+
+        fn extract(cx: &mut DispatchContext<'_, '_>) -> Result<Self, Self::Exception> {
+            Ok(match extract(cx) {
+                ExportPropertyKind::Local => {
+                    let local = extract::<LocalW>(cx);
+                    let ident = extract::<IdentW>(cx);
+                    Self(local.0.into(), ident.0)
+                }
+                ExportPropertyKind::Global => {
+                    let ident = extract::<IdentW>(cx).0;
+                    let value = cx.global().get_property(cx.scope, ident.into())?;
+                    Self(value, ident)
+                }
+            })
+        }
+    }
+}
+
 mod handlers {
     use dash_middle::compiler::instruction::{AssignKind, IntrinsicOperation};
-    use dash_middle::compiler::{ArrayMemberKind, FunctionCallMetadata, ObjectMemberKind, StaticImportKind};
+    use dash_middle::compiler::{FunctionCallMetadata, StaticImportKind};
     use dash_middle::interner::sym;
+    use dash_middle::iterator_with::{InfallibleIteratorWith, IteratorWith};
+    use handlers::extract::{ForwardSequence, FrontIteratorWith};
+    use hashbrown::hash_map::Entry;
     use if_chain::if_chain;
     use smallvec::SmallVec;
     use std::ops::{Add, ControlFlow, Div, Mul, Rem, Sub};
@@ -208,6 +560,8 @@ mod handlers {
     use crate::value::object::{NamedObject, Object, ObjectMap, PropertyKey, PropertyValue, PropertyValueKind};
     use crate::value::ops::conversions::ValueConversion;
     use crate::value::ops::equality;
+
+    use self::extract::{ArrayElement, BackwardSequence, ExportProperty, IdentW, NumberWConstant, ObjectProperty};
 
     use super::*;
 
@@ -567,11 +921,7 @@ mod handlers {
 
                 for i in 0..length {
                     let i = cx.scope.intern_usize(i);
-                    let value = unsafe {
-                        // SAFETY: Rooting is not necessary here because the values being pushed to `splice_args`
-                        // are directly "injected" into the value stack
-                        iterable.get_property(&mut cx, i.into())?.into_value()
-                    };
+                    let value = iterable.get_property(&mut cx, i.into())?.root(cx.scope);
                     splice_args.push(value);
                 }
                 cx.stack
@@ -994,32 +1344,22 @@ mod handlers {
         stack_values: usize,
         mut fun: impl FnMut(Element<PropertyValue>),
     ) -> Result<(), Unrooted> {
-        let mut elements = cx.pop_stack_many(stack_values).collect::<Vec<_>>().into_iter();
-        let mut next_element = || elements.next().unwrap();
-        for _ in 0..len {
-            let id = ArrayMemberKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
-
-            match id {
-                ArrayMemberKind::Item => {
-                    fun(Element::Value(PropertyValue::static_default(next_element())));
-                }
-                ArrayMemberKind::Spread => {
-                    // TODO: make this work for array-like values, not just arrays, by calling @@iterator on it
-                    let value = next_element();
-                    let len = value.length_of_array_like(cx.scope)?;
-                    for i in 0..len {
-                        let i = cx.scope.intern_usize(i);
-                        let value = value.get_property(cx.scope, i.into())?.root(cx.scope);
+        let mut iter = ForwardSequence::<ArrayElement>::from_len(cx, len, stack_values);
+        while let Some(element) = iter.next_front(cx) {
+            match element? {
+                ArrayElement::Single(value) => fun(Element::Value(PropertyValue::static_default(value))),
+                ArrayElement::Multiple(multi) => {
+                    for value in multi.into_infallible_front_iter(cx) {
                         fun(Element::Value(PropertyValue::static_default(value)));
                     }
                 }
-                ArrayMemberKind::Empty => {
-                    let count = cx.fetch_and_inc_ip();
-                    fun(Element::Hole { count: count.into() });
-                }
+                ArrayElement::Hole(count) => fun(Element::Hole { count }),
             }
         }
-        assert!(elements.next().is_none());
+        let truncate_to = cx.stack.len() - stack_values;
+        cx.stack.truncate(truncate_to);
+
+        assert!(iter.next_front(cx).is_none());
         Ok(())
     }
 
@@ -1055,64 +1395,36 @@ mod handlers {
     }
 
     pub fn objlit<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
-        let len = cx.fetch_and_inc_ip() as usize;
+        let mut iter = BackwardSequence::<ObjectProperty>::new_u8(&mut cx);
 
         let mut obj = ObjectMap::default();
-        for _ in 0..len {
-            let kind = ObjectMemberKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
-
-            match kind {
-                ObjectMemberKind::Dynamic => {
-                    let key = cx.pop_stack_rooted();
-                    let key = PropertyKey::from_value(cx.scope, key)?;
-                    let value = cx.pop_stack_rooted();
-
-                    obj.insert(key, PropertyValue::static_default(value));
-                }
-                ObjectMemberKind::Static => {
-                    let id = cx.fetchw_and_inc_ip();
-                    // TODO: optimization opportunity: do not reallocate string from Rc<str>
-                    let key = cx.identifier_constant(id.into());
-                    let value = cx.pop_stack_rooted();
-                    obj.insert(key.into(), PropertyValue::static_default(value));
-                }
-                ObjectMemberKind::Getter => {
-                    let id = cx.fetchw_and_inc_ip();
-                    let key = cx.identifier_constant(id.into());
-                    let Value::Object(value) = cx.pop_stack_rooted() else {
-                        panic!("Getter is not an object");
-                    };
-                    obj.entry(key.into())
-                        .and_modify(|v| match v.kind_mut() {
-                            PropertyValueKind::Trap { get, .. } => *get = Some(value.clone()),
-                            _ => *v = PropertyValue::getter_default(value.clone()),
-                        })
-                        .or_insert_with(|| PropertyValue::getter_default(value.clone()));
-                }
-                ObjectMemberKind::Setter => {
-                    let id = cx.fetchw_and_inc_ip();
-                    let key = cx.identifier_constant(id.into());
-                    let Value::Object(value) = cx.pop_stack_rooted() else {
-                        panic!("Setter is not an object");
-                    };
-                    obj.entry(key.into())
-                        .and_modify(|v| match v.kind_mut() {
-                            PropertyValueKind::Trap { set, .. } => *set = Some(value.clone()),
-                            _ => *v = PropertyValue::setter_default(value.clone()),
-                        })
-                        .or_insert_with(|| PropertyValue::setter_default(value.clone()));
-                }
-                ObjectMemberKind::Spread => {
-                    let value = cx.pop_stack_rooted();
-                    if let Value::Object(target) = &value {
-                        for key in target.own_keys(cx.scope)? {
+        while let Some(property) = iter.next(&mut cx) {
+            match property? {
+                ObjectProperty::Static { key, value } => drop(obj.insert(key, value)),
+                ObjectProperty::Getter { key, value } => match obj.entry(key) {
+                    Entry::Occupied(mut entry) => match &mut entry.get_mut().kind {
+                        PropertyValueKind::Static(_) => drop(entry.insert(PropertyValue::getter_default(value))),
+                        PropertyValueKind::Trap { get, .. } => *get = Some(value),
+                    },
+                    Entry::Vacant(entry) => drop(entry.insert(PropertyValue::getter_default(value))),
+                },
+                ObjectProperty::Setter { key, value } => match obj.entry(key) {
+                    Entry::Occupied(mut entry) => match &mut entry.get_mut().kind {
+                        PropertyValueKind::Static(_) => drop(entry.insert(PropertyValue::setter_default(value))),
+                        PropertyValueKind::Trap { set, .. } => *set = Some(value),
+                    },
+                    Entry::Vacant(entry) => drop(entry.insert(PropertyValue::setter_default(value))),
+                },
+                ObjectProperty::Spread(value) => {
+                    if let Value::Object(object) = value {
+                        for key in object.own_keys(cx.scope)? {
                             let key = PropertyKey::from_value(cx.scope, key)?;
-                            let value = target.get_property(&mut cx, key.clone())?.root(cx.scope);
+                            let value = object.get_property(&mut cx, key.clone())?.root(cx.scope);
                             obj.insert(key, PropertyValue::static_default(value));
                         }
                     }
                 }
-            };
+            }
         }
 
         let obj = NamedObject::with_values(&cx, obj);
@@ -1470,12 +1782,12 @@ mod handlers {
 
     pub fn export_default<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
         // NOTE: Does not need to be rooted. Storing it in frame state counts as being rooted.
-        let value = cx.pop_stack_rooted();
+        let value = cx.pop_stack();
         let frame = cx.active_frame_mut();
 
         match &mut frame.state {
             FrameState::Module(module) => {
-                module.default = Some(value.into());
+                module.default = Some(value);
             }
             _ => throw!(cx, Error, "Export is only available at the top level in modules"),
         }
@@ -1484,40 +1796,15 @@ mod handlers {
     }
 
     pub fn export_named<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
-        let count = cx.fetchw_and_inc_ip();
+        let mut iter = BackwardSequence::<ExportProperty>::new_u16(&mut cx);
+        while let Some(prop) = iter.next(&mut cx) {
+            let ExportProperty(value, ident) = prop?;
 
-        for _ in 0..count {
-            let (value, ident) = match cx.fetch_and_inc_ip() {
-                0 => {
-                    // Local variable
-                    let loc_id = cx.fetchw_and_inc_ip();
-                    let ident_id = cx.fetchw_and_inc_ip();
-
-                    let value = cx.get_local(loc_id.into());
-                    let ident = cx.identifier_constant(ident_id.into());
-
-                    (value.into(), ident)
-                }
-                1 => {
-                    // Global variable
-                    let ident_id = cx.fetchw_and_inc_ip();
-
-                    let ident = cx.identifier_constant(ident_id.into());
-
-                    let value = cx.global.clone().get_property(&mut cx, ident.into())?;
-
-                    (value, ident)
-                }
-                _ => unreachable!(),
-            };
-
-            let frame = cx.active_frame_mut();
-            match &mut frame.state {
+            match &mut cx.active_frame_mut().state {
                 FrameState::Module(exports) => exports.named.push((ident, value)),
                 _ => throw!(cx, Error, "Export is only available at the top level in modules"),
             }
         }
-
         Ok(None)
     }
 
@@ -1626,7 +1913,6 @@ mod handlers {
     }
 
     pub fn objdestruct<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
-        let count = cx.fetchw_and_inc_ip();
         let rest_id = match cx.fetchw_and_inc_ip() {
             u16::MAX => None,
             n => Some(n),
@@ -1635,18 +1921,14 @@ mod handlers {
 
         let mut idents = Vec::new();
 
-        for _ in 0..count {
-            let loc_id = cx.fetchw_and_inc_ip();
-            let ident_id = cx.fetchw_and_inc_ip();
-
-            let id = cx.number_constant(loc_id.into()) as usize;
-            let ident = cx.identifier_constant(ident_id.into());
+        let mut iter = BackwardSequence::<(NumberWConstant, IdentW)>::new_u16(&mut cx);
+        while let Some((NumberWConstant(id), IdentW(ident))) = iter.next_infallible(&mut cx) {
             if rest_id.is_some() {
                 idents.push(ident);
             }
 
             let prop = obj.get_property(&mut cx, ident.into())?;
-            cx.set_local(id, prop);
+            cx.set_local(id as usize, prop);
         }
 
         if let Some(rest_id) = rest_id {
@@ -1673,17 +1955,14 @@ mod handlers {
     }
 
     pub fn arraydestruct<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
-        let count = cx.fetchw_and_inc_ip();
         let array = cx.pop_stack_rooted();
 
-        for i in 0..count {
-            let loc_id = cx.fetchw_and_inc_ip();
+        let mut iter = BackwardSequence::<NumberWConstant>::new_u16(&mut cx).enumerate();
 
-            let id = cx.number_constant(loc_id.into()) as usize;
-
-            let i = cx.scope.intern_usize(i.into());
-
-            let prop = array.get_property(&mut cx, i.into())?;
+        while let Some((i, NumberWConstant(id))) = iter.next_infallible(&mut cx) {
+            let id = id as usize;
+            let key = cx.scope.intern_usize(i);
+            let prop = array.get_property(cx.scope, key.into())?;
             cx.set_local(id, prop);
         }
 
@@ -1888,9 +2167,6 @@ mod handlers {
 }
 
 pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResult>, Unrooted> {
-    // TODO: rework this
-    // let scope_ref = cx.scope as *const LocalScope;
-    // cx.externals.add(scope_ref, refs);
     let mut scope = vm.scope();
     let cx = DispatchContext::new(&mut scope);
     match instruction {

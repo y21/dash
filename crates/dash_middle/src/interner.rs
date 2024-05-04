@@ -354,6 +354,7 @@ impl StringInterner {
     }
 
     pub fn intern_usize(&mut self, mut val: usize) -> Symbol {
+        // TODO: for small N, have a static array of numbers
         const _: () = assert!(std::mem::size_of::<usize>() <= 8);
         // `usize::MAX` is at most 20 digits long
         let mut buf = [0; 20];

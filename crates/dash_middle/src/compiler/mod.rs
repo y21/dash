@@ -165,3 +165,10 @@ impl From<&ParserArrayMemberKind> for ArrayMemberKind {
         }
     }
 }
+
+#[repr(u8)]
+#[derive(FromRepr, Debug)]
+pub enum ExportPropertyKind {
+    Local,
+    Global,
+}

@@ -1,5 +1,6 @@
 pub mod compiler;
 pub mod interner;
+pub mod iterator_with;
 pub mod lexer;
 pub mod parser;
 pub mod sourcemap;

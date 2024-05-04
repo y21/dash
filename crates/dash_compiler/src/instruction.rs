@@ -1,6 +1,8 @@
 use dash_middle::compiler::constant::{Constant, LimitExceededError};
 use dash_middle::compiler::instruction::{AssignKind, Instruction, IntrinsicOperation};
-use dash_middle::compiler::{FunctionCallMetadata, ObjectMemberKind as CompilerObjectMemberKind, StaticImportKind};
+use dash_middle::compiler::{
+    ExportPropertyKind, FunctionCallMetadata, ObjectMemberKind as CompilerObjectMemberKind, StaticImportKind,
+};
 use dash_middle::interner::Symbol;
 use dash_middle::parser::error::Error;
 use dash_middle::parser::expr::ObjectMemberKind;
@@ -286,12 +288,12 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
         for kind in it.iter().copied() {
             match kind {
                 NamedExportKind::Local { loc_id, ident_id } => {
-                    self.write(0);
+                    self.write(ExportPropertyKind::Local as u8);
                     self.writew(loc_id);
                     self.writew(ident_id);
                 }
                 NamedExportKind::Global { ident_id } => {
-                    self.write(1);
+                    self.write(ExportPropertyKind::Global as u8);
                     self.writew(ident_id);
                 }
             }
@@ -303,14 +305,14 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
     // TODO: encode this using Option<NonMaxU16>
     pub fn build_objdestruct(&mut self, count: u16, rest: Option<u16>) {
         self.write_instr(Instruction::ObjDestruct);
-        self.writew(count);
         self.writew(rest.map_or_else(
             || u16::MAX,
             |v| {
                 assert!(v != u16::MAX);
                 v
             },
-        ))
+        ));
+        self.writew(count);
     }
 
     pub fn build_arraydestruct(&mut self, count: u16) {
