@@ -191,7 +191,7 @@ impl Object for RequireFunction {
 
         let is_path = matches!(arg.chars().next(), Some('.' | '/' | '~'));
         let result = if is_path {
-            if !arg.ends_with(".js") {
+            if !arg.ends_with(".js") && !arg.ends_with(".json") {
                 arg += ".js";
             }
 

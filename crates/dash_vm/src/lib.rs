@@ -240,6 +240,7 @@ impl Vm {
                 (sym::getOwnPropertyDescriptor, scope.statics.object_get_own_property_descriptor.clone()),
                 (sym::getOwnPropertyDescriptors, scope.statics.object_get_own_property_descriptors.clone()),
                 (sym::defineProperty, scope.statics.object_define_property.clone()),
+                (sym::defineProperties, scope.statics.object_define_properties.clone()),
                 (sym::entries, scope.statics.object_entries.clone()),
                 (sym::assign, scope.statics.object_assign.clone()),
                 (sym::getPrototypeOf, scope.statics.object_get_prototype_of.clone()),

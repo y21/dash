@@ -365,13 +365,13 @@ impl PropertyValue {
         let enumerable = value.get_property(sc, sym::enumerable.into()).root(sc)?.into_option();
         let writable = value.get_property(sc, sym::writable.into()).root(sc)?.into_option();
 
-        if configurable.map_or(true, |v| v.is_truthy(sc)) {
+        if configurable.is_some_and(|v| v.is_truthy(sc)) {
             flags |= PropertyDataDescriptor::CONFIGURABLE;
         }
-        if enumerable.map_or(true, |v| v.is_truthy(sc)) {
+        if enumerable.is_some_and(|v| v.is_truthy(sc)) {
             flags |= PropertyDataDescriptor::ENUMERABLE;
         }
-        if writable.map_or(true, |v| v.is_truthy(sc)) {
+        if writable.is_some_and(|v| v.is_truthy(sc)) {
             flags |= PropertyDataDescriptor::WRITABLE;
         }
 

@@ -153,6 +153,27 @@ pub fn define_property(cx: CallContext) -> Result<Value, Value> {
     Ok(Value::Object(object.clone()))
 }
 
+pub fn define_properties(cx: CallContext) -> Result<Value, Value> {
+    let object = match cx.args.first() {
+        Some(Value::Object(o)) => o.clone(),
+        _ => throw!(
+            cx.scope,
+            TypeError,
+            "Object.prototype.hasOwnProperty called on non-object"
+        ),
+    };
+
+    let properties = cx.args.get(1).unwrap_or_undefined();
+    for key in properties.own_keys(cx.scope)? {
+        let key = key.to_js_string(cx.scope)?;
+        let descriptor = properties.get_property(cx.scope, key.into()).root(cx.scope)?;
+        let descriptor = PropertyValue::from_descriptor_value(cx.scope, descriptor)?;
+        object.set_property(cx.scope, key.into(), descriptor)?;
+    }
+
+    Ok(Value::Object(object))
+}
+
 pub fn assign(cx: CallContext) -> Result<Value, Value> {
     let mut args = cx.args.into_iter();
     let to = args.next().unwrap_or_undefined().to_object(cx.scope)?;

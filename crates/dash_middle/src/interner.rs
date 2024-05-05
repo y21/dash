@@ -141,6 +141,7 @@ pub mod sym {
                 getOwnPropertyDescriptor,
                 getOwnPropertyDescriptors,
                 defineProperty,
+                defineProperties,
                 entries,
                 assign,
                 Object,
