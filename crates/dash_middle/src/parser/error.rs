@@ -58,6 +58,7 @@ pub enum Error {
     IllegalBreak(Span),
     MissingInitializerInDestructuring(Span),
     ArgumentsInRoot(Span),
+    Unexpected(Span, &'static str),
 }
 
 pub struct FormattableError<'a, 'buf> {
@@ -372,6 +373,10 @@ impl<'a, 'buf> fmt::Display for FormattableError<'a, 'buf> {
                 diag.message("referencing `arguments` in the root function");
                 diag.span_error(span, "");
                 diag.help("this function is in the root context and is never called");
+            }
+            Error::Unexpected(span, descr) => {
+                diag.message(format!("unexpected {descr}"));
+                diag.span_error(span, "");
             }
         }
         fmt::Display::fmt(&diag, f)

@@ -218,13 +218,19 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
         }
     }
 
-    pub fn build_objlit(&mut self, span: Span, constants: Vec<ObjectMemberKind>) -> Result<(), Error> {
-        let len = constants
+    pub fn build_object_member_like_instruction(
+        &mut self,
+        span: Span,
+        constants: Vec<ObjectMemberKind>,
+        instr: Instruction,
+    ) -> Result<(), Error> {
+        let len: u16 = constants
             .len()
             .try_into()
             .map_err(|_| Error::ObjectLitLimitExceeded(span))?;
 
-        self.write_wide_instr(Instruction::ObjLit, Instruction::ObjLitW, len);
+        self.write_instr(instr);
+        self.writew(len);
 
         fn compile_object_member_kind(
             ib: &mut InstructionBuilder,

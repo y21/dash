@@ -8,6 +8,7 @@ use dash_middle::parser::statement::{
     VariableDeclaration, VariableDeclarationKind, VariableDeclarationName, VariableDeclarations, WhileLoop,
 };
 use dash_middle::parser::types::TypeSegment;
+use dash_middle::sourcemap::Span;
 
 use crate::Parser;
 
@@ -76,6 +77,12 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
         // Start parsing class members
         while !self.expect_token_type_and_skip(&[TokenType::RightBrace], false) {
+            enum Kind {
+                Getter(Span),
+                Setter(Span),
+                Normal,
+            }
+
             let is_static = self.expect_token_type_and_skip(&[TokenType::Static], false);
             let is_private = self.expect_token_type_and_skip(&[TokenType::Hash], false);
             let asyncness = match self.expect_token_type_and_skip(&[TokenType::Async], false) {
@@ -83,6 +90,14 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 false => Asyncness::No,
             };
             let is_generator = self.expect_token_type_and_skip(&[TokenType::Star], false);
+            // FIXME: this breaks `class V { get }`, which is valid -- needs backtracking
+            let property_kind = if self.expect_token_type_and_skip(&[TokenType::Get], false) {
+                Kind::Getter(self.previous().unwrap().span)
+            } else if self.expect_token_type_and_skip(&[TokenType::Set], false) {
+                Kind::Setter(self.previous().unwrap().span)
+            } else {
+                Kind::Normal
+            };
 
             let key = if self.expect_token_type_and_skip(&[TokenType::LeftSquareBrace], false) {
                 let expr = self.parse_expression()?;
@@ -122,13 +137,18 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                         false => FunctionKind::Function(asyncness),
                     },
                     ty_seg,
+                    None,
                 );
 
                 members.push(ClassMember {
                     private: is_private,
                     static_: is_static,
                     key,
-                    value: ClassMemberValue::Method(func),
+                    value: match property_kind {
+                        Kind::Getter(_) => ClassMemberValue::Getter(func),
+                        Kind::Setter(_) => ClassMemberValue::Setter(func),
+                        Kind::Normal => ClassMemberValue::Method(func),
+                    },
                 });
             } else {
                 let kind = self.next()?.ty;
@@ -145,6 +165,11 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 };
 
                 self.expect_token_type_and_skip(&[TokenType::Semicolon], false);
+                // Error on `get v = 3`
+                if let Kind::Getter(span) | Kind::Setter(span) = property_kind {
+                    self.create_error(Error::Unexpected(span, "getter or setter as field"));
+                    return None;
+                }
 
                 members.push(ClassMember {
                     private: is_private,

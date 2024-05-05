@@ -468,6 +468,9 @@ pub struct FunctionDeclaration {
     /// The type of function
     pub ty: FunctionKind,
     pub ty_segment: Option<TypeSegment>,
+    /// If this function is a desugared class constructor,
+    /// then this contains all the instance members that need to be initialized.
+    pub constructor_initializers: Option<Vec<ClassMember>>,
 }
 
 impl fmt::Display for FunctionDeclaration {
@@ -531,6 +534,7 @@ impl FunctionDeclaration {
         statements: Vec<Statement>,
         ty: FunctionKind,
         ty_segment: Option<TypeSegment>,
+        constructor_initializers: Option<Vec<ClassMember>>,
     ) -> Self {
         Self {
             id,
@@ -539,6 +543,7 @@ impl FunctionDeclaration {
             statements,
             ty,
             ty_segment,
+            constructor_initializers,
         }
     }
 }
@@ -875,6 +880,8 @@ impl fmt::Display for ClassMember {
             ClassMemberValue::Method(method) => write!(f, "{method}"),
             ClassMemberValue::Field(Some(field)) => write!(f, "= {field};"),
             ClassMemberValue::Field(None) => f.write_char(';'),
+            ClassMemberValue::Getter(method) => write!(f, "get {method}"),
+            ClassMemberValue::Setter(method) => write!(f, "set {method}"),
         }
     }
 }
@@ -902,8 +909,9 @@ pub enum ClassMemberValue {
     /// A class field.
     /// The value can be `None` for `class V { Key; }`
     Field(Option<Expr>),
+    Getter(FunctionDeclaration),
+    Setter(FunctionDeclaration),
 }
-
 /// A function parameter
 #[derive(Debug, Clone, Display)]
 pub enum Parameter {

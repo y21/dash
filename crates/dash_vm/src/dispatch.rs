@@ -214,14 +214,6 @@ mod extract {
     }
 
     impl<T> BackwardSequence<T> {
-        pub fn new_u8(cx: &mut DispatchContext<'_, '_>) -> Self {
-            let len = cx.fetch_and_inc_ip();
-            Self {
-                index: 0,
-                len: len as usize,
-                _p: PhantomData,
-            }
-        }
         pub fn new_u16(cx: &mut DispatchContext<'_, '_>) -> Self {
             let len = cx.fetchw_and_inc_ip();
             Self {
@@ -311,6 +303,7 @@ mod extract {
         ) -> Result<Self, Self::Error>;
     }
 
+    #[derive(Debug)]
     pub enum ObjectProperty {
         Static { key: PropertyKey, value: PropertyValue },
         Getter { key: PropertyKey, value: Handle },
@@ -1381,7 +1374,7 @@ mod handlers {
     }
 
     pub fn objlit<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
-        let mut iter = BackwardSequence::<ObjectProperty>::new_u8(&mut cx);
+        let mut iter = BackwardSequence::<ObjectProperty>::new_u16(&mut cx);
 
         let mut obj = ObjectMap::default();
         while let Some(property) = iter.next(&mut cx) {
@@ -1417,6 +1410,47 @@ mod handlers {
 
         let handle = cx.gc.register(obj);
         cx.stack.push(handle.into());
+
+        Ok(None)
+    }
+
+    pub fn assign_properties(mut cx: DispatchContext<'_, '_>) -> Result<Option<HandleResult>, Unrooted> {
+        let mut iter = BackwardSequence::<ObjectProperty>::new_u16(&mut cx);
+        let target = cx.pop_stack_rooted();
+
+        while let Some(property) = iter.next(&mut cx) {
+            let property = property?;
+            let is_getter = matches!(property, ObjectProperty::Getter { .. });
+
+            match property {
+                ObjectProperty::Static { key, value } => target.set_property(cx.scope, key, value)?,
+                ObjectProperty::Getter { key, value } | ObjectProperty::Setter { key, value } => {
+                    let prop = target.get_property_descriptor(cx.scope, key.clone())?;
+                    let prop = match prop {
+                        Some(mut prop) => {
+                            if let PropertyValueKind::Trap { get, set } = &mut prop.kind {
+                                if is_getter {
+                                    *get = Some(value);
+                                } else {
+                                    *set = Some(value);
+                                }
+                            }
+                            prop
+                        }
+                        None => {
+                            if is_getter {
+                                PropertyValue::getter_default(value)
+                            } else {
+                                PropertyValue::setter_default(value)
+                            }
+                        }
+                    };
+
+                    target.set_property(cx.scope, key, prop)?;
+                }
+                ObjectProperty::Spread(_) => unimplemented!("spread operator in AssignProperties"),
+            }
+        }
 
         Ok(None)
     }
@@ -2234,6 +2268,7 @@ pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResu
         Instruction::DeletePropertyDynamic => handlers::delete_property_dynamic(cx),
         Instruction::ObjDestruct => handlers::objdestruct(cx),
         Instruction::ArrayDestruct => handlers::arraydestruct(cx),
+        Instruction::AssignProperties => handlers::assign_properties(cx),
         Instruction::Nop => Ok(None),
         _ => unimplemented!("{:?}", instruction),
     }

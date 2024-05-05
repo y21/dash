@@ -544,6 +544,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                                             body.0,
                                             FunctionKind::Function(Asyncness::No),
                                             None,
+                                            None,
                                         )),
                                     },
                                 ));
@@ -604,6 +605,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                                 params,
                                 stmts,
                                 FunctionKind::Function(Asyncness::No),
+                                None,
                                 None,
                             );
                             items.push((
@@ -799,7 +801,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
         let func_id = self.function_counter.advance();
         Some((
-            FunctionDeclaration::new(name, func_id, arguments, statements, ty, ty_seg),
+            FunctionDeclaration::new(name, func_id, arguments, statements, ty, ty_seg, None),
             self.previous()?.span,
         ))
     }
@@ -861,6 +863,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 list,
                 vec![body],
                 FunctionKind::Arrow,
+                None,
                 None,
             )),
         })

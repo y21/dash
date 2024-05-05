@@ -1,12 +1,11 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::rc::Rc;
-use std::usize;
 
 use dash_log::{debug, span, Level};
 use dash_middle::compiler::constant::{Buffer, Constant, ConstantPool, Function};
 use dash_middle::compiler::external::External;
-use dash_middle::compiler::instruction::{AssignKind, IntrinsicOperation};
+use dash_middle::compiler::instruction::{AssignKind, Instruction, IntrinsicOperation};
 use dash_middle::compiler::scope::{CompileValueType, Scope, ScopeLocal};
 use dash_middle::compiler::{CompileResult, DebugSymbols, FunctionCallMetadata, StaticImportKind};
 use dash_middle::interner::{sym, StringInterner, Symbol};
@@ -18,9 +17,9 @@ use dash_middle::parser::expr::{
     PropertyAccessExpr, Seq, UnaryExpr,
 };
 use dash_middle::parser::statement::{
-    Asyncness, BlockStatement, Class, ClassMemberKey, ClassMemberValue, DoWhileLoop, ExportKind, ForInLoop, ForLoop,
-    ForOfLoop, FuncId, FunctionDeclaration, FunctionKind, IfStatement, ImportKind, Loop, Parameter, ReturnStatement,
-    SpecifierKind, Statement, StatementKind, SwitchCase, SwitchStatement, TryCatch, VariableBinding,
+    Asyncness, BlockStatement, Class, ClassMember, ClassMemberKey, ClassMemberValue, DoWhileLoop, ExportKind,
+    ForInLoop, ForLoop, ForOfLoop, FuncId, FunctionDeclaration, FunctionKind, IfStatement, ImportKind, Loop, Parameter,
+    ReturnStatement, SpecifierKind, Statement, StatementKind, SwitchCase, SwitchStatement, TryCatch, VariableBinding,
     VariableDeclaration, VariableDeclarationKind, VariableDeclarationName, VariableDeclarations, WhileLoop,
 };
 use dash_middle::sourcemap::Span;
@@ -1679,6 +1678,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             mut statements,
             ty,
             ty_segment: _,
+            constructor_initializers,
         }: FunctionDeclaration,
     ) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
@@ -1720,12 +1720,15 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
 
         transformations::hoist_declarations(&mut statements);
         transformations::ast_insert_implicit_return(&mut statements);
-        let res: Result<(), Error> = (|| {
-            for stmt in statements {
-                ib.accept(stmt)?;
-            }
-            Ok(())
-        })();
+
+        // Insert initializers
+        if let Some(members) = constructor_initializers {
+            let members = compile_class_members(&mut ib, span, members)?;
+            ib.build_this();
+            ib.build_object_member_like_instruction(span, members, Instruction::AssignProperties)?;
+        }
+
+        let res = statements.into_iter().try_for_each(|stmt| ib.accept(stmt));
 
         let cmp = ib.function_stack.pop().expect("Missing function state");
         res?; // Cannot early return error in the loop as we need to pop the function state in any case
@@ -1797,20 +1800,9 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
     fn visit_object_literal(&mut self, span: Span, ObjectLiteral(exprs): ObjectLiteral) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
-        let mut members = Vec::with_capacity(exprs.len());
-        for (member, value) in exprs {
-            ib.accept_expr(value)?;
+        let members = compile_object_members(&mut ib, exprs.iter().cloned())?;
+        ib.build_object_member_like_instruction(span, members, Instruction::ObjLit)?;
 
-            if let ObjectMemberKind::Dynamic(expr) = member {
-                // TODO: do not clone, the `expr` is not needed in ib.build_objlit
-                members.push(ObjectMemberKind::Dynamic(expr.clone()));
-                ib.accept_expr(expr)?;
-            } else {
-                members.push(member);
-            }
-        }
-
-        ib.build_objlit(span, members)?;
         Ok(())
     }
 
@@ -2109,7 +2101,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                 .map_err(|_| Error::LocalLimitExceeded(span))?,
         };
 
-        let (parameters, mut statements, id) = match constructor {
+        let (parameters, statements, id) = match constructor {
             Some(fun) => (fun.parameters, fun.statements, fun.id),
             None => {
                 let parent = ib.current_function().id;
@@ -2117,7 +2109,10 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             }
         };
 
-        transformations::insert_initializer_in_constructor(&class, &mut statements);
+        let fields = class
+            .members
+            .iter()
+            .filter(|member| matches!(member.value, ClassMemberValue::Field(_)));
 
         let desugared_class = FunctionDeclaration {
             id,
@@ -2126,6 +2121,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             statements,
             ty: FunctionKind::Function(Asyncness::No),
             ty_segment: None,
+            constructor_initializers: Some(fields.clone().filter(|member| !member.static_).cloned().collect()),
         };
 
         ib.visit_assignment_expression(
@@ -2133,7 +2129,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             AssignmentExpr::new_local_place(
                 binding_id,
                 Expr {
-                    span: Span::COMPILER_GENERATED,
+                    span,
                     kind: ExprKind::Function(desugared_class),
                 },
                 TokenType::Assignment,
@@ -2157,42 +2153,25 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             ),
         };
 
-        for member in class.members {
-            if let ClassMemberValue::Method(method) = member.value {
-                // Either Class.name or Class.prototype.name
-                let assign_target = Expr {
-                    span: Span::COMPILER_GENERATED,
-                    kind: ExprKind::property_access(
-                        matches!(member.key, ClassMemberKey::Computed(_)),
-                        match member.static_ {
-                            true => load_class_binding.clone(),
-                            false => class_prototype.clone(),
-                        },
-                        match member.key {
-                            ClassMemberKey::Computed(ref expr) => expr.clone(),
-                            ClassMemberKey::Named(name) => Expr {
-                                span: Span::COMPILER_GENERATED,
-                                kind: ExprKind::identifier(name),
-                            },
-                        },
-                    ),
-                };
-                ib.accept(Statement {
-                    span: Span::COMPILER_GENERATED,
-                    kind: StatementKind::Expression(Expr {
-                        span: Span::COMPILER_GENERATED,
-                        kind: ExprKind::Assignment(AssignmentExpr {
-                            left: AssignmentTarget::Expr(Box::new(assign_target)),
-                            right: Box::new(Expr {
-                                span: Span::COMPILER_GENERATED,
-                                kind: ExprKind::Function(method),
-                            }),
-                            operator: TokenType::Assignment,
-                        }),
-                    }),
-                })?;
-            }
-        }
+        let methods = class.members.iter().filter(|member| {
+            matches!(
+                member.value,
+                ClassMemberValue::Getter(_) | ClassMemberValue::Setter(_) | ClassMemberValue::Method(_)
+            )
+        });
+
+        let static_m = compile_class_members(&mut ib, span, methods.clone().filter(|method| method.static_).cloned())?;
+        ib.accept_expr(load_class_binding.clone())?;
+        ib.build_object_member_like_instruction(span, static_m, Instruction::AssignProperties)?;
+
+        let prototype_m = compile_class_members(&mut ib, span, methods.filter(|method| !method.static_).cloned())?;
+        ib.accept_expr(class_prototype.clone())?;
+        ib.build_object_member_like_instruction(span, prototype_m, Instruction::AssignProperties)?;
+
+        let static_fields = compile_class_members(&mut ib, span, fields.filter(|member| member.static_).cloned())?;
+        ib.accept_expr(load_class_binding.clone())?;
+        ib.build_object_member_like_instruction(span, static_fields, Instruction::AssignProperties)?;
+
         ib.build_pop();
 
         if let Some(super_id) = load_super_class {
@@ -2368,4 +2347,85 @@ fn compile_switch_naive(
     }
 
     Ok(())
+}
+
+fn compile_object_members(
+    ib: &mut InstructionBuilder<'_, '_>,
+    iter: impl IntoIterator<Item = (ObjectMemberKind, Expr)>,
+) -> Result<Vec<ObjectMemberKind>, Error> {
+    let iter = iter.into_iter();
+
+    let mut members = Vec::with_capacity(iter.size_hint().0);
+    for (member, value) in iter {
+        ib.accept_expr(value)?;
+
+        if let ObjectMemberKind::Dynamic(expr) = member {
+            // TODO: no clone needed, the `expr` is not needed in ib.build_objlit
+            members.push(ObjectMemberKind::Dynamic(expr.clone()));
+            ib.accept_expr(expr)?;
+        } else {
+            members.push(member);
+        }
+    }
+
+    Ok(members)
+}
+
+fn compile_class_members(
+    ib: &mut InstructionBuilder<'_, '_>,
+    span: Span,
+    it: impl IntoIterator<Item = ClassMember>,
+) -> Result<Vec<ObjectMemberKind>, Error> {
+    let mk_fn = |f| Expr {
+        span,
+        kind: ExprKind::function(f),
+    };
+
+    compile_object_members(
+        ib,
+        it.into_iter().map(|member| {
+            let (key, value) = match (member.key, member.value) {
+                (ClassMemberKey::Computed(key), ClassMemberValue::Method(value)) => {
+                    (ObjectMemberKind::Dynamic(key), mk_fn(value))
+                }
+                (ClassMemberKey::Computed(key), ClassMemberValue::Field(value)) => (
+                    ObjectMemberKind::Dynamic(key),
+                    value.unwrap_or_else(|| Expr {
+                        span,
+                        kind: ExprKind::undefined_literal(),
+                    }),
+                ),
+                (ClassMemberKey::Computed(key), ClassMemberValue::Getter(value)) => {
+                    let Some(ident) = key.kind.as_identifier() else {
+                        panic!("FIXME")
+                    };
+                    (ObjectMemberKind::Getter(ident), mk_fn(value))
+                }
+                (ClassMemberKey::Computed(key), ClassMemberValue::Setter(value)) => {
+                    let Some(ident) = key.kind.as_identifier() else {
+                        panic!("FIXME")
+                    };
+                    (ObjectMemberKind::Setter(ident), mk_fn(value))
+                }
+                (ClassMemberKey::Named(key), ClassMemberValue::Method(value)) => {
+                    (ObjectMemberKind::Static(key), mk_fn(value))
+                }
+                (ClassMemberKey::Named(key), ClassMemberValue::Field(value)) => (
+                    ObjectMemberKind::Static(key),
+                    value.unwrap_or_else(|| Expr {
+                        span,
+                        kind: ExprKind::undefined_literal(),
+                    }),
+                ),
+                (ClassMemberKey::Named(key), ClassMemberValue::Getter(value)) => {
+                    (ObjectMemberKind::Getter(key), mk_fn(value))
+                }
+                (ClassMemberKey::Named(key), ClassMemberValue::Setter(value)) => {
+                    (ObjectMemberKind::Setter(key), mk_fn(value))
+                }
+            };
+
+            (key, value)
+        }),
+    )
 }

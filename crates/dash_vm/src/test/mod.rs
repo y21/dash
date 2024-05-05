@@ -392,3 +392,39 @@ assert(sum.apply(null, 0) === 0);
     "#,
     Value::undefined()
 );
+
+simple_test!(
+    classes,
+    r#"
+    class C1 {}
+    new C1();
+    
+    class C2 { field = sideEffect() }
+    /* don't evaluate C2 constructor */
+    
+    class C3 { field = 4 * 4 }
+    assert('field' in new C3());
+    assert(new C3().field === 16);
+    
+    let c = 0;
+    class C4 {
+        get field() { return c++ };
+        // FIXME: uncomment once we have setters
+        set field(v) { c = v; }
+    }
+    assert(new C4().field === 0);
+    assert(new C4().field === 1);
+    // new C4().field = 0;
+    // assert(new C4().field === 0);
+    // assert(new C4().field === 1);
+    
+    class C5 { static field = 42; }
+    assert(C5.field === 42);
+    assert(!('field' in new C5()));
+    
+    class C6 { foo(n) { return n * n; }; static bar() { return 42 } }
+    assert(new C6().foo(4) === 16);
+    assert(C6.bar() === 42);
+    "#,
+    Value::undefined()
+);

@@ -47,7 +47,6 @@ pub enum Instruction {
     ArrayLit,
     ArrayLitW,
     ObjLit,
-    ObjLitW,
     This,
     StaticPropAssign,
     DynamicPropAssign,
@@ -97,6 +96,7 @@ pub enum Instruction {
     DeletePropertyDynamic,
     ObjDestruct,
     ArrayDestruct,
+    AssignProperties,
     // Nop exists solely for the sake of benchmarking the raw throughput of the VM dispatch loop
     Nop,
 }

@@ -128,7 +128,9 @@ impl TypeInferCtx {
         self.visit_maybe_expr(extends.as_ref(), func_id);
         for member in members {
             match &member.value {
-                ClassMemberValue::Method(method) => drop(self.visit_function_expression(method, func_id)),
+                ClassMemberValue::Method(method)
+                | ClassMemberValue::Getter(method)
+                | ClassMemberValue::Setter(method) => drop(self.visit_function_expression(method, func_id)),
                 ClassMemberValue::Field(field) => drop(self.visit_maybe_expr(field.as_ref(), func_id)),
             }
         }

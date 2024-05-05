@@ -117,7 +117,9 @@ impl<'b, 'interner> ConstFunctionEvalCtx<'b, 'interner> {
         self.visit_maybe_expr(extends.as_mut(), func_id);
         for member in members {
             match &mut member.value {
-                ClassMemberValue::Method(method) => {
+                ClassMemberValue::Method(method)
+                | ClassMemberValue::Getter(method)
+                | ClassMemberValue::Setter(method) => {
                     self.visit_function_expression(method, func_id);
                 }
                 ClassMemberValue::Field(field) => {

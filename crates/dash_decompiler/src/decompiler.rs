@@ -271,7 +271,6 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                     let props = props.iter().map(|v| v as &dyn fmt::Display).collect::<Vec<_>>();
                     self.handle_op_instr("objlit", &props);
                 }
-                Instruction::ObjLitW => todo!(),
                 Instruction::This => self.handle_opless_instr("this"),
                 Instruction::StaticPropAssign => {
                     let _k = self.read()?;
@@ -412,6 +411,7 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                     }
                     self.handle_op_map_instr("arraydestruct", &[("count", &count)])
                 }
+                Instruction::AssignProperties => todo!(),
                 Instruction::Nop => self.handle_opless_instr("nop"),
             }
         }
