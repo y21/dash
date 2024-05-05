@@ -125,7 +125,7 @@ impl TypeInferCtx {
         }: &Class,
         func_id: FuncId,
     ) {
-        self.visit_maybe_expr(extends.as_ref(), func_id);
+        self.visit_maybe_expr(extends.as_deref(), func_id);
         for member in members {
             match &member.value {
                 ClassMemberValue::Method(method)
@@ -258,6 +258,7 @@ impl TypeInferCtx {
             ExprKind::Prefix((tt, expr)) => self.visit_prefix_expression(expr, *tt, func_id),
             ExprKind::Postfix((tt, expr)) => self.visit_postfix_expression(expr, *tt, func_id),
             ExprKind::Function(expr) => self.visit_function_expression(expr, func_id),
+            ExprKind::Class(class) => self.visit_class_expression(class, func_id),
             ExprKind::Array(expr) => self.visit_array_expression(expr, func_id),
             ExprKind::Object(expr) => self.visit_object_expression(expr, func_id),
             ExprKind::Compiled(..) => None,
@@ -288,6 +289,11 @@ impl TypeInferCtx {
             (_, _, TokenType::Minus | TokenType::Star | TokenType::Slash) => Some(CompileValueType::Number),
             _ => None,
         }
+    }
+
+    fn visit_class_expression(&mut self, class: &Class, func_id: FuncId) -> Option<CompileValueType> {
+        self.visit_class_statement(class, func_id);
+        None
     }
 
     pub fn visit_grouping_expression(

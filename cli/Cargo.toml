@@ -25,12 +25,12 @@ dash_node_impl = { path = "../crates/dash_node_impl", optional = true, features 
     "fetch",
 ] }
 dash_rt_modules = { path = "../crates/dash_rt_modules", features = [
-    # "http",
-    # "fs",
-    # "fetch",
-    # "modules",
-    # "timers",
-    # "dll",
+    "http",
+    "fs",
+    "fetch",
+    "modules",
+    "timers",
+    "dll",
 ] }
 tracing-subscriber = "0.3.15"
 tracing = "0.1.36"

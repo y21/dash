@@ -63,11 +63,11 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         })
     }
 
-    fn parse_class(&mut self) -> Option<Class> {
+    pub fn parse_class(&mut self) -> Option<Class> {
         let name = self.expect_identifier(false);
 
         let extends = if self.expect_token_type_and_skip(&[TokenType::Extends], false) {
-            Some(self.parse_expression()?)
+            Some(Box::new(self.parse_expression()?))
         } else {
             None
         };

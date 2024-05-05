@@ -813,7 +813,7 @@ pub struct Class {
     /// Class expressions don't necessarily need to have a name
     pub name: Option<Symbol>,
     /// The superclass of this class, if present
-    pub extends: Option<Expr>,
+    pub extends: Option<Box<Expr>>,
     /// Members of this class
     pub members: Vec<ClassMember>,
 }

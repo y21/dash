@@ -6,7 +6,7 @@ use crate::interner::{sym, Symbol};
 use crate::lexer::token::TokenType;
 use crate::sourcemap::Span;
 
-use super::statement::{fmt_list, FunctionDeclaration};
+use super::statement::{fmt_list, Class, FunctionDeclaration};
 
 /// The sequence operator (`expr, expr`)
 pub type Seq = (Box<Expr>, Box<Expr>);
@@ -47,6 +47,8 @@ pub enum ExprKind {
     ///
     /// This includes both normal functions and arrow functions
     Function(FunctionDeclaration),
+    /// A `class {}` expression
+    Class(Class),
     /// An array literal expression
     Array(ArrayLiteral),
     /// An object literal expression

@@ -88,6 +88,8 @@ pub trait Visitor<V> {
     /// Visits a function expression
     fn visit_function_expr(&mut self, span: Span, f: FunctionDeclaration) -> V;
 
+    fn visit_class_expr(&mut self, span: Span, c: Class) -> V;
+
     /// Visits an array literal
     fn visit_array_literal(&mut self, span: Span, a: ArrayLiteral) -> V;
 
@@ -181,6 +183,7 @@ where
         ExprKind::Postfix(e) => this.visit_postfix_expr(span, e),
         ExprKind::Prefix(e) => this.visit_prefix_expr(span, e),
         ExprKind::Function(e) => this.visit_function_expr(span, e),
+        ExprKind::Class(e) => this.visit_class_expr(span, e),
         ExprKind::Array(e) => this.visit_array_literal(span, e),
         ExprKind::Object(e) => this.visit_object_literal(span, e),
         ExprKind::Compiled(..) => on_empty(this),

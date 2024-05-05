@@ -114,7 +114,7 @@ impl<'b, 'interner> ConstFunctionEvalCtx<'b, 'interner> {
     }
 
     pub fn visit_class_statement(&mut self, Class { extends, members, .. }: &mut Class, func_id: FuncId) {
-        self.visit_maybe_expr(extends.as_mut(), func_id);
+        self.visit_maybe_expr(extends.as_deref_mut(), func_id);
         for member in members {
             match &mut member.value {
                 ClassMemberValue::Method(method)
@@ -230,6 +230,7 @@ impl<'b, 'interner> ConstFunctionEvalCtx<'b, 'interner> {
             ExprKind::Prefix(..) => self.visit_prefix_expression(expression, func_id),
             ExprKind::Postfix(..) => self.visit_postfix_expression(expression, func_id),
             ExprKind::Function(expr) => self.visit_function_expression(expr, func_id),
+            ExprKind::Class(class) => self.visit_class_statement(class, func_id),
             ExprKind::Array(..) => self.visit_array_expression(expression, func_id),
             ExprKind::Object(..) => self.visit_object_expression(expression, func_id),
             ExprKind::Compiled(..) => {}

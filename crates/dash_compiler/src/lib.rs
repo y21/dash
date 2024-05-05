@@ -511,6 +511,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             ExprKind::Postfix(e) => self.visit_postfix_expr(span, e),
             ExprKind::Prefix(e) => self.visit_prefix_expr(span, e),
             ExprKind::Function(e) => self.visit_function_expr(span, e),
+            ExprKind::Class(e) => self.visit_class_expr(span, e),
             ExprKind::Array(e) => self.visit_array_literal(span, e),
             ExprKind::Object(e) => self.visit_object_literal(span, e),
             ExprKind::Compiled(mut buf) => {
@@ -2061,10 +2062,10 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
         Ok(())
     }
 
-    fn visit_class_declaration(&mut self, span: Span, class: Class) -> Result<(), Error> {
+    fn visit_class_expr(&mut self, span: Span, class: Class) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
-        let load_super_class = match &class.extends {
+        let load_super_class = match class.extends.as_deref() {
             Some(expr) => {
                 let extend_id = ib
                     .current_scope_mut()
@@ -2124,17 +2125,17 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             constructor_initializers: Some(fields.clone().filter(|member| !member.static_).cloned().collect()),
         };
 
-        ib.visit_assignment_expression(
-            span,
-            AssignmentExpr::new_local_place(
+        ib.visit_expression_statement(Expr {
+            span: Span::COMPILER_GENERATED,
+            kind: ExprKind::Assignment(AssignmentExpr::new_local_place(
                 binding_id,
                 Expr {
                     span,
                     kind: ExprKind::Function(desugared_class),
                 },
                 TokenType::Assignment,
-            ),
-        )?;
+            )),
+        })?;
         let load_class_binding = Expr {
             span: Span::COMPILER_GENERATED,
             kind: ExprKind::Compiled(compile_local_load(binding_id, false)),
@@ -2171,8 +2172,6 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
         let static_fields = compile_class_members(&mut ib, span, fields.filter(|member| member.static_).cloned())?;
         ib.accept_expr(load_class_binding.clone())?;
         ib.build_object_member_like_instruction(span, static_fields, Instruction::AssignProperties)?;
-
-        ib.build_pop();
 
         if let Some(super_id) = load_super_class {
             // Add the superclass' prototype to our prototype chain
@@ -2229,6 +2228,15 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             })?;
         }
 
+        // Load it one last time since the `class` expression ultimately should evaluate to that class
+        ib.accept_expr(load_class_binding)?;
+
+        Ok(())
+    }
+
+    fn visit_class_declaration(&mut self, span: Span, class: Class) -> Result<(), Error> {
+        self.visit_class_expr(span, class)?;
+        InstructionBuilder::new(self).build_pop();
         Ok(())
     }
 

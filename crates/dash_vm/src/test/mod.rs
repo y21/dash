@@ -443,6 +443,10 @@ simple_test!(
     assert(new C8().get() === 1);
     assert(new C8().set() === 2);
     assert(new C8().a === 3);
+
+    assert(new (class { constructor() { return [42] } })()[0] == 42);
+    let v = class V {};
+    assert(v === V);
     "#,
     Value::undefined()
 );

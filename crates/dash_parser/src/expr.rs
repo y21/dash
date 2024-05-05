@@ -706,6 +706,14 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 span,
                 kind: ExprKind::function(f),
             })?,
+            TokenType::Class => {
+                let class = self.parse_class()?;
+                let rbrace = self.previous().unwrap().span;
+                Expr {
+                    span: current.span.to(rbrace),
+                    kind: ExprKind::Class(class),
+                }
+            }
             TokenType::RegexLiteral { literal, flags } => {
                 // Trim / prefix and suffix
                 let full = self.interner.resolve(literal);
