@@ -425,6 +425,24 @@ simple_test!(
     class C6 { foo(n) { return n * n; }; static bar() { return 42 } }
     assert(new C6().foo(4) === 16);
     assert(C6.bar() === 42);
+
+    class C7 {
+        *[Symbol.iterator]() {
+            yield 42;
+        }
+    }
+    const gen = new C7()[Symbol.iterator]();
+    assert(gen.next().value === 42);
+    assert(gen.next().done);
+
+    class C8 {
+        get() { return 1 }
+        set() { return 2 }
+        get a() { return 3 }
+    }
+    assert(new C8().get() === 1);
+    assert(new C8().set() === 2);
+    assert(new C8().a === 3);
     "#,
     Value::undefined()
 );

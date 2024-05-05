@@ -1,3 +1,4 @@
+use dash_middle::interner::sym;
 use dash_middle::lexer::token::{TokenType, VARIABLE_TYPES};
 use dash_middle::parser::error::Error;
 use dash_middle::parser::expr::{Expr, ExprKind};
@@ -90,8 +91,8 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 false => Asyncness::No,
             };
             let is_generator = self.expect_token_type_and_skip(&[TokenType::Star], false);
-            // FIXME: this breaks `class V { get }`, which is valid -- needs backtracking
-            let property_kind = if self.expect_token_type_and_skip(&[TokenType::Get], false) {
+
+            let mut property_kind = if self.expect_token_type_and_skip(&[TokenType::Get], false) {
                 Kind::Getter(self.previous().unwrap().span)
             } else if self.expect_token_type_and_skip(&[TokenType::Set], false) {
                 Kind::Setter(self.previous().unwrap().span)
@@ -104,7 +105,21 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 self.expect_token_type_and_skip(&[TokenType::RightSquareBrace], true);
                 ClassMemberKey::Computed(expr)
             } else {
-                ClassMemberKey::Named(self.expect_identifier_or_reserved_kw(true)?)
+                // HACK: if we have `get` + `(`, it is not a getter
+                // change `Kind::Getter` to `Kind::Normal` and treat it as a "get" named method (same for set)
+                if self.current().is_some_and(|tok| tok.ty == TokenType::LeftParen)
+                    && matches!(property_kind, Kind::Getter(_) | Kind::Setter(_))
+                {
+                    let key = match property_kind {
+                        Kind::Getter(_) => sym::get,
+                        Kind::Setter(_) => sym::set,
+                        Kind::Normal => unreachable!(),
+                    };
+                    property_kind = Kind::Normal;
+                    ClassMemberKey::Named(key)
+                } else {
+                    ClassMemberKey::Named(self.expect_identifier_or_reserved_kw(true)?)
+                }
             };
 
             let is_method = self.expect_token_type_and_skip(&[TokenType::LeftParen], false);
