@@ -181,7 +181,8 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
 
     pub fn build_static_prop_access(&mut self, ident: Symbol, preserve_this: bool) -> Result<(), LimitExceededError> {
         let id = self.current_function_mut().cp.add(Constant::Identifier(ident))?;
-        self.write_wide_instr(Instruction::StaticPropAccess, Instruction::StaticPropAccessW, id);
+        self.write_instr(Instruction::StaticPropAccess);
+        self.writew(id);
         self.write(preserve_this.into());
 
         Ok(())

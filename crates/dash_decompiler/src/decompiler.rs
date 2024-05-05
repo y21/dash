@@ -210,14 +210,9 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                     );
                 }
                 Instruction::StaticPropAccess => {
-                    let b = self.read()?;
+                    let b = self.read_i16()?;
                     let _preserve_this = self.read()?;
                     self.handle_op_instr("staticpropaccess", &[&self.display(&self.constants[b as usize])]);
-                }
-                Instruction::StaticPropAccessW => {
-                    let b = self.read_u16()?;
-                    let _preserve_this = self.read()?;
-                    self.handle_op_instr("staticpropaccessw", &[&self.display(&self.constants[b as usize])]);
                 }
                 Instruction::Ret => {
                     self.read_u16()?; // intentionally ignored

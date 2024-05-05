@@ -1474,7 +1474,7 @@ mod handlers {
     }
 
     pub fn staticpropertyaccess<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
-        let id = cx.fetch_and_inc_ip();
+        let id = cx.fetchw_and_inc_ip();
         let ident = cx.identifier_constant(id.into());
 
         let preserve_this = cx.fetch_and_inc_ip() == 1;

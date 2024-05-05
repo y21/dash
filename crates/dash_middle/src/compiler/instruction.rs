@@ -42,7 +42,6 @@ pub enum Instruction {
     JmpFalseP,
     Jmp,
     StaticPropAccess,
-    StaticPropAccessW,
     DynamicPropAccess,
     ArrayLit,
     ArrayLitW,
