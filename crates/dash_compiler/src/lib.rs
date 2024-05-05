@@ -2359,12 +2359,17 @@ fn compile_object_members(
     for (member, value) in iter {
         ib.accept_expr(value)?;
 
-        if let ObjectMemberKind::Dynamic(expr) = member {
-            // TODO: no clone needed, the `expr` is not needed in ib.build_objlit
-            members.push(ObjectMemberKind::Dynamic(expr.clone()));
-            ib.accept_expr(expr)?;
-        } else {
-            members.push(member);
+        let mut push_and_accept = |ct: fn(Expr) -> ObjectMemberKind, expr: Expr| {
+            // TODO: no clone really needed, the `expr` is not needed in ib.build_objlit
+            members.push(ct(expr.clone()));
+            ib.accept_expr(expr)
+        };
+
+        match member {
+            ObjectMemberKind::DynamicGetter(expr) => push_and_accept(ObjectMemberKind::DynamicGetter, expr)?,
+            ObjectMemberKind::DynamicSetter(expr) => push_and_accept(ObjectMemberKind::DynamicSetter, expr)?,
+            ObjectMemberKind::Dynamic(expr) => push_and_accept(ObjectMemberKind::Dynamic, expr)?,
+            _ => members.push(member),
         }
     }
 
@@ -2396,16 +2401,10 @@ fn compile_class_members(
                     }),
                 ),
                 (ClassMemberKey::Computed(key), ClassMemberValue::Getter(value)) => {
-                    let Some(ident) = key.kind.as_identifier() else {
-                        panic!("FIXME")
-                    };
-                    (ObjectMemberKind::Getter(ident), mk_fn(value))
+                    (ObjectMemberKind::DynamicGetter(key), mk_fn(value))
                 }
                 (ClassMemberKey::Computed(key), ClassMemberValue::Setter(value)) => {
-                    let Some(ident) = key.kind.as_identifier() else {
-                        panic!("FIXME")
-                    };
-                    (ObjectMemberKind::Setter(ident), mk_fn(value))
+                    (ObjectMemberKind::DynamicSetter(key), mk_fn(value))
                 }
                 (ClassMemberKey::Named(key), ClassMemberValue::Method(value)) => {
                     (ObjectMemberKind::Static(key), mk_fn(value))

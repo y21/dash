@@ -434,6 +434,24 @@ mod extract {
                         value: PropertyValue::static_default(value),
                     }
                 }
+                ObjectMemberKind::DynamicGetter => {
+                    let key = extract(cx);
+                    let value = extract::<Object>(cx).0;
+
+                    Self::Getter {
+                        key: PropertyKey::from_value(cx.scope, key)?,
+                        value,
+                    }
+                }
+                ObjectMemberKind::DynamicSetter => {
+                    let key = extract(cx);
+                    let value = extract::<Object>(cx).0;
+
+                    Self::Setter {
+                        key: PropertyKey::from_value(cx.scope, key)?,
+                        value,
+                    }
+                }
                 ObjectMemberKind::Spread => Self::Spread(extract(cx)),
             })
         }

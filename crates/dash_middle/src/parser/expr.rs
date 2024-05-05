@@ -280,7 +280,9 @@ impl fmt::Display for ArrayLiteral {
 #[derive(Debug, Clone)]
 pub enum ObjectMemberKind {
     Getter(Symbol),
+    DynamicGetter(Expr),
     Setter(Symbol),
+    DynamicSetter(Expr),
     Static(Symbol),
     Spread,
     Dynamic(Expr),
@@ -290,7 +292,9 @@ impl fmt::Display for ObjectMemberKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Getter(name) => write!(f, "get {name}"),
-            Self::Setter(name) => write!(f, "set {name}"),
+            Self::DynamicGetter(expr) => write!(f, "get [{expr}]"),
+            Self::Setter(name) => write!(f, "set [{name}]"),
+            Self::DynamicSetter(expr) => write!(f, "set [{expr}]"),
             Self::Static(name) => write!(f, "{name}"),
             Self::Dynamic(expr) => write!(f, "[{expr}]"),
             Self::Spread => f.write_str("...<expression unavailable>"), // TODO: figure out a way to display it here

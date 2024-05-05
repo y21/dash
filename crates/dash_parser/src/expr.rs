@@ -616,6 +616,9 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                                 },
                             ));
                         }
+                        ObjectMemberKind::DynamicGetter(_) | ObjectMemberKind::DynamicSetter(_) => {
+                            unreachable!("never created")
+                        }
                     }
                 }
                 let rbrace_span = self.previous()?.span;

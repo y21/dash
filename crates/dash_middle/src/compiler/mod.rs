@@ -126,7 +126,9 @@ pub enum StaticImportKind {
 #[derive(FromRepr)]
 pub enum ObjectMemberKind {
     Getter,
+    DynamicGetter,
     Setter,
+    DynamicSetter,
     Static,
     Dynamic,
     Spread,
@@ -138,7 +140,9 @@ impl From<&ParserObjectMemberKind> for ObjectMemberKind {
     fn from(v: &ParserObjectMemberKind) -> Self {
         match v {
             ParserObjectMemberKind::Dynamic(..) => Self::Dynamic,
+            ParserObjectMemberKind::DynamicGetter(..) => Self::DynamicGetter,
             ParserObjectMemberKind::Getter(..) => Self::Getter,
+            ParserObjectMemberKind::DynamicSetter(..) => Self::DynamicSetter,
             ParserObjectMemberKind::Setter(..) => Self::Setter,
             ParserObjectMemberKind::Static(..) => Self::Static,
             ParserObjectMemberKind::Spread => Self::Spread,

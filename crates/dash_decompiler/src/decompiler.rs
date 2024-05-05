@@ -266,6 +266,8 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                             ObjectMemberKind::Spread => {
                                 props.push(String::from("<spread>"));
                             }
+                            ObjectMemberKind::DynamicGetter => props.push(String::from("get <dynamic>")),
+                            ObjectMemberKind::DynamicSetter => props.push(String::from("set <dynamic>")),
                         }
                     }
                     let props = props.iter().map(|v| v as &dyn fmt::Display).collect::<Vec<_>>();
