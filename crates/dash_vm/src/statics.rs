@@ -82,6 +82,7 @@ pub struct Statics {
     pub object_assign: Handle,
     pub object_entries: Handle,
     pub object_get_prototype_of: Handle,
+    pub object_set_prototype_of: Handle,
     pub object_is_prototype_of: Handle,
     pub object_property_is_enumerable: Handle,
     pub number_ctor: Handle,
@@ -298,6 +299,7 @@ impl Statics {
             object_assign: function(gc, sym::assign, js_std::object::assign),
             object_entries: function(gc, sym::entries, js_std::object::entries),
             object_get_prototype_of: function(gc, sym::getPrototypeOf, js_std::object::get_prototype_of),
+            object_set_prototype_of: function(gc, sym::setPrototypeOf, js_std::object::set_prototype_of),
             object_is_prototype_of: function(gc, sym::isPrototypeOf, js_std::object::is_prototype_of),
             object_property_is_enumerable: function(
                 gc,

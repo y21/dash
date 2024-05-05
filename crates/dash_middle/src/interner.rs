@@ -267,6 +267,7 @@ pub mod sym {
                 zero: "0",
                 one: "1",
                 getPrototypeOf,
+                setPrototypeOf,
                 isPrototypeOf,
                 arguments,
                 propertyIsEnumerable,

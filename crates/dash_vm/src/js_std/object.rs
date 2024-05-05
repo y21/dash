@@ -213,6 +213,13 @@ pub fn get_prototype_of(cx: CallContext) -> Result<Value, Value> {
     obj.get_prototype(cx.scope)
 }
 
+pub fn set_prototype_of(cx: CallContext) -> Result<Value, Value> {
+    let obj = cx.args.first().unwrap_or_undefined().to_object(cx.scope)?;
+    let target = cx.args.get(1).unwrap_or_undefined();
+    obj.set_prototype(cx.scope, target)?;
+    Ok(Value::Object(obj))
+}
+
 pub fn is_prototype_of(cx: CallContext) -> Result<Value, Value> {
     let target_proto = Value::Object(cx.this.to_object(cx.scope)?);
     let this_proto = cx.args.first().unwrap_or_undefined();

@@ -244,6 +244,7 @@ impl Vm {
                 (sym::entries, scope.statics.object_entries.clone()),
                 (sym::assign, scope.statics.object_assign.clone()),
                 (sym::getPrototypeOf, scope.statics.object_get_prototype_of.clone()),
+                (sym::setPrototypeOf, scope.statics.object_set_prototype_of.clone()),
             ],
             [],
             [],

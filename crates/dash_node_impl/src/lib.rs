@@ -65,6 +65,17 @@ async fn run_inner_fallible(path: &str, opt: OptLevel, initial_gc_threshold: Opt
     State::from_vm_mut(rt.vm_mut()).store.insert(Nodejs, state);
 
     rt.vm_mut().with_scope(|scope| {
+        let global = scope.global();
+        let global_k = scope.intern("global");
+        global
+            .clone()
+            .set_property(
+                scope,
+                global_k.into(),
+                PropertyValue::static_default(Value::Object(global)),
+            )
+            .unwrap();
+
         anyhow::Ok(
             execute_node_module(scope, path, path, &entry, opt, global_state, Rc::new(package_state)).map_err(
                 |err| match err {
