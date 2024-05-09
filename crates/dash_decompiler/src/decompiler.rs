@@ -190,12 +190,8 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                 }
                 Instruction::Arguments => self.handle_opless_instr("arguments"),
                 Instruction::LdGlobal => {
-                    let b = self.read()?;
+                    let b = self.read_i16()?;
                     self.handle_op_instr("ldglobal", &[&self.display(&self.constants[b as usize])]);
-                }
-                Instruction::LdGlobalW => {
-                    let b = self.read_u16()?;
-                    self.handle_op_instr("ldglobalw", &[&self.display(&self.constants[b as usize])]);
                 }
                 Instruction::StoreLocal => self.handle_inc_op_instr2("storelocal")?,
                 Instruction::StoreLocalW => self.handle_inc_op_instr2("storelocalw")?,

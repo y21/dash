@@ -771,7 +771,7 @@ mod handlers {
     }
 
     pub fn ldglobal<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
-        let id = cx.fetch_and_inc_ip();
+        let id = cx.fetchw_and_inc_ip();
         let name = cx.identifier_constant(id.into());
 
         let value = match cx.global.as_any().downcast_ref::<NamedObject>() {

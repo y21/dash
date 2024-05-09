@@ -99,7 +99,8 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
 
     pub fn build_global_load(&mut self, ident: Symbol) -> Result<(), LimitExceededError> {
         let id = self.current_function_mut().cp.add(Constant::Identifier(ident))?;
-        self.write_wide_instr(Instruction::LdGlobal, Instruction::LdGlobalW, id);
+        self.write_instr(Instruction::LdGlobal);
+        self.writew(id);
         Ok(())
     }
 

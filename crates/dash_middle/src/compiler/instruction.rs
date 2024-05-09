@@ -22,7 +22,6 @@ pub enum Instruction {
     LdLocal,
     LdLocalW,
     LdGlobal,
-    LdGlobalW,
     Constant,
     ConstantW,
     Pos,
