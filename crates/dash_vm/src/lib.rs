@@ -237,6 +237,8 @@ impl Vm {
             [
                 (sym::create, scope.statics.object_create.clone()),
                 (sym::keys, scope.statics.object_keys.clone()),
+                // FIXME: these are not the same
+                (sym::getOwnPropertyNames, scope.statics.object_keys.clone()),
                 (sym::getOwnPropertyDescriptor, scope.statics.object_get_own_property_descriptor.clone()),
                 (sym::getOwnPropertyDescriptors, scope.statics.object_get_own_property_descriptors.clone()),
                 (sym::defineProperty, scope.statics.object_define_property.clone()),
