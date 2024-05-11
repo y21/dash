@@ -31,6 +31,7 @@ pub fn create(cx: CallContext) -> Result<Value, Value> {
 
 pub fn keys(cx: CallContext) -> Result<Value, Value> {
     let obj = cx.args.first().unwrap_or_undefined().to_object(cx.scope)?;
+    // FIXME: own_keys should probably takes an `enumerable: bool`
     let keys = obj.own_keys(cx.scope)?;
     let array = Array::from_vec(cx.scope, keys.into_iter().map(PropertyValue::static_default).collect());
     Ok(cx.scope.register(array).into())

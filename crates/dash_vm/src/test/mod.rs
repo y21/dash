@@ -450,3 +450,103 @@ simple_test!(
     "#,
     Value::undefined()
 );
+
+simple_test!(
+    try_finally,
+    r#"
+
+    let o = '';
+    assert((() => {
+        o += 1;
+        try {
+            o += 2;
+            return 1;
+        } catch {
+            o += 4;
+        } finally {
+            o += 3;
+        }
+    })() == 1);
+    assert(o === '123');
+
+
+    o = '';
+    assert((() => {
+        o += 1;
+        try {
+            o += 2;
+            return 1;
+        } catch {
+            o += 4;
+        } finally {
+            o += 3;
+            return 2;
+        }
+    })() == 2);
+    assert(o === '123');
+
+
+    o = '';
+    try {
+        o += 1;
+        try {
+            o += 2;
+            throw null;
+        } catch {
+            o += 3;
+        } finally {
+            o += 4;
+        }
+    } catch(e) {
+        // exception was already caught by the inner catch
+        o += 5;
+    } finally {
+        o += 6;
+    }
+    assert(o === '12346');
+
+
+    o = '';
+    try {
+        o += 1;
+        try {
+            o += 2;
+            throw null;
+        } catch(e) {
+            o += 3;
+            throw e;
+        } finally {
+            o += 4;
+        }
+    } catch(e) {
+        // inner exception rethrown, we should catch it here
+        assert(e === null);
+        o += 5;
+    } finally {
+        o += 6;
+    }
+    assert(o === '123456');
+
+    o = '';
+    assert((() => {
+        try {
+            try {
+                o += 1;
+                return 1;
+            } catch(e) {
+                o += 2;
+            } finally {
+                o += 3;
+                // DONT return here just yet
+            }
+            o += 4;
+        } finally {
+            o += 5;
+            return 5;
+        }
+    })() === 5);
+    assert(o === '135');
+
+    "#,
+    Value::undefined()
+);

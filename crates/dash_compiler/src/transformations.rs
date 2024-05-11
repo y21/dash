@@ -173,7 +173,9 @@ pub fn hoist_declarations(ast: &mut Vec<Statement>) {
             }
             StatementKind::Try(tc_stmt) => {
                 hoist_function_declaration(prepend_function_assigns, &mut tc_stmt.try_);
-                hoist_function_declaration(prepend_function_assigns, &mut tc_stmt.catch.body);
+                if let Some(catch) = &mut tc_stmt.catch {
+                    hoist_function_declaration(prepend_function_assigns, &mut catch.body);
+                }
                 if let Some(finally_stmt) = &mut tc_stmt.finally {
                     hoist_function_declaration(prepend_function_assigns, finally_stmt);
                 }

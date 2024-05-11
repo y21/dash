@@ -138,6 +138,7 @@ pub mod sym {
                 call,
                 create,
                 keys,
+                getOwnPropertyNames,
                 getOwnPropertyDescriptor,
                 getOwnPropertyDescriptors,
                 defineProperty,

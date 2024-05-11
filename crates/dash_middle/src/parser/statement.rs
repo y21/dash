@@ -205,14 +205,18 @@ pub struct TryCatch {
     pub try_: Box<Statement>,
     /// Catch statement
     // TODO: make this optional. a try can exist without catch (try finally)
-    pub catch: Catch,
+    pub catch: Option<Catch>,
     /// Optional finally block
     pub finally: Option<Box<Statement>>,
 }
 
 impl fmt::Display for TryCatch {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "try {{ {} }} {}", self.try_, self.catch)?;
+        write!(f, "try {{ {} }} ", self.try_)?;
+
+        if let Some(catch) = &self.catch {
+            write!(f, "{catch}")?;
+        }
 
         if let Some(finally) = &self.finally {
             write!(f, " finally {{ {finally} }}")?;
@@ -224,7 +228,7 @@ impl fmt::Display for TryCatch {
 
 impl TryCatch {
     /// Creates a new try catch block
-    pub fn new(try_: Statement, catch: Catch, finally: Option<Statement>) -> Self {
+    pub fn new(try_: Statement, catch: Option<Catch>, finally: Option<Statement>) -> Self {
         Self {
             try_: Box::new(try_),
             catch,

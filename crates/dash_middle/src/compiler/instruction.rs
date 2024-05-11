@@ -22,7 +22,6 @@ pub enum Instruction {
     LdLocal,
     LdLocalW,
     LdGlobal,
-    LdGlobalW,
     Constant,
     ConstantW,
     Pos,
@@ -59,6 +58,7 @@ pub enum Instruction {
     StrictNe,
     Try,
     TryEnd,
+    FinallyEnd,
     Throw,
     Yield,
     JmpFalseNP,
@@ -96,6 +96,7 @@ pub enum Instruction {
     ObjDestruct,
     ArrayDestruct,
     AssignProperties,
+    DelayedReturn,
     // Nop exists solely for the sake of benchmarking the raw throughput of the VM dispatch loop
     Nop,
 }

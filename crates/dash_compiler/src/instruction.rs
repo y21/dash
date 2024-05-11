@@ -87,10 +87,25 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
         Ok(())
     }
 
-    pub fn build_try_block(&mut self) {
+    fn write_bool(&mut self, b: bool) {
+        self.write(b.into());
+    }
+
+    pub fn build_try_block(&mut self, has_catch: bool, finally_id: Option<usize>) {
         self.write_instr(Instruction::Try);
-        self.write_all(&[0, 0]);
+        self.write_bool(has_catch);
+        if has_catch {
+            self.write_all(&[0, 0]);
+        }
+        // NOTE: even though we won't *really* perform a jump (we skip over the following `jump` instruction emitted by this call in the vm dispatcher)
+        // we use the local jump resolving mechanism for updating the catch offset
         self.add_local_jump(Label::Catch);
+        self.write_bool(finally_id.is_some());
+        if let Some(finally_id) = finally_id {
+            self.write_all(&[0, 0]);
+            self.current_function_mut()
+                .add_global_jump(Label::Finally { finally_id });
+        }
     }
 
     pub fn build_local_load(&mut self, index: u16, is_extern: bool) {
@@ -99,7 +114,8 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
 
     pub fn build_global_load(&mut self, ident: Symbol) -> Result<(), LimitExceededError> {
         let id = self.current_function_mut().cp.add(Constant::Identifier(ident))?;
-        self.write_wide_instr(Instruction::LdGlobal, Instruction::LdGlobalW, id);
+        self.write_instr(Instruction::LdGlobal);
+        self.writew(id);
         Ok(())
     }
 

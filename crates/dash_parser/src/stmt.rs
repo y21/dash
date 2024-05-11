@@ -137,7 +137,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
                 let body = self.parse_statement()?;
 
-                let func_id = self.function_counter.advance();
+                let func_id = self.function_counter.inc();
                 let func = FunctionDeclaration::new(
                     match key {
                         ClassMemberKey::Named(name) => Some(name),
@@ -271,21 +271,27 @@ impl<'a, 'interner> Parser<'a, 'interner> {
     fn parse_try(&mut self) -> Option<TryCatch> {
         let try_ = self.parse_statement()?;
 
-        self.expect_token_type_and_skip(&[TokenType::Catch], true);
+        let catch = if self.expect_token_type_and_skip(&[TokenType::Catch], false) {
+            let capture_ident = if self.expect_token_type_and_skip(&[TokenType::LeftParen], false) {
+                let ident = self.expect_identifier(true)?;
+                self.expect_token_type_and_skip(&[TokenType::RightParen], true);
+                Some(ident)
+            } else {
+                None
+            };
 
-        let capture_ident = if self.expect_token_type_and_skip(&[TokenType::LeftParen], false) {
-            let ident = self.expect_identifier(true)?;
-            self.expect_token_type_and_skip(&[TokenType::RightParen], true);
-            Some(ident)
+            Some(Catch::new(self.parse_statement()?, capture_ident))
         } else {
             None
         };
 
-        let catch = self.parse_statement()?;
+        let finally = if self.expect_token_type_and_skip(&[TokenType::Finally], false) {
+            Some(self.parse_statement()?)
+        } else {
+            None
+        };
 
-        // TODO: finally
-
-        Some(TryCatch::new(try_, Catch::new(catch, capture_ident), None))
+        Some(TryCatch::new(try_, catch, finally))
     }
 
     fn parse_return(&mut self) -> Option<ReturnStatement> {

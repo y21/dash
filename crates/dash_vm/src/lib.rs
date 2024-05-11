@@ -237,6 +237,8 @@ impl Vm {
             [
                 (sym::create, scope.statics.object_create.clone()),
                 (sym::keys, scope.statics.object_keys.clone()),
+                // FIXME: these are not the same
+                (sym::getOwnPropertyNames, scope.statics.object_keys.clone()),
                 (sym::getOwnPropertyDescriptor, scope.statics.object_get_own_property_descriptor.clone()),
                 (sym::getOwnPropertyDescriptors, scope.statics.object_get_own_property_descriptors.clone()),
                 (sym::defineProperty, scope.statics.object_define_property.clone()),
@@ -1289,10 +1291,8 @@ impl Vm {
         debug!("handling rt error @{max_fp}");
         // Using .last() here instead of .pop() because there is a possibility that we
         // can't use this block (read the comment above the if statement try_fp < max_fp)
-        if let Some(last) = self.try_blocks.last() {
+        if let Some(&TryBlock { catch_ip, finally_ip, frame_ip: try_fp }) = self.try_blocks.last() {
             // if we're in a try-catch block, we need to jump to it
-            let try_fp = last.frame_ip;
-            let catch_ip = last.catch_ip;
 
             // Do not unwind further than we are allowed to. If the last try block is "outside" of
             // the frame that this execution context was instantiated in, then we can't jump there.
@@ -1308,12 +1308,29 @@ impl Vm {
             // Unwind frames
             drop(self.frames.drain(try_fp..));
 
-            self.active_frame_mut().ip = catch_ip;
+            if let Some(catch_ip) = catch_ip {
+                self.active_frame_mut().ip = catch_ip;
 
-            let catch_ip = self.fetchw_and_inc_ip();
-            if catch_ip != u16::MAX {
-                // u16::MAX is used to indicate that there is no variable binding in the catch block
-                self.set_local(catch_ip as usize, err);
+                let catch_binding = self.fetchw_and_inc_ip();
+                if catch_binding != u16::MAX {
+                    // u16::MAX is used to indicate that there is no variable binding in the catch block
+                    self.set_local(catch_binding as usize, err);
+                }
+                
+                // If we have both a catch_ip and finally_ip, then re-push it but with the catch_ip set to None
+                // and then jump to the old catch_ip.
+                // Reason: when we then throw an exception within this catch, we correctly jump to the finally.
+                if let Some(finally_ip) = finally_ip {
+                    self.try_blocks.push(TryBlock{
+                        catch_ip: None,
+                        finally_ip: Some(finally_ip),
+                        frame_ip: try_fp
+                    });
+                }
+            } else if let Some(finally_ip) = finally_ip {
+                self.active_frame_mut().delayed_ret = Some(Err(err));
+                // `+ 1` because we need to jump over the `TryEnd` instruction since there won't be a try block to pop.
+                self.active_frame_mut().ip = finally_ip + 1;
             }
 
             Ok(())

@@ -6,7 +6,7 @@ use dash_rt::typemap::Key;
 use dash_vm::value::Value;
 use dash_vm::Vm;
 
-define_symbol_set!(#[derive(Trace)] NodeSymbols => [fs, fetch, path, parse, dir, events, EventEmitter, on, emit]);
+define_symbol_set!(#[derive(Trace)] NodeSymbols => [fs, fetch, path, parse, dir, events, EventEmitter, on, emit, stream, http, https, url, zlib, punycode]);
 
 #[derive(Trace)]
 pub struct State {
@@ -14,6 +14,7 @@ pub struct State {
     pub fs_cache: OnceCell<Value>,
     pub fetch_cache: OnceCell<Value>,
     pub path_cache: OnceCell<Value>,
+    pub stream_cache: OnceCell<Value>,
 }
 
 impl State {
@@ -23,6 +24,7 @@ impl State {
             fs_cache: OnceCell::new(),
             fetch_cache: OnceCell::new(),
             path_cache: OnceCell::new(),
+            stream_cache: OnceCell::new(),
         }
     }
 }

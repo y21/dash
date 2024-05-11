@@ -50,6 +50,14 @@ unsafe impl<T: Trace> Trace for Option<T> {
         }
     }
 }
+unsafe impl<T: Trace, E: Trace> Trace for Result<T, E> {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
+        match self {
+            Ok(v) => v.trace(cx),
+            Err(v) => v.trace(cx),
+        }
+    }
+}
 unsafe impl Trace for Unrooted {
     fn trace(&self, cx: &mut TraceCtxt<'_>) {
         unsafe { self.get().trace(cx) }
