@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1714950430632,
+  "lastUpdate": 1715456780231,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -9233,6 +9233,60 @@ window.BENCHMARK_DATA = {
             "name": "exec tinycolor2 parse hex+toFilter",
             "value": 35733638,
             "range": "± 655057",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "Timo",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2bb12d53e18b44341da9a2dc14a996d30010dc70",
+          "message": "Merge pull request #88 from y21/try-finally\n\nImplement try-finally blocks",
+          "timestamp": "2024-05-11T21:43:11+02:00",
+          "tree_id": "8caf79411e1dcad92afb201c12f25d69d79c03cc",
+          "url": "https://github.com/y21/dash/commit/2bb12d53e18b44341da9a2dc14a996d30010dc70"
+        },
+        "date": 1715456779556,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1804564,
+            "range": "± 19624",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 174936,
+            "range": "± 5539",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 60306,
+            "range": "± 161",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse+compile tinycolor2",
+            "value": 2057328,
+            "range": "± 4791",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "exec tinycolor2 parse hex+toFilter",
+            "value": 35774967,
+            "range": "± 499432",
             "unit": "ns/iter"
           }
         ]
