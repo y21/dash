@@ -214,6 +214,7 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                     self.read_u16()?; // intentionally ignored
                     self.handle_opless_instr("ret")
                 }
+                Instruction::DelayedReturn => self.handle_opless_instr("delayedret"),
                 Instruction::Pos => self.handle_opless_instr("pos"),
                 Instruction::Neg => self.handle_opless_instr("neg"),
                 Instruction::TypeOfGlobalIdent => {
@@ -282,6 +283,7 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                 Instruction::StrictNe => self.handle_opless_instr("strictne"),
                 Instruction::Try => self.handle_incw_op_instr("try")?, // TODO: show @offset like in JMP
                 Instruction::TryEnd => self.handle_opless_instr("tryend"),
+                Instruction::FinallyEnd => self.handle_opless_instr("finallyend"),
                 Instruction::Throw => self.handle_opless_instr("throw"),
                 Instruction::Yield => self.handle_opless_instr("yield"),
                 Instruction::BitOr => self.handle_opless_instr("bitor"),

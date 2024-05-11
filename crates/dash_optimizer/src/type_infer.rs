@@ -114,7 +114,9 @@ impl TypeInferCtx {
 
     pub fn visit_try_statement(&mut self, TryCatch { try_, catch, finally }: &TryCatch, func_id: FuncId) {
         self.visit_statement(try_, func_id);
-        self.visit_statement(&catch.body, func_id);
+        if let Some(catch) = catch {
+            self.visit_statement(&catch.body, func_id);
+        }
         self.visit_maybe_statement(finally.as_deref(), func_id);
     }
 

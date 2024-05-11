@@ -23,6 +23,7 @@ use dash_middle::parser::statement::{
     VariableDeclaration, VariableDeclarationKind, VariableDeclarationName, VariableDeclarations, WhileLoop,
 };
 use dash_middle::sourcemap::Span;
+use dash_middle::util::Counter;
 use dash_middle::visitor::Visitor;
 use dash_optimizer::consteval::ConstFunctionEvalCtx;
 use dash_optimizer::type_infer::TypeInferCtx;
@@ -64,8 +65,11 @@ struct FunctionLocalState {
     ///
     /// Bytecode can refer to constants using the [Instruction::Constant] instruction, followed by a u8 index.
     cp: ConstantPool,
-    /// Current try catch depth
-    try_catch_depth: u16,
+    /// Current `try` depth (note that this does NOT include `catch`es)
+    try_depth: u16,
+    /// A stack of try-catch-finally blocks and their optional `finally` label that can be jumped to
+    finally_labels: Vec<Option<Label>>,
+    finally_counter: Counter<usize>,
     /// The type of function that this FunctionCompiler compiles
     ty: FunctionKind,
     /// Container, used for storing global labels that can be jumped to
@@ -89,7 +93,9 @@ impl FunctionLocalState {
         Self {
             buf: Vec::new(),
             cp: ConstantPool::new(),
-            try_catch_depth: 0,
+            try_depth: 0,
+            finally_labels: Vec::new(),
+            finally_counter: Counter::new(),
             ty,
             jc: JumpContainer::new(),
             breakables: Vec::new(),
@@ -120,6 +126,7 @@ impl FunctionLocalState {
         self.switch_counter += 1;
         switch_id
     }
+
     fn exit_loop(&mut self) {
         let item = self.breakables.pop();
         match item {
@@ -150,6 +157,17 @@ impl FunctionLocalState {
             FunctionKind::Function(a) => matches!(a, Asyncness::Yes),
             FunctionKind::Generator | FunctionKind::Arrow => false,
         }
+    }
+
+    pub fn is_generator_or_async(&self) -> bool {
+        matches!(
+            self.ty,
+            FunctionKind::Function(Asyncness::Yes) | FunctionKind::Generator
+        )
+    }
+
+    fn enclosing_finally(&self) -> Option<Label> {
+        self.finally_labels.iter().copied().rev().find_map(|lbl| lbl)
     }
 }
 
@@ -1459,9 +1477,18 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
     }
 
     fn visit_return_statement(&mut self, _span: Span, ReturnStatement(stmt): ReturnStatement) -> Result<(), Error> {
-        let tc_depth = self.current_function().try_catch_depth;
-        self.accept_expr(stmt)?;
-        InstructionBuilder::new(self).build_ret(tc_depth);
+        let mut ib = InstructionBuilder::new(self);
+        let finally = ib.current_function().enclosing_finally();
+
+        let tc_depth = ib.current_function().try_depth;
+        ib.accept_expr(stmt)?;
+        if let Some(finally) = finally {
+            ib.write_instr(Instruction::DelayedReturn);
+            ib.build_jmp(finally, false);
+        } else {
+            ib.build_ret(tc_depth);
+        }
+
         Ok(())
     }
 
@@ -1807,45 +1834,75 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
         Ok(())
     }
 
-    fn visit_try_catch(&mut self, span: Span, TryCatch { try_, catch, .. }: TryCatch) -> Result<(), Error> {
+    fn visit_try_catch(&mut self, span: Span, TryCatch { try_, catch, finally }: TryCatch) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
-        ib.build_try_block();
+        let finally = finally.map(|f| (ib.current_function_mut().finally_counter.inc(), f));
 
-        ib.current_function_mut().try_catch_depth += 1;
+        ib.build_try_block(catch.is_some(), finally.as_ref().map(|&(id, _)| id));
+
+        ib.current_function_mut().try_depth += 1;
+        ib.current_function_mut()
+            .finally_labels
+            .push(finally.as_ref().map(|&(finally_id, _)| Label::Finally { finally_id }));
         ib.current_scope_mut().enter();
         let res = ib.accept(*try_); // TODO: some API for making this nicer
         ib.current_scope_mut().exit();
-        ib.current_function_mut().try_catch_depth -= 1;
+        ib.current_function_mut().try_depth -= 1;
         res?;
 
         ib.build_jmp(Label::TryEnd, true);
 
-        ib.add_local_label(Label::Catch);
-
         ib.current_scope_mut().enter();
 
-        if let Some(ident) = catch.ident {
-            let id = ib
-                .current_scope_mut()
-                .add_local(ident, VariableDeclarationKind::Var, None)
-                .map_err(|_| Error::LocalLimitExceeded(span))?;
-
-            if id == u16::MAX {
-                // Max u16 value is reserved for "no binding"
-                return Err(Error::LocalLimitExceeded(span));
-            }
-
-            ib.writew(id);
-        } else {
-            ib.writew(u16::MAX);
+        if catch.is_none() && finally.is_none() {
+            // FIXME: make it a real error
+            unimplementedc!(span, "try block has no catch or finally");
         }
 
-        ib.accept(*catch.body)?;
-        ib.current_scope_mut().exit();
+        if let Some(catch) = catch {
+            ib.add_local_label(Label::Catch);
 
-        ib.add_local_label(Label::TryEnd);
-        ib.build_try_end();
+            if let Some(ident) = catch.ident {
+                let id = ib
+                    .current_scope_mut()
+                    .add_local(ident, VariableDeclarationKind::Var, None)
+                    .map_err(|_| Error::LocalLimitExceeded(span))?;
+
+                if id == u16::MAX {
+                    // Max u16 value is reserved for "no binding"
+                    return Err(Error::LocalLimitExceeded(span));
+                }
+
+                ib.writew(id);
+            } else {
+                ib.writew(u16::MAX);
+            }
+
+            ib.accept(*catch.body)?;
+        }
+        ib.current_scope_mut().exit();
+        ib.current_function_mut().finally_labels.pop();
+
+        if let Some((finally_id, finally)) = finally {
+            if ib.current_function().is_generator_or_async() {
+                // TODO: is this also already an issue without finally?
+                unimplementedc!(span, "try-finally in generator function");
+            }
+
+            ib.current_function_mut()
+                .add_global_label(Label::Finally { finally_id });
+            ib.add_local_label(Label::TryEnd);
+            ib.build_try_end();
+
+            ib.accept(*finally)?;
+
+            ib.write_instr(Instruction::FinallyEnd);
+            ib.writew(ib.current_function().try_depth);
+        } else {
+            ib.add_local_label(Label::TryEnd);
+            ib.build_try_end();
+        }
 
         Ok(())
     }
@@ -2016,6 +2073,11 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
 
     fn visit_break(&mut self, span: Span) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
+
+        if ib.current_function().enclosing_finally().is_some() {
+            unimplementedc!(span, "`break` in a try-finally block");
+        }
+
         let breakable = *ib
             .current_function_mut()
             .breakables
@@ -2035,6 +2097,11 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
 
     fn visit_continue(&mut self, span: Span) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
+
+        if ib.current_function().enclosing_finally().is_some() {
+            unimplementedc!(span, "`continue` in a try-finally block");
+        }
+
         let breakable = *ib
             .current_function_mut()
             .breakables

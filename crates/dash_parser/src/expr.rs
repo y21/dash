@@ -532,7 +532,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                                 let parameters = self.parse_parameter_list()?;
                                 self.expect_token_type_and_skip(&[TokenType::LeftBrace], true);
                                 let body = self.parse_block()?;
-                                let id = self.function_counter.advance();
+                                let id = self.function_counter.inc();
                                 items.push((
                                     key,
                                     Expr {
@@ -598,7 +598,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                             let BlockStatement(stmts) = self.parse_block()?;
 
                             // Desugar to function
-                            let func_id = self.function_counter.advance();
+                            let func_id = self.function_counter.inc();
                             let fun = FunctionDeclaration::new(
                                 None,
                                 func_id,
@@ -810,7 +810,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
         self.new_level_stack.pop_level().unwrap();
 
-        let func_id = self.function_counter.advance();
+        let func_id = self.function_counter.inc();
         Some((
             FunctionDeclaration::new(name, func_id, arguments, statements, ty, ty_seg, None),
             self.previous()?.span,
@@ -865,7 +865,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             }
         };
 
-        let func_id = self.function_counter.advance();
+        let func_id = self.function_counter.inc();
         Some(Expr {
             span: pre_span.to(body.span),
             kind: ExprKind::function(FunctionDeclaration::new(

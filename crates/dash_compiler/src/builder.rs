@@ -7,7 +7,7 @@ use dash_middle::compiler::instruction::Instruction;
 use crate::jump_container::JumpContainer;
 use crate::{jump_container, FunctionCompiler};
 
-#[derive(PartialOrd, Ord, Hash, Eq, PartialEq, Debug, Clone)]
+#[derive(PartialOrd, Ord, Hash, Eq, PartialEq, Debug, Clone, Copy)]
 pub enum Label {
     IfEnd,
     /// A branch of an if statement
@@ -33,6 +33,9 @@ pub enum Label {
         switch_id: usize,
     },
     Catch,
+    Finally {
+        finally_id: usize,
+    },
     TryEnd,
     InitParamWithDefaultValue,
     FinishParamDefaultValueInit,

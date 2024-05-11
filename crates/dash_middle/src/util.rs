@@ -275,7 +275,7 @@ where
         Self(start.into(), PhantomData)
     }
 
-    pub fn advance(&mut self) -> T {
+    pub fn inc(&mut self) -> T {
         let old = self.0;
         self.0 += 1;
         T::from(old)

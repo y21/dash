@@ -532,6 +532,24 @@ mod extract {
             })
         }
     }
+
+    impl<E, T: ExtractBack<Exception = E>> ExtractBack for Option<T> {
+        type Exception = E;
+        fn extract(cx: &mut DispatchContext<'_, '_>) -> Result<Self, Self::Exception> {
+            match cx.fetch_and_inc_ip() {
+                0 => Ok(None),
+                1 => Ok(Some(T::extract(cx)?)),
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    impl ExtractBack for u16 {
+        type Exception = Infallible;
+        fn extract(cx: &mut DispatchContext<'_, '_>) -> Result<Self, Self::Exception> {
+            Ok(cx.fetchw_and_inc_ip())
+        }
+    }
 }
 
 mod handlers {
@@ -539,7 +557,7 @@ mod handlers {
     use dash_middle::compiler::{FunctionCallMetadata, StaticImportKind};
     use dash_middle::interner::sym;
     use dash_middle::iterator_with::{InfallibleIteratorWith, IteratorWith};
-    use handlers::extract::{ForwardSequence, FrontIteratorWith};
+    use handlers::extract::{extract, ForwardSequence, FrontIteratorWith};
     use hashbrown::hash_map::Entry;
     use if_chain::if_chain;
     use smallvec::SmallVec;
@@ -722,11 +740,36 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn ret<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
-        let tc_depth = cx.fetchw_and_inc_ip();
-        let value = cx.pop_stack_rooted();
-        let this = cx.pop_frame();
+    pub fn delayed_ret(mut cx: DispatchContext<'_, '_>) -> Result<Option<HandleResult>, Unrooted> {
+        let value = cx.pop_stack();
+        cx.active_frame_mut().delayed_ret = Some(Ok(value));
+        Ok(None)
+    }
 
+    pub fn finally_end<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+        let tc_depth = cx.fetchw_and_inc_ip();
+
+        if let Some(ret) = cx.active_frame_mut().delayed_ret.take() {
+            let ret = ret?.root(cx.scope);
+            let frame_ip = cx.frames.len();
+            let enclosing_finally = cx
+                .try_blocks
+                .iter()
+                .find_map(|tc| if tc.frame_ip == frame_ip { tc.finally_ip } else { None });
+
+            if let Some(finally) = enclosing_finally {
+                let lower_tcp = cx.try_blocks.len() - usize::from(tc_depth);
+                drop(cx.try_blocks.drain(lower_tcp..));
+                cx.active_frame_mut().ip = finally;
+            } else {
+                let this = cx.pop_frame();
+                return Ok(ret_inner(cx, tc_depth, ret, this));
+            }
+        }
+        Ok(None)
+    }
+
+    fn ret_inner(mut cx: DispatchContext<'_, '_>, tc_depth: u16, value: Value, this: Frame) -> Option<HandleResult> {
         // Drain all try catch blocks that are in this frame.
         let lower_tcp = cx.try_blocks.len() - usize::from(tc_depth);
         drop(cx.try_blocks.drain(lower_tcp..));
@@ -738,7 +781,7 @@ mod handlers {
             FrameState::Module(_) => {
                 // Put it back on the frame stack, because we'll need it in Vm::execute_module
                 cx.frames.push(this);
-                Ok(Some(HandleResult::Return(Unrooted::new(value))))
+                Some(HandleResult::Return(Unrooted::new(value)))
             }
             FrameState::Function {
                 is_constructor_call,
@@ -752,22 +795,29 @@ mod handlers {
                         // return `this`
                         if is_flat_call {
                             cx.stack.push(this);
-                            Ok(None)
+                            None
                         } else {
-                            Ok(Some(HandleResult::Return(Unrooted::new(this))))
+                            Some(HandleResult::Return(Unrooted::new(this)))
                         }
                     }
                     else {
                         if is_flat_call {
                             cx.stack.push(value);
-                            Ok(None)
+                            None
                         } else {
-                            Ok(Some(HandleResult::Return(Unrooted::new(value))))
+                            Some(HandleResult::Return(Unrooted::new(value)))
                         }
                     }
                 }
             }
         }
+    }
+
+    pub fn ret<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+        let tc_depth = cx.fetchw_and_inc_ip();
+        let value = cx.pop_stack_rooted();
+        let this = cx.pop_frame();
+        Ok(ret_inner(cx, tc_depth, value, this))
     }
 
     pub fn ldglobal<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
@@ -1739,12 +1789,21 @@ mod handlers {
     }
 
     pub fn try_block<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
-        let ip = cx.active_frame().ip;
-        let catch_offset = cx.fetchw_and_inc_ip() as usize;
-        let catch_ip = ip + catch_offset + 2;
+        let mut compute_dist_ip = || {
+            let distance = extract::<Option<u16>>(&mut cx)?;
+            let ip = cx.active_frame().ip;
+            Some(ip + distance as usize)
+        };
+
+        let catch_ip = compute_dist_ip();
+        let finally_ip = compute_dist_ip();
         let frame_ip = cx.frames.len();
 
-        cx.try_blocks.push(TryBlock { catch_ip, frame_ip });
+        cx.try_blocks.push(TryBlock {
+            catch_ip,
+            finally_ip,
+            frame_ip,
+        });
 
         Ok(None)
     }
@@ -2250,6 +2309,7 @@ pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResu
         Instruction::StrictNe => handlers::strict_ne(cx),
         Instruction::Try => handlers::try_block(cx),
         Instruction::TryEnd => handlers::try_end(cx),
+        Instruction::FinallyEnd => handlers::finally_end(cx),
         Instruction::Throw => handlers::throw(cx),
         Instruction::Yield => handlers::yield_(cx),
         Instruction::JmpFalseNP => handlers::jmpfalsenp(cx),
@@ -2287,6 +2347,7 @@ pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResu
         Instruction::ObjDestruct => handlers::objdestruct(cx),
         Instruction::ArrayDestruct => handlers::arraydestruct(cx),
         Instruction::AssignProperties => handlers::assign_properties(cx),
+        Instruction::DelayedReturn => handlers::delayed_ret(cx),
         Instruction::Nop => Ok(None),
         _ => unimplemented!("{:?}", instruction),
     }

@@ -15,13 +15,13 @@ use crate::value::{ExternalValue, Unrooted};
 use super::value::function::user::UserFunction;
 use super::value::Value;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct TryBlock {
-    pub catch_ip: usize,
+    pub catch_ip: Option<usize>,
+    pub finally_ip: Option<usize>,
     pub frame_ip: usize,
 }
 
-// TODO: these should be unrooted
 #[derive(Debug, Clone, Default)]
 pub struct Exports {
     pub default: Option<Unrooted>,
@@ -101,6 +101,10 @@ pub struct Frame {
     pub this: Option<Value>,
     pub sp: usize,
     pub state: FrameState,
+    /// When evaluating a `return` op in a try/catch with a finally block,
+    /// this will be set to Some(Ok(that_value)).
+    /// Exceptions thrown will set it to Err(exception).
+    pub delayed_ret: Option<Result<Unrooted, Unrooted>>,
 
     /// The `arguments` object.
     /// For optimization purposes, this is `None` in frames whose function never references `arguments`,
@@ -126,6 +130,7 @@ impl Frame {
             externals: uf.externals().clone(),
             ip: 0,
             sp: 0,
+            delayed_ret: None,
             extra_stack_space: inner.locals - uf.inner().params,
             state: FrameState::Function {
                 is_constructor_call,
@@ -144,6 +149,7 @@ impl Frame {
             externals: uf.externals().clone(),
             ip: 0,
             sp: 0,
+            delayed_ret: None,
             extra_stack_space: inner.locals - uf.inner().params,
             state: FrameState::Module(Exports::default()),
             loop_counter: LoopCounterMap::default(),
@@ -181,6 +187,7 @@ impl Frame {
             externals: Vec::new().into(),
             ip: 0,
             sp: 0,
+            delayed_ret: None,
             extra_stack_space: cr.locals, /* - 0 params */
             state: FrameState::Function {
                 is_constructor_call: false,

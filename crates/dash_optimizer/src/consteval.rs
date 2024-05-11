@@ -109,7 +109,9 @@ impl<'b, 'interner> ConstFunctionEvalCtx<'b, 'interner> {
 
     pub fn visit_try_statement(&mut self, TryCatch { try_, catch, finally }: &mut TryCatch, func_id: FuncId) {
         self.visit_statement(try_, func_id);
-        self.visit_statement(&mut catch.body, func_id);
+        if let Some(catch) = catch {
+            self.visit_statement(&mut catch.body, func_id);
+        }
         self.visit_maybe_statement(finally.as_deref_mut(), func_id);
     }
 
