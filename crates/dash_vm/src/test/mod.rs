@@ -550,3 +550,8 @@ simple_test!(
     "#,
     Value::undefined()
 );
+
+// Issue #89
+simple_test!(closure_default_param1, "((v = 1) => v)()", Value::number(1.));
+
+simple_test!(closure_default_param2, "((v = 1) => v)(2)", Value::number(2.));

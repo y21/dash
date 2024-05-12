@@ -1,7 +1,9 @@
 use dash_middle::interner::{sym, Symbol};
 use dash_middle::lexer::token::{Token, TokenType, ASSIGNMENT_TYPES};
 use dash_middle::parser::error::Error;
-use dash_middle::parser::expr::{ArrayMemberKind, CallArgumentKind, Expr, ExprKind, ObjectMemberKind};
+use dash_middle::parser::expr::{
+    ArrayMemberKind, AssignmentExpr, AssignmentTarget, CallArgumentKind, Expr, ExprKind, LiteralExpr, ObjectMemberKind,
+};
 use dash_middle::parser::statement::{
     Asyncness, BlockStatement, FunctionDeclaration, FunctionKind, Parameter, ReturnStatement, Statement, StatementKind,
 };
@@ -867,8 +869,24 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             // e.g. (a: number) => {}
             // we need to properly convert types here too
 
-            // TODO2: handle parameter default values
-            list.push((Parameter::Identifier(expr.kind.as_identifier()?), None, None));
+            let (ident, value) = match expr.kind {
+                ExprKind::Literal(LiteralExpr::Identifier(ident)) => (ident, None),
+                ExprKind::Assignment(AssignmentExpr {
+                    left: AssignmentTarget::Expr(left),
+                    right,
+                    ..
+                }) => (left.kind.as_identifier()?, Some(*right)),
+                _ => {
+                    self.create_error(Error::Unimplemented(
+                        expr.span,
+                        "only assignment and identifier expressions are supported as in closure parameter recovery"
+                            .into(),
+                    ));
+                    return None;
+                }
+            };
+
+            list.push((Parameter::Identifier(ident), value, None));
         }
 
         if let Some(rest_binding) = rest_binding {
