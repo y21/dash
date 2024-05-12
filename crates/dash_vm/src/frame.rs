@@ -15,7 +15,7 @@ use crate::value::{ExternalValue, Unrooted};
 use super::value::function::user::UserFunction;
 use super::value::Value;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Trace)]
 pub struct TryBlock {
     pub catch_ip: Option<usize>,
     pub finally_ip: Option<usize>,

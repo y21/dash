@@ -17,9 +17,14 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
     let frame = {
         let generator = as_generator(cx.scope, &cx.this)?;
 
-        let (ip, old_stack, arguments) = match &mut *generator.state().borrow_mut() {
+        let (ip, old_stack, arguments, try_blocks) = match &mut *generator.state().borrow_mut() {
             GeneratorState::Finished => return create_generator_value(cx.scope, true, None),
-            GeneratorState::Running { ip, stack, arguments } => (*ip, mem::take(stack), arguments.take()),
+            GeneratorState::Running {
+                ip,
+                stack,
+                arguments,
+                try_blocks,
+            } => (*ip, mem::take(stack), arguments.take(), mem::take(try_blocks)),
         };
 
         let function = generator.function();
@@ -29,6 +34,7 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
             _ => throw!(cx.scope, TypeError, "Incompatible generator function"),
         };
 
+        cx.scope.try_blocks.extend(try_blocks);
         let current_sp = cx.scope.stack_size();
         cx.scope.try_extend_stack(old_stack).root_err(cx.scope)?;
 
@@ -68,13 +74,31 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
             // Async functions are desugared to generators, so `await` is treated equivalent to `yield`, for now...
             let value = value.root(cx.scope);
 
+            let fp = cx.scope.frames.len();
             let frame = cx.scope.pop_frame().expect("Generator frame is missing");
             let stack = cx.scope.drain_stack(frame.sp..).collect::<Vec<_>>();
+
+            // Save any try blocks part of this frame
+            let frame_try_blocks = cx
+                .scope
+                .try_blocks
+                .iter()
+                .rev()
+                .take_while(|b| b.frame_ip == fp)
+                .count();
+
+            let total_try_blocks = cx.scope.try_blocks.len();
+            let try_blocks = cx
+                .scope
+                .try_blocks
+                .drain(total_try_blocks - frame_try_blocks..)
+                .collect::<Vec<_>>();
 
             generator.state().replace(GeneratorState::Running {
                 ip: frame.ip,
                 stack,
                 arguments: frame.arguments,
+                try_blocks,
             });
 
             create_generator_value(cx.scope, false, Some(value))

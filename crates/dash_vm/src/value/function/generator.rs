@@ -3,6 +3,7 @@ use std::cell::RefCell;
 
 use dash_proc_macro::Trace;
 
+use crate::frame::TryBlock;
 use crate::gc::handle::Handle;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::localscope::LocalScope;
@@ -54,7 +55,7 @@ impl GeneratorFunction {
             scope.stack.drain(sp..).collect::<Vec<_>>()
         };
 
-        let iter = GeneratorIterator::new(callee, scope, args, arguments);
+        let iter = GeneratorIterator::new(callee, scope, args, arguments, Vec::new());
         Ok(Value::Object(scope.register(iter)))
     }
 }
@@ -65,6 +66,7 @@ pub enum GeneratorState {
     Running {
         ip: usize,
         stack: Vec<Value>,
+        try_blocks: Vec<TryBlock>,
         arguments: Option<Handle>,
     },
 }
@@ -86,9 +88,11 @@ unsafe impl Trace for GeneratorState {
                 ip: _,
                 stack,
                 arguments,
+                try_blocks,
             } => {
                 stack.trace(cx);
                 arguments.trace(cx);
+                try_blocks.trace(cx);
             }
         }
     }
@@ -102,7 +106,13 @@ pub struct GeneratorIterator {
 }
 
 impl GeneratorIterator {
-    pub fn new(function: Handle, vm: &Vm, stack: Vec<Value>, arguments: Option<Handle>) -> Self {
+    pub fn new(
+        function: Handle,
+        vm: &Vm,
+        stack: Vec<Value>,
+        arguments: Option<Handle>,
+        try_blocks: Vec<TryBlock>,
+    ) -> Self {
         let proto = vm.statics.generator_iterator_prototype.clone();
         let ctor = function.clone();
 
@@ -113,6 +123,7 @@ impl GeneratorIterator {
                 ip: 0,
                 stack,
                 arguments,
+                try_blocks,
             }),
         }
     }

@@ -159,13 +159,6 @@ impl FunctionLocalState {
         }
     }
 
-    pub fn is_generator_or_async(&self) -> bool {
-        matches!(
-            self.ty,
-            FunctionKind::Function(Asyncness::Yes) | FunctionKind::Generator
-        )
-    }
-
     fn enclosing_finally(&self) -> Option<Label> {
         self.finally_labels.iter().copied().rev().find_map(|lbl| lbl)
     }
@@ -1885,11 +1878,6 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
         ib.current_function_mut().finally_labels.pop();
 
         if let Some((finally_id, finally)) = finally {
-            if ib.current_function().is_generator_or_async() {
-                // TODO: is this also already an issue without finally?
-                unimplementedc!(span, "try-finally in generator function");
-            }
-
             ib.current_function_mut()
                 .add_global_label(Label::Finally { finally_id });
             ib.add_local_label(Label::TryEnd);
