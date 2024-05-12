@@ -692,15 +692,42 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 Expr::grouping(exprs)
             }
             TokenType::Async => {
-                // TODO: if it isn't followed by function, check if followed by ( for arrow functions
-                // or if not, parse it as an identifier
-                if !self.expect_token_type_and_skip(&[TokenType::Function], true) {
+                if self.expect_token_type_and_skip(&[TokenType::Function], false) {
+                    self.parse_function(true).map(|(f, span)| Expr {
+                        span,
+                        kind: ExprKind::function(f),
+                    })?
+                } else if self.expect_token_type_and_skip(&[TokenType::LeftParen], true) {
+                    let params = self.parse_parameter_list()?;
+                    self.expect_token_type_and_skip(&[TokenType::FatArrow], true);
+                    let statement = if self.expect_token_type_and_skip(&[TokenType::LeftBrace], false) {
+                        self.advance_back();
+                        self.parse_statement()?
+                    } else {
+                        let expr = self.parse_expression_no_comma()?;
+                        Statement {
+                            span: expr.span,
+                            kind: StatementKind::Return(ReturnStatement(expr)),
+                        }
+                    };
+
+                    Expr {
+                        span: current.span.to(statement.span),
+                        kind: ExprKind::function(FunctionDeclaration::new(
+                            None,
+                            self.function_counter.inc(),
+                            params,
+                            vec![statement],
+                            // FIXME: this isn't correct -- we're currently desugaring async closures
+                            // as if they're simply async functions
+                            FunctionKind::Function(Asyncness::Yes),
+                            None,
+                            None,
+                        )),
+                    }
+                } else {
                     return None;
                 }
-                self.parse_function(true).map(|(f, span)| Expr {
-                    span,
-                    kind: ExprKind::function(f),
-                })?
             }
             TokenType::Function => self.parse_function(false).map(|(f, span)| Expr {
                 span,
