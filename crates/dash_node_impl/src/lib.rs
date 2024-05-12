@@ -12,6 +12,7 @@ use dash_rt::format_value;
 use dash_rt::runtime::Runtime;
 use dash_rt::state::State;
 use dash_vm::eval::EvalError;
+use dash_vm::gc::handle::Handle;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::{Root, Unrooted, Value};
@@ -67,13 +68,18 @@ async fn run_inner_fallible(path: &str, opt: OptLevel, initial_gc_threshold: Opt
     rt.vm_mut().with_scope(|scope| {
         let global = scope.global();
         let global_k = scope.intern("global");
+        let process_k = scope.intern("process");
         global
             .clone()
             .set_property(
                 scope,
                 global_k.into(),
-                PropertyValue::static_default(Value::Object(global)),
+                PropertyValue::static_default(Value::Object(global.clone())),
             )
+            .unwrap();
+        let process = create_process_object(scope);
+        global
+            .set_property(scope, process_k.into(), PropertyValue::static_default(process.into()))
             .unwrap();
 
         anyhow::Ok(
@@ -91,6 +97,16 @@ async fn run_inner_fallible(path: &str, opt: OptLevel, initial_gc_threshold: Opt
     }
 
     Ok(())
+}
+
+fn create_process_object(sc: &mut LocalScope<'_>) -> Handle {
+    let obj = NamedObject::new(sc);
+    let env = NamedObject::new(sc);
+    let env = sc.register(env);
+    let env_k = sc.intern("env");
+    obj.set_property(sc, env_k.into(), PropertyValue::static_default(env.into()))
+        .unwrap();
+    sc.register(obj)
 }
 
 fn process_package_json(path: &Path) -> Result<PackageState, anyhow::Error> {

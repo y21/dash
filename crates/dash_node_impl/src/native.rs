@@ -47,19 +47,19 @@ pub fn load_native_module(sc: &mut LocalScope<'_>, arg: JsString) -> Result<Opti
         #[cfg(feature = "path")]
         state.sym.path => (state_mut(sc).path_cache, crate::path::init_module),
         #[cfg(feature = "events")]
-        state.sym.events => (state_mut(sc).path_cache, crate::events::init_module),
+        state.sym.events => (state_mut(sc).events_cache, crate::events::init_module),
         #[]
         state.sym.stream => (state_mut(sc).stream_cache, init_stream),
         #[]
-        state.sym.http => (state_mut(sc).path_cache, init_dummy_empty_module),
+        state.sym.http => (state_mut(sc).http_cache, init_dummy_empty_module),
         #[]
-        state.sym.https => (state_mut(sc).path_cache, init_dummy_empty_module),
+        state.sym.https => (state_mut(sc).https_cache, init_dummy_empty_module),
         #[]
-        state.sym.url => (state_mut(sc).path_cache, init_dummy_empty_module),
+        state.sym.url => (state_mut(sc).url_cache, init_dummy_empty_module),
         #[]
-        state.sym.zlib => (state_mut(sc).path_cache, init_dummy_empty_module),
+        state.sym.zlib => (state_mut(sc).zlib_cache, init_dummy_empty_module),
         #[]
-        state.sym.punycode => (state_mut(sc).path_cache, init_dummy_empty_module)
+        state.sym.punycode => (state_mut(sc).punycode_cache, init_dummy_empty_module)
     }
 }
 

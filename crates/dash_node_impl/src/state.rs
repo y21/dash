@@ -14,7 +14,13 @@ pub struct State {
     pub fs_cache: OnceCell<Value>,
     pub fetch_cache: OnceCell<Value>,
     pub path_cache: OnceCell<Value>,
+    pub events_cache: OnceCell<Value>,
     pub stream_cache: OnceCell<Value>,
+    pub http_cache: OnceCell<Value>,
+    pub https_cache: OnceCell<Value>,
+    pub url_cache: OnceCell<Value>,
+    pub zlib_cache: OnceCell<Value>,
+    pub punycode_cache: OnceCell<Value>,
 }
 
 impl State {
@@ -25,6 +31,12 @@ impl State {
             fetch_cache: OnceCell::new(),
             path_cache: OnceCell::new(),
             stream_cache: OnceCell::new(),
+            events_cache: OnceCell::new(),
+            http_cache: OnceCell::new(),
+            https_cache: OnceCell::new(),
+            url_cache: OnceCell::new(),
+            zlib_cache: OnceCell::new(),
+            punycode_cache: OnceCell::new(),
         }
     }
 }

@@ -70,13 +70,13 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
         },
     );
 
-    let exports = NamedObject::new(sc);
-    exports.set_property(
+    event_emitter_ctor.set_property(
         sc,
         event_emitter_sym.into(),
-        PropertyValue::static_default(event_emitter_ctor.into()),
+        PropertyValue::static_default(event_emitter_ctor.clone().into()),
     )?;
-    Ok(sc.register(exports).into())
+
+    Ok(Value::Object(event_emitter_ctor))
 }
 
 #[derive(Debug, Trace)]
