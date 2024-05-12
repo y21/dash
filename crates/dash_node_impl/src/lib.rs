@@ -245,12 +245,23 @@ impl Object for RequireFunction {
             Ok(o.into())
         } else {
             // Resolve dependency in node_modules
-            let dir_path = self.state.node_modules_dir.join(&arg);
+            // If we have something like `require('a/b/c')`,
+            // try looking for modules (in the following order):
+            // - node_modules/a/package.json
+            // - node_modules/a/b/package.json
+            // - node_modules/a/b/c/package.json
 
-            let package_state = match process_package_json(&dir_path) {
-                Ok(p) => p,
-                Err(e) => throw!(scope, Error, "Failed to load module {arg}: {}", e),
+            let components = Path::new(&arg).components().collect::<Vec<_>>();
+
+            let module = (0..components.len())
+                .map(|c| self.state.node_modules_dir.join(PathBuf::from_iter(&components[0..=c])))
+                .find_map(|v| process_package_json(&v).ok().map(|pkg| (pkg, v)));
+
+            let (package_state, dir_path) = match module {
+                Some((package_state, dir_path)) => (package_state, dir_path),
+                None => throw!(scope, Error, "Failed to load module {arg}"),
             };
+
             let file_path = dir_path.join(&package_state.metadata.main);
             let source = std::fs::read_to_string(&file_path).unwrap();
 
