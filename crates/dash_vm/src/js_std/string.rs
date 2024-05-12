@@ -8,6 +8,7 @@ use crate::value::function::native::CallContext;
 use crate::value::object::PropertyValue;
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::{Value, ValueContext};
+use std::cmp;
 use std::fmt::Write;
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
@@ -386,6 +387,47 @@ pub fn substring(cx: CallContext) -> Result<Value, Value> {
     let result = String::from_utf8_lossy(bytes).into_owned();
 
     Ok(Value::String(cx.scope.intern(result.as_ref()).into()))
+}
+
+pub fn slice(cx: CallContext) -> Result<Value, Value> {
+    let string = cx.this.to_js_string(cx.scope)?;
+    let len = string.len(cx.scope);
+
+    // 4. Let intStart be ? ToIntegerOrInfinity(start).
+    // 5. If intStart = -∞, let from be 0.
+    // 6. Else if intStart < 0, let from be max(len + intStart, 0).
+    // 7. Else, let from be min(intStart, len).
+    let int_start = cx.args.first().unwrap_or_undefined().to_integer_or_infinity(cx.scope)?;
+    let from = if int_start == f64::NEG_INFINITY {
+        0
+    } else if int_start < 0. {
+        cmp::max(len as isize + int_start as isize, 0) as usize
+    } else {
+        cmp::min(int_start as usize, len)
+    };
+    // 8. If end is undefined, let intEnd be len; else let intEnd be ? ToIntegerOrInfinity(end).
+    let int_end = match cx.args.get(1) {
+        Some(v) => v.to_integer_or_infinity(cx.scope)?,
+        None => len as f64,
+    };
+    // 9. If intEnd = -∞, let to be 0.
+    // 10. Else if intEnd < 0, let to be max(len + intEnd, 0).
+    // 11. Else, let to be min(intEnd, len).
+    let to = if int_end == f64::NEG_INFINITY {
+        0
+    } else if int_end < 0. {
+        cmp::max(len as isize + int_end as isize, 0) as usize
+    } else {
+        cmp::min(int_end as usize, len)
+    };
+
+    if from >= to {
+        Ok(Value::String(sym::empty.into()))
+    } else {
+        let bytes = string.res(cx.scope).as_bytes().get(from..to).unwrap_or(&[]);
+        let result = String::from_utf8_lossy(bytes).into_owned();
+        Ok(Value::String(cx.scope.intern(result).into()))
+    }
 }
 
 pub fn iterator(cx: CallContext) -> Result<Value, Value> {

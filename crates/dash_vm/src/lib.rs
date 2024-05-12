@@ -443,6 +443,7 @@ impl Vm {
                 (sym::trimEnd, scope.statics.string_trim_end.clone()),
                 (sym::substr, scope.statics.string_substr.clone()),
                 (sym::substring, scope.statics.string_substring.clone()),
+                (sym::slice, scope.statics.string_slice.clone()),
             ],
            [(scope.statics.symbol_iterator.clone(), scope.statics.string_iterator.clone())],
            [],
