@@ -553,5 +553,16 @@ simple_test!(
 
 // Issue #89
 simple_test!(closure_default_param1, "((v = 1) => v)()", Value::number(1.));
-
 simple_test!(closure_default_param2, "((v = 1) => v)(2)", Value::number(2.));
+
+simple_test!(
+    holey_array_join,
+    "assert(new Array(6).join('1') === '11111')",
+    Value::undefined()
+);
+
+simple_test!(
+    return_automatic_semicolon_insertion,
+    "(function() { return\n5 })()",
+    Value::undefined()
+);

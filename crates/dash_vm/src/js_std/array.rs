@@ -30,8 +30,10 @@ fn join_inner(sc: &mut LocalScope, array: Value, separator: JsString) -> Result<
 
         let i = sc.intern_usize(i);
         let element = array.get_property(sc, i.into()).root(sc)?;
-        let s = element.to_js_string(sc)?;
-        result.push_str(s.res(sc));
+        if !element.is_nullish() {
+            let s = element.to_js_string(sc)?;
+            result.push_str(s.res(sc));
+        }
     }
 
     Ok(Value::String(sc.intern(result).into()))
