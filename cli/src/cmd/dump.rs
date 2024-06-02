@@ -9,8 +9,7 @@ use dash_middle::parser::error::IntoFormattableErrors;
 use dash_middle::parser::statement::{FuncId, VariableDeclarationName};
 use dash_optimizer::consteval::ConstFunctionEvalCtx;
 use dash_optimizer::type_infer::TypeInferCtx;
-
-use crate::util;
+use dash_optimizer::OptLevel;
 
 pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
     let dump_ir = arg.is_present("ir");
@@ -20,7 +19,7 @@ pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
     let dump_tokens = arg.is_present("tokens");
     let dump_types = arg.is_present("types");
 
-    let opt = util::opt_level_from_matches(arg)?;
+    let opt = *arg.get_one::<OptLevel>("opt").unwrap();
     let path = arg.value_of("file").context("Missing file")?;
     let source = fs::read_to_string(path)?;
 

@@ -1,16 +1,15 @@
 use anyhow::Context;
 use clap::ArgMatches;
 use dash_middle::parser::error::IntoFormattableErrors;
+use dash_optimizer::OptLevel;
 use dash_rt::format_value;
 use dash_vm::eval::EvalError;
 use dash_vm::value::Root;
 use dash_vm::Vm;
 
-use crate::util;
-
 pub fn eval(args: &ArgMatches) -> anyhow::Result<()> {
     let source = args.value_of("source").context("Missing source")?;
-    let opt = util::opt_level_from_matches(args)?;
+    let opt = *args.get_one::<OptLevel>("opt").unwrap();
 
     let mut vm = Vm::new(Default::default());
     let mut scope = vm.scope();

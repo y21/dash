@@ -12,8 +12,6 @@ use std::time::Instant;
 use anyhow::Context;
 use clap::ArgMatches;
 
-use crate::util;
-
 pub fn run(args: &ArgMatches) -> anyhow::Result<()> {
     let path = args.value_of("file").context("Missing source")?;
     let nodejs = args.is_present("node");
@@ -21,7 +19,7 @@ pub fn run(args: &ArgMatches) -> anyhow::Result<()> {
         .value_of("initial-gc-threshold")
         .map(<usize as FromStr>::from_str)
         .transpose()?;
-    let opt = util::opt_level_from_matches(args)?;
+    let opt = *args.get_one::<OptLevel>("opt").unwrap();
     let before = args.is_present("timing").then(Instant::now);
     let quiet = args.is_present("quiet");
 

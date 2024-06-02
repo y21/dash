@@ -1,8 +1,9 @@
 use std::backtrace::{Backtrace, BacktraceStatus};
 
-use anyhow::bail;
+use anyhow::{bail, Context};
 use clap::{Arg, Command};
 use colorful::Colorful;
+use dash_optimizer::OptLevel;
 
 mod cmd;
 mod util;
@@ -11,8 +12,9 @@ fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
     let opt_level = Arg::new("opt")
-        .short('o')
+        .short('O')
         .long("opt")
+        .value_parser(|val: &_| OptLevel::from_level(val).context("unknown opt level"))
         .default_value("1")
         .possible_values(["0", "1", "2"]);
 
