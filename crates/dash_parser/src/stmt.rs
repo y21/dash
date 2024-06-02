@@ -296,7 +296,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
     fn parse_return(&mut self) -> Option<ReturnStatement> {
         let return_kw = self.previous()?.span;
-        if self.expect_token_type_and_skip(&[TokenType::Semicolon], false) {
+        if self.expect_token_type_and_skip(&[TokenType::Semicolon], false) || self.at_lineterm() {
             Some(ReturnStatement(Expr {
                 span: return_kw, /* `return;` intentionally has an implicit `undefined` with the same span as `return;` */
                 kind: ExprKind::undefined_literal(),

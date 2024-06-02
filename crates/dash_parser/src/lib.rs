@@ -18,8 +18,7 @@ pub struct Parser<'a, 'interner> {
     error_sync: bool,
     idx: usize,
     interner: &'interner mut StringInterner,
-    // TODO: remove, not needed anymore
-    _source: SourceMap<'a>,
+    source: SourceMap<'a>,
     new_level_stack: LevelStack,
     function_counter: Counter<FuncId>,
 }
@@ -43,7 +42,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             errors: Vec::new(),
             error_sync: false,
             idx: 0,
-            _source: SourceMap::new(input),
+            source: SourceMap::new(input),
             new_level_stack: level_stack,
             interner,
             // FuncId::ROOT (0) is reserved for the root function, so the counter for new functions has to start at 1
@@ -237,5 +236,27 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         } else {
             None
         }
+    }
+
+    /// Checks if between the previous token and the current token there is a LineTerminator or EOF. Necessary for automatic semicolon insertion.
+    ///
+    /// ```ignore
+    /// (function() {
+    ///     return
+    ///     var x = 1
+    ///     ^~~ true for this token
+    /// })
+    /// ```
+    pub fn at_lineterm(&self) -> bool {
+        let prev_span = self.previous().map(|t| t.span);
+        let curr_span = self.current().map(|c| c.span);
+
+        let (lo, hi) = match (prev_span, curr_span) {
+            (_, None) => return true,
+            (None, Some(curr)) => (0, curr.lo),
+            (Some(prev), Some(curr)) => (prev.hi, curr.lo),
+        };
+        let src = self.source.resolve(Span { lo, hi });
+        src.contains('\n')
     }
 }

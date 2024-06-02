@@ -467,29 +467,19 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                     let token = self.next()?.clone();
                     let key = match token.ty {
                         TokenType::Get => {
-                            if matches!(
-                                self.current(),
-                                Some(Token {
-                                    ty: TokenType::Colon | TokenType::LeftParen, // { get: .. } or { get(..) {..} }
-                                    ..
-                                })
-                            ) {
-                                ObjectMemberKind::Static(sym::get)
+                            if let Some(sym) = self.current().and_then(|t| t.ty.as_identifier()) {
+                                self.advance();
+                                ObjectMemberKind::Getter(sym)
                             } else {
-                                ObjectMemberKind::Getter(self.expect_identifier_or_reserved_kw(true)?)
+                                ObjectMemberKind::Static(sym::get)
                             }
                         }
                         TokenType::Set => {
-                            if matches!(
-                                self.current(),
-                                Some(Token {
-                                    ty: TokenType::Colon | TokenType::LeftParen,
-                                    ..
-                                })
-                            ) {
-                                ObjectMemberKind::Static(sym::set)
+                            if let Some(sym) = self.current().and_then(|t| t.ty.as_identifier()) {
+                                self.advance();
+                                ObjectMemberKind::Setter(sym)
                             } else {
-                                ObjectMemberKind::Setter(self.expect_identifier_or_reserved_kw(true)?)
+                                ObjectMemberKind::Static(sym::set)
                             }
                         }
                         TokenType::LeftSquareBrace => {

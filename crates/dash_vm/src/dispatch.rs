@@ -153,8 +153,8 @@ impl<'sc, 'vm> DispatchContext<'sc, 'vm> {
             .expect("Dispatch Context attempted to reference missing frame")
     }
 
-    pub fn constant(&self, index: usize) -> Constant {
-        self.active_frame().function.constants[index].clone()
+    pub fn constant(&self, index: usize) -> &Constant {
+        &self.active_frame().function.constants[index]
     }
 
     pub fn identifier_constant(&self, index: usize) -> JsString {
@@ -195,7 +195,7 @@ mod extract {
     use std::convert::Infallible;
     use std::marker::PhantomData;
 
-    use dash_middle::compiler::{ArrayMemberKind, ExportPropertyKind, ObjectMemberKind};
+    use dash_middle::compiler::{ArrayMemberKind, ExportPropertyKind, InlinePropertyData, ObjectMemberKind};
     use dash_middle::iterator_with::IteratorWith;
 
     use crate::gc::handle::Handle;
@@ -580,7 +580,7 @@ mod handlers {
     fn constant_instruction<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>, idx: usize) -> Result<(), Value> {
         let constant = cx.constant(idx);
 
-        let value = Value::from_constant(constant, &mut cx);
+        let value = Value::from_constant(constant.clone(), &mut cx);
         cx.stack.push(value);
         Ok(())
     }

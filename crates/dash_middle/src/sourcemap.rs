@@ -46,6 +46,6 @@ impl<'buf> SourceMap<'buf> {
     }
 
     pub fn resolve(&self, span: Span) -> &'buf str {
-        &self.0[span.lo as usize..span.hi as usize - span.lo as usize]
+        span.res(self.0)
     }
 }

@@ -395,6 +395,8 @@ impl TokenType {
         match self {
             Self::Identifier(sym) => Some(*sym),
             Self::Dollar => Some(sym::dollar),
+            Self::Set => Some(sym::set),
+            Self::Get => Some(sym::get),
             _ => None,
         }
     }
