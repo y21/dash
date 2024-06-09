@@ -195,7 +195,7 @@ mod extract {
     use std::convert::Infallible;
     use std::marker::PhantomData;
 
-    use dash_middle::compiler::{ArrayMemberKind, ExportPropertyKind, InlinePropertyData, ObjectMemberKind};
+    use dash_middle::compiler::{ArrayMemberKind, ExportPropertyKind, ObjectMemberKind};
     use dash_middle::iterator_with::IteratorWith;
 
     use crate::gc::handle::Handle;

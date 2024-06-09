@@ -33,6 +33,12 @@ pub enum Element<T> {
     Hole { count: usize },
 }
 impl<T> Element<T> {
+    pub fn into_value(self) -> Result<T, Self> {
+        match self {
+            Element::Value(value) => Ok(value),
+            _ => Err(self),
+        }
+    }
     pub fn elements(&self) -> usize {
         match *self {
             Self::Value(_) => 1,
@@ -214,18 +220,26 @@ impl<T> HoleyArray<T> {
         self.0.push(Element::Value(value));
     }
 
-    pub fn remove(&mut self, at: usize) {
+    pub fn remove(&mut self, at: usize) -> Option<MaybeHoley<T>> {
         if let Some(Lookup { holey_index, .. }) = self.lookup_index(at) {
             match &mut self.0[holey_index] {
-                Element::Value(_) => drop(self.0.remove(holey_index)),
+                Element::Value(_) => Some(MaybeHoley::Some(
+                    self.0
+                        .remove(holey_index)
+                        .into_value()
+                        .unwrap_or_else(|_| unreachable!()),
+                )),
                 Element::Hole { count } => {
                     *count -= 1;
                     if *count == 0 {
                         self.0.remove(holey_index);
                     }
+                    Some(MaybeHoley::Hole)
                 }
             }
             // TODO: this needs to merge or remove duplicate holes now, and remove ones at the end
+        } else {
+            None
         }
     }
 }

@@ -17,6 +17,7 @@ pub use self::holey::{Element, HoleyArray};
 use super::object::{NamedObject, Object, PropertyKey, PropertyValue, PropertyValueKind};
 use super::ops::conversions::ValueConversion;
 use super::primitive::array_like_keys;
+use super::root_ext::RootErrExt;
 use super::{Root, Unrooted, Value};
 
 mod holey;
@@ -105,11 +106,13 @@ impl<E: std::fmt::Debug> ArrayInner<E> {
         }
     }
 
-    pub fn remove(&mut self, at: usize) {
+    pub fn remove(&mut self, at: usize) -> Option<MaybeHoley<E>> {
         match self {
             ArrayInner::NonHoley(v) => {
                 if at < v.len() {
-                    v.remove(at);
+                    Some(MaybeHoley::Some(v.remove(at)))
+                } else {
+                    None
                 }
             }
             ArrayInner::Holey(v) => v.remove(at),
@@ -280,7 +283,12 @@ impl Object for Array {
 
             if let Ok(index) = key.res(sc).parse::<usize>() {
                 let mut items = self.items.borrow_mut();
-                items.remove(index);
+                match items.remove(index) {
+                    Some(MaybeHoley::Some(value)) => {
+                        return value.get_or_apply(sc, Value::undefined()).root_err(sc);
+                    }
+                    Some(MaybeHoley::Hole) | None => return Ok(Value::undefined().into()),
+                }
             }
         }
 
