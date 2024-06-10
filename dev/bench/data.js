@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1715481351133,
+  "lastUpdate": 1718006706196,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -9395,6 +9395,60 @@ window.BENCHMARK_DATA = {
             "name": "exec tinycolor2 parse hex+toFilter",
             "value": 36172504,
             "range": "± 294826",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "Timo",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c74fe21a802616a823531c76ce4f624e968727ae",
+          "message": "Merge pull request #91 from hamirmahal/fix/usage-of-node12-in-actions/checkout\n\nfix: usage of `node12` in `actions/checkout`",
+          "timestamp": "2024-06-10T10:02:03+02:00",
+          "tree_id": "90f386b2648dc582d0fbad78460710eb99d8cf01",
+          "url": "https://github.com/y21/dash/commit/c74fe21a802616a823531c76ce4f624e968727ae"
+        },
+        "date": 1718006705243,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1785618,
+            "range": "± 19668",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 171237,
+            "range": "± 1000",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 59172,
+            "range": "± 1714",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse+compile tinycolor2",
+            "value": 2055140,
+            "range": "± 10559",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "exec tinycolor2 parse hex+toFilter",
+            "value": 36635208,
+            "range": "± 419075",
             "unit": "ns/iter"
           }
         ]
