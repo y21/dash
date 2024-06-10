@@ -3,11 +3,12 @@ use std::ops::{Deref, DerefMut};
 
 use dash_middle::compiler::instruction as inst;
 use dash_middle::compiler::instruction::Instruction;
+use dash_middle::interner::Symbol;
 
 use crate::jump_container::JumpContainer;
 use crate::{jump_container, FunctionCompiler};
 
-#[derive(PartialOrd, Ord, Hash, Eq, PartialEq, Debug, Clone, Copy)]
+#[derive(Hash, Eq, PartialEq, Debug, Clone, Copy)]
 pub enum Label {
     IfEnd,
     /// A branch of an if statement
@@ -39,6 +40,9 @@ pub enum Label {
     TryEnd,
     InitParamWithDefaultValue,
     FinishParamDefaultValueInit,
+    UserDefinedEnd {
+        sym: Symbol,
+    },
 }
 
 pub struct InstructionBuilder<'cx, 'interner> {

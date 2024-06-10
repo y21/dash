@@ -121,7 +121,7 @@ pub trait Visitor<V> {
     fn visit_empty_statement(&mut self) -> V;
 
     /// Visits a break statement
-    fn visit_break(&mut self, span: Span) -> V;
+    fn visit_break(&mut self, span: Span, sym: Option<Symbol>) -> V;
 
     /// Visits a continue statement
     fn visit_continue(&mut self, span: Span) -> V;
@@ -137,6 +137,9 @@ pub trait Visitor<V> {
 
     /// Visits a switch statement
     fn visit_switch_statement(&mut self, span: Span, s: SwitchStatement) -> V;
+
+    /// Visits a labelled statement.
+    fn visit_labelled(&mut self, span: Span, label: Symbol, stmt: Box<Statement>) -> V;
 }
 
 pub fn accept_default<T, V: Visitor<T>>(this: &mut V, Statement { kind, span }: Statement) -> T {
@@ -158,10 +161,11 @@ pub fn accept_default<T, V: Visitor<T>>(this: &mut V, Statement { kind, span }: 
         StatementKind::Export(e) => this.visit_export_statement(span, e),
         StatementKind::Class(c) => this.visit_class_declaration(span, c),
         StatementKind::Continue => this.visit_continue(span),
-        StatementKind::Break => this.visit_break(span),
+        StatementKind::Break(sym) => this.visit_break(span, sym),
         StatementKind::Debugger => this.visit_debugger(span),
         StatementKind::Empty => this.visit_empty_statement(),
         StatementKind::Switch(s) => this.visit_switch_statement(span, s),
+        StatementKind::Labelled(l, s) => this.visit_labelled(span, l, s),
     }
 }
 

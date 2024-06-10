@@ -566,3 +566,23 @@ simple_test!(
     "(function() { return\n5 })()",
     Value::undefined()
 );
+
+simple_test!(
+    labels,
+    r"
+    let order = [];
+    let i = 0;
+    a: while (true) {
+        b: while(true) {
+            order.push(`i${i}`);
+            if (i >= 5) break b;
+            i++;
+        }
+        order.push(`o${i}`);
+        if (i == 10) break a;
+        i++;
+    }
+    assert(order == 'i0,i1,i2,i3,i4,i5,o5,i6,o6,i7,o7,i8,o8,i9,o9,i10,o10');
+    ",
+    Value::undefined()
+);

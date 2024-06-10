@@ -500,10 +500,11 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             StatementKind::Export(e) => self.visit_export_statement(span, e),
             StatementKind::Class(c) => self.visit_class_declaration(span, c),
             StatementKind::Continue => self.visit_continue(span),
-            StatementKind::Break => self.visit_break(span),
+            StatementKind::Break(sym) => self.visit_break(span, sym),
             StatementKind::Debugger => self.visit_debugger(span),
             StatementKind::Empty => self.visit_empty_statement(),
             StatementKind::Switch(s) => self.visit_switch_statement(span, s),
+            StatementKind::Labelled(label, stmt) => self.visit_labelled(span, label, stmt),
         }
     }
 
@@ -2059,11 +2060,16 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
         Ok(())
     }
 
-    fn visit_break(&mut self, span: Span) -> Result<(), Error> {
+    fn visit_break(&mut self, span: Span, sym: Option<Symbol>) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         if ib.current_function().enclosing_finally().is_some() {
             unimplementedc!(span, "`break` in a try-finally block");
+        }
+
+        if let Some(sym) = sym {
+            ib.build_jmp(Label::UserDefinedEnd { sym }, false);
+            return Ok(());
         }
 
         let breakable = *ib
@@ -2312,6 +2318,14 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             .add_global_label(Label::SwitchEnd { switch_id });
         ib.current_function_mut().exit_switch();
 
+        Ok(())
+    }
+
+    fn visit_labelled(&mut self, _: Span, label: Symbol, stmt: Box<Statement>) -> Result<(), Error> {
+        let mut ib = InstructionBuilder::new(self);
+        ib.accept(*stmt)?;
+        ib.current_function_mut()
+            .add_global_label(Label::UserDefinedEnd { sym: label });
         Ok(())
     }
 }

@@ -69,9 +69,10 @@ impl<'b, 'interner> ConstFunctionEvalCtx<'b, 'interner> {
             StatementKind::Class(stmt) => self.visit_class_statement(stmt, func_id),
             StatementKind::Switch(stmt) => self.visit_switch_statement(stmt, func_id),
             StatementKind::Continue => {}
-            StatementKind::Break => {}
+            StatementKind::Break(_) => {}
             StatementKind::Debugger => {}
             StatementKind::Empty => {}
+            StatementKind::Labelled(_, stmt) => self.visit_statement(stmt, func_id),
         };
 
         if !stmt_has_side_effects(statement) {
@@ -494,7 +495,7 @@ impl<'b, 'interner> ConstFunctionEvalCtx<'b, 'interner> {
 fn stmt_has_side_effects(stmt: &Statement) -> bool {
     match &stmt.kind {
         StatementKind::Block(BlockStatement(block)) => block.iter().any(stmt_has_side_effects),
-        StatementKind::Break => true,
+        StatementKind::Break(_) => true,
         StatementKind::Class(Class { .. }) => true, // TODO: can possibly be SE-free
         StatementKind::Empty => false,
         StatementKind::Expression(expr) => expr_has_side_effects(expr),

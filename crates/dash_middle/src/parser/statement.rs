@@ -49,10 +49,17 @@ pub enum StatementKind {
     Continue,
     /// Break loop statement
     #[display(fmt = "break;")]
-    Break,
+    Break(Option<Symbol>),
     /// Debugger statement
     #[display(fmt = "debugger;")]
     Debugger,
+    /// A labelled statement:
+    ///
+    ///     foo: { break foo; }
+    ///
+    /// is represented as Labelled(foo, Expr(Block(Break(foo))))
+    #[display(fmt = "{_0}: {_1}")]
+    Labelled(Symbol, Box<Statement>),
     /// An empty statement
     ///
     /// This is impossible to occur in JavaScript code, however a statement may be folded to an empty statement

@@ -42,10 +42,21 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             TokenType::Class => self.parse_class().map(StatementKind::Class),
             TokenType::Switch => self.parse_switch().map(StatementKind::Switch),
             TokenType::Continue => Some(StatementKind::Continue),
-            TokenType::Break => Some(StatementKind::Break),
+            TokenType::Break => {
+                let ident = self.expect_identifier(false);
+                Some(StatementKind::Break(ident))
+            }
             TokenType::Debugger => Some(StatementKind::Debugger),
             TokenType::Semicolon => Some(StatementKind::Empty),
-            _ => {
+            other => 'other: {
+                if let TokenType::Identifier(label) = other {
+                    if self.expect_token_type_and_skip(&[TokenType::Colon], false) {
+                        // `foo: <statement that can be broken out of>`
+                        let stmt = self.parse_statement()?;
+                        break 'other Some(StatementKind::Labelled(label, Box::new(stmt)));
+                    }
+                }
+
                 // We've skipped the current character because of the statement cases that skip the current token
                 // So we go back, as the skipped token belongs to this expression
                 self.advance_back();

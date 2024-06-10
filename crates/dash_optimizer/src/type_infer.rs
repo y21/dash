@@ -82,9 +82,10 @@ impl TypeInferCtx {
             StatementKind::Class(stmt) => self.visit_class_statement(stmt, func_id),
             StatementKind::Switch(stmt) => self.visit_switch_statement(stmt, func_id),
             StatementKind::Continue => {}
-            StatementKind::Break => {}
+            StatementKind::Break(_) => {}
             StatementKind::Debugger => {}
             StatementKind::Empty => {}
+            StatementKind::Labelled(_, s) => self.visit_statement(s, func_id),
         }
     }
 

@@ -1,19 +1,19 @@
-use std::collections::BTreeMap;
+use rustc_hash::FxHashMap;
 
 use crate::builder::Label;
 
 /// A container that is responsible for storing and resolving jumps to labels
 #[derive(Debug)]
 pub struct JumpContainer {
-    jumps: BTreeMap<Label, Vec<usize>>,
-    labels: BTreeMap<Label, usize>,
+    jumps: FxHashMap<Label, Vec<usize>>,
+    labels: FxHashMap<Label, usize>,
 }
 
 impl JumpContainer {
     pub fn new() -> Self {
         Self {
-            jumps: BTreeMap::new(),
-            labels: BTreeMap::new(),
+            jumps: FxHashMap::default(),
+            labels: FxHashMap::default(),
         }
     }
 }
