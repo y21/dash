@@ -41,11 +41,8 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             TokenType::Export => self.parse_export().map(StatementKind::Export),
             TokenType::Class => self.parse_class().map(StatementKind::Class),
             TokenType::Switch => self.parse_switch().map(StatementKind::Switch),
-            TokenType::Continue => Some(StatementKind::Continue),
-            TokenType::Break => {
-                let ident = self.expect_identifier(false);
-                Some(StatementKind::Break(ident))
-            }
+            TokenType::Continue => Some(StatementKind::Continue(self.expect_identifier(false))),
+            TokenType::Break => Some(StatementKind::Break(self.expect_identifier(false))),
             TokenType::Debugger => Some(StatementKind::Debugger),
             TokenType::Semicolon => Some(StatementKind::Empty),
             other => 'other: {

@@ -46,7 +46,7 @@ pub enum StatementKind {
     Switch(SwitchStatement),
     /// Continue loop statement
     #[display(fmt = "continue;")]
-    Continue,
+    Continue(Option<Symbol>),
     /// Break loop statement
     #[display(fmt = "break;")]
     Break(Option<Symbol>),

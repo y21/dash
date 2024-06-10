@@ -510,7 +510,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             StatementKind::Import(i) => self.visit_import_statement(span, i),
             StatementKind::Export(e) => self.visit_export_statement(span, e),
             StatementKind::Class(c) => self.visit_class_declaration(span, c),
-            StatementKind::Continue => self.visit_continue(span),
+            StatementKind::Continue(sym) => self.visit_continue(span, sym),
             StatementKind::Break(sym) => self.visit_break(span, sym),
             StatementKind::Debugger => self.visit_debugger(span),
             StatementKind::Empty => self.visit_empty_statement(),
@@ -2097,7 +2097,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
         Ok(())
     }
 
-    fn visit_continue(&mut self, span: Span) -> Result<(), Error> {
+    fn visit_continue(&mut self, span: Span, sym: Option<Symbol>) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         if ib.current_function().enclosing_finally().is_some() {
@@ -2106,7 +2106,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
 
         let breakable = ib
             .current_function_mut()
-            .find_breakable(None) // TODO
+            .find_breakable(sym)
             .ok_or(Error::IllegalBreak(span))?;
 
         match breakable {

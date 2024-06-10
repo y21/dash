@@ -124,7 +124,7 @@ pub trait Visitor<V> {
     fn visit_break(&mut self, span: Span, sym: Option<Symbol>) -> V;
 
     /// Visits a continue statement
-    fn visit_continue(&mut self, span: Span) -> V;
+    fn visit_continue(&mut self, span: Span, sym: Option<Symbol>) -> V;
 
     /// Visits a debugger statement
     fn visit_debugger(&mut self, span: Span) -> V;
@@ -160,7 +160,7 @@ pub fn accept_default<T, V: Visitor<T>>(this: &mut V, Statement { kind, span }: 
         StatementKind::Import(i) => this.visit_import_statement(span, i),
         StatementKind::Export(e) => this.visit_export_statement(span, e),
         StatementKind::Class(c) => this.visit_class_declaration(span, c),
-        StatementKind::Continue => this.visit_continue(span),
+        StatementKind::Continue(sym) => this.visit_continue(span, sym),
         StatementKind::Break(sym) => this.visit_break(span, sym),
         StatementKind::Debugger => this.visit_debugger(span),
         StatementKind::Empty => this.visit_empty_statement(),

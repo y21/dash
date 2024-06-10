@@ -68,7 +68,7 @@ impl<'b, 'interner> ConstFunctionEvalCtx<'b, 'interner> {
             StatementKind::Export(ExportKind::NamedVar(stmt)) => self.visit_variable_declaration(stmt, func_id),
             StatementKind::Class(stmt) => self.visit_class_statement(stmt, func_id),
             StatementKind::Switch(stmt) => self.visit_switch_statement(stmt, func_id),
-            StatementKind::Continue => {}
+            StatementKind::Continue(_) => {}
             StatementKind::Break(_) => {}
             StatementKind::Debugger => {}
             StatementKind::Empty => {}
