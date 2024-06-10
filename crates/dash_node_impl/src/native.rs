@@ -11,7 +11,6 @@ macro_rules! check_module {
         $arg:expr;
         $sc:expr;
         $(
-            #[$($attr:meta)*]
             $sym:expr => ($cache:expr, $init:expr)
         ),*
     ) => {
@@ -40,25 +39,15 @@ pub fn load_native_module(sc: &mut LocalScope<'_>, arg: JsString) -> Result<Opti
     check_module! {
         arg.sym();
         sc;
-        #[cfg(feature = "fs")]
         state.sym.fs => (state_mut(sc).fs_cache, dash_rt_fs::sync::init_module),
-        #[cfg(feature = "fetch")]
         state.sym.fetch => (state_mut(sc).fetch_cache, dash_rt_fetch::init_module),
-        #[cfg(feature = "path")]
         state.sym.path => (state_mut(sc).path_cache, crate::path::init_module),
-        #[cfg(feature = "events")]
         state.sym.events => (state_mut(sc).events_cache, crate::events::init_module),
-        #[]
         state.sym.stream => (state_mut(sc).stream_cache, init_stream),
-        #[]
         state.sym.http => (state_mut(sc).http_cache, init_dummy_empty_module),
-        #[]
         state.sym.https => (state_mut(sc).https_cache, init_dummy_empty_module),
-        #[]
         state.sym.url => (state_mut(sc).url_cache, init_dummy_empty_module),
-        #[]
         state.sym.zlib => (state_mut(sc).zlib_cache, init_dummy_empty_module),
-        #[]
         state.sym.punycode => (state_mut(sc).punycode_cache, init_dummy_empty_module)
     }
 }

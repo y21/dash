@@ -8,6 +8,7 @@ nodejs = ["dash_node_impl"]
 stress_gc = ["dash_vm/stress_gc"]
 
 [dependencies]
+dash_node_impl = { path = "../crates/dash_node_impl", optional = true }
 anyhow = "1.0"
 clap = { version = "3.0.0", features = ["std"], default-features = false }
 rustyline = "9.1.2"
@@ -20,10 +21,6 @@ dash_vm = { path = "../crates/dash_vm", features = [] }
 dash_middle = { path = "../crates/dash_middle", features = ["format"] }
 dash_optimizer = { path = "../crates/dash_optimizer" }
 dash_decompiler = { path = "../crates/dash_decompiler" }
-dash_node_impl = { path = "../crates/dash_node_impl", optional = true, features = [
-    "fs",
-    "fetch",
-] }
 dash_rt_modules = { path = "../crates/dash_rt_modules", features = [
     "http",
     "fs",
