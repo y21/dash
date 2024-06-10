@@ -54,6 +54,7 @@ macro_rules! unimplementedc {
 enum Breakable {
     Loop { loop_id: usize },
     Switch { switch_id: usize },
+    Named { sym: Symbol, label_id: usize },
 }
 
 /// Function-specific state, such as
@@ -70,6 +71,8 @@ struct FunctionLocalState {
     /// A stack of try-catch-finally blocks and their optional `finally` label that can be jumped to
     finally_labels: Vec<Option<Label>>,
     finally_counter: Counter<usize>,
+    /// Counter for user-defined labels
+    user_label_counter: Counter<usize>,
     /// The type of function that this FunctionCompiler compiles
     ty: FunctionKind,
     /// Container, used for storing global labels that can be jumped to
@@ -88,6 +91,15 @@ struct FunctionLocalState {
     references_arguments: Option<Span>,
 }
 
+macro_rules! exit_breakable {
+    ($fc:expr, $what:pat) => {
+        match $fc.breakables.pop() {
+            Some($what) => {}
+            _ => panic!("Tried to exit breakable, but wrong kind was on the stack"),
+        }
+    };
+}
+
 impl FunctionLocalState {
     pub fn new(ty: FunctionKind, id: FuncId) -> Self {
         Self {
@@ -96,6 +108,7 @@ impl FunctionLocalState {
             try_depth: 0,
             finally_labels: Vec::new(),
             finally_counter: Counter::new(),
+            user_label_counter: Counter::new(),
             ty,
             jc: JumpContainer::new(),
             breakables: Vec::new(),
@@ -127,22 +140,6 @@ impl FunctionLocalState {
         switch_id
     }
 
-    fn exit_loop(&mut self) {
-        let item = self.breakables.pop();
-        match item {
-            None | Some(Breakable::Switch { .. }) => panic!("Tried to exit loop, but no breakable was found"),
-            Some(Breakable::Loop { .. }) => {}
-        }
-    }
-
-    fn exit_switch(&mut self) {
-        let item = self.breakables.pop();
-        match item {
-            None | Some(Breakable::Loop { .. }) => panic!("Tried to exit switch, but no breakable was found"),
-            Some(Breakable::Switch { .. }) => {}
-        }
-    }
-
     fn add_global_label(&mut self, label: Label) {
         jump_container::add_label(&mut self.jc, label, &mut self.buf)
     }
@@ -150,6 +147,20 @@ impl FunctionLocalState {
     /// Jumps to a label that was previously (or will be) created by a call to `add_global_label`
     fn add_global_jump(&mut self, label: Label) {
         jump_container::add_jump(&mut self.jc, label, &mut self.buf)
+    }
+
+    /// Tries to find the target to jump to for a `break` (or `continue`).
+    fn find_breakable(&self, label: Option<Symbol>) -> Option<Breakable> {
+        self.breakables
+            .iter()
+            .rev()
+            .find(|brk| match (brk, label) {
+                (Breakable::Named { sym, label_id: _ }, Some(sym2)) => *sym == sym2,
+                (Breakable::Named { .. }, None) => false,
+                (Breakable::Loop { .. } | Breakable::Switch { .. }, None) => true,
+                (Breakable::Loop { .. } | Breakable::Switch { .. }, Some(_)) => false,
+            })
+            .copied()
     }
 
     pub fn is_async(&self) -> bool {
@@ -1014,7 +1025,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
 
         ib.current_function_mut().add_global_label(Label::LoopEnd { loop_id });
 
-        ib.current_function_mut().exit_loop();
+        exit_breakable!(ib.current_function_mut(), Breakable::Loop { .. });
 
         Ok(())
     }
@@ -1033,7 +1044,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
         ib.build_jmptruep(Label::LoopCondition { loop_id }, false);
 
         ib.current_function_mut().add_global_label(Label::LoopEnd { loop_id });
-        ib.current_function_mut().exit_loop();
+        exit_breakable!(ib.current_function_mut(), Breakable::Loop { .. });
 
         Ok(())
     }
@@ -1945,7 +1956,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
 
         ib.current_function_mut().add_global_label(Label::LoopEnd { loop_id });
         ib.current_scope_mut().exit();
-        ib.current_function_mut().exit_loop();
+        exit_breakable!(ib.current_function_mut(), Breakable::Loop { .. });
 
         Ok(())
     }
@@ -2067,15 +2078,9 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             unimplementedc!(span, "`break` in a try-finally block");
         }
 
-        if let Some(sym) = sym {
-            ib.build_jmp(Label::UserDefinedEnd { sym }, false);
-            return Ok(());
-        }
-
-        let breakable = *ib
+        let breakable = ib
             .current_function_mut()
-            .breakables
-            .last()
+            .find_breakable(sym)
             .ok_or(Error::IllegalBreak(span))?;
 
         match breakable {
@@ -2084,6 +2089,9 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             }
             Breakable::Switch { switch_id } => {
                 ib.build_jmp(Label::SwitchEnd { switch_id }, false);
+            }
+            Breakable::Named { sym: _, label_id } => {
+                ib.build_jmp(Label::UserDefinedEnd { id: label_id }, false);
             }
         }
         Ok(())
@@ -2096,10 +2104,9 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             unimplementedc!(span, "`continue` in a try-finally block");
         }
 
-        let breakable = *ib
+        let breakable = ib
             .current_function_mut()
-            .breakables
-            .last()
+            .find_breakable(None) // TODO
             .ok_or(Error::IllegalBreak(span))?;
 
         match breakable {
@@ -2109,6 +2116,9 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             Breakable::Switch { .. } => {
                 // TODO: make it possible to use `continue` in loops even if its used in a switch
                 unimplementedc!(span, "`continue` used inside of a switch statement");
+            }
+            Breakable::Named { .. } => {
+                unimplementedc!(span, "`continue` cannot target a non-iteration statement");
             }
         }
         Ok(())
@@ -2316,16 +2326,23 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
 
         ib.current_function_mut()
             .add_global_label(Label::SwitchEnd { switch_id });
-        ib.current_function_mut().exit_switch();
+        exit_breakable!(ib.current_function_mut(), Breakable::Switch { .. });
 
         Ok(())
     }
 
     fn visit_labelled(&mut self, _: Span, label: Symbol, stmt: Box<Statement>) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
-        ib.accept(*stmt)?;
+        let label_id = ib.current_function_mut().user_label_counter.inc();
         ib.current_function_mut()
-            .add_global_label(Label::UserDefinedEnd { sym: label });
+            .breakables
+            .push(Breakable::Named { sym: label, label_id });
+
+        ib.accept(*stmt)?;
+
+        ib.current_function_mut()
+            .add_global_label(Label::UserDefinedEnd { id: label_id });
+        exit_breakable!(ib.current_function_mut(), Breakable::Named { .. });
         Ok(())
     }
 }

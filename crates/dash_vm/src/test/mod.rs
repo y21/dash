@@ -583,6 +583,21 @@ simple_test!(
         i++;
     }
     assert(order == 'i0,i1,i2,i3,i4,i5,o5,i6,o6,i7,o7,i8,o8,i9,o9,i10,o10');
+
+    order = [];
+    b: {
+        order.push(1);
+        break b;
+        order.push(2);
+    }
+    
+    b: {
+        order.push(3);
+        break b;
+        order.push(4);
+    }
+    order.push(5);
+    assert(order == '1,3,5' && order != '135');
     ",
     Value::undefined()
 );

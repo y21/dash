@@ -3,7 +3,6 @@ use std::ops::{Deref, DerefMut};
 
 use dash_middle::compiler::instruction as inst;
 use dash_middle::compiler::instruction::Instruction;
-use dash_middle::interner::Symbol;
 
 use crate::jump_container::JumpContainer;
 use crate::{jump_container, FunctionCompiler};
@@ -41,7 +40,7 @@ pub enum Label {
     InitParamWithDefaultValue,
     FinishParamDefaultValueInit,
     UserDefinedEnd {
-        sym: Symbol,
+        id: usize,
     },
 }
 
