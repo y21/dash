@@ -13,7 +13,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
     fn parse_union_type(&mut self) -> Option<TypeSegment> {
         let mut left = self.parse_intersection_type()?;
 
-        while self.expect_token_type_and_skip(&[TokenType::BitwiseOr], false) {
+        while self.eat(TokenType::BitwiseOr, false).is_some() {
             let right = self.parse_intersection_type()?;
             left = TypeSegment::Union(Box::new(left), Box::new(right));
         }
@@ -25,7 +25,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
     fn parse_intersection_type(&mut self) -> Option<TypeSegment> {
         let mut left = self.parse_postfix_array()?;
 
-        while self.expect_token_type_and_skip(&[TokenType::BitwiseAnd], false) {
+        while self.eat(TokenType::BitwiseAnd, false).is_some() {
             let right = self.parse_postfix_array()?;
             left = TypeSegment::Union(Box::new(left), Box::new(right));
         }
@@ -37,8 +37,8 @@ impl<'a, 'interner> Parser<'a, 'interner> {
     fn parse_postfix_array(&mut self) -> Option<TypeSegment> {
         let mut target = self.parse_generic_type()?;
 
-        while self.expect_token_type_and_skip(&[TokenType::LeftSquareBrace], false) {
-            self.expect_token_type_and_skip(&[TokenType::RightSquareBrace], true);
+        while self.eat(TokenType::LeftSquareBrace, false).is_some() {
+            self.eat(TokenType::RightSquareBrace, true)?;
             target = TypeSegment::Array(Box::new(target));
         }
 
@@ -49,13 +49,13 @@ impl<'a, 'interner> Parser<'a, 'interner> {
     fn parse_generic_type(&mut self) -> Option<TypeSegment> {
         let mut left = self.parse_primary_type()?;
 
-        while self.expect_token_type_and_skip(&[TokenType::Less], false) {
+        while self.eat(TokenType::Less, false).is_some() {
             let mut args = Vec::new();
 
-            while !self.expect_token_type_and_skip(&[TokenType::Greater], false) {
+            while self.eat(TokenType::Greater, false).is_none() {
                 if !args.is_empty() {
                     // separate types by comma
-                    self.expect_token_type_and_skip(&[TokenType::Comma], true);
+                    self.eat(TokenType::Comma, true)?;
                 }
 
                 args.push(self.parse_type_segment()?);

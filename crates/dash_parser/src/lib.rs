@@ -1,7 +1,7 @@
 use dash_log::{debug, span, Level};
 use dash_middle::interner::{StringInterner, Symbol};
 use dash_middle::lexer::token::{Token, TokenType};
-use dash_middle::parser::error::Error;
+use dash_middle::parser::error::{Error, TokenTypeSuggestion};
 use dash_middle::parser::expr::{Expr, ExprKind};
 use dash_middle::parser::statement::{FuncId, Statement};
 use dash_middle::sourcemap::{SourceMap, Span};
@@ -119,40 +119,8 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         let ok = ty.iter().any(|ty| ty.eq(&current.ty));
 
         if !ok && emit_error {
-            let current = current.clone();
-            self.create_error(Error::UnexpectedTokenMultiple(current, ty));
-        }
-
-        ok
-    }
-
-    fn expect_token_type_and_skip(&mut self, ty: &'static [TokenType], emit_error: bool) -> bool {
-        self.expect_token_and_skip(|to_check| ty.contains(to_check), ty, emit_error)
-    }
-
-    fn expect_token_and_skip(
-        &mut self,
-        check: impl FnOnce(&TokenType) -> bool,
-        expected_ty: &'static [TokenType],
-        emit_error: bool,
-    ) -> bool {
-        let current = match self.current() {
-            Some(k) => k,
-            None => {
-                if emit_error {
-                    self.create_error(Error::UnexpectedEof);
-                }
-                return false;
-            }
-        };
-
-        let ok = check(&current.ty);
-
-        if ok {
-            self.advance();
-        } else if emit_error {
-            let current = current.clone();
-            self.create_error(Error::UnexpectedTokenMultiple(current, expected_ty));
+            let current = *current;
+            self.create_error(Error::unexpected_token(current, ty));
         }
 
         ok
@@ -188,54 +156,55 @@ impl<'a, 'interner> Parser<'a, 'interner> {
     }
 
     pub fn expect_template_literal(&mut self, emit_error: bool) -> Option<Symbol> {
-        if self.expect_token_and_skip(
-            |ty| matches!(ty, TokenType::TemplateLiteral(_)),
-            &[TokenType::DUMMY_TEMPLATE_LITERAL],
+        self.eat(
+            (
+                |tok: Token| {
+                    if let TokenType::TemplateLiteral(literal) = tok.ty {
+                        Some(literal)
+                    } else {
+                        None
+                    }
+                },
+                &[TokenType::DUMMY_TEMPLATE_LITERAL] as &[_],
+            ),
             emit_error,
-        ) {
-            match self.previous().unwrap().ty {
-                TokenType::TemplateLiteral(sym) => Some(sym),
-                _ => unreachable!(),
-            }
-        } else {
-            None
-        }
+        )
     }
 
     pub fn expect_identifier(&mut self, emit_error: bool) -> Option<Symbol> {
-        if self.expect_token_and_skip(|ty| ty.is_identifier(), &[TokenType::DUMMY_IDENTIFIER], emit_error) {
-            self.previous().unwrap().ty.as_identifier()
-        } else {
-            None
-        }
+        self.eat(
+            (
+                |tok: Token| tok.ty.as_identifier(),
+                &[TokenType::DUMMY_IDENTIFIER] as &[_],
+            ),
+            emit_error,
+        )
     }
 
     pub fn expect_string(&mut self, emit_error: bool) -> Option<Symbol> {
-        if self.expect_token_and_skip(
-            |ty| matches!(ty, TokenType::String(_)),
-            &[TokenType::DUMMY_STRING],
+        self.eat(
+            (
+                |tok: Token| {
+                    if let TokenType::String(sym) = tok.ty {
+                        Some(sym)
+                    } else {
+                        None
+                    }
+                },
+                &[TokenType::DUMMY_STRING] as &[_],
+            ),
             emit_error,
-        ) {
-            match self.previous().unwrap().ty {
-                TokenType::String(sym) => Some(sym),
-                _ => unreachable!(),
-            }
-        } else {
-            None
-        }
+        )
     }
 
     pub fn expect_identifier_or_reserved_kw(&mut self, emit_error: bool) -> Option<Symbol> {
-        // TODO: this isn't quite right, it should always skip, even if it didn't match. also the argument is useless, we always call it with false
-        if self.expect_token_and_skip(
-            |ty| ty.is_identifier_or_reserved_kw(),
-            &[TokenType::DUMMY_IDENTIFIER],
+        self.eat(
+            (
+                |tok: Token| tok.ty.as_identifier_or_reserved_kw(),
+                &[TokenType::DUMMY_IDENTIFIER] as &[_],
+            ),
             emit_error,
-        ) {
-            self.previous().unwrap().ty.as_identifier_or_reserved_kw()
-        } else {
-            None
-        }
+        )
     }
 
     /// Checks if between the previous token and the current token there is a LineTerminator or EOF. Necessary for automatic semicolon insertion.
@@ -259,4 +228,74 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         let src = self.source.resolve(Span { lo, hi });
         src.contains('\n')
     }
+
+    pub fn eat<M: Matcher>(&mut self, mut matcher: M, emit_error: bool) -> Option<M::Output> {
+        let current = match self.current() {
+            Some(k) => *k,
+            None => {
+                if emit_error {
+                    self.create_error(Error::UnexpectedEof);
+                }
+                return None;
+            }
+        };
+
+        let res = matcher.matches(current);
+
+        if res.is_some() {
+            self.advance();
+        } else if emit_error {
+            let expected_tys = matcher.suggestion();
+            self.create_error(Error::UnexpectedToken(current, expected_tys));
+        }
+
+        res
+    }
+}
+
+pub trait Matcher {
+    type Output;
+
+    fn matches(&mut self, t: Token) -> Option<Self::Output>;
+    fn suggestion(&self) -> TokenTypeSuggestion;
+}
+
+impl Matcher for TokenType {
+    type Output = ();
+
+    fn matches(&mut self, t: Token) -> Option<Self::Output> {
+        (t.ty == *self).then_some(())
+    }
+    fn suggestion(&self) -> TokenTypeSuggestion {
+        TokenTypeSuggestion::Exact(*self)
+    }
+}
+
+impl<F, R> Matcher for (F, &'static [TokenType])
+where
+    F: FnMut(Token) -> Option<R>,
+{
+    type Output = R;
+
+    fn matches(&mut self, t: Token) -> Option<Self::Output> {
+        (self.0)(t)
+    }
+    fn suggestion(&self) -> TokenTypeSuggestion {
+        TokenTypeSuggestion::AnyOf(self.1)
+    }
+}
+
+pub fn any(s: &'static [TokenType]) -> impl Matcher<Output = ()> {
+    struct AnyMatcher(&'static [TokenType]);
+    impl Matcher for AnyMatcher {
+        type Output = ();
+
+        fn matches(&mut self, t: Token) -> Option<Self::Output> {
+            self.0.iter().any(|ty| *ty == t.ty).then_some(())
+        }
+        fn suggestion(&self) -> TokenTypeSuggestion {
+            TokenTypeSuggestion::AnyOf(self.0)
+        }
+    }
+    AnyMatcher(s)
 }

@@ -11,7 +11,7 @@ use dash_middle::parser::statement::{
 use dash_middle::parser::types::TypeSegment;
 use dash_middle::sourcemap::Span;
 
-use crate::Parser;
+use crate::{any, Parser};
 
 type ParameterList = Option<Vec<(Parameter, Option<Expr>, Option<TypeSegment>)>>;
 
@@ -25,9 +25,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             TokenType::Function => self.parse_function(false).map(|(k, _)| StatementKind::Function(k)),
             TokenType::Async => {
                 // async must be followed by function (todo: or async () => {})
-                if !self.expect_token_type_and_skip(&[TokenType::Function], true) {
-                    return None;
-                }
+                self.eat(TokenType::Function, true)?;
                 self.parse_function(true).map(|(k, _)| StatementKind::Function(k))
             }
             TokenType::LeftBrace => self.parse_block().map(StatementKind::Block),
@@ -47,7 +45,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             TokenType::Semicolon => Some(StatementKind::Empty),
             other => 'other: {
                 if let TokenType::Identifier(label) = other {
-                    if self.expect_token_type_and_skip(&[TokenType::Colon], false) {
+                    if self.eat(TokenType::Colon, false).is_some() {
                         // `foo: <statement that can be broken out of>`
                         let stmt = self.parse_statement()?;
                         break 'other Some(StatementKind::Labelled(label, Box::new(stmt)));
@@ -63,7 +61,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
         let hi_span = self.previous().unwrap().span;
 
-        self.expect_token_type_and_skip(&[TokenType::Semicolon], false);
+        _ = self.eat(TokenType::Semicolon, false);
 
         Some(Statement {
             kind,
@@ -74,43 +72,43 @@ impl<'a, 'interner> Parser<'a, 'interner> {
     pub fn parse_class(&mut self) -> Option<Class> {
         let name = self.expect_identifier(false);
 
-        let extends = if self.expect_token_type_and_skip(&[TokenType::Extends], false) {
+        let extends = if self.eat(TokenType::Extends, false).is_some() {
             Some(Box::new(self.parse_expression()?))
         } else {
             None
         };
 
-        self.expect_token_type_and_skip(&[TokenType::LeftBrace], true);
+        self.eat(TokenType::LeftBrace, true)?;
 
         let mut members = Vec::new();
 
         // Start parsing class members
-        while !self.expect_token_type_and_skip(&[TokenType::RightBrace], false) {
+        while self.eat(TokenType::RightBrace, false).is_none() {
             enum Kind {
                 Getter(Span),
                 Setter(Span),
                 Normal,
             }
 
-            let is_static = self.expect_token_type_and_skip(&[TokenType::Static], false);
-            let is_private = self.expect_token_type_and_skip(&[TokenType::Hash], false);
-            let asyncness = match self.expect_token_type_and_skip(&[TokenType::Async], false) {
+            let is_static = self.eat(TokenType::Static, false).is_some();
+            let is_private = self.eat(TokenType::Hash, false).is_some();
+            let asyncness = match self.eat(TokenType::Async, false).is_some() {
                 true => Asyncness::Yes,
                 false => Asyncness::No,
             };
-            let is_generator = self.expect_token_type_and_skip(&[TokenType::Star], false);
+            let is_generator = self.eat(TokenType::Star, false).is_some();
 
-            let mut property_kind = if self.expect_token_type_and_skip(&[TokenType::Get], false) {
+            let mut property_kind = if self.eat(TokenType::Get, false).is_some() {
                 Kind::Getter(self.previous().unwrap().span)
-            } else if self.expect_token_type_and_skip(&[TokenType::Set], false) {
+            } else if self.eat(TokenType::Set, false).is_some() {
                 Kind::Setter(self.previous().unwrap().span)
             } else {
                 Kind::Normal
             };
 
-            let key = if self.expect_token_type_and_skip(&[TokenType::LeftSquareBrace], false) {
+            let key = if self.eat(TokenType::LeftSquareBrace, false).is_some() {
                 let expr = self.parse_expression()?;
-                self.expect_token_type_and_skip(&[TokenType::RightSquareBrace], true);
+                self.eat(TokenType::RightSquareBrace, true)?;
                 ClassMemberKey::Computed(expr)
             } else {
                 // HACK: if we have `get` + `(`, it is not a getter
@@ -130,14 +128,14 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 }
             };
 
-            let is_method = self.expect_token_type_and_skip(&[TokenType::LeftParen], false);
+            let is_method = self.eat(TokenType::LeftParen, false).is_some();
 
             if is_method {
                 let arguments = self.parse_parameter_list()?;
 
                 // Parse type param
                 // TODO: this should probably be part of parse_aprameter_list
-                let ty_seg = if self.expect_token_type_and_skip(&[TokenType::Colon], false) {
+                let ty_seg = if self.eat(TokenType::Colon, false).is_some() {
                     Some(self.parse_type_segment()?)
                 } else {
                     None
@@ -187,7 +185,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                     }
                 };
 
-                self.expect_token_type_and_skip(&[TokenType::Semicolon], false);
+                _ = self.eat(TokenType::Semicolon, false);
                 // Error on `get v = 3`
                 if let Kind::Getter(span) | Kind::Setter(span) = property_kind {
                     self.create_error(Error::Unexpected(span, "getter or setter as field"));
@@ -207,14 +205,14 @@ impl<'a, 'interner> Parser<'a, 'interner> {
     }
 
     fn parse_export(&mut self) -> Option<ExportKind> {
-        let is_named = self.expect_token_type_and_skip(&[TokenType::LeftBrace], false);
+        let is_named = self.eat(TokenType::LeftBrace, false).is_some();
 
         if is_named {
             let mut names = Vec::new();
-            while !self.expect_token_type_and_skip(&[TokenType::RightBrace], false) {
+            while self.eat(TokenType::RightBrace, false).is_none() {
                 let name = self.expect_identifier(true)?;
                 names.push(name);
-                self.expect_token_type_and_skip(&[TokenType::Comma], false);
+                _ = self.eat(TokenType::Comma, false);
             }
             return Some(ExportKind::Named(names));
         }
@@ -230,7 +228,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
         // We emit an error because this is the last possible way to create
         // an export statement
-        if self.expect_token_type_and_skip(&[TokenType::Default], true) {
+        if self.eat(TokenType::Default, true).is_some() {
             let expr = self.parse_expression()?;
             return Some(ExportKind::Default(expr));
         }
@@ -240,15 +238,15 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
     fn parse_import(&mut self) -> Option<ImportKind> {
         // `import` followed by ( is considered a dynamic import
-        let is_dynamic = self.expect_token_type_and_skip(&[TokenType::LeftParen], false);
+        let is_dynamic = self.eat(TokenType::LeftParen, false).is_some();
         if is_dynamic {
             let specifier = self.parse_expression()?;
-            self.expect_token_type_and_skip(&[TokenType::RightParen], true);
+            self.eat(TokenType::RightParen, true)?;
             return Some(ImportKind::Dynamic(specifier));
         }
 
         // `import` followed by a `*` imports all exported values
-        let is_import_all = self.expect_token_type_and_skip(&[TokenType::Star], false);
+        let is_import_all = self.eat(TokenType::Star, false).is_some();
         if is_import_all {
             self.expect_identifier(true);
             // TODO: enforce identifier be == b"as"
@@ -279,10 +277,10 @@ impl<'a, 'interner> Parser<'a, 'interner> {
     fn parse_try(&mut self) -> Option<TryCatch> {
         let try_ = self.parse_statement()?;
 
-        let catch = if self.expect_token_type_and_skip(&[TokenType::Catch], false) {
-            let capture_ident = if self.expect_token_type_and_skip(&[TokenType::LeftParen], false) {
+        let catch = if self.eat(TokenType::Catch, false).is_some() {
+            let capture_ident = if self.eat(TokenType::LeftParen, false).is_some() {
                 let ident = self.expect_identifier(true)?;
-                self.expect_token_type_and_skip(&[TokenType::RightParen], true);
+                self.eat(TokenType::RightParen, true)?;
                 Some(ident)
             } else {
                 None
@@ -293,7 +291,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             None
         };
 
-        let finally = if self.expect_token_type_and_skip(&[TokenType::Finally], false) {
+        let finally = if self.eat(TokenType::Finally, false).is_some() {
             Some(self.parse_statement()?)
         } else {
             None
@@ -304,7 +302,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
     fn parse_return(&mut self) -> Option<ReturnStatement> {
         let return_kw = self.previous()?.span;
-        if self.expect_token_type_and_skip(&[TokenType::Semicolon], false) || self.at_lineterm() {
+        if self.eat(TokenType::Semicolon, false).is_some() || self.at_lineterm() {
             Some(ReturnStatement(Expr {
                 span: return_kw, /* `return;` intentionally has an implicit `undefined` with the same span as `return;` */
                 kind: ExprKind::undefined_literal(),
@@ -316,24 +314,24 @@ impl<'a, 'interner> Parser<'a, 'interner> {
     }
 
     fn parse_for_loop(&mut self) -> Option<Loop> {
-        self.expect_token_type_and_skip(&[TokenType::LeftParen], true);
+        self.eat(TokenType::LeftParen, true)?;
 
-        let init = if self.expect_token_type_and_skip(&[TokenType::Semicolon], false) {
+        let init = if self.eat(TokenType::Semicolon, false).is_some() {
             None
         } else {
-            let is_binding = self.expect_token_type_and_skip(VARIABLE_TYPES, false);
+            let is_binding = self.eat(any(VARIABLE_TYPES), false).is_some();
 
             if is_binding {
                 let binding_span_lo = self.previous()?.span;
                 let binding = self.parse_variable_binding()?;
                 let binding_kind = binding.kind;
-                let is_of_or_in = self.expect_token_type_and_skip(&[TokenType::Of, TokenType::In], false);
+                let is_of_or_in = self.eat(any(&[TokenType::Of, TokenType::In]), false).is_some();
 
                 if is_of_or_in {
                     let ty = self.previous()?.ty;
                     let expr = self.parse_expression()?;
 
-                    self.expect_token_type_and_skip(&[TokenType::RightParen], true);
+                    self.eat(TokenType::RightParen, true)?;
 
                     let body = Box::new(self.parse_statement()?);
 
@@ -346,13 +344,13 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                     let value = self.parse_variable_definition();
 
                     let mut decls = vec![VariableDeclaration::new(binding, value)];
-                    while self.expect_token_type_and_skip(&[TokenType::Comma], false) {
+                    while self.eat(TokenType::Comma, false).is_some() {
                         let binding = self.parse_variable_binding_with_kind(binding_kind)?;
                         let def = self.parse_variable_definition();
                         decls.push(VariableDeclaration::new(binding, def));
                     }
 
-                    self.expect_token_type_and_skip(&[TokenType::Semicolon], true);
+                    self.eat(TokenType::Semicolon, true)?;
                     let binding_span_hi = self.previous()?.span;
 
                     Some(Statement {
@@ -368,19 +366,19 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             }
         };
 
-        let cond = if self.expect_token_type_and_skip(&[TokenType::Semicolon], false) {
+        let cond = if self.eat(TokenType::Semicolon, false).is_some() {
             None
         } else {
             let expr = self.parse_expression();
-            self.expect_token_type_and_skip(&[TokenType::Semicolon], true);
+            self.eat(TokenType::Semicolon, true)?;
             expr
         };
 
-        let finalizer = if self.expect_token_type_and_skip(&[TokenType::RightParen], false) {
+        let finalizer = if self.eat(TokenType::RightParen, false).is_some() {
             None
         } else {
             let expr = self.parse_expression();
-            self.expect_token_type_and_skip(&[TokenType::RightParen], true);
+            self.eat(TokenType::RightParen, true)?;
             expr
         };
 
@@ -390,15 +388,11 @@ impl<'a, 'interner> Parser<'a, 'interner> {
     }
 
     fn parse_while_loop(&mut self) -> Option<Loop> {
-        if !self.expect_token_type_and_skip(&[TokenType::LeftParen], true) {
-            return None;
-        }
+        self.eat(TokenType::LeftParen, true)?;
 
         let condition = self.parse_expression()?;
 
-        if !self.expect_token_type_and_skip(&[TokenType::RightParen], true) {
-            return None;
-        }
+        self.eat(TokenType::RightParen, true)?;
 
         let body = self.parse_statement()?;
 
@@ -408,9 +402,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
     fn parse_do_while_loop(&mut self) -> Option<Loop> {
         let body = self.parse_statement()?;
 
-        if !self.expect_token_type_and_skip(&[TokenType::While], true) {
-            return None;
-        }
+        self.eat(TokenType::While, true)?;
 
         let condition = self.parse_expression()?;
 
@@ -420,7 +412,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
     /// Parses a block. Assumes that the left brace `{` has already been consumed.
     pub fn parse_block(&mut self) -> Option<BlockStatement> {
         let mut stmts = Vec::new();
-        while !self.expect_token_type_and_skip(&[TokenType::RightBrace], false) {
+        while self.eat(TokenType::RightBrace, false).is_none() {
             if self.is_eof() {
                 return None;
             }
@@ -443,7 +435,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             kind
         };
 
-        while self.expect_token_type_and_skip(&[TokenType::Comma], false) {
+        while self.eat(TokenType::Comma, false).is_some() {
             let binding = self.parse_variable_binding_with_kind(initial_kind)?;
             let value = self.parse_variable_definition();
             decls.push(VariableDeclaration::new(binding, value));
@@ -453,15 +445,11 @@ impl<'a, 'interner> Parser<'a, 'interner> {
     }
 
     fn parse_if(&mut self, parse_else: bool) -> Option<IfStatement> {
-        if !self.expect_token_type_and_skip(&[TokenType::LeftParen], true) {
-            return None;
-        }
+        self.eat(TokenType::LeftParen, true)?;
 
         let condition = self.parse_expression()?;
 
-        if !self.expect_token_type_and_skip(&[TokenType::RightParen], true) {
-            return None;
-        }
+        self.eat(TokenType::RightParen, true)?;
 
         let then = self.parse_statement()?;
 
@@ -469,8 +457,8 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         let mut el: Option<Box<Statement>> = None;
 
         if parse_else {
-            while self.expect_token_type_and_skip(&[TokenType::Else], false) {
-                let is_if = self.expect_token_type_and_skip(&[TokenType::If], false);
+            while self.eat(TokenType::Else, false).is_some() {
+                let is_if = self.eat(TokenType::If, false).is_some();
 
                 if is_if {
                     let if_statement = self.parse_if(false)?;
@@ -490,14 +478,14 @@ impl<'a, 'interner> Parser<'a, 'interner> {
     pub fn parse_parameter_list(&mut self) -> ParameterList {
         let mut parameters = Vec::new();
 
-        while !self.expect_token_type_and_skip(&[TokenType::RightParen], false) {
+        while self.eat(TokenType::RightParen, false).is_none() {
             let tok = self.next().cloned()?;
 
             let parameter = match tok.ty {
                 TokenType::Dot => {
                     // Begin of spread operator
                     for _ in 0..2 {
-                        self.expect_token_type_and_skip(&[TokenType::Dot], true);
+                        self.eat(TokenType::Dot, true)?;
                     }
 
                     let ident = self.expect_identifier(true)?;
@@ -508,20 +496,20 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 // TODO: refactor to if let guards once stable
                 other if other.is_identifier() => Parameter::Identifier(other.as_identifier().unwrap()),
                 _ => {
-                    self.create_error(Error::UnexpectedToken(tok.clone(), TokenType::Comma));
+                    self.create_error(Error::unexpected_token(tok, TokenType::Comma));
                     return None;
                 }
             };
 
             // Parse type param
-            let ty = if self.expect_token_type_and_skip(&[TokenType::Colon], false) {
+            let ty = if self.eat(TokenType::Colon, false).is_some() {
                 Some(self.parse_type_segment()?)
             } else {
                 None
             };
 
             // Parse default value
-            let default = if self.expect_token_type_and_skip(&[TokenType::Assignment], false) {
+            let default = if self.eat(TokenType::Assignment, false).is_some() {
                 Some(self.parse_expression()?)
             } else {
                 None
@@ -533,9 +521,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
             if is_spread {
                 // Must be followed by )
-                if !self.expect_token_type_and_skip(&[TokenType::RightParen], true) {
-                    return None;
-                }
+                self.eat(TokenType::RightParen, true)?;
 
                 break;
             }
@@ -546,17 +532,17 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
     /// Parses the `x` in `let x = 1`, `[x, y]` in `let [x, y] = [1, 2]`, etc.
     fn parse_variable_binding_with_kind(&mut self, kind: VariableDeclarationKind) -> Option<VariableBinding> {
-        let name = if self.expect_token_type_and_skip(&[TokenType::LeftBrace], false) {
+        let name = if self.eat(TokenType::LeftBrace, false).is_some() {
             // Object destructuring
             let mut fields = Vec::new();
             let mut rest = None;
 
-            while !self.expect_token_type_and_skip(&[TokenType::RightBrace], false) {
+            while self.eat(TokenType::RightBrace, false).is_none() {
                 if !fields.is_empty() {
-                    self.expect_token_type_and_skip(&[TokenType::Comma], true);
+                    self.eat(TokenType::Comma, true)?;
                 }
 
-                let cur = self.current()?.clone();
+                let cur = *self.current()?;
                 match cur.ty {
                     TokenType::RightBrace => {
                         // Trailing comma.
@@ -568,10 +554,10 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                         self.advance();
                         // Begin of rest operator, must be followed by two more dots
                         for _ in 0..2 {
-                            self.expect_token_type_and_skip(&[TokenType::Dot], true);
+                            self.eat(TokenType::Dot, true)?;
                         }
 
-                        let name = self.current()?.clone();
+                        let name = *self.current()?;
                         if let Some(sym) = name.ty.as_identifier() {
                             if rest.is_some() {
                                 // Only allow one rest operator
@@ -582,7 +568,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                             rest = Some(sym);
                             self.advance();
                         } else {
-                            self.create_error(Error::UnexpectedToken(name, TokenType::DUMMY_IDENTIFIER));
+                            self.create_error(Error::unexpected_token(name, TokenType::DUMMY_IDENTIFIER));
                             return None;
                         }
                     }
@@ -590,13 +576,13 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                         let name = other.as_identifier().unwrap();
                         self.advance();
 
-                        let alias = if self.expect_token_type_and_skip(&[TokenType::Colon], false) {
-                            let alias = self.current()?.clone();
+                        let alias = if self.eat(TokenType::Colon, false).is_some() {
+                            let alias = *self.current()?;
                             if let Some(alias) = alias.ty.as_identifier() {
                                 self.advance();
                                 Some(alias)
                             } else {
-                                self.create_error(Error::UnexpectedToken(alias, TokenType::DUMMY_IDENTIFIER));
+                                self.create_error(Error::unexpected_token(alias, TokenType::DUMMY_IDENTIFIER));
                                 return None;
                             }
                         } else {
@@ -605,24 +591,24 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                         fields.push((name, alias));
                     }
                     _ => {
-                        self.create_error(Error::UnexpectedToken(cur, TokenType::DUMMY_IDENTIFIER));
+                        self.create_error(Error::unexpected_token(cur, TokenType::DUMMY_IDENTIFIER));
                         return None;
                     }
                 }
             }
 
             VariableDeclarationName::ObjectDestructuring { fields, rest }
-        } else if self.expect_token_type_and_skip(&[TokenType::LeftSquareBrace], false) {
+        } else if self.eat(TokenType::LeftSquareBrace, false).is_some() {
             // Array destructuring
             let mut fields = Vec::new();
             let mut rest = None;
 
-            while !self.expect_token_type_and_skip(&[TokenType::RightSquareBrace], false) {
+            while self.eat(TokenType::RightSquareBrace, false).is_none() {
                 if !fields.is_empty() {
-                    self.expect_token_type_and_skip(&[TokenType::Comma], true);
+                    self.eat(TokenType::Comma, true)?;
                 }
 
-                let cur = self.current()?.clone();
+                let cur = *self.current()?;
                 match cur.ty {
                     TokenType::RightSquareBrace => {
                         // Trailing comma.
@@ -634,10 +620,10 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                         self.advance();
                         // Begin of rest operator, must be followed by two more dots
                         for _ in 0..2 {
-                            self.expect_token_type_and_skip(&[TokenType::Dot], true);
+                            self.eat(TokenType::Dot, true)?;
                         }
 
-                        let name = self.current()?.clone();
+                        let name = *self.current()?;
                         if let Some(sym) = name.ty.as_identifier() {
                             if rest.is_some() {
                                 // Only allow one rest operator
@@ -648,7 +634,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                             rest = Some(sym);
                             self.advance();
                         } else {
-                            self.create_error(Error::UnexpectedToken(name, TokenType::DUMMY_IDENTIFIER));
+                            self.create_error(Error::unexpected_token(name, TokenType::DUMMY_IDENTIFIER));
                             return None;
                         }
                     }
@@ -658,7 +644,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                         fields.push(name);
                     }
                     _ => {
-                        self.create_error(Error::UnexpectedToken(cur, TokenType::DUMMY_IDENTIFIER));
+                        self.create_error(Error::unexpected_token(cur, TokenType::DUMMY_IDENTIFIER));
                         return None;
                     }
                 }
@@ -671,7 +657,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             VariableDeclarationName::Identifier(name)
         };
 
-        let ty = if self.expect_token_type_and_skip(&[TokenType::Colon], false) {
+        let ty = if self.eat(TokenType::Colon, false).is_some() {
             Some(self.parse_type_segment()?)
         } else {
             None
@@ -689,7 +675,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
     /// Parses the definition segment of a variable declaration statement, i.e. `= 5`
     fn parse_variable_definition(&mut self) -> Option<Expr> {
         // If the next char is `=`, we assume this declaration has a value
-        let has_value = self.expect_token_type_and_skip(&[TokenType::Assignment], false);
+        let has_value = self.eat(TokenType::Assignment, false).is_some();
 
         if !has_value {
             return None;
@@ -699,24 +685,24 @@ impl<'a, 'interner> Parser<'a, 'interner> {
     }
 
     fn parse_switch(&mut self) -> Option<SwitchStatement> {
-        self.expect_token_type_and_skip(&[TokenType::LeftParen], true);
+        self.eat(TokenType::LeftParen, true)?;
         let value = self.parse_expression()?;
-        self.expect_token_type_and_skip(&[TokenType::RightParen], true);
+        self.eat(TokenType::RightParen, true)?;
 
-        self.expect_token_type_and_skip(&[TokenType::LeftBrace], true);
+        self.eat(TokenType::LeftBrace, true)?;
 
         let mut cases = Vec::new();
         let mut default = None;
 
         // Parse cases
-        while !self.expect_token_type_and_skip(&[TokenType::RightBrace], false) {
-            let cur = self.current()?.clone();
+        while self.eat(TokenType::RightBrace, false).is_none() {
+            let cur = *self.current()?;
             self.next()?;
 
             match cur.ty {
                 TokenType::Case => {
                     let value = self.parse_expression()?;
-                    self.expect_token_type_and_skip(&[TokenType::Colon], true);
+                    self.eat(TokenType::Colon, true)?;
 
                     let mut body = Vec::new();
                     while !self.expect(&[TokenType::Case, TokenType::Default, TokenType::RightBrace]) {
@@ -726,7 +712,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                     cases.push(SwitchCase { body, value });
                 }
                 TokenType::Default => {
-                    self.expect_token_type_and_skip(&[TokenType::Colon], true);
+                    self.eat(TokenType::Colon, true)?;
 
                     let mut body = Vec::new();
                     while !self.expect(&[TokenType::Case, TokenType::Default, TokenType::RightBrace]) {
@@ -739,9 +725,9 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                     }
                 }
                 _ => {
-                    self.create_error(Error::UnexpectedTokenMultiple(
+                    self.create_error(Error::unexpected_token(
                         cur,
-                        &[TokenType::Case, TokenType::Default],
+                        &[TokenType::Case, TokenType::Default] as &[_],
                     ));
                     return None;
                 }

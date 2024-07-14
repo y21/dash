@@ -536,7 +536,7 @@ pub fn as_token(s: Symbol) -> TokenType {
 }
 
 /// A token
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct Token {
     /// The type of token
     pub ty: TokenType,

@@ -10,6 +10,23 @@ use owo_colors::OwoColorize;
 use crate::lexer::token::{Token, TokenType};
 use crate::sourcemap::Span;
 
+#[derive(Debug, Copy, Clone)]
+pub enum TokenTypeSuggestion {
+    AnyOf(&'static [TokenType]),
+    Exact(TokenType),
+    Unknown,
+}
+impl From<TokenType> for TokenTypeSuggestion {
+    fn from(value: TokenType) -> Self {
+        Self::Exact(value)
+    }
+}
+impl From<&'static [TokenType]> for TokenTypeSuggestion {
+    fn from(value: &'static [TokenType]) -> Self {
+        Self::AnyOf(value)
+    }
+}
+
 /// An error that occurred during the "middle" stage of execution,
 /// i.e. lexing, parsing or compiling (perhaps counterintuitive with the module this is in...)
 #[derive(Debug)]
@@ -19,10 +36,7 @@ pub enum Error {
     /// An unknown token was found
     UnknownToken(Token),
     InvalidEscapeSequence(Span),
-    /// An token was found that we didn't expect, we expect a certain other token type
-    UnexpectedToken(Token, TokenType),
-    /// Same as UnexpectedToken, but we expected any of the given token types
-    UnexpectedTokenMultiple(Token, &'static [TokenType]),
+    UnexpectedToken(Token, TokenTypeSuggestion),
     /// Unexpected end of file
     UnexpectedEof,
     /// Integer parsing failed
@@ -59,6 +73,12 @@ pub enum Error {
     MissingInitializerInDestructuring(Span),
     ArgumentsInRoot(Span),
     Unexpected(Span, &'static str),
+}
+
+impl Error {
+    pub fn unexpected_token(token: Token, v: impl Into<TokenTypeSuggestion>) -> Self {
+        Self::UnexpectedToken(token, v.into())
+    }
 }
 
 pub struct FormattableError<'a, 'buf> {
@@ -253,24 +273,23 @@ impl<'a, 'buf> fmt::Display for FormattableError<'a, 'buf> {
                 diag.message("unexpected token");
                 diag.span_error(span, "");
             }
-            Error::UnexpectedToken(Token { span, .. }, ty) => {
+            Error::UnexpectedToken(Token { span, .. }, sugg) => {
                 diag.message("unexpected token");
                 diag.span_error(span, "");
-                diag.help(format!("expected: `{}`", ty.fmt_for_expected_tys()))
-            }
-            Error::UnexpectedTokenMultiple(Token { span, .. }, tys) => {
-                diag.message("unexpected token");
-                diag.span_error(span, "");
-                diag.help(format!(
-                    "expected one of: {}",
-                    tys.iter().fold(String::new(), |mut acc, ty| {
-                        if !acc.is_empty() {
-                            acc.push_str(", ");
-                        }
-                        let _ = write!(acc, "`{}`", ty.fmt_for_expected_tys());
-                        acc
-                    })
-                ))
+                match sugg {
+                    TokenTypeSuggestion::AnyOf(tys) => diag.help(format!(
+                        "expected one of: {}",
+                        tys.iter().fold(String::new(), |mut acc, ty| {
+                            if !acc.is_empty() {
+                                acc.push_str(", ");
+                            }
+                            _ = write!(acc, "`{}`", ty.fmt_for_expected_tys());
+                            acc
+                        })
+                    )),
+                    TokenTypeSuggestion::Exact(ty) => diag.help(format!("expected: `{}`", ty.fmt_for_expected_tys())),
+                    TokenTypeSuggestion::Unknown => {}
+                }
             }
             Error::InvalidEscapeSequence(span) => {
                 diag.message("invalid escape sequence");
