@@ -39,12 +39,12 @@ impl HandleResult {
     }
 }
 
-pub struct DispatchContext<'sc, 'vm> {
-    scope: &'sc mut LocalScope<'vm>,
+pub struct DispatchContext<'vm> {
+    scope: LocalScope<'vm>,
 }
 
-impl<'sc, 'vm> DispatchContext<'sc, 'vm> {
-    pub fn new(scope: &'sc mut LocalScope<'vm>) -> Self {
+impl<'vm> DispatchContext<'vm> {
+    pub fn new(scope: LocalScope<'vm>) -> Self {
         Self { scope }
     }
 
@@ -71,7 +71,7 @@ impl<'sc, 'vm> DispatchContext<'sc, 'vm> {
     }
 
     pub fn pop_stack_rooted(&mut self) -> Value {
-        self.scope.pop_stack_unwrap().root(self.scope)
+        self.scope.pop_stack_unwrap().root(&mut self.scope)
     }
 
     pub fn peek_stack(&mut self) -> Value {
@@ -133,8 +133,8 @@ impl<'sc, 'vm> DispatchContext<'sc, 'vm> {
     {
         let (left, right) = self.pop_stack2_new();
 
-        let left = left.root(self.scope);
-        let right = right.root(self.scope);
+        let left = left.root(&mut self.scope);
+        let right = right.root(&mut self.scope);
 
         let result = fun(&left, &right, self)?;
         self.stack.push(result);
@@ -178,16 +178,16 @@ impl<'sc, 'vm> DispatchContext<'sc, 'vm> {
     }
 }
 
-impl<'sc, 'vm> Deref for DispatchContext<'sc, 'vm> {
+impl<'vm> Deref for DispatchContext<'vm> {
     type Target = LocalScope<'vm>;
     fn deref(&self) -> &Self::Target {
-        self.scope
+        &self.scope
     }
 }
 
-impl<'sc, 'vm> DerefMut for DispatchContext<'sc, 'vm> {
+impl<'vm> DerefMut for DispatchContext<'vm> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.scope
+        &mut self.scope
     }
 }
 
@@ -214,7 +214,7 @@ mod extract {
     }
 
     impl<T> BackwardSequence<T> {
-        pub fn new_u16(cx: &mut DispatchContext<'_, '_>) -> Self {
+        pub fn new_u16(cx: &mut DispatchContext<'_>) -> Self {
             let len = cx.fetchw_and_inc_ip();
             Self {
                 index: 0,
@@ -239,7 +239,7 @@ mod extract {
     }
 
     impl<T> ForwardSequence<T> {
-        pub fn from_len(cx: &mut DispatchContext<'_, '_>, iter_len: usize, stack_len: usize) -> Self {
+        pub fn from_len(cx: &mut DispatchContext<'_>, iter_len: usize, stack_len: usize) -> Self {
             Self {
                 back: BackwardSequence::from_len(iter_len),
                 stack_index: cx.stack.len() - stack_len,
@@ -247,10 +247,10 @@ mod extract {
         }
     }
 
-    impl<'sc, 'vm, T: ExtractBack> IteratorWith<&mut DispatchContext<'sc, 'vm>> for BackwardSequence<T> {
+    impl<'vm, T: ExtractBack> IteratorWith<&mut DispatchContext<'vm>> for BackwardSequence<T> {
         type Item = Result<T, T::Exception>;
 
-        fn next(&mut self, cx: &mut DispatchContext<'sc, 'vm>) -> Option<Self::Item> {
+        fn next(&mut self, cx: &mut DispatchContext<'vm>) -> Option<Self::Item> {
             if self.index == self.len {
                 None
             } else {
@@ -266,9 +266,9 @@ mod extract {
 
         fn next_front(&mut self, args: Args) -> Option<Self::Item>;
     }
-    impl<'sc, 'vm, T: ExtractFront> FrontIteratorWith<&mut DispatchContext<'sc, 'vm>> for ForwardSequence<T> {
+    impl<'vm, T: ExtractFront> FrontIteratorWith<&mut DispatchContext<'vm>> for ForwardSequence<T> {
         type Item = Result<T, T::Error>;
-        fn next_front(&mut self, cx: &mut DispatchContext<'sc, 'vm>) -> Option<Self::Item> {
+        fn next_front(&mut self, cx: &mut DispatchContext<'vm>) -> Option<Self::Item> {
             if self.back.index == self.back.len {
                 None
             } else {
@@ -288,7 +288,7 @@ mod extract {
         /// JS Exceptions on the other hand use `type Error = Value;` because they must be propagated
         type Exception;
 
-        fn extract(cx: &mut DispatchContext<'_, '_>) -> Result<Self, Self::Exception>;
+        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception>;
     }
 
     pub trait ExtractFront: Sized {
@@ -297,10 +297,7 @@ mod extract {
         /// Extracts the value from the "front", as opposed to popping it off the back.
         /// The implementation is allowed to reorder the stack (e.g. via `swap_remove`)
         /// insofar everything behind the sequence is unaffected.
-        fn extract_front<U>(
-            seq: &mut ForwardSequence<U>,
-            cx: &mut DispatchContext<'_, '_>,
-        ) -> Result<Self, Self::Error>;
+        fn extract_front<U>(seq: &mut ForwardSequence<U>, cx: &mut DispatchContext<'_>) -> Result<Self, Self::Error>;
     }
 
     #[derive(Debug)]
@@ -316,7 +313,7 @@ mod extract {
     impl ExtractBack for IdentW {
         type Exception = Infallible;
 
-        fn extract(cx: &mut DispatchContext<'_, '_>) -> Result<Self, Self::Exception> {
+        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
             let id = cx.fetchw_and_inc_ip();
             Ok(Self(cx.identifier_constant(id.into())))
         }
@@ -327,7 +324,7 @@ mod extract {
     impl ExtractBack for NumberWConstant {
         type Exception = Infallible;
 
-        fn extract(cx: &mut DispatchContext<'_, '_>) -> Result<Self, Self::Exception> {
+        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
             let id = cx.fetchw_and_inc_ip();
             Ok(Self(cx.number_constant(id.into())))
         }
@@ -337,7 +334,7 @@ mod extract {
     impl ExtractBack for Object {
         type Exception = Infallible;
 
-        fn extract(cx: &mut DispatchContext<'_, '_>) -> Result<Self, Self::Exception> {
+        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
             match cx.pop_stack_rooted() {
                 Value::Object(o) => Ok(Self(o)),
                 _ => panic!("stack top must contain an object"),
@@ -348,7 +345,7 @@ mod extract {
     impl ExtractBack for ObjectMemberKind {
         type Exception = Infallible;
 
-        fn extract(cx: &mut DispatchContext<'_, '_>) -> Result<Self, Self::Exception> {
+        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
             Ok(ObjectMemberKind::from_repr(cx.fetch_and_inc_ip()).unwrap())
         }
     }
@@ -356,17 +353,14 @@ mod extract {
     impl ExtractBack for Value {
         type Exception = Infallible;
 
-        fn extract(cx: &mut DispatchContext<'_, '_>) -> Result<Self, Self::Exception> {
+        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
             Ok(cx.pop_stack_rooted())
         }
     }
     impl ExtractFront for Value {
         type Error = Infallible;
 
-        fn extract_front<U>(
-            seq: &mut ForwardSequence<U>,
-            cx: &mut DispatchContext<'_, '_>,
-        ) -> Result<Self, Self::Error> {
+        fn extract_front<U>(seq: &mut ForwardSequence<U>, cx: &mut DispatchContext<'_>) -> Result<Self, Self::Error> {
             seq.stack_index += 1;
             let value = cx.stack[seq.stack_index - 1].clone();
             cx.scope.add_value(value.clone());
@@ -375,7 +369,7 @@ mod extract {
     }
 
     /// Convenience function for infallibly extracting a `T`
-    pub fn extract<T: ExtractBack<Exception = Infallible>>(cx: &mut DispatchContext<'_, '_>) -> T {
+    pub fn extract<T: ExtractBack<Exception = Infallible>>(cx: &mut DispatchContext<'_>) -> T {
         match T::extract(cx) {
             Ok(v) => v,
             Err(err) => match err {},
@@ -385,7 +379,7 @@ mod extract {
     /// Convenience function for infallibly extracting a `T`
     pub fn extract_front<T: ExtractFront<Error = Infallible>, U>(
         seq: &mut ForwardSequence<U>,
-        cx: &mut DispatchContext<'_, '_>,
+        cx: &mut DispatchContext<'_>,
     ) -> T {
         match T::extract_front(seq, cx) {
             Ok(v) => v,
@@ -396,7 +390,7 @@ mod extract {
     impl<E, A: ExtractBack<Exception = E>, B: ExtractBack<Exception = E>> ExtractBack for (A, B) {
         type Exception = E;
 
-        fn extract(cx: &mut DispatchContext<'_, '_>) -> Result<Self, Self::Exception> {
+        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
             Ok((A::extract(cx)?, B::extract(cx)?))
         }
     }
@@ -404,7 +398,7 @@ mod extract {
     impl ExtractBack for ObjectProperty {
         type Exception = Value;
 
-        fn extract(cx: &mut DispatchContext<'_, '_>) -> Result<Self, Self::Exception> {
+        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
             Ok(match extract(cx) {
                 ObjectMemberKind::Getter => {
                     let key = extract::<IdentW>(cx).0;
@@ -430,7 +424,7 @@ mod extract {
                     let value = extract(cx);
 
                     Self::Static {
-                        key: PropertyKey::from_value(cx.scope, key)?,
+                        key: PropertyKey::from_value(&mut cx.scope, key)?,
                         value: PropertyValue::static_default(value),
                     }
                 }
@@ -439,7 +433,7 @@ mod extract {
                     let value = extract::<Object>(cx).0;
 
                     Self::Getter {
-                        key: PropertyKey::from_value(cx.scope, key)?,
+                        key: PropertyKey::from_value(&mut cx.scope, key)?,
                         value,
                     }
                 }
@@ -448,7 +442,7 @@ mod extract {
                     let value = extract::<Object>(cx).0;
 
                     Self::Setter {
-                        key: PropertyKey::from_value(cx.scope, key)?,
+                        key: PropertyKey::from_value(&mut cx.scope, key)?,
                         value,
                     }
                 }
@@ -467,16 +461,13 @@ mod extract {
     impl ExtractFront for ArrayElement {
         type Error = Value;
 
-        fn extract_front<U>(
-            seq: &mut ForwardSequence<U>,
-            cx: &mut DispatchContext<'_, '_>,
-        ) -> Result<Self, Self::Error> {
+        fn extract_front<U>(seq: &mut ForwardSequence<U>, cx: &mut DispatchContext<'_>) -> Result<Self, Self::Error> {
             Ok(match extract::<ArrayMemberKind>(cx) {
                 ArrayMemberKind::Item => ArrayElement::Single(extract_front(seq, cx)),
                 ArrayMemberKind::Spread => {
                     let value: Value = extract_front(seq, cx);
                     // TODO: make this work for array-like values, not just arrays, by calling @@iterator on it
-                    let len = value.length_of_array_like(cx.scope)?;
+                    let len = value.length_of_array_like(&mut cx.scope)?;
                     ArrayElement::Spread(value, len)
                 }
                 ArrayMemberKind::Empty => {
@@ -490,7 +481,7 @@ mod extract {
     impl ExtractBack for ArrayMemberKind {
         type Exception = Infallible;
 
-        fn extract(cx: &mut DispatchContext<'_, '_>) -> Result<Self, Self::Exception> {
+        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
             Ok(ArrayMemberKind::from_repr(cx.fetch_and_inc_ip()).unwrap())
         }
     }
@@ -499,7 +490,7 @@ mod extract {
     impl ExtractBack for LocalW {
         type Exception = Infallible;
 
-        fn extract(cx: &mut DispatchContext<'_, '_>) -> Result<Self, Self::Exception> {
+        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
             let local_id = cx.fetchw_and_inc_ip();
             Ok(Self(cx.get_local(local_id.into())))
         }
@@ -508,7 +499,7 @@ mod extract {
     impl ExtractBack for ExportPropertyKind {
         type Exception = Infallible;
 
-        fn extract(cx: &mut DispatchContext<'_, '_>) -> Result<Self, Self::Exception> {
+        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
             Ok(Self::from_repr(cx.fetch_and_inc_ip()).unwrap())
         }
     }
@@ -517,7 +508,7 @@ mod extract {
     impl ExtractBack for ExportProperty {
         type Exception = Unrooted;
 
-        fn extract(cx: &mut DispatchContext<'_, '_>) -> Result<Self, Self::Exception> {
+        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
             Ok(match extract(cx) {
                 ExportPropertyKind::Local => {
                     let local = extract::<LocalW>(cx);
@@ -526,7 +517,7 @@ mod extract {
                 }
                 ExportPropertyKind::Global => {
                     let ident = extract::<IdentW>(cx).0;
-                    let value = cx.global().get_property(cx.scope, ident.into())?;
+                    let value = cx.global().get_property(&mut cx.scope, ident.into())?;
                     Self(value, ident)
                 }
             })
@@ -535,7 +526,7 @@ mod extract {
 
     impl<E, T: ExtractBack<Exception = E>> ExtractBack for Option<T> {
         type Exception = E;
-        fn extract(cx: &mut DispatchContext<'_, '_>) -> Result<Self, Self::Exception> {
+        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
             match cx.fetch_and_inc_ip() {
                 0 => Ok(None),
                 1 => Ok(Some(T::extract(cx)?)),
@@ -546,7 +537,7 @@ mod extract {
 
     impl ExtractBack for u16 {
         type Exception = Infallible;
-        fn extract(cx: &mut DispatchContext<'_, '_>) -> Result<Self, Self::Exception> {
+        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
             Ok(cx.fetchw_and_inc_ip())
         }
     }
@@ -578,7 +569,7 @@ mod handlers {
 
     use super::*;
 
-    fn constant_instruction<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>, idx: usize) -> Result<(), Value> {
+    fn constant_instruction<'vm>(mut cx: DispatchContext<'vm>, idx: usize) -> Result<(), Value> {
         let constant = cx.constant(idx);
 
         let value = Value::from_constant(constant.clone(), &mut cx);
@@ -586,74 +577,74 @@ mod handlers {
         Ok(())
     }
 
-    pub fn constant<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn constant<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let id = cx.fetch_and_inc_ip();
         constant_instruction(cx, id as usize)?;
         Ok(None)
     }
 
-    pub fn constantw<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn constantw<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let id = cx.fetchw_and_inc_ip();
         constant_instruction(cx, id as usize)?;
         Ok(None)
     }
 
-    pub fn add<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn add<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         cx.evaluate_binary_with_scope(Value::add)
     }
 
-    pub fn sub<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn sub<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         cx.evaluate_binary_with_scope(Value::sub)
     }
 
-    pub fn mul<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn mul<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         cx.evaluate_binary_with_scope(Value::mul)
     }
 
-    pub fn div<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn div<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         cx.evaluate_binary_with_scope(Value::div)
     }
 
-    pub fn rem<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn rem<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         cx.evaluate_binary_with_scope(Value::rem)
     }
 
-    pub fn pow<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn pow<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         cx.evaluate_binary_with_scope(Value::pow)
     }
 
-    pub fn bitor<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn bitor<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         cx.evaluate_binary_with_scope(Value::bitor)
     }
 
-    pub fn bitxor<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn bitxor<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         cx.evaluate_binary_with_scope(Value::bitxor)
     }
 
-    pub fn bitand<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn bitand<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         cx.evaluate_binary_with_scope(Value::bitand)
     }
 
-    pub fn bitshl<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn bitshl<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         cx.evaluate_binary_with_scope(Value::bitshl)
     }
 
-    pub fn bitshr<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn bitshr<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         cx.evaluate_binary_with_scope(Value::bitshr)
     }
 
-    pub fn bitushr<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn bitushr<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         cx.evaluate_binary_with_scope(Value::bitushr)
     }
 
-    pub fn bitnot<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn bitnot<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let value = cx.pop_stack_rooted();
         let result = value.bitnot(&mut cx)?;
         cx.stack.push(result);
         Ok(None)
     }
 
-    pub fn objin<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn objin<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         cx.evaluate_binary_with_scope(|property, target, sc| {
             let property = property.to_js_string(sc)?;
             let found = target
@@ -675,7 +666,7 @@ mod handlers {
         })
     }
 
-    pub fn instanceof<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn instanceof<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let (source, target) = cx.pop_stack2_rooted();
 
         let is_instanceof = source.instanceof(&target, &mut cx).map(Value::Boolean)?;
@@ -683,75 +674,75 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn lt<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn lt<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         cx.evaluate_binary_with_scope(|l, r, sc| equality::lt(l, r, sc).map(Value::Boolean))
     }
 
-    pub fn le<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn le<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         cx.evaluate_binary_with_scope(|l, r, sc| equality::le(l, r, sc).map(Value::Boolean))
     }
 
-    pub fn gt<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn gt<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         cx.evaluate_binary_with_scope(|l, r, sc| equality::gt(l, r, sc).map(Value::Boolean))
     }
 
-    pub fn ge<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn ge<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         cx.evaluate_binary_with_scope(|l, r, sc| equality::ge(l, r, sc).map(Value::Boolean))
     }
 
-    pub fn eq<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn eq<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         cx.evaluate_binary_with_scope(|l, r, sc| equality::eq(l, r, sc).map(Value::Boolean))
     }
 
-    pub fn ne<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn ne<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         cx.evaluate_binary_with_scope(|l, r, sc| equality::ne(l, r, sc).map(Value::Boolean))
     }
 
-    pub fn strict_eq<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn strict_eq<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         cx.evaluate_binary_with_scope(|l, r, _| Ok(Value::Boolean(equality::strict_eq(l, r))))
     }
 
-    pub fn strict_ne<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn strict_ne<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         cx.evaluate_binary_with_scope(|l, r, _| Ok(Value::Boolean(equality::strict_ne(l, r))))
     }
 
-    pub fn neg<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn neg<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let value = cx.pop_stack_rooted();
         let result = value.to_number(&mut cx)?;
         cx.stack.push(Value::number(-result));
         Ok(None)
     }
 
-    pub fn pos<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn pos<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let value = cx.pop_stack_rooted();
         let result = value.to_number(&mut cx)?;
         cx.stack.push(Value::number(result));
         Ok(None)
     }
 
-    pub fn not<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn not<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let value = cx.pop_stack_rooted();
-        let result = value.not(cx.scope);
+        let result = value.not(&mut cx.scope);
         cx.stack.push(result);
         Ok(None)
     }
 
-    pub fn pop<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn pop<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         cx.pop_stack();
         Ok(None)
     }
 
-    pub fn delayed_ret(mut cx: DispatchContext<'_, '_>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn delayed_ret(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let value = cx.pop_stack();
         cx.active_frame_mut().delayed_ret = Some(Ok(value));
         Ok(None)
     }
 
-    pub fn finally_end<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn finally_end<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let tc_depth = cx.fetchw_and_inc_ip();
 
         if let Some(ret) = cx.active_frame_mut().delayed_ret.take() {
-            let ret = ret?.root(cx.scope);
+            let ret = ret?.root(&mut cx.scope);
             let frame_ip = cx.frames.len();
             let enclosing_finally = cx
                 .try_blocks
@@ -770,7 +761,7 @@ mod handlers {
         Ok(None)
     }
 
-    fn ret_inner(mut cx: DispatchContext<'_, '_>, tc_depth: u16, value: Value, this: Frame) -> Option<HandleResult> {
+    fn ret_inner(mut cx: DispatchContext<'_>, tc_depth: u16, value: Value, this: Frame) -> Option<HandleResult> {
         // Drain all try catch blocks that are in this frame.
         let lower_tcp = cx.try_blocks.len() - usize::from(tc_depth);
         drop(cx.try_blocks.drain(lower_tcp..));
@@ -814,14 +805,14 @@ mod handlers {
         }
     }
 
-    pub fn ret<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn ret<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let tc_depth = cx.fetchw_and_inc_ip();
         let value = cx.pop_stack_rooted();
         let this = cx.pop_frame();
         Ok(ret_inner(cx, tc_depth, value, this))
     }
 
-    pub fn ldglobal<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn ldglobal<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let id = cx.fetchw_and_inc_ip();
         let name = cx.identifier_constant(id.into());
 
@@ -829,7 +820,7 @@ mod handlers {
             Some(value) => match value.get_raw_property(name.into()) {
                 Some(value) => value.kind().get_or_apply(&mut cx, Value::undefined())?,
                 None => {
-                    let name = name.res(cx.scope).to_owned();
+                    let name = name.res(&mut cx.scope).to_owned();
                     throw!(&mut cx, ReferenceError, "{} is not defined", name)
                 }
             },
@@ -840,7 +831,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn storeglobal<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn storeglobal<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let id = cx.fetch_and_inc_ip();
         let name = cx.identifier_constant(id.into());
         let kind = AssignKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
@@ -852,7 +843,7 @@ mod handlers {
                     .global
                     .clone()
                     .get_property(&mut cx, PropertyKey::String(name))
-                    .root(cx.scope)?;
+                    .root(&mut cx.scope)?;
 
                 let res = $op(&value, &right, &mut cx)?;
                 cx.global
@@ -868,7 +859,7 @@ mod handlers {
                     .global
                     .clone()
                     .get_property(&mut cx, PropertyKey::String(name))
-                    .root(cx.scope)?;
+                    .root(&mut cx.scope)?;
                 let value = Value::number(value.to_number(&mut cx)?);
 
                 let right = Value::number(1.0);
@@ -886,7 +877,7 @@ mod handlers {
                     .global
                     .clone()
                     .get_property(&mut cx, PropertyKey::String(name))
-                    .root(cx.scope)?;
+                    .root(&mut cx.scope)?;
                 let value = Value::number(value.to_number(&mut cx)?);
 
                 let right = Value::number(1.0);
@@ -929,8 +920,8 @@ mod handlers {
 
     /// Calls a function in a "non-recursive" way
     #[allow(clippy::too_many_arguments)]
-    fn call_flat<'sc, 'vm>(
-        mut cx: DispatchContext<'sc, 'vm>,
+    fn call_flat<'vm>(
+        mut cx: DispatchContext<'vm>,
         callee: &Value,
         this: Value,
         function: &Function,
@@ -960,13 +951,13 @@ mod handlers {
                 let adjusted_spread_index = sp + spread_count + spread_index as usize;
 
                 let iterable = cx.stack[adjusted_spread_index].clone();
-                let length = iterable.length_of_array_like(cx.scope)?;
+                let length = iterable.length_of_array_like(&mut cx.scope)?;
 
                 let mut splice_args = SmallVec::<[_; 2]>::new();
 
                 for i in 0..length {
                     let i = cx.scope.intern_usize(i);
-                    let value = iterable.get_property(&mut cx, i.into())?.root(cx.scope);
+                    let value = iterable.get_property(&mut cx, i.into())?.root(&mut cx.scope);
                     splice_args.push(value);
                 }
                 cx.stack
@@ -993,8 +984,8 @@ mod handlers {
     }
 
     /// Fallback for callable values that are not "function objects"
-    fn call_generic<'sc, 'vm>(
-        mut cx: DispatchContext<'sc, 'vm>,
+    fn call_generic<'vm>(
+        mut cx: DispatchContext<'vm>,
         callee: &Value,
         this: Value,
         argc: usize,
@@ -1020,10 +1011,10 @@ mod handlers {
 
                 for (index, value) in raw_args.into_iter().enumerate() {
                     if indices_iter.peek().is_some_and(|&v| usize::from(v) == index) {
-                        let len = value.length_of_array_like(cx.scope)?;
+                        let len = value.length_of_array_like(&mut cx.scope)?;
                         for i in 0..len {
                             let i = cx.scope.intern_usize(i);
-                            let value = value.get_property(&mut cx, i.into())?.root(cx.scope);
+                            let value = value.get_property(&mut cx, i.into())?.root(&mut cx.scope);
                             // NB: no need to push into `refs` since we already rooted it
                             args.push(value);
                         }
@@ -1050,7 +1041,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn call<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn call<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let call_ip = cx.active_frame().ip as u16 - 1;
 
         let meta = FunctionCallMetadata::from(cx.fetch_and_inc_ip());
@@ -1084,14 +1075,14 @@ mod handlers {
         }
     }
 
-    pub fn jmpfalsep<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn jmpfalsep<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         #[cfg(feature = "jit")]
         let ip = cx.active_frame().ip;
 
         let offset = cx.fetchw_and_inc_ip() as i16;
         let value = cx.pop_stack_rooted();
 
-        let jump = !value.is_truthy(cx.scope);
+        let jump = !value.is_truthy(&mut cx.scope);
 
         #[cfg(feature = "jit")]
         cx.record_conditional_jump(ip, jump);
@@ -1109,13 +1100,13 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn jmpfalsenp<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn jmpfalsenp<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         #[cfg(feature = "jit")]
         let ip = cx.active_frame().ip;
         let offset = cx.fetchw_and_inc_ip() as i16;
         let value = cx.peek_stack();
 
-        let jump = !value.is_truthy(cx.scope);
+        let jump = !value.is_truthy(&mut cx.scope);
 
         #[cfg(feature = "jit")]
         cx.record_conditional_jump(ip, jump);
@@ -1133,14 +1124,14 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn jmptruep<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn jmptruep<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         #[cfg(feature = "jit")]
         let ip = cx.active_frame().ip;
 
         let offset = cx.fetchw_and_inc_ip() as i16;
         let value = cx.pop_stack_rooted();
 
-        let jump = value.is_truthy(cx.scope);
+        let jump = value.is_truthy(&mut cx.scope);
 
         #[cfg(feature = "jit")]
         cx.record_conditional_jump(ip, jump);
@@ -1158,13 +1149,13 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn jmptruenp<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn jmptruenp<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         #[cfg(feature = "jit")]
         let ip = cx.active_frame().ip;
         let offset = cx.fetchw_and_inc_ip() as i16;
         let value = cx.peek_stack();
 
-        let jump = value.is_truthy(cx.scope);
+        let jump = value.is_truthy(&mut cx.scope);
 
         #[cfg(feature = "jit")]
         cx.record_conditional_jump(ip, jump);
@@ -1182,7 +1173,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn jmpnullishp<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn jmpnullishp<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         #[cfg(feature = "jit")]
         let ip = cx.active_frame().ip;
         let offset = cx.fetchw_and_inc_ip() as i16;
@@ -1206,7 +1197,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn jmpnullishnp<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn jmpnullishnp<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         #[cfg(feature = "jit")]
         let ip = cx.active_frame().ip;
         let offset = cx.fetchw_and_inc_ip() as i16;
@@ -1230,7 +1221,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn jmpundefinedp<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn jmpundefinedp<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         #[cfg(feature = "jit")]
         let ip = cx.active_frame().ip;
         let offset = cx.fetchw_and_inc_ip() as i16;
@@ -1259,7 +1250,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn jmpundefinednp<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn jmpundefinednp<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         #[cfg(feature = "jit")]
         let ip = cx.active_frame().ip;
         let offset = cx.fetchw_and_inc_ip() as i16;
@@ -1288,7 +1279,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn jmp<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn jmp<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let offset = cx.fetchw_and_inc_ip() as i16;
         let frame = cx.active_frame_mut();
 
@@ -1311,7 +1302,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn storelocal<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn storelocal<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let id = cx.fetch_and_inc_ip() as usize;
         let kind = AssignKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
 
@@ -1375,7 +1366,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn ldlocal<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn ldlocal<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let id = cx.fetch_and_inc_ip();
         let value = cx.get_local(id.into());
 
@@ -1384,7 +1375,7 @@ mod handlers {
     }
 
     fn with_arraylit_elements(
-        cx: &mut DispatchContext<'_, '_>,
+        cx: &mut DispatchContext<'_>,
         len: usize,
         stack_values: usize,
         mut fun: impl FnMut(Element<PropertyValue>),
@@ -1397,7 +1388,7 @@ mod handlers {
                     for i in 0..len {
                         let i = cx.scope.intern_usize(i);
 
-                        let value = source.get_property(cx.scope, i.into())?.root(cx.scope);
+                        let value = source.get_property(&mut cx.scope, i.into())?.root(&mut cx.scope);
                         fun(Element::Value(PropertyValue::static_default(value)));
                     }
                 }
@@ -1411,23 +1402,23 @@ mod handlers {
         Ok(())
     }
 
-    fn arraylit_holey(cx: &mut DispatchContext<'_, '_>, len: usize, stack_values: usize) -> Result<Array, Unrooted> {
+    fn arraylit_holey(cx: &mut DispatchContext<'_>, len: usize, stack_values: usize) -> Result<Array, Unrooted> {
         let mut new_elements = Vec::with_capacity(stack_values);
         with_arraylit_elements(cx, len, stack_values, |element| new_elements.push(element))?;
-        Ok(Array::from_possibly_holey(cx.scope, new_elements))
+        Ok(Array::from_possibly_holey(&mut cx.scope, new_elements))
     }
 
-    fn arraylit_dense(cx: &mut DispatchContext<'_, '_>, len: usize) -> Result<Array, Unrooted> {
+    fn arraylit_dense(cx: &mut DispatchContext<'_>, len: usize) -> Result<Array, Unrooted> {
         // Dense implies len == stack_values
         let mut new_elements = Vec::with_capacity(len);
         with_arraylit_elements(cx, len, len, |element| match element {
             Element::Hole { .. } => unreachable!(),
             Element::Value(v) => new_elements.push(v),
         })?;
-        Ok(Array::from_vec(cx.scope, new_elements))
+        Ok(Array::from_vec(&mut cx.scope, new_elements))
     }
 
-    pub fn arraylit(mut cx: DispatchContext<'_, '_>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn arraylit(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let len = cx.fetch_and_inc_ip() as usize;
         let stack_values = cx.fetch_and_inc_ip() as usize;
         // Split up into two functions as a non-holey array literal can be evaluated more efficiently
@@ -1442,7 +1433,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn objlit<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn objlit<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let mut iter = BackwardSequence::<ObjectProperty>::new_u16(&mut cx);
 
         let mut obj = ObjectMap::default();
@@ -1465,9 +1456,9 @@ mod handlers {
                 },
                 ObjectProperty::Spread(value) => {
                     if let Value::Object(object) = value {
-                        for key in object.own_keys(cx.scope)? {
-                            let key = PropertyKey::from_value(cx.scope, key)?;
-                            let value = object.get_property(&mut cx, key.clone())?.root(cx.scope);
+                        for key in object.own_keys(&mut cx.scope)? {
+                            let key = PropertyKey::from_value(&mut cx.scope, key)?;
+                            let value = object.get_property(&mut cx, key.clone())?.root(&mut cx.scope);
                             obj.insert(key, PropertyValue::static_default(value));
                         }
                     }
@@ -1483,7 +1474,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn assign_properties(mut cx: DispatchContext<'_, '_>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn assign_properties(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let mut iter = BackwardSequence::<ObjectProperty>::new_u16(&mut cx);
         let target = cx.pop_stack_rooted();
 
@@ -1492,9 +1483,9 @@ mod handlers {
             let is_getter = matches!(property, ObjectProperty::Getter { .. });
 
             match property {
-                ObjectProperty::Static { key, value } => target.set_property(cx.scope, key, value)?,
+                ObjectProperty::Static { key, value } => target.set_property(&mut cx.scope, key, value)?,
                 ObjectProperty::Getter { key, value } | ObjectProperty::Setter { key, value } => {
-                    let prop = target.get_property_descriptor(cx.scope, key.clone())?;
+                    let prop = target.get_property_descriptor(&mut cx.scope, key.clone())?;
                     let prop = match prop {
                         Some(mut prop) => {
                             if let PropertyValueKind::Trap { get, set } = &mut prop.kind {
@@ -1515,7 +1506,7 @@ mod handlers {
                         }
                     };
 
-                    target.set_property(cx.scope, key, prop)?;
+                    target.set_property(&mut cx.scope, key, prop)?;
                 }
                 ObjectProperty::Spread(_) => unimplemented!("spread operator in AssignProperties"),
             }
@@ -1524,7 +1515,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn staticpropertyaccess<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn staticpropertyaccess<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let id = cx.fetchw_and_inc_ip();
         let ident = cx.identifier_constant(id.into());
 
@@ -1541,7 +1532,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn staticpropertyassign<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn staticpropertyassign<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let kind = AssignKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
         let id = cx.fetchw_and_inc_ip();
         let key = cx.identifier_constant(id.into());
@@ -1550,10 +1541,10 @@ mod handlers {
             ($op:expr) => {{
                 let (target, value) = cx.pop_stack2_new();
 
-                let target = target.root(cx.scope);
-                let value = value.root(cx.scope);
+                let target = target.root(&mut cx.scope);
+                let value = value.root(&mut cx.scope);
 
-                let p = target.get_property(&mut cx, key.into())?.root(cx.scope);
+                let p = target.get_property(&mut cx, key.into())?.root(&mut cx.scope);
                 let res = $op(&p, &value, &mut cx)?;
 
                 target.set_property(&mut cx, key.into(), PropertyValue::static_default(res.clone()))?;
@@ -1564,7 +1555,7 @@ mod handlers {
         macro_rules! postfix {
             ($op:expr) => {{
                 let target = cx.pop_stack_rooted();
-                let prop = target.get_property(&mut cx, key.into())?.root(cx.scope);
+                let prop = target.get_property(&mut cx, key.into())?.root(&mut cx.scope);
                 let prop = Value::number(prop.to_number(&mut cx)?);
                 let one = Value::number(1.0);
                 let res = $op(&prop, &one, &mut cx)?;
@@ -1576,7 +1567,7 @@ mod handlers {
         macro_rules! prefix {
             ($op:expr) => {{
                 let target = cx.pop_stack_rooted();
-                let prop = target.get_property(&mut cx, key.into())?.root(cx.scope);
+                let prop = target.get_property(&mut cx, key.into())?.root(&mut cx.scope);
                 let prop = Value::number(prop.to_number(&mut cx)?);
                 let one = Value::number(1.0);
                 let res = $op(&prop, &one, &mut cx)?;
@@ -1588,8 +1579,8 @@ mod handlers {
         match kind {
             AssignKind::Assignment => {
                 let (target, value) = cx.pop_stack2_new();
-                let target = target.root(cx.scope);
-                let value = value.root(cx.scope);
+                let target = target.root(&mut cx.scope);
+                let value = value.root(&mut cx.scope);
                 target.set_property(&mut cx, key.into(), PropertyValue::static_default(value.clone()))?;
                 cx.stack.push(value);
             }
@@ -1614,9 +1605,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn dynamicpropertyassign<'sc, 'vm>(
-        mut cx: DispatchContext<'sc, 'vm>,
-    ) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn dynamicpropertyassign<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let kind = AssignKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
 
         macro_rules! op {
@@ -1624,7 +1613,7 @@ mod handlers {
                 let (target, value, key) = cx.pop_stack3_rooted();
 
                 let key = PropertyKey::from_value(&mut cx, key)?;
-                let prop = target.get_property(&mut cx, key.clone())?.root(cx.scope);
+                let prop = target.get_property(&mut cx, key.clone())?.root(&mut cx.scope);
 
                 let result = $op(&prop, &value, &mut cx)?;
 
@@ -1637,7 +1626,7 @@ mod handlers {
             ($op:expr) => {{
                 let (target, key) = cx.pop_stack2_rooted();
                 let key = PropertyKey::from_value(&mut cx, key)?;
-                let prop = target.get_property(&mut cx, key.clone())?.root(cx.scope);
+                let prop = target.get_property(&mut cx, key.clone())?.root(&mut cx.scope);
                 let prop = Value::number(prop.to_number(&mut cx)?);
                 let one = Value::number(1.0);
                 let res = $op(&prop, &one, &mut cx)?;
@@ -1650,7 +1639,7 @@ mod handlers {
             ($op:expr) => {{
                 let (target, key) = cx.pop_stack2_rooted();
                 let key = PropertyKey::from_value(&mut cx, key)?;
-                let prop = target.get_property(&mut cx, key.clone())?.root(cx.scope);
+                let prop = target.get_property(&mut cx, key.clone())?.root(&mut cx.scope);
                 let prop = Value::number(prop.to_number(&mut cx)?);
                 let one = Value::number(1.0);
                 let res = $op(&prop, &one, &mut cx)?;
@@ -1689,9 +1678,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn dynamicpropertyaccess<'sc, 'vm>(
-        mut cx: DispatchContext<'sc, 'vm>,
-    ) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn dynamicpropertyaccess<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let key = cx.pop_stack_rooted();
 
         let preserve_this = cx.fetch_and_inc_ip() == 1;
@@ -1709,7 +1696,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn ldlocalext<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn ldlocalext<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let id = cx.fetch_and_inc_ip();
         let value = Value::External(cx.get_external(id.into()).clone());
 
@@ -1724,7 +1711,7 @@ mod handlers {
         unsafe { ExternalValue::replace(handle, value) };
     }
 
-    pub fn storelocalext<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn storelocalext<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let id = cx.fetch_and_inc_ip();
         let kind = AssignKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
 
@@ -1789,7 +1776,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn try_block<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn try_block<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let mut compute_dist_ip = || {
             let distance = extract::<Option<u16>>(&mut cx)?;
             let ip = cx.active_frame().ip;
@@ -1809,45 +1796,45 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn try_end<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn try_end<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         cx.try_blocks.pop();
         Ok(None)
     }
 
-    pub fn throw<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn throw<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         Err(cx.pop_stack())
     }
 
-    pub fn type_of<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn type_of<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let value = cx.pop_stack_rooted();
         cx.stack.push(value.type_of().as_value());
         Ok(None)
     }
 
-    pub fn type_of_ident<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn type_of_ident<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let id = cx.fetchw_and_inc_ip();
         let constant = cx.identifier_constant(id.into());
         let prop = cx
             .global
             .clone()
-            .get_property(cx.scope, constant.into())?
-            .root(cx.scope);
+            .get_property(&mut cx.scope, constant.into())?
+            .root(&mut cx.scope);
 
         cx.stack.push(prop.type_of().as_value());
         Ok(None)
     }
 
-    pub fn yield_<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn yield_<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let value = cx.pop_stack();
         Ok(Some(HandleResult::Yield(value)))
     }
 
-    pub fn await_<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn await_<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let value = cx.pop_stack();
         Ok(Some(HandleResult::Await(value)))
     }
 
-    pub fn import_dyn<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn import_dyn<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let value = cx.pop_stack_rooted();
 
         let _ret = match cx.params.dynamic_import_callback() {
@@ -1861,7 +1848,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn import_static<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn import_static<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let ty = StaticImportKind::from_repr(cx.fetch_and_inc_ip()).expect("Invalid import kind");
         let local_id = cx.fetchw_and_inc_ip();
         let path_id = cx.fetchw_and_inc_ip();
@@ -1878,7 +1865,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn export_default<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn export_default<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         // NOTE: Does not need to be rooted. Storing it in frame state counts as being rooted.
         let value = cx.pop_stack();
         let frame = cx.active_frame_mut();
@@ -1893,7 +1880,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn export_named<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn export_named<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let mut iter = BackwardSequence::<ExportProperty>::new_u16(&mut cx);
         while let Some(prop) = iter.next(&mut cx) {
             let ExportProperty(value, ident) = prop?;
@@ -1906,7 +1893,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn debugger<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn debugger<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         if let Some(cb) = cx.params().debugger_callback() {
             cb(&mut cx)?;
         }
@@ -1914,7 +1901,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn this<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn this<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let this = cx
             .frames
             .iter()
@@ -1927,48 +1914,48 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn global_this<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn global_this<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let global = cx.global.clone();
         cx.stack.push(Value::Object(global));
         Ok(None)
     }
 
-    pub fn super_<'sc, 'vm>(cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn super_<'vm>(cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         throw!(cx, SyntaxError, "`super` keyword unexpected in this context");
     }
 
-    pub fn undef<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn undef<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         cx.stack.push(Value::undefined());
         Ok(None)
     }
 
-    pub fn infinity<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn infinity<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         cx.stack.push(Value::number(f64::INFINITY));
         Ok(None)
     }
 
-    pub fn nan<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn nan<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         cx.stack.push(Value::number(f64::NAN));
         Ok(None)
     }
 
-    pub fn call_symbol_iterator<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn call_symbol_iterator<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let value = cx.pop_stack_rooted();
         let symbol_iterator = cx.statics.symbol_iterator.clone();
         let iterable = value
             .get_property(&mut cx, PropertyKey::Symbol(symbol_iterator))?
-            .root(cx.scope);
+            .root(&mut cx.scope);
         let iterator = iterable.apply(&mut cx, value, Vec::new())?;
         cx.push_stack(iterator);
         Ok(None)
     }
 
-    pub fn call_for_in_iterator<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn call_for_in_iterator<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let value = cx.pop_stack_rooted();
 
         let keys = match value {
-            Value::Object(obj) => obj.own_keys(cx.scope)?,
-            Value::External(obj) => obj.own_keys(cx.scope)?,
+            Value::Object(obj) => obj.own_keys(&mut cx.scope)?,
+            Value::External(obj) => obj.own_keys(&mut cx.scope)?,
             _ => Vec::new(),
         }
         .into_iter()
@@ -1983,34 +1970,30 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn delete_property_dynamic<'sc, 'vm>(
-        mut cx: DispatchContext<'sc, 'vm>,
-    ) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn delete_property_dynamic<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let (property, target) = cx.pop_stack2_rooted();
         let key = PropertyKey::from_value(&mut cx, property)?;
         let value = target.delete_property(&mut cx, key)?;
 
         // TODO: not correct, as `undefined` might have been the actual value
-        let did_delete = !matches!(value.root(cx.scope), Value::Undefined(..));
+        let did_delete = !matches!(value.root(&mut cx.scope), Value::Undefined(..));
         cx.stack.push(Value::Boolean(did_delete));
         Ok(None)
     }
 
-    pub fn delete_property_static<'sc, 'vm>(
-        mut cx: DispatchContext<'sc, 'vm>,
-    ) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn delete_property_static<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let target = cx.pop_stack_rooted();
         let cid = cx.fetchw_and_inc_ip();
         let con = cx.identifier_constant(cid.into());
         let value = target.delete_property(&mut cx, con.into())?;
 
         // TODO: not correct, as `undefined` might have been the actual value
-        let did_delete = !matches!(value.root(cx.scope), Value::Undefined(..));
+        let did_delete = !matches!(value.root(&mut cx.scope), Value::Undefined(..));
         cx.stack.push(Value::Boolean(did_delete));
         Ok(None)
     }
 
-    pub fn objdestruct<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn objdestruct<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let rest_id = match cx.fetchw_and_inc_ip() {
             u16::MAX => None,
             n => Some(n),
@@ -2031,7 +2014,7 @@ mod handlers {
 
         if let Some(rest_id) = rest_id {
             let keys = obj
-                .own_keys(cx.scope)?
+                .own_keys(&mut cx.scope)?
                 .into_iter()
                 .filter_map(|s| match s {
                     Value::String(s) => (!idents.contains(&s)).then_some(s),
@@ -2039,11 +2022,11 @@ mod handlers {
                 })
                 .collect::<Vec<_>>();
 
-            let rest = NamedObject::new(cx.scope);
+            let rest = NamedObject::new(&mut cx.scope);
             let rest = cx.scope.register(rest);
             for key in keys {
-                let value = obj.get_property(cx.scope, key.into())?.root(cx.scope);
-                rest.set_property(cx.scope, key.into(), PropertyValue::static_default(value))?;
+                let value = obj.get_property(&mut cx.scope, key.into())?.root(&mut cx.scope);
+                rest.set_property(&mut cx.scope, key.into(), PropertyValue::static_default(value))?;
             }
 
             cx.set_local(rest_id.into(), Value::Object(rest).into());
@@ -2052,7 +2035,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn arraydestruct<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn arraydestruct<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let array = cx.pop_stack_rooted();
 
         let mut iter = BackwardSequence::<NumberWConstant>::new_u16(&mut cx).enumerate();
@@ -2060,14 +2043,14 @@ mod handlers {
         while let Some((i, NumberWConstant(id))) = iter.next_infallible(&mut cx) {
             let id = id as usize;
             let key = cx.scope.intern_usize(i);
-            let prop = array.get_property(cx.scope, key.into())?;
+            let prop = array.get_property(&mut cx.scope, key.into())?;
             cx.set_local(id, prop);
         }
 
         Ok(None)
     }
 
-    pub fn intrinsic_op<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn intrinsic_op<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let op = IntrinsicOperation::from_repr(cx.fetch_and_inc_ip()).unwrap();
 
         macro_rules! lr_as_num_spec {
@@ -2147,7 +2130,7 @@ mod handlers {
             }};
         }
 
-        fn logical_op_numl_u32r_n<F: FnOnce(f64, f64) -> bool>(mut cx: DispatchContext<'_, '_>, f: F) {
+        fn logical_op_numl_u32r_n<F: FnOnce(f64, f64) -> bool>(mut cx: DispatchContext<'_>, f: F) {
             let vm: &mut Vm = &mut cx;
 
             let Some(value @ &mut Value::Number(Number(left))) = vm.stack.last_mut() else {
@@ -2178,8 +2161,12 @@ mod handlers {
                     // TODO: don't warn here but when purity was violated
                     warn!("missed spec call due to impurity");
                     // Builtins impure, fallback to slow dynamic property lookup
-                    let k = cx.global.clone().get_property(&mut cx, $k.into())?.root(cx.scope);
-                    let fun = k.get_property(&mut cx, $v.into())?.root(cx.scope);
+                    let k = cx
+                        .global
+                        .clone()
+                        .get_property(&mut cx, $k.into())?
+                        .root(&mut cx.scope);
+                    let fun = k.get_property(&mut cx, $v.into())?.root(&mut cx.scope);
                     let result = fun.apply(&mut cx, Value::undefined(), args)?;
                     cx.push_stack(result);
                 } else {
@@ -2255,7 +2242,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn arguments<'sc, 'vm>(mut cx: DispatchContext<'sc, 'vm>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn arguments<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let arguments = cx
             .active_frame()
             .arguments
@@ -2267,8 +2254,7 @@ mod handlers {
 }
 
 pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResult>, Unrooted> {
-    let mut scope = vm.scope();
-    let cx = DispatchContext::new(&mut scope);
+    let cx = DispatchContext::new(vm.scope());
     match instruction {
         Instruction::Add => handlers::add(cx),
         Instruction::Sub => handlers::sub(cx),
