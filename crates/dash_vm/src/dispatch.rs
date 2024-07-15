@@ -572,6 +572,7 @@ mod handlers {
     use crate::value::object::{NamedObject, Object, ObjectMap, PropertyKey, PropertyValue, PropertyValueKind};
     use crate::value::ops::conversions::ValueConversion;
     use crate::value::ops::equality;
+    use crate::value::primitive::Number;
 
     use self::extract::{ArrayElement, BackwardSequence, ExportProperty, IdentW, NumberWConstant, ObjectProperty};
 
@@ -2146,19 +2147,21 @@ mod handlers {
             }};
         }
 
-        macro_rules! bin_op_numl_constr_n {
-            ($op:tt, $ty:ty) => {{
-                let left = match cx.stack.last().unwrap() {
-                    Value::Number(n) => n.0,
-                    _ => unreachable!(),
-                };
-                let mut right_bytes: [u8; <$ty>::BITS as usize / 8] = [0; <$ty>::BITS as usize / 8];
-                for byte in right_bytes.iter_mut() {
-                    *byte = cx.fetch_and_inc_ip();
-                }
-                let right = <$ty>::from_ne_bytes(right_bytes) as f64;
-                *cx.stack.last_mut().unwrap() = Value::Boolean(left $op right);
-            }};
+        fn logical_op_numl_u32r_n<F: FnOnce(f64, f64) -> bool>(mut cx: DispatchContext<'_, '_>, f: F) {
+            let vm: &mut Vm = &mut cx;
+
+            let Some(value @ &mut Value::Number(Number(left))) = vm.stack.last_mut() else {
+                unreachable!()
+            };
+            let frame = vm.frames.last_mut().unwrap();
+            let ip = frame.ip;
+            let right = frame
+                .function
+                .buffer
+                .with(|buf| u32::from_ne_bytes(buf[ip..ip + 4].try_into().unwrap()) as f64);
+            frame.ip += 4;
+
+            *value = Value::Boolean(f(left, right));
         }
 
         macro_rules! fn_call {
@@ -2215,10 +2218,10 @@ mod handlers {
             IntrinsicOperation::GeNumLConstR => bin_op_numl_constr!(>=),
             IntrinsicOperation::LtNumLConstR => bin_op_numl_constr!(<),
             IntrinsicOperation::LeNumLConstR => bin_op_numl_constr!(<=),
-            IntrinsicOperation::GtNumLConstR32 => bin_op_numl_constr_n!(>, u32),
-            IntrinsicOperation::GeNumLConstR32 => bin_op_numl_constr_n!(>=, u32),
-            IntrinsicOperation::LtNumLConstR32 => bin_op_numl_constr_n!(<, u32),
-            IntrinsicOperation::LeNumLConstR32 => bin_op_numl_constr_n!(<=, u32),
+            IntrinsicOperation::GtNumLConstR32 => logical_op_numl_u32r_n(cx, |l, r| l > r),
+            IntrinsicOperation::GeNumLConstR32 => logical_op_numl_u32r_n(cx, |l, r| l >= r),
+            IntrinsicOperation::LtNumLConstR32 => logical_op_numl_u32r_n(cx, |l, r| l < r),
+            IntrinsicOperation::LeNumLConstR32 => logical_op_numl_u32r_n(cx, |l, r| l <= r),
             IntrinsicOperation::Exp => fn_call!(math_exp, sym::Math, sym::exp),
             IntrinsicOperation::Log2 => fn_call!(math_log2, sym::Math, sym::log2),
             IntrinsicOperation::Expm1 => fn_call!(math_expm1, sym::Math, sym::expm1),
