@@ -686,8 +686,9 @@ pub enum VariableDeclarationName {
     },
     /// Array destructuring: [ a ] = [ 1 ]
     ArrayDestructuring {
-        /// Elements to destructure
-        fields: Vec<Symbol>,
+        /// Elements to destructure.
+        /// For `[a,,b]` this stores `[Some(a), None, Some(b)]`
+        fields: Vec<Option<Symbol>>,
         /// The rest element, if present
         rest: Option<Symbol>,
     },
@@ -726,7 +727,10 @@ impl fmt::Display for VariableDeclarationName {
                         write!(f, ", ")?;
                     }
 
-                    write!(f, "{name}")?;
+                    match name {
+                        Some(name) => write!(f, "{name}")?,
+                        None => f.write_char(',')?,
+                    }
                 }
 
                 if let Some(rest) = rest {

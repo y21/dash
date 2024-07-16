@@ -615,6 +615,9 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                         self.advance();
                         break;
                     }
+                    TokenType::Comma => {
+                        fields.push(None);
+                    }
                     TokenType::Dot => {
                         // Skip the dot
                         self.advance();
@@ -641,7 +644,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                     other if other.is_identifier() => {
                         let name = other.as_identifier().unwrap();
                         self.advance();
-                        fields.push(name);
+                        fields.push(Some(name));
                     }
                     _ => {
                         self.create_error(Error::unexpected_token(cur, TokenType::DUMMY_IDENTIFIER));

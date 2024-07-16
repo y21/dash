@@ -2038,13 +2038,15 @@ mod handlers {
     pub fn arraydestruct<'vm>(mut cx: DispatchContext<'vm>) -> Result<Option<HandleResult>, Unrooted> {
         let array = cx.pop_stack_rooted();
 
-        let mut iter = BackwardSequence::<NumberWConstant>::new_u16(&mut cx).enumerate();
+        let mut iter = BackwardSequence::<Option<NumberWConstant>>::new_u16(&mut cx).enumerate();
 
-        while let Some((i, NumberWConstant(id))) = iter.next_infallible(&mut cx) {
-            let id = id as usize;
-            let key = cx.scope.intern_usize(i);
-            let prop = array.get_property(&mut cx.scope, key.into())?;
-            cx.set_local(id, prop);
+        while let Some((i, id)) = iter.next_infallible(&mut cx) {
+            if let Some(NumberWConstant(id)) = id {
+                let id = id as usize;
+                let key = cx.scope.intern_usize(i);
+                let prop = array.get_property(&mut cx.scope, key.into())?;
+                cx.set_local(id, prop);
+            }
         }
 
         Ok(None)

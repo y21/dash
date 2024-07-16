@@ -905,17 +905,21 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                     ib.build_arraydestruct(field_count);
 
                     for name in fields {
-                        let id = ib
-                            .current_scope_mut()
-                            .add_local(name, binding.kind, None)
-                            .map_err(|_| Error::LocalLimitExceeded(span))?;
+                        ib.write_bool(name.is_some());
+                        if let Some(name) = name {
+                            let id = ib
+                                .current_scope_mut()
+                                .add_local(name, binding.kind, None)
+                                .map_err(|_| Error::LocalLimitExceeded(span))?;
 
-                        let var_id = ib
-                            .current_function_mut()
-                            .cp
-                            .add(Constant::Number(id as f64))
-                            .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
-                        ib.writew(var_id);
+                            let id = ib
+                                .current_function_mut()
+                                .cp
+                                .add(Constant::Number(id as f64))
+                                .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
+
+                            ib.writew(id);
+                        }
                     }
                 }
             }
@@ -2050,7 +2054,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                     match var.binding.name {
                         VariableDeclarationName::Identifier(ident) => it.push(ident),
                         VariableDeclarationName::ArrayDestructuring { ref fields, rest } => {
-                            it.extend(fields.iter().copied());
+                            it.extend(fields.iter().copied().flatten());
                             it.extend(rest);
                         }
                         VariableDeclarationName::ObjectDestructuring { ref fields, rest } => {

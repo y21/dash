@@ -87,7 +87,7 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
         Ok(())
     }
 
-    fn write_bool(&mut self, b: bool) {
+    pub fn write_bool(&mut self, b: bool) {
         self.write(b.into());
     }
 
