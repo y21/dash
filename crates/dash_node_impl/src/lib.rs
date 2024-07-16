@@ -14,6 +14,7 @@ use dash_rt::state::State;
 use dash_vm::eval::EvalError;
 use dash_vm::gc::handle::Handle;
 use dash_vm::localscope::LocalScope;
+use dash_vm::value::array::Array;
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::{Root, Unrooted, Value};
 use dash_vm::{delegate, throw};
@@ -45,16 +46,21 @@ async fn run_inner_fallible(path: &str, opt: OptLevel, initial_gc_threshold: Opt
         process_package_json(path)?
     } else {
         PackageState {
-            base_dir: path.parent().unwrap_or(&env::current_dir()?).into(),
+            base_dir: match path.parent() {
+                Some(p) => p.to_path_buf(),
+                None => env::current_dir()?,
+            },
             metadata: Package::default_with_entry(path.into()),
         }
     };
 
-    let entry = if path.is_dir() {
-        std::fs::read_to_string(path.join(&package_state.metadata.main))
+    let entry_path = if path.is_dir() {
+        path.join(&package_state.metadata.main)
     } else {
-        std::fs::read_to_string(&package_state.metadata.main)
-    }?;
+        package_state.metadata.main.clone()
+    };
+
+    let entry = std::fs::read_to_string(&entry_path)?;
 
     let global_state = Rc::new(GlobalState {
         node_modules_dir: package_state.base_dir.join("node_modules"),
@@ -83,12 +89,19 @@ async fn run_inner_fallible(path: &str, opt: OptLevel, initial_gc_threshold: Opt
             .unwrap();
 
         anyhow::Ok(
-            execute_node_module(scope, path, path, &entry, opt, global_state, Rc::new(package_state)).map_err(
-                |err| match err {
-                    (EvalError::Middle(errs), entry) => anyhow!("{}", errs.formattable(&entry, true)),
-                    (EvalError::Exception(err), ..) => anyhow!("{}", format_value(err.root(scope), scope).unwrap()),
-                },
-            )?,
+            execute_node_module(
+                scope,
+                entry_path.parent().unwrap(),
+                &entry_path,
+                &entry,
+                opt,
+                global_state,
+                Rc::new(package_state),
+            )
+            .map_err(|err| match err {
+                (EvalError::Middle(errs), entry) => anyhow!("{}", errs.formattable(&entry, true)),
+                (EvalError::Exception(err), ..) => anyhow!("{}", format_value(err.root(scope), scope).unwrap()),
+            })?,
         )
     })?;
 
@@ -106,6 +119,31 @@ fn create_process_object(sc: &mut LocalScope<'_>) -> Handle {
     let env_k = sc.intern("env");
     obj.set_property(sc, env_k.into(), PropertyValue::static_default(env.into()))
         .unwrap();
+
+    let argv_k = sc.intern("argv");
+    let argv = env::args()
+        .map(|arg| PropertyValue::static_default(Value::String(sc.intern(arg).into())))
+        .collect::<Vec<_>>();
+    let argv = Array::from_vec(sc, argv);
+    let argv = sc.register(argv);
+    obj.set_property(sc, argv_k.into(), PropertyValue::static_default(argv.into()))
+        .unwrap();
+
+    let versions_k = sc.intern("versions");
+    let dash_k = sc.intern("dash");
+    let versions = NamedObject::new(sc);
+    let version = sc.intern(env!("CARGO_PKG_VERSION"));
+    versions
+        .set_property(
+            sc,
+            dash_k.into(),
+            PropertyValue::static_default(Value::String(version.into())),
+        )
+        .unwrap();
+    let versions = sc.register(versions);
+    obj.set_property(sc, versions_k.into(), PropertyValue::static_default(versions.into()))
+        .unwrap();
+
     sc.register(obj)
 }
 
