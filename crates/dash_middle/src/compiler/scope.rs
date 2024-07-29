@@ -12,7 +12,10 @@ pub struct LimitExceededError;
 
 #[derive(Debug, Clone)]
 pub struct FunctionScope {
-    // TODO: document the difference between this and `declarations`
+    /// All locals that are declared in this function.
+    /// Every scope that this function encloses (including the function's `Scope` itself) will have its own declarations.
+    /// Some scopes may not have any declarations at all, such as unnameable locals.
+    /// There can also be multiple locals with the same name.
     pub locals: Vec<Local>,
 }
 impl FunctionScope {
@@ -40,6 +43,9 @@ pub struct Scope {
     pub kind: ScopeKind,
     pub parent: Option<ScopeId>,
     pub subscopes: Vec<ScopeId>,
+    /// All variable declarations in this scope.
+    /// It contains the identifier, as well as the local slot
+    /// (index into `functions` of the enclosing function scope).
     pub declarations: Vec<(Symbol, u16)>,
 }
 

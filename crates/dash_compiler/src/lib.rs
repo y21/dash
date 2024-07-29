@@ -288,13 +288,10 @@ impl<'interner> FunctionCompiler<'interner> {
     fn add_external_to_func(&mut self, func_id: ScopeId, external_id: u16, is_nested_external: bool) -> usize {
         let fun = self.function_stack.iter_mut().rev().find(|f| f.id == func_id);
         let externals = &mut fun.unwrap().externals;
-        if let Some(id) = externals.iter().position(|ext| {
-            ext.id == external_id && {
-                // assert_eq!(ext.is_nested_external, is_nested_external);
-                // true
-                ext.is_nested_external == is_nested_external
-            }
-        }) {
+        if let Some(id) = externals
+            .iter()
+            .position(|ext| ext.id == external_id && ext.is_nested_external == is_nested_external)
+        {
             id
         } else {
             externals.push(External {
@@ -348,7 +345,6 @@ impl<'interner> FunctionCompiler<'interner> {
 
     /// This is the same as `find_local` but should be used
     /// when type_infer must have discovered/registered the local variable in the current scope.
-    /// It would be *wrong* to go up scopes sometimes.
     fn find_local_from_binding(&mut self, binding: Binding) -> u16 {
         self.decl_to_slot.slot_from_local(binding.id)
     }
@@ -1849,11 +1845,6 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
         ib.current_function_mut()
             .finally_labels
             .push(finally.as_ref().map(|&(finally_id, _)| Label::Finally { finally_id }));
-        // if true {
-        //     panic!(
-        //         "add a test for ensuring we dont really need to enter a scope here because try_ is already a block stmt"
-        //     );
-        // }
         let res = ib.accept(*try_);
         ib.current_function_mut().try_depth -= 1;
         res?;

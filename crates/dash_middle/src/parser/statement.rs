@@ -685,7 +685,8 @@ pub enum VariableDeclarationKind {
 
     /// Unnameable variables cannot be referred to by JavaScript code directly and are created by the compiler
     ///
-    /// TODO: be more detailed about the semantics here
+    /// Multiple unnamed variables of the same name can exist in a function's `locals` vec and all `find` operations
+    /// on the `ScopeGraph` will never consider unnamed variables.
     #[display(fmt = "__intrinsic_var")]
     Unnameable,
 }
