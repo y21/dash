@@ -147,10 +147,16 @@ pub fn includes(cx: CallContext) -> Result<Value, Value> {
 pub fn index_of(cx: CallContext) -> Result<Value, Value> {
     let this = cx.this.to_js_string(cx.scope)?;
     let other = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
+    let start_index = match cx.args.get(1) {
+        Some(n) => n.to_length_u(cx.scope)?,
+        None => 0,
+    };
+    let this = this.res(cx.scope);
     let pos = this
-        .res(cx.scope)
+        .get(start_index..)
+        .unwrap_or("")
         .find(other.res(cx.scope))
-        .map(|i| i as f64)
+        .map(|i| (start_index + i) as f64)
         .unwrap_or(-1.0);
     Ok(Value::number(pos))
 }
@@ -158,8 +164,15 @@ pub fn index_of(cx: CallContext) -> Result<Value, Value> {
 pub fn last_index_of(cx: CallContext) -> Result<Value, Value> {
     let this = cx.this.to_js_string(cx.scope)?;
     let other = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
+    let end_index = match cx.args.get(1) {
+        Some(n) => n.to_length_u(cx.scope)? + 1,
+        None => this.res(cx.scope).len(),
+    };
+
+    let this = this.res(cx.scope);
     let pos = this
-        .res(cx.scope)
+        .get(..end_index)
+        .unwrap_or(this)
         .rfind(other.res(cx.scope))
         .map(|i| i as f64)
         .unwrap_or(-1.0);
