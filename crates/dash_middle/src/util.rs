@@ -238,7 +238,7 @@ macro_rules! timed {
     }};
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Counter<T>(usize, PhantomData<T>);
 
 impl<T> Default for Counter<T> {
@@ -298,5 +298,13 @@ macro_rules! if_match {
         $(
             else { $fallback }
         )?
+    }};
+}
+
+#[macro_export]
+macro_rules! with {
+    ($v:expr, |$name:ident| $code:expr) => {{
+        let $name = $v;
+        $code
     }};
 }

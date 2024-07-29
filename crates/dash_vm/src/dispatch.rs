@@ -820,7 +820,7 @@ mod handlers {
             Some(value) => match value.get_raw_property(name.into()) {
                 Some(value) => value.kind().get_or_apply(&mut cx, Value::undefined())?,
                 None => {
-                    let name = name.res(&mut cx.scope).to_owned();
+                    let name = name.res(&cx.scope).to_owned();
                     throw!(&mut cx, ReferenceError, "{} is not defined", name)
                 }
             },
@@ -1405,7 +1405,7 @@ mod handlers {
     fn arraylit_holey(cx: &mut DispatchContext<'_>, len: usize, stack_values: usize) -> Result<Array, Unrooted> {
         let mut new_elements = Vec::with_capacity(stack_values);
         with_arraylit_elements(cx, len, stack_values, |element| new_elements.push(element))?;
-        Ok(Array::from_possibly_holey(&mut cx.scope, new_elements))
+        Ok(Array::from_possibly_holey(&cx.scope, new_elements))
     }
 
     fn arraylit_dense(cx: &mut DispatchContext<'_>, len: usize) -> Result<Array, Unrooted> {
@@ -1415,7 +1415,7 @@ mod handlers {
             Element::Hole { .. } => unreachable!(),
             Element::Value(v) => new_elements.push(v),
         })?;
-        Ok(Array::from_vec(&mut cx.scope, new_elements))
+        Ok(Array::from_vec(&cx.scope, new_elements))
     }
 
     pub fn arraylit(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
@@ -2022,7 +2022,7 @@ mod handlers {
                 })
                 .collect::<Vec<_>>();
 
-            let rest = NamedObject::new(&mut cx.scope);
+            let rest = NamedObject::new(&cx.scope);
             let rest = cx.scope.register(rest);
             for key in keys {
                 let value = obj.get_property(&mut cx.scope, key.into())?.root(&mut cx.scope);

@@ -543,7 +543,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                                 let parameters = self.parse_parameter_list()?;
                                 self.eat(TokenType::LeftBrace, true)?;
                                 let body = self.parse_block()?;
-                                let id = self.function_counter.inc();
+                                let id = self.scope_count.inc();
                                 items.push((
                                     key,
                                     Expr {
@@ -606,13 +606,11 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                             }
 
                             self.eat(TokenType::LeftBrace, true)?;
-                            let BlockStatement(stmts) = self.parse_block()?;
+                            let BlockStatement(stmts, scope_id) = self.parse_block()?;
 
-                            // Desugar to function
-                            let func_id = self.function_counter.inc();
                             let fun = FunctionDeclaration::new(
                                 None,
-                                func_id,
+                                scope_id,
                                 params,
                                 stmts,
                                 FunctionKind::Function(Asyncness::No),
@@ -720,7 +718,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                         span: current.span.to(statement.span),
                         kind: ExprKind::function(FunctionDeclaration::new(
                             None,
-                            self.function_counter.inc(),
+                            self.scope_count.inc(),
                             params,
                             vec![statement],
                             // FIXME: this isn't correct -- we're currently desugaring async closures
@@ -810,10 +808,9 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         let name = {
             let ty = self.current()?.ty;
             if ty.is_identifier() {
-                match self.next() {
-                    Some(tok) => tok.ty.as_identifier(),
-                    None => None,
-                }
+                self.next()
+                    .and_then(|tok| tok.ty.as_identifier())
+                    .map(|ident| self.create_binding(ident))
             } else {
                 None
             }
@@ -834,13 +831,12 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
         self.new_level_stack.add_level();
 
-        let BlockStatement(statements) = self.parse_block()?;
+        let BlockStatement(statements, scope_id) = self.parse_block()?;
 
         self.new_level_stack.pop_level().unwrap();
 
-        let func_id = self.function_counter.inc();
         Some((
-            FunctionDeclaration::new(name, func_id, arguments, statements, ty, ty_seg, None),
+            FunctionDeclaration::new(name, scope_id, arguments, statements, ty, ty_seg, None),
             self.previous()?.span,
         ))
     }
@@ -885,11 +881,11 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 }
             };
 
-            list.push((Parameter::Identifier(ident), value, None));
+            list.push((Parameter::Identifier(self.create_binding(ident)), value, None));
         }
 
-        if let Some(rest_binding) = rest_binding {
-            list.push((Parameter::Spread(rest_binding), None, None));
+        if let Some(ident) = rest_binding {
+            list.push((Parameter::Spread(self.create_binding(ident)), None, None));
         }
 
         let is_statement = self.eat(TokenType::LeftBrace, false).is_some();
@@ -909,7 +905,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             }
         };
 
-        let func_id = self.function_counter.inc();
+        let func_id = self.scope_count.inc();
         Some(Expr {
             span: pre_span.to(body.span),
             kind: ExprKind::function(FunctionDeclaration::new(

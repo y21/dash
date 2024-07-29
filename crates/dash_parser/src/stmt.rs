@@ -70,7 +70,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
     }
 
     pub fn parse_class(&mut self) -> Option<Class> {
-        let name = self.expect_identifier(false);
+        let name = self.expect_identifier(false).map(|ident| self.create_binding(ident));
 
         let extends = if self.eat(TokenType::Extends, false).is_some() {
             Some(Box::new(self.parse_expression()?))
@@ -143,10 +143,10 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
                 let body = self.parse_statement()?;
 
-                let func_id = self.function_counter.inc();
+                let func_id = self.scope_count.inc();
                 let func = FunctionDeclaration::new(
                     match key {
-                        ClassMemberKey::Named(name) => Some(name),
+                        ClassMemberKey::Named(name) => Some(self.create_binding(name)),
                         // TODO: not correct, `class V { ['a']() {} }` should have its name set to 'a'
                         ClassMemberKey::Computed(_) => None,
                     },
@@ -254,7 +254,10 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             // TODO: enforce identifier be == b"from"
             self.expect_identifier(true);
             let specifier = self.expect_string(true)?;
-            return Some(ImportKind::AllAs(SpecifierKind::Ident(ident), specifier));
+            return Some(ImportKind::AllAs(
+                SpecifierKind::Ident(self.create_binding(ident)),
+                specifier,
+            ));
         }
 
         // `import` followed by an identifier is considered a default import
@@ -262,7 +265,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             self.expect_identifier(true); // TODO: enforce == from
             let specifier = self.expect_string(true)?;
             return Some(ImportKind::DefaultAs(
-                SpecifierKind::Ident(default_import_ident),
+                SpecifierKind::Ident(self.create_binding(default_import_ident)),
                 specifier,
             ));
         }
@@ -281,12 +284,14 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             let capture_ident = if self.eat(TokenType::LeftParen, false).is_some() {
                 let ident = self.expect_identifier(true)?;
                 self.eat(TokenType::RightParen, true)?;
-                Some(ident)
+                Some(self.create_binding(ident))
             } else {
                 None
             };
 
-            Some(Catch::new(self.parse_statement()?, capture_ident))
+            let (span, block) = self.parse_full_block()?;
+
+            Some(Catch::new(span, block, capture_ident))
         } else {
             None
         };
@@ -315,6 +320,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
     fn parse_for_loop(&mut self) -> Option<Loop> {
         self.eat(TokenType::LeftParen, true)?;
+        let scope = self.scope_count.inc();
 
         let init = if self.eat(TokenType::Semicolon, false).is_some() {
             None
@@ -336,8 +342,18 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                     let body = Box::new(self.parse_statement()?);
 
                     return Some(match ty {
-                        TokenType::In => Loop::ForIn(ForInLoop { binding, expr, body }),
-                        TokenType::Of => Loop::ForOf(ForOfLoop { binding, expr, body }),
+                        TokenType::In => Loop::ForIn(ForInLoop {
+                            binding,
+                            expr,
+                            body,
+                            scope,
+                        }),
+                        TokenType::Of => Loop::ForOf(ForOfLoop {
+                            binding,
+                            expr,
+                            body,
+                            scope,
+                        }),
                         _ => unreachable!(),
                     });
                 } else {
@@ -384,7 +400,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
         let body = self.parse_statement()?;
 
-        Some(ForLoop::new(init, cond, finalizer, body).into())
+        Some(ForLoop::new(init, cond, finalizer, body, scope).into())
     }
 
     fn parse_while_loop(&mut self) -> Option<Loop> {
@@ -409,8 +425,18 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         Some(DoWhileLoop::new(condition, body).into())
     }
 
+    pub fn parse_full_block(&mut self) -> Option<(Span, BlockStatement)> {
+        self.eat(TokenType::LeftBrace, true)?;
+        let lbrace = self.previous().unwrap().span;
+        let block = self.parse_block()?;
+        let rbrace = self.previous().unwrap().span;
+
+        Some((lbrace.to(rbrace), block))
+    }
+
     /// Parses a block. Assumes that the left brace `{` has already been consumed.
     pub fn parse_block(&mut self) -> Option<BlockStatement> {
+        let scope_id = self.scope_count.inc();
         let mut stmts = Vec::new();
         while self.eat(TokenType::RightBrace, false).is_none() {
             if self.is_eof() {
@@ -421,7 +447,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 stmts.push(stmt);
             }
         }
-        Some(BlockStatement(stmts))
+        Some(BlockStatement(stmts, scope_id))
     }
 
     fn parse_variable(&mut self) -> Option<VariableDeclarations> {
@@ -490,11 +516,13 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
                     let ident = self.expect_identifier(true)?;
 
-                    Parameter::Spread(ident)
+                    Parameter::Spread(self.create_binding(ident))
                 }
                 TokenType::Comma => continue,
                 // TODO: refactor to if let guards once stable
-                other if other.is_identifier() => Parameter::Identifier(other.as_identifier().unwrap()),
+                other if other.is_identifier() => {
+                    Parameter::Identifier(self.create_binding(other.as_identifier().unwrap()))
+                }
                 _ => {
                     self.create_error(Error::unexpected_token(tok, TokenType::Comma));
                     return None;
@@ -565,7 +593,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                                 return None;
                             }
 
-                            rest = Some(sym);
+                            rest = Some(self.create_binding(sym));
                             self.advance();
                         } else {
                             self.create_error(Error::unexpected_token(name, TokenType::DUMMY_IDENTIFIER));
@@ -588,7 +616,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                         } else {
                             None
                         };
-                        fields.push((name, alias));
+                        fields.push((self.local_count.inc(), name, alias));
                     }
                     _ => {
                         self.create_error(Error::unexpected_token(cur, TokenType::DUMMY_IDENTIFIER));
@@ -634,7 +662,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                                 return None;
                             }
 
-                            rest = Some(sym);
+                            rest = Some(self.create_binding(sym));
                             self.advance();
                         } else {
                             self.create_error(Error::unexpected_token(name, TokenType::DUMMY_IDENTIFIER));
@@ -644,7 +672,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                     other if other.is_identifier() => {
                         let name = other.as_identifier().unwrap();
                         self.advance();
-                        fields.push(Some(name));
+                        fields.push(Some(self.create_binding(name)));
                     }
                     _ => {
                         self.create_error(Error::unexpected_token(cur, TokenType::DUMMY_IDENTIFIER));
@@ -657,7 +685,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         } else {
             // Identifier
             let name = self.expect_identifier(true)?;
-            VariableDeclarationName::Identifier(name)
+            VariableDeclarationName::Identifier(self.create_binding(name))
         };
 
         let ty = if self.eat(TokenType::Colon, false).is_some() {

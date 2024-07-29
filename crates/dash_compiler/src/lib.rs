@@ -1,12 +1,13 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
+use std::mem;
 use std::rc::Rc;
 
 use dash_log::{debug, span, Level};
 use dash_middle::compiler::constant::{Buffer, Constant, ConstantPool, Function};
 use dash_middle::compiler::external::External;
 use dash_middle::compiler::instruction::{AssignKind, Instruction, IntrinsicOperation};
-use dash_middle::compiler::scope::{CompileValueType, Scope, ScopeLocal};
+use dash_middle::compiler::scope::{CompileValueType, LimitExceededError, Local, ScopeGraph};
 use dash_middle::compiler::{CompileResult, DebugSymbols, FunctionCallMetadata, StaticImportKind};
 use dash_middle::interner::{sym, StringInterner, Symbol};
 use dash_middle::lexer::token::TokenType;
@@ -17,16 +18,17 @@ use dash_middle::parser::expr::{
     PropertyAccessExpr, Seq, UnaryExpr,
 };
 use dash_middle::parser::statement::{
-    Asyncness, BlockStatement, Class, ClassMember, ClassMemberKey, ClassMemberValue, DoWhileLoop, ExportKind,
-    ForInLoop, ForLoop, ForOfLoop, FuncId, FunctionDeclaration, FunctionKind, IfStatement, ImportKind, Loop, Parameter,
-    ReturnStatement, SpecifierKind, Statement, StatementKind, SwitchCase, SwitchStatement, TryCatch, VariableBinding,
-    VariableDeclaration, VariableDeclarationKind, VariableDeclarationName, VariableDeclarations, WhileLoop,
+    Asyncness, Binding, BlockStatement, Class, ClassMember, ClassMemberKey, ClassMemberValue, DoWhileLoop, ExportKind,
+    ForInLoop, ForLoop, ForOfLoop, FunctionDeclaration, FunctionKind, IfStatement, ImportKind, Loop, Parameter,
+    ReturnStatement, ScopeId, SpecifierKind, Statement, StatementKind, SwitchCase, SwitchStatement, TryCatch,
+    VariableBinding, VariableDeclaration, VariableDeclarationKind, VariableDeclarationName, VariableDeclarations,
+    WhileLoop,
 };
 use dash_middle::sourcemap::Span;
 use dash_middle::util::Counter;
 use dash_middle::visitor::Visitor;
 use dash_optimizer::consteval::ConstFunctionEvalCtx;
-use dash_optimizer::type_infer::TypeInferCtx;
+use dash_optimizer::type_infer::{InferMode, LocalDeclToSlot, NameResolutionResults, TypeInferCtx};
 use dash_optimizer::OptLevel;
 use instruction::compile_local_load;
 use jump_container::JumpContainer;
@@ -83,8 +85,9 @@ struct FunctionLocalState {
     loop_counter: usize,
     /// Keeps track of the total number of loops to be able to have unique IDs
     switch_counter: usize,
-    id: FuncId,
+    id: ScopeId,
     debug_symbols: DebugSymbols,
+    externals: Vec<External>,
     /// Whether this function references `arguments` anywhere in its body
     ///
     /// Also tracks the span for error reporting, but is discarded past the compiler stage.
@@ -101,7 +104,7 @@ macro_rules! exit_breakable {
 }
 
 impl FunctionLocalState {
-    pub fn new(ty: FunctionKind, id: FuncId) -> Self {
+    pub fn new(ty: FunctionKind, id: ScopeId) -> Self {
         Self {
             buf: Vec::new(),
             cp: ConstantPool::new(),
@@ -116,6 +119,7 @@ impl FunctionLocalState {
             switch_counter: 0,
             id,
             debug_symbols: DebugSymbols::default(),
+            externals: Vec::new(),
             references_arguments: None,
         }
     }
@@ -178,7 +182,10 @@ impl FunctionLocalState {
 #[derive(Debug)]
 pub struct FunctionCompiler<'interner> {
     function_stack: Vec<FunctionLocalState>,
-    tcx: TypeInferCtx,
+    scopes: ScopeGraph,
+    decl_to_slot: LocalDeclToSlot,
+    current: ScopeId,
+    scope_counter: Counter<ScopeId>,
     interner: &'interner mut StringInterner,
     /// Optimization level
     #[allow(unused)]
@@ -187,11 +194,22 @@ pub struct FunctionCompiler<'interner> {
 }
 
 impl<'interner> FunctionCompiler<'interner> {
-    pub fn new(source: &str, opt_level: OptLevel, tcx: TypeInferCtx, interner: &'interner mut StringInterner) -> Self {
+    /// Creates a new compiler for compiling parsed JavaScript functions.
+    /// Prior to this, you must call `name_res` to obtain name resolution results and scopes
+    pub fn new(
+        source: &str,
+        opt_level: OptLevel,
+        name_res: NameResolutionResults,
+        scope_counter: Counter<ScopeId>,
+        interner: &'interner mut StringInterner,
+    ) -> Self {
         Self {
             opt_level,
-            tcx,
+            scopes: name_res.scopes,
+            decl_to_slot: name_res.decl_to_slot,
+            scope_counter,
             interner,
+            current: ScopeId::ROOT,
             function_stack: Vec::new(),
             source: Rc::from(source),
         }
@@ -201,7 +219,7 @@ impl<'interner> FunctionCompiler<'interner> {
         let compile_span = span!(Level::TRACE, "compile ast");
         let _enter = compile_span.enter();
 
-        transformations::hoist_declarations(&mut ast);
+        transformations::hoist_declarations(ScopeId::ROOT, &mut self.scope_counter, &mut self.scopes, &mut ast);
         if implicit_return {
             transformations::ast_patch_implicit_return(&mut ast);
         } else {
@@ -209,24 +227,15 @@ impl<'interner> FunctionCompiler<'interner> {
             transformations::ast_insert_implicit_return(&mut ast);
         }
 
-        let tif_span = span!(Level::TRACE, "type infer");
-        tif_span.in_scope(|| {
-            debug!("begin type inference");
-            for stmt in &ast {
-                self.tcx.visit_statement(stmt, FuncId::ROOT);
-            }
-            debug!("finished type inference");
-        });
-
         let consteval_span = span!(Level::TRACE, "const eval");
         consteval_span.in_scope(|| {
             let opt_level = self.opt_level;
             if opt_level.enabled() {
                 debug!("begin const eval, opt level: {:?}", opt_level);
-                let mut cfx = ConstFunctionEvalCtx::new(&mut self.tcx, self.interner, opt_level);
+                let mut cfx = ConstFunctionEvalCtx::new(&self.scopes, self.interner, opt_level);
 
                 for stmt in &mut ast {
-                    cfx.visit_statement(stmt, FuncId::ROOT);
+                    cfx.visit_statement(stmt);
                 }
                 debug!("finished const eval");
             } else {
@@ -236,25 +245,24 @@ impl<'interner> FunctionCompiler<'interner> {
 
         self.function_stack.push(FunctionLocalState::new(
             FunctionKind::Function(Asyncness::No),
-            FuncId::ROOT,
+            ScopeId::ROOT,
         ));
 
         self.accept_multiple(ast)?;
 
         let root = self.function_stack.pop().expect("No root function");
-        assert_eq!(root.id, FuncId::ROOT, "Function must be the root function");
+        assert_eq!(root.id, ScopeId::ROOT, "Function must be the root function");
         if let Some(span) = root.references_arguments {
             return Err(Error::ArgumentsInRoot(span));
         }
-        let root_scope = self.tcx.scope(root.id);
-        let locals = root_scope.locals().len();
-        let externals = root_scope.externals().to_owned();
+        let root_function = self.scopes[root.id].expect_function();
+        let locals = root_function.locals.len();
 
         Ok(CompileResult {
             instructions: root.buf,
             cp: root.cp,
             locals,
-            externals,
+            externals: root.externals,
             source: self.source,
             debug_symbols: root.debug_symbols,
         })
@@ -275,58 +283,78 @@ impl<'interner> FunctionCompiler<'interner> {
         self.function_stack.last_mut().expect("Function must be present")
     }
 
-    fn current_scope(&self) -> &Scope {
-        let id = self.current_function().id;
-        self.tcx.scope(id)
-    }
-
-    fn current_scope_mut(&mut self) -> &mut Scope {
-        let id = self.current_function().id;
-        self.tcx.scope_mut(id)
-    }
-
     /// Adds an external to the current [`FunctionLocalState`] if it's not already present
     /// and returns its ID
-    fn add_external_to_func(&mut self, func_id: FuncId, external_id: u16, is_nested_external: bool) -> usize {
-        let externals = self.tcx.scope_mut(func_id).externals_mut();
-        let id = externals.iter().position(
-            |External {
-                 id,
-                 is_nested_external: is_external,
-             }| *id == external_id && *is_external == is_nested_external,
-        );
-
-        match id {
-            Some(id) => id,
-            None => {
-                externals.push(External {
-                    id: external_id,
-                    is_nested_external,
-                });
-                externals.len() - 1
+    fn add_external_to_func(&mut self, func_id: ScopeId, external_id: u16, is_nested_external: bool) -> usize {
+        let fun = self.function_stack.iter_mut().rev().find(|f| f.id == func_id);
+        let externals = &mut fun.unwrap().externals;
+        if let Some(id) = externals.iter().position(|ext| {
+            ext.id == external_id && {
+                // assert_eq!(ext.is_nested_external, is_nested_external);
+                // true
+                ext.is_nested_external == is_nested_external
             }
-        }
-    }
-
-    fn find_local_in_scope(&mut self, ident: Symbol, func_id: FuncId) -> Option<(u16, ScopeLocal, bool)> {
-        if let Some((id, local)) = self.tcx.scope(func_id).find_local(ident) {
-            Some((id, local.clone(), false))
+        }) {
+            id
         } else {
-            let parent = self.tcx.scope_node(func_id).parent()?;
-
-            let (local_id, loc, nested_extern) = self.find_local_in_scope(ident, parent.into())?;
-            // TODO: don't hardcast
-            let external_id = self.add_external_to_func(func_id, local_id, nested_extern) as u16;
-            // println!("{func_id:?} {external_id}");
-            Some((external_id, loc, true))
+            externals.push(External {
+                id: external_id,
+                is_nested_external,
+            });
+            externals.len() - 1
         }
     }
-    /// Tries to find a local in the current or surrounding scopes
+
+    /// Returns the scope id of the function that stores the local.
+    fn find_local_in_scope(&mut self, ident: Symbol, scope: ScopeId) -> Option<(u16, Local, ScopeId)> {
+        let enclosing_function = self.scopes.enclosing_function_of(scope);
+
+        if let Some(slot) = self.scopes[scope].find_local(ident) {
+            return Some((
+                slot,
+                self.scopes[enclosing_function].expect_function().locals[slot as usize].clone(),
+                enclosing_function,
+            ));
+        } else {
+            let parent = self.scopes[scope].parent?;
+            let parent_enclosing_function = self.scopes.enclosing_function_of(parent);
+            let (local_id, local, src_function) = self.find_local_in_scope(ident, parent)?;
+            let local = local.clone();
+
+            if parent_enclosing_function == enclosing_function {
+                // if the parent scope is in the same function, then the parent has already dealt with the external
+                // and we can just return it right away without having to add it (again)
+                return Some((local_id, local, src_function));
+            }
+
+            // at this point, we know we crossed a function boundary, so store it in the externals
+            // and return our external id
+
+            let nested_external = src_function != parent_enclosing_function;
+
+            let external_id = self.add_external_to_func(enclosing_function, local_id, nested_external);
+            Some((external_id.try_into().unwrap(), local, src_function))
+        }
+    }
+    /// Tries to dynamically find a local in the current- or surrounding scopes.
     ///
     /// If a local variable is found in a parent scope, it is marked as an extern local
-    pub fn find_local(&mut self, ident: Symbol) -> Option<(u16, ScopeLocal, bool)> {
-        let func_id = self.current_function().id;
-        self.find_local_in_scope(ident, func_id)
+    pub fn find_local(&mut self, ident: Symbol) -> Option<(u16, Local, bool)> {
+        let scope = self.current;
+        let enclosing_function = self.scopes.enclosing_function_of(scope);
+        self.find_local_in_scope(ident, scope)
+            .map(|(id, loc, target_fn_scope)| (id, loc, target_fn_scope != enclosing_function))
+    }
+
+    /// This is the same as `find_local` but should be used
+    /// when type_infer must have discovered/registered the local variable in the current scope.
+    /// It would be *wrong* to go up scopes sometimes.
+    fn find_local_from_binding(&mut self, binding: Binding) -> u16 {
+        self.decl_to_slot.slot_from_local(binding.id)
+    }
+
+    fn add_unnameable_local(&mut self, name: Symbol) -> Result<u16, LimitExceededError> {
+        self.scopes.add_unnameable_local(self.current, name, None)
     }
 
     fn visit_for_each_kinded_loop(
@@ -335,6 +363,7 @@ impl<'interner> FunctionCompiler<'interner> {
         binding: VariableBinding,
         expr: Expr,
         mut body: Box<Statement>,
+        scope: ScopeId,
     ) -> Result<(), Error> {
         // For-Of Loop Desugaring:
 
@@ -366,13 +395,11 @@ impl<'interner> FunctionCompiler<'interner> {
 
         let mut ib = InstructionBuilder::new(self);
         let for_of_iter_id = ib
-            .current_scope_mut()
-            .add_local(sym::for_of_iter, VariableDeclarationKind::Unnameable, None)
+            .add_unnameable_local(sym::for_of_iter)
             .map_err(|_| Error::LocalLimitExceeded(expr.span))?;
 
         let for_of_gen_step_id = ib
-            .current_scope_mut()
-            .add_local(sym::for_of_gen_step, VariableDeclarationKind::Unnameable, None)
+            .add_unnameable_local(sym::for_of_gen_step)
             .map_err(|_| Error::LocalLimitExceeded(expr.span))?;
 
         ib.accept_expr(expr)?;
@@ -383,50 +410,36 @@ impl<'interner> FunctionCompiler<'interner> {
         ib.build_local_store(AssignKind::Assignment, for_of_iter_id, false);
         ib.build_pop();
 
-        // Prepend variable assignment to body
-        if !matches!(body.kind, StatementKind::Block(..)) {
-            let old_body = std::mem::replace(&mut *body, Statement::dummy_empty());
-
-            *body = Statement {
-                span: old_body.span,
-                kind: StatementKind::Block(BlockStatement(vec![old_body])),
-            };
-        }
+        let gen_step = compile_local_load(for_of_gen_step_id, false);
 
         // Assign iterator value to binding at the very start of the for loop body
-        match &mut body.kind {
-            StatementKind::Block(BlockStatement(stmts)) => {
-                let gen_step = compile_local_load(for_of_gen_step_id, false);
-
-                let var = Statement {
+        let next_value = Statement {
+            span: Span::COMPILER_GENERATED,
+            kind: StatementKind::Variable(VariableDeclarations(vec![VariableDeclaration::new(
+                binding,
+                Some(Expr {
                     span: Span::COMPILER_GENERATED,
-                    kind: StatementKind::Variable(VariableDeclarations(vec![VariableDeclaration::new(
-                        binding,
-                        Some(Expr {
+                    kind: ExprKind::property_access(
+                        false,
+                        Expr {
                             span: Span::COMPILER_GENERATED,
-                            kind: ExprKind::property_access(
-                                false,
-                                Expr {
-                                    span: Span::COMPILER_GENERATED,
-                                    kind: ExprKind::compiled(gen_step),
-                                },
-                                Expr {
-                                    span: Span::COMPILER_GENERATED,
-                                    kind: ExprKind::identifier(sym::value),
-                                },
-                            ),
-                        }),
-                    )])),
-                };
+                            kind: ExprKind::compiled(gen_step),
+                        },
+                        Expr {
+                            span: Span::COMPILER_GENERATED,
+                            kind: ExprKind::identifier(sym::value),
+                        },
+                    ),
+                }),
+            )])),
+        };
 
-                if stmts.is_empty() {
-                    stmts.push(var);
-                } else {
-                    stmts.insert(0, var);
-                }
-            }
-            _ => unreachable!("For-of body was not a statement"),
-        }
+        // Create a new block for the variable declaration
+        let old_body = mem::replace(&mut *body, Statement::dummy_empty());
+        *body = Statement {
+            span: Span::COMPILER_GENERATED,
+            kind: StatementKind::Block(BlockStatement(vec![next_value, old_body], scope)),
+        };
 
         let for_of_iter_binding_bc = compile_local_load(for_of_iter_id, false);
 
@@ -550,9 +563,8 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
         span: Span,
         BinaryExpr { left, right, operator }: BinaryExpr,
     ) -> Result<(), Error> {
-        let func_id = self.current_function().id;
-        let left_type = self.tcx.visit(&left, func_id);
-        let right_type = self.tcx.visit(&right, func_id);
+        let left_type = expr_ty(self, &left);
+        let right_type = expr_ty(self, &right);
 
         let mut ib = InstructionBuilder::new(self);
         ib.accept_expr(*left)?;
@@ -843,20 +855,16 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
         for VariableDeclaration { binding, value } in declarations {
             match binding.name {
                 VariableDeclarationName::Identifier(ident) => {
-                    // Type infer pass must have discovered the local variable
-                    let (id, _) = ib.current_scope().find_local(ident).unwrap();
+                    let slot = ib.find_local_from_binding(ident);
 
                     if let Some(expr) = value {
                         ib.accept_expr(expr)?;
-                        ib.build_local_store(AssignKind::Assignment, id, false);
+                        ib.build_local_store(AssignKind::Assignment, slot, false);
                         ib.build_pop();
                     }
                 }
                 VariableDeclarationName::ObjectDestructuring { fields, rest } => {
-                    let rest_id = rest
-                        .map(|rest| ib.current_scope_mut().add_local(rest, binding.kind, None))
-                        .transpose()
-                        .map_err(|_| Error::LocalLimitExceeded(span))?;
+                    let rest_id = rest.map(|rest| ib.find_local_from_binding(rest));
 
                     let field_count = fields
                         .len()
@@ -868,12 +876,9 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
 
                     ib.build_objdestruct(field_count, rest_id);
 
-                    for (name, alias) in fields {
+                    for (local, name, alias) in fields {
                         let name = alias.unwrap_or(name);
-                        let id = ib
-                            .current_scope_mut()
-                            .add_local(name, binding.kind, None)
-                            .map_err(|_| Error::LocalLimitExceeded(span))?;
+                        let id = ib.find_local_from_binding(Binding { id: local, ident: name });
 
                         let var_id = ib
                             .current_function_mut()
@@ -907,10 +912,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                     for name in fields {
                         ib.write_bool(name.is_some());
                         if let Some(name) = name {
-                            let id = ib
-                                .current_scope_mut()
-                                .add_local(name, binding.kind, None)
-                                .map_err(|_| Error::LocalLimitExceeded(span))?;
+                            let id = ib.find_local_from_binding(name);
 
                             let id = ib
                                 .current_function_mut()
@@ -986,25 +988,21 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
         Ok(())
     }
 
-    fn visit_block_statement(&mut self, _span: Span, BlockStatement(stmt): BlockStatement) -> Result<(), Error> {
-        self.current_scope_mut().enter();
+    fn visit_block_statement(&mut self, _span: Span, BlockStatement(stmt, id): BlockStatement) -> Result<(), Error> {
+        let old = self.current;
+        self.current = id;
 
         // Note: No `?` here because we need to always exit the scope
         let re = self.accept_multiple(stmt);
-        self.current_scope_mut().exit();
+
+        self.current = old;
+
         re
     }
 
     fn visit_function_declaration(&mut self, span: Span, fun: FunctionDeclaration) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
-        let var_id = match fun.name {
-            Some(name) => Some(
-                ib.current_scope_mut()
-                    .add_local(name, VariableDeclarationKind::Var, None)
-                    .map_err(|_| Error::LocalLimitExceeded(span))?,
-            ),
-            None => None,
-        };
+        let var_id = fun.name.map(|name| ib.find_local_from_binding(name));
 
         ib.visit_function_expr(span, fun)?;
         if let Some(var_id) = var_id {
@@ -1067,7 +1065,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                     let local = ib.find_local(ident);
 
                     if let Some((id, local, is_extern)) = local {
-                        if matches!(local.binding().kind, VariableDeclarationKind::Const) {
+                        if let VariableDeclarationKind::Const = local.kind {
                             return Err(Error::ConstAssignment(span));
                         }
 
@@ -1345,8 +1343,9 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
         if let ExprKind::Literal(LiteralExpr::Identifier(sym::super_)) = target.kind {
             // super() call lowering
             let super_id = ib
-                .current_scope_mut()
-                .add_local(sym::super_, VariableDeclarationKind::Unnameable, None)
+                .inner
+                .scopes
+                .add_unnameable_local(ib.current, sym::super_, None)
                 .map_err(|_| Error::LocalLimitExceeded(span))?;
 
             // __super = new this.constructor.__proto__()
@@ -1719,81 +1718,77 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
         }: FunctionDeclaration,
     ) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
-        ib.function_stack.push(FunctionLocalState::new(ty, id));
+        ib.with_scope(id, |ib| {
+            ib.function_stack.push(FunctionLocalState::new(ty, id));
 
-        let mut rest_local = None;
+            let mut rest_local = None;
 
-        for (param, default, _ty) in &arguments {
-            let name = match *param {
-                Parameter::Identifier(ident) => ident,
-                Parameter::Spread(ident) => ident,
+            for (param, default, _ty) in &arguments {
+                let name = match *param {
+                    Parameter::Identifier(ident) => ident,
+                    Parameter::Spread(ident) => ident,
+                };
+
+                let id = ib.find_local_from_binding(name);
+
+                if let Parameter::Spread(..) = param {
+                    rest_local = Some(id);
+                }
+
+                if let Some(default) = default {
+                    let mut sub_ib = InstructionBuilder::new(ib);
+                    // First, load parameter
+                    sub_ib.build_local_load(id, false);
+                    // Jump to InitParamWithDefaultValue if param is undefined
+                    sub_ib.build_jmpundefinedp(Label::InitParamWithDefaultValue, true);
+                    // If it isn't undefined, it won't jump to InitParamWithDefaultValue, so we jump to the end
+                    sub_ib.build_jmp(Label::FinishParamDefaultValueInit, true);
+                    sub_ib.add_local_label(Label::InitParamWithDefaultValue);
+                    sub_ib.accept_expr(default.clone())?;
+                    sub_ib.build_local_store(AssignKind::Assignment, id, false);
+
+                    sub_ib.add_local_label(Label::FinishParamDefaultValueInit);
+                }
+            }
+
+            transformations::hoist_declarations(id, &mut ib.inner.scope_counter, &mut ib.inner.scopes, &mut statements);
+            transformations::ast_insert_implicit_return(&mut statements);
+
+            // Insert initializers
+            if let Some(members) = constructor_initializers {
+                let members = compile_class_members(ib, span, members)?;
+                ib.build_this();
+                ib.build_object_member_like_instruction(span, members, Instruction::AssignProperties)?;
+            }
+
+            let res = statements.into_iter().try_for_each(|stmt| ib.accept(stmt));
+
+            let cmp = ib.function_stack.pop().expect("Missing function state");
+            res?; // Cannot early return error in the loop as we need to pop the function state in any case
+            let locals = ib.scopes[id].expect_function().locals.len();
+
+            let function = Function {
+                buffer: Buffer(Cell::new(cmp.buf.into())),
+                constants: cmp.cp.into_vec().into(),
+                locals,
+                name: name.map(|binding| binding.ident),
+                ty,
+                params: match arguments.last() {
+                    Some((Parameter::Spread(..), ..)) => arguments.len() - 1,
+                    _ => arguments.len(),
+                },
+                externals: cmp.externals.into(),
+                rest_local,
+                poison_ips: RefCell::new(HashSet::new()),
+                debug_symbols: cmp.debug_symbols,
+                source: Rc::clone(&ib.source),
+                references_arguments: cmp.references_arguments.is_some(),
             };
+            ib.build_constant(Constant::Function(Rc::new(function)))
+                .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
 
-            let id = ib
-                .tcx
-                .scope_mut(id)
-                .add_local(name, VariableDeclarationKind::Var, None)
-                .map_err(|_| Error::LocalLimitExceeded(span))?;
-
-            if let Parameter::Spread(..) = param {
-                rest_local = Some(id);
-            }
-
-            if let Some(default) = default {
-                let mut sub_ib = InstructionBuilder::new(&mut ib);
-                // First, load parameter
-                sub_ib.build_local_load(id, false);
-                // Jump to InitParamWithDefaultValue if param is undefined
-                sub_ib.build_jmpundefinedp(Label::InitParamWithDefaultValue, true);
-                // If it isn't undefined, it won't jump to InitParamWithDefaultValue, so we jump to the end
-                sub_ib.build_jmp(Label::FinishParamDefaultValueInit, true);
-                sub_ib.add_local_label(Label::InitParamWithDefaultValue);
-                sub_ib.accept_expr(default.clone())?;
-                sub_ib.build_local_store(AssignKind::Assignment, id, false);
-
-                sub_ib.add_local_label(Label::FinishParamDefaultValueInit);
-            }
-        }
-
-        transformations::hoist_declarations(&mut statements);
-        transformations::ast_insert_implicit_return(&mut statements);
-
-        // Insert initializers
-        if let Some(members) = constructor_initializers {
-            let members = compile_class_members(&mut ib, span, members)?;
-            ib.build_this();
-            ib.build_object_member_like_instruction(span, members, Instruction::AssignProperties)?;
-        }
-
-        let res = statements.into_iter().try_for_each(|stmt| ib.accept(stmt));
-
-        let cmp = ib.function_stack.pop().expect("Missing function state");
-        res?; // Cannot early return error in the loop as we need to pop the function state in any case
-        let scope = ib.tcx.scope(id);
-        let externals = scope.externals();
-        let locals = scope.locals().len();
-
-        let function = Function {
-            buffer: Buffer(Cell::new(cmp.buf.into())),
-            constants: cmp.cp.into_vec().into(),
-            locals,
-            name,
-            ty,
-            params: match arguments.last() {
-                Some((Parameter::Spread(..), ..)) => arguments.len() - 1,
-                _ => arguments.len(),
-            },
-            externals: externals.into(),
-            rest_local,
-            poison_ips: RefCell::new(HashSet::new()),
-            debug_symbols: cmp.debug_symbols,
-            source: Rc::clone(&ib.source),
-            references_arguments: cmp.references_arguments.is_some(),
-        };
-        ib.build_constant(Constant::Function(Rc::new(function)))
-            .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
-
-        Ok(())
+            Ok(())
+        })
     }
 
     fn visit_array_literal(&mut self, _: Span, ArrayLiteral(exprs): ArrayLiteral) -> Result<(), Error> {
@@ -1854,15 +1849,16 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
         ib.current_function_mut()
             .finally_labels
             .push(finally.as_ref().map(|&(finally_id, _)| Label::Finally { finally_id }));
-        ib.current_scope_mut().enter();
-        let res = ib.accept(*try_); // TODO: some API for making this nicer
-        ib.current_scope_mut().exit();
+        // if true {
+        //     panic!(
+        //         "add a test for ensuring we dont really need to enter a scope here because try_ is already a block stmt"
+        //     );
+        // }
+        let res = ib.accept(*try_);
         ib.current_function_mut().try_depth -= 1;
         res?;
 
         ib.build_jmp(Label::TryEnd, true);
-
-        ib.current_scope_mut().enter();
 
         if catch.is_none() && finally.is_none() {
             // FIXME: make it a real error
@@ -1872,11 +1868,8 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
         if let Some(catch) = catch {
             ib.add_local_label(Label::Catch);
 
-            if let Some(ident) = catch.ident {
-                let id = ib
-                    .current_scope_mut()
-                    .add_local(ident, VariableDeclarationKind::Var, None)
-                    .map_err(|_| Error::LocalLimitExceeded(span))?;
+            if let Some(binding) = catch.binding {
+                let id = ib.find_local_from_binding(binding);
 
                 if id == u16::MAX {
                     // Max u16 value is reserved for "no binding"
@@ -1888,9 +1881,8 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                 ib.writew(u16::MAX);
             }
 
-            ib.accept(*catch.body)?;
+            ib.visit_block_statement(catch.body_span, catch.body)?;
         }
-        ib.current_scope_mut().exit();
         ib.current_function_mut().finally_labels.pop();
 
         if let Some((finally_id, finally)) = finally {
@@ -1926,51 +1918,68 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             condition,
             finalizer,
             body,
+            scope,
         }: ForLoop,
     ) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
-        ib.current_scope_mut().enter();
+        ib.with_scope(scope, |ib| {
+            // Initialization
+            if let Some(init) = init {
+                ib.accept(*init)?;
+            }
 
-        // Initialization
-        if let Some(init) = init {
-            ib.accept(*init)?;
-        }
+            let loop_id = ib.current_function_mut().prepare_loop();
 
-        let loop_id = ib.current_function_mut().prepare_loop();
+            // Condition
+            ib.current_function_mut()
+                .add_global_label(Label::LoopCondition { loop_id });
+            if let Some(condition) = condition {
+                ib.accept_expr(condition)?;
+                ib.build_jmpfalsep(Label::LoopEnd { loop_id }, false);
+            }
 
-        // Condition
-        ib.current_function_mut()
-            .add_global_label(Label::LoopCondition { loop_id });
-        if let Some(condition) = condition {
-            ib.accept_expr(condition)?;
-            ib.build_jmpfalsep(Label::LoopEnd { loop_id }, false);
-        }
+            // Body
+            ib.accept(*body)?;
 
-        // Body
-        ib.accept(*body)?;
+            // Increment
+            ib.current_function_mut()
+                .add_global_label(Label::LoopIncrement { loop_id });
+            if let Some(finalizer) = finalizer {
+                ib.accept_expr(finalizer)?;
+                ib.build_pop();
+            }
+            ib.build_jmp(Label::LoopCondition { loop_id }, false);
 
-        // Increment
-        ib.current_function_mut()
-            .add_global_label(Label::LoopIncrement { loop_id });
-        if let Some(finalizer) = finalizer {
-            ib.accept_expr(finalizer)?;
-            ib.build_pop();
-        }
-        ib.build_jmp(Label::LoopCondition { loop_id }, false);
-
-        ib.current_function_mut().add_global_label(Label::LoopEnd { loop_id });
-        ib.current_scope_mut().exit();
-        exit_breakable!(ib.current_function_mut(), Breakable::Loop { .. });
-
-        Ok(())
+            ib.current_function_mut().add_global_label(Label::LoopEnd { loop_id });
+            exit_breakable!(ib.current_function_mut(), Breakable::Loop { .. });
+            Ok(())
+        })
     }
 
-    fn visit_for_of_loop(&mut self, _span: Span, ForOfLoop { binding, expr, body }: ForOfLoop) -> Result<(), Error> {
-        self.visit_for_each_kinded_loop(ForEachLoopKind::ForOf, binding, expr, body)
+    fn visit_for_of_loop(
+        &mut self,
+        _span: Span,
+        ForOfLoop {
+            binding,
+            expr,
+            body,
+            scope,
+        }: ForOfLoop,
+    ) -> Result<(), Error> {
+        self.visit_for_each_kinded_loop(ForEachLoopKind::ForOf, binding, expr, body, scope)
     }
 
-    fn visit_for_in_loop(&mut self, _span: Span, ForInLoop { binding, expr, body }: ForInLoop) -> Result<(), Error> {
-        self.visit_for_each_kinded_loop(ForEachLoopKind::ForIn, binding, expr, body)
+    fn visit_for_in_loop(
+        &mut self,
+        _span: Span,
+        ForInLoop {
+            binding,
+            expr,
+            body,
+            scope,
+        }: ForInLoop,
+    ) -> Result<(), Error> {
+        self.visit_for_each_kinded_loop(ForEachLoopKind::ForIn, binding, expr, body, scope)
     }
 
     fn visit_import_statement(&mut self, span: Span, import: ImportKind) -> Result<(), Error> {
@@ -1981,17 +1990,9 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                 ib.accept_expr(ex)?;
                 ib.build_dynamic_import();
             }
-            ref kind @ (ImportKind::DefaultAs(ref spec, path) | ImportKind::AllAs(ref spec, path)) => {
-                let local_id = ib
-                    .current_scope_mut()
-                    .add_local(
-                        match spec {
-                            SpecifierKind::Ident(id) => *id,
-                        },
-                        VariableDeclarationKind::Var,
-                        None,
-                    )
-                    .map_err(|_| Error::LocalLimitExceeded(span))?;
+            ref kind @ (ImportKind::DefaultAs(SpecifierKind::Ident(sym), path)
+            | ImportKind::AllAs(SpecifierKind::Ident(sym), path)) => {
+                let local_id = ib.find_local_from_binding(sym);
 
                 let path_id = ib
                     .current_function_mut()
@@ -2052,14 +2053,14 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
 
                 for var in &vars {
                     match var.binding.name {
-                        VariableDeclarationName::Identifier(ident) => it.push(ident),
+                        VariableDeclarationName::Identifier(Binding { ident, .. }) => it.push(ident),
                         VariableDeclarationName::ArrayDestructuring { ref fields, rest } => {
-                            it.extend(fields.iter().copied().flatten());
-                            it.extend(rest);
+                            it.extend(fields.iter().flatten().map(|b| b.ident));
+                            it.extend(rest.map(|b| b.ident));
                         }
                         VariableDeclarationName::ObjectDestructuring { ref fields, rest } => {
-                            it.extend(fields.iter().map(|&(name, ident)| ident.unwrap_or(name)));
-                            it.extend(rest);
+                            it.extend(fields.iter().map(|&(_, name, ident)| ident.unwrap_or(name)));
+                            it.extend(rest.map(|b| b.ident));
                         }
                     }
                 }
@@ -2143,8 +2144,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
         let load_super_class = match class.extends.as_deref() {
             Some(expr) => {
                 let extend_id = ib
-                    .current_scope_mut()
-                    .add_local(sym::DesugaredClass, VariableDeclarationKind::Unnameable, None)
+                    .add_unnameable_local(sym::DesugaredClass)
                     .map_err(|_| Error::LocalLimitExceeded(span))?;
 
                 // __super = <class extend expression>
@@ -2167,21 +2167,22 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
         let constructor = class.constructor();
 
         let binding_id = match class.name {
-            Some(name) => ib
-                .current_scope_mut()
-                .add_local(name, VariableDeclarationKind::Var, None)
-                .map_err(|_| Error::LocalLimitExceeded(span))?,
+            Some(name) => ib.find_local_from_binding(name),
             None => ib
-                .current_scope_mut()
-                .add_local(sym::DesugaredClass, VariableDeclarationKind::Unnameable, None)
+                .add_unnameable_local(sym::DesugaredClass)
                 .map_err(|_| Error::LocalLimitExceeded(span))?,
         };
 
         let (parameters, statements, id) = match constructor {
             Some(fun) => (fun.parameters, fun.statements, fun.id),
             None => {
-                let parent = ib.current_function().id;
-                (Vec::new(), Vec::new(), ib.tcx.add_scope(Some(parent)))
+                let parent = ib.current;
+                let scope = ib
+                    .inner
+                    .scopes
+                    .add_empty_function_scope(parent, &mut ib.inner.scope_counter);
+
+                (Vec::new(), Vec::new(), scope)
             }
         };
 
@@ -2405,8 +2406,7 @@ fn compile_switch_naive(
     default: Option<Vec<Statement>>,
 ) -> Result<(), Error> {
     let condition_id = ib
-        .current_scope_mut()
-        .add_local(sym::switch_cond_desugar, VariableDeclarationKind::Unnameable, None)
+        .add_unnameable_local(sym::switch_cond_desugar)
         .map_err(|_| Error::LocalLimitExceeded(span))?;
 
     // Store condition in temporary
@@ -2525,4 +2525,10 @@ fn compile_class_members(
             (key, value)
         }),
     )
+}
+
+fn expr_ty(c: &FunctionCompiler<'_>, expr: &Expr) -> Option<CompileValueType> {
+    let func_id = c.current_function().id;
+    let mut tcx = TypeInferCtx::view(InferMode::View(&c.scopes), c.current, func_id);
+    tcx.visit(expr)
 }

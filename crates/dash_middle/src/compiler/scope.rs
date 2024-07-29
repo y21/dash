@@ -1,9 +1,47 @@
 use std::cell::RefCell;
+use std::iter;
+use std::ops::{Index, IndexMut};
 
 use crate::interner::Symbol;
-use crate::parser::statement::{VariableBinding, VariableDeclarationKind, VariableDeclarationName};
+use crate::parser::statement::{ScopeId, VariableDeclarationKind};
+use crate::util::Counter;
+use crate::with;
 
-use super::external::External;
+#[derive(Debug)]
+pub struct LimitExceededError;
+
+#[derive(Debug, Clone)]
+pub struct FunctionScope {
+    // TODO: document the difference between this and `declarations`
+    pub locals: Vec<Local>,
+}
+impl FunctionScope {
+    pub fn add_local(&mut self, local: Local) -> Result<u16, LimitExceededError> {
+        let id = self.locals.len();
+        self.locals.push(local);
+        id.try_into().map_err(|_| LimitExceededError)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct BlockScope {
+    pub enclosing_function: ScopeId,
+}
+
+#[derive(Debug, Clone)]
+pub enum ScopeKind {
+    Function(FunctionScope),
+    Block(BlockScope),
+    Uninit,
+}
+
+#[derive(Debug, Clone)]
+pub struct Scope {
+    pub kind: ScopeKind,
+    pub parent: Option<ScopeId>,
+    pub subscopes: Vec<ScopeId>,
+    pub declarations: Vec<(Symbol, u16)>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompileValueType {
@@ -20,18 +58,15 @@ pub enum CompileValueType {
 }
 
 #[derive(Debug, Clone)]
-pub struct ScopeLocal {
+pub struct Local {
     /// The binding of this variable
-    binding: VariableBinding,
-    inferred_type: RefCell<Option<CompileValueType>>,
+    // binding: VariableBinding,
+    pub name: Symbol,
+    pub kind: VariableDeclarationKind,
+    pub inferred_type: RefCell<Option<CompileValueType>>,
 }
 
-impl ScopeLocal {
-    /// Returns the binding of this variable
-    pub fn binding(&self) -> &VariableBinding {
-        &self.binding
-    }
-
+impl Local {
     /// Sets the inferred type of this local variable
     pub fn infer(&self, value: CompileValueType) {
         *self.inferred_type.borrow_mut() = Some(value);
@@ -41,97 +76,143 @@ impl ScopeLocal {
         &self.inferred_type
     }
 }
+impl Scope {
+    pub fn new(kind: ScopeKind, parent: Option<ScopeId>) -> Self {
+        Self {
+            kind,
+            parent,
+            subscopes: Vec::new(),
+            declarations: Vec::new(),
+        }
+    }
+    pub fn with_parent(mut self, parent: ScopeId) -> Self {
+        self.parent = Some(parent);
+        self
+    }
+    pub fn expect_function_mut(&mut self) -> &mut FunctionScope {
+        match &mut self.kind {
+            ScopeKind::Function(f) => f,
+            other => panic!("expected function, got {other:?}"),
+        }
+    }
+    pub fn expect_function(&self) -> &FunctionScope {
+        match &self.kind {
+            ScopeKind::Function(f) => f,
+            other => panic!("expected function, got {other:?}"),
+        }
+    }
+    /// Looks for a local **in this scope** (only): it does not look in upper scopes.
+    /// Consider using `ScopeGraph::find_local` instead if you need that
+    pub fn find_local(&self, name: Symbol) -> Option<u16> {
+        self.declarations
+            .iter()
+            .find_map(|&(name2, slot)| (name2 == name).then_some(slot))
+    }
+}
+impl Index<ScopeId> for ScopeGraph {
+    type Output = Scope;
 
-pub struct LimitExceededError;
-
-#[derive(Debug, Default)]
-
-pub struct Scope {
-    depth: u16,
-    // length limited to u16
-    locals: Vec<ScopeLocal>,
-    /// A vector of external values
-    externals: Vec<External>,
+    fn index(&self, index: ScopeId) -> &Self::Output {
+        &self.scopes[index.0]
+    }
+}
+impl IndexMut<ScopeId> for ScopeGraph {
+    fn index_mut(&mut self, index: ScopeId) -> &mut Self::Output {
+        &mut self.scopes[index.0]
+    }
 }
 
-impl Scope {
-    pub fn new() -> Self {
-        Self::default()
-    }
+#[derive(Debug)]
+pub struct ScopeGraph {
+    scopes: Vec<Scope>,
+}
 
-    pub fn externals(&self) -> &[External] {
-        &self.externals
-    }
-
-    pub fn externals_mut(&mut self) -> &mut Vec<External> {
-        &mut self.externals
-    }
-
-    pub fn find_local(&self, identifier: Symbol) -> Option<(u16, &ScopeLocal)> {
-        self.locals
-            .iter()
-            .enumerate()
-            .find(|(_, l)| match l.binding() {
-                VariableBinding {
-                    name: VariableDeclarationName::Identifier(name),
-                    kind,
-                    ..
-                } => *name == identifier && kind.is_nameable(),
-                _ => panic!("Only identifiers can be registered"),
-            })
-            .map(|(i, l)| (i as u16, l))
-    }
-
-    pub fn add_local(
-        &mut self,
-        name: Symbol,
-        kind: VariableDeclarationKind,
-        inferred_type: Option<CompileValueType>,
-    ) -> Result<u16, LimitExceededError> {
-        // if there's already a local with the same name, we should use that
-        if let Some((id, _)) = self.find_local(name) {
-            return Ok(id);
+impl ScopeGraph {
+    pub fn new(count: usize) -> Self {
+        Self {
+            scopes: iter::repeat(Scope::new(ScopeKind::Uninit, None)).take(count).collect(),
         }
+    }
 
-        self.locals.push(ScopeLocal {
-            binding: VariableBinding {
-                name: VariableDeclarationName::Identifier(name),
-                kind,
-                ty: None,
-            },
-            inferred_type: RefCell::new(inferred_type),
+    /// If this is a block, returns the enclosing function.
+    /// If it's a function, returns itself
+    pub fn enclosing_function_of(&self, of: ScopeId) -> ScopeId {
+        match self[of].kind {
+            ScopeKind::Function { .. } => of,
+            ScopeKind::Block(BlockScope { enclosing_function }) => enclosing_function,
+            ScopeKind::Uninit => panic!("cannot get enclosing function of uninit scope {of:?}"),
+        }
+    }
+
+    pub fn add_empty_function_scope(&mut self, at: ScopeId, counter: &mut Counter<ScopeId>) -> ScopeId {
+        let id = counter.inc();
+        assert_eq!(self.scopes.len(), id.0);
+
+        self[at].subscopes.push(id);
+        self.scopes.push(Scope {
+            kind: ScopeKind::Function(FunctionScope { locals: Vec::new() }),
+            declarations: Vec::new(),
+            parent: Some(at),
+            subscopes: Vec::new(),
         });
 
-        u16::try_from(self.locals.len() - 1).map_err(|_| LimitExceededError)
+        id
     }
 
-    pub fn add_scope_local(&mut self, local: ScopeLocal) -> Result<u16, LimitExceededError> {
-        // TODO: check if it exists already
-        self.locals.push(local);
-        u16::try_from(self.locals.len() - 1).map_err(|_| LimitExceededError)
+    pub fn add_empty_block_scope(&mut self, at: ScopeId, counter: &mut Counter<ScopeId>) -> ScopeId {
+        let enclosing_function = self.enclosing_function_of(at);
+
+        let id = counter.inc();
+        assert_eq!(self.scopes.len(), id.0);
+        self[at].subscopes.push(id);
+
+        self.scopes.push(Scope {
+            kind: ScopeKind::Block(BlockScope { enclosing_function }),
+            parent: Some(at),
+            subscopes: vec![],
+            declarations: vec![],
+        });
+
+        id
     }
 
-    pub fn enter(&mut self) {
-        self.depth += 1;
+    /// See [VariableDeclarationKind::Unnameable] for the exact semantics here.
+    pub fn add_unnameable_local(
+        &mut self,
+        at: ScopeId,
+        name: Symbol,
+        ty: Option<CompileValueType>,
+    ) -> Result<u16, LimitExceededError> {
+        let enclosing_function = self.enclosing_function_of(at);
+
+        with!(self[enclosing_function].expect_function_mut(), |fun| {
+            fun.add_local(Local {
+                inferred_type: RefCell::new(ty),
+                kind: VariableDeclarationKind::Unnameable,
+                name,
+            })
+        })
     }
 
-    pub fn exit(&mut self) {
-        self.depth -= 1;
+    pub fn find(&self, at: ScopeId, name: Symbol) -> Option<FindResult> {
+        if let Some(slot) = self[at].find_local(name) {
+            Some(FindResult { slot, scope: at })
+        } else {
+            let parent = self[at].parent?;
+            self.find(parent, name)
+                .map(|FindResult { slot, scope }| FindResult { slot, scope })
+        }
     }
 
-    pub fn reset_depth(&mut self) {
-        self.depth = 0;
+    pub fn find_local(&self, at: ScopeId, name: Symbol) -> Option<&Local> {
+        self.find(at, name).map(|FindResult { slot, scope, .. }| {
+            let function = self.enclosing_function_of(scope);
+            &self[function].expect_function().locals[slot as usize]
+        })
     }
+}
 
-    pub fn depth(&self) -> u16 {
-        self.depth
-    }
-
-    pub fn locals(&self) -> &[ScopeLocal] {
-        self.locals.as_ref()
-    }
-
-    pub fn into_locals(self) -> Vec<ScopeLocal> {
-        self.locals
-    }
+pub struct FindResult {
+    pub slot: u16,
+    pub scope: ScopeId,
 }

@@ -120,16 +120,7 @@ impl StatementKind {
 pub enum SpecifierKind {
     /// A raw identifier
     #[display(fmt = "{_0}")]
-    Ident(Symbol),
-}
-
-impl SpecifierKind {
-    /// Attempts to return self as an identifier
-    pub fn as_ident(&self) -> Option<Symbol> {
-        match self {
-            Self::Ident(i) => Some(*i),
-        }
-    }
+    Ident(Binding),
 }
 
 /// Type of import statement
@@ -187,20 +178,26 @@ impl ImportKind {
 
 /// A catch statement
 #[derive(Debug, Clone, Display)]
-#[display(fmt = "catch ({}) {{ {} }}", "ident.unwrap_or(sym::empty)", "body")]
+#[display(
+    fmt = "catch ({}) {{ {} }}",
+    "binding.map(|b| b.ident).unwrap_or(sym::empty)",
+    "body"
+)]
 pub struct Catch {
+    pub body_span: Span,
     /// The body of a catch statement
-    pub body: Box<Statement>,
+    pub body: BlockStatement,
     /// The identifier of the variable that receives the thrown error
-    pub ident: Option<Symbol>,
+    pub binding: Option<Binding>,
 }
 
 impl Catch {
     /// Creates a new catch statement
-    pub fn new(body: Statement, ident: Option<Symbol>) -> Self {
+    pub fn new(body_span: Span, body: BlockStatement, binding: Option<Binding>) -> Self {
         Self {
-            body: Box::new(body),
-            ident,
+            body_span,
+            body,
+            binding,
         }
     }
 }
@@ -309,6 +306,7 @@ pub struct ForOfLoop {
     pub expr: Expr,
     /// The body of this loop
     pub body: Box<Statement>,
+    pub scope: ScopeId,
 }
 
 /// A for loop
@@ -322,6 +320,7 @@ pub struct ForLoop {
     pub finalizer: Option<Expr>,
     /// The body of a for loop
     pub body: Box<Statement>,
+    pub scope: ScopeId,
 }
 
 impl fmt::Display for ForLoop {
@@ -350,12 +349,19 @@ impl fmt::Display for ForLoop {
 
 impl ForLoop {
     /// Creates a new for loop
-    pub fn new(init: Option<Statement>, condition: Option<Expr>, finalizer: Option<Expr>, body: Statement) -> Self {
+    pub fn new(
+        init: Option<Statement>,
+        condition: Option<Expr>,
+        finalizer: Option<Expr>,
+        body: Statement,
+        scope: ScopeId,
+    ) -> Self {
         Self {
             init: init.map(Box::new),
             condition,
             finalizer,
             body: Box::new(body),
+            scope,
         }
     }
 }
@@ -370,6 +376,7 @@ pub struct ForInLoop {
     pub expr: Expr,
     /// The body of this loop
     pub body: Box<Statement>,
+    pub scope: ScopeId,
 }
 
 /// A while loop
@@ -404,42 +411,52 @@ pub enum FunctionKind {
     Arrow,
 }
 
+#[derive(Debug, Clone, Copy, Display, PartialEq)]
+#[display(fmt = "{ident}")]
+pub struct Binding {
+    pub ident: Symbol,
+    pub id: LocalId,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
-pub struct FuncId(usize);
+pub struct LocalId(pub usize);
 
-impl FuncId {
-    /// The root function of
-    pub const ROOT: FuncId = FuncId(0);
-    /// The ID that refers to the first function that is not the root function
-    pub const FIRST_NON_ROOT: FuncId = FuncId(1);
-
-    pub fn new(id: usize) -> Self {
-        Self(id)
-    }
-}
-
-impl From<usize> for FuncId {
+impl From<usize> for LocalId {
     fn from(value: usize) -> Self {
-        FuncId(value)
+        LocalId(value)
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct ScopeId(pub usize);
+
+impl ScopeId {
+    /// The root function of
+    pub const ROOT: ScopeId = ScopeId(0);
+}
+
+impl From<usize> for ScopeId {
+    fn from(value: usize) -> Self {
+        ScopeId(value)
     }
 }
 
-impl From<FuncId> for usize {
-    fn from(val: FuncId) -> Self {
+impl From<ScopeId> for usize {
+    fn from(val: ScopeId) -> Self {
         val.0
     }
 }
 
-impl From<FuncId> for TreeToken {
-    fn from(value: FuncId) -> Self {
+impl From<ScopeId> for TreeToken {
+    fn from(value: ScopeId) -> Self {
         Self::new(value.0)
     }
 }
 
-impl From<TreeToken> for FuncId {
+impl From<TreeToken> for ScopeId {
     fn from(value: TreeToken) -> Self {
-        Self::new(value.into())
+        Self(value.into())
     }
 }
 
@@ -462,9 +479,9 @@ impl From<bool> for Asyncness {
 /// A function declaration
 #[derive(Debug, Clone)]
 pub struct FunctionDeclaration {
-    pub id: FuncId,
+    pub id: ScopeId,
     /// The name of this function, if present
-    pub name: Option<Symbol>,
+    pub name: Option<Binding>,
     /// Function parameter names
     pub parameters: Vec<(
         // Parameter
@@ -539,8 +556,8 @@ where
 impl FunctionDeclaration {
     /// Creates a new function declaration
     pub fn new(
-        name: Option<Symbol>,
-        id: FuncId,
+        name: Option<Binding>,
+        id: ScopeId,
         parameters: Vec<(Parameter, Option<Expr>, Option<TypeSegment>)>,
         statements: Vec<Statement>,
         ty: FunctionKind,
@@ -561,7 +578,7 @@ impl FunctionDeclaration {
 
 /// A block statement, primarily used to enter a new scope
 #[derive(Debug, Clone)]
-pub struct BlockStatement(pub Vec<Statement>);
+pub struct BlockStatement(pub Vec<Statement>, pub ScopeId);
 
 impl fmt::Display for BlockStatement {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -667,6 +684,8 @@ pub enum VariableDeclarationKind {
     Const,
 
     /// Unnameable variables cannot be referred to by JavaScript code directly and are created by the compiler
+    ///
+    /// TODO: be more detailed about the semantics here
     #[display(fmt = "__intrinsic_var")]
     Unnameable,
 }
@@ -674,23 +693,23 @@ pub enum VariableDeclarationKind {
 #[derive(Debug, Clone, PartialEq)]
 pub enum VariableDeclarationName {
     /// Normal identifier
-    Identifier(Symbol),
+    Identifier(Binding),
     /// Object destructuring: { a } = { a: 1 }
     ObjectDestructuring {
         /// Fields to destructure
         ///
         /// Destructured fields can also be aliased with ` { a: b } = { a: 3 } `
-        fields: Vec<(Symbol, Option<Symbol>)>,
+        fields: Vec<(LocalId, Symbol, Option<Symbol>)>,
         /// The rest element, if present
-        rest: Option<Symbol>,
+        rest: Option<Binding>,
     },
     /// Array destructuring: [ a ] = [ 1 ]
     ArrayDestructuring {
         /// Elements to destructure.
         /// For `[a,,b]` this stores `[Some(a), None, Some(b)]`
-        fields: Vec<Option<Symbol>>,
+        fields: Vec<Option<Binding>>,
         /// The rest element, if present
-        rest: Option<Symbol>,
+        rest: Option<Binding>,
     },
 }
 
@@ -701,7 +720,7 @@ impl fmt::Display for VariableDeclarationName {
             VariableDeclarationName::ObjectDestructuring { fields, rest } => {
                 write!(f, "{{ ")?;
 
-                for (i, (name, alias)) in fields.iter().enumerate() {
+                for (i, (_, name, alias)) in fields.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
@@ -772,17 +791,6 @@ pub struct VariableBinding {
     pub ty: Option<TypeSegment>,
 }
 
-impl VariableBinding {
-    pub fn unnameable(name: Symbol) -> Self {
-        // TODO: we should somehow mangle `name`, otherwise nested for of loops in the same function will clash
-        Self {
-            name: VariableDeclarationName::Identifier(name),
-            kind: VariableDeclarationKind::Unnameable,
-            ty: None,
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct VariableDeclarations(pub Vec<VariableDeclaration>);
 
@@ -826,7 +834,7 @@ pub struct Class {
     /// The name of this class, if present
     ///
     /// Class expressions don't necessarily need to have a name
-    pub name: Option<Symbol>,
+    pub name: Option<Binding>,
     /// The superclass of this class, if present
     pub extends: Option<Box<Expr>>,
     /// Members of this class
@@ -835,7 +843,7 @@ pub struct Class {
 
 impl fmt::Display for Class {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "class {}", self.name.unwrap_or(sym::empty))?;
+        write!(f, "class {}", self.name.map(|b| b.ident).unwrap_or(sym::empty))?;
 
         if let Some(extends) = &self.extends {
             write!(f, " extends {extends}")?;
@@ -910,7 +918,7 @@ impl ClassMember {
         }
 
         match &self.value {
-            ClassMemberValue::Method(m) if m.name == Some(sym::constructor) => Some(m),
+            ClassMemberValue::Method(m) if m.name.is_some_and(|b| b.ident == sym::constructor) => Some(m),
             _ => None,
         }
     }
@@ -930,6 +938,6 @@ pub enum ClassMemberValue {
 /// A function parameter
 #[derive(Debug, Clone, Display)]
 pub enum Parameter {
-    Identifier(Symbol),
-    Spread(Symbol),
+    Identifier(Binding),
+    Spread(Binding),
 }

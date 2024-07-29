@@ -1,8 +1,10 @@
 use std::hash::Hash;
+use std::mem;
 use std::ops::{Deref, DerefMut};
 
 use dash_middle::compiler::instruction as inst;
 use dash_middle::compiler::instruction::Instruction;
+use dash_middle::parser::statement::ScopeId;
 
 use crate::jump_container::JumpContainer;
 use crate::{jump_container, FunctionCompiler};
@@ -45,7 +47,7 @@ pub enum Label {
 }
 
 pub struct InstructionBuilder<'cx, 'interner> {
-    inner: &'cx mut FunctionCompiler<'interner>,
+    pub inner: &'cx mut FunctionCompiler<'interner>,
     jc: JumpContainer,
 }
 
@@ -55,6 +57,14 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
             inner: fc,
             jc: JumpContainer::new(),
         }
+    }
+
+    /// Enters a scope for the duration of the closure. This can be used for both functions and blocks.
+    pub fn with_scope<R>(&mut self, scope: ScopeId, f: impl FnOnce(&mut InstructionBuilder) -> R) -> R {
+        let old = mem::replace(&mut self.current, scope);
+        let res = f(self);
+        self.current = old;
+        res
     }
 
     pub fn append(&mut self, other: &mut Vec<u8>) {

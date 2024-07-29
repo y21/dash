@@ -6,9 +6,9 @@ use clap::ArgMatches;
 use dash_compiler::transformations;
 use dash_middle::interner::StringInterner;
 use dash_middle::parser::error::IntoFormattableErrors;
-use dash_middle::parser::statement::{FuncId, VariableDeclarationName};
+use dash_middle::parser::statement::ScopeId;
 use dash_optimizer::consteval::ConstFunctionEvalCtx;
-use dash_optimizer::type_infer::TypeInferCtx;
+use dash_optimizer::type_infer::name_res;
 use dash_optimizer::OptLevel;
 
 pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
@@ -33,31 +33,24 @@ pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
         println!("{tokens:#?}");
     }
 
-    let (mut ast, counter) = dash_parser::Parser::new(interner, &source, tokens)
+    let (mut ast, scope_counter, local_counter) = dash_parser::Parser::new(interner, &source, tokens)
         .parse_all()
         .map_err(|err| anyhow!("{}", err.formattable(&source, true)))?;
 
     transformations::ast_patch_implicit_return(&mut ast);
 
-    let mut tcx = TypeInferCtx::new(counter);
-    for stmt in &ast {
-        tcx.visit_statement(stmt, FuncId::ROOT);
-    }
+    let nameres = name_res(&ast, scope_counter.len(), local_counter.len());
 
     if dump_types {
-        for local in tcx.scope_mut(FuncId::ROOT).locals() {
-            if let VariableDeclarationName::Identifier(ident) = local.binding().name {
-                let ty = local.inferred_type().borrow();
-                println!("{ident}: {ty:?}");
-            }
+        for local in &nameres.scopes[ScopeId::ROOT].expect_function().locals {
+            let ty = local.inferred_type().borrow();
+            println!("{}: {ty:?}", interner.resolve(local.name));
         }
     }
 
     if opt.enabled() {
-        let mut cfx = ConstFunctionEvalCtx::new(&mut tcx, interner, opt);
-        for stmt in &mut ast {
-            cfx.visit_statement(stmt, FuncId::ROOT);
-        }
+        let mut cfx = ConstFunctionEvalCtx::new(&nameres.scopes, interner, opt);
+        cfx.visit_many_statements(&mut ast);
     }
 
     if dump_ast {
@@ -70,7 +63,7 @@ pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
         }
     }
 
-    let bytecode = dash_compiler::FunctionCompiler::new(&source, opt, tcx, interner)
+    let bytecode = dash_compiler::FunctionCompiler::new(&source, opt, nameres, scope_counter, interner)
         .compile_ast(ast, true)
         .map_err(|err| anyhow!("{}", [err].formattable(&source, true)))?;
 

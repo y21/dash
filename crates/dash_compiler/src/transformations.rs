@@ -1,10 +1,12 @@
+use dash_middle::compiler::scope::ScopeGraph;
 use dash_middle::interner::sym;
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::expr::{AssignmentExpr, AssignmentTarget, Expr, ExprKind, PropertyAccessExpr};
 use dash_middle::parser::statement::{
-    BlockStatement, Class, ClassMemberKey, ClassMemberValue, Loop, ReturnStatement, Statement, StatementKind,
+    BlockStatement, Class, ClassMemberKey, ClassMemberValue, Loop, ReturnStatement, ScopeId, Statement, StatementKind,
 };
 use dash_middle::sourcemap::Span;
+use dash_middle::util::Counter;
 
 /// Implicitly patches the last expression to be returned from the function
 ///
@@ -23,7 +25,7 @@ pub fn ast_patch_implicit_return(ast: &mut Vec<Statement>) {
                 kind: StatementKind::Return(ReturnStatement(expr)),
             });
         }
-        Some(StatementKind::Block(BlockStatement(block))) => ast_patch_implicit_return(block),
+        Some(StatementKind::Block(BlockStatement(block, _))) => ast_patch_implicit_return(block),
         _ => ast_insert_implicit_return(ast),
     }
 }
@@ -76,7 +78,7 @@ pub fn insert_initializer_in_constructor(class: &Class, statements: &mut Vec<Sta
     *statements = prestatements;
 }
 
-/// Hoists all function declarations as well as moving the assignment to the nearest enclosing block.
+/// Hoists all **function declarations** as well as moving the assignment to the nearest enclosing block.
 /// Example:
 /// ```js
 /// x();
@@ -104,8 +106,30 @@ pub fn insert_initializer_in_constructor(class: &Class, statements: &mut Vec<Sta
 ///    x = function x() { return 56; };
 /// }
 /// ```
-pub fn hoist_declarations(ast: &mut Vec<Statement>) {
+pub fn hoist_declarations(
+    at: ScopeId,
+    counter: &mut Counter<ScopeId>,
+    scopes: &mut ScopeGraph,
+    ast: &mut Vec<Statement>,
+) {
     let mut prepend_function_assigns = Vec::new();
+
+    fn hoist_function_declaration_in_block(BlockStatement(stmts, id): &mut BlockStatement) {
+        let mut prepend = Vec::new();
+        for stmt in stmts.iter_mut() {
+            hoist_function_declaration(&mut prepend, stmt);
+        }
+
+        if !stmts.is_empty() {
+            stmts.insert(
+                0,
+                Statement {
+                    span: Span::COMPILER_GENERATED,
+                    kind: StatementKind::Block(BlockStatement(prepend, *id)),
+                },
+            );
+        }
+    }
 
     fn hoist_function_declaration(prepend_function_assigns: &mut Vec<Statement>, stmt: &mut Statement) {
         match &mut stmt.kind {
@@ -123,7 +147,7 @@ pub fn hoist_declarations(ast: &mut Vec<Statement>) {
                         kind: ExprKind::assignment(
                             Expr {
                                 span: stmt.span,
-                                kind: ExprKind::identifier(name),
+                                kind: ExprKind::identifier(name.ident), // TODO: do we need to use the id here as well?
                             },
                             Expr {
                                 span: stmt.span,
@@ -134,22 +158,7 @@ pub fn hoist_declarations(ast: &mut Vec<Statement>) {
                     }),
                 });
             }
-            StatementKind::Block(BlockStatement(stmts)) => {
-                let mut prepend = Vec::new();
-                for stmt in stmts.iter_mut() {
-                    hoist_function_declaration(&mut prepend, stmt);
-                }
-
-                if !stmts.is_empty() {
-                    stmts.insert(
-                        0,
-                        Statement {
-                            span: Span::COMPILER_GENERATED,
-                            kind: StatementKind::Block(BlockStatement(prepend)),
-                        },
-                    );
-                }
-            }
+            StatementKind::Block(block) => hoist_function_declaration_in_block(block),
             StatementKind::If(if_stmt) => {
                 hoist_function_declaration(prepend_function_assigns, &mut if_stmt.then);
                 if let Some(else_stmt) = &mut if_stmt.el {
@@ -174,7 +183,7 @@ pub fn hoist_declarations(ast: &mut Vec<Statement>) {
             StatementKind::Try(tc_stmt) => {
                 hoist_function_declaration(prepend_function_assigns, &mut tc_stmt.try_);
                 if let Some(catch) = &mut tc_stmt.catch {
-                    hoist_function_declaration(prepend_function_assigns, &mut catch.body);
+                    hoist_function_declaration_in_block(&mut catch.body);
                 }
                 if let Some(finally_stmt) = &mut tc_stmt.finally {
                     hoist_function_declaration(prepend_function_assigns, finally_stmt);
@@ -189,11 +198,13 @@ pub fn hoist_declarations(ast: &mut Vec<Statement>) {
     }
 
     if !ast.is_empty() {
+        let block_id = scopes.add_empty_block_scope(at, counter);
+
         ast.insert(
             0,
             Statement {
                 span: Span::COMPILER_GENERATED,
-                kind: StatementKind::Block(BlockStatement(prepend_function_assigns)),
+                kind: StatementKind::Block(BlockStatement(prepend_function_assigns, block_id)),
             },
         );
     }

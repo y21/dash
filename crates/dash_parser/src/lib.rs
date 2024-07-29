@@ -3,13 +3,15 @@ use dash_middle::interner::{StringInterner, Symbol};
 use dash_middle::lexer::token::{Token, TokenType};
 use dash_middle::parser::error::{Error, TokenTypeSuggestion};
 use dash_middle::parser::expr::{Expr, ExprKind};
-use dash_middle::parser::statement::{FuncId, Statement};
+use dash_middle::parser::statement::{Binding, LocalId, ScopeId, Statement};
 use dash_middle::sourcemap::{SourceMap, Span};
 use dash_middle::util::{Counter, LevelStack};
 
 mod expr;
 mod stmt;
 mod types;
+
+pub type ParseResult = Result<(Vec<Statement>, Counter<ScopeId>, Counter<LocalId>), Vec<Error>>;
 
 /// A JavaScript source code parser
 pub struct Parser<'a, 'interner> {
@@ -20,7 +22,8 @@ pub struct Parser<'a, 'interner> {
     interner: &'interner mut StringInterner,
     source: SourceMap<'a>,
     new_level_stack: LevelStack,
-    function_counter: Counter<FuncId>,
+    scope_count: Counter<ScopeId>,
+    local_count: Counter<LocalId>,
 }
 
 impl<'a, 'interner> Parser<'a, 'interner> {
@@ -37,6 +40,9 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         let mut level_stack = LevelStack::new();
         level_stack.add_level();
 
+        let mut scope_count = Counter::new();
+        scope_count.inc(); // the implicit top level function
+
         Self {
             tokens: tokens.into_boxed_slice(),
             errors: Vec::new(),
@@ -45,8 +51,15 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             source: SourceMap::new(input),
             new_level_stack: level_stack,
             interner,
-            // FuncId::ROOT (0) is reserved for the root function, so the counter for new functions has to start at 1
-            function_counter: Counter::with(FuncId::FIRST_NON_ROOT),
+            scope_count,
+            local_count: Counter::new(),
+        }
+    }
+
+    fn create_binding(&mut self, ident: Symbol) -> Binding {
+        Binding {
+            ident,
+            id: self.local_count.inc(),
         }
     }
 
@@ -63,7 +76,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
     /// Iteratively parses every token and returns an AST, or a vector of errors
     ///
     /// The AST will be folded by passing true as the `fold` parameter.
-    pub fn parse_all(mut self) -> Result<(Vec<Statement>, Counter<FuncId>), Vec<Error>> {
+    pub fn parse_all(mut self) -> ParseResult {
         let mut stmts = Vec::new();
 
         while !self.is_eof() {
@@ -75,7 +88,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         if !self.errors.is_empty() {
             Err(self.errors)
         } else {
-            Ok((stmts, self.function_counter))
+            Ok((stmts, self.scope_count, self.local_count))
         }
     }
 

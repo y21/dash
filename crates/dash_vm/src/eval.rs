@@ -1,7 +1,7 @@
 use dash_compiler::FunctionCompiler;
 use dash_lexer::Lexer;
 use dash_middle::compiler::StaticImportKind;
-use dash_optimizer::type_infer::TypeInferCtx;
+use dash_optimizer::type_infer::name_res;
 use dash_optimizer::OptLevel;
 use dash_parser::Parser;
 
@@ -23,12 +23,13 @@ impl Vm {
         let tokens = Lexer::new(&mut self.interner, input)
             .scan_all()
             .map_err(EvalError::Middle)?;
-        let (ast, counter) = Parser::new(&mut self.interner, input, tokens)
+        let (ast, scope_counter, local_counter) = Parser::new(&mut self.interner, input, tokens)
             .parse_all()
             .map_err(EvalError::Middle)?;
 
-        let tcx = TypeInferCtx::new(counter);
-        let cr = FunctionCompiler::new(input, opt, tcx, &mut self.interner)
+        let nameres = name_res(&ast, scope_counter.len(), local_counter.len());
+
+        let cr = FunctionCompiler::new(input, opt, nameres, scope_counter, &mut self.interner)
             .compile_ast(ast, true)
             .map_err(|err| EvalError::Middle(vec![err]))?;
         let mut frame = Frame::from_compile_result(cr);

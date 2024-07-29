@@ -1,4 +1,5 @@
 use dash_log::debug;
+use dash_middle::compiler::scope::ScopeGraph;
 use dash_middle::interner::StringInterner;
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::expr::{
@@ -7,72 +8,74 @@ use dash_middle::parser::expr::{
     UnaryExpr,
 };
 use dash_middle::parser::statement::{
-    BlockStatement, Class, ClassMemberValue, DoWhileLoop, ExportKind, ForInLoop, ForLoop, ForOfLoop, FuncId,
-    FunctionDeclaration, IfStatement, ImportKind, Loop, Parameter, ReturnStatement, SpecifierKind, Statement,
-    StatementKind, SwitchCase, SwitchStatement, TryCatch, VariableBinding, VariableDeclaration,
-    VariableDeclarationKind, VariableDeclarations, WhileLoop,
+    BlockStatement, Class, ClassMemberValue, DoWhileLoop, ExportKind, ForInLoop, ForLoop, ForOfLoop,
+    FunctionDeclaration, IfStatement, ImportKind, Loop, ReturnStatement, ScopeId, SpecifierKind, Statement,
+    StatementKind, SwitchCase, SwitchStatement, TryCatch, VariableBinding, VariableDeclaration, VariableDeclarations,
+    WhileLoop,
 };
 
-use crate::type_infer::TypeInferCtx;
 use crate::OptLevel;
 
 #[derive(Debug)]
 pub struct ConstFunctionEvalCtx<'b, 'interner> {
-    tcx: &'b mut TypeInferCtx,
+    _view: &'b ScopeGraph,
+    current: ScopeId,
     interner: &'interner mut StringInterner,
     #[allow(unused)]
     opt_level: OptLevel,
 }
 
 impl<'b, 'interner> ConstFunctionEvalCtx<'b, 'interner> {
-    pub fn new(tcx: &'b mut TypeInferCtx, interner: &'interner mut StringInterner, opt_level: OptLevel) -> Self {
+    pub fn new(view: &'b ScopeGraph, interner: &'interner mut StringInterner, opt_level: OptLevel) -> Self {
         Self {
-            tcx,
+            _view: view,
+            current: ScopeId::ROOT,
             interner,
             opt_level,
         }
     }
 
-    pub fn visit_statement(&mut self, statement: &mut Statement, func_id: FuncId) {
+    fn with_scope(&mut self, id: ScopeId, f: impl FnOnce(&mut Self)) {
+        let old = self.current;
+        self.current = id;
+        f(self);
+        self.current = old;
+    }
+
+    pub fn visit_statement(&mut self, statement: &mut Statement) {
         match &mut statement.kind {
-            StatementKind::Block(BlockStatement(stmt)) => {
-                self.tcx.scope_mut(func_id).enter();
-                for stmt in stmt {
-                    self.visit_statement(stmt, func_id);
-                }
-                self.tcx.scope_mut(func_id).exit();
-            }
+            StatementKind::Block(block) => self.visit_block_statement(block),
             StatementKind::Expression(expr) => {
-                self.visit(expr, func_id);
+                self.visit(expr);
             }
-            StatementKind::Variable(stmt) => self.visit_variable_declaration(stmt, func_id),
-            StatementKind::If(stmt) => self.visit_if_statement(stmt, func_id),
+            StatementKind::Variable(stmt) => self.visit_variable_declaration(stmt),
+            StatementKind::If(stmt) => self.visit_if_statement(stmt),
             StatementKind::Function(expr) => {
-                self.visit_function_expression(expr, func_id);
+                self.visit_function_expression(expr);
             }
-            StatementKind::Loop(expr) => self.visit_loop_statement(expr, func_id),
-            StatementKind::Return(stmt) => self.visit_return_statement(stmt, func_id),
-            StatementKind::Try(stmt) => self.visit_try_statement(stmt, func_id),
+            StatementKind::Loop(expr) => self.visit_loop_statement(expr),
+            StatementKind::Return(stmt) => self.visit_return_statement(stmt),
+            StatementKind::Try(stmt) => self.visit_try_statement(stmt),
             StatementKind::Throw(expr) => {
-                self.visit(expr, func_id);
+                self.visit(expr);
             }
             StatementKind::Import(ImportKind::AllAs(SpecifierKind::Ident(..), ..)) => {}
             StatementKind::Import(ImportKind::Dynamic(expr)) => {
-                self.visit(expr, func_id);
+                self.visit(expr);
             }
             StatementKind::Import(ImportKind::DefaultAs(SpecifierKind::Ident(..), ..)) => {}
             StatementKind::Export(ExportKind::Default(expr)) => {
-                self.visit(expr, func_id);
+                self.visit(expr);
             }
             StatementKind::Export(ExportKind::Named(..)) => {}
-            StatementKind::Export(ExportKind::NamedVar(stmt)) => self.visit_variable_declaration(stmt, func_id),
-            StatementKind::Class(stmt) => self.visit_class_statement(stmt, func_id),
-            StatementKind::Switch(stmt) => self.visit_switch_statement(stmt, func_id),
+            StatementKind::Export(ExportKind::NamedVar(stmt)) => self.visit_variable_declaration(stmt),
+            StatementKind::Class(stmt) => self.visit_class_statement(stmt),
+            StatementKind::Switch(stmt) => self.visit_switch_statement(stmt),
             StatementKind::Continue(_) => {}
             StatementKind::Break(_) => {}
             StatementKind::Debugger => {}
             StatementKind::Empty => {}
-            StatementKind::Labelled(_, stmt) => self.visit_statement(stmt, func_id),
+            StatementKind::Labelled(_, stmt) => self.visit_statement(stmt),
         };
 
         if !stmt_has_side_effects(statement) {
@@ -80,122 +83,135 @@ impl<'b, 'interner> ConstFunctionEvalCtx<'b, 'interner> {
         }
     }
 
-    pub fn visit_maybe_statement(&mut self, stmt: Option<&mut Statement>, func_id: FuncId) {
+    pub fn visit_maybe_statement(&mut self, stmt: Option<&mut Statement>) {
         if let Some(stmt) = stmt {
-            self.visit_statement(stmt, func_id);
+            self.visit_statement(stmt);
         }
     }
 
-    pub fn visit_many_statements(&mut self, stmt: &mut [Statement], func_id: FuncId) {
+    pub fn visit_many_statements(&mut self, stmt: &mut [Statement]) {
         for stmt in stmt {
-            self.visit_statement(stmt, func_id);
+            self.visit_statement(stmt);
         }
     }
 
-    pub fn visit_many_exprs(&mut self, expr: &mut [Expr], func_id: FuncId) {
+    pub fn visit_many_exprs(&mut self, expr: &mut [Expr]) {
         for expr in expr {
-            self.visit(expr, func_id);
+            self.visit(expr);
         }
     }
 
-    pub fn visit_maybe_expr(&mut self, expr: Option<&mut Expr>, func_id: FuncId) {
+    pub fn visit_maybe_expr(&mut self, expr: Option<&mut Expr>) {
         if let Some(expr) = expr {
-            self.visit(expr, func_id);
+            self.visit(expr);
         }
     }
 
-    pub fn visit_return_statement(&mut self, ReturnStatement(expr): &mut ReturnStatement, func_id: FuncId) {
-        self.visit(expr, func_id);
+    pub fn visit_return_statement(&mut self, ReturnStatement(expr): &mut ReturnStatement) {
+        self.visit(expr);
     }
 
-    pub fn visit_try_statement(&mut self, TryCatch { try_, catch, finally }: &mut TryCatch, func_id: FuncId) {
-        self.visit_statement(try_, func_id);
+    pub fn visit_block_statement(&mut self, BlockStatement(stmt, id): &mut BlockStatement) {
+        self.with_scope(*id, |this| this.visit_many_statements(stmt));
+    }
+
+    pub fn visit_try_statement(&mut self, TryCatch { try_, catch, finally }: &mut TryCatch) {
+        self.visit_statement(try_);
         if let Some(catch) = catch {
-            self.visit_statement(&mut catch.body, func_id);
+            self.visit_block_statement(&mut catch.body);
         }
-        self.visit_maybe_statement(finally.as_deref_mut(), func_id);
+        self.visit_maybe_statement(finally.as_deref_mut());
     }
 
-    pub fn visit_class_statement(&mut self, Class { extends, members, .. }: &mut Class, func_id: FuncId) {
-        self.visit_maybe_expr(extends.as_deref_mut(), func_id);
+    pub fn visit_class_statement(&mut self, Class { extends, members, .. }: &mut Class) {
+        self.visit_maybe_expr(extends.as_deref_mut());
         for member in members {
             match &mut member.value {
                 ClassMemberValue::Method(method)
                 | ClassMemberValue::Getter(method)
                 | ClassMemberValue::Setter(method) => {
-                    self.visit_function_expression(method, func_id);
+                    self.visit_function_expression(method);
                 }
                 ClassMemberValue::Field(field) => {
-                    self.visit_maybe_expr(field.as_mut(), func_id);
+                    self.visit_maybe_expr(field.as_mut());
                 }
             }
         }
     }
 
-    pub fn visit_switch_statement(
-        &mut self,
-        SwitchStatement { expr, default, cases }: &mut SwitchStatement,
-        func_id: FuncId,
-    ) {
-        self.visit(expr, func_id);
+    pub fn visit_switch_statement(&mut self, SwitchStatement { expr, default, cases }: &mut SwitchStatement) {
+        self.visit(expr);
 
         if let Some(default) = default {
-            self.visit_many_statements(default, func_id);
+            self.visit_many_statements(default);
         }
 
         for SwitchCase { value, body } in cases {
-            self.visit(value, func_id);
-            self.visit_many_statements(body, func_id);
+            self.visit(value);
+            self.visit_many_statements(body);
         }
     }
 
-    pub fn visit_loop_statement(&mut self, loop_: &mut Loop, func_id: FuncId) {
+    pub fn visit_loop_statement(&mut self, loop_: &mut Loop) {
         match loop_ {
             Loop::For(ForLoop {
                 init,
                 condition,
                 finalizer,
                 body,
+                scope,
             }) => {
-                self.visit_maybe_statement(init.as_deref_mut(), func_id);
-                self.visit_maybe_expr(condition.as_mut(), func_id);
-                self.visit_maybe_expr(finalizer.as_mut(), func_id);
-                self.visit_statement(body, func_id);
+                self.with_scope(*scope, |this| {
+                    this.visit_maybe_statement(init.as_deref_mut());
+                    this.visit_maybe_expr(condition.as_mut());
+                    this.visit_maybe_expr(finalizer.as_mut());
+                    this.visit_statement(body);
+                });
             }
-            Loop::ForOf(ForOfLoop { expr, body, binding }) => {
-                self.visit_variable_binding(binding, None, func_id);
-                self.visit(expr, func_id);
-                self.visit_statement(body, func_id);
+            Loop::ForOf(ForOfLoop {
+                expr,
+                body,
+                binding,
+                scope,
+            }) => {
+                self.with_scope(*scope, |this| {
+                    this.visit_variable_binding(binding, None);
+                    this.visit(expr);
+                    this.visit_statement(body);
+                });
             }
-            Loop::ForIn(ForInLoop { expr, body, binding }) => {
-                self.visit_variable_binding(binding, None, func_id);
-                self.visit(expr, func_id);
-                self.visit_statement(body, func_id);
+            Loop::ForIn(ForInLoop {
+                expr,
+                body,
+                binding,
+                scope,
+            }) => {
+                self.with_scope(*scope, |this| {
+                    this.visit_variable_binding(binding, None);
+                    this.visit(expr);
+                    this.visit_statement(body);
+                });
             }
             Loop::While(WhileLoop { condition, body }) => {
-                self.visit(condition, func_id);
-                self.visit_statement(body, func_id);
+                self.visit(condition);
+                self.visit_statement(body);
             }
             Loop::DoWhile(DoWhileLoop { body, condition }) => {
-                self.visit(condition, func_id);
-                self.visit_statement(body, func_id);
+                self.visit(condition);
+                self.visit_statement(body);
             }
         }
     }
 
-    fn visit_variable_binding(&mut self, _binding: &VariableBinding, value: Option<&mut Expr>, func_id: FuncId) {
+    fn visit_variable_binding(&mut self, _binding: &VariableBinding, value: Option<&mut Expr>) {
         if let Some(value) = value {
-            self.visit(value, func_id);
+            self.visit(value);
         }
     }
 
-    pub fn visit_variable_declaration(
-        &mut self,
-        VariableDeclarations(declarations): &mut VariableDeclarations,
-        func_id: FuncId,
-    ) {
+    pub fn visit_variable_declaration(&mut self, VariableDeclarations(declarations): &mut VariableDeclarations) {
         for VariableDeclaration { binding, value } in declarations {
-            self.visit_variable_binding(binding, value.as_mut(), func_id);
+            self.visit_variable_binding(binding, value.as_mut());
         }
     }
 
@@ -207,110 +223,109 @@ impl<'b, 'interner> ConstFunctionEvalCtx<'b, 'interner> {
             branches,
             el,
         }: &mut IfStatement,
-        func_id: FuncId,
     ) {
-        self.visit(condition, func_id);
-        self.visit_statement(then, func_id);
+        self.visit(condition);
+        self.visit_statement(then);
         if let Some(el) = el {
-            self.visit_statement(el, func_id);
+            self.visit_statement(el);
         }
         for branch in branches {
-            self.visit_if_statement(branch, func_id);
+            self.visit_if_statement(branch);
         }
     }
 
-    pub fn visit(&mut self, expression: &mut Expr, func_id: FuncId) {
+    pub fn visit(&mut self, expression: &mut Expr) {
         match &mut expression.kind {
-            ExprKind::Binary(..) => self.visit_binary_expression(expression, func_id),
-            ExprKind::Grouping(GroupingExpr(expr)) => expr.iter_mut().for_each(|e| self.visit(e, func_id)),
+            ExprKind::Binary(..) => self.visit_binary_expression(expression),
+            ExprKind::Grouping(GroupingExpr(expr)) => expr.iter_mut().for_each(|e| self.visit(e)),
             ExprKind::Literal(..) => {}
-            ExprKind::Unary(..) => self.visit_unary_expression(expression, func_id),
-            ExprKind::Assignment(..) => self.visit_assignment_expression(expression, func_id),
-            ExprKind::Call(..) => self.visit_call_expression(expression, func_id),
-            ExprKind::Conditional(..) => self.visit_conditional_expression(expression, func_id),
-            ExprKind::PropertyAccess(..) => self.visit_property_access_expression(expression, func_id),
-            ExprKind::Sequence(..) => self.visit_seq_expression(expression, func_id),
-            ExprKind::Prefix(..) => self.visit_prefix_expression(expression, func_id),
-            ExprKind::Postfix(..) => self.visit_postfix_expression(expression, func_id),
-            ExprKind::Function(expr) => self.visit_function_expression(expr, func_id),
-            ExprKind::Class(class) => self.visit_class_statement(class, func_id),
-            ExprKind::Array(..) => self.visit_array_expression(expression, func_id),
-            ExprKind::Object(..) => self.visit_object_expression(expression, func_id),
+            ExprKind::Unary(..) => self.visit_unary_expression(expression),
+            ExprKind::Assignment(..) => self.visit_assignment_expression(expression),
+            ExprKind::Call(..) => self.visit_call_expression(expression),
+            ExprKind::Conditional(..) => self.visit_conditional_expression(expression),
+            ExprKind::PropertyAccess(..) => self.visit_property_access_expression(expression),
+            ExprKind::Sequence(..) => self.visit_seq_expression(expression),
+            ExprKind::Prefix(..) => self.visit_prefix_expression(expression),
+            ExprKind::Postfix(..) => self.visit_postfix_expression(expression),
+            ExprKind::Function(expr) => self.visit_function_expression(expr),
+            ExprKind::Class(class) => self.visit_class_statement(class),
+            ExprKind::Array(..) => self.visit_array_expression(expression),
+            ExprKind::Object(..) => self.visit_object_expression(expression),
             ExprKind::Compiled(..) => {}
             ExprKind::Empty => {}
         }
     }
 
-    fn visit_array_expression(&mut self, array_expr: &mut Expr, func_id: FuncId) {
+    fn visit_array_expression(&mut self, array_expr: &mut Expr) {
         let ExprKind::Array(ArrayLiteral(array)) = &mut array_expr.kind else {
             unreachable!()
         };
 
         for expr in array {
             match expr {
-                ArrayMemberKind::Spread(expr) => self.visit(expr, func_id),
-                ArrayMemberKind::Item(expr) => self.visit(expr, func_id),
+                ArrayMemberKind::Spread(expr) => self.visit(expr),
+                ArrayMemberKind::Item(expr) => self.visit(expr),
                 ArrayMemberKind::Empty => {}
             }
         }
     }
 
-    fn visit_object_expression(&mut self, object_expr: &mut Expr, func_id: FuncId) {
+    fn visit_object_expression(&mut self, object_expr: &mut Expr) {
         let ExprKind::Object(ObjectLiteral(object)) = &mut object_expr.kind else {
             unreachable!()
         };
 
         for (kind, expr) in object {
             if let ObjectMemberKind::Dynamic(expr) = kind {
-                self.visit(expr, func_id);
+                self.visit(expr);
             }
-            self.visit(expr, func_id);
+            self.visit(expr);
         }
     }
 
-    fn visit_postfix_expression(&mut self, postfix_expr: &mut Expr, func_id: FuncId) {
+    fn visit_postfix_expression(&mut self, postfix_expr: &mut Expr) {
         let ExprKind::Postfix((_, expr)) = &mut postfix_expr.kind else {
             unreachable!()
         };
 
-        self.visit(expr, func_id);
+        self.visit(expr);
     }
 
-    fn visit_prefix_expression(&mut self, prefix_expr: &mut Expr, func_id: FuncId) {
+    fn visit_prefix_expression(&mut self, prefix_expr: &mut Expr) {
         let ExprKind::Prefix((_, expr)) = &mut prefix_expr.kind else {
             unreachable!()
         };
 
-        self.visit(expr, func_id);
+        self.visit(expr);
     }
 
-    fn visit_seq_expression(&mut self, seq_expr: &mut Expr, func_id: FuncId) {
+    fn visit_seq_expression(&mut self, seq_expr: &mut Expr) {
         let ExprKind::Sequence((left, right)) = &mut seq_expr.kind else {
             unreachable!()
         };
 
-        self.visit(left, func_id);
-        self.visit(right, func_id);
+        self.visit(left);
+        self.visit(right);
     }
 
-    fn visit_property_access_expression(&mut self, property_access_expr: &mut Expr, func_id: FuncId) {
+    fn visit_property_access_expression(&mut self, property_access_expr: &mut Expr) {
         let ExprKind::PropertyAccess(PropertyAccessExpr { target, property, .. }) = &mut property_access_expr.kind
         else {
             unreachable!()
         };
 
-        self.visit(target, func_id);
-        self.visit(property, func_id);
+        self.visit(target);
+        self.visit(property);
     }
 
-    fn visit_conditional_expression(&mut self, conditional_expr: &mut Expr, func_id: FuncId) {
+    fn visit_conditional_expression(&mut self, conditional_expr: &mut Expr) {
         let ExprKind::Conditional(ConditionalExpr { condition, then, el }) = &mut conditional_expr.kind else {
             unreachable!()
         };
         debug!("reduce conditional {:?}", condition);
-        self.visit(condition, func_id);
-        self.visit(then, func_id);
-        self.visit(el, func_id);
+        self.visit(condition);
+        self.visit(then);
+        self.visit(el);
 
         use ExprKind::Literal;
         use LiteralExpr::Boolean;
@@ -328,37 +343,37 @@ impl<'b, 'interner> ConstFunctionEvalCtx<'b, 'interner> {
         }
     }
 
-    fn visit_call_expression(&mut self, call_expr: &mut Expr, func_id: FuncId) {
+    fn visit_call_expression(&mut self, call_expr: &mut Expr) {
         let ExprKind::Call(FunctionCall { target, arguments, .. }) = &mut call_expr.kind else {
             unreachable!()
         };
 
-        self.visit(target, func_id);
+        self.visit(target);
         for expr in arguments {
             match expr {
-                CallArgumentKind::Normal(expr) => self.visit(expr, func_id),
-                CallArgumentKind::Spread(expr) => self.visit(expr, func_id),
+                CallArgumentKind::Normal(expr) => self.visit(expr),
+                CallArgumentKind::Spread(expr) => self.visit(expr),
             }
         }
     }
 
-    fn visit_assignment_expression(&mut self, assignment_expr: &mut Expr, func_id: FuncId) {
+    fn visit_assignment_expression(&mut self, assignment_expr: &mut Expr) {
         let ExprKind::Assignment(AssignmentExpr { left, right, .. }) = &mut assignment_expr.kind else {
             unreachable!()
         };
 
         if let AssignmentTarget::Expr(left) = left {
-            self.visit(left, func_id);
+            self.visit(left);
         }
-        self.visit(right, func_id);
+        self.visit(right);
     }
 
-    fn visit_unary_expression(&mut self, unary_expr: &mut Expr, func_id: FuncId) {
+    fn visit_unary_expression(&mut self, unary_expr: &mut Expr) {
         let ExprKind::Unary(UnaryExpr { operator, expr }) = &mut unary_expr.kind else {
             unreachable!()
         };
 
-        self.visit(expr, func_id);
+        self.visit(expr);
 
         use ExprKind::*;
         use LiteralExpr::*;
@@ -371,13 +386,13 @@ impl<'b, 'interner> ConstFunctionEvalCtx<'b, 'interner> {
         }
     }
 
-    fn visit_binary_expression(&mut self, binary_expr: &mut Expr, func_id: FuncId) {
+    fn visit_binary_expression(&mut self, binary_expr: &mut Expr) {
         let ExprKind::Binary(BinaryExpr { left, right, operator }) = &mut binary_expr.kind else {
             unreachable!()
         };
         debug!("reduce binary: {:?} {:?}", left, right);
-        self.visit(left, func_id);
-        self.visit(right, func_id);
+        self.visit(left);
+        self.visit(right);
         debug!("reduced binary to: {:?} {:?}", left, right);
 
         use ExprKind::*;
@@ -466,35 +481,24 @@ impl<'b, 'interner> ConstFunctionEvalCtx<'b, 'interner> {
             id,
             ..
         }: &mut FunctionDeclaration,
-        _func_id: FuncId,
     ) {
-        let sub_func_id = *id;
-
-        for (param, expr, _) in parameters {
-            match param {
-                Parameter::Identifier(ident) | Parameter::Spread(ident) => {
-                    // TODO: handle this error, somehow
-                    let _ = self
-                        .tcx
-                        .scope_mut(sub_func_id)
-                        .add_local(*ident, VariableDeclarationKind::Var, None);
+        self.with_scope(*id, |this| {
+            for (_, expr, _) in parameters {
+                if let Some(expr) = expr {
+                    this.visit(expr);
                 }
             }
 
-            if let Some(expr) = expr {
-                self.visit(expr, sub_func_id);
+            for stmt in statements {
+                this.visit_statement(stmt);
             }
-        }
-
-        for stmt in statements {
-            self.visit_statement(stmt, sub_func_id);
-        }
+        });
     }
 }
 
 fn stmt_has_side_effects(stmt: &Statement) -> bool {
     match &stmt.kind {
-        StatementKind::Block(BlockStatement(block)) => block.iter().any(stmt_has_side_effects),
+        StatementKind::Block(BlockStatement(block, _)) => block.iter().any(stmt_has_side_effects),
         StatementKind::Break(_) => true,
         StatementKind::Class(Class { .. }) => true, // TODO: can possibly be SE-free
         StatementKind::Empty => false,
