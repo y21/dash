@@ -121,8 +121,19 @@ pub fn char_code_at(cx: CallContext) -> Result<Value, Value> {
 
 pub fn concat(cx: CallContext) -> Result<Value, Value> {
     let this = cx.this.to_js_string(cx.scope)?;
-    let other = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
-    let concat = String::from(this.res(cx.scope)) + other.res(cx.scope);
+
+    let concat = if cx.args.len() > 1 {
+        // avoid interning every concatenation
+        let mut concat = String::from(this.res(cx.scope));
+        for value in &cx.args {
+            concat += value.to_js_string(cx.scope)?.res(cx.scope);
+        }
+        concat
+    } else {
+        let other = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
+        String::from(this.res(cx.scope)) + other.res(cx.scope)
+    };
+
     Ok(Value::String(cx.scope.intern(concat.as_ref()).into()))
 }
 
