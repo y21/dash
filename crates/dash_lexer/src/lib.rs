@@ -345,6 +345,21 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
                     }
                 };
             }
+            b'u' => {
+                self.advance();
+                let Some(hex) = self.input.get(self.idx..self.idx + 4) else {
+                    self.create_error(Error::UnexpectedEof);
+                    return;
+                };
+
+                let Some(escaped) = u32::from_str_radix(hex, 16).ok().and_then(char::from_u32) else {
+                    self.create_error(Error::InvalidEscapeSequence(self.span()));
+                    return;
+                };
+
+                lexeme.as_mut().unwrap().to_mut().push(escaped);
+                self.advance_n(4);
+            }
             other if !other.is_ascii() => {
                 // if the escaped character is non-ascii, decode UTF-8
                 let (c, len) = util::next_char_in_bytes(&self.input.as_bytes()[self.idx..]);

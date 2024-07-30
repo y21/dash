@@ -17,7 +17,8 @@ use super::ops::conversions::{PreferredType, ValueConversion};
 use super::string::JsString;
 use super::{Typeof, Unrooted, Value};
 
-pub const MAX_SAFE_INTEGER: u64 = 9007199254740991u64;
+pub const MIN_SAFE_INTEGER: i64 = -9007199254740991i64;
+pub const MAX_SAFE_INTEGER: i64 = 9007199254740991i64;
 pub const MAX_SAFE_INTEGERF: f64 = 9007199254740991f64;
 pub const MIN_SAFE_INTEGERF: f64 = -9007199254740991f64;
 

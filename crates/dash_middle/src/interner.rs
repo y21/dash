@@ -156,6 +156,7 @@ pub mod sym {
                 isNaN,
                 eval,
                 isSafeInteger,
+                isInteger,
                 EPSILON,
                 MAX_SAFE_INTEGER,
                 MAX_VALUE,

@@ -2,7 +2,7 @@ use crate::throw;
 use crate::util::intern_f64;
 use crate::value::function::native::CallContext;
 use crate::value::ops::conversions::ValueConversion;
-use crate::value::primitive::{Number, MAX_SAFE_INTEGERF, MIN_SAFE_INTEGERF};
+use crate::value::primitive::{Number, MAX_SAFE_INTEGER, MIN_SAFE_INTEGER};
 use crate::value::{boxed, Value, ValueContext};
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
@@ -57,13 +57,26 @@ pub fn is_nan(cx: CallContext) -> Result<Value, Value> {
     Ok(Value::Boolean(num.is_nan()))
 }
 
+fn as_integer(f: f64) -> Option<i64> {
+    (f.trunc() == f && f.is_finite()).then(|| f as i64)
+}
+
 pub fn is_safe_integer(cx: CallContext) -> Result<Value, Value> {
     let num = match cx.args.first() {
-        Some(Value::Number(Number(n))) => n,
+        Some(&Value::Number(Number(n))) => n,
         _ => return Ok(Value::Boolean(false)),
     };
+    let is_safe = as_integer(num).is_some_and(|n| (MIN_SAFE_INTEGER..=MAX_SAFE_INTEGER).contains(&n));
 
-    Ok(Value::Boolean(*num <= MAX_SAFE_INTEGERF && *num >= MIN_SAFE_INTEGERF))
+    Ok(Value::Boolean(is_safe))
+}
+
+pub fn is_integer(cx: CallContext) -> Result<Value, Value> {
+    let num = match cx.args.first() {
+        Some(&Value::Number(Number(n))) => n,
+        _ => return Ok(Value::Boolean(false)),
+    };
+    Ok(Value::Boolean(as_integer(num).is_some()))
 }
 
 pub fn to_fixed(cx: CallContext) -> Result<Value, Value> {

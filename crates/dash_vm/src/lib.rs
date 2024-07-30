@@ -336,6 +336,7 @@ impl Vm {
                 (sym::isFinite, scope.statics.number_is_finite.clone()),
                 (sym::isNaN, scope.statics.number_is_nan.clone()),
                 (sym::isSafeInteger, scope.statics.number_is_safe_integer.clone()),
+                (sym::isInteger, scope.statics.number_is_integer.clone()),
             ],
             [],
             [
