@@ -372,7 +372,6 @@ mod extract {
     pub fn extract<T: ExtractBack<Exception = Infallible>>(cx: &mut DispatchContext<'_>) -> T {
         match T::extract(cx) {
             Ok(v) => v,
-            Err(err) => match err {},
         }
     }
 
@@ -383,7 +382,6 @@ mod extract {
     ) -> T {
         match T::extract_front(seq, cx) {
             Ok(v) => v,
-            Err(err) => match err {},
         }
     }
 

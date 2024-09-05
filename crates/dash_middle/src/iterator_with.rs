@@ -11,7 +11,6 @@ impl<T> InfallibleResult for Result<T, Infallible> {
     fn into_ok(self) -> T {
         match self {
             Ok(v) => v,
-            Err(v) => match v {},
         }
     }
 }
