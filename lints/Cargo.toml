@@ -1,0 +1,10 @@
+[package]
+name = "lints"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clippy_utils = { git = "https://github.com/rust-lang/rust-clippy", rev = "7d7b298" }
+
+[package.metadata.rust-analyzer]
+rustc_private = true
