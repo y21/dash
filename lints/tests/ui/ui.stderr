@@ -1,0 +1,74 @@
+error: use of unrooted value after mutable scope borrow
+  --> lints/tests/ui/src/lib.rs:25:5
+   |
+25 |     unrooted; // killed
+   |     ^^^^^^^^
+   |
+note: scope mutably borrowed here
+  --> lints/tests/ui/src/lib.rs:24:5
+   |
+24 |     use_vm(vm);
+   |     ^^^^^^^^^^
+   = note: `#[deny(missing_root)]` on by default
+
+error: use of unrooted value after mutable scope borrow
+  --> lints/tests/ui/src/lib.rs:30:5
+   |
+30 |     unrooted; // killed
+   |     ^^^^^^^^
+   |
+note: scope mutably borrowed here
+  --> lints/tests/ui/src/lib.rs:29:5
+   |
+29 |     use_scope(scope);
+   |     ^^^^^^^^^^^^^^^^
+
+error: use of unrooted value after mutable scope borrow
+  --> lints/tests/ui/src/lib.rs:35:5
+   |
+35 |     u2; // killed
+   |     ^^
+   |
+note: scope mutably borrowed here
+  --> lints/tests/ui/src/lib.rs:34:13
+   |
+34 |     let v = transform_unrooted(scope, u1);
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: use of unrooted value after mutable scope borrow
+  --> lints/tests/ui/src/lib.rs:52:5
+   |
+52 |     u1; // killed
+   |     ^^
+   |
+note: scope mutably borrowed here
+  --> lints/tests/ui/src/lib.rs:42:13
+   |
+42 |             use_scope(scope);
+   |             ^^^^^^^^^^^^^^^^
+
+error: use of unrooted value after mutable scope borrow
+  --> lints/tests/ui/src/lib.rs:60:5
+   |
+60 |     x; // killed;
+   |     ^
+   |
+note: scope mutably borrowed here
+  --> lints/tests/ui/src/lib.rs:59:14
+   |
+59 |     let u2 = make_unrooted_res(scope)?;
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: use of unrooted value after mutable scope borrow
+  --> lints/tests/ui/src/lib.rs:61:5
+   |
+61 |     u1; // killed
+   |     ^^
+   |
+note: scope mutably borrowed here
+  --> lints/tests/ui/src/lib.rs:59:14
+   |
+59 |     let u2 = make_unrooted_res(scope)?;
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: could not compile `ui` (lib) due to 6 previous errors

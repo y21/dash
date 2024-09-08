@@ -6,5 +6,12 @@ edition = "2021"
 [dependencies]
 clippy_utils = { git = "https://github.com/rust-lang/rust-clippy", rev = "7d7b298" }
 
+[dev-dependencies]
+prettydiff = "0.7.0"
+
+[[test]]
+name = "uitest"
+harness = false
+
 [package.metadata.rust-analyzer]
 rustc_private = true
