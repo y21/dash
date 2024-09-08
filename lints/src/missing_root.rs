@@ -2,6 +2,7 @@ use std::iter;
 
 use clippy_utils::def_path_res;
 use mir::visit::MirVisitable as _;
+use rustc_ast::Mutability;
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::def_id::{DefId, LocalDefId};
 use rustc_hir::intravisit::FnKind;
@@ -11,12 +12,18 @@ use rustc_index::IndexVec;
 use rustc_infer::infer::TyCtxtInferExt;
 use rustc_infer::traits::{Obligation, ObligationCause};
 use rustc_lint::{LateContext, LateLintPass};
+use rustc_middle::mir::tcx::PlaceTy;
+use rustc_middle::mir::visit::Visitor;
 use rustc_middle::mir::{self, BasicBlock, Body, Local};
 use rustc_middle::ty::{ParamEnv, Ty, TyCtxt};
 use rustc_middle::{bug, ty};
 use rustc_session::{declare_lint, impl_lint_pass};
+use rustc_span::source_map::Spanned;
 use rustc_span::Span;
+use rustc_target::abi::VariantIdx;
 use rustc_trait_selection::traits::ObligationCtxt;
+
+use crate::utils::has_no_gc_attr;
 
 declare_lint! {
     pub MISSING_ROOT,
@@ -24,38 +31,85 @@ declare_lint! {
     "missing .root() calls"
 }
 
+macro_rules! required_items {
+    ($($struct_or_trait:tt $field:ident => $respath:expr),+) => {
+        macro_rules! defkind {
+            (trait) => { DefKind::Trait };
+            (struct) => { DefKind::Struct }
+        }
+
+        #[derive(Default)]
+        struct RequiredItems {
+            $($field: Option<DefId>),+
+        }
+        impl RequiredItems {
+            fn init(&mut self, cx: &LateContext<'_>) {
+                $(
+                    self.$field = Some(unique_res(cx, &$respath, defkind!($struct_or_trait)));
+                )+
+            }
+
+            $(
+                fn $field(&self) -> DefId {
+                    self.$field.unwrap()
+                }
+            )+
+        }
+    };
+}
+required_items!(
+    trait root => ["dash_vm", "value", "Root"],
+    struct vm => ["dash_vm", "Vm"],
+    struct gc => ["dash_vm", "gc", "Gc"],
+    struct scope => ["dash_vm", "localscope", "LocalScope"],
+    struct dispatchcx => ["dash_vm", "dispatch", "DispatchContext"]
+);
+
 #[derive(Default)]
 pub struct MissingRoot {
-    root: Option<DefId>,
-    scope: Option<DefId>,
-    vm: Option<DefId>,
+    items: RequiredItems,
 }
 
 impl_lint_pass!(MissingRoot => [MISSING_ROOT]);
 
-impl MissingRoot {
-    fn root_trait(&self) -> DefId {
-        self.root.unwrap()
-    }
+#[derive(Copy, Clone)]
+enum RefBehavior {
+    OnlyMut,
+    PermitImm,
+}
 
-    fn is_vm_like(&self, ty: Ty<'_>) -> bool {
-        if let ty::Adt(def, _) = ty.peel_refs().kind() {
-            [self.root.unwrap(), self.scope.unwrap()].contains(&def.did())
-        } else {
-            false
+impl MissingRoot {
+    fn is_scope_like<'tcx>(&self, tcx: TyCtxt<'tcx>, ty: Ty<'tcx>, refb: RefBehavior) -> bool {
+        match *ty.kind() {
+            ty::Adt(def, _) => [
+                self.items.dispatchcx(),
+                self.items.vm(),
+                self.items.scope(),
+                self.items.gc(),
+            ]
+            .contains(&def.did()),
+            ty::Ref(_, pointee, Mutability::Mut) => self.is_scope_like(tcx, pointee, refb),
+            ty::Ref(_, pointee, Mutability::Not) if let RefBehavior::PermitImm = refb => {
+                self.is_scope_like(tcx, pointee, refb)
+            }
+            ty::Closure(closure_def_id, _) => tcx
+                .closure_captures(closure_def_id.as_local().unwrap())
+                .iter()
+                .any(|capture| self.is_scope_like(tcx, capture.place.ty(), refb)),
+            _ => false,
         }
     }
 }
 
-fn unique_res(cx: &LateContext<'_>, path: &[&str], kind: DefKind) -> Option<DefId> {
+fn unique_res(cx: &LateContext<'_>, path: &[&str], kind: DefKind) -> DefId {
     let mut unrooted_res = def_path_res(cx.tcx, path).into_iter();
     if let Some(Res::Def(res_kind, def_id)) = unrooted_res.next()
         && res_kind == kind
         && unrooted_res.next().is_none()
     {
-        Some(def_id)
+        def_id
     } else {
-        None
+        bug!("failed to resolve {path:?}")
     }
 }
 
@@ -80,7 +134,7 @@ struct TraverseCtxt<'a, 'tcx> {
 
 impl<'tcx> TraverseCtxt<'_, 'tcx> {
     fn is_rootable(&self, ty: Ty<'tcx>) -> bool {
-        let trait_ref = ty::TraitRef::new(self.tcx, self.lint.root_trait(), [ty::GenericArg::from(ty)]);
+        let trait_ref = ty::TraitRef::new(self.tcx, self.lint.items.root(), [ty::GenericArg::from(ty.peel_refs())]);
         let obligation = Obligation::new(self.tcx, ObligationCause::dummy(), self.param_env, trait_ref);
         self.ocx.register_obligation(obligation);
         self.ocx.select_all_or_error().is_empty()
@@ -129,11 +183,9 @@ struct PlaceVisitor<'a, 'b, 'tcx> {
 
 impl<'a, 'tcx> mir::visit::Visitor<'tcx> for PlaceVisitor<'a, '_, 'tcx> {
     fn visit_place(&mut self, place: &mir::Place<'tcx>, context: mir::visit::PlaceContext, location: mir::Location) {
-        let ty = self.mir.local_decls[place.local].ty;
+        let base_ty = self.mir.local_decls[place.local].ty;
 
-        if self.cx.lint.is_vm_like(ty) {
-            self.state.kill(self.span);
-        } else if self.cx.is_rootable(ty)
+        if self.cx.is_rootable(base_ty)
             && let LocalState::Killed { at: killed_at } = self.state.locals[place.local]
         {
             if context.is_place_assignment() {
@@ -148,6 +200,40 @@ impl<'a, 'tcx> mir::visit::Visitor<'tcx> for PlaceVisitor<'a, '_, 'tcx> {
             }
         }
 
+        let mut kill = false;
+        let mut projections = place.iter_projections();
+        let mut ty = base_ty;
+
+        for (_, projection) in &mut projections {
+            ty = PlaceTy::from_ty(ty).projection_ty(self.cx.tcx, projection).ty;
+
+            if self.cx.lint.is_scope_like(self.cx.tcx, ty, RefBehavior::OnlyMut) {
+                kill = true;
+                break;
+            }
+        }
+
+        if kill {
+            for (_, projection) in projections {
+                if let mir::ProjectionElem::Field(idx, _) = projection
+                    && let Some(adt) = ty.ty_adt_def()
+                {
+                    assert!(adt.is_struct());
+                    let field = &adt.variant(VariantIdx::from_u32(0)).fields[idx];
+                    if has_no_gc_attr(self.cx.tcx, field.did) {
+                        kill = false;
+                        continue;
+                    }
+                }
+
+                kill = true;
+            }
+        }
+
+        if kill {
+            self.state.kill(self.span);
+        }
+
         self.super_place(place, context, location)
     }
 }
@@ -159,7 +245,6 @@ fn traverse<'tcx>(
     bb: BasicBlock,
 ) -> TraverseState {
     if !cx.visited_bbs.insert(bb) {
-        // TODO: is returning this for block cycles correct?
         return state;
     }
 
@@ -175,12 +260,15 @@ fn traverse<'tcx>(
             statement_index,
         };
 
-        if let mir::StatementKind::Assign(box (_, value)) = &stmt.kind
-            && let mir::Rvalue::Ref(_, mir::BorrowKind::Mut { .. }, place) = value
-            && vis.cx.lint.is_vm_like(mir.local_decls[place.local].ty)
+        if let mir::StatementKind::Assign(box (assignee, _)) = &stmt.kind
+            && vis.cx.lint.is_scope_like(
+                vis.cx.tcx,
+                assignee.ty(&mir.local_decls, vis.cx.tcx).ty,
+                RefBehavior::PermitImm,
+            )
         {
-            // Special case `_x = &mut (*_y)` where `*y` is vm-like to not kill.
-            // That is itself part of special casing `.root(sc)`, which is split into multiple statements.
+            // Specifically allow assignments of scope-like things.
+            // This is itself part of the special casing for fn call terminators down below
         } else {
             stmt.apply(location, vis);
         }
@@ -188,27 +276,72 @@ fn traverse<'tcx>(
 
     let terminator = mir.basic_blocks[bb].terminator();
 
+    let vis = &mut PlaceVisitor {
+        cx,
+        mir,
+        state: &mut state,
+        span: terminator.source_info.span,
+    };
+    let location = mir::Location {
+        block: bb,
+        statement_index: mir.basic_blocks[bb].statements.len(),
+    };
+
     if let mir::TerminatorKind::Call {
-        func: mir::Operand::Constant(box func),
-        ..
+        func,
+        args,
+        destination,
+        target: _,
+        unwind: _,
+        call_source: _,
+        fn_span: _,
     } = &terminator.kind
-        && let ty::FnDef(def_id, ..) = *func.ty().kind()
-        && cx.tcx.trait_of_item(def_id) == Some(cx.lint.root_trait())
     {
-        // Don't look for mutating uses of vms in .root() calls because they are specifically ok
+        if let mir::Operand::Constant(ct) = func
+            && let ty::FnDef(callee_def_id, _) = *ct.ty().kind()
+            && (vis.cx.tcx.trait_of_item(callee_def_id) == Some(vis.cx.tcx.lang_items().deref_mut_trait().unwrap())
+                || has_no_gc_attr(vis.cx.tcx, callee_def_id))
+        {
+            // Allow derefs (and anything that is annotated with #[trusted_no_gc]).
+            // They could in theory do arbitrary work, but in practice deref should never do that.
+        } else {
+            // General function calls of the form `fun(scope, arg2, arg3)` are special cased:
+            // Even though `scope` of type `&mut LocalScope` is evaluated first, which would kill all unrooteds
+            // as per the usual rules, we do want to special case scope references passed *directly* to functions:
+            // - Only *after* evaluating the function call should all unrooteds be killed
+            //   - This allows passing unrooteds along with the scope into a function
+            // - The assignee, i.e. `unrooted2 = fun(scope, unrooted1)`, should NOT be killed
+
+            vis.visit_operand(func, location);
+
+            let mut kill = false;
+            for Spanned { node, .. } in args {
+                if let mir::Operand::Move(place) = node
+                    && let ty = place.ty(&mir.local_decls, vis.cx.tcx).ty
+                    && let ty::Ref(_, pointee, Mutability::Mut) = *ty.kind()
+                    && vis.cx.lint.is_scope_like(vis.cx.tcx, pointee, RefBehavior::OnlyMut)
+                {
+                    kill = true;
+                } else {
+                    vis.visit_operand(node, location);
+                }
+            }
+
+            if kill {
+                vis.state.kill(terminator.source_info.span);
+            }
+
+            // Evaluate destination *after* the potential kill, which makes the destination live again
+            vis.visit_place(
+                destination,
+                mir::visit::PlaceContext::MutatingUse(mir::visit::MutatingUseContext::Call),
+                location,
+            );
+        }
+    } else if let mir::TerminatorKind::Drop { .. } = terminator.kind {
+        // Allow drops
     } else {
-        terminator.apply(
-            mir::Location {
-                block: bb,
-                statement_index: mir.basic_blocks[bb].statements.len(),
-            },
-            &mut PlaceVisitor {
-                cx,
-                mir,
-                state: &mut state,
-                span: terminator.source_info.span,
-            },
-        );
+        terminator.apply(location, vis);
     }
 
     match terminator.edges() {
@@ -246,16 +379,7 @@ fn traverse<'tcx>(
 
 impl LateLintPass<'_> for MissingRoot {
     fn check_crate(&mut self, cx: &LateContext<'_>) {
-        if let Some(root) = unique_res(cx, &["dash_vm", "value", "Root"], DefKind::Trait)
-            && let Some(vm) = unique_res(cx, &["dash_vm", "Vm"], DefKind::Struct)
-            && let Some(scope) = unique_res(cx, &["dash_vm", "localscope", "LocalScope"], DefKind::Struct)
-        {
-            self.root = Some(root);
-            self.vm = Some(vm);
-            self.scope = Some(scope);
-        } else {
-            bug!("failed to get required items")
-        }
+        self.items.init(cx);
     }
 
     fn check_fn(
@@ -268,7 +392,6 @@ impl LateLintPass<'_> for MissingRoot {
         def_id: LocalDefId,
     ) {
         let mir = cx.tcx.optimized_mir(def_id);
-
         let locals = IndexVec::<Local, LocalState>::from_elem_n(LocalState::LiveBeforeBorrow, mir.local_decls.len());
 
         let infcx = cx.tcx.infer_ctxt().build();

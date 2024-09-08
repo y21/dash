@@ -5,6 +5,9 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(dash_lints)'] }
+
 [features]
 jit = ["dash_llvm_jit_backend", "dash_typed_cfg"]
 stress_gc = []                                    # allows stress testing the GC

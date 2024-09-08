@@ -147,6 +147,7 @@ impl<'vm> DispatchContext<'vm> {
             .expect("Dispatch Context attempted to reference missing frame")
     }
 
+    #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
     pub fn active_frame_mut(&mut self) -> &mut Frame {
         self.frames
             .last_mut()

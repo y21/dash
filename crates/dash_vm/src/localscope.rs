@@ -150,6 +150,7 @@ impl<'vm> LocalScope<'vm> {
         self.scope_data_mut().refs.push(obj);
     }
 
+    #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
     pub fn add_value(&mut self, value: Value) {
         match value {
             Value::Object(o) => self.add_ref(o),

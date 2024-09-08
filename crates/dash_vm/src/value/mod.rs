@@ -187,6 +187,7 @@ impl Unrooted {
 
 pub trait Root {
     type Rooted;
+    #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
     fn root(self, scope: &mut LocalScope<'_>) -> Self::Rooted;
 }
 

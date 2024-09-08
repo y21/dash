@@ -1,3 +1,5 @@
+#![cfg_attr(dash_lints, feature(register_tool))]
+#![cfg_attr(dash_lints, register_tool(dash_lints))]
 #![warn(clippy::redundant_clone)]
 #![deny(clippy::disallowed_methods)]
 
@@ -55,6 +57,7 @@ pub const MAX_STACK_SIZE: usize = 8192;
 const DEFAULT_GC_OBJECT_COUNT_THRESHOLD: usize = 8192;
 
 pub struct Vm {
+    #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
     frames: Vec<Frame>,
     async_tasks: Vec<Handle>,
     // TODO: the inner vec of the stack should be private for soundness
@@ -72,8 +75,10 @@ pub struct Vm {
     // We can't do that in Persistent's Drop code, because we don't have access to the VM there.
     external_refs: FxHashSet<Handle>,
     scopes: LocalScopeList,
-    statics: Box<Statics>, // TODO: we should box this... maybe?
+    statics: Box<Statics>,
+    #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
     try_blocks: Vec<TryBlock>,
+    #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
     params: VmParams,
     gc_object_threshold: usize,
     /// Keeps track of the "purity" of the builtins of this VM.
@@ -1165,12 +1170,15 @@ impl Vm {
     pub(crate) fn active_frame(&self) -> &Frame {
         self.frames.last().expect("frames stack is empty")
     }
+
+    #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
     pub(crate) fn active_frame_mut(&mut self) -> &mut Frame {
         self.frames.last_mut().expect("frames stack is empty")
     }
 
     /// Fetches the current instruction/value in the currently executing frame
     /// and increments the instruction pointer
+    #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
     pub(crate) fn fetch_and_inc_ip(&mut self) -> u8 {
         let frame = self.active_frame_mut();
         let ip = frame.ip;
@@ -1180,6 +1188,7 @@ impl Vm {
 
     /// Fetches a wide value (16-bit) in the currently executing frame
     /// and increments the instruction pointer
+    #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
     pub(crate) fn fetchw_and_inc_ip(&mut self) -> u16 {
         let frame = self.active_frame_mut();
         let value: [u8; 2] = frame.function.buffer.with(|buf| {
@@ -1192,6 +1201,7 @@ impl Vm {
         u16::from_ne_bytes(value)
     }
 
+    #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
     pub(crate) fn get_frame_sp(&self) -> usize {
         self.active_frame().sp
     }
@@ -1213,6 +1223,7 @@ impl Vm {
         self.active_frame().externals.get(id)
     }
 
+    #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
     pub(crate) fn set_local(&mut self, id: usize, value: Unrooted) {
         let sp = self.get_frame_sp();
         let idx = sp + id;
@@ -1241,7 +1252,7 @@ impl Vm {
             cold_path();
             // This is a bit sus (we're creating a temporary scope for the error creation and returning it past its scope),
             // but the error type is `Unrooted`, so it needs to be re-rooted at callsite anyway.
-            throw!(&mut self.scope(), RangeError, "Maximum call stack size exceeded");
+            throw!(self.scope(), RangeError, "Maximum call stack size exceeded");
         }
         Ok(())
     }
@@ -1257,7 +1268,7 @@ impl Vm {
             debug!("vm exceeded stack size");
             // This is a bit sus (we're creating a temporary scope for the error creation and returning it past its scope),
             // but the error type is `Unrooted`, so it needs to be re-rooted at callsite anyway.
-            throw!(&mut self.scope(), RangeError, "Maximum stack size exceeded");
+            throw!(self.scope(), RangeError, "Maximum stack size exceeded");
         }
         self.stack.extend(it);
         Ok(())
@@ -1516,6 +1527,8 @@ impl Vm {
         &self.statics
     }
 
+    // Using the returned handle might invoke a gc but this call alone wont
+    #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
     pub fn gc_mut(&mut self) -> &mut Gc {
         &mut self.gc
     }
