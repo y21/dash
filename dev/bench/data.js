@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725827858580,
+  "lastUpdate": 1725917781691,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -9935,6 +9935,60 @@ window.BENCHMARK_DATA = {
             "name": "exec tinycolor2 parse hex+toFilter",
             "value": 34630401,
             "range": "± 372021",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "8a79a8d184c24b3535e84c194e571337f857ef8a",
+          "message": "rename `PrimitiveCapabilities` to `InternalSlots` and more misc fixes",
+          "timestamp": "2024-09-09T22:30:15+02:00",
+          "tree_id": "13e8b66834fd6e9e8634c45e44a832da8e484856",
+          "url": "https://github.com/y21/dash/commit/8a79a8d184c24b3535e84c194e571337f857ef8a"
+        },
+        "date": 1725917781122,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1813332,
+            "range": "± 12987",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 170422,
+            "range": "± 454",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 61565,
+            "range": "± 676",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse+compile tinycolor2",
+            "value": 2116467,
+            "range": "± 9117",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "exec tinycolor2 parse hex+toFilter",
+            "value": 33526288,
+            "range": "± 290768",
             "unit": "ns/iter"
           }
         ]
