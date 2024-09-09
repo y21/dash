@@ -39,7 +39,7 @@ use self::function::generator::GeneratorFunction;
 use self::function::user::UserFunction;
 use self::function::Function;
 use self::object::{Object, PropertyKey, PropertyValue};
-use self::primitive::{Number, PrimitiveCapabilities, Symbol};
+use self::primitive::{InternalSlots, Number, Symbol};
 use self::regex::RegExp;
 use self::string::JsString;
 use super::localscope::LocalScope;
@@ -88,11 +88,29 @@ impl Object for Value {
     }
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
-        self.set_property(sc, key, value)
+        match self {
+            Self::Object(h) => h.set_property(sc, key, value),
+            Self::Number(n) => n.set_property(sc, key, value),
+            Self::Boolean(b) => b.set_property(sc, key, value),
+            Self::String(s) => s.set_property(sc, key, value),
+            Self::External(h) => h.set_property(sc, key, value),
+            Self::Undefined(u) => u.set_property(sc, key, value),
+            Self::Null(n) => n.set_property(sc, key, value),
+            Self::Symbol(s) => s.set_property(sc, key, value),
+        }
     }
 
     fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
-        self.delete_property(sc, key)
+        match self {
+            Self::Object(o) => o.delete_property(sc, key),
+            Self::Number(n) => n.delete_property(sc, key),
+            Self::Boolean(b) => b.delete_property(sc, key),
+            Self::String(s) => s.delete_property(sc, key),
+            Self::External(o) => o.delete_property(sc, key),
+            Self::Undefined(u) => u.delete_property(sc, key),
+            Self::Null(n) => n.delete_property(sc, key),
+            Self::Symbol(s) => s.delete_property(sc, key),
+        }
     }
 
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
@@ -141,20 +159,48 @@ impl Object for Value {
             Value::External(e) => e.own_keys(sc),
         }
     }
+
+    fn type_of(&self) -> Typeof {
+        match self {
+            Self::Boolean(_) => Typeof::Boolean,
+            Self::External(e) => e.type_of(),
+            Self::Number(_) => Typeof::Number,
+            Self::String(_) => Typeof::String,
+            Self::Undefined(_) => Typeof::Undefined,
+            Self::Object(o) => o.type_of(),
+            Self::Null(_) => Typeof::Object,
+            Self::Symbol(_) => Typeof::Symbol,
+        }
+    }
+
+    fn construct(
+        &self,
+        scope: &mut LocalScope,
+        _: Handle,
+        this: Value,
+        args: Vec<Value>,
+    ) -> Result<Unrooted, Unrooted> {
+        self.construct(scope, this, args)
+    }
+
+    fn internal_slots(&self) -> Option<&dyn InternalSlots> {
+        match self {
+            Value::Number(n) => Some(n),
+            Value::Boolean(b) => Some(b),
+            Value::String(s) => Some(s),
+            Value::Undefined(_) | Value::Null(_) => None,
+            Value::Symbol(s) => Some(s),
+            Value::Object(o) => o.internal_slots(),
+            Value::External(_) => unreachable!(),
+        }
+    }
 }
 
 /// A wrapper type around JavaScript values that are not rooted.
+///
 /// Before accessing a value, you must root it using a [`LocalScope`],
 /// to prevent a situation in which the garbage collector collects
 /// the value while it is still being used.
-///
-// TODO: this is still not sound. we need to make sure that you cannot use an Unrooted
-// after using the vm:
-// ```rs
-// let val: Unrooted = returns_unrooted_value();
-// call_js_function(); // this may trigger a GC cycle
-// val.root(&mut scope).do_something(); // this is UB, the GC cycle may have collected the value
-// ```
 #[derive(Debug, Clone)]
 pub struct Unrooted {
     // Possible mini optimization: store a flag that indicates if the value is already rooted?
@@ -322,7 +368,7 @@ impl Object for ExternalValue {
         get_property_descriptor,
         get_prototype,
         type_of,
-        as_primitive_capable
+        internal_slots
     );
 
     // NB: this intentionally does not delegate to self.inner.as_any() because
@@ -438,19 +484,6 @@ impl Value {
         }
     }
 
-    pub fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
-        match self {
-            Self::Object(h) => h.set_property(sc, key, value),
-            Self::Number(n) => n.set_property(sc, key, value),
-            Self::Boolean(b) => b.set_property(sc, key, value),
-            Self::String(s) => s.set_property(sc, key, value),
-            Self::External(h) => h.set_property(sc, key, value),
-            Self::Undefined(u) => u.set_property(sc, key, value),
-            Self::Null(n) => n.set_property(sc, key, value),
-            Self::Symbol(s) => s.set_property(sc, key, value),
-        }
-    }
-
     pub fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Unrooted> {
         match self {
             Self::Object(o) => o.get_property(sc, key),
@@ -461,19 +494,6 @@ impl Value {
             Self::Undefined(u) => u.get_property(sc, self.clone(), key),
             Self::Null(n) => n.get_property(sc, self.clone(), key),
             Self::Symbol(s) => s.get_property(sc, self.clone(), key),
-        }
-    }
-
-    pub fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
-        match self {
-            Self::Object(o) => o.delete_property(sc, key),
-            Self::Number(n) => n.delete_property(sc, key),
-            Self::Boolean(b) => b.delete_property(sc, key),
-            Self::String(s) => s.delete_property(sc, key),
-            Self::External(o) => o.delete_property(sc, key),
-            Self::Undefined(u) => u.delete_property(sc, key),
-            Self::Null(n) => n.delete_property(sc, key),
-            Self::Symbol(s) => s.delete_property(sc, key),
         }
     }
 
@@ -581,19 +601,6 @@ impl Value {
         match self {
             Value::Undefined(_) => None,
             _ => Some(self),
-        }
-    }
-
-    pub fn type_of(&self) -> Typeof {
-        match self {
-            Self::Boolean(_) => Typeof::Boolean,
-            Self::External(e) => e.type_of(),
-            Self::Number(_) => Typeof::Number,
-            Self::String(_) => Typeof::String,
-            Self::Undefined(_) => Typeof::Undefined,
-            Self::Object(o) => o.type_of(),
-            Self::Null(_) => Typeof::Object,
-            Self::Symbol(_) => Typeof::Symbol,
         }
     }
 
@@ -785,7 +792,7 @@ impl<O: Object + 'static> Object for PureBuiltin<O> {
         self.inner.own_keys(sc)
     }
 
-    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
-        self.inner.as_primitive_capable()
+    fn internal_slots(&self) -> Option<&dyn InternalSlots> {
+        self.inner.internal_slots()
     }
 }

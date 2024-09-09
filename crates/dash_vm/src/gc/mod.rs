@@ -191,9 +191,9 @@ macro_rules! register_gc {
                     <$ty as Object>::construct(&*(ptr.cast::<$ty>()), scope, callee, this, args)
                 },
                 js_as_any: |ptr| unsafe { <$ty as Object>::as_any(&*(ptr.cast::<$ty>())) },
-                js_as_primitive_capable: |ptr| unsafe {
-                    <$ty as Object>::as_primitive_capable(&*(ptr.cast::<$ty>()))
-                        .map(|v| v as *const dyn crate::value::primitive::PrimitiveCapabilities)
+                js_internal_slots: |ptr| unsafe {
+                    <$ty as Object>::internal_slots(&*(ptr.cast::<$ty>()))
+                        .map(|v| v as *const dyn crate::value::primitive::InternalSlots)
                 },
                 js_own_keys: |ptr, scope| unsafe { <$ty as Object>::own_keys(&*(ptr.cast::<$ty>()), scope) },
                 js_type_of: |ptr| unsafe { <$ty as Object>::type_of(&*(ptr.cast::<$ty>())) },

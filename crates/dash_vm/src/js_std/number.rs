@@ -1,8 +1,9 @@
 use crate::throw;
 use crate::util::intern_f64;
 use crate::value::function::native::CallContext;
+use crate::value::object::Object;
 use crate::value::ops::conversions::ValueConversion;
-use crate::value::primitive::{Number, MAX_SAFE_INTEGER, MIN_SAFE_INTEGER};
+use crate::value::primitive::{InternalSlots, Number, MAX_SAFE_INTEGER, MIN_SAFE_INTEGER};
 use crate::value::{boxed, Value, ValueContext};
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
@@ -25,8 +26,12 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
         .map(|n| n as u8)
         .unwrap_or(10);
 
-    let Value::Number(Number(num)) = cx.this else {
-        throw!(cx.scope, TypeError, "Number.prototype.toString called on non-number")
+    let Some(num) = cx.this.internal_slots().and_then(InternalSlots::number_value) else {
+        throw!(
+            cx.scope,
+            TypeError,
+            "Number.prototype.toString called on non-number value"
+        )
     };
 
     let re = match radix {
@@ -37,6 +42,18 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
     };
 
     Ok(Value::String(re.into()))
+}
+
+pub fn value_of(cx: CallContext) -> Result<Value, Value> {
+    if let Some(num) = cx.this.internal_slots().and_then(InternalSlots::number_value) {
+        Ok(Value::number(num))
+    } else {
+        throw!(
+            cx.scope,
+            TypeError,
+            "Number.prototype.valueOf called on non-number value"
+        )
+    }
 }
 
 pub fn is_finite(cx: CallContext) -> Result<Value, Value> {
@@ -58,7 +75,7 @@ pub fn is_nan(cx: CallContext) -> Result<Value, Value> {
 }
 
 fn as_integer(f: f64) -> Option<i64> {
-    (f.trunc() == f && f.is_finite()).then(|| f as i64)
+    (f.trunc() == f && f.is_finite()).then_some(f as i64)
 }
 
 pub fn is_safe_integer(cx: CallContext) -> Result<Value, Value> {

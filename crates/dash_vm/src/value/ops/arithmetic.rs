@@ -1,4 +1,5 @@
 use crate::localscope::LocalScope;
+use crate::value::object::Object as _;
 use crate::value::{Typeof, Value};
 
 use super::conversions::ValueConversion;

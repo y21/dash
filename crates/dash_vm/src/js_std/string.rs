@@ -5,7 +5,7 @@ use crate::throw;
 use crate::value::array::{Array, ArrayIterator};
 use crate::value::boxed::String as BoxedString;
 use crate::value::function::native::CallContext;
-use crate::value::object::PropertyValue;
+use crate::value::object::{Object, PropertyValue};
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::{Value, ValueContext};
 use std::cmp;
@@ -25,7 +25,15 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn to_string(cx: CallContext) -> Result<Value, Value> {
-    Ok(cx.this)
+    if let Some(value) = cx.this.internal_slots().and_then(|prim| prim.string_value()) {
+        Ok(Value::String(value))
+    } else {
+        throw!(
+            cx.scope,
+            TypeError,
+            "String.prototype.toString called on non-string value"
+        )
+    }
 }
 
 fn create_html(

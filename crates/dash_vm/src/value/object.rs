@@ -16,7 +16,7 @@ use crate::localscope::LocalScope;
 use crate::{throw, Vm};
 
 use super::ops::conversions::ValueConversion;
-use super::primitive::{PrimitiveCapabilities, Symbol};
+use super::primitive::{InternalSlots, Symbol};
 use super::string::JsString;
 use super::{Root, Typeof, Unrooted, Value, ValueContext};
 
@@ -86,7 +86,7 @@ pub trait Object: Debug + Trace {
 
     fn as_any(&self) -> &dyn Any;
 
-    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
+    fn internal_slots(&self) -> Option<&dyn InternalSlots> {
         None
     }
 
@@ -194,9 +194,9 @@ macro_rules! delegate {
             self.$field.type_of()
         }
     };
-    (override $field:ident, as_primitive_capable) => {
-        fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
-            self.$field.as_primitive_capable()
+    (override $field:ident, internal_slots) => {
+        fn internal_slots(&self) -> Option<&dyn InternalSlots> {
+            self.$field.internal_slots()
         }
     };
 
@@ -774,8 +774,8 @@ impl Object for Box<dyn Object> {
         (**self).type_of()
     }
 
-    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
-        (**self).as_primitive_capable()
+    fn internal_slots(&self) -> Option<&dyn InternalSlots> {
+        (**self).internal_slots()
     }
 }
 
@@ -852,8 +852,8 @@ impl Object for Handle {
         unsafe { (self.vtable().js_type_of)(self.erased_value()) }
     }
 
-    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
-        unsafe { (self.vtable().js_as_primitive_capable)(self.erased_value()).map(|v| &*v) }
+    fn internal_slots(&self) -> Option<&dyn InternalSlots> {
+        unsafe { (self.vtable().js_internal_slots)(self.erased_value()).map(|v| &*v) }
     }
 }
 
@@ -890,7 +890,7 @@ impl Persistent {
         (**self).construct(sc, this, args)
     }
 
-    // FIXME: should override typeof, as_primitive_capable, etc.
+    // FIXME: should override typeof, internal_slots, etc.
 }
 
 /// Delegates a get_property call to get_property_descriptor and converts the return value respectively

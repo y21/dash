@@ -7,7 +7,7 @@ use dash_proc_macro::Trace;
 use std::any::Any;
 
 use super::object::{NamedObject, Object};
-use super::primitive::{PrimitiveCapabilities, Symbol as PrimitiveSymbol};
+use super::primitive::{InternalSlots, Symbol as PrimitiveSymbol};
 use super::Value;
 
 macro_rules! boxed_primitive {
@@ -63,7 +63,7 @@ macro_rules! boxed_primitive {
                     self
                 }
 
-                fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
+                fn internal_slots(&self) -> Option<&dyn InternalSlots> {
                     Some(self)
                 }
             }
@@ -104,38 +104,22 @@ boxed_primitive! {
     Symbol symbol_prototype symbol_ctor PrimitiveSymbol
 }
 
-impl PrimitiveCapabilities for Number {
-    fn as_number(&self) -> Option<f64> {
+impl InternalSlots for Number {
+    fn number_value(&self) -> Option<f64> {
         Some(self.inner)
     }
-
-    fn unbox(&self) -> Value {
-        Value::number(self.inner)
-    }
 }
 
-impl PrimitiveCapabilities for Boolean {
-    fn as_bool(&self) -> Option<bool> {
+impl InternalSlots for Boolean {
+    fn boolean_value(&self) -> Option<bool> {
         Some(self.inner)
     }
-
-    fn unbox(&self) -> Value {
-        Value::Boolean(self.inner)
-    }
 }
 
-impl PrimitiveCapabilities for String {
-    fn as_string(&self) -> Option<JsString> {
+impl InternalSlots for String {
+    fn string_value(&self) -> Option<JsString> {
         Some(self.inner)
     }
-
-    fn unbox(&self) -> Value {
-        Value::String(self.inner)
-    }
 }
 
-impl PrimitiveCapabilities for Symbol {
-    fn unbox(&self) -> Value {
-        Value::Symbol(self.inner.clone())
-    }
-}
+impl InternalSlots for Symbol {}

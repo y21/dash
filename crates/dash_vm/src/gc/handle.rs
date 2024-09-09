@@ -8,7 +8,7 @@ use bitflags::bitflags;
 
 use crate::localscope::LocalScope;
 use crate::value::object::{PropertyKey, PropertyValue};
-use crate::value::primitive::PrimitiveCapabilities;
+use crate::value::primitive::InternalSlots;
 use crate::value::{Typeof, Unrooted, Value};
 
 use super::trace::{Trace, TraceCtxt};
@@ -77,7 +77,7 @@ pub struct ObjectVTable {
     pub(crate) js_construct:
         unsafe fn(*const (), &mut LocalScope<'_>, Handle, Value, Vec<Value>) -> Result<Unrooted, Unrooted>,
     pub(crate) js_as_any: unsafe fn(*const ()) -> *const dyn Any,
-    pub(crate) js_as_primitive_capable: unsafe fn(*const ()) -> Option<*const dyn PrimitiveCapabilities>,
+    pub(crate) js_internal_slots: unsafe fn(*const ()) -> Option<*const dyn InternalSlots>,
     pub(crate) js_own_keys: unsafe fn(*const (), sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value>,
     pub(crate) js_type_of: unsafe fn(*const ()) -> Typeof,
 }

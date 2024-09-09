@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
 
 use crate::localscope::LocalScope;
+use crate::value::object::Object as _;
 use crate::value::Value;
 
 use super::conversions::ValueConversion;

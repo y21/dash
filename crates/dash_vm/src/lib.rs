@@ -365,6 +365,7 @@ impl Vm {
             number_ctor.clone(),
             [
                 (sym::toString, scope.statics.number_tostring.clone()),
+                (sym::valueOf, scope.statics.number_valueof.clone()),
                 (sym::toFixed, scope.statics.number_to_fixed.clone()),
             ],
             [],

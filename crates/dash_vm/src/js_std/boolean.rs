@@ -1,7 +1,9 @@
 use crate::gc::interner::sym;
 use crate::throw;
 use crate::value::function::native::CallContext;
+use crate::value::object::Object;
 use crate::value::ops::conversions::ValueConversion;
+use crate::value::primitive::InternalSlots;
 use crate::value::{boxed, Value, ValueContext};
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
@@ -15,18 +17,27 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn to_string(cx: CallContext) -> Result<Value, Value> {
-    if let Value::Boolean(b) = cx.this {
-        let s = b.then(|| sym::true_.into()).unwrap_or_else(|| sym::false_.into());
-
-        Ok(Value::String(s))
+    if let Some(value) = cx.this.internal_slots().and_then(InternalSlots::boolean_value) {
+        Ok(Value::String(
+            value.then(|| sym::true_.into()).unwrap_or_else(|| sym::false_.into()),
+        ))
     } else {
-        todo!()
+        throw!(
+            cx.scope,
+            TypeError,
+            "Boolean.prototype.toString called on non-boolean value"
+        )
     }
 }
 
 pub fn value_of(cx: CallContext) -> Result<Value, Value> {
-    match cx.this {
-        Value::Boolean(b) => Ok(Value::Boolean(b)),
-        _ => throw!(cx.scope, TypeError, "Boolean.valueOf called on non-boolean"),
+    if let Some(value) = cx.this.internal_slots().and_then(InternalSlots::boolean_value) {
+        Ok(Value::Boolean(value))
+    } else {
+        throw!(
+            cx.scope,
+            TypeError,
+            "Boolean.prototype.valueOf called on non-boolean value"
+        )
     }
 }

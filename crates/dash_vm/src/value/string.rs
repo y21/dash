@@ -8,7 +8,7 @@ use crate::value::boxed::String as BoxedString;
 
 use super::object::{Object, PropertyKey, PropertyValue};
 use super::ops::conversions::{PreferredType, ValueConversion};
-use super::primitive::{array_like_keys, PrimitiveCapabilities};
+use super::primitive::{array_like_keys, InternalSlots};
 use super::{Typeof, Unrooted, Value};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Trace)]
@@ -141,17 +141,13 @@ impl Object for JsString {
         Typeof::String
     }
 
-    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
+    fn internal_slots(&self) -> Option<&dyn InternalSlots> {
         Some(self)
     }
 }
 
-impl PrimitiveCapabilities for JsString {
-    fn as_string(&self) -> Option<JsString> {
+impl InternalSlots for JsString {
+    fn string_value(&self) -> Option<JsString> {
         Some(*self)
-    }
-
-    fn unbox(&self) -> Value {
-        Value::String(*self)
     }
 }

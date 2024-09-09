@@ -5,7 +5,7 @@ use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::array::{Array, ArrayIterator};
 use crate::value::function::native::CallContext;
-use crate::value::object::PropertyValue;
+use crate::value::object::{Object as _, PropertyValue};
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::ops::equality::strict_eq;
 use crate::value::root_ext::RootErrExt;

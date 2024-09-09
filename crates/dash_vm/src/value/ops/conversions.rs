@@ -66,15 +66,6 @@ pub trait ValueConversion {
 
 impl ValueConversion for Value {
     fn to_number(&self, sc: &mut LocalScope) -> Result<f64, Value> {
-        fn object_to_number(this: &Value, obj: &dyn Object, sc: &mut LocalScope) -> Result<f64, Value> {
-            if let Some(prim) = obj.as_primitive_capable() {
-                ValueConversion::to_number(prim, sc)
-            } else {
-                let prim = this.to_primitive(sc, Some(PreferredType::Number))?;
-                prim.to_number(sc)
-            }
-        }
-
         match self {
             Value::Number(Number(n)) => Ok(*n),
             Value::Undefined(_) => Ok(f64::NAN),
@@ -85,8 +76,8 @@ impl ValueConversion for Value {
                 _ => Ok(s.res(sc).parse::<f64>().unwrap_or(f64::NAN)),
             },
             Value::Symbol(_) => throw!(sc, TypeError, "Cannot convert symbol to number"),
-            Value::Object(o) => object_to_number(self, o, sc),
-            Value::External(o) => object_to_number(self, &o.inner, sc),
+            Value::Object(_) => self.to_primitive(sc, Some(PreferredType::Number))?.to_number(sc),
+            Value::External(_) => unreachable!(),
         }
     }
 
@@ -99,53 +90,39 @@ impl ValueConversion for Value {
             Value::String(s) => Ok(!s.res(sc).is_empty()),
             Value::Symbol(_) => Ok(true),
             Value::Object(_) => Ok(true),
-            _ => todo!(), // TODO: implement other cases
+            Value::External(_) => unreachable!(),
         }
     }
 
     fn to_js_string(&self, sc: &mut LocalScope) -> Result<JsString, Value> {
-        fn object_to_string(this: &Value, obj: &dyn Object, sc: &mut LocalScope) -> Result<JsString, Value> {
-            if let Some(prim) = obj.as_primitive_capable() {
-                ValueConversion::to_js_string(prim, sc)
-            } else {
-                let prim_value = this.to_primitive(sc, Some(PreferredType::String))?;
-                prim_value.to_js_string(sc)
-            }
-        }
-
         match self {
             Value::String(s) => ValueConversion::to_js_string(s, sc),
             Value::Boolean(b) => ValueConversion::to_js_string(b, sc),
             Value::Null(n) => ValueConversion::to_js_string(n, sc),
             Value::Undefined(u) => ValueConversion::to_js_string(u, sc),
             Value::Number(n) => ValueConversion::to_js_string(n, sc),
-            Value::Object(o) => object_to_string(self, o, sc),
-            Value::External(o) => object_to_string(self, &o.inner, sc),
+            Value::Object(_) => self.to_primitive(sc, Some(PreferredType::String))?.to_js_string(sc),
             Value::Symbol(_) => throw!(sc, TypeError, "Cannot convert symbol to a string"),
+            Value::External(_) => unreachable!(),
         }
     }
 
     fn to_primitive(&self, sc: &mut LocalScope, preferred_type: Option<PreferredType>) -> Result<Value, Value> {
         // 1. If Type(input) is Object, then
-        let obj = match self {
-            Value::Object(o) => o,
-            Value::External(o) => &o.inner,
-            _ => return Ok(self.clone()),
-        };
-
-        if let Some(prim) = obj.as_primitive_capable() {
-            return prim.to_primitive(sc, preferred_type);
+        // (If not, return as is)
+        if !matches!(self, Value::Object(_)) {
+            return Ok(self.clone());
         }
 
         // a. Let exoticToPrim be ? GetMethod(input, @@toPrimitive).
         let to_primitive = sc.statics.symbol_to_primitive.clone();
         let exotic_to_prim = self.get_property(sc, to_primitive.into()).root(sc)?.into_option();
 
-        // i. If preferredType is not present, let hint be "default".
-        let preferred_type = preferred_type.unwrap_or(PreferredType::Default);
-
         // b. If exoticToPrim is not undefined, then
         if let Some(exotic_to_prim) = exotic_to_prim {
+            // i. If preferredType is not present, let hint be "default".
+            let preferred_type = preferred_type.unwrap_or(PreferredType::Default);
+
             let preferred_type = preferred_type.to_value();
 
             // iv. Let result be ? Call(exoticToPrim, input, « hint »).
@@ -161,6 +138,9 @@ impl ValueConversion for Value {
             // vi. Throw a TypeError exception.
             throw!(sc, TypeError, "Failed to convert to primitive");
         }
+
+        // i. If preferredType is not present, let hint be "default".
+        let preferred_type = preferred_type.unwrap_or(PreferredType::Number);
 
         self.ordinary_to_primitive(sc, preferred_type)
     }
@@ -186,7 +166,7 @@ impl ValueConversion for Value {
             Value::Symbol(s) => register_dyn(sc, |sc| BoxedSymbol::new(sc, s.clone())),
             Value::Number(Number(n)) => register_dyn(sc, |sc| BoxedNumber::new(sc, *n)),
             Value::String(s) => register_dyn(sc, |sc| BoxedString::new(sc, *s)),
-            Value::External(e) => Ok(e.inner.clone()), // TODO: is this correct?
+            Value::External(_) => unreachable!(),
         }
     }
 }

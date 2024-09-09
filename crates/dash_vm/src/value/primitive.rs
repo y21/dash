@@ -70,7 +70,7 @@ impl Object for f64 {
         Typeof::Number
     }
 
-    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
+    fn internal_slots(&self) -> Option<&dyn InternalSlots> {
         Some(self)
     }
 }
@@ -122,68 +122,10 @@ impl Object for bool {
         Typeof::Boolean
     }
 
-    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
+    fn internal_slots(&self) -> Option<&dyn InternalSlots> {
         Some(self)
     }
 }
-
-// // TODO: impl<T: Deref<Target=O>, O: Object> Object for T  possible?
-// impl Object for Rc<str> {
-//     fn get_own_property_descriptor(
-//         &self,
-//         sc: &mut LocalScope,
-//         key: PropertyKey,
-//     ) -> Result<Option<PropertyValue>, Unrooted> {
-//         str::get_own_property_descriptor(self, sc, key.clone())
-//     }
-
-//     fn set_property(
-//         &self,
-//         _sc: &mut LocalScope,
-//         _key: PropertyKey<'static>,
-//         _value: PropertyValue,
-//     ) -> Result<(), Value> {
-//         Ok(())
-//     }
-
-//     fn delete_property(&self, _sc: &mut LocalScope, _key: PropertyKey) -> Result<Unrooted, Value> {
-//         Ok(Unrooted::new(Value::undefined()))
-//     }
-
-//     fn set_prototype(&self, _sc: &mut LocalScope, _value: Value) -> Result<(), Value> {
-//         Ok(())
-//     }
-
-//     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
-//         Ok(sc.statics.string_prototype.clone().into())
-//     }
-
-//     fn apply(
-//         &self,
-//         scope: &mut LocalScope,
-//         _callee: Handle,
-//         _this: Value,
-//         _args: Vec<Value>,
-//     ) -> Result<Unrooted, Unrooted> {
-//         throw!(scope, TypeError, "string is not a function")
-//     }
-
-//     fn as_any(&self) -> &dyn Any {
-//         self
-//     }
-
-//     fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
-//         str::own_keys(self, sc)
-//     }
-
-//     fn type_of(&self) -> Typeof {
-//         str::type_of(self)
-//     }
-
-//     fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
-//         Some(self)
-//     }
-// }
 
 pub fn array_like_keys<'a, 'b>(
     sc: &'a mut LocalScope<'b>,
@@ -251,10 +193,6 @@ impl Object for Undefined {
     fn type_of(&self) -> Typeof {
         Typeof::Undefined
     }
-
-    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
-        Some(self)
-    }
 }
 
 impl Object for Null {
@@ -302,10 +240,6 @@ impl Object for Null {
 
     fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         Ok(Vec::new())
-    }
-
-    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
-        Some(self)
     }
 }
 
@@ -434,37 +368,30 @@ impl Object for Symbol {
         Typeof::Symbol
     }
 
-    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
+    fn internal_slots(&self) -> Option<&dyn InternalSlots> {
         Some(self)
     }
 }
 
-pub trait PrimitiveCapabilities: ValueConversion + std::fmt::Debug {
-    fn as_string(&self) -> Option<JsString> {
+impl InternalSlots for Symbol {}
+
+pub trait InternalSlots {
+    // TODO: rename as_number to number_value?
+    fn string_value(&self) -> Option<JsString> {
         None
     }
-    fn as_number(&self) -> Option<f64> {
+    fn number_value(&self) -> Option<f64> {
         None
     }
-    fn as_bool(&self) -> Option<bool> {
+    fn boolean_value(&self) -> Option<bool> {
         None
     }
-    fn is_undefined(&self) -> bool {
-        false
-    }
-    fn is_null(&self) -> bool {
-        false
-    }
-    fn unbox(&self) -> Value;
 }
 
-impl PrimitiveCapabilities for f64 {
-    fn as_number(&self) -> Option<f64> {
+// TODO: do we even need this given that we have it for the Number wrapper? same for Rc<str> str etc
+impl InternalSlots for f64 {
+    fn number_value(&self) -> Option<f64> {
         Some(*self)
-    }
-
-    fn unbox(&self) -> Value {
-        Value::number(*self)
     }
 }
 
@@ -495,13 +422,9 @@ impl ValueConversion for f64 {
     }
 }
 
-impl PrimitiveCapabilities for bool {
-    fn as_bool(&self) -> Option<bool> {
+impl InternalSlots for bool {
+    fn boolean_value(&self) -> Option<bool> {
         Some(*self)
-    }
-
-    fn unbox(&self) -> Value {
-        Value::Boolean(*self)
     }
 }
 
@@ -532,16 +455,6 @@ impl ValueConversion for bool {
     }
 }
 
-impl PrimitiveCapabilities for Undefined {
-    fn is_undefined(&self) -> bool {
-        true
-    }
-
-    fn unbox(&self) -> Value {
-        Value::undefined()
-    }
-}
-
 impl ValueConversion for Undefined {
     fn to_primitive(&self, _sc: &mut LocalScope, _preferred_type: Option<PreferredType>) -> Result<Value, Value> {
         Ok(Value::undefined())
@@ -568,16 +481,6 @@ impl ValueConversion for Undefined {
     }
 }
 
-impl PrimitiveCapabilities for Null {
-    fn is_null(&self) -> bool {
-        true
-    }
-
-    fn unbox(&self) -> Value {
-        Value::null()
-    }
-}
-
 impl ValueConversion for Null {
     fn to_primitive(&self, _sc: &mut LocalScope, _preferred_type: Option<PreferredType>) -> Result<Value, Value> {
         Ok(Value::null())
@@ -601,12 +504,6 @@ impl ValueConversion for Null {
 
     fn to_object(&self, sc: &mut LocalScope) -> Result<Handle, Value> {
         throw!(sc, TypeError, "Cannot convert null to object");
-    }
-}
-
-impl PrimitiveCapabilities for Symbol {
-    fn unbox(&self) -> Value {
-        Value::Symbol(self.clone())
     }
 }
 
@@ -711,17 +608,14 @@ impl Object for Number {
         self.0.type_of()
     }
 
-    fn as_primitive_capable(&self) -> Option<&dyn PrimitiveCapabilities> {
+    fn internal_slots(&self) -> Option<&dyn InternalSlots> {
         Some(self)
     }
 }
-impl PrimitiveCapabilities for Number {
-    fn as_number(&self) -> Option<f64> {
-        Some(self.0)
-    }
 
-    fn unbox(&self) -> Value {
-        Value::Number(*self)
+impl InternalSlots for Number {
+    fn number_value(&self) -> Option<f64> {
+        Some(self.0)
     }
 }
 

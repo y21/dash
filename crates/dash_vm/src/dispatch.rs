@@ -1226,12 +1226,7 @@ mod handlers {
         let offset = cx.fetchw_and_inc_ip() as i16;
         let value = cx.pop_stack_rooted();
 
-        let jump = match value {
-            Value::Undefined(..) => true,
-            Value::Object(obj) => obj.as_primitive_capable().map(|p| p.is_undefined()).unwrap_or_default(),
-            Value::External(obj) => obj.as_primitive_capable().map(|p| p.is_undefined()).unwrap_or_default(),
-            _ => false,
-        };
+        let jump = matches!(value, Value::Undefined(_));
 
         #[cfg(feature = "jit")]
         cx.record_conditional_jump(ip, jump);
@@ -1255,12 +1250,7 @@ mod handlers {
         let offset = cx.fetchw_and_inc_ip() as i16;
         let value = cx.peek_stack();
 
-        let jump = match value {
-            Value::Undefined(..) => true,
-            Value::Object(obj) => obj.as_primitive_capable().map(|p| p.is_undefined()).unwrap_or_default(),
-            Value::External(obj) => obj.as_primitive_capable().map(|p| p.is_undefined()).unwrap_or_default(),
-            _ => false,
-        };
+        let jump = matches!(value, Value::Null(_));
 
         #[cfg(feature = "jit")]
         cx.record_conditional_jump(ip, jump);
