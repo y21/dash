@@ -393,7 +393,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 let token = self.next()?;
                 if !matches!(token.ty, TokenType::Dot) {
                     let token = *token;
-                    self.create_error(Error::IncompleteSpread(token));
+                    self.error(Error::IncompleteSpread(token));
                     return None;
                 }
             }
@@ -513,7 +513,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                                 let token = self.next()?;
                                 if !matches!(token.ty, TokenType::Dot) {
                                     let token = *token;
-                                    self.create_error(Error::IncompleteSpread(token));
+                                    self.error(Error::IncompleteSpread(token));
                                     return None;
                                 }
                             }
@@ -523,7 +523,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                             if let Some(ident) = other.as_property_name() {
                                 ObjectMemberKind::Static(ident)
                             } else {
-                                self.create_error(Error::unexpected_token(token, TokenType::DUMMY_IDENTIFIER));
+                                self.error(Error::unexpected_token(token, TokenType::DUMMY_IDENTIFIER));
                                 return None;
                             }
                         }
@@ -569,7 +569,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                                         },
                                     )),
                                     ObjectMemberKind::Dynamic(..) => {
-                                        self.create_error(Error::unexpected_token(token, TokenType::Colon));
+                                        self.error(Error::unexpected_token(token, TokenType::Colon));
                                         return None;
                                     }
                                     _ => unreachable!(),
@@ -584,7 +584,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                             match key {
                                 ObjectMemberKind::Setter(..) => {
                                     if params.len() != 1 {
-                                        self.create_error(Error::InvalidAccessorParams {
+                                        self.error(Error::InvalidAccessorParams {
                                             token,
                                             expect: 1,
                                             got: params.len(),
@@ -594,7 +594,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                                 }
                                 ObjectMemberKind::Getter(..) => {
                                     if !params.is_empty() {
-                                        self.create_error(Error::InvalidAccessorParams {
+                                        self.error(Error::InvalidAccessorParams {
                                             token,
                                             expect: 0,
                                             got: params.len(),
@@ -685,7 +685,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
                 // If it's not an arrow function, then it is a group
                 if let Some((sym, span)) = rest_binding {
-                    self.create_error(Error::UnknownToken(Token {
+                    self.error(Error::UnknownToken(Token {
                         span,
                         ty: TokenType::Identifier(sym),
                     }));
@@ -758,7 +758,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                     Ok((nodes, flags)) => (nodes, flags),
                     Err(err) => {
                         let tok = *self.previous().unwrap();
-                        self.create_error(Error::RegexSyntaxError(tok, err));
+                        self.error(Error::RegexSyntaxError(tok, err));
                         return None;
                     }
                 };
@@ -782,7 +782,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             }
             _ => {
                 let cur = self.previous().cloned()?;
-                self.create_error(Error::UnknownToken(cur));
+                self.error(Error::UnknownToken(cur));
                 return None;
             }
         };
@@ -796,7 +796,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         let ty = if is_generator {
             if is_async {
                 let star_span = self.previous().unwrap().span;
-                self.create_error(Error::Unimplemented(star_span, "async generator".into()));
+                self.error(Error::Unimplemented(star_span, "async generator".into()));
                 return None;
             }
 
@@ -872,7 +872,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                     ..
                 }) => (left.kind.as_identifier()?, Some(*right)),
                 _ => {
-                    self.create_error(Error::Unimplemented(
+                    self.error(Error::Unimplemented(
                         expr.span,
                         "only assignment and identifier expressions are supported as in closure parameter recovery"
                             .into(),

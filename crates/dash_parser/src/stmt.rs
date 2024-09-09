@@ -188,7 +188,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 _ = self.eat(TokenType::Semicolon, false);
                 // Error on `get v = 3`
                 if let Kind::Getter(span) | Kind::Setter(span) = property_kind {
-                    self.create_error(Error::Unexpected(span, "getter or setter as field"));
+                    self.error(Error::Unexpected(span, "getter or setter as field"));
                     return None;
                 }
 
@@ -524,7 +524,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                     Parameter::Identifier(self.create_binding(other.as_identifier().unwrap()))
                 }
                 _ => {
-                    self.create_error(Error::unexpected_token(tok, TokenType::Comma));
+                    self.error(Error::unexpected_token(tok, TokenType::Comma));
                     return None;
                 }
             };
@@ -589,14 +589,14 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                         if let Some(sym) = name.ty.as_identifier() {
                             if rest.is_some() {
                                 // Only allow one rest operator
-                                self.create_error(Error::MultipleRestInDestructuring(name));
+                                self.error(Error::MultipleRestInDestructuring(name));
                                 return None;
                             }
 
                             rest = Some(self.create_binding(sym));
                             self.advance();
                         } else {
-                            self.create_error(Error::unexpected_token(name, TokenType::DUMMY_IDENTIFIER));
+                            self.error(Error::unexpected_token(name, TokenType::DUMMY_IDENTIFIER));
                             return None;
                         }
                     }
@@ -610,7 +610,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                                 self.advance();
                                 Some(alias)
                             } else {
-                                self.create_error(Error::unexpected_token(alias, TokenType::DUMMY_IDENTIFIER));
+                                self.error(Error::unexpected_token(alias, TokenType::DUMMY_IDENTIFIER));
                                 return None;
                             }
                         } else {
@@ -619,7 +619,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                         fields.push((self.local_count.inc(), name, alias));
                     }
                     _ => {
-                        self.create_error(Error::unexpected_token(cur, TokenType::DUMMY_IDENTIFIER));
+                        self.error(Error::unexpected_token(cur, TokenType::DUMMY_IDENTIFIER));
                         return None;
                     }
                 }
@@ -658,14 +658,14 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                         if let Some(sym) = name.ty.as_identifier() {
                             if rest.is_some() {
                                 // Only allow one rest operator
-                                self.create_error(Error::MultipleRestInDestructuring(name));
+                                self.error(Error::MultipleRestInDestructuring(name));
                                 return None;
                             }
 
                             rest = Some(self.create_binding(sym));
                             self.advance();
                         } else {
-                            self.create_error(Error::unexpected_token(name, TokenType::DUMMY_IDENTIFIER));
+                            self.error(Error::unexpected_token(name, TokenType::DUMMY_IDENTIFIER));
                             return None;
                         }
                     }
@@ -675,7 +675,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                         fields.push(Some(self.create_binding(name)));
                     }
                     _ => {
-                        self.create_error(Error::unexpected_token(cur, TokenType::DUMMY_IDENTIFIER));
+                        self.error(Error::unexpected_token(cur, TokenType::DUMMY_IDENTIFIER));
                         return None;
                     }
                 }
@@ -736,7 +736,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                     self.eat(TokenType::Colon, true)?;
 
                     let mut body = Vec::new();
-                    while !self.expect(&[TokenType::Case, TokenType::Default, TokenType::RightBrace]) {
+                    while !self.matches(any(&[TokenType::Case, TokenType::Default, TokenType::RightBrace])) {
                         body.push(self.parse_statement()?);
                     }
 
@@ -746,17 +746,17 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                     self.eat(TokenType::Colon, true)?;
 
                     let mut body = Vec::new();
-                    while !self.expect(&[TokenType::Case, TokenType::Default, TokenType::RightBrace]) {
+                    while !self.matches(any(&[TokenType::Case, TokenType::Default, TokenType::RightBrace])) {
                         body.push(self.parse_statement()?);
                     }
 
                     if default.replace(body).is_some() {
-                        self.create_error(Error::MultipleDefaultInSwitch(cur.span));
+                        self.error(Error::MultipleDefaultInSwitch(cur.span));
                         return None;
                     }
                 }
                 _ => {
-                    self.create_error(Error::unexpected_token(
+                    self.error(Error::unexpected_token(
                         cur,
                         &[TokenType::Case, TokenType::Default] as &[_],
                     ));

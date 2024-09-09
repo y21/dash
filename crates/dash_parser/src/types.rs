@@ -75,7 +75,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             TokenType::Identifier(cur) => TypeSegment::Literal(LiteralType::Identifier(cur)),
             _ => {
                 let cur = self.previous().cloned()?;
-                self.create_error(Error::UnknownToken(cur));
+                self.error(Error::UnknownToken(cur));
                 return None;
             }
         };

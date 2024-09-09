@@ -101,7 +101,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 kind: ExprKind::number_literal(f),
             }),
             Err(e) => {
-                self.create_error(Error::ParseIntError(self.previous().cloned()?, e));
+                self.error(Error::ParseIntError(self.previous().cloned()?, e));
                 None
             }
         }
@@ -111,11 +111,8 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         self.idx >= self.tokens.len()
     }
 
-    fn expect(&self, expected_ty: &'static [TokenType]) -> bool {
-        match self.current() {
-            Some(Token { ty, .. }) => expected_ty.contains(ty),
-            _ => false,
-        }
+    fn matches(&self, mut m: impl Matcher) -> bool {
+        self.current().is_some_and(|&token| m.matches(token).is_some())
     }
 
     fn expect_previous(&mut self, ty: &'static [TokenType], emit_error: bool) -> bool {
@@ -123,7 +120,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             Some(k) => k,
             None => {
                 if emit_error {
-                    self.create_error(Error::UnexpectedEof);
+                    self.error(Error::UnexpectedEof);
                 }
                 return false;
             }
@@ -133,13 +130,13 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
         if !ok && emit_error {
             let current = *current;
-            self.create_error(Error::unexpected_token(current, ty));
+            self.error(Error::unexpected_token(current, ty));
         }
 
         ok
     }
 
-    fn create_error(&mut self, err: Error) {
+    fn error(&mut self, err: Error) {
         debug!("got error {:?}, recovering", err);
         if !self.error_sync {
             self.errors.push(err);
@@ -247,7 +244,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             Some(k) => *k,
             None => {
                 if emit_error {
-                    self.create_error(Error::UnexpectedEof);
+                    self.error(Error::UnexpectedEof);
                 }
                 return None;
             }
@@ -258,8 +255,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         if res.is_some() {
             self.advance();
         } else if emit_error {
-            let expected_tys = matcher.suggestion();
-            self.create_error(Error::UnexpectedToken(current, expected_tys));
+            self.error(Error::UnexpectedToken(current, matcher.suggestion()));
         }
 
         res
