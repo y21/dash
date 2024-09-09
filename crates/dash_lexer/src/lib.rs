@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::ops::Range;
 
 use dash_middle::interner::{sym, StringInterner, Symbol};
-use dash_middle::lexer::token::{as_token, Token, TokenType};
+use dash_middle::lexer::token::{as_token, Token, TokenType, EXPR_PRECEDED_TOKENS};
 use dash_middle::parser::error::Error;
 use dash_middle::sourcemap::Span;
 use dash_middle::util;
@@ -11,35 +11,14 @@ use dash_middle::util;
 #[derive(Debug)]
 pub struct Lexer<'a, 'interner> {
     input: &'a str,
-
     tokens: Vec<Token>,
     errors: Vec<Error>,
-
     interner: &'interner mut StringInterner,
-
     idx: usize,
     line: usize,
     start: usize,
     line_idx: usize,
     template_literal_depths_stack: Vec<usize>,
-}
-
-/// Represents a comment
-#[derive(Debug)]
-pub enum CommentKind {
-    /// A multiline comment: /* */
-    Multiline,
-    /// A singleline comment: //
-    Singleline,
-}
-
-/// A lexer node (either a token or an error)
-#[derive(Debug)]
-pub enum Node {
-    /// A valid token
-    Token(Token),
-    /// An error
-    Error(Error),
 }
 
 impl<'a, 'interner> Lexer<'a, 'interner> {
@@ -100,7 +79,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
     }
 
     /// Creates a token based on the current location
-    fn create_contextified_token(&mut self, ty: TokenType) {
+    fn token(&mut self, ty: TokenType) {
         let tok = Token { ty, span: self.span() };
         self.tokens.push(tok);
     }
@@ -109,58 +88,34 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
     ///
     /// A token may be multiple bytes wide, in which case this function can be used.
     /// This function can be seen as a helper function to create a token based on the next bytes.
-    fn create_contextified_conditional_token(&mut self, default: TokenType, tokens: &[(&str, TokenType)]) {
+    fn conditional_token(&mut self, default: TokenType, tokens: &[(&str, TokenType)]) {
         for (expect, token) in tokens {
             let from = self.idx;
-            let slice = self.safe_subslice(from, from + expect.len());
+            let slice = self.input.get(from..from + expect.len());
 
-            if slice.eq(*expect) {
-                self.create_contextified_token(*token);
+            if slice == Some(*expect) {
+                self.token(*token);
                 self.idx += expect.len();
                 return;
             }
         }
 
-        self.create_contextified_token(default);
+        self.token(default);
     }
 
     /// Creates a new error token
-    fn create_error(&mut self, err: Error) {
+    fn error(&mut self, err: Error) {
         self.errors.push(err);
     }
 
-    // /// Creates a token based on the current location and a given lexeme
-    // fn create_contextified_token_with_lexeme(&mut self, ty: TokenType, lexeme: Cow<'a, str>) {
-    //     // TODO: can we get rid of the lexeme cow parameter and replace with a span?
-    //     let tok = Token {
-    //         ty,
-    //         span: match lexeme {
-    //             Cow::Borrowed(lexeme) => Span {
-    //                 lo: (lexeme.as_ptr() as usize - self.input.as_ptr() as usize) as u32,
-    //                 hi: (lexeme.as_ptr() as usize - self.input.as_ptr() as usize + lexeme.len()) as u32,
-    //             },
-    //             // TODO: handle Cow::Owned case properly
-    //             Cow::Owned(_) => self.span(),
-    //         },
-    //     };
-    //     self.tokens.push(tok);
-    // }
-
     /// Returns the current lexeme
-    fn get_lexeme(&self) -> &'a str {
+    fn current_lexeme(&self) -> &'a str {
         &self.input[self.start..self.idx]
     }
 
     /// Slices into the source string
     fn subslice(&self, r: Range<usize>) -> &'a str {
         &self.input[r]
-    }
-
-    /// Slices into the source string, but makes sure no panic occurs
-    fn safe_subslice(&self, from: usize, to: usize) -> &'a str {
-        let from = from.max(0);
-        let to = to.min(self.input.len());
-        &self.input[from..to]
     }
 
     /// Advances the cursor
@@ -180,12 +135,11 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
             None => return false,
         };
 
-        if !cur.eq(&expected) {
+        if cur != expected {
             return false;
         }
 
         self.advance();
-
         true
     }
 
@@ -230,11 +184,11 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
         };
 
         if !found_quote && self.is_eof() {
-            return self.create_error(Error::UnexpectedEof);
+            return self.error(Error::UnexpectedEof);
         }
 
         let sym = self.interner.intern(lexeme);
-        self.create_contextified_token(TokenType::String(sym));
+        self.token(TokenType::String(sym));
     }
 
     /// Reads a prefixed number literal (0x, 0b, 0o)
@@ -255,8 +209,8 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
             }
         }
 
-        let sym = self.interner.intern(self.get_lexeme());
-        self.create_contextified_token(ty_ctor(sym));
+        let sym = self.interner.intern(self.current_lexeme());
+        self.token(ty_ctor(sym));
     }
 
     /// Reads a number literal
@@ -272,7 +226,6 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
                     if is_float {
                         break;
                     }
-
                     is_float = true;
                 }
                 b'e' => {
@@ -296,8 +249,8 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
 
             self.advance();
         }
-        let sym = self.interner.intern(self.get_lexeme());
-        self.create_contextified_token(TokenType::NumberDec(sym))
+        let sym = self.interner.intern(self.current_lexeme());
+        self.token(TokenType::NumberDec(sym))
     }
 
     fn read_escape_character(&mut self, lexeme_starting_idx: &mut usize, lexeme: &mut Option<Cow<'a, str>>) {
@@ -336,11 +289,11 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
                         self.advance_n(2);
                     }
                     Some(Err(_)) => {
-                        self.create_error(Error::InvalidEscapeSequence(self.span()));
+                        self.error(Error::InvalidEscapeSequence(self.span()));
                         return;
                     }
                     None => {
-                        self.create_error(Error::UnexpectedEof);
+                        self.error(Error::UnexpectedEof);
                         return;
                     }
                 };
@@ -348,12 +301,12 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
             b'u' => {
                 self.advance();
                 let Some(hex) = self.input.get(self.idx..self.idx + 4) else {
-                    self.create_error(Error::UnexpectedEof);
+                    self.error(Error::UnexpectedEof);
                     return;
                 };
 
                 let Some(escaped) = u32::from_str_radix(hex, 16).ok().and_then(char::from_u32) else {
-                    self.create_error(Error::InvalidEscapeSequence(self.span()));
+                    self.error(Error::InvalidEscapeSequence(self.span()));
                     return;
                 };
 
@@ -414,7 +367,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
         }
 
         if !found_end && self.is_eof() {
-            return self.create_error(Error::UnexpectedEof);
+            return self.error(Error::UnexpectedEof);
         }
 
         let end = match is_interpolated {
@@ -432,7 +385,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
         };
 
         let sym = self.interner.intern(lexeme);
-        self.create_contextified_token(TokenType::TemplateLiteral(sym)); // TODO: check if the spans created by this call are right!!
+        self.token(TokenType::TemplateLiteral(sym)); // TODO: check if the spans created by this call are right!!
     }
 
     /// Assumes one character has already been read.
@@ -455,7 +408,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
     /// Reads an identifier and returns it as a node
     fn read_identifier(&mut self) {
         let sym = self.read_identifier_raw();
-        self.create_contextified_token(as_token(sym));
+        self.token(as_token(sym));
     }
 
     /// Reads a regex literal, assuming the current cursor is one byte ahead of the `/`
@@ -472,7 +425,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
             }
         }
 
-        let regex_sym = self.interner.intern(self.get_lexeme());
+        let regex_sym = self.interner.intern(self.current_lexeme());
 
         let flags = if self.current().is_some_and(util::is_alpha) {
             self.advance(); // identifier reading requires one character to be read
@@ -481,7 +434,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
             sym::empty
         };
 
-        self.create_contextified_token(TokenType::RegexLiteral {
+        self.token(TokenType::RegexLiteral {
             literal: regex_sym,
             flags,
         });
@@ -512,20 +465,20 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
                 if util::is_alpha(self.current()?) {
                     self.read_identifier();
                 } else {
-                    self.create_contextified_token(TokenType::Dollar);
+                    self.token(TokenType::Dollar);
                 }
             }
-            b'(' => self.create_contextified_token(TokenType::LeftParen),
-            b')' => self.create_contextified_token(TokenType::RightParen),
+            b'(' => self.token(TokenType::LeftParen),
+            b')' => self.token(TokenType::RightParen),
             b'{' => {
                 if let Some(depth) = self.template_literal_depths_stack.last_mut() {
                     *depth += 1;
                 }
 
-                self.create_contextified_token(TokenType::LeftBrace)
+                self.token(TokenType::LeftBrace)
             }
             b'}' => {
-                self.create_contextified_token(TokenType::RightBrace);
+                self.token(TokenType::RightBrace);
 
                 if let Some(depth) = self.template_literal_depths_stack.last_mut() {
                     *depth -= 1;
@@ -534,24 +487,20 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
                         self.read_template_literal_segment();
                     }
                 }
-                // if self.template_literal_depth > 0 {
-                //     self.template_literal_depth -= 1;
-                //     self.read_template_literal_segment();
-                // }
             }
-            b'[' => self.create_contextified_token(TokenType::LeftSquareBrace),
-            b']' => self.create_contextified_token(TokenType::RightSquareBrace),
-            b',' => self.create_contextified_token(TokenType::Comma),
-            b'.' => self.create_contextified_token(TokenType::Dot),
-            b'-' => self.create_contextified_conditional_token(
+            b'[' => self.token(TokenType::LeftSquareBrace),
+            b']' => self.token(TokenType::RightSquareBrace),
+            b',' => self.token(TokenType::Comma),
+            b'.' => self.token(TokenType::Dot),
+            b'-' => self.conditional_token(
                 TokenType::Minus,
                 &[("-", TokenType::Decrement), ("=", TokenType::SubtractionAssignment)],
             ),
-            b'+' => self.create_contextified_conditional_token(
+            b'+' => self.conditional_token(
                 TokenType::Plus,
                 &[("+", TokenType::Increment), ("=", TokenType::AdditionAssignment)],
             ),
-            b'*' => self.create_contextified_conditional_token(
+            b'*' => self.conditional_token(
                 TokenType::Star,
                 &[
                     ("*=", TokenType::ExponentiationAssignment),
@@ -559,7 +508,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
                     ("=", TokenType::MultiplicationAssignment),
                 ],
             ),
-            b'|' => self.create_contextified_conditional_token(
+            b'|' => self.conditional_token(
                 TokenType::BitwiseOr,
                 &[
                     ("|=", TokenType::LogicalOrAssignment),
@@ -567,11 +516,8 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
                     ("|", TokenType::LogicalOr),
                 ],
             ),
-            b'^' => self.create_contextified_conditional_token(
-                TokenType::BitwiseXor,
-                &[("=", TokenType::BitwiseXorAssignment)],
-            ),
-            b'&' => self.create_contextified_conditional_token(
+            b'^' => self.conditional_token(TokenType::BitwiseXor, &[("=", TokenType::BitwiseXorAssignment)]),
+            b'&' => self.conditional_token(
                 TokenType::BitwiseAnd,
                 &[
                     ("&=", TokenType::LogicalAndAssignment),
@@ -579,7 +525,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
                     ("&", TokenType::LogicalAnd),
                 ],
             ),
-            b'>' => self.create_contextified_conditional_token(
+            b'>' => self.conditional_token(
                 TokenType::Greater,
                 &[
                     (">>=", TokenType::UnsignedRightShiftAssignment),
@@ -589,7 +535,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
                     (">", TokenType::RightShift),
                 ],
             ),
-            b'<' => self.create_contextified_conditional_token(
+            b'<' => self.conditional_token(
                 TokenType::Less,
                 &[
                     ("<=", TokenType::LeftShiftAssignment),
@@ -597,9 +543,8 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
                     ("<", TokenType::LeftShift),
                 ],
             ),
-            b'%' => self
-                .create_contextified_conditional_token(TokenType::Remainder, &[("=", TokenType::RemainderAssignment)]),
-            b'/' => {
+            b'%' => self.conditional_token(TokenType::Remainder, &[("=", TokenType::RemainderAssignment)]),
+            b'/' => match self.tokens.last() {
                 // '/' is very ambiguous, probably the most ambiguous character in the grammar
                 // Comments (both single line and multi line) have already been checked for,
                 // so the only ambiguity left is the division operator and the start of a regex literal.
@@ -619,85 +564,16 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
                 // `{}   /a/g` : /a/ IS a regex literal
                 // The previous token is the same in both cases `}`, but is parsed differently depending on whether
                 // `}` ends a code block or an object literal.
-
-                const PRECEDING_TOKENS: &[TokenType] = &[
-                    // Symbols
-                    TokenType::Dot,
-                    TokenType::LeftParen,
-                    TokenType::LeftBrace,
-                    TokenType::LeftSquareBrace,
-                    TokenType::Semicolon,
-                    TokenType::Comma,
-                    TokenType::Less,
-                    TokenType::Greater,
-                    TokenType::LessEqual,
-                    TokenType::GreaterEqual,
-                    TokenType::Equality,
-                    TokenType::Inequality,
-                    TokenType::StrictEquality,
-                    TokenType::StrictInequality,
-                    TokenType::Plus,
-                    TokenType::Minus,
-                    TokenType::Star,
-                    TokenType::Remainder,
-                    TokenType::Increment,
-                    TokenType::Decrement,
-                    TokenType::LeftShift,
-                    TokenType::RightShift,
-                    TokenType::UnsignedRightShift,
-                    TokenType::BitwiseAnd,
-                    TokenType::BitwiseOr,
-                    TokenType::BitwiseXor,
-                    TokenType::LogicalNot,
-                    TokenType::BitwiseNot,
-                    TokenType::LogicalAnd,
-                    TokenType::LogicalOr,
-                    TokenType::Conditional,
-                    TokenType::Colon,
-                    TokenType::Assignment,
-                    TokenType::AdditionAssignment,
-                    TokenType::SubtractionAssignment,
-                    TokenType::MultiplicationAssignment,
-                    TokenType::RemainderAssignment,
-                    TokenType::LeftShiftAssignment,
-                    TokenType::RightShiftAssignment,
-                    TokenType::UnsignedRightShiftAssignment,
-                    TokenType::BitwiseAndAssignment,
-                    TokenType::BitwiseOrAssignment,
-                    TokenType::BitwiseXorAssignment,
-                    TokenType::Slash,
-                    TokenType::DivisionAssignment,
-                    // Keywords
-                    TokenType::New,
-                    TokenType::Delete,
-                    TokenType::Void,
-                    TokenType::Typeof,
-                    TokenType::Instanceof,
-                    TokenType::In,
-                    // TokenType::Do,
-                    TokenType::Return,
-                    TokenType::Case,
-                    TokenType::Throw,
-                    TokenType::Else,
-                    TokenType::Await,
-                    TokenType::Yield,
-                ];
-
-                match self.tokens.last() {
-                    Some(token) if PRECEDING_TOKENS.contains(&token.ty) => self.read_regex_literal(),
-                    None => self.read_regex_literal(),
-                    _ => self.create_contextified_conditional_token(
-                        TokenType::Slash,
-                        &[("=", TokenType::DivisionAssignment)],
-                    ),
-                }
-            }
-            b'!' => self.create_contextified_conditional_token(
+                Some(token) if EXPR_PRECEDED_TOKENS.contains(&token.ty) => self.read_regex_literal(),
+                None => self.read_regex_literal(),
+                _ => self.conditional_token(TokenType::Slash, &[("=", TokenType::DivisionAssignment)]),
+            },
+            b'!' => self.conditional_token(
                 TokenType::LogicalNot,
                 &[("==", TokenType::StrictInequality), ("=", TokenType::Inequality)],
             ),
-            b'~' => self.create_contextified_token(TokenType::BitwiseNot),
-            b'?' => self.create_contextified_conditional_token(
+            b'~' => self.token(TokenType::BitwiseNot),
+            b'?' => self.conditional_token(
                 TokenType::Conditional,
                 &[
                     ("?=", TokenType::LogicalNullishAssignment),
@@ -705,10 +581,10 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
                     (".", TokenType::OptionalChaining),
                 ],
             ),
-            b'#' => self.create_contextified_token(TokenType::Hash),
-            b':' => self.create_contextified_token(TokenType::Colon),
-            b';' => self.create_contextified_token(TokenType::Semicolon),
-            b'=' => self.create_contextified_conditional_token(
+            b'#' => self.token(TokenType::Hash),
+            b':' => self.token(TokenType::Colon),
+            b';' => self.token(TokenType::Semicolon),
+            b'=' => self.conditional_token(
                 TokenType::Assignment,
                 &[
                     ("==", TokenType::StrictEquality),
@@ -737,7 +613,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
                 } else if util::is_identifier_start(cur) {
                     self.read_identifier()
                 } else {
-                    self.create_error(Error::UnknownCharacter(self.span(), cur));
+                    self.error(Error::UnknownCharacter(self.span(), cur));
                 }
             }
         };
