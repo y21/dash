@@ -8,7 +8,6 @@ edition = "2018"
 [dependencies]
 clap = { version = "3.0.0", features = ["std"], default-features = false }
 anyhow = "1.0"
-dash_core = { path = "../crates/dash_core" }
 dash_vm = { path = "../crates/dash_vm", features = [] }
 dash_optimizer = { path = "../crates/dash_optimizer" }
 serde_yaml = "0.9.17"
