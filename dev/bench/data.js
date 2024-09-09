@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725917781691,
+  "lastUpdate": 1725920235113,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -9989,6 +9989,60 @@ window.BENCHMARK_DATA = {
             "name": "exec tinycolor2 parse hex+toFilter",
             "value": 33526288,
             "range": "± 290768",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "2c2cdeb4aa0c94b7875b8c733fd7c0f0c9350824",
+          "message": "pass the third argument to all array prototype methods",
+          "timestamp": "2024-09-10T00:13:00+02:00",
+          "tree_id": "dfe726fa2c02596eebc2f27519025ad19bc26dfa",
+          "url": "https://github.com/y21/dash/commit/2c2cdeb4aa0c94b7875b8c733fd7c0f0c9350824"
+        },
+        "date": 1725920233830,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1834050,
+            "range": "± 15432",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 174406,
+            "range": "± 812",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 61650,
+            "range": "± 1789",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse+compile tinycolor2",
+            "value": 2134199,
+            "range": "± 7848",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "exec tinycolor2 parse hex+toFilter",
+            "value": 34877357,
+            "range": "± 465761",
             "unit": "ns/iter"
           }
         ]
