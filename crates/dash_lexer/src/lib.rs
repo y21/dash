@@ -1,3 +1,8 @@
+#![warn(clippy::pedantic)]
+#![allow(
+    clippy::cast_possible_truncation,
+    reason = "invariant that any index derived from the source code fits in u32 is asserted in the constructor"
+)]
 use std::borrow::Cow;
 use std::ops::Range;
 
@@ -23,8 +28,16 @@ pub struct Lexer<'a, 'interner> {
 
 impl<'a, 'interner> Lexer<'a, 'interner> {
     /// Creates a new lexer
+    ///
+    /// # Panics
+    /// Source code is limited to 4 GB and is a general invariant throughout the dash crates, so this function will panic
+    /// if the input length is >= 2**32 - 1
     pub fn new(interner: &'interner mut StringInterner, source: &'a str) -> Self {
-        assert!(source.len() <= u32::MAX as usize);
+        assert!(
+            u32::try_from(source.len()).is_ok(),
+            "source string length must fit in a u32"
+        );
+
         Self {
             input: source,
             idx: 0,
@@ -130,10 +143,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
 
     /// Expects the current byte to be `expected` and advances the stream if matched
     fn expect_and_skip(&mut self, expected: u8) -> bool {
-        let cur = match self.current() {
-            Some(c) => c,
-            None => return false,
-        };
+        let Some(cur) = self.current() else { return false };
 
         if cur != expected {
             return false;
@@ -250,7 +260,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
             self.advance();
         }
         let sym = self.interner.intern(self.current_lexeme());
-        self.token(TokenType::NumberDec(sym))
+        self.token(TokenType::NumberDec(sym));
     }
 
     fn read_escape_character(&mut self, lexeme_starting_idx: &mut usize, lexeme: &mut Option<Cow<'a, str>>) {
@@ -370,10 +380,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
             return self.error(Error::UnexpectedEof);
         }
 
-        let end = match is_interpolated {
-            true => self.idx,
-            false => self.idx - 1,
-        };
+        let end = if is_interpolated { self.idx } else { self.idx - 1 };
 
         let lexeme = match lexeme {
             None => Cow::Borrowed(self.subslice(self.start + 1..end)),
@@ -441,6 +448,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
     }
 
     /// Iterates through the input string and yields the next node
+    #[expect(clippy::too_many_lines)]
     pub fn scan_next(&mut self) -> Option<()> {
         self.skip_whitespaces();
         while self.current() == Some(b'/') {
@@ -475,7 +483,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
                     *depth += 1;
                 }
 
-                self.token(TokenType::LeftBrace)
+                self.token(TokenType::LeftBrace);
             }
             b'}' => {
                 self.token(TokenType::RightBrace);
@@ -600,18 +608,18 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
 
                     match (is_prefixed, self.current()) {
                         (true, Some(b'x' | b'X')) => {
-                            self.read_prefixed_literal(TokenType::NumberHex, util::is_hex_digit)
+                            self.read_prefixed_literal(TokenType::NumberHex, util::is_hex_digit);
                         }
                         (true, Some(b'b' | b'B')) => {
-                            self.read_prefixed_literal(TokenType::NumberBin, util::is_binary_digit)
+                            self.read_prefixed_literal(TokenType::NumberBin, util::is_binary_digit);
                         }
                         (true, Some(b'o' | b'O')) => {
-                            self.read_prefixed_literal(TokenType::NumberOct, util::is_octal_digit)
+                            self.read_prefixed_literal(TokenType::NumberOct, util::is_octal_digit);
                         }
                         _ => self.read_number_literal(),
                     }
                 } else if util::is_identifier_start(cur) {
-                    self.read_identifier()
+                    self.read_identifier();
                 } else {
                     self.error(Error::UnknownCharacter(self.span(), cur));
                 }
@@ -623,10 +631,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
     /// Skips any meaningless whitespaces
     fn skip_whitespaces(&mut self) {
         while !self.is_eof() {
-            let ch = match self.current() {
-                Some(c) => c,
-                None => return,
-            };
+            let Some(ch) = self.current() else { return };
 
             match ch {
                 b'\n' => {
@@ -643,10 +648,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
 
     /// Skips any comments
     fn skip_comments(&mut self) {
-        let cur = match self.current() {
-            Some(c) => c,
-            None => return,
-        };
+        let Some(cur) = self.current() else { return };
 
         if cur == b'/' {
             match self.peek() {
@@ -660,12 +662,9 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
     /// Skips a single line comment
     fn skip_single_line_comment(&mut self) {
         while !self.is_eof() {
-            let ch = match self.current() {
-                Some(c) => c,
-                None => return,
-            };
+            let Some(cur) = self.current() else { return };
 
-            if ch == b'\n' {
+            if cur == b'\n' {
                 self.line += 1;
                 self.line_idx = self.idx;
                 return;
@@ -680,15 +679,12 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
         self.expect_and_skip(b'/');
         self.expect_and_skip(b'*');
         while !self.is_eof() {
-            let ch = match self.current() {
-                Some(c) => c,
-                None => return,
-            };
+            let Some(cur) = self.current() else { return };
 
-            if ch == b'\n' {
+            if cur == b'\n' {
                 self.line += 1;
                 self.line_idx = self.idx;
-            } else if ch == b'*' && self.peek() == Some(b'/') {
+            } else if cur == b'*' && self.peek() == Some(b'/') {
                 self.advance_n(2);
                 return;
             }
@@ -700,6 +696,9 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
     /// Drives this lexer to completion
     ///
     /// Calling this function will exhaust the lexer and return all nodes
+    ///
+    /// # Errors
+    /// Errors returned by this function correspond to syntax errors in the given JavaScript code
     pub fn scan_all(mut self) -> Result<Vec<Token>, Vec<Error>> {
         while !self.is_eof() {
             self.scan_next();
