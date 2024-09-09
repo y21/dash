@@ -105,7 +105,7 @@ pub fn every(cx: CallContext) -> Result<Value, Value> {
     for k in 0..len {
         let pk = cx.scope.intern_usize(k);
         let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
-        let args = vec![pkv, Value::number(k as f64)];
+        let args = vec![pkv, Value::number(k as f64), this.clone()];
         let test = callback
             .apply(cx.scope, Value::undefined(), args)
             .root(cx.scope)?
@@ -127,7 +127,7 @@ pub fn some(cx: CallContext) -> Result<Value, Value> {
     for k in 0..len {
         let pk = cx.scope.intern_usize(k);
         let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
-        let args = vec![pkv, Value::number(k as f64)];
+        let args = vec![pkv, Value::number(k as f64), this.clone()];
         let test = callback
             .apply(cx.scope, Value::undefined(), args)
             .root(cx.scope)?
@@ -167,7 +167,7 @@ pub fn filter(cx: CallContext) -> Result<Value, Value> {
     for k in 0..len {
         let pk = cx.scope.intern_usize(k);
         let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
-        let args = vec![pkv.clone(), Value::number(k as f64)];
+        let args = vec![pkv.clone(), Value::number(k as f64), this.clone()];
         let test = callback
             .apply(cx.scope, Value::undefined(), args)
             .root(cx.scope)?
@@ -208,7 +208,7 @@ pub fn reduce(cx: CallContext) -> Result<Value, Value> {
     for k in start..len {
         let pk = cx.scope.intern_usize(k);
         let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
-        let args = vec![accumulator, pkv, Value::number(k as f64)];
+        let args = vec![accumulator, pkv, Value::number(k as f64), this.clone()];
         accumulator = callback.apply(cx.scope, Value::undefined(), args).root(cx.scope)?;
     }
 
@@ -223,7 +223,7 @@ pub fn find(cx: CallContext) -> Result<Value, Value> {
     for k in 0..len {
         let pk = cx.scope.intern_usize(k);
         let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
-        let args = vec![pkv.clone(), Value::number(k as f64)];
+        let args = vec![pkv.clone(), Value::number(k as f64), this.clone()];
         let test = callback
             .apply(cx.scope, Value::undefined(), args)
             .root(cx.scope)?
@@ -245,7 +245,7 @@ pub fn find_index(cx: CallContext) -> Result<Value, Value> {
     for k in 0..len {
         let pk = cx.scope.intern_usize(k);
         let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
-        let args = vec![pkv, Value::number(k as f64)];
+        let args = vec![pkv, Value::number(k as f64), this.clone()];
         let test = callback
             .apply(cx.scope, Value::undefined(), args)
             .root(cx.scope)?
@@ -271,7 +271,7 @@ pub fn for_each(cx: CallContext) -> Result<Value, Value> {
     for k in 0..len {
         let pk = cx.scope.intern_usize(k);
         let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
-        let args = vec![pkv, Value::number(k as f64)];
+        let args = vec![pkv, Value::number(k as f64), this.clone()];
         callback.apply(cx.scope, Value::undefined(), args).root_err(cx.scope)?;
     }
 
@@ -367,7 +367,7 @@ pub fn map(cx: CallContext) -> Result<Value, Value> {
     for k in 0..len {
         let pk = cx.scope.intern_usize(k);
         let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
-        let args = vec![pkv.clone(), Value::number(k as f64)];
+        let args = vec![pkv.clone(), Value::number(k as f64), this.clone()];
         let value = callback.apply(cx.scope, Value::undefined(), args).root(cx.scope)?;
 
         values.push(PropertyValue::static_default(value));

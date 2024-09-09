@@ -6,7 +6,6 @@ members = [
     "crates/dash_compiler",
     "crates/dash_optimizer",
     "crates/dash_vm",
-    "crates/dash_core",
     "cli",
     "testrunner",
     "crates/dash_regex",
