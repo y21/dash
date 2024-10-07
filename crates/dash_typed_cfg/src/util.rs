@@ -58,8 +58,13 @@ impl<'a> DecodeCtxt<'a> {
             | Instruction::Div
             | Instruction::Rem
             | Instruction::BitAnd => {}
-            Instruction::Constant => drop(self.next_byte()),
-            Instruction::ConstantW => drop(self.next_wide()),
+            Instruction::Boolean
+            | Instruction::Number
+            | Instruction::String
+            | Instruction::Regex
+            | Instruction::Null
+            | Instruction::Undefined
+            | Instruction::Function => drop(self.next_byte()),
             Instruction::LdLocal => drop(self.next_byte()),
             Instruction::LdLocalW => drop(self.next_wide()),
             Instruction::StoreLocal => {

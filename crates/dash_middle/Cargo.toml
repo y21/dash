@@ -24,3 +24,4 @@ rustc-hash = "1.1.0"
 memchr = "2.5.0"
 owo-colors = "3.5.0"
 dash_proc_macro = { path = "../dash_proc_macro" }
+thin-vec = "0.2.13"

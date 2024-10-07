@@ -168,7 +168,7 @@ impl Frame {
 
         let fun = Function {
             buffer: Buffer(Cell::new(cr.instructions.into())),
-            constants: cr.cp.into_vec().into(),
+            constants: cr.cp,
             externals: Vec::new().into(),
             locals: cr.locals,
             name: None,

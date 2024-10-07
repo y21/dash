@@ -1,11 +1,11 @@
 use std::rc::Rc;
 
+use constant::ConstantPool;
 use strum_macros::FromRepr;
 
 use crate::parser;
 use crate::sourcemap::Span;
 
-use self::constant::ConstantPool;
 use self::external::External;
 
 #[cfg(feature = "format")]

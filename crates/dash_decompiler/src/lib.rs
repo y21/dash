@@ -1,4 +1,4 @@
-use dash_middle::compiler::constant::Constant;
+use dash_middle::compiler::constant::ConstantPool;
 use dash_middle::compiler::instruction::Instruction;
 use dash_middle::interner::StringInterner;
 use decompiler::FunctionDecompiler;
@@ -22,7 +22,7 @@ pub enum DecompileError {
 
 pub fn decompile(
     interner: &StringInterner,
-    constants: &[Constant],
+    constants: &ConstantPool,
     instructions: &[u8],
 ) -> Result<String, DecompileError> {
     FunctionDecompiler::new(interner, instructions, constants, "<main>").run()

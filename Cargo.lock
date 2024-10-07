@@ -414,6 +414,7 @@ dependencies = [
  "dash_middle",
  "dash_optimizer",
  "dash_parser",
+ "dash_regex",
  "rustc-hash",
  "strum",
  "strum_macros",
@@ -486,6 +487,7 @@ dependencies = [
  "smallvec",
  "strum",
  "strum_macros",
+ "thin-vec",
 ]
 
 [[package]]
@@ -2160,6 +2162,12 @@ name = "textwrap"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23d434d3f8967a09480fb04132ebe0a3e088c173e6d0ee7897abbdf4eab0f8b9"
+
+[[package]]
+name = "thin-vec"
+version = "0.2.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a38c90d48152c236a3ab59271da4f4ae63d678c5d7ad6b7714d7cb9760be5e4b"
 
 [[package]]
 name = "thiserror"

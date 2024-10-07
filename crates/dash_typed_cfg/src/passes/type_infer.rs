@@ -1,6 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
+use dash_middle::compiler::constant::NumberConstant;
 use dash_middle::compiler::instruction::{Instruction, IntrinsicOperation};
+use dash_middle::util::is_integer;
 
 use crate::error::Error;
 use crate::util::DecodeCtxt;
@@ -18,7 +20,7 @@ pub enum Type {
 
 pub trait TypeInferQuery {
     fn type_of_local(&self, index: u16) -> Type;
-    fn type_of_constant(&self, index: u16) -> Type;
+    fn number_constant(&self, id: NumberConstant) -> f64;
 }
 
 #[derive(Clone, Default)]
@@ -113,15 +115,24 @@ impl<'a, 'q, Q: TypeInferQuery> TypeInferCtxt<'a, 'q, Q> {
                     let ty = self.get_or_insert_local_ty(index);
                     ty_stack.push(ty);
                 }
-                Instruction::Constant | Instruction::ConstantW => {
-                    let index = match instr {
-                        Instruction::Constant => dcx.next_byte().into(),
-                        Instruction::ConstantW => dcx.next_wide(),
-                        _ => unreachable!(),
-                    };
-
-                    let ty = self.query.type_of_constant(index);
-                    ty_stack.push(ty);
+                Instruction::Boolean => {
+                    dcx.next_wide();
+                    ty_stack.push(Type::Boolean);
+                }
+                Instruction::Number => {
+                    let id = dcx.next_wide();
+                    ty_stack.push(if is_integer(self.query.number_constant(NumberConstant(id))) {
+                        Type::I64
+                    } else {
+                        Type::F64
+                    });
+                }
+                Instruction::String
+                | Instruction::Regex
+                | Instruction::Null
+                | Instruction::Undefined
+                | Instruction::Function => {
+                    todo!("unimplemented constant type: {instr:?}")
                 }
                 Instruction::StoreLocal | Instruction::StoreLocalW => {
                     let index = match instr {

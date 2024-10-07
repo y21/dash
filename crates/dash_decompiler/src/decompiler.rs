@@ -1,4 +1,4 @@
-use dash_middle::compiler::constant::Constant;
+use dash_middle::compiler::constant::{ConstantPool, FunctionConstant, SymbolConstant};
 use dash_middle::compiler::instruction::{Instruction, IntrinsicOperation};
 use dash_middle::compiler::{FunctionCallMetadata, ObjectMemberKind};
 use dash_middle::interner::StringInterner;
@@ -12,7 +12,7 @@ use crate::DecompileError;
 pub struct FunctionDecompiler<'interner, 'buf> {
     interner: &'interner StringInterner,
     reader: Reader<&'buf [u8]>,
-    constants: &'buf [Constant],
+    constants: &'buf ConstantPool,
     name: &'buf str,
     out: String,
     /// Index of the current instruction in the bytecode
@@ -23,7 +23,7 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
     pub fn new(
         interner: &'interner StringInterner,
         buf: &'buf [u8],
-        constants: &'buf [Constant],
+        constants: &'buf ConstantPool,
         name: &'buf str,
     ) -> Self {
         Self {
@@ -110,10 +110,6 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
         self.reader.read_u32_ne().ok_or(DecompileError::AbruptEof)
     }
 
-    fn display(&self, constant: &'buf Constant) -> DisplayConstant<'interner, 'buf> {
-        DisplayConstant(self.interner, constant)
-    }
-
     pub fn run(mut self) -> Result<String, DecompileError> {
         let mut functions = Vec::new();
 
@@ -138,22 +134,22 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                 Instruction::Eq => self.handle_opless_instr("eq"),
                 Instruction::Ne => self.handle_opless_instr("ne"),
                 Instruction::Pop => self.handle_opless_instr("pop"),
-                Instruction::Constant => {
-                    let b = self.read()?;
-                    let constant = &self.constants[b as usize];
-                    if let Constant::Function(fun) = constant {
-                        functions.push(Rc::clone(fun));
-                    }
-                    self.handle_op_instr("constant", &[&self.display(constant)]);
+                Instruction::Function => {
+                    let id = self.read_u16()?;
+                    let fun = Rc::clone(&self.constants.functions[FunctionConstant(id)]);
+                    let name = match fun.name {
+                        Some(sym) => self.interner.resolve(sym).to_owned(),
+                        None => String::from("<anon>"),
+                    };
+                    functions.push(fun);
+                    self.handle_op_instr("function", &[&format_args!("function {name}")]);
                 }
-                Instruction::ConstantW => {
-                    let b = self.read_u16()?;
-                    let constant = &self.constants[b as usize];
-                    if let Constant::Function(fun) = constant {
-                        functions.push(Rc::clone(fun));
-                    }
-                    self.handle_op_instr("constant", &[&self.display(constant)]);
-                }
+                Instruction::String
+                | Instruction::Number
+                | Instruction::Boolean
+                | Instruction::Regex
+                | Instruction::Null
+                | Instruction::Undefined => todo!(),
                 Instruction::LdLocal => {
                     let b = self.read()?;
                     // TODO: use debug symbols to find the name
@@ -190,8 +186,12 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                 }
                 Instruction::Arguments => self.handle_opless_instr("arguments"),
                 Instruction::LdGlobal => {
-                    let b = self.read_i16()?;
-                    self.handle_op_instr("ldglobal", &[&self.display(&self.constants[b as usize])]);
+                    let b = self.read_u16()?;
+                    let ident = self
+                        .interner
+                        .resolve(self.constants.symbols[SymbolConstant(b)])
+                        .to_owned();
+                    self.handle_op_instr("ldglobal", &[&ident]);
                 }
                 Instruction::StoreLocal => self.handle_inc_op_instr2("storelocal")?,
                 Instruction::StoreLocalW => self.handle_inc_op_instr2("storelocalw")?,
@@ -206,9 +206,13 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                     );
                 }
                 Instruction::StaticPropAccess => {
-                    let b = self.read_i16()?;
+                    let b = self.read_u16()?;
                     let _preserve_this = self.read()?;
-                    self.handle_op_instr("staticpropaccess", &[&self.display(&self.constants[b as usize])]);
+                    let ident = self
+                        .interner
+                        .resolve(self.constants.symbols[SymbolConstant(b)])
+                        .to_owned();
+                    self.handle_op_instr("staticpropaccess", &[&ident]);
                 }
                 Instruction::Ret => {
                     self.read_u16()?; // intentionally ignored
@@ -219,20 +223,32 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                 Instruction::Neg => self.handle_opless_instr("neg"),
                 Instruction::TypeOfGlobalIdent => {
                     let id = self.read_u16()?;
-                    self.handle_op_instr("typeof", &[&self.display(&self.constants[id as usize])]);
+                    let ident = self
+                        .interner
+                        .resolve(self.constants.symbols[SymbolConstant(id)])
+                        .to_owned();
+                    self.handle_op_instr("typeof", &[&ident]);
                 }
                 Instruction::TypeOf => self.handle_opless_instr("typeof"),
                 Instruction::BitNot => self.handle_opless_instr("bitnot"),
                 Instruction::Not => self.handle_opless_instr("not"),
                 Instruction::StoreGlobal => {
                     let b = self.read()?;
-                    let _kind = self.read();
-                    self.handle_op_instr("storeglobal", &[&self.display(&self.constants[b as usize])]);
+                    let _kind = self.read()?;
+                    let ident = self
+                        .interner
+                        .resolve(self.constants.symbols[SymbolConstant(b as u16)])
+                        .to_owned();
+                    self.handle_op_instr("storeglobal", &[&ident]);
                 }
                 Instruction::StoreGlobalW => {
                     let b = self.read_u16()?;
-                    let _kind = self.read();
-                    self.handle_op_instr("storeglobalw", &[&self.display(&self.constants[b as usize])]);
+                    let _kind = self.read()?;
+                    let ident = self
+                        .interner
+                        .resolve(self.constants.symbols[SymbolConstant(b)])
+                        .to_owned();
+                    self.handle_op_instr("storeglobalw", &[&ident]);
                 }
                 Instruction::DynamicPropAccess => {
                     let b = self.read()?;
@@ -253,7 +269,11 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                             }
                             ObjectMemberKind::Static | ObjectMemberKind::Getter | ObjectMemberKind::Setter => {
                                 let cid = self.read_u16()?;
-                                props.push(self.display(&self.constants[cid as usize]).to_string());
+                                let ident = self
+                                    .interner
+                                    .resolve(self.constants.symbols[SymbolConstant(cid)])
+                                    .to_owned();
+                                props.push(ident);
                             }
                             ObjectMemberKind::Spread => {
                                 props.push(String::from("<spread>"));
@@ -269,7 +289,11 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                 Instruction::StaticPropAssign => {
                     let _k = self.read()?;
                     let b = self.read_u16()?;
-                    self.handle_op_instr("staticpropassign", &[&self.display(&self.constants[b as usize])]);
+                    let ident = self
+                        .interner
+                        .resolve(self.constants.symbols[SymbolConstant(b)])
+                        .to_owned();
+                    self.handle_op_instr("staticpropassign", &[&ident]);
                 }
                 Instruction::DynamicPropAssign => {
                     let _k = self.read()?;
@@ -428,28 +452,5 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
         }
 
         Ok(self.out)
-    }
-}
-
-struct DisplayConstant<'i, 'a>(&'i StringInterner, &'a Constant);
-impl fmt::Display for DisplayConstant<'_, '_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.1 {
-            Constant::Number(n) => write!(f, "{n}"),
-            Constant::String(s) => write!(f, "\"{}\"", self.0.resolve(*s)),
-            Constant::Boolean(b) => write!(f, "{b}"),
-            Constant::Identifier(ident) => write!(f, "{}", self.0.resolve(*ident)),
-            Constant::Function(fun) => write!(
-                f,
-                "<function {}>",
-                fun.name.map(|v| self.0.resolve(v)).unwrap_or("<anon>")
-            ),
-            Constant::Null => f.write_str("null"),
-            Constant::Undefined => f.write_str("undefined"),
-            Constant::Regex(regex) => {
-                let (_, _, sym) = &**regex;
-                write!(f, "{}", self.0.resolve(*sym))
-            }
-        }
     }
 }

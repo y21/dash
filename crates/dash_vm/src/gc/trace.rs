@@ -4,7 +4,8 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use dash_middle::compiler::constant::Constant;
+use dash_middle::compiler::constant::ConstantPool;
+use dash_regex::{Flags, ParsedRegex};
 
 use crate::value::primitive::{Null, Number, Undefined};
 use crate::value::typedarray::TypedArrayKind;
@@ -160,33 +161,29 @@ unsafe impl Trace for dash_middle::compiler::constant::Function {
             ty: _,
             locals: _,
             params: _,
-            constants,
+            constants:
+                ConstantPool {
+                    numbers,
+                    symbols,
+                    booleans,
+                    functions,
+                    regexes,
+                },
             externals: _,
             rest_local: _,
             poison_ips: _,
-            source: _,
+            source: Rc { .. },
             debug_symbols: _,
             references_arguments: _,
         } = self;
         name.trace(cx);
-        constants.trace(cx);
-    }
-}
+        numbers.as_slice().trace(cx);
+        symbols.as_slice().trace(cx);
+        booleans.as_slice().trace(cx);
+        functions.as_slice().trace(cx);
 
-unsafe impl Trace for Constant {
-    fn trace(&self, cx: &mut TraceCtxt<'_>) {
-        match self {
-            Constant::Number(_) => {}
-            Constant::String(sym) => sym.trace(cx),
-            Constant::Identifier(sym) => sym.trace(cx),
-            Constant::Boolean(_) => {}
-            Constant::Function(func) => func.trace(cx),
-            Constant::Regex(s) => {
-                let (_, _, sym) = &**s;
-                sym.trace(cx);
-            }
-            Constant::Null => {}
-            Constant::Undefined => {}
+        for (ParsedRegex { .. }, Flags { .. }, sym) in regexes.as_slice() {
+            sym.trace(cx);
         }
     }
 }

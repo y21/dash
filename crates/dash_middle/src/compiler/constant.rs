@@ -1,14 +1,13 @@
 use core::fmt;
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
-use std::ops::Deref;
 use std::rc::Rc;
 
-#[cfg(feature = "format")]
-use serde::{Deserialize, Serialize};
+use dash_regex::{Flags, ParsedRegex};
 
+use crate::index_type;
+use crate::indexvec::IndexThinVec;
 use crate::interner::Symbol;
-use crate::parser::expr::LiteralExpr;
 use crate::parser::statement::FunctionKind;
 
 use super::external::External;
@@ -35,7 +34,7 @@ impl Buffer {
 }
 
 #[cfg(feature = "format")]
-impl Serialize for Buffer {
+impl serde::Serialize for Buffer {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -45,7 +44,7 @@ impl Serialize for Buffer {
 }
 
 #[cfg(feature = "format")]
-impl<'de> Deserialize<'de> for Buffer {
+impl<'de> serde::Deserialize<'de> for Buffer {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -66,7 +65,7 @@ impl Clone for Buffer {
     }
 }
 
-#[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "format", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct Function {
     pub name: Option<Symbol>,
@@ -74,7 +73,7 @@ pub struct Function {
     pub ty: FunctionKind,
     pub locals: usize,
     pub params: usize,
-    pub constants: Box<[Constant]>,
+    pub constants: ConstantPool,
     pub externals: Box<[External]>,
     /// If the parameter list uses the rest operator ..., then this will be Some(local_id)
     pub rest_local: Option<u16>,
@@ -95,97 +94,44 @@ impl Function {
         self.poison_ips.borrow().contains(&ip)
     }
 }
+index_type!(NumberConstant u16);
+index_type!(BooleanConstant u16);
+index_type!(FunctionConstant u16);
+index_type!(RegexConstant u16);
+index_type!(SymbolConstant u16);
 
-#[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone)]
-pub enum Constant {
-    Number(f64),
-    String(Symbol),
-    Identifier(Symbol),
-    Boolean(bool),
-    Function(Rc<Function>),
-    // Boxed because this otherwise bloats the enum way too much.
-    // This makes evaluating regex constants slower but they're *far* less common than e.g. number literals
-    // TODO: avoid cloning `Constant`s when turning them into Values,
-    // because there's no point in cloning this box
-    Regex(Box<(dash_regex::ParsedRegex, dash_regex::Flags, Symbol)>),
-    Null,
-    Undefined,
-}
-
-impl Constant {
-    pub fn as_number(&self) -> Option<f64> {
-        match self {
-            Constant::Number(n) => Some(*n),
-            _ => None,
-        }
-    }
-
-    pub fn as_string(&self) -> Option<Symbol> {
-        match self {
-            Constant::String(s) => Some(*s),
-            _ => None,
-        }
-    }
-
-    pub fn as_identifier(&self) -> Option<Symbol> {
-        match self {
-            Constant::Identifier(s) => Some(*s),
-            _ => None,
-        }
-    }
-
-    pub fn as_boolean(&self) -> Option<bool> {
-        match self {
-            Constant::Boolean(b) => Some(*b),
-            _ => None,
-        }
-    }
-
-    pub fn from_literal(expr: &LiteralExpr) -> Self {
-        match expr {
-            LiteralExpr::Number(n) => Self::Number(*n),
-            LiteralExpr::Identifier(s) => Self::Identifier(*s),
-            LiteralExpr::String(s) => Self::String(*s),
-            LiteralExpr::Boolean(b) => Self::Boolean(*b),
-            LiteralExpr::Null => Self::Null,
-            LiteralExpr::Undefined => Self::Undefined,
-            LiteralExpr::Regex(regex, flags, source) => Self::Regex(Box::new((regex.clone(), *flags, *source))),
-        }
-    }
-}
-
-#[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "format", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Default, Debug, Clone)]
 pub struct ConstantPool {
-    constants: Vec<Constant>,
+    pub numbers: IndexThinVec<f64, NumberConstant>,
+    /// Strings and identifiers
+    pub symbols: IndexThinVec<Symbol, SymbolConstant>,
+    pub booleans: IndexThinVec<bool, BooleanConstant>,
+    pub functions: IndexThinVec<Rc<Function>, FunctionConstant>,
+    pub regexes: IndexThinVec<(ParsedRegex, Flags, Symbol), RegexConstant>,
 }
 
 pub struct LimitExceededError;
-impl ConstantPool {
-    pub fn new() -> Self {
-        Self::default()
-    }
 
-    pub fn add(&mut self, constant: Constant) -> Result<u16, LimitExceededError> {
-        if self.constants.len() > u16::MAX as usize {
-            Err(LimitExceededError)
-        } else {
-            let id = self.constants.len() as u16;
-            self.constants.push(constant);
-            Ok(id)
-        }
-    }
-
-    pub fn into_vec(self) -> Vec<Constant> {
-        self.constants
-    }
+macro_rules! define_push_methods {
+    ($($method:ident($field:ident, $valty:ty) -> $constant:ty),*) => {
+        $(
+            pub fn $method(
+                &mut self,
+                val: $valty,
+            ) -> Result<$constant, LimitExceededError> {
+                self.$field.try_push(val).map_err(|_| LimitExceededError)
+            }
+        )*
+    };
 }
 
-impl Deref for ConstantPool {
-    type Target = [Constant];
-
-    fn deref(&self) -> &Self::Target {
-        &self.constants
-    }
+impl ConstantPool {
+    define_push_methods!(
+        add_number(numbers, f64) -> NumberConstant,
+        add_symbol(symbols, Symbol) -> SymbolConstant,
+        add_boolean(booleans, bool) -> BooleanConstant,
+        add_function(functions, Rc<Function>) -> FunctionConstant,
+        add_regex(regexes, (ParsedRegex, Flags, Symbol)) -> RegexConstant
+    );
 }

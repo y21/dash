@@ -4,7 +4,7 @@ use std::mem;
 use std::rc::Rc;
 
 use dash_log::{debug, span, Level};
-use dash_middle::compiler::constant::{Buffer, Constant, ConstantPool, Function};
+use dash_middle::compiler::constant::{Buffer, ConstantPool, Function, NumberConstant, SymbolConstant};
 use dash_middle::compiler::external::External;
 use dash_middle::compiler::instruction::{AssignKind, Instruction, IntrinsicOperation};
 use dash_middle::compiler::scope::{CompileValueType, LimitExceededError, Local, ScopeGraph};
@@ -64,9 +64,7 @@ enum Breakable {
 struct FunctionLocalState {
     /// Instruction buffer
     buf: Vec<u8>,
-    /// A list of constants used throughout this function.
-    ///
-    /// Bytecode can refer to constants using the [Instruction::Constant] instruction, followed by a u8 index.
+    /// A list of constants used throughout this function
     cp: ConstantPool,
     /// Current `try` depth (note that this does NOT include `catch`es)
     try_depth: u16,
@@ -107,7 +105,7 @@ impl FunctionLocalState {
     pub fn new(ty: FunctionKind, id: ScopeId) -> Self {
         Self {
             buf: Vec::new(),
-            cp: ConstantPool::new(),
+            cp: ConstantPool::default(),
             try_depth: 0,
             finally_labels: Vec::new(),
             finally_counter: Counter::new(),
@@ -717,11 +715,17 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
     }
 
     fn visit_literal_expression(&mut self, span: Span, expr: LiteralExpr) -> Result<(), Error> {
-        let constant = Constant::from_literal(&expr);
-        InstructionBuilder::new(self)
-            .build_constant(constant)
-            .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
-        Ok(())
+        let mut ib = InstructionBuilder::new(self);
+        let res = match expr {
+            LiteralExpr::Boolean(b) => ib.build_boolean_constant(b),
+            LiteralExpr::Number(n) => ib.build_number_constant(n),
+            LiteralExpr::String(s) => ib.build_string_constant(s),
+            LiteralExpr::Identifier(_) => unreachable!("identifiers are handled in visit_identifier_expression"),
+            LiteralExpr::Regex(regex, flags, sym) => ib.build_regex_constant(regex, flags, sym),
+            LiteralExpr::Null => ib.build_null_constant(),
+            LiteralExpr::Undefined => ib.build_undefined_constant(),
+        };
+        res.map_err(|_| Error::ConstantPoolLimitExceeded(span))
     }
 
     fn visit_identifier_expression(&mut self, span: Span, ident: Symbol) -> Result<(), Error> {
@@ -782,7 +786,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                         let id = ib
                             .current_function_mut()
                             .cp
-                            .add(Constant::Identifier(ident))
+                            .add_symbol(ident)
                             .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
                         ib.build_static_delete(id);
                     }
@@ -797,12 +801,12 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                     let id = ib
                         .current_function_mut()
                         .cp
-                        .add(Constant::Identifier(ident))
+                        .add_symbol(ident)
                         .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
                     ib.build_static_delete(id);
                 }
                 _ => {
-                    ib.build_constant(Constant::Boolean(true))
+                    ib.build_boolean_constant(true)
                         .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
                 }
             }
@@ -876,15 +880,15 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                         let name = alias.unwrap_or(name);
                         let id = ib.find_local_from_binding(Binding { id: local, ident: name });
 
-                        let var_id = ib
+                        let NumberConstant(var_id) = ib
                             .current_function_mut()
                             .cp
-                            .add(Constant::Number(id as f64))
+                            .add_number(id as f64)
                             .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
-                        let ident_id = ib
+                        let SymbolConstant(ident_id) = ib
                             .current_function_mut()
                             .cp
-                            .add(Constant::Identifier(name))
+                            .add_symbol(name)
                             .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
                         ib.writew(var_id);
                         ib.writew(ident_id);
@@ -910,10 +914,10 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                         if let Some(name) = name {
                             let id = ib.find_local_from_binding(name);
 
-                            let id = ib
+                            let NumberConstant(id) = ib
                                 .current_function_mut()
                                 .cp
-                                .add(Constant::Number(id as f64))
+                                .add_number(id as f64)
                                 .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
 
                             ib.writew(id);
@@ -1765,7 +1769,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
 
             let function = Function {
                 buffer: Buffer(Cell::new(cmp.buf.into())),
-                constants: cmp.cp.into_vec().into(),
+                constants: cmp.cp,
                 locals,
                 name: name.map(|binding| binding.ident),
                 ty,
@@ -1780,7 +1784,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                 source: Rc::clone(&ib.source),
                 references_arguments: cmp.references_arguments.is_some(),
             };
-            ib.build_constant(Constant::Function(Rc::new(function)))
+            ib.build_function_constant(function)
                 .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
 
             Ok(())
@@ -1988,7 +1992,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                 let path_id = ib
                     .current_function_mut()
                     .cp
-                    .add(Constant::String(path))
+                    .add_symbol(path)
                     .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
 
                 ib.build_static_import(
@@ -2021,7 +2025,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                     let ident_id = ib
                         .current_function_mut()
                         .cp
-                        .add(Constant::Identifier(name))
+                        .add_symbol(name)
                         .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
 
                     match ib.find_local(name) {

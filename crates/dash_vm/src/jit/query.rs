@@ -1,6 +1,6 @@
-use dash_llvm_jit_backend::codegen::{CodegenQuery, JitConstant};
+use dash_llvm_jit_backend::codegen::CodegenQuery;
 use dash_llvm_jit_backend::Trace;
-use dash_middle::compiler::constant::Constant;
+use dash_middle::compiler::constant::{BooleanConstant, NumberConstant};
 use dash_middle::util::is_integer;
 use dash_typed_cfg::passes::bb_generation::{BBGenerationQuery, ConditionalBranchAction};
 use dash_typed_cfg::passes::type_infer::{Type, TypeInferQuery};
@@ -24,20 +24,10 @@ impl<'a> BBGenerationQuery for QueryProvider<'a> {
 }
 
 impl<'a> TypeInferQuery for QueryProvider<'a> {
-    fn type_of_constant(&self, index: u16) -> Type {
-        let constant = &self.vm.active_frame().function.constants[usize::from(index)];
-        match constant {
-            Constant::Boolean(..) => Type::Boolean,
-            Constant::Number(n) => {
-                if is_integer(*n) {
-                    Type::I64
-                } else {
-                    Type::F64
-                }
-            }
-            _ => panic!("invalid jit type"),
-        }
+    fn number_constant(&self, id: NumberConstant) -> f64 {
+        self.vm.active_frame().function.constants.numbers[id]
     }
+
     fn type_of_local(&self, index: u16) -> Type {
         match self.vm.get_local(index.into()).unwrap() {
             Value::Boolean(..) => Type::Boolean,
@@ -54,18 +44,11 @@ impl<'a> TypeInferQuery for QueryProvider<'a> {
 }
 
 impl<'a> CodegenQuery for QueryProvider<'a> {
-    fn get_constant(&self, id: u16) -> JitConstant {
-        let constant = &self.vm.active_frame().function.constants[usize::from(id)];
-        match constant {
-            Constant::Boolean(b) => JitConstant::Boolean(*b),
-            Constant::Number(n) => {
-                if is_integer(*n) {
-                    JitConstant::I64(*n as i64)
-                } else {
-                    JitConstant::F64(*n)
-                }
-            }
-            _ => todo!(),
-        }
+    fn boolean_constant(&self, id: BooleanConstant) -> bool {
+        self.vm.active_frame().function.constants.booleans[id]
+    }
+
+    fn number_constant(&self, id: NumberConstant) -> f64 {
+        self.vm.active_frame().function.constants.numbers[id]
     }
 }
