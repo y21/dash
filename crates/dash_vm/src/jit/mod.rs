@@ -85,7 +85,8 @@ mod tests {
 
     use dash_compiler::FunctionCompiler;
     use dash_llvm_jit_backend::codegen;
-    use dash_llvm_jit_backend::codegen::{CodegenQuery, JitConstant};
+    use dash_llvm_jit_backend::codegen::CodegenQuery;
+    use dash_middle::compiler::constant::{BooleanConstant, NumberConstant};
     use dash_middle::interner::StringInterner;
     use dash_optimizer::OptLevel;
     use dash_typed_cfg::passes::bb_generation::{BBGenerationQuery, ConditionalBranchAction};
@@ -107,31 +108,22 @@ mod tests {
     }
 
     impl TypeInferQuery for TestQueryProvider {
-        fn type_of_constant(&self, index: u16) -> dash_typed_cfg::passes::type_infer::Type {
-            match index {
-                #[allow(clippy::manual_range_patterns)]
-                0 | 1 | 2 => Type::I64,
-                _ => todo!("{index}"),
-            }
+        fn number_constant(&self, _: NumberConstant) -> f64 {
+            1.0
         }
 
-        fn type_of_local(&self, index: u16) -> Type {
-            match index {
-                0 => Type::I64,
-                1 => Type::Boolean,
-                o => todo!("{o}"),
-            }
+        fn type_of_local(&self, _: u16) -> Type {
+            Type::I64
         }
     }
 
     impl CodegenQuery for TestQueryProvider {
-        fn get_constant(&self, cid: u16) -> JitConstant {
-            match cid {
-                0 => JitConstant::I64(0),
-                1 => JitConstant::I64(10),
-                2 => JitConstant::I64(3),
-                _ => todo!(),
-            }
+        fn boolean_constant(&self, _: BooleanConstant) -> bool {
+            true
+        }
+
+        fn number_constant(&self, _: NumberConstant) -> f64 {
+            1.0
         }
     }
 

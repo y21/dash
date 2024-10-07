@@ -1,4 +1,5 @@
 use dash_log::warn;
+use dash_middle::compiler::constant::{ConstantPool, NumberConstant, SymbolConstant};
 use std::ops::{Deref, DerefMut};
 use std::vec::Drain;
 
@@ -9,7 +10,6 @@ use crate::value::{ExternalValue, Root, Unrooted};
 
 use super::value::Value;
 use super::Vm;
-use dash_middle::compiler::constant::Constant;
 use dash_middle::compiler::instruction::Instruction;
 
 #[derive(Debug)]
@@ -153,28 +153,8 @@ impl<'vm> DispatchContext<'vm> {
             .expect("Dispatch Context attempted to reference missing frame")
     }
 
-    pub fn constant(&self, index: usize) -> &Constant {
-        &self.active_frame().function.constants[index]
-    }
-
-    pub fn identifier_constant(&self, index: usize) -> JsString {
-        self.constant(index)
-            .as_identifier()
-            .expect("Bytecode attempted to reference invalid identifier constant")
-            .into()
-    }
-
-    pub fn string_constant(&self, index: usize) -> JsString {
-        self.constant(index)
-            .as_string()
-            .expect("Bytecode attempted to reference invalid string constant")
-            .into()
-    }
-
-    pub fn number_constant(&self, index: usize) -> f64 {
-        self.constant(index)
-            .as_number()
-            .expect("Bytecode attempted to reference invalid number constant")
+    pub fn constants(&self) -> &ConstantPool {
+        &self.active_frame().function.constants
     }
 }
 
@@ -195,6 +175,7 @@ mod extract {
     use std::convert::Infallible;
     use std::marker::PhantomData;
 
+    use dash_middle::compiler::constant::{NumberConstant, SymbolConstant};
     use dash_middle::compiler::{ArrayMemberKind, ExportPropertyKind, ObjectMemberKind};
     use dash_middle::iterator_with::IteratorWith;
 
@@ -315,7 +296,7 @@ mod extract {
 
         fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
             let id = cx.fetchw_and_inc_ip();
-            Ok(Self(cx.identifier_constant(id.into())))
+            Ok(Self(cx.constants().symbols[SymbolConstant(id)].into()))
         }
     }
 
@@ -326,7 +307,7 @@ mod extract {
 
         fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
             let id = cx.fetchw_and_inc_ip();
-            Ok(Self(cx.number_constant(id.into())))
+            Ok(Self(cx.constants().numbers[NumberConstant(id)]))
         }
     }
 
@@ -542,48 +523,137 @@ mod extract {
 }
 
 mod handlers {
+    use dash_middle::compiler::constant::{BooleanConstant, FunctionConstant, RegexConstant};
+    use dash_middle::compiler::external::External;
     use dash_middle::compiler::instruction::{AssignKind, IntrinsicOperation};
     use dash_middle::compiler::{FunctionCallMetadata, StaticImportKind};
     use dash_middle::interner::sym;
     use dash_middle::iterator_with::{InfallibleIteratorWith, IteratorWith};
+    use dash_middle::parser::statement::{Asyncness, FunctionKind as ParserFunctionKind};
     use handlers::extract::{extract, ForwardSequence, FrontIteratorWith};
     use hashbrown::hash_map::Entry;
     use if_chain::if_chain;
     use smallvec::SmallVec;
     use std::ops::{Add, ControlFlow, Div, Mul, Rem, Sub};
+    use std::rc::Rc;
 
     use crate::frame::{FrameState, TryBlock};
     use crate::throw;
     use crate::util::unlikely;
     use crate::value::array::{Array, ArrayIterator, Element};
+    use crate::value::function::r#async::AsyncFunction;
+    use crate::value::function::closure::Closure;
+    use crate::value::function::generator::GeneratorFunction;
     use crate::value::function::user::UserFunction;
     use crate::value::function::{adjust_stack_from_flat_call, Function, FunctionKind};
     use crate::value::object::{NamedObject, Object, ObjectMap, PropertyKey, PropertyValue, PropertyValueKind};
     use crate::value::ops::conversions::ValueConversion;
     use crate::value::ops::equality;
     use crate::value::primitive::Number;
+    use crate::value::regex::RegExp;
+    use crate::value::ValueContext;
 
     use self::extract::{ArrayElement, BackwardSequence, ExportProperty, IdentW, NumberWConstant, ObjectProperty};
 
     use super::*;
 
-    fn constant_instruction(mut cx: DispatchContext<'_>, idx: usize) -> Result<(), Value> {
-        let constant = cx.constant(idx);
-
-        let value = Value::from_constant(constant.clone(), &mut cx);
-        cx.stack.push(value);
-        Ok(())
-    }
-
-    pub fn constant(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let id = cx.fetch_and_inc_ip();
-        constant_instruction(cx, id as usize)?;
+    pub fn string_constant(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
+        let id = cx.fetchw_and_inc_ip();
+        let sym = JsString::from(cx.constants().symbols[SymbolConstant(id)]);
+        cx.push_stack(Value::String(sym).into());
         Ok(None)
     }
 
-    pub fn constantw(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn boolean_constant(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let id = cx.fetchw_and_inc_ip();
-        constant_instruction(cx, id as usize)?;
+        let b = cx.constants().booleans[BooleanConstant(id)];
+        cx.push_stack(Value::Boolean(b).into());
+        Ok(None)
+    }
+
+    pub fn number_constant(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
+        let id = cx.fetchw_and_inc_ip();
+        let n = cx.constants().numbers[NumberConstant(id)];
+        cx.push_stack(Value::number(n).into());
+        Ok(None)
+    }
+
+    pub fn regex_constant(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
+        let id = cx.fetchw_and_inc_ip();
+        let (nodes, flags, source) = &cx.constants().regexes[RegexConstant(id)];
+
+        let regex = RegExp::new(nodes.clone(), *flags, JsString::from(*source), &cx.scope);
+        let regex = cx.scope.register(regex);
+        cx.push_stack(Value::Object(regex).into());
+        Ok(None)
+    }
+
+    pub fn null_constant(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
+        cx.push_stack(Value::null().into());
+        Ok(None)
+    }
+
+    pub fn undefined_constant(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
+        cx.push_stack(Value::undefined().into());
+        Ok(None)
+    }
+
+    pub fn function_constant(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
+        fn register_function_externals(
+            function: &dash_middle::compiler::constant::Function,
+            sc: &mut LocalScope<'_>,
+        ) -> Vec<ExternalValue> {
+            let mut externals = Vec::new();
+
+            for External { id, is_nested_external } in function.externals.iter().copied() {
+                let id = usize::from(id);
+
+                let val = if is_nested_external {
+                    sc.get_external(id).expect("Referenced local not found").clone()
+                } else {
+                    let v = sc.get_local_raw(id).expect("Referenced local not found");
+
+                    match v {
+                        Value::External(v) => v,
+                        other => {
+                            // TODO: comment what's happening here -- Value -> Handle -> ExternaValue(..)
+                            let ext = ExternalValue::new(sc.register(other));
+                            sc.set_local(id, Value::External(ext.clone()).into());
+                            ext
+                        }
+                    }
+                };
+
+                externals.push(val);
+            }
+
+            externals
+        }
+
+        let id = cx.fetchw_and_inc_ip();
+        let fun = Rc::clone(&cx.constants().functions[FunctionConstant(id)]);
+
+        let externals = register_function_externals(&fun, &mut cx.scope);
+
+        let name = fun.name.map(Into::into);
+        let ty = fun.ty;
+
+        let fun = UserFunction::new(fun, externals.into());
+
+        let kind = match ty {
+            ParserFunctionKind::Function(Asyncness::Yes) => FunctionKind::Async(AsyncFunction::new(fun)),
+            ParserFunctionKind::Function(Asyncness::No) => FunctionKind::User(fun),
+            ParserFunctionKind::Arrow => FunctionKind::Closure(Closure {
+                fun,
+                this: cx.scope.active_frame().this.clone().unwrap_or_undefined(),
+            }),
+            ParserFunctionKind::Generator => FunctionKind::Generator(GeneratorFunction::new(fun)),
+        };
+
+        let function = Function::new(&cx.scope, name, kind);
+        let function = cx.scope.register(function);
+        cx.push_stack(Value::Object(function).into());
+
         Ok(None)
     }
 
@@ -813,7 +883,7 @@ mod handlers {
 
     pub fn ldglobal(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let id = cx.fetchw_and_inc_ip();
-        let name = cx.identifier_constant(id.into());
+        let name = JsString::from(cx.constants().symbols[SymbolConstant(id)]);
 
         let value = match cx.global.as_any().downcast_ref::<NamedObject>() {
             Some(value) => match value.get_raw_property(name.into()) {
@@ -832,7 +902,7 @@ mod handlers {
 
     pub fn storeglobal(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let id = cx.fetch_and_inc_ip();
-        let name = cx.identifier_constant(id.into());
+        let name = JsString::from(cx.constants().symbols[SymbolConstant(id.into())]);
         let kind = AssignKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
 
         macro_rules! op {
@@ -1506,7 +1576,7 @@ mod handlers {
 
     pub fn staticpropertyaccess(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let id = cx.fetchw_and_inc_ip();
-        let ident = cx.identifier_constant(id.into());
+        let ident = JsString::from(cx.constants().symbols[SymbolConstant(id)]);
 
         let preserve_this = cx.fetch_and_inc_ip() == 1;
 
@@ -1524,7 +1594,7 @@ mod handlers {
     pub fn staticpropertyassign(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let kind = AssignKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
         let id = cx.fetchw_and_inc_ip();
-        let key = cx.identifier_constant(id.into());
+        let key = JsString::from(cx.constants().symbols[SymbolConstant(id)]);
 
         macro_rules! op {
             ($op:expr) => {{
@@ -1802,11 +1872,11 @@ mod handlers {
 
     pub fn type_of_ident(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let id = cx.fetchw_and_inc_ip();
-        let constant = cx.identifier_constant(id.into());
+        let ident = JsString::from(cx.constants().symbols[SymbolConstant(id)]);
         let prop = cx
             .global
             .clone()
-            .get_property(&mut cx.scope, constant.into())?
+            .get_property(&mut cx.scope, ident.into())?
             .root(&mut cx.scope);
 
         cx.stack.push(prop.type_of().as_value());
@@ -1842,10 +1912,10 @@ mod handlers {
         let local_id = cx.fetchw_and_inc_ip();
         let path_id = cx.fetchw_and_inc_ip();
 
-        let path = cx.string_constant(path_id.into());
+        let path = cx.constants().symbols[SymbolConstant(path_id)];
 
         let value = match cx.params.static_import_callback() {
-            Some(cb) => cb(&mut cx, ty, path)?,
+            Some(cb) => cb(&mut cx, ty, path.into())?,
             None => throw!(cx, Error, "Static imports are disabled for this context."),
         };
 
@@ -1973,7 +2043,7 @@ mod handlers {
     pub fn delete_property_static(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let target = cx.pop_stack_rooted();
         let cid = cx.fetchw_and_inc_ip();
-        let con = cx.identifier_constant(cid.into());
+        let con = JsString::from(cx.constants().symbols[SymbolConstant(cid)]);
         let value = target.delete_property(&mut cx, con.into())?;
 
         // TODO: not correct, as `undefined` might have been the actual value
@@ -2262,8 +2332,13 @@ pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResu
         Instruction::Pop => handlers::pop(cx),
         Instruction::LdLocal => handlers::ldlocal(cx),
         Instruction::LdGlobal => handlers::ldglobal(cx),
-        Instruction::Constant => handlers::constant(cx),
-        Instruction::ConstantW => handlers::constantw(cx),
+        Instruction::String => handlers::string_constant(cx),
+        Instruction::Boolean => handlers::boolean_constant(cx),
+        Instruction::Number => handlers::number_constant(cx),
+        Instruction::Regex => handlers::regex_constant(cx),
+        Instruction::Null => handlers::null_constant(cx),
+        Instruction::Undefined => handlers::undefined_constant(cx),
+        Instruction::Function => handlers::function_constant(cx),
         Instruction::Pos => handlers::pos(cx),
         Instruction::Neg => handlers::neg(cx),
         Instruction::TypeOf => handlers::type_of(cx),

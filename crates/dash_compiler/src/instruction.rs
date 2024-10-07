@@ -1,4 +1,8 @@
-use dash_middle::compiler::constant::{Constant, LimitExceededError};
+use std::rc::Rc;
+
+use dash_middle::compiler::constant::{
+    BooleanConstant, Function, FunctionConstant, LimitExceededError, NumberConstant, RegexConstant, SymbolConstant,
+};
 use dash_middle::compiler::instruction::{AssignKind, Instruction, IntrinsicOperation};
 use dash_middle::compiler::{
     ExportPropertyKind, FunctionCallMetadata, ObjectMemberKind as CompilerObjectMemberKind, StaticImportKind,
@@ -81,12 +85,6 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
         self.writew(tc_depth);
     }
 
-    pub fn build_constant(&mut self, constant: Constant) -> Result<(), LimitExceededError> {
-        let id = self.current_function_mut().cp.add(constant)?;
-        self.write_wide_instr(Instruction::Constant, Instruction::ConstantW, id);
-        Ok(())
-    }
-
     pub fn write_bool(&mut self, b: bool) {
         self.write(b.into());
     }
@@ -112,15 +110,67 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
         compile_local_load_into(&mut self.current_function_mut().buf, index, is_extern);
     }
 
+    pub fn build_string_constant(&mut self, sym: Symbol) -> Result<(), LimitExceededError> {
+        let SymbolConstant(id) = self.current_function_mut().cp.add_symbol(sym)?;
+        self.write_instr(Instruction::String);
+        self.writew(id);
+        Ok(())
+    }
+
+    pub fn build_boolean_constant(&mut self, b: bool) -> Result<(), LimitExceededError> {
+        let BooleanConstant(id) = self.current_function_mut().cp.add_boolean(b)?;
+        self.write_instr(Instruction::Boolean);
+        self.writew(id);
+        Ok(())
+    }
+
+    pub fn build_number_constant(&mut self, n: f64) -> Result<(), LimitExceededError> {
+        let NumberConstant(id) = self.current_function_mut().cp.add_number(n)?;
+        self.write_instr(Instruction::Number);
+        self.writew(id);
+        Ok(())
+    }
+
+    pub fn build_regex_constant(
+        &mut self,
+        regex: dash_regex::ParsedRegex,
+        flags: dash_regex::Flags,
+        sym: Symbol,
+    ) -> Result<(), LimitExceededError> {
+        let RegexConstant(id) = self.current_function_mut().cp.add_regex((regex, flags, sym))?;
+        self.write_instr(Instruction::Regex);
+        self.writew(id);
+        Ok(())
+    }
+
+    pub fn build_null_constant(&mut self) -> Result<(), LimitExceededError> {
+        self.write_instr(Instruction::Null);
+        Ok(())
+    }
+
+    pub fn build_undefined_constant(&mut self) -> Result<(), LimitExceededError> {
+        self.write_instr(Instruction::Undefined);
+        Ok(())
+    }
+
+    pub fn build_function_constant(&mut self, fun: Function) -> Result<(), LimitExceededError> {
+        let FunctionConstant(id) = self.current_function_mut().cp.add_function(Rc::new(fun))?;
+        self.write_instr(Instruction::Function);
+        self.writew(id);
+        Ok(())
+    }
+
+    // pub fn build_boolean_constant(&mut self, b: bool) -> Result<
+
     pub fn build_global_load(&mut self, ident: Symbol) -> Result<(), LimitExceededError> {
-        let id = self.current_function_mut().cp.add(Constant::Identifier(ident))?;
+        let SymbolConstant(id) = self.current_function_mut().cp.add_symbol(ident)?;
         self.write_instr(Instruction::LdGlobal);
         self.writew(id);
         Ok(())
     }
 
     pub fn build_global_store(&mut self, kind: AssignKind, ident: Symbol) -> Result<(), LimitExceededError> {
-        let id = self.current_function_mut().cp.add(Constant::Identifier(ident))?;
+        let SymbolConstant(id) = self.current_function_mut().cp.add_symbol(ident)?;
         self.write_wide_instr(Instruction::StoreGlobal, Instruction::StoreGlobalW, id);
         self.write(kind as u8);
         Ok(())
@@ -196,7 +246,7 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
     }
 
     pub fn build_static_prop_access(&mut self, ident: Symbol, preserve_this: bool) -> Result<(), LimitExceededError> {
-        let id = self.current_function_mut().cp.add(Constant::Identifier(ident))?;
+        let SymbolConstant(id) = self.current_function_mut().cp.add_symbol(ident)?;
         self.write_instr(Instruction::StaticPropAccess);
         self.writew(id);
         self.write(preserve_this.into());
@@ -210,7 +260,7 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
     }
 
     pub fn build_static_prop_assign(&mut self, kind: AssignKind, ident: Symbol) -> Result<(), LimitExceededError> {
-        let id = self.current_function_mut().cp.add(Constant::Identifier(ident))?;
+        let SymbolConstant(id) = self.current_function_mut().cp.add_symbol(ident)?;
         self.write_instr(Instruction::StaticPropAssign);
         self.write(kind as u8);
         self.writew(id);
@@ -255,10 +305,10 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
             name: Symbol,
             kind_id: u8,
         ) -> Result<(), Error> {
-            let id = ib
+            let SymbolConstant(id) = ib
                 .current_function_mut()
                 .cp
-                .add(Constant::Identifier(name))
+                .add_symbol(name)
                 .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
 
             ib.write(kind_id);
@@ -284,20 +334,20 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
         Ok(())
     }
 
-    pub fn build_static_import(&mut self, import: StaticImportKind, local_id: u16, path_id: u16) {
+    pub fn build_static_import(&mut self, import: StaticImportKind, local_id: u16, path_id: SymbolConstant) {
         self.write_instr(Instruction::ImportStatic);
         self.write(import as u8);
         self.writew(local_id);
-        self.writew(path_id);
+        self.writew(path_id.0);
     }
 
     pub fn build_dynamic_import(&mut self) {
         self.write_instr(Instruction::ImportDyn);
     }
 
-    pub fn build_static_delete(&mut self, id: u16) {
+    pub fn build_static_delete(&mut self, id: SymbolConstant) {
         self.write_instr(Instruction::DeletePropertyStatic);
-        self.writew(id);
+        self.writew(id.0);
     }
 
     pub fn build_named_export(&mut self, span: Span, it: &[NamedExportKind]) -> Result<(), Error> {
@@ -315,11 +365,11 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
                 NamedExportKind::Local { loc_id, ident_id } => {
                     self.write(ExportPropertyKind::Local as u8);
                     self.writew(loc_id);
-                    self.writew(ident_id);
+                    self.writew(ident_id.0);
                 }
                 NamedExportKind::Global { ident_id } => {
                     self.write(ExportPropertyKind::Global as u8);
-                    self.writew(ident_id);
+                    self.writew(ident_id.0);
                 }
             }
         }
@@ -546,10 +596,10 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
     }
 
     pub fn build_typeof_global_ident(&mut self, at: Span, ident: Symbol) -> Result<(), Error> {
-        let id = self
+        let SymbolConstant(id) = self
             .current_function_mut()
             .cp
-            .add(Constant::Identifier(ident))
+            .add_symbol(ident)
             .map_err(|_| Error::ConstantPoolLimitExceeded(at))?;
         self.write_instr(Instruction::TypeOfGlobalIdent);
         self.writew(id);
@@ -559,8 +609,8 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
 
 #[derive(Copy, Clone)]
 pub enum NamedExportKind {
-    Local { loc_id: u16, ident_id: u16 },
-    Global { ident_id: u16 },
+    Local { loc_id: u16, ident_id: SymbolConstant },
+    Global { ident_id: SymbolConstant },
 }
 
 pub fn compile_local_load_into(out: &mut Vec<u8>, index: u16, is_extern: bool) {

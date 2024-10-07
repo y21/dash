@@ -10,6 +10,7 @@ from_string = ["dash_parser", "dash_lexer"]
 decompile = []
 
 [dependencies]
+dash_regex = { path = "../dash_regex" }
 dash_middle = { path = "../dash_middle" }
 strum = "0.24.0"
 strum_macros = "0.24.0"

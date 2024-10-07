@@ -1,6 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
+use dash_middle::compiler::constant::{BooleanConstant, NumberConstant};
 use dash_middle::compiler::instruction::{AssignKind, Instruction, IntrinsicOperation};
+use dash_middle::util::is_integer;
 use dash_typed_cfg::passes::bb_generation::{
     BasicBlockKey, BasicBlockMap, BasicBlockSuccessor, ConditionalBranchAction,
 };
@@ -106,7 +108,8 @@ impl JitConstant {
 }
 
 pub trait CodegenQuery {
-    fn get_constant(&self, cid: u16) -> JitConstant;
+    fn boolean_constant(&self, id: BooleanConstant) -> bool;
+    fn number_constant(&self, id: NumberConstant) -> f64;
 }
 
 pub struct CodegenCtxt<'a, 'q, Q> {
@@ -332,11 +335,27 @@ impl<'a, 'q, Q: CodegenQuery> CodegenCtxt<'a, 'q, Q> {
                     let value = self.load_local(id.into());
                     stack.push(value);
                 }
-                Instruction::Constant => {
-                    let cid = dcx.next_byte();
-                    let constant = self.query.get_constant(cid.into());
-                    stack.push(constant.to_llvm_value(&self.llcx));
+                Instruction::Boolean | Instruction::Number => {
+                    let id = dcx.next_wide();
+                    let value = match instr {
+                        Instruction::Boolean => self.llcx.const_i1(self.query.boolean_constant(BooleanConstant(id))),
+                        Instruction::Number => {
+                            let val = self.query.number_constant(NumberConstant(id));
+                            if is_integer(val) {
+                                self.llcx.const_i64(val as i64)
+                            } else {
+                                self.llcx.const_f64(val)
+                            }
+                        }
+                        _ => unreachable!(),
+                    };
+                    stack.push(value);
                 }
+                Instruction::String
+                | Instruction::Regex
+                | Instruction::Null
+                | Instruction::Undefined
+                | Instruction::Function => todo!(),
                 Instruction::Pop => drop(stack.pop()),
                 Instruction::Jmp => {
                     let bb = &self.bb_map[&bbk];

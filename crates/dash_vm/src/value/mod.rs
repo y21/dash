@@ -18,9 +18,6 @@ pub mod typedarray;
 use std::any::TypeId;
 use std::ops::ControlFlow;
 
-use dash_middle::compiler::constant::Constant;
-use dash_middle::compiler::external::External;
-use dash_middle::parser::statement::{Asyncness, FunctionKind as ParserFunctionKind};
 use dash_middle::util::ThreadSafeStorage;
 use dash_proc_macro::Trace;
 
@@ -29,18 +26,11 @@ use crate::gc::handle::Handle;
 use crate::gc::interner::sym;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::util::cold_path;
-use crate::value::function::FunctionKind;
 use crate::value::primitive::{Null, Undefined};
 use crate::{delegate, throw};
 
-use self::function::r#async::AsyncFunction;
-use self::function::closure::Closure;
-use self::function::generator::GeneratorFunction;
-use self::function::user::UserFunction;
-use self::function::Function;
 use self::object::{Object, PropertyKey, PropertyValue};
 use self::primitive::{InternalSlots, Number, Symbol};
-use self::regex::RegExp;
 use self::string::JsString;
 use super::localscope::LocalScope;
 
@@ -415,75 +405,7 @@ unsafe impl Trace for Value {
     }
 }
 
-fn register_function_externals(
-    function: &dash_middle::compiler::constant::Function,
-    sc: &mut LocalScope<'_>,
-) -> Vec<ExternalValue> {
-    let mut externals = Vec::new();
-
-    for External { id, is_nested_external } in function.externals.iter().copied() {
-        let id = usize::from(id);
-
-        let val = if is_nested_external {
-            sc.get_external(id).expect("Referenced local not found").clone()
-        } else {
-            let v = sc.get_local_raw(id).expect("Referenced local not found");
-
-            match v {
-                Value::External(v) => v,
-                other => {
-                    // TODO: comment what's happening here -- Value -> Handle -> ExternaValue(..)
-                    let ext = ExternalValue::new(sc.register(other));
-                    sc.set_local(id, Value::External(ext.clone()).into());
-                    ext
-                }
-            }
-        };
-
-        externals.push(val);
-    }
-
-    externals
-}
-
 impl Value {
-    pub fn from_constant(constant: Constant, sc: &mut LocalScope<'_>) -> Self {
-        match constant {
-            Constant::Number(n) => Value::number(n),
-            Constant::Boolean(b) => Value::Boolean(b),
-            Constant::String(s) => Value::String(s.into()),
-            Constant::Undefined => Value::undefined(),
-            Constant::Null => Value::null(),
-            Constant::Regex(regex) => {
-                let (nodes, flags, source) = *regex;
-                let regex = RegExp::new(nodes, flags, source.into(), sc);
-                Value::Object(sc.register(regex))
-            }
-            Constant::Function(f) => {
-                let externals = register_function_externals(&f, sc);
-
-                let name = f.name.map(Into::into);
-                let ty = f.ty;
-
-                let fun = UserFunction::new(f, externals.into());
-
-                let kind = match ty {
-                    ParserFunctionKind::Function(Asyncness::Yes) => FunctionKind::Async(AsyncFunction::new(fun)),
-                    ParserFunctionKind::Function(Asyncness::No) => FunctionKind::User(fun),
-                    ParserFunctionKind::Arrow => FunctionKind::Closure(Closure {
-                        fun,
-                        this: sc.active_frame().this.clone().unwrap_or_undefined(),
-                    }),
-                    ParserFunctionKind::Generator => FunctionKind::Generator(GeneratorFunction::new(fun)),
-                };
-
-                let function = Function::new(sc, name, kind);
-                sc.register(function).into()
-            }
-            Constant::Identifier(_) => unreachable!(),
-        }
-    }
-
     pub fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Unrooted> {
         match self {
             Self::Object(o) => o.get_property(sc, key),

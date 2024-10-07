@@ -1,4 +1,5 @@
 pub mod compiler;
+pub mod indexvec;
 pub mod interner;
 pub mod iterator_with;
 pub mod lexer;
@@ -7,5 +8,3 @@ pub mod sourcemap;
 pub mod tree;
 pub mod util;
 pub mod visitor;
-// Unused for now.
-// pub mod walker;
