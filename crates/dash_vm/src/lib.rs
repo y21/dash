@@ -1193,7 +1193,10 @@ impl Vm {
     pub(crate) fn fetchw_and_inc_ip(&mut self) -> u16 {
         let frame = self.active_frame_mut();
         let value: [u8; 2] = frame.function.buffer.with(|buf| {
-            buf[frame.ip..frame.ip + 2]
+            // This "no op" cast usize->u32->usize is intentional
+            // as it elides the end > start indexing branch
+            let ip = frame.ip as u32 as usize;
+            buf[ip..ip + 2]
                 .try_into()
                 .expect("Failed to get wide instruction")
         });

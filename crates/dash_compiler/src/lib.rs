@@ -256,6 +256,12 @@ impl<'interner> FunctionCompiler<'interner> {
         let root_function = self.scopes[root.id].expect_function();
         let locals = root_function.locals.len();
 
+        // Throughout the vm we make the assumption that the instruction pointer is always a u32
+        assert!(
+            root.buf.len() <= u32::MAX as usize,
+            "bytecode for root function exceeds the 4 GB limit"
+        );
+
         Ok(CompileResult {
             instructions: root.buf,
             cp: root.cp,
@@ -1766,6 +1772,12 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             let cmp = ib.function_stack.pop().expect("Missing function state");
             res?; // Cannot early return error in the loop as we need to pop the function state in any case
             let locals = ib.scopes[id].expect_function().locals.len();
+
+            assert!(
+                cmp.buf.len() <= u32::MAX as usize,
+                "bytecode for function {} exceeds 4 GB limit",
+                name.map(|b| ib.interner.resolve(b.ident)).unwrap_or("<anon>")
+            );
 
             let function = Function {
                 buffer: Buffer(Cell::new(cmp.buf.into())),
