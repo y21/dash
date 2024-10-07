@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726155342485,
+  "lastUpdate": 1728332362130,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -10097,6 +10097,60 @@ window.BENCHMARK_DATA = {
             "name": "exec tinycolor2 parse hex+toFilter",
             "value": 33583868,
             "range": "± 1168563",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "9cb0fd5ddc76c5b237b45106fe18225bb152a1cc",
+          "message": "SoA constants",
+          "timestamp": "2024-10-07T22:15:05+02:00",
+          "tree_id": "5cfafc32e34952ab71ce079c6a2f82cf4a857fd0",
+          "url": "https://github.com/y21/dash/commit/9cb0fd5ddc76c5b237b45106fe18225bb152a1cc"
+        },
+        "date": 1728332361250,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1829629,
+            "range": "± 23957",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 165981,
+            "range": "± 2528",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 60281,
+            "range": "± 1342",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse+compile tinycolor2",
+            "value": 2117570,
+            "range": "± 11868",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "exec tinycolor2 parse hex+toFilter",
+            "value": 34074938,
+            "range": "± 405957",
             "unit": "ns/iter"
           }
         ]
