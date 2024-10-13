@@ -41,7 +41,7 @@ fn parse_path(cx: CallContext) -> Result<Value, Value> {
     object.set_property(
         cx.scope,
         dir_sym.into(),
-        PropertyValue::static_default(Value::String(dir.into())),
+        PropertyValue::static_default(Value::string(dir.into())),
     )?;
     Ok(cx.scope.register(object).into())
 }

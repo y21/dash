@@ -3,8 +3,8 @@ use dash_proc_macro::Trace;
 
 use crate::gc::interner::Symbol;
 use crate::localscope::LocalScope;
-use crate::throw;
 use crate::value::boxed::String as BoxedString;
+use crate::{throw, Vm};
 
 use super::object::{Object, PropertyKey, PropertyValue};
 use super::ops::conversions::{PreferredType, ValueConversion};
@@ -44,7 +44,7 @@ impl JsString {
 
 impl ValueConversion for JsString {
     fn to_primitive(&self, _: &mut LocalScope, _: Option<PreferredType>) -> Result<Value, Value> {
-        Ok(Value::String(*self))
+        Ok(Value::string(*self))
     }
 
     fn to_number(&self, sc: &mut LocalScope) -> Result<f64, Value> {
@@ -67,7 +67,7 @@ impl ValueConversion for JsString {
         Ok(self.res(sc).len())
     }
 
-    fn to_object(&self, sc: &mut LocalScope) -> Result<crate::gc::handle::Handle, Value> {
+    fn to_object(&self, sc: &mut LocalScope) -> Result<crate::gc::ObjectId, Value> {
         let bx = BoxedString::new(sc, *self);
         Ok(sc.register(bx))
     }
@@ -88,7 +88,7 @@ impl Object for JsString {
                 let bytes = self.res(sc).as_bytes();
                 if let Some(&byte) = bytes.get(index) {
                     let s = sc.intern((byte as char).to_string().as_ref());
-                    return Ok(Some(PropertyValue::static_non_enumerable(Value::String(s.into()))));
+                    return Ok(Some(PropertyValue::static_non_enumerable(Value::string(s.into()))));
                 }
             }
         }
@@ -120,7 +120,7 @@ impl Object for JsString {
     fn apply(
         &self,
         scope: &mut LocalScope,
-        _: crate::gc::handle::Handle,
+        _: crate::gc::ObjectId,
         _: Value,
         _: Vec<Value>,
     ) -> Result<super::Unrooted, super::Unrooted> {
@@ -128,7 +128,7 @@ impl Object for JsString {
         throw!(scope, TypeError, "'{}' is not a function", v)
     }
 
-    fn as_any(&self) -> &dyn std::any::Any {
+    fn as_any(&self, _: &Vm) -> &dyn std::any::Any {
         self
     }
 
@@ -137,11 +137,11 @@ impl Object for JsString {
         Ok(array_like_keys(sc, len).collect())
     }
 
-    fn type_of(&self) -> Typeof {
+    fn type_of(&self, _: &Vm) -> Typeof {
         Typeof::String
     }
 
-    fn internal_slots(&self) -> Option<&dyn InternalSlots> {
+    fn internal_slots(&self, _: &Vm) -> Option<&dyn InternalSlots> {
         Some(self)
     }
 }

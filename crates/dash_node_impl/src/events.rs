@@ -5,14 +5,14 @@ use dash_middle::interner::Symbol;
 use dash_proc_macro::Trace;
 use dash_rt::state::State;
 use dash_rt::typemap::Key;
-use dash_vm::gc::handle::Handle;
+use dash_vm::gc::ObjectId;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::function::native::{register_native_fn, CallContext};
 use dash_vm::value::function::{Function, FunctionKind};
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::root_ext::RootErrExt;
-use dash_vm::value::Value;
+use dash_vm::value::{Unpack, Value, ValueKind};
 use dash_vm::{delegate, throw};
 use rustc_hash::FxHashMap;
 
@@ -76,13 +76,13 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
         PropertyValue::static_default(event_emitter_ctor.clone().into()),
     )?;
 
-    Ok(Value::Object(event_emitter_ctor))
+    Ok(Value::object(event_emitter_ctor))
 }
 
 #[derive(Debug, Trace)]
 pub struct EventEmitter {
     object: NamedObject,
-    handlers: RefCell<FxHashMap<Symbol, Vec<Handle>>>,
+    handlers: RefCell<FxHashMap<Symbol, Vec<ObjectId>>>,
 }
 
 struct EventsKey;
@@ -92,8 +92,8 @@ impl Key for EventsKey {
 
 #[derive(Debug, Trace)]
 struct EventsState {
-    event_emitter_prototype: Handle,
-    event_emitter_constructor: Handle,
+    event_emitter_prototype: ObjectId,
+    event_emitter_constructor: ObjectId,
 }
 
 impl Object for EventEmitter {
@@ -115,10 +115,10 @@ fn on(cx: CallContext) -> Result<Value, Value> {
         throw!(cx.scope, Error, "expected an event name and callback function");
     };
     let name = name.to_js_string(cx.scope)?;
-    let Value::Object(cb) = cb else {
+    let ValueKind::Object(cb) = cb.unpack() else {
         throw!(cx.scope, Error, "expected callback to be a function")
     };
-    let Some(this) = cx.this.downcast_ref::<EventEmitter>() else {
+    let Some(this) = cx.this.downcast_ref::<EventEmitter>(cx.scope) else {
         throw!(cx.scope, TypeError, "on can only be called on EventEmitter instances")
     };
     match this.handlers.borrow_mut().entry(name.sym()) {
@@ -133,7 +133,7 @@ fn emit(cx: CallContext) -> Result<Value, Value> {
         throw!(cx.scope, Error, "expected an event name");
     };
     let name = name.to_js_string(cx.scope)?;
-    let Some(this) = cx.this.downcast_ref::<EventEmitter>() else {
+    let Some(this) = cx.this.downcast_ref::<EventEmitter>(cx.scope) else {
         throw!(cx.scope, TypeError, "on can only be called on EventEmitter instances")
     };
     let mut did_emit = false;
@@ -146,5 +146,5 @@ fn emit(cx: CallContext) -> Result<Value, Value> {
         }
     }
 
-    Ok(Value::Boolean(did_emit))
+    Ok(Value::boolean(did_emit))
 }

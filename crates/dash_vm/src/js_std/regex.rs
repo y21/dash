@@ -31,13 +31,13 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
 
     let regex = RegExp::new(nodes, flags, pattern, cx.scope);
 
-    Ok(Value::Object(cx.scope.register(regex)))
+    Ok(Value::object(cx.scope.register(regex)))
 }
 
 pub fn test(cx: CallContext) -> Result<Value, Value> {
     let text = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
 
-    let regex = match cx.this.downcast_ref::<RegExp>() {
+    let regex = match cx.this.downcast_ref::<RegExp>(cx.scope) {
         Some(regex) => regex,
         None => throw!(cx.scope, TypeError, "Receiver must be a RegExp"),
     };
@@ -57,7 +57,7 @@ pub fn test(cx: CallContext) -> Result<Value, Value> {
 
     if is_global && last_index.get() >= text.len() {
         last_index.set(0);
-        return Ok(Value::Boolean(false));
+        return Ok(Value::boolean(false));
     }
 
     let mut matcher = RegexMatcher::new(regex, text[last_index.get()..].as_bytes());
@@ -65,19 +65,19 @@ pub fn test(cx: CallContext) -> Result<Value, Value> {
         if is_global {
             last_index.set(last_index.get() + matcher.groups.get(0).unwrap().end);
         }
-        Ok(Value::Boolean(true))
+        Ok(Value::boolean(true))
     } else {
         if is_global {
             last_index.set(0);
         }
-        Ok(Value::Boolean(false))
+        Ok(Value::boolean(false))
     }
 }
 
 pub fn exec(cx: CallContext<'_, '_>) -> Result<Value, Value> {
     let text = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
 
-    let regex = match cx.this.downcast_ref::<RegExp>() {
+    let regex = match cx.this.downcast_ref::<RegExp>(cx.scope) {
         Some(regex) => regex,
         None => throw!(cx.scope, TypeError, "Receiver must be a RegExp"),
     };
@@ -114,12 +114,12 @@ pub fn exec(cx: CallContext<'_, '_>) -> Result<Value, Value> {
                     Some(r) => cx.scope.intern(&text[r]).into(),
                     None => sym::null.into(),
                 };
-                PropertyValue::static_default(Value::String(sub))
+                PropertyValue::static_default(Value::string(sub))
             })
             .collect();
 
         let groups = Array::from_vec(cx.scope, groups);
-        Ok(Value::Object(cx.scope.register(groups)))
+        Ok(Value::object(cx.scope.register(groups)))
     } else {
         if is_global {
             last_index.set(0);

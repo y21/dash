@@ -2,21 +2,21 @@ use std::any::Any;
 
 use dash_proc_macro::Trace;
 
-use crate::gc::handle::Handle;
+use crate::gc::ObjectId;
 use crate::value::object::{NamedObject, Object};
 use crate::value::{Typeof, Unrooted, Value};
 use crate::{delegate, Vm};
 
 #[derive(Debug, Trace)]
 pub struct BoundFunction {
-    callee: Handle,
+    callee: ObjectId,
     this: Option<Value>,
     args: Option<Vec<Value>>,
     obj: NamedObject,
 }
 
 impl BoundFunction {
-    pub fn new(vm: &Vm, callee: Handle, this: Option<Value>, args: Option<Vec<Value>>) -> Self {
+    pub fn new(vm: &Vm, callee: ObjectId, this: Option<Value>, args: Option<Vec<Value>>) -> Self {
         Self {
             callee,
             this,
@@ -42,7 +42,7 @@ impl Object for BoundFunction {
     fn apply(
         &self,
         scope: &mut crate::localscope::LocalScope,
-        _callee: Handle,
+        _callee: ObjectId,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
@@ -54,11 +54,11 @@ impl Object for BoundFunction {
         self.callee.apply(scope, target_this, target_args)
     }
 
-    fn as_any(&self) -> &dyn Any {
+    fn as_any(&self, _: &Vm) -> &dyn Any {
         self
     }
 
-    fn type_of(&self) -> Typeof {
+    fn type_of(&self, _: &Vm) -> Typeof {
         Typeof::Function
     }
 }

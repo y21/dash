@@ -16,10 +16,10 @@ pub fn init_module(sc: &mut LocalScope) -> Result<Value, Value> {
     module.set_property(
         sc,
         name.into(),
-        PropertyValue::static_default(Value::Object(read_file_value)),
+        PropertyValue::static_default(Value::object(read_file_value)),
     )?;
 
-    Ok(Value::Object(sc.register(module)))
+    Ok(Value::object(sc.register(module)))
 }
 
 fn read_file(cx: CallContext) -> Result<Value, Value> {
@@ -32,10 +32,10 @@ fn read_file(cx: CallContext) -> Result<Value, Value> {
         .to_owned();
 
     wrap_async(cx, tokio::fs::read_to_string(path), |sc, res| match res {
-        Ok(s) => Ok(Value::String(sc.intern(s.as_ref()).into())),
+        Ok(s) => Ok(Value::string(sc.intern(s.as_ref()).into())),
         Err(e) => {
             let err = Error::new(sc, e.to_string());
-            Err(Value::Object(sc.register(err)))
+            Err(Value::object(sc.register(err)))
         }
     })
 }

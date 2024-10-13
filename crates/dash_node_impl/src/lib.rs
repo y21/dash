@@ -12,12 +12,12 @@ use dash_rt::format_value;
 use dash_rt::runtime::Runtime;
 use dash_rt::state::State;
 use dash_vm::eval::EvalError;
-use dash_vm::gc::handle::Handle;
+use dash_vm::gc::ObjectId;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::array::Array;
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
-use dash_vm::value::{Root, Unrooted, Value};
-use dash_vm::{delegate, throw};
+use dash_vm::value::{Root, Unpack, Unrooted, Value, ValueKind};
+use dash_vm::{delegate, throw, Vm};
 use package::Package;
 use rustc_hash::FxHashMap;
 use state::Nodejs;
@@ -80,7 +80,7 @@ async fn run_inner_fallible(path: &str, opt: OptLevel, initial_gc_threshold: Opt
             .set_property(
                 scope,
                 global_k.into(),
-                PropertyValue::static_default(Value::Object(global.clone())),
+                PropertyValue::static_default(Value::object(global)),
             )
             .unwrap();
         let process = create_process_object(scope);
@@ -112,7 +112,7 @@ async fn run_inner_fallible(path: &str, opt: OptLevel, initial_gc_threshold: Opt
     Ok(())
 }
 
-fn create_process_object(sc: &mut LocalScope<'_>) -> Handle {
+fn create_process_object(sc: &mut LocalScope<'_>) -> ObjectId {
     let obj = NamedObject::new(sc);
     let env = NamedObject::new(sc);
     let env = sc.register(env);
@@ -122,7 +122,7 @@ fn create_process_object(sc: &mut LocalScope<'_>) -> Handle {
 
     let argv_k = sc.intern("argv");
     let argv = env::args()
-        .map(|arg| PropertyValue::static_default(Value::String(sc.intern(arg).into())))
+        .map(|arg| PropertyValue::static_default(Value::string(sc.intern(arg).into())))
         .collect::<Vec<_>>();
     let argv = Array::from_vec(sc, argv);
     let argv = sc.register(argv);
@@ -137,7 +137,7 @@ fn create_process_object(sc: &mut LocalScope<'_>) -> Handle {
         .set_property(
             sc,
             dash_k.into(),
-            PropertyValue::static_default(Value::String(version.into())),
+            PropertyValue::static_default(Value::string(version.into())),
         )
         .unwrap();
     let versions = sc.register(versions);
@@ -168,9 +168,9 @@ fn execute_node_module(
     package: Rc<PackageState>,
 ) -> Result<Value, (EvalError, String)> {
     debug!(?dir_path, ?file_path);
-    let exports = Value::Object(scope.register(NamedObject::new(scope)));
-    let module = Value::Object(scope.register(NamedObject::new(scope)));
-    let require = Value::Object(scope.register(RequireFunction {
+    let exports = Value::object(scope.register(NamedObject::new(scope)));
+    let module = Value::object(scope.register(NamedObject::new(scope)));
+    let require = Value::object(scope.register(RequireFunction {
         current_dir: dir_path.to_owned(),
         state: global_state.clone(),
         package,
@@ -235,23 +235,22 @@ impl Object for RequireFunction {
         own_keys
     );
 
-    fn type_of(&self) -> dash_vm::value::Typeof {
+    fn type_of(&self, _: &Vm) -> dash_vm::value::Typeof {
         dash_vm::value::Typeof::Function
     }
 
     fn apply(
         &self,
         scope: &mut LocalScope,
-        _callee: dash_vm::gc::handle::Handle,
+        _callee: dash_vm::gc::ObjectId,
         _this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
-        let Some(Value::String(arg)) = args.first() else {
+        let Some(ValueKind::String(raw_arg)) = args.first().unpack() else {
             throw!(scope, Error, "require() expects a string argument");
         };
         let exports = scope.intern("exports");
-        let raw_arg = arg;
-        let mut arg = arg.res(scope).to_owned();
+        let mut arg = raw_arg.res(scope).to_owned();
         debug!(%arg, "require node module");
 
         let is_path = matches!(arg.chars().next(), Some('.' | '/' | '~'));
@@ -295,7 +294,7 @@ impl Object for RequireFunction {
             };
 
             module.get_property(scope, exports.into())
-        } else if let Some(o) = native::load_native_module(scope, *raw_arg)? {
+        } else if let Some(o) = native::load_native_module(scope, raw_arg)? {
             Ok(o.into())
         } else {
             // Resolve dependency in node_modules

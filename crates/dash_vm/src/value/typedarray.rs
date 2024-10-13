@@ -2,7 +2,7 @@ use std::any::Any;
 
 use dash_proc_macro::Trace;
 
-use crate::gc::handle::Handle;
+use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::Vm;
 
@@ -42,29 +42,29 @@ impl TypedArrayKind {
 
 #[derive(Debug, Trace)]
 pub struct TypedArray {
-    arraybuffer: Handle,
+    arraybuffer: ObjectId,
     kind: TypedArrayKind,
     obj: NamedObject,
 }
 
 impl TypedArray {
-    pub fn new(vm: &Vm, arraybuffer: Handle, kind: TypedArrayKind) -> Self {
+    pub fn new(vm: &Vm, arraybuffer: ObjectId, kind: TypedArrayKind) -> Self {
         let (proto, ctor) = match kind {
-            TypedArrayKind::Uint8Array => (&vm.statics.uint8array_prototype, &vm.statics.uint8array_ctor),
-            TypedArrayKind::Uint8ClampedArray => (&vm.statics.uint8array_prototype, &vm.statics.uint8array_ctor),
-            TypedArrayKind::Int8Array => (&vm.statics.int8array_prototype, &vm.statics.int8array_ctor),
-            TypedArrayKind::Int16Array => (&vm.statics.int16array_prototype, &vm.statics.int16array_ctor),
-            TypedArrayKind::Uint16Array => (&vm.statics.uint16array_prototype, &vm.statics.uint16array_ctor),
-            TypedArrayKind::Int32Array => (&vm.statics.int32array_prototype, &vm.statics.int32array_ctor),
-            TypedArrayKind::Uint32Array => (&vm.statics.uint32array_prototype, &vm.statics.uint32array_ctor),
-            TypedArrayKind::Float32Array => (&vm.statics.float32array_prototype, &vm.statics.float32array_ctor),
-            TypedArrayKind::Float64Array => (&vm.statics.float64array_prototype, &vm.statics.float64array_ctor),
+            TypedArrayKind::Uint8Array => (vm.statics.uint8array_prototype, vm.statics.uint8array_ctor),
+            TypedArrayKind::Uint8ClampedArray => (vm.statics.uint8array_prototype, vm.statics.uint8array_ctor),
+            TypedArrayKind::Int8Array => (vm.statics.int8array_prototype, vm.statics.int8array_ctor),
+            TypedArrayKind::Int16Array => (vm.statics.int16array_prototype, vm.statics.int16array_ctor),
+            TypedArrayKind::Uint16Array => (vm.statics.uint16array_prototype, vm.statics.uint16array_ctor),
+            TypedArrayKind::Int32Array => (vm.statics.int32array_prototype, vm.statics.int32array_ctor),
+            TypedArrayKind::Uint32Array => (vm.statics.uint32array_prototype, vm.statics.uint32array_ctor),
+            TypedArrayKind::Float32Array => (vm.statics.float32array_prototype, vm.statics.float32array_ctor),
+            TypedArrayKind::Float64Array => (vm.statics.float64array_prototype, vm.statics.float64array_ctor),
         };
 
         Self {
             arraybuffer,
             kind,
-            obj: NamedObject::with_prototype_and_constructor(proto.clone(), ctor.clone()),
+            obj: NamedObject::with_prototype_and_constructor(proto, ctor),
         }
     }
 
@@ -72,8 +72,8 @@ impl TypedArray {
         self.kind
     }
 
-    pub fn buffer(&self) -> Handle {
-        self.arraybuffer.clone()
+    pub fn buffer(&self) -> ObjectId {
+        self.arraybuffer
     }
 }
 
@@ -84,7 +84,7 @@ impl Object for TypedArray {
         key: PropertyKey,
     ) -> Result<Option<PropertyValue>, Unrooted> {
         if let Some(Ok(index)) = key.as_string().map(|k| k.res(sc).parse::<usize>()) {
-            let arraybuffer = self.arraybuffer.as_any().downcast_ref::<ArrayBuffer>();
+            let arraybuffer = self.arraybuffer.as_any(sc).downcast_ref::<ArrayBuffer>();
 
             if let Some(arraybuffer) = arraybuffer {
                 let bytes = arraybuffer.storage();
@@ -129,7 +129,7 @@ impl Object for TypedArray {
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
         if let Some(Ok(index)) = key.as_string().map(|k| k.res(sc).parse::<usize>()) {
-            let arraybuffer = self.arraybuffer.as_any().downcast_ref::<ArrayBuffer>();
+            let arraybuffer = self.arraybuffer.as_any(sc).downcast_ref::<ArrayBuffer>();
 
             // TODO: not undefined as this
             let value = value.kind().get_or_apply(sc, Value::undefined()).root(sc)?;
@@ -188,14 +188,14 @@ impl Object for TypedArray {
     fn apply(
         &self,
         scope: &mut LocalScope,
-        callee: Handle,
+        callee: ObjectId,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         self.obj.apply(scope, callee, this, args)
     }
 
-    fn as_any(&self) -> &dyn Any {
+    fn as_any(&self, _: &Vm) -> &dyn Any {
         self
     }
 

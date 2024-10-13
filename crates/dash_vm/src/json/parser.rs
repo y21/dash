@@ -209,7 +209,7 @@ impl<'a, 'sc, 'vm> Parser<'a, 'sc, 'vm> {
                 }
 
                 let arr = Array::from_vec(self.sc, arr);
-                Ok(Value::Object(self.sc.register(arr)))
+                Ok(Value::object(self.sc.register(arr)))
             }
             b'{' => {
                 let mut obj = ObjectMap::default();
@@ -238,13 +238,13 @@ impl<'a, 'sc, 'vm> Parser<'a, 'sc, 'vm> {
 
                 let obj = NamedObject::with_values(self.sc, obj);
 
-                Ok(Value::Object(self.sc.register(obj)))
+                Ok(Value::object(self.sc.register(obj)))
             }
             b'"' => {
                 let string = self.read_string_literal()?;
                 std::str::from_utf8(string)
                     .map_err(|err| JsonParseError::Utf8Error(err, self.idx))
-                    .map(|s| Value::String(self.sc.intern(s).into()))
+                    .map(|s| Value::string(self.sc.intern(s).into()))
             }
             _ if util::is_digit(cur) => {
                 let num = std::str::from_utf8(self.read_number_literal()?)

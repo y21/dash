@@ -54,7 +54,7 @@ pub fn load_native_module(sc: &mut LocalScope<'_>, arg: JsString) -> Result<Opti
 
 fn init_dummy_empty_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     let exports = NamedObject::new(sc);
-    Ok(Value::Object(sc.register(exports)))
+    Ok(Value::object(sc.register(exports)))
 }
 
 fn init_stream(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
@@ -62,5 +62,5 @@ fn init_stream(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     let readable = sc.intern("Readable");
     let readable_fn = register_native_fn(sc, readable, |_sc| Ok(Value::undefined()));
     exports.set_property(sc, readable.into(), PropertyValue::static_default(readable_fn.into()))?;
-    Ok(Value::Object(sc.register(exports)))
+    Ok(Value::object(sc.register(exports)))
 }

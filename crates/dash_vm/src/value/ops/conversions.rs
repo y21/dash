@@ -1,12 +1,12 @@
-use crate::gc::handle::Handle;
 use crate::gc::interner::sym;
+use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::boxed::{Boolean, Number as BoxedNumber, String as BoxedString, Symbol as BoxedSymbol};
 use crate::value::object::Object;
 use crate::value::primitive::{Number, MAX_SAFE_INTEGERF};
 use crate::value::string::JsString;
-use crate::value::{Root, Typeof, Value};
+use crate::value::{Root, Typeof, Unpack, Value, ValueKind};
 
 pub trait ValueConversion {
     fn to_primitive(&self, sc: &mut LocalScope, preferred_type: Option<PreferredType>) -> Result<Value, Value>;
@@ -56,7 +56,7 @@ pub trait ValueConversion {
 
     fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value>;
 
-    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle, Value>;
+    fn to_object(&self, sc: &mut LocalScope) -> Result<ObjectId, Value>;
 
     fn to_int32(&self, sc: &mut LocalScope) -> Result<i32, Value> {
         let n = self.to_number(sc)?;
@@ -66,51 +66,51 @@ pub trait ValueConversion {
 
 impl ValueConversion for Value {
     fn to_number(&self, sc: &mut LocalScope) -> Result<f64, Value> {
-        match self {
-            Value::Number(Number(n)) => Ok(*n),
-            Value::Undefined(_) => Ok(f64::NAN),
-            Value::Null(_) => Ok(0.0),
-            Value::Boolean(b) => Ok(*b as i8 as f64),
-            Value::String(s) => match s.len(sc) {
+        match self.unpack() {
+            ValueKind::Number(Number(n)) => Ok(n),
+            ValueKind::Undefined(_) => Ok(f64::NAN),
+            ValueKind::Null(_) => Ok(0.0),
+            ValueKind::Boolean(b) => Ok(b as i8 as f64),
+            ValueKind::String(s) => match s.len(sc) {
                 0 => Ok(0.0),
                 _ => Ok(s.res(sc).parse::<f64>().unwrap_or(f64::NAN)),
             },
-            Value::Symbol(_) => throw!(sc, TypeError, "Cannot convert symbol to number"),
-            Value::Object(_) => self.to_primitive(sc, Some(PreferredType::Number))?.to_number(sc),
-            Value::External(_) => unreachable!(),
+            ValueKind::Symbol(_) => throw!(sc, TypeError, "Cannot convert symbol to number"),
+            ValueKind::Object(_) => self.to_primitive(sc, Some(PreferredType::Number))?.to_number(sc),
+            ValueKind::External(_) => unreachable!(),
         }
     }
 
     fn to_boolean(&self, sc: &mut LocalScope<'_>) -> Result<bool, Value> {
-        match self {
-            Value::Boolean(b) => Ok(*b),
-            Value::Undefined(_) => Ok(false),
-            Value::Null(_) => Ok(false),
-            Value::Number(Number(n)) => Ok(*n != 0.0 && !n.is_nan()),
-            Value::String(s) => Ok(!s.res(sc).is_empty()),
-            Value::Symbol(_) => Ok(true),
-            Value::Object(_) => Ok(true),
-            Value::External(_) => unreachable!(),
+        match self.unpack() {
+            ValueKind::Boolean(b) => Ok(b),
+            ValueKind::Undefined(_) => Ok(false),
+            ValueKind::Null(_) => Ok(false),
+            ValueKind::Number(Number(n)) => Ok(n != 0.0 && !n.is_nan()),
+            ValueKind::String(s) => Ok(!s.res(sc).is_empty()),
+            ValueKind::Symbol(_) => Ok(true),
+            ValueKind::Object(_) => Ok(true),
+            ValueKind::External(_) => unreachable!(),
         }
     }
 
     fn to_js_string(&self, sc: &mut LocalScope) -> Result<JsString, Value> {
-        match self {
-            Value::String(s) => ValueConversion::to_js_string(s, sc),
-            Value::Boolean(b) => ValueConversion::to_js_string(b, sc),
-            Value::Null(n) => ValueConversion::to_js_string(n, sc),
-            Value::Undefined(u) => ValueConversion::to_js_string(u, sc),
-            Value::Number(n) => ValueConversion::to_js_string(n, sc),
-            Value::Object(_) => self.to_primitive(sc, Some(PreferredType::String))?.to_js_string(sc),
-            Value::Symbol(_) => throw!(sc, TypeError, "Cannot convert symbol to a string"),
-            Value::External(_) => unreachable!(),
+        match self.unpack() {
+            ValueKind::String(s) => ValueConversion::to_js_string(&s, sc),
+            ValueKind::Boolean(b) => ValueConversion::to_js_string(&b, sc),
+            ValueKind::Null(n) => ValueConversion::to_js_string(&n, sc),
+            ValueKind::Undefined(u) => ValueConversion::to_js_string(&u, sc),
+            ValueKind::Number(n) => ValueConversion::to_js_string(&n, sc),
+            ValueKind::Object(_) => self.to_primitive(sc, Some(PreferredType::String))?.to_js_string(sc),
+            ValueKind::Symbol(_) => throw!(sc, TypeError, "Cannot convert symbol to a string"),
+            ValueKind::External(_) => unreachable!(),
         }
     }
 
     fn to_primitive(&self, sc: &mut LocalScope, preferred_type: Option<PreferredType>) -> Result<Value, Value> {
         // 1. If Type(input) is Object, then
         // (If not, return as is)
-        if !matches!(self, Value::Object(_)) {
+        if !matches!(self.unpack(), ValueKind::Object(_)) {
             return Ok(self.clone());
         }
 
@@ -131,7 +131,7 @@ impl ValueConversion for Value {
             // If Type(result) is not Object, return result.
             // TODO: this can still be an object if Value::External
             // TODO2: ^ can it? we usually unbox all locals on use, so you can't return an external
-            if !matches!(result, Value::Object(_)) {
+            if !matches!(result.unpack(), ValueKind::Object(_)) {
                 return Ok(result);
             }
 
@@ -149,24 +149,24 @@ impl ValueConversion for Value {
         self.get_property(sc, sym::length.into()).root(sc)?.to_length_u(sc)
     }
 
-    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle, Value> {
+    fn to_object(&self, sc: &mut LocalScope) -> Result<ObjectId, Value> {
         fn register_dyn<O: Object + 'static, F: Fn(&mut LocalScope) -> O>(
             sc: &mut LocalScope,
             fun: F,
-        ) -> Result<Handle, Value> {
+        ) -> Result<ObjectId, Value> {
             let obj = fun(sc);
             Ok(sc.register(obj))
         }
 
-        match self {
-            Value::Object(o) => Ok(o.clone()),
-            Value::Undefined(_) => throw!(sc, TypeError, "Cannot convert undefined to object"),
-            Value::Null(_) => throw!(sc, TypeError, "Cannot convert null to object"),
-            Value::Boolean(b) => register_dyn(sc, |sc| Boolean::new(sc, *b)),
-            Value::Symbol(s) => register_dyn(sc, |sc| BoxedSymbol::new(sc, s.clone())),
-            Value::Number(Number(n)) => register_dyn(sc, |sc| BoxedNumber::new(sc, *n)),
-            Value::String(s) => register_dyn(sc, |sc| BoxedString::new(sc, *s)),
-            Value::External(_) => unreachable!(),
+        match self.unpack() {
+            ValueKind::Object(o) => Ok(o),
+            ValueKind::Undefined(_) => throw!(sc, TypeError, "Cannot convert undefined to object"),
+            ValueKind::Null(_) => throw!(sc, TypeError, "Cannot convert null to object"),
+            ValueKind::Boolean(b) => register_dyn(sc, |sc| Boolean::new(sc, b)),
+            ValueKind::Symbol(s) => register_dyn(sc, |sc| BoxedSymbol::new(sc, s)),
+            ValueKind::Number(Number(n)) => register_dyn(sc, |sc| BoxedNumber::new(sc, n)),
+            ValueKind::String(s) => register_dyn(sc, |sc| BoxedString::new(sc, s)),
+            ValueKind::External(_) => unreachable!(),
         }
     }
 }
@@ -179,13 +179,11 @@ pub enum PreferredType {
 
 impl PreferredType {
     pub fn to_value(&self) -> Value {
-        let st = match self {
+        Value::string(match self {
             PreferredType::Default => sym::default.into(),
             PreferredType::String => sym::string.into(),
             PreferredType::Number => sym::number.into(),
-        };
-
-        Value::String(st)
+        })
     }
 }
 
@@ -198,10 +196,10 @@ impl Value {
 
         for name in method_names {
             let method = self.get_property(sc, name.into()).root(sc)?;
-            if matches!(method.type_of(), Typeof::Function) {
+            if matches!(method.type_of(sc), Typeof::Function) {
                 let this = self.clone();
                 let result = method.apply(sc, this, Vec::new()).root(sc)?;
-                if !matches!(result, Value::Object(_)) {
+                if !matches!(result.unpack(), ValueKind::Object(_)) {
                     return Ok(result);
                 }
             }

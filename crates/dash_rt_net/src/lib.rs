@@ -29,9 +29,9 @@ impl ModuleLoader for NetModule {
         exports.set_property(
             sc,
             name.into(),
-            PropertyValue::static_default(Value::Object(tcplistener)),
+            PropertyValue::static_default(Value::object(tcplistener)),
         )?;
 
-        Ok(Some(Value::Object(sc.register(exports))))
+        Ok(Some(Value::object(sc.register(exports))))
     }
 }

@@ -8,6 +8,7 @@ use dash_proc_macro::Trace;
 
 use crate::gc::handle::Handle;
 use crate::gc::interner::sym;
+use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::value::object::PropertyDataDescriptor;
 use crate::{delegate, throw, Vm};
@@ -298,14 +299,14 @@ impl Object for Array {
     fn apply(
         &self,
         scope: &mut LocalScope,
-        callee: Handle,
+        callee: ObjectId,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         self.obj.apply(scope, callee, this, args)
     }
 
-    fn as_any(&self) -> &dyn Any {
+    fn as_any(&self, _: &Vm) -> &dyn Any {
         self
     }
 
@@ -347,14 +348,14 @@ impl Object for ArrayIterator {
     fn apply(
         &self,
         scope: &mut LocalScope,
-        callee: Handle,
+        callee: ObjectId,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         self.obj.apply(scope, callee, this, args)
     }
 
-    fn as_any(&self) -> &dyn Any {
+    fn as_any(&self, _: &Vm) -> &dyn Any {
         self
     }
 }
@@ -397,8 +398,8 @@ impl ArrayIterator {
 }
 
 /// Equivalent to calling get_property, but specialized for arrays
-pub fn spec_array_get_property(scope: &mut LocalScope, target: &Value, index: usize) -> Result<Unrooted, Unrooted> {
-    if let Some(arr) = target.downcast_ref::<Array>() {
+pub fn spec_array_get_property(scope: &mut LocalScope<'_>, target: &Value, index: usize) -> Result<Unrooted, Unrooted> {
+    if let Some(arr) = target.downcast_ref::<Array>(scope) {
         let inner = arr.items.borrow();
         return match inner.get(index) {
             Some(MaybeHoley::Some(value)) => value.get_or_apply(scope, Value::undefined()),
@@ -421,7 +422,7 @@ pub fn spec_array_set_property(
     value: PropertyValue,
 ) -> Result<(), Value> {
     // specialize array path
-    if let Some(arr) = target.downcast_ref::<Array>() {
+    if let Some(arr) = target.downcast_ref::<Array>(scope) {
         let mut inner = arr.items.borrow_mut();
 
         if index < MAX_LENGTH {

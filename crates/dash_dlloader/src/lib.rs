@@ -27,9 +27,9 @@ impl ModuleLoader for DllModule {
         let load = sc.intern("load");
         let load_sync = Function::new(sc, Some(load.into()), FunctionKind::Native(load_sync));
         let load_sync = sc.register(load_sync);
-        object.set_property(sc, load.into(), PropertyValue::static_default(Value::Object(load_sync)))?;
+        object.set_property(sc, load.into(), PropertyValue::static_default(Value::object(load_sync)))?;
 
-        Ok(Some(Value::Object(sc.register(object))))
+        Ok(Some(Value::object(sc.register(object))))
     }
 }
 

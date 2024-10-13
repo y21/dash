@@ -14,7 +14,7 @@ use dash_vm::value::function::{Function, FunctionKind};
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::string::JsString;
-use dash_vm::value::Value;
+use dash_vm::value::{Unpack, Value, ValueKind};
 
 #[derive(Debug)]
 pub struct TimersModule;
@@ -31,11 +31,11 @@ impl ModuleLoader for TimersModule {
 
             let name = sc.intern("setTimeout");
             let set_timeout = Function::new(sc, Some(name.into()), FunctionKind::Native(set_timeout));
-            let set_timeout = Value::Object(sc.register(set_timeout));
+            let set_timeout = Value::object(sc.register(set_timeout));
 
             obj.set_property(sc, name.into(), PropertyValue::static_default(set_timeout))?;
 
-            Ok(Some(Value::Object(sc.register(obj))))
+            Ok(Some(Value::object(sc.register(obj))))
         } else {
             Ok(None)
         }
@@ -43,8 +43,8 @@ impl ModuleLoader for TimersModule {
 }
 
 fn set_timeout(cx: CallContext) -> Result<Value, Value> {
-    let callback = match cx.args.first() {
-        Some(Value::Object(cb)) => cb.clone(),
+    let callback = match cx.args.first().unpack() {
+        Some(ValueKind::Object(cb)) => cb,
         _ => throw!(cx.scope, TypeError, "missing callback function argument"),
     };
 

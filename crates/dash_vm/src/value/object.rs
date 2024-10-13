@@ -6,19 +6,20 @@ use std::hash::BuildHasherDefault;
 use crate::gc::interner::sym;
 use crate::gc::persistent::Persistent;
 use crate::gc::trace::{Trace, TraceCtxt};
+use crate::gc::ObjectId;
 use bitflags::bitflags;
 use dash_proc_macro::Trace;
 use hashbrown::hash_map::Entry;
 use rustc_hash::FxHasher;
 
-use crate::gc::handle::Handle;
+use crate::gc::handle::{Handle, ObjectVTable};
 use crate::localscope::LocalScope;
 use crate::{throw, Vm};
 
 use super::ops::conversions::ValueConversion;
 use super::primitive::{InternalSlots, Symbol};
 use super::string::JsString;
-use super::{Root, Typeof, Unrooted, Value, ValueContext};
+use super::{Root, Typeof, Unpack, Unrooted, Value, ValueContext, ValueKind};
 
 pub type ObjectMap<K, V> = hashbrown::HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
@@ -50,10 +51,10 @@ pub trait Object: Debug + Trace {
             return Ok(own_descriptor);
         }
 
-        match self.get_prototype(sc)? {
-            Value::Object(object) => object.get_property_descriptor(sc, key),
-            Value::External(object) => object.get_own_property_descriptor(sc, key),
-            Value::Null(..) => Ok(None),
+        match self.get_prototype(sc)?.unpack() {
+            ValueKind::Object(object) => object.get_property_descriptor(sc, key),
+            ValueKind::External(object) => object.get_own_property_descriptor(sc, key),
+            ValueKind::Null(..) => Ok(None),
             _ => unreachable!(),
         }
     }
@@ -69,7 +70,7 @@ pub trait Object: Debug + Trace {
     fn apply(
         &self,
         scope: &mut LocalScope,
-        callee: Handle,
+        callee: ObjectId,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted>;
@@ -77,23 +78,23 @@ pub trait Object: Debug + Trace {
     fn construct(
         &self,
         scope: &mut LocalScope,
-        callee: Handle,
+        callee: ObjectId,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         self.apply(scope, callee, this, args)
     }
 
-    fn as_any(&self) -> &dyn Any;
+    fn as_any(&self, vm: &Vm) -> &dyn Any;
 
-    fn internal_slots(&self) -> Option<&dyn InternalSlots> {
+    fn internal_slots(&self, _: &Vm) -> Option<&dyn InternalSlots> {
         None
     }
 
     // TODO: change this to Vec<JsString>
     fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value>;
 
-    fn type_of(&self) -> Typeof {
+    fn type_of(&self, _: &Vm) -> Typeof {
         Typeof::Object
     }
 }
@@ -158,7 +159,7 @@ macro_rules! delegate {
         }
     };
     (override $field:ident, as_any) => {
-        fn as_any(&self) -> &dyn std::any::Any {
+        fn as_any(&self, _: &$crate::Vm) -> &dyn std::any::Any {
             self
         }
     };
@@ -171,32 +172,32 @@ macro_rules! delegate {
         fn apply(
             &self,
             sc: &mut $crate::localscope::LocalScope,
-            handle: $crate::gc::handle::Handle,
+            id: $crate::gc::ObjectId,
             this: $crate::value::Value,
             args: Vec<$crate::value::Value>,
         ) -> Result<$crate::value::Unrooted, $crate::value::Unrooted> {
-            $crate::value::object::Object::apply(&self.$field, sc, handle, this, args)
+            $crate::value::object::Object::apply(&self.$field, sc, id, this, args)
         }
     };
     (override $field:ident, construct) => {
         fn construct(
             &self,
             sc: &mut $crate::localscope::LocalScope,
-            handle: $crate::gc::handle::Handle,
+            id: $crate::gc::ObjectId,
             this: $crate::value::Value,
             args: Vec<$crate::value::Value>,
         ) -> Result<$crate::value::Unrooted, $crate::value::Unrooted> {
-            $crate::value::object::Object::construct(&self.$field, sc, handle, this, args)
+            $crate::value::object::Object::construct(&self.$field, sc, id, this, args)
         }
     };
     (override $field:ident, type_of) => {
-        fn type_of(&self) -> $crate::value::Typeof {
-            self.$field.type_of()
+        fn type_of(&self, vm: &Vm) -> $crate::value::Typeof {
+            self.$field.type_of(vm)
         }
     };
     (override $field:ident, internal_slots) => {
-        fn internal_slots(&self) -> Option<&dyn InternalSlots> {
-            self.$field.internal_slots()
+        fn internal_slots(&self, vm: &Vm) -> Option<&dyn InternalSlots> {
+            self.$field.internal_slots(vm)
         }
     };
 
@@ -209,8 +210,8 @@ macro_rules! delegate {
 
 #[derive(Debug, Clone)]
 pub struct NamedObject {
-    prototype: RefCell<Option<Handle>>,
-    constructor: RefCell<Option<Handle>>,
+    prototype: RefCell<Option<ObjectId>>,
+    constructor: RefCell<Option<ObjectId>>,
     values: RefCell<ObjectMap<PropertyKey, PropertyValue>>,
 }
 
@@ -277,7 +278,7 @@ impl PropertyValue {
         )
     }
 
-    pub fn getter_default(value: Handle) -> Self {
+    pub fn getter_default(value: ObjectId) -> Self {
         Self::new(
             PropertyValueKind::Trap {
                 get: Some(value),
@@ -287,7 +288,7 @@ impl PropertyValue {
         )
     }
 
-    pub fn setter_default(value: Handle) -> Self {
+    pub fn setter_default(value: ObjectId) -> Self {
         Self::new(
             PropertyValueKind::Trap {
                 get: None,
@@ -325,8 +326,8 @@ impl PropertyValue {
                 obj.set_property(sc, sym::value.into(), PropertyValue::static_default(value.clone()))?;
             }
             PropertyValueKind::Trap { get, set } => {
-                let get = get.as_ref().map(|v| Value::Object(v.clone())).unwrap_or_undefined();
-                let set = set.as_ref().map(|v| Value::Object(v.clone())).unwrap_or_undefined();
+                let get = get.map(Value::object).unwrap_or_undefined();
+                let set = set.map(Value::object).unwrap_or_undefined();
                 obj.set_property(sc, sym::get.into(), PropertyValue::static_default(get))?;
                 obj.set_property(sc, sym::set.into(), PropertyValue::static_default(set))?;
             }
@@ -335,7 +336,7 @@ impl PropertyValue {
         obj.set_property(
             sc,
             sym::writable.into(),
-            PropertyValue::static_default(Value::Boolean(
+            PropertyValue::static_default(Value::boolean(
                 self.descriptor.contains(PropertyDataDescriptor::WRITABLE),
             )),
         )?;
@@ -343,7 +344,7 @@ impl PropertyValue {
         obj.set_property(
             sc,
             sym::enumerable.into(),
-            PropertyValue::static_default(Value::Boolean(
+            PropertyValue::static_default(Value::boolean(
                 self.descriptor.contains(PropertyDataDescriptor::ENUMERABLE),
             )),
         )?;
@@ -351,12 +352,12 @@ impl PropertyValue {
         obj.set_property(
             sc,
             sym::configurable.into(),
-            PropertyValue::static_default(Value::Boolean(
+            PropertyValue::static_default(Value::boolean(
                 self.descriptor.contains(PropertyDataDescriptor::CONFIGURABLE),
             )),
         )?;
 
-        Ok(Value::Object(sc.register(obj)))
+        Ok(Value::object(sc.register(obj)))
     }
 
     pub fn from_descriptor_value(sc: &mut LocalScope<'_>, value: Value) -> Result<Self, Value> {
@@ -385,16 +386,16 @@ impl PropertyValue {
                     .get_property(sc, sym::get.into())
                     .root(sc)?
                     .into_option()
-                    .and_then(|v| match v {
-                        Value::Object(o) => Some(o),
+                    .and_then(|v| match v.unpack() {
+                        ValueKind::Object(o) => Some(o),
                         _ => None,
                     });
                 let set = value
                     .get_property(sc, sym::set.into())
                     .root(sc)?
                     .into_option()
-                    .and_then(|v| match v {
-                        Value::Object(o) => Some(o),
+                    .and_then(|v| match v.unpack() {
+                        ValueKind::Object(o) => Some(o),
                         _ => None,
                     });
 
@@ -410,21 +411,24 @@ impl PropertyValue {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PropertyValueKind {
     /// Accessor property
-    Trap { get: Option<Handle>, set: Option<Handle> },
+    Trap {
+        get: Option<ObjectId>,
+        set: Option<ObjectId>,
+    },
     /// Static value property
     Static(Value),
     // TODO: magic property that appears "static" but is actually computed, e.g. array.length
 }
 
 impl PropertyValueKind {
-    pub fn getter(get: Handle) -> Self {
+    pub fn getter(get: ObjectId) -> Self {
         Self::Trap {
             get: Some(get),
             set: None,
         }
     }
 
-    pub fn setter(set: Handle) -> Self {
+    pub fn setter(set: ObjectId) -> Self {
         Self::Trap {
             set: Some(set),
             get: None,
@@ -442,7 +446,7 @@ impl PropertyValueKind {
         match self {
             Self::Static(value) => Ok(value.clone().into()),
             Self::Trap { get, .. } => match get {
-                Some(handle) => handle.apply(sc, this, Vec::new()),
+                Some(id) => id.apply(sc, this, Vec::new()),
                 None => Ok(Value::undefined().into()),
             },
         }
@@ -494,16 +498,16 @@ impl From<Symbol> for PropertyKey {
 impl PropertyKey {
     pub fn as_value(&self) -> Value {
         match self {
-            PropertyKey::String(s) => Value::String(*s),
-            PropertyKey::Symbol(s) => Value::Symbol(s.clone()),
+            PropertyKey::String(s) => Value::string(*s),
+            PropertyKey::Symbol(s) => Value::symbol(s.clone()),
         }
     }
 
     pub fn from_value(sc: &mut LocalScope, value: Value) -> Result<Self, Value> {
         // TODO: call ToPrimitive as specified by ToPropertyKey in the spec?
-        match value {
-            Value::Symbol(s) => Ok(Self::Symbol(s)),
-            other => Ok(PropertyKey::String(other.to_js_string(sc)?)),
+        match value.unpack() {
+            ValueKind::Symbol(s) => Ok(Self::Symbol(s)),
+            _ => Ok(PropertyKey::String(value.to_js_string(sc)?)),
         }
     }
 }
@@ -541,7 +545,7 @@ impl NamedObject {
         }
     }
 
-    pub fn with_prototype_and_constructor(prototype: Handle, ctor: Handle) -> Self {
+    pub fn with_prototype_and_constructor(prototype: ObjectId, ctor: ObjectId) -> Self {
         Self {
             constructor: RefCell::new(Some(ctor)),
             prototype: RefCell::new(Some(prototype)),
@@ -578,11 +582,7 @@ impl Object for NamedObject {
                 sym::__proto__ => return Ok(Some(PropertyValue::static_default(self.get_prototype(sc)?))),
                 sym::constructor => {
                     return Ok(Some(PropertyValue::static_default(
-                        self.constructor
-                            .borrow()
-                            .as_ref()
-                            .map(|x| Value::from(x.clone()))
-                            .unwrap_or_undefined(),
+                        self.constructor.borrow().map(Value::object).unwrap_or_undefined(),
                     )));
                 }
                 _ => {}
@@ -609,11 +609,19 @@ impl Object for NamedObject {
                 );
             }
             Some(sym::constructor) => {
-                let obj = match value.kind {
-                    PropertyValueKind::Static(Value::Object(obj)) => obj,
-                    PropertyValueKind::Static(Value::External(obj)) => obj.inner,
-                    _ => throw!(sc, TypeError, "constructor is not an object"), // TODO: it doesn't need to be
+                let obj = if let PropertyValueKind::Static(val) = value.kind {
+                    match val.unpack() {
+                        ValueKind::Object(obj) => Some(obj),
+                        ValueKind::External(obj) => Some(obj.inner),
+                        _ => None,
+                    }
+                } else {
+                    None
                 };
+                let Some(obj) = obj else {
+                    throw!(sc, TypeError, "constructor is not an object") // TODO: it doesn't need to be
+                };
+
                 self.constructor.replace(Some(obj));
                 return Ok(());
             }
@@ -665,22 +673,22 @@ impl Object for NamedObject {
     fn apply(
         &self,
         _sc: &mut LocalScope,
-        _handle: Handle,
+        _handle: ObjectId,
         _this: Value,
         _args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         Ok(Value::undefined().into())
     }
 
-    fn as_any(&self) -> &dyn Any {
+    fn as_any(&self, _: &Vm) -> &dyn Any {
         self
     }
 
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
-        match value {
-            Value::Null(_) => self.prototype.replace(None),
-            Value::Object(handle) => self.prototype.replace(Some(handle)),
-            Value::External(handle) => self.prototype.replace(Some(handle.inner)), // TODO: check that handle is an object
+        match value.unpack() {
+            ValueKind::Null(_) => self.prototype.replace(None),
+            ValueKind::Object(handle) => self.prototype.replace(Some(handle)),
+            ValueKind::External(handle) => self.prototype.replace(Some(handle.inner)), // TODO: check that handle is an object
             _ => throw!(sc, TypeError, "prototype must be an object"),
         };
 
@@ -689,8 +697,8 @@ impl Object for NamedObject {
 
     fn get_prototype(&self, _sc: &mut LocalScope) -> Result<Value, Value> {
         let prototype = self.prototype.borrow();
-        match prototype.as_ref() {
-            Some(handle) => Ok(Value::Object(handle.clone())),
+        match *prototype {
+            Some(id) => Ok(Value::object(id)),
             None => Ok(Value::null()),
         }
     }
@@ -701,6 +709,7 @@ impl Object for NamedObject {
     }
 }
 
+// TODO: is this still needed?
 impl Object for Box<dyn Object> {
     fn get_own_property(&self, sc: &mut LocalScope, this: Value, key: PropertyKey) -> Result<Unrooted, Unrooted> {
         (**self).get_own_property(sc, this, key)
@@ -745,7 +754,7 @@ impl Object for Box<dyn Object> {
     fn apply(
         &self,
         scope: &mut LocalScope,
-        callee: Handle,
+        callee: ObjectId,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
@@ -755,14 +764,14 @@ impl Object for Box<dyn Object> {
     fn construct(
         &self,
         scope: &mut LocalScope,
-        callee: Handle,
+        callee: ObjectId,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         (**self).construct(scope, callee, this, args)
     }
 
-    fn as_any(&self) -> &dyn Any {
+    fn as_any(&self, _: &Vm) -> &dyn Any {
         self
     }
 
@@ -770,18 +779,35 @@ impl Object for Box<dyn Object> {
         (**self).own_keys(sc)
     }
 
-    fn type_of(&self) -> Typeof {
-        (**self).type_of()
+    fn type_of(&self, vm: &Vm) -> Typeof {
+        (**self).type_of(vm)
     }
 
-    fn internal_slots(&self) -> Option<&dyn InternalSlots> {
-        (**self).internal_slots()
+    fn internal_slots(&self, vm: &Vm) -> Option<&dyn InternalSlots> {
+        (**self).internal_slots(vm)
     }
 }
 
-impl Object for Handle {
+impl ObjectId {
+    pub fn vtable(self, vm: &Vm) -> &'static ObjectVTable {
+        unsafe { (*vm.alloc.header(self)).metadata }
+    }
+    pub fn data_ptr(self, vm: &Vm) -> *const () {
+        vm.alloc.data(self)
+    }
+    pub fn refcount(self, vm: &Vm) -> u32 {
+        unsafe { (*vm.alloc.header(self)).refcount.get() }
+    }
+    pub fn set_refcount(self, vm: &Vm, count: u32) {
+        unsafe { (*vm.alloc.header(self)).refcount.set(count) }
+    }
+}
+
+// TODO: can these be inherent methods? or do we actually require the `ObjectId: Object` trait obligation anywhere?
+// then they also wouldn't need to take &self
+impl Object for ObjectId {
     fn get_own_property(&self, sc: &mut LocalScope, this: Value, key: PropertyKey) -> Result<Unrooted, Unrooted> {
-        unsafe { (self.vtable().js_get_own_property)(self.erased_value(), sc, this, key) }
+        unsafe { (self.vtable(sc).js_get_own_property)(self.data_ptr(sc), sc, this, key) }
     }
 
     fn get_own_property_descriptor(
@@ -789,11 +815,11 @@ impl Object for Handle {
         sc: &mut LocalScope,
         key: PropertyKey,
     ) -> Result<Option<PropertyValue>, Unrooted> {
-        unsafe { (self.vtable().js_get_own_property_descriptor)(self.erased_value(), sc, key) }
+        unsafe { (self.vtable(sc).js_get_own_property_descriptor)(self.data_ptr(sc), sc, key) }
     }
 
     fn get_property(&self, sc: &mut LocalScope, this: Value, key: PropertyKey) -> Result<Unrooted, Unrooted> {
-        unsafe { (self.vtable().js_get_property)(self.erased_value(), sc, this, key) }
+        unsafe { (self.vtable(sc).js_get_property)(self.data_ptr(sc), sc, this, key) }
     }
 
     fn get_property_descriptor(
@@ -801,69 +827,69 @@ impl Object for Handle {
         sc: &mut LocalScope,
         key: PropertyKey,
     ) -> Result<Option<PropertyValue>, Unrooted> {
-        unsafe { (self.vtable().js_get_property_descriptor)(self.erased_value(), sc, key) }
+        unsafe { (self.vtable(sc).js_get_property_descriptor)(self.data_ptr(sc), sc, key) }
     }
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
-        unsafe { (self.vtable().js_set_property)(self.erased_value(), sc, key, value) }
+        unsafe { (self.vtable(sc).js_set_property)(self.data_ptr(sc), sc, key, value) }
     }
 
     fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
-        unsafe { (self.vtable().js_delete_property)(self.erased_value(), sc, key) }
+        unsafe { (self.vtable(sc).js_delete_property)(self.data_ptr(sc), sc, key) }
     }
 
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
-        unsafe { (self.vtable().js_set_prototype)(self.erased_value(), sc, value) }
+        unsafe { (self.vtable(sc).js_set_prototype)(self.data_ptr(sc), sc, value) }
     }
 
     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
-        unsafe { (self.vtable().js_get_prototype)(self.erased_value(), sc) }
+        unsafe { (self.vtable(sc).js_get_prototype)(self.data_ptr(sc), sc) }
     }
 
     fn apply(
         &self,
         scope: &mut LocalScope,
-        callee: Handle,
+        callee: ObjectId,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
-        unsafe { (self.vtable().js_apply)(self.erased_value(), scope, callee, this, args) }
+        unsafe { (self.vtable(scope).js_apply)(self.data_ptr(scope), scope, callee, this, args) }
     }
 
     fn construct(
         &self,
         scope: &mut LocalScope,
-        callee: Handle,
+        callee: ObjectId,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
-        unsafe { (self.vtable().js_construct)(self.erased_value(), scope, callee, this, args) }
+        unsafe { (self.vtable(scope).js_construct)(self.data_ptr(scope), scope, callee, this, args) }
     }
 
-    fn as_any(&self) -> &dyn Any {
-        unsafe { &*(self.vtable().js_as_any)(self.erased_value()) }
+    fn as_any(&self, vm: &Vm) -> &dyn Any {
+        unsafe { &*(self.vtable(vm).js_as_any)(self.data_ptr(vm), vm) }
     }
 
     fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
-        unsafe { (self.vtable().js_own_keys)(self.erased_value(), sc) }
+        unsafe { (self.vtable(sc).js_own_keys)(self.data_ptr(sc), sc) }
     }
 
-    fn type_of(&self) -> Typeof {
-        unsafe { (self.vtable().js_type_of)(self.erased_value()) }
+    fn type_of(&self, vm: &Vm) -> Typeof {
+        unsafe { (self.vtable(vm).js_type_of)(self.data_ptr(vm), vm) }
     }
 
-    fn internal_slots(&self) -> Option<&dyn InternalSlots> {
-        unsafe { (self.vtable().js_internal_slots)(self.erased_value()).map(|v| &*v) }
+    fn internal_slots(&self, vm: &Vm) -> Option<&dyn InternalSlots> {
+        unsafe { (self.vtable(vm).js_internal_slots)(self.data_ptr(vm), vm).map(|v| &*v) }
     }
 }
 
-impl Handle {
-    pub fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Unrooted> {
-        Object::get_property(self, sc, Value::Object(self.clone()), key)
+impl ObjectId {
+    pub fn get_property(self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Unrooted> {
+        Object::get_property(&self, sc, Value::object(self), key)
     }
 
-    pub fn get_own_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Unrooted> {
-        Object::get_own_property(self, sc, Value::Object(self.clone()), key)
+    pub fn get_own_property(self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Unrooted> {
+        Object::get_own_property(&self, sc, Value::object(self), key)
     }
 
     pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
@@ -879,15 +905,15 @@ impl Handle {
 
 impl Persistent {
     pub fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Unrooted> {
-        (**self).get_property(sc, key)
+        self.id().get_property(sc, key)
     }
 
     pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
-        (**self).apply(sc, this, args)
+        self.id().apply(sc, this, args)
     }
 
     pub fn construct(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
-        (**self).construct(sc, this, args)
+        self.id().construct(sc, this, args)
     }
 
     // FIXME: should override typeof, internal_slots, etc.

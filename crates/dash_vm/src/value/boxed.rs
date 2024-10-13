@@ -1,5 +1,5 @@
 use super::ops::conversions::{PreferredType, ValueConversion};
-use crate::gc::handle::Handle;
+use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::value::{JsString, PropertyKey, Unrooted};
 use crate::{delegate, PropertyValue, Vm};
@@ -59,11 +59,11 @@ macro_rules! boxed_primitive {
                     return self.obj.get_own_property_descriptor(sc, key);
                 }
 
-                fn as_any(&self) -> &dyn Any {
+                fn as_any(&self, _: &Vm) -> &dyn Any {
                     self
                 }
 
-                fn internal_slots(&self) -> Option<&dyn InternalSlots> {
+                fn internal_slots(&self, _: &Vm) -> Option<&dyn InternalSlots> {
                     Some(self)
                 }
             }
@@ -89,7 +89,7 @@ macro_rules! boxed_primitive {
                     ValueConversion::length_of_array_like(&self.inner, sc)
                 }
 
-                fn to_object(&self, sc: &mut LocalScope) -> Result<Handle, Value> {
+                fn to_object(&self, sc: &mut LocalScope) -> Result<ObjectId, Value> {
                     ValueConversion::to_object(&self.inner, sc)
                 }
             }

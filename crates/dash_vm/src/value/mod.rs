@@ -15,32 +15,284 @@ pub mod regex;
 pub mod set;
 pub mod typedarray;
 
-use std::any::TypeId;
 use std::ops::ControlFlow;
 
+use dash_middle::interner;
 use dash_middle::util::ThreadSafeStorage;
 use dash_proc_macro::Trace;
 
 pub mod string;
-use crate::gc::handle::Handle;
 use crate::gc::interner::sym;
 use crate::gc::trace::{Trace, TraceCtxt};
+use crate::gc::ObjectId;
 use crate::util::cold_path;
 use crate::value::primitive::{Null, Undefined};
-use crate::{delegate, throw};
+use crate::{delegate, throw, Vm};
 
 use self::object::{Object, PropertyKey, PropertyValue};
 use self::primitive::{InternalSlots, Number, Symbol};
 use self::string::JsString;
 use super::localscope::LocalScope;
 
-// Impl detail: must be repr(C) because we do
-// raw pointer arithmetic to access the data ptr/vtable ptr
-// directly from JIT code and we don't want the optimizer
-// to mess with it.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "jit", repr(C))]
-pub enum Value {
+/// A packed JavaScript value.
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+pub struct Value(u64);
+
+impl std::fmt::Debug for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Value [packed]").field(&self.0).finish()
+    }
+}
+
+#[expect(clippy::unusual_byte_groupings)]
+impl Value {
+    const TAG_MASK: u64 = 0b1_11111111111_111 << (64 - 15);
+
+    const INFINITY_MASK: u64 = 0b0_11111111111_000 << (64 - 15);
+    const NEG_INFINITY_MASK: u64 = 0b1_11111111111_000 << (64 - 15);
+    const NAN_MASK: u64 = 0b0_11111111111_100 << (64 - 15);
+
+    const BOOLEAN_MASK: u64 = 0b0_11111111111_001 << (64 - 15);
+    const STRING_MASK: u64 = 0b0_11111111111_010 << (64 - 15);
+    const UNDEFINED_MASK: u64 = 0b0_11111111111_011 << (64 - 15);
+    const NULL_MASK: u64 = 0b1_11111111111_001 << (64 - 15);
+    const SYMBOL_MASK: u64 = 0b1_11111111111_010 << (64 - 15);
+    const OBJECT_MASK: u64 = 0b1_11111111111_011 << (64 - 15);
+    const EXTERNAL_MASK: u64 = 0b1_11111111111_101 << (64 - 15);
+
+    pub fn number(v: f64) -> Self {
+        // TODO: masking etc. maybe? def. need to be careful here if the bitpattern is untrusted...
+        let num = Self(v.to_bits());
+        assert!(matches!(num.unpack(), ValueKind::Number(_)));
+        num
+    }
+
+    pub fn raw(self) -> u64 {
+        self.0
+    }
+
+    pub fn boolean(b: bool) -> Self {
+        Self(Self::BOOLEAN_MASK | b as u64)
+    }
+
+    pub fn undefined() -> Self {
+        Self(Self::UNDEFINED_MASK)
+    }
+
+    pub fn null() -> Self {
+        Self(Self::NULL_MASK)
+    }
+
+    pub fn symbol(v: Symbol) -> Self {
+        Self(Self::SYMBOL_MASK | v.sym().raw() as u64)
+    }
+
+    pub fn string(v: JsString) -> Self {
+        Self(Self::STRING_MASK | v.sym().raw() as u64)
+    }
+
+    pub fn object(id: ObjectId) -> Self {
+        Self(Self::OBJECT_MASK | id.raw() as u64)
+    }
+
+    pub fn external(id: ObjectId) -> Self {
+        Self(Self::EXTERNAL_MASK | id.raw() as u64)
+    }
+}
+
+pub trait Unpack {
+    type Output;
+    fn unpack(self) -> Self::Output;
+}
+impl Unpack for Value {
+    type Output = ValueKind;
+
+    /// Unpacks the value so it can be matched
+    fn unpack(self) -> Self::Output {
+        // TODO: find out why codegen is bad
+        #[expect(clippy::wildcard_in_or_patterns)]
+        match self.0 & Self::TAG_MASK {
+            Self::BOOLEAN_MASK => ValueKind::Boolean(self.0 as u8 == 1),
+            Self::STRING_MASK => ValueKind::String(JsString::from(interner::Symbol::from_raw(self.0 as u32))),
+            Self::UNDEFINED_MASK => ValueKind::Undefined(Undefined),
+            Self::NULL_MASK => ValueKind::Null(Null),
+            Self::SYMBOL_MASK => {
+                ValueKind::Symbol(Symbol::new(JsString::from(interner::Symbol::from_raw(self.0 as u32))))
+            }
+            Self::OBJECT_MASK => ValueKind::Object(ObjectId::from_raw(self.0 as u32)),
+            Self::EXTERNAL_MASK => ValueKind::External(ExternalValue {
+                inner: ObjectId::from_raw(self.0 as u32),
+            }),
+            Self::INFINITY_MASK | Self::NEG_INFINITY_MASK | Self::NAN_MASK | _ => {
+                // Anything else is a double.
+                ValueKind::Number(Number(f64::from_bits(self.0)))
+            }
+        }
+    }
+}
+
+impl Unpack for &Value {
+    type Output = ValueKind;
+    fn unpack(self) -> Self::Output {
+        (*self).unpack()
+    }
+}
+
+impl<U: Unpack> Unpack for Option<U> {
+    type Output = Option<U::Output>;
+    fn unpack(self) -> Self::Output {
+        self.map(Unpack::unpack)
+    }
+}
+
+unsafe impl Trace for Value {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
+        match self.unpack() {
+            ValueKind::Object(o) => o.trace(cx),
+            ValueKind::External(e) => e.trace(cx),
+            ValueKind::String(s) => s.trace(cx),
+            ValueKind::Number(_) => {}
+            ValueKind::Boolean(_) => {}
+            ValueKind::Undefined(_) => {}
+            ValueKind::Null(_) => {}
+            ValueKind::Symbol(s) => s.trace(cx),
+        }
+    }
+}
+
+impl Object for Value {
+    fn get_own_property_descriptor(
+        &self,
+        sc: &mut LocalScope,
+        key: PropertyKey,
+    ) -> Result<Option<PropertyValue>, Unrooted> {
+        match self.unpack() {
+            ValueKind::Number(n) => n.get_own_property_descriptor(sc, key),
+            ValueKind::Boolean(b) => b.get_own_property_descriptor(sc, key),
+            ValueKind::String(s) => s.get_own_property_descriptor(sc, key),
+            ValueKind::Undefined(u) => u.get_own_property_descriptor(sc, key),
+            ValueKind::Null(n) => n.get_own_property_descriptor(sc, key),
+            ValueKind::Symbol(s) => s.get_own_property_descriptor(sc, key),
+            ValueKind::Object(o) => o.get_own_property_descriptor(sc, key),
+            ValueKind::External(e) => e.get_own_property_descriptor(sc, key),
+        }
+    }
+
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
+        match self.unpack() {
+            ValueKind::Object(h) => h.set_property(sc, key, value),
+            ValueKind::Number(n) => n.set_property(sc, key, value),
+            ValueKind::Boolean(b) => b.set_property(sc, key, value),
+            ValueKind::String(s) => s.set_property(sc, key, value),
+            ValueKind::External(h) => h.set_property(sc, key, value),
+            ValueKind::Undefined(u) => u.set_property(sc, key, value),
+            ValueKind::Null(n) => n.set_property(sc, key, value),
+            ValueKind::Symbol(s) => s.set_property(sc, key, value),
+        }
+    }
+
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
+        match self.unpack() {
+            ValueKind::Object(o) => o.delete_property(sc, key),
+            ValueKind::Number(n) => n.delete_property(sc, key),
+            ValueKind::Boolean(b) => b.delete_property(sc, key),
+            ValueKind::String(s) => s.delete_property(sc, key),
+            ValueKind::External(o) => o.delete_property(sc, key),
+            ValueKind::Undefined(u) => u.delete_property(sc, key),
+            ValueKind::Null(n) => n.delete_property(sc, key),
+            ValueKind::Symbol(s) => s.delete_property(sc, key),
+        }
+    }
+
+    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
+        match self.unpack() {
+            ValueKind::Number(n) => n.set_prototype(sc, value),
+            ValueKind::Boolean(b) => b.set_prototype(sc, value),
+            ValueKind::String(s) => s.set_prototype(sc, value),
+            ValueKind::Undefined(u) => u.set_prototype(sc, value),
+            ValueKind::Null(n) => n.set_prototype(sc, value),
+            ValueKind::Symbol(s) => s.set_prototype(sc, value),
+            ValueKind::Object(o) => o.set_prototype(sc, value),
+            ValueKind::External(e) => e.set_prototype(sc, value),
+        }
+    }
+
+    fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
+        match self.unpack() {
+            ValueKind::Number(n) => n.get_prototype(sc),
+            ValueKind::Boolean(b) => b.get_prototype(sc),
+            ValueKind::String(s) => s.get_prototype(sc),
+            ValueKind::Undefined(u) => u.get_prototype(sc),
+            ValueKind::Null(n) => n.get_prototype(sc),
+            ValueKind::Symbol(s) => s.get_prototype(sc),
+            ValueKind::Object(o) => o.get_prototype(sc),
+            ValueKind::External(e) => e.get_prototype(sc),
+        }
+    }
+
+    fn apply(&self, scope: &mut LocalScope, _: ObjectId, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
+        // self.apply(scope, this, args)
+        todo!()
+    }
+
+    fn as_any(&self, _: &Vm) -> &dyn std::any::Any {
+        // self
+        todo!()
+    }
+
+    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+        match self.unpack() {
+            ValueKind::Number(n) => n.own_keys(sc),
+            ValueKind::Boolean(b) => b.own_keys(sc),
+            ValueKind::String(s) => s.own_keys(sc),
+            ValueKind::Undefined(u) => u.own_keys(sc),
+            ValueKind::Null(n) => n.own_keys(sc),
+            ValueKind::Symbol(s) => s.own_keys(sc),
+            ValueKind::Object(o) => o.own_keys(sc),
+            ValueKind::External(e) => e.own_keys(sc),
+        }
+    }
+
+    fn type_of(&self, vm: &Vm) -> Typeof {
+        match self.unpack() {
+            ValueKind::Boolean(_) => Typeof::Boolean,
+            ValueKind::External(e) => e.type_of(vm),
+            ValueKind::Number(_) => Typeof::Number,
+            ValueKind::String(_) => Typeof::String,
+            ValueKind::Undefined(_) => Typeof::Undefined,
+            ValueKind::Object(o) => o.type_of(vm),
+            ValueKind::Null(_) => Typeof::Object,
+            ValueKind::Symbol(_) => Typeof::Symbol,
+        }
+    }
+
+    fn construct(
+        &self,
+        scope: &mut LocalScope,
+        _: ObjectId,
+        this: Value,
+        args: Vec<Value>,
+    ) -> Result<Unrooted, Unrooted> {
+        self.construct(scope, this, args)
+    }
+
+    fn internal_slots(&self, vm: &Vm) -> Option<&dyn InternalSlots> {
+        todo!("???") // how do we implement this? we cant return the unpacked &f64
+        // Idea: return Some(self) and delegate to the inner ones in dyn Internalslots
+        // match self.unpack() {
+        //     ValueKind::Number(n) => Some(n),
+        //     ValueKind::Boolean(b) => Some(b),
+        //     ValueKind::String(s) => Some(s),
+        //     ValueKind::Undefined(_) | Value::Null(_) => None,
+        //     ValueKind::Symbol(s) => Some(s),
+        //     ValueKind::Object(o) => o.internal_slots(vm),
+        //     ValueKind::External(_) => unreachable!(),
+        // }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum ValueKind {
     /// The number type
     Number(Number),
     /// The boolean type
@@ -54,136 +306,9 @@ pub enum Value {
     /// The symbol type
     Symbol(Symbol),
     /// The object type
-    Object(Handle),
+    Object(ObjectId),
     /// An "external" value that is being used by other functions.
     External(ExternalValue),
-}
-
-impl Object for Value {
-    fn get_own_property_descriptor(
-        &self,
-        sc: &mut LocalScope,
-        key: PropertyKey,
-    ) -> Result<Option<PropertyValue>, Unrooted> {
-        match self {
-            Value::Number(n) => n.get_own_property_descriptor(sc, key),
-            Value::Boolean(b) => b.get_own_property_descriptor(sc, key),
-            Value::String(s) => s.get_own_property_descriptor(sc, key),
-            Value::Undefined(u) => u.get_own_property_descriptor(sc, key),
-            Value::Null(n) => n.get_own_property_descriptor(sc, key),
-            Value::Symbol(s) => s.get_own_property_descriptor(sc, key),
-            Value::Object(o) => o.get_own_property_descriptor(sc, key),
-            Value::External(e) => e.get_own_property_descriptor(sc, key),
-        }
-    }
-
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
-        match self {
-            Self::Object(h) => h.set_property(sc, key, value),
-            Self::Number(n) => n.set_property(sc, key, value),
-            Self::Boolean(b) => b.set_property(sc, key, value),
-            Self::String(s) => s.set_property(sc, key, value),
-            Self::External(h) => h.set_property(sc, key, value),
-            Self::Undefined(u) => u.set_property(sc, key, value),
-            Self::Null(n) => n.set_property(sc, key, value),
-            Self::Symbol(s) => s.set_property(sc, key, value),
-        }
-    }
-
-    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
-        match self {
-            Self::Object(o) => o.delete_property(sc, key),
-            Self::Number(n) => n.delete_property(sc, key),
-            Self::Boolean(b) => b.delete_property(sc, key),
-            Self::String(s) => s.delete_property(sc, key),
-            Self::External(o) => o.delete_property(sc, key),
-            Self::Undefined(u) => u.delete_property(sc, key),
-            Self::Null(n) => n.delete_property(sc, key),
-            Self::Symbol(s) => s.delete_property(sc, key),
-        }
-    }
-
-    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
-        match self {
-            Value::Number(n) => n.set_prototype(sc, value),
-            Value::Boolean(b) => b.set_prototype(sc, value),
-            Value::String(s) => s.set_prototype(sc, value),
-            Value::Undefined(u) => u.set_prototype(sc, value),
-            Value::Null(n) => n.set_prototype(sc, value),
-            Value::Symbol(s) => s.set_prototype(sc, value),
-            Value::Object(o) => o.set_prototype(sc, value),
-            Value::External(e) => e.set_prototype(sc, value),
-        }
-    }
-
-    fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
-        match self {
-            Value::Number(n) => n.get_prototype(sc),
-            Value::Boolean(b) => b.get_prototype(sc),
-            Value::String(s) => s.get_prototype(sc),
-            Value::Undefined(u) => u.get_prototype(sc),
-            Value::Null(n) => n.get_prototype(sc),
-            Value::Symbol(s) => s.get_prototype(sc),
-            Value::Object(o) => o.get_prototype(sc),
-            Value::External(e) => e.get_prototype(sc),
-        }
-    }
-
-    fn apply(&self, scope: &mut LocalScope, _: Handle, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
-        self.apply(scope, this, args)
-    }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
-        match self {
-            Value::Number(n) => n.own_keys(sc),
-            Value::Boolean(b) => b.own_keys(sc),
-            Value::String(s) => s.own_keys(sc),
-            Value::Undefined(u) => u.own_keys(sc),
-            Value::Null(n) => n.own_keys(sc),
-            Value::Symbol(s) => s.own_keys(sc),
-            Value::Object(o) => o.own_keys(sc),
-            Value::External(e) => e.own_keys(sc),
-        }
-    }
-
-    fn type_of(&self) -> Typeof {
-        match self {
-            Self::Boolean(_) => Typeof::Boolean,
-            Self::External(e) => e.type_of(),
-            Self::Number(_) => Typeof::Number,
-            Self::String(_) => Typeof::String,
-            Self::Undefined(_) => Typeof::Undefined,
-            Self::Object(o) => o.type_of(),
-            Self::Null(_) => Typeof::Object,
-            Self::Symbol(_) => Typeof::Symbol,
-        }
-    }
-
-    fn construct(
-        &self,
-        scope: &mut LocalScope,
-        _: Handle,
-        this: Value,
-        args: Vec<Value>,
-    ) -> Result<Unrooted, Unrooted> {
-        self.construct(scope, this, args)
-    }
-
-    fn internal_slots(&self) -> Option<&dyn InternalSlots> {
-        match self {
-            Value::Number(n) => Some(n),
-            Value::Boolean(b) => Some(b),
-            Value::String(s) => Some(s),
-            Value::Undefined(_) | Value::Null(_) => None,
-            Value::Symbol(s) => Some(s),
-            Value::Object(o) => o.internal_slots(),
-            Value::External(_) => unreachable!(),
-        }
-    }
 }
 
 /// A wrapper type around JavaScript values that are not rooted.
@@ -191,7 +316,7 @@ impl Object for Value {
 /// Before accessing a value, you must root it using a [`LocalScope`],
 /// to prevent a situation in which the garbage collector collects
 /// the value while it is still being used.
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct Unrooted {
     // Possible mini optimization: store a flag that indicates if the value is already rooted?
     value: Value,
@@ -218,6 +343,17 @@ impl Unrooted {
     /// occur.
     pub unsafe fn into_value(self) -> Value {
         self.value
+    }
+
+    /// Returns the inner value if it is a primitive that does not have anything that must be preserved by the GC
+    pub fn try_prim(self) -> Option<Value> {
+        if let ValueKind::Boolean(_) | ValueKind::Null(_) | ValueKind::Number(_) | ValueKind::Undefined(_) =
+            self.value.unpack()
+        {
+            Some(self.value)
+        } else {
+            None
+        }
     }
 }
 
@@ -294,32 +430,37 @@ impl From<Value> for Unrooted {
 
 /// Usually you do not need to worry about this type in e.g. JS handler functions,
 /// since we unbox values on use in the Vm directly.
-#[derive(Debug, Trace, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Trace, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct ExternalValue {
     // The `dyn Object` is always `Value` (an invariant of this type).
     // It's currently type-erased, but there's no real reason for this. This should make the transition
     // to a thin `Handle` with its vtable in the allocation easier.
-    inner: Handle,
+    inner: ObjectId,
 }
 
 impl ExternalValue {
     /// The `dyn Object` *must* be `Value`.
     // can we make this type safe?
-    pub fn new(inner: Handle) -> Self {
-        debug_assert!(inner.as_any().downcast_ref::<Value>().is_some());
+    pub fn new(vm: &Vm, inner: ObjectId) -> Self {
+        // debug_assert!(inner.as_any().downcast_ref::<Value>().is_some());
         Self { inner }
     }
 
-    pub fn inner(&self) -> &Value {
-        self.inner
-            .as_any()
-            .downcast_ref()
-            .expect("invariant violated: ExternalValue did not contain a Value")
+    pub fn inner(&self) -> Value {
+        todo!("Object::as_any needs to take a &Vm")
+        // self.inner
+        //     .as_any()
+        //     .downcast_ref()
+        //     .expect("invariant violated: ExternalValue did not contain a Value")
     }
 
-    pub fn as_gc_handle(&self) -> Handle {
-        self.inner.clone()
+    pub fn id(&self) -> ObjectId {
+        self.inner
     }
+
+    // pub fn as_gc_handle(&self) -> Handle {
+    //     self.inner.clone()
+    // }
 
     /// Assigns a new value to this external.
     ///
@@ -339,10 +480,11 @@ impl ExternalValue {
         // Even though it looks like we are assigning through a shared reference,
         // this is ok because Handle has a mutable pointer to the GcNode on the heap
 
-        assert_eq!(this.inner.as_any().type_id(), TypeId::of::<Value>());
-        // SAFETY: casting to *mut GcNode<Value>, then dereferencing + writing
-        // to said pointer is safe, because it is asserted on the previous line that the type is correct
-        (*this.inner.as_ptr::<Value>()).value.0 = value;
+        todo!();
+        // assert_eq!(this.inner.as_any().type_id(), TypeId::of::<Value>());
+        // // SAFETY: casting to *mut GcNode<Value>, then dereferencing + writing
+        // // to said pointer is safe, because it is asserted on the previous line that the type is correct
+        // (*this.inner.as_ptr::<Value>()).value.0 = value;
     }
 }
 
@@ -365,14 +507,14 @@ impl Object for ExternalValue {
     // we need to downcast to ExternalValue specifically in some places.
     // for that reason, prefer calling downcast_ref not on handles directly
     // but on values.
-    fn as_any(&self) -> &dyn std::any::Any {
+    fn as_any(&self, _: &Vm) -> &dyn std::any::Any {
         self
     }
 
     fn apply(
         &self,
         scope: &mut LocalScope,
-        _callee: Handle,
+        _callee: ObjectId,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
@@ -382,7 +524,7 @@ impl Object for ExternalValue {
     fn construct(
         &self,
         scope: &mut LocalScope,
-        _callee: Handle,
+        _callee: ObjectId,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
@@ -390,48 +532,33 @@ impl Object for ExternalValue {
     }
 }
 
-unsafe impl Trace for Value {
-    fn trace(&self, cx: &mut TraceCtxt<'_>) {
-        match self {
-            Value::Object(o) => o.trace(cx),
-            Value::External(e) => e.trace(cx),
-            Value::String(s) => s.trace(cx),
-            Value::Number(_) => {}
-            Value::Boolean(_) => {}
-            Value::Undefined(_) => {}
-            Value::Null(_) => {}
-            Value::Symbol(s) => s.trace(cx),
-        }
-    }
-}
-
 impl Value {
     pub fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Unrooted> {
-        match self {
-            Self::Object(o) => o.get_property(sc, key),
-            Self::Number(n) => n.get_property(sc, self.clone(), key),
-            Self::Boolean(b) => b.get_property(sc, self.clone(), key),
-            Self::String(s) => s.get_property(sc, self.clone(), key),
-            Self::External(o) => o.inner().get_property(sc, key),
-            Self::Undefined(u) => u.get_property(sc, self.clone(), key),
-            Self::Null(n) => n.get_property(sc, self.clone(), key),
-            Self::Symbol(s) => s.get_property(sc, self.clone(), key),
+        match self.unpack() {
+            ValueKind::Object(o) => o.get_property(sc, key),
+            ValueKind::Number(n) => n.get_property(sc, self.clone(), key),
+            ValueKind::Boolean(b) => b.get_property(sc, self.clone(), key),
+            ValueKind::String(s) => s.get_property(sc, self.clone(), key),
+            ValueKind::External(o) => o.inner().get_property(sc, key),
+            ValueKind::Undefined(u) => u.get_property(sc, self.clone(), key),
+            ValueKind::Null(n) => n.get_property(sc, self.clone(), key),
+            ValueKind::Symbol(s) => s.get_property(sc, self.clone(), key),
         }
     }
 
     pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
-        match self {
-            Self::Object(o) => o.apply(sc, this, args),
-            Self::External(o) => o.inner().apply(sc, this, args),
-            Self::Number(n) => throw!(sc, TypeError, "{} is not a function", n),
-            Self::Boolean(b) => throw!(sc, TypeError, "{} is not a function", b),
-            Self::String(s) => {
+        match self.unpack() {
+            ValueKind::Object(o) => o.apply(sc, this, args),
+            ValueKind::External(o) => o.inner().apply(sc, this, args),
+            ValueKind::Number(n) => throw!(sc, TypeError, "{} is not a function", n),
+            ValueKind::Boolean(b) => throw!(sc, TypeError, "{} is not a function", b),
+            ValueKind::String(s) => {
                 let s = s.res(sc).to_owned();
                 throw!(sc, TypeError, "{} is not a function", s)
             }
-            Self::Undefined(_) => throw!(sc, TypeError, "undefined is not a function"),
-            Self::Null(_) => throw!(sc, TypeError, "null is not a function"),
-            Self::Symbol(s) => throw!(sc, TypeError, "{:?} is not a function", s),
+            ValueKind::Undefined(_) => throw!(sc, TypeError, "undefined is not a function"),
+            ValueKind::Null(_) => throw!(sc, TypeError, "null is not a function"),
+            ValueKind::Symbol(s) => throw!(sc, TypeError, "{:?} is not a function", s),
         }
     }
 
@@ -443,9 +570,9 @@ impl Value {
         args: Vec<Value>,
         ip: u16,
     ) -> Result<Unrooted, Unrooted> {
-        match self {
-            Self::Object(o) => o.apply(sc, this, args),
-            Self::External(o) => o.inner().apply(sc, this, args),
+        match self.unpack() {
+            ValueKind::Object(o) => o.apply(sc, this, args),
+            ValueKind::External(o) => o.inner().apply(sc, this, args),
             _ => {
                 cold_path();
 
@@ -463,65 +590,53 @@ impl Value {
     }
 
     pub fn construct(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
-        match self {
-            Self::Object(o) => o.construct(sc, this, args),
-            Self::External(o) => o.inner().construct(sc, this, args),
-            Self::Number(n) => throw!(sc, TypeError, "{} is not a constructor", n),
-            Self::Boolean(b) => throw!(sc, TypeError, "{} is not a constructor", b),
-            Self::String(s) => {
+        match self.unpack() {
+            ValueKind::Object(o) => o.construct(sc, this, args),
+            ValueKind::External(o) => o.inner().construct(sc, this, args),
+            ValueKind::Number(n) => throw!(sc, TypeError, "{} is not a constructor", n),
+            ValueKind::Boolean(b) => throw!(sc, TypeError, "{} is not a constructor", b),
+            ValueKind::String(s) => {
                 let s = s.res(sc).to_owned();
                 throw!(sc, TypeError, "{} is not a constructor", s)
             }
-            Self::Undefined(_) => throw!(sc, TypeError, "undefined is not a constructor"),
-            Self::Null(_) => throw!(sc, TypeError, "null is not a constructor"),
-            Self::Symbol(s) => throw!(sc, TypeError, "{:?} is not a constructor", s),
+            ValueKind::Undefined(_) => throw!(sc, TypeError, "undefined is not a constructor"),
+            ValueKind::Null(_) => throw!(sc, TypeError, "null is not a constructor"),
+            ValueKind::Symbol(s) => throw!(sc, TypeError, "{:?} is not a constructor", s),
         }
     }
 
     pub fn is_truthy(&self, sc: &mut LocalScope<'_>) -> bool {
-        match self {
-            Value::Boolean(b) => *b,
-            Value::String(s) => !s.res(sc).is_empty(),
-            Value::Number(Number(n)) => *n != 0.0 && !n.is_nan(),
-            Value::Symbol(_) => true,
-            Value::Object(_) => true,
-            Value::Undefined(_) => false,
-            Value::Null(_) => false,
-            Value::External(_) => todo!(),
+        match self.unpack() {
+            ValueKind::Boolean(b) => b,
+            ValueKind::String(s) => !s.res(sc).is_empty(),
+            ValueKind::Number(Number(n)) => n != 0.0 && !n.is_nan(),
+            ValueKind::Symbol(_) => true,
+            ValueKind::Object(_) => true,
+            ValueKind::Undefined(_) => false,
+            ValueKind::Null(_) => false,
+            ValueKind::External(_) => panic!("called is_truthy on an external; consider unboxing it first"),
         }
     }
 
     pub fn is_nullish(&self) -> bool {
-        match self {
-            Value::Null(_) => true,
-            Value::Undefined(_) => true,
-            Value::External(_) => todo!(),
+        match self.unpack() {
+            ValueKind::Null(_) => true,
+            ValueKind::Undefined(_) => true,
+            ValueKind::External(_) => panic!("called is_nullish on an external; consider unboxing it first"),
             _ => false,
         }
     }
 
-    pub fn undefined() -> Value {
-        Value::Undefined(Undefined)
-    }
-
-    pub fn null() -> Value {
-        Value::Null(Null)
-    }
-
-    pub fn number(n: f64) -> Value {
-        Value::Number(Number(n))
-    }
-
     pub fn unbox_external(self) -> Value {
-        match self {
-            Value::External(e) => e.inner().clone(),
+        match self.unpack() {
+            ValueKind::External(e) => e.inner(),
             _ => self,
         }
     }
 
     pub fn into_option(self) -> Option<Self> {
-        match self {
-            Value::Undefined(_) => None,
+        match self.unpack() {
+            ValueKind::Undefined(_) => None,
             _ => Some(self),
         }
     }
@@ -532,7 +647,7 @@ impl Value {
         mut fun: impl FnMut(&mut LocalScope<'_>, &Value) -> Result<ControlFlow<T>, Value>,
     ) -> Result<ControlFlow<T>, Value> {
         let mut this = self.clone();
-        while !matches!(this, Value::Null(_)) {
+        while !matches!(this.unpack(), ValueKind::Null(_)) {
             if let ControlFlow::Break(b) = fun(sc, &this)? {
                 return Ok(ControlFlow::Break(b));
             }
@@ -542,7 +657,7 @@ impl Value {
     }
 
     pub fn instanceof(&self, ctor: &Self, sc: &mut LocalScope) -> Result<bool, Value> {
-        if !matches!(self, Value::Object(_)) {
+        if !matches!(self.unpack(), ValueKind::Object(_)) {
             return Ok(false);
         }
 
@@ -561,12 +676,15 @@ impl Value {
     /// Attempts to downcast this value to a concrete type `T`.
     ///
     /// NOTE: if this value is an external, it will call downcast_ref on the "lower level" handle (i.e. the wrapped object)
-    pub fn downcast_ref<T: 'static>(&self) -> Option<&T> {
-        match self {
-            Value::Object(obj) => obj.as_any().downcast_ref(),
-            Value::External(obj) => obj.inner.as_any().downcast_ref(),
-            _ => None,
-        }
+    pub fn downcast_ref<T: 'static>(&self, vm: &Vm) -> Option<&T> {
+        // weird borrowck error
+        todo!()
+
+        // match self.unpack() {
+        //     ValueKind::Object(obj) => obj.as_any(vm).downcast_ref(),
+        //     ValueKind::External(obj) => obj.inner.as_any(vm).downcast_ref(),
+        //     _ => None,
+        // }
     }
 }
 
@@ -585,14 +703,14 @@ pub enum Typeof {
 impl Typeof {
     pub fn as_value(&self) -> Value {
         match self {
-            Self::Undefined => Value::String(sym::undefined.into()),
-            Self::Object => Value::String(sym::object.into()),
-            Self::Boolean => Value::String(sym::boolean.into()),
-            Self::Number => Value::String(sym::number.into()),
-            Self::Bigint => Value::String(sym::bigint.into()),
-            Self::String => Value::String(sym::string.into()),
-            Self::Symbol => Value::String(sym::symbol.into()),
-            Self::Function => Value::String(sym::function.into()),
+            Self::Undefined => Value::string(sym::undefined.into()),
+            Self::Object => Value::string(sym::object.into()),
+            Self::Boolean => Value::string(sym::boolean.into()),
+            Self::Number => Value::string(sym::number.into()),
+            Self::Bigint => Value::string(sym::bigint.into()),
+            Self::String => Value::string(sym::string.into()),
+            Self::Symbol => Value::string(sym::symbol.into()),
+            Self::Function => Value::string(sym::function.into()),
         }
     }
 }
@@ -706,7 +824,7 @@ impl<O: Object + 'static> Object for PureBuiltin<O> {
         self.inner.set_prototype(sc, value)
     }
 
-    fn as_any(&self) -> &dyn std::any::Any {
+    fn as_any(&self, _: &Vm) -> &dyn std::any::Any {
         &self.inner
     }
 
@@ -714,7 +832,7 @@ impl<O: Object + 'static> Object for PureBuiltin<O> {
         self.inner.own_keys(sc)
     }
 
-    fn internal_slots(&self) -> Option<&dyn InternalSlots> {
-        self.inner.internal_slots()
+    fn internal_slots(&self, vm: &Vm) -> Option<&dyn InternalSlots> {
+        self.inner.internal_slots(vm)
     }
 }

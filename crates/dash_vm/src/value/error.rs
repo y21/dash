@@ -3,10 +3,11 @@ use std::fmt::Write;
 
 use dash_proc_macro::Trace;
 
-use crate::delegate;
 use crate::gc::handle::Handle;
 use crate::gc::interner::sym;
+use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
+use crate::{delegate, Vm};
 
 use super::object::{NamedObject, Object, PropertyKey, PropertyValue};
 use super::string::JsString;
@@ -54,8 +55,8 @@ impl Error {
         sc: &mut LocalScope<'_>,
         name: S1,
         message: S2,
-        ctor: Handle,
-        proto: Handle,
+        ctor: ObjectId,
+        proto: ObjectId,
     ) -> Self {
         let name = name.into();
         let message = message.into();
@@ -73,8 +74,8 @@ impl Error {
         sc: &mut LocalScope<'_>,
         name: S1,
         message: S2,
-        ctor: Handle,
-        proto: Handle,
+        ctor: ObjectId,
+        proto: ObjectId,
     ) -> Self {
         let name = name.into();
         let message = sc.intern(message.into().as_ref()).into();
@@ -115,13 +116,13 @@ impl Object for Error {
     ) -> Result<Option<PropertyValue>, Unrooted> {
         match key {
             PropertyKey::String(s) if s.sym() == sym::name => {
-                Ok(Some(PropertyValue::static_default(Value::String(self.name))))
+                Ok(Some(PropertyValue::static_default(Value::string(self.name))))
             }
             PropertyKey::String(s) if s.sym() == sym::message => {
-                Ok(Some(PropertyValue::static_default(Value::String(self.message))))
+                Ok(Some(PropertyValue::static_default(Value::string(self.message))))
             }
             PropertyKey::String(s) if s.sym() == sym::stack => {
-                Ok(Some(PropertyValue::static_default(Value::String(self.stack))))
+                Ok(Some(PropertyValue::static_default(Value::string(self.stack))))
             }
             _ => self.obj.get_property_descriptor(sc, key),
         }
@@ -140,14 +141,14 @@ impl Object for Error {
     fn apply(
         &self,
         scope: &mut LocalScope,
-        callee: Handle,
+        callee: ObjectId,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         self.obj.apply(scope, callee, this, args)
     }
 
-    fn as_any(&self) -> &dyn Any {
+    fn as_any(&self, _: &Vm) -> &dyn Any {
         self
     }
 

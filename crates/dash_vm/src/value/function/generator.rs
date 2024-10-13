@@ -6,6 +6,7 @@ use dash_proc_macro::Trace;
 use crate::frame::TryBlock;
 use crate::gc::handle::Handle;
 use crate::gc::trace::{Trace, TraceCtxt};
+use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::value::arguments::Arguments;
 use crate::value::object::{NamedObject, Object};
@@ -32,7 +33,7 @@ impl GeneratorFunction {
     pub(crate) fn handle_function_call(
         &self,
         scope: &mut LocalScope,
-        callee: Handle,
+        callee: ObjectId,
         _this: Value,
         args: Vec<Value>,
         _is_constructor_call: bool,
@@ -56,7 +57,7 @@ impl GeneratorFunction {
         };
 
         let iter = GeneratorIterator::new(callee, scope, args, arguments, Vec::new());
-        Ok(Value::Object(scope.register(iter)))
+        Ok(Value::object(scope.register(iter)))
     }
 }
 
@@ -67,7 +68,7 @@ pub enum GeneratorState {
         ip: usize,
         stack: Vec<Value>,
         try_blocks: Vec<TryBlock>,
-        arguments: Option<Handle>,
+        arguments: Option<ObjectId>,
     },
 }
 
@@ -100,17 +101,17 @@ unsafe impl Trace for GeneratorState {
 
 #[derive(Debug, Trace)]
 pub struct GeneratorIterator {
-    function: Handle,
+    function: ObjectId,
     obj: NamedObject,
     state: RefCell<GeneratorState>,
 }
 
 impl GeneratorIterator {
     pub fn new(
-        function: Handle,
+        function: ObjectId,
         vm: &Vm,
         stack: Vec<Value>,
-        arguments: Option<Handle>,
+        arguments: Option<ObjectId>,
         try_blocks: Vec<TryBlock>,
     ) -> Self {
         let proto = vm.statics.generator_iterator_prototype.clone();
@@ -128,7 +129,7 @@ impl GeneratorIterator {
         }
     }
 
-    pub fn empty(function: Handle) -> Self {
+    pub fn empty(function: ObjectId) -> Self {
         Self {
             function,
             obj: NamedObject::null(),
@@ -140,8 +141,8 @@ impl GeneratorIterator {
         &self.state
     }
 
-    pub fn function(&self) -> Handle {
-        self.function.clone()
+    pub fn function(&self) -> ObjectId {
+        self.function
     }
 
     pub fn did_run(&self) -> bool {
@@ -165,24 +166,24 @@ impl Object for GeneratorIterator {
     fn apply(
         &self,
         scope: &mut LocalScope,
-        callee: Handle,
+        callee: ObjectId,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         self.obj.apply(scope, callee, this, args)
     }
 
-    fn as_any(&self) -> &dyn Any {
+    fn as_any(&self, _: &Vm) -> &dyn Any {
         self
     }
 
-    fn type_of(&self) -> Typeof {
+    fn type_of(&self, _: &Vm) -> Typeof {
         Typeof::Object
     }
 }
 
 pub fn as_generator<'a>(scope: &mut LocalScope, value: &'a Value) -> Result<&'a GeneratorIterator, Value> {
-    let generator = match value.downcast_ref::<GeneratorIterator>() {
+    let generator = match value.downcast_ref::<GeneratorIterator>(scope) {
         Some(it) => it,
         None => throw!(scope, TypeError, "Incompatible receiver"),
     };

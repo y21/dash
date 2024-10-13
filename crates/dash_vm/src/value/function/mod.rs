@@ -10,6 +10,7 @@ use crate::dispatch::HandleResult;
 use crate::gc::handle::Handle;
 use crate::gc::interner::sym;
 use crate::gc::trace::{Trace, TraceCtxt};
+use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::value::arguments::Arguments;
 use crate::Vm;
@@ -100,7 +101,7 @@ pub struct Function {
     name: RefCell<Option<JsString>>,
     kind: FunctionKind,
     obj: NamedObject,
-    prototype: RefCell<Option<Handle>>,
+    prototype: RefCell<Option<ObjectId>>,
 }
 
 impl Function {
@@ -135,15 +136,15 @@ impl Function {
         *self.name.borrow()
     }
 
-    pub fn set_fn_prototype(&self, prototype: Handle) {
+    pub fn set_fn_prototype(&self, prototype: ObjectId) {
         self.prototype.replace(Some(prototype));
     }
 
-    pub fn get_fn_prototype(&self) -> Option<Handle> {
-        self.prototype.borrow().clone()
+    pub fn get_fn_prototype(&self) -> Option<ObjectId> {
+        *self.prototype.borrow()
     }
 
-    pub fn get_or_set_prototype(&self, scope: &mut LocalScope) -> Handle {
+    pub fn get_or_set_prototype(&self, scope: &mut LocalScope) -> ObjectId {
         self.prototype
             .borrow_mut()
             .get_or_insert_with(|| {
@@ -154,7 +155,7 @@ impl Function {
     }
 
     /// Creates a new instance of this function.
-    pub fn new_instance(&self, this_handle: Handle, scope: &mut LocalScope) -> Result<Handle, Value> {
+    pub fn new_instance(&self, this_handle: ObjectId, scope: &mut LocalScope) -> Result<ObjectId, Value> {
         let prototype = self.get_or_set_prototype(scope);
         let this = scope.register(NamedObject::with_prototype_and_constructor(prototype, this_handle));
         Ok(this)
@@ -164,7 +165,7 @@ impl Function {
 fn handle_call(
     fun: &Function,
     scope: &mut LocalScope,
-    callee: Handle,
+    callee: ObjectId,
     this: Value,
     args: Vec<Value>,
     is_constructor_call: bool,
@@ -208,13 +209,13 @@ impl Object for Function {
                 sym::name => {
                     let name = self.name().unwrap_or_else(|| sym::empty.into());
                     return Ok(Some(PropertyValue {
-                        kind: PropertyValueKind::Static(Value::String(name)),
+                        kind: PropertyValueKind::Static(Value::string(name)),
                         descriptor: PropertyDataDescriptor::CONFIGURABLE,
                     }));
                 }
                 sym::prototype => {
                     let prototype = self.get_or_set_prototype(sc);
-                    return Ok(Some(PropertyValue::static_empty(Value::Object(prototype))));
+                    return Ok(Some(PropertyValue::static_empty(Value::object(prototype))));
                 }
                 _ => {}
             }
@@ -241,7 +242,7 @@ impl Object for Function {
     fn apply(
         &self,
         scope: &mut LocalScope,
-        callee: Handle,
+        callee: ObjectId,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
@@ -251,15 +252,15 @@ impl Object for Function {
     fn construct(
         &self,
         scope: &mut LocalScope,
-        callee: Handle,
+        callee: ObjectId,
         _this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         let this = self.new_instance(callee.clone(), scope)?;
-        handle_call(self, scope, callee, Value::Object(this), args, true)
+        handle_call(self, scope, callee, Value::object(this), args, true)
     }
 
-    fn as_any(&self) -> &dyn Any {
+    fn as_any(&self, _: &Vm) -> &dyn Any {
         self
     }
 
@@ -272,10 +273,10 @@ impl Object for Function {
     }
 
     fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
-        Ok(vec![Value::String(sym::length.into()), Value::String(sym::name.into())])
+        Ok(vec![Value::string(sym::length.into()), Value::string(sym::name.into())])
     }
 
-    fn type_of(&self) -> Typeof {
+    fn type_of(&self, _: &Vm) -> Typeof {
         Typeof::Function
     }
 }
@@ -286,7 +287,7 @@ pub(crate) fn adjust_stack_from_flat_call(
     user_function: &UserFunction,
     old_sp: usize,
     argc: usize,
-) -> Option<Handle> {
+) -> Option<ObjectId> {
     let mut arguments = None;
     if user_function.inner().references_arguments {
         let args = scope.stack[old_sp..].to_vec();
@@ -314,7 +315,7 @@ pub(crate) fn adjust_stack_from_flat_call(
 
         let array = Array::from_vec(scope, args);
         let array = scope.register(array);
-        Some(Value::Object(array))
+        Some(Value::object(array))
     } else {
         None
     };
@@ -357,6 +358,6 @@ fn extend_stack_from_args(args: Vec<Value>, expected_args: usize, scope: &mut Lo
 
         let array = Array::from_vec(scope, args);
         let array = scope.register(array);
-        scope.stack.push(Value::Object(array));
+        scope.stack.push(Value::object(array));
     }
 }

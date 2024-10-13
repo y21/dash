@@ -6,7 +6,7 @@ use dash_optimizer::OptLevel;
 use crate::gc::persistent::Persistent;
 use crate::value::object::{NamedObject, Object, PropertyValue};
 use crate::value::primitive::Number;
-use crate::value::{Root, Value};
+use crate::value::{Root, Unpack, Value, ValueKind};
 use crate::Vm;
 
 const INTERPRETER: &str = include_str!("interpreter.js");
@@ -20,8 +20,8 @@ fn interpreter() {
 
     assert_eq!(scope.stack.len(), 0);
     assert_eq!(scope.frames.len(), 0);
-    match value {
-        Value::Number(Number(n)) => assert_eq!(n, 1275.0),
+    match value.unpack() {
+        ValueKind::Number(Number(n)) => assert_eq!(n, 1275.0),
         other => unreachable!("{:?}", other),
     }
 }
@@ -77,35 +77,35 @@ fn persistent_trace() {
             .set_property(
                 &mut scope,
                 key.into(),
-                PropertyValue::static_default(Value::Object(dummy_string)),
+                PropertyValue::static_default(Value::object(dummy_string)),
             )
             .unwrap();
         scope.register(object)
     }; // scope dropped here
 
-    assert!(vm.external_refs.is_empty());
+    assert!(vm.external_refs.0.borrow().is_empty());
     let p1 = Persistent::new(&mut vm, object.clone());
     assert_eq!(p1.refcount(), 1);
-    assert!(vm.external_refs.len() == 1);
+    assert!(vm.external_refs.0.borrow().len() == 1);
     let p2 = Persistent::new(&mut vm, object.clone());
     assert_eq!(p1.refcount(), 2);
-    assert!(vm.external_refs.len() == 1);
+    assert!(vm.external_refs.0.borrow().len() == 1);
     assert!(ptr::eq(
-        vm.external_refs.iter().next().unwrap().as_erased_ptr(),
-        object.as_erased_ptr()
+        vm.external_refs.0.borrow().keys().next().unwrap().data_ptr(&vm),
+        object.data_ptr(&vm)
     ));
     drop(p2);
     assert_eq!(p1.refcount(), 1);
-    assert!(vm.external_refs.len() == 1);
+    assert!(vm.external_refs.0.borrow().len() == 1);
     vm.perform_gc();
     assert_eq!(p1.refcount(), 1);
-    assert!(vm.external_refs.len() == 1);
+    assert!(vm.external_refs.0.borrow().len() == 1);
 
     // Check that p1 and object are still alive after GC.
     let mut scope = vm.scope();
     let key = scope.intern("foo");
     let p = p1.get_property(&mut scope, key.into()).unwrap().root(&mut scope);
-    assert!(p.downcast_ref::<NamedObject>().is_some());
+    assert!(p.downcast_ref::<NamedObject>(&scope).is_some());
 }
 
 #[test]

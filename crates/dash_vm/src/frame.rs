@@ -9,6 +9,7 @@ use dash_proc_macro::Trace;
 
 use crate::gc::handle::Handle;
 use crate::gc::trace::{Trace, TraceCtxt};
+use crate::gc::ObjectId;
 use crate::value::string::JsString;
 use crate::value::{ExternalValue, Unrooted};
 
@@ -109,7 +110,7 @@ pub struct Frame {
     /// The `arguments` object.
     /// For optimization purposes, this is `None` in frames whose function never references `arguments`,
     /// because there's no reason to construct it in those cases.
-    pub arguments: Option<Handle>,
+    pub arguments: Option<ObjectId>,
 
     /// Counts the number of backjumps to a particular loop header, to find hot loops
     pub loop_counter: LoopCounterMap,
@@ -121,7 +122,7 @@ impl Frame {
         uf: &UserFunction,
         is_constructor_call: bool,
         is_flat_call: bool,
-        arguments: Option<Handle>,
+        arguments: Option<ObjectId>,
     ) -> Self {
         let inner = uf.inner();
         Self {
@@ -141,7 +142,7 @@ impl Frame {
         }
     }
 
-    pub fn from_module(this: Option<Value>, uf: &UserFunction, arguments: Option<Handle>) -> Self {
+    pub fn from_module(this: Option<Value>, uf: &UserFunction, arguments: Option<ObjectId>) -> Self {
         let inner = uf.inner();
         Self {
             this,

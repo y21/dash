@@ -16,7 +16,7 @@ use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::root_ext::RootErrExt;
 use dash_vm::value::string::JsString;
-use dash_vm::value::{Value, ValueContext};
+use dash_vm::value::{Unpack, Value, ValueContext, ValueKind};
 use dash_vm::{delegate, throw};
 use hyper::Body;
 use tokio::sync::oneshot;
@@ -49,8 +49,8 @@ impl ModuleLoader for HttpModule {
 
 pub fn listen(cx: CallContext) -> Result<Value, Value> {
     let port = cx.args.first().unwrap_or_undefined().to_int32(cx.scope)?;
-    let cb = match cx.args.get(1).cloned() {
-        Some(Value::Object(o)) => o,
+    let cb = match cx.args.get(1).unpack() {
+        Some(ValueKind::Object(o)) => o,
         _ => throw!(cx.scope, TypeError, "Expected callback function as second argument"),
     };
 
@@ -96,7 +96,7 @@ pub fn listen(cx: CallContext) -> Result<Value, Value> {
                     ctx.set_property(&mut scope, name.into(), PropertyValue::static_default(fun.into()))
                         .unwrap();
 
-                    let ctx = Value::Object(scope.register(ctx));
+                    let ctx = Value::object(scope.register(ctx));
 
                     if let Err(err) = cb.apply(&mut scope, Value::undefined(), vec![ctx]).root_err(&mut scope) {
                         match err.to_js_string(&mut scope) {
@@ -166,7 +166,7 @@ impl Object for HttpContext {
 }
 
 fn ctx_respond(cx: CallContext) -> Result<Value, Value> {
-    let Some(this) = cx.this.downcast_ref::<HttpContext>() else {
+    let Some(this) = cx.this.downcast_ref::<HttpContext>(cx.scope) else {
         throw!(cx.scope, TypeError, "Missing this");
     };
 

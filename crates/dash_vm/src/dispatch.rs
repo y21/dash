@@ -128,14 +128,14 @@ impl<'vm> DispatchContext<'vm> {
 
     pub fn evaluate_binary_with_scope<F>(&mut self, fun: F) -> Result<Option<HandleResult>, Unrooted>
     where
-        F: Fn(&Value, &Value, &mut LocalScope) -> Result<Value, Value>,
+        F: Fn(Value, Value, &mut LocalScope) -> Result<Value, Value>,
     {
         let (left, right) = self.pop_stack2_new();
 
         let left = left.root(&mut self.scope);
         let right = right.root(&mut self.scope);
 
-        let result = fun(&left, &right, self)?;
+        let result = fun(left, right, self)?;
         self.stack.push(result);
         Ok(None)
     }
@@ -179,11 +179,11 @@ mod extract {
     use dash_middle::compiler::{ArrayMemberKind, ExportPropertyKind, ObjectMemberKind};
     use dash_middle::iterator_with::IteratorWith;
 
-    use crate::gc::handle::Handle;
+    use crate::gc::ObjectId;
     use crate::value::object::{PropertyKey, PropertyValue};
     use crate::value::ops::conversions::ValueConversion;
     use crate::value::string::JsString;
-    use crate::value::{Unrooted, Value};
+    use crate::value::{Unpack, Unrooted, Value, ValueKind};
 
     use super::DispatchContext;
 
@@ -284,8 +284,8 @@ mod extract {
     #[derive(Debug)]
     pub enum ObjectProperty {
         Static { key: PropertyKey, value: PropertyValue },
-        Getter { key: PropertyKey, value: Handle },
-        Setter { key: PropertyKey, value: Handle },
+        Getter { key: PropertyKey, value: ObjectId },
+        Setter { key: PropertyKey, value: ObjectId },
         Spread(Value),
     }
 
@@ -311,13 +311,13 @@ mod extract {
         }
     }
 
-    pub struct Object(pub Handle);
+    pub struct Object(pub ObjectId);
     impl ExtractBack for Object {
         type Exception = Infallible;
 
         fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
-            match cx.pop_stack_rooted() {
-                Value::Object(o) => Ok(Self(o)),
+            match cx.pop_stack_rooted().unpack() {
+                ValueKind::Object(o) => Ok(Self(o)),
                 _ => panic!("stack top must contain an object"),
             }
         }
@@ -551,7 +551,7 @@ mod handlers {
     use crate::value::ops::equality;
     use crate::value::primitive::Number;
     use crate::value::regex::RegExp;
-    use crate::value::ValueContext;
+    use crate::value::{Unpack, ValueContext, ValueKind};
 
     use self::extract::{ArrayElement, BackwardSequence, ExportProperty, IdentW, NumberWConstant, ObjectProperty};
 
@@ -560,14 +560,14 @@ mod handlers {
     pub fn string_constant(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let id = cx.fetchw_and_inc_ip();
         let sym = JsString::from(cx.constants().symbols[SymbolConstant(id)]);
-        cx.push_stack(Value::String(sym).into());
+        cx.push_stack(Value::string(sym).into());
         Ok(None)
     }
 
     pub fn boolean_constant(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let id = cx.fetchw_and_inc_ip();
         let b = cx.constants().booleans[BooleanConstant(id)];
-        cx.push_stack(Value::Boolean(b).into());
+        cx.push_stack(Value::boolean(b).into());
         Ok(None)
     }
 
@@ -584,7 +584,7 @@ mod handlers {
 
         let regex = RegExp::new(nodes.clone(), *flags, JsString::from(*source), &cx.scope);
         let regex = cx.scope.register(regex);
-        cx.push_stack(Value::Object(regex).into());
+        cx.push_stack(Value::object(regex).into());
         Ok(None)
     }
 
@@ -613,13 +613,14 @@ mod handlers {
                 } else {
                     let v = sc.get_local_raw(id).expect("Referenced local not found");
 
-                    match v {
-                        Value::External(v) => v,
-                        other => {
+                    match v.unpack() {
+                        ValueKind::External(v) => v,
+                        _ => {
                             // TODO: comment what's happening here -- Value -> Handle -> ExternaValue(..)
-                            let ext = ExternalValue::new(sc.register(other));
-                            sc.set_local(id, Value::External(ext.clone()).into());
-                            ext
+
+                            let ext_id = sc.register(v);
+                            sc.set_local(id, Value::external(ext_id).into());
+                            ExternalValue::new(sc, ext_id)
                         }
                     }
                 };
@@ -652,7 +653,7 @@ mod handlers {
 
         let function = Function::new(&cx.scope, name, kind);
         let function = cx.scope.register(function);
-        cx.push_stack(Value::Object(function).into());
+        cx.push_stack(Value::object(function).into());
 
         Ok(None)
     }
@@ -720,7 +721,7 @@ mod handlers {
                     let contains = target
                         .own_keys(sc)?
                         .iter()
-                        .any(|v| matches!(v, Value::String(s) if *s == property));
+                        .any(|v| matches!(v.unpack(), ValueKind::String(s) if s == property));
 
                     if contains {
                         Ok(ControlFlow::Break(()))
@@ -730,48 +731,48 @@ mod handlers {
                 })?
                 .is_break();
 
-            Ok(Value::Boolean(found))
+            Ok(Value::boolean(found))
         })
     }
 
     pub fn instanceof(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let (source, target) = cx.pop_stack2_rooted();
 
-        let is_instanceof = source.instanceof(&target, &mut cx).map(Value::Boolean)?;
+        let is_instanceof = source.instanceof(&target, &mut cx).map(Value::boolean)?;
         cx.stack.push(is_instanceof);
         Ok(None)
     }
 
     pub fn lt(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(|l, r, sc| equality::lt(l, r, sc).map(Value::Boolean))
+        cx.evaluate_binary_with_scope(|l, r, sc| equality::lt(l, r, sc).map(Value::boolean))
     }
 
     pub fn le(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(|l, r, sc| equality::le(l, r, sc).map(Value::Boolean))
+        cx.evaluate_binary_with_scope(|l, r, sc| equality::le(l, r, sc).map(Value::boolean))
     }
 
     pub fn gt(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(|l, r, sc| equality::gt(l, r, sc).map(Value::Boolean))
+        cx.evaluate_binary_with_scope(|l, r, sc| equality::gt(l, r, sc).map(Value::boolean))
     }
 
     pub fn ge(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(|l, r, sc| equality::ge(l, r, sc).map(Value::Boolean))
+        cx.evaluate_binary_with_scope(|l, r, sc| equality::ge(l, r, sc).map(Value::boolean))
     }
 
     pub fn eq(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(|l, r, sc| equality::eq(l, r, sc).map(Value::Boolean))
+        cx.evaluate_binary_with_scope(|l, r, sc| equality::eq(l, r, sc).map(Value::boolean))
     }
 
     pub fn ne(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(|l, r, sc| equality::ne(l, r, sc).map(Value::Boolean))
+        cx.evaluate_binary_with_scope(|l, r, sc| equality::ne(l, r, sc).map(Value::boolean))
     }
 
     pub fn strict_eq(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(|l, r, _| Ok(Value::Boolean(equality::strict_eq(l, r))))
+        cx.evaluate_binary_with_scope(|l, r, _| Ok(Value::boolean(equality::strict_eq(l, r))))
     }
 
     pub fn strict_ne(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(|l, r, _| Ok(Value::Boolean(equality::strict_ne(l, r))))
+        cx.evaluate_binary_with_scope(|l, r, _| Ok(Value::boolean(equality::strict_ne(l, r))))
     }
 
     pub fn neg(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
@@ -849,7 +850,7 @@ mod handlers {
                 is_flat_call,
             } => {
                 if_chain! {
-                    if is_constructor_call && !matches!(value, Value::Object(_) | Value::External(_));
+                    if is_constructor_call && !matches!(value.unpack(), ValueKind::Object(_) | ValueKind::External(_));
                     if let Frame { this: Some(this), .. } = this;
                     then {
                         // If this is a constructor call and the return value is not an object,
@@ -885,7 +886,7 @@ mod handlers {
         let id = cx.fetchw_and_inc_ip();
         let name = JsString::from(cx.constants().symbols[SymbolConstant(id)]);
 
-        let value = match cx.global.as_any().downcast_ref::<NamedObject>() {
+        let value = match cx.global.as_any(&cx.scope).downcast_ref::<NamedObject>() {
             Some(value) => match value.get_raw_property(name.into()) {
                 Some(value) => value.kind().get_or_apply(&mut cx, Value::undefined())?,
                 None => {
@@ -914,7 +915,7 @@ mod handlers {
                     .get_property(&mut cx, PropertyKey::String(name))
                     .root(&mut cx.scope)?;
 
-                let res = $op(&value, &right, &mut cx)?;
+                let res = $op(value, right, &mut cx)?;
                 cx.global
                     .clone()
                     .set_property(&mut cx, name.into(), PropertyValue::static_default(res.clone()))?;
@@ -932,7 +933,7 @@ mod handlers {
                 let value = Value::number(value.to_number(&mut cx)?);
 
                 let right = Value::number(1.0);
-                let res = $op(&value, &right, &mut cx)?;
+                let res = $op(value, right, &mut cx)?;
                 cx.global
                     .clone()
                     .set_property(&mut cx, name.into(), PropertyValue::static_default(res.clone()))?;
@@ -950,7 +951,7 @@ mod handlers {
                 let value = Value::number(value.to_number(&mut cx)?);
 
                 let right = Value::number(1.0);
-                let res = $op(&value, &right, &mut cx)?;
+                let res = $op(value, right, &mut cx)?;
                 cx.global
                     .clone()
                     .set_property(&mut cx, name.into(), PropertyValue::static_default(res))?;
@@ -991,7 +992,7 @@ mod handlers {
     #[allow(clippy::too_many_arguments)]
     fn call_flat(
         mut cx: DispatchContext<'_>,
-        callee: &Value,
+        callee: Value,
         this: Value,
         function: &Function,
         user_function: &UserFunction,
@@ -999,12 +1000,12 @@ mod handlers {
         is_constructor: bool,
     ) -> Result<Option<HandleResult>, Unrooted> {
         let sp = cx.stack.len() - argc;
-        let Value::Object(callee) = callee else {
+        let ValueKind::Object(callee) = callee.unpack() else {
             unreachable!("guaranteed by caller")
         };
 
         let this = match is_constructor {
-            true => Value::Object(function.new_instance(callee.clone(), &mut cx)?),
+            true => Value::object(function.new_instance(callee.clone(), &mut cx)?),
             false => this,
         };
 
@@ -1055,7 +1056,7 @@ mod handlers {
     /// Fallback for callable values that are not "function objects"
     fn call_generic(
         mut cx: DispatchContext<'_>,
-        callee: &Value,
+        callee: Value,
         this: Value,
         argc: usize,
         is_constructor: bool,
@@ -1130,17 +1131,17 @@ mod handlers {
             (callee, Value::undefined())
         };
 
-        if let Some(function) = callee.downcast_ref::<Function>() {
+        if let Some(function) = callee.downcast_ref::<Function>(&cx.scope) {
             match function.kind() {
-                FunctionKind::User(user) => call_flat(cx, &callee, this, function, user, argc, is_constructor),
+                FunctionKind::User(user) => call_flat(cx, callee, this, function, user, argc, is_constructor),
                 FunctionKind::Closure(closure) => {
                     let bound_this = closure.this.clone();
-                    call_flat(cx, &callee, bound_this, function, &closure.fun, argc, is_constructor)
+                    call_flat(cx, callee, bound_this, function, &closure.fun, argc, is_constructor)
                 }
-                _ => call_generic(cx, &callee, this, argc, is_constructor, call_ip),
+                _ => call_generic(cx, callee, this, argc, is_constructor, call_ip),
             }
         } else {
-            call_generic(cx, &callee, this, argc, is_constructor, call_ip)
+            call_generic(cx, callee, this, argc, is_constructor, call_ip)
         }
     }
 
@@ -1296,7 +1297,7 @@ mod handlers {
         let offset = cx.fetchw_and_inc_ip() as i16;
         let value = cx.pop_stack_rooted();
 
-        let jump = matches!(value, Value::Undefined(_));
+        let jump = matches!(value.unpack(), ValueKind::Undefined(_));
 
         #[cfg(feature = "jit")]
         cx.record_conditional_jump(ip, jump);
@@ -1320,7 +1321,7 @@ mod handlers {
         let offset = cx.fetchw_and_inc_ip() as i16;
         let value = cx.peek_stack();
 
-        let jump = matches!(value, Value::Null(_));
+        let jump = matches!(value.unpack(), ValueKind::Null(_));
 
         #[cfg(feature = "jit")]
         cx.record_conditional_jump(ip, jump);
@@ -1369,7 +1370,7 @@ mod handlers {
             ($op:expr) => {{
                 let value = cx.get_local(id);
                 let right = cx.pop_stack_rooted();
-                let res = $op(&value, &right, &mut cx)?;
+                let res = $op(value, right, &mut cx)?;
                 cx.set_local(id, res.clone().into());
                 cx.stack.push(res);
             }};
@@ -1380,7 +1381,7 @@ mod handlers {
                 let value = cx.get_local(id);
                 let value = Value::number(value.to_number(&mut cx)?);
                 let one = Value::number(1.0);
-                let res = $op(&value, &one, &mut cx)?;
+                let res = $op(value, one, &mut cx)?;
                 cx.set_local(id, res.clone().into());
                 cx.stack.push(res);
             }};
@@ -1391,7 +1392,7 @@ mod handlers {
                 let value = cx.get_local(id);
                 let value = Value::number(value.to_number(&mut cx)?);
                 let one = Value::number(1.0);
-                let res = $op(&value, &one, &mut cx)?;
+                let res = $op(value, one, &mut cx)?;
                 cx.set_local(id, res.into());
                 cx.stack.push(value);
             }};
@@ -1487,8 +1488,8 @@ mod handlers {
             arraylit_holey(&mut cx, len, stack_values)?
         };
 
-        let handle = cx.gc.register(array);
-        cx.stack.push(Value::Object(handle));
+        let handle = cx.scope.register(array);
+        cx.stack.push(Value::object(handle));
         Ok(None)
     }
 
@@ -1514,7 +1515,7 @@ mod handlers {
                     Entry::Vacant(entry) => drop(entry.insert(PropertyValue::setter_default(value))),
                 },
                 ObjectProperty::Spread(value) => {
-                    if let Value::Object(object) = value {
+                    if let ValueKind::Object(object) = value.unpack() {
                         for key in object.own_keys(&mut cx.scope)? {
                             let key = PropertyKey::from_value(&mut cx.scope, key)?;
                             let value = object.get_property(&mut cx, key.clone())?.root(&mut cx.scope);
@@ -1527,7 +1528,7 @@ mod handlers {
 
         let obj = NamedObject::with_values(&cx, obj);
 
-        let handle = cx.gc.register(obj);
+        let handle = cx.scope.register(obj);
         cx.stack.push(handle.into());
 
         Ok(None)
@@ -1604,7 +1605,7 @@ mod handlers {
                 let value = value.root(&mut cx.scope);
 
                 let p = target.get_property(&mut cx, key.into())?.root(&mut cx.scope);
-                let res = $op(&p, &value, &mut cx)?;
+                let res = $op(p, value, &mut cx)?;
 
                 target.set_property(&mut cx, key.into(), PropertyValue::static_default(res.clone()))?;
                 cx.stack.push(res);
@@ -1617,7 +1618,7 @@ mod handlers {
                 let prop = target.get_property(&mut cx, key.into())?.root(&mut cx.scope);
                 let prop = Value::number(prop.to_number(&mut cx)?);
                 let one = Value::number(1.0);
-                let res = $op(&prop, &one, &mut cx)?;
+                let res = $op(prop, one, &mut cx)?;
                 target.set_property(&mut cx, key.into(), PropertyValue::static_default(res))?;
                 cx.stack.push(prop);
             }};
@@ -1628,8 +1629,9 @@ mod handlers {
                 let target = cx.pop_stack_rooted();
                 let prop = target.get_property(&mut cx, key.into())?.root(&mut cx.scope);
                 let prop = Value::number(prop.to_number(&mut cx)?);
+                // TODO: check that it encodes at comptime, if not make a constant Value::ONE
                 let one = Value::number(1.0);
-                let res = $op(&prop, &one, &mut cx)?;
+                let res = $op(prop, one, &mut cx)?;
                 target.set_property(&mut cx, key.into(), PropertyValue::static_default(res.clone()))?;
                 cx.stack.push(res);
             }};
@@ -1674,7 +1676,7 @@ mod handlers {
                 let key = PropertyKey::from_value(&mut cx, key)?;
                 let prop = target.get_property(&mut cx, key.clone())?.root(&mut cx.scope);
 
-                let result = $op(&prop, &value, &mut cx)?;
+                let result = $op(prop, value, &mut cx)?;
 
                 target.set_property(&mut cx, key, PropertyValue::static_default(result.clone()))?;
                 cx.stack.push(result);
@@ -1688,7 +1690,7 @@ mod handlers {
                 let prop = target.get_property(&mut cx, key.clone())?.root(&mut cx.scope);
                 let prop = Value::number(prop.to_number(&mut cx)?);
                 let one = Value::number(1.0);
-                let res = $op(&prop, &one, &mut cx)?;
+                let res = $op(prop, one, &mut cx)?;
                 target.set_property(&mut cx, key, PropertyValue::static_default(res))?;
                 cx.stack.push(prop);
             }};
@@ -1701,7 +1703,7 @@ mod handlers {
                 let prop = target.get_property(&mut cx, key.clone())?.root(&mut cx.scope);
                 let prop = Value::number(prop.to_number(&mut cx)?);
                 let one = Value::number(1.0);
-                let res = $op(&prop, &one, &mut cx)?;
+                let res = $op(prop, one, &mut cx)?;
                 target.set_property(&mut cx, key, PropertyValue::static_default(res.clone()))?;
                 cx.stack.push(res);
             }};
@@ -1757,7 +1759,7 @@ mod handlers {
 
     pub fn ldlocalext(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let id = cx.fetch_and_inc_ip();
-        let value = Value::External(cx.get_external(id.into()).clone());
+        let value = Value::external(cx.get_external(id.into()).id().clone());
 
         // Unbox external values such that any use will create a copy
         let value = value.unbox_external();
@@ -1776,9 +1778,9 @@ mod handlers {
 
         macro_rules! op {
             ($op:expr) => {{
-                let value = Value::External(cx.get_external(id.into()).clone()).unbox_external();
+                let value = Value::external(cx.get_external(id.into()).id()).unbox_external();
                 let right = cx.pop_stack_rooted();
-                let res = $op(&value, &right, &mut cx)?;
+                let res = $op(value, right, &mut cx)?;
                 let external = cx.scope.get_external(id.into()).unwrap().clone();
                 assign_to_external(&external, res.clone());
                 cx.stack.push(res);
@@ -1787,9 +1789,9 @@ mod handlers {
 
         macro_rules! prefix {
             ($op:expr) => {{
-                let value = Value::External(cx.get_external(id.into()).clone()).unbox_external();
+                let value = Value::external(cx.get_external(id.into()).id()).unbox_external();
                 let right = Value::number(1.0);
-                let res = $op(&value, &right, &mut cx)?;
+                let res = $op(value, right, &mut cx)?;
                 let external = cx.scope.get_external(id.into()).unwrap().clone();
                 assign_to_external(&external, res.clone());
                 cx.stack.push(res);
@@ -1798,9 +1800,9 @@ mod handlers {
 
         macro_rules! postfix {
             ($op:expr) => {{
-                let value = Value::External(cx.get_external(id.into()).clone()).unbox_external();
+                let value = Value::external(cx.get_external(id.into()).id()).unbox_external();
                 let right = Value::number(1.0);
-                let res = $op(&value, &right, &mut cx)?;
+                let res = $op(value, right, &mut cx)?;
                 let external = cx.scope.get_external(id.into()).unwrap().clone();
                 assign_to_external(&external, res);
                 cx.stack.push(value);
@@ -1866,7 +1868,8 @@ mod handlers {
 
     pub fn type_of(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let value = cx.pop_stack_rooted();
-        cx.stack.push(value.type_of().as_value());
+        let ty = value.type_of(&cx.scope).as_value();
+        cx.stack.push(ty);
         Ok(None)
     }
 
@@ -1879,7 +1882,8 @@ mod handlers {
             .get_property(&mut cx.scope, ident.into())?
             .root(&mut cx.scope);
 
-        cx.stack.push(prop.type_of().as_value());
+        let ty = prop.type_of(&cx.scope).as_value();
+        cx.stack.push(ty);
         Ok(None)
     }
 
@@ -1967,7 +1971,7 @@ mod handlers {
             .rev()
             .find_map(|f| f.this.as_ref())
             .cloned()
-            .unwrap_or_else(|| Value::Object(cx.global.clone()));
+            .unwrap_or_else(|| Value::object(cx.global));
 
         cx.stack.push(this);
         Ok(None)
@@ -1975,7 +1979,7 @@ mod handlers {
 
     pub fn global_this(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let global = cx.global.clone();
-        cx.stack.push(Value::Object(global));
+        cx.stack.push(Value::object(global));
         Ok(None)
     }
 
@@ -2012,9 +2016,9 @@ mod handlers {
     pub fn call_for_in_iterator(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let value = cx.pop_stack_rooted();
 
-        let keys = match value {
-            Value::Object(obj) => obj.own_keys(&mut cx.scope)?,
-            Value::External(obj) => obj.own_keys(&mut cx.scope)?,
+        let keys = match value.unpack() {
+            ValueKind::Object(obj) => obj.own_keys(&mut cx.scope)?,
+            ValueKind::External(obj) => obj.own_keys(&mut cx.scope)?,
             _ => Vec::new(),
         }
         .into_iter()
@@ -2023,9 +2027,9 @@ mod handlers {
 
         let keys = Array::from_vec(&cx, keys);
         let keys = cx.register(keys);
-        let iter = ArrayIterator::new(&mut cx, Value::Object(keys))?;
+        let iter = ArrayIterator::new(&mut cx, Value::object(keys))?;
         let iter = cx.register(iter);
-        cx.stack.push(Value::Object(iter));
+        cx.stack.push(Value::object(iter));
         Ok(None)
     }
 
@@ -2035,8 +2039,8 @@ mod handlers {
         let value = target.delete_property(&mut cx, key)?;
 
         // TODO: not correct, as `undefined` might have been the actual value
-        let did_delete = !matches!(value.root(&mut cx.scope), Value::Undefined(..));
-        cx.stack.push(Value::Boolean(did_delete));
+        let did_delete = !matches!(value.root(&mut cx.scope).unpack(), ValueKind::Undefined(..));
+        cx.stack.push(Value::boolean(did_delete));
         Ok(None)
     }
 
@@ -2047,8 +2051,8 @@ mod handlers {
         let value = target.delete_property(&mut cx, con.into())?;
 
         // TODO: not correct, as `undefined` might have been the actual value
-        let did_delete = !matches!(value.root(&mut cx.scope), Value::Undefined(..));
-        cx.stack.push(Value::Boolean(did_delete));
+        let did_delete = !matches!(value.root(&mut cx.scope).unpack(), ValueKind::Undefined(..));
+        cx.stack.push(Value::boolean(did_delete));
         Ok(None)
     }
 
@@ -2075,8 +2079,8 @@ mod handlers {
             let keys = obj
                 .own_keys(&mut cx.scope)?
                 .into_iter()
-                .filter_map(|s| match s {
-                    Value::String(s) => (!idents.contains(&s)).then_some(s),
+                .filter_map(|s| match s.unpack() {
+                    ValueKind::String(s) => (!idents.contains(&s)).then_some(s),
                     _ => unreachable!("own_keys returned non-string"),
                 })
                 .collect::<Vec<_>>();
@@ -2088,7 +2092,7 @@ mod handlers {
                 rest.set_property(&mut cx.scope, key.into(), PropertyValue::static_default(value))?;
             }
 
-            cx.set_local(rest_id.into(), Value::Object(rest).into());
+            cx.set_local(rest_id.into(), Value::object(rest).into());
         }
 
         Ok(None)
@@ -2118,9 +2122,10 @@ mod handlers {
             () => {{
                 // Unrooted is technically fine here, nothing can trigger a GC cycle
                 // OK to remove if it turns out to be a useful opt
+                // TODO: this can be optimized by reinterpreting it as a number directly, but could be potentially quite unsafe
                 let (left, right) = cx.pop_stack2_rooted();
-                match (left, right) {
-                    (Value::Number(l), Value::Number(r)) => (l.0, r.0),
+                match (left.unpack(), right.unpack()) {
+                    (ValueKind::Number(l), ValueKind::Number(r)) => (l.0, r.0),
                     _ => unreachable!(),
                 }
             }};
@@ -2129,7 +2134,6 @@ mod handlers {
         macro_rules! bin_op {
             ($fun:expr) => {{
                 let (l, r) = lr_as_num_spec!();
-                // No try_push_stack needed, because we just popped two values off. Therefore it can hold one more now
                 cx.stack.push(Value::number($fun(l, r)));
             }};
         }
@@ -2150,51 +2154,53 @@ mod handlers {
         macro_rules! bin_op_to_bool {
             ($op:tt) => {{
                 let (l, r) = lr_as_num_spec!();
-                cx.stack.push(Value::Boolean(l $op r));
+                cx.stack.push(Value::boolean(l $op r));
             }};
         }
 
         macro_rules! postfix {
             ($op:tt) => {{
                 let id = cx.fetch_and_inc_ip();
-                let local = match cx.get_local(id.into()) {
-                    Value::Number(n) => n,
+                let local = match cx.get_local(id.into()).unpack() {
+                    ValueKind::Number(n) => n,
                     _ => unreachable!(),
                 };
                 cx.set_local(id.into(), Value::number(local.0 $op 1.0).into());
-                cx.stack.push(Value::Number(local));
+                cx.stack.push(Value::number(local.0));
             }};
         }
 
         macro_rules! prefix {
-            ($op:tt) => {{{
+            ($op:tt) => {{
                 let id = cx.fetch_and_inc_ip();
-                let local = match cx.get_local(id.into()) {
-                    Value::Number(n) => n,
+                let local = match cx.get_local(id.into()).unpack() {
+                    ValueKind::Number(n) => n,
                     _ => unreachable!(),
                 };
                 let new = Value::number(local.0 $op 1.0);
-                cx.set_local(id.into(), new.clone().into());
+                cx.set_local(id.into(), new.into());
                 cx.stack.push(new);
-            }
             }};
         }
 
         macro_rules! bin_op_numl_constr {
             ($op:tt) => {{
-                let left = match cx.pop_stack_rooted() {
-                    Value::Number(n) => n.0,
+                let left = match cx.pop_stack_rooted().unpack() {
+                    ValueKind::Number(n) => n.0,
                     _ => unreachable!(),
                 };
                 let right = cx.fetch_and_inc_ip() as f64;
-                cx.stack.push(Value::Boolean(left $op right));
+                cx.stack.push(Value::boolean(left $op right));
             }};
         }
 
         fn logical_op_numl_u32r_n<F: FnOnce(f64, f64) -> bool>(mut cx: DispatchContext<'_>, f: F) {
             let vm: &mut Vm = &mut cx;
 
-            let Some(value @ &mut Value::Number(Number(left))) = vm.stack.last_mut() else {
+            let Some(value) = vm.stack.last_mut() else {
+                unreachable!()
+            };
+            let ValueKind::Number(Number(left)) = value.unpack() else {
                 unreachable!()
             };
             let frame = vm.frames.last_mut().unwrap();
@@ -2205,7 +2211,7 @@ mod handlers {
                 .with(|buf| u32::from_ne_bytes(buf[ip..ip + 4].try_into().unwrap()) as f64);
             frame.ip += 4;
 
-            *value = Value::Boolean(f(left, right));
+            *value = Value::boolean(f(left, right));
         }
 
         macro_rules! fn_call {
@@ -2309,7 +2315,7 @@ mod handlers {
             .arguments
             .clone()
             .expect("`arguments` was never set despite being referenced in bytecode");
-        cx.stack.push(Value::Object(arguments));
+        cx.stack.push(Value::object(arguments));
         Ok(None)
     }
 }

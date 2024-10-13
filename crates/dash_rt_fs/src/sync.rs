@@ -15,10 +15,10 @@ pub fn init_module(sc: &mut LocalScope) -> Result<Value, Value> {
     module.set_property(
         sc,
         name.into(),
-        PropertyValue::static_default(Value::Object(read_file_value)),
+        PropertyValue::static_default(Value::object(read_file_value)),
     )?;
 
-    Ok(Value::Object(sc.register(module)))
+    Ok(Value::object(sc.register(module)))
 }
 
 fn read_file_sync(cx: CallContext) -> Result<Value, Value> {
@@ -31,10 +31,10 @@ fn read_file_sync(cx: CallContext) -> Result<Value, Value> {
         .to_owned();
 
     match std::fs::read_to_string(path) {
-        Ok(s) => Ok(Value::String(cx.scope.intern(s.as_ref()).into())),
+        Ok(s) => Ok(Value::string(cx.scope.intern(s.as_ref()).into())),
         Err(err) => {
             let err = Error::new(cx.scope, err.to_string());
-            Err(Value::Object(cx.scope.register(err)))
+            Err(Value::object(cx.scope.register(err)))
         }
     }
 }

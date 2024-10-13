@@ -5,11 +5,11 @@ use std::{fmt, iter};
 use dash_middle::interner;
 use dash_proc_macro::Trace;
 
-use crate::gc::handle::Handle;
 use crate::gc::interner::sym;
+use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
-use crate::throw;
 use crate::util::{intern_f64, Captures};
+use crate::{throw, Vm};
 
 use super::boxed::{Boolean as BoxedBoolean, Number as BoxedNumber, Symbol as BoxedSymbol};
 use super::object::{Object, PropertyKey, PropertyValue};
@@ -51,14 +51,14 @@ impl Object for f64 {
     fn apply(
         &self,
         scope: &mut LocalScope,
-        _callee: Handle,
+        _callee: ObjectId,
         _this: Value,
         _args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         throw!(scope, TypeError, "number is not a function")
     }
 
-    fn as_any(&self) -> &dyn Any {
+    fn as_any(&self, _: &Vm) -> &dyn Any {
         self
     }
 
@@ -66,11 +66,11 @@ impl Object for f64 {
         Ok(Vec::new())
     }
 
-    fn type_of(&self) -> Typeof {
+    fn type_of(&self, _: &Vm) -> Typeof {
         Typeof::Number
     }
 
-    fn internal_slots(&self) -> Option<&dyn InternalSlots> {
+    fn internal_slots(&self, _: &Vm) -> Option<&dyn InternalSlots> {
         Some(self)
     }
 }
@@ -103,14 +103,14 @@ impl Object for bool {
     fn apply(
         &self,
         scope: &mut LocalScope,
-        _callee: Handle,
+        _callee: ObjectId,
         _this: Value,
         _args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         throw!(scope, TypeError, "boolean is not a function")
     }
 
-    fn as_any(&self) -> &dyn Any {
+    fn as_any(&self, _: &Vm) -> &dyn Any {
         self
     }
 
@@ -118,11 +118,11 @@ impl Object for bool {
         Ok(Vec::new())
     }
 
-    fn type_of(&self) -> Typeof {
+    fn type_of(&self, _: &Vm) -> Typeof {
         Typeof::Boolean
     }
 
-    fn internal_slots(&self) -> Option<&dyn InternalSlots> {
+    fn internal_slots(&self, _: &Vm) -> Option<&dyn InternalSlots> {
         Some(self)
     }
 }
@@ -134,7 +134,7 @@ pub fn array_like_keys<'a, 'b>(
     (0..len)
         .map(|i| sc.intern_usize(i))
         .chain(iter::once_with(|| sym::length))
-        .map(|x| Value::String(x.into()))
+        .map(|x| Value::string(x.into()))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -175,14 +175,14 @@ impl Object for Undefined {
     fn apply(
         &self,
         sc: &mut LocalScope,
-        _callee: Handle,
+        _callee: ObjectId,
         _this: Value,
         _args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         throw!(sc, TypeError, "undefined is not a function")
     }
 
-    fn as_any(&self) -> &dyn Any {
+    fn as_any(&self, _: &Vm) -> &dyn Any {
         self
     }
 
@@ -190,7 +190,7 @@ impl Object for Undefined {
         Ok(Vec::new())
     }
 
-    fn type_of(&self) -> Typeof {
+    fn type_of(&self, _: &Vm) -> Typeof {
         Typeof::Undefined
     }
 }
@@ -227,14 +227,14 @@ impl Object for Null {
     fn apply(
         &self,
         sc: &mut LocalScope,
-        _callee: Handle,
+        _callee: ObjectId,
         _this: Value,
         _args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         throw!(sc, TypeError, "null is not a function")
     }
 
-    fn as_any(&self) -> &dyn Any {
+    fn as_any(&self, _: &Vm) -> &dyn Any {
         self
     }
 
@@ -243,70 +243,8 @@ impl Object for Null {
     }
 }
 
-// impl Object for str {
-//     fn get_own_property_descriptor(
-//         &self,
-//         sc: &mut LocalScope,
-//         key: PropertyKey,
-//     ) -> Result<Option<PropertyValue>, Unrooted> {
-//         if let PropertyKey::String(st) = key {
-//             if st.sym() == sym::length {
-//                 return Ok(Some(PropertyValue::static_default(Value::number(self.len() as f64))));
-//             }
-
-//             if let Ok(index) = st.res(sc).parse::<usize>() {
-//                 let bytes = self.as_bytes();
-//                 if let Some(&byte) = bytes.get(index) {
-//                     let s = sc.intern((byte as char).to_string().as_ref());
-//                     return Ok(Some(PropertyValue::static_default(Value::String(s.into()))));
-//                 }
-//             }
-//         }
-
-//         Ok(None)
-//     }
-
-//     fn set_property(&self, _sc: &mut LocalScope, _key: PropertyKey, _value: PropertyValue) -> Result<(), Value> {
-//         Ok(())
-//     }
-
-//     fn delete_property(&self, _sc: &mut LocalScope, _key: PropertyKey) -> Result<Unrooted, Value> {
-//         Ok(Unrooted::new(Value::undefined()))
-//     }
-
-//     fn set_prototype(&self, _sc: &mut LocalScope, _value: Value) -> Result<(), Value> {
-//         Ok(())
-//     }
-
-//     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
-//         Ok(sc.statics.string_prototype.clone().into())
-//     }
-
-//     fn apply(
-//         &self,
-//         scope: &mut LocalScope,
-//         _callee: Handle,
-//         _this: Value,
-//         _args: Vec<Value>,
-//     ) -> Result<Unrooted, Unrooted> {
-//         throw!(scope, TypeError, "string is not a function")
-//     }
-
-//     fn as_any(&self) -> &dyn Any {
-//         panic!("cannot convert string to any")
-//     }
-
-//     fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
-//         Ok(array_like_keys(self.len()).collect())
-//     }
-
-//     fn type_of(&self) -> Typeof {
-//         Typeof::String
-//     }
-// }
-
 // TODO: rename to JsSymbol
-#[derive(Debug, Clone, Hash, PartialEq, Eq, Trace)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Trace)]
 pub struct Symbol {
     description: JsString,
 }
@@ -349,14 +287,14 @@ impl Object for Symbol {
     fn apply(
         &self,
         scope: &mut LocalScope,
-        _callee: Handle,
+        _callee: ObjectId,
         _this: Value,
         _args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         throw!(scope, TypeError, "symbol is not a function")
     }
 
-    fn as_any(&self) -> &dyn Any {
+    fn as_any(&self, _: &Vm) -> &dyn Any {
         self
     }
 
@@ -364,11 +302,11 @@ impl Object for Symbol {
         Ok(Vec::new())
     }
 
-    fn type_of(&self) -> Typeof {
+    fn type_of(&self, _: &Vm) -> Typeof {
         Typeof::Symbol
     }
 
-    fn internal_slots(&self) -> Option<&dyn InternalSlots> {
+    fn internal_slots(&self, _: &Vm) -> Option<&dyn InternalSlots> {
         Some(self)
     }
 }
@@ -416,7 +354,7 @@ impl ValueConversion for f64 {
         todo!() // TODO
     }
 
-    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle, Value> {
+    fn to_object(&self, sc: &mut LocalScope) -> Result<ObjectId, Value> {
         let num = BoxedNumber::new(sc, *self);
         Ok(sc.register(num))
     }
@@ -430,7 +368,7 @@ impl InternalSlots for bool {
 
 impl ValueConversion for bool {
     fn to_primitive(&self, _sc: &mut LocalScope, _preferred_type: Option<PreferredType>) -> Result<Value, Value> {
-        Ok(Value::Boolean(*self))
+        Ok(Value::boolean(*self))
     }
 
     fn to_number(&self, _sc: &mut LocalScope) -> Result<f64, Value> {
@@ -449,7 +387,7 @@ impl ValueConversion for bool {
         todo!() // TODO
     }
 
-    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle, Value> {
+    fn to_object(&self, sc: &mut LocalScope) -> Result<ObjectId, Value> {
         let bool = BoxedBoolean::new(sc, *self);
         Ok(sc.register(bool))
     }
@@ -476,7 +414,7 @@ impl ValueConversion for Undefined {
         todo!() // TODO: throw?
     }
 
-    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle, Value> {
+    fn to_object(&self, sc: &mut LocalScope) -> Result<ObjectId, Value> {
         throw!(sc, TypeError, "Cannot convert undefined to object")
     }
 }
@@ -502,14 +440,14 @@ impl ValueConversion for Null {
         todo!() // TODO: throw?
     }
 
-    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle, Value> {
+    fn to_object(&self, sc: &mut LocalScope) -> Result<ObjectId, Value> {
         throw!(sc, TypeError, "Cannot convert null to object");
     }
 }
 
 impl ValueConversion for Symbol {
     fn to_primitive(&self, _sc: &mut LocalScope, _preferred_type: Option<PreferredType>) -> Result<Value, Value> {
-        Ok(Value::Symbol(self.clone()))
+        Ok(Value::symbol(*self))
     }
 
     fn to_number(&self, sc: &mut LocalScope) -> Result<f64, Value> {
@@ -528,7 +466,7 @@ impl ValueConversion for Symbol {
         todo!() // TODO: throw?
     }
 
-    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle, Value> {
+    fn to_object(&self, sc: &mut LocalScope) -> Result<ObjectId, Value> {
         let sym = BoxedSymbol::new(sc, self.clone());
         Ok(sc.register(sym))
     }
@@ -589,14 +527,14 @@ impl Object for Number {
     fn apply(
         &self,
         scope: &mut LocalScope,
-        callee: Handle,
+        callee: ObjectId,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         self.0.apply(scope, callee, this, args)
     }
 
-    fn as_any(&self) -> &dyn Any {
+    fn as_any(&self, _: &Vm) -> &dyn Any {
         self
     }
 
@@ -604,11 +542,11 @@ impl Object for Number {
         self.0.own_keys(sc)
     }
 
-    fn type_of(&self) -> Typeof {
-        self.0.type_of()
+    fn type_of(&self, vm: &Vm) -> Typeof {
+        self.0.type_of(vm)
     }
 
-    fn internal_slots(&self) -> Option<&dyn InternalSlots> {
+    fn internal_slots(&self, _: &Vm) -> Option<&dyn InternalSlots> {
         Some(self)
     }
 }
@@ -640,7 +578,7 @@ impl ValueConversion for Number {
         self.0.length_of_array_like(sc)
     }
 
-    fn to_object(&self, sc: &mut LocalScope) -> Result<Handle, Value> {
+    fn to_object(&self, sc: &mut LocalScope) -> Result<ObjectId, Value> {
         self.0.to_object(sc)
     }
 }

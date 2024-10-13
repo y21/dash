@@ -2,8 +2,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use dash_vm::gc::handle::Handle;
 use dash_vm::gc::trace::Trace;
+use dash_vm::gc::ObjectId;
 use dash_vm::Vm;
 use rustc_hash::FxHashMap;
 
@@ -17,7 +17,7 @@ pub struct State {
     tx: EventSender,
     root_module: Rc<RefCell<Option<Box<dyn ModuleLoader>>>>,
     pub tasks: TaskIds,
-    promises: FxHashMap<u64, Handle>,
+    promises: FxHashMap<u64, ObjectId>,
     pub store: TypeMap,
 }
 unsafe impl Trace for State {
@@ -86,19 +86,19 @@ impl State {
         self.rt.clone()
     }
 
-    pub fn add_pending_promise(&mut self, promise: Handle) -> u64 {
+    pub fn add_pending_promise(&mut self, promise: ObjectId) -> u64 {
         static NEXT_PROMISE_ID: AtomicU64 = AtomicU64::new(0);
         let id = NEXT_PROMISE_ID.fetch_add(1, Ordering::Relaxed);
         self.promises.insert(id, promise);
         id
     }
 
-    pub fn take_promise(&mut self, id: u64) -> Handle {
+    pub fn take_promise(&mut self, id: u64) -> ObjectId {
         self.try_take_promise(id)
             .expect("Attempted to take a promise that was already taken")
     }
 
-    pub fn try_take_promise(&mut self, id: u64) -> Option<Handle> {
+    pub fn try_take_promise(&mut self, id: u64) -> Option<ObjectId> {
         self.promises.remove(&id)
     }
 }

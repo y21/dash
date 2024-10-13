@@ -4,7 +4,7 @@ use crate::value::function::native::CallContext;
 use crate::value::object::Object;
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::typedarray::{TypedArray, TypedArrayKind};
-use crate::value::Value;
+use crate::value::{Unpack, Value, ValueKind};
 
 macro_rules! typedarray {
     (module: $module:ident, kind: $kind:expr) => {
@@ -12,11 +12,11 @@ macro_rules! typedarray {
             use super::*;
 
             pub fn constructor(cx: CallContext) -> Result<Value, Value> {
-                let arg = match cx.args.first() {
-                    Some(Value::Object(o)) => o,
+                let arg = match cx.args.first().unpack() {
+                    Some(ValueKind::Object(o)) => o,
                     _ => throw!(cx.scope, TypeError, "Missing argument"),
                 };
-                let Some(this) = arg.as_any().downcast_ref::<ArrayBuffer>() else {
+                let Some(this) = arg.as_any(cx.scope).downcast_ref::<ArrayBuffer>() else {
                     throw!(cx.scope, TypeError, "Incompatible receiver")
                 };
 
@@ -41,7 +41,7 @@ macro_rules! typedarray {
 }
 
 pub fn fill(cx: CallContext) -> Result<Value, Value> {
-    let this = match cx.this.downcast_ref::<TypedArray>() {
+    let this = match cx.this.downcast_ref::<TypedArray>(cx.scope) {
         Some(this) => this,
         None => throw!(cx.scope, TypeError, "Invalid receiver"),
     };
@@ -50,7 +50,7 @@ pub fn fill(cx: CallContext) -> Result<Value, Value> {
         None => throw!(cx.scope, TypeError, "Missing fill value"), // TODO: shouldn't throw
     };
     let buf = this.buffer();
-    let buf = buf.as_any().downcast_ref::<ArrayBuffer>().unwrap().storage();
+    let buf = buf.as_any(cx.scope).downcast_ref::<ArrayBuffer>().unwrap().storage();
 
     macro_rules! fill_typed_array {
         ($ty:ty) => {{

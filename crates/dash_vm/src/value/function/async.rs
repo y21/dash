@@ -1,7 +1,7 @@
 use dash_proc_macro::Trace;
 
-use crate::gc::handle::Handle;
 use crate::gc::interner::sym;
+use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::value::object::{NamedObject, Object, PropertyKey};
 use crate::value::promise::{wrap_promise, Promise};
@@ -28,7 +28,7 @@ impl AsyncFunction {
     pub(crate) fn handle_function_call(
         &self,
         scope: &mut LocalScope,
-        callee: Handle,
+        callee: ObjectId,
         this: Value,
         args: Vec<Value>,
         is_constructor_call: bool,
@@ -65,7 +65,7 @@ impl AsyncFunction {
                     let then_task = ThenTask::new(scope, generator_iter.clone(), final_promise.clone());
                     let then_task = scope.register(then_task);
 
-                    let promise = Value::Object(final_promise);
+                    let promise = Value::object(final_promise);
 
                     scope
                         .statics
@@ -77,7 +77,7 @@ impl AsyncFunction {
                                 Ok(value) => value,
                                 Err(value) => value,
                             },
-                            vec![Value::Object(then_task)],
+                            vec![Value::object(then_task)],
                         )
                         .root_err(scope)?;
 
@@ -102,12 +102,12 @@ impl AsyncFunction {
 pub struct ThenTask {
     /// The inner generator iterator of the async function
     generator_iter: Value,
-    final_promise: Handle,
+    final_promise: ObjectId,
     obj: NamedObject,
 }
 
 impl ThenTask {
-    pub fn new(vm: &Vm, generator_iter: Value, final_promise: Handle) -> Self {
+    pub fn new(vm: &Vm, generator_iter: Value, final_promise: ObjectId) -> Self {
         Self {
             generator_iter,
             obj: NamedObject::new(vm),
@@ -133,7 +133,7 @@ impl Object for ThenTask {
     fn apply(
         &self,
         scope: &mut crate::localscope::LocalScope,
-        _callee: Handle,
+        _callee: ObjectId,
         _this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
@@ -169,7 +169,7 @@ impl Object for ThenTask {
                     // TODO: value might be a promise
                     scope.drive_promise(
                         PromiseAction::Resolve,
-                        self.final_promise.as_any().downcast_ref::<Promise>().unwrap(),
+                        self.final_promise.as_any(scope).downcast_ref::<Promise>().unwrap(),
                         vec![value],
                     );
                 } else {
@@ -181,14 +181,14 @@ impl Object for ThenTask {
                         .statics
                         .promise_then
                         .clone()
-                        .apply(scope, value, vec![Value::Object(then_task)])?;
+                        .apply(scope, value, vec![Value::object(then_task)])?;
                 }
             }
             Err(value) => {
                 // Promise in rejected state
                 scope.drive_promise(
                     PromiseAction::Reject,
-                    self.final_promise.as_any().downcast_ref::<Promise>().unwrap(),
+                    self.final_promise.as_any(scope).downcast_ref::<Promise>().unwrap(),
                     vec![value],
                 );
             }
@@ -197,7 +197,7 @@ impl Object for ThenTask {
         Ok(Value::undefined().into())
     }
 
-    fn type_of(&self) -> Typeof {
+    fn type_of(&self, _: &Vm) -> Typeof {
         Typeof::Function
     }
 }

@@ -4,9 +4,10 @@ use std::ops::{Deref, DerefMut};
 
 use crate::gc::handle::Handle;
 use crate::gc::interner::Symbol;
+use crate::gc::ObjectId;
 use crate::value::function::bound::BoundFunction;
 use crate::value::promise::{Promise, PromiseState};
-use crate::value::ValueContext;
+use crate::value::{Unpack, ValueContext, ValueKind};
 use crate::PromiseAction;
 
 use super::value::object::Object;
@@ -117,7 +118,7 @@ impl Default for LocalScopeList {
 
 #[derive(Clone, Debug)]
 pub struct ScopeData {
-    refs: Vec<Handle>,
+    refs: Vec<ObjectId>,
     strings: Vec<Symbol>,
     next: Option<NonNull<ScopeData>>,
 }
@@ -146,24 +147,24 @@ impl<'vm> LocalScope<'vm> {
         unsafe { self.scope_data.as_mut() }
     }
 
-    pub fn add_ref(&mut self, obj: Handle) {
+    pub fn add_ref(&mut self, obj: ObjectId) {
         self.scope_data_mut().refs.push(obj);
     }
 
     #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
     pub fn add_value(&mut self, value: Value) {
-        match value {
-            Value::Object(o) => self.add_ref(o),
-            Value::External(o) => {
+        match value.unpack() {
+            ValueKind::Object(o) => self.add_ref(o),
+            ValueKind::External(o) => {
                 // Two things to add: the inner object, and the external itself
                 // TODO: do we really need to add the inner object, considering that the inner will be traversed during tracing
-                self.add_value(o.inner().clone());
-                self.add_ref(o.as_gc_handle());
+                self.add_value(o.inner());
+                self.add_ref(o.id());
             }
-            Value::String(s) => {
+            ValueKind::String(s) => {
                 self.scope_data_mut().strings.push(s.sym());
             }
-            Value::Symbol(s) => {
+            ValueKind::Symbol(s) => {
                 self.scope_data_mut().strings.push(s.sym());
             }
             _ => {}
@@ -178,11 +179,12 @@ impl<'vm> LocalScope<'vm> {
 
     /// Registers an object and roots it.
     #[cfg_attr(feature = "stress_gc", track_caller)]
-    pub fn register<O: Object + 'static>(&mut self, obj: O) -> Handle {
-        #[allow(clippy::disallowed_methods)] // ok, we immediately root the handle
-        let handle = self.deref_mut().register(obj);
-        self.add_ref(handle.clone());
-        handle
+    pub fn register<O: Object + 'static>(&mut self, obj: O) -> ObjectId {
+        // #[allow(clippy::disallowed_methods)] // ok, we immediately root the handle
+        // let handle = self.deref_mut().register(obj);
+        todo!("use the new allocator")
+        // self.add_ref(handle.clone());
+        // handle
     }
 
     pub fn drive_promise(&mut self, action: PromiseAction, promise: &Promise, args: Vec<Value>) {

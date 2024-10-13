@@ -36,7 +36,7 @@ fn join_inner(sc: &mut LocalScope, array: Value, separator: JsString) -> Result<
         }
     }
 
-    Ok(Value::String(sc.intern(result).into()))
+    Ok(Value::string(sc.intern(result).into()))
 }
 
 pub fn to_string(cx: CallContext) -> Result<Value, Value> {
@@ -54,7 +54,7 @@ pub fn values(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn at(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::Object(cx.this.to_object(cx.scope)?);
+    let this = Value::object(cx.this.to_object(cx.scope)?);
     let len = this.length_of_array_like(cx.scope)? as i64;
     let mut index = cx.args.first().unwrap_or_undefined().to_integer_or_infinity(cx.scope)? as i64;
 
@@ -71,7 +71,7 @@ pub fn at(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn concat(cx: CallContext) -> Result<Value, Value> {
-    let _this = Value::Object(cx.this.to_object(cx.scope)?);
+    let _this = Value::object(cx.this.to_object(cx.scope)?);
     let mut array = Vec::new();
     // TODO: add elements from `this` to `array`
 
@@ -98,7 +98,7 @@ pub fn keys(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn every(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::Object(cx.this.to_object(cx.scope)?);
+    let this = Value::object(cx.this.to_object(cx.scope)?);
     let len = this.length_of_array_like(cx.scope)?;
     let callback = cx.args.first().unwrap_or_undefined();
 
@@ -120,7 +120,7 @@ pub fn every(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn some(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::Object(cx.this.to_object(cx.scope)?);
+    let this = Value::object(cx.this.to_object(cx.scope)?);
     let len = this.length_of_array_like(cx.scope)?;
     let callback = cx.args.first().unwrap_or_undefined();
 
@@ -142,7 +142,7 @@ pub fn some(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn fill(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::Object(cx.this.to_object(cx.scope)?);
+    let this = Value::object(cx.this.to_object(cx.scope)?);
     let len = this.length_of_array_like(cx.scope)?;
     let value = cx.args.first().unwrap_or_undefined();
 
@@ -150,7 +150,7 @@ pub fn fill(cx: CallContext) -> Result<Value, Value> {
         array::spec_array_set_property(cx.scope, &this, i, PropertyValue::static_default(value.clone()))?;
     }
 
-    if let Some(arr) = cx.this.downcast_ref::<Array>() {
+    if let Some(arr) = cx.this.downcast_ref::<Array>(&cx.scope) {
         // all holes were replaced with values, so there cannot be holes
         arr.force_convert_to_non_holey();
     }
@@ -159,7 +159,7 @@ pub fn fill(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn filter(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::Object(cx.this.to_object(cx.scope)?);
+    let this = Value::object(cx.this.to_object(cx.scope)?);
     let len = this.length_of_array_like(cx.scope)?;
     let callback = cx.args.first().unwrap_or_undefined();
     let mut values = Vec::new();
@@ -184,7 +184,7 @@ pub fn filter(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn reduce(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::Object(cx.this.to_object(cx.scope)?);
+    let this = Value::object(cx.this.to_object(cx.scope)?);
     let len = this.length_of_array_like(cx.scope)?;
     let callback = cx.args.first().unwrap_or_undefined();
     let initial_value = cx.args.get(1);
@@ -216,7 +216,7 @@ pub fn reduce(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn find(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::Object(cx.this.to_object(cx.scope)?);
+    let this = Value::object(cx.this.to_object(cx.scope)?);
     let len = this.length_of_array_like(cx.scope)?;
     let callback = cx.args.first().unwrap_or_undefined();
 
@@ -238,7 +238,7 @@ pub fn find(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn find_index(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::Object(cx.this.to_object(cx.scope)?);
+    let this = Value::object(cx.this.to_object(cx.scope)?);
     let len = this.length_of_array_like(cx.scope)?;
     let callback = cx.args.first().unwrap_or_undefined();
 
@@ -264,7 +264,7 @@ pub fn flat(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn for_each(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::Object(cx.this.to_object(cx.scope)?);
+    let this = Value::object(cx.this.to_object(cx.scope)?);
     let len = this.length_of_array_like(cx.scope)?;
     let callback = cx.args.first().unwrap_or_undefined();
 
@@ -279,14 +279,14 @@ pub fn for_each(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn includes(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::Object(cx.this.to_object(cx.scope)?);
+    let this = Value::object(cx.this.to_object(cx.scope)?);
     let len = this.length_of_array_like(cx.scope)?;
     let search_element = cx.args.first().unwrap_or_undefined();
 
     for k in 0..len {
         let pk = cx.scope.intern_usize(k);
         let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
-        if strict_eq(&pkv, &search_element) {
+        if strict_eq(pkv, search_element) {
             return Ok(true.into());
         }
     }
@@ -295,7 +295,7 @@ pub fn includes(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn index_of(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::Object(cx.this.to_object(cx.scope)?);
+    let this = Value::object(cx.this.to_object(cx.scope)?);
     let len = this.length_of_array_like(cx.scope)?;
     if len == 0 {
         return Ok(Value::number(-1.));
@@ -318,7 +318,7 @@ pub fn index_of(cx: CallContext) -> Result<Value, Value> {
     for k in from_index..len {
         let pk = cx.scope.intern_usize(k);
         let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
-        if strict_eq(&pkv, &search_element) {
+        if strict_eq(pkv, search_element) {
             return Ok(Value::number(k as f64));
         }
     }
@@ -327,7 +327,7 @@ pub fn index_of(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn last_index_of(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::Object(cx.this.to_object(cx.scope)?);
+    let this = Value::object(cx.this.to_object(cx.scope)?);
     let len = this.length_of_array_like(cx.scope)?;
     if len == 0 {
         return Ok(Value::number(-1.));
@@ -350,7 +350,7 @@ pub fn last_index_of(cx: CallContext) -> Result<Value, Value> {
     for k in (0..=from_index).rev() {
         let pk = cx.scope.intern_usize(k);
         let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
-        if strict_eq(&pkv, &search_element) {
+        if strict_eq(pkv, search_element) {
             return Ok(Value::number(k as f64));
         }
     }
@@ -359,7 +359,7 @@ pub fn last_index_of(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn map(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::Object(cx.this.to_object(cx.scope)?);
+    let this = Value::object(cx.this.to_object(cx.scope)?);
     let len = this.length_of_array_like(cx.scope)?;
     let callback = cx.args.first().unwrap_or_undefined();
     let mut values = Vec::new();
@@ -379,7 +379,7 @@ pub fn map(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn pop(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::Object(cx.this.to_object(cx.scope)?);
+    let this = Value::object(cx.this.to_object(cx.scope)?);
     let len = this.length_of_array_like(cx.scope)?;
 
     if len == 0 {
@@ -399,7 +399,7 @@ pub fn pop(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn push(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::Object(cx.this.to_object(cx.scope)?);
+    let this = Value::object(cx.this.to_object(cx.scope)?);
     let len = this.length_of_array_like(cx.scope)?;
 
     let mut last = Value::undefined();
@@ -418,7 +418,7 @@ pub fn push(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn reverse(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::Object(cx.this.to_object(cx.scope)?);
+    let this = Value::object(cx.this.to_object(cx.scope)?);
     let len = this.length_of_array_like(cx.scope)?;
 
     // Strategy: Given [1,2,3,4,5], swap `i` with `len - i - 1` for every index `i` in `0..len / 2`
@@ -435,7 +435,7 @@ pub fn reverse(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn shift(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::Object(cx.this.to_object(cx.scope)?);
+    let this = Value::object(cx.this.to_object(cx.scope)?);
     let len = this.length_of_array_like(cx.scope)?;
 
     if len == 0 {
@@ -505,7 +505,7 @@ fn shift_array(
 }
 
 pub fn unshift(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::Object(cx.this.to_object(cx.scope)?);
+    let this = Value::object(cx.this.to_object(cx.scope)?);
     let len = this.length_of_array_like(cx.scope)?;
     let arg_len = cx.args.len();
     let new_len = len + cx.args.len();
@@ -530,7 +530,7 @@ fn to_slice_index(index: isize, len: usize) -> usize {
 }
 
 pub fn slice(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::Object(cx.this.to_object(cx.scope)?);
+    let this = Value::object(cx.this.to_object(cx.scope)?);
     let len = this.length_of_array_like(cx.scope)?;
 
     let start = match cx.args.first() {
@@ -560,8 +560,12 @@ pub fn slice(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn is_array(cx: CallContext) -> Result<Value, Value> {
-    Ok(Value::Boolean(
-        cx.args.first().unwrap_or_undefined().downcast_ref::<Array>().is_some(),
+    Ok(Value::boolean(
+        cx.args
+            .first()
+            .unwrap_or_undefined()
+            .downcast_ref::<Array>(&cx.scope)
+            .is_some(),
     ))
 }
 
@@ -585,7 +589,7 @@ pub fn from(cx: CallContext) -> Result<Value, Value> {
         }
 
         let values = Array::from_vec(scope, values);
-        Ok(Value::Object(scope.register(values)))
+        Ok(Value::object(scope.register(values)))
     }
 
     fn with_array_like(scope: &mut LocalScope, items: Value, mapper: Option<Value>) -> Result<Value, Value> {
@@ -604,7 +608,7 @@ pub fn from(cx: CallContext) -> Result<Value, Value> {
         }
 
         let values = Array::from_vec(scope, values);
-        Ok(Value::Object(scope.register(values)))
+        Ok(Value::object(scope.register(values)))
     }
 
     let mut args = cx.args.into_iter();
@@ -635,7 +639,7 @@ pub fn from(cx: CallContext) -> Result<Value, Value> {
 // since that must happen in a closure that needs to return an `Ordering`, without the ability to
 // return errors, but calling into JS can throw exceptions.
 pub fn sort(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::Object(cx.this.to_object(cx.scope)?);
+    let this = Value::object(cx.this.to_object(cx.scope)?);
     let len = this.length_of_array_like(cx.scope)?;
 
     let Some(compare_fn) = cx.args.first().cloned() else {

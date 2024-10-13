@@ -6,7 +6,7 @@ use crate::value::object::{NamedObject, Object, PropertyValue};
 use crate::value::{Root, Value, ValueContext};
 
 pub fn next(cx: CallContext) -> Result<Value, Value> {
-    let iterator = match cx.this.downcast_ref::<ArrayIterator>() {
+    let iterator = match cx.this.downcast_ref::<ArrayIterator>(&cx.scope) {
         Some(it) => it,
         None => throw!(cx.scope, TypeError, "Incompatible receiver"),
     };
@@ -23,7 +23,7 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
     obj.set_property(
         cx.scope,
         sym::done.into(),
-        PropertyValue::static_default(Value::Boolean(done)),
+        PropertyValue::static_default(Value::boolean(done)),
     )?;
 
     Ok(cx.scope.register(obj).into())

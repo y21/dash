@@ -2,15 +2,21 @@ use std::fmt::Debug;
 use std::ptr::NonNull;
 
 use dash_log::debug;
+use handle::ObjectVTable;
 
 use crate::value::object::Object;
 
 use self::handle::{GcNode, Handle};
 
+mod buf;
+pub mod gc2;
 pub mod handle;
 pub mod interner;
 pub mod persistent;
 pub mod trace;
+
+// TODO: can we inline the vtable and get rid of the indirection? benchmark that though, might be a regression
+pub type ObjectId = gc2::AllocId<&'static ObjectVTable>;
 
 #[derive(Debug)]
 pub struct Gc {
@@ -144,6 +150,58 @@ unsafe fn drop_erased_gc_node(s: *mut GcNode<()>) {
     ((*s).vtable.drop_boxed_gcnode)(s);
 }
 
+#[macro_export]
+macro_rules! object_vtable_for_ty {
+    ($ty:ty) => {
+        const {
+            use $crate::value::object::Object;
+
+            &$crate::gc::handle::ObjectVTable {
+                drop_boxed_gcnode: |ptr| unsafe {
+                    drop(Box::from_raw(ptr.cast::<$crate::gc::handle::GcNode<$ty>>()));
+                },
+                trace: |ptr, ctxt| unsafe { <$ty as $crate::gc::trace::Trace>::trace(&*(ptr.cast::<$ty>()), ctxt) },
+                debug_fmt: |ptr, f| unsafe { <$ty as std::fmt::Debug>::fmt(&*(ptr.cast::<$ty>()), f) },
+                js_get_own_property: |ptr, scope, this, key| unsafe {
+                    <$ty as Object>::get_own_property(&*(ptr.cast::<$ty>()), scope, this, key)
+                },
+                js_get_own_property_descriptor: |ptr, scope, key| unsafe {
+                    <$ty as Object>::get_own_property_descriptor(&*(ptr.cast::<$ty>()), scope, key)
+                },
+                js_get_property: |ptr, scope, this, key| unsafe {
+                    <$ty as Object>::get_property(&*(ptr.cast::<$ty>()), scope, this, key)
+                },
+                js_get_property_descriptor: |ptr, scope, key| unsafe {
+                    <$ty as Object>::get_property_descriptor(&*(ptr.cast::<$ty>()), scope, key)
+                },
+                js_set_property: |ptr, scope, key, value| unsafe {
+                    <$ty as Object>::set_property(&*(ptr.cast::<$ty>()), scope, key, value)
+                },
+                js_delete_property: |ptr, scope, key| unsafe {
+                    <$ty as Object>::delete_property(&*(ptr.cast::<$ty>()), scope, key)
+                },
+                js_set_prototype: |ptr, scope, proto| unsafe {
+                    <$ty as Object>::set_prototype(&*(ptr.cast::<$ty>()), scope, proto)
+                },
+                js_get_prototype: |ptr, scope| unsafe { <$ty as Object>::get_prototype(&*(ptr.cast::<$ty>()), scope) },
+                js_apply: |ptr, scope, callee, this, args| unsafe {
+                    <$ty as Object>::apply(&*(ptr.cast::<$ty>()), scope, callee, this, args)
+                },
+                js_construct: |ptr, scope, callee, this, args| unsafe {
+                    <$ty as Object>::construct(&*(ptr.cast::<$ty>()), scope, callee, this, args)
+                },
+                js_as_any: |ptr, vm| unsafe { <$ty as Object>::as_any(&*(ptr.cast::<$ty>()), vm) },
+                js_internal_slots: |ptr, vm| unsafe {
+                    <$ty as Object>::internal_slots(&*(ptr.cast::<$ty>()), vm)
+                        .map(|v| v as *const dyn $crate::value::primitive::InternalSlots)
+                },
+                js_own_keys: |ptr, scope| unsafe { <$ty as Object>::own_keys(&*(ptr.cast::<$ty>()), scope) },
+                js_type_of: |ptr, vm| unsafe { <$ty as Object>::type_of(&*(ptr.cast::<$ty>()), vm) },
+            }
+        }
+    };
+}
+
 macro_rules! register_gc {
     ($ty:ty, $gc:expr, $val:expr) => {{
         assert!(
@@ -190,13 +248,13 @@ macro_rules! register_gc {
                 js_construct: |ptr, scope, callee, this, args| unsafe {
                     <$ty as Object>::construct(&*(ptr.cast::<$ty>()), scope, callee, this, args)
                 },
-                js_as_any: |ptr| unsafe { <$ty as Object>::as_any(&*(ptr.cast::<$ty>())) },
-                js_internal_slots: |ptr| unsafe {
-                    <$ty as Object>::internal_slots(&*(ptr.cast::<$ty>()))
+                js_as_any: |ptr, vm| unsafe { <$ty as Object>::as_any(&*(ptr.cast::<$ty>()), vm) },
+                js_internal_slots: |ptr, vm| unsafe {
+                    <$ty as Object>::internal_slots(&*(ptr.cast::<$ty>()), vm)
                         .map(|v| v as *const dyn crate::value::primitive::InternalSlots)
                 },
                 js_own_keys: |ptr, scope| unsafe { <$ty as Object>::own_keys(&*(ptr.cast::<$ty>()), scope) },
-                js_type_of: |ptr| unsafe { <$ty as Object>::type_of(&*(ptr.cast::<$ty>())) },
+                js_type_of: |ptr, vm| unsafe { <$ty as Object>::type_of(&*(ptr.cast::<$ty>()), vm) },
             },
             flags: Default::default(),
             refcount: Default::default(),
@@ -320,11 +378,12 @@ mod tests {
 
             // test that ExternalValue::replace works
             {
-                let h4i: Handle = register_gc!(Value, gc, Value::Number(Number(123.4)));
-                let ext = ExternalValue::new(h4i);
-                assert_eq!(ext.inner(), &Value::Number(Number(123.4)));
-                ExternalValue::replace(&ext, Value::Boolean(true));
-                assert_eq!(ext.inner(), &Value::Boolean(true));
+                todo!();
+                // let h4i: Handle = register_gc!(Value, gc, Value::Number(Number(123.4)));
+                // let ext = ExternalValue::new(h4i);
+                // assert_eq!(ext.inner(), &Value::Number(Number(123.4)));
+                // ExternalValue::replace(&ext, Value::Boolean(true));
+                // assert_eq!(ext.inner(), &Value::Boolean(true));
             }
 
             // lastly, test if Gc::drop works correctly. run under miri to see possible leaks

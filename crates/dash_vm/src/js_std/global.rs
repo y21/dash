@@ -4,20 +4,23 @@ use crate::eval::EvalError;
 use crate::throw;
 use crate::value::function::native::CallContext;
 use crate::value::ops::conversions::ValueConversion;
-use crate::value::{Root, Value, ValueContext};
+use crate::value::{Root, Unpack, Value, ValueContext, ValueKind};
 
 pub fn is_nan(cx: CallContext) -> Result<Value, Value> {
     // 1. Let num be ? ToNumber(number).
     let num = cx.args.first().unwrap_or_undefined().to_number(cx.scope)?;
     // 2. If num is NaN, return true.
     // 3. Otherwise, return false.
-    Ok(Value::Boolean(num.is_nan()))
+    Ok(Value::boolean(num.is_nan()))
 }
 
 pub fn eval(cx: CallContext) -> Result<Value, Value> {
-    let source = match cx.args.first().unwrap_or_undefined() {
-        Value::String(s) => s.res(cx.scope).to_owned(),
-        other => return Ok(other),
+    let source = {
+        let value = cx.args.first().unwrap_or_undefined();
+        match value.unpack() {
+            ValueKind::String(s) => s.res(cx.scope).to_owned(),
+            _ => return Ok(value),
+        }
     };
 
     match cx.scope.eval(&source, Default::default()) {
@@ -41,7 +44,7 @@ pub fn is_finite(cx: CallContext) -> Result<Value, Value> {
     let num = cx.args.first().unwrap_or_undefined().to_number(cx.scope)?;
     // 2. If num is NaN, +∞, or -∞, return false.
     // 3. Otherwise, return true.
-    Ok(Value::Boolean(num.is_finite()))
+    Ok(Value::boolean(num.is_finite()))
 }
 
 pub fn parse_float(cx: CallContext) -> Result<Value, Value> {

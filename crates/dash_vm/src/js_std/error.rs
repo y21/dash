@@ -40,5 +40,5 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
     cx.this
         .get_property(cx.scope, sym::stack.into())
         .root(cx.scope)
-        .and_then(|v| v.to_js_string(cx.scope).map(Value::String))
+        .and_then(|v| v.to_js_string(cx.scope).map(Value::string))
 }

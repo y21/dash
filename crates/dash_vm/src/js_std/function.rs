@@ -4,7 +4,7 @@ use crate::value::function::native::CallContext;
 use crate::value::function::Function;
 use crate::value::object::Object;
 use crate::value::ops::conversions::ValueConversion;
-use crate::value::{Root, Typeof, Value, ValueContext};
+use crate::value::{Root, Typeof, Unpack, Value, ValueContext, ValueKind};
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     throw!(cx.scope, Error, "Dynamic code compilation is currently not supported")
@@ -29,8 +29,8 @@ pub fn apply(cx: CallContext) -> Result<Value, Value> {
         vec![]
     };
 
-    let target_callee = match cx.this {
-        Value::Object(o) if matches!(o.type_of(), Typeof::Function) => o,
+    let target_callee = match cx.this.unpack() {
+        ValueKind::Object(o) if matches!(o.type_of(&cx.scope), Typeof::Function) => o,
         _ => throw!(cx.scope, TypeError, "Bound value must be a function"),
     };
 
@@ -42,20 +42,20 @@ pub fn apply(cx: CallContext) -> Result<Value, Value> {
 pub fn bind(cx: CallContext) -> Result<Value, Value> {
     let target_this = cx.args.first().cloned();
     let target_args = cx.args.get(1..).map(|s| s.to_vec());
-    let target_callee = match cx.this {
-        Value::Object(o) if matches!(o.type_of(), Typeof::Function) => o,
+    let target_callee = match cx.this.unpack() {
+        ValueKind::Object(o) if matches!(o.type_of(&cx.scope), Typeof::Function) => o,
         _ => throw!(cx.scope, TypeError, "Bound value must be a function"),
     };
 
     let bf = BoundFunction::new(cx.scope, target_callee, target_this, target_args);
-    Ok(Value::Object(cx.scope.register(bf)))
+    Ok(Value::object(cx.scope.register(bf)))
 }
 
 pub fn call(cx: CallContext) -> Result<Value, Value> {
     let target_this = cx.args.first().cloned();
     let target_args = cx.args.get(1..).map(|s| s.to_vec());
-    let target_callee = match cx.this {
-        Value::Object(o) if matches!(o.type_of(), Typeof::Function) => o,
+    let target_callee = match cx.this.unpack() {
+        ValueKind::Object(o) if matches!(o.type_of(&cx.scope), Typeof::Function) => o,
         _ => throw!(cx.scope, TypeError, "Bound value must be a function"),
     };
 
@@ -69,12 +69,12 @@ pub fn call(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn to_string(cx: CallContext) -> Result<Value, Value> {
-    let Some(this) = cx.this.downcast_ref::<Function>() else {
+    let Some(this) = cx.this.downcast_ref::<Function>(&cx.scope) else {
         throw!(cx.scope, TypeError, "Incompatible receiver");
     };
     let name = format!(
         "function {}() {{ [native code] }}",
         this.name().map(|s| s.res(cx.scope)).unwrap_or_default()
     );
-    Ok(Value::String(cx.scope.intern(name.as_ref()).into()))
+    Ok(Value::string(cx.scope.intern(name.as_ref()).into()))
 }

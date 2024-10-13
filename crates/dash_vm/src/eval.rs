@@ -58,7 +58,7 @@ impl Vm {
                 Some(obj) => obj.root(sc),
                 None => {
                     let o = NamedObject::new(sc);
-                    Value::Object(sc.register(o))
+                    Value::object(sc.register(o))
                 }
             },
             StaticImportKind::All => {
@@ -69,7 +69,7 @@ impl Vm {
                     export_obj.set_property(sc, sym::default.into(), PropertyValue::static_default(default))?;
                 }
 
-                Value::Object(sc.register(export_obj))
+                Value::object(sc.register(export_obj))
             }
         };
 

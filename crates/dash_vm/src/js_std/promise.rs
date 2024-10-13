@@ -1,18 +1,18 @@
 use dash_proc_macro::Trace;
 
-use crate::gc::handle::Handle;
 use crate::gc::interner::sym;
+use crate::gc::ObjectId;
 use crate::value::function::bound::BoundFunction;
 use crate::value::function::native::CallContext;
 use crate::value::object::{NamedObject, Object, PropertyKey};
 use crate::value::promise::{Promise, PromiseRejecter, PromiseResolver, PromiseState};
 use crate::value::root_ext::RootErrExt;
-use crate::value::{Root, Typeof, Unrooted, Value, ValueContext};
+use crate::value::{Root, Typeof, Unpack, Unrooted, Value, ValueContext, ValueKind};
 use crate::{delegate, throw, Vm};
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let initiator = match cx.args.first() {
-        Some(v) if matches!(v.type_of(), Typeof::Function) => v,
+        Some(v) if matches!(v.type_of(cx.scope), Typeof::Function) => v,
         _ => throw!(cx.scope, TypeError, "Promise callback must be a function"),
     };
 
@@ -31,34 +31,34 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
         .apply(
             cx.scope,
             Value::undefined(),
-            vec![Value::Object(resolve), Value::Object(reject)],
+            vec![Value::object(resolve), Value::object(reject)],
         )
         .root_err(cx.scope)?;
 
-    Ok(Value::Object(cx.scope.register(promise)))
+    Ok(Value::object(cx.scope.register(promise)))
 }
 
 pub fn resolve(cx: CallContext) -> Result<Value, Value> {
     let value = cx.args.first().unwrap_or_undefined();
     // TODO: do not wrap thenable values in another promise
     let promise = Promise::resolved(cx.scope, value);
-    Ok(Value::Object(cx.scope.register(promise)))
+    Ok(Value::object(cx.scope.register(promise)))
 }
 
 pub fn reject(cx: CallContext) -> Result<Value, Value> {
     let value = cx.args.first().unwrap_or_undefined();
     let promise = Promise::resolved(cx.scope, value);
-    Ok(Value::Object(cx.scope.register(promise)))
+    Ok(Value::object(cx.scope.register(promise)))
 }
 
 pub fn then(cx: CallContext) -> Result<Value, Value> {
-    let promise = match cx.this.downcast_ref::<Promise>() {
+    let promise = match cx.this.downcast_ref::<Promise>(cx.scope) {
         Some(promise) => promise,
         None => throw!(cx.scope, TypeError, "Receiver must be a promise"),
     };
 
-    let handler = match cx.args.first() {
-        Some(Value::Object(obj)) if matches!(obj.type_of(), Typeof::Function) => obj.clone(),
+    let handler = match cx.args.first().unpack() {
+        Some(ValueKind::Object(obj)) if matches!(obj.type_of(cx.scope), Typeof::Function) => obj.clone(),
         _ => throw!(cx.scope, TypeError, "Promise handler must be a function"),
     };
 
@@ -87,7 +87,7 @@ pub fn then(cx: CallContext) -> Result<Value, Value> {
         PromiseState::Rejected(..) => {}
     }
 
-    Ok(Value::Object(then_promise))
+    Ok(Value::object(then_promise))
 }
 
 // TODO: Promise.prototype.catch
@@ -95,14 +95,14 @@ pub fn then(cx: CallContext) -> Result<Value, Value> {
 #[derive(Debug, Trace)]
 struct ThenTask {
     // TODO: make a type like CastHandle<Promise> that implements Deref by downcasting
-    then_promise: Handle,
-    handler: Handle,
-    resolver: Handle,
+    then_promise: ObjectId,
+    handler: ObjectId,
+    resolver: ObjectId,
     obj: NamedObject,
 }
 
 impl ThenTask {
-    pub fn new(vm: &Vm, then_promise: Handle, handler: Handle, resolver: Handle) -> Self {
+    pub fn new(vm: &Vm, then_promise: ObjectId, handler: ObjectId, resolver: ObjectId) -> Self {
         Self {
             then_promise,
             handler,
@@ -129,7 +129,7 @@ impl Object for ThenTask {
     fn apply(
         &self,
         scope: &mut crate::localscope::LocalScope,
-        _callee: Handle,
+        _callee: ObjectId,
         _this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
@@ -143,16 +143,16 @@ impl Object for ThenTask {
             .get_property(scope, PropertyKey::String(sym::then.into()))?
             .root(scope);
 
-        match ret_then {
-            Value::Undefined(..) => {
+        match ret_then.unpack() {
+            ValueKind::Undefined(..) => {
                 // Not a promise. Call resolver(value)
-                let bf = BoundFunction::new(scope, self.resolver.clone(), None, Some(vec![ret]));
+                let bf = BoundFunction::new(scope, self.resolver, None, Some(vec![ret]));
                 let bf = scope.register(bf);
                 scope.add_async_task(bf);
             }
             _ => {
                 // Is a promise. Call value.then(resolver)
-                ret_then.apply(scope, ret, vec![Value::Object(self.resolver.clone())])?;
+                ret_then.apply(scope, ret, vec![Value::object(self.resolver)])?;
             }
         }
 

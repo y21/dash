@@ -37,7 +37,6 @@ where
     };
 
     let (promise_id, rt) = {
-        let promise = promise.clone();
         let state = State::from_vm_mut(cx.scope);
         let pid = state.add_pending_promise(promise);
         let rt = state.rt_handle();
@@ -50,7 +49,7 @@ where
         event_tx.send(EventMessage::ScheduleCallback(Box::new(move |rt| {
             let promise = State::from_vm_mut(rt.vm_mut()).take_promise(promise_id);
             let mut scope = rt.vm_mut().scope();
-            let promise = promise.as_any().downcast_ref::<Promise>().unwrap();
+            let promise = promise.as_any(&scope).downcast_ref::<Promise>().unwrap();
 
             let data = convert(&mut scope, data);
 
@@ -63,7 +62,7 @@ where
         })));
     });
 
-    Ok(Value::Object(promise))
+    Ok(Value::object(promise))
 }
 
 pub fn format_value<'s>(value: Value, scope: &'s mut LocalScope) -> Result<&'s str, Value> {

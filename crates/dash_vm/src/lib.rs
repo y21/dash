@@ -25,13 +25,14 @@ use self::value::Value;
 
 use dash_log::{debug, error, span, Level};
 use dash_middle::compiler::instruction::Instruction;
+use gc::gc2::Allocator;
 use gc::handle::Handle;
 use gc::interner::StringInterner;
-use gc::Gc;
+use gc::{Gc, ObjectId};
 use localscope::{scope, LocalScopeList};
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use value::object::NamedObject;
-use value::{ExternalValue, PureBuiltin, Unrooted};
+use value::{ExternalValue, PureBuiltin, Unpack, Unrooted, ValueKind};
 
 #[cfg(feature = "jit")]
 mod jit;
@@ -56,16 +57,20 @@ pub const MAX_FRAME_STACK_SIZE: usize = 1024;
 pub const MAX_STACK_SIZE: usize = 8192;
 const DEFAULT_GC_OBJECT_COUNT_THRESHOLD: usize = 8192;
 
+#[derive(Clone, Default)]
+pub struct ExternalRefs(pub std::rc::Rc<std::cell::RefCell<FxHashMap<ObjectId, u32>>>);
+
 pub struct Vm {
     #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
     frames: Vec<Frame>,
-    async_tasks: Vec<Handle>,
+    async_tasks: Vec<ObjectId>,
     // TODO: the inner vec of the stack should be private for soundness
     // popping from the stack must return `Unrooted`
     stack: Vec<Value>,
     gc: Gc,
+    alloc: Allocator,
     pub interner: StringInterner,
-    global: Handle,
+    global: ObjectId,
     // "External refs" currently refers to existing `Persistent<T>`s.
     // Persistent values already manage the reference count when cloning or dropping them
     // and are stored in the Handle itself, but we still need to keep track of them so we can
@@ -73,7 +78,7 @@ pub struct Vm {
     //
     // We insert into this in `Persistent::new`, and remove from it during the tracing phase.
     // We can't do that in Persistent's Drop code, because we don't have access to the VM there.
-    external_refs: FxHashSet<Handle>,
+    external_refs: ExternalRefs,
     scopes: LocalScopeList,
     statics: Box<Statics>,
     #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
@@ -94,10 +99,11 @@ pub struct Vm {
 impl Vm {
     pub fn new(params: VmParams) -> Self {
         debug!("create vm");
-        let mut gc = Gc::default();
-        let statics = Statics::new(&mut gc);
+        let gc = Gc::default();
+        let mut alloc = Allocator::new();
+        let statics = Statics::new(&mut alloc);
         // TODO: global __proto__ and constructor
-        let global = gc.register(PureBuiltin::new(NamedObject::null()));
+        let global: ObjectId = alloc.alloc_object(PureBuiltin::new(NamedObject::null()));
         let gc_object_threshold = params
             .initial_gc_object_threshold()
             .unwrap_or(DEFAULT_GC_OBJECT_COUNT_THRESHOLD);
@@ -107,9 +113,10 @@ impl Vm {
             async_tasks: Vec::new(),
             stack: Vec::with_capacity(512),
             gc,
+            alloc,
             interner: StringInterner::new(),
             global,
-            external_refs: FxHashSet::default(),
+            external_refs: ExternalRefs::default(),
             scopes: LocalScopeList::new(),
             statics: Box::new(statics),
             try_blocks: Vec::new(),
@@ -128,16 +135,16 @@ impl Vm {
         scope(self)
     }
 
-    pub fn global(&self) -> Handle {
-        self.global.clone()
+    pub fn global(&self) -> ObjectId {
+        self.global
     }
 
     /// Prepare the VM for execution.
     #[rustfmt::skip]
     fn prepare(&mut self) {
         debug!("initialize vm intrinsics");
-        fn set_fn_prototype(v: &dyn Object, proto: Handle, name: interner::Symbol) {
-            let fun = v.as_any().downcast_ref::<Function>().unwrap();
+        fn set_fn_prototype(vm: &Vm, v: &dyn Object, proto: ObjectId, name: interner::Symbol) {
+            let fun = v.as_any(vm).downcast_ref::<Function>().unwrap();
             fun.set_name(name.into());
             fun.set_fn_prototype(proto);
         }
@@ -147,18 +154,18 @@ impl Vm {
         // (though we also populate function prototypes later on this way, so it's not so trivial)
         #[allow(clippy::too_many_arguments)]
         fn register(
-            base: Handle,
+            base: ObjectId,
             prototype: impl Into<Value>,
-            constructor: Handle,
-            methods: impl IntoIterator<Item = (interner::Symbol, Handle)>,
-            symbols: impl IntoIterator<Item = (Symbol, Handle)>,
+            constructor: ObjectId,
+            methods: impl IntoIterator<Item = (interner::Symbol, ObjectId)>,
+            symbols: impl IntoIterator<Item = (Symbol, ObjectId)>,
             fields: impl IntoIterator<Item = (interner::Symbol, Value, Option<PropertyDataDescriptor>)>,
             // Contrary to `prototype`, this optionally sets the function prototype. Should only be `Some`
             // when base is a function
-            fn_prototype: Option<(interner::Symbol, Handle)>,
+            fn_prototype: Option<(interner::Symbol, ObjectId)>,
             // LocalScope needs to be the last parameter because we don't have two phase borrows in user code
             scope: &mut LocalScope<'_>,
-        ) -> Handle {
+        ) -> ObjectId {
             base.set_property(scope, sym::constructor.into(), PropertyValue::static_non_enumerable(constructor.into())).unwrap();
             base.set_prototype(scope, prototype.into()).unwrap();
 
@@ -199,7 +206,7 @@ impl Vm {
             }
 
             if let Some((proto_name, proto_val)) = fn_prototype {
-                set_fn_prototype(&base, proto_val, proto_name);
+                set_fn_prototype(scope, &base, proto_val, proto_name);
             }
 
             base
@@ -548,18 +555,18 @@ impl Vm {
             [],
             [],
             [
-                (sym::asyncIterator,Value::Symbol( scope.statics.symbol_async_iterator.clone()), Some(PropertyDataDescriptor::empty())),
-                (sym::hasInstance, Value::Symbol(scope.statics.symbol_has_instance.clone()), Some(PropertyDataDescriptor::empty())),
-                (sym::iterator, Value::Symbol(scope.statics.symbol_iterator.clone()), Some(PropertyDataDescriptor::empty())),
-                (sym::match_, Value::Symbol(scope.statics.symbol_match.clone()), Some(PropertyDataDescriptor::empty())),
-                (sym::matchAll, Value::Symbol(scope.statics.symbol_match_all.clone()), Some(PropertyDataDescriptor::empty())),
-                (sym::replace, Value::Symbol(scope.statics.symbol_replace.clone()), Some(PropertyDataDescriptor::empty())),
-                (sym::search, Value::Symbol(scope.statics.symbol_search.clone()), Some(PropertyDataDescriptor::empty())),
-                (sym::species, Value::Symbol(scope.statics.symbol_species.clone()), Some(PropertyDataDescriptor::empty())),
-                (sym::split, Value::Symbol(scope.statics.symbol_split.clone()), Some(PropertyDataDescriptor::empty())),
-                (sym::toPrimitive, Value::Symbol(scope.statics.symbol_to_primitive.clone()), Some(PropertyDataDescriptor::empty())),
-                (sym::toStringTag, Value::Symbol(scope.statics.symbol_to_string_tag.clone()), Some(PropertyDataDescriptor::empty())),
-                (sym::unscopables, Value::Symbol(scope.statics.symbol_unscopables.clone()), Some(PropertyDataDescriptor::empty())),
+                (sym::asyncIterator,Value::symbol(scope.statics.symbol_async_iterator.clone()), Some(PropertyDataDescriptor::empty())),
+                (sym::hasInstance, Value::symbol(scope.statics.symbol_has_instance.clone()), Some(PropertyDataDescriptor::empty())),
+                (sym::iterator, Value::symbol(scope.statics.symbol_iterator.clone()), Some(PropertyDataDescriptor::empty())),
+                (sym::match_, Value::symbol(scope.statics.symbol_match.clone()), Some(PropertyDataDescriptor::empty())),
+                (sym::matchAll, Value::symbol(scope.statics.symbol_match_all.clone()), Some(PropertyDataDescriptor::empty())),
+                (sym::replace, Value::symbol(scope.statics.symbol_replace.clone()), Some(PropertyDataDescriptor::empty())),
+                (sym::search, Value::symbol(scope.statics.symbol_search.clone()), Some(PropertyDataDescriptor::empty())),
+                (sym::species, Value::symbol(scope.statics.symbol_species.clone()), Some(PropertyDataDescriptor::empty())),
+                (sym::split, Value::symbol(scope.statics.symbol_split.clone()), Some(PropertyDataDescriptor::empty())),
+                (sym::toPrimitive, Value::symbol(scope.statics.symbol_to_primitive.clone()), Some(PropertyDataDescriptor::empty())),
+                (sym::toStringTag, Value::symbol(scope.statics.symbol_to_string_tag.clone()), Some(PropertyDataDescriptor::empty())),
+                (sym::unscopables, Value::symbol(scope.statics.symbol_unscopables.clone()), Some(PropertyDataDescriptor::empty())),
             ],
             Some((sym::JsSymbol, scope.statics.symbol_prototype.clone())),
             &mut scope,
@@ -1233,7 +1240,8 @@ impl Vm {
         // and value will become a root here, therefore this is ok
         let value = unsafe { value.into_value() };
 
-        if let Value::External(o) = self.stack[idx].clone() {
+        // TODO: double check this is still right
+        if let ValueKind::External(o) = self.stack[idx].unpack() {
             unsafe { ExternalValue::replace(&o, value) };
         } else {
             self.stack[idx] = value;
@@ -1358,16 +1366,16 @@ impl Vm {
     pub fn print_stack(&self) {
         for (i, v) in self.stack.iter().enumerate() {
             print!("{i}: ");
-            match v {
-                Value::Object(o) => println!("{:#?}", o),
-                Value::External(o) => println!("[[external]]: {:#?}", o.inner()),
-                _ => println!("{v:?}"),
+            match v.unpack() {
+                ValueKind::Object(o) => println!("{:#?}", o),
+                ValueKind::External(o) => println!("[[external]]: {:#?}", o.inner()),
+                v => println!("{v:?}"),
             }
         }
     }
 
     /// Adds a function to the async task queue.
-    pub fn add_async_task(&mut self, fun: Handle) {
+    pub fn add_async_task(&mut self, fun: ObjectId) {
         self.async_tasks.push(fun);
     }
 
@@ -1488,7 +1496,7 @@ impl Vm {
     }
 
     fn trace_roots(&mut self) {
-        let mut cx = TraceCtxt::new(&mut self.interner);
+        let mut cx = TraceCtxt::new(&mut self.interner, &mut self.alloc);
 
         debug!("trace frames");
         self.frames.trace(&mut cx);
@@ -1509,13 +1517,12 @@ impl Vm {
         // we do two things here:
         // remove Handles from external refs set that have a zero refcount (implying no active persistent refs)
         // and trace if refcount > 0
-        self.external_refs.retain(|e| {
-            let refcount = e.refcount();
+        self.external_refs.0.borrow_mut().retain(|&id, &mut refcount| {
             if refcount == 0 {
                 false
             } else {
                 // Non-zero refcount, retain object and trace
-                e.trace(&mut cx);
+                id.trace(&mut cx);
                 true
             }
         });

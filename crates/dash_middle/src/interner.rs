@@ -437,6 +437,10 @@ impl Symbol {
         self.0
     }
 
+    pub fn from_raw(v: u32) -> Self {
+        Self(v)
+    }
+
     pub fn is_keyword(self) -> bool {
         #![allow(clippy::absurd_extreme_comparisons)]
 

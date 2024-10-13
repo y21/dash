@@ -11,7 +11,7 @@ use dash_vm::value::function::{Function, FunctionKind};
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::promise::Promise;
 use dash_vm::value::string::JsString;
-use dash_vm::value::Value;
+use dash_vm::value::{Unpack, Value, ValueKind};
 use dash_vm::{delegate, throw, PromiseAction, Vm};
 use once_cell::sync::Lazy;
 use reqwest::{Client, Method};
@@ -41,12 +41,12 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     let fun = Function::new(sc, Some(name.into()), FunctionKind::Native(fetch));
     let fun = sc.register(fun);
 
-    Ok(Value::Object(fun))
+    Ok(Value::object(fun))
 }
 
 fn fetch(cx: CallContext) -> Result<Value, Value> {
-    let url = match cx.args.first() {
-        Some(Value::String(url)) => url.res(cx.scope).to_owned(),
+    let url = match cx.args.first().unpack() {
+        Some(ValueKind::String(url)) => url.res(cx.scope).to_owned(),
         _ => throw!(cx.scope, TypeError, "Expected a string as the first argument"),
     };
 
@@ -60,7 +60,7 @@ fn fetch(cx: CallContext) -> Result<Value, Value> {
     let promise = Promise::new(cx.scope);
     let promise = cx.scope.register(promise);
 
-    let promise_id = State::from_vm_mut(cx.scope).add_pending_promise(promise.clone());
+    let promise_id = State::from_vm_mut(cx.scope).add_pending_promise(promise);
 
     rt.spawn(async move {
         let req = REQWEST
@@ -72,23 +72,23 @@ fn fetch(cx: CallContext) -> Result<Value, Value> {
         event_tx.send(EventMessage::ScheduleCallback(Box::new(move |rt| {
             let mut sc = rt.vm_mut().scope();
             let promise = State::from_vm_mut(&mut sc).take_promise(promise_id);
-            let promise = promise.as_any().downcast_ref::<Promise>().unwrap();
+            let promise = promise.as_any(&sc).downcast_ref::<Promise>().unwrap();
 
             let (req, action) = match req {
                 Ok(resp) => {
                     let obj = HttpResponse::new(resp, &sc);
                     let text = sc.intern("text");
                     let text_fun = Function::new(&sc, Some(text.into()), FunctionKind::Native(http_response_text));
-                    let text_fun = Value::Object(sc.register(text_fun));
+                    let text_fun = Value::object(sc.register(text_fun));
 
                     obj.set_property(&mut sc, text.into(), PropertyValue::static_default(text_fun))
                         .unwrap();
 
-                    (Value::Object(sc.register(obj)), PromiseAction::Resolve)
+                    (Value::object(sc.register(obj)), PromiseAction::Resolve)
                 }
                 Err(err) => {
                     let err = Error::new(&mut sc, err.to_string());
-                    (Value::Object(sc.register(err)), PromiseAction::Reject)
+                    (Value::object(sc.register(err)), PromiseAction::Reject)
                 }
             };
 
@@ -97,15 +97,15 @@ fn fetch(cx: CallContext) -> Result<Value, Value> {
         })));
     });
 
-    Ok(Value::Object(promise))
+    Ok(Value::object(promise))
 }
 
 fn http_response_text(cx: CallContext) -> Result<Value, Value> {
-    let this = match &cx.this {
-        Value::Object(obj) => obj,
+    let this = match cx.this.unpack() {
+        ValueKind::Object(obj) => obj,
         _ => throw!(cx.scope, TypeError, "Expected a this value"),
     };
-    let this = match this.as_any().downcast_ref::<HttpResponse>() {
+    let this = match this.as_any(cx.scope).downcast_ref::<HttpResponse>() {
         Some(resp) => resp,
         None => throw!(cx.scope, TypeError, "Invalid receiver, expected HttpResponse"),
     };
@@ -125,7 +125,7 @@ fn http_response_text(cx: CallContext) -> Result<Value, Value> {
     let promise = Promise::new(cx.scope);
     let promise = cx.scope.register(promise);
 
-    let promise_id = State::from_vm_mut(cx.scope).add_pending_promise(promise.clone());
+    let promise_id = State::from_vm_mut(cx.scope).add_pending_promise(promise);
 
     rt.spawn(async move {
         let text = response.text().await;
@@ -133,16 +133,16 @@ fn http_response_text(cx: CallContext) -> Result<Value, Value> {
         event_tx.send(EventMessage::ScheduleCallback(Box::new(move |rt| {
             let mut sc = rt.vm_mut().scope();
             let promise = State::from_vm_mut(&mut sc).take_promise(promise_id);
-            let promise = promise.as_any().downcast_ref::<Promise>().unwrap();
+            let promise = promise.as_any(&sc).downcast_ref::<Promise>().unwrap();
 
             let (value, action) = match text {
                 Ok(text) => {
-                    let text = Value::String(sc.intern(text.as_ref()).into());
+                    let text = Value::string(sc.intern(text.as_ref()).into());
                     (text, PromiseAction::Resolve)
                 }
                 Err(err) => {
                     let err = Error::new(&mut sc, err.to_string());
-                    let err = Value::Object(sc.register(err));
+                    let err = Value::object(sc.register(err));
                     (err, PromiseAction::Reject)
                 }
             };
@@ -152,7 +152,7 @@ fn http_response_text(cx: CallContext) -> Result<Value, Value> {
         })));
     });
 
-    Ok(Value::Object(promise))
+    Ok(Value::object(promise))
 }
 
 #[derive(Debug)]

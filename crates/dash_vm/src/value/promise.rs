@@ -3,17 +3,20 @@ use std::cell::RefCell;
 
 use dash_proc_macro::Trace;
 
-use crate::gc::handle::Handle;
 use crate::gc::trace::{Trace, TraceCtxt};
+use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::{PromiseAction, Vm};
 
 use super::object::{NamedObject, Object};
-use super::{Typeof, Unrooted, Value};
+use super::{Typeof, Unpack, Unrooted, Value, ValueKind};
 
 #[derive(Debug)]
 pub enum PromiseState {
-    Pending { resolve: Vec<Handle>, reject: Vec<Handle> },
+    Pending {
+        resolve: Vec<ObjectId>,
+        reject: Vec<ObjectId>,
+    },
     Resolved(Value),
     Rejected(Value),
 }
@@ -53,19 +56,13 @@ impl Promise {
     pub fn resolved(vm: &Vm, value: Value) -> Self {
         Self {
             state: RefCell::new(PromiseState::Resolved(value)),
-            obj: NamedObject::with_prototype_and_constructor(
-                vm.statics.promise_proto.clone(),
-                vm.statics.promise_ctor.clone(),
-            ),
+            obj: NamedObject::with_prototype_and_constructor(vm.statics.promise_proto, vm.statics.promise_ctor),
         }
     }
     pub fn rejected(vm: &Vm, value: Value) -> Self {
         Self {
             state: RefCell::new(PromiseState::Rejected(value)),
-            obj: NamedObject::with_prototype_and_constructor(
-                vm.statics.promise_proto.clone(),
-                vm.statics.promise_ctor.clone(),
-            ),
+            obj: NamedObject::with_prototype_and_constructor(vm.statics.promise_proto, vm.statics.promise_ctor),
         }
     }
     pub fn state(&self) -> &RefCell<PromiseState> {
@@ -110,14 +107,14 @@ impl Object for Promise {
     fn apply(
         &self,
         scope: &mut crate::localscope::LocalScope,
-        callee: Handle,
+        callee: ObjectId,
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         self.obj.apply(scope, callee, this, args)
     }
 
-    fn as_any(&self) -> &dyn Any {
+    fn as_any(&self, _: &Vm) -> &dyn Any {
         self
     }
 
@@ -128,12 +125,12 @@ impl Object for Promise {
 
 #[derive(Debug, Trace)]
 pub struct PromiseResolver {
-    promise: Handle,
+    promise: ObjectId,
     obj: NamedObject,
 }
 
 impl PromiseResolver {
-    pub fn new(vm: &Vm, promise: Handle) -> Self {
+    pub fn new(vm: &Vm, promise: ObjectId) -> Self {
         Self {
             promise,
             obj: NamedObject::new(vm),
@@ -178,20 +175,20 @@ impl Object for PromiseResolver {
     fn apply(
         &self,
         scope: &mut crate::localscope::LocalScope,
-        _callee: Handle,
+        _callee: ObjectId,
         _this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         scope.drive_promise(
             PromiseAction::Resolve,
-            self.promise.as_any().downcast_ref::<Promise>().unwrap(),
+            self.promise.as_any(scope).downcast_ref::<Promise>().unwrap(),
             args,
         );
 
         Ok(Value::undefined().into())
     }
 
-    fn as_any(&self) -> &dyn Any {
+    fn as_any(&self, _: &Vm) -> &dyn Any {
         self
     }
 
@@ -199,19 +196,19 @@ impl Object for PromiseResolver {
         self.obj.own_keys(sc)
     }
 
-    fn type_of(&self) -> super::Typeof {
+    fn type_of(&self, _: &Vm) -> super::Typeof {
         Typeof::Function
     }
 }
 
 #[derive(Debug, Trace)]
 pub struct PromiseRejecter {
-    promise: Handle,
+    promise: ObjectId,
     obj: NamedObject,
 }
 
 impl PromiseRejecter {
-    pub fn new(vm: &Vm, promise: Handle) -> Self {
+    pub fn new(vm: &Vm, promise: ObjectId) -> Self {
         Self {
             promise,
             obj: NamedObject::new(vm),
@@ -256,20 +253,20 @@ impl Object for PromiseRejecter {
     fn apply(
         &self,
         scope: &mut crate::localscope::LocalScope,
-        _callee: Handle,
+        _callee: ObjectId,
         _this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         scope.drive_promise(
             PromiseAction::Reject,
-            self.promise.as_any().downcast_ref::<Promise>().unwrap(),
+            self.promise.as_any(scope).downcast_ref::<Promise>().unwrap(),
             args,
         );
 
         Ok(Value::undefined().into())
     }
 
-    fn as_any(&self) -> &dyn Any {
+    fn as_any(&self, _: &Vm) -> &dyn Any {
         self
     }
 
@@ -277,19 +274,19 @@ impl Object for PromiseRejecter {
         self.obj.own_keys(sc)
     }
 
-    fn type_of(&self) -> super::Typeof {
+    fn type_of(&self, _: &Vm) -> super::Typeof {
         Typeof::Function
     }
 }
 
 /// Wraps the passed value in a resolved promise, unless it already is a promise
 pub fn wrap_promise(scope: &mut LocalScope, value: Value) -> Value {
-    if let Value::Object(object) = &value {
-        if object.as_any().is::<Promise>() {
+    if let ValueKind::Object(object) = value.unpack() {
+        if object.as_any(scope).is::<Promise>() {
             return value.clone();
         }
     }
 
     let promise = Promise::resolved(scope, value);
-    Value::Object(scope.register(promise))
+    Value::object(scope.register(promise))
 }

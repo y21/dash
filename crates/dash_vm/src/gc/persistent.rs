@@ -1,24 +1,22 @@
 use std::ops::Deref;
+use std::rc::Rc;
 
-use crate::Vm;
+use crate::{ExternalRefs, Vm};
 
-use super::Handle;
+use super::gc2::AllocHeader;
+use super::handle::ObjectVTable;
+use super::{Handle, ObjectId};
 
 // TODO: document this
 // TL;DR for now, `Persist<T>` adds reference counting to a `Handle<T>`,
 // allowing it to be held safely for longer than any LocalScope
 // NOTE: careful with cycles, this can leak
-pub struct Persistent(Handle);
+pub struct Persistent(ObjectId, ExternalRefs);
 
 impl Persistent {
-    pub fn new(vm: &mut Vm, handle: Handle) -> Self {
-        let this = Self(handle.clone());
-        // This function creates a strong reference, so increment
-        this.inc_refcount();
-
-        // "Inserting" twice is fine, since it is a HashSet
-        vm.external_refs.insert(handle);
-
+    pub fn new(vm: &mut Vm, id: ObjectId) -> Self {
+        let this = Self(id, vm.external_refs.clone());
+        assert_eq!(vm.external_refs.0.borrow_mut().insert(id, 1), None);
         this
     }
 }
@@ -26,35 +24,33 @@ impl Persistent {
 impl Persistent {
     // Used in tests
     #[allow(unused)]
-    pub(crate) fn refcount(&self) -> u64 {
-        self.0.refcount()
+    pub(crate) fn refcount(&self) -> u32 {
+        (*self.1.0.borrow())[&self.0]
     }
 
-    fn inc_refcount(&self) -> u64 {
-        let refcount = self.0.refcount().checked_add(1).expect("Reference count overflowed");
-        unsafe { self.0.set_refcount(refcount) };
-        refcount
+    fn inc_refcount(&self) -> u32 {
+        let mut map = self.1.0.borrow_mut();
+        let val = map.get_mut(&self.0).unwrap();
+        *val = val.checked_add(1).expect("reference count overflow");
+        *val
     }
 
-    unsafe fn dec_refcount(&self) -> u64 {
-        let refcount = self.0.refcount().checked_sub(1).expect("Reference count underflowed");
-        self.0.set_refcount(refcount);
-        refcount
+    unsafe fn dec_refcount(&self) -> u32 {
+        let mut map = self.1.0.borrow_mut();
+        let val = map.get_mut(&self.0).unwrap();
+        *val = val.checked_sub(1).expect("reference count overflow");
+        *val
     }
-}
 
-impl Deref for Persistent {
-    type Target = Handle;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
+    pub fn id(&self) -> ObjectId {
+        self.0
     }
 }
 
 impl Clone for Persistent {
     fn clone(&self) -> Self {
         self.inc_refcount();
-        Self(self.0.clone())
+        Self(self.0, self.1.clone())
     }
 }
 

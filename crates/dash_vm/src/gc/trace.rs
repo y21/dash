@@ -11,15 +11,18 @@ use crate::value::primitive::{Null, Number, Undefined};
 use crate::value::typedarray::TypedArrayKind;
 use crate::value::Unrooted;
 
+use super::gc2::Allocator;
 use super::interner::StringInterner;
+use super::ObjectId;
 
 pub struct TraceCtxt<'vm> {
     pub interner: &'vm mut StringInterner,
+    pub alloc: &'vm mut Allocator,
 }
 
 impl<'vm> TraceCtxt<'vm> {
-    pub fn new(interner: &'vm mut StringInterner) -> Self {
-        Self { interner }
+    pub fn new(interner: &'vm mut StringInterner, alloc: &'vm mut Allocator) -> Self {
+        Self { interner, alloc }
     }
 
     pub fn mark_symbol(&self, symbol: dash_middle::interner::Symbol) {
@@ -206,3 +209,18 @@ unsafe_empty_trace!(
     (),
     TypeId
 );
+
+unsafe impl Trace for ObjectId {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
+        let (data, header) = cx.alloc.resolve_raw(*self);
+
+        unsafe {
+            if (*header).visited.get() {
+                // Already marked
+                return;
+            }
+            (*header).visited.set(true);
+            ((*header).metadata.trace)(data, cx);
+        };
+    }
+}

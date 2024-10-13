@@ -7,7 +7,7 @@ use dash_typed_cfg::passes::type_infer::{Type, TypeInferQuery};
 use dash_typed_cfg::TypedCfgQuery;
 
 use crate::value::primitive::Number;
-use crate::value::Value;
+use crate::value::{Unpack, ValueKind};
 use crate::Vm;
 
 pub struct QueryProvider<'a> {
@@ -29,9 +29,9 @@ impl<'a> TypeInferQuery for QueryProvider<'a> {
     }
 
     fn type_of_local(&self, index: u16) -> Type {
-        match self.vm.get_local(index.into()).unwrap() {
-            Value::Boolean(..) => Type::Boolean,
-            Value::Number(Number(n)) => {
+        match self.vm.get_local(index.into()).unwrap().unpack() {
+            ValueKind::Boolean(..) => Type::Boolean,
+            ValueKind::Number(Number(n)) => {
                 if is_integer(n) {
                     Type::I64
                 } else {

@@ -13,7 +13,7 @@ use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::promise::Promise;
 use dash_vm::value::{Unrooted, Value};
-use dash_vm::{delegate, throw, PromiseAction};
+use dash_vm::{delegate, throw, PromiseAction, Vm};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::sync::{mpsc, oneshot};
@@ -65,7 +65,7 @@ impl Object for TcpListenerConstructor {
     fn apply(
         &self,
         scope: &mut dash_vm::localscope::LocalScope,
-        _callee: dash_vm::gc::handle::Handle,
+        _callee: dash_vm::gc::ObjectId,
         _this: dash_vm::value::Value,
         _args: Vec<dash_vm::value::Value>,
     ) -> Result<dash_vm::value::Unrooted, dash_vm::value::Unrooted> {
@@ -75,7 +75,7 @@ impl Object for TcpListenerConstructor {
     fn construct(
         &self,
         scope: &mut dash_vm::localscope::LocalScope,
-        _callee: dash_vm::gc::handle::Handle,
+        _callee: dash_vm::gc::ObjectId,
         _this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
@@ -120,12 +120,12 @@ impl Object for TcpListenerConstructor {
                         event_tx.send(EventMessage::ScheduleCallback(Box::new(move |rt| {
                             let mut scope = rt.vm_mut().scope();
                             let promise = State::from_vm_mut(&mut scope).take_promise(promise_id);
-                            let promise = promise.as_any().downcast_ref::<Promise>().unwrap();
+                            let promise = promise.as_any(&scope).downcast_ref::<Promise>().unwrap();
 
                             let stream_handle = TcpStreamHandle::new(&mut scope, writer_tx, reader_tx).unwrap();
                             let stream_handle = scope.register(stream_handle);
 
-                            scope.drive_promise(PromiseAction::Resolve, promise, vec![Value::Object(stream_handle)]);
+                            scope.drive_promise(PromiseAction::Resolve, promise, vec![Value::object(stream_handle)]);
                             scope.process_async_tasks();
                         })));
                     }
@@ -134,10 +134,10 @@ impl Object for TcpListenerConstructor {
         });
 
         let handle = TcpListenerHandle::new(tx, scope)?;
-        Ok(Value::Object(scope.register(handle)).into())
+        Ok(Value::object(scope.register(handle)).into())
     }
 
-    fn as_any(&self) -> &dyn std::any::Any {
+    fn as_any(&self, _: &Vm) -> &dyn std::any::Any {
         self
     }
 
@@ -170,7 +170,7 @@ impl TcpListenerHandle {
         let name = sc.intern("accept");
         let accept_fn = Function::new(sc, Some(name.into()), FunctionKind::Native(tcplistener_accept));
         let accept_fn = sc.register(accept_fn);
-        object.set_property(sc, name.into(), PropertyValue::static_default(Value::Object(accept_fn)))?;
+        object.set_property(sc, name.into(), PropertyValue::static_default(Value::object(accept_fn)))?;
         Ok(Self { object, sender })
     }
 }
@@ -190,7 +190,7 @@ impl Object for TcpListenerHandle {
 }
 
 fn tcplistener_accept(cx: CallContext) -> Result<Value, Value> {
-    let Some(handle) = cx.this.downcast_ref::<TcpListenerHandle>() else {
+    let Some(handle) = cx.this.downcast_ref::<TcpListenerHandle>(cx.scope) else {
         throw!(
             cx.scope,
             TypeError,
@@ -203,14 +203,14 @@ fn tcplistener_accept(cx: CallContext) -> Result<Value, Value> {
         cx.scope.register(promise)
     };
 
-    let promise_id = State::from_vm_mut(cx.scope).add_pending_promise(promise.clone());
+    let promise_id = State::from_vm_mut(cx.scope).add_pending_promise(promise);
 
     handle
         .sender
         .try_send(TcpListenerBridgeMessage::Accept { promise_id })
         .expect("queue full");
 
-    Ok(Value::Object(promise))
+    Ok(Value::object(promise))
 }
 
 #[derive(Debug)]
@@ -233,7 +233,7 @@ impl TcpStreamHandle {
         object.set_property(
             scope,
             name.into(),
-            PropertyValue::static_default(Value::Object(write_fn)),
+            PropertyValue::static_default(Value::object(write_fn)),
         )?;
         let name = scope.intern("read");
         let read_fn = Function::new(scope, Some(name.into()), FunctionKind::Native(tcpstream_read));
@@ -241,7 +241,7 @@ impl TcpStreamHandle {
         object.set_property(
             scope,
             name.into(),
-            PropertyValue::static_default(Value::Object(read_fn)),
+            PropertyValue::static_default(Value::object(read_fn)),
         )?;
         Ok(Self {
             object,
@@ -277,10 +277,10 @@ impl Object for TcpStreamHandle {
 }
 
 fn tcpstream_write(cx: CallContext) -> Result<Value, Value> {
-    let Some(handle) = cx.this.downcast_ref::<TcpStreamHandle>() else {
+    let Some(handle) = cx.this.downcast_ref::<TcpStreamHandle>(cx.scope) else {
         throw!(cx.scope, TypeError, "TcpStream.write called on non-TcpStream object")
     };
-    let Some(value) = cx.args.first().unwrap().downcast_ref::<ArrayBuffer>() else {
+    let Some(value) = cx.args.first().unwrap().downcast_ref::<ArrayBuffer>(cx.scope) else {
         throw!(
             cx.scope,
             TypeError,
@@ -303,7 +303,7 @@ fn tcpstream_write(cx: CallContext) -> Result<Value, Value> {
 }
 
 fn tcpstream_read(cx: CallContext) -> Result<Value, Value> {
-    let Some(handle) = cx.this.downcast_ref::<TcpStreamHandle>() else {
+    let Some(handle) = cx.this.downcast_ref::<TcpStreamHandle>(cx.scope) else {
         throw!(cx.scope, TypeError, "TcpStream.write called on non-TcpStream object")
     };
 
@@ -316,6 +316,6 @@ fn tcpstream_read(cx: CallContext) -> Result<Value, Value> {
         let buf = Vec::from(ret).into_iter().map(Cell::new).collect::<Vec<_>>();
         let buf = ArrayBuffer::from_storage(sc, buf);
 
-        Ok(Value::Object(sc.register(buf)))
+        Ok(Value::object(sc.register(buf)))
     })
 }

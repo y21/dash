@@ -10,8 +10,10 @@ use crate::localscope::LocalScope;
 use crate::value::object::{PropertyKey, PropertyValue};
 use crate::value::primitive::InternalSlots;
 use crate::value::{Typeof, Unrooted, Value};
+use crate::Vm;
 
 use super::trace::{Trace, TraceCtxt};
+use super::ObjectId;
 
 bitflags! {
     #[derive(Default)]
@@ -73,13 +75,13 @@ pub struct ObjectVTable {
     pub(crate) js_set_prototype: unsafe fn(*const (), &mut LocalScope<'_>, Value) -> Result<(), Value>,
     pub(crate) js_get_prototype: unsafe fn(*const (), &mut LocalScope<'_>) -> Result<Value, Value>,
     pub(crate) js_apply:
-        unsafe fn(*const (), &mut LocalScope<'_>, Handle, Value, Vec<Value>) -> Result<Unrooted, Unrooted>,
+        unsafe fn(*const (), &mut LocalScope<'_>, ObjectId, Value, Vec<Value>) -> Result<Unrooted, Unrooted>,
     pub(crate) js_construct:
-        unsafe fn(*const (), &mut LocalScope<'_>, Handle, Value, Vec<Value>) -> Result<Unrooted, Unrooted>,
-    pub(crate) js_as_any: unsafe fn(*const ()) -> *const dyn Any,
-    pub(crate) js_internal_slots: unsafe fn(*const ()) -> Option<*const dyn InternalSlots>,
+        unsafe fn(*const (), &mut LocalScope<'_>, ObjectId, Value, Vec<Value>) -> Result<Unrooted, Unrooted>,
+    pub(crate) js_as_any: unsafe fn(*const (), &Vm) -> *const dyn Any,
+    pub(crate) js_internal_slots: unsafe fn(*const (), &Vm) -> Option<*const dyn InternalSlots>,
     pub(crate) js_own_keys: unsafe fn(*const (), sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value>,
-    pub(crate) js_type_of: unsafe fn(*const ()) -> Typeof,
+    pub(crate) js_type_of: unsafe fn(*const (), _: &Vm) -> Typeof,
 }
 
 #[repr(C, align(8))]

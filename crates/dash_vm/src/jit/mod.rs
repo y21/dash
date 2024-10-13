@@ -93,7 +93,6 @@ mod tests {
     use dash_typed_cfg::passes::type_infer::{Type, TypeInferQuery};
     use dash_typed_cfg::TypedCfgQuery;
 
-    use crate::value::primitive::Number;
     use crate::value::Value;
 
     #[derive(Debug)]
@@ -150,7 +149,7 @@ mod tests {
         dash_llvm_jit_backend::init();
 
         let fun = codegen::compile_typed_cfg(bytecode, &tcfg, &mut query).unwrap();
-        let mut s = [Value::Number(Number(0.0)), Value::Boolean(false)];
+        let mut s = [Value::number(0.0), Value::boolean(false)];
         let mut x = 0;
         unsafe { fun(s.as_mut_ptr().cast(), 0, &mut x) };
         dbg!(x, s);

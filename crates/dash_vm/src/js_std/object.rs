@@ -1,7 +1,7 @@
 use std::ops::ControlFlow;
 
-use crate::gc::handle::Handle;
 use crate::gc::interner::sym;
+use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::array::Array;
@@ -9,12 +9,12 @@ use crate::value::function::native::CallContext;
 use crate::value::object::{NamedObject, Object, PropertyDataDescriptor, PropertyKey, PropertyValue};
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::root_ext::RootErrExt;
-use crate::value::{Root, Typeof, Value, ValueContext};
+use crate::value::{Root, Typeof, Unpack, Value, ValueContext, ValueKind};
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     match cx.args.first() {
-        Some(v) => v.to_object(cx.scope).map(Value::Object),
-        None => Ok(Value::Object(cx.scope.register(NamedObject::new(cx.scope)))),
+        Some(v) => v.to_object(cx.scope).map(Value::object),
+        None => Ok(Value::object(cx.scope.register(NamedObject::new(cx.scope)))),
     }
 }
 
@@ -38,7 +38,7 @@ pub fn keys(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn to_string(cx: CallContext) -> Result<Value, Value> {
-    fn to_string_inner(scope: &mut LocalScope<'_>, o: Handle) -> Result<Value, Value> {
+    fn to_string_inner(scope: &mut LocalScope<'_>, o: ObjectId) -> Result<Value, Value> {
         let constructor = o
             .get_property(scope, sym::constructor.into())
             .root(scope)?
@@ -48,13 +48,13 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
 
         let constructor = format!("[object {}]", constructor.res(scope));
 
-        Ok(Value::String(scope.intern(constructor).into()))
+        Ok(Value::string(scope.intern(constructor).into()))
     }
 
-    let value = match &cx.this {
-        Value::Undefined(_) => Value::String(cx.scope.intern("[object Undefined]").into()),
-        Value::Null(_) => Value::String(cx.scope.intern("[object Null]").into()),
-        Value::Object(o) => to_string_inner(cx.scope, o.clone())?,
+    let value = match cx.this.unpack() {
+        ValueKind::Undefined(_) => Value::string(cx.scope.intern("[object Undefined]").into()),
+        ValueKind::Null(_) => Value::string(cx.scope.intern("[object Null]").into()),
+        ValueKind::Object(o) => to_string_inner(cx.scope, o.clone())?,
         _ => unreachable!(), // `this` is always object/null/undefined. TODO: wrong, `Object.prototype.toString..call('a')` crashes
     };
 
@@ -63,8 +63,8 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
 
 pub fn get_own_property_descriptor(cx: CallContext) -> Result<Value, Value> {
     let o = cx.args.first().unwrap_or_undefined();
-    let o = match &o {
-        Value::Object(o) => o,
+    let o = match o.unpack() {
+        ValueKind::Object(o) => o,
         _ => throw!(
             cx.scope,
             TypeError,
@@ -83,8 +83,8 @@ pub fn get_own_property_descriptor(cx: CallContext) -> Result<Value, Value> {
 
 pub fn get_own_property_descriptors(cx: CallContext) -> Result<Value, Value> {
     let o = cx.args.first().unwrap_or_undefined();
-    let o = match &o {
-        Value::Object(o) => o,
+    let o = match o.unpack() {
+        ValueKind::Object(o) => o,
         _ => throw!(
             cx.scope,
             TypeError,
@@ -108,12 +108,12 @@ pub fn get_own_property_descriptors(cx: CallContext) -> Result<Value, Value> {
     }
 
     let descriptors = Array::from_vec(cx.scope, descriptors);
-    Ok(Value::Object(cx.scope.register(descriptors)))
+    Ok(Value::object(cx.scope.register(descriptors)))
 }
 
 pub fn has_own_property(cx: CallContext) -> Result<Value, Value> {
-    let o = match &cx.this {
-        Value::Object(o) => o,
+    let o = match cx.this.unpack() {
+        ValueKind::Object(o) => o,
         _ => throw!(
             cx.scope,
             TypeError,
@@ -124,12 +124,12 @@ pub fn has_own_property(cx: CallContext) -> Result<Value, Value> {
     let key = cx.args.first().unwrap_or_undefined();
     let key = PropertyKey::from_value(cx.scope, key)?;
     let desc = o.get_property_descriptor(cx.scope, key).root_err(cx.scope)?;
-    Ok(Value::Boolean(desc.is_some()))
+    Ok(Value::boolean(desc.is_some()))
 }
 
 pub fn define_property(cx: CallContext) -> Result<Value, Value> {
-    let object = match cx.args.first() {
-        Some(Value::Object(o)) => o,
+    let object = match cx.args.first().unpack() {
+        Some(ValueKind::Object(o)) => o,
         _ => throw!(
             cx.scope,
             TypeError,
@@ -138,25 +138,31 @@ pub fn define_property(cx: CallContext) -> Result<Value, Value> {
     };
 
     let property = match cx.args.get(1) {
-        Some(Value::Symbol(sym)) => PropertyKey::from(sym.clone()),
+        Some(arg) => {
+            if let ValueKind::Symbol(sym) = arg.unpack() {
+                PropertyKey::from(sym)
+            } else {
+                throw!(cx.scope, TypeError, "Property must be a string or symbol")
+            }
+        }
         Some(other) => PropertyKey::from(other.to_js_string(cx.scope)?),
         _ => throw!(cx.scope, TypeError, "Property must be a string or symbol"),
     };
-    let descriptor = match cx.args.get(2) {
-        Some(Value::Object(o)) => o,
+    let descriptor = match cx.args.get(2).unpack() {
+        Some(ValueKind::Object(o)) => o,
         _ => throw!(cx.scope, TypeError, "Property descriptor must be an object"),
     };
 
-    let value = PropertyValue::from_descriptor_value(cx.scope, Value::Object(descriptor.clone()))?;
+    let value = PropertyValue::from_descriptor_value(cx.scope, Value::object(descriptor))?;
 
     object.set_property(cx.scope, property, value)?;
 
-    Ok(Value::Object(object.clone()))
+    Ok(Value::object(object))
 }
 
 pub fn define_properties(cx: CallContext) -> Result<Value, Value> {
-    let object = match cx.args.first() {
-        Some(Value::Object(o)) => o.clone(),
+    let object = match cx.args.first().unpack() {
+        Some(ValueKind::Object(o)) => o,
         _ => throw!(
             cx.scope,
             TypeError,
@@ -172,7 +178,7 @@ pub fn define_properties(cx: CallContext) -> Result<Value, Value> {
         object.set_property(cx.scope, key.into(), descriptor)?;
     }
 
-    Ok(Value::Object(object))
+    Ok(Value::object(object))
 }
 
 pub fn assign(cx: CallContext) -> Result<Value, Value> {
@@ -186,7 +192,7 @@ pub fn assign(cx: CallContext) -> Result<Value, Value> {
             to.set_property(cx.scope, key, PropertyValue::static_default(desc))?;
         }
     }
-    Ok(Value::Object(to))
+    Ok(Value::object(to))
 }
 
 pub fn entries(cx: CallContext) -> Result<Value, Value> {
@@ -202,11 +208,11 @@ pub fn entries(cx: CallContext) -> Result<Value, Value> {
                 PropertyValue::static_default(value),
             ],
         );
-        entries.push(PropertyValue::static_default(Value::Object(cx.scope.register(entry))));
+        entries.push(PropertyValue::static_default(Value::object(cx.scope.register(entry))));
     }
 
     let entries = Array::from_vec(cx.scope, entries);
-    Ok(Value::Object(cx.scope.register(entries)))
+    Ok(Value::object(cx.scope.register(entries)))
 }
 
 pub fn get_prototype_of(cx: CallContext) -> Result<Value, Value> {
@@ -218,17 +224,17 @@ pub fn set_prototype_of(cx: CallContext) -> Result<Value, Value> {
     let obj = cx.args.first().unwrap_or_undefined().to_object(cx.scope)?;
     let target = cx.args.get(1).unwrap_or_undefined();
     obj.set_prototype(cx.scope, target)?;
-    Ok(Value::Object(obj))
+    Ok(Value::object(obj))
 }
 
 pub fn is_prototype_of(cx: CallContext) -> Result<Value, Value> {
-    let target_proto = Value::Object(cx.this.to_object(cx.scope)?);
+    let target_proto = Value::object(cx.this.to_object(cx.scope)?);
     let this_proto = cx.args.first().unwrap_or_undefined();
-    if this_proto.type_of() != Typeof::Object {
-        return Ok(Value::Boolean(false));
+    if this_proto.type_of(cx.scope) != Typeof::Object {
+        return Ok(Value::boolean(false));
     }
 
-    Ok(Value::Boolean(
+    Ok(Value::boolean(
         this_proto
             .for_each_prototype(cx.scope, |_, proto| {
                 if proto == &target_proto {
@@ -245,7 +251,7 @@ pub fn property_is_enumerable(cx: CallContext) -> Result<Value, Value> {
     let prop = PropertyKey::from_value(cx.scope, cx.args.first().unwrap_or_undefined())?;
     let obj = cx.this.to_object(cx.scope)?;
     let desc = obj.get_own_property_descriptor(cx.scope, prop).root_err(cx.scope)?;
-    Ok(Value::Boolean(desc.is_some_and(|val| {
+    Ok(Value::boolean(desc.is_some_and(|val| {
         val.descriptor.contains(PropertyDataDescriptor::ENUMERABLE)
     })))
 }
