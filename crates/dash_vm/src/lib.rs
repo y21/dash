@@ -1435,9 +1435,9 @@ impl Vm {
             }
             #[cfg(not(feature = "stress_gc"))]
             {
-                if util::unlikely(self.gc.node_count() > self.gc_object_threshold) {
-                    self.perform_gc();
-                }
+                // if util::unlikely(self.gc.node_count() > self.gc_object_threshold) {
+                //     self.perform_gc();
+                // }
             }
 
             let instruction = Instruction::from_repr(self.fetch_and_inc_ip()).unwrap();
