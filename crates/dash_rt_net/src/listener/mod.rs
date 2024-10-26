@@ -12,7 +12,7 @@ use dash_vm::value::function::{Function, FunctionKind};
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::promise::Promise;
-use dash_vm::value::{Unrooted, Value};
+use dash_vm::value::{Unpack, Unrooted, Value};
 use dash_vm::{delegate, throw, PromiseAction, Vm};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
@@ -190,7 +190,8 @@ impl Object for TcpListenerHandle {
 }
 
 fn tcplistener_accept(cx: CallContext) -> Result<Value, Value> {
-    let Some(handle) = cx.this.downcast_ref::<TcpListenerHandle>(cx.scope) else {
+    let this = cx.this.unpack();
+    let Some(handle) = this.downcast_ref::<TcpListenerHandle>(cx.scope) else {
         throw!(
             cx.scope,
             TypeError,
@@ -277,10 +278,14 @@ impl Object for TcpStreamHandle {
 }
 
 fn tcpstream_write(cx: CallContext) -> Result<Value, Value> {
-    let Some(handle) = cx.this.downcast_ref::<TcpStreamHandle>(cx.scope) else {
+    let this = cx.this.unpack();
+    let Some(handle) = this.downcast_ref::<TcpStreamHandle>(cx.scope) else {
         throw!(cx.scope, TypeError, "TcpStream.write called on non-TcpStream object")
     };
-    let Some(value) = cx.args.first().unwrap().downcast_ref::<ArrayBuffer>(cx.scope) else {
+    let Some(arg) = cx.args.first().map(|v| v.unpack()) else {
+        throw!(cx.scope, ReferenceError, "TcpStream.write called without an argument")
+    };
+    let Some(value) = arg.downcast_ref::<ArrayBuffer>(cx.scope) else {
         throw!(
             cx.scope,
             TypeError,
@@ -303,7 +308,8 @@ fn tcpstream_write(cx: CallContext) -> Result<Value, Value> {
 }
 
 fn tcpstream_read(cx: CallContext) -> Result<Value, Value> {
-    let Some(handle) = cx.this.downcast_ref::<TcpStreamHandle>(cx.scope) else {
+    let this = cx.this.unpack();
+    let Some(handle) = this.downcast_ref::<TcpStreamHandle>(cx.scope) else {
         throw!(cx.scope, TypeError, "TcpStream.write called on non-TcpStream object")
     };
 

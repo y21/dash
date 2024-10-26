@@ -1,8 +1,6 @@
 use dash_proc_macro::Trace;
 
-use crate::gc::gc2::Allocator;
-use crate::gc::interner::{self, sym};
-use crate::gc::ObjectId;
+use crate::gc::{Allocator, ObjectId};
 use crate::js_std;
 use crate::value::error::{AggregateError, EvalError, RangeError, ReferenceError, SyntaxError, TypeError, URIError};
 use crate::value::function::{Function, FunctionKind};
@@ -10,6 +8,7 @@ use crate::value::map::Map;
 use crate::value::regex::RegExp;
 use crate::value::set::Set;
 use crate::value::PureBuiltin;
+use dash_middle::interner::{self, sym};
 
 use super::value::array::{Array, ArrayIterator};
 use super::value::arraybuffer::ArrayBuffer;
@@ -256,7 +255,6 @@ pub struct Statics {
 }
 
 fn builtin_object<O: Object + 'static>(gc: &mut Allocator, obj: O) -> ObjectId {
-    // gc.register(PureBuiltin::new(obj))
     gc.alloc_object(PureBuiltin::new(obj))
 }
 

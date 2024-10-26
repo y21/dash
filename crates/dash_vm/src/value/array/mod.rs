@@ -6,12 +6,11 @@ use std::mem;
 use dash_log::debug;
 use dash_proc_macro::Trace;
 
-use crate::gc::handle::Handle;
-use crate::gc::interner::sym;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::value::object::PropertyDataDescriptor;
 use crate::{delegate, throw, Vm};
+use dash_middle::interner::sym;
 
 pub use self::holey::{Element, HoleyArray};
 
@@ -19,7 +18,7 @@ use super::object::{NamedObject, Object, PropertyKey, PropertyValue, PropertyVal
 use super::ops::conversions::ValueConversion;
 use super::primitive::array_like_keys;
 use super::root_ext::RootErrExt;
-use super::{Root, Unrooted, Value};
+use super::{Root, Unpack, Unrooted, Value};
 
 mod holey;
 
@@ -399,7 +398,7 @@ impl ArrayIterator {
 
 /// Equivalent to calling get_property, but specialized for arrays
 pub fn spec_array_get_property(scope: &mut LocalScope<'_>, target: &Value, index: usize) -> Result<Unrooted, Unrooted> {
-    if let Some(arr) = target.downcast_ref::<Array>(scope) {
+    if let Some(arr) = target.unpack().downcast_ref::<Array>(scope) {
         let inner = arr.items.borrow();
         return match inner.get(index) {
             Some(MaybeHoley::Some(value)) => value.get_or_apply(scope, Value::undefined()),
@@ -422,7 +421,7 @@ pub fn spec_array_set_property(
     value: PropertyValue,
 ) -> Result<(), Value> {
     // specialize array path
-    if let Some(arr) = target.downcast_ref::<Array>(scope) {
+    if let Some(arr) = target.unpack().downcast_ref::<Array>(scope) {
         let mut inner = arr.items.borrow_mut();
 
         if index < MAX_LENGTH {

@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use crate::gc::interner::sym;
+use dash_middle::interner::sym;
 use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::array::{Array, ArrayIterator};
@@ -10,7 +10,7 @@ use crate::value::ops::conversions::ValueConversion;
 use crate::value::ops::equality::strict_eq;
 use crate::value::root_ext::RootErrExt;
 use crate::value::string::JsString;
-use crate::value::{array, Root, Value, ValueContext};
+use crate::value::{array, Root, Unpack, Value, ValueContext, ValueKind};
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let size = cx.args.first().unwrap_or_undefined().to_length_u(cx.scope)?;
@@ -128,6 +128,17 @@ pub fn some(cx: CallContext) -> Result<Value, Value> {
         let pk = cx.scope.intern_usize(k);
         let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
         let args = vec![pkv, Value::number(k as f64), this.clone()];
+        // let arg = match callback.unpack() {
+        //     ValueKind::Object(obj) => obj,
+        //     other => todo!("??? {other:?}"),
+        // };
+        // println!(
+        //     "Calling {:?} {:?} {:?}",
+        //     callback,
+        //     callback.unpack(),
+        //     arg.data_ptr(cx.scope)
+        // );
+        // callback.apply(cx.scope, Value::undefined(), vec![]);
         let test = callback
             .apply(cx.scope, Value::undefined(), args)
             .root(cx.scope)?
@@ -150,7 +161,7 @@ pub fn fill(cx: CallContext) -> Result<Value, Value> {
         array::spec_array_set_property(cx.scope, &this, i, PropertyValue::static_default(value.clone()))?;
     }
 
-    if let Some(arr) = cx.this.downcast_ref::<Array>(&cx.scope) {
+    if let Some(arr) = this.unpack().downcast_ref::<Array>(cx.scope) {
         // all holes were replaced with values, so there cannot be holes
         arr.force_convert_to_non_holey();
     }
@@ -564,6 +575,7 @@ pub fn is_array(cx: CallContext) -> Result<Value, Value> {
         cx.args
             .first()
             .unwrap_or_undefined()
+            .unpack()
             .downcast_ref::<Array>(&cx.scope)
             .is_some(),
     ))

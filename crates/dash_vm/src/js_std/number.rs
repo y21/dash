@@ -26,7 +26,11 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
         .map(|n| n as u8)
         .unwrap_or(10);
 
-    let Some(num) = cx.this.internal_slots(&cx.scope).and_then(InternalSlots::number_value) else {
+    let Some(num) = cx
+        .this
+        .internal_slots(&cx.scope)
+        .and_then(|slots| slots.number_value(cx.scope))
+    else {
         throw!(
             cx.scope,
             TypeError,
@@ -45,7 +49,11 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn value_of(cx: CallContext) -> Result<Value, Value> {
-    if let Some(num) = cx.this.internal_slots(&cx.scope).and_then(InternalSlots::number_value) {
+    if let Some(num) = cx
+        .this
+        .internal_slots(&cx.scope)
+        .and_then(|slots| slots.number_value(cx.scope))
+    {
         Ok(Value::number(num))
     } else {
         throw!(

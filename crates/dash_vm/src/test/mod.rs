@@ -1,12 +1,14 @@
+use core::f64;
 use std::ptr;
 
 use dash_middle::interner::sym;
 use dash_optimizer::OptLevel;
 
 use crate::gc::persistent::Persistent;
+use crate::gc::ObjectId;
 use crate::value::object::{NamedObject, Object, PropertyValue};
-use crate::value::primitive::Number;
-use crate::value::{Root, Unpack, Value, ValueKind};
+use crate::value::primitive::{Null, Number, Symbol, Undefined};
+use crate::value::{ExternalValue, Root, Unpack, Value, ValueKind};
 use crate::Vm;
 
 const INTERPRETER: &str = include_str!("interpreter.js");
@@ -23,6 +25,73 @@ fn interpreter() {
     match value.unpack() {
         ValueKind::Number(Number(n)) => assert_eq!(n, 1275.0),
         other => unreachable!("{:?}", other),
+    }
+}
+
+#[test]
+fn packed_value() {
+    let vm = Vm::new(Default::default());
+
+    assert_eq!(Value::null().unpack(), ValueKind::Null(Null));
+    assert_eq!(Value::undefined().unpack(), ValueKind::Undefined(Undefined));
+    assert_eq!(Value::boolean(true).unpack(), ValueKind::Boolean(true));
+    assert_eq!(Value::boolean(false).unpack(), ValueKind::Boolean(false));
+    assert_eq!(
+        Value::external(ObjectId::from_raw(u32::MAX)).unpack(),
+        ValueKind::External(ExternalValue::new(&vm, ObjectId::from_raw(u32::MAX)))
+    );
+    assert_eq!(
+        Value::external(ObjectId::from_raw(4242)).unpack(),
+        ValueKind::External(ExternalValue::new(&vm, ObjectId::from_raw(4242)))
+    );
+    assert_eq!(Value::number(0.0).unpack(), ValueKind::Number(Number(0.0)));
+    match Value::number(f64::NAN).unpack() {
+        ValueKind::Number(num) => assert!(num.0.is_nan()),
+        other => panic!("wrong type: {other:?}"),
+    }
+    assert_eq!(
+        Value::number(f64::INFINITY).unpack(),
+        ValueKind::Number(Number(f64::INFINITY))
+    );
+    assert_eq!(
+        Value::number(f64::NEG_INFINITY).unpack(),
+        ValueKind::Number(Number(f64::NEG_INFINITY))
+    );
+    assert_eq!(
+        Value::object(ObjectId::from_raw(u32::MAX)).unpack(),
+        ValueKind::Object(ObjectId::from_raw(u32::MAX))
+    );
+    assert_eq!(
+        Value::object(ObjectId::from_raw(4242)).unpack(),
+        ValueKind::Object(ObjectId::from_raw(4242))
+    );
+    assert_eq!(
+        Value::string(sym::Array.into()).unpack(),
+        ValueKind::String(sym::Array.into())
+    );
+    assert_eq!(
+        Value::symbol(Symbol::new(sym::Array.into())).unpack(),
+        ValueKind::Symbol(Symbol::new(sym::Array.into()))
+    );
+
+    let reprs = [
+        Value::BOOLEAN_MASK,
+        Value::NULL_MASK,
+        Value::OBJECT_MASK,
+        Value::STRING_MASK,
+        Value::SYMBOL_MASK,
+        Value::EXTERNAL_MASK,
+        Value::UNDEFINED_MASK,
+    ];
+    for repr in reprs {
+        assert_eq!(
+            reprs.iter().filter(|&&c| c == repr).count(),
+            1,
+            "pattern {repr} must be unique"
+        );
+        #[expect(clippy::unusual_byte_groupings)]
+        let mask: u64 = 0b0_11111111111_11 << (64 - 14);
+        assert!(repr & mask == mask);
     }
 }
 
@@ -105,7 +174,7 @@ fn persistent_trace() {
     let mut scope = vm.scope();
     let key = scope.intern("foo");
     let p = p1.get_property(&mut scope, key.into()).unwrap().root(&mut scope);
-    assert!(p.downcast_ref::<NamedObject>(&scope).is_some());
+    assert!(p.unpack().downcast_ref::<NamedObject>(&scope).is_some());
 }
 
 #[test]

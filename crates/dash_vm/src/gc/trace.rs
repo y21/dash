@@ -5,15 +5,14 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use dash_middle::compiler::constant::ConstantPool;
+use dash_middle::interner::StringInterner;
 use dash_regex::{Flags, ParsedRegex};
 
 use crate::value::primitive::{Null, Number, Undefined};
 use crate::value::typedarray::TypedArrayKind;
 use crate::value::Unrooted;
 
-use super::gc2::Allocator;
-use super::interner::StringInterner;
-use super::ObjectId;
+use super::{Allocator, ObjectId};
 
 pub struct TraceCtxt<'vm> {
     pub interner: &'vm mut StringInterner,

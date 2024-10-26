@@ -1,4 +1,4 @@
-use crate::gc::interner::sym;
+use dash_middle::interner::sym;
 use crate::value::error::{
     AggregateError, Error, EvalError, RangeError, ReferenceError, SyntaxError, TypeError, URIError,
 };

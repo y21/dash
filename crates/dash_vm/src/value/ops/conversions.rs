@@ -1,4 +1,5 @@
-use crate::gc::interner::sym;
+use dash_middle::interner::sym;
+
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::throw;

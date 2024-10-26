@@ -6,7 +6,7 @@ macro_rules! throw {
             #[allow(unused_mut)]
             let mut vm = $vm;
             let err = $crate::value::error::$err::new(&mut vm as &mut $crate::localscope::LocalScope<'_>, $msg);
-            let id: $crate::gc::ObjectId = todo!();
+            let id: $crate::gc::ObjectId = vm.register(err);
             Value::object(id).into()
         })
     };
@@ -16,7 +16,7 @@ macro_rules! throw {
             #[allow(unused_mut)]
             let mut vm: &mut $crate::localscope::LocalScope<'_> = $vm;
             let err = $crate::value::error::$err::new(vm, format!($msg, $($arg),*));
-            let id: $crate::gc::ObjectId = todo!();
+            let id: $crate::gc::ObjectId = vm.register(err);
             Value::object(id).into()
         })
     };

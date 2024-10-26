@@ -118,7 +118,8 @@ fn on(cx: CallContext) -> Result<Value, Value> {
     let ValueKind::Object(cb) = cb.unpack() else {
         throw!(cx.scope, Error, "expected callback to be a function")
     };
-    let Some(this) = cx.this.downcast_ref::<EventEmitter>(cx.scope) else {
+    let this = cx.this.unpack();
+    let Some(this) = this.downcast_ref::<EventEmitter>(cx.scope) else {
         throw!(cx.scope, TypeError, "on can only be called on EventEmitter instances")
     };
     match this.handlers.borrow_mut().entry(name.sym()) {
@@ -133,7 +134,8 @@ fn emit(cx: CallContext) -> Result<Value, Value> {
         throw!(cx.scope, Error, "expected an event name");
     };
     let name = name.to_js_string(cx.scope)?;
-    let Some(this) = cx.this.downcast_ref::<EventEmitter>(cx.scope) else {
+    let this = cx.this.unpack();
+    let Some(this) = this.downcast_ref::<EventEmitter>(cx.scope) else {
         throw!(cx.scope, TypeError, "on can only be called on EventEmitter instances")
     };
     let mut did_emit = false;

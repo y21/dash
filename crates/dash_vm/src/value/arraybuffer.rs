@@ -3,7 +3,6 @@ use std::cell::Cell;
 
 use dash_proc_macro::Trace;
 
-use crate::gc::handle::Handle;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::{delegate, Vm};

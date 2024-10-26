@@ -105,19 +105,19 @@ boxed_primitive! {
 }
 
 impl InternalSlots for Number {
-    fn number_value(&self) -> Option<f64> {
+    fn number_value(&self, _: &Vm) -> Option<f64> {
         Some(self.inner)
     }
 }
 
 impl InternalSlots for Boolean {
-    fn boolean_value(&self) -> Option<bool> {
+    fn boolean_value(&self, _: &Vm) -> Option<bool> {
         Some(self.inner)
     }
 }
 
 impl InternalSlots for String {
-    fn string_value(&self) -> Option<JsString> {
+    fn string_value(&self, _: &Vm) -> Option<JsString> {
         Some(self.inner)
     }
 }

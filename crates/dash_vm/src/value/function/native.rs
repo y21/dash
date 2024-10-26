@@ -1,6 +1,5 @@
 use dash_middle::interner::Symbol;
 
-use crate::gc::handle::Handle;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::value::Value;

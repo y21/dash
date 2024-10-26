@@ -4,14 +4,13 @@ use std::cell::RefCell;
 use dash_proc_macro::Trace;
 
 use crate::frame::TryBlock;
-use crate::gc::handle::Handle;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::value::arguments::Arguments;
 use crate::value::object::{NamedObject, Object};
 use crate::value::{Typeof, Unrooted, Value};
-use crate::{delegate, throw, Vm};
+use crate::{delegate, Vm};
 
 use super::extend_stack_from_args;
 use super::user::UserFunction;
@@ -180,13 +179,4 @@ impl Object for GeneratorIterator {
     fn type_of(&self, _: &Vm) -> Typeof {
         Typeof::Object
     }
-}
-
-pub fn as_generator<'a>(scope: &mut LocalScope, value: &'a Value) -> Result<&'a GeneratorIterator, Value> {
-    let generator = match value.downcast_ref::<GeneratorIterator>(scope) {
-        Some(it) => it,
-        None => throw!(scope, TypeError, "Incompatible receiver"),
-    };
-
-    Ok(generator)
 }

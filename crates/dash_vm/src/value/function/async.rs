@@ -1,15 +1,15 @@
 use dash_proc_macro::Trace;
 
-use crate::gc::interner::sym;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::value::object::{NamedObject, Object, PropertyKey};
 use crate::value::promise::{wrap_promise, Promise};
 use crate::value::root_ext::RootErrExt;
-use crate::value::{Root, Typeof, Unrooted, Value, ValueContext};
-use crate::{delegate, PromiseAction, Vm};
+use crate::value::{Root, Typeof, Unpack, Unrooted, Value, ValueContext};
+use crate::{delegate, throw, PromiseAction, Vm};
+use dash_middle::interner::sym;
 
-use super::generator::{as_generator, GeneratorFunction, GeneratorState};
+use super::generator::{GeneratorFunction, GeneratorIterator, GeneratorState};
 use super::user::UserFunction;
 
 #[derive(Debug, Trace)]
@@ -51,8 +51,10 @@ impl AsyncFunction {
 
         match &result {
             Ok(value) => {
-                let is_done = as_generator(scope, &generator_iter)
-                    .map(|gen| matches!(&*gen.state().borrow(), GeneratorState::Finished))?;
+                let is_done = match generator_iter.unpack().downcast_ref::<GeneratorIterator>(scope) {
+                    Some(it) => matches!(*it.state().borrow(), GeneratorState::Finished),
+                    None => throw!(scope, TypeError, "Incompatible receiver"),
+                };
 
                 if is_done {
                     // Promise in resolved state
@@ -161,8 +163,10 @@ impl Object for ThenTask {
 
         match value {
             Ok(value) => {
-                let is_done = as_generator(scope, &self.generator_iter)
-                    .map(|gen| matches!(&*gen.state().borrow(), GeneratorState::Finished))?;
+                let is_done = match self.generator_iter.unpack().downcast_ref::<GeneratorIterator>(scope) {
+                    Some(it) => matches!(*it.state().borrow(), GeneratorState::Finished),
+                    None => throw!(scope, TypeError, "Incompatible receiver"),
+                };
 
                 if is_done {
                     // Promise in resolved state

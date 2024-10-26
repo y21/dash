@@ -1,7 +1,6 @@
-use dash_middle::interner::sym;
+use dash_middle::interner::{sym, Symbol};
 use dash_proc_macro::Trace;
 
-use crate::gc::interner::Symbol;
 use crate::localscope::LocalScope;
 use crate::value::boxed::String as BoxedString;
 use crate::{throw, Vm};
@@ -147,7 +146,7 @@ impl Object for JsString {
 }
 
 impl InternalSlots for JsString {
-    fn string_value(&self) -> Option<JsString> {
+    fn string_value(&self, _: &Vm) -> Option<JsString> {
         Some(*self)
     }
 }

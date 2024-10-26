@@ -1,10 +1,9 @@
 use std::any::Any;
 use std::fmt::Write;
 
+use dash_middle::interner::sym;
 use dash_proc_macro::Trace;
 
-use crate::gc::handle::Handle;
-use crate::gc::interner::sym;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::{delegate, Vm};

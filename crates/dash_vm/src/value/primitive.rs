@@ -2,13 +2,12 @@ use std::any::Any;
 use std::hash::{Hash, Hasher};
 use std::{fmt, iter};
 
-use dash_middle::interner;
+use dash_middle::interner::{self, sym};
 use dash_proc_macro::Trace;
 
-use crate::gc::interner::sym;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
-use crate::util::{intern_f64, Captures};
+use crate::util::intern_f64;
 use crate::{throw, Vm};
 
 use super::boxed::{Boolean as BoxedBoolean, Number as BoxedNumber, Symbol as BoxedSymbol};
@@ -127,10 +126,7 @@ impl Object for bool {
     }
 }
 
-pub fn array_like_keys<'a, 'b>(
-    sc: &'a mut LocalScope<'b>,
-    len: usize,
-) -> impl Iterator<Item = Value> + Captures<'a> + Captures<'b> {
+pub fn array_like_keys<'a, 'b>(sc: &'a mut LocalScope<'b>, len: usize) -> impl Iterator<Item = Value> + use<'a, 'b> {
     (0..len)
         .map(|i| sc.intern_usize(i))
         .chain(iter::once_with(|| sym::length))
@@ -315,20 +311,20 @@ impl InternalSlots for Symbol {}
 
 pub trait InternalSlots {
     // TODO: rename as_number to number_value?
-    fn string_value(&self) -> Option<JsString> {
+    fn string_value(&self, _: &Vm) -> Option<JsString> {
         None
     }
-    fn number_value(&self) -> Option<f64> {
+    fn number_value(&self, _: &Vm) -> Option<f64> {
         None
     }
-    fn boolean_value(&self) -> Option<bool> {
+    fn boolean_value(&self, _: &Vm) -> Option<bool> {
         None
     }
 }
 
 // TODO: do we even need this given that we have it for the Number wrapper? same for Rc<str> str etc
 impl InternalSlots for f64 {
-    fn number_value(&self) -> Option<f64> {
+    fn number_value(&self, _: &Vm) -> Option<f64> {
         Some(*self)
     }
 }
@@ -361,7 +357,7 @@ impl ValueConversion for f64 {
 }
 
 impl InternalSlots for bool {
-    fn boolean_value(&self) -> Option<bool> {
+    fn boolean_value(&self, _: &Vm) -> Option<bool> {
         Some(*self)
     }
 }
@@ -552,7 +548,7 @@ impl Object for Number {
 }
 
 impl InternalSlots for Number {
-    fn number_value(&self) -> Option<f64> {
+    fn number_value(&self, _: &Vm) -> Option<f64> {
         Some(self.0)
     }
 }

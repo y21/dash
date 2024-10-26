@@ -1,10 +1,9 @@
-use crate::gc::interner::sym;
 use crate::throw;
 use crate::value::function::native::CallContext;
 use crate::value::object::Object;
 use crate::value::ops::conversions::ValueConversion;
-use crate::value::primitive::InternalSlots;
 use crate::value::{boxed, Value, ValueContext};
+use dash_middle::interner::sym;
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let value = cx.args.first().unwrap_or_undefined().to_boolean(cx.scope)?;
@@ -17,7 +16,11 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn to_string(cx: CallContext) -> Result<Value, Value> {
-    if let Some(value) = cx.this.internal_slots(&cx.scope).and_then(InternalSlots::boolean_value) {
+    if let Some(value) = cx
+        .this
+        .internal_slots(&cx.scope)
+        .and_then(|slots| slots.boolean_value(cx.scope))
+    {
         Ok(Value::string(
             value.then(|| sym::true_.into()).unwrap_or_else(|| sym::false_.into()),
         ))
@@ -31,7 +34,11 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn value_of(cx: CallContext) -> Result<Value, Value> {
-    if let Some(value) = cx.this.internal_slots(&cx.scope).and_then(InternalSlots::boolean_value) {
+    if let Some(value) = cx
+        .this
+        .internal_slots(&cx.scope)
+        .and_then(|slots| slots.boolean_value(cx.scope))
+    {
         Ok(Value::boolean(value))
     } else {
         throw!(

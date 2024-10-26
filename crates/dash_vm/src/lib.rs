@@ -7,8 +7,6 @@ use std::ops::RangeBounds;
 use std::vec::Drain;
 use std::fmt;
 
-use crate::gc::interner::{self, sym};
-use crate::gc::trace::{Trace, TraceCtxt};
 use crate::util::cold_path;
 use crate::value::function::Function;
 use crate::value::object::{PropertyDataDescriptor, PropertyValueKind};
@@ -25,12 +23,11 @@ use self::value::Value;
 
 use dash_log::{debug, error, span, Level};
 use dash_middle::compiler::instruction::Instruction;
-use gc::gc2::Allocator;
-use gc::handle::Handle;
-use gc::interner::StringInterner;
-use gc::{Gc, ObjectId};
+use dash_middle::interner::{self, sym, StringInterner};
+use gc::trace::{Trace, TraceCtxt};
+use gc::{Allocator, ObjectId};
 use localscope::{scope, LocalScopeList};
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 use value::object::NamedObject;
 use value::{ExternalValue, PureBuiltin, Unpack, Unrooted, ValueKind};
 
@@ -39,7 +36,6 @@ mod jit;
 
 pub mod dispatch;
 pub mod eval;
-pub mod external;
 pub mod frame;
 pub mod gc;
 pub mod js_std;
@@ -67,7 +63,6 @@ pub struct Vm {
     // TODO: the inner vec of the stack should be private for soundness
     // popping from the stack must return `Unrooted`
     stack: Vec<Value>,
-    gc: Gc,
     alloc: Allocator,
     pub interner: StringInterner,
     global: ObjectId,
@@ -99,7 +94,6 @@ pub struct Vm {
 impl Vm {
     pub fn new(params: VmParams) -> Self {
         debug!("create vm");
-        let gc = Gc::default();
         let mut alloc = Allocator::new();
         let statics = Statics::new(&mut alloc);
         // TODO: global __proto__ and constructor
@@ -112,7 +106,6 @@ impl Vm {
             frames: Vec::new(),
             async_tasks: Vec::new(),
             stack: Vec::with_capacity(512),
-            gc,
             alloc,
             interner: StringInterner::new(),
             global,
@@ -1224,7 +1217,7 @@ impl Vm {
     /// This is usually the method you want to use, since handling externals specifically is not
     /// typically useful.
     pub(crate) fn get_local(&self, id: usize) -> Option<Value> {
-        self.stack.get(self.get_frame_sp() + id).cloned().map(|v| v.unbox_external())
+        self.stack.get(self.get_frame_sp() + id).cloned().map(|v| v.unbox_external(self))
     }
 
     pub(crate) fn get_external(&self, id: usize) -> Option<&ExternalValue> {
@@ -1242,7 +1235,7 @@ impl Vm {
 
         // TODO: double check this is still right
         if let ValueKind::External(o) = self.stack[idx].unpack() {
-            unsafe { ExternalValue::replace(&o, value) };
+            unsafe { ExternalValue::replace(self, &o, value) };
         } else {
             self.stack[idx] = value;
         }
@@ -1368,7 +1361,7 @@ impl Vm {
             print!("{i}: ");
             match v.unpack() {
                 ValueKind::Object(o) => println!("{:#?}", o),
-                ValueKind::External(o) => println!("[[external]]: {:#?}", o.inner()),
+                ValueKind::External(o) => println!("[[external]]: {:#?}", o.inner(self)),
                 v => println!("{v:?}"),
             }
         }
@@ -1476,22 +1469,23 @@ impl Vm {
 
     pub fn perform_gc(&mut self) {
         debug!("gc cycle triggered");
+        todo!();
 
         let trace_roots = span!(Level::TRACE, "gc trace");
         trace_roots.in_scope(|| self.trace_roots());
 
         // All reachable roots are marked.
-        debug!("object count before sweep: {}", self.gc.node_count());
+        // debug!("object count before sweep: {}", self.gc.node_count());
         let sweep = span!(Level::TRACE, "gc sweep");
-        sweep.in_scope(|| unsafe { self.gc.sweep() });
-        debug!("object count after sweep: {}", self.gc.node_count());
+        // sweep.in_scope(|| unsafe { self.gc.sweep() });
+        // debug!("object count after sweep: {}", self.gc.node_count());
 
         debug!("sweep interner");
         self.interner.sweep();
 
         // Adjust GC threshold
-        let new_object_count = self.gc.node_count();
-        self.gc_object_threshold = new_object_count * 2;
+        // let new_object_count = self.gc.node_count();
+        // self.gc_object_threshold = new_object_count * 2;
         debug!("new threshold: {}", self.gc_object_threshold);
     }
 
@@ -1533,20 +1527,6 @@ impl Vm {
 
     pub fn statics(&self) -> &Statics {
         &self.statics
-    }
-
-    // Using the returned handle might invoke a gc but this call alone wont
-    #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
-    pub fn gc_mut(&mut self) -> &mut Gc {
-        &mut self.gc
-    }
-
-    // TODO: remove this function at all costs, this should never be called.
-    // Always call `register` on local scope
-    // Or, rather, return Unrooted
-    #[cfg_attr(feature = "stress_gc", track_caller)]
-    pub fn register<O: Object + 'static>(&mut self, obj: O) -> Handle {
-        self.gc.register(obj)
     }
 
     pub fn params(&self) -> &VmParams {

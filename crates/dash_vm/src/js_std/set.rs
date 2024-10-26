@@ -3,7 +3,7 @@ use crate::value::function::native::CallContext;
 use crate::value::object::PropertyKey;
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::set::Set;
-use crate::value::{Root, Value, ValueContext};
+use crate::value::{Root, Unpack, Value, ValueContext};
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let set = Set::new(cx.scope);
@@ -24,7 +24,8 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn add(cx: CallContext) -> Result<Value, Value> {
-    let this = match cx.this.downcast_ref::<Set>(cx.scope) {
+    let this = cx.this.unpack();
+    let this = match this.downcast_ref::<Set>(cx.scope) {
         Some(set) => set,
         _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
     };
@@ -36,7 +37,8 @@ pub fn add(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn has(cx: CallContext) -> Result<Value, Value> {
-    let this = match cx.this.downcast_ref::<Set>(cx.scope) {
+    let this = cx.this.unpack();
+    let this = match this.downcast_ref::<Set>(cx.scope) {
         Some(set) => set,
         _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
     };
@@ -46,7 +48,8 @@ pub fn has(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn delete(cx: CallContext) -> Result<Value, Value> {
-    let this = match cx.this.downcast_ref::<Set>(cx.scope) {
+    let this = cx.this.unpack();
+    let this = match this.downcast_ref::<Set>(cx.scope) {
         Some(set) => set,
         _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
     };
@@ -58,7 +61,8 @@ pub fn delete(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn clear(cx: CallContext) -> Result<Value, Value> {
-    let this = match cx.this.downcast_ref::<Set>(cx.scope) {
+    let this = cx.this.unpack();
+    let this = match this.downcast_ref::<Set>(cx.scope) {
         Some(set) => set,
         _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
     };
@@ -69,7 +73,8 @@ pub fn clear(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn size(cx: CallContext) -> Result<Value, Value> {
-    let this = match cx.this.downcast_ref::<Set>(cx.scope) {
+    let this = cx.this.unpack();
+    let this = match this.downcast_ref::<Set>(cx.scope) {
         Some(set) => set,
         _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
     };

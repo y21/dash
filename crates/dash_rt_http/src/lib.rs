@@ -166,7 +166,8 @@ impl Object for HttpContext {
 }
 
 fn ctx_respond(cx: CallContext) -> Result<Value, Value> {
-    let Some(this) = cx.this.downcast_ref::<HttpContext>(cx.scope) else {
+    let this = cx.this.unpack();
+    let Some(this) = this.downcast_ref::<HttpContext>(cx.scope) else {
         throw!(cx.scope, TypeError, "Missing this");
     };
 

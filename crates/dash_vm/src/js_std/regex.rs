@@ -1,11 +1,11 @@
-use crate::gc::interner::sym;
+use dash_middle::interner::sym;
 use crate::throw;
 use crate::value::array::Array;
 use crate::value::function::native::CallContext;
 use crate::value::object::PropertyValue;
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::regex::{RegExp, RegExpInner};
-use crate::value::{Value, ValueContext};
+use crate::value::{Unpack, Value, ValueContext};
 use dash_regex::matcher::Matcher as RegexMatcher;
 use dash_regex::parser::Parser as RegexParser;
 use dash_regex::Flags;
@@ -37,7 +37,8 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
 pub fn test(cx: CallContext) -> Result<Value, Value> {
     let text = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
 
-    let regex = match cx.this.downcast_ref::<RegExp>(cx.scope) {
+    let this = cx.this.unpack();
+    let regex = match this.downcast_ref::<RegExp>(cx.scope) {
         Some(regex) => regex,
         None => throw!(cx.scope, TypeError, "Receiver must be a RegExp"),
     };
@@ -77,7 +78,8 @@ pub fn test(cx: CallContext) -> Result<Value, Value> {
 pub fn exec(cx: CallContext<'_, '_>) -> Result<Value, Value> {
     let text = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
 
-    let regex = match cx.this.downcast_ref::<RegExp>(cx.scope) {
+    let this = cx.this.unpack();
+    let regex = match this.downcast_ref::<RegExp>(cx.scope) {
         Some(regex) => regex,
         None => throw!(cx.scope, TypeError, "Receiver must be a RegExp"),
     };

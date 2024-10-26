@@ -41,7 +41,8 @@ macro_rules! typedarray {
 }
 
 pub fn fill(cx: CallContext) -> Result<Value, Value> {
-    let this = match cx.this.downcast_ref::<TypedArray>(cx.scope) {
+    let this = cx.this.unpack();
+    let this = match this.downcast_ref::<TypedArray>(cx.scope) {
         Some(this) => this,
         None => throw!(cx.scope, TypeError, "Invalid receiver"),
     };

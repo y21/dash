@@ -1,6 +1,6 @@
 use dash_proc_macro::Trace;
 
-use crate::gc::interner::sym;
+use dash_middle::interner::sym;
 use crate::gc::ObjectId;
 use crate::value::function::bound::BoundFunction;
 use crate::value::function::native::CallContext;
@@ -52,7 +52,8 @@ pub fn reject(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn then(cx: CallContext) -> Result<Value, Value> {
-    let promise = match cx.this.downcast_ref::<Promise>(cx.scope) {
+    let this = cx.this.unpack();
+    let promise = match this.downcast_ref::<Promise>(cx.scope) {
         Some(promise) => promise,
         None => throw!(cx.scope, TypeError, "Receiver must be a promise"),
     };

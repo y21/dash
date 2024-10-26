@@ -15,14 +15,15 @@ pub mod regex;
 pub mod set;
 pub mod typedarray;
 
+use std::any::TypeId;
 use std::ops::ControlFlow;
+use std::ptr;
 
-use dash_middle::interner;
+use dash_middle::interner::{self, sym};
 use dash_middle::util::ThreadSafeStorage;
 use dash_proc_macro::Trace;
 
 pub mod string;
-use crate::gc::interner::sym;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::gc::ObjectId;
 use crate::util::cold_path;
@@ -46,25 +47,46 @@ impl std::fmt::Debug for Value {
 
 #[expect(clippy::unusual_byte_groupings)]
 impl Value {
-    const TAG_MASK: u64 = 0b1_11111111111_111 << (64 - 15);
+    /*
+    Packed value encoding scheme (high 13 bits):
+    0b0_11111111111_10 00	NaN
+    0b1_11111111111_00 00	-inf
+    0b0_11111111111_00 00	inf
+    0bx_11111111111_x0 00	<normal double>
+    0bx_xxxxxxxxxxx_xx xx	<normal double> (at least one of the exponent bits is 0)
 
-    const INFINITY_MASK: u64 = 0b0_11111111111_000 << (64 - 15);
-    const NEG_INFINITY_MASK: u64 = 0b1_11111111111_000 << (64 - 15);
-    const NAN_MASK: u64 = 0b0_11111111111_100 << (64 - 15);
+    0b0_11111111111_11 00	boolean
+    0b0_11111111111_11 10	string
+    0b1_11111111111_11 10	symbol
+    0b0_11111111111_11 01	undefined
+    0b1_11111111111_11 01	null
+    0b0_11111111111_11 10	object
+    0b1_11111111111_11 10	external
+                     ^ This bit is always set for non-doubles
+     */
+    const TAG_MASK: u64 = 0b1_11111111111_1111 << (64 - 16);
+    const NON_NUMBER_MASK: u64 = 0b0_11111111111_1100 << (64 - 16);
 
-    const BOOLEAN_MASK: u64 = 0b0_11111111111_001 << (64 - 15);
-    const STRING_MASK: u64 = 0b0_11111111111_010 << (64 - 15);
-    const UNDEFINED_MASK: u64 = 0b0_11111111111_011 << (64 - 15);
-    const NULL_MASK: u64 = 0b1_11111111111_001 << (64 - 15);
-    const SYMBOL_MASK: u64 = 0b1_11111111111_010 << (64 - 15);
-    const OBJECT_MASK: u64 = 0b1_11111111111_011 << (64 - 15);
-    const EXTERNAL_MASK: u64 = 0b1_11111111111_101 << (64 - 15);
+    pub(crate) const BOOLEAN_MASK: u64 = 0b0_11111111111_1100 << (64 - 16);
+    pub(crate) const STRING_MASK: u64 = 0b1_11111111111_1100 << (64 - 16);
+    pub(crate) const SYMBOL_MASK: u64 = 0b0_11111111111_1101 << (64 - 16);
+    pub(crate) const UNDEFINED_MASK: u64 = 0b1_11111111111_1101 << (64 - 16);
+    pub(crate) const NULL_MASK: u64 = 0b0_11111111111_1110 << (64 - 16);
+    pub(crate) const OBJECT_MASK: u64 = 0b1_11111111111_1110 << (64 - 16);
+    pub(crate) const EXTERNAL_MASK: u64 = 0b0_11111111111_1111 << (64 - 16);
 
     pub fn number(v: f64) -> Self {
-        // TODO: masking etc. maybe? def. need to be careful here if the bitpattern is untrusted...
-        let num = Self(v.to_bits());
-        assert!(matches!(num.unpack(), ValueKind::Number(_)));
-        num
+        #[cold]
+        #[inline(never)]
+        fn fail(bits: u64, val: f64) -> ! {
+            panic!("invalid float bitpattern: {bits} ({val})")
+        }
+
+        let bits = v.to_bits();
+        if (bits & Self::NON_NUMBER_MASK) == Self::NON_NUMBER_MASK {
+            fail(bits, v);
+        }
+        Self(bits)
     }
 
     pub fn raw(self) -> u64 {
@@ -123,10 +145,10 @@ impl Unpack for Value {
             Self::EXTERNAL_MASK => ValueKind::External(ExternalValue {
                 inner: ObjectId::from_raw(self.0 as u32),
             }),
-            Self::INFINITY_MASK | Self::NEG_INFINITY_MASK | Self::NAN_MASK | _ => {
-                // Anything else is a double.
+            _ if (self.0 & Self::NON_NUMBER_MASK) != Self::NON_NUMBER_MASK => {
                 ValueKind::Number(Number(f64::from_bits(self.0)))
             }
+            _ => unsafe { std::hint::unreachable_unchecked() },
         }
     }
 }
@@ -160,6 +182,7 @@ unsafe impl Trace for Value {
     }
 }
 
+// TODO: can we just get rid of this impl if ExternalValue stores ValueId instead of ObjectId which should remove the need for having an object vtable for value
 impl Object for Value {
     fn get_own_property_descriptor(
         &self,
@@ -231,13 +254,11 @@ impl Object for Value {
     }
 
     fn apply(&self, scope: &mut LocalScope, _: ObjectId, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
-        // self.apply(scope, this, args)
-        todo!()
+        self.apply(scope, this, args)
     }
 
     fn as_any(&self, _: &Vm) -> &dyn std::any::Any {
-        // self
-        todo!()
+        self
     }
 
     fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
@@ -276,22 +297,42 @@ impl Object for Value {
         self.construct(scope, this, args)
     }
 
-    fn internal_slots(&self, vm: &Vm) -> Option<&dyn InternalSlots> {
-        todo!("???") // how do we implement this? we cant return the unpacked &f64
-        // Idea: return Some(self) and delegate to the inner ones in dyn Internalslots
-        // match self.unpack() {
-        //     ValueKind::Number(n) => Some(n),
-        //     ValueKind::Boolean(b) => Some(b),
-        //     ValueKind::String(s) => Some(s),
-        //     ValueKind::Undefined(_) | Value::Null(_) => None,
-        //     ValueKind::Symbol(s) => Some(s),
-        //     ValueKind::Object(o) => o.internal_slots(vm),
-        //     ValueKind::External(_) => unreachable!(),
-        // }
+    fn internal_slots(&self, _: &Vm) -> Option<&dyn InternalSlots> {
+        Some(self)
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[deny(clippy::missing_trait_methods)]
+impl InternalSlots for Value {
+    fn string_value(&self, vm: &Vm) -> Option<JsString> {
+        match self.unpack() {
+            ValueKind::String(s) => Some(s),
+            ValueKind::Object(obj) => obj.internal_slots(vm).and_then(|slots| slots.string_value(vm)),
+            ValueKind::External(ext) => ext.internal_slots(vm).and_then(|slots| slots.string_value(vm)),
+            _ => None,
+        }
+    }
+
+    fn number_value(&self, vm: &Vm) -> Option<f64> {
+        match self.unpack() {
+            ValueKind::Number(Number(n)) => Some(n),
+            ValueKind::Object(obj) => obj.internal_slots(vm).and_then(|slots| slots.number_value(vm)),
+            ValueKind::External(ext) => ext.internal_slots(vm).and_then(|slots| slots.number_value(vm)),
+            _ => None,
+        }
+    }
+
+    fn boolean_value(&self, vm: &Vm) -> Option<bool> {
+        match self.unpack() {
+            ValueKind::Boolean(b) => Some(b),
+            ValueKind::Object(obj) => obj.internal_slots(vm).and_then(|slots| slots.boolean_value(vm)),
+            ValueKind::External(ext) => ext.internal_slots(vm).and_then(|slots| slots.boolean_value(vm)),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum ValueKind {
     /// The number type
     Number(Number),
@@ -309,6 +350,19 @@ pub enum ValueKind {
     Object(ObjectId),
     /// An "external" value that is being used by other functions.
     External(ExternalValue),
+}
+
+impl ValueKind {
+    /// Attempts to downcast this value to a concrete type `T`.
+    ///
+    /// NOTE: if this value is an external, it will call downcast_ref on the "lower level" handle (i.e. the wrapped object)
+    pub fn downcast_ref<T: 'static>(&self, vm: &Vm) -> Option<&T> {
+        match self {
+            ValueKind::Object(obj) => obj.as_any(vm).downcast_ref(),
+            ValueKind::External(obj) => obj.inner.as_any(vm).downcast_ref(),
+            _ => None,
+        }
+    }
 }
 
 /// A wrapper type around JavaScript values that are not rooted.
@@ -446,12 +500,12 @@ impl ExternalValue {
         Self { inner }
     }
 
-    pub fn inner(&self) -> Value {
-        todo!("Object::as_any needs to take a &Vm")
-        // self.inner
-        //     .as_any()
-        //     .downcast_ref()
-        //     .expect("invariant violated: ExternalValue did not contain a Value")
+    pub fn inner(&self, vm: &Vm) -> Value {
+        *self
+            .inner
+            .as_any(vm)
+            .downcast_ref()
+            .expect("invariant violated: ExternalValue did not contain a Value")
     }
 
     pub fn id(&self) -> ObjectId {
@@ -476,15 +530,10 @@ impl ExternalValue {
     /// ExternalValue::replace(&ext, Value::Number(4.0)); // UB, writing to the inner value while a borrow is live
     /// use_borrow(r);
     /// ```
-    pub unsafe fn replace(this: &ExternalValue, value: Value) {
-        // Even though it looks like we are assigning through a shared reference,
-        // this is ok because Handle has a mutable pointer to the GcNode on the heap
-
-        todo!();
-        // assert_eq!(this.inner.as_any().type_id(), TypeId::of::<Value>());
-        // // SAFETY: casting to *mut GcNode<Value>, then dereferencing + writing
-        // // to said pointer is safe, because it is asserted on the previous line that the type is correct
-        // (*this.inner.as_ptr::<Value>()).value.0 = value;
+    pub unsafe fn replace(vm: &mut Vm, this: &ExternalValue, value: Value) {
+        assert_eq!(this.inner.as_any(vm).type_id(), TypeId::of::<Value>());
+        let data = vm.alloc.data(this.inner).cast_mut().cast::<Value>();
+        ptr::write(data, value);
     }
 }
 
@@ -539,7 +588,7 @@ impl Value {
             ValueKind::Number(n) => n.get_property(sc, self.clone(), key),
             ValueKind::Boolean(b) => b.get_property(sc, self.clone(), key),
             ValueKind::String(s) => s.get_property(sc, self.clone(), key),
-            ValueKind::External(o) => o.inner().get_property(sc, key),
+            ValueKind::External(o) => o.inner(sc).get_property(sc, key),
             ValueKind::Undefined(u) => u.get_property(sc, self.clone(), key),
             ValueKind::Null(n) => n.get_property(sc, self.clone(), key),
             ValueKind::Symbol(s) => s.get_property(sc, self.clone(), key),
@@ -549,7 +598,7 @@ impl Value {
     pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
         match self.unpack() {
             ValueKind::Object(o) => o.apply(sc, this, args),
-            ValueKind::External(o) => o.inner().apply(sc, this, args),
+            ValueKind::External(o) => o.inner(sc).apply(sc, this, args),
             ValueKind::Number(n) => throw!(sc, TypeError, "{} is not a function", n),
             ValueKind::Boolean(b) => throw!(sc, TypeError, "{} is not a function", b),
             ValueKind::String(s) => {
@@ -572,7 +621,7 @@ impl Value {
     ) -> Result<Unrooted, Unrooted> {
         match self.unpack() {
             ValueKind::Object(o) => o.apply(sc, this, args),
-            ValueKind::External(o) => o.inner().apply(sc, this, args),
+            ValueKind::External(o) => o.inner(sc).apply(sc, this, args),
             _ => {
                 cold_path();
 
@@ -592,7 +641,7 @@ impl Value {
     pub fn construct(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
         match self.unpack() {
             ValueKind::Object(o) => o.construct(sc, this, args),
-            ValueKind::External(o) => o.inner().construct(sc, this, args),
+            ValueKind::External(o) => o.inner(sc).construct(sc, this, args),
             ValueKind::Number(n) => throw!(sc, TypeError, "{} is not a constructor", n),
             ValueKind::Boolean(b) => throw!(sc, TypeError, "{} is not a constructor", b),
             ValueKind::String(s) => {
@@ -627,9 +676,9 @@ impl Value {
         }
     }
 
-    pub fn unbox_external(self) -> Value {
+    pub fn unbox_external(self, vm: &Vm) -> Value {
         match self.unpack() {
-            ValueKind::External(e) => e.inner(),
+            ValueKind::External(e) => e.inner(vm),
             _ => self,
         }
     }
@@ -671,20 +720,6 @@ impl Value {
             })
         })
         .map(|c| c.is_break())
-    }
-
-    /// Attempts to downcast this value to a concrete type `T`.
-    ///
-    /// NOTE: if this value is an external, it will call downcast_ref on the "lower level" handle (i.e. the wrapped object)
-    pub fn downcast_ref<T: 'static>(&self, vm: &Vm) -> Option<&T> {
-        // weird borrowck error
-        todo!()
-
-        // match self.unpack() {
-        //     ValueKind::Object(obj) => obj.as_any(vm).downcast_ref(),
-        //     ValueKind::External(obj) => obj.inner.as_any(vm).downcast_ref(),
-        //     _ => None,
-        // }
     }
 }
 

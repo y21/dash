@@ -7,7 +7,6 @@ use dash_middle::compiler::CompileResult;
 use dash_middle::parser::statement::{Asyncness, FunctionKind};
 use dash_proc_macro::Trace;
 
-use crate::gc::handle::Handle;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::gc::ObjectId;
 use crate::value::string::JsString;

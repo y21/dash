@@ -1,11 +1,8 @@
-use std::ops::Deref;
-use std::rc::Rc;
+use std::collections::hash_map::Entry;
 
 use crate::{ExternalRefs, Vm};
 
-use super::gc2::AllocHeader;
-use super::handle::ObjectVTable;
-use super::{Handle, ObjectId};
+use super::ObjectId;
 
 // TODO: document this
 // TL;DR for now, `Persist<T>` adds reference counting to a `Handle<T>`,
@@ -16,7 +13,14 @@ pub struct Persistent(ObjectId, ExternalRefs);
 impl Persistent {
     pub fn new(vm: &mut Vm, id: ObjectId) -> Self {
         let this = Self(id, vm.external_refs.clone());
-        assert_eq!(vm.external_refs.0.borrow_mut().insert(id, 1), None);
+        match vm.external_refs.0.borrow_mut().entry(id) {
+            Entry::Occupied(mut entry) => {
+                let value = entry.get_mut();
+                *value = value.checked_add(1).unwrap();
+            }
+            Entry::Vacant(entry) => drop(entry.insert(1)),
+        }
+
         this
     }
 }

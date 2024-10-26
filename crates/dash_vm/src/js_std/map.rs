@@ -1,10 +1,10 @@
-use crate::gc::interner::sym;
+use dash_middle::interner::sym;
 use crate::throw;
 use crate::value::function::native::CallContext;
 use crate::value::map::Map;
 use crate::value::object::PropertyKey;
 use crate::value::ops::conversions::ValueConversion;
-use crate::value::{Root, Value, ValueContext};
+use crate::value::{Root, Unpack, Value, ValueContext};
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let map = Map::new(cx.scope);
@@ -30,7 +30,8 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn set(cx: CallContext) -> Result<Value, Value> {
-    let this = match cx.this.downcast_ref::<Map>(&cx.scope) {
+    let this = cx.this.unpack();
+    let this = match this.downcast_ref::<Map>(&cx.scope) {
         Some(map) => map,
         _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
     };
@@ -43,8 +44,9 @@ pub fn set(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn has(cx: CallContext) -> Result<Value, Value> {
-    let this = match cx.this.downcast_ref::<Map>(&cx.scope) {
-        Some(set) => set,
+    let this = cx.this.unpack();
+    let this = match this.downcast_ref::<Map>(&cx.scope) {
+        Some(map) => map,
         _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
     };
 
@@ -53,8 +55,9 @@ pub fn has(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn get(cx: CallContext) -> Result<Value, Value> {
-    let this = match cx.this.downcast_ref::<Map>(&cx.scope) {
-        Some(set) => set,
+    let this = cx.this.unpack();
+    let this = match this.downcast_ref::<Map>(&cx.scope) {
+        Some(map) => map,
         _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
     };
 
@@ -63,8 +66,9 @@ pub fn get(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn delete(cx: CallContext) -> Result<Value, Value> {
-    let this = match cx.this.downcast_ref::<Map>(&cx.scope) {
-        Some(set) => set,
+    let this = cx.this.unpack();
+    let this = match this.downcast_ref::<Map>(&cx.scope) {
+        Some(map) => map,
         _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
     };
 
@@ -75,8 +79,9 @@ pub fn delete(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn clear(cx: CallContext) -> Result<Value, Value> {
-    let this = match cx.this.downcast_ref::<Map>(&cx.scope) {
-        Some(set) => set,
+    let this = cx.this.unpack();
+    let this = match this.downcast_ref::<Map>(&cx.scope) {
+        Some(map) => map,
         _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
     };
 
@@ -86,8 +91,9 @@ pub fn clear(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn size(cx: CallContext) -> Result<Value, Value> {
-    let this = match cx.this.downcast_ref::<Map>(&cx.scope) {
-        Some(set) => set,
+    let this = cx.this.unpack();
+    let this = match this.downcast_ref::<Map>(&cx.scope) {
+        Some(map) => map,
         _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
     };
 

@@ -2,7 +2,7 @@ use crate::throw;
 use crate::value::arraybuffer::ArrayBuffer;
 use crate::value::function::native::CallContext;
 use crate::value::ops::conversions::ValueConversion;
-use crate::value::Value;
+use crate::value::{Unpack, Value};
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let length = match cx.args.first() {
@@ -15,7 +15,8 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn byte_length(cx: CallContext) -> Result<Value, Value> {
-    let Some(this) = cx.this.downcast_ref::<ArrayBuffer>(&cx.scope) else {
+    let this = cx.this.unpack();
+    let Some(this) = this.downcast_ref::<ArrayBuffer>(&cx.scope) else {
         throw!(
             cx.scope,
             TypeError,

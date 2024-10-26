@@ -3,16 +3,15 @@ use std::cell::RefCell;
 use std::fmt::Debug;
 use std::hash::BuildHasherDefault;
 
-use crate::gc::interner::sym;
 use crate::gc::persistent::Persistent;
 use crate::gc::trace::{Trace, TraceCtxt};
-use crate::gc::ObjectId;
+use crate::gc::{ObjectId, ObjectVTable};
 use bitflags::bitflags;
+use dash_middle::interner::sym;
 use dash_proc_macro::Trace;
 use hashbrown::hash_map::Entry;
 use rustc_hash::FxHasher;
 
-use crate::gc::handle::{Handle, ObjectVTable};
 use crate::localscope::LocalScope;
 use crate::{throw, Vm};
 
@@ -483,8 +482,8 @@ impl From<JsString> for PropertyKey {
         PropertyKey::String(value)
     }
 }
-impl From<crate::gc::interner::Symbol> for PropertyKey {
-    fn from(value: crate::gc::interner::Symbol) -> Self {
+impl From<dash_middle::interner::Symbol> for PropertyKey {
+    fn from(value: dash_middle::interner::Symbol) -> Self {
         PropertyKey::String(value.into())
     }
 }
@@ -794,12 +793,6 @@ impl ObjectId {
     }
     pub fn data_ptr(self, vm: &Vm) -> *const () {
         vm.alloc.data(self)
-    }
-    pub fn refcount(self, vm: &Vm) -> u32 {
-        unsafe { (*vm.alloc.header(self)).refcount.get() }
-    }
-    pub fn set_refcount(self, vm: &Vm, count: u32) {
-        unsafe { (*vm.alloc.header(self)).refcount.set(count) }
     }
 }
 

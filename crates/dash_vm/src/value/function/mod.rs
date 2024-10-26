@@ -7,13 +7,12 @@ use std::iter::{self};
 use dash_proc_macro::Trace;
 
 use crate::dispatch::HandleResult;
-use crate::gc::handle::Handle;
-use crate::gc::interner::sym;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::value::arguments::Arguments;
 use crate::Vm;
+use dash_middle::interner::sym;
 
 use self::r#async::AsyncFunction;
 use self::closure::Closure;

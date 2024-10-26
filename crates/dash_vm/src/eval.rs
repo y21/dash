@@ -1,12 +1,12 @@
 use dash_compiler::FunctionCompiler;
 use dash_lexer::Lexer;
 use dash_middle::compiler::StaticImportKind;
+use dash_middle::interner::sym;
 use dash_optimizer::type_infer::name_res;
 use dash_optimizer::OptLevel;
 use dash_parser::Parser;
 
 use crate::frame::Frame;
-use crate::gc::interner::sym;
 use crate::localscope::LocalScope;
 use crate::value::object::{NamedObject, Object, PropertyValue};
 use crate::value::{Root, Unrooted, Value};

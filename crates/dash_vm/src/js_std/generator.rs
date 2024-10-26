@@ -2,21 +2,24 @@ use std::mem;
 
 use crate::dispatch::HandleResult;
 use crate::frame::Frame;
-use crate::gc::interner::sym;
+use dash_middle::interner::sym;
 use crate::localscope::LocalScope;
 use crate::throw;
-use crate::value::function::generator::{as_generator, GeneratorState};
+use crate::value::function::generator::{GeneratorIterator, GeneratorState};
 use crate::value::function::native::CallContext;
 use crate::value::function::{Function, FunctionKind};
 use crate::value::object::{NamedObject, Object, PropertyValue};
 use crate::value::root_ext::RootErrExt;
-use crate::value::{Root, Value, ValueContext};
+use crate::value::{Root, Unpack, Value, ValueContext};
 
 pub fn next(cx: CallContext) -> Result<Value, Value> {
+    let generator = cx.this.unpack();
+    let generator = match generator.downcast_ref::<GeneratorIterator>(cx.scope) {
+        Some(it) => it,
+        None => throw!(cx.scope, TypeError, "Incompatible receiver"),
+    };
     let arg = cx.args.first().unwrap_or_undefined();
     let frame = {
-        let generator = as_generator(cx.scope, &cx.this)?;
-
         let (ip, old_stack, arguments, try_blocks) = match &mut *generator.state().borrow_mut() {
             GeneratorState::Finished => return create_generator_value(cx.scope, true, None),
             GeneratorState::Running {
@@ -65,7 +68,6 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
         // TODO: this should not early return because we never reset the temporarily broken generator state
         Err(v) => return Err(v.root(cx.scope)),
     };
-    let generator = as_generator(cx.scope, &cx.this)?;
 
     match result {
         HandleResult::Return(value) => {

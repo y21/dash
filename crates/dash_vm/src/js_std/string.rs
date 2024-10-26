@@ -25,7 +25,11 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn to_string(cx: CallContext) -> Result<Value, Value> {
-    if let Some(value) = cx.this.internal_slots(cx.scope).and_then(|prim| prim.string_value()) {
+    if let Some(value) = cx
+        .this
+        .internal_slots(cx.scope)
+        .and_then(|prim| prim.string_value(cx.scope))
+    {
         Ok(Value::string(value))
     } else {
         throw!(

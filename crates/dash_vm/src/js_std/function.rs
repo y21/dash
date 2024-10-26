@@ -69,7 +69,8 @@ pub fn call(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn to_string(cx: CallContext) -> Result<Value, Value> {
-    let Some(this) = cx.this.downcast_ref::<Function>(&cx.scope) else {
+    let this = cx.this.unpack();
+    let Some(this) = this.downcast_ref::<Function>(&cx.scope) else {
         throw!(cx.scope, TypeError, "Incompatible receiver");
     };
     let name = format!(

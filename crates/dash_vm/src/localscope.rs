@@ -2,8 +2,8 @@ use std::marker::PhantomData;
 use std::mem;
 use std::ops::{Deref, DerefMut};
 
-use crate::gc::handle::Handle;
-use crate::gc::interner::Symbol;
+use dash_middle::interner::Symbol;
+
 use crate::gc::ObjectId;
 use crate::value::function::bound::BoundFunction;
 use crate::value::promise::{Promise, PromiseState};
@@ -158,7 +158,7 @@ impl<'vm> LocalScope<'vm> {
             ValueKind::External(o) => {
                 // Two things to add: the inner object, and the external itself
                 // TODO: do we really need to add the inner object, considering that the inner will be traversed during tracing
-                self.add_value(o.inner());
+                self.add_value(o.inner(self));
                 self.add_ref(o.id());
             }
             ValueKind::String(s) => {
@@ -172,19 +172,17 @@ impl<'vm> LocalScope<'vm> {
     }
 
     pub fn add_many(&mut self, v: &[Value]) {
-        for val in v {
-            self.add_value(val.clone());
+        for &val in v {
+            self.add_value(val);
         }
     }
 
     /// Registers an object and roots it.
     #[cfg_attr(feature = "stress_gc", track_caller)]
     pub fn register<O: Object + 'static>(&mut self, obj: O) -> ObjectId {
-        // #[allow(clippy::disallowed_methods)] // ok, we immediately root the handle
-        // let handle = self.deref_mut().register(obj);
-        todo!("use the new allocator")
-        // self.add_ref(handle.clone());
-        // handle
+        let handle = self.alloc.alloc_object(obj);
+        self.add_ref(handle);
+        handle
     }
 
     pub fn drive_promise(&mut self, action: PromiseAction, promise: &Promise, args: Vec<Value>) {

@@ -66,24 +66,14 @@ where
 }
 
 pub fn format_value<'s>(value: Value, scope: &'s mut LocalScope) -> Result<&'s str, Value> {
-    thread_local! {
-        // Cache bytecode so we can avoid recompiling it every time
-        // We can be even smarter if we need to -- cache the whole value at callsite
-        static INSPECT_BC: OnceCell<CompileResult> = const { OnceCell::new() };
-    }
+    let inspect_bc = FunctionCompiler::compile_str(
+        &mut scope.interner,
+        include_str!("../js/inspect.js"),
+        Default::default(),
+    )
+    .unwrap();
 
-    let inspect_bc = INSPECT_BC.with(|tls| {
-        let inspect = tls.get_or_init(|| {
-            FunctionCompiler::compile_str(
-                // TODO: can reuse a string interner if worth it
-                &mut scope.interner,
-                include_str!("../js/inspect.js"),
-                Default::default(),
-            )
-            .unwrap()
-        });
-        inspect.clone()
-    });
+    // TODO: we need to somehow add `CompileResult` as an external?
 
     let Exports {
         default: Some(inspect_fn),

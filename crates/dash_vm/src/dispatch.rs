@@ -1131,7 +1131,7 @@ mod handlers {
             (callee, Value::undefined())
         };
 
-        if let Some(function) = callee.downcast_ref::<Function>(&cx.scope) {
+        if let Some(function) = callee.unpack().downcast_ref::<Function>(&cx.scope) {
             match function.kind() {
                 FunctionKind::User(user) => call_flat(cx, callee, this, function, user, argc, is_constructor),
                 FunctionKind::Closure(closure) => {
@@ -1762,14 +1762,14 @@ mod handlers {
         let value = Value::external(cx.get_external(id.into()).id().clone());
 
         // Unbox external values such that any use will create a copy
-        let value = value.unbox_external();
+        let value = value.unbox_external(&cx.scope);
 
         cx.stack.push(value);
         Ok(None)
     }
 
-    fn assign_to_external(handle: &ExternalValue, value: Value) {
-        unsafe { ExternalValue::replace(handle, value) };
+    fn assign_to_external(vm: &mut Vm, handle: &ExternalValue, value: Value) {
+        unsafe { ExternalValue::replace(vm, handle, value) };
     }
 
     pub fn storelocalext(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
@@ -1778,33 +1778,33 @@ mod handlers {
 
         macro_rules! op {
             ($op:expr) => {{
-                let value = Value::external(cx.get_external(id.into()).id()).unbox_external();
+                let value = Value::external(cx.get_external(id.into()).id()).unbox_external(&cx.scope);
                 let right = cx.pop_stack_rooted();
                 let res = $op(value, right, &mut cx)?;
                 let external = cx.scope.get_external(id.into()).unwrap().clone();
-                assign_to_external(&external, res.clone());
+                assign_to_external(&mut cx.scope, &external, res.clone());
                 cx.stack.push(res);
             }};
         }
 
         macro_rules! prefix {
             ($op:expr) => {{
-                let value = Value::external(cx.get_external(id.into()).id()).unbox_external();
+                let value = Value::external(cx.get_external(id.into()).id()).unbox_external(&cx.scope);
                 let right = Value::number(1.0);
                 let res = $op(value, right, &mut cx)?;
                 let external = cx.scope.get_external(id.into()).unwrap().clone();
-                assign_to_external(&external, res.clone());
+                assign_to_external(&mut cx.scope, &external, res.clone());
                 cx.stack.push(res);
             }};
         }
 
         macro_rules! postfix {
             ($op:expr) => {{
-                let value = Value::external(cx.get_external(id.into()).id()).unbox_external();
+                let value = Value::external(cx.get_external(id.into()).id()).unbox_external(&cx.scope);
                 let right = Value::number(1.0);
                 let res = $op(value, right, &mut cx)?;
                 let external = cx.scope.get_external(id.into()).unwrap().clone();
-                assign_to_external(&external, res);
+                assign_to_external(&mut cx.scope, &external, res);
                 cx.stack.push(value);
             }};
         }
@@ -1813,7 +1813,7 @@ mod handlers {
             AssignKind::Assignment => {
                 let value = cx.pop_stack_rooted();
                 let external = cx.scope.get_external(id.into()).unwrap().clone();
-                assign_to_external(&external, value.clone());
+                assign_to_external(&mut cx.scope, &external, value.clone());
                 cx.stack.push(value);
             }
             AssignKind::AddAssignment => op!(Value::add),

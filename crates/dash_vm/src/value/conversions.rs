@@ -1,4 +1,3 @@
-use crate::gc::handle::Handle;
 use crate::gc::ObjectId;
 
 use super::primitive::Symbol;
