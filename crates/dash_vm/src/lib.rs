@@ -1436,7 +1436,7 @@ impl Vm {
             #[cfg(not(feature = "stress_gc"))]
             {
                 // if util::unlikely(self.gc.node_count() > self.gc_object_threshold) {
-                //     self.perform_gc();
+                    // self.perform_gc();
                 // }
             }
 
@@ -1469,7 +1469,6 @@ impl Vm {
 
     pub fn perform_gc(&mut self) {
         debug!("gc cycle triggered");
-        todo!();
 
         let trace_roots = span!(Level::TRACE, "gc trace");
         trace_roots.in_scope(|| self.trace_roots());
@@ -1477,7 +1476,7 @@ impl Vm {
         // All reachable roots are marked.
         // debug!("object count before sweep: {}", self.gc.node_count());
         let sweep = span!(Level::TRACE, "gc sweep");
-        // sweep.in_scope(|| unsafe { self.gc.sweep() });
+        sweep.in_scope(|| unsafe { self.alloc.sweep() });
         // debug!("object count after sweep: {}", self.gc.node_count());
 
         debug!("sweep interner");

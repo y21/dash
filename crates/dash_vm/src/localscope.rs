@@ -90,9 +90,9 @@ unsafe impl Trace for LocalScopeList {
         // but remain in the list, so if we would use head,
         // we would miss those scopes!).
         for ptr in list {
-            let data = unsafe { ptr.as_ref() };
-            data.refs.trace(cx);
-            data.strings.trace(cx);
+            let ScopeData { refs, strings, next: _ } = unsafe { ptr.as_ref() };
+            refs.trace(cx);
+            strings.trace(cx);
         }
     }
 }

@@ -12,7 +12,7 @@ use crate::value::primitive::{Null, Number, Undefined};
 use crate::value::typedarray::TypedArrayKind;
 use crate::value::Unrooted;
 
-use super::{Allocator, ObjectId};
+use super::{AllocFlags, Allocator, ObjectId};
 
 pub struct TraceCtxt<'vm> {
     pub interner: &'vm mut StringInterner,
@@ -211,15 +211,17 @@ unsafe_empty_trace!(
 
 unsafe impl Trace for ObjectId {
     fn trace(&self, cx: &mut TraceCtxt<'_>) {
-        let (data, header) = cx.alloc.resolve_raw(*self);
+        let (data, metadata) = cx.alloc.resolve_raw(*self);
+        let info = cx.alloc.info(*self);
 
         unsafe {
-            if (*header).visited.get() {
+            let flags = info.flags.get();
+            if flags.contains(AllocFlags::VISITED) {
                 // Already marked
                 return;
             }
-            (*header).visited.set(true);
-            ((*header).metadata.trace)(data, cx);
+            info.flags.set(flags | AllocFlags::VISITED);
+            ((*metadata).trace)(data, cx);
         };
     }
 }

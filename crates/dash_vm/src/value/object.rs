@@ -789,7 +789,7 @@ impl Object for Box<dyn Object> {
 
 impl ObjectId {
     pub fn vtable(self, vm: &Vm) -> &'static ObjectVTable {
-        unsafe { (*vm.alloc.header(self)).metadata }
+        unsafe { *vm.alloc.metadata(self) }
     }
     pub fn data_ptr(self, vm: &Vm) -> *const () {
         vm.alloc.data(self)
