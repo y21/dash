@@ -17,16 +17,12 @@ use super::user::UserFunction;
 
 #[derive(Debug, Trace)]
 pub struct GeneratorFunction {
-    function: UserFunction,
+    pub function: UserFunction,
 }
 
 impl GeneratorFunction {
     pub fn new(function: UserFunction) -> Self {
         Self { function }
-    }
-
-    pub fn function(&self) -> &UserFunction {
-        &self.function
     }
 
     pub(crate) fn handle_function_call(

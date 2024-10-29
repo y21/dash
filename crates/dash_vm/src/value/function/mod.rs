@@ -53,36 +53,6 @@ unsafe impl Trace for FunctionKind {
     }
 }
 
-impl FunctionKind {
-    pub fn as_native(&self) -> Option<&NativeFunction> {
-        match self {
-            Self::Native(f) => Some(f),
-            _ => None,
-        }
-    }
-
-    pub fn as_user(&self) -> Option<&UserFunction> {
-        match self {
-            Self::User(f) => Some(f),
-            _ => None,
-        }
-    }
-
-    pub fn as_generator(&self) -> Option<&GeneratorFunction> {
-        match self {
-            Self::Generator(f) => Some(f),
-            _ => None,
-        }
-    }
-
-    pub fn as_async(&self) -> Option<&AsyncFunction> {
-        match self {
-            Self::Async(f) => Some(f),
-            _ => None,
-        }
-    }
-}
-
 impl fmt::Debug for FunctionKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -154,6 +124,16 @@ impl Function {
         let this = scope.register(NamedObject::with_prototype_and_constructor(prototype, this_handle));
         Ok(this)
     }
+
+    pub fn inner_user_function(&self) -> Option<&UserFunction> {
+        match &self.kind {
+            FunctionKind::User(function) => Some(function),
+            FunctionKind::Generator(generator) => Some(&generator.function),
+            FunctionKind::Async(function) => Some(&function.inner.function),
+            FunctionKind::Closure(closure) => Some(&closure.fun),
+            FunctionKind::Native(_) => None,
+        }
+    }
 }
 
 fn handle_call(
@@ -206,6 +186,14 @@ impl Object for Function {
                         kind: PropertyValueKind::Static(Value::string(name)),
                         descriptor: PropertyDataDescriptor::CONFIGURABLE,
                     }));
+                }
+                sym::length => {
+                    if let Some(function) = self.inner_user_function() {
+                        return Ok(Some(PropertyValue {
+                            kind: PropertyValueKind::Static(Value::number(function.inner().params as f64)),
+                            descriptor: PropertyDataDescriptor::CONFIGURABLE,
+                        }));
+                    }
                 }
                 sym::prototype => {
                     let prototype = self.get_or_set_prototype(sc);

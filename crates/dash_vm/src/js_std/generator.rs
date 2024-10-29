@@ -2,7 +2,6 @@ use std::mem;
 
 use crate::dispatch::HandleResult;
 use crate::frame::Frame;
-use dash_middle::interner::sym;
 use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::function::generator::{GeneratorIterator, GeneratorState};
@@ -11,6 +10,7 @@ use crate::value::function::{Function, FunctionKind};
 use crate::value::object::{NamedObject, Object, PropertyValue};
 use crate::value::root_ext::RootErrExt;
 use crate::value::{Root, Unpack, Value, ValueContext};
+use dash_middle::interner::sym;
 
 pub fn next(cx: CallContext) -> Result<Value, Value> {
     let generator = cx.this.unpack();
@@ -36,8 +36,8 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
             .downcast_ref::<Function>()
             .map(|fun| fun.kind())
         {
-            Some(FunctionKind::Generator(gen)) => gen.function(),
-            Some(FunctionKind::Async(fun)) => fun.inner().function(),
+            Some(FunctionKind::Generator(gen)) => &gen.function,
+            Some(FunctionKind::Async(fun)) => &fun.inner.function,
             _ => throw!(cx.scope, TypeError, "Incompatible generator function"),
         };
 

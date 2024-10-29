@@ -15,7 +15,7 @@ use super::user::UserFunction;
 #[derive(Debug, Trace)]
 pub struct AsyncFunction {
     /// The properties of generator functions are very similar to async functions, so we can build upon generators
-    inner: GeneratorFunction,
+    pub inner: GeneratorFunction,
 }
 
 impl AsyncFunction {
@@ -91,10 +91,6 @@ impl AsyncFunction {
                 Err(promise.into())
             }
         }
-    }
-
-    pub fn inner(&self) -> &GeneratorFunction {
-        &self.inner
     }
 }
 
