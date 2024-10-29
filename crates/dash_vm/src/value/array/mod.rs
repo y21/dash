@@ -136,7 +136,7 @@ pub struct Array {
 }
 
 fn get_named_object(vm: &Vm) -> NamedObject {
-    NamedObject::with_prototype_and_constructor(vm.statics.array_prototype.clone(), vm.statics.array_ctor.clone())
+    NamedObject::with_prototype_and_constructor(vm.statics.array_prototype, vm.statics.array_ctor)
 }
 
 impl Array {
@@ -368,8 +368,8 @@ impl ArrayIterator {
             length,
             value,
             obj: NamedObject::with_prototype_and_constructor(
-                sc.statics.array_iterator_prototype.clone(),
-                sc.statics.object_ctor.clone(),
+                sc.statics.array_iterator_prototype,
+                sc.statics.object_ctor,
             ),
         })
     }

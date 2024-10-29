@@ -53,7 +53,7 @@ impl<'vm> DispatchContext<'vm> {
             .expect("Bytecode attempted to reference invalid local")
     }
 
-    pub fn get_external(&mut self, index: usize) -> &ExternalValue {
+    pub fn get_external(&mut self, index: usize) -> ExternalValue {
         self.scope
             .get_external(index)
             .expect("Bytecode attempted to reference invalid external")
@@ -74,10 +74,10 @@ impl<'vm> DispatchContext<'vm> {
     }
 
     pub fn peek_stack(&mut self) -> Value {
-        self.stack
+        *self
+            .stack
             .last()
             .expect("Bytecode attempted to peek stack value, but nothing was on the stack")
-            .clone()
     }
 
     // TODO: !! should return [Unrooted; N] !!
@@ -98,8 +98,8 @@ impl<'vm> DispatchContext<'vm> {
 
     pub fn pop_stack2_rooted(&mut self) -> (Value, Value) {
         let [a, b] = self.pop_stack_const();
-        self.scope.add_value(a.clone());
-        self.scope.add_value(b.clone());
+        self.scope.add_value(a);
+        self.scope.add_value(b);
         (a, b)
     }
 
@@ -115,9 +115,9 @@ impl<'vm> DispatchContext<'vm> {
 
     pub fn pop_stack3_rooted(&mut self) -> (Value, Value, Value) {
         let [a, b, c] = self.pop_stack_const();
-        self.scope.add_value(a.clone());
-        self.scope.add_value(b.clone());
-        self.scope.add_value(c.clone());
+        self.scope.add_value(a);
+        self.scope.add_value(b);
+        self.scope.add_value(c);
         (a, b, c)
     }
 
@@ -343,8 +343,8 @@ mod extract {
 
         fn extract_front<U>(seq: &mut ForwardSequence<U>, cx: &mut DispatchContext<'_>) -> Result<Self, Self::Error> {
             seq.stack_index += 1;
-            let value = cx.stack[seq.stack_index - 1].clone();
-            cx.scope.add_value(value.clone());
+            let value = cx.stack[seq.stack_index - 1];
+            cx.scope.add_value(value);
             Ok(value)
         }
     }
@@ -609,7 +609,7 @@ mod handlers {
                 let id = usize::from(id);
 
                 let val = if is_nested_external {
-                    sc.get_external(id).expect("Referenced local not found").clone()
+                    sc.get_external(id).expect("Referenced local not found")
                 } else {
                     let v = sc.get_local_raw(id).expect("Referenced local not found");
 
@@ -646,7 +646,7 @@ mod handlers {
             ParserFunctionKind::Function(Asyncness::No) => FunctionKind::User(fun),
             ParserFunctionKind::Arrow => FunctionKind::Closure(Closure {
                 fun,
-                this: cx.scope.active_frame().this.clone().unwrap_or_undefined(),
+                this: cx.scope.active_frame().this.unwrap_or_undefined(),
             }),
             ParserFunctionKind::Generator => FunctionKind::Generator(GeneratorFunction::new(fun)),
         };
@@ -894,7 +894,7 @@ mod handlers {
                     throw!(&mut cx, ReferenceError, "{} is not defined", name)
                 }
             },
-            None => cx.global.clone().get_property(&mut cx, name.into())?,
+            None => cx.global.get_property(&mut cx, name.into())?,
         };
 
         cx.push_stack(value);
@@ -965,7 +965,7 @@ mod handlers {
 
                 cx.global
                     .clone()
-                    .set_property(&mut cx, name.into(), PropertyValue::static_default(value.clone()))?;
+                    .set_property(&mut cx, name.into(), PropertyValue::static_default(value))?;
                 cx.stack.push(value);
             }
             AssignKind::AddAssignment => op!(Value::add),
@@ -1005,7 +1005,7 @@ mod handlers {
         };
 
         let this = match is_constructor {
-            true => Value::object(function.new_instance(callee.clone(), &mut cx)?),
+            true => Value::object(function.new_instance(callee, &mut cx)?),
             false => this,
         };
 
@@ -1020,7 +1020,7 @@ mod handlers {
             for spread_index in spread_indices {
                 let adjusted_spread_index = sp + spread_count + spread_index as usize;
 
-                let iterable = cx.stack[adjusted_spread_index].clone();
+                let iterable = cx.stack[adjusted_spread_index];
                 let length = iterable.length_of_array_like(&mut cx.scope)?;
 
                 let mut splice_args = SmallVec::<[_; 2]>::new();
@@ -1135,7 +1135,7 @@ mod handlers {
             match function.kind() {
                 FunctionKind::User(user) => call_flat(cx, callee, this, function, user, argc, is_constructor),
                 FunctionKind::Closure(closure) => {
-                    let bound_this = closure.this.clone();
+                    let bound_this = closure.this;
                     call_flat(cx, callee, bound_this, function, &closure.fun, argc, is_constructor)
                 }
                 _ => call_generic(cx, callee, this, argc, is_constructor, call_ip),
@@ -1402,7 +1402,7 @@ mod handlers {
             AssignKind::Assignment => {
                 // NOTE: Does not need to be rooted.
                 let value = cx.pop_stack();
-                cx.set_local(id, value.clone());
+                cx.set_local(id, value);
                 cx.push_stack(value);
             }
             AssignKind::AddAssignment => op!(Value::add),
@@ -1642,7 +1642,7 @@ mod handlers {
                 let (target, value) = cx.pop_stack2_new();
                 let target = target.root(&mut cx.scope);
                 let value = value.root(&mut cx.scope);
-                target.set_property(&mut cx, key.into(), PropertyValue::static_default(value.clone()))?;
+                target.set_property(&mut cx, key.into(), PropertyValue::static_default(value))?;
                 cx.stack.push(value);
             }
             AssignKind::AddAssignment => op!(Value::add),
@@ -1715,7 +1715,7 @@ mod handlers {
 
                 let key = PropertyKey::from_value(&mut cx, key)?;
 
-                target.set_property(&mut cx, key, PropertyValue::static_default(value.clone()))?;
+                target.set_property(&mut cx, key, PropertyValue::static_default(value))?;
                 cx.stack.push(value);
             }
             AssignKind::AddAssignment => op!(Value::add),
@@ -1759,7 +1759,7 @@ mod handlers {
 
     pub fn ldlocalext(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let id = cx.fetch_and_inc_ip();
-        let value = Value::external(cx.get_external(id.into()).id().clone());
+        let value = Value::external(cx.get_external(id.into()).id());
 
         // Unbox external values such that any use will create a copy
         let value = value.unbox_external(&cx.scope);
@@ -1768,7 +1768,7 @@ mod handlers {
         Ok(None)
     }
 
-    fn assign_to_external(vm: &mut Vm, handle: &ExternalValue, value: Value) {
+    fn assign_to_external(vm: &mut Vm, handle: ExternalValue, value: Value) {
         unsafe { ExternalValue::replace(vm, handle, value) };
     }
 
@@ -1782,7 +1782,7 @@ mod handlers {
                 let right = cx.pop_stack_rooted();
                 let res = $op(value, right, &mut cx)?;
                 let external = cx.scope.get_external(id.into()).unwrap().clone();
-                assign_to_external(&mut cx.scope, &external, res.clone());
+                assign_to_external(&mut cx.scope, external, res.clone());
                 cx.stack.push(res);
             }};
         }
@@ -1793,7 +1793,7 @@ mod handlers {
                 let right = Value::number(1.0);
                 let res = $op(value, right, &mut cx)?;
                 let external = cx.scope.get_external(id.into()).unwrap().clone();
-                assign_to_external(&mut cx.scope, &external, res.clone());
+                assign_to_external(&mut cx.scope, external, res.clone());
                 cx.stack.push(res);
             }};
         }
@@ -1804,7 +1804,7 @@ mod handlers {
                 let right = Value::number(1.0);
                 let res = $op(value, right, &mut cx)?;
                 let external = cx.scope.get_external(id.into()).unwrap().clone();
-                assign_to_external(&mut cx.scope, &external, res);
+                assign_to_external(&mut cx.scope, external, res);
                 cx.stack.push(value);
             }};
         }
@@ -1812,8 +1812,8 @@ mod handlers {
         match kind {
             AssignKind::Assignment => {
                 let value = cx.pop_stack_rooted();
-                let external = cx.scope.get_external(id.into()).unwrap().clone();
-                assign_to_external(&mut cx.scope, &external, value.clone());
+                let external = cx.scope.get_external(id.into()).unwrap();
+                assign_to_external(&mut cx.scope, external, value);
                 cx.stack.push(value);
             }
             AssignKind::AddAssignment => op!(Value::add),
@@ -1876,11 +1876,7 @@ mod handlers {
     pub fn type_of_ident(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let id = cx.fetchw_and_inc_ip();
         let ident = JsString::from(cx.constants().symbols[SymbolConstant(id)]);
-        let prop = cx
-            .global
-            .clone()
-            .get_property(&mut cx.scope, ident.into())?
-            .root(&mut cx.scope);
+        let prop = cx.global.get_property(&mut cx.scope, ident.into())?.root(&mut cx.scope);
 
         let ty = prop.type_of(&cx.scope).as_value();
         cx.stack.push(ty);
@@ -1978,7 +1974,7 @@ mod handlers {
     }
 
     pub fn global_this(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let global = cx.global.clone();
+        let global = cx.global;
         cx.stack.push(Value::object(global));
         Ok(None)
     }
@@ -2004,7 +2000,7 @@ mod handlers {
 
     pub fn call_symbol_iterator(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let value = cx.pop_stack_rooted();
-        let symbol_iterator = cx.statics.symbol_iterator.clone();
+        let symbol_iterator = cx.statics.symbol_iterator;
         let iterable = value
             .get_property(&mut cx, PropertyKey::Symbol(symbol_iterator))?
             .root(&mut cx.scope);
@@ -2313,7 +2309,6 @@ mod handlers {
         let arguments = cx
             .active_frame()
             .arguments
-            .clone()
             .expect("`arguments` was never set despite being referenced in bytecode");
         cx.stack.push(Value::object(arguments));
         Ok(None)

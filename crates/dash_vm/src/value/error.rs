@@ -39,15 +39,23 @@ fn get_stack_trace(name: JsString, message: JsString, sc: &mut LocalScope<'_>) -
 
 impl Error {
     pub fn new<S: Into<String>>(sc: &mut LocalScope<'_>, message: S) -> Self {
-        let ctor = sc.statics.error_ctor.clone();
-        let proto = sc.statics.error_prototype.clone();
-        Self::suberror(sc, sym::Error, message, ctor, proto)
+        Self::suberror(
+            sc,
+            sym::Error,
+            message,
+            sc.statics.error_ctor,
+            sc.statics.error_prototype,
+        )
     }
 
     pub fn new_with_js_string<S: Into<JsString>>(sc: &mut LocalScope<'_>, message: S) -> Self {
-        let ctor = sc.statics.error_ctor.clone();
-        let proto = sc.statics.error_prototype.clone();
-        Self::suberror_with_js_string(sc, sym::Error, message, ctor, proto)
+        Self::suberror_with_js_string(
+            sc,
+            sym::Error,
+            message,
+            sc.statics.error_ctor,
+            sc.statics.error_prototype,
+        )
     }
 
     pub fn suberror_with_js_string<S1: Into<JsString>, S2: Into<JsString>>(

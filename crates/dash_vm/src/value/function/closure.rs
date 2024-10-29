@@ -22,7 +22,7 @@ impl Closure {
     ) -> Result<Unrooted, Unrooted> {
         let ret = self
             .fun
-            .handle_function_call(scope, self.this.clone(), args, is_constructor_call)?;
+            .handle_function_call(scope, self.this, args, is_constructor_call)?;
 
         Ok(match ret {
             HandleResult::Return(v) => v,

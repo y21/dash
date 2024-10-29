@@ -451,7 +451,7 @@ pub mod root_ext {
 impl Root for Unrooted {
     type Rooted = Value;
     fn root(self, scope: &mut LocalScope<'_>) -> Self::Rooted {
-        scope.add_value(self.value.clone());
+        scope.add_value(self.value);
         self.value
     }
 }
@@ -530,7 +530,7 @@ impl ExternalValue {
     /// ExternalValue::replace(&ext, Value::Number(4.0)); // UB, writing to the inner value while a borrow is live
     /// use_borrow(r);
     /// ```
-    pub unsafe fn replace(vm: &mut Vm, this: &ExternalValue, value: Value) {
+    pub unsafe fn replace(vm: &mut Vm, this: ExternalValue, value: Value) {
         assert_eq!(this.inner.as_any(vm).type_id(), TypeId::of::<Value>());
         let data = vm.alloc.data(this.inner).cast_mut().cast::<Value>();
         ptr::write(data, value);
@@ -585,13 +585,13 @@ impl Value {
     pub fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Unrooted> {
         match self.unpack() {
             ValueKind::Object(o) => o.get_property(sc, key),
-            ValueKind::Number(n) => n.get_property(sc, self.clone(), key),
-            ValueKind::Boolean(b) => b.get_property(sc, self.clone(), key),
-            ValueKind::String(s) => s.get_property(sc, self.clone(), key),
+            ValueKind::Number(n) => n.get_property(sc, *self, key),
+            ValueKind::Boolean(b) => b.get_property(sc, *self, key),
+            ValueKind::String(s) => s.get_property(sc, *self, key),
             ValueKind::External(o) => o.inner(sc).get_property(sc, key),
-            ValueKind::Undefined(u) => u.get_property(sc, self.clone(), key),
-            ValueKind::Null(n) => n.get_property(sc, self.clone(), key),
-            ValueKind::Symbol(s) => s.get_property(sc, self.clone(), key),
+            ValueKind::Undefined(u) => u.get_property(sc, *self, key),
+            ValueKind::Null(n) => n.get_property(sc, *self, key),
+            ValueKind::Symbol(s) => s.get_property(sc, *self, key),
         }
     }
 
@@ -695,7 +695,7 @@ impl Value {
         sc: &mut LocalScope<'_>,
         mut fun: impl FnMut(&mut LocalScope<'_>, &Value) -> Result<ControlFlow<T>, Value>,
     ) -> Result<ControlFlow<T>, Value> {
-        let mut this = self.clone();
+        let mut this = *self;
         while !matches!(this.unpack(), ValueKind::Null(_)) {
             if let ControlFlow::Break(b) = fun(sc, &this)? {
                 return Ok(ControlFlow::Break(b));
@@ -775,14 +775,14 @@ impl ValueContext for Option<Value> {
 impl ValueContext for Option<&Value> {
     fn unwrap_or_undefined(self) -> Value {
         match self {
-            Some(x) => x.clone(), // Values are cheap to clone
+            Some(x) => *x,
             None => Value::undefined(),
         }
     }
 
     fn unwrap_or_null(self) -> Value {
         match self {
-            Some(x) => x.clone(),
+            Some(x) => *x,
             None => Value::null(),
         }
     }

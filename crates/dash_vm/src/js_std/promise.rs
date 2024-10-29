@@ -22,8 +22,8 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     };
 
     let (resolve, reject) = {
-        let r1 = PromiseResolver::new(cx.scope, promise.clone());
-        let r2 = PromiseRejecter::new(cx.scope, promise.clone());
+        let r1 = PromiseResolver::new(cx.scope, promise);
+        let r2 = PromiseRejecter::new(cx.scope, promise);
         (cx.scope.register(r1), cx.scope.register(r2))
     };
 
@@ -59,7 +59,7 @@ pub fn then(cx: CallContext) -> Result<Value, Value> {
     };
 
     let handler = match cx.args.first().unpack() {
-        Some(ValueKind::Object(obj)) if matches!(obj.type_of(cx.scope), Typeof::Function) => obj.clone(),
+        Some(ValueKind::Object(obj)) if matches!(obj.type_of(cx.scope), Typeof::Function) => obj,
         _ => throw!(cx.scope, TypeError, "Promise handler must be a function"),
     };
 
@@ -70,18 +70,18 @@ pub fn then(cx: CallContext) -> Result<Value, Value> {
         cx.scope.register(p)
     };
     let resolver = {
-        let p = PromiseResolver::new(cx.scope, then_promise.clone());
+        let p = PromiseResolver::new(cx.scope, then_promise);
         cx.scope.register(p)
     };
     let then_task = {
-        let t = ThenTask::new(cx.scope, then_promise.clone(), handler, resolver);
+        let t = ThenTask::new(cx.scope, then_promise, handler, resolver);
         cx.scope.register(t)
     };
 
     match &mut *state {
         PromiseState::Pending { resolve, .. } => resolve.push(then_task),
         PromiseState::Resolved(value) => {
-            let bf = BoundFunction::new(cx.scope, then_task, None, Some(vec![value.clone()]));
+            let bf = BoundFunction::new(cx.scope, then_task, None, Some(vec![*value]));
             let bf = cx.scope.register(bf);
             cx.scope.add_async_task(bf);
         }

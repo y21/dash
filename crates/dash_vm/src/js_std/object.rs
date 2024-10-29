@@ -54,7 +54,7 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
     let value = match cx.this.unpack() {
         ValueKind::Undefined(_) => Value::string(cx.scope.intern("[object Undefined]").into()),
         ValueKind::Null(_) => Value::string(cx.scope.intern("[object Null]").into()),
-        ValueKind::Object(o) => to_string_inner(cx.scope, o.clone())?,
+        ValueKind::Object(o) => to_string_inner(cx.scope, o)?,
         _ => unreachable!(), // `this` is always object/null/undefined. TODO: wrong, `Object.prototype.toString..call('a')` crashes
     };
 

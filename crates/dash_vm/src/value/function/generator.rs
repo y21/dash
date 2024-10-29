@@ -113,12 +113,9 @@ impl GeneratorIterator {
         arguments: Option<ObjectId>,
         try_blocks: Vec<TryBlock>,
     ) -> Self {
-        let proto = vm.statics.generator_iterator_prototype.clone();
-        let ctor = function.clone();
-
         Self {
             function,
-            obj: NamedObject::with_prototype_and_constructor(proto, ctor),
+            obj: NamedObject::with_prototype_and_constructor(vm.statics.generator_iterator_prototype, function),
             state: RefCell::new(GeneratorState::Running {
                 ip: 0,
                 stack,

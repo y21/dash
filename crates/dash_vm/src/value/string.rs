@@ -113,7 +113,7 @@ impl Object for JsString {
     }
 
     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
-        Ok(sc.statics.string_prototype.clone().into())
+        Ok(sc.statics.string_prototype.into())
     }
 
     fn apply(

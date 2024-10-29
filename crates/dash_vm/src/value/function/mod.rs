@@ -105,12 +105,10 @@ pub struct Function {
 
 impl Function {
     pub fn new(vm: &Vm, name: Option<JsString>, kind: FunctionKind) -> Self {
-        let (proto, ctor) = (&vm.statics.function_proto, &vm.statics.function_ctor);
-
         Self::with_obj(
             name,
             kind,
-            NamedObject::with_prototype_and_constructor(proto.clone(), ctor.clone()),
+            NamedObject::with_prototype_and_constructor(vm.statics.function_proto, vm.statics.function_ctor),
         )
     }
 
@@ -144,13 +142,10 @@ impl Function {
     }
 
     pub fn get_or_set_prototype(&self, scope: &mut LocalScope) -> ObjectId {
-        self.prototype
-            .borrow_mut()
-            .get_or_insert_with(|| {
-                let proto = NamedObject::new(scope);
-                scope.register(proto)
-            })
-            .clone()
+        *self.prototype.borrow_mut().get_or_insert_with(|| {
+            let proto = NamedObject::new(scope);
+            scope.register(proto)
+        })
     }
 
     /// Creates a new instance of this function.
@@ -255,7 +250,7 @@ impl Object for Function {
         _this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
-        let this = self.new_instance(callee.clone(), scope)?;
+        let this = self.new_instance(callee, scope)?;
         handle_call(self, scope, callee, Value::object(this), args, true)
     }
 

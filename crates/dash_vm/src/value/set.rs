@@ -16,9 +16,10 @@ pub struct Set {
 
 impl Set {
     pub fn new(vm: &Vm) -> Self {
-        let prototype = vm.statics.set_prototype.clone();
-        let ctor = vm.statics.set_constructor.clone();
-        Self::with_obj(NamedObject::with_prototype_and_constructor(prototype, ctor))
+        Self::with_obj(NamedObject::with_prototype_and_constructor(
+            vm.statics.set_prototype,
+            vm.statics.set_constructor,
+        ))
     }
 
     pub fn with_obj(obj: NamedObject) -> Self {

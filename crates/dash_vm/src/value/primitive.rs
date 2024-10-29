@@ -44,7 +44,7 @@ impl Object for f64 {
     }
 
     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
-        Ok(sc.statics.number_prototype.clone().into())
+        Ok(sc.statics.number_prototype.into())
     }
 
     fn apply(
@@ -96,7 +96,7 @@ impl Object for bool {
     }
 
     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
-        Ok(sc.statics.boolean_prototype.clone().into())
+        Ok(sc.statics.boolean_prototype.into())
     }
 
     fn apply(
@@ -277,7 +277,7 @@ impl Object for Symbol {
     }
 
     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
-        Ok(sc.statics.symbol_prototype.clone().into())
+        Ok(sc.statics.symbol_prototype.into())
     }
 
     fn apply(
@@ -463,7 +463,7 @@ impl ValueConversion for Symbol {
     }
 
     fn to_object(&self, sc: &mut LocalScope) -> Result<ObjectId, Value> {
-        let sym = BoxedSymbol::new(sc, self.clone());
+        let sym = BoxedSymbol::new(sc, *self);
         Ok(sc.register(sym))
     }
 }

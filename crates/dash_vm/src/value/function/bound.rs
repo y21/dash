@@ -46,7 +46,7 @@ impl Object for BoundFunction {
         this: Value,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
-        let target_this = self.this.clone().unwrap_or(this);
+        let target_this = self.this.unwrap_or(this);
 
         // TODO: args should be concatenated with self.args
         let target_args = self.args.clone().unwrap_or(args);

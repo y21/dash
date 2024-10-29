@@ -37,9 +37,6 @@ pub struct RegExp {
 
 impl RegExp {
     pub fn new(regex: ParsedRegex, flags: Flags, source: JsString, vm: &Vm) -> Self {
-        let proto = vm.statics.regexp_prototype.clone();
-        let ctor = vm.statics.regexp_ctor.clone();
-
         Self {
             inner: Some(RegExpInner {
                 regex,
@@ -47,7 +44,7 @@ impl RegExp {
                 source,
                 last_index: Cell::new(0),
             }),
-            object: NamedObject::with_prototype_and_constructor(proto, ctor),
+            object: NamedObject::with_prototype_and_constructor(vm.statics.regexp_prototype, vm.statics.regexp_ctor),
         }
     }
 

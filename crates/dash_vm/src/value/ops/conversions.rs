@@ -112,11 +112,11 @@ impl ValueConversion for Value {
         // 1. If Type(input) is Object, then
         // (If not, return as is)
         if !matches!(self.unpack(), ValueKind::Object(_)) {
-            return Ok(self.clone());
+            return Ok(*self);
         }
 
         // a. Let exoticToPrim be ? GetMethod(input, @@toPrimitive).
-        let to_primitive = sc.statics.symbol_to_primitive.clone();
+        let to_primitive = sc.statics.symbol_to_primitive;
         let exotic_to_prim = self.get_property(sc, to_primitive.into()).root(sc)?.into_option();
 
         // b. If exoticToPrim is not undefined, then
@@ -127,7 +127,7 @@ impl ValueConversion for Value {
             let preferred_type = preferred_type.to_value();
 
             // iv. Let result be ? Call(exoticToPrim, input, « hint »).
-            let result = exotic_to_prim.apply(sc, self.clone(), vec![preferred_type]).root(sc)?;
+            let result = exotic_to_prim.apply(sc, *self, vec![preferred_type]).root(sc)?;
 
             // If Type(result) is not Object, return result.
             // TODO: this can still be an object if Value::External
@@ -198,8 +198,7 @@ impl Value {
         for name in method_names {
             let method = self.get_property(sc, name.into()).root(sc)?;
             if matches!(method.type_of(sc), Typeof::Function) {
-                let this = self.clone();
-                let result = method.apply(sc, this, Vec::new()).root(sc)?;
+                let result = method.apply(sc, *self, Vec::new()).root(sc)?;
                 if !matches!(result.unpack(), ValueKind::Object(_)) {
                     return Ok(result);
                 }

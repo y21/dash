@@ -105,7 +105,7 @@ pub fn every(cx: CallContext) -> Result<Value, Value> {
     for k in 0..len {
         let pk = cx.scope.intern_usize(k);
         let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
-        let args = vec![pkv, Value::number(k as f64), this.clone()];
+        let args = vec![pkv, Value::number(k as f64), this];
         let test = callback
             .apply(cx.scope, Value::undefined(), args)
             .root(cx.scope)?
@@ -127,7 +127,7 @@ pub fn some(cx: CallContext) -> Result<Value, Value> {
     for k in 0..len {
         let pk = cx.scope.intern_usize(k);
         let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
-        let args = vec![pkv, Value::number(k as f64), this.clone()];
+        let args = vec![pkv, Value::number(k as f64), this];
         let test = callback
             .apply(cx.scope, Value::undefined(), args)
             .root(cx.scope)?
@@ -147,7 +147,7 @@ pub fn fill(cx: CallContext) -> Result<Value, Value> {
     let value = cx.args.first().unwrap_or_undefined();
 
     for i in 0..len {
-        array::spec_array_set_property(cx.scope, &this, i, PropertyValue::static_default(value.clone()))?;
+        array::spec_array_set_property(cx.scope, &this, i, PropertyValue::static_default(value))?;
     }
 
     if let Some(arr) = this.unpack().downcast_ref::<Array>(cx.scope) {
@@ -167,7 +167,7 @@ pub fn filter(cx: CallContext) -> Result<Value, Value> {
     for k in 0..len {
         let pk = cx.scope.intern_usize(k);
         let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
-        let args = vec![pkv.clone(), Value::number(k as f64), this.clone()];
+        let args = vec![pkv, Value::number(k as f64), this];
         let test = callback
             .apply(cx.scope, Value::undefined(), args)
             .root(cx.scope)?
@@ -187,12 +187,12 @@ pub fn reduce(cx: CallContext) -> Result<Value, Value> {
     let this = Value::object(cx.this.to_object(cx.scope)?);
     let len = this.length_of_array_like(cx.scope)?;
     let callback = cx.args.first().unwrap_or_undefined();
-    let initial_value = cx.args.get(1);
+    let initial_value = cx.args.get(1).copied();
 
     let (start, mut accumulator) = match (len, initial_value) {
         (0, None) => throw!(cx.scope, TypeError, "Reduce of empty array with no initial value"),
-        (0, Some(_)) => return Ok(initial_value.unwrap().clone()),
-        (_, Some(initial)) => (0, initial.clone()),
+        (0, Some(_)) => return Ok(initial_value.unwrap()),
+        (_, Some(initial)) => (0, initial),
         (1, None) => {
             let pkv = this.get_property(cx.scope, sym::zero.into()).root(cx.scope)?;
             return Ok(pkv);
@@ -208,7 +208,7 @@ pub fn reduce(cx: CallContext) -> Result<Value, Value> {
     for k in start..len {
         let pk = cx.scope.intern_usize(k);
         let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
-        let args = vec![accumulator, pkv, Value::number(k as f64), this.clone()];
+        let args = vec![accumulator, pkv, Value::number(k as f64), this];
         accumulator = callback.apply(cx.scope, Value::undefined(), args).root(cx.scope)?;
     }
 
@@ -223,7 +223,7 @@ pub fn find(cx: CallContext) -> Result<Value, Value> {
     for k in 0..len {
         let pk = cx.scope.intern_usize(k);
         let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
-        let args = vec![pkv.clone(), Value::number(k as f64), this.clone()];
+        let args = vec![pkv, Value::number(k as f64), this];
         let test = callback
             .apply(cx.scope, Value::undefined(), args)
             .root(cx.scope)?
@@ -245,7 +245,7 @@ pub fn find_index(cx: CallContext) -> Result<Value, Value> {
     for k in 0..len {
         let pk = cx.scope.intern_usize(k);
         let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
-        let args = vec![pkv, Value::number(k as f64), this.clone()];
+        let args = vec![pkv, Value::number(k as f64), this];
         let test = callback
             .apply(cx.scope, Value::undefined(), args)
             .root(cx.scope)?
@@ -271,7 +271,7 @@ pub fn for_each(cx: CallContext) -> Result<Value, Value> {
     for k in 0..len {
         let pk = cx.scope.intern_usize(k);
         let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
-        let args = vec![pkv, Value::number(k as f64), this.clone()];
+        let args = vec![pkv, Value::number(k as f64), this];
         callback.apply(cx.scope, Value::undefined(), args).root_err(cx.scope)?;
     }
 
@@ -367,7 +367,7 @@ pub fn map(cx: CallContext) -> Result<Value, Value> {
     for k in 0..len {
         let pk = cx.scope.intern_usize(k);
         let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
-        let args = vec![pkv.clone(), Value::number(k as f64), this.clone()];
+        let args = vec![pkv, Value::number(k as f64), this];
         let value = callback.apply(cx.scope, Value::undefined(), args).root(cx.scope)?;
 
         values.push(PropertyValue::static_default(value));
@@ -410,7 +410,7 @@ pub fn push(cx: CallContext) -> Result<Value, Value> {
     }
 
     for (idx, arg) in cx.args.into_iter().enumerate() {
-        last = arg.clone();
+        last = arg;
         array::spec_array_set_property(cx.scope, &this, idx + len, PropertyValue::static_default(arg))?;
     }
 
@@ -576,7 +576,7 @@ pub fn from(cx: CallContext) -> Result<Value, Value> {
 
         let next = items.get_property(scope, sym::next.into()).root(scope)?;
         loop {
-            let item = next.apply(scope, items.clone(), Vec::new()).root(scope)?;
+            let item = next.apply(scope, items, Vec::new()).root(scope)?;
             let done = item.get_property(scope, sym::done.into()).root(scope)?.is_truthy(scope);
             if done {
                 break;
@@ -618,7 +618,7 @@ pub fn from(cx: CallContext) -> Result<Value, Value> {
     let mapper = args.next();
 
     let items_iterator = {
-        let iterator = cx.scope.statics.symbol_iterator.clone();
+        let iterator = cx.scope.statics.symbol_iterator;
         items
             .get_property(cx.scope, iterator.into())
             .root(cx.scope)?
@@ -659,7 +659,7 @@ pub fn sort(cx: CallContext) -> Result<Value, Value> {
             let previous = this.get_property(cx.scope, prev_idx.into()).root(cx.scope)?;
             let current = this.get_property(cx.scope, idx.into()).root(cx.scope)?;
             let ordering = compare_fn
-                .apply(cx.scope, Value::undefined(), vec![previous.clone(), current.clone()])
+                .apply(cx.scope, Value::undefined(), vec![previous, current])
                 .root(cx.scope)?
                 .to_int32(cx.scope)?;
 

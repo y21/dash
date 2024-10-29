@@ -48,8 +48,8 @@ impl Promise {
                 resolve: Vec::new(),
             }),
             obj: NamedObject::with_prototype_and_constructor(
-                vm.statics.promise_proto.clone(),
-                vm.statics.promise_ctor.clone(),
+                vm.statics.promise_proto,
+                vm.statics.promise_ctor,
             ),
         }
     }
@@ -283,7 +283,7 @@ impl Object for PromiseRejecter {
 pub fn wrap_promise(scope: &mut LocalScope, value: Value) -> Value {
     if let ValueKind::Object(object) = value.unpack() {
         if object.as_any(scope).is::<Promise>() {
-            return value.clone();
+            return value;
         }
     }
 

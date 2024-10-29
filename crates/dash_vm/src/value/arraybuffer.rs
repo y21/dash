@@ -18,11 +18,12 @@ pub struct ArrayBuffer {
 
 impl ArrayBuffer {
     pub fn from_storage(vm: &Vm, storage: Vec<Cell<u8>>) -> Self {
-        let (proto, ctor) = (&vm.statics.arraybuffer_prototype, &vm.statics.arraybuffer_ctor);
-
         Self {
             storage,
-            obj: NamedObject::with_prototype_and_constructor(proto.clone(), ctor.clone()),
+            obj: NamedObject::with_prototype_and_constructor(
+                vm.statics.arraybuffer_prototype,
+                vm.statics.arraybuffer_ctor,
+            ),
         }
     }
 
@@ -31,11 +32,12 @@ impl ArrayBuffer {
     }
 
     pub fn with_capacity(vm: &Vm, capacity: usize) -> Self {
-        let (proto, ctor) = (&vm.statics.arraybuffer_prototype, &vm.statics.arraybuffer_ctor);
-
         Self {
             storage: vec![Cell::new(0); capacity],
-            obj: NamedObject::with_prototype_and_constructor(proto.clone(), ctor.clone()),
+            obj: NamedObject::with_prototype_and_constructor(
+                vm.statics.arraybuffer_prototype,
+                vm.statics.arraybuffer_ctor,
+            ),
         }
     }
 

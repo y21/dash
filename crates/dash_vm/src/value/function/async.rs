@@ -41,7 +41,7 @@ impl AsyncFunction {
             .statics
             .generator_iterator_next
             .clone()
-            .apply(scope, generator_iter.clone(), Vec::new())
+            .apply(scope, generator_iter, Vec::new())
             .root(scope)
             .and_then(|result| {
                 result
@@ -49,7 +49,7 @@ impl AsyncFunction {
                     .root(scope)
             });
 
-        match &result {
+        match result {
             Ok(value) => {
                 let is_done = match generator_iter.unpack().downcast_ref::<GeneratorIterator>(scope) {
                     Some(it) => matches!(*it.state().borrow(), GeneratorState::Finished),
@@ -58,13 +58,13 @@ impl AsyncFunction {
 
                 if is_done {
                     // Promise in resolved state
-                    let promise = wrap_promise(scope, value.clone());
+                    let promise = wrap_promise(scope, value);
                     Ok(promise)
                 } else {
                     // Promise in pending state
                     let final_promise = Promise::new(scope);
                     let final_promise = scope.register(final_promise);
-                    let then_task = ThenTask::new(scope, generator_iter.clone(), final_promise.clone());
+                    let then_task = ThenTask::new(scope, generator_iter, final_promise);
                     let then_task = scope.register(then_task);
 
                     let promise = Value::object(final_promise);
@@ -87,7 +87,7 @@ impl AsyncFunction {
                 }
             }
             Err(value) => {
-                let promise = wrap_promise(scope, value.clone());
+                let promise = wrap_promise(scope, value);
                 Err(promise.into())
             }
         }
@@ -147,7 +147,7 @@ impl Object for ThenTask {
             .statics
             .generator_iterator_next
             .clone()
-            .apply(scope, self.generator_iter.clone(), vec![promise_value])
+            .apply(scope, self.generator_iter, vec![promise_value])
             .root(scope)
             .and_then(|result| {
                 result
@@ -177,7 +177,7 @@ impl Object for ThenTask {
                         vec![value],
                     );
                 } else {
-                    let then_task = ThenTask::new(scope, self.generator_iter.clone(), self.final_promise.clone());
+                    let then_task = ThenTask::new(scope, self.generator_iter, self.final_promise);
                     let then_task = scope.register(then_task);
                     let value = wrap_promise(scope, value);
 

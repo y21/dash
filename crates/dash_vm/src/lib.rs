@@ -1,6 +1,5 @@
 #![cfg_attr(dash_lints, feature(register_tool))]
 #![cfg_attr(dash_lints, register_tool(dash_lints))]
-#![allow(clippy::clone_on_copy)] // TODO: Requires large amounts of changes
 #![warn(clippy::redundant_clone)]
 #![deny(clippy::disallowed_methods)]
 
@@ -165,9 +164,9 @@ impl Vm {
 
             for (key, value) in methods {
                 register(
-                    value.clone(),
-                    scope.statics.function_proto.clone(),
-                    scope.statics.function_ctor.clone(),
+                    value,
+                    scope.statics.function_proto,
+                    scope.statics.function_ctor,
                     [],
                     [],
                     [],
@@ -179,9 +178,9 @@ impl Vm {
 
             for (key, value) in symbols {
                 register(
-                    value.clone(),
-                    scope.statics.function_proto.clone(),
-                    scope.statics.function_ctor.clone(),
+                    value,
+                    scope.statics.function_proto,
+                    scope.statics.function_ctor,
                     [],
                     [],
                     [],
@@ -207,28 +206,28 @@ impl Vm {
         }
 
         let mut scope = self.scope();
-        let global = scope.global.clone();
+        let global = scope.global;
         
         let function_ctor = register(
-            scope.statics.function_ctor.clone(),
-            scope.statics.function_proto.clone(),
-            scope.statics.function_ctor.clone(),
+            scope.statics.function_ctor,
+            scope.statics.function_proto,
+            scope.statics.function_ctor,
             [],
             [],
             [],
-            Some((sym::Function, scope.statics.function_proto.clone())),
+            Some((sym::Function, scope.statics.function_proto)),
             &mut scope,
         );
         
         let function_proto = register(
-            scope.statics.function_proto.clone(),
-            scope.statics.object_prototype.clone(),
-            function_ctor.clone(),
+            scope.statics.function_proto,
+            scope.statics.object_prototype,
+            function_ctor,
             [
-                (sym::apply, scope.statics.function_apply.clone()),
-                (sym::bind, scope.statics.function_bind.clone()),
-                (sym::call, scope.statics.function_call.clone()),
-                (sym::toString, scope.statics.function_to_string.clone()),
+                (sym::apply, scope.statics.function_apply),
+                (sym::bind, scope.statics.function_bind),
+                (sym::call, scope.statics.function_call),
+                (sym::toString, scope.statics.function_to_string),
             ],
             [],
             [],
@@ -237,38 +236,38 @@ impl Vm {
         );
         
         let object_ctor = register(
-            scope.statics.object_ctor.clone(),
-            function_proto.clone(),
-            function_ctor.clone(),
+            scope.statics.object_ctor,
+            function_proto,
+            function_ctor,
             [
-                (sym::create, scope.statics.object_create.clone()),
-                (sym::keys, scope.statics.object_keys.clone()),
+                (sym::create, scope.statics.object_create),
+                (sym::keys, scope.statics.object_keys),
                 // FIXME: these are not the same
-                (sym::getOwnPropertyNames, scope.statics.object_keys.clone()),
-                (sym::getOwnPropertyDescriptor, scope.statics.object_get_own_property_descriptor.clone()),
-                (sym::getOwnPropertyDescriptors, scope.statics.object_get_own_property_descriptors.clone()),
-                (sym::defineProperty, scope.statics.object_define_property.clone()),
-                (sym::defineProperties, scope.statics.object_define_properties.clone()),
-                (sym::entries, scope.statics.object_entries.clone()),
-                (sym::assign, scope.statics.object_assign.clone()),
-                (sym::getPrototypeOf, scope.statics.object_get_prototype_of.clone()),
-                (sym::setPrototypeOf, scope.statics.object_set_prototype_of.clone()),
+                (sym::getOwnPropertyNames, scope.statics.object_keys),
+                (sym::getOwnPropertyDescriptor, scope.statics.object_get_own_property_descriptor),
+                (sym::getOwnPropertyDescriptors, scope.statics.object_get_own_property_descriptors),
+                (sym::defineProperty, scope.statics.object_define_property),
+                (sym::defineProperties, scope.statics.object_define_properties),
+                (sym::entries, scope.statics.object_entries),
+                (sym::assign, scope.statics.object_assign),
+                (sym::getPrototypeOf, scope.statics.object_get_prototype_of),
+                (sym::setPrototypeOf, scope.statics.object_set_prototype_of),
             ],
             [],
             [],
-            Some((sym::Object, scope.statics.object_prototype.clone())),
+            Some((sym::Object, scope.statics.object_prototype)),
             &mut scope,
         );
         
         let object_proto = register(
-            scope.statics.object_prototype.clone(),
+            scope.statics.object_prototype,
             Value::null(),
-            object_ctor.clone(),
+            object_ctor,
             [
-                (sym::toString, scope.statics.object_to_string.clone()),
-                (sym::hasOwnProperty, scope.statics.object_has_own_property.clone()),
-                (sym::isPrototypeOf, scope.statics.object_is_prototype_of.clone()),
-                (sym::propertyIsEnumerable, scope.statics.object_property_is_enumerable.clone())
+                (sym::toString, scope.statics.object_to_string),
+                (sym::hasOwnProperty, scope.statics.object_has_own_property),
+                (sym::isPrototypeOf, scope.statics.object_is_prototype_of),
+                (sym::propertyIsEnumerable, scope.statics.object_property_is_enumerable)
             ],
             [],
             [],
@@ -277,11 +276,11 @@ impl Vm {
         );
         
         let console = register(
-            scope.statics.console.clone(),
-            object_proto.clone(),
-            object_ctor.clone(),
+            scope.statics.console,
+            object_proto,
+            object_ctor,
             [
-                (sym::log, scope.statics.console_log.clone()),
+                (sym::log, scope.statics.console_log),
             ],
             [],
             [],
@@ -290,41 +289,41 @@ impl Vm {
         );
         
         let math = register(
-            scope.statics.math.clone(),
-            object_proto.clone(),
-            object_ctor.clone(),
+            scope.statics.math,
+            object_proto,
+            object_ctor,
             [
-                (sym::floor, scope.statics.math_floor.clone()),
-                (sym::abs, scope.statics.math_abs.clone()),
-                (sym::acos, scope.statics.math_acos.clone()),
-                (sym::acosh, scope.statics.math_acosh.clone()),
-                (sym::asin, scope.statics.math_asin.clone()),
-                (sym::asinh, scope.statics.math_asinh.clone()),
-                (sym::atan, scope.statics.math_atan.clone()),
-                (sym::atanh, scope.statics.math_atanh.clone()),
-                (sym::atan2, scope.statics.math_atan2.clone()),
-                (sym::cbrt, scope.statics.math_cbrt.clone()),
-                (sym::ceil, scope.statics.math_ceil.clone()),
-                (sym::clz32, scope.statics.math_clz32.clone()),
-                (sym::cos, scope.statics.math_cos.clone()),
-                (sym::cosh, scope.statics.math_cosh.clone()),
-                (sym::exp, scope.statics.math_exp.clone()),
-                (sym::expm1, scope.statics.math_expm1.clone()),
-                (sym::log, scope.statics.math_log.clone()),
-                (sym::log1p, scope.statics.math_log1p.clone()),
-                (sym::log10, scope.statics.math_log10.clone()),
-                (sym::log2, scope.statics.math_log2.clone()),
-                (sym::round, scope.statics.math_round.clone()),
-                (sym::sin, scope.statics.math_sin.clone()),
-                (sym::sinh, scope.statics.math_sinh.clone()),
-                (sym::sqrt, scope.statics.math_sqrt.clone()),
-                (sym::tan, scope.statics.math_tan.clone()),
-                (sym::tanh, scope.statics.math_tanh.clone()),
-                (sym::trunc, scope.statics.math_trunc.clone()),
-                (sym::random, scope.statics.math_random.clone()),
-                (sym::max, scope.statics.math_max.clone()),
-                (sym::min, scope.statics.math_min.clone()),
-                (sym::pow, scope.statics.math_pow.clone()),
+                (sym::floor, scope.statics.math_floor),
+                (sym::abs, scope.statics.math_abs),
+                (sym::acos, scope.statics.math_acos),
+                (sym::acosh, scope.statics.math_acosh),
+                (sym::asin, scope.statics.math_asin),
+                (sym::asinh, scope.statics.math_asinh),
+                (sym::atan, scope.statics.math_atan),
+                (sym::atanh, scope.statics.math_atanh),
+                (sym::atan2, scope.statics.math_atan2),
+                (sym::cbrt, scope.statics.math_cbrt),
+                (sym::ceil, scope.statics.math_ceil),
+                (sym::clz32, scope.statics.math_clz32),
+                (sym::cos, scope.statics.math_cos),
+                (sym::cosh, scope.statics.math_cosh),
+                (sym::exp, scope.statics.math_exp),
+                (sym::expm1, scope.statics.math_expm1),
+                (sym::log, scope.statics.math_log),
+                (sym::log1p, scope.statics.math_log1p),
+                (sym::log10, scope.statics.math_log10),
+                (sym::log2, scope.statics.math_log2),
+                (sym::round, scope.statics.math_round),
+                (sym::sin, scope.statics.math_sin),
+                (sym::sinh, scope.statics.math_sinh),
+                (sym::sqrt, scope.statics.math_sqrt),
+                (sym::tan, scope.statics.math_tan),
+                (sym::tanh, scope.statics.math_tanh),
+                (sym::trunc, scope.statics.math_trunc),
+                (sym::random, scope.statics.math_random),
+                (sym::max, scope.statics.math_max),
+                (sym::min, scope.statics.math_min),
+                (sym::pow, scope.statics.math_pow),
             ],
             [],
             [
@@ -335,14 +334,14 @@ impl Vm {
         );
         
         let number_ctor = register(
-            scope.statics.number_ctor.clone(),
-            function_proto.clone(),
-            function_ctor.clone(),
+            scope.statics.number_ctor,
+            function_proto,
+            function_ctor,
             [
-                (sym::isFinite, scope.statics.number_is_finite.clone()),
-                (sym::isNaN, scope.statics.number_is_nan.clone()),
-                (sym::isSafeInteger, scope.statics.number_is_safe_integer.clone()),
-                (sym::isInteger, scope.statics.number_is_integer.clone()),
+                (sym::isFinite, scope.statics.number_is_finite),
+                (sym::isNaN, scope.statics.number_is_nan),
+                (sym::isSafeInteger, scope.statics.number_is_safe_integer),
+                (sym::isInteger, scope.statics.number_is_integer),
             ],
             [],
             [
@@ -356,18 +355,18 @@ impl Vm {
                 // TODO: this needs to be writable: false, causes test262 language/types/number/S8.5_A14_T1.js to fail
                 (sym::NaN, Value::number(f64::NAN), Some(PropertyDataDescriptor::empty()))
             ],
-            Some((sym::Number, scope.statics.number_prototype.clone())),
+            Some((sym::Number, scope.statics.number_prototype)),
             &mut scope,
         );
         
         register(
-            scope.statics.number_prototype.clone(),
-            object_proto.clone(),
-            number_ctor.clone(),
+            scope.statics.number_prototype,
+            object_proto,
+            number_ctor,
             [
-                (sym::toString, scope.statics.number_tostring.clone()),
-                (sym::valueOf, scope.statics.number_valueof.clone()),
-                (sym::toFixed, scope.statics.number_to_fixed.clone()),
+                (sym::toString, scope.statics.number_tostring),
+                (sym::valueOf, scope.statics.number_valueof),
+                (sym::toFixed, scope.statics.number_to_fixed),
             ],
             [],
             [],
@@ -376,23 +375,23 @@ impl Vm {
         );
         
         let boolean_ctor = register(
-            scope.statics.boolean_ctor.clone(),
-            function_proto.clone(),
-            function_ctor.clone(),
+            scope.statics.boolean_ctor,
+            function_proto,
+            function_ctor,
             [],
             [],
             [],
-            Some((sym::Boolean, scope.statics.boolean_prototype.clone())),
+            Some((sym::Boolean, scope.statics.boolean_prototype)),
             &mut scope,
         );
         
         register(
-            scope.statics.boolean_prototype.clone(),
-            object_proto.clone(),
-            boolean_ctor.clone(),
+            scope.statics.boolean_prototype,
+            object_proto,
+            boolean_ctor,
             [
-                (sym::toString, scope.statics.boolean_tostring.clone()),
-                (sym::valueOf, scope.statics.boolean_valueof.clone()),
+                (sym::toString, scope.statics.boolean_tostring),
+                (sym::valueOf, scope.statics.boolean_valueof),
             ],
             [],
             [],
@@ -401,126 +400,126 @@ impl Vm {
         );
         
         let string_ctor = register(
-            scope.statics.string_ctor.clone(),
-            function_proto.clone(),
-            function_ctor.clone(),
+            scope.statics.string_ctor,
+            function_proto,
+            function_ctor,
             [
-                (sym::fromCharCode, scope.statics.string_from_char_code.clone()),
+                (sym::fromCharCode, scope.statics.string_from_char_code),
             ],
             [],
             [],
-            Some((sym::String, scope.statics.string_prototype.clone())),
+            Some((sym::String, scope.statics.string_prototype)),
             &mut scope,
         );
         
         register(
-           scope.statics.string_prototype.clone(),
-           scope.statics.object_prototype.clone(),
-           scope.statics.string_ctor.clone(),
+           scope.statics.string_prototype,
+           scope.statics.object_prototype,
+           scope.statics.string_ctor,
            [
-                (sym::toString, scope.statics.string_tostring.clone()),
-                (sym::charAt, scope.statics.string_char_at.clone()),
-                (sym::charCodeAt, scope.statics.string_char_code_at.clone()),
-                (sym::concat, scope.statics.string_concat.clone()),
-                (sym::endsWith, scope.statics.string_ends_with.clone()),
-                (sym::startsWith, scope.statics.string_starts_with.clone()),
-                (sym::includes, scope.statics.string_includes.clone()),
-                (sym::indexOf, scope.statics.string_index_of.clone()),
-                (sym::lastIndexOf, scope.statics.string_last_index_of.clone()),
-                (sym::padEnd, scope.statics.string_pad_end.clone()),
-                (sym::padStart, scope.statics.string_pad_start.clone()),
-                (sym::repeat, scope.statics.string_repeat.clone()),
-                (sym::replace, scope.statics.string_replace.clone()),
-                (sym::replaceAll, scope.statics.string_replace_all.clone()),
-                (sym::split, scope.statics.string_split.clone()),
-                (sym::toLowerCase, scope.statics.string_to_lowercase.clone()),
-                (sym::toUpperCase, scope.statics.string_to_uppercase.clone()),
-                (sym::big, scope.statics.string_big.clone()),
-                (sym::blink, scope.statics.string_blink.clone()),
-                (sym::bold, scope.statics.string_bold.clone()),
-                (sym::fixed, scope.statics.string_fixed.clone()),
-                (sym::italics, scope.statics.string_italics.clone()),
-                (sym::strike, scope.statics.string_strike.clone()),
-                (sym::sub, scope.statics.string_sub.clone()),
-                (sym::sup, scope.statics.string_sup.clone()),
-                (sym::fontcolor, scope.statics.string_fontcolor.clone()),
-                (sym::fontsize, scope.statics.string_fontsize.clone()),
-                (sym::link, scope.statics.string_link.clone()),
-                (sym::trim, scope.statics.string_trim.clone()),
-                (sym::trimStart, scope.statics.string_trim_start.clone()),
-                (sym::trimEnd, scope.statics.string_trim_end.clone()),
-                (sym::substr, scope.statics.string_substr.clone()),
-                (sym::substring, scope.statics.string_substring.clone()),
-                (sym::slice, scope.statics.string_slice.clone()),
+                (sym::toString, scope.statics.string_tostring),
+                (sym::charAt, scope.statics.string_char_at),
+                (sym::charCodeAt, scope.statics.string_char_code_at),
+                (sym::concat, scope.statics.string_concat),
+                (sym::endsWith, scope.statics.string_ends_with),
+                (sym::startsWith, scope.statics.string_starts_with),
+                (sym::includes, scope.statics.string_includes),
+                (sym::indexOf, scope.statics.string_index_of),
+                (sym::lastIndexOf, scope.statics.string_last_index_of),
+                (sym::padEnd, scope.statics.string_pad_end),
+                (sym::padStart, scope.statics.string_pad_start),
+                (sym::repeat, scope.statics.string_repeat),
+                (sym::replace, scope.statics.string_replace),
+                (sym::replaceAll, scope.statics.string_replace_all),
+                (sym::split, scope.statics.string_split),
+                (sym::toLowerCase, scope.statics.string_to_lowercase),
+                (sym::toUpperCase, scope.statics.string_to_uppercase),
+                (sym::big, scope.statics.string_big),
+                (sym::blink, scope.statics.string_blink),
+                (sym::bold, scope.statics.string_bold),
+                (sym::fixed, scope.statics.string_fixed),
+                (sym::italics, scope.statics.string_italics),
+                (sym::strike, scope.statics.string_strike),
+                (sym::sub, scope.statics.string_sub),
+                (sym::sup, scope.statics.string_sup),
+                (sym::fontcolor, scope.statics.string_fontcolor),
+                (sym::fontsize, scope.statics.string_fontsize),
+                (sym::link, scope.statics.string_link),
+                (sym::trim, scope.statics.string_trim),
+                (sym::trimStart, scope.statics.string_trim_start),
+                (sym::trimEnd, scope.statics.string_trim_end),
+                (sym::substr, scope.statics.string_substr),
+                (sym::substring, scope.statics.string_substring),
+                (sym::slice, scope.statics.string_slice),
             ],
-           [(scope.statics.symbol_iterator.clone(), scope.statics.string_iterator.clone())],
+           [(scope.statics.symbol_iterator, scope.statics.string_iterator)],
            [],
            None,
            &mut scope,
         );
         
         let array_ctor = register(
-            scope.statics.array_ctor.clone(),
-            function_proto.clone(),
-            function_ctor.clone(),
+            scope.statics.array_ctor,
+            function_proto,
+            function_ctor,
             [
-                (sym::from, scope.statics.array_from.clone()),
-                (sym::isArray, scope.statics.array_is_array.clone()),
+                (sym::from, scope.statics.array_from),
+                (sym::isArray, scope.statics.array_is_array),
             ],
             [],
             [],
-            Some((sym::Array, scope.statics.array_prototype.clone())),
+            Some((sym::Array, scope.statics.array_prototype)),
             &mut scope,
         );
         
         register(
-            scope.statics.array_prototype.clone(),
-            object_proto.clone(),
-            array_ctor.clone(),
+            scope.statics.array_prototype,
+            object_proto,
+            array_ctor,
             [
-                (sym::toString, scope.statics.array_tostring.clone()),
-                (sym::join, scope.statics.array_join.clone()),
-                (sym::values, scope.statics.array_values.clone()),
-                (sym::at, scope.statics.array_at.clone()),
-                (sym::concat, scope.statics.array_concat.clone()),
-                (sym::entries, scope.statics.array_entries.clone()),
-                (sym::keys, scope.statics.array_keys.clone()),
-                (sym::every, scope.statics.array_every.clone()),
-                (sym::some, scope.statics.array_some.clone()),
-                (sym::fill, scope.statics.array_fill.clone()),
-                (sym::filter, scope.statics.array_filter.clone()),
-                (sym::reduce, scope.statics.array_reduce.clone()),
-                (sym::find, scope.statics.array_find.clone()),
-                (sym::findIndex, scope.statics.array_find_index.clone()),
-                (sym::flat, scope.statics.array_flat.clone()),
-                (sym::forEach, scope.statics.array_for_each.clone()),
-                (sym::includes, scope.statics.array_includes.clone()),
-                (sym::indexOf, scope.statics.array_index_of.clone()),
-                (sym::map, scope.statics.array_map.clone()),
-                (sym::pop, scope.statics.array_pop.clone()),
-                (sym::push, scope.statics.array_push.clone()),
-                (sym::reverse, scope.statics.array_reverse.clone()),
-                (sym::shift, scope.statics.array_shift.clone()),
-                (sym::sort, scope.statics.array_sort.clone()),
-                (sym::unshift, scope.statics.array_unshift.clone()),
-                (sym::slice, scope.statics.array_slice.clone()),
-                (sym::lastIndexOf, scope.statics.array_last_index_of.clone()),
+                (sym::toString, scope.statics.array_tostring),
+                (sym::join, scope.statics.array_join),
+                (sym::values, scope.statics.array_values),
+                (sym::at, scope.statics.array_at),
+                (sym::concat, scope.statics.array_concat),
+                (sym::entries, scope.statics.array_entries),
+                (sym::keys, scope.statics.array_keys),
+                (sym::every, scope.statics.array_every),
+                (sym::some, scope.statics.array_some),
+                (sym::fill, scope.statics.array_fill),
+                (sym::filter, scope.statics.array_filter),
+                (sym::reduce, scope.statics.array_reduce),
+                (sym::find, scope.statics.array_find),
+                (sym::findIndex, scope.statics.array_find_index),
+                (sym::flat, scope.statics.array_flat),
+                (sym::forEach, scope.statics.array_for_each),
+                (sym::includes, scope.statics.array_includes),
+                (sym::indexOf, scope.statics.array_index_of),
+                (sym::map, scope.statics.array_map),
+                (sym::pop, scope.statics.array_pop),
+                (sym::push, scope.statics.array_push),
+                (sym::reverse, scope.statics.array_reverse),
+                (sym::shift, scope.statics.array_shift),
+                (sym::sort, scope.statics.array_sort),
+                (sym::unshift, scope.statics.array_unshift),
+                (sym::slice, scope.statics.array_slice),
+                (sym::lastIndexOf, scope.statics.array_last_index_of),
             ],
-            [(scope.statics.symbol_iterator.clone(), scope.statics.array_values.clone())],
+            [(scope.statics.symbol_iterator, scope.statics.array_values)],
             [],
             None,
             &mut scope,
         );
         
         register(
-            scope.statics.array_iterator_prototype.clone(),
-            object_proto.clone(), // TODO: wrong
-            function_ctor.clone(), // TODO: ^
+            scope.statics.array_iterator_prototype,
+            object_proto, // TODO: wrong
+            function_ctor, // TODO: ^
             [
-                (sym::next, scope.statics.array_iterator_next.clone()),
+                (sym::next, scope.statics.array_iterator_next),
             ],
             [
-                (scope.statics.symbol_iterator.clone(), scope.statics.identity_this.clone()),
+                (scope.statics.symbol_iterator, scope.statics.identity_this),
             ],
             [],
             None,
@@ -528,14 +527,14 @@ impl Vm {
         );
         
         register(
-            scope.statics.generator_iterator_prototype.clone(),
-            object_proto.clone(), // TODO: wrong
-            function_ctor.clone(), // TODO: ^
+            scope.statics.generator_iterator_prototype,
+            object_proto, // TODO: wrong
+            function_ctor, // TODO: ^
             [
-                (sym::next, scope.statics.generator_iterator_next.clone()),
+                (sym::next, scope.statics.generator_iterator_next),
             ],
             [
-                (scope.statics.symbol_iterator.clone(), scope.statics.identity_this.clone()),
+                (scope.statics.symbol_iterator, scope.statics.identity_this),
             ],
             [],
             None,
@@ -543,46 +542,46 @@ impl Vm {
         );
         
         let symbol_ctor = register(
-            scope.statics.symbol_ctor.clone(),
-            function_proto.clone(),
-            function_ctor.clone(),
+            scope.statics.symbol_ctor,
+            function_proto,
+            function_ctor,
             [],
             [],
             [
-                (sym::asyncIterator,Value::symbol(scope.statics.symbol_async_iterator.clone()), Some(PropertyDataDescriptor::empty())),
-                (sym::hasInstance, Value::symbol(scope.statics.symbol_has_instance.clone()), Some(PropertyDataDescriptor::empty())),
-                (sym::iterator, Value::symbol(scope.statics.symbol_iterator.clone()), Some(PropertyDataDescriptor::empty())),
-                (sym::match_, Value::symbol(scope.statics.symbol_match.clone()), Some(PropertyDataDescriptor::empty())),
-                (sym::matchAll, Value::symbol(scope.statics.symbol_match_all.clone()), Some(PropertyDataDescriptor::empty())),
-                (sym::replace, Value::symbol(scope.statics.symbol_replace.clone()), Some(PropertyDataDescriptor::empty())),
-                (sym::search, Value::symbol(scope.statics.symbol_search.clone()), Some(PropertyDataDescriptor::empty())),
-                (sym::species, Value::symbol(scope.statics.symbol_species.clone()), Some(PropertyDataDescriptor::empty())),
-                (sym::split, Value::symbol(scope.statics.symbol_split.clone()), Some(PropertyDataDescriptor::empty())),
-                (sym::toPrimitive, Value::symbol(scope.statics.symbol_to_primitive.clone()), Some(PropertyDataDescriptor::empty())),
-                (sym::toStringTag, Value::symbol(scope.statics.symbol_to_string_tag.clone()), Some(PropertyDataDescriptor::empty())),
-                (sym::unscopables, Value::symbol(scope.statics.symbol_unscopables.clone()), Some(PropertyDataDescriptor::empty())),
+                (sym::asyncIterator,Value::symbol(scope.statics.symbol_async_iterator), Some(PropertyDataDescriptor::empty())),
+                (sym::hasInstance, Value::symbol(scope.statics.symbol_has_instance), Some(PropertyDataDescriptor::empty())),
+                (sym::iterator, Value::symbol(scope.statics.symbol_iterator), Some(PropertyDataDescriptor::empty())),
+                (sym::match_, Value::symbol(scope.statics.symbol_match), Some(PropertyDataDescriptor::empty())),
+                (sym::matchAll, Value::symbol(scope.statics.symbol_match_all), Some(PropertyDataDescriptor::empty())),
+                (sym::replace, Value::symbol(scope.statics.symbol_replace), Some(PropertyDataDescriptor::empty())),
+                (sym::search, Value::symbol(scope.statics.symbol_search), Some(PropertyDataDescriptor::empty())),
+                (sym::species, Value::symbol(scope.statics.symbol_species), Some(PropertyDataDescriptor::empty())),
+                (sym::split, Value::symbol(scope.statics.symbol_split), Some(PropertyDataDescriptor::empty())),
+                (sym::toPrimitive, Value::symbol(scope.statics.symbol_to_primitive), Some(PropertyDataDescriptor::empty())),
+                (sym::toStringTag, Value::symbol(scope.statics.symbol_to_string_tag), Some(PropertyDataDescriptor::empty())),
+                (sym::unscopables, Value::symbol(scope.statics.symbol_unscopables), Some(PropertyDataDescriptor::empty())),
             ],
-            Some((sym::JsSymbol, scope.statics.symbol_prototype.clone())),
+            Some((sym::JsSymbol, scope.statics.symbol_prototype)),
             &mut scope,
         );
         
         let error_ctor = register(
-            scope.statics.error_ctor.clone(),
-            function_proto.clone(),
-            function_ctor.clone(),
+            scope.statics.error_ctor,
+            function_proto,
+            function_ctor,
             [],
             [],
             [],
-            Some((sym::Error, scope.statics.error_prototype.clone())),
+            Some((sym::Error, scope.statics.error_prototype)),
             &mut scope,
         );
         
         register(
-            scope.statics.error_prototype.clone(),
-            object_proto.clone(),
-            error_ctor.clone(),
+            scope.statics.error_prototype,
+            object_proto,
+            error_ctor,
             [
-                (sym::toString, scope.statics.error_to_string.clone()),
+                (sym::toString, scope.statics.error_to_string),
             ],
             [],
             [],
@@ -591,22 +590,22 @@ impl Vm {
         );
         
         let arraybuffer_ctor = register(
-            scope.statics.arraybuffer_ctor.clone(),
-            function_proto.clone(),
-            function_ctor.clone(),
+            scope.statics.arraybuffer_ctor,
+            function_proto,
+            function_ctor,
             [],
             [],
             [],
-            Some((sym::ArrayBuffer, scope.statics.arraybuffer_prototype.clone())),
+            Some((sym::ArrayBuffer, scope.statics.arraybuffer_prototype)),
             &mut scope,
         );
         
         register(
-            scope.statics.arraybuffer_prototype.clone(),
-            object_proto.clone(),
-            arraybuffer_ctor.clone(),
+            scope.statics.arraybuffer_prototype,
+            object_proto,
+            arraybuffer_ctor,
             [
-                (sym::byteLength, scope.statics.arraybuffer_byte_length.clone()) // TODO: should be a getter really
+                (sym::byteLength, scope.statics.arraybuffer_byte_length) // TODO: should be a getter really
             ],
             [],
             [],
@@ -615,22 +614,22 @@ impl Vm {
         );
         
         let u8array_ctor = register(
-            scope.statics.uint8array_ctor.clone(),
-            function_proto.clone(),
-            function_ctor.clone(),
+            scope.statics.uint8array_ctor,
+            function_proto,
+            function_ctor,
             [],
             [],
             [],
-            Some((sym::Uint8Array, scope.statics.uint8array_prototype.clone())),
+            Some((sym::Uint8Array, scope.statics.uint8array_prototype)),
             &mut scope,
         );
         
         register(
-            scope.statics.uint8array_prototype.clone(),
-            object_proto.clone(),
-            u8array_ctor.clone(),
+            scope.statics.uint8array_prototype,
+            object_proto,
+            u8array_ctor,
             [
-                (sym::fill, scope.statics.typedarray_fill.clone()),
+                (sym::fill, scope.statics.typedarray_fill),
             ],
             [],
             [],
@@ -639,22 +638,22 @@ impl Vm {
         );
         
         let i8array_ctor = register(
-            scope.statics.int8array_ctor.clone(),
-            function_proto.clone(),
-            function_ctor.clone(),
+            scope.statics.int8array_ctor,
+            function_proto,
+            function_ctor,
             [],
             [],
             [],
-            Some((sym::Int8Array, scope.statics.int8array_prototype.clone())),
+            Some((sym::Int8Array, scope.statics.int8array_prototype)),
             &mut scope,
         );
         
         register(
-            scope.statics.int8array_prototype.clone(),
-            object_proto.clone(),
-            i8array_ctor.clone(),
+            scope.statics.int8array_prototype,
+            object_proto,
+            i8array_ctor,
             [
-                (sym::fill, scope.statics.typedarray_fill.clone()),
+                (sym::fill, scope.statics.typedarray_fill),
             ],
             [],
             [],
@@ -663,22 +662,22 @@ impl Vm {
         );
         
         let u16array_ctor = register(
-            scope.statics.uint16array_ctor.clone(),
-            function_proto.clone(),
-            function_ctor.clone(),
+            scope.statics.uint16array_ctor,
+            function_proto,
+            function_ctor,
             [],
             [],
             [],
-            Some((sym::Uint16Array, scope.statics.uint16array_prototype.clone())),
+            Some((sym::Uint16Array, scope.statics.uint16array_prototype)),
             &mut scope,
         );
         
         register(
-            scope.statics.uint16array_prototype.clone(),
-            object_proto.clone(),
-            u16array_ctor.clone(),
+            scope.statics.uint16array_prototype,
+            object_proto,
+            u16array_ctor,
             [
-                (sym::fill, scope.statics.typedarray_fill.clone()),
+                (sym::fill, scope.statics.typedarray_fill),
             ],
             [],
             [],
@@ -687,22 +686,22 @@ impl Vm {
         );
         
         let i16array_ctor = register(
-            scope.statics.int16array_ctor.clone(),
-            function_proto.clone(),
-            function_ctor.clone(),
+            scope.statics.int16array_ctor,
+            function_proto,
+            function_ctor,
             [],
             [],
             [],
-            Some((sym::Int16Array, scope.statics.int16array_prototype.clone())),
+            Some((sym::Int16Array, scope.statics.int16array_prototype)),
             &mut scope,
         );
         
         register(
-            scope.statics.int16array_prototype.clone(),
-            object_proto.clone(),
-            i16array_ctor.clone(),
+            scope.statics.int16array_prototype,
+            object_proto,
+            i16array_ctor,
             [
-                (sym::fill, scope.statics.typedarray_fill.clone()),
+                (sym::fill, scope.statics.typedarray_fill),
             ],
             [],
             [],
@@ -711,22 +710,22 @@ impl Vm {
         );
         
         let u32array_ctor = register(
-            scope.statics.uint32array_ctor.clone(),
-            function_proto.clone(),
-            function_ctor.clone(),
+            scope.statics.uint32array_ctor,
+            function_proto,
+            function_ctor,
             [],
             [],
             [],
-            Some((sym::Uint32Array, scope.statics.uint32array_prototype.clone())),
+            Some((sym::Uint32Array, scope.statics.uint32array_prototype)),
             &mut scope,
         );
         
         register(
-            scope.statics.uint32array_prototype.clone(),
-            object_proto.clone(),
-            u32array_ctor.clone(),
+            scope.statics.uint32array_prototype,
+            object_proto,
+            u32array_ctor,
             [
-                (sym::fill, scope.statics.typedarray_fill.clone()),
+                (sym::fill, scope.statics.typedarray_fill),
             ],
             [],
             [],
@@ -735,22 +734,22 @@ impl Vm {
         );
         
         let i32array_ctor = register(
-            scope.statics.int32array_ctor.clone(),
-            function_proto.clone(),
-            function_ctor.clone(),
+            scope.statics.int32array_ctor,
+            function_proto,
+            function_ctor,
             [],
             [],
             [],
-            Some((sym::Int32Array, scope.statics.int32array_prototype.clone())),
+            Some((sym::Int32Array, scope.statics.int32array_prototype)),
             &mut scope,
         );
         
         register(
-            scope.statics.int32array_prototype.clone(),
-            object_proto.clone(),
-            i32array_ctor.clone(),
+            scope.statics.int32array_prototype,
+            object_proto,
+            i32array_ctor,
             [
-                (sym::fill, scope.statics.typedarray_fill.clone()),
+                (sym::fill, scope.statics.typedarray_fill),
             ],
             [],
             [],
@@ -759,22 +758,22 @@ impl Vm {
         );
         
         let f32array_ctor = register(
-            scope.statics.float32array_ctor.clone(),
-            function_proto.clone(),
-            function_ctor.clone(),
+            scope.statics.float32array_ctor,
+            function_proto,
+            function_ctor,
             [],
             [],
             [],
-            Some((sym::Float32Array, scope.statics.float32array_prototype.clone())),
+            Some((sym::Float32Array, scope.statics.float32array_prototype)),
             &mut scope,
         );
         
         register(
-            scope.statics.float32array_prototype.clone(),
-            object_proto.clone(),
-            f32array_ctor.clone(),
+            scope.statics.float32array_prototype,
+            object_proto,
+            f32array_ctor,
             [
-                (sym::fill, scope.statics.typedarray_fill.clone()),
+                (sym::fill, scope.statics.typedarray_fill),
             ],
             [],
             [],
@@ -783,22 +782,22 @@ impl Vm {
         );
         
         let f64array_ctor = register(
-            scope.statics.float64array_ctor.clone(),
-            function_proto.clone(),
-            function_ctor.clone(),
+            scope.statics.float64array_ctor,
+            function_proto,
+            function_ctor,
             [],
             [],
             [],
-            Some((sym::Float64Array, scope.statics.float64array_prototype.clone())),
+            Some((sym::Float64Array, scope.statics.float64array_prototype)),
             &mut scope,
         );
         
         register(
-            scope.statics.float64array_prototype.clone(),
-            object_proto.clone(),
-            f64array_ctor.clone(),
+            scope.statics.float64array_prototype,
+            object_proto,
+            f64array_ctor,
             [
-                (sym::fill, scope.statics.typedarray_fill.clone()),
+                (sym::fill, scope.statics.typedarray_fill),
             ],
             [],
             [],
@@ -807,25 +806,25 @@ impl Vm {
         );
         
         let promise_ctor = register(
-            scope.statics.promise_ctor.clone(),
-            function_proto.clone(),
-            function_ctor.clone(),
+            scope.statics.promise_ctor,
+            function_proto,
+            function_ctor,
             [
-                (sym::resolve, scope.statics.promise_resolve.clone()),
-                (sym::reject, scope.statics.promise_reject.clone()),
+                (sym::resolve, scope.statics.promise_resolve),
+                (sym::reject, scope.statics.promise_reject),
             ],
             [],
             [],
-            Some((sym::Promise, scope.statics.promise_proto.clone())),
+            Some((sym::Promise, scope.statics.promise_proto)),
             &mut scope,
         );
         
         register(
-            scope.statics.promise_proto.clone(),
-            object_proto.clone(),
-            promise_ctor.clone(),
+            scope.statics.promise_proto,
+            object_proto,
+            promise_ctor,
             [
-                (sym::then, scope.statics.promise_then.clone()),
+                (sym::then, scope.statics.promise_then),
             ],
             [],
             [],
@@ -834,26 +833,26 @@ impl Vm {
         );
         
         let set_ctor = register(
-            scope.statics.set_constructor.clone(),
-            function_proto.clone(),
-            function_ctor.clone(),
+            scope.statics.set_constructor,
+            function_proto,
+            function_ctor,
             [],
             [],
             [],
-            Some((sym::Set, scope.statics.set_prototype.clone())),
+            Some((sym::Set, scope.statics.set_prototype)),
             &mut scope,
         );
         
         register(
-            scope.statics.set_prototype.clone(),
-            object_proto.clone(),
-            set_ctor.clone(),
+            scope.statics.set_prototype,
+            object_proto,
+            set_ctor,
             [
-                (sym::add, scope.statics.set_add.clone()),
-                (sym::has, scope.statics.set_has.clone()),
-                (sym::delete, scope.statics.set_delete.clone()),
-                (sym::clear, scope.statics.set_clear.clone()),
-                (sym::size, scope.statics.set_size.clone()),
+                (sym::add, scope.statics.set_add),
+                (sym::has, scope.statics.set_has),
+                (sym::delete, scope.statics.set_delete),
+                (sym::clear, scope.statics.set_clear),
+                (sym::size, scope.statics.set_size),
             ],
             [],
             [],
@@ -862,27 +861,27 @@ impl Vm {
         );
         
         let map_ctor = register(
-            scope.statics.map_constructor.clone(),
-            function_proto.clone(),
-            function_ctor.clone(),
+            scope.statics.map_constructor,
+            function_proto,
+            function_ctor,
             [],
             [],
             [],
-            Some((sym::Map, scope.statics.map_prototype.clone())),
+            Some((sym::Map, scope.statics.map_prototype)),
             &mut scope,
         );
         
         register(
-            scope.statics.map_prototype.clone(),
-            object_proto.clone(),
-            map_ctor.clone(),
+            scope.statics.map_prototype,
+            object_proto,
+            map_ctor,
             [
-                (sym::set, scope.statics.map_set.clone()),
-                (sym::get, scope.statics.map_get.clone()),
-                (sym::has, scope.statics.map_has.clone()),
-                (sym::delete, scope.statics.map_delete.clone()),
-                (sym::clear, scope.statics.map_clear.clone()),
-                (sym::size, scope.statics.map_size.clone()), // TODO: this should be a getter
+                (sym::set, scope.statics.map_set),
+                (sym::get, scope.statics.map_get),
+                (sym::has, scope.statics.map_has),
+                (sym::delete, scope.statics.map_delete),
+                (sym::clear, scope.statics.map_clear),
+                (sym::size, scope.statics.map_size), // TODO: this should be a getter
             ],
             [],
             [],
@@ -891,23 +890,23 @@ impl Vm {
         );
         
         let regexp_ctor = register(
-            scope.statics.regexp_ctor.clone(),
-            function_proto.clone(),
-            function_ctor.clone(),
+            scope.statics.regexp_ctor,
+            function_proto,
+            function_ctor,
             [],
             [],
             [],
-            Some((sym::RegExp, scope.statics.regexp_prototype.clone())),
+            Some((sym::RegExp, scope.statics.regexp_prototype)),
             &mut scope,
         );
         
         register(
-            scope.statics.regexp_prototype.clone(),
-            object_proto.clone(),
-            regexp_ctor.clone(),
+            scope.statics.regexp_prototype,
+            object_proto,
+            regexp_ctor,
             [
-                (sym::test, scope.statics.regexp_test.clone()),
-                (sym::exec, scope.statics.regexp_exec.clone())
+                (sym::test, scope.statics.regexp_test),
+                (sym::exec, scope.statics.regexp_exec)
             ],
             [],
             [],
@@ -916,22 +915,22 @@ impl Vm {
         );
         
         let eval_error_ctor = register(
-            scope.statics.eval_error_ctor.clone(),
-            function_proto.clone(),
-            function_ctor.clone(),
+            scope.statics.eval_error_ctor,
+            function_proto,
+            function_ctor,
             [],
             [],
             [],
-            Some((sym::EvalError, scope.statics.eval_error_prototype.clone())),
+            Some((sym::EvalError, scope.statics.eval_error_prototype)),
             &mut scope,
         );
         
         register(
-            scope.statics.eval_error_prototype.clone(),
-            scope.statics.error_prototype.clone(),
-            eval_error_ctor.clone(),
+            scope.statics.eval_error_prototype,
+            scope.statics.error_prototype,
+            eval_error_ctor,
             [
-                (sym::toString, scope.statics.error_to_string.clone()),
+                (sym::toString, scope.statics.error_to_string),
             ],
             [],
             [],
@@ -940,22 +939,22 @@ impl Vm {
         );
         
         let range_error_ctor = register(
-            scope.statics.range_error_ctor.clone(),
-            function_proto.clone(),
-            function_ctor.clone(),
+            scope.statics.range_error_ctor,
+            function_proto,
+            function_ctor,
             [],
             [],
             [],
-            Some((sym::RangeError, scope.statics.range_error_prototype.clone())),
+            Some((sym::RangeError, scope.statics.range_error_prototype)),
             &mut scope,
         );
         
         register(
-            scope.statics.range_error_prototype.clone(),
-            scope.statics.error_prototype.clone(),
-            range_error_ctor.clone(),
+            scope.statics.range_error_prototype,
+            scope.statics.error_prototype,
+            range_error_ctor,
             [
-                (sym::toString, scope.statics.error_to_string.clone()),
+                (sym::toString, scope.statics.error_to_string),
             ],
             [],
             [],
@@ -964,22 +963,22 @@ impl Vm {
         );
         
         let reference_error_ctor = register(
-            scope.statics.reference_error_ctor.clone(),
-            function_proto.clone(),
-            function_ctor.clone(),
+            scope.statics.reference_error_ctor,
+            function_proto,
+            function_ctor,
             [],
             [],
             [],
-            Some((sym::ReferenceError, scope.statics.reference_error_prototype.clone())),
+            Some((sym::ReferenceError, scope.statics.reference_error_prototype)),
             &mut scope,
         );
         
         register(
-            scope.statics.reference_error_prototype.clone(),
-            scope.statics.error_prototype.clone(),
-            reference_error_ctor.clone(),
+            scope.statics.reference_error_prototype,
+            scope.statics.error_prototype,
+            reference_error_ctor,
             [
-                (sym::toString, scope.statics.error_to_string.clone()),
+                (sym::toString, scope.statics.error_to_string),
             ],
             [],
             [],
@@ -988,22 +987,22 @@ impl Vm {
         );
         
         let syntax_error_ctor = register(
-            scope.statics.syntax_error_ctor.clone(),
-            function_proto.clone(),
-            function_ctor.clone(),
+            scope.statics.syntax_error_ctor,
+            function_proto,
+            function_ctor,
             [],
             [],
             [],
-            Some((sym::SyntaxError, scope.statics.syntax_error_prototype.clone())),
+            Some((sym::SyntaxError, scope.statics.syntax_error_prototype)),
             &mut scope,
         );
         
         register(
-            scope.statics.syntax_error_prototype.clone(),
-            scope.statics.error_prototype.clone(),
-            syntax_error_ctor.clone(),
+            scope.statics.syntax_error_prototype,
+            scope.statics.error_prototype,
+            syntax_error_ctor,
             [
-                (sym::toString, scope.statics.error_to_string.clone()),
+                (sym::toString, scope.statics.error_to_string),
             ],
             [],
             [],
@@ -1012,22 +1011,22 @@ impl Vm {
         );
         
         let type_error_ctor = register(
-            scope.statics.type_error_ctor.clone(),
-            function_proto.clone(),
-            function_ctor.clone(),
+            scope.statics.type_error_ctor,
+            function_proto,
+            function_ctor,
             [],
             [],
             [],
-            Some((sym::TypeError, scope.statics.type_error_prototype.clone())),
+            Some((sym::TypeError, scope.statics.type_error_prototype)),
             &mut scope,
         );
         
         register(
-            scope.statics.type_error_prototype.clone(),
-            scope.statics.error_prototype.clone(),
-            type_error_ctor.clone(),
+            scope.statics.type_error_prototype,
+            scope.statics.error_prototype,
+            type_error_ctor,
             [
-                (sym::toString, scope.statics.error_to_string.clone()),
+                (sym::toString, scope.statics.error_to_string),
             ],
             [],
             [],
@@ -1036,22 +1035,22 @@ impl Vm {
         );
         
         let uri_error_ctor = register(
-            scope.statics.uri_error_ctor.clone(),
-            function_proto.clone(),
-            function_ctor.clone(),
+            scope.statics.uri_error_ctor,
+            function_proto,
+            function_ctor,
             [],
             [],
             [],
-            Some((sym::URIError, scope.statics.uri_error_prototype.clone())),
+            Some((sym::URIError, scope.statics.uri_error_prototype)),
             &mut scope,
         );
         
         register(
-            scope.statics.uri_error_prototype.clone(),
-            scope.statics.error_prototype.clone(),
-            uri_error_ctor.clone(),
+            scope.statics.uri_error_prototype,
+            scope.statics.error_prototype,
+            uri_error_ctor,
             [
-                (sym::toString, scope.statics.error_to_string.clone()),
+                (sym::toString, scope.statics.error_to_string),
             ],
             [],
             [],
@@ -1060,22 +1059,22 @@ impl Vm {
         );
         
         let aggregate_error_ctor = register(
-            scope.statics.aggregate_error_ctor.clone(),
-            function_proto.clone(),
-            function_ctor.clone(),
+            scope.statics.aggregate_error_ctor,
+            function_proto,
+            function_ctor,
             [],
             [],
             [],
-            Some((sym::AggregateError, scope.statics.aggregate_error_prototype.clone())),
+            Some((sym::AggregateError, scope.statics.aggregate_error_prototype)),
             &mut scope,
         );
         
         register(
-            scope.statics.aggregate_error_prototype.clone(),
-            scope.statics.error_prototype.clone(),
-            aggregate_error_ctor.clone(),
+            scope.statics.aggregate_error_prototype,
+            scope.statics.error_prototype,
+            aggregate_error_ctor,
             [
-                (sym::toString, scope.statics.error_to_string.clone()),
+                (sym::toString, scope.statics.error_to_string),
             ],
             [],
             [],
@@ -1084,22 +1083,22 @@ impl Vm {
         );
         
         let date_ctor = register(
-            scope.statics.date_ctor.clone(),
-            function_proto.clone(),
-            function_ctor.clone(),
+            scope.statics.date_ctor,
+            function_proto,
+            function_ctor,
             [
-                (sym::now, scope.statics.date_now.clone()),
+                (sym::now, scope.statics.date_now),
             ],
             [],
             [],
-            Some((sym::Date, scope.statics.date_prototype.clone())),
+            Some((sym::Date, scope.statics.date_prototype)),
             &mut scope,
         );
         
         register(
-            scope.statics.date_prototype.clone(),
-            object_proto.clone(),
-            date_ctor.clone(),
+            scope.statics.date_prototype,
+            object_proto,
+            date_ctor,
             [],
             [],
             [],
@@ -1108,11 +1107,11 @@ impl Vm {
         );
         
         let json_ctor = register(
-            scope.statics.json_ctor.clone(),
+            scope.statics.json_ctor,
             function_proto,
             function_ctor,
             [
-                (sym::parse, scope.statics.json_parse.clone()),
+                (sym::parse, scope.statics.json_parse),
             ],
             [],
             [],
@@ -1123,13 +1122,13 @@ impl Vm {
         register(
             global,
             object_proto,
-            object_ctor.clone(),
+            object_ctor,
             [
-                (sym::isNaN, scope.statics.is_nan.clone()),
-                (sym::eval, scope.statics.eval.clone()),
-                (sym::isFinite, scope.statics.is_finite.clone()),
-                (sym::parseFloat, scope.statics.parse_float.clone()),
-                (sym::parseInt, scope.statics.parse_int.clone()),
+                (sym::isNaN, scope.statics.is_nan),
+                (sym::eval, scope.statics.eval),
+                (sym::isFinite, scope.statics.is_finite),
+                (sym::parseFloat, scope.statics.parse_float),
+                (sym::parseInt, scope.statics.parse_int),
                 (sym::RegExp, regexp_ctor),
                 (sym::JsSymbol, symbol_ctor),
                 (sym::Date, date_ctor),
@@ -1221,8 +1220,8 @@ impl Vm {
         self.stack.get(self.get_frame_sp() + id).cloned().map(|v| v.unbox_external(self))
     }
 
-    pub(crate) fn get_external(&self, id: usize) -> Option<&ExternalValue> {
-        self.active_frame().externals.get(id)
+    pub(crate) fn get_external(&self, id: usize) -> Option<ExternalValue> {
+        self.active_frame().externals.get(id).copied()
     }
 
     #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
@@ -1236,7 +1235,7 @@ impl Vm {
 
         // TODO: double check this is still right
         if let ValueKind::External(o) = self.stack[idx].unpack() {
-            unsafe { ExternalValue::replace(self, &o, value) };
+            unsafe { ExternalValue::replace(self, o, value) };
         } else {
             self.stack[idx] = value;
         }
@@ -1385,7 +1384,7 @@ impl Vm {
         while let Some(task) = self.async_tasks.pop() {
             let mut scope = self.scope();
 
-            scope.add_ref(task.clone());
+            scope.add_ref(task);
 
             debug!("process task {:?}", task);
             if let Err(ex) = task.apply(&mut scope, Value::undefined(), Vec::new()) {

@@ -320,9 +320,9 @@ impl PropertyValue {
     pub fn to_descriptor_value(&self, sc: &mut LocalScope) -> Result<Value, Value> {
         let obj = NamedObject::new(sc);
 
-        match &self.kind {
+        match self.kind {
             PropertyValueKind::Static(value) => {
-                obj.set_property(sc, sym::value.into(), PropertyValue::static_default(value.clone()))?;
+                obj.set_property(sc, sym::value.into(), PropertyValue::static_default(value))?;
             }
             PropertyValueKind::Trap { get, set } => {
                 let get = get.map(Value::object).unwrap_or_undefined();
@@ -442,8 +442,8 @@ impl PropertyValueKind {
     }
 
     pub fn get_or_apply(&self, sc: &mut LocalScope, this: Value) -> Result<Unrooted, Unrooted> {
-        match self {
-            Self::Static(value) => Ok(value.clone().into()),
+        match *self {
+            Self::Static(value) => Ok(value.into()),
             Self::Trap { get, .. } => match get {
                 Some(id) => id.apply(sc, this, Vec::new()),
                 None => Ok(Value::undefined().into()),
@@ -496,9 +496,9 @@ impl From<Symbol> for PropertyKey {
 
 impl PropertyKey {
     pub fn as_value(&self) -> Value {
-        match self {
-            PropertyKey::String(s) => Value::string(*s),
-            PropertyKey::Symbol(s) => Value::symbol(s.clone()),
+        match *self {
+            PropertyKey::String(s) => Value::string(s),
+            PropertyKey::Symbol(s) => Value::symbol(s),
         }
     }
 
@@ -517,12 +517,9 @@ impl NamedObject {
     }
 
     pub fn with_values(vm: &Vm, values: ObjectMap<PropertyKey, PropertyValue>) -> Self {
-        let objp = vm.statics.object_prototype.clone();
-        let objc = vm.statics.object_ctor.clone(); // TODO: function_ctor instead
-
         Self {
-            prototype: RefCell::new(Some(objp)),
-            constructor: RefCell::new(Some(objc)),
+            prototype: RefCell::new(Some(vm.statics.object_prototype)),
+            constructor: RefCell::new(Some(vm.statics.object_ctor)), // TODO: function_ctor instead
             values: RefCell::new(values),
         }
     }
@@ -886,12 +883,12 @@ impl ObjectId {
     }
 
     pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
-        let callee = self.clone();
+        let callee = *self;
         Object::apply(self, sc, callee, this, args)
     }
 
     pub fn construct(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
-        let callee = self.clone();
+        let callee = *self;
         Object::construct(self, sc, callee, this, args)
     }
 }

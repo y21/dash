@@ -151,10 +151,10 @@ fn persistent_trace() {
     }; // scope dropped here
 
     assert!(vm.external_refs.0.borrow().is_empty());
-    let p1 = Persistent::new(&mut vm, object.clone());
+    let p1 = Persistent::new(&mut vm, object);
     assert_eq!(p1.refcount(), 1);
     assert!(vm.external_refs.0.borrow().len() == 1);
-    let p2 = Persistent::new(&mut vm, object.clone());
+    let p2 = Persistent::new(&mut vm, object);
     assert_eq!(p1.refcount(), 2);
     assert!(vm.external_refs.0.borrow().len() == 1);
     assert!(ptr::eq(
