@@ -8,7 +8,7 @@ use crate::gc::persistent::Persistent;
 use crate::gc::ObjectId;
 use crate::value::object::{NamedObject, Object, PropertyValue};
 use crate::value::primitive::{Null, Number, Symbol, Undefined};
-use crate::value::{ExternalValue, Root, Unpack, Value, ValueKind};
+use crate::value::{Root, Unpack, Value, ValueKind};
 use crate::Vm;
 
 const INTERPRETER: &str = include_str!("interpreter.js");
@@ -30,20 +30,18 @@ fn interpreter() {
 
 #[test]
 fn packed_value() {
-    let vm = Vm::new(Default::default());
-
     assert_eq!(Value::null().unpack(), ValueKind::Null(Null));
     assert_eq!(Value::undefined().unpack(), ValueKind::Undefined(Undefined));
     assert_eq!(Value::boolean(true).unpack(), ValueKind::Boolean(true));
     assert_eq!(Value::boolean(false).unpack(), ValueKind::Boolean(false));
-    assert_eq!(
+    assert!(matches!(
         Value::external(ObjectId::from_raw(u32::MAX)).unpack(),
-        ValueKind::External(ExternalValue::new(&vm, ObjectId::from_raw(u32::MAX)))
-    );
-    assert_eq!(
+        ValueKind::External(ext) if ext.id() == ObjectId::from_raw(u32::MAX)
+    ));
+    assert!(matches!(
         Value::external(ObjectId::from_raw(4242)).unpack(),
-        ValueKind::External(ExternalValue::new(&vm, ObjectId::from_raw(4242)))
-    );
+        ValueKind::External(ext) if ext.id() == ObjectId::from_raw(4242)
+    ));
     assert_eq!(Value::number(0.0).unpack(), ValueKind::Number(Number(0.0)));
     match Value::number(f64::NAN).unpack() {
         ValueKind::Number(num) => assert!(num.0.is_nan()),
