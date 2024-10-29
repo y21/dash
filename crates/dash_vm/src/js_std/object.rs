@@ -138,7 +138,13 @@ pub fn define_property(cx: CallContext) -> Result<Value, Value> {
     };
 
     let property = match cx.args.get(1) {
-        Some(other) => PropertyKey::from(other.to_js_string(cx.scope)?),
+        Some(other) => {
+            if let ValueKind::Symbol(sym) = other.unpack() {
+                PropertyKey::Symbol(sym)
+            } else {
+                PropertyKey::from(other.to_js_string(cx.scope)?)
+            }
+        }
         _ => throw!(cx.scope, TypeError, "Property must be a string or symbol"),
     };
     let descriptor = match cx.args.get(2).unpack() {

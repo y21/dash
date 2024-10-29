@@ -1,6 +1,6 @@
 #![cfg_attr(dash_lints, feature(register_tool))]
 #![cfg_attr(dash_lints, register_tool(dash_lints))]
-#![allow(clippy::clone_on_copy)] // TODO: Requires large amounts of changes
+#![allow(clippy::clone_on_copy, clippy::needless_borrow)] // TODO: Requires large amounts of changes
 #![warn(clippy::redundant_clone)]
 #![deny(clippy::disallowed_methods)]
 
@@ -1476,11 +1476,9 @@ impl Vm {
 
         // All reachable roots are marked.
         debug!("rss before sweep: {}", self.alloc.rss());
-        let before = self.alloc.rss();
         let sweep = span!(Level::TRACE, "gc sweep");
         sweep.in_scope(|| unsafe { self.alloc.sweep() });
         debug!("rss after sweep: {}", self.alloc.rss());
-        println!("[GC] {} -> {}", before, self.alloc.rss());
 
         debug!("sweep interner");
         self.interner.sweep();

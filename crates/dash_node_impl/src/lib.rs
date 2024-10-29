@@ -178,13 +178,13 @@ fn execute_node_module(
     }));
     let key = scope.intern("exports");
     module
-        .set_property(scope, key.into(), PropertyValue::static_default(exports.clone()))
+        .set_property(scope, key.into(), PropertyValue::static_default(exports))
         .unwrap();
 
     global_state
         .ongoing_requires
         .borrow_mut()
-        .insert(file_path.to_owned(), module.clone());
+        .insert(file_path.to_owned(), module);
 
     let mut code = String::from("(function(exports, module, require) {\n");
     code += source;
@@ -195,7 +195,7 @@ fn execute_node_module(
         Err(err) => return Err((err, code)),
     };
 
-    fun.apply(scope, Value::undefined(), vec![exports, module.clone(), require])
+    fun.apply(scope, Value::undefined(), vec![exports, module, require])
         .map_err(|err| (EvalError::Exception(err), code))?;
 
     Ok(module)

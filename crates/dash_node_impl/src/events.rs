@@ -46,26 +46,26 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
                 let EventsState {
                     event_emitter_prototype,
                     event_emitter_constructor,
-                } = &State::from_vm(cx.scope).store[EventsKey];
+                } = State::from_vm(cx.scope).store[EventsKey];
 
                 let emitter = EventEmitter {
                     object: NamedObject::with_prototype_and_constructor(
-                        event_emitter_prototype.clone(),
-                        event_emitter_constructor.clone(),
+                        event_emitter_prototype,
+                        event_emitter_constructor,
                     ),
                     handlers: RefCell::new(FxHashMap::default()),
                 };
                 Ok(cx.scope.register(emitter).into())
             }),
         );
-        event_emitter_ctor.set_fn_prototype(event_emitter_prototype.clone());
+        event_emitter_ctor.set_fn_prototype(event_emitter_prototype);
         sc.register(event_emitter_ctor)
     };
 
     State::from_vm_mut(sc).store.insert(
         EventsKey,
         EventsState {
-            event_emitter_constructor: event_emitter_ctor.clone(),
+            event_emitter_constructor: event_emitter_ctor,
             event_emitter_prototype,
         },
     );
@@ -73,7 +73,7 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     event_emitter_ctor.set_property(
         sc,
         event_emitter_sym.into(),
-        PropertyValue::static_default(event_emitter_ctor.clone().into()),
+        PropertyValue::static_default(event_emitter_ctor.into()),
     )?;
 
     Ok(Value::object(event_emitter_ctor))
@@ -111,7 +111,7 @@ impl Object for EventEmitter {
 }
 
 fn on(cx: CallContext) -> Result<Value, Value> {
-    let [name, cb] = &*cx.args else {
+    let [name, cb] = *cx.args else {
         throw!(cx.scope, Error, "expected an event name and callback function");
     };
     let name = name.to_js_string(cx.scope)?;
@@ -123,8 +123,8 @@ fn on(cx: CallContext) -> Result<Value, Value> {
         throw!(cx.scope, TypeError, "on can only be called on EventEmitter instances")
     };
     match this.handlers.borrow_mut().entry(name.sym()) {
-        Entry::Occupied(mut entry) => entry.get_mut().push(cb.clone()),
-        Entry::Vacant(entry) => drop(entry.insert(vec![cb.clone()])),
+        Entry::Occupied(mut entry) => entry.get_mut().push(cb),
+        Entry::Vacant(entry) => drop(entry.insert(vec![cb])),
     };
     Ok(cx.this)
 }
@@ -141,9 +141,7 @@ fn emit(cx: CallContext) -> Result<Value, Value> {
     let mut did_emit = false;
     if let Some(handlers) = this.handlers.borrow().get(&name.sym()) {
         for handler in handlers {
-            handler
-                .apply(cx.scope, cx.this.clone(), args.to_owned())
-                .root_err(cx.scope)?;
+            handler.apply(cx.scope, cx.this, args.to_owned()).root_err(cx.scope)?;
             did_emit = true;
         }
     }

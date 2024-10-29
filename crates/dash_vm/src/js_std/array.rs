@@ -128,17 +128,6 @@ pub fn some(cx: CallContext) -> Result<Value, Value> {
         let pk = cx.scope.intern_usize(k);
         let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
         let args = vec![pkv, Value::number(k as f64), this.clone()];
-        // let arg = match callback.unpack() {
-        //     ValueKind::Object(obj) => obj,
-        //     other => todo!("??? {other:?}"),
-        // };
-        // println!(
-        //     "Calling {:?} {:?} {:?}",
-        //     callback,
-        //     callback.unpack(),
-        //     arg.data_ptr(cx.scope)
-        // );
-        // callback.apply(cx.scope, Value::undefined(), vec![]);
         let test = callback
             .apply(cx.scope, Value::undefined(), args)
             .root(cx.scope)?
