@@ -18,7 +18,7 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
 pub fn to_string(cx: CallContext) -> Result<Value, Value> {
     if let Some(value) = cx
         .this
-        .internal_slots(&cx.scope)
+        .internal_slots(cx.scope)
         .and_then(|slots| slots.boolean_value(cx.scope))
     {
         Ok(Value::string(
@@ -36,7 +36,7 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
 pub fn value_of(cx: CallContext) -> Result<Value, Value> {
     if let Some(value) = cx
         .this
-        .internal_slots(&cx.scope)
+        .internal_slots(cx.scope)
         .and_then(|slots| slots.boolean_value(cx.scope))
     {
         Ok(Value::boolean(value))

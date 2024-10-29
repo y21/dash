@@ -16,7 +16,7 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
 
 pub fn byte_length(cx: CallContext) -> Result<Value, Value> {
     let this = cx.this.unpack();
-    let Some(this) = this.downcast_ref::<ArrayBuffer>(&cx.scope) else {
+    let Some(this) = this.downcast_ref::<ArrayBuffer>(cx.scope) else {
         throw!(
             cx.scope,
             TypeError,

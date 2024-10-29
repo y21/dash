@@ -565,7 +565,7 @@ pub fn is_array(cx: CallContext) -> Result<Value, Value> {
             .first()
             .unwrap_or_undefined()
             .unpack()
-            .downcast_ref::<Array>(&cx.scope)
+            .downcast_ref::<Array>(cx.scope)
             .is_some(),
     ))
 }

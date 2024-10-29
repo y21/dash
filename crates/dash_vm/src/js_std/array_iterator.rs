@@ -7,7 +7,7 @@ use dash_middle::interner::sym;
 
 pub fn next(cx: CallContext) -> Result<Value, Value> {
     let this = cx.this.unpack();
-    let iterator = match this.downcast_ref::<ArrayIterator>(&cx.scope) {
+    let iterator = match this.downcast_ref::<ArrayIterator>(cx.scope) {
         Some(it) => it,
         None => throw!(cx.scope, TypeError, "Incompatible receiver"),
     };

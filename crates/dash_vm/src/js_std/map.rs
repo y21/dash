@@ -31,7 +31,7 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
 
 pub fn set(cx: CallContext) -> Result<Value, Value> {
     let this = cx.this.unpack();
-    let this = match this.downcast_ref::<Map>(&cx.scope) {
+    let this = match this.downcast_ref::<Map>(cx.scope) {
         Some(map) => map,
         _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
     };
@@ -45,7 +45,7 @@ pub fn set(cx: CallContext) -> Result<Value, Value> {
 
 pub fn has(cx: CallContext) -> Result<Value, Value> {
     let this = cx.this.unpack();
-    let this = match this.downcast_ref::<Map>(&cx.scope) {
+    let this = match this.downcast_ref::<Map>(cx.scope) {
         Some(map) => map,
         _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
     };
@@ -56,7 +56,7 @@ pub fn has(cx: CallContext) -> Result<Value, Value> {
 
 pub fn get(cx: CallContext) -> Result<Value, Value> {
     let this = cx.this.unpack();
-    let this = match this.downcast_ref::<Map>(&cx.scope) {
+    let this = match this.downcast_ref::<Map>(cx.scope) {
         Some(map) => map,
         _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
     };
@@ -67,7 +67,7 @@ pub fn get(cx: CallContext) -> Result<Value, Value> {
 
 pub fn delete(cx: CallContext) -> Result<Value, Value> {
     let this = cx.this.unpack();
-    let this = match this.downcast_ref::<Map>(&cx.scope) {
+    let this = match this.downcast_ref::<Map>(cx.scope) {
         Some(map) => map,
         _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
     };
@@ -80,7 +80,7 @@ pub fn delete(cx: CallContext) -> Result<Value, Value> {
 
 pub fn clear(cx: CallContext) -> Result<Value, Value> {
     let this = cx.this.unpack();
-    let this = match this.downcast_ref::<Map>(&cx.scope) {
+    let this = match this.downcast_ref::<Map>(cx.scope) {
         Some(map) => map,
         _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
     };
@@ -92,7 +92,7 @@ pub fn clear(cx: CallContext) -> Result<Value, Value> {
 
 pub fn size(cx: CallContext) -> Result<Value, Value> {
     let this = cx.this.unpack();
-    let this = match this.downcast_ref::<Map>(&cx.scope) {
+    let this = match this.downcast_ref::<Map>(cx.scope) {
         Some(map) => map,
         _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
     };

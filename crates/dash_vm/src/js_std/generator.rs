@@ -32,7 +32,7 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
 
         let function = generator.function();
         let function = match function
-            .as_any(&cx.scope)
+            .as_any(cx.scope)
             .downcast_ref::<Function>()
             .map(|fun| fun.kind())
         {

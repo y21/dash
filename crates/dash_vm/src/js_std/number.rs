@@ -28,7 +28,7 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
 
     let Some(num) = cx
         .this
-        .internal_slots(&cx.scope)
+        .internal_slots(cx.scope)
         .and_then(|slots| slots.number_value(cx.scope))
     else {
         throw!(
@@ -51,7 +51,7 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
 pub fn value_of(cx: CallContext) -> Result<Value, Value> {
     if let Some(num) = cx
         .this
-        .internal_slots(&cx.scope)
+        .internal_slots(cx.scope)
         .and_then(|slots| slots.number_value(cx.scope))
     {
         Ok(Value::number(num))

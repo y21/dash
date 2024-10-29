@@ -30,7 +30,7 @@ pub fn apply(cx: CallContext) -> Result<Value, Value> {
     };
 
     let target_callee = match cx.this.unpack() {
-        ValueKind::Object(o) if matches!(o.type_of(&cx.scope), Typeof::Function) => o,
+        ValueKind::Object(o) if matches!(o.type_of(cx.scope), Typeof::Function) => o,
         _ => throw!(cx.scope, TypeError, "Bound value must be a function"),
     };
 
@@ -43,7 +43,7 @@ pub fn bind(cx: CallContext) -> Result<Value, Value> {
     let target_this = cx.args.first().cloned();
     let target_args = cx.args.get(1..).map(|s| s.to_vec());
     let target_callee = match cx.this.unpack() {
-        ValueKind::Object(o) if matches!(o.type_of(&cx.scope), Typeof::Function) => o,
+        ValueKind::Object(o) if matches!(o.type_of(cx.scope), Typeof::Function) => o,
         _ => throw!(cx.scope, TypeError, "Bound value must be a function"),
     };
 
@@ -55,7 +55,7 @@ pub fn call(cx: CallContext) -> Result<Value, Value> {
     let target_this = cx.args.first().cloned();
     let target_args = cx.args.get(1..).map(|s| s.to_vec());
     let target_callee = match cx.this.unpack() {
-        ValueKind::Object(o) if matches!(o.type_of(&cx.scope), Typeof::Function) => o,
+        ValueKind::Object(o) if matches!(o.type_of(cx.scope), Typeof::Function) => o,
         _ => throw!(cx.scope, TypeError, "Bound value must be a function"),
     };
 
@@ -70,7 +70,7 @@ pub fn call(cx: CallContext) -> Result<Value, Value> {
 
 pub fn to_string(cx: CallContext) -> Result<Value, Value> {
     let this = cx.this.unpack();
-    let Some(this) = this.downcast_ref::<Function>(&cx.scope) else {
+    let Some(this) = this.downcast_ref::<Function>(cx.scope) else {
         throw!(cx.scope, TypeError, "Incompatible receiver");
     };
     let name = format!(

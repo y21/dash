@@ -1,6 +1,6 @@
 #![cfg_attr(dash_lints, feature(register_tool))]
 #![cfg_attr(dash_lints, register_tool(dash_lints))]
-#![allow(clippy::clone_on_copy, clippy::needless_borrow)] // TODO: Requires large amounts of changes
+#![allow(clippy::clone_on_copy)] // TODO: Requires large amounts of changes
 #![warn(clippy::redundant_clone)]
 #![deny(clippy::disallowed_methods)]
 
