@@ -41,7 +41,7 @@ impl Runtime {
             .set_state(Box::new(state));
 
         if let Some(threshold) = initial_gc_threshold {
-            params = params.set_initial_gc_object_threshold(threshold);
+            params = params.set_initial_gc_rss_threshold(threshold);
         }
 
         let vm = Vm::new(params);

@@ -21,7 +21,7 @@ fn main() -> anyhow::Result<()> {
     let nodejs = Arg::new("node").long("node").takes_value(false);
 
     let initial_gc_threshold = Arg::new("initial-gc-threshold")
-        .help("Sets the initial GC object threshold, i.e. the object count at which the first GC cycle triggers.")
+        .help("Sets the initial GC object threshold, i.e. the RSS at which the first GC cycle triggers.")
         .long("initial-gc-threshold")
         .takes_value(true)
         .required(false);

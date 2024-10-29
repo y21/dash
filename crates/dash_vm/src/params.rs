@@ -33,14 +33,14 @@ impl<T: Any + Trace> State for T {
 
 #[derive(Default)]
 pub struct VmParams {
-    math_random_callback: Option<MathRandomCallback>,
-    time_millis_callback: Option<TimeMillisCallback>,
-    static_import_callback: Option<StaticImportCallback>,
-    dynamic_import_callback: Option<DynamicImportCallback>,
-    debugger_callback: Option<DebuggerCallback>,
-    unhandled_task_exception_callback: Option<UnhandledTaskException>,
-    initial_gc_object_threshold: Option<usize>,
-    state: Option<Box<dyn State>>,
+    pub math_random_callback: Option<MathRandomCallback>,
+    pub time_millis_callback: Option<TimeMillisCallback>,
+    pub static_import_callback: Option<StaticImportCallback>,
+    pub dynamic_import_callback: Option<DynamicImportCallback>,
+    pub debugger_callback: Option<DebuggerCallback>,
+    pub unhandled_task_exception_callback: Option<UnhandledTaskException>,
+    pub initial_gc_rss_threshold: Option<usize>,
+    pub state: Option<Box<dyn State>>,
 }
 
 impl VmParams {
@@ -56,14 +56,6 @@ impl VmParams {
     pub fn set_dynamic_import_callback(mut self, callback: DynamicImportCallback) -> Self {
         self.dynamic_import_callback = Some(callback);
         self
-    }
-
-    pub fn static_import_callback(&self) -> Option<StaticImportCallback> {
-        self.static_import_callback
-    }
-
-    pub fn dynamic_import_callback(&self) -> Option<DynamicImportCallback> {
-        self.dynamic_import_callback
     }
 
     pub fn set_state(mut self, state: Box<dyn State>) -> Self {
@@ -91,27 +83,14 @@ impl VmParams {
         self.math_random_callback = Some(callback);
         self
     }
-
-    pub fn math_random_callback(&self) -> Option<MathRandomCallback> {
-        self.math_random_callback
-    }
-
     pub fn set_time_millis_callback(mut self, callback: TimeMillisCallback) -> Self {
         self.time_millis_callback = Some(callback);
         self
     }
 
-    pub fn time_millis_callback(&self) -> Option<TimeMillisCallback> {
-        self.time_millis_callback
-    }
-
     pub fn set_debugger_callback(mut self, callback: DebuggerCallback) -> Self {
         self.debugger_callback = Some(callback);
         self
-    }
-
-    pub fn debugger_callback(&self) -> Option<DebuggerCallback> {
-        self.debugger_callback
     }
 
     pub fn set_unhandled_task_exception_callback(mut self, callback: UnhandledTaskException) -> Self {
@@ -123,12 +102,8 @@ impl VmParams {
         self.unhandled_task_exception_callback
     }
 
-    pub fn set_initial_gc_object_threshold(mut self, threshold: usize) -> Self {
-        self.initial_gc_object_threshold = Some(threshold);
+    pub fn set_initial_gc_rss_threshold(mut self, threshold: usize) -> Self {
+        self.initial_gc_rss_threshold = Some(threshold);
         self
-    }
-
-    pub fn initial_gc_object_threshold(&self) -> Option<usize> {
-        self.initial_gc_object_threshold
     }
 }

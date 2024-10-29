@@ -52,7 +52,7 @@ pub mod value;
 
 pub const MAX_FRAME_STACK_SIZE: usize = 1024;
 pub const MAX_STACK_SIZE: usize = 8192;
-const DEFAULT_GC_OBJECT_COUNT_THRESHOLD: usize = 8192;
+const DEFAULT_GC_RSS_THRESHOLD: usize = 1024 * 1024;
 
 #[derive(Clone, Default)]
 pub struct ExternalRefs(pub std::rc::Rc<std::cell::RefCell<FxHashMap<ObjectId, u32>>>);
@@ -81,7 +81,7 @@ pub struct Vm {
     try_blocks: Vec<TryBlock>,
     #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
     params: VmParams,
-    gc_object_threshold: usize,
+    gc_rss_threshold: usize,
     /// Keeps track of the "purity" of the builtins of this VM.
     /// Purity here refers to whether builtins have been (in one way or another) mutated.
     /// Removing a property from the global object (e.g. `Math`) or any other builtin,
@@ -99,9 +99,9 @@ impl Vm {
         let statics = Statics::new(&mut alloc);
         // TODO: global __proto__ and constructor
         let global: ObjectId = alloc.alloc_object(PureBuiltin::new(NamedObject::null()));
-        let gc_object_threshold = params
-            .initial_gc_object_threshold()
-            .unwrap_or(DEFAULT_GC_OBJECT_COUNT_THRESHOLD);
+        let gc_rss_threshold = params
+            .initial_gc_rss_threshold
+            .unwrap_or(DEFAULT_GC_RSS_THRESHOLD);
 
         let mut vm = Self {
             frames: Vec::new(),
@@ -115,7 +115,7 @@ impl Vm {
             statics: Box::new(statics),
             try_blocks: Vec::new(),
             params,
-            gc_object_threshold,
+            gc_rss_threshold,
             builtins_pure: true,
 
             #[cfg(feature = "jit")]
@@ -1436,9 +1436,9 @@ impl Vm {
             }
             #[cfg(not(feature = "stress_gc"))]
             {
-                // if util::unlikely(self.gc.node_count() > self.gc_object_threshold) {
-                    // self.perform_gc();
-                // }
+                if util::unlikely(self.alloc.rss() > self.gc_rss_threshold) {
+                    self.perform_gc();
+                }
             }
 
             let instruction = Instruction::from_repr(self.fetch_and_inc_ip()).unwrap();
@@ -1475,18 +1475,19 @@ impl Vm {
         trace_roots.in_scope(|| self.trace_roots());
 
         // All reachable roots are marked.
-        // debug!("object count before sweep: {}", self.gc.node_count());
+        debug!("rss before sweep: {}", self.alloc.rss());
+        let before = self.alloc.rss();
         let sweep = span!(Level::TRACE, "gc sweep");
         sweep.in_scope(|| unsafe { self.alloc.sweep() });
-        // debug!("object count after sweep: {}", self.gc.node_count());
+        debug!("rss after sweep: {}", self.alloc.rss());
+        println!("[GC] {} -> {}", before, self.alloc.rss());
 
         debug!("sweep interner");
         self.interner.sweep();
 
         // Adjust GC threshold
-        // let new_object_count = self.gc.node_count();
-        // self.gc_object_threshold = new_object_count * 2;
-        debug!("new threshold: {}", self.gc_object_threshold);
+        self.gc_rss_threshold = self.alloc.rss() * 2;
+        debug!("new threshold: {}", self.gc_rss_threshold);
     }
 
     fn trace_roots(&mut self) {

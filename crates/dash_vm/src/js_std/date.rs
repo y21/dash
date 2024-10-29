@@ -4,7 +4,7 @@ use crate::value::root_ext::RootErrExt;
 use crate::value::Value;
 
 pub fn time_millis(cx: &mut CallContext) -> Result<u64, Value> {
-    let callback = match cx.scope.params().time_millis_callback() {
+    let callback = match cx.scope.params().time_millis_callback {
         Some(c) => c,
         None => throw!(&mut cx.scope, Error, "Failed to get the current time"),
     };

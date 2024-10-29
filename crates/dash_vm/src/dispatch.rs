@@ -1900,7 +1900,7 @@ mod handlers {
     pub fn import_dyn(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let value = cx.pop_stack_rooted();
 
-        let _ret = match cx.params.dynamic_import_callback() {
+        let _ret = match cx.params.dynamic_import_callback {
             Some(cb) => cb(&mut cx, value)?,
             None => throw!(cx, Error, "Dynamic imports are disabled for this context"),
         };
@@ -1918,7 +1918,7 @@ mod handlers {
 
         let path = cx.constants().symbols[SymbolConstant(path_id)];
 
-        let value = match cx.params.static_import_callback() {
+        let value = match cx.params.static_import_callback {
             Some(cb) => cb(&mut cx, ty, path.into())?,
             None => throw!(cx, Error, "Static imports are disabled for this context."),
         };
@@ -1957,7 +1957,7 @@ mod handlers {
     }
 
     pub fn debugger(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        if let Some(cb) = cx.params().debugger_callback() {
+        if let Some(cb) = cx.params().debugger_callback {
             cb(&mut cx)?;
         }
 
