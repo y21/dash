@@ -1,6 +1,5 @@
 use std::ops::ControlFlow;
 
-use dash_middle::interner::sym;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::throw;
@@ -10,6 +9,7 @@ use crate::value::object::{NamedObject, Object, PropertyDataDescriptor, Property
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::root_ext::RootErrExt;
 use crate::value::{Root, Typeof, Unpack, Value, ValueContext, ValueKind};
+use dash_middle::interner::sym;
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     match cx.args.first() {
@@ -138,13 +138,6 @@ pub fn define_property(cx: CallContext) -> Result<Value, Value> {
     };
 
     let property = match cx.args.get(1) {
-        Some(arg) => {
-            if let ValueKind::Symbol(sym) = arg.unpack() {
-                PropertyKey::from(sym)
-            } else {
-                throw!(cx.scope, TypeError, "Property must be a string or symbol")
-            }
-        }
         Some(other) => PropertyKey::from(other.to_js_string(cx.scope)?),
         _ => throw!(cx.scope, TypeError, "Property must be a string or symbol"),
     };

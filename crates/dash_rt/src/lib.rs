@@ -1,8 +1,6 @@
-use std::cell::OnceCell;
 use std::future::Future;
 
 use dash_compiler::FunctionCompiler;
-use dash_middle::compiler::CompileResult;
 use dash_vm::frame::{Exports, Frame};
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::function::native::CallContext;

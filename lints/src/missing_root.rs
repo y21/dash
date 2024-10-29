@@ -60,7 +60,7 @@ macro_rules! required_items {
 required_items!(
     trait root => ["dash_vm", "value", "Root"],
     struct vm => ["dash_vm", "Vm"],
-    struct gc => ["dash_vm", "gc", "Gc"],
+    struct allocator => ["dash_vm", "gc", "Allocator"],
     struct scope => ["dash_vm", "localscope", "LocalScope"],
     struct dispatchcx => ["dash_vm", "dispatch", "DispatchContext"]
 );
@@ -85,7 +85,7 @@ impl MissingRoot {
                 self.items.dispatchcx(),
                 self.items.vm(),
                 self.items.scope(),
-                self.items.gc(),
+                self.items.allocator(),
             ]
             .contains(&def.did()),
             ty::Ref(_, pointee, Mutability::Mut) => self.is_scope_like(tcx, pointee, refb),

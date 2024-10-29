@@ -132,7 +132,6 @@ impl Unpack for Value {
     /// Unpacks the value so it can be matched
     fn unpack(self) -> Self::Output {
         // TODO: find out why codegen is bad
-        #[expect(clippy::wildcard_in_or_patterns)]
         match self.0 & Self::TAG_MASK {
             Self::BOOLEAN_MASK => ValueKind::Boolean(self.0 as u8 == 1),
             Self::STRING_MASK => ValueKind::String(JsString::from(interner::Symbol::from_raw(self.0 as u32))),
@@ -496,7 +495,8 @@ impl ExternalValue {
     /// The `dyn Object` *must* be `Value`.
     // can we make this type safe?
     pub fn new(vm: &Vm, inner: ObjectId) -> Self {
-        // debug_assert!(inner.as_any().downcast_ref::<Value>().is_some());
+        // TODO: make a ValueId
+        debug_assert!(inner.as_any(vm).downcast_ref::<Value>().is_some());
         Self { inner }
     }
 

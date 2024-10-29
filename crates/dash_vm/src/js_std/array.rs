@@ -1,6 +1,5 @@
 use std::ops::Range;
 
-use dash_middle::interner::sym;
 use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::array::{Array, ArrayIterator};
@@ -10,7 +9,8 @@ use crate::value::ops::conversions::ValueConversion;
 use crate::value::ops::equality::strict_eq;
 use crate::value::root_ext::RootErrExt;
 use crate::value::string::JsString;
-use crate::value::{array, Root, Unpack, Value, ValueContext, ValueKind};
+use crate::value::{array, Root, Unpack, Value, ValueContext};
+use dash_middle::interner::sym;
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let size = cx.args.first().unwrap_or_undefined().to_length_u(cx.scope)?;

@@ -3,7 +3,7 @@ use crate::util::intern_f64;
 use crate::value::function::native::CallContext;
 use crate::value::object::Object;
 use crate::value::ops::conversions::ValueConversion;
-use crate::value::primitive::{InternalSlots, Number, MAX_SAFE_INTEGER, MIN_SAFE_INTEGER};
+use crate::value::primitive::{Number, MAX_SAFE_INTEGER, MIN_SAFE_INTEGER};
 use crate::value::{boxed, Unpack, Value, ValueContext, ValueKind};
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
