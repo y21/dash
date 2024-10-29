@@ -3,7 +3,6 @@ use std::any::Any;
 use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut};
 use std::ptr::{self, NonNull};
 use std::{fmt, mem};
 
@@ -178,31 +177,34 @@ impl<M> std::hash::Hash for AllocId<M> {
     }
 }
 
+fn const_checks_for_alloc<T, M>() {
+    const {
+        assert!(size_of::<T>() < 1024);
+        assert!(size_of::<M>() < 256);
+        // We could store its `drop_in_place` as well to support it but it's not needed ATP.
+        assert!(!std::mem::needs_drop::<M>());
+    }
+}
+
 #[derive(Debug)]
 struct OutOfSpace;
 
 #[derive(Debug)]
 struct AllocSizeInfo {
     /// The number of padding bytes (excluding the size byte)
-    header_padding: u8,
-    data_padding: u8,
+    header_padding: usize,
+    data_padding: usize,
+    data_index: u16,
     total: usize,
 }
 
 // The general encoding for every allocation is as follows:
-// <2 byte AllocInfo index>
-// <any padding for metadata - 4  the index is part of the padding>
+// <any padding for metadata - 2  the index is part of the padding>
 // <2 byte AllocInfo index>
 // <metadata>
 // <padding for data>
 // <1 byte for how far back the metadata start is located>
 // <data>
-//
-// The reason for encoding the AllocInfo twice, once at the start and at the back is to allow iteration from both directions:
-// AllocId only gives us the data index, which makes it fast to get the data, but we don't know the padding size for unknown metadata
-// so we also insert it at the end of the padding.
-//
-// During sweeping we do a forward scan which requires the AllocInfo index at the start.
 struct Chunk {
     data: NonNull<u8>,
     info: Vec<AllocInfo>,
@@ -218,11 +220,6 @@ bitflags! {
 
 struct AllocInfo {
     flags: Cell<AllocFlags>,
-    /// The number of padding bytes in between the two info indices
-    metadata_padding_size: u8,
-    metadata_size: u8,
-    data_padding_size: u8,
-    data_size: u16,
     total_alloc_size: u16,
     alloc_start: u16,
     data_index: u16, // TODO: this can be computed with alloc_start alone
@@ -275,14 +272,6 @@ impl Chunk {
         Ok(())
     }
 
-    fn push_n(&mut self, byte: u8, n: usize) -> Result<(), OutOfSpace> {
-        self.ensure_space(n)?;
-
-        unsafe { self.data.add(self.at).write_bytes(byte, n) };
-        self.at += n;
-        Ok(())
-    }
-
     /// Copies the raw bytes of `T` into the buffer. The `T` must be aligned.
     fn write<T>(&mut self, value: T) -> Result<(), OutOfSpace> {
         let size = size_of::<T>();
@@ -301,8 +290,8 @@ impl Chunk {
 
     /// Computes the size that an allocation would take up at a given position. Returns an error if the allocation won't fit in the given `size`.
     fn size_for_alloc_at<T, M>(&self, at: usize) -> Result<AllocSizeInfo, OutOfSpace> {
-        // Start with the alloc info indices + padding.
-        let mut total: usize = 4;
+        // Start with the alloc info index + padding.
+        let mut total: usize = 2;
 
         // Make sure that `additional` extra bytes fit.
         let ensure = |total: usize, additional: usize| {
@@ -314,28 +303,23 @@ impl Chunk {
         };
 
         ensure(total, 1)?; // Bounds check for the header_padding `add` below
-        let header_padding: u8 = unsafe {
-            self.data
-                .add(at + total)
-                .align_offset(align_of::<M>())
-                .try_into()
-                .map_err(|_| OutOfSpace)?
-        };
+        let header_padding = unsafe { self.data.add(at + total).align_offset(align_of::<M>()) };
+        if header_padding > u8::MAX as usize {
+            return Err(OutOfSpace);
+        }
 
-        total += usize::from(header_padding);
+        total += header_padding;
         total += size_of::<M>();
         total += 1; // 1 Byte back offset to metadata
 
         ensure(total, 1)?; // Bounds check for the header_padding `add` below
-        let data_padding: u8 = unsafe {
-            self.data
-                .add(at + total)
-                .align_offset(align_of::<T>())
-                .try_into()
-                .map_err(|_| OutOfSpace)?
-        };
+        let data_padding = unsafe { self.data.add(at + total).align_offset(align_of::<T>()) };
+        if data_padding > u8::MAX as usize {
+            return Err(OutOfSpace);
+        }
 
-        total += usize::from(data_padding);
+        total += data_padding;
+        let data_index = (at + total) as u16;
         total += size_of::<T>();
 
         self.ensure_space(total)?;
@@ -343,17 +327,9 @@ impl Chunk {
         Ok(AllocSizeInfo {
             header_padding,
             data_padding,
+            data_index,
             total,
         })
-    }
-
-    fn const_checks_for_alloc<T, M>() {
-        const {
-            assert!(size_of::<T>() < 1024);
-            assert!(size_of::<M>() < 256);
-            // We could store its `drop_in_place` as well to support it but it's not needed ATP.
-            assert!(!std::mem::needs_drop::<M>());
-        }
     }
 
     /// Tries to reuse an existing allocation for a `T`. The returned `LocalAllocId` can be different in case of different alignment
@@ -365,52 +341,25 @@ impl Chunk {
         value: T,
         metadata: M,
     ) -> Result<(LocalAllocId, usize), (T, M)> {
-        struct ChunkCursor<'a> {
-            chunk: &'a mut Chunk,
-            old_at: usize,
-            allocation_start: usize,
-            allocation_size: usize,
-        }
-        impl Deref for ChunkCursor<'_> {
-            type Target = Chunk;
-            fn deref(&self) -> &Self::Target {
-                self.chunk
-            }
-        }
-        impl DerefMut for ChunkCursor<'_> {
-            fn deref_mut(&mut self) -> &mut Self::Target {
-                self.chunk
-            }
-        }
-        impl Drop for ChunkCursor<'_> {
-            fn drop(&mut self) {
-                assert!(self.chunk.at <= self.allocation_start + self.allocation_size);
-                self.chunk.at = self.old_at;
-            }
-        }
-
-        Self::const_checks_for_alloc::<T, M>();
+        const_checks_for_alloc::<T, M>();
 
         let AllocSizeInfo {
             header_padding,
             data_padding,
+            data_index,
             total: total_alloc_size,
         } = match self.size_for_alloc_at::<T, M>(allocation_start) {
             // Make sure that even if it fits in the chunk, it doesn't overflow the old allocation.
-            Ok(v) if v.total as u16 > old_total_allocation_size => return Err((value, metadata)),
+            Ok(v) if v.total > old_total_allocation_size as usize => return Err((value, metadata)),
             Ok(v) => v,
             Err(OutOfSpace) => return Err((value, metadata)),
         };
 
         let alloc_info = AllocInfo {
             flags: Cell::new(AllocFlags::INITIALIZED),
-            metadata_padding_size: header_padding,
-            metadata_size: size_of::<M>() as u8,
-            data_padding_size: data_padding,
-            data_size: size_of::<T>() as u16,
             total_alloc_size: total_alloc_size as u16,
             alloc_start: allocation_start as u16,
-            data_index: 0, // Placeholder. TODO: can we use the AllocSizeInfo to compute it exactly ahead of time
+            data_index,
             drop_in_place: unsafe {
                 std::mem::transmute::<unsafe fn(*mut T), unsafe fn(*const ())>(std::ptr::drop_in_place::<T> as _)
             },
@@ -425,29 +374,23 @@ impl Chunk {
         };
 
         let old_at = self.at;
-        let cursor = ChunkCursor {
-            chunk: self,
-            allocation_start,
-            allocation_size: total_alloc_size,
-            old_at,
-        };
-        // Gets reset in ChunkCursor's drop code
-        cursor.chunk.at = allocation_start;
-        let written_id = cursor
-            .chunk
-            .write_alloc_data(info_id, header_padding, data_padding, value, metadata);
-        cursor.chunk.info[info_id as usize].data_index = written_id.0;
+        self.at = allocation_start;
+        let id = self.write_alloc_data(info_id, header_padding, data_padding, value, metadata);
 
-        Ok((written_id, total_alloc_size))
+        assert!(self.at <= allocation_start + total_alloc_size);
+        self.at = old_at;
+
+        Ok((id, total_alloc_size))
     }
 
     /// Tries to allocate a value in this chunk if there is enough space.
     pub fn try_alloc<T, M>(&mut self, value: T, metadata: M) -> Result<(LocalAllocId, usize), (T, M)> {
-        Self::const_checks_for_alloc::<T, M>();
+        const_checks_for_alloc::<T, M>();
 
         let AllocSizeInfo {
             header_padding,
             data_padding,
+            data_index,
             total: total_alloc_size,
         } = match self.size_for_alloc_at::<T, M>(self.at) {
             Ok(v) => v,
@@ -457,12 +400,8 @@ impl Chunk {
         let info_id: u16 = self.info.len().try_into().unwrap();
         self.info.push(AllocInfo {
             flags: Cell::new(AllocFlags::INITIALIZED),
-            metadata_padding_size: header_padding,
-            metadata_size: size_of::<M>() as u8,
-            data_padding_size: data_padding,
-            data_size: size_of::<T>() as u16,
             total_alloc_size: total_alloc_size as u16,
-            data_index: 0, // Placeholder
+            data_index,
             alloc_start: self.at as u16,
             drop_in_place: unsafe {
                 std::mem::transmute::<unsafe fn(*mut T), unsafe fn(*const ())>(std::ptr::drop_in_place::<T> as _)
@@ -470,7 +409,7 @@ impl Chunk {
         });
 
         let id = self.write_alloc_data(info_id, header_padding, data_padding, value, metadata);
-        self.info[info_id as usize].data_index = id.0;
+        assert_eq!(id.0, data_index);
 
         Ok((id, total_alloc_size))
     }
@@ -478,20 +417,19 @@ impl Chunk {
     fn write_alloc_data<T, M>(
         &mut self,
         info_id: u16,
-        header_padding: u8,
-        data_padding: u8,
+        header_padding: usize,
+        data_padding: usize,
         value: T,
         metadata: M,
     ) -> LocalAllocId {
-        self.push_u16(info_id).unwrap();
-        self.push_n(0, header_padding.into()).unwrap();
+        self.at += header_padding;
         self.push_u16(info_id).unwrap();
 
         let metadata_pos = self.at;
 
         self.write(metadata).unwrap();
 
-        self.push_n(0, data_padding.into()).unwrap();
+        self.at += data_padding;
         let back_offset_to_metadata = u8::try_from(self.at + 1 - metadata_pos).unwrap();
         self.push(back_offset_to_metadata).unwrap();
 
@@ -577,47 +515,56 @@ impl Allocator {
         &self.chunks[id as usize]
     }
 
-    pub fn alloc<T, M>(&mut self, mut value: T, mut metadata: M) -> AllocId<M> {
-        {
-            let approximated_size = size_of::<T>() as u16 + size_of::<M>() as u16;
+    fn alloc_in_free_list<T, M>(&mut self, mut value: T, mut metadata: M) -> Result<AllocId<M>, (T, M)> {
+        let approximated_size = size_of::<T>() as u16 + size_of::<M>() as u16;
 
-            let range = self.free_list.range_mut(approximated_size..);
+        let range = self.free_list.range_mut(approximated_size..);
 
-            for (&exact_size, alloc_ids) in range {
-                let FreeListEntry {
-                    chunk: chunk_id,
-                    allocation_start_index,
-                    info_id,
-                } = *alloc_ids.last().unwrap();
+        for (&exact_size, alloc_ids) in range {
+            let FreeListEntry {
+                chunk: chunk_id,
+                allocation_start_index,
+                info_id,
+            } = *alloc_ids.last().unwrap();
 
-                let chunk = &mut self.chunks[chunk_id.0 as usize];
-                match unsafe { chunk.try_alloc_at(allocation_start_index.into(), exact_size, info_id, value, metadata) }
-                {
-                    Ok((local_alloc_id, size)) => {
-                        self.rss += size;
-                        alloc_ids.pop();
-                        if alloc_ids.is_empty() {
-                            self.free_list.remove(&exact_size);
-                        }
-
-                        let remaining_size = exact_size - size as u16;
-                        if remaining_size > 12 {
-                            // If the difference is large enough that it could fit another small allocation,
-                            // push the unused space to avoid wasting space.
-                            self.free_list.entry(remaining_size).or_default().push(FreeListEntry {
-                                allocation_start_index: allocation_start_index + size as u16,
-                                chunk: chunk_id,
-                                info_id: None,
-                            });
-                        }
-
-                        return AllocId::from_raw_parts(local_alloc_id, chunk_id);
+            let chunk = &mut self.chunks[chunk_id.0 as usize];
+            match unsafe { chunk.try_alloc_at(allocation_start_index.into(), exact_size, info_id, value, metadata) } {
+                Ok((local_alloc_id, size)) => {
+                    self.rss += size;
+                    alloc_ids.pop();
+                    if alloc_ids.is_empty() {
+                        self.free_list.remove(&exact_size);
                     }
-                    Err((t, m)) => {
-                        value = t;
-                        metadata = m;
+
+                    let remaining_size = exact_size - size as u16;
+                    if remaining_size > 12 {
+                        // If the difference is large enough that it could fit another small allocation,
+                        // push the unused space to avoid wasting space.
+                        self.free_list.entry(remaining_size).or_default().push(FreeListEntry {
+                            allocation_start_index: allocation_start_index + size as u16,
+                            chunk: chunk_id,
+                            info_id: None,
+                        });
                     }
+
+                    return Ok(AllocId::from_raw_parts(local_alloc_id, chunk_id));
                 }
+                Err((t, m)) => {
+                    value = t;
+                    metadata = m;
+                }
+            }
+        }
+
+        Err((value, metadata))
+    }
+
+    pub fn alloc<T, M>(&mut self, mut value: T, mut metadata: M) -> AllocId<M> {
+        match self.alloc_in_free_list(value, metadata) {
+            Ok(id) => return id,
+            Err((t, m)) => {
+                value = t;
+                metadata = m;
             }
         }
 
