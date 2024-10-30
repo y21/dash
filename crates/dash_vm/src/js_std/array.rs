@@ -1,4 +1,6 @@
-use std::ops::Range;
+use std::cmp;
+use std::ops::{ControlFlow, Range};
+use ControlFlow::{Break, Continue};
 
 use crate::localscope::LocalScope;
 use crate::throw;
@@ -37,6 +39,25 @@ fn join_inner(sc: &mut LocalScope, array: Value, separator: JsString) -> Result<
     }
 
     Ok(Value::string(sc.intern(result).into()))
+}
+
+fn for_each_element<B>(
+    scope: &mut LocalScope<'_>,
+    this: Value,
+    mut f: impl FnMut(&mut LocalScope<'_>, Value, Value) -> Result<ControlFlow<B>, Value>,
+) -> Result<ControlFlow<B>, Value> {
+    let len = this.length_of_array_like(scope)?;
+    for k in 0..len {
+        let pk = scope.intern_usize(k);
+        if let Some(value) = this.get_property_descriptor(scope, pk.into()).root_err(scope)? {
+            let value = value.get_or_apply(scope, this).root(scope)?;
+            if let Break(value) = f(scope, value, Value::number(k as f64))? {
+                return Ok(Break(value));
+            }
+        }
+    }
+
+    Ok(Continue(()))
 }
 
 pub fn to_string(cx: CallContext) -> Result<Value, Value> {
@@ -99,46 +120,50 @@ pub fn keys(cx: CallContext) -> Result<Value, Value> {
 
 pub fn every(cx: CallContext) -> Result<Value, Value> {
     let this = Value::object(cx.this.to_object(cx.scope)?);
-    let len = this.length_of_array_like(cx.scope)?;
     let callback = cx.args.first().unwrap_or_undefined();
+    let cb_this = match cx.args.get(1) {
+        Some(v) => Value::object(v.to_object(cx.scope)?),
+        None => Value::undefined(),
+    };
 
-    for k in 0..len {
-        let pk = cx.scope.intern_usize(k);
-        let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
-        let args = vec![pkv, Value::number(k as f64), this];
-        let test = callback
-            .apply(cx.scope, Value::undefined(), args)
-            .root(cx.scope)?
-            .to_boolean(cx.scope)?;
-
-        if !test {
-            return Ok(false.into());
+    let all_true = for_each_element(cx.scope, this, |scope, elem, idx| {
+        if callback
+            .apply(scope, cb_this, vec![elem, idx, this])
+            .root(scope)?
+            .to_boolean(scope)?
+        {
+            Ok(Continue(()))
+        } else {
+            Ok(Break(()))
         }
-    }
+    })?
+    .is_continue();
 
-    Ok(true.into())
+    Ok(Value::boolean(all_true))
 }
 
 pub fn some(cx: CallContext) -> Result<Value, Value> {
     let this = Value::object(cx.this.to_object(cx.scope)?);
-    let len = this.length_of_array_like(cx.scope)?;
     let callback = cx.args.first().unwrap_or_undefined();
+    let cb_this = match cx.args.get(1) {
+        Some(v) => Value::object(v.to_object(cx.scope)?),
+        None => Value::undefined(),
+    };
 
-    for k in 0..len {
-        let pk = cx.scope.intern_usize(k);
-        let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
-        let args = vec![pkv, Value::number(k as f64), this];
-        let test = callback
-            .apply(cx.scope, Value::undefined(), args)
-            .root(cx.scope)?
-            .to_boolean(cx.scope)?;
-
-        if test {
-            return Ok(true.into());
+    let any_true = for_each_element(cx.scope, this, |scope, elem, idx| {
+        if callback
+            .apply(scope, cb_this, vec![elem, idx, this])
+            .root(scope)?
+            .to_boolean(scope)?
+        {
+            Ok(Break(()))
+        } else {
+            Ok(Continue(()))
         }
-    }
+    })?
+    .is_break();
 
-    Ok(false.into())
+    Ok(Value::boolean(any_true))
 }
 
 pub fn fill(cx: CallContext) -> Result<Value, Value> {
@@ -146,13 +171,34 @@ pub fn fill(cx: CallContext) -> Result<Value, Value> {
     let len = this.length_of_array_like(cx.scope)?;
     let value = cx.args.first().unwrap_or_undefined();
 
-    for i in 0..len {
+    let relative_start = cx.args.get(1).unwrap_or_undefined().to_integer_or_infinity(cx.scope)?;
+    let k = if relative_start < 0.0 {
+        cmp::max(len as isize + relative_start as isize, 0) as usize
+    } else {
+        cmp::min(relative_start as isize, len as isize) as usize
+    };
+
+    let relative_end = cx
+        .args
+        .get(2)
+        .map(|v| v.to_integer_or_infinity(cx.scope))
+        .transpose()?
+        .unwrap_or(len as f64);
+
+    let final_ = if relative_end == f64::NEG_INFINITY {
+        0
+    } else if relative_end < 0.0 {
+        cmp::max(len as isize + relative_end as isize, 0) as usize
+    } else {
+        cmp::min(relative_end as isize, len as isize) as usize
+    };
+
+    for i in k..final_ {
         array::spec_array_set_property(cx.scope, &this, i, PropertyValue::static_default(value))?;
     }
 
     if let Some(arr) = this.unpack().downcast_ref::<Array>(cx.scope) {
-        // all holes were replaced with values, so there cannot be holes
-        arr.force_convert_to_non_holey();
+        arr.try_convert_to_non_holey();
     }
 
     Ok(this)
@@ -160,23 +206,23 @@ pub fn fill(cx: CallContext) -> Result<Value, Value> {
 
 pub fn filter(cx: CallContext) -> Result<Value, Value> {
     let this = Value::object(cx.this.to_object(cx.scope)?);
-    let len = this.length_of_array_like(cx.scope)?;
     let callback = cx.args.first().unwrap_or_undefined();
+    let cb_this = match cx.args.get(1) {
+        Some(v) => Value::object(v.to_object(cx.scope)?),
+        None => Value::undefined(),
+    };
     let mut values = Vec::new();
 
-    for k in 0..len {
-        let pk = cx.scope.intern_usize(k);
-        let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
-        let args = vec![pkv, Value::number(k as f64), this];
-        let test = callback
-            .apply(cx.scope, Value::undefined(), args)
-            .root(cx.scope)?
-            .to_boolean(cx.scope)?;
-
-        if test {
-            values.push(PropertyValue::static_default(pkv));
+    let (Break(()) | Continue(())) = for_each_element(cx.scope, this, |scope, elem, idx| {
+        if callback
+            .apply(scope, cb_this, vec![elem, idx, this])
+            .root(scope)?
+            .to_boolean(scope)?
+        {
+            values.push(PropertyValue::static_default(elem));
         }
-    }
+        Ok(Continue(()))
+    })?;
 
     let values = Array::from_vec(cx.scope, values);
 
@@ -217,46 +263,54 @@ pub fn reduce(cx: CallContext) -> Result<Value, Value> {
 
 pub fn find(cx: CallContext) -> Result<Value, Value> {
     let this = Value::object(cx.this.to_object(cx.scope)?);
-    let len = this.length_of_array_like(cx.scope)?;
     let callback = cx.args.first().unwrap_or_undefined();
+    let cb_this = match cx.args.get(1) {
+        Some(v) => Value::object(v.to_object(cx.scope)?),
+        None => Value::undefined(),
+    };
 
-    for k in 0..len {
-        let pk = cx.scope.intern_usize(k);
-        let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
-        let args = vec![pkv, Value::number(k as f64), this];
-        let test = callback
-            .apply(cx.scope, Value::undefined(), args)
-            .root(cx.scope)?
-            .to_boolean(cx.scope)?;
-
-        if test {
-            return Ok(pkv);
+    let element = for_each_element(cx.scope, this, |scope, elem, idx| {
+        if callback
+            .apply(scope, cb_this, vec![elem, idx, this])
+            .root(scope)?
+            .to_boolean(scope)?
+        {
+            Ok(Break(elem))
+        } else {
+            Ok(Continue(()))
         }
-    }
+    })?;
 
-    Ok(Value::undefined())
+    Ok(match element {
+        Break(value) => value,
+        Continue(()) => Value::undefined(),
+    })
 }
 
 pub fn find_index(cx: CallContext) -> Result<Value, Value> {
     let this = Value::object(cx.this.to_object(cx.scope)?);
-    let len = this.length_of_array_like(cx.scope)?;
     let callback = cx.args.first().unwrap_or_undefined();
+    let cb_this = match cx.args.get(1) {
+        Some(v) => Value::object(v.to_object(cx.scope)?),
+        None => Value::undefined(),
+    };
 
-    for k in 0..len {
-        let pk = cx.scope.intern_usize(k);
-        let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
-        let args = vec![pkv, Value::number(k as f64), this];
-        let test = callback
-            .apply(cx.scope, Value::undefined(), args)
-            .root(cx.scope)?
-            .to_boolean(cx.scope)?;
-
-        if test {
-            return Ok(Value::number(k as f64));
+    let element = for_each_element(cx.scope, this, |scope, elem, idx| {
+        if callback
+            .apply(scope, cb_this, vec![elem, idx, this])
+            .root(scope)?
+            .to_boolean(scope)?
+        {
+            Ok(Break(idx))
+        } else {
+            Ok(Continue(()))
         }
-    }
+    })?;
 
-    Ok(Value::number(-1.0))
+    Ok(match element {
+        Break(value) => value,
+        Continue(()) => Value::number(-1.0),
+    })
 }
 
 pub fn flat(cx: CallContext) -> Result<Value, Value> {
@@ -265,15 +319,16 @@ pub fn flat(cx: CallContext) -> Result<Value, Value> {
 
 pub fn for_each(cx: CallContext) -> Result<Value, Value> {
     let this = Value::object(cx.this.to_object(cx.scope)?);
-    let len = this.length_of_array_like(cx.scope)?;
     let callback = cx.args.first().unwrap_or_undefined();
+    let cb_this = match cx.args.get(1) {
+        Some(v) => Value::object(v.to_object(cx.scope)?),
+        None => Value::undefined(),
+    };
 
-    for k in 0..len {
-        let pk = cx.scope.intern_usize(k);
-        let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
-        let args = vec![pkv, Value::number(k as f64), this];
-        callback.apply(cx.scope, Value::undefined(), args).root_err(cx.scope)?;
-    }
+    let (Break(()) | Continue(())) = for_each_element(cx.scope, this, |scope, elem, idx| {
+        callback.apply(scope, cb_this, vec![elem, idx, this]).root_err(scope)?;
+        Ok(Continue(()))
+    })?;
 
     Ok(Value::undefined())
 }
@@ -360,18 +415,18 @@ pub fn last_index_of(cx: CallContext) -> Result<Value, Value> {
 
 pub fn map(cx: CallContext) -> Result<Value, Value> {
     let this = Value::object(cx.this.to_object(cx.scope)?);
-    let len = this.length_of_array_like(cx.scope)?;
     let callback = cx.args.first().unwrap_or_undefined();
+    let cb_this = match cx.args.get(1) {
+        Some(v) => Value::object(v.to_object(cx.scope)?),
+        None => Value::undefined(),
+    };
     let mut values = Vec::new();
 
-    for k in 0..len {
-        let pk = cx.scope.intern_usize(k);
-        let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
-        let args = vec![pkv, Value::number(k as f64), this];
-        let value = callback.apply(cx.scope, Value::undefined(), args).root(cx.scope)?;
-
-        values.push(PropertyValue::static_default(value));
-    }
+    let (Break(()) | Continue(())) = for_each_element(cx.scope, this, |scope, elem, idx| {
+        let mapped = callback.apply(scope, cb_this, vec![elem, idx, this]).root(scope)?;
+        values.push(PropertyValue::static_default(mapped));
+        Ok(Continue(()))
+    })?;
 
     let values = Array::from_vec(cx.scope, values);
 

@@ -237,7 +237,7 @@ impl Object for Array {
                     if let Some(element) = items.get(index) {
                         match element {
                             MaybeHoley::Some(v) => return Ok(Some(v.clone())),
-                            MaybeHoley::Hole => return Ok(Some(PropertyValue::static_default(Value::undefined()))),
+                            MaybeHoley::Hole => return Ok(None),
                         }
                     }
                 }
