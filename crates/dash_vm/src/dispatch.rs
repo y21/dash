@@ -902,8 +902,8 @@ mod handlers {
     }
 
     pub fn storeglobal(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let id = cx.fetch_and_inc_ip();
-        let name = JsString::from(cx.constants().symbols[SymbolConstant(id.into())]);
+        let id = cx.fetchw_and_inc_ip();
+        let name = JsString::from(cx.constants().symbols[SymbolConstant(id)]);
         let kind = AssignKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
 
         macro_rules! op {
@@ -1363,7 +1363,7 @@ mod handlers {
     }
 
     pub fn storelocal(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let id = cx.fetch_and_inc_ip() as usize;
+        let id = cx.fetchw_and_inc_ip() as usize;
         let kind = AssignKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
 
         macro_rules! op {
@@ -1427,7 +1427,7 @@ mod handlers {
     }
 
     pub fn ldlocal(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let id = cx.fetch_and_inc_ip();
+        let id = cx.fetchw_and_inc_ip();
         let value = cx.get_local(id.into());
 
         cx.stack.push(value);
@@ -1479,8 +1479,8 @@ mod handlers {
     }
 
     pub fn arraylit(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let len = cx.fetch_and_inc_ip() as usize;
-        let stack_values = cx.fetch_and_inc_ip() as usize;
+        let len = cx.fetchw_and_inc_ip() as usize;
+        let stack_values = cx.fetchw_and_inc_ip() as usize;
         // Split up into two functions as a non-holey array literal can be evaluated more efficiently
         let array = if len == stack_values {
             arraylit_dense(&mut cx, len)?
@@ -1758,7 +1758,7 @@ mod handlers {
     }
 
     pub fn ldlocalext(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let id = cx.fetch_and_inc_ip();
+        let id = cx.fetchw_and_inc_ip();
         let value = Value::external(cx.get_external(id.into()).id());
 
         // Unbox external values such that any use will create a copy
@@ -1773,7 +1773,7 @@ mod handlers {
     }
 
     pub fn storelocalext(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let id = cx.fetch_and_inc_ip();
+        let id = cx.fetchw_and_inc_ip();
         let kind = AssignKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
 
         macro_rules! op {
@@ -2405,6 +2405,5 @@ pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResu
         Instruction::AssignProperties => handlers::assign_properties(cx),
         Instruction::DelayedReturn => handlers::delayed_ret(cx),
         Instruction::Nop => Ok(None),
-        _ => unimplemented!("{:?}", instruction),
     }
 }

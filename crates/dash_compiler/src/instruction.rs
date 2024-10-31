@@ -160,8 +160,6 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
         Ok(())
     }
 
-    // pub fn build_boolean_constant(&mut self, b: bool) -> Result<
-
     pub fn build_global_load(&mut self, ident: Symbol) -> Result<(), LimitExceededError> {
         let SymbolConstant(id) = self.current_function_mut().cp.add_symbol(ident)?;
         self.write_instr(Instruction::LdGlobal);
@@ -171,19 +169,19 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
 
     pub fn build_global_store(&mut self, kind: AssignKind, ident: Symbol) -> Result<(), LimitExceededError> {
         let SymbolConstant(id) = self.current_function_mut().cp.add_symbol(ident)?;
-        self.write_wide_instr(Instruction::StoreGlobal, Instruction::StoreGlobalW, id);
+        self.write_instr(Instruction::StoreGlobal);
+        self.writew(id);
         self.write(kind as u8);
         Ok(())
     }
 
     pub fn build_local_store(&mut self, kind: AssignKind, id: u16, is_extern: bool) {
-        let (thin, wide) = if is_extern {
-            (Instruction::StoreLocalExt, Instruction::StoreLocalExtW)
+        if is_extern {
+            self.write_instr(Instruction::StoreLocalExt);
         } else {
-            (Instruction::StoreLocal, Instruction::StoreLocalW)
-        };
-
-        self.write_wide_instr(thin, wide, id);
+            self.write_instr(Instruction::StoreLocal);
+        }
+        self.writew(id);
         self.write(kind as u8);
     }
 
@@ -274,15 +272,9 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
     }
 
     pub fn build_arraylit(&mut self, len: u16, stack_values: u16) {
-        if let (Ok(len), Ok(stack_values)) = (u8::try_from(len), u8::try_from(stack_values)) {
-            self.write_instr(Instruction::ArrayLit);
-            self.write(len);
-            self.write(stack_values);
-        } else {
-            self.write_instr(Instruction::ArrayLitW);
-            self.writew(len);
-            self.writew(stack_values);
-        }
+        self.write_instr(Instruction::ArrayLit);
+        self.writew(len);
+        self.writew(stack_values);
     }
 
     pub fn build_object_member_like_instruction(
@@ -614,19 +606,12 @@ pub enum NamedExportKind {
 }
 
 pub fn compile_local_load_into(out: &mut Vec<u8>, index: u16, is_extern: bool) {
-    let (thin, wide) = if is_extern {
-        (Instruction::LdLocalExt, Instruction::LdLocalExtW)
+    if is_extern {
+        out.push(Instruction::LdLocalExt as u8);
     } else {
-        (Instruction::LdLocal, Instruction::LdLocalW)
-    };
-
-    if let Ok(index) = u8::try_from(index) {
-        out.push(thin as u8);
-        out.push(index);
-    } else {
-        out.push(wide as u8);
-        out.extend_from_slice(&index.to_ne_bytes());
+        out.push(Instruction::LdLocal as u8);
     }
+    out.extend_from_slice(&index.to_ne_bytes());
 }
 
 /// Convenience function for creating a vec and calling `compile_local_load_into`.

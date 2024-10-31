@@ -66,12 +66,7 @@ impl<'a> DecodeCtxt<'a> {
             | Instruction::Undefined
             | Instruction::Function => drop(self.next_byte()),
             Instruction::LdLocal => drop(self.next_byte()),
-            Instruction::LdLocalW => drop(self.next_wide()),
             Instruction::StoreLocal => {
-                self.next_byte();
-                self.next_byte();
-            }
-            Instruction::StoreLocalW => {
                 self.next_wide();
                 self.next_byte();
             }
