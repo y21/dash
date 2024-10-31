@@ -73,26 +73,10 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
         Ok(())
     }
 
-    /// Handles an opcode with a single argument that is in the following bytecode.
-    fn handle_inc_op_instr2(&mut self, name: &str) -> Result<(), DecompileError> {
-        let b = self.read()?;
-        let b2 = self.read()?;
-        self.handle_op_instr(name, &[&b, &b2]);
-        Ok(())
-    }
-
     /// Handles an opcode with a single wide argument that is in the following bytecode.
     fn handle_incw_op_instr(&mut self, name: &str) -> Result<(), DecompileError> {
         let b = self.read_u16()?;
         self.handle_op_instr(name, &[&b]);
-        Ok(())
-    }
-
-    /// Handles an opcode with a single wide argument that is in the following bytecode.
-    fn handle_incw_op_instr2(&mut self, name: &str) -> Result<(), DecompileError> {
-        let b = self.read_u16()?;
-        let b2 = self.read()?;
-        self.handle_op_instr(name, &[&b, &b2]);
         Ok(())
     }
 
@@ -176,7 +160,6 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                     // TODO: use debug symbols to find the name
                     self.handle_op_instr("ldlocal", &[&b]);
                 }
-                Instruction::LdLocalW => self.handle_incw_op_instr("ldlocalw")?,
                 Instruction::Jmp
                 | Instruction::JmpFalseNP
                 | Instruction::JmpFalseP
@@ -214,8 +197,11 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                         .to_owned();
                     self.handle_op_instr("ldglobal", &[&ident]);
                 }
-                Instruction::StoreLocal => self.handle_inc_op_instr2("storelocal")?,
-                Instruction::StoreLocalW => self.handle_inc_op_instr2("storelocalw")?,
+                Instruction::StoreLocal => {
+                    let id = self.read_u16()?;
+                    let kind = self.read()?;
+                    self.handle_op_instr("storelocal", &[&id, &kind]);
+                }
                 Instruction::Call => {
                     let meta = FunctionCallMetadata::from(self.read()?);
                     self.handle_op_map_instr(
@@ -254,29 +240,19 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                 Instruction::BitNot => self.handle_opless_instr("bitnot"),
                 Instruction::Not => self.handle_opless_instr("not"),
                 Instruction::StoreGlobal => {
-                    let b = self.read()?;
-                    let _kind = self.read()?;
-                    let ident = self
-                        .interner
-                        .resolve(self.constants.symbols[SymbolConstant(b as u16)])
-                        .to_owned();
-                    self.handle_op_instr("storeglobal", &[&ident]);
-                }
-                Instruction::StoreGlobalW => {
                     let b = self.read_u16()?;
                     let _kind = self.read()?;
                     let ident = self
                         .interner
                         .resolve(self.constants.symbols[SymbolConstant(b)])
                         .to_owned();
-                    self.handle_op_instr("storeglobalw", &[&ident]);
+                    self.handle_op_instr("storeglobal", &[&ident]);
                 }
                 Instruction::DynamicPropAccess => {
                     let b = self.read()?;
                     self.handle_op_map_instr("dynamicpropaccess", &[("preserve_this", &(b == 1))])
                 }
-                Instruction::ArrayLit => self.handle_inc_op_instr("arraylit")?,
-                Instruction::ArrayLitW => self.handle_incw_op_instr("arraylitw")?,
+                Instruction::ArrayLit => self.handle_incw_op_instr("arraylit")?,
                 Instruction::ObjLit => {
                     let len = self.read()?;
                     let mut props = Vec::new();
@@ -320,10 +296,12 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                     let _k = self.read()?;
                     self.handle_opless_instr("dynamicpropset")
                 }
-                Instruction::LdLocalExt => self.handle_inc_op_instr("ldlocalext")?,
-                Instruction::LdLocalExtW => self.handle_incw_op_instr("ldlocalextw")?,
-                Instruction::StoreLocalExt => self.handle_inc_op_instr2("storelocalext")?,
-                Instruction::StoreLocalExtW => self.handle_incw_op_instr2("storelocalextw")?,
+                Instruction::LdLocalExt => self.handle_incw_op_instr("ldlocalext")?,
+                Instruction::StoreLocalExt => {
+                    let id = self.read_u16()?;
+                    let kind = self.read()?;
+                    self.handle_op_instr("storelocalext", &[&id, &kind]);
+                }
                 Instruction::StrictEq => self.handle_opless_instr("stricteq"),
                 Instruction::StrictNe => self.handle_opless_instr("strictne"),
                 Instruction::Try => self.handle_incw_op_instr("try")?, // TODO: show @offset like in JMP

@@ -327,12 +327,12 @@ impl<'a, 'q, Q: CodegenQuery> CodegenCtxt<'a, 'q, Q> {
                     stack.push(val);
                 }
                 Instruction::StoreLocal => {
-                    let id = dcx.next_byte();
+                    let id = dcx.next_wide();
                     let kind = AssignKind::from_repr(dcx.next_byte()).unwrap();
                     assert_eq!(kind, AssignKind::Assignment);
                     let value = stack.pop();
-                    self.store_local(id.into(), &value);
-                    let value = self.load_local(id.into());
+                    self.store_local(id, &value);
+                    let value = self.load_local(id);
                     stack.push(value);
                 }
                 Instruction::Boolean | Instruction::Number => {

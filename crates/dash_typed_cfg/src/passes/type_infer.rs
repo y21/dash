@@ -105,12 +105,8 @@ impl<'a, 'q, Q: TypeInferQuery> TypeInferCtxt<'a, 'q, Q> {
                     ty_stack.push(Type::Boolean);
                 }
                 Instruction::Pop => drop(ty_stack.pop()),
-                Instruction::LdLocal | Instruction::LdLocalW => {
-                    let index = match instr {
-                        Instruction::LdLocal => dcx.next_byte().into(),
-                        Instruction::LdLocalW => dcx.next_wide(),
-                        _ => unreachable!(),
-                    };
+                Instruction::LdLocal => {
+                    let index = dcx.next_byte().into();
 
                     let ty = self.get_or_insert_local_ty(index);
                     ty_stack.push(ty);
@@ -134,12 +130,8 @@ impl<'a, 'q, Q: TypeInferQuery> TypeInferCtxt<'a, 'q, Q> {
                 | Instruction::Function => {
                     todo!("unimplemented constant type: {instr:?}")
                 }
-                Instruction::StoreLocal | Instruction::StoreLocalW => {
-                    let index = match instr {
-                        Instruction::StoreLocal => dcx.next_byte().into(),
-                        Instruction::StoreLocalW => dcx.next_wide(),
-                        _ => unreachable!(),
-                    };
+                Instruction::StoreLocal => {
+                    let index = dcx.next_wide();
                     let _kind = dcx.next_byte();
 
                     let ty = ty_stack.pop();
