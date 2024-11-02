@@ -251,7 +251,6 @@ impl Object for RequireFunction {
         };
         let exports = scope.intern("exports");
         let mut arg = raw_arg.res(scope).to_owned();
-        debug!(%arg, "require node module");
 
         let is_path = matches!(arg.chars().next(), Some('.' | '/' | '~'));
         let result = if is_path {
@@ -267,8 +266,10 @@ impl Object for RequireFunction {
                 Ok(v) => v,
                 Err(err) => throw!(scope, Error, err.to_string()),
             };
+            debug!("require path module {}", canonicalized_path.display());
 
             if let Some(module) = self.state.ongoing_requires.borrow().get(&canonicalized_path) {
+                debug!(%arg, "resolved module (cache)");
                 return module.get_property(scope, exports.into());
             }
 

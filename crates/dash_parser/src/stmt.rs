@@ -1,12 +1,13 @@
 use dash_middle::interner::sym;
-use dash_middle::lexer::token::{TokenType, VARIABLE_TYPES};
+use dash_middle::lexer::token::{Token, TokenType, VARIABLE_TYPES};
 use dash_middle::parser::error::Error;
 use dash_middle::parser::expr::{Expr, ExprKind};
 use dash_middle::parser::statement::{
     Asyncness, BlockStatement, Catch, Class, ClassMember, ClassMemberKey, ClassMemberValue, DoWhileLoop, ExportKind,
     ForInLoop, ForLoop, ForOfLoop, FunctionDeclaration, FunctionKind, IfStatement, ImportKind, Loop, Parameter,
-    ReturnStatement, SpecifierKind, Statement, StatementKind, SwitchCase, SwitchStatement, TryCatch, VariableBinding,
-    VariableDeclaration, VariableDeclarationKind, VariableDeclarationName, VariableDeclarations, WhileLoop,
+    ReturnStatement, ScopeId, SpecifierKind, Statement, StatementKind, SwitchCase, SwitchStatement, TryCatch,
+    VariableBinding, VariableDeclaration, VariableDeclarationKind, VariableDeclarationName, VariableDeclarations,
+    WhileLoop,
 };
 use dash_middle::parser::types::TypeSegment;
 use dash_middle::sourcemap::Span;
@@ -318,6 +319,36 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         }
     }
 
+    /// Parses the rest of a for in/for of loop after having confirmed that it is one (after the `in`/`of`).
+    fn parse_in_of_loop_after_binding(
+        &mut self,
+        binding: VariableBinding,
+        in_or_of: TokenType,
+        scope: ScopeId,
+    ) -> Option<Loop> {
+        let expr = self.parse_expression()?;
+
+        self.eat(TokenType::RightParen, true)?;
+
+        let body = Box::new(self.parse_statement()?);
+
+        Some(match in_or_of {
+            TokenType::In => Loop::ForIn(ForInLoop {
+                binding,
+                expr,
+                body,
+                scope,
+            }),
+            TokenType::Of => Loop::ForOf(ForOfLoop {
+                binding,
+                expr,
+                body,
+                scope,
+            }),
+            _ => unreachable!(),
+        })
+    }
+
     fn parse_for_loop(&mut self) -> Option<Loop> {
         self.eat(TokenType::LeftParen, true)?;
         let scope = self.scope_count.inc();
@@ -325,37 +356,43 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         let init = if self.eat(TokenType::Semicolon, false).is_some() {
             None
         } else {
+            if let Some(name) = self.eat(
+                (
+                    |tok: Token| tok.ty.as_identifier(),
+                    [TokenType::DUMMY_IDENTIFIER].as_slice(),
+                ),
+                false,
+            ) {
+                if let Some(in_or_of) = self.eat(any(&[TokenType::Of, TokenType::In]), false) {
+                    // for (ident in ..)
+
+                    let name = self.create_binding(name);
+                    return self.parse_in_of_loop_after_binding(
+                        VariableBinding {
+                            name: VariableDeclarationName::Identifier(name),
+                            kind: VariableDeclarationKind::Var,
+                            ty: None,
+                        },
+                        in_or_of,
+                        scope,
+                    );
+                } else {
+                    // Back to the identifier to re-parse it as a regular for statement
+                    self.advance_back();
+                }
+            }
+
             let is_binding = self.eat(any(VARIABLE_TYPES), false).is_some();
 
             if is_binding {
                 let binding_span_lo = self.previous()?.span;
                 let binding = self.parse_variable_binding()?;
                 let binding_kind = binding.kind;
-                let is_of_or_in = self.eat(any(&[TokenType::Of, TokenType::In]), false).is_some();
 
-                if is_of_or_in {
-                    let ty = self.previous()?.ty;
-                    let expr = self.parse_expression()?;
+                if let Some(in_or_of) = self.eat(any(&[TokenType::Of, TokenType::In]), false) {
+                    // for (const binding in ..)
 
-                    self.eat(TokenType::RightParen, true)?;
-
-                    let body = Box::new(self.parse_statement()?);
-
-                    return Some(match ty {
-                        TokenType::In => Loop::ForIn(ForInLoop {
-                            binding,
-                            expr,
-                            body,
-                            scope,
-                        }),
-                        TokenType::Of => Loop::ForOf(ForOfLoop {
-                            binding,
-                            expr,
-                            body,
-                            scope,
-                        }),
-                        _ => unreachable!(),
-                    });
+                    return self.parse_in_of_loop_after_binding(binding, in_or_of, scope);
                 } else {
                     let value = self.parse_variable_definition();
 
@@ -697,7 +734,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         Some(VariableBinding { kind, name, ty })
     }
 
-    /// Parses a variable binding, i.e. `let x`
+    /// Parses a variable binding, i.e. `x`, assuming that the binding kind has been consumed
     fn parse_variable_binding(&mut self) -> Option<VariableBinding> {
         let kind: VariableDeclarationKind = self.previous()?.ty.into();
         self.parse_variable_binding_with_kind(kind)

@@ -294,13 +294,13 @@ where
     }
 }
 
-pub fn any(s: &'static [TokenType]) -> impl Matcher<Output = ()> {
+pub fn any(s: &'static [TokenType]) -> impl Matcher<Output = TokenType> {
     struct AnyMatcher(&'static [TokenType]);
     impl Matcher for AnyMatcher {
-        type Output = ();
+        type Output = TokenType;
 
         fn matches(&mut self, t: Token) -> Option<Self::Output> {
-            self.0.iter().any(|ty| *ty == t.ty).then_some(())
+            self.0.iter().find(|&ty| *ty == t.ty).copied()
         }
         fn suggestion(&self) -> TokenTypeSuggestion {
             TokenTypeSuggestion::AnyOf(self.0)
