@@ -531,7 +531,6 @@ mod handlers {
     use dash_middle::iterator_with::{InfallibleIteratorWith, IteratorWith};
     use dash_middle::parser::statement::{Asyncness, FunctionKind as ParserFunctionKind};
     use handlers::extract::{extract, ForwardSequence, FrontIteratorWith};
-    use hashbrown::hash_map::Entry;
     use if_chain::if_chain;
     use smallvec::SmallVec;
     use std::ops::{Add, ControlFlow, Div, Mul, Rem, Sub};
@@ -546,7 +545,8 @@ mod handlers {
     use crate::value::function::generator::GeneratorFunction;
     use crate::value::function::user::UserFunction;
     use crate::value::function::{adjust_stack_from_flat_call, Function, FunctionKind};
-    use crate::value::object::{NamedObject, Object, ObjectMap, PropertyKey, PropertyValue, PropertyValueKind};
+    use crate::value::object::{NamedObject, Object, PropertyKey, PropertyValue, PropertyValueKind};
+    use crate::value::object_map::ObjectMap;
     use crate::value::ops::conversions::ValueConversion;
     use crate::value::ops::equality;
     use crate::value::primitive::Number;
@@ -1499,26 +1499,26 @@ mod handlers {
         let mut obj = ObjectMap::default();
         while let Some(property) = iter.next(&mut cx) {
             match property? {
-                ObjectProperty::Static { key, value } => drop(obj.insert(key, value)),
-                ObjectProperty::Getter { key, value } => match obj.entry(key) {
-                    Entry::Occupied(mut entry) => match &mut entry.get_mut().kind {
-                        PropertyValueKind::Static(_) => drop(entry.insert(PropertyValue::getter_default(value))),
+                ObjectProperty::Static { key, value } => obj.insert(key, value),
+                ObjectProperty::Getter { key, value } => obj.entry(key).modify_or_insert(
+                    |prop| match &mut prop.kind {
+                        PropertyValueKind::Static(_) => *prop = PropertyValue::getter_default(value),
                         PropertyValueKind::Trap { get, .. } => *get = Some(value),
                     },
-                    Entry::Vacant(entry) => drop(entry.insert(PropertyValue::getter_default(value))),
-                },
-                ObjectProperty::Setter { key, value } => match obj.entry(key) {
-                    Entry::Occupied(mut entry) => match &mut entry.get_mut().kind {
-                        PropertyValueKind::Static(_) => drop(entry.insert(PropertyValue::setter_default(value))),
+                    || PropertyValue::getter_default(value),
+                ),
+                ObjectProperty::Setter { key, value } => obj.entry(key).modify_or_insert(
+                    |prop| match &mut prop.kind {
+                        PropertyValueKind::Static(_) => *prop = PropertyValue::setter_default(value),
                         PropertyValueKind::Trap { set, .. } => *set = Some(value),
                     },
-                    Entry::Vacant(entry) => drop(entry.insert(PropertyValue::setter_default(value))),
-                },
+                    || PropertyValue::setter_default(value),
+                ),
                 ObjectProperty::Spread(value) => {
                     if let ValueKind::Object(object) = value.unpack() {
                         for key in object.own_keys(&mut cx.scope)? {
                             let key = PropertyKey::from_value(&mut cx.scope, key)?;
-                            let value = object.get_property(&mut cx, key.clone())?.root(&mut cx.scope);
+                            let value = object.get_property(&mut cx, key)?.root(&mut cx.scope);
                             obj.insert(key, PropertyValue::static_default(value));
                         }
                     }
@@ -1545,7 +1545,7 @@ mod handlers {
             match property {
                 ObjectProperty::Static { key, value } => target.set_property(&mut cx.scope, key, value)?,
                 ObjectProperty::Getter { key, value } | ObjectProperty::Setter { key, value } => {
-                    let prop = target.get_property_descriptor(&mut cx.scope, key.clone())?;
+                    let prop = target.get_property_descriptor(&mut cx.scope, key)?;
                     let prop = match prop {
                         Some(mut prop) => {
                             if let PropertyValueKind::Trap { get, set } = &mut prop.kind {

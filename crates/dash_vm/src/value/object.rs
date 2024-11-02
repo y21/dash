@@ -1,26 +1,23 @@
 use std::any::Any;
 use std::cell::RefCell;
 use std::fmt::Debug;
-use std::hash::BuildHasherDefault;
 
 use crate::gc::persistent::Persistent;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::gc::{ObjectId, ObjectVTable};
 use bitflags::bitflags;
+use dash_middle::closure;
 use dash_middle::interner::sym;
 use dash_proc_macro::Trace;
-use hashbrown::hash_map::Entry;
-use rustc_hash::FxHasher;
 
 use crate::localscope::LocalScope;
 use crate::{throw, Vm};
 
+use super::object_map::ObjectMap;
 use super::ops::conversions::ValueConversion;
 use super::primitive::{InternalSlots, Symbol};
 use super::string::JsString;
 use super::{Root, Typeof, Unpack, Unrooted, Value, ValueContext, ValueKind};
-
-pub type ObjectMap<K, V> = hashbrown::HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
 // only here for the time being, will be removed later
 fn __assert_trait_object_safety(_: Box<dyn Object>) {}
@@ -45,7 +42,7 @@ pub trait Object: Debug + Trace {
         sc: &mut LocalScope,
         key: PropertyKey,
     ) -> Result<Option<PropertyValue>, Unrooted> {
-        let own_descriptor = self.get_own_property_descriptor(sc, key.clone())?;
+        let own_descriptor = self.get_own_property_descriptor(sc, key)?;
         if own_descriptor.is_some() {
             return Ok(own_descriptor);
         }
@@ -211,11 +208,11 @@ macro_rules! delegate {
 pub struct NamedObject {
     prototype: RefCell<Option<ObjectId>>,
     constructor: RefCell<Option<ObjectId>>,
-    values: RefCell<ObjectMap<PropertyKey, PropertyValue>>,
+    properties: RefCell<ObjectMap>,
 }
 
 // TODO: optimization opportunity: some kind of Number variant for faster indexing without .to_string()
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum PropertyKey {
     String(JsString),
     Symbol(Symbol),
@@ -495,8 +492,8 @@ impl From<Symbol> for PropertyKey {
 }
 
 impl PropertyKey {
-    pub fn as_value(&self) -> Value {
-        match *self {
+    pub fn as_value(self) -> Value {
+        match self {
             PropertyKey::String(s) => Value::string(s),
             PropertyKey::Symbol(s) => Value::symbol(s),
         }
@@ -516,11 +513,11 @@ impl NamedObject {
         Self::with_values(vm, ObjectMap::default())
     }
 
-    pub fn with_values(vm: &Vm, values: ObjectMap<PropertyKey, PropertyValue>) -> Self {
+    pub fn with_values(vm: &Vm, values: ObjectMap) -> Self {
         Self {
             prototype: RefCell::new(Some(vm.statics.object_prototype)),
             constructor: RefCell::new(Some(vm.statics.object_ctor)), // TODO: function_ctor instead
-            values: RefCell::new(values),
+            properties: RefCell::new(values),
         }
     }
 
@@ -529,15 +526,15 @@ impl NamedObject {
         Self {
             prototype: RefCell::new(None),
             constructor: RefCell::new(None),
-            values: RefCell::new(ObjectMap::default()),
+            properties: RefCell::new(ObjectMap::default()),
         }
     }
 
-    pub fn null_with_values(values: ObjectMap<PropertyKey, PropertyValue>) -> Self {
+    pub fn null_with_values(values: ObjectMap) -> Self {
         Self {
             prototype: RefCell::new(None),
             constructor: RefCell::new(None),
-            values: RefCell::new(values),
+            properties: RefCell::new(values),
         }
     }
 
@@ -545,12 +542,12 @@ impl NamedObject {
         Self {
             constructor: RefCell::new(Some(ctor)),
             prototype: RefCell::new(Some(prototype)),
-            values: RefCell::new(ObjectMap::default()),
+            properties: RefCell::new(ObjectMap::default()),
         }
     }
 
     pub fn get_raw_property(&self, pk: PropertyKey) -> Option<PropertyValue> {
-        self.values.borrow().get(&pk).cloned()
+        self.properties.borrow().get(pk).cloned()
     }
 }
 
@@ -559,7 +556,7 @@ unsafe impl Trace for NamedObject {
         let Self {
             prototype,
             constructor,
-            values,
+            properties: values,
         } = self;
         values.trace(cx);
         prototype.trace(cx);
@@ -585,8 +582,8 @@ impl Object for NamedObject {
             }
         };
 
-        let values = self.values.borrow();
-        if let Some(value) = values.get(&key).cloned() {
+        let values = self.properties.borrow();
+        if let Some(value) = values.get(key).cloned() {
             return Ok(Some(value));
         }
 
@@ -626,21 +623,20 @@ impl Object for NamedObject {
 
         // TODO: check if we are invoking a setter
 
-        let mut map = self.values.borrow_mut();
-        match map.entry(key) {
-            Entry::Occupied(mut entry) => {
-                if entry.get().descriptor.contains(PropertyDataDescriptor::WRITABLE) {
-                    entry.insert(value);
+        self.properties.borrow_mut().entry(key).modify_or_insert(
+            closure!(clone(value); |prop| {
+                if prop.descriptor.contains(PropertyDataDescriptor::WRITABLE) {
+                    *prop = value;
                 }
-            }
-            Entry::Vacant(vacant) => drop(vacant.insert(value)),
-        }
+            }),
+            || value,
+        );
         Ok(())
     }
 
     fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
-        let mut values = self.values.borrow_mut();
-        let value = values.remove(&key);
+        let mut values = self.properties.borrow_mut();
+        let value = values.remove(key);
 
         match value.map(PropertyValue::into_kind) {
             Some(PropertyValueKind::Static(value)) => {
@@ -700,7 +696,7 @@ impl Object for NamedObject {
     }
 
     fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
-        let values = self.values.borrow();
+        let values = self.properties.borrow();
         Ok(values.keys().map(PropertyKey::as_value).collect())
     }
 }

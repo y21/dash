@@ -8,6 +8,7 @@ pub mod function;
 pub mod inspect;
 pub mod map;
 pub mod object;
+pub mod object_map;
 pub mod ops;
 pub mod primitive;
 pub mod promise;

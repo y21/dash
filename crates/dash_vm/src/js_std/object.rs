@@ -187,7 +187,7 @@ pub fn assign(cx: CallContext) -> Result<Value, Value> {
         let source = source.to_object(cx.scope)?;
         for key in source.own_keys(cx.scope)? {
             let key = PropertyKey::from_value(cx.scope, key)?;
-            let desc = source.get_own_property(cx.scope, key.clone()).root(cx.scope)?;
+            let desc = source.get_own_property(cx.scope, key).root(cx.scope)?;
             to.set_property(cx.scope, key, PropertyValue::static_default(desc))?;
         }
     }
@@ -199,7 +199,7 @@ pub fn entries(cx: CallContext) -> Result<Value, Value> {
     let obj = cx.args.first().unwrap_or_undefined().to_object(cx.scope)?;
     for key in obj.own_keys(cx.scope)? {
         let key = PropertyKey::from_value(cx.scope, key)?;
-        let value = obj.get_own_property(cx.scope, key.clone()).root(cx.scope)?;
+        let value = obj.get_own_property(cx.scope, key).root(cx.scope)?;
         let entry = Array::from_vec(
             cx.scope,
             vec![

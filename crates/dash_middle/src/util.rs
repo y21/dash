@@ -308,3 +308,13 @@ macro_rules! with {
         $code
     }};
 }
+
+#[macro_export]
+macro_rules! closure {
+    ($(clone($clone_binding:ident))*; $closure:expr) => {
+        {
+            $(let $clone_binding = $clone_binding.clone();)*
+            $closure
+        }
+    };
+}

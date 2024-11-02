@@ -15,7 +15,7 @@ pub struct Arguments {
 }
 
 impl Arguments {
-    pub fn new(vm: &mut LocalScope, args: impl IntoIterator<IntoIter = impl ExactSizeIterator<Item = Value>>) -> Self {
+    pub fn new(vm: &mut LocalScope, args: impl IntoIterator<IntoIter: ExactSizeIterator<Item = Value>>) -> Self {
         let args = args.into_iter();
         let len = args.len();
 
