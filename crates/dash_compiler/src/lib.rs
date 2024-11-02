@@ -101,6 +101,12 @@ macro_rules! exit_breakable {
     };
 }
 
+#[derive(Copy, Clone)]
+enum BreakStmt {
+    Break,
+    Continue,
+}
+
 impl FunctionLocalState {
     pub fn new(ty: FunctionKind, id: ScopeId) -> Self {
         Self {
@@ -152,15 +158,18 @@ impl FunctionLocalState {
     }
 
     /// Tries to find the target to jump to for a `break` (or `continue`).
-    fn find_breakable(&self, label: Option<Symbol>) -> Option<Breakable> {
+    fn find_breakable(&self, label: Option<Symbol>, brk_stmt: BreakStmt) -> Option<Breakable> {
         self.breakables
             .iter()
             .rev()
-            .find(|brk| match (brk, label) {
-                (Breakable::Named { sym, label_id: _ }, Some(sym2)) => *sym == sym2,
-                (Breakable::Named { .. }, None) => false,
-                (Breakable::Loop { .. } | Breakable::Switch { .. }, None) => true,
-                (Breakable::Loop { .. } | Breakable::Switch { .. }, Some(_)) => false,
+            .find(|brk| match (brk, brk_stmt, label) {
+                (Breakable::Named { sym, label_id: _ }, _, Some(sym2)) => *sym == sym2,
+                // 'x: while(true) { continue; }
+                (Breakable::Named { .. }, _, None) => false,
+                (Breakable::Loop { .. } | Breakable::Switch { .. }, BreakStmt::Break, None) => true,
+                (Breakable::Loop { .. }, BreakStmt::Continue, None) => true,
+                (Breakable::Switch { .. }, BreakStmt::Continue, None) => false,
+                (Breakable::Loop { .. } | Breakable::Switch { .. }, _, Some(_)) => false,
             })
             .copied()
     }
@@ -2080,7 +2089,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
 
         let breakable = ib
             .current_function_mut()
-            .find_breakable(sym)
+            .find_breakable(sym, BreakStmt::Break)
             .ok_or(Error::IllegalBreak(span))?;
 
         match breakable {
@@ -2106,7 +2115,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
 
         let breakable = ib
             .current_function_mut()
-            .find_breakable(sym)
+            .find_breakable(sym, BreakStmt::Continue)
             .ok_or(Error::IllegalBreak(span))?;
 
         match breakable {
