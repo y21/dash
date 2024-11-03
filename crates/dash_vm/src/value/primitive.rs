@@ -153,6 +153,10 @@ impl Object for Undefined {
     }
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, _value: PropertyValue) -> Result<(), Value> {
+        let key = match key {
+            PropertyKey::String(s) => s.res(sc).to_owned(),
+            PropertyKey::Symbol(s) => sc.interner.resolve(s.sym()).to_owned(),
+        };
         throw!(sc, TypeError, "Cannot set property {:?} of undefined", key)
     }
 
@@ -205,6 +209,10 @@ impl Object for Null {
     }
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, _value: PropertyValue) -> Result<(), Value> {
+        let key = match key {
+            PropertyKey::String(s) => s.res(sc).to_owned(),
+            PropertyKey::Symbol(s) => sc.interner.resolve(s.sym()).to_owned(),
+        };
         throw!(sc, TypeError, "Cannot set property {:?} of null", key)
     }
 

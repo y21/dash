@@ -1,6 +1,5 @@
 use dash_vm::localscope::LocalScope;
-use dash_vm::value::function::native::register_native_fn;
-use dash_vm::value::object::{NamedObject, Object, PropertyValue};
+use dash_vm::value::object::NamedObject;
 use dash_vm::value::string::JsString;
 use dash_vm::value::Value;
 
@@ -43,7 +42,7 @@ pub fn load_native_module(sc: &mut LocalScope<'_>, arg: JsString) -> Result<Opti
         state.sym.fetch => (state_mut(sc).fetch_cache, dash_rt_fetch::init_module),
         state.sym.path => (state_mut(sc).path_cache, crate::path::init_module),
         state.sym.events => (state_mut(sc).events_cache, crate::events::init_module),
-        state.sym.stream => (state_mut(sc).stream_cache, init_stream),
+        state.sym.stream => (state_mut(sc).stream_cache, crate::stream::init_module),
         state.sym.http => (state_mut(sc).http_cache, init_dummy_empty_module),
         state.sym.https => (state_mut(sc).https_cache, init_dummy_empty_module),
         state.sym.url => (state_mut(sc).url_cache, init_dummy_empty_module),
@@ -55,13 +54,5 @@ pub fn load_native_module(sc: &mut LocalScope<'_>, arg: JsString) -> Result<Opti
 
 fn init_dummy_empty_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     let exports = NamedObject::new(sc);
-    Ok(Value::object(sc.register(exports)))
-}
-
-fn init_stream(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
-    let exports = NamedObject::new(sc);
-    let readable = sc.intern("Readable");
-    let readable_fn = register_native_fn(sc, readable, |_sc| Ok(Value::undefined()));
-    exports.set_property(sc, readable.into(), PropertyValue::static_default(readable_fn.into()))?;
     Ok(Value::object(sc.register(exports)))
 }
