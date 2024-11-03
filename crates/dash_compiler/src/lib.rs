@@ -54,7 +54,7 @@ macro_rules! unimplementedc {
 
 #[derive(Debug, Clone, Copy)]
 enum Breakable {
-    Loop { loop_id: usize },
+    Loop { loop_id: usize, label: Option<Symbol> },
     Switch { switch_id: usize },
     Named { sym: Symbol, label_id: usize },
 }
@@ -133,9 +133,9 @@ impl FunctionLocalState {
     /// Specifically, this function increments a FunctionCompiler-local loop counter and
     /// inserts the loop into a stack of switch-case/loops so that `break` (and `continue`)
     /// statements can be resolved at compile-time
-    fn prepare_loop(&mut self) -> usize {
+    fn prepare_loop(&mut self, label: Option<Symbol>) -> usize {
         let loop_id = self.loop_counter;
-        self.breakables.push(Breakable::Loop { loop_id });
+        self.breakables.push(Breakable::Loop { loop_id, label });
         self.loop_counter += 1;
         loop_id
     }
@@ -163,7 +163,15 @@ impl FunctionLocalState {
             .iter()
             .rev()
             .find(|brk| match (brk, brk_stmt, label) {
-                (Breakable::Named { sym, label_id: _ }, _, Some(sym2)) => *sym == sym2,
+                (
+                    Breakable::Named { sym, label_id: _ }
+                    | Breakable::Loop {
+                        label: Some(sym),
+                        loop_id: _,
+                    },
+                    _,
+                    Some(sym2),
+                ) => *sym == sym2,
                 // 'x: while(true) { continue; }
                 (Breakable::Named { .. }, _, None) => false,
                 (Breakable::Loop { .. } | Breakable::Switch { .. }, BreakStmt::Break, None) => true,
@@ -367,6 +375,7 @@ impl<'interner> FunctionCompiler<'interner> {
         expr: Expr,
         mut body: Box<Statement>,
         scope: ScopeId,
+        label: Option<Symbol>,
     ) -> Result<(), Error> {
         // For-Of Loop Desugaring:
 
@@ -449,6 +458,7 @@ impl<'interner> FunctionCompiler<'interner> {
         // for..of -> while loop rewrite
         ib.visit_while_loop(
             Span::COMPILER_GENERATED,
+            label,
             WhileLoop {
                 condition: Expr {
                     span: Span::COMPILER_GENERATED,
@@ -515,11 +525,11 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             StatementKind::If(i) => self.visit_if_statement(span, i),
             StatementKind::Block(b) => self.visit_block_statement(span, b),
             StatementKind::Function(f) => self.visit_function_declaration(span, f),
-            StatementKind::Loop(Loop::For(f)) => self.visit_for_loop(span, f),
-            StatementKind::Loop(Loop::While(w)) => self.visit_while_loop(span, w),
-            StatementKind::Loop(Loop::ForOf(f)) => self.visit_for_of_loop(span, f),
-            StatementKind::Loop(Loop::ForIn(f)) => self.visit_for_in_loop(span, f),
-            StatementKind::Loop(Loop::DoWhile(d)) => self.visit_do_while_loop(span, d),
+            StatementKind::Loop(Loop::For(f)) => self.visit_for_loop(span, None, f),
+            StatementKind::Loop(Loop::While(w)) => self.visit_while_loop(span, None, w),
+            StatementKind::Loop(Loop::ForOf(f)) => self.visit_for_of_loop(span, None, f),
+            StatementKind::Loop(Loop::ForIn(f)) => self.visit_for_in_loop(span, None, f),
+            StatementKind::Loop(Loop::DoWhile(d)) => self.visit_do_while_loop(span, None, d),
             StatementKind::Return(r) => self.visit_return_statement(span, r),
             StatementKind::Try(t) => self.visit_try_catch(span, t),
             StatementKind::Throw(t) => self.visit_throw(span, t),
@@ -1021,10 +1031,15 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
         Ok(())
     }
 
-    fn visit_while_loop(&mut self, _span: Span, WhileLoop { condition, body }: WhileLoop) -> Result<(), Error> {
+    fn visit_while_loop(
+        &mut self,
+        _span: Span,
+        label: Option<Symbol>,
+        WhileLoop { condition, body }: WhileLoop,
+    ) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
-        let loop_id = ib.current_function_mut().prepare_loop();
+        let loop_id = ib.current_function_mut().prepare_loop(label);
 
         ib.current_function_mut()
             .add_global_label(Label::LoopCondition { loop_id });
@@ -1041,10 +1056,15 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
         Ok(())
     }
 
-    fn visit_do_while_loop(&mut self, _span: Span, DoWhileLoop { body, condition }: DoWhileLoop) -> Result<(), Error> {
+    fn visit_do_while_loop(
+        &mut self,
+        _span: Span,
+        label: Option<Symbol>,
+        DoWhileLoop { body, condition }: DoWhileLoop,
+    ) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
-        let loop_id = ib.current_function_mut().prepare_loop();
+        let loop_id = ib.current_function_mut().prepare_loop(label);
 
         ib.current_function_mut()
             .add_global_label(Label::LoopCondition { loop_id });
@@ -1917,6 +1937,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
     fn visit_for_loop(
         &mut self,
         _span: Span,
+        label: Option<Symbol>,
         ForLoop {
             init,
             condition,
@@ -1932,7 +1953,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                 ib.accept(*init)?;
             }
 
-            let loop_id = ib.current_function_mut().prepare_loop();
+            let loop_id = ib.current_function_mut().prepare_loop(label);
 
             // Condition
             ib.current_function_mut()
@@ -1963,6 +1984,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
     fn visit_for_of_loop(
         &mut self,
         _span: Span,
+        label: Option<Symbol>,
         ForOfLoop {
             binding,
             expr,
@@ -1970,12 +1992,13 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             scope,
         }: ForOfLoop,
     ) -> Result<(), Error> {
-        self.visit_for_each_kinded_loop(ForEachLoopKind::ForOf, binding, expr, body, scope)
+        self.visit_for_each_kinded_loop(ForEachLoopKind::ForOf, binding, expr, body, scope, label)
     }
 
     fn visit_for_in_loop(
         &mut self,
         _span: Span,
+        label: Option<Symbol>,
         ForInLoop {
             binding,
             expr,
@@ -1983,7 +2006,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             scope,
         }: ForInLoop,
     ) -> Result<(), Error> {
-        self.visit_for_each_kinded_loop(ForEachLoopKind::ForIn, binding, expr, body, scope)
+        self.visit_for_each_kinded_loop(ForEachLoopKind::ForIn, binding, expr, body, scope, label)
     }
 
     fn visit_import_statement(&mut self, span: Span, import: ImportKind) -> Result<(), Error> {
@@ -2093,7 +2116,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             .ok_or(Error::IllegalBreak(span))?;
 
         match breakable {
-            Breakable::Loop { loop_id } => {
+            Breakable::Loop { loop_id, label: _ } => {
                 ib.build_jmp(Label::LoopEnd { loop_id }, false);
             }
             Breakable::Switch { switch_id } => {
@@ -2119,7 +2142,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             .ok_or(Error::IllegalBreak(span))?;
 
         match breakable {
-            Breakable::Loop { loop_id } => {
+            Breakable::Loop { loop_id, label: _ } => {
                 ib.build_jmp(Label::LoopIncrement { loop_id }, false);
             }
             Breakable::Switch { .. } => {
@@ -2347,7 +2370,17 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             .breakables
             .push(Breakable::Named { sym: label, label_id });
 
-        ib.accept(*stmt)?;
+        if let StatementKind::Loop(lp) = stmt.kind {
+            match lp {
+                Loop::For(for_loop) => ib.visit_for_loop(stmt.span, Some(label), for_loop)?,
+                Loop::ForOf(for_of_loop) => ib.visit_for_of_loop(stmt.span, Some(label), for_of_loop)?,
+                Loop::ForIn(for_in_loop) => ib.visit_for_in_loop(stmt.span, Some(label), for_in_loop)?,
+                Loop::While(while_loop) => ib.visit_while_loop(stmt.span, Some(label), while_loop)?,
+                Loop::DoWhile(do_while_loop) => ib.visit_do_while_loop(stmt.span, Some(label), do_while_loop)?,
+            }
+        } else {
+            ib.accept(*stmt)?;
+        }
 
         ib.current_function_mut()
             .add_global_label(Label::UserDefinedEnd { id: label_id });

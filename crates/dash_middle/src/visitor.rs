@@ -54,10 +54,10 @@ pub trait Visitor<V> {
     fn visit_function_declaration(&mut self, span: Span, f: FunctionDeclaration) -> V;
 
     /// Visits a while loop
-    fn visit_while_loop(&mut self, span: Span, l: WhileLoop) -> V;
+    fn visit_while_loop(&mut self, span: Span, label: Option<Symbol>, l: WhileLoop) -> V;
 
     /// Visits a do while loop
-    fn visit_do_while_loop(&mut self, span: Span, d: DoWhileLoop) -> V;
+    fn visit_do_while_loop(&mut self, span: Span, label: Option<Symbol>, d: DoWhileLoop) -> V;
 
     /// Visits an assignment expression
     fn visit_assignment_expression(&mut self, span: Span, e: AssignmentExpr) -> V;
@@ -103,13 +103,13 @@ pub trait Visitor<V> {
     fn visit_throw(&mut self, span: Span, e: Expr) -> V;
 
     /// Visits a for loop
-    fn visit_for_loop(&mut self, span: Span, f: ForLoop) -> V;
+    fn visit_for_loop(&mut self, span: Span, label: Option<Symbol>, f: ForLoop) -> V;
 
     /// Visits a for..of loop
-    fn visit_for_of_loop(&mut self, span: Span, f: ForOfLoop) -> V;
+    fn visit_for_of_loop(&mut self, span: Span, label: Option<Symbol>, f: ForOfLoop) -> V;
 
     /// Visits a for..in loop
-    fn visit_for_in_loop(&mut self, span: Span, f: ForInLoop) -> V;
+    fn visit_for_in_loop(&mut self, span: Span, label: Option<Symbol>, f: ForInLoop) -> V;
 
     /// Visits an import statement
     fn visit_import_statement(&mut self, span: Span, i: ImportKind) -> V;
@@ -149,11 +149,11 @@ pub fn accept_default<T, V: Visitor<T>>(this: &mut V, Statement { kind, span }: 
         StatementKind::If(i) => this.visit_if_statement(span, i),
         StatementKind::Block(b) => this.visit_block_statement(span, b),
         StatementKind::Function(f) => this.visit_function_declaration(span, f),
-        StatementKind::Loop(Loop::For(f)) => this.visit_for_loop(span, f),
-        StatementKind::Loop(Loop::While(w)) => this.visit_while_loop(span, w),
-        StatementKind::Loop(Loop::ForOf(f)) => this.visit_for_of_loop(span, f),
-        StatementKind::Loop(Loop::ForIn(f)) => this.visit_for_in_loop(span, f),
-        StatementKind::Loop(Loop::DoWhile(d)) => this.visit_do_while_loop(span, d),
+        StatementKind::Loop(Loop::For(f)) => this.visit_for_loop(span, None, f),
+        StatementKind::Loop(Loop::While(w)) => this.visit_while_loop(span, None, w),
+        StatementKind::Loop(Loop::ForOf(f)) => this.visit_for_of_loop(span, None, f),
+        StatementKind::Loop(Loop::ForIn(f)) => this.visit_for_in_loop(span, None, f),
+        StatementKind::Loop(Loop::DoWhile(d)) => this.visit_do_while_loop(span, None, d),
         StatementKind::Return(r) => this.visit_return_statement(span, r),
         StatementKind::Try(t) => this.visit_try_catch(span, t),
         StatementKind::Throw(t) => this.visit_throw(span, t),
