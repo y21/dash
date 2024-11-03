@@ -31,6 +31,7 @@ mod state;
 mod stream;
 mod symbols;
 mod util;
+mod zlib;
 
 pub fn run_with_nodejs_mnemnoics(path: &str, opt: OptLevel, initial_gc_threshold: Option<usize>) -> anyhow::Result<()> {
     let tokio_rt = tokio::runtime::Runtime::new()?;
@@ -320,7 +321,10 @@ impl Object for RequireFunction {
                 None => throw!(scope, Error, "Failed to load module {}", arg),
             };
 
-            let file_path = dir_path.join(&package_state.metadata.main);
+            let mut file_path = dir_path.join(&package_state.metadata.main);
+            if file_path.extension().is_none() {
+                file_path.set_extension("js");
+            }
             let source = std::fs::read_to_string(&file_path).unwrap();
 
             let module = match execute_node_module(

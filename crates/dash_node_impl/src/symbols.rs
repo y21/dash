@@ -21,5 +21,6 @@ define_symbol_set!(#[derive(Trace)] NodeSymbols => [
     punycode,
     inherits,
     Stream,
-    Readable
+    Readable,
+    Inflate
 ]);
