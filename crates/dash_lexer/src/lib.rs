@@ -504,6 +504,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
             b'[' => self.token(TokenType::LeftSquareBrace),
             b']' => self.token(TokenType::RightSquareBrace),
             b',' => self.token(TokenType::Comma),
+            b'.' if self.current().is_some_and(|d| d.is_ascii_digit()) => self.read_number_literal(),
             b'.' => self.token(TokenType::Dot),
             b'-' => self.conditional_token(
                 TokenType::Minus,
