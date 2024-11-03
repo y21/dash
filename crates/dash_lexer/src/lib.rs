@@ -421,14 +421,19 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
     /// Reads a regex literal, assuming the current cursor is one byte ahead of the `/`
     fn read_regex_literal(&mut self) {
         // No real regex parsing here, we only skip to the end of the regex literal here.
+        let mut in_class = false;
         while !self.is_eof() {
             let c = self.next_char().unwrap();
-            if c == b'/' {
+            match c {
+                b'[' => in_class = true,
+                b']' if in_class => in_class = false,
                 // End of regex literal
-                break;
-            } else if c == b'\\' {
-                // Skip escaped character
-                self.advance();
+                b'/' if !in_class => break,
+                b'\\' => {
+                    // Skip escaped character
+                    self.advance();
+                }
+                _ => {}
             }
         }
 
