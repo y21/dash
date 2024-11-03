@@ -70,8 +70,21 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         })
     }
 
+    pub fn automatic_semicolon_insertion_terminator(&mut self) -> bool {
+        if self
+            .eat(any(&[TokenType::Semicolon, TokenType::RightBrace]), false)
+            .is_some()
+        {
+            // `}` needs to be consumed at callsite
+            self.advance_back();
+            true
+        } else {
+            self.at_lineterm()
+        }
+    }
+
     pub fn parse_break_continue_label(&mut self) -> Option<Symbol> {
-        if self.eat(TokenType::Semicolon, false).is_some() || self.at_lineterm() {
+        if self.automatic_semicolon_insertion_terminator() {
             None
         } else {
             self.expect_identifier(true)
@@ -316,7 +329,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
     fn parse_return(&mut self) -> Option<ReturnStatement> {
         let return_kw = self.previous()?.span;
-        if self.eat(TokenType::Semicolon, false).is_some() || self.at_lineterm() {
+        if self.automatic_semicolon_insertion_terminator() {
             Some(ReturnStatement(Expr {
                 span: return_kw, /* `return;` intentionally has an implicit `undefined` with the same span as `return;` */
                 kind: ExprKind::undefined_literal(),
