@@ -12,7 +12,7 @@ fn default_main() -> PathBuf {
 pub struct Package {
     pub name: String,
     pub version: String,
-    pub description: String,
+    pub description: Option<String>,
     #[serde(default = "default_main")]
     pub main: PathBuf,
     #[serde(default)]
@@ -23,7 +23,7 @@ impl Package {
         Package {
             name: String::default(),
             version: String::default(),
-            description: String::default(),
+            description: None,
             main: entry,
             dependencies: HashMap::default(),
         }
