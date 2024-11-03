@@ -1043,6 +1043,8 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
 
         ib.current_function_mut()
             .add_global_label(Label::LoopCondition { loop_id });
+        ib.current_function_mut()
+            .add_global_label(Label::LoopIterationEnd { loop_id });
         ib.accept_expr(condition)?;
         ib.build_jmpfalsep(Label::LoopEnd { loop_id }, false);
 
@@ -1071,6 +1073,8 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
 
         ib.accept(*body)?;
 
+        ib.current_function_mut()
+            .add_global_label(Label::LoopIterationEnd { loop_id });
         ib.accept_expr(condition)?;
         ib.build_jmptruep(Label::LoopCondition { loop_id }, false);
 
@@ -1968,7 +1972,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
 
             // Increment
             ib.current_function_mut()
-                .add_global_label(Label::LoopIncrement { loop_id });
+                .add_global_label(Label::LoopIterationEnd { loop_id });
             if let Some(finalizer) = finalizer {
                 ib.accept_expr(finalizer)?;
                 ib.build_pop();
@@ -2143,7 +2147,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
 
         match breakable {
             Breakable::Loop { loop_id, label: _ } => {
-                ib.build_jmp(Label::LoopIncrement { loop_id }, false);
+                ib.build_jmp(Label::LoopIterationEnd { loop_id }, false);
             }
             Breakable::Switch { .. } => {
                 // TODO: make it possible to use `continue` in loops even if its used in a switch

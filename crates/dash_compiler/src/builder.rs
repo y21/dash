@@ -22,7 +22,8 @@ pub enum Label {
     LoopEnd {
         loop_id: usize,
     },
-    LoopIncrement {
+    /// The end of an iteration. For `for` loops, this points to the increment code. For other loops, this aliases the condition.
+    LoopIterationEnd {
         loop_id: usize,
     },
     SwitchCaseCondition {
