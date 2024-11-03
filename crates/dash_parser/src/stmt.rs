@@ -1,4 +1,4 @@
-use dash_middle::interner::sym;
+use dash_middle::interner::{sym, Symbol};
 use dash_middle::lexer::token::{Token, TokenType, VARIABLE_TYPES};
 use dash_middle::parser::error::Error;
 use dash_middle::parser::expr::{Expr, ExprKind};
@@ -40,8 +40,8 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             TokenType::Export => self.parse_export().map(StatementKind::Export),
             TokenType::Class => self.parse_class().map(StatementKind::Class),
             TokenType::Switch => self.parse_switch().map(StatementKind::Switch),
-            TokenType::Continue => Some(StatementKind::Continue(self.expect_identifier(false))),
-            TokenType::Break => Some(StatementKind::Break(self.expect_identifier(false))),
+            TokenType::Continue => Some(StatementKind::Continue(self.parse_break_continue_label())),
+            TokenType::Break => Some(StatementKind::Break(self.parse_break_continue_label())),
             TokenType::Debugger => Some(StatementKind::Debugger),
             TokenType::Semicolon => Some(StatementKind::Empty),
             other => 'other: {
@@ -68,6 +68,14 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             kind,
             span: lo_span.to(hi_span),
         })
+    }
+
+    pub fn parse_break_continue_label(&mut self) -> Option<Symbol> {
+        if self.eat(TokenType::Semicolon, false).is_some() || self.at_lineterm() {
+            None
+        } else {
+            self.expect_identifier(true)
+        }
     }
 
     pub fn parse_class(&mut self) -> Option<Class> {
