@@ -243,8 +243,8 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
                         break;
                     }
 
-                    // Handle minus after e, like 1e-5
-                    if matches!(self.peek(), Some(b'-')) {
+                    // Handle minus/plus after e, like 1e-5
+                    if matches!(self.peek(), Some(b'-' | b'+')) {
                         self.advance();
                     }
 
