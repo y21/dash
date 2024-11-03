@@ -1,10 +1,74 @@
+use std::cell::Cell;
+use std::convert::Infallible;
+use std::ops::ControlFlow;
+
+use crate::js_std::array::for_each_js_iterator_element;
 use crate::throw;
 use crate::value::arraybuffer::ArrayBuffer;
 use crate::value::function::native::CallContext;
 use crate::value::object::Object;
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::typedarray::{TypedArray, TypedArrayKind};
-use crate::value::{Unpack, Value, ValueKind};
+use crate::value::{Root, Unpack, Value, ValueKind};
+
+fn typedarray_constructor(cx: CallContext, kind: TypedArrayKind) -> Result<Value, Value> {
+    let Some(&arg) = cx.args.first() else {
+        throw!(cx.scope, TypeError, "Missing argument")
+    };
+
+    if let ValueKind::Object(obj) = arg.unpack() {
+        if let Some(this) = obj.as_any(cx.scope).downcast_ref::<ArrayBuffer>() {
+            if this.len() % kind.bytes_per_element() != 0 {
+                throw!(
+                    cx.scope,
+                    RangeError,
+                    "Length of array buffer must be a multiple of {}",
+                    kind.bytes_per_element()
+                );
+            }
+
+            let array = TypedArray::new(cx.scope, obj, kind);
+            return Ok(cx.scope.register(array).into());
+        }
+
+        if let Some(iterator) = obj
+            .get_property(cx.scope, cx.scope.statics.symbol_iterator.into())
+            .root(cx.scope)?
+            .into_option()
+        {
+            let iterator = iterator.apply(cx.scope, arg, Vec::new()).root(cx.scope)?;
+            let mut values = Vec::new();
+            for_each_js_iterator_element(cx.scope, iterator, |scope, value| {
+                use TypedArrayKind::*;
+
+                let value = value.to_number(scope)?;
+
+                match kind {
+                    Int8Array | Uint8Array => values.push(Cell::new(value as u8)),
+                    Uint8ClampedArray => values.push(Cell::new(value.clamp(0.0, u8::MAX as f64) as u8)),
+                    Int16Array | Uint16Array => values.extend_from_slice(&(value as u16).to_ne_bytes().map(Cell::new)),
+                    Int32Array | Uint32Array => values.extend_from_slice(&(value as u32).to_ne_bytes().map(Cell::new)),
+                    Float32Array => values.extend_from_slice(&(value as f32).to_ne_bytes().map(Cell::new)),
+                    Float64Array => values.extend_from_slice(&value.to_ne_bytes().map(Cell::new)),
+                }
+                Ok(ControlFlow::<Infallible, _>::Continue(()))
+            })?;
+
+            let buffer = ArrayBuffer::from_storage(cx.scope, values);
+            let buffer = cx.scope.register(buffer);
+
+            let array = TypedArray::new(cx.scope, buffer, kind);
+            return Ok(cx.scope.register(array).into());
+        }
+    }
+
+    let size = arg.to_number(cx.scope)? as usize;
+    let buffer = ArrayBuffer::with_capacity(cx.scope, size);
+    let buffer = cx.scope.register(buffer);
+
+    let array = TypedArray::new(cx.scope, buffer, kind);
+    Ok(cx.scope.register(array).into())
+}
 
 macro_rules! typedarray {
     (module: $module:ident, kind: $kind:expr) => {
@@ -12,29 +76,7 @@ macro_rules! typedarray {
             use super::*;
 
             pub fn constructor(cx: CallContext) -> Result<Value, Value> {
-                let arg = match cx.args.first().unpack() {
-                    Some(ValueKind::Object(o)) => o,
-                    _ => throw!(cx.scope, TypeError, "Missing argument"),
-                };
-                let Some(this) = arg.as_any(cx.scope).downcast_ref::<ArrayBuffer>() else {
-                    throw!(cx.scope, TypeError, "Incompatible receiver")
-                };
-
-                const REQUIRED_ALIGN: usize = $kind.bytes_per_element();
-
-                #[allow(clippy::modulo_one)]
-                if this.len() % REQUIRED_ALIGN != 0 {
-                    throw!(
-                        cx.scope,
-                        RangeError,
-                        "Length of array buffer must be a multiple of {}",
-                        REQUIRED_ALIGN
-                    );
-                }
-
-                let array = TypedArray::new(cx.scope, arg.clone(), $kind);
-
-                Ok(cx.scope.register(array).into())
+                typedarray_constructor(cx, $kind)
             }
         }
     };

@@ -25,7 +25,7 @@ pub enum TypedArrayKind {
 }
 
 impl TypedArrayKind {
-    pub const fn bytes_per_element(&self) -> usize {
+    pub const fn bytes_per_element(self) -> usize {
         match self {
             TypedArrayKind::Int8Array => 1,
             TypedArrayKind::Uint8Array => 1,

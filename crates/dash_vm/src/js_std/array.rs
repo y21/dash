@@ -1,4 +1,5 @@
 use std::cmp;
+use std::convert::Infallible;
 use std::ops::{ControlFlow, Range};
 use ControlFlow::{Break, Continue};
 
@@ -625,24 +626,39 @@ pub fn is_array(cx: CallContext) -> Result<Value, Value> {
     ))
 }
 
+pub fn for_each_js_iterator_element<B, F: FnMut(&mut LocalScope<'_>, Value) -> Result<ControlFlow<B>, Value>>(
+    scope: &mut LocalScope<'_>,
+    iter: Value,
+    mut f: F,
+) -> Result<ControlFlow<B>, Value> {
+    let next = iter.get_property(scope, sym::next.into()).root(scope)?;
+    loop {
+        let item = next.apply(scope, iter, Vec::new()).root(scope)?;
+        let done = item.get_property(scope, sym::done.into()).root(scope)?.is_truthy(scope);
+        if done {
+            break;
+        }
+        let value = item.get_property(scope, sym::value.into()).root(scope)?;
+        if let ControlFlow::Break(val) = f(scope, value)? {
+            return Ok(ControlFlow::Break(val));
+        }
+    }
+
+    Ok(ControlFlow::Continue(()))
+}
+
 pub fn from(cx: CallContext) -> Result<Value, Value> {
     fn with_iterator(scope: &mut LocalScope, items: Value, mapper: Option<Value>) -> Result<Value, Value> {
         let mut values = Vec::new();
 
-        let next = items.get_property(scope, sym::next.into()).root(scope)?;
-        loop {
-            let item = next.apply(scope, items, Vec::new()).root(scope)?;
-            let done = item.get_property(scope, sym::done.into()).root(scope)?.is_truthy(scope);
-            if done {
-                break;
-            }
-            let value = item.get_property(scope, sym::value.into()).root(scope)?;
+        for_each_js_iterator_element(scope, items, |scope, value| {
             let value = match &mapper {
                 Some(mapper) => mapper.apply(scope, Value::undefined(), vec![value]).root(scope)?,
                 None => value,
             };
             values.push(PropertyValue::static_default(value));
-        }
+            Ok(ControlFlow::<Infallible, _>::Continue(()))
+        })?;
 
         let values = Array::from_vec(scope, values);
         Ok(Value::object(scope.register(values)))
