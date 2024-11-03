@@ -5,7 +5,8 @@ use dash_vm::value::function::native::{register_native_fn, CallContext};
 use dash_vm::value::object::{NamedObject, Object, PropertyDataDescriptor, PropertyValue, PropertyValueKind};
 use dash_vm::value::{Root, Typeof, Value};
 
-use crate::state::{state_mut, NodeSymbols};
+use crate::state::state_mut;
+use crate::symbols::NodeSymbols;
 
 pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     let NodeSymbols {

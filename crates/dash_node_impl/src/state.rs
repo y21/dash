@@ -1,16 +1,16 @@
 use std::cell::OnceCell;
 
-use dash_middle::define_symbol_set;
 use dash_proc_macro::Trace;
 use dash_rt::typemap::Key;
 use dash_vm::value::Value;
 use dash_vm::Vm;
 
-define_symbol_set!(#[derive(Trace)] NodeSymbols => [fs, fetch, path, parse, dir, events, util, EventEmitter, on, emit, stream, http, https, url, zlib, punycode, inherits, Stream, Readable]);
+use crate::symbols::NodeSymbols;
 
 #[derive(Trace)]
 pub struct State {
     pub sym: NodeSymbols,
+    pub assert_cache: OnceCell<Value>,
     pub fs_cache: OnceCell<Value>,
     pub fetch_cache: OnceCell<Value>,
     pub path_cache: OnceCell<Value>,
@@ -28,6 +28,7 @@ impl State {
     pub fn new(vm: &mut Vm) -> Self {
         Self {
             sym: NodeSymbols::new(&mut vm.interner),
+            assert_cache: OnceCell::new(),
             fs_cache: OnceCell::new(),
             fetch_cache: OnceCell::new(),
             path_cache: OnceCell::new(),

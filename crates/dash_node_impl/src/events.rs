@@ -16,7 +16,8 @@ use dash_vm::value::{Unpack, Value, ValueKind};
 use dash_vm::{delegate, throw};
 use rustc_hash::FxHashMap;
 
-use crate::state::{state_mut, NodeSymbols};
+use crate::state::state_mut;
+use crate::symbols::NodeSymbols;
 
 pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     let NodeSymbols {

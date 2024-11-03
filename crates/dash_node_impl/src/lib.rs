@@ -22,12 +22,14 @@ use package::Package;
 use rustc_hash::FxHashMap;
 use state::Nodejs;
 
+mod assert;
 mod events;
 mod native;
 mod package;
 mod path;
 mod state;
 mod stream;
+mod symbols;
 mod util;
 
 pub fn run_with_nodejs_mnemnoics(path: &str, opt: OptLevel, initial_gc_threshold: Option<usize>) -> anyhow::Result<()> {

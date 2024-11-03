@@ -9,7 +9,8 @@ use dash_vm::value::function::{Function, FunctionKind};
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::Value;
 
-use crate::state::{state_mut, NodeSymbols};
+use crate::state::state_mut;
+use crate::symbols::NodeSymbols;
 
 pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     let NodeSymbols {
