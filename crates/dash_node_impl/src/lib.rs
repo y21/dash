@@ -27,6 +27,7 @@ mod native;
 mod package;
 mod path;
 mod state;
+mod util;
 
 pub fn run_with_nodejs_mnemnoics(path: &str, opt: OptLevel, initial_gc_threshold: Option<usize>) -> anyhow::Result<()> {
     let tokio_rt = tokio::runtime::Runtime::new()?;
@@ -313,7 +314,7 @@ impl Object for RequireFunction {
 
             let (package_state, dir_path) = match module {
                 Some((package_state, dir_path)) => (package_state, dir_path),
-                None => throw!(scope, Error, "Failed to load module {arg}"),
+                None => throw!(scope, Error, "Failed to load module {}", arg),
             };
 
             let file_path = dir_path.join(&package_state.metadata.main);
