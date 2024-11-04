@@ -252,6 +252,7 @@ impl<'b, 'interner> ConstFunctionEvalCtx<'b, 'interner> {
             ExprKind::Array(..) => self.visit_array_expression(expression),
             ExprKind::Object(..) => self.visit_object_expression(expression),
             ExprKind::Compiled(..) => {}
+            ExprKind::YieldStar(e) => self.visit(e),
             ExprKind::Empty => {}
         }
     }

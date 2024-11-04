@@ -388,6 +388,10 @@ impl<'s> TypeInferCtx<'s> {
             ExprKind::Object(expr) => self.visit_object_expression(expr),
             ExprKind::Compiled(..) => None,
             ExprKind::Empty => None,
+            ExprKind::YieldStar(e) => {
+                self.visit(e);
+                None
+            }
         }
     }
 

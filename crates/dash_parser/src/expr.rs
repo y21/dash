@@ -36,10 +36,19 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
     fn parse_yield(&mut self) -> Option<Expr> {
         if self.eat(TokenType::Yield, false).is_some() {
-            let lo_span = self.previous()?.span;
+            let yield_lo_span = self.previous()?.span;
+
+            if !self.at_lineterm() && self.eat(TokenType::Star, false).is_some() {
+                let right = self.parse_yield()?;
+                return Some(Expr {
+                    span: yield_lo_span.to(right.span),
+                    kind: ExprKind::YieldStar(Box::new(right)),
+                });
+            }
+
             let right = self.parse_yield()?;
             return Some(Expr {
-                span: lo_span.to(right.span),
+                span: yield_lo_span.to(right.span),
                 kind: ExprKind::unary(TokenType::Yield, right),
             });
         }

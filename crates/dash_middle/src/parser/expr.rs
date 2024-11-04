@@ -26,6 +26,8 @@ pub enum ExprKind {
     Literal(LiteralExpr),
     /// Represents an unary expression, i.e. `-foo`, `+bar`, `await foo`
     Unary(UnaryExpr),
+    #[display(fmt = "yield* {_0}")]
+    YieldStar(Box<Expr>),
     /// An assignment expression, i.e. `foo = bar`
     Assignment(AssignmentExpr),
     /// A function call expression

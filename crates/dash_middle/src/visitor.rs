@@ -140,6 +140,8 @@ pub trait Visitor<V> {
 
     /// Visits a labelled statement.
     fn visit_labelled(&mut self, span: Span, label: Symbol, stmt: Box<Statement>) -> V;
+
+    fn visit_yield_star(&mut self, span: Span, right: Box<Expr>) -> V;
 }
 
 pub fn accept_default<T, V: Visitor<T>>(this: &mut V, Statement { kind, span }: Statement) -> T {
@@ -192,5 +194,6 @@ where
         ExprKind::Object(e) => this.visit_object_literal(span, e),
         ExprKind::Compiled(..) => on_empty(this),
         ExprKind::Empty => this.visit_empty_expr(),
+        ExprKind::YieldStar(e) => this.visit_yield_star(span, e),
     }
 }

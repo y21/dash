@@ -1,6 +1,5 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
-use std::mem;
 use std::rc::Rc;
 
 use dash_log::{debug, span, Level};
@@ -21,8 +20,7 @@ use dash_middle::parser::statement::{
     Asyncness, Binding, BlockStatement, Class, ClassMember, ClassMemberKey, ClassMemberValue, DoWhileLoop, ExportKind,
     ForInLoop, ForLoop, ForOfLoop, FunctionDeclaration, FunctionKind, IfStatement, ImportKind, Loop, Parameter,
     ReturnStatement, ScopeId, SpecifierKind, Statement, StatementKind, SwitchCase, SwitchStatement, TryCatch,
-    VariableBinding, VariableDeclaration, VariableDeclarationKind, VariableDeclarationName, VariableDeclarations,
-    WhileLoop,
+    VariableDeclaration, VariableDeclarationKind, VariableDeclarationName, VariableDeclarations, WhileLoop,
 };
 use dash_middle::sourcemap::Span;
 use dash_middle::util::Counter;
@@ -30,6 +28,7 @@ use dash_middle::visitor::Visitor;
 use dash_optimizer::consteval::ConstFunctionEvalCtx;
 use dash_optimizer::type_infer::{InferMode, LocalDeclToSlot, NameResolutionResults, TypeInferCtx};
 use dash_optimizer::OptLevel;
+use for_each_loop::{ForEachDesugarCtxt, ForEachLoopKind};
 use instruction::compile_local_load;
 use jump_container::JumpContainer;
 
@@ -38,12 +37,12 @@ use crate::builder::{InstructionBuilder, Label};
 use self::instruction::NamedExportKind;
 
 pub mod builder;
+mod for_each_loop;
 #[cfg(feature = "from_string")]
 pub mod from_string;
 pub mod instruction;
 pub mod transformations;
-// #[cfg(test)]
-// mod test;
+
 mod jump_container;
 
 macro_rules! unimplementedc {
@@ -367,154 +366,6 @@ impl<'interner> FunctionCompiler<'interner> {
     fn add_unnameable_local(&mut self, name: Symbol) -> Result<u16, LimitExceededError> {
         self.scopes.add_unnameable_local(self.current, name, None)
     }
-
-    fn visit_for_each_kinded_loop(
-        &mut self,
-        kind: ForEachLoopKind,
-        binding: VariableBinding,
-        expr: Expr,
-        mut body: Box<Statement>,
-        scope: ScopeId,
-        label: Option<Symbol>,
-    ) -> Result<(), Error> {
-        // For-Of Loop Desugaring:
-
-        // === ORIGINAL ===
-        // for (const x of [1,2]) console.log(x)
-
-        // === AFTER DESUGARING ===
-        // let __forOfIter = [1,2][Symbol.iterator]();
-        // let __forOfGenStep;
-        // let x;
-
-        // while (!(__forOfGenStep = __forOfIter.next()).done) {
-        //     console.log(x)
-        // }
-
-        // For-In Loop Desugaring
-
-        // === ORIGINAL ===
-        // for (const x in { a: 3, b: 4 }) console.log(x);
-
-        // === AFTER DESUGARING ===
-        // let __forInIter = [1,2][__intrinsicForInIter]();
-        // let __forInGenStep;
-        // let x;
-
-        // while (!(__forInGenStep = __forOfIter.next()).done) {
-        //     console.log(x)
-        // }
-
-        let mut ib = InstructionBuilder::new(self);
-        let for_of_iter_id = ib
-            .add_unnameable_local(sym::for_of_iter)
-            .map_err(|_| Error::LocalLimitExceeded(expr.span))?;
-
-        let for_of_gen_step_id = ib
-            .add_unnameable_local(sym::for_of_gen_step)
-            .map_err(|_| Error::LocalLimitExceeded(expr.span))?;
-
-        ib.accept_expr(expr)?;
-        match kind {
-            ForEachLoopKind::ForOf => ib.build_symbol_iterator(),
-            ForEachLoopKind::ForIn => ib.build_for_in_iterator(),
-        }
-        ib.build_local_store(AssignKind::Assignment, for_of_iter_id, false);
-        ib.build_pop();
-
-        let gen_step = compile_local_load(for_of_gen_step_id, false);
-
-        // Assign iterator value to binding at the very start of the for loop body
-        let next_value = Statement {
-            span: Span::COMPILER_GENERATED,
-            kind: StatementKind::Variable(VariableDeclarations(vec![VariableDeclaration::new(
-                binding,
-                Some(Expr {
-                    span: Span::COMPILER_GENERATED,
-                    kind: ExprKind::property_access(
-                        false,
-                        Expr {
-                            span: Span::COMPILER_GENERATED,
-                            kind: ExprKind::compiled(gen_step),
-                        },
-                        Expr {
-                            span: Span::COMPILER_GENERATED,
-                            kind: ExprKind::identifier(sym::value),
-                        },
-                    ),
-                }),
-            )])),
-        };
-
-        // Create a new block for the variable declaration
-        let old_body = mem::replace(&mut *body, Statement::dummy_empty());
-        *body = Statement {
-            span: Span::COMPILER_GENERATED,
-            kind: StatementKind::Block(BlockStatement(vec![next_value, old_body], scope)),
-        };
-
-        let for_of_iter_binding_bc = compile_local_load(for_of_iter_id, false);
-
-        // for..of -> while loop rewrite
-        ib.visit_while_loop(
-            Span::COMPILER_GENERATED,
-            label,
-            WhileLoop {
-                condition: Expr {
-                    span: Span::COMPILER_GENERATED,
-                    kind: ExprKind::unary(
-                        TokenType::LogicalNot,
-                        Expr {
-                            span: Span::COMPILER_GENERATED,
-                            kind: ExprKind::property_access(
-                                false,
-                                Expr {
-                                    span: Span::COMPILER_GENERATED,
-                                    kind: ExprKind::assignment_local_space(
-                                        for_of_gen_step_id,
-                                        Expr {
-                                            span: Span::COMPILER_GENERATED,
-                                            kind: ExprKind::function_call(
-                                                Expr {
-                                                    span: Span::COMPILER_GENERATED,
-                                                    kind: ExprKind::property_access(
-                                                        false,
-                                                        Expr {
-                                                            span: Span::COMPILER_GENERATED,
-                                                            kind: ExprKind::compiled(for_of_iter_binding_bc),
-                                                        },
-                                                        Expr {
-                                                            span: Span::COMPILER_GENERATED,
-                                                            kind: ExprKind::identifier(sym::next),
-                                                        },
-                                                    ),
-                                                },
-                                                Vec::new(),
-                                                false,
-                                            ),
-                                        },
-                                        TokenType::Assignment,
-                                    ),
-                                },
-                                Expr {
-                                    span: Span::COMPILER_GENERATED,
-                                    kind: ExprKind::identifier(sym::done),
-                                },
-                            ),
-                        },
-                    ),
-                },
-                body,
-            },
-        )?;
-
-        Ok(())
-    }
-}
-
-enum ForEachLoopKind {
-    ForOf,
-    ForIn,
 }
 
 impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
@@ -567,6 +418,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                 self.current_function_mut().buf.append(&mut buf);
                 Ok(())
             }
+            ExprKind::YieldStar(e) => self.visit_yield_star(span, e),
             ExprKind::Empty => self.visit_empty_expr(),
         }
     }
@@ -860,6 +712,39 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             }
             _ => unimplementedc!(span, "unary operator {:?}", operator),
         }
+
+        Ok(())
+    }
+
+    fn visit_yield_star(&mut self, span: Span, right: Box<Expr>) -> Result<(), Error> {
+        if !matches!(self.current_function().ty, FunctionKind::Generator) {
+            return Err(Error::YieldOutsideGenerator { yield_expr: span });
+        }
+
+        // Desugar `yield* right` to:
+        //
+        // let _iterator = right;
+        // let _item;
+        // while (!(_item = _iterator.next()).done) {
+        //     yield _item.value;
+        // }
+        // _item.value;
+
+        let mut ib = InstructionBuilder::new(self);
+        let mut fcx = ForEachDesugarCtxt::new(&mut ib, span)?;
+        fcx.init_iterator(ForEachLoopKind::ForOf, *right)?;
+        fcx.compile_loop(
+            None,
+            Box::new(Statement {
+                span,
+                kind: StatementKind::Expression(Expr {
+                    span,
+                    kind: ExprKind::unary(TokenType::Yield, fcx.step_value_expr()),
+                }),
+            }),
+        )?;
+        let step_value = fcx.step_value_expr();
+        ib.accept_expr(step_value)?;
 
         Ok(())
     }
@@ -1987,7 +1872,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
 
     fn visit_for_of_loop(
         &mut self,
-        _span: Span,
+        span: Span,
         label: Option<Symbol>,
         ForOfLoop {
             binding,
@@ -1996,12 +1881,19 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             scope,
         }: ForOfLoop,
     ) -> Result<(), Error> {
-        self.visit_for_each_kinded_loop(ForEachLoopKind::ForOf, binding, expr, body, scope, label)
+        ForEachDesugarCtxt::new(&mut InstructionBuilder::new(self), span)?.desugar_for_each_kinded_loop(
+            ForEachLoopKind::ForOf,
+            binding,
+            expr,
+            body,
+            scope,
+            label,
+        )
     }
 
     fn visit_for_in_loop(
         &mut self,
-        _span: Span,
+        span: Span,
         label: Option<Symbol>,
         ForInLoop {
             binding,
@@ -2010,7 +1902,14 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             scope,
         }: ForInLoop,
     ) -> Result<(), Error> {
-        self.visit_for_each_kinded_loop(ForEachLoopKind::ForIn, binding, expr, body, scope, label)
+        ForEachDesugarCtxt::new(&mut InstructionBuilder::new(self), span)?.desugar_for_each_kinded_loop(
+            ForEachLoopKind::ForIn,
+            binding,
+            expr,
+            body,
+            scope,
+            label,
+        )
     }
 
     fn visit_import_statement(&mut self, span: Span, import: ImportKind) -> Result<(), Error> {
