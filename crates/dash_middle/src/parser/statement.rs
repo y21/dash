@@ -692,11 +692,9 @@ pub enum VariableDeclarationKind {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum VariableDeclarationName {
-    /// Normal identifier
-    Identifier(Binding),
+pub enum Pattern {
     /// Object destructuring: { a } = { a: 1 }
-    ObjectDestructuring {
+    Object {
         /// Fields to destructure
         ///
         /// Destructured fields can also be aliased with ` { a: b } = { a: 3 } `
@@ -705,7 +703,7 @@ pub enum VariableDeclarationName {
         rest: Option<Binding>,
     },
     /// Array destructuring: [ a ] = [ 1 ]
-    ArrayDestructuring {
+    Array {
         /// Elements to destructure.
         /// For `[a,,b]` this stores `[Some(a), None, Some(b)]`
         fields: Vec<Option<Binding>>,
@@ -714,11 +712,17 @@ pub enum VariableDeclarationName {
     },
 }
 
-impl fmt::Display for VariableDeclarationName {
+#[derive(Debug, Clone, PartialEq, Display)]
+pub enum VariableDeclarationName {
+    /// Normal identifier
+    Identifier(Binding),
+    Pattern(Pattern),
+}
+
+impl fmt::Display for Pattern {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            VariableDeclarationName::Identifier(name) => write!(f, "{name}"),
-            VariableDeclarationName::ObjectDestructuring { fields, rest } => {
+            Pattern::Object { fields, rest } => {
                 write!(f, "{{ ")?;
 
                 for (i, (_, name, alias)) in fields.iter().enumerate() {
@@ -739,7 +743,7 @@ impl fmt::Display for VariableDeclarationName {
 
                 write!(f, " }}")
             }
-            VariableDeclarationName::ArrayDestructuring { fields, rest } => {
+            Pattern::Array { fields, rest } => {
                 write!(f, "[ ")?;
 
                 for (i, name) in fields.iter().enumerate() {
@@ -940,5 +944,9 @@ pub enum ClassMemberValue {
 #[derive(Debug, Clone, Display)]
 pub enum Parameter {
     Identifier(Binding),
-    Spread(Binding),
+    SpreadIdentifier(Binding),
+    #[display(fmt = "{_1}")]
+    Pattern(LocalId, Pattern),
+    #[display(fmt = "{_1}")]
+    SpreadPattern(LocalId, Pattern),
 }

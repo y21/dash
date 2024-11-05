@@ -5,7 +5,7 @@ use dash_middle::parser::expr::{Expr, ExprKind};
 use dash_middle::parser::statement::{
     Asyncness, BlockStatement, Catch, Class, ClassMember, ClassMemberKey, ClassMemberValue, DoWhileLoop, ExportKind,
     ForInLoop, ForLoop, ForOfLoop, FunctionDeclaration, FunctionKind, IfStatement, ImportKind, Loop, Parameter,
-    ReturnStatement, ScopeId, SpecifierKind, Statement, StatementKind, SwitchCase, SwitchStatement, TryCatch,
+    Pattern, ReturnStatement, ScopeId, SpecifierKind, Statement, StatementKind, SwitchCase, SwitchStatement, TryCatch,
     VariableBinding, VariableDeclaration, VariableDeclarationKind, VariableDeclarationName, VariableDeclarations,
     WhileLoop,
 };
@@ -557,68 +557,8 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         Some(IfStatement::new(condition, then, branches, el))
     }
 
-    /// Parses a list of parameters (identifier, followed by optional type segment) delimited by comma,
-    /// assuming that the ( has already been consumed
-    pub fn parse_parameter_list(&mut self) -> ParameterList {
-        let mut parameters = Vec::new();
-
-        while self.eat(TokenType::RightParen, false).is_none() {
-            let tok = self.next().cloned()?;
-
-            let parameter = match tok.ty {
-                TokenType::Dot => {
-                    // Begin of spread operator
-                    for _ in 0..2 {
-                        self.eat(TokenType::Dot, true)?;
-                    }
-
-                    let ident = self.expect_identifier(true)?;
-
-                    Parameter::Spread(self.create_binding(ident))
-                }
-                TokenType::Comma => continue,
-                // TODO: refactor to if let guards once stable
-                other if other.is_identifier() => {
-                    Parameter::Identifier(self.create_binding(other.as_identifier().unwrap()))
-                }
-                _ => {
-                    self.error(Error::unexpected_token(tok, TokenType::Comma));
-                    return None;
-                }
-            };
-
-            // Parse type param
-            let ty = if self.eat(TokenType::Colon, false).is_some() {
-                Some(self.parse_type_segment()?)
-            } else {
-                None
-            };
-
-            // Parse default value
-            let default = if self.eat(TokenType::Assignment, false).is_some() {
-                Some(self.parse_expression()?)
-            } else {
-                None
-            };
-
-            let is_spread = matches!(parameter, Parameter::Spread(..));
-
-            parameters.push((parameter, default, ty));
-
-            if is_spread {
-                // Must be followed by )
-                self.eat(TokenType::RightParen, true)?;
-
-                break;
-            }
-        }
-
-        Some(parameters)
-    }
-
-    /// Parses the `x` in `let x = 1`, `[x, y]` in `let [x, y] = [1, 2]`, etc.
-    fn parse_variable_binding_with_kind(&mut self, kind: VariableDeclarationKind) -> Option<VariableBinding> {
-        let name = if self.eat(TokenType::LeftBrace, false).is_some() {
+    pub fn parse_pattern(&mut self) -> Option<Pattern> {
+        if self.eat(TokenType::LeftBrace, false).is_some() {
             // Object destructuring
             let mut fields = Vec::new();
             let mut rest = None;
@@ -683,9 +623,10 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 }
             }
 
-            VariableDeclarationName::ObjectDestructuring { fields, rest }
-        } else if self.eat(TokenType::LeftSquareBrace, false).is_some() {
+            Some(Pattern::Object { fields, rest })
+        } else {
             // Array destructuring
+            self.eat(TokenType::LeftSquareBrace, true)?;
             let mut fields = Vec::new();
             let mut rest = None;
 
@@ -739,11 +680,80 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 }
             }
 
-            VariableDeclarationName::ArrayDestructuring { fields, rest }
+            Some(Pattern::Array { fields, rest })
+        }
+    }
+
+    /// Parses a list of parameters (identifier, followed by optional type segment) delimited by comma,
+    /// assuming that the ( has already been consumed
+    pub fn parse_parameter_list(&mut self) -> ParameterList {
+        let mut parameters = Vec::new();
+
+        while self.eat(TokenType::RightParen, false).is_none() {
+            let tok = self.next().cloned()?;
+
+            let parameter = match tok.ty {
+                TokenType::Dot => {
+                    // Begin of spread operator
+                    for _ in 0..2 {
+                        self.eat(TokenType::Dot, true)?;
+                    }
+
+                    if let Some(ident) = self.expect_identifier(false) {
+                        Parameter::SpreadIdentifier(self.create_binding(ident))
+                    } else {
+                        Parameter::SpreadPattern(self.local_count.inc(), self.parse_pattern()?)
+                    }
+                }
+                TokenType::Comma => continue,
+                other => {
+                    if let Some(ident) = other.as_identifier() {
+                        Parameter::Identifier(self.create_binding(ident))
+                    } else {
+                        self.advance_back();
+                        Parameter::Pattern(self.local_count.inc(), self.parse_pattern()?)
+                    }
+                }
+            };
+
+            // Parse type param
+            let ty = if self.eat(TokenType::Colon, false).is_some() {
+                Some(self.parse_type_segment()?)
+            } else {
+                None
+            };
+
+            // Parse default value
+            let default = if self.eat(TokenType::Assignment, false).is_some() {
+                Some(self.parse_expression()?)
+            } else {
+                None
+            };
+
+            let is_spread = matches!(
+                parameter,
+                Parameter::SpreadIdentifier(..) | Parameter::SpreadPattern(..)
+            );
+
+            parameters.push((parameter, default, ty));
+
+            if is_spread {
+                // Must be followed by )
+                self.eat(TokenType::RightParen, true)?;
+
+                break;
+            }
+        }
+
+        Some(parameters)
+    }
+
+    /// Parses the `x` in `let x = 1`, `[x, y]` in `let [x, y] = [1, 2]`, etc.
+    fn parse_variable_binding_with_kind(&mut self, kind: VariableDeclarationKind) -> Option<VariableBinding> {
+        let name = if let Some(ident) = self.expect_identifier(false) {
+            VariableDeclarationName::Identifier(self.create_binding(ident))
         } else {
-            // Identifier
-            let name = self.expect_identifier(true)?;
-            VariableDeclarationName::Identifier(self.create_binding(name))
+            VariableDeclarationName::Pattern(self.parse_pattern()?)
         };
 
         let ty = if self.eat(TokenType::Colon, false).is_some() {

@@ -19,7 +19,7 @@ use dash_middle::parser::expr::{
 use dash_middle::parser::statement::{
     Asyncness, Binding, BlockStatement, Class, ClassMember, ClassMemberKey, ClassMemberValue, DoWhileLoop, ExportKind,
     ForInLoop, ForLoop, ForOfLoop, FunctionDeclaration, FunctionKind, IfStatement, ImportKind, Loop, Parameter,
-    ReturnStatement, ScopeId, SpecifierKind, Statement, StatementKind, SwitchCase, SwitchStatement, TryCatch,
+    Pattern, ReturnStatement, ScopeId, SpecifierKind, Statement, StatementKind, SwitchCase, SwitchStatement, TryCatch,
     VariableDeclaration, VariableDeclarationKind, VariableDeclarationName, VariableDeclarations, WhileLoop,
 };
 use dash_middle::sourcemap::Span;
@@ -767,66 +767,9 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                         ib.build_pop();
                     }
                 }
-                VariableDeclarationName::ObjectDestructuring { fields, rest } => {
-                    let rest_id = rest.map(|rest| ib.find_local_from_binding(rest));
-
-                    let field_count = fields
-                        .len()
-                        .try_into()
-                        .map_err(|_| Error::DestructureLimitExceeded(span))?;
-
+                VariableDeclarationName::Pattern(ref pat) => {
                     let value = value.ok_or(Error::MissingInitializerInDestructuring(span))?;
-                    ib.accept_expr(value)?;
-
-                    ib.build_objdestruct(field_count, rest_id);
-
-                    for (local, name, alias) in fields {
-                        let name = alias.unwrap_or(name);
-                        let id = ib.find_local_from_binding(Binding { id: local, ident: name });
-
-                        let NumberConstant(var_id) = ib
-                            .current_function_mut()
-                            .cp
-                            .add_number(id as f64)
-                            .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
-                        let SymbolConstant(ident_id) = ib
-                            .current_function_mut()
-                            .cp
-                            .add_symbol(name)
-                            .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
-                        ib.writew(var_id);
-                        ib.writew(ident_id);
-                    }
-                }
-                VariableDeclarationName::ArrayDestructuring { fields, rest } => {
-                    if rest.is_some() {
-                        unimplementedc!(span, "rest operator in array destructuring");
-                    }
-
-                    let field_count = fields
-                        .len()
-                        .try_into()
-                        .map_err(|_| Error::DestructureLimitExceeded(span))?;
-
-                    let value = value.ok_or(Error::MissingInitializerInDestructuring(span))?;
-                    ib.accept_expr(value)?;
-
-                    ib.build_arraydestruct(field_count);
-
-                    for name in fields {
-                        ib.write_bool(name.is_some());
-                        if let Some(name) = name {
-                            let id = ib.find_local_from_binding(name);
-
-                            let NumberConstant(id) = ib
-                                .current_function_mut()
-                                .cp
-                                .add_number(id as f64)
-                                .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
-
-                            ib.writew(id);
-                        }
-                    }
+                    compile_destructuring_pattern(&mut ib, value, pat, span)?;
                 }
             }
         }
@@ -1642,14 +1585,14 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             let mut rest_local = None;
 
             for (param, default, _ty) in &arguments {
-                let name = match *param {
-                    Parameter::Identifier(ident) => ident,
-                    Parameter::Spread(ident) => ident,
+                let id = match *param {
+                    Parameter::Identifier(binding) | Parameter::SpreadIdentifier(binding) => {
+                        ib.find_local_from_binding(binding)
+                    }
+                    Parameter::Pattern(id, _) | Parameter::SpreadPattern(id, _) => ib.decl_to_slot.slot_from_local(id),
                 };
 
-                let id = ib.find_local_from_binding(name);
-
-                if let Parameter::Spread(..) = param {
+                if let Parameter::SpreadIdentifier(_) | Parameter::SpreadPattern(..) = param {
                     rest_local = Some(id);
                 }
 
@@ -1666,6 +1609,18 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                     sub_ib.build_local_store(AssignKind::Assignment, id, false);
 
                     sub_ib.add_local_label(Label::FinishParamDefaultValueInit);
+                }
+
+                if let Parameter::Pattern(_, pat) | Parameter::SpreadPattern(_, pat) = param {
+                    compile_destructuring_pattern(
+                        ib,
+                        Expr {
+                            span,
+                            kind: ExprKind::Compiled(compile_local_load(id, false)),
+                        },
+                        pat,
+                        span,
+                    )?;
                 }
             }
 
@@ -1692,7 +1647,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                 name: name.map(|binding| binding.ident),
                 ty,
                 params: match arguments.last() {
-                    Some((Parameter::Spread(..), ..)) => arguments.len() - 1,
+                    Some((Parameter::SpreadPattern(..) | Parameter::SpreadIdentifier(_), ..)) => arguments.len() - 1,
                     _ => arguments.len(),
                 },
                 externals: cmp.externals.into(),
@@ -1984,11 +1939,11 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                 for var in &vars {
                     match var.binding.name {
                         VariableDeclarationName::Identifier(Binding { ident, .. }) => it.push(ident),
-                        VariableDeclarationName::ArrayDestructuring { ref fields, rest } => {
+                        VariableDeclarationName::Pattern(Pattern::Array { ref fields, rest }) => {
                             it.extend(fields.iter().flatten().map(|b| b.ident));
                             it.extend(rest.map(|b| b.ident));
                         }
-                        VariableDeclarationName::ObjectDestructuring { ref fields, rest } => {
+                        VariableDeclarationName::Pattern(Pattern::Object { ref fields, rest }) => {
                             it.extend(fields.iter().map(|&(_, name, ident)| ident.unwrap_or(name)));
                             it.extend(rest.map(|b| b.ident));
                         }
@@ -2412,6 +2367,77 @@ fn compile_object_members(
     }
 
     Ok(members)
+}
+
+fn compile_destructuring_pattern(
+    ib: &mut InstructionBuilder<'_, '_>,
+    from: Expr,
+    pat: &Pattern,
+    at: Span,
+) -> Result<(), Error> {
+    match pat {
+        Pattern::Object { fields, rest } => {
+            let rest_id = rest.map(|rest| ib.find_local_from_binding(rest));
+
+            let field_count = fields
+                .len()
+                .try_into()
+                .map_err(|_| Error::DestructureLimitExceeded(at))?;
+
+            ib.accept_expr(from)?;
+
+            ib.build_objdestruct(field_count, rest_id);
+
+            for &(local, name, alias) in fields {
+                let name = alias.unwrap_or(name);
+                let id = ib.find_local_from_binding(Binding { id: local, ident: name });
+
+                let NumberConstant(var_id) = ib
+                    .current_function_mut()
+                    .cp
+                    .add_number(id as f64)
+                    .map_err(|_| Error::ConstantPoolLimitExceeded(at))?;
+                let SymbolConstant(ident_id) = ib
+                    .current_function_mut()
+                    .cp
+                    .add_symbol(name)
+                    .map_err(|_| Error::ConstantPoolLimitExceeded(at))?;
+                ib.writew(var_id);
+                ib.writew(ident_id);
+            }
+        }
+        Pattern::Array { fields, rest } => {
+            if rest.is_some() {
+                unimplementedc!(at, "rest operator in array destructuring");
+            }
+
+            let field_count = fields
+                .len()
+                .try_into()
+                .map_err(|_| Error::DestructureLimitExceeded(at))?;
+
+            ib.accept_expr(from)?;
+
+            ib.build_arraydestruct(field_count);
+
+            for &name in fields {
+                ib.write_bool(name.is_some());
+                if let Some(name) = name {
+                    let id = ib.find_local_from_binding(name);
+
+                    let NumberConstant(id) = ib
+                        .current_function_mut()
+                        .cp
+                        .add_number(id as f64)
+                        .map_err(|_| Error::ConstantPoolLimitExceeded(at))?;
+
+                    ib.writew(id);
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
 fn compile_class_members(

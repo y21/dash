@@ -2,7 +2,7 @@ use std::cell::RefCell;
 
 use dash_log::debug;
 use dash_middle::compiler::scope::{BlockScope, CompileValueType, FunctionScope, Local, ScopeGraph, ScopeKind};
-use dash_middle::interner::Symbol;
+use dash_middle::interner::{sym, Symbol};
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::expr::{
     ArrayLiteral, ArrayMemberKind, AssignmentExpr, AssignmentTarget, BinaryExpr, CallArgumentKind, ConditionalExpr,
@@ -11,8 +11,8 @@ use dash_middle::parser::expr::{
 };
 use dash_middle::parser::statement::{
     Binding, BlockStatement, Class, ClassMemberKey, ClassMemberValue, DoWhileLoop, ExportKind, ForInLoop, ForLoop,
-    ForOfLoop, FunctionDeclaration, IfStatement, ImportKind, LocalId, Loop, Parameter, ReturnStatement, ScopeId,
-    SpecifierKind, Statement, StatementKind, SwitchCase, SwitchStatement, TryCatch, VariableBinding,
+    ForOfLoop, FunctionDeclaration, IfStatement, ImportKind, LocalId, Loop, Parameter, Pattern, ReturnStatement,
+    ScopeId, SpecifierKind, Statement, StatementKind, SwitchCase, SwitchStatement, TryCatch, VariableBinding,
     VariableDeclaration, VariableDeclarationKind, VariableDeclarationName, VariableDeclarations, WhileLoop,
 };
 
@@ -315,6 +315,28 @@ impl<'s> TypeInferCtx<'s> {
         }
     }
 
+    fn visit_pattern(&mut self, kind: VariableDeclarationKind, pat: &Pattern) {
+        match *pat {
+            Pattern::Object { ref fields, rest } => {
+                for &(id, field, alias) in fields {
+                    let name = alias.unwrap_or(field);
+                    self.add_local(Binding { id, ident: name }, kind, None);
+                }
+                if let Some(rest) = rest {
+                    self.add_local(rest, kind, None);
+                }
+            }
+            Pattern::Array { ref fields, rest } => {
+                for field in fields.iter().flatten().copied() {
+                    self.add_local(field, kind, None);
+                }
+                if let Some(rest) = rest {
+                    self.add_local(rest, kind, None);
+                }
+            }
+        }
+    }
+
     fn visit_variable_binding(&mut self, binding: &VariableBinding, value: Option<&Expr>) {
         let ty = match value {
             Some(expr) => self.visit(expr),
@@ -324,23 +346,7 @@ impl<'s> TypeInferCtx<'s> {
 
         match binding.name {
             VariableDeclarationName::Identifier(name) => self.add_local(name, binding.kind, ty),
-            VariableDeclarationName::ObjectDestructuring { ref fields, rest } => {
-                for &(id, field, alias) in fields {
-                    let name = alias.unwrap_or(field);
-                    self.add_local(Binding { id, ident: name }, binding.kind, None);
-                }
-                if let Some(rest) = rest {
-                    self.add_local(rest, binding.kind, None);
-                }
-            }
-            VariableDeclarationName::ArrayDestructuring { ref fields, rest } => {
-                for field in fields.iter().flatten().copied() {
-                    self.add_local(field, binding.kind, None);
-                }
-                if let Some(rest) = rest {
-                    self.add_local(rest, binding.kind, None);
-                }
-            }
+            VariableDeclarationName::Pattern(ref pat) => self.visit_pattern(binding.kind, pat),
         }
     }
 
@@ -605,13 +611,30 @@ impl<'s> TypeInferCtx<'s> {
         self.with_function_scope(sub_func_id, |this| {
             for (param, expr, _) in parameters {
                 match *param {
-                    Parameter::Identifier(ident) | Parameter::Spread(ident) => {
-                        this.add_local(ident, VariableDeclarationKind::Var, None);
+                    Parameter::Identifier(binding) | Parameter::SpreadIdentifier(binding) => {
+                        this.add_local(binding, VariableDeclarationKind::Var, None)
+                    }
+                    Parameter::Pattern(local_id, _) | Parameter::SpreadPattern(local_id, _) => {
+                        // Actual patterns bindings are visited in a second pass so that the actual parameters locals get their ids first
+                        this.add_local(
+                            Binding {
+                                ident: sym::empty,
+                                id: local_id,
+                            },
+                            VariableDeclarationKind::Unnameable,
+                            None,
+                        );
                     }
                 }
 
                 if let Some(expr) = expr {
                     this.visit(expr);
+                }
+            }
+
+            for (param, _, _) in parameters {
+                if let Parameter::Pattern(_, pat) | Parameter::SpreadPattern(_, pat) = param {
+                    this.visit_pattern(VariableDeclarationKind::Var, pat);
                 }
             }
 

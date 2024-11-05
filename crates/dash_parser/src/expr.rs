@@ -894,7 +894,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         }
 
         if let Some(ident) = rest_binding {
-            list.push((Parameter::Spread(self.create_binding(ident)), None, None));
+            list.push((Parameter::SpreadIdentifier(self.create_binding(ident)), None, None));
         }
 
         let is_statement = self.eat(TokenType::LeftBrace, false).is_some();
