@@ -17,6 +17,7 @@ use crate::{throw, Vm};
 
 use super::ops::conversions::ValueConversion;
 use super::primitive::{InternalSlots, Symbol};
+use super::root_ext::RootErrExt;
 use super::string::JsString;
 use super::{Root, Typeof, Unpack, Unrooted, Value, ValueContext, ValueKind};
 
@@ -45,7 +46,7 @@ pub trait Object: Debug + Trace {
         sc: &mut LocalScope,
         key: PropertyKey,
     ) -> Result<Option<PropertyValue>, Unrooted> {
-        let own_descriptor = self.get_own_property_descriptor(sc, key.clone())?;
+        let own_descriptor = self.get_own_property_descriptor(sc, key)?;
         if own_descriptor.is_some() {
             return Ok(own_descriptor);
         }
@@ -215,7 +216,7 @@ pub struct NamedObject {
 }
 
 // TODO: optimization opportunity: some kind of Number variant for faster indexing without .to_string()
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum PropertyKey {
     String(JsString),
     Symbol(Symbol),
@@ -891,6 +892,30 @@ impl ObjectId {
         let callee = *self;
         Object::construct(self, sc, callee, this, args)
     }
+
+    pub fn set_integrity_level(self, sc: &mut LocalScope<'_>, level: IntegrityLevel) -> Result<(), Value> {
+        // TODO: invoke [[PreventExtensions]]
+        let keys = self.own_keys(sc)?;
+        for key in keys {
+            let key = PropertyKey::from_value(sc, key)?;
+
+            if let Some(mut desc) = self.get_own_property_descriptor(sc, key).root_err(sc)? {
+                desc.descriptor.remove(PropertyDataDescriptor::CONFIGURABLE);
+                if let IntegrityLevel::Frozen = level {
+                    if let PropertyValueKind::Static(_) = desc.kind {
+                        desc.descriptor.remove(PropertyDataDescriptor::WRITABLE);
+                    }
+                }
+                self.set_property(sc, key, desc)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+pub enum IntegrityLevel {
+    Sealed,
+    Frozen,
 }
 
 impl Persistent {

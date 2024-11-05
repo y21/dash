@@ -271,6 +271,8 @@ pub mod sym {
                 getPrototypeOf,
                 setPrototypeOf,
                 isPrototypeOf,
+                freeze,
+                seal,
                 arguments,
                 propertyIsEnumerable,
                 apply

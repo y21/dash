@@ -1518,7 +1518,7 @@ mod handlers {
                     if let ValueKind::Object(object) = value.unpack() {
                         for key in object.own_keys(&mut cx.scope)? {
                             let key = PropertyKey::from_value(&mut cx.scope, key)?;
-                            let value = object.get_property(&mut cx, key.clone())?.root(&mut cx.scope);
+                            let value = object.get_property(&mut cx, key)?.root(&mut cx.scope);
                             obj.insert(key, PropertyValue::static_default(value));
                         }
                     }
@@ -1545,7 +1545,7 @@ mod handlers {
             match property {
                 ObjectProperty::Static { key, value } => target.set_property(&mut cx.scope, key, value)?,
                 ObjectProperty::Getter { key, value } | ObjectProperty::Setter { key, value } => {
-                    let prop = target.get_property_descriptor(&mut cx.scope, key.clone())?;
+                    let prop = target.get_property_descriptor(&mut cx.scope, key)?;
                     let prop = match prop {
                         Some(mut prop) => {
                             if let PropertyValueKind::Trap { get, set } = &mut prop.kind {

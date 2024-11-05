@@ -250,6 +250,8 @@ impl Vm {
                 (sym::defineProperties, scope.statics.object_define_properties),
                 (sym::entries, scope.statics.object_entries),
                 (sym::assign, scope.statics.object_assign),
+                (sym::freeze, scope.statics.object_freeze),
+                (sym::seal, scope.statics.object_seal),
                 (sym::getPrototypeOf, scope.statics.object_get_prototype_of),
                 (sym::setPrototypeOf, scope.statics.object_set_prototype_of),
             ],
