@@ -24,6 +24,7 @@ use rustc_hash::FxHashMap;
 use state::Nodejs;
 
 mod assert;
+mod buffer;
 mod events;
 mod native;
 mod package;
@@ -81,6 +82,7 @@ async fn run_inner_fallible(path: &str, opt: OptLevel, initial_gc_threshold: Opt
         let global = scope.global();
         let global_k = scope.intern("global");
         let process_k = scope.intern("process");
+        let buffer_k = scope.intern("Buffer");
         global
             .clone()
             .set_property(
@@ -89,9 +91,15 @@ async fn run_inner_fallible(path: &str, opt: OptLevel, initial_gc_threshold: Opt
                 PropertyValue::static_default(Value::object(global)),
             )
             .unwrap();
+
         let process = create_process_object(scope);
         global
             .set_property(scope, process_k.into(), PropertyValue::static_default(process.into()))
+            .unwrap();
+
+        let buffer = buffer::init_module(scope).unwrap();
+        global
+            .set_property(scope, buffer_k.into(), PropertyValue::static_default(buffer))
             .unwrap();
 
         anyhow::Ok(
@@ -173,6 +181,9 @@ fn execute_node_module(
     global_state: Rc<GlobalState>,
     package: Rc<PackageState>,
 ) -> Result<Value, (EvalError, String)> {
+    let dir_path = dir_path.canonicalize().unwrap();
+    let file_path = file_path.canonicalize().unwrap();
+
     debug!(?dir_path, ?file_path);
     let exports = Value::object(scope.register(NamedObject::new(scope)));
     let module = Value::object(scope.register(NamedObject::new(scope)));
@@ -192,7 +203,7 @@ fn execute_node_module(
         .borrow_mut()
         .insert(file_path.to_owned(), module);
 
-    let mut code = String::from("(function(exports, module, require) {\n");
+    let mut code = String::from("(function(exports, module, require, __dirname, __filename) {\n");
     code += source;
     code += "\n})";
 
@@ -201,8 +212,14 @@ fn execute_node_module(
         Err(err) => return Err((err, code)),
     };
 
-    fun.apply(scope, Value::undefined(), vec![exports, module, require])
-        .map_err(|err| (EvalError::Exception(err), code))?;
+    let dirname = Value::string(scope.intern(dir_path.to_str().expect("invalid utf-8 path")).into());
+    let filename = Value::string(scope.intern(file_path.to_str().expect("invalid utf-8 path")).into());
+    fun.apply(
+        scope,
+        Value::undefined(),
+        vec![exports, module, require, dirname, filename],
+    )
+    .map_err(|err| (EvalError::Exception(err), code))?;
 
     Ok(module)
 }

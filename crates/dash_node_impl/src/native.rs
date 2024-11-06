@@ -51,7 +51,8 @@ pub fn load_native_module(sc: &mut LocalScope<'_>, arg: JsString) -> Result<Opti
         state.sym.punycode => (state_mut(sc).punycode_cache, init_dummy_empty_module),
         state.sym.querystring => (state_mut(sc).querystring_cache, init_dummy_empty_module),
         state.sym.util => (state_mut(sc).util_cache, crate::util::init_module),
-        state.sym.timers => (state_mut(sc).timers_cache, init_timers_module)
+        state.sym.timers => (state_mut(sc).timers_cache, init_timers_module),
+        state.sym.buffer => (state_mut(sc).buffer_cache, crate::buffer::init_module)
     }
 }
 

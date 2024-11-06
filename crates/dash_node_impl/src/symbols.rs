@@ -24,5 +24,7 @@ define_symbol_set!(#[derive(Trace)] NodeSymbols => [
     Readable,
     Inflate,
     querystring,
-    timers
+    timers,
+    Buffer,
+    buffer
 ]);
