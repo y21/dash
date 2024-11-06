@@ -22,5 +22,6 @@ define_symbol_set!(#[derive(Trace)] NodeSymbols => [
     inherits,
     Stream,
     Readable,
-    Inflate
+    Inflate,
+    querystring
 ]);

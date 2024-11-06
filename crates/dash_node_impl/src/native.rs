@@ -49,6 +49,7 @@ pub fn load_native_module(sc: &mut LocalScope<'_>, arg: JsString) -> Result<Opti
         state.sym.url => (state_mut(sc).url_cache, init_dummy_empty_module),
         state.sym.zlib => (state_mut(sc).zlib_cache, crate::zlib::init_module),
         state.sym.punycode => (state_mut(sc).punycode_cache, init_dummy_empty_module),
+        state.sym.querystring => (state_mut(sc).querystring_cache, init_dummy_empty_module),
         state.sym.util => (state_mut(sc).util_cache, crate::util::init_module)
     }
 }
