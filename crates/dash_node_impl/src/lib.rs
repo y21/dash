@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::env;
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -283,23 +284,30 @@ impl Object for RequireFunction {
                 Err(err) => throw!(scope, Error, err.to_string()),
             };
 
-            let module = match execute_node_module(
-                scope,
-                canonicalized_path.parent().unwrap(),
-                &canonicalized_path,
-                &source,
-                OptLevel::default(),
-                self.state.clone(),
-                self.package.clone(),
-            ) {
-                Ok(v) => v,
-                Err((EvalError::Exception(value), ..)) => return Err(value),
-                Err((EvalError::Middle(errs), source)) => {
-                    throw!(scope, SyntaxError, "{}", errs.formattable(&source, true))
+            if canonicalized_path.extension() == Some(OsStr::new("json")) {
+                match dash_vm::json::parser::Parser::new(source.as_bytes(), scope).parse() {
+                    Ok(val) => Ok(val.into()),
+                    Err(err) => throw!(scope, SyntaxError, "{}", err.to_string()),
                 }
-            };
+            } else {
+                let module = match execute_node_module(
+                    scope,
+                    canonicalized_path.parent().unwrap(),
+                    &canonicalized_path,
+                    &source,
+                    OptLevel::default(),
+                    self.state.clone(),
+                    self.package.clone(),
+                ) {
+                    Ok(v) => v,
+                    Err((EvalError::Exception(value), ..)) => return Err(value),
+                    Err((EvalError::Middle(errs), source)) => {
+                        throw!(scope, SyntaxError, "{}", errs.formattable(&source, true))
+                    }
+                };
 
-            module.get_property(scope, exports.into())
+                module.get_property(scope, exports.into())
+            }
         } else if let Some(o) = native::load_native_module(scope, raw_arg)? {
             Ok(o.into())
         } else {

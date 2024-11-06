@@ -9,8 +9,7 @@ use dash_rt::state::State;
 use dash_vm::gc::persistent::Persistent;
 use dash_vm::localscope::LocalScope;
 use dash_vm::throw;
-use dash_vm::value::function::native::CallContext;
-use dash_vm::value::function::{Function, FunctionKind};
+use dash_vm::value::function::native::{register_native_fn, CallContext};
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::string::JsString;
@@ -27,19 +26,34 @@ impl ModuleLoader for TimersModule {
         path: JsString,
     ) -> Result<Option<Value>, Value> {
         if path.res(sc) == "@std/timers" {
-            let obj = NamedObject::new(sc);
-
-            let name = sc.intern("setTimeout");
-            let set_timeout = Function::new(sc, Some(name.into()), FunctionKind::Native(set_timeout));
-            let set_timeout = Value::object(sc.register(set_timeout));
-
-            obj.set_property(sc, name.into(), PropertyValue::static_default(set_timeout))?;
-
-            Ok(Some(Value::object(sc.register(obj))))
+            import(sc).map(Some)
         } else {
             Ok(None)
         }
     }
+}
+
+pub fn import(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let obj = NamedObject::new(sc);
+
+    let set_timeout_sym = sc.intern("setTimeout");
+    let set_timeout = register_native_fn(sc, set_timeout_sym, set_timeout);
+
+    obj.set_property(
+        sc,
+        set_timeout_sym.into(),
+        PropertyValue::static_default(set_timeout.into()),
+    )?;
+
+    let set_immediate_sym = sc.intern("setImmediate");
+    let set_immediate = register_native_fn(sc, set_immediate_sym, set_immediate);
+    obj.set_property(
+        sc,
+        set_immediate_sym.into(),
+        PropertyValue::static_default(set_immediate.into()),
+    )?;
+
+    Ok(Value::object(sc.register(obj)))
 }
 
 fn set_timeout(cx: CallContext) -> Result<Value, Value> {
@@ -74,6 +88,30 @@ fn set_timeout(cx: CallContext) -> Result<Value, Value> {
             tx2.send(EventMessage::RemoveTask(tid));
         })));
     });
+
+    Ok(Value::undefined())
+}
+
+fn set_immediate(cx: CallContext) -> Result<Value, Value> {
+    let callback = match cx.args.first().unpack() {
+        Some(ValueKind::Object(cb)) => cb,
+        _ => throw!(cx.scope, TypeError, "missing callback function argument"),
+    };
+
+    let callback = ThreadSafeStorage::new(Persistent::new(cx.scope, callback));
+
+    let state = State::from_vm_mut(cx.scope);
+    let tid = state.tasks.add();
+    let tx = state.event_sender();
+    tx.send(EventMessage::ScheduleCallback(Box::new(move |rt| {
+        rt.state_mut().tasks.remove(tid);
+        let callback = callback.get();
+        let mut sc = rt.vm_mut().scope();
+
+        if let Err(err) = callback.apply(&mut sc, Value::undefined(), Vec::new()) {
+            eprintln!("Unhandled error in timer callback: {err:?}");
+        }
+    })));
 
     Ok(Value::undefined())
 }

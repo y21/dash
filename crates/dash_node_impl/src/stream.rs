@@ -50,6 +50,7 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
         readable_sym.into(),
         PropertyValue::static_default(readable_fn.into()),
     )?;
+    stream_ctor.set_property(sc, stream_sym.into(), PropertyValue::static_default(stream_ctor.into()))?;
 
     State::from_vm_mut(sc).store.insert(
         StreamKey,

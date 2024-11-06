@@ -23,6 +23,7 @@ pub struct State {
     pub zlib_cache: OnceCell<Value>,
     pub punycode_cache: OnceCell<Value>,
     pub querystring_cache: OnceCell<Value>,
+    pub timers_cache: OnceCell<Value>,
 }
 
 impl State {
@@ -42,6 +43,7 @@ impl State {
             zlib_cache: OnceCell::new(),
             punycode_cache: OnceCell::new(),
             querystring_cache: OnceCell::new(),
+            timers_cache: OnceCell::new(),
         }
     }
 }
