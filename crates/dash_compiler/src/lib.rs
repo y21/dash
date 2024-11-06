@@ -1094,7 +1094,102 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                         other => unimplementedc!(span, "assignment to computed property {other:?}"),
                     }
                 }
-                _ => unimplementedc!(span, "assignment to non-identifier"),
+                _ => {
+                    match &left.kind {
+                        ExprKind::Object(ObjectLiteral(object)) => {
+                            let mut rest = None;
+
+                            for (kind, expr) in object {
+                                if let ObjectMemberKind::Spread = kind {
+                                    let Some(ident) = expr.kind.as_identifier() else {
+                                        unimplementedc!(span, "rest binding must be an identifier")
+                                    };
+
+                                    let Some((local, _, false)) = ib.find_local(ident) else {
+                                        unimplementedc!(span, "rest binding must be defined in the current function")
+                                    };
+
+                                    if rest.is_some() {
+                                        unimplementedc!(span, "duplicate rest binding in object destructuring");
+                                    }
+
+                                    rest = Some(local);
+                                }
+                            }
+
+                            let object_local = ib.add_unnameable_local(sym::empty).map_err(|_| Error::LocalLimitExceeded(span))?;
+                            ib.accept_expr(*right)?;
+                            ib.build_local_store(AssignKind::Assignment, object_local, false);
+
+                            ib.build_objdestruct((object.len() - rest.is_some() as usize).try_into().map_err(|_| Error::DestructureLimitExceeded(span))?, rest);
+
+                            for (kind, expr) in object {
+                                let name = match kind {
+                                    ObjectMemberKind::Spread => continue,
+                                    ObjectMemberKind::Static(sym) => *sym,
+                                    other => unimplementedc!(span, "invalid object member in destructuring: {:?}", other)
+                                };
+                                let Some(alias) = expr.kind.as_identifier() else {
+                                    unimplementedc!(span, "binding must be an identifier")
+                                };
+
+                                let Some((local, _, false)) = ib.find_local(alias) else {
+                                    unimplementedc!(span, "binding must be defined in the current function")
+                                };
+
+                                let NumberConstant(var_id) = ib
+                                    .current_function_mut()
+                                    .cp
+                                    .add_number(local as f64)
+                                    .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
+                                let SymbolConstant(ident_id) = ib
+                                    .current_function_mut()
+                                    .cp
+                                    .add_symbol(name)
+                                    .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
+                                ib.writew(var_id);
+                                ib.writew(ident_id);
+                            }
+
+                            ib.build_local_load(object_local, false);
+                        },
+                        ExprKind::Array(ArrayLiteral(array)) => {
+                            let array_local = ib.add_unnameable_local(sym::empty).map_err(|_| Error::LocalLimitExceeded(span))?;
+                            ib.accept_expr(*right)?;
+                            ib.build_local_store(AssignKind::Assignment, array_local, false);
+
+                            ib.build_arraydestruct(array.len().try_into().map_err(|_| Error::LocalLimitExceeded(span))?);
+
+                            for kind in array {
+                                match kind {
+                                    ArrayMemberKind::Empty => ib.write_bool(false),
+                                    ArrayMemberKind::Item(expr) => {
+                                        ib.write_bool(true);
+
+                                        let Some(alias) = expr.kind.as_identifier() else {
+                                            unimplementedc!(span, "binding must be an identifier")
+                                        };
+
+                                        let Some((local, _, false)) = ib.find_local(alias) else {
+                                            unimplementedc!(span, "binding must be defined in the current function")
+                                        };
+
+                                        let NumberConstant(var_id) = ib
+                                            .current_function_mut()
+                                            .cp
+                                            .add_number(local as f64)
+                                            .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
+                                        ib.writew(var_id);
+                                    }
+                                    ArrayMemberKind::Spread(_) => unimplementedc!(span, "rest operator in array destructuring is unsupported"),
+                                }
+                            }
+
+                            ib.build_local_load(array_local, false);
+                        }
+                        _ => unimplementedc!(span, "assignment to non-identifier")
+                    }
+                },
             },
             AssignmentTarget::LocalId(id) => {
                 ib.accept_expr(*right)?;
