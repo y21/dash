@@ -614,7 +614,14 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                         } else {
                             None
                         };
-                        fields.push((self.local_count.inc(), name, alias));
+
+                        let default = if self.eat(TokenType::Assignment, false).is_some() {
+                            Some(self.parse_expression_no_comma()?)
+                        } else {
+                            None
+                        };
+
+                        fields.push((self.local_count.inc(), name, alias, default));
                     }
                     _ => {
                         self.error(Error::unexpected_token(cur, TokenType::DUMMY_IDENTIFIER));
@@ -671,7 +678,12 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                     other if other.is_identifier() => {
                         let name = other.as_identifier().unwrap();
                         self.advance();
-                        fields.push(Some(self.create_binding(name)));
+                        let default = if self.eat(TokenType::Assignment, false).is_some() {
+                            Some(self.parse_expression_no_comma()?)
+                        } else {
+                            None
+                        };
+                        fields.push(Some((self.create_binding(name), default)));
                     }
                     _ => {
                         self.error(Error::unexpected_token(cur, TokenType::DUMMY_IDENTIFIER));

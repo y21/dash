@@ -349,6 +349,14 @@ mod extract {
         }
     }
 
+    impl ExtractBack for bool {
+        type Exception = Infallible;
+
+        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
+            Ok(cx.fetch_and_inc_ip() == 1)
+        }
+    }
+
     /// Convenience function for infallibly extracting a `T`
     pub fn extract<T: ExtractBack<Exception = Infallible>>(cx: &mut DispatchContext<'_>) -> T {
         match T::extract(cx) {
@@ -366,12 +374,26 @@ mod extract {
         }
     }
 
-    impl<E, A: ExtractBack<Exception = E>, B: ExtractBack<Exception = E>> ExtractBack for (A, B) {
-        type Exception = E;
+    macro_rules! tupl_impl {
+        ($($($param:ident)*),*) => {
+            $(
+                impl<E $(, $param : ExtractBack<Exception = E>)*> ExtractBack for ($($param),*) {
+                    type Exception = E;
 
-        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
-            Ok((A::extract(cx)?, B::extract(cx)?))
-        }
+                    fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
+                        Ok((
+                            $(
+                                <$param>::extract(cx)?
+                            ),*
+                        ))
+                    }
+                }
+            )*
+        };
+    }
+    tupl_impl! {
+        A B,
+        A B C
     }
 
     impl ExtractBack for ObjectProperty {
@@ -2061,13 +2083,20 @@ mod handlers {
 
         let mut idents = Vec::new();
 
-        let mut iter = BackwardSequence::<(NumberWConstant, IdentW)>::new_u16(&mut cx);
-        while let Some((NumberWConstant(id), IdentW(ident))) = iter.next_infallible(&mut cx) {
+        let mut iter = BackwardSequence::<(bool, NumberWConstant, IdentW)>::new_u16(&mut cx);
+        while let Some((has_default, NumberWConstant(id), IdentW(ident))) = iter.next_infallible(&mut cx) {
             if rest_id.is_some() {
                 idents.push(ident);
             }
 
-            let prop = obj.get_property(&mut cx, ident.into())?;
+            let mut prop = obj.get_property(&mut cx, ident.into())?;
+            if has_default {
+                // NB: we need to at least pop it from the stack even if the property exists
+                let default = cx.pop_stack();
+                if prop.is_undefined() {
+                    prop = default;
+                }
+            }
             cx.set_local(id as usize, prop);
         }
 
@@ -2097,13 +2126,21 @@ mod handlers {
     pub fn arraydestruct(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let array = cx.pop_stack_rooted();
 
-        let mut iter = BackwardSequence::<Option<NumberWConstant>>::new_u16(&mut cx).enumerate();
+        let mut iter = BackwardSequence::<Option<(bool, NumberWConstant)>>::new_u16(&mut cx).enumerate();
 
         while let Some((i, id)) = iter.next_infallible(&mut cx) {
-            if let Some(NumberWConstant(id)) = id {
+            if let Some((has_default, NumberWConstant(id))) = id {
                 let id = id as usize;
                 let key = cx.scope.intern_usize(i);
-                let prop = array.get_property(&mut cx.scope, key.into())?;
+                let mut prop = array.get_property(&mut cx.scope, key.into())?;
+
+                if has_default {
+                    // NB: we need to at least pop it from the stack even if the property exists
+                    let default = cx.pop_stack();
+                    if prop.is_undefined() {
+                        prop = default;
+                    }
+                }
                 cx.set_local(id, prop);
             }
         }

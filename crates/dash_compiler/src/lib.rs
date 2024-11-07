@@ -2035,11 +2035,11 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                     match var.binding.name {
                         VariableDeclarationName::Identifier(Binding { ident, .. }) => it.push(ident),
                         VariableDeclarationName::Pattern(Pattern::Array { ref fields, rest }) => {
-                            it.extend(fields.iter().flatten().map(|b| b.ident));
+                            it.extend(fields.iter().flatten().map(|(b, _)| b.ident));
                             it.extend(rest.map(|b| b.ident));
                         }
                         VariableDeclarationName::Pattern(Pattern::Object { ref fields, rest }) => {
-                            it.extend(fields.iter().map(|&(_, name, ident)| ident.unwrap_or(name)));
+                            it.extend(fields.iter().map(|&(_, name, ident, _)| ident.unwrap_or(name)));
                             it.extend(rest.map(|b| b.ident));
                         }
                     }
@@ -2479,11 +2479,17 @@ fn compile_destructuring_pattern(
                 .try_into()
                 .map_err(|_| Error::DestructureLimitExceeded(at))?;
 
+            for (.., default) in fields.iter().rev() {
+                if let Some(default) = default {
+                    ib.accept_expr(default.clone())?;
+                }
+            }
+
             ib.accept_expr(from)?;
 
             ib.build_objdestruct(field_count, rest_id);
 
-            for &(local, name, alias) in fields {
+            for &(local, name, alias, ref default) in fields {
                 let name = alias.unwrap_or(name);
                 let id = ib.find_local_from_binding(Binding { id: local, ident: name });
 
@@ -2497,6 +2503,7 @@ fn compile_destructuring_pattern(
                     .cp
                     .add_symbol(name)
                     .map_err(|_| Error::ConstantPoolLimitExceeded(at))?;
+                ib.write_bool(default.is_some());
                 ib.writew(var_id);
                 ib.writew(ident_id);
             }
@@ -2511,13 +2518,20 @@ fn compile_destructuring_pattern(
                 .try_into()
                 .map_err(|_| Error::DestructureLimitExceeded(at))?;
 
+            #[expect(clippy::manual_flatten, reason = "pattern contains an inner Some()")]
+            for field in fields.iter().rev() {
+                if let Some((_, Some(default))) = field {
+                    ib.accept_expr(default.clone())?;
+                }
+            }
+
             ib.accept_expr(from)?;
 
             ib.build_arraydestruct(field_count);
 
-            for &name in fields {
+            for name in fields {
                 ib.write_bool(name.is_some());
-                if let Some(name) = name {
+                if let Some((name, ref default)) = *name {
                     let id = ib.find_local_from_binding(name);
 
                     let NumberConstant(id) = ib
@@ -2526,6 +2540,7 @@ fn compile_destructuring_pattern(
                         .add_number(id as f64)
                         .map_err(|_| Error::ConstantPoolLimitExceeded(at))?;
 
+                    ib.write_bool(default.is_some());
                     ib.writew(id);
                 }
             }

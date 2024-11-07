@@ -691,28 +691,28 @@ pub enum VariableDeclarationKind {
     Unnameable,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Pattern {
     /// Object destructuring: { a } = { a: 1 }
     Object {
         /// Fields to destructure
         ///
-        /// Destructured fields can also be aliased with ` { a: b } = { a: 3 } `
-        fields: Vec<(LocalId, Symbol, Option<Symbol>)>,
+        /// Destructured fields can also be aliased with ` { a: b } = { a: 3 }` and have default values
+        fields: Vec<(LocalId, Symbol, Option<Symbol>, Option<Expr>)>,
         /// The rest element, if present
         rest: Option<Binding>,
     },
     /// Array destructuring: [ a ] = [ 1 ]
     Array {
         /// Elements to destructure.
-        /// For `[a,,b]` this stores `[Some(a), None, Some(b)]`
-        fields: Vec<Option<Binding>>,
+        /// For `[a,,b = default]` this stores `[Some((a, None)), None, Some((b, Some(default)))]`
+        fields: Vec<Option<(Binding, Option<Expr>)>>,
         /// The rest element, if present
         rest: Option<Binding>,
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Display)]
+#[derive(Debug, Clone, Display)]
 pub enum VariableDeclarationName {
     /// Normal identifier
     Identifier(Binding),
@@ -725,15 +725,17 @@ impl fmt::Display for Pattern {
             Pattern::Object { fields, rest } => {
                 write!(f, "{{ ")?;
 
-                for (i, (_, name, alias)) in fields.iter().enumerate() {
+                for (i, (_, name, alias, default)) in fields.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
 
+                    write!(f, "{name}")?;
                     if let Some(alias) = alias {
-                        write!(f, "{name}: {alias}")?;
-                    } else {
-                        write!(f, "{name}")?;
+                        write!(f, ": {alias}")?;
+                    }
+                    if let Some(default) = default {
+                        write!(f, " = {default}")?;
                     }
                 }
 
@@ -752,7 +754,12 @@ impl fmt::Display for Pattern {
                     }
 
                     match name {
-                        Some(name) => write!(f, "{name}")?,
+                        Some((name, default)) => {
+                            write!(f, "{name}")?;
+                            if let Some(default) = default {
+                                write!(f, " = {default}")?;
+                            }
+                        }
                         None => f.write_char(',')?,
                     }
                 }
@@ -785,7 +792,7 @@ impl From<TokenType> for VariableDeclarationKind {
 }
 
 /// A variable binding
-#[derive(Debug, Clone, Display, PartialEq)]
+#[derive(Debug, Clone, Display)]
 #[display(fmt = "{kind} {name}")]
 pub struct VariableBinding {
     /// The name/identifier of this variable

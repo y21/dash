@@ -380,6 +380,12 @@ impl Unrooted {
         Self { value }
     }
 
+    /// Checks if this value is undefined.
+    /// As this does not require access to any garbage collected resources, this operation is safe without rooting.
+    pub fn is_undefined(self) -> bool {
+        matches!(self.value.unpack(), ValueKind::Undefined(_))
+    }
+
     /// Returns an unprotected, unrooted reference to the value.
     ///
     /// # Safety

@@ -318,17 +318,19 @@ impl<'s> TypeInferCtx<'s> {
     fn visit_pattern(&mut self, kind: VariableDeclarationKind, pat: &Pattern) {
         match *pat {
             Pattern::Object { ref fields, rest } => {
-                for &(id, field, alias) in fields {
+                for &(id, field, alias, ref default) in fields {
                     let name = alias.unwrap_or(field);
                     self.add_local(Binding { id, ident: name }, kind, None);
+                    self.visit_maybe_expr(default.as_ref());
                 }
                 if let Some(rest) = rest {
                     self.add_local(rest, kind, None);
                 }
             }
             Pattern::Array { ref fields, rest } => {
-                for field in fields.iter().flatten().copied() {
+                for &(field, ref default) in fields.iter().flatten() {
                     self.add_local(field, kind, None);
+                    self.visit_maybe_expr(default.as_ref());
                 }
                 if let Some(rest) = rest {
                     self.add_local(rest, kind, None);
