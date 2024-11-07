@@ -62,9 +62,9 @@ async fn run_inner_fallible(path: &str, opt: OptLevel, initial_gc_threshold: Opt
     };
 
     let entry_path = if path.is_dir() {
-        path.join(&package_state.metadata.main)
+        path.join(&package_state.metadata.main).canonicalize()?
     } else {
-        package_state.metadata.main.clone()
+        package_state.metadata.main.clone().canonicalize()?
     };
 
     let entry = std::fs::read_to_string(&entry_path)?;

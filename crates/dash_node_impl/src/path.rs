@@ -1,21 +1,22 @@
-use std::path::Path;
+use std::path::{self, Path, PathBuf};
 
+use dash_middle::interner::sym;
 use dash_vm::localscope::LocalScope;
 use dash_vm::throw;
-use dash_vm::value::function::native::CallContext;
-use dash_vm::value::function::{Function, FunctionKind};
+use dash_vm::value::function::native::{register_native_fn, CallContext};
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
-use dash_vm::value::Value;
+use dash_vm::value::{Unpack, Value, ValueKind};
 
 use crate::state::state_mut;
 
 pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     let exports = NamedObject::new(sc);
     let parse_sym = state_mut(sc).sym.parse;
-    let parse_path = Function::new(sc, Some(parse_sym.into()), FunctionKind::Native(parse_path));
-    let parse_path = sc.register(parse_path);
+    let parse_path = register_native_fn(sc, parse_sym, parse_path);
+    let join_path = register_native_fn(sc, sym::join, join_path);
     exports.set_property(sc, parse_sym.into(), PropertyValue::static_default(parse_path.into()))?;
+    exports.set_property(sc, sym::join.into(), PropertyValue::static_default(join_path.into()))?;
 
     Ok(sc.register(exports).into())
 }
@@ -44,4 +45,32 @@ fn parse_path(cx: CallContext) -> Result<Value, Value> {
         PropertyValue::static_default(Value::string(dir.into())),
     )?;
     Ok(cx.scope.register(object).into())
+}
+
+fn join_path(cx: CallContext) -> Result<Value, Value> {
+    let mut path = PathBuf::new();
+
+    for arg in &cx.args {
+        let value = match arg.unpack() {
+            ValueKind::String(s) => s.res(cx.scope),
+            other => throw!(
+                cx.scope,
+                TypeError,
+                "expected string argument to path.join, got {:?}",
+                other
+            ),
+        };
+
+        for segment in value.split(path::MAIN_SEPARATOR) {
+            match segment {
+                ".." => drop(path.pop()),
+                "." => {}
+                _ => path.push(segment),
+            }
+        }
+    }
+
+    Ok(Value::string(
+        cx.scope.intern(path.display().to_string().as_str()).into(),
+    ))
 }
