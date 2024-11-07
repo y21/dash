@@ -2089,15 +2089,15 @@ mod handlers {
                 idents.push(ident);
             }
 
-            let mut prop = obj.get_property(&mut cx, ident.into())?;
+            let mut prop = obj.get_property(&mut cx, ident.into())?.root(&mut cx.scope);
             if has_default {
                 // NB: we need to at least pop it from the stack even if the property exists
-                let default = cx.pop_stack();
-                if prop.is_undefined() {
+                let default = cx.pop_stack_rooted();
+                if matches!(prop.unpack(), ValueKind::Undefined(_)) {
                     prop = default;
                 }
             }
-            cx.set_local(id as usize, prop);
+            cx.set_local(id as usize, prop.into());
         }
 
         if let Some(rest_id) = rest_id {
@@ -2132,16 +2132,16 @@ mod handlers {
             if let Some((has_default, NumberWConstant(id))) = id {
                 let id = id as usize;
                 let key = cx.scope.intern_usize(i);
-                let mut prop = array.get_property(&mut cx.scope, key.into())?;
+                let mut prop = array.get_property(&mut cx.scope, key.into())?.root(&mut cx.scope);
 
                 if has_default {
                     // NB: we need to at least pop it from the stack even if the property exists
-                    let default = cx.pop_stack();
-                    if prop.is_undefined() {
+                    let default = cx.pop_stack_rooted();
+                    if matches!(prop.unpack(), ValueKind::Undefined(_)) {
                         prop = default;
                     }
                 }
-                cx.set_local(id, prop);
+                cx.set_local(id, prop.into());
             }
         }
 

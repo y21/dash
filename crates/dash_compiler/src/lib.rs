@@ -1147,6 +1147,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                                     .cp
                                     .add_symbol(name)
                                     .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
+                                ib.write_bool(false); // Defaults are unsupported
                                 ib.writew(var_id);
                                 ib.writew(ident_id);
                             }
@@ -1179,6 +1180,8 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                                             .cp
                                             .add_number(local as f64)
                                             .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
+
+                                        ib.write_bool(false); // Defaults are unsupported
                                         ib.writew(var_id);
                                     }
                                     ArrayMemberKind::Spread(_) => unimplementedc!(span, "rest operator in array destructuring is unsupported"),
