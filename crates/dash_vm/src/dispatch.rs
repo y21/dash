@@ -1018,10 +1018,10 @@ mod handlers {
         this: Value,
         function: &Function,
         user_function: &UserFunction,
-        argc: usize,
+        mut argc: usize,
         is_constructor: bool,
     ) -> Result<Option<HandleResult>, Unrooted> {
-        let sp = cx.stack.len() - argc;
+        let sp_before_call = cx.stack.len() - argc;
         let ValueKind::Object(callee) = callee.unpack() else {
             unreachable!("guaranteed by caller")
         };
@@ -1031,32 +1031,37 @@ mod handlers {
             false => this,
         };
 
-        let len = cx.fetch_and_inc_ip();
+        let spread_arguments = cx.fetch_and_inc_ip();
+
         // If we have spread args, we need to "splice" values from iterables in.
         // This is hopefully rather "rare" (compared to regular call arguments),
         // so we can afford to do more work here in order to keep the common path fast.
-        if len > 0 {
-            let spread_indices: SmallVec<[_; 4]> = (0..len).map(|_| cx.fetch_and_inc_ip()).collect();
+        if spread_arguments > 0 {
+            let spread_indices: SmallVec<[_; 4]> = (0..spread_arguments).map(|_| cx.fetch_and_inc_ip()).collect();
             let mut spread_count = 0;
 
+            let mut splice_args = Vec::new();
             for spread_index in spread_indices {
-                let adjusted_spread_index = sp + spread_count + spread_index as usize;
+                splice_args.clear();
+                let adjusted_spread_index = (sp_before_call as isize + spread_index as isize + spread_count) as usize;
 
                 let iterable = cx.stack[adjusted_spread_index];
                 let length = iterable.length_of_array_like(&mut cx.scope)?;
-
-                let mut splice_args = SmallVec::<[_; 2]>::new();
 
                 for i in 0..length {
                     let i = cx.scope.intern_usize(i);
                     let value = iterable.get_property(&mut cx, i.into())?.root(&mut cx.scope);
                     splice_args.push(value);
                 }
-                cx.stack
-                    .splice(adjusted_spread_index..=adjusted_spread_index, splice_args);
+                cx.stack.splice(
+                    adjusted_spread_index..=adjusted_spread_index,
+                    splice_args.iter().copied(),
+                );
 
-                spread_count += length.saturating_sub(1);
+                spread_count += (length as isize) - 1;
             }
+
+            argc = (argc as isize + spread_count) as usize;
         }
 
         // NOTE: since we are in a "flat" call,
@@ -1064,10 +1069,10 @@ mod handlers {
         // reference list since they stay on the VM stack
         // and are reachable from there
 
-        let arguments = adjust_stack_from_flat_call(&mut cx, user_function, sp, argc);
+        let arguments = adjust_stack_from_flat_call(&mut cx, user_function, sp_before_call, argc);
 
         let mut frame = Frame::from_function(Some(this), user_function, is_constructor, true, arguments);
-        frame.set_sp(sp);
+        frame.set_sp(sp_before_call);
 
         cx.pad_stack_for_frame(&frame);
         cx.try_push_frame(frame)?;
