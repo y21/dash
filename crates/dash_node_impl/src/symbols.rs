@@ -20,6 +20,7 @@ define_symbol_set!(#[derive(Trace)] NodeSymbols => [
     zlib,
     punycode,
     inherits,
+    inspect,
     Stream,
     Readable,
     Inflate,
