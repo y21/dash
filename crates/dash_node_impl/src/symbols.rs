@@ -27,5 +27,8 @@ define_symbol_set!(#[derive(Trace)] NodeSymbols => [
     querystring,
     timers,
     Buffer,
-    buffer
+    buffer,
+    alloc,
+    writeUInt32BE,
+    writeUInt32LE
 ]);

@@ -92,8 +92,7 @@ pub fn fill(cx: CallContext) -> Result<Value, Value> {
         Some(value) => value.to_number(cx.scope)?,
         None => throw!(cx.scope, TypeError, "Missing fill value"), // TODO: shouldn't throw
     };
-    let buf = this.buffer();
-    let buf = buf.as_any(cx.scope).downcast_ref::<ArrayBuffer>().unwrap().storage();
+    let buf = this.arraybuffer(cx.scope).storage();
 
     macro_rules! fill_typed_array {
         ($ty:ty) => {{

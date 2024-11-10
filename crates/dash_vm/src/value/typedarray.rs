@@ -49,6 +49,14 @@ pub struct TypedArray {
 }
 
 impl TypedArray {
+    pub fn new_with_proto_ctor(arraybuffer: ObjectId, kind: TypedArrayKind, proto: ObjectId, ctor: ObjectId) -> Self {
+        Self {
+            arraybuffer,
+            kind,
+            obj: NamedObject::with_prototype_and_constructor(proto, ctor),
+        }
+    }
+
     pub fn new(vm: &Vm, arraybuffer: ObjectId, kind: TypedArrayKind) -> Self {
         let (proto, ctor) = match kind {
             TypedArrayKind::Uint8Array => (vm.statics.uint8array_prototype, vm.statics.uint8array_ctor),
@@ -62,19 +70,15 @@ impl TypedArray {
             TypedArrayKind::Float64Array => (vm.statics.float64array_prototype, vm.statics.float64array_ctor),
         };
 
-        Self {
-            arraybuffer,
-            kind,
-            obj: NamedObject::with_prototype_and_constructor(proto, ctor),
-        }
+        Self::new_with_proto_ctor(arraybuffer, kind, proto, ctor)
     }
 
     pub fn kind(&self) -> TypedArrayKind {
         self.kind
     }
 
-    pub fn buffer(&self) -> ObjectId {
-        self.arraybuffer
+    pub fn arraybuffer(&self, vm: &Vm) -> &ArrayBuffer {
+        self.arraybuffer.as_any(vm).downcast_ref().unwrap()
     }
 }
 
@@ -85,46 +89,44 @@ impl Object for TypedArray {
         key: PropertyKey,
     ) -> Result<Option<PropertyValue>, Unrooted> {
         if let Some(Ok(index)) = key.as_string().map(|k| k.res(sc).parse::<usize>()) {
-            let arraybuffer = self.arraybuffer.as_any(sc).downcast_ref::<ArrayBuffer>();
+            let arraybuffer = self.arraybuffer(sc);
 
-            if let Some(arraybuffer) = arraybuffer {
-                let bytes = arraybuffer.storage();
-                let index = index * self.kind.bytes_per_element();
+            let bytes = arraybuffer.storage();
+            let index = index * self.kind.bytes_per_element();
 
-                macro_rules! decode_from {
-                    (ty: $ty:ty, size: $size:expr) => {
-                        bytes
-                            .get(index..index + $size)
-                            .map(|x| {
-                                let mut arr = [0; $size];
-                                for (dest, src) in arr.iter_mut().zip(x.iter()) {
-                                    *dest = src.get();
-                                }
-                                arr
-                            })
-                            .map(<$ty>::from_ne_bytes)
-                            .map(f64::from)
-                    };
-                }
-
-                let value = match self.kind {
-                    TypedArrayKind::Int8Array => decode_from!(ty: i8, size: 1),
-                    TypedArrayKind::Uint8Array => decode_from!(ty: u8, size: 1),
-                    TypedArrayKind::Uint8ClampedArray => decode_from!(ty: u8, size: 1),
-                    TypedArrayKind::Int16Array => decode_from!(ty: i16, size: 2),
-                    TypedArrayKind::Uint16Array => decode_from!(ty: u16, size: 2),
-                    TypedArrayKind::Int32Array => decode_from!(ty: i32, size: 4),
-                    TypedArrayKind::Uint32Array => decode_from!(ty: u32, size: 4),
-                    TypedArrayKind::Float32Array => decode_from!(ty: f32, size: 4),
-                    TypedArrayKind::Float64Array => decode_from!(ty: f64, size: 8),
+            macro_rules! decode_from {
+                (ty: $ty:ty, size: $size:expr) => {
+                    bytes
+                        .get(index..index + $size)
+                        .map(|x| {
+                            let mut arr = [0; $size];
+                            for (dest, src) in arr.iter_mut().zip(x.iter()) {
+                                *dest = src.get();
+                            }
+                            arr
+                        })
+                        .map(<$ty>::from_ne_bytes)
+                        .map(f64::from)
                 };
+            }
 
-                if let Some(value) = value {
-                    return Ok(Some(PropertyValue::static_default(Value::number(value))));
-                }
+            let value = match self.kind {
+                TypedArrayKind::Int8Array => decode_from!(ty: i8, size: 1),
+                TypedArrayKind::Uint8Array => decode_from!(ty: u8, size: 1),
+                TypedArrayKind::Uint8ClampedArray => decode_from!(ty: u8, size: 1),
+                TypedArrayKind::Int16Array => decode_from!(ty: i16, size: 2),
+                TypedArrayKind::Uint16Array => decode_from!(ty: u16, size: 2),
+                TypedArrayKind::Int32Array => decode_from!(ty: i32, size: 4),
+                TypedArrayKind::Uint32Array => decode_from!(ty: u32, size: 4),
+                TypedArrayKind::Float32Array => decode_from!(ty: f32, size: 4),
+                TypedArrayKind::Float64Array => decode_from!(ty: f64, size: 8),
+            };
+
+            if let Some(value) = value {
+                return Ok(Some(PropertyValue::static_default(Value::number(value))));
             }
         } else if key.as_string().is_some_and(|s| s.sym() == sym::length) {
-            let len = self.arraybuffer.as_any(sc).downcast_ref::<ArrayBuffer>().unwrap().len();
+            let len = self.arraybuffer(sc).len();
             // TODO: make this a getter once we support getting the arraybuffer from subclasses
             return Ok(Some(PropertyValue::static_default(Value::number(len as f64))));
         }
