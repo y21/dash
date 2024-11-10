@@ -1,5 +1,6 @@
 use std::any::Any;
 
+use dash_middle::interner::sym;
 use dash_proc_macro::Trace;
 
 use crate::gc::ObjectId;
@@ -122,6 +123,10 @@ impl Object for TypedArray {
                     return Ok(Some(PropertyValue::static_default(Value::number(value))));
                 }
             }
+        } else if key.as_string().is_some_and(|s| s.sym() == sym::length) {
+            let len = self.arraybuffer.as_any(sc).downcast_ref::<ArrayBuffer>().unwrap().len();
+            // TODO: make this a getter once we support getting the arraybuffer from subclasses
+            return Ok(Some(PropertyValue::static_default(Value::number(len as f64))));
         }
 
         self.obj.get_own_property_descriptor(sc, key)
