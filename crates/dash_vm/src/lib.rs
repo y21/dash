@@ -1101,7 +1101,9 @@ impl Vm {
             scope.statics.date_prototype,
             object_proto,
             date_ctor,
-            [],
+            [
+                (sym::getTime, scope.statics.date_get_time)
+            ],
             [],
             [],
             None,

@@ -260,6 +260,7 @@ pub mod sym {
                 exec,
                 now,
                 Date,
+                getTime,
                 parse,
                 parseFloat,
                 parseInt,

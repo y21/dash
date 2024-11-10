@@ -2,6 +2,8 @@ use dash_middle::define_symbol_set;
 use dash_proc_macro::Trace;
 
 define_symbol_set!(#[derive(Trace)] NodeSymbols => [
+    global,
+    process,
     assert,
     fs,
     fetch,
@@ -30,5 +32,6 @@ define_symbol_set!(#[derive(Trace)] NodeSymbols => [
     buffer,
     alloc,
     writeUInt32BE,
-    writeUInt32LE
+    writeUInt32LE,
+    setTimeout
 ]);

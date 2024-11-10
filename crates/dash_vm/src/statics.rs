@@ -251,6 +251,7 @@ pub struct Statics {
     pub regexp_exec: ObjectId,
     pub date_ctor: ObjectId,
     pub date_prototype: ObjectId,
+    pub date_get_time: ObjectId,
     pub date_now: ObjectId,
     pub json_ctor: ObjectId,
     pub json_parse: ObjectId,
@@ -519,6 +520,7 @@ impl Statics {
             date_ctor: function(gc, sym::Date, js_std::date::constructor),
             date_prototype: builtin_object(gc, NamedObject::null()),
             date_now: function(gc, sym::now, js_std::date::now),
+            date_get_time: function(gc, sym::getTime, js_std::date::get_time),
             json_ctor: function(gc, sym::JSON, js_std::json::constructor),
             json_parse: function(gc, sym::parse, js_std::json::parse),
         }

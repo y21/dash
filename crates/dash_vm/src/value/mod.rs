@@ -3,6 +3,7 @@ pub mod array;
 pub mod arraybuffer;
 pub mod boxed;
 pub mod conversions;
+pub mod date;
 pub mod error;
 pub mod function;
 pub mod inspect;

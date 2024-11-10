@@ -1,4 +1,3 @@
-use dash_log::warn;
 use dash_middle::compiler::constant::{ConstantPool, NumberConstant, SymbolConstant};
 use std::ops::{Deref, DerefMut};
 use std::vec::Drain;
@@ -2263,8 +2262,6 @@ mod handlers {
                         cx.scope.add_value(arg.clone());
                     }
 
-                    // TODO: don't warn here but when purity was violated
-                    warn!("missed spec call due to impurity");
                     // Builtins impure, fallback to slow dynamic property lookup
                     let k = cx
                         .global

@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
+use std::ops::ControlFlow;
 
 use dash_middle::interner::Symbol;
 use dash_proc_macro::Trace;
@@ -111,6 +112,25 @@ impl Object for EventEmitter {
     );
 }
 
+fn with_event_emitter(
+    sc: &mut LocalScope<'_>,
+    v: Value,
+    f: impl Fn(&mut LocalScope<'_>, &EventEmitter) -> Result<Value, Value>,
+) -> Result<Value, Value> {
+    let cf = v.for_each_prototype(sc, |sc, v| {
+        if let Some(e) = v.unpack().downcast_ref::<EventEmitter>(sc) {
+            Ok(ControlFlow::Break(f(sc, e)?))
+        } else {
+            Ok(ControlFlow::Continue(()))
+        }
+    })?;
+
+    match cf {
+        ControlFlow::Break(b) => Ok(b),
+        ControlFlow::Continue(()) => throw!(sc, TypeError, "Incompatible EventEmitter receiver"),
+    }
+}
+
 fn on(cx: CallContext) -> Result<Value, Value> {
     let [name, cb] = *cx.args else {
         throw!(cx.scope, Error, "expected an event name and callback function");
@@ -119,15 +139,13 @@ fn on(cx: CallContext) -> Result<Value, Value> {
     let ValueKind::Object(cb) = cb.unpack() else {
         throw!(cx.scope, Error, "expected callback to be a function")
     };
-    let this = cx.this.unpack();
-    let Some(this) = this.downcast_ref::<EventEmitter>(cx.scope) else {
-        throw!(cx.scope, TypeError, "on can only be called on EventEmitter instances")
-    };
-    match this.handlers.borrow_mut().entry(name.sym()) {
-        Entry::Occupied(mut entry) => entry.get_mut().push(cb),
-        Entry::Vacant(entry) => drop(entry.insert(vec![cb])),
-    };
-    Ok(cx.this)
+    with_event_emitter(cx.scope, cx.this, |_, this| {
+        match this.handlers.borrow_mut().entry(name.sym()) {
+            Entry::Occupied(mut entry) => entry.get_mut().push(cb),
+            Entry::Vacant(entry) => drop(entry.insert(vec![cb])),
+        };
+        Ok(cx.this)
+    })
 }
 
 fn emit(cx: CallContext) -> Result<Value, Value> {
@@ -135,17 +153,15 @@ fn emit(cx: CallContext) -> Result<Value, Value> {
         throw!(cx.scope, Error, "expected an event name");
     };
     let name = name.to_js_string(cx.scope)?;
-    let this = cx.this.unpack();
-    let Some(this) = this.downcast_ref::<EventEmitter>(cx.scope) else {
-        throw!(cx.scope, TypeError, "on can only be called on EventEmitter instances")
-    };
-    let mut did_emit = false;
-    if let Some(handlers) = this.handlers.borrow().get(&name.sym()) {
-        for handler in handlers {
-            handler.apply(cx.scope, cx.this, args.to_owned()).root_err(cx.scope)?;
-            did_emit = true;
+    with_event_emitter(cx.scope, cx.this, |sc, this| {
+        let mut did_emit = false;
+        if let Some(handlers) = this.handlers.borrow().get(&name.sym()) {
+            for handler in handlers {
+                handler.apply(sc, cx.this, args.to_owned()).root_err(sc)?;
+                did_emit = true;
+            }
         }
-    }
 
-    Ok(Value::boolean(did_emit))
+        Ok(Value::boolean(did_emit))
+    })
 }

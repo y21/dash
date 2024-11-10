@@ -22,6 +22,7 @@ use dash_vm::{delegate, throw, Vm};
 use package::Package;
 use rustc_hash::FxHashMap;
 use state::Nodejs;
+use symbols::NodeSymbols;
 
 mod assert;
 mod buffer;
@@ -75,31 +76,47 @@ async fn run_inner_fallible(path: &str, opt: OptLevel, initial_gc_threshold: Opt
     });
 
     let mut rt = Runtime::new(initial_gc_threshold).await;
-    let state = state::State::new(rt.vm_mut());
+    let state @ state::State {
+        sym:
+            NodeSymbols {
+                global: global_sym,
+                process: process_sym,
+                Buffer: buffer_sym,
+                setTimeout: set_timeout_sym,
+                ..
+            },
+        ..
+    } = state::State::new(rt.vm_mut());
     State::from_vm_mut(rt.vm_mut()).store.insert(Nodejs, state);
 
     rt.vm_mut().with_scope(|scope| {
         let global = scope.global();
-        let global_k = scope.intern("global");
-        let process_k = scope.intern("process");
-        let buffer_k = scope.intern("Buffer");
         global
             .clone()
             .set_property(
                 scope,
-                global_k.into(),
+                global_sym.into(),
                 PropertyValue::static_default(Value::object(global)),
             )
             .unwrap();
 
         let process = create_process_object(scope);
         global
-            .set_property(scope, process_k.into(), PropertyValue::static_default(process.into()))
+            .set_property(scope, process_sym.into(), PropertyValue::static_default(process.into()))
             .unwrap();
 
         let buffer = buffer::init_module(scope).unwrap();
         global
-            .set_property(scope, buffer_k.into(), PropertyValue::static_default(buffer))
+            .set_property(scope, buffer_sym.into(), PropertyValue::static_default(buffer))
+            .unwrap();
+        let timer = dash_rt_timers::import(scope).unwrap();
+        let set_timeout = timer.get_property(scope, set_timeout_sym.into()).unwrap().root(scope);
+        global
+            .set_property(
+                scope,
+                set_timeout_sym.into(),
+                PropertyValue::static_default(set_timeout),
+            )
             .unwrap();
 
         anyhow::Ok(
