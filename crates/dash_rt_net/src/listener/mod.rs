@@ -13,7 +13,7 @@ use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::promise::Promise;
 use dash_vm::value::{Unpack, Unrooted, Value};
-use dash_vm::{delegate, throw, PromiseAction, Vm};
+use dash_vm::{delegate, extract, throw, PromiseAction};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::sync::{mpsc, oneshot};
@@ -120,7 +120,7 @@ impl Object for TcpListenerConstructor {
                         event_tx.send(EventMessage::ScheduleCallback(Box::new(move |rt| {
                             let mut scope = rt.vm_mut().scope();
                             let promise = State::from_vm_mut(&mut scope).take_promise(promise_id);
-                            let promise = promise.as_any(&scope).downcast_ref::<Promise>().unwrap();
+                            let promise = promise.extract::<Promise>(&scope).unwrap();
 
                             let stream_handle = TcpStreamHandle::new(&mut scope, writer_tx, reader_tx).unwrap();
                             let stream_handle = scope.register(stream_handle);
@@ -137,13 +137,11 @@ impl Object for TcpListenerConstructor {
         Ok(Value::object(scope.register(handle)).into())
     }
 
-    fn as_any(&self, _: &Vm) -> &dyn std::any::Any {
-        self
-    }
-
     fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<dash_vm::value::Value>, dash_vm::value::Value> {
         Ok(Vec::new())
     }
+
+    extract!(self);
 }
 
 enum TcpListenerBridgeMessage {
@@ -184,9 +182,10 @@ impl Object for TcpListenerHandle {
         set_prototype,
         get_prototype,
         apply,
-        as_any,
         own_keys
     );
+
+    extract!(self);
 }
 
 fn tcplistener_accept(cx: CallContext) -> Result<Value, Value> {
@@ -272,9 +271,10 @@ impl Object for TcpStreamHandle {
         set_prototype,
         get_prototype,
         apply,
-        as_any,
         own_keys
     );
+
+    extract!(self);
 }
 
 fn tcpstream_write(cx: CallContext) -> Result<Value, Value> {

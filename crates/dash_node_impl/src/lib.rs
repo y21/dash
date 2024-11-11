@@ -18,7 +18,7 @@ use dash_vm::localscope::LocalScope;
 use dash_vm::value::array::Array;
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::{Root, Unpack, Unrooted, Value, ValueKind};
-use dash_vm::{delegate, throw, Vm};
+use dash_vm::{delegate, extract, throw, Vm};
 use package::Package;
 use rustc_hash::FxHashMap;
 use state::Nodejs;
@@ -271,7 +271,6 @@ impl Object for RequireFunction {
         delete_property,
         set_prototype,
         get_prototype,
-        as_any,
         own_keys
     );
 
@@ -390,4 +389,6 @@ impl Object for RequireFunction {
         debug!(%arg, "resolved module");
         result
     }
+
+    extract!(self);
 }

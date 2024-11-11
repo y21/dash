@@ -36,6 +36,36 @@ use self::primitive::{InternalSlots, Number, Symbol};
 use self::string::JsString;
 use super::localscope::LocalScope;
 
+/// Implements the `Object::extract_type_raw` function by checking the type id of the implementer and the provided fields
+#[macro_export]
+macro_rules! extract {
+    (self $(,$field:ident)*) => {
+        fn extract_type_raw(&self, #[allow(unused_variables)] vm: &$crate::Vm, type_id: std::any::TypeId) -> Option<std::ptr::NonNull<()>> {
+            if std::any::TypeId::of::<Self>() == type_id {
+                Some(std::ptr::NonNull::from(self).cast())
+            }
+            $(
+                else if let Some(v) = $crate::value::object::Object::extract_type_raw(&self.$field, vm, type_id) {
+                    Some(v)
+                }
+            )*
+            else {
+                None
+            }
+        }
+    };
+    ($($field:ident),*) => {
+        fn extract_type_raw(&self, vm: &$crate::Vm, type_id: std::any::TypeId) -> Option<std::ptr::NonNull<()>> {
+            $(
+                if let Some(v) = $crate::value::object::Object::extract_type_raw(&self.$field, vm, type_id) {
+                    return Some(v);
+                }
+            )*
+            None
+        }
+    };
+}
+
 /// A packed JavaScript value.
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Value(u64);
@@ -257,10 +287,6 @@ impl Object for Value {
         self.apply(scope, this, args)
     }
 
-    fn as_any(&self, _: &Vm) -> &dyn std::any::Any {
-        self
-    }
-
     fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         match self.unpack() {
             ValueKind::Number(n) => n.own_keys(sc),
@@ -299,6 +325,23 @@ impl Object for Value {
 
     fn internal_slots(&self, _: &Vm) -> Option<&dyn InternalSlots> {
         Some(self)
+    }
+
+    fn extract_type_raw(&self, vm: &Vm, type_id: TypeId) -> Option<ptr::NonNull<()>> {
+        if TypeId::of::<Self>() == type_id {
+            Some(ptr::NonNull::from(self).cast())
+        } else {
+            match self.unpack() {
+                ValueKind::Number(number) => number.extract_type_raw(vm, type_id),
+                ValueKind::Boolean(boolean) => boolean.extract_type_raw(vm, type_id),
+                ValueKind::String(js_string) => js_string.extract_type_raw(vm, type_id),
+                ValueKind::Undefined(undefined) => undefined.extract_type_raw(vm, type_id),
+                ValueKind::Null(null) => null.extract_type_raw(vm, type_id),
+                ValueKind::Symbol(symbol) => symbol.extract_type_raw(vm, type_id),
+                ValueKind::Object(alloc_id) => alloc_id.extract_type_raw(vm, type_id),
+                ValueKind::External(external_value) => external_value.extract_type_raw(vm, type_id),
+            }
+        }
     }
 }
 
@@ -357,9 +400,10 @@ impl ValueKind {
     ///
     /// NOTE: if this value is an external, it will call downcast_ref on the "lower level" handle (i.e. the wrapped object)
     pub fn downcast_ref<T: 'static>(&self, vm: &Vm) -> Option<&T> {
+        // TODO: remove this in favor of extract()
         match self {
-            ValueKind::Object(obj) => obj.as_any(vm).downcast_ref(),
-            ValueKind::External(obj) => obj.inner.as_any(vm).downcast_ref(),
+            ValueKind::Object(obj) => obj.extract(vm),
+            ValueKind::External(obj) => obj.inner.extract(vm),
             _ => None,
         }
     }
@@ -497,15 +541,15 @@ impl ExternalValue {
     // can we make this type safe?
     pub fn new(vm: &Vm, inner: ObjectId) -> Self {
         // TODO: make a ValueId
-        debug_assert!(inner.as_any(vm).downcast_ref::<Value>().is_some());
+        // TODO: how does this interact with values that extend externalvalues? does that even work?
+        debug_assert!(inner.extract::<Value>(vm).is_some());
         Self { inner }
     }
 
     pub fn inner(&self, vm: &Vm) -> Value {
         *self
             .inner
-            .as_any(vm)
-            .downcast_ref()
+            .extract(vm)
             .expect("invariant violated: ExternalValue did not contain a Value")
     }
 
@@ -532,7 +576,7 @@ impl ExternalValue {
     /// use_borrow(r);
     /// ```
     pub unsafe fn replace(vm: &mut Vm, this: ExternalValue, value: Value) {
-        assert_eq!(this.inner.as_any(vm).type_id(), TypeId::of::<Value>());
+        assert!(this.inner.extract::<Value>(vm).is_some());
         let data = vm.alloc.data(this.inner).cast_mut().cast::<Value>();
         ptr::write(data, value);
     }
@@ -553,13 +597,7 @@ impl Object for ExternalValue {
         internal_slots
     );
 
-    // NB: this intentionally does not delegate to self.inner.as_any() because
-    // we need to downcast to ExternalValue specifically in some places.
-    // for that reason, prefer calling downcast_ref not on handles directly
-    // but on values.
-    fn as_any(&self, _: &Vm) -> &dyn std::any::Any {
-        self
-    }
+    extract!(self, inner);
 
     fn apply(
         &self,
@@ -583,6 +621,12 @@ impl Object for ExternalValue {
 }
 
 impl Value {
+    pub fn extract<T: 'static>(&self, vm: &Vm) -> Option<&T> {
+        let ptr = self.extract_type_raw(vm, TypeId::of::<T>())?;
+        // SAFETY: `extract_type_raw` only returns `Some(_)` for types with the same TypeId
+        Some(unsafe { ptr.cast::<T>().as_ref() })
+    }
+
     pub fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Unrooted> {
         match self.unpack() {
             ValueKind::Object(o) => o.get_property(sc, key),
@@ -860,10 +904,6 @@ impl<O: Object + 'static> Object for PureBuiltin<O> {
         self.inner.set_prototype(sc, value)
     }
 
-    fn as_any(&self, _: &Vm) -> &dyn std::any::Any {
-        &self.inner
-    }
-
     fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         self.inner.own_keys(sc)
     }
@@ -871,4 +911,6 @@ impl<O: Object + 'static> Object for PureBuiltin<O> {
     fn internal_slots(&self, vm: &Vm) -> Option<&dyn InternalSlots> {
         self.inner.internal_slots(vm)
     }
+
+    extract!(inner);
 }

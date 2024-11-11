@@ -17,7 +17,7 @@ use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::root_ext::RootErrExt;
 use dash_vm::value::string::JsString;
 use dash_vm::value::{Unpack, Value, ValueContext, ValueKind};
-use dash_vm::{delegate, throw};
+use dash_vm::{delegate, extract, throw};
 use hyper::Body;
 use tokio::sync::oneshot;
 use tokio::sync::oneshot::Sender;
@@ -159,10 +159,11 @@ impl Object for HttpContext {
         delete_property,
         set_prototype,
         get_prototype,
-        as_any,
         apply,
         own_keys
     );
+
+    extract!(self);
 }
 
 fn ctx_respond(cx: CallContext) -> Result<Value, Value> {

@@ -12,7 +12,7 @@ use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::promise::Promise;
 use dash_vm::value::string::JsString;
 use dash_vm::value::{Unpack, Value, ValueKind};
-use dash_vm::{delegate, throw, PromiseAction, Vm};
+use dash_vm::{delegate, extract, throw, PromiseAction, Vm};
 use once_cell::sync::Lazy;
 use reqwest::{Client, Method};
 
@@ -72,7 +72,7 @@ fn fetch(cx: CallContext) -> Result<Value, Value> {
         event_tx.send(EventMessage::ScheduleCallback(Box::new(move |rt| {
             let mut sc = rt.vm_mut().scope();
             let promise = State::from_vm_mut(&mut sc).take_promise(promise_id);
-            let promise = promise.as_any(&sc).downcast_ref::<Promise>().unwrap();
+            let promise = promise.extract::<Promise>(&sc).unwrap();
 
             let (req, action) = match req {
                 Ok(resp) => {
@@ -105,7 +105,7 @@ fn http_response_text(cx: CallContext) -> Result<Value, Value> {
         ValueKind::Object(obj) => obj,
         _ => throw!(cx.scope, TypeError, "Expected a this value"),
     };
-    let this = match this.as_any(cx.scope).downcast_ref::<HttpResponse>() {
+    let this = match this.extract::<HttpResponse>(cx.scope) {
         Some(resp) => resp,
         None => throw!(cx.scope, TypeError, "Invalid receiver, expected HttpResponse"),
     };
@@ -133,7 +133,7 @@ fn http_response_text(cx: CallContext) -> Result<Value, Value> {
         event_tx.send(EventMessage::ScheduleCallback(Box::new(move |rt| {
             let mut sc = rt.vm_mut().scope();
             let promise = State::from_vm_mut(&mut sc).take_promise(promise_id);
-            let promise = promise.as_any(&sc).downcast_ref::<Promise>().unwrap();
+            let promise = promise.extract::<Promise>(&sc).unwrap();
 
             let (value, action) = match text {
                 Ok(text) => {
@@ -186,8 +186,9 @@ impl Object for HttpResponse {
         delete_property,
         set_prototype,
         get_prototype,
-        as_any,
         apply,
         own_keys
     );
+
+    extract!(self);
 }

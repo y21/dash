@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::fmt::Write;
 
 use dash_middle::interner::sym;
@@ -6,7 +5,7 @@ use dash_proc_macro::Trace;
 
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
-use crate::{delegate, Vm};
+use crate::{delegate, extract};
 
 use super::object::{NamedObject, Object, PropertyKey, PropertyValue};
 use super::string::JsString;
@@ -155,10 +154,6 @@ impl Object for Error {
         self.obj.apply(scope, callee, this, args)
     }
 
-    fn as_any(&self, _: &Vm) -> &dyn Any {
-        self
-    }
-
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
         self.obj.set_prototype(sc, value)
     }
@@ -170,6 +165,8 @@ impl Object for Error {
     fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         self.obj.own_keys(sc)
     }
+
+    extract!(self);
 }
 
 // Other types of errors
@@ -217,10 +214,11 @@ macro_rules! define_error_type {
                     delete_property,
                     set_prototype,
                     get_prototype,
-                    as_any,
                     apply,
                     own_keys
                 );
+
+                extract!(self, inner);
             }
         )*
     };

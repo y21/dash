@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::cell::Cell;
 
 use dash_middle::interner::sym;
@@ -14,8 +13,8 @@ use dash_vm::value::object::{Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::primitive::Number;
 use dash_vm::value::typedarray::{TypedArray, TypedArrayKind};
-use dash_vm::value::{Unpack, Value, ValueKind};
-use dash_vm::{delegate, throw, Vm};
+use dash_vm::value::{Root, Unpack, Value, ValueKind};
+use dash_vm::{delegate, extract, throw};
 
 use crate::state::state_mut;
 use crate::symbols::NodeSymbols;
@@ -136,9 +135,8 @@ impl Object for Buffer {
         apply,
         own_keys
     );
-    fn as_any(&self, _: &Vm) -> &dyn Any {
-        self
-    }
+
+    extract!(self, inner);
 }
 
 fn from(cx: CallContext) -> Result<Value, Value> {
@@ -147,7 +145,22 @@ fn from(cx: CallContext) -> Result<Value, Value> {
         buffer_ctor,
     } = State::from_vm(cx.scope).store[BufferKey];
 
-    let arraybuffer = cx.scope.register(ArrayBuffer::new(cx.scope));
+    let Some(source) = cx.args.first() else {
+        throw!(cx.scope, Error, "Missing source to `Buffer.from`")
+    };
+
+    let length = source.length_of_array_like(cx.scope)?;
+    let mut buf = Vec::with_capacity(length);
+    for i in 0..length {
+        let i = cx.scope.intern_usize(i);
+        let item = source
+            .get_property(cx.scope, i.into())
+            .root(cx.scope)?
+            .to_number(cx.scope)? as u8;
+        buf.push(Cell::new(item));
+    }
+
+    let arraybuffer = cx.scope.register(ArrayBuffer::from_storage(cx.scope, buf));
     let instn = Buffer {
         inner: TypedArray::new_with_proto_ctor(arraybuffer, TypedArrayKind::Uint8Array, buffer_prototype, buffer_ctor),
     };

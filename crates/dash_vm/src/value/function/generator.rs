@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::cell::RefCell;
 
 use dash_proc_macro::Trace;
@@ -10,7 +9,7 @@ use crate::localscope::LocalScope;
 use crate::value::arguments::Arguments;
 use crate::value::object::{NamedObject, Object};
 use crate::value::{Typeof, Unrooted, Value};
-use crate::{delegate, Vm};
+use crate::{delegate, extract, Vm};
 
 use super::extend_stack_from_args;
 use super::user::UserFunction;
@@ -165,11 +164,9 @@ impl Object for GeneratorIterator {
         self.obj.apply(scope, callee, this, args)
     }
 
-    fn as_any(&self, _: &Vm) -> &dyn Any {
-        self
-    }
-
     fn type_of(&self, _: &Vm) -> Typeof {
         Typeof::Object
     }
+
+    extract!(self);
 }

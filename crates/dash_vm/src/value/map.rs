@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use ahash::HashMap;
 use dash_proc_macro::Trace;
 
-use crate::{delegate, Vm};
+use crate::{delegate, extract, Vm};
 
 use super::object::{NamedObject, Object};
 use super::Value;
@@ -64,8 +64,9 @@ impl Object for Map {
         delete_property,
         set_prototype,
         get_prototype,
-        as_any,
         apply,
         own_keys
     );
+
+    extract!(self);
 }

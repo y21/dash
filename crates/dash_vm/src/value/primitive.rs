@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::hash::{Hash, Hasher};
 use std::{fmt, iter};
 
@@ -8,7 +7,7 @@ use dash_proc_macro::Trace;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::util::intern_f64;
-use crate::{throw, Vm};
+use crate::{extract, throw, Vm};
 
 use super::boxed::{Boolean as BoxedBoolean, Number as BoxedNumber, Symbol as BoxedSymbol};
 use super::object::{Object, PropertyKey, PropertyValue};
@@ -57,10 +56,6 @@ impl Object for f64 {
         throw!(scope, TypeError, "number is not a function")
     }
 
-    fn as_any(&self, _: &Vm) -> &dyn Any {
-        self
-    }
-
     fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         Ok(Vec::new())
     }
@@ -72,6 +67,8 @@ impl Object for f64 {
     fn internal_slots(&self, _: &Vm) -> Option<&dyn InternalSlots> {
         Some(self)
     }
+
+    extract!(self);
 }
 
 impl Object for bool {
@@ -109,10 +106,6 @@ impl Object for bool {
         throw!(scope, TypeError, "boolean is not a function")
     }
 
-    fn as_any(&self, _: &Vm) -> &dyn Any {
-        self
-    }
-
     fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         Ok(Vec::new())
     }
@@ -124,6 +117,8 @@ impl Object for bool {
     fn internal_slots(&self, _: &Vm) -> Option<&dyn InternalSlots> {
         Some(self)
     }
+
+    extract!(self);
 }
 
 pub fn array_like_keys<'a, 'b>(sc: &'a mut LocalScope<'b>, len: usize) -> impl Iterator<Item = Value> + use<'a, 'b> {
@@ -182,10 +177,6 @@ impl Object for Undefined {
         throw!(sc, TypeError, "undefined is not a function")
     }
 
-    fn as_any(&self, _: &Vm) -> &dyn Any {
-        self
-    }
-
     fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         Ok(Vec::new())
     }
@@ -193,6 +184,8 @@ impl Object for Undefined {
     fn type_of(&self, _: &Vm) -> Typeof {
         Typeof::Undefined
     }
+
+    extract!(self);
 }
 
 impl Object for Null {
@@ -238,13 +231,11 @@ impl Object for Null {
         throw!(sc, TypeError, "null is not a function")
     }
 
-    fn as_any(&self, _: &Vm) -> &dyn Any {
-        self
-    }
-
     fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         Ok(Vec::new())
     }
+
+    extract!(self);
 }
 
 // TODO: rename to JsSymbol
@@ -298,10 +289,6 @@ impl Object for Symbol {
         throw!(scope, TypeError, "symbol is not a function")
     }
 
-    fn as_any(&self, _: &Vm) -> &dyn Any {
-        self
-    }
-
     fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         Ok(Vec::new())
     }
@@ -313,10 +300,13 @@ impl Object for Symbol {
     fn internal_slots(&self, _: &Vm) -> Option<&dyn InternalSlots> {
         Some(self)
     }
+
+    extract!(self);
 }
 
 impl InternalSlots for Symbol {}
 
+// TODO: can this be removed in favor of the `extract` system?
 pub trait InternalSlots {
     // TODO: rename as_number to number_value?
     fn string_value(&self, _: &Vm) -> Option<JsString> {
@@ -538,10 +528,6 @@ impl Object for Number {
         self.0.apply(scope, callee, this, args)
     }
 
-    fn as_any(&self, _: &Vm) -> &dyn Any {
-        self
-    }
-
     fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         self.0.own_keys(sc)
     }
@@ -553,6 +539,8 @@ impl Object for Number {
     fn internal_slots(&self, _: &Vm) -> Option<&dyn InternalSlots> {
         Some(self)
     }
+
+    extract!(self);
 }
 
 impl InternalSlots for Number {

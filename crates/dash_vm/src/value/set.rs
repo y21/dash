@@ -3,7 +3,7 @@ use std::collections::HashSet;
 
 use dash_proc_macro::Trace;
 
-use crate::{delegate, Vm};
+use crate::{delegate, extract, Vm};
 
 use super::object::{NamedObject, Object};
 use super::Value;
@@ -66,8 +66,9 @@ impl Object for Set {
         delete_property,
         set_prototype,
         get_prototype,
-        as_any,
         apply,
         own_keys
     );
+
+    extract!(self);
 }

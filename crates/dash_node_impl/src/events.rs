@@ -14,7 +14,7 @@ use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::root_ext::RootErrExt;
 use dash_vm::value::{Unpack, Value, ValueKind};
-use dash_vm::{delegate, throw};
+use dash_vm::{delegate, extract, throw};
 use rustc_hash::FxHashMap;
 
 use crate::state::state_mut;
@@ -107,9 +107,10 @@ impl Object for EventEmitter {
         set_prototype,
         get_prototype,
         apply,
-        as_any,
         own_keys
     );
+
+    extract!(self);
 }
 
 fn with_event_emitter(

@@ -3,7 +3,7 @@ use dash_proc_macro::Trace;
 
 use crate::localscope::LocalScope;
 use crate::value::boxed::String as BoxedString;
-use crate::{throw, Vm};
+use crate::{extract, throw, Vm};
 
 use super::object::{Object, PropertyKey, PropertyValue};
 use super::ops::conversions::{PreferredType, ValueConversion};
@@ -127,10 +127,6 @@ impl Object for JsString {
         throw!(scope, TypeError, "'{}' is not a function", v)
     }
 
-    fn as_any(&self, _: &Vm) -> &dyn std::any::Any {
-        self
-    }
-
     fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         let len = self.len(sc);
         Ok(array_like_keys(sc, len).collect())
@@ -143,6 +139,8 @@ impl Object for JsString {
     fn internal_slots(&self, _: &Vm) -> Option<&dyn InternalSlots> {
         Some(self)
     }
+
+    extract!(self);
 }
 
 impl InternalSlots for JsString {

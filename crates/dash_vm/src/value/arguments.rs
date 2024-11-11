@@ -1,10 +1,8 @@
-use std::any::Any;
-
 use dash_middle::interner::sym;
 use dash_proc_macro::Trace;
 
 use crate::localscope::LocalScope;
-use crate::{delegate, Vm};
+use crate::{delegate, extract};
 
 use super::object::{NamedObject, Object, PropertyKey, PropertyValue};
 use super::Value;
@@ -50,7 +48,5 @@ impl Object for Arguments {
         apply
     );
 
-    fn as_any(&self, _: &Vm) -> &dyn Any {
-        self
-    }
+    extract!(self);
 }

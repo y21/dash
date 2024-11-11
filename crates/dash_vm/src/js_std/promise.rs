@@ -1,6 +1,5 @@
 use dash_proc_macro::Trace;
 
-use dash_middle::interner::sym;
 use crate::gc::ObjectId;
 use crate::value::function::bound::BoundFunction;
 use crate::value::function::native::CallContext;
@@ -8,7 +7,8 @@ use crate::value::object::{NamedObject, Object, PropertyKey};
 use crate::value::promise::{Promise, PromiseRejecter, PromiseResolver, PromiseState};
 use crate::value::root_ext::RootErrExt;
 use crate::value::{Root, Typeof, Unpack, Unrooted, Value, ValueContext, ValueKind};
-use crate::{delegate, throw, Vm};
+use crate::{delegate, extract, throw, Vm};
+use dash_middle::interner::sym;
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let initiator = match cx.args.first() {
@@ -123,7 +123,6 @@ impl Object for ThenTask {
         delete_property,
         set_prototype,
         get_prototype,
-        as_any,
         own_keys
     );
 
@@ -159,4 +158,6 @@ impl Object for ThenTask {
 
         Ok(Value::undefined().into())
     }
+
+    extract!(self);
 }

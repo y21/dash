@@ -1,11 +1,9 @@
-use std::any::Any;
-
 use dash_proc_macro::Trace;
 
 use crate::gc::ObjectId;
 use crate::value::object::{NamedObject, Object};
 use crate::value::{Typeof, Unrooted, Value};
-use crate::{delegate, Vm};
+use crate::{delegate, extract, Vm};
 
 #[derive(Debug, Trace)]
 pub struct BoundFunction {
@@ -54,11 +52,9 @@ impl Object for BoundFunction {
         self.callee.apply(scope, target_this, target_args)
     }
 
-    fn as_any(&self, _: &Vm) -> &dyn Any {
-        self
-    }
-
     fn type_of(&self, _: &Vm) -> Typeof {
         Typeof::Function
     }
+
+    extract!(self);
 }

@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::fmt::{self, Debug};
@@ -11,7 +10,7 @@ use crate::gc::trace::{Trace, TraceCtxt};
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::value::arguments::Arguments;
-use crate::Vm;
+use crate::{extract, Vm};
 use dash_middle::interner::sym;
 
 use self::r#async::AsyncFunction;
@@ -242,10 +241,6 @@ impl Object for Function {
         handle_call(self, scope, callee, Value::object(this), args, true)
     }
 
-    fn as_any(&self, _: &Vm) -> &dyn Any {
-        self
-    }
-
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
         self.obj.set_prototype(sc, value)
     }
@@ -261,6 +256,8 @@ impl Object for Function {
     fn type_of(&self, _: &Vm) -> Typeof {
         Typeof::Function
     }
+
+    extract!(self);
 }
 
 /// Returns the `arguments` object, iff the function needs it.

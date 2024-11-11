@@ -1,11 +1,9 @@
-use std::any::Any;
-
 use dash_middle::interner::sym;
 use dash_proc_macro::Trace;
 
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
-use crate::Vm;
+use crate::{extract, Vm};
 
 use super::arraybuffer::ArrayBuffer;
 use super::object::{NamedObject, Object, PropertyKey, PropertyValue};
@@ -78,7 +76,7 @@ impl TypedArray {
     }
 
     pub fn arraybuffer(&self, vm: &Vm) -> &ArrayBuffer {
-        self.arraybuffer.as_any(vm).downcast_ref().unwrap()
+        self.arraybuffer.extract(vm).unwrap()
     }
 }
 
@@ -136,7 +134,7 @@ impl Object for TypedArray {
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
         if let Some(Ok(index)) = key.as_string().map(|k| k.res(sc).parse::<usize>()) {
-            let arraybuffer = self.arraybuffer.as_any(sc).downcast_ref::<ArrayBuffer>();
+            let arraybuffer = self.arraybuffer.extract::<ArrayBuffer>(sc);
 
             // TODO: not undefined as this
             let value = value.kind().get_or_apply(sc, Value::undefined()).root(sc)?;
@@ -202,11 +200,9 @@ impl Object for TypedArray {
         self.obj.apply(scope, callee, this, args)
     }
 
-    fn as_any(&self, _: &Vm) -> &dyn Any {
-        self
-    }
-
     fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         self.obj.own_keys(sc)
     }
+
+    extract!(self);
 }

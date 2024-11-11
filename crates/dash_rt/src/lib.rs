@@ -4,7 +4,6 @@ use dash_compiler::FunctionCompiler;
 use dash_vm::frame::{Exports, Frame};
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::function::native::CallContext;
-use dash_vm::value::object::Object;
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::promise::Promise;
 use dash_vm::value::{Root, Value};
@@ -47,7 +46,7 @@ where
         event_tx.send(EventMessage::ScheduleCallback(Box::new(move |rt| {
             let promise = State::from_vm_mut(rt.vm_mut()).take_promise(promise_id);
             let mut scope = rt.vm_mut().scope();
-            let promise = promise.as_any(&scope).downcast_ref::<Promise>().unwrap();
+            let promise = promise.extract::<Promise>(&scope).unwrap();
 
             let data = convert(&mut scope, data);
 

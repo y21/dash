@@ -1,11 +1,10 @@
-use std::any::Any;
 use std::cell::Cell;
 
 use dash_proc_macro::Trace;
 
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
-use crate::{delegate, Vm};
+use crate::{delegate, extract, Vm};
 
 use super::object::{NamedObject, Object};
 use super::{Unrooted, Value};
@@ -84,7 +83,5 @@ impl Object for ArrayBuffer {
         self.obj.apply(scope, callee, this, args)
     }
 
-    fn as_any(&self, _: &Vm) -> &dyn Any {
-        self
-    }
+    extract!(self);
 }

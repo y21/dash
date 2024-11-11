@@ -1,7 +1,8 @@
-use std::any::Any;
+use std::any::TypeId;
 use std::cell::RefCell;
 use std::fmt::Debug;
 use std::hash::BuildHasherDefault;
+use std::ptr::NonNull;
 
 use crate::gc::persistent::Persistent;
 use crate::gc::trace::{Trace, TraceCtxt};
@@ -13,7 +14,7 @@ use hashbrown::hash_map::Entry;
 use rustc_hash::FxHasher;
 
 use crate::localscope::LocalScope;
-use crate::{throw, Vm};
+use crate::{extract, throw, Vm};
 
 use super::ops::conversions::ValueConversion;
 use super::primitive::{InternalSlots, Symbol};
@@ -85,7 +86,10 @@ pub trait Object: Debug + Trace {
         self.apply(scope, callee, this, args)
     }
 
-    fn as_any(&self, vm: &Vm) -> &dyn Any;
+    // TODO: require returning a special kind of pointer wrapper that needs unsafe to construct
+    fn extract_type_raw(&self, _: &Vm, _: TypeId) -> Option<NonNull<()>> {
+        None
+    }
 
     fn internal_slots(&self, _: &Vm) -> Option<&dyn InternalSlots> {
         None
@@ -156,11 +160,6 @@ macro_rules! delegate {
     (override $field:ident, get_prototype) => {
         fn get_prototype(&self, sc: &mut $crate::localscope::LocalScope) -> Result<$crate::value::Value, $crate::value::Value> {
             self.$field.get_prototype(sc)
-        }
-    };
-    (override $field:ident, as_any) => {
-        fn as_any(&self, _: &$crate::Vm) -> &dyn std::any::Any {
-            self
         }
     };
     (override $field:ident, own_keys) => {
@@ -677,10 +676,6 @@ impl Object for NamedObject {
         Ok(Value::undefined().into())
     }
 
-    fn as_any(&self, _: &Vm) -> &dyn Any {
-        self
-    }
-
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
         match value.unpack() {
             ValueKind::Null(_) => self.prototype.replace(None),
@@ -704,85 +699,8 @@ impl Object for NamedObject {
         let values = self.values.borrow();
         Ok(values.keys().map(PropertyKey::as_value).collect())
     }
-}
 
-// TODO: is this still needed?
-impl Object for Box<dyn Object> {
-    fn get_own_property(&self, sc: &mut LocalScope, this: Value, key: PropertyKey) -> Result<Unrooted, Unrooted> {
-        (**self).get_own_property(sc, this, key)
-    }
-
-    fn get_own_property_descriptor(
-        &self,
-        sc: &mut LocalScope,
-        key: PropertyKey,
-    ) -> Result<Option<PropertyValue>, Unrooted> {
-        (**self).get_own_property_descriptor(sc, key)
-    }
-
-    fn get_property(&self, sc: &mut LocalScope, this: Value, key: PropertyKey) -> Result<Unrooted, Unrooted> {
-        (**self).get_property(sc, this, key)
-    }
-
-    fn get_property_descriptor(
-        &self,
-        sc: &mut LocalScope,
-        key: PropertyKey,
-    ) -> Result<Option<PropertyValue>, Unrooted> {
-        (**self).get_property_descriptor(sc, key)
-    }
-
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
-        (**self).set_property(sc, key, value)
-    }
-
-    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
-        (**self).delete_property(sc, key)
-    }
-
-    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
-        (**self).set_prototype(sc, value)
-    }
-
-    fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
-        (**self).get_prototype(sc)
-    }
-
-    fn apply(
-        &self,
-        scope: &mut LocalScope,
-        callee: ObjectId,
-        this: Value,
-        args: Vec<Value>,
-    ) -> Result<Unrooted, Unrooted> {
-        (**self).apply(scope, callee, this, args)
-    }
-
-    fn construct(
-        &self,
-        scope: &mut LocalScope,
-        callee: ObjectId,
-        this: Value,
-        args: Vec<Value>,
-    ) -> Result<Unrooted, Unrooted> {
-        (**self).construct(scope, callee, this, args)
-    }
-
-    fn as_any(&self, _: &Vm) -> &dyn Any {
-        self
-    }
-
-    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
-        (**self).own_keys(sc)
-    }
-
-    fn type_of(&self, vm: &Vm) -> Typeof {
-        (**self).type_of(vm)
-    }
-
-    fn internal_slots(&self, vm: &Vm) -> Option<&dyn InternalSlots> {
-        (**self).internal_slots(vm)
-    }
+    extract!(self);
 }
 
 impl ObjectId {
@@ -857,10 +775,6 @@ impl Object for ObjectId {
         unsafe { (self.vtable(scope).js_construct)(self.data_ptr(scope), scope, callee, this, args) }
     }
 
-    fn as_any(&self, vm: &Vm) -> &dyn Any {
-        unsafe { &*(self.vtable(vm).js_as_any)(self.data_ptr(vm), vm) }
-    }
-
     fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         unsafe { (self.vtable(sc).js_own_keys)(self.data_ptr(sc), sc) }
     }
@@ -872,9 +786,23 @@ impl Object for ObjectId {
     fn internal_slots(&self, vm: &Vm) -> Option<&dyn InternalSlots> {
         unsafe { (self.vtable(vm).js_internal_slots)(self.data_ptr(vm), vm).map(|v| &*v) }
     }
+
+    fn extract_type_raw(&self, vm: &Vm, type_id: TypeId) -> Option<NonNull<()>> {
+        unsafe { (self.vtable(vm).js_extract_type_raw)(self.data_ptr(vm), vm, type_id) }
+    }
+}
+
+pub fn extract_type<'a, T: 'static>(v: &'a (impl Object + ?Sized), vm: &Vm) -> Option<&'a T> {
+    let ptr = v.extract_type_raw(vm, TypeId::of::<T>())?;
+    // SAFETY: `extract_type_raw` only returns `Some(_)` for types with the same TypeId
+    Some(unsafe { ptr.cast().as_ref() })
 }
 
 impl ObjectId {
+    pub fn extract<T: 'static>(&self, vm: &Vm) -> Option<&T> {
+        extract_type::<T>(self, vm)
+    }
+
     pub fn get_property(self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Unrooted> {
         Object::get_property(&self, sc, Value::object(self), key)
     }

@@ -4,7 +4,7 @@ use dash_proc_macro::Trace;
 use dash_regex::{Flags, ParsedRegex};
 
 use crate::gc::trace::{Trace, TraceCtxt};
-use crate::{delegate, Vm};
+use crate::{delegate, extract, Vm};
 
 use super::object::{NamedObject, Object};
 use super::string::JsString;
@@ -70,8 +70,9 @@ impl Object for RegExp {
         delete_property,
         set_prototype,
         get_prototype,
-        as_any,
         apply,
         own_keys
     );
+
+    extract!(self);
 }

@@ -1,5 +1,5 @@
 use std::alloc::{alloc, dealloc, handle_alloc_error, Layout};
-use std::any::Any;
+use std::any::TypeId;
 use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
@@ -42,8 +42,8 @@ pub struct ObjectVTable {
         unsafe fn(*const (), &mut LocalScope<'_>, ObjectId, Value, Vec<Value>) -> Result<Unrooted, Unrooted>,
     pub(crate) js_construct:
         unsafe fn(*const (), &mut LocalScope<'_>, ObjectId, Value, Vec<Value>) -> Result<Unrooted, Unrooted>,
-    pub(crate) js_as_any: unsafe fn(*const (), &Vm) -> *const dyn Any,
     pub(crate) js_internal_slots: unsafe fn(*const (), &Vm) -> Option<*const dyn InternalSlots>,
+    pub(crate) js_extract_type_raw: unsafe fn(*const (), &Vm, TypeId) -> Option<NonNull<()>>,
     pub(crate) js_own_keys: unsafe fn(*const (), sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value>,
     pub(crate) js_type_of: unsafe fn(*const (), _: &Vm) -> Typeof,
 }
@@ -86,10 +86,12 @@ macro_rules! object_vtable_for_ty {
                 js_construct: |ptr, scope, callee, this, args| unsafe {
                     <$ty as Object>::construct(&*(ptr.cast::<$ty>()), scope, callee, this, args)
                 },
-                js_as_any: |ptr, vm| unsafe { <$ty as Object>::as_any(&*(ptr.cast::<$ty>()), vm) },
                 js_internal_slots: |ptr, vm| unsafe {
                     <$ty as Object>::internal_slots(&*(ptr.cast::<$ty>()), vm)
                         .map(|v| v as *const dyn $crate::value::primitive::InternalSlots)
+                },
+                js_extract_type_raw: |ptr, vm, id| unsafe {
+                    <$ty as Object>::extract_type_raw(&*(ptr.cast::<$ty>()), vm, id)
                 },
                 js_own_keys: |ptr, scope| unsafe { <$ty as Object>::own_keys(&*(ptr.cast::<$ty>()), scope) },
                 js_type_of: |ptr, vm| unsafe { <$ty as Object>::type_of(&*(ptr.cast::<$ty>()), vm) },

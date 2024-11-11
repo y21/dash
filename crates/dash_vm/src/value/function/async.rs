@@ -6,7 +6,7 @@ use crate::value::object::{NamedObject, Object, PropertyKey};
 use crate::value::promise::{wrap_promise, Promise};
 use crate::value::root_ext::RootErrExt;
 use crate::value::{Root, Typeof, Unpack, Unrooted, Value, ValueContext};
-use crate::{delegate, throw, PromiseAction, Vm};
+use crate::{delegate, extract, throw, PromiseAction, Vm};
 use dash_middle::interner::sym;
 
 use super::generator::{GeneratorFunction, GeneratorIterator, GeneratorState};
@@ -124,7 +124,6 @@ impl Object for ThenTask {
         delete_property,
         set_prototype,
         get_prototype,
-        as_any,
         own_keys
     );
 
@@ -169,7 +168,7 @@ impl Object for ThenTask {
                     // TODO: value might be a promise
                     scope.drive_promise(
                         PromiseAction::Resolve,
-                        self.final_promise.as_any(scope).downcast_ref::<Promise>().unwrap(),
+                        self.final_promise.extract::<Promise>(scope).unwrap(),
                         vec![value],
                     );
                 } else {
@@ -188,7 +187,7 @@ impl Object for ThenTask {
                 // Promise in rejected state
                 scope.drive_promise(
                     PromiseAction::Reject,
-                    self.final_promise.as_any(scope).downcast_ref::<Promise>().unwrap(),
+                    self.final_promise.extract::<Promise>(scope).unwrap(),
                     vec![value],
                 );
             }
@@ -200,4 +199,6 @@ impl Object for ThenTask {
     fn type_of(&self, _: &Vm) -> Typeof {
         Typeof::Function
     }
+
+    extract!(self);
 }

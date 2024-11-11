@@ -7,7 +7,7 @@ ECMA-262 implementation in pure Rust.
 ## ⚠️ WIP
 This is a *WIP* and **not** yet production ready. It is actively being worked on and the API is constantly changing.
 
-Current status: Not recommended for use in real projects. Feel free to experiment. The majority of language constructs are implemented and "work fine". It currently passes around 21% of test262.
+Current status: Not recommended for use in real projects. Feel free to experiment. The majority of language constructs are implemented and "work fine". It currently passes around 25% of test262.
 
 ## Usage
 ### Using the CLI

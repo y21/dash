@@ -1,12 +1,12 @@
 use dash_proc_macro::Trace;
 use dash_rt::state::State;
 use dash_rt::typemap::Key;
-use dash_vm::delegate;
 use dash_vm::gc::ObjectId;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::function::{Function, FunctionKind};
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::Value;
+use dash_vm::{delegate, extract};
 
 use crate::state::state_mut;
 use crate::symbols::NodeSymbols;
@@ -83,7 +83,8 @@ impl Object for Inflate {
         set_prototype,
         get_prototype,
         apply,
-        as_any,
         own_keys
     );
+
+    extract!(self);
 }

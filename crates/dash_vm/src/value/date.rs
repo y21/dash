@@ -1,7 +1,7 @@
 use dash_proc_macro::Trace;
 
 use crate::localscope::LocalScope;
-use crate::{delegate, throw};
+use crate::{delegate, extract, throw};
 
 use super::object::{NamedObject, Object};
 use super::root_ext::RootErrExt;
@@ -37,8 +37,9 @@ impl Object for Date {
         delete_property,
         set_prototype,
         get_prototype,
-        as_any,
         apply,
         own_keys
     );
+
+    extract!(self);
 }

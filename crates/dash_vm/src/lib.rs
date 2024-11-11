@@ -28,7 +28,7 @@ use gc::trace::{Trace, TraceCtxt};
 use gc::{Allocator, ObjectId};
 use localscope::{scope, LocalScopeList};
 use rustc_hash::FxHashMap;
-use value::object::NamedObject;
+use value::object::{extract_type, NamedObject};
 use value::{ExternalValue, PureBuiltin, Unpack, Unrooted, ValueKind};
 
 #[cfg(feature = "jit")]
@@ -137,7 +137,7 @@ impl Vm {
     fn prepare(&mut self) {
         debug!("initialize vm intrinsics");
         fn set_fn_prototype(vm: &Vm, v: &dyn Object, proto: ObjectId, name: interner::Symbol) {
-            let fun = v.as_any(vm).downcast_ref::<Function>().unwrap();
+            let fun = extract_type::<Function>(v, vm).unwrap();
             fun.set_name(name.into());
             fun.set_fn_prototype(proto);
         }

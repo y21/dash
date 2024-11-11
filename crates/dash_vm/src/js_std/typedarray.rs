@@ -6,7 +6,6 @@ use crate::js_std::array::for_each_js_iterator_element;
 use crate::throw;
 use crate::value::arraybuffer::ArrayBuffer;
 use crate::value::function::native::CallContext;
-use crate::value::object::Object;
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::typedarray::{TypedArray, TypedArrayKind};
 use crate::value::{Root, Unpack, Value, ValueKind};
@@ -17,7 +16,7 @@ fn typedarray_constructor(cx: CallContext, kind: TypedArrayKind) -> Result<Value
     };
 
     if let ValueKind::Object(obj) = arg.unpack() {
-        if let Some(this) = obj.as_any(cx.scope).downcast_ref::<ArrayBuffer>() {
+        if let Some(this) = obj.extract::<ArrayBuffer>(cx.scope) {
             if this.len() % kind.bytes_per_element() != 0 {
                 throw!(
                     cx.scope,

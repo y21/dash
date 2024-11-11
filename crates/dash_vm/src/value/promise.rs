@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::cell::RefCell;
 
 use dash_proc_macro::Trace;
@@ -6,10 +5,10 @@ use dash_proc_macro::Trace;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
-use crate::{PromiseAction, Vm};
+use crate::{extract, PromiseAction, Vm};
 
 use super::object::{NamedObject, Object};
-use super::{Typeof, Unpack, Unrooted, Value, ValueKind};
+use super::{Typeof, Unrooted, Value};
 
 #[derive(Debug)]
 pub enum PromiseState {
@@ -47,10 +46,7 @@ impl Promise {
                 reject: Vec::new(),
                 resolve: Vec::new(),
             }),
-            obj: NamedObject::with_prototype_and_constructor(
-                vm.statics.promise_proto,
-                vm.statics.promise_ctor,
-            ),
+            obj: NamedObject::with_prototype_and_constructor(vm.statics.promise_proto, vm.statics.promise_ctor),
         }
     }
     pub fn resolved(vm: &Vm, value: Value) -> Self {
@@ -114,13 +110,11 @@ impl Object for Promise {
         self.obj.apply(scope, callee, this, args)
     }
 
-    fn as_any(&self, _: &Vm) -> &dyn Any {
-        self
-    }
-
     fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         self.obj.own_keys(sc)
     }
+
+    extract!(self);
 }
 
 #[derive(Debug, Trace)]
@@ -181,15 +175,11 @@ impl Object for PromiseResolver {
     ) -> Result<Unrooted, Unrooted> {
         scope.drive_promise(
             PromiseAction::Resolve,
-            self.promise.as_any(scope).downcast_ref::<Promise>().unwrap(),
+            self.promise.extract::<Promise>(scope).unwrap(),
             args,
         );
 
         Ok(Value::undefined().into())
-    }
-
-    fn as_any(&self, _: &Vm) -> &dyn Any {
-        self
     }
 
     fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
@@ -199,6 +189,8 @@ impl Object for PromiseResolver {
     fn type_of(&self, _: &Vm) -> super::Typeof {
         Typeof::Function
     }
+
+    extract!(self);
 }
 
 #[derive(Debug, Trace)]
@@ -259,15 +251,11 @@ impl Object for PromiseRejecter {
     ) -> Result<Unrooted, Unrooted> {
         scope.drive_promise(
             PromiseAction::Reject,
-            self.promise.as_any(scope).downcast_ref::<Promise>().unwrap(),
+            self.promise.extract::<Promise>(scope).unwrap(),
             args,
         );
 
         Ok(Value::undefined().into())
-    }
-
-    fn as_any(&self, _: &Vm) -> &dyn Any {
-        self
     }
 
     fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
@@ -277,14 +265,14 @@ impl Object for PromiseRejecter {
     fn type_of(&self, _: &Vm) -> super::Typeof {
         Typeof::Function
     }
+
+    extract!(self);
 }
 
 /// Wraps the passed value in a resolved promise, unless it already is a promise
 pub fn wrap_promise(scope: &mut LocalScope, value: Value) -> Value {
-    if let ValueKind::Object(object) = value.unpack() {
-        if object.as_any(scope).is::<Promise>() {
-            return value;
-        }
+    if value.extract::<Promise>(scope).is_some() {
+        return value;
     }
 
     let promise = Promise::resolved(scope, value);

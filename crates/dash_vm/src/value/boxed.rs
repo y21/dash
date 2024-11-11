@@ -2,9 +2,8 @@ use super::ops::conversions::{PreferredType, ValueConversion};
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::value::{JsString, PropertyKey, Unrooted};
-use crate::{delegate, PropertyValue, Vm};
+use crate::{delegate, extract, PropertyValue, Vm};
 use dash_proc_macro::Trace;
-use std::any::Any;
 
 use super::object::{NamedObject, Object};
 use super::primitive::{InternalSlots, Symbol as PrimitiveSymbol};
@@ -59,13 +58,11 @@ macro_rules! boxed_primitive {
                     return self.obj.get_own_property_descriptor(sc, key);
                 }
 
-                fn as_any(&self, _: &Vm) -> &dyn Any {
-                    self
-                }
-
                 fn internal_slots(&self, _: &Vm) -> Option<&dyn InternalSlots> {
                     Some(self)
                 }
+
+                extract!(self, inner);
             }
 
             impl ValueConversion for $name {

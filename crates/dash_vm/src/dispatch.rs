@@ -907,7 +907,7 @@ mod handlers {
         let id = cx.fetchw_and_inc_ip();
         let name = JsString::from(cx.constants().symbols[SymbolConstant(id)]);
 
-        let value = match cx.global.as_any(&cx.scope).downcast_ref::<NamedObject>() {
+        let value = match cx.global.extract::<NamedObject>(&cx.scope) {
             Some(value) => match value.get_raw_property(name.into()) {
                 Some(value) => value.kind().get_or_apply(&mut cx, Value::undefined())?,
                 None => {

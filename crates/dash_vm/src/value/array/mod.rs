@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::cmp::Ordering;
 use std::mem;
@@ -9,7 +8,7 @@ use dash_proc_macro::Trace;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::value::object::PropertyDataDescriptor;
-use crate::{delegate, throw, Vm};
+use crate::{delegate, extract, throw, Vm};
 use dash_middle::interner::sym;
 
 pub use self::holey::{Element, HoleyArray};
@@ -305,10 +304,6 @@ impl Object for Array {
         self.obj.apply(scope, callee, this, args)
     }
 
-    fn as_any(&self, _: &Vm) -> &dyn Any {
-        self
-    }
-
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
         self.obj.set_prototype(sc, value)
     }
@@ -321,6 +316,8 @@ impl Object for Array {
         let items = self.items.borrow();
         Ok(array_like_keys(sc, items.len()).collect())
     }
+
+    extract!(self);
 }
 
 #[derive(Debug, Trace)]
@@ -354,9 +351,7 @@ impl Object for ArrayIterator {
         self.obj.apply(scope, callee, this, args)
     }
 
-    fn as_any(&self, _: &Vm) -> &dyn Any {
-        self
-    }
+    extract!(self);
 }
 
 impl ArrayIterator {
