@@ -6,6 +6,7 @@ use std::iter::{self};
 use dash_proc_macro::Trace;
 
 use crate::dispatch::HandleResult;
+use crate::frame::This;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
@@ -139,12 +140,14 @@ fn handle_call(
     fun: &Function,
     scope: &mut LocalScope,
     callee: ObjectId,
-    this: Value,
+    this: This,
     args: Vec<Value>,
     is_constructor_call: bool,
 ) -> Result<Unrooted, Unrooted> {
     match &fun.kind {
         FunctionKind::Native(native) => {
+            let this = this.to_value(scope)?;
+            // TODO: pass `This` to native fns as-is?
             let cx = match is_constructor_call {
                 true => CallContext::constructor(args, scope, this),
                 false => CallContext::call(args, scope, this),
@@ -207,7 +210,7 @@ impl Object for Function {
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
         if let Some(sym::prototype) = key.as_string().map(JsString::sym) {
-            let prototype = value.get_or_apply(sc, Value::undefined()).root(sc)?;
+            let prototype = value.get_or_apply(sc, This::Default).root(sc)?;
             // TODO: function prototype does not need to be an object
             *self.prototype.borrow_mut() = Some(prototype.to_object(sc)?);
             return Ok(());
@@ -224,7 +227,7 @@ impl Object for Function {
         &self,
         scope: &mut LocalScope,
         callee: ObjectId,
-        this: Value,
+        this: This,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         handle_call(self, scope, callee, this, args, false)
@@ -234,11 +237,11 @@ impl Object for Function {
         &self,
         scope: &mut LocalScope,
         callee: ObjectId,
-        _this: Value,
+        _this: This,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         let this = self.new_instance(callee, scope)?;
-        handle_call(self, scope, callee, Value::object(this), args, true)
+        handle_call(self, scope, callee, This::Bound(Value::object(this)), args, true)
     }
 
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {

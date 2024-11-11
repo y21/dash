@@ -4,7 +4,7 @@ use dash_middle::compiler::constant::Function;
 use dash_proc_macro::Trace;
 
 use crate::dispatch::HandleResult;
-use crate::frame::Frame;
+use crate::frame::{Frame, This};
 use crate::localscope::LocalScope;
 use crate::value::arguments::Arguments;
 use crate::value::{ExternalValue, Root, Value};
@@ -33,7 +33,7 @@ impl UserFunction {
     pub(crate) fn handle_function_call(
         &self,
         scope: &mut LocalScope,
-        this: Value,
+        this: This,
         args: Vec<Value>,
         is_constructor_call: bool,
     ) -> Result<HandleResult, Value> {
@@ -48,7 +48,7 @@ impl UserFunction {
 
         extend_stack_from_args(args, self.inner.params, scope, self.inner.rest_local.is_some());
 
-        let mut frame = Frame::from_function(Some(this), self, is_constructor_call, false, arguments);
+        let mut frame = Frame::from_function(this, self, is_constructor_call, false, arguments);
         frame.set_sp(sp);
 
         match scope.execute_frame(frame) {

@@ -1,6 +1,7 @@
 use dash_middle::interner::sym;
 use dash_proc_macro::Trace;
 
+use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::{extract, Vm};
@@ -137,7 +138,7 @@ impl Object for TypedArray {
             let arraybuffer = self.arraybuffer.extract::<ArrayBuffer>(sc);
 
             // TODO: not undefined as this
-            let value = value.kind().get_or_apply(sc, Value::undefined()).root(sc)?;
+            let value = value.kind().get_or_apply(sc, This::Default).root(sc)?;
             let value = value.to_number(sc)?;
             if let Some(arraybuffer) = arraybuffer {
                 let bytes = arraybuffer.storage();
@@ -194,7 +195,7 @@ impl Object for TypedArray {
         &self,
         scope: &mut LocalScope,
         callee: ObjectId,
-        this: Value,
+        this: This,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         self.obj.apply(scope, callee, this, args)

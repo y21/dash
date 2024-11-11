@@ -1,6 +1,7 @@
 use dash_middle::interner::{sym, Symbol};
 use dash_proc_macro::Trace;
 
+use crate::frame::This;
 use crate::localscope::LocalScope;
 use crate::value::boxed::String as BoxedString;
 use crate::{extract, throw, Vm};
@@ -120,7 +121,7 @@ impl Object for JsString {
         &self,
         scope: &mut LocalScope,
         _: crate::gc::ObjectId,
-        _: Value,
+        _: This,
         _: Vec<Value>,
     ) -> Result<super::Unrooted, super::Unrooted> {
         let v = self.res(scope).to_owned();

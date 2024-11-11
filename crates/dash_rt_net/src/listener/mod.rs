@@ -4,6 +4,7 @@ use dash_proc_macro::Trace;
 use dash_rt::event::EventMessage;
 use dash_rt::state::State;
 use dash_rt::wrap_async;
+use dash_vm::frame::This;
 use dash_vm::gc::trace::{Trace, TraceCtxt};
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::arraybuffer::ArrayBuffer;
@@ -66,7 +67,7 @@ impl Object for TcpListenerConstructor {
         &self,
         scope: &mut dash_vm::localscope::LocalScope,
         _callee: dash_vm::gc::ObjectId,
-        _this: dash_vm::value::Value,
+        _this: This,
         _args: Vec<dash_vm::value::Value>,
     ) -> Result<dash_vm::value::Unrooted, dash_vm::value::Unrooted> {
         throw!(scope, Error, "TcpListener should be called as a constructor")
@@ -76,7 +77,7 @@ impl Object for TcpListenerConstructor {
         &self,
         scope: &mut dash_vm::localscope::LocalScope,
         _callee: dash_vm::gc::ObjectId,
-        _this: Value,
+        _this: This,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         let Some(value) = args.first() else {

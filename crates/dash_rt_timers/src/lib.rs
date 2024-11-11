@@ -6,6 +6,7 @@ use dash_middle::util::ThreadSafeStorage;
 use dash_rt::event::EventMessage;
 use dash_rt::module::ModuleLoader;
 use dash_rt::state::State;
+use dash_vm::frame::This;
 use dash_vm::gc::persistent::Persistent;
 use dash_vm::localscope::LocalScope;
 use dash_vm::throw;
@@ -81,7 +82,7 @@ fn set_timeout(cx: CallContext) -> Result<Value, Value> {
             let mut sc = rt.vm_mut().scope();
             let callback = callback.get();
 
-            if let Err(err) = callback.apply(&mut sc, Value::undefined(), Vec::new()) {
+            if let Err(err) = callback.apply(&mut sc, This::Default, Vec::new()) {
                 eprintln!("Unhandled error in timer callback: {err:?}");
             }
 
@@ -108,7 +109,7 @@ fn set_immediate(cx: CallContext) -> Result<Value, Value> {
         let callback = callback.get();
         let mut sc = rt.vm_mut().scope();
 
-        if let Err(err) = callback.apply(&mut sc, Value::undefined(), Vec::new()) {
+        if let Err(err) = callback.apply(&mut sc, This::Default, Vec::new()) {
             eprintln!("Unhandled error in timer callback: {err:?}");
         }
     })));

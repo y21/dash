@@ -25,6 +25,7 @@ use dash_middle::util::ThreadSafeStorage;
 use dash_proc_macro::Trace;
 
 pub mod string;
+use crate::frame::This;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::gc::ObjectId;
 use crate::util::cold_path;
@@ -283,7 +284,7 @@ impl Object for Value {
         }
     }
 
-    fn apply(&self, scope: &mut LocalScope, _: ObjectId, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
+    fn apply(&self, scope: &mut LocalScope, _: ObjectId, this: This, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
         self.apply(scope, this, args)
     }
 
@@ -317,7 +318,7 @@ impl Object for Value {
         &self,
         scope: &mut LocalScope,
         _: ObjectId,
-        this: Value,
+        this: This,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         self.construct(scope, this, args)
@@ -603,7 +604,7 @@ impl Object for ExternalValue {
         &self,
         scope: &mut LocalScope,
         _callee: ObjectId,
-        this: Value,
+        this: This,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         self.inner.apply(scope, this, args)
@@ -613,7 +614,7 @@ impl Object for ExternalValue {
         &self,
         scope: &mut LocalScope,
         _callee: ObjectId,
-        this: Value,
+        this: This,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         self.inner.construct(scope, this, args)
@@ -630,17 +631,18 @@ impl Value {
     pub fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Unrooted> {
         match self.unpack() {
             ValueKind::Object(o) => o.get_property(sc, key),
-            ValueKind::Number(n) => n.get_property(sc, *self, key),
-            ValueKind::Boolean(b) => b.get_property(sc, *self, key),
-            ValueKind::String(s) => s.get_property(sc, *self, key),
+            // TODO: autobox primitives
+            ValueKind::Number(n) => n.get_property(sc, This::Bound(*self), key),
+            ValueKind::Boolean(b) => b.get_property(sc, This::Bound(*self), key),
+            ValueKind::String(s) => s.get_property(sc, This::Bound(*self), key),
             ValueKind::External(o) => o.inner(sc).get_property(sc, key),
-            ValueKind::Undefined(u) => u.get_property(sc, *self, key),
-            ValueKind::Null(n) => n.get_property(sc, *self, key),
-            ValueKind::Symbol(s) => s.get_property(sc, *self, key),
+            ValueKind::Undefined(u) => u.get_property(sc, This::Bound(*self), key),
+            ValueKind::Null(n) => n.get_property(sc, This::Bound(*self), key),
+            ValueKind::Symbol(s) => s.get_property(sc, This::Bound(*self), key),
         }
     }
 
-    pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
+    pub fn apply(&self, sc: &mut LocalScope, this: This, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
         match self.unpack() {
             ValueKind::Object(o) => o.apply(sc, this, args),
             ValueKind::External(o) => o.inner(sc).apply(sc, this, args),
@@ -660,7 +662,7 @@ impl Value {
     pub(crate) fn apply_with_debug(
         &self,
         sc: &mut LocalScope,
-        this: Value,
+        this: This,
         args: Vec<Value>,
         ip: u16,
     ) -> Result<Unrooted, Unrooted> {
@@ -683,7 +685,7 @@ impl Value {
         }
     }
 
-    pub fn construct(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
+    pub fn construct(&self, sc: &mut LocalScope, this: This, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
         match self.unpack() {
             ValueKind::Object(o) => o.construct(sc, this, args),
             ValueKind::External(o) => o.inner(sc).construct(sc, this, args),

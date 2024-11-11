@@ -1,5 +1,6 @@
 use dash_middle::interner::sym;
 
+use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::throw;
@@ -127,7 +128,9 @@ impl ValueConversion for Value {
             let preferred_type = preferred_type.to_value();
 
             // iv. Let result be ? Call(exoticToPrim, input, « hint »).
-            let result = exotic_to_prim.apply(sc, *self, vec![preferred_type]).root(sc)?;
+            let result = exotic_to_prim
+                .apply(sc, This::Bound(*self), vec![preferred_type])
+                .root(sc)?;
 
             // If Type(result) is not Object, return result.
             // TODO: this can still be an object if Value::External
@@ -198,7 +201,7 @@ impl Value {
         for name in method_names {
             let method = self.get_property(sc, name.into()).root(sc)?;
             if matches!(method.type_of(sc), Typeof::Function) {
-                let result = method.apply(sc, *self, Vec::new()).root(sc)?;
+                let result = method.apply(sc, This::Bound(*self), Vec::new()).root(sc)?;
                 if !matches!(result.unpack(), ValueKind::Object(_)) {
                     return Ok(result);
                 }

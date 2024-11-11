@@ -1,5 +1,6 @@
 use dash_proc_macro::Trace;
 
+use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::value::object::{NamedObject, Object};
 use crate::value::{Typeof, Unrooted, Value};
@@ -41,10 +42,10 @@ impl Object for BoundFunction {
         &self,
         scope: &mut crate::localscope::LocalScope,
         _callee: ObjectId,
-        this: Value,
+        this: This,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
-        let target_this = self.this.unwrap_or(this);
+        let target_this = self.this.map_or(this, This::Bound);
 
         // TODO: args should be concatenated with self.args
         let target_args = self.args.clone().unwrap_or(args);

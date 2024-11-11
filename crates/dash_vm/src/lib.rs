@@ -24,6 +24,7 @@ use self::value::Value;
 use dash_log::{debug, error, span, Level};
 use dash_middle::compiler::instruction::Instruction;
 use dash_middle::interner::{self, sym, StringInterner};
+use frame::This;
 use gc::trace::{Trace, TraceCtxt};
 use gc::{Allocator, ObjectId};
 use localscope::{scope, LocalScopeList};
@@ -1391,7 +1392,7 @@ impl Vm {
             scope.add_ref(task);
 
             debug!("process task {:?}", task);
-            if let Err(ex) = task.apply(&mut scope, Value::undefined(), Vec::new()) {
+            if let Err(ex) = task.apply(&mut scope, This::Default, Vec::new()) {
                 if let Some(callback) = scope.params.unhandled_task_exception_callback() {
                     let ex = ex.root(&mut scope);
                     error!("uncaught async task exception");

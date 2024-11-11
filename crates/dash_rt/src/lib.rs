@@ -1,7 +1,7 @@
 use std::future::Future;
 
 use dash_compiler::FunctionCompiler;
-use dash_vm::frame::{Exports, Frame};
+use dash_vm::frame::{Exports, Frame, This};
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::function::native::CallContext;
 use dash_vm::value::ops::conversions::ValueConversion;
@@ -82,7 +82,7 @@ pub fn format_value<'s>(value: Value, scope: &'s mut LocalScope) -> Result<&'s s
 
     let result = inspect_fn
         .root(scope)
-        .apply(scope, Value::undefined(), vec![value])
+        .apply(scope, This::Default, vec![value])
         .unwrap()
         .root(scope)
         .to_js_string(scope)

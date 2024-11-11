@@ -4,6 +4,7 @@ use std::{fmt, iter};
 use dash_middle::interner::{self, sym};
 use dash_proc_macro::Trace;
 
+use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::util::intern_f64;
@@ -50,7 +51,7 @@ impl Object for f64 {
         &self,
         scope: &mut LocalScope,
         _callee: ObjectId,
-        _this: Value,
+        _this: This,
         _args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         throw!(scope, TypeError, "number is not a function")
@@ -100,7 +101,7 @@ impl Object for bool {
         &self,
         scope: &mut LocalScope,
         _callee: ObjectId,
-        _this: Value,
+        _this: This,
         _args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         throw!(scope, TypeError, "boolean is not a function")
@@ -171,7 +172,7 @@ impl Object for Undefined {
         &self,
         sc: &mut LocalScope,
         _callee: ObjectId,
-        _this: Value,
+        _this: This,
         _args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         throw!(sc, TypeError, "undefined is not a function")
@@ -225,7 +226,7 @@ impl Object for Null {
         &self,
         sc: &mut LocalScope,
         _callee: ObjectId,
-        _this: Value,
+        _this: This,
         _args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         throw!(sc, TypeError, "null is not a function")
@@ -283,7 +284,7 @@ impl Object for Symbol {
         &self,
         scope: &mut LocalScope,
         _callee: ObjectId,
-        _this: Value,
+        _this: This,
         _args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         throw!(scope, TypeError, "symbol is not a function")
@@ -522,7 +523,7 @@ impl Object for Number {
         &self,
         scope: &mut LocalScope,
         callee: ObjectId,
-        this: Value,
+        this: This,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         self.0.apply(scope, callee, this, args)

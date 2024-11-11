@@ -10,6 +10,7 @@ use bitflags::bitflags;
 use smallvec::SmallVec;
 use trace::TraceCtxt;
 
+use crate::frame::This;
 use crate::localscope::LocalScope;
 use crate::value::object::{PropertyKey, PropertyValue};
 use crate::value::primitive::InternalSlots;
@@ -27,10 +28,10 @@ pub struct ObjectVTable {
     pub(crate) trace: unsafe fn(*const (), &mut TraceCtxt<'_>),
     pub(crate) debug_fmt: unsafe fn(*const (), &mut core::fmt::Formatter<'_>) -> core::fmt::Result,
     pub(crate) js_get_own_property:
-        unsafe fn(*const (), &mut LocalScope<'_>, Value, PropertyKey) -> Result<Unrooted, Unrooted>,
+        unsafe fn(*const (), &mut LocalScope<'_>, This, PropertyKey) -> Result<Unrooted, Unrooted>,
     pub(crate) js_get_own_property_descriptor:
         unsafe fn(*const (), &mut LocalScope<'_>, PropertyKey) -> Result<Option<PropertyValue>, Unrooted>,
-    pub(crate) js_get_property: unsafe fn(*const (), &mut LocalScope, Value, PropertyKey) -> Result<Unrooted, Unrooted>,
+    pub(crate) js_get_property: unsafe fn(*const (), &mut LocalScope, This, PropertyKey) -> Result<Unrooted, Unrooted>,
     pub(crate) js_get_property_descriptor:
         unsafe fn(*const (), &mut LocalScope<'_>, PropertyKey) -> Result<Option<PropertyValue>, Unrooted>,
     pub(crate) js_set_property:
@@ -39,9 +40,9 @@ pub struct ObjectVTable {
     pub(crate) js_set_prototype: unsafe fn(*const (), &mut LocalScope<'_>, Value) -> Result<(), Value>,
     pub(crate) js_get_prototype: unsafe fn(*const (), &mut LocalScope<'_>) -> Result<Value, Value>,
     pub(crate) js_apply:
-        unsafe fn(*const (), &mut LocalScope<'_>, ObjectId, Value, Vec<Value>) -> Result<Unrooted, Unrooted>,
+        unsafe fn(*const (), &mut LocalScope<'_>, ObjectId, This, Vec<Value>) -> Result<Unrooted, Unrooted>,
     pub(crate) js_construct:
-        unsafe fn(*const (), &mut LocalScope<'_>, ObjectId, Value, Vec<Value>) -> Result<Unrooted, Unrooted>,
+        unsafe fn(*const (), &mut LocalScope<'_>, ObjectId, This, Vec<Value>) -> Result<Unrooted, Unrooted>,
     pub(crate) js_internal_slots: unsafe fn(*const (), &Vm) -> Option<*const dyn InternalSlots>,
     pub(crate) js_extract_type_raw: unsafe fn(*const (), &Vm, TypeId) -> Option<NonNull<()>>,
     pub(crate) js_own_keys: unsafe fn(*const (), sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value>,

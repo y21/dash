@@ -5,6 +5,7 @@ use std::mem;
 use dash_log::debug;
 use dash_proc_macro::Trace;
 
+use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::value::object::PropertyDataDescriptor;
@@ -252,7 +253,7 @@ impl Object for Array {
 
             if key.sym() == sym::length {
                 // TODO: this shouldnt be undefined
-                let value = value.kind().get_or_apply(sc, Value::undefined()).root(sc)?;
+                let value = value.kind().get_or_apply(sc, This::Default).root(sc)?;
                 let new_len = value.to_number(sc)? as usize;
 
                 if new_len > MAX_LENGTH {
@@ -284,7 +285,7 @@ impl Object for Array {
                 let mut items = self.items.borrow_mut();
                 match items.remove(index) {
                     Some(MaybeHoley::Some(value)) => {
-                        return value.get_or_apply(sc, Value::undefined()).root_err(sc);
+                        return value.get_or_apply(sc, This::Default).root_err(sc);
                     }
                     Some(MaybeHoley::Hole) | None => return Ok(Value::undefined().into()),
                 }
@@ -298,7 +299,7 @@ impl Object for Array {
         &self,
         scope: &mut LocalScope,
         callee: ObjectId,
-        this: Value,
+        this: This,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         self.obj.apply(scope, callee, this, args)
@@ -345,7 +346,7 @@ impl Object for ArrayIterator {
         &self,
         scope: &mut LocalScope,
         callee: ObjectId,
-        this: Value,
+        this: This,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         self.obj.apply(scope, callee, this, args)
@@ -396,7 +397,7 @@ pub fn spec_array_get_property(scope: &mut LocalScope<'_>, target: &Value, index
     if let Some(arr) = target.unpack().downcast_ref::<Array>(scope) {
         let inner = arr.items.borrow();
         return match inner.get(index) {
-            Some(MaybeHoley::Some(value)) => value.get_or_apply(scope, Value::undefined()),
+            Some(MaybeHoley::Some(value)) => value.get_or_apply(scope, This::Default),
             Some(MaybeHoley::Hole) | None => Ok(Value::undefined().into()),
         };
     }

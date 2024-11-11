@@ -558,7 +558,7 @@ mod handlers {
     use std::ops::{Add, ControlFlow, Div, Mul, Rem, Sub};
     use std::rc::Rc;
 
-    use crate::frame::{FrameState, TryBlock};
+    use crate::frame::{FrameState, This, TryBlock};
     use crate::throw;
     use crate::util::unlikely;
     use crate::value::array::{Array, ArrayIterator, Element};
@@ -572,7 +572,7 @@ mod handlers {
     use crate::value::ops::equality;
     use crate::value::primitive::Number;
     use crate::value::regex::RegExp;
-    use crate::value::{Unpack, ValueContext, ValueKind};
+    use crate::value::{Unpack, ValueKind};
 
     use self::extract::{ArrayElement, BackwardSequence, ExportProperty, IdentW, NumberWConstant, ObjectProperty};
 
@@ -667,7 +667,7 @@ mod handlers {
             ParserFunctionKind::Function(Asyncness::No) => FunctionKind::User(fun),
             ParserFunctionKind::Arrow => FunctionKind::Closure(Closure {
                 fun,
-                this: cx.scope.active_frame().this.unwrap_or_undefined(),
+                this: cx.scope.active_frame().this,
             }),
             ParserFunctionKind::Generator => FunctionKind::Generator(GeneratorFunction::new(fun)),
         };
@@ -846,13 +846,18 @@ mod handlers {
                 cx.active_frame_mut().ip = finally;
             } else {
                 let this = cx.pop_frame();
-                return Ok(ret_inner(cx, tc_depth, ret, this));
+                return ret_inner(cx, tc_depth, ret, this);
             }
         }
         Ok(None)
     }
 
-    fn ret_inner(mut cx: DispatchContext<'_>, tc_depth: u16, value: Value, this: Frame) -> Option<HandleResult> {
+    fn ret_inner(
+        mut cx: DispatchContext<'_>,
+        tc_depth: u16,
+        value: Value,
+        this: Frame,
+    ) -> Result<Option<HandleResult>, Unrooted> {
         // Drain all try catch blocks that are in this frame.
         let lower_tcp = cx.try_blocks.len() - usize::from(tc_depth);
         drop(cx.try_blocks.drain(lower_tcp..));
@@ -864,7 +869,7 @@ mod handlers {
             FrameState::Module(_) => {
                 // Put it back on the frame stack, because we'll need it in Vm::execute_module
                 cx.frames.push(this);
-                Some(HandleResult::Return(Unrooted::new(value)))
+                Ok(Some(HandleResult::Return(Unrooted::new(value))))
             }
             FrameState::Function {
                 is_constructor_call,
@@ -872,23 +877,23 @@ mod handlers {
             } => {
                 if_chain! {
                     if is_constructor_call && !matches!(value.unpack(), ValueKind::Object(_) | ValueKind::External(_));
-                    if let Frame { this: Some(this), .. } = this;
                     then {
+                        let this = this.this.to_value(&mut cx.scope)?;
                         // If this is a constructor call and the return value is not an object,
                         // return `this`
                         if is_flat_call {
                             cx.stack.push(this);
-                            None
+                            Ok(None)
                         } else {
-                            Some(HandleResult::Return(Unrooted::new(this)))
+                            Ok(Some(HandleResult::Return(Unrooted::new(this))))
                         }
                     }
                     else {
                         if is_flat_call {
                             cx.stack.push(value);
-                            None
+                            Ok(None)
                         } else {
-                            Some(HandleResult::Return(Unrooted::new(value)))
+                            Ok(Some(HandleResult::Return(Unrooted::new(value))))
                         }
                     }
                 }
@@ -900,7 +905,7 @@ mod handlers {
         let tc_depth = cx.fetchw_and_inc_ip();
         let value = cx.pop_stack_rooted();
         let this = cx.pop_frame();
-        Ok(ret_inner(cx, tc_depth, value, this))
+        ret_inner(cx, tc_depth, value, this)
     }
 
     pub fn ldglobal(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
@@ -909,7 +914,7 @@ mod handlers {
 
         let value = match cx.global.extract::<NamedObject>(&cx.scope) {
             Some(value) => match value.get_raw_property(name.into()) {
-                Some(value) => value.kind().get_or_apply(&mut cx, Value::undefined())?,
+                Some(value) => value.kind().get_or_apply(&mut cx, This::Default)?,
                 None => {
                     let name = name.res(&cx.scope).to_owned();
                     throw!(&mut cx, ReferenceError, "{} is not defined", name)
@@ -1014,7 +1019,7 @@ mod handlers {
     fn call_flat(
         mut cx: DispatchContext<'_>,
         callee: Value,
-        this: Value,
+        this: This,
         function: &Function,
         user_function: &UserFunction,
         mut argc: usize,
@@ -1026,7 +1031,7 @@ mod handlers {
         };
 
         let this = match is_constructor {
-            true => Value::object(function.new_instance(callee, &mut cx)?),
+            true => This::Bound(Value::object(function.new_instance(callee, &mut cx)?)),
             false => this,
         };
 
@@ -1070,7 +1075,7 @@ mod handlers {
 
         let arguments = adjust_stack_from_flat_call(&mut cx, user_function, sp_before_call, argc);
 
-        let mut frame = Frame::from_function(Some(this), user_function, is_constructor, true, arguments);
+        let mut frame = Frame::from_function(this, user_function, is_constructor, true, arguments);
         frame.set_sp(sp_before_call);
 
         cx.pad_stack_for_frame(&frame);
@@ -1083,7 +1088,7 @@ mod handlers {
     fn call_generic(
         mut cx: DispatchContext<'_>,
         callee: Value,
-        this: Value,
+        this: This,
         argc: usize,
         is_constructor: bool,
         call_ip: u16,
@@ -1149,12 +1154,12 @@ mod handlers {
         let (callee, this) = if has_this {
             cx.stack[stack_len - argc - 2..].rotate_left(2);
             let (this, callee) = cx.pop_stack2_rooted();
-            (callee, this)
+            (callee, This::Bound(this))
         } else {
             cx.stack[stack_len - argc - 1..].rotate_left(1);
             // NOTE: Does not need to be rooted for flat calls. `generic_call` manually roots it.
             let callee = cx.pop_stack_rooted();
-            (callee, Value::undefined())
+            (callee, This::Default)
         };
 
         if let Some(function) = callee.unpack().downcast_ref::<Function>(&cx.scope) {
@@ -1987,15 +1992,8 @@ mod handlers {
     }
 
     pub fn this(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let this = cx
-            .frames
-            .iter()
-            .rev()
-            .find_map(|f| f.this.as_ref())
-            .cloned()
-            .unwrap_or_else(|| Value::object(cx.global));
-
-        cx.stack.push(this);
+        let value = cx.active_frame().this.to_value(&mut cx.scope)?;
+        cx.stack.push(value);
         Ok(None)
     }
 
@@ -2030,7 +2028,7 @@ mod handlers {
         let iterable = value
             .get_property(&mut cx, PropertyKey::Symbol(symbol_iterator))?
             .root(&mut cx.scope);
-        let iterator = iterable.apply(&mut cx, value, Vec::new())?;
+        let iterator = iterable.apply(&mut cx, This::Bound(value), Vec::new())?;
         cx.push_stack(iterator);
         Ok(None)
     }
@@ -2269,12 +2267,12 @@ mod handlers {
                         .get_property(&mut cx, $k.into())?
                         .root(&mut cx.scope);
                     let fun = k.get_property(&mut cx, $v.into())?.root(&mut cx.scope);
-                    let result = fun.apply(&mut cx, Value::undefined(), args)?;
+                    let result = fun.apply(&mut cx, This::Default, args)?;
                     cx.push_stack(result);
                 } else {
                     // Fastpath: call builtin directly
                     // TODO: should we add to externals?
-                    let result = fun.apply(&mut cx, Value::undefined(), args)?;
+                    let result = fun.apply(&mut cx, This::Default, args)?;
                     cx.push_stack(result);
                 }
             }};

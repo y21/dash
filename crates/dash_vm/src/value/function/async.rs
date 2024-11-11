@@ -1,5 +1,6 @@
 use dash_proc_macro::Trace;
 
+use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::value::object::{NamedObject, Object, PropertyKey};
@@ -29,7 +30,7 @@ impl AsyncFunction {
         &self,
         scope: &mut LocalScope,
         callee: ObjectId,
-        this: Value,
+        this: This,
         args: Vec<Value>,
         is_constructor_call: bool,
     ) -> Result<Value, Unrooted> {
@@ -41,7 +42,7 @@ impl AsyncFunction {
             .statics
             .generator_iterator_next
             .clone()
-            .apply(scope, generator_iter, Vec::new())
+            .apply(scope, This::Bound(generator_iter), Vec::new())
             .root(scope)
             .and_then(|result| {
                 result
@@ -75,10 +76,10 @@ impl AsyncFunction {
                         .clone()
                         .apply(
                             scope,
-                            match result {
+                            This::Bound(match result {
                                 Ok(value) => value,
                                 Err(value) => value,
-                            },
+                            }),
                             vec![Value::object(then_task)],
                         )
                         .root_err(scope)?;
@@ -131,7 +132,7 @@ impl Object for ThenTask {
         &self,
         scope: &mut crate::localscope::LocalScope,
         _callee: ObjectId,
-        _this: Value,
+        _this: This,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         let promise_value = args.first().unwrap_or_undefined();
@@ -142,7 +143,7 @@ impl Object for ThenTask {
             .statics
             .generator_iterator_next
             .clone()
-            .apply(scope, self.generator_iter, vec![promise_value])
+            .apply(scope, This::Bound(self.generator_iter), vec![promise_value])
             .root(scope)
             .and_then(|result| {
                 result
@@ -176,11 +177,11 @@ impl Object for ThenTask {
                     let then_task = scope.register(then_task);
                     let value = wrap_promise(scope, value);
 
-                    scope
-                        .statics
-                        .promise_then
-                        .clone()
-                        .apply(scope, value, vec![Value::object(then_task)])?;
+                    scope.statics.promise_then.clone().apply(
+                        scope,
+                        This::Bound(value),
+                        vec![Value::object(then_task)],
+                    )?;
                 }
             }
             Err(value) => {

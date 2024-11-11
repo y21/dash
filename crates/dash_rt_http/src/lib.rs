@@ -7,6 +7,7 @@ use dash_middle::util::{SharedOnce, ThreadSafeStorage};
 use dash_rt::event::EventMessage;
 use dash_rt::module::ModuleLoader;
 use dash_rt::state::State;
+use dash_vm::frame::This;
 use dash_vm::gc::persistent::Persistent;
 use dash_vm::gc::trace::{Trace, TraceCtxt};
 use dash_vm::localscope::LocalScope;
@@ -98,7 +99,7 @@ pub fn listen(cx: CallContext) -> Result<Value, Value> {
 
                     let ctx = Value::object(scope.register(ctx));
 
-                    if let Err(err) = cb.apply(&mut scope, Value::undefined(), vec![ctx]).root_err(&mut scope) {
+                    if let Err(err) = cb.apply(&mut scope, This::Default, vec![ctx]).root_err(&mut scope) {
                         match err.to_js_string(&mut scope) {
                             Ok(err) => eprintln!("Unhandled exception in HTTP handler! {}", err.res(&scope)),
                             Err(..) => eprintln!("Unhandled exception in exception toString method in HTTP handler!"),

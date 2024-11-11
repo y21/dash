@@ -1,4 +1,5 @@
 use dash_middle::interner::sym;
+use dash_vm::frame::This;
 use dash_vm::localscope::LocalScope;
 use dash_vm::throw;
 use dash_vm::value::function::native::{register_native_fn, CallContext};
@@ -38,7 +39,7 @@ fn inherits(cx: CallContext) -> Result<Value, Value> {
     }
 
     let super_inst = super_ctor
-        .construct(cx.scope, Value::undefined(), Vec::new())
+        .construct(cx.scope, This::Default, Vec::new())
         .root(cx.scope)?;
 
     super_inst.set_property(

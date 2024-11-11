@@ -2,6 +2,7 @@ use std::cell::Cell;
 use std::convert::Infallible;
 use std::ops::ControlFlow;
 
+use crate::frame::This;
 use crate::js_std::array::for_each_js_iterator_element;
 use crate::throw;
 use crate::value::arraybuffer::ArrayBuffer;
@@ -35,7 +36,7 @@ fn typedarray_constructor(cx: CallContext, kind: TypedArrayKind) -> Result<Value
             .root(cx.scope)?
             .into_option()
         {
-            let iterator = iterator.apply(cx.scope, arg, Vec::new()).root(cx.scope)?;
+            let iterator = iterator.apply(cx.scope, This::Bound(arg), Vec::new()).root(cx.scope)?;
             let mut values = Vec::new();
             for_each_js_iterator_element(cx.scope, iterator, |scope, value| {
                 use TypedArrayKind::*;

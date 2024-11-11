@@ -1,10 +1,11 @@
+use crate::frame::This;
 use crate::throw;
 use crate::value::function::bound::BoundFunction;
 use crate::value::function::native::CallContext;
 use crate::value::function::Function;
 use crate::value::object::Object;
 use crate::value::ops::conversions::ValueConversion;
-use crate::value::{Root, Typeof, Unpack, Value, ValueContext, ValueKind};
+use crate::value::{Root, Typeof, Unpack, Value, ValueKind};
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     throw!(cx.scope, Error, "Dynamic code compilation is currently not supported")
@@ -35,7 +36,7 @@ pub fn apply(cx: CallContext) -> Result<Value, Value> {
     };
 
     target_callee
-        .apply(cx.scope, target_this.unwrap_or_undefined(), target_args)
+        .apply(cx.scope, target_this.map_or(This::Default, This::Bound), target_args)
         .root(cx.scope)
 }
 
@@ -62,7 +63,7 @@ pub fn call(cx: CallContext) -> Result<Value, Value> {
     target_callee
         .apply(
             cx.scope,
-            target_this.unwrap_or_undefined(),
+            target_this.map_or(This::Default, This::Bound),
             target_args.unwrap_or_default(),
         )
         .root(cx.scope)

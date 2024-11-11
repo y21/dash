@@ -13,6 +13,7 @@ use dash_rt::format_value;
 use dash_rt::runtime::Runtime;
 use dash_rt::state::State;
 use dash_vm::eval::EvalError;
+use dash_vm::frame::This;
 use dash_vm::gc::ObjectId;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::array::Array;
@@ -231,12 +232,8 @@ fn execute_node_module(
 
     let dirname = Value::string(scope.intern(dir_path.to_str().expect("invalid utf-8 path")).into());
     let filename = Value::string(scope.intern(file_path.to_str().expect("invalid utf-8 path")).into());
-    fun.apply(
-        scope,
-        Value::undefined(),
-        vec![exports, module, require, dirname, filename],
-    )
-    .map_err(|err| (EvalError::Exception(err), code))?;
+    fun.apply(scope, This::Default, vec![exports, module, require, dirname, filename])
+        .map_err(|err| (EvalError::Exception(err), code))?;
 
     Ok(module)
 }
@@ -282,7 +279,7 @@ impl Object for RequireFunction {
         &self,
         scope: &mut LocalScope,
         _callee: dash_vm::gc::ObjectId,
-        _this: Value,
+        _this: This,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         let Some(ValueKind::String(raw_arg)) = args.first().unpack() else {

@@ -2,6 +2,7 @@ use std::cell::RefCell;
 
 use dash_proc_macro::Trace;
 
+use crate::frame::This;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
@@ -104,7 +105,7 @@ impl Object for Promise {
         &self,
         scope: &mut crate::localscope::LocalScope,
         callee: ObjectId,
-        this: Value,
+        this: This,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         self.obj.apply(scope, callee, this, args)
@@ -170,7 +171,7 @@ impl Object for PromiseResolver {
         &self,
         scope: &mut crate::localscope::LocalScope,
         _callee: ObjectId,
-        _this: Value,
+        _this: This,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         scope.drive_promise(
@@ -246,7 +247,7 @@ impl Object for PromiseRejecter {
         &self,
         scope: &mut crate::localscope::LocalScope,
         _callee: ObjectId,
-        _this: Value,
+        _this: This,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         scope.drive_promise(

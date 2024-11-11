@@ -6,6 +6,7 @@ use dash_middle::interner::Symbol;
 use dash_proc_macro::Trace;
 use dash_rt::state::State;
 use dash_rt::typemap::Key;
+use dash_vm::frame::This;
 use dash_vm::gc::ObjectId;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::function::native::{register_native_fn, CallContext};
@@ -158,7 +159,7 @@ fn emit(cx: CallContext) -> Result<Value, Value> {
         let mut did_emit = false;
         if let Some(handlers) = this.handlers.borrow().get(&name.sym()) {
             for handler in handlers {
-                handler.apply(sc, cx.this, args.to_owned()).root_err(sc)?;
+                handler.apply(sc, This::Bound(cx.this), args.to_owned()).root_err(sc)?;
                 did_emit = true;
             }
         }

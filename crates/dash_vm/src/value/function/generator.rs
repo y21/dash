@@ -2,7 +2,7 @@ use std::cell::RefCell;
 
 use dash_proc_macro::Trace;
 
-use crate::frame::TryBlock;
+use crate::frame::{This, TryBlock};
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
@@ -28,7 +28,7 @@ impl GeneratorFunction {
         &self,
         scope: &mut LocalScope,
         callee: ObjectId,
-        _this: Value,
+        _this: This,
         args: Vec<Value>,
         _is_constructor_call: bool,
     ) -> Result<Value, Unrooted> {
@@ -158,7 +158,7 @@ impl Object for GeneratorIterator {
         &self,
         scope: &mut LocalScope,
         callee: ObjectId,
-        this: Value,
+        this: This,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         self.obj.apply(scope, callee, this, args)

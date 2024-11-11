@@ -3,6 +3,7 @@ use std::fmt::Write;
 use dash_middle::interner::sym;
 use dash_proc_macro::Trace;
 
+use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::{delegate, extract};
@@ -148,7 +149,7 @@ impl Object for Error {
         &self,
         scope: &mut LocalScope,
         callee: ObjectId,
-        this: Value,
+        this: This,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         self.obj.apply(scope, callee, this, args)

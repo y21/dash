@@ -1,5 +1,6 @@
 use dash_proc_macro::Trace;
 
+use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::value::function::bound::BoundFunction;
 use crate::value::function::native::CallContext;
@@ -30,7 +31,7 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     initiator
         .apply(
             cx.scope,
-            Value::undefined(),
+            This::Default,
             vec![Value::object(resolve), Value::object(reject)],
         )
         .root_err(cx.scope)?;
@@ -130,14 +131,11 @@ impl Object for ThenTask {
         &self,
         scope: &mut crate::localscope::LocalScope,
         _callee: ObjectId,
-        _this: Value,
+        _this: This,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         let resolved = args.first().unwrap_or_undefined();
-        let ret = self
-            .handler
-            .apply(scope, Value::undefined(), vec![resolved])
-            .root(scope)?;
+        let ret = self.handler.apply(scope, This::Default, vec![resolved]).root(scope)?;
 
         let ret_then = ret
             .get_property(scope, PropertyKey::String(sym::then.into()))?
@@ -152,7 +150,7 @@ impl Object for ThenTask {
             }
             _ => {
                 // Is a promise. Call value.then(resolver)
-                ret_then.apply(scope, ret, vec![Value::object(self.resolver)])?;
+                ret_then.apply(scope, This::Bound(ret), vec![Value::object(self.resolver)])?;
             }
         }
 

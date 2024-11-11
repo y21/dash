@@ -9,6 +9,8 @@ use dash_proc_macro::Trace;
 
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::gc::ObjectId;
+use crate::localscope::LocalScope;
+use crate::throw;
 use crate::value::string::JsString;
 use crate::value::{ExternalValue, Unrooted};
 
@@ -89,6 +91,38 @@ unsafe impl Trace for LoopCounterMap {
     fn trace(&self, _: &mut TraceCtxt<'_>) {}
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum This {
+    /// No `this` binding. Evaluates to the global object in non-strict mode, or undefined in strict mode
+    Default,
+    /// Initial state of `this` in subclass constructors. Throws an error if attempted to evaluate.
+    /// Gets changed to `Bound` by the call to super().
+    BeforeSuper,
+    /// Bound as a value.
+    Bound(Value),
+}
+
+impl This {
+    pub fn to_value(self, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+        match self {
+            // TODO: once we have strict mode, eval to undefined
+            This::Default => Ok(Value::object(scope.global)),
+            This::Bound(value) => Ok(value),
+            This::BeforeSuper => throw!(scope, Error, "`super()` must be called before accessing `this`"),
+        }
+    }
+}
+
+unsafe impl Trace for This {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
+        match self {
+            This::Default => {}
+            This::BeforeSuper => {}
+            This::Bound(value) => value.trace(cx),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Trace)]
 pub struct Frame {
     pub function: Rc<Function>,
@@ -98,7 +132,7 @@ pub struct Frame {
     pub extra_stack_space: usize,
     /// Contains local variable values from the outer scope
     pub externals: Rc<[ExternalValue]>,
-    pub this: Option<Value>,
+    pub this: This,
     pub sp: usize,
     pub state: FrameState,
     /// When evaluating a `return` op in a try/catch with a finally block,
@@ -117,7 +151,7 @@ pub struct Frame {
 
 impl Frame {
     pub fn from_function(
-        this: Option<Value>,
+        this: This,
         uf: &UserFunction,
         is_constructor_call: bool,
         is_flat_call: bool,
@@ -141,7 +175,7 @@ impl Frame {
         }
     }
 
-    pub fn from_module(this: Option<Value>, uf: &UserFunction, arguments: Option<ObjectId>) -> Self {
+    pub fn from_module(this: This, uf: &UserFunction, arguments: Option<ObjectId>) -> Self {
         let inner = uf.inner();
         Self {
             this,
@@ -182,7 +216,7 @@ impl Frame {
         };
 
         Self {
-            this: None,
+            this: This::Default,
             function: Rc::new(fun),
             externals: Vec::new().into(),
             ip: 0,

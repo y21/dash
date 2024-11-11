@@ -1,7 +1,7 @@
 use std::mem;
 
 use crate::dispatch::HandleResult;
-use crate::frame::Frame;
+use crate::frame::{Frame, This};
 use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::function::generator::{GeneratorIterator, GeneratorState};
@@ -41,7 +41,7 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
         let current_sp = cx.scope.stack_size();
         cx.scope.try_extend_stack(old_stack).root_err(cx.scope)?;
 
-        let mut frame = Frame::from_function(None, function, false, false, arguments);
+        let mut frame = Frame::from_function(This::Default, function, false, false, arguments);
         frame.set_ip(ip);
         frame.set_sp(current_sp);
 

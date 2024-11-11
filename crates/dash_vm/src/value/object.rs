@@ -4,6 +4,7 @@ use std::fmt::Debug;
 use std::hash::BuildHasherDefault;
 use std::ptr::NonNull;
 
+use crate::frame::This;
 use crate::gc::persistent::Persistent;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::gc::{ObjectId, ObjectVTable};
@@ -28,7 +29,7 @@ pub type ObjectMap<K, V> = hashbrown::HashMap<K, V, BuildHasherDefault<FxHasher>
 fn __assert_trait_object_safety(_: Box<dyn Object>) {}
 
 pub trait Object: Debug + Trace {
-    fn get_own_property(&self, sc: &mut LocalScope, this: Value, key: PropertyKey) -> Result<Unrooted, Unrooted> {
+    fn get_own_property(&self, sc: &mut LocalScope, this: This, key: PropertyKey) -> Result<Unrooted, Unrooted> {
         delegate_get_own_property(self, this, sc, key)
     }
 
@@ -38,7 +39,7 @@ pub trait Object: Debug + Trace {
         key: PropertyKey,
     ) -> Result<Option<PropertyValue>, Unrooted>;
 
-    fn get_property(&self, sc: &mut LocalScope, this: Value, key: PropertyKey) -> Result<Unrooted, Unrooted> {
+    fn get_property(&self, sc: &mut LocalScope, this: This, key: PropertyKey) -> Result<Unrooted, Unrooted> {
         delegate_get_property(self, this, sc, key)
     }
 
@@ -72,7 +73,7 @@ pub trait Object: Debug + Trace {
         &self,
         scope: &mut LocalScope,
         callee: ObjectId,
-        this: Value,
+        this: This,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted>;
 
@@ -80,7 +81,7 @@ pub trait Object: Debug + Trace {
         &self,
         scope: &mut LocalScope,
         callee: ObjectId,
-        this: Value,
+        this: This,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         self.apply(scope, callee, this, args)
@@ -118,7 +119,7 @@ macro_rules! delegate {
         fn get_property(
             &self,
             sc: &mut $crate::localscope::LocalScope,
-            this: $crate::value::Value,
+            this: $crate::frame::This,
             key: $crate::value::object::PropertyKey,
         ) -> Result<$crate::value::Unrooted, $crate::value::Unrooted> {
             $crate::value::object::Object::get_property(&self.$field, sc, this, key)
@@ -172,7 +173,7 @@ macro_rules! delegate {
             &self,
             sc: &mut $crate::localscope::LocalScope,
             id: $crate::gc::ObjectId,
-            this: $crate::value::Value,
+            this: $crate::frame::This,
             args: Vec<$crate::value::Value>,
         ) -> Result<$crate::value::Unrooted, $crate::value::Unrooted> {
             $crate::value::object::Object::apply(&self.$field, sc, id, this, args)
@@ -183,7 +184,7 @@ macro_rules! delegate {
             &self,
             sc: &mut $crate::localscope::LocalScope,
             id: $crate::gc::ObjectId,
-            this: $crate::value::Value,
+            this: $crate::frame::This,
             args: Vec<$crate::value::Value>,
         ) -> Result<$crate::value::Unrooted, $crate::value::Unrooted> {
             $crate::value::object::Object::construct(&self.$field, sc, id, this, args)
@@ -313,7 +314,7 @@ impl PropertyValue {
         self.kind
     }
 
-    pub fn get_or_apply(&self, sc: &mut LocalScope, this: Value) -> Result<Unrooted, Unrooted> {
+    pub fn get_or_apply(&self, sc: &mut LocalScope, this: This) -> Result<Unrooted, Unrooted> {
         self.kind.get_or_apply(sc, this)
     }
 
@@ -441,7 +442,7 @@ impl PropertyValueKind {
         }
     }
 
-    pub fn get_or_apply(&self, sc: &mut LocalScope, this: Value) -> Result<Unrooted, Unrooted> {
+    pub fn get_or_apply(&self, sc: &mut LocalScope, this: This) -> Result<Unrooted, Unrooted> {
         match *self {
             Self::Static(value) => Ok(value.into()),
             Self::Trap { get, .. } => match get {
@@ -670,7 +671,7 @@ impl Object for NamedObject {
         &self,
         _sc: &mut LocalScope,
         _handle: ObjectId,
-        _this: Value,
+        _this: This,
         _args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         Ok(Value::undefined().into())
@@ -715,7 +716,7 @@ impl ObjectId {
 // TODO: can these be inherent methods? or do we actually require the `ObjectId: Object` trait obligation anywhere?
 // then they also wouldn't need to take &self
 impl Object for ObjectId {
-    fn get_own_property(&self, sc: &mut LocalScope, this: Value, key: PropertyKey) -> Result<Unrooted, Unrooted> {
+    fn get_own_property(&self, sc: &mut LocalScope, this: This, key: PropertyKey) -> Result<Unrooted, Unrooted> {
         unsafe { (self.vtable(sc).js_get_own_property)(self.data_ptr(sc), sc, this, key) }
     }
 
@@ -727,7 +728,7 @@ impl Object for ObjectId {
         unsafe { (self.vtable(sc).js_get_own_property_descriptor)(self.data_ptr(sc), sc, key) }
     }
 
-    fn get_property(&self, sc: &mut LocalScope, this: Value, key: PropertyKey) -> Result<Unrooted, Unrooted> {
+    fn get_property(&self, sc: &mut LocalScope, this: This, key: PropertyKey) -> Result<Unrooted, Unrooted> {
         unsafe { (self.vtable(sc).js_get_property)(self.data_ptr(sc), sc, this, key) }
     }
 
@@ -759,7 +760,7 @@ impl Object for ObjectId {
         &self,
         scope: &mut LocalScope,
         callee: ObjectId,
-        this: Value,
+        this: This,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         unsafe { (self.vtable(scope).js_apply)(self.data_ptr(scope), scope, callee, this, args) }
@@ -769,7 +770,7 @@ impl Object for ObjectId {
         &self,
         scope: &mut LocalScope,
         callee: ObjectId,
-        this: Value,
+        this: This,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
         unsafe { (self.vtable(scope).js_construct)(self.data_ptr(scope), scope, callee, this, args) }
@@ -804,19 +805,19 @@ impl ObjectId {
     }
 
     pub fn get_property(self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Unrooted> {
-        Object::get_property(&self, sc, Value::object(self), key)
+        Object::get_property(&self, sc, This::Bound(Value::object(self)), key)
     }
 
     pub fn get_own_property(self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Unrooted> {
-        Object::get_own_property(&self, sc, Value::object(self), key)
+        Object::get_own_property(&self, sc, This::Bound(Value::object(self)), key)
     }
 
-    pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
+    pub fn apply(&self, sc: &mut LocalScope, this: This, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
         let callee = *self;
         Object::apply(self, sc, callee, this, args)
     }
 
-    pub fn construct(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
+    pub fn construct(&self, sc: &mut LocalScope, this: This, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
         let callee = *self;
         Object::construct(self, sc, callee, this, args)
     }
@@ -851,11 +852,11 @@ impl Persistent {
         self.id().get_property(sc, key)
     }
 
-    pub fn apply(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
+    pub fn apply(&self, sc: &mut LocalScope, this: This, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
         self.id().apply(sc, this, args)
     }
 
-    pub fn construct(&self, sc: &mut LocalScope, this: Value, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
+    pub fn construct(&self, sc: &mut LocalScope, this: This, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
         self.id().construct(sc, this, args)
     }
 
@@ -865,7 +866,7 @@ impl Persistent {
 /// Delegates a get_property call to get_property_descriptor and converts the return value respectively
 pub fn delegate_get_property<T: Object + ?Sized>(
     this: &T,
-    this_value: Value,
+    this_value: This,
     sc: &mut LocalScope,
     key: PropertyKey,
 ) -> Result<Unrooted, Unrooted> {
@@ -876,7 +877,7 @@ pub fn delegate_get_property<T: Object + ?Sized>(
 /// Delegates a get_property call to get_property_descriptor and converts the return value respectively
 pub fn delegate_get_own_property<T: Object + ?Sized>(
     this: &T,
-    this_value: Value,
+    this_value: This,
     sc: &mut LocalScope,
     key: PropertyKey,
 ) -> Result<Unrooted, Unrooted> {
