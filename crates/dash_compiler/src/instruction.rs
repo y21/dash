@@ -52,6 +52,7 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
         build_typeof Instruction::TypeOf,
         build_bitnot Instruction::BitNot,
         build_not Instruction::Not,
+        build_bind_this Instruction::BindThis,
         build_this Instruction::This,
         build_strict_eq Instruction::StrictEq,
         build_strict_ne Instruction::StrictNe,

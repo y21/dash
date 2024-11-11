@@ -115,7 +115,7 @@ impl This {
 
 unsafe impl Trace for This {
     fn trace(&self, cx: &mut TraceCtxt<'_>) {
-        match self {
+        match *self {
             This::Default => {}
             This::BeforeSuper => {}
             This::Bound(value) => value.trace(cx),
@@ -213,6 +213,7 @@ impl Frame {
             source: cr.source,
             debug_symbols: cr.debug_symbols,
             references_arguments: false,
+            has_extends_clause: false,
         };
 
         Self {

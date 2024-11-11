@@ -177,6 +177,7 @@ unsafe impl Trace for dash_middle::compiler::constant::Function {
             source: Rc { .. },
             debug_symbols: _,
             references_arguments: _,
+            has_extends_clause: _,
         } = self;
         name.trace(cx);
         numbers.as_slice().trace(cx);

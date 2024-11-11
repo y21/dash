@@ -557,15 +557,16 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                                     key,
                                     Expr {
                                         span: current.span.to(self.previous()?.span),
-                                        kind: ExprKind::function(FunctionDeclaration::new(
-                                            None,
+                                        kind: ExprKind::function(FunctionDeclaration {
                                             id,
+                                            name: None,
                                             parameters,
-                                            body.0,
-                                            FunctionKind::Function(Asyncness::No),
-                                            None,
-                                            None,
-                                        )),
+                                            statements: body.0,
+                                            ty: FunctionKind::Function(Asyncness::No),
+                                            ty_segment: None,
+                                            constructor_initializers: None,
+                                            has_extends_clause: false,
+                                        }),
                                     },
                                 ));
                             } else {
@@ -617,15 +618,16 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                             self.eat(TokenType::LeftBrace, true)?;
                             let BlockStatement(stmts, scope_id) = self.parse_block()?;
 
-                            let fun = FunctionDeclaration::new(
-                                None,
-                                scope_id,
-                                params,
-                                stmts,
-                                FunctionKind::Function(Asyncness::No),
-                                None,
-                                None,
-                            );
+                            let fun = FunctionDeclaration {
+                                name: None,
+                                id: scope_id,
+                                parameters: params,
+                                statements: stmts,
+                                ty: FunctionKind::Function(Asyncness::No),
+                                ty_segment: None,
+                                constructor_initializers: None,
+                                has_extends_clause: false,
+                            };
                             items.push((
                                 key,
                                 Expr {
@@ -725,17 +727,18 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
                     Expr {
                         span: current.span.to(statement.span),
-                        kind: ExprKind::function(FunctionDeclaration::new(
-                            None,
-                            self.scope_count.inc(),
-                            params,
-                            vec![statement],
+                        kind: ExprKind::function(FunctionDeclaration {
+                            name: None,
+                            id: self.scope_count.inc(),
+                            parameters: params,
+                            statements: vec![statement],
                             // FIXME: this isn't correct -- we're currently desugaring async closures
                             // as if they're simply async functions
-                            FunctionKind::Function(Asyncness::Yes),
-                            None,
-                            None,
-                        )),
+                            ty: FunctionKind::Function(Asyncness::Yes),
+                            ty_segment: None,
+                            constructor_initializers: None,
+                            has_extends_clause: false,
+                        }),
                     }
                 } else {
                     return None;
@@ -845,7 +848,16 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         self.new_level_stack.pop_level().unwrap();
 
         Some((
-            FunctionDeclaration::new(name, scope_id, arguments, statements, ty, ty_seg, None),
+            FunctionDeclaration {
+                name,
+                id: scope_id,
+                parameters: arguments,
+                statements,
+                ty,
+                ty_segment: ty_seg,
+                constructor_initializers: None,
+                has_extends_clause: false,
+            },
             self.previous()?.span,
         ))
     }
@@ -917,15 +929,16 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         let func_id = self.scope_count.inc();
         Some(Expr {
             span: pre_span.to(body.span),
-            kind: ExprKind::function(FunctionDeclaration::new(
-                None,
-                func_id,
-                list,
-                vec![body],
-                FunctionKind::Arrow,
-                None,
-                None,
-            )),
+            kind: ExprKind::function(FunctionDeclaration {
+                name: None,
+                id: func_id,
+                parameters: list,
+                statements: vec![body],
+                ty: FunctionKind::Arrow,
+                ty_segment: None,
+                constructor_initializers: None,
+                has_extends_clause: false,
+            }),
         })
     }
 }

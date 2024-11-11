@@ -46,6 +46,7 @@ pub enum Instruction {
     DynamicPropAccess,
     ArrayLit,
     ObjLit,
+    BindThis,
     This,
     StaticPropAssign,
     DynamicPropAssign,

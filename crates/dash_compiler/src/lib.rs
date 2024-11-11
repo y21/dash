@@ -1345,6 +1345,42 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                 kind: ExprKind::assignment_local_space(super_id, superclass_constructor_call, TokenType::Assignment),
             })?;
 
+            // __super.constructor = this.constructor
+            ib.visit_expression_statement(Expr {
+                span: Span::COMPILER_GENERATED,
+                kind: ExprKind::assignment(
+                    Expr {
+                        span: Span::COMPILER_GENERATED,
+                        kind: ExprKind::property_access(
+                            false,
+                            Expr {
+                                span: Span::COMPILER_GENERATED,
+                                kind: ExprKind::compiled(compile_local_load(super_id, false)),
+                            },
+                            Expr {
+                                span: Span::COMPILER_GENERATED,
+                                kind: ExprKind::identifier(sym::constructor),
+                            },
+                        ),
+                    },
+                    Expr {
+                        span: Span::COMPILER_GENERATED,
+                        kind: ExprKind::property_access(
+                            false,
+                            Expr {
+                                span: Span::COMPILER_GENERATED,
+                                kind: ExprKind::identifier(sym::this),
+                            },
+                            Expr {
+                                span: Span::COMPILER_GENERATED,
+                                kind: ExprKind::identifier(sym::constructor),
+                            },
+                        ),
+                    },
+                    TokenType::Assignment,
+                ),
+            })?;
+
             // __super.__proto__ = this.__proto__
             ib.visit_expression_statement(Expr {
                 span: Span::COMPILER_GENERATED,
@@ -1369,7 +1405,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                             false,
                             Expr {
                                 span: Span::COMPILER_GENERATED,
-                                kind: ExprKind::Literal(LiteralExpr::Identifier(sym::this)),
+                                kind: ExprKind::identifier(sym::this),
                             },
                             Expr {
                                 span: Span::COMPILER_GENERATED,
@@ -1381,32 +1417,12 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                 ),
             })?;
 
-            // this.__proto__ = __super
-            ib.visit_assignment_expression(
-                Span::COMPILER_GENERATED,
-                AssignmentExpr::new_expr_place(
-                    Expr {
-                        span: Span::COMPILER_GENERATED,
-                        kind: ExprKind::property_access(
-                            false,
-                            Expr {
-                                span: Span::COMPILER_GENERATED,
-                                kind: ExprKind::Literal(LiteralExpr::Identifier(sym::this)),
-                            },
-                            Expr {
-                                span: Span::COMPILER_GENERATED,
-                                kind: ExprKind::identifier(sym::__proto__),
-                            },
-                        ),
-                    },
-                    Expr {
-                        span: Span::COMPILER_GENERATED,
-                        kind: ExprKind::compiled(compile_local_load(super_id, false)),
-                    },
-                    TokenType::Assignment,
-                ),
-            )?;
-            // Assignment expression leaves `super` on the stack, as it is needed by expressions
+            // this = __super
+            ib.build_local_load(super_id, false);
+            ib.build_bind_this();
+
+            // Leave the instance on the stack as required by expressions
+            ib.build_this();
 
             return Ok(());
         }
@@ -1674,6 +1690,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             ty,
             ty_segment: _,
             constructor_initializers,
+            has_extends_clause,
         }: FunctionDeclaration,
     ) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
@@ -1754,6 +1771,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
                 debug_symbols: cmp.debug_symbols,
                 source: Rc::clone(&ib.source),
                 references_arguments: cmp.references_arguments.is_some(),
+                has_extends_clause,
             };
             ib.build_function_constant(function)
                 .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
@@ -2182,6 +2200,7 @@ impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
             ty: FunctionKind::Function(Asyncness::No),
             ty_segment: None,
             constructor_initializers: Some(fields.clone().filter(|member| !member.static_).cloned().collect()),
+            has_extends_clause: class.extends.is_some(),
         };
 
         ib.visit_expression_statement(Expr {

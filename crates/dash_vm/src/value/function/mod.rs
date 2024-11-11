@@ -240,8 +240,21 @@ impl Object for Function {
         _this: This,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
-        let this = self.new_instance(callee, scope)?;
-        handle_call(self, scope, callee, This::Bound(Value::object(this)), args, true)
+        let this = 'this: {
+            if let Some(user) = self.inner_user_function() {
+                if user.inner().has_extends_clause {
+                    // We don't immediately create an instance when instantiating a subclass.
+                    // The super() call desugaring will initialize `this`
+
+                    break 'this This::BeforeSuper;
+                }
+            }
+
+            let inst = self.new_instance(callee, scope)?;
+            This::Bound(Value::object(inst))
+        };
+
+        handle_call(self, scope, callee, this, args, true)
     }
 
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {

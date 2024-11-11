@@ -166,22 +166,23 @@ impl<'a, 'interner> Parser<'a, 'interner> {
                 let body = self.parse_statement()?;
 
                 let func_id = self.scope_count.inc();
-                let func = FunctionDeclaration::new(
-                    match key {
+                let func = FunctionDeclaration {
+                    name: match key {
                         ClassMemberKey::Named(name) => Some(self.create_binding(name)),
                         // TODO: not correct, `class V { ['a']() {} }` should have its name set to 'a'
                         ClassMemberKey::Computed(_) => None,
                     },
-                    func_id,
-                    arguments,
-                    vec![body],
-                    match is_generator {
+                    id: func_id,
+                    parameters: arguments,
+                    statements: vec![body],
+                    ty: match is_generator {
                         true => FunctionKind::Generator,
                         false => FunctionKind::Function(asyncness),
                     },
-                    ty_seg,
-                    None,
-                );
+                    ty_segment: ty_seg,
+                    constructor_initializers: None,
+                    has_extends_clause: false,
+                };
 
                 members.push(ClassMember {
                     private: is_private,

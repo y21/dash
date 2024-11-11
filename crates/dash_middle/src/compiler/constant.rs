@@ -83,6 +83,7 @@ pub struct Function {
     pub source: Rc<str>,
     pub debug_symbols: DebugSymbols,
     pub references_arguments: bool,
+    pub has_extends_clause: bool,
 }
 
 impl Function {

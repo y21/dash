@@ -1997,6 +1997,12 @@ mod handlers {
         Ok(None)
     }
 
+    pub fn bindthis(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
+        let value = cx.pop_stack_rooted();
+        cx.active_frame_mut().this = This::Bound(value);
+        Ok(None)
+    }
+
     pub fn global_this(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let global = cx.global;
         cx.stack.push(Value::object(global));
@@ -2393,6 +2399,7 @@ pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResu
         Instruction::DynamicPropAccess => handlers::dynamicpropertyaccess(cx),
         Instruction::ArrayLit => handlers::arraylit(cx),
         Instruction::ObjLit => handlers::objlit(cx),
+        Instruction::BindThis => handlers::bindthis(cx),
         Instruction::This => handlers::this(cx),
         Instruction::StaticPropAssign => handlers::staticpropertyassign(cx),
         Instruction::DynamicPropAssign => handlers::dynamicpropertyassign(cx),

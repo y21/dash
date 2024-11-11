@@ -283,6 +283,7 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                     self.handle_op_instr("objlit", &props);
                 }
                 Instruction::This => self.handle_opless_instr("this"),
+                Instruction::BindThis => self.handle_opless_instr("bindthis"),
                 Instruction::StaticPropAssign => {
                     let _k = self.read()?;
                     let b = self.read_u16()?;

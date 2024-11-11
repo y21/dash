@@ -499,6 +499,8 @@ pub struct FunctionDeclaration {
     /// If this function is a desugared class constructor,
     /// then this contains all the instance members that need to be initialized.
     pub constructor_initializers: Option<Vec<ClassMember>>,
+    /// Whether this function is a desugared class constructor and the class has an `extends` clause
+    pub has_extends_clause: bool,
 }
 
 impl fmt::Display for FunctionDeclaration {
@@ -551,29 +553,6 @@ where
     }
 
     Ok(())
-}
-
-impl FunctionDeclaration {
-    /// Creates a new function declaration
-    pub fn new(
-        name: Option<Binding>,
-        id: ScopeId,
-        parameters: Vec<(Parameter, Option<Expr>, Option<TypeSegment>)>,
-        statements: Vec<Statement>,
-        ty: FunctionKind,
-        ty_segment: Option<TypeSegment>,
-        constructor_initializers: Option<Vec<ClassMember>>,
-    ) -> Self {
-        Self {
-            id,
-            name,
-            parameters,
-            statements,
-            ty,
-            ty_segment,
-            constructor_initializers,
-        }
-    }
 }
 
 /// A block statement, primarily used to enter a new scope
