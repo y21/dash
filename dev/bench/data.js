@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1731287747672,
+  "lastUpdate": 1731455274332,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -10637,6 +10637,60 @@ window.BENCHMARK_DATA = {
             "name": "exec tinycolor2 parse hex+toFilter",
             "value": 27688305,
             "range": "± 2070965",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "3b2c157e068a05c57e4ab30bb215b62d5c97781e",
+          "message": "reduce scope of refcell guards",
+          "timestamp": "2024-11-13T00:43:50+01:00",
+          "tree_id": "c4bd4a5ea9e840b309cd3c38b9805de2bd1832fd",
+          "url": "https://github.com/y21/dash/commit/3b2c157e068a05c57e4ab30bb215b62d5c97781e"
+        },
+        "date": 1731455273505,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1541067,
+            "range": "± 67702",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 147409,
+            "range": "± 9517",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 75609,
+            "range": "± 11665",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse+compile tinycolor2",
+            "value": 2222279,
+            "range": "± 80397",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "exec tinycolor2 parse hex+toFilter",
+            "value": 26503522,
+            "range": "± 3006360",
             "unit": "ns/iter"
           }
         ]
