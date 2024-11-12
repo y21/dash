@@ -234,13 +234,11 @@ impl Object for Array {
 
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
         if let PropertyKey::String(key) = &key {
-            let mut items = self.items.borrow_mut();
-
             if key.sym() == sym::length {
                 // TODO: this shouldnt be undefined
                 let value = value.kind().get_or_apply(sc, This::Default).root(sc)?;
                 if let Ok(new_len) = u32::try_from(value.to_number(sc)? as usize) {
-                    items.resize(new_len);
+                    self.items.borrow_mut().resize(new_len);
                     return Ok(());
                 }
 
@@ -249,7 +247,7 @@ impl Object for Array {
 
             if let Ok(index) = key.res(sc).parse::<u32>() {
                 if index < MAX_LENGTH {
-                    items.set(index, value);
+                    self.items.borrow_mut().set(index, value);
 
                     return Ok(());
                 }
@@ -381,10 +379,10 @@ impl ArrayIterator {
 
 /// Equivalent to calling get_property, but specialized for arrays
 pub fn spec_array_get_property(scope: &mut LocalScope<'_>, target: &Value, index: usize) -> Result<Unrooted, Unrooted> {
-    if let Some(arr) = target.unpack().downcast_ref::<Array>(scope) {
-        let inner = arr.items.borrow();
-        if let Ok(index) = u32::try_from(index) {
-            if index < MAX_LENGTH {
+    if let Ok(index) = u32::try_from(index) {
+        if index < MAX_LENGTH {
+            if let Some(arr) = target.unpack().downcast_ref::<Array>(scope) {
+                let inner = arr.items.borrow();
                 return match inner.get(index) {
                     Some(MaybeHoley::Some(value)) => value.get_or_apply(scope, This::Default),
                     Some(MaybeHoley::Hole) | None => Ok(Value::undefined().into()),
