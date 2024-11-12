@@ -4,15 +4,15 @@ use std::mem;
 
 use dash_log::debug;
 use dash_proc_macro::Trace;
+use table::ArrayTable;
 
 use crate::frame::This;
+use crate::gc::trace::Trace;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::value::object::PropertyDataDescriptor;
 use crate::{delegate, extract, throw, Vm};
 use dash_middle::interner::sym;
-
-pub use self::holey::{Element, HoleyArray};
 
 use super::object::{NamedObject, Object, PropertyKey, PropertyValue, PropertyValueKind};
 use super::ops::conversions::ValueConversion;
@@ -20,14 +20,15 @@ use super::primitive::array_like_keys;
 use super::root_ext::RootErrExt;
 use super::{Root, Unpack, Unrooted, Value};
 
-mod holey;
+pub mod table;
 
-pub const MAX_LENGTH: usize = 4294967295;
+pub const MAX_LENGTH: u32 = 4294967295;
 
 #[derive(Debug)]
-pub enum ArrayInner<E> {
-    NonHoley(Vec<E>),
-    Holey(HoleyArray<E>),
+pub enum ArrayInner {
+    // TODO: store Value, also support holes
+    Dense(Vec<PropertyValue>),
+    Table(ArrayTable),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -36,102 +37,113 @@ pub enum MaybeHoley<T> {
     Hole,
 }
 
-impl<E: std::fmt::Debug> ArrayInner<E> {
-    /// Computes the length.
-    /// NOTE: this can potentially be an expensive operation for holey arrays, if it has an unusual high number of holes
-    pub fn len(&self) -> usize {
+impl ArrayInner {
+    /// Computes the length (the highest index at which an element is stored + 1)
+    #[expect(clippy::len_without_is_empty)]
+    pub fn len(&self) -> u32 {
         match self {
-            ArrayInner::NonHoley(v) => v.len(),
-            ArrayInner::Holey(v) => v.compute_len(),
+            ArrayInner::Dense(v) => v.len() as u32,
+            ArrayInner::Table(v) => v.len(),
         }
     }
 
-    pub fn is_empty(&self) -> bool {
+    pub fn get(&self, at: u32) -> Option<MaybeHoley<PropertyValue>> {
         match self {
-            ArrayInner::NonHoley(v) => v.is_empty(),
-            ArrayInner::Holey(v) => v.is_empty(),
+            ArrayInner::Dense(v) => v.get(at as usize).cloned().map(MaybeHoley::Some),
+            ArrayInner::Table(v) => v.get(at),
         }
     }
 
-    pub fn get(&self, at: usize) -> Option<MaybeHoley<&E>> {
-        match self {
-            ArrayInner::NonHoley(v) => v.get(at).map(MaybeHoley::Some),
-            ArrayInner::Holey(v) => v.get(at),
+    fn transition_to_table(&mut self) {
+        if let ArrayInner::Dense(v) = self {
+            let len = v.len();
+            let table = ArrayTable::from_iter(mem::take(v), len as u32);
+            *self = ArrayInner::Table(table);
+        }
+    }
+
+    fn transition_to_dense_if_no_holes(&mut self) {
+        if let ArrayInner::Table(table) = self {
+            if !table.has_holes() {
+                *self = Self::Dense(table.take_into_sorted_array());
+            }
         }
     }
 
     /// Resizes this array, potentially switching to a holey kind.
-    pub fn resize(&mut self, to: usize) {
+    pub fn resize(&mut self, new_length: u32) {
         match self {
-            ArrayInner::NonHoley(v) => {
+            ArrayInner::Dense(v) => {
                 let len = v.len();
-                if to <= len {
-                    v.truncate(to);
+                if new_length as usize <= len {
+                    v.truncate(new_length as usize);
                 } else {
                     debug!("out of bounds resize, convert to holey array");
-                    let hole = to - len;
-                    let mut holey = mem::take(v).into_iter().map(Element::Value).collect::<Vec<_>>();
-                    holey.push(Element::Hole { count: hole });
-                    *self = ArrayInner::Holey(HoleyArray::from(holey));
+
+                    let table = ArrayTable::from_iter(mem::take(v), new_length);
+                    *self = ArrayInner::Table(table);
                 }
             }
-            ArrayInner::Holey(v) => v.resize(to),
+            ArrayInner::Table(v) => v.resize(new_length),
         }
     }
 
-    pub fn set(&mut self, at: usize, value: E) {
+    pub fn set(&mut self, at: u32, value: PropertyValue) {
         match self {
-            ArrayInner::NonHoley(v) => {
-                match at.cmp(&v.len()) {
-                    Ordering::Less => v[at] = value,
+            ArrayInner::Dense(v) => {
+                match (at as usize).cmp(&v.len()) {
+                    Ordering::Less => v[at as usize] = value,
                     Ordering::Equal => v.push(value),
                     Ordering::Greater => {
                         // resize us, causing self to have a hole and do the set logic below
-                        self.resize(at);
+                        self.resize(at + 1);
                         self.set(at, value);
-                        debug_assert!(matches!(self, Self::Holey(_)));
+                        debug_assert!(matches!(self, Self::Table(_)));
                     }
                 }
             }
-            ArrayInner::Holey(v) => {
+            ArrayInner::Table(v) => {
                 v.set(at, value);
+                self.transition_to_dense_if_no_holes();
             }
         }
     }
 
-    pub fn push(&mut self, value: E) {
+    pub fn push(&mut self, value: PropertyValue) {
         match self {
-            ArrayInner::NonHoley(v) => v.push(value),
-            ArrayInner::Holey(v) => v.push(value),
+            ArrayInner::Dense(v) => v.push(value),
+            ArrayInner::Table(v) => v.push(value),
         }
     }
 
-    pub fn remove(&mut self, at: usize) -> Option<MaybeHoley<E>> {
+    pub fn delete(&mut self, at: u32) -> Option<MaybeHoley<PropertyValue>> {
         match self {
-            ArrayInner::NonHoley(v) => {
-                if at < v.len() {
-                    Some(MaybeHoley::Some(v.remove(at)))
+            ArrayInner::Dense(v) => {
+                if (at as usize) < v.len() {
+                    // Deleting an element in the middle means there will be a hole, so transition to array table
+                    self.transition_to_table();
+                    self.delete(at)
                 } else {
                     None
                 }
             }
-            ArrayInner::Holey(v) => v.remove(at),
+            ArrayInner::Table(v) => v.delete_make_hole(at),
         }
     }
 }
 
-unsafe impl crate::gc::trace::Trace for ArrayInner<PropertyValue> {
+unsafe impl Trace for ArrayInner {
     fn trace(&self, cx: &mut crate::gc::trace::TraceCtxt<'_>) {
         match self {
-            ArrayInner::NonHoley(v) => v.trace(cx),
-            ArrayInner::Holey(v) => v.trace(cx),
+            ArrayInner::Dense(v) => v.trace(cx),
+            ArrayInner::Table(v) => v.trace(cx),
         }
     }
 }
 
 #[derive(Debug, Trace)]
 pub struct Array {
-    pub items: RefCell<ArrayInner<PropertyValue>>,
+    pub items: RefCell<ArrayInner>,
     obj: NamedObject,
 }
 
@@ -147,14 +159,14 @@ impl Array {
     /// Creates a non-holey array from a vec of values
     pub fn from_vec(vm: &Vm, items: Vec<PropertyValue>) -> Self {
         Self {
-            items: RefCell::new(ArrayInner::NonHoley(items)),
+            items: RefCell::new(ArrayInner::Dense(items)),
             obj: get_named_object(vm),
         }
     }
 
-    pub fn from_possibly_holey(vm: &Vm, elements: Vec<Element<PropertyValue>>) -> Self {
+    pub fn from_table(vm: &Vm, table: ArrayTable) -> Self {
         Self {
-            items: RefCell::new(ArrayInner::Holey(elements.into())),
+            items: RefCell::new(ArrayInner::Table(table)),
             obj: get_named_object(vm),
         }
     }
@@ -162,30 +174,14 @@ impl Array {
     /// Creates a holey array with a given length
     pub fn with_hole(vm: &Vm, len: usize) -> Self {
         Self {
-            items: RefCell::new(ArrayInner::Holey(HoleyArray::from(vec![Element::Hole { count: len }]))),
+            items: RefCell::new(ArrayInner::Table(ArrayTable::with_len(len as u32))),
             obj: get_named_object(vm),
         }
     }
 
     /// Tries to convert this holey array into a non-holey array
     pub fn try_convert_to_non_holey(&self) {
-        let values = if let ArrayInner::Holey(elements) = &mut *self.items.borrow_mut() {
-            if !elements.has_hole() {
-                mem::take(elements)
-                    .into_inner()
-                    .into_iter()
-                    .map(|element| match element {
-                        Element::Value(value) => value,
-                        _ => unreachable!(),
-                    })
-                    .collect::<Vec<_>>()
-            } else {
-                return;
-            }
-        } else {
-            return;
-        };
-        *self.items.borrow_mut() = ArrayInner::NonHoley(values);
+        self.items.borrow_mut().transition_to_dense_if_no_holes();
     }
 
     /// Converts this potentially-holey array into a non-holey array, assuming that it succeeds.
@@ -193,24 +189,13 @@ impl Array {
     ///
     /// This can be useful to call after an operation that is guaranteed to remove any holes (e.g. filling an array)
     pub fn force_convert_to_non_holey(&self) {
-        let values = if let ArrayInner::Holey(elements) = &mut *self.items.borrow_mut() {
-            mem::take(elements)
-                .into_inner()
-                .into_iter()
-                .map(|element| match element {
-                    Element::Value(value) => value,
-                    other => unreachable!("expected value element but got {other:?}"),
-                })
-                .collect::<Vec<_>>()
-        } else {
-            return;
-        };
-        *self.items.borrow_mut() = ArrayInner::NonHoley(values);
+        self.try_convert_to_non_holey();
+        assert!(matches!(*self.items.borrow(), ArrayInner::Dense(_)));
     }
 
     pub fn with_obj(obj: NamedObject) -> Self {
         Self {
-            items: RefCell::new(ArrayInner::NonHoley(Vec::new())),
+            items: RefCell::new(ArrayInner::Dense(Vec::new())),
             obj,
         }
     }
@@ -232,11 +217,11 @@ impl Object for Array {
                 }));
             }
 
-            if let Ok(index) = key.res(sc).parse::<usize>() {
+            if let Ok(index) = key.res(sc).parse::<u32>() {
                 if index < MAX_LENGTH {
                     if let Some(element) = items.get(index) {
                         match element {
-                            MaybeHoley::Some(v) => return Ok(Some(v.clone())),
+                            MaybeHoley::Some(v) => return Ok(Some(v)),
                             MaybeHoley::Hole => return Ok(None),
                         }
                     }
@@ -254,19 +239,18 @@ impl Object for Array {
             if key.sym() == sym::length {
                 // TODO: this shouldnt be undefined
                 let value = value.kind().get_or_apply(sc, This::Default).root(sc)?;
-                let new_len = value.to_number(sc)? as usize;
-
-                if new_len > MAX_LENGTH {
-                    throw!(sc, RangeError, "Invalid array length");
+                if let Ok(new_len) = u32::try_from(value.to_number(sc)? as usize) {
+                    items.resize(new_len);
+                    return Ok(());
                 }
 
-                items.resize(new_len);
-                return Ok(());
+                throw!(sc, RangeError, "Invalid array length")
             }
 
-            if let Ok(index) = key.res(sc).parse::<usize>() {
+            if let Ok(index) = key.res(sc).parse::<u32>() {
                 if index < MAX_LENGTH {
                     items.set(index, value);
+
                     return Ok(());
                 }
             }
@@ -281,13 +265,15 @@ impl Object for Array {
                 return Ok(Unrooted::new(Value::undefined()));
             }
 
-            if let Ok(index) = key.res(sc).parse::<usize>() {
-                let mut items = self.items.borrow_mut();
-                match items.remove(index) {
-                    Some(MaybeHoley::Some(value)) => {
-                        return value.get_or_apply(sc, This::Default).root_err(sc);
+            if let Ok(index) = key.res(sc).parse::<u32>() {
+                if index < MAX_LENGTH {
+                    let mut items = self.items.borrow_mut();
+                    match items.delete(index) {
+                        Some(MaybeHoley::Some(value)) => {
+                            return value.get_or_apply(sc, This::Default).root_err(sc);
+                        }
+                        Some(MaybeHoley::Hole) | None => return Ok(Value::undefined().into()),
                     }
-                    Some(MaybeHoley::Hole) | None => return Ok(Value::undefined().into()),
                 }
             }
         }
@@ -315,7 +301,8 @@ impl Object for Array {
 
     fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         let items = self.items.borrow();
-        Ok(array_like_keys(sc, items.len()).collect())
+        // TODO: this should not include holey indices
+        Ok(array_like_keys(sc, items.len() as usize).collect())
     }
 
     extract!(self);
@@ -396,10 +383,14 @@ impl ArrayIterator {
 pub fn spec_array_get_property(scope: &mut LocalScope<'_>, target: &Value, index: usize) -> Result<Unrooted, Unrooted> {
     if let Some(arr) = target.unpack().downcast_ref::<Array>(scope) {
         let inner = arr.items.borrow();
-        return match inner.get(index) {
-            Some(MaybeHoley::Some(value)) => value.get_or_apply(scope, This::Default),
-            Some(MaybeHoley::Hole) | None => Ok(Value::undefined().into()),
-        };
+        if let Ok(index) = u32::try_from(index) {
+            if index < MAX_LENGTH {
+                return match inner.get(index) {
+                    Some(MaybeHoley::Some(value)) => value.get_or_apply(scope, This::Default),
+                    Some(MaybeHoley::Hole) | None => Ok(Value::undefined().into()),
+                };
+            }
+        }
     }
 
     let index = scope.intern_usize(index);
@@ -420,209 +411,14 @@ pub fn spec_array_set_property(
     if let Some(arr) = target.unpack().downcast_ref::<Array>(scope) {
         let mut inner = arr.items.borrow_mut();
 
-        if index < MAX_LENGTH {
-            inner.set(index, value);
-            return Ok(());
+        if let Ok(index) = u32::try_from(index) {
+            if index < MAX_LENGTH {
+                inner.set(index, value);
+                return Ok(());
+            }
         }
     }
 
     let index = scope.intern_usize(index);
     target.set_property(scope, index.into(), value)
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::value::array::holey::HoleyArray;
-    use crate::value::array::{ArrayInner, Element, MaybeHoley};
-
-    #[test]
-    fn non_holey_get() {
-        let arr = ArrayInner::NonHoley(vec![1, 2, 3]);
-        assert_eq!(arr.get(0), Some(MaybeHoley::Some(&1)));
-        assert_eq!(arr.get(1), Some(MaybeHoley::Some(&2)));
-        assert_eq!(arr.get(2), Some(MaybeHoley::Some(&3)));
-    }
-
-    #[test]
-    fn holey_get() {
-        let arr = ArrayInner::Holey(HoleyArray::from(vec![
-            Element::Value(1),
-            Element::Hole { count: 3 },
-            Element::Value(2),
-            Element::Hole { count: 5 },
-            Element::Value(3),
-            Element::Hole { count: 5 },
-        ]));
-        assert_eq!(arr.get(0), Some(MaybeHoley::Some(&1)));
-        assert_eq!(arr.get(1), Some(MaybeHoley::Hole));
-        assert_eq!(arr.get(2), Some(MaybeHoley::Hole));
-        assert_eq!(arr.get(3), Some(MaybeHoley::Hole));
-        assert_eq!(arr.get(4), Some(MaybeHoley::Some(&2)));
-        assert_eq!(arr.get(5), Some(MaybeHoley::Hole));
-        assert_eq!(arr.get(6), Some(MaybeHoley::Hole));
-        assert_eq!(arr.get(7), Some(MaybeHoley::Hole));
-        assert_eq!(arr.get(8), Some(MaybeHoley::Hole));
-        assert_eq!(arr.get(9), Some(MaybeHoley::Hole));
-        assert_eq!(arr.get(10), Some(MaybeHoley::Some(&3)));
-        assert_eq!(arr.get(13), Some(MaybeHoley::Hole));
-        assert_eq!(arr.get(17), None);
-    }
-
-    #[test]
-    fn non_holey_resize() {
-        let mut arr = ArrayInner::NonHoley(vec![1, 2, 3, 4]);
-        arr.resize(2);
-        assert_eq!(arr.get(0), Some(MaybeHoley::Some(&1)));
-        assert_eq!(arr.get(1), Some(MaybeHoley::Some(&2)));
-        assert_eq!(arr.get(2), None);
-        arr.resize(3);
-        assert!(matches!(arr, ArrayInner::Holey(..)));
-        assert_eq!(arr.get(0), Some(MaybeHoley::Some(&1)));
-        assert_eq!(arr.get(1), Some(MaybeHoley::Some(&2)));
-        assert_eq!(arr.get(2), Some(MaybeHoley::Hole));
-        arr.resize(0);
-        assert_eq!(arr.get(0), None);
-        arr.resize(1);
-        assert_eq!(arr.get(0), Some(MaybeHoley::Hole));
-        assert_eq!(arr.get(1), None);
-    }
-
-    #[test]
-    fn holey_resize() {
-        let mut arr = ArrayInner::Holey(HoleyArray::from(vec![
-            Element::Value(1),
-            Element::Hole { count: 3 },
-            Element::Value(2),
-            Element::Hole { count: 5 },
-            Element::Value(3),
-            Element::Hole { count: 5 },
-        ]));
-        let len = arr.len();
-        arr.resize(2);
-        assert_eq!(arr.get(0), Some(MaybeHoley::Some(&1)));
-        assert_eq!(arr.get(1), Some(MaybeHoley::Hole));
-        assert_eq!(arr.get(2), None);
-        for i in 3..len {
-            assert_eq!(arr.get(i), None);
-        }
-        arr.resize(1000);
-        assert_eq!(arr.get(1), Some(MaybeHoley::Hole));
-        assert_eq!(arr.get(999), Some(MaybeHoley::Hole));
-        assert_eq!(arr.get(1000), None);
-    }
-
-    #[test]
-    fn holey_set() {
-        let mut arr = ArrayInner::Holey(HoleyArray::from(vec![
-            Element::Value(1),
-            Element::Hole { count: 3 },
-            Element::Value(2),
-            Element::Hole { count: 5 },
-            Element::Value(3),
-            Element::Hole { count: 5 },
-        ]));
-        arr.set(0, 2);
-        assert_eq!(arr.get(0), Some(MaybeHoley::Some(&2)));
-        assert_eq!(arr.get(1), Some(MaybeHoley::Hole));
-
-        // in the middle of a 3-element hole should split it into (Hole(1), Some, Hole(1))
-        arr.set(2, 3);
-        assert_eq!(arr.get(2), Some(MaybeHoley::Some(&3)));
-        assert_eq!(arr.get(0), Some(MaybeHoley::Some(&2)));
-        assert_eq!(arr.get(1), Some(MaybeHoley::Hole));
-        assert_eq!(arr.get(3), Some(MaybeHoley::Hole));
-        assert_eq!(arr.get(4), Some(MaybeHoley::Some(&2)));
-
-        // arr is now [Some(2), Hole(1), Some(3)], check that setting a Hole(1) works
-        arr.set(1, 4);
-        assert_eq!(arr.get(0), Some(MaybeHoley::Some(&2)));
-        assert_eq!(arr.get(1), Some(MaybeHoley::Some(&4)));
-        assert_eq!(arr.get(2), Some(MaybeHoley::Some(&3)));
-
-        // setting at len
-        let len = arr.len();
-        assert_eq!(arr.get(len), None);
-        arr.set(len, 999);
-        assert_eq!(arr.get(len), Some(MaybeHoley::Some(&999)));
-
-        // setting two past len should have a Hole(2) before it
-        let len = arr.len();
-        assert_eq!(arr.get(len + 2), None);
-        arr.set(len + 2, 1000);
-        assert_eq!(arr.get(len + 2), Some(MaybeHoley::Some(&1000)));
-        assert_eq!(arr.get(len + 1), Some(MaybeHoley::Hole));
-        assert_eq!(arr.get(len), Some(MaybeHoley::Hole));
-        assert_eq!(arr.get(len + 3), None);
-    }
-
-    #[test]
-    fn non_holey_set() {
-        let mut arr = ArrayInner::NonHoley(vec![1, 2, 3]);
-        arr.set(3, 4);
-        assert!(matches!(arr, ArrayInner::NonHoley(_)));
-        arr.set(5, 6);
-        assert!(matches!(arr, ArrayInner::Holey(_)));
-        assert_eq!(arr.get(5), Some(MaybeHoley::Some(&6)));
-        assert_eq!(arr.get(4), Some(MaybeHoley::Hole));
-        assert_eq!(arr.get(6), None);
-    }
-
-    #[test]
-    fn holey_remove() {
-        let mut arr = ArrayInner::Holey(HoleyArray::from(vec![
-            Element::Value(1),
-            Element::Hole { count: 3 },
-            Element::Value(2),
-            Element::Hole { count: 5 },
-            Element::Value(3),
-            Element::Hole { count: 5 },
-        ]));
-        arr.remove(2);
-        assert_eq!(arr.get(0), Some(MaybeHoley::Some(&1)));
-        assert_eq!(arr.get(1), Some(MaybeHoley::Hole));
-        assert_eq!(arr.get(2), Some(MaybeHoley::Hole));
-        assert_eq!(arr.get(3), Some(MaybeHoley::Some(&2)));
-        arr.remove(0);
-        assert_eq!(arr.get(0), Some(MaybeHoley::Hole));
-        assert_eq!(arr.get(1), Some(MaybeHoley::Hole));
-
-        arr.remove(0);
-        arr.remove(0);
-        // Hole should now be gone
-        assert_eq!(arr.get(0), Some(MaybeHoley::Some(&2)));
-    }
-
-    fn holey<T>(arr: &ArrayInner<T>) -> &[Element<T>] {
-        match arr {
-            ArrayInner::NonHoley(_) => unreachable!(),
-            ArrayInner::Holey(h) => h.inner(),
-        }
-    }
-
-    #[test]
-    fn zero_sized_zoles() {
-        // Tests match arms in HoleyArray::set
-        let mut arr: ArrayInner<i32> = ArrayInner::Holey(HoleyArray::from(vec![Element::Hole { count: 1 }]));
-        arr.set(0, 4);
-        assert_eq!(holey(&arr), &[Element::Value(4)]);
-
-        let mut arr: ArrayInner<i32> = ArrayInner::Holey(HoleyArray::from(vec![Element::Hole { count: 2 }]));
-        arr.set(0, 4);
-        assert_eq!(holey(&arr), &[Element::Value(4), Element::Hole { count: 1 }]);
-
-        let mut arr: ArrayInner<i32> = ArrayInner::Holey(HoleyArray::from(vec![Element::Hole { count: 2 }]));
-        arr.set(1, 4);
-        assert_eq!(holey(&arr), &[Element::Hole { count: 1 }, Element::Value(4)]);
-
-        let mut arr: ArrayInner<i32> = ArrayInner::Holey(HoleyArray::from(vec![Element::Hole { count: 3 }]));
-        arr.set(1, 4);
-        assert_eq!(
-            holey(&arr),
-            &[
-                Element::Hole { count: 1 },
-                Element::Value(4),
-                Element::Hole { count: 1 }
-            ]
-        );
-    }
 }

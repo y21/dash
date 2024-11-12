@@ -455,7 +455,7 @@ mod extract {
     pub enum ArrayElement {
         Single(Value),
         Spread(Value, usize),
-        Hole(usize),
+        Hole(u32),
     }
 
     impl ExtractFront for ArrayElement {
@@ -561,7 +561,8 @@ mod handlers {
     use crate::frame::{FrameState, This, TryBlock};
     use crate::throw;
     use crate::util::unlikely;
-    use crate::value::array::{Array, ArrayIterator, Element};
+    use crate::value::array::table::ArrayTable;
+    use crate::value::array::{Array, ArrayIterator};
     use crate::value::function::r#async::AsyncFunction;
     use crate::value::function::closure::Closure;
     use crate::value::function::generator::GeneratorFunction;
@@ -1469,21 +1470,21 @@ mod handlers {
         cx: &mut DispatchContext<'_>,
         len: usize,
         stack_values: usize,
-        mut fun: impl FnMut(Element<PropertyValue>),
+        mut fun: impl FnMut(ArrayElement),
     ) -> Result<(), Unrooted> {
         let mut iter = ForwardSequence::<ArrayElement>::from_len(cx, len, stack_values);
         while let Some(element) = iter.next_front(cx) {
             match element? {
-                ArrayElement::Single(value) => fun(Element::Value(PropertyValue::static_default(value))),
+                ArrayElement::Single(value) => fun(ArrayElement::Single(value)),
                 ArrayElement::Spread(source, len) => {
                     for i in 0..len {
                         let i = cx.scope.intern_usize(i);
 
                         let value = source.get_property(&mut cx.scope, i.into())?.root(&mut cx.scope);
-                        fun(Element::Value(PropertyValue::static_default(value)));
+                        fun(ArrayElement::Single(value));
                     }
                 }
-                ArrayElement::Hole(count) => fun(Element::Hole { count }),
+                ArrayElement::Hole(count) => fun(ArrayElement::Hole(count)),
             }
         }
         let truncate_to = cx.stack.len() - stack_values;
@@ -1494,17 +1495,21 @@ mod handlers {
     }
 
     fn arraylit_holey(cx: &mut DispatchContext<'_>, len: usize, stack_values: usize) -> Result<Array, Unrooted> {
-        let mut new_elements = Vec::with_capacity(stack_values);
-        with_arraylit_elements(cx, len, stack_values, |element| new_elements.push(element))?;
-        Ok(Array::from_possibly_holey(&cx.scope, new_elements))
+        let mut table = ArrayTable::new();
+        with_arraylit_elements(cx, len, stack_values, |element| match element {
+            ArrayElement::Single(value) => table.push(PropertyValue::static_default(value)),
+            ArrayElement::Hole(hole) => table.resize(table.len() + hole),
+            ArrayElement::Spread(..) => unreachable!(),
+        })?;
+        Ok(Array::from_table(&cx.scope, table))
     }
 
     fn arraylit_dense(cx: &mut DispatchContext<'_>, len: usize) -> Result<Array, Unrooted> {
         // Dense implies len == stack_values
         let mut new_elements = Vec::with_capacity(len);
         with_arraylit_elements(cx, len, len, |element| match element {
-            Element::Hole { .. } => unreachable!(),
-            Element::Value(v) => new_elements.push(v),
+            ArrayElement::Single(value) => new_elements.push(PropertyValue::static_default(value)),
+            ArrayElement::Spread(..) | ArrayElement::Hole(_) => unreachable!(),
         })?;
         Ok(Array::from_vec(&cx.scope, new_elements))
     }

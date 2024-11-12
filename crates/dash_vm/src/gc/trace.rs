@@ -194,6 +194,7 @@ unsafe impl Trace for dash_middle::compiler::constant::Function {
 unsafe_empty_trace!(
     usize,
     u8,
+    u32,
     u64,
     f64,
     bool,
