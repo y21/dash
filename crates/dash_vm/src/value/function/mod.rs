@@ -53,7 +53,7 @@ unsafe impl Trace for FunctionKind {
     }
 }
 
-impl fmt::Debug for FunctionKind {
+impl Debug for FunctionKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Native(..) => f.write_str("NativeFunction"),

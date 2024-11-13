@@ -130,7 +130,7 @@ impl Object for ThenTask {
 
     fn apply(
         &self,
-        scope: &mut crate::localscope::LocalScope,
+        scope: &mut LocalScope,
         _callee: ObjectId,
         _this: This,
         args: Vec<Value>,

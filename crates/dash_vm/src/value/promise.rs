@@ -78,32 +78,28 @@ impl Object for Promise {
 
     fn set_property(
         &self,
-        sc: &mut crate::localscope::LocalScope,
+        sc: &mut LocalScope,
         key: crate::value::object::PropertyKey,
         value: crate::value::object::PropertyValue,
     ) -> Result<(), Value> {
         self.obj.set_property(sc, key, value)
     }
 
-    fn delete_property(
-        &self,
-        sc: &mut crate::localscope::LocalScope,
-        key: crate::value::object::PropertyKey,
-    ) -> Result<Unrooted, Value> {
+    fn delete_property(&self, sc: &mut LocalScope, key: crate::value::object::PropertyKey) -> Result<Unrooted, Value> {
         self.obj.delete_property(sc, key)
     }
 
-    fn set_prototype(&self, sc: &mut crate::localscope::LocalScope, value: Value) -> Result<(), Value> {
+    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
         self.obj.set_prototype(sc, value)
     }
 
-    fn get_prototype(&self, sc: &mut crate::localscope::LocalScope) -> Result<Value, Value> {
+    fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
         self.obj.get_prototype(sc)
     }
 
     fn apply(
         &self,
-        scope: &mut crate::localscope::LocalScope,
+        scope: &mut LocalScope,
         callee: ObjectId,
         this: This,
         args: Vec<Value>,
@@ -144,32 +140,28 @@ impl Object for PromiseResolver {
 
     fn set_property(
         &self,
-        sc: &mut crate::localscope::LocalScope,
+        sc: &mut LocalScope,
         key: crate::value::object::PropertyKey,
         value: crate::value::object::PropertyValue,
     ) -> Result<(), Value> {
         self.obj.set_property(sc, key, value)
     }
 
-    fn delete_property(
-        &self,
-        sc: &mut crate::localscope::LocalScope,
-        key: crate::value::object::PropertyKey,
-    ) -> Result<Unrooted, Value> {
+    fn delete_property(&self, sc: &mut LocalScope, key: crate::value::object::PropertyKey) -> Result<Unrooted, Value> {
         self.obj.delete_property(sc, key)
     }
 
-    fn set_prototype(&self, sc: &mut crate::localscope::LocalScope, value: Value) -> Result<(), Value> {
+    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
         self.obj.set_prototype(sc, value)
     }
 
-    fn get_prototype(&self, sc: &mut crate::localscope::LocalScope) -> Result<Value, Value> {
+    fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
         self.obj.get_prototype(sc)
     }
 
     fn apply(
         &self,
-        scope: &mut crate::localscope::LocalScope,
+        scope: &mut LocalScope,
         _callee: ObjectId,
         _this: This,
         args: Vec<Value>,
@@ -187,7 +179,7 @@ impl Object for PromiseResolver {
         self.obj.own_keys(sc)
     }
 
-    fn type_of(&self, _: &Vm) -> super::Typeof {
+    fn type_of(&self, _: &Vm) -> Typeof {
         Typeof::Function
     }
 
@@ -220,32 +212,28 @@ impl Object for PromiseRejecter {
 
     fn set_property(
         &self,
-        sc: &mut crate::localscope::LocalScope,
+        sc: &mut LocalScope,
         key: crate::value::object::PropertyKey,
         value: crate::value::object::PropertyValue,
     ) -> Result<(), Value> {
         self.obj.set_property(sc, key, value)
     }
 
-    fn delete_property(
-        &self,
-        sc: &mut crate::localscope::LocalScope,
-        key: crate::value::object::PropertyKey,
-    ) -> Result<Unrooted, Value> {
+    fn delete_property(&self, sc: &mut LocalScope, key: crate::value::object::PropertyKey) -> Result<Unrooted, Value> {
         self.obj.delete_property(sc, key)
     }
 
-    fn set_prototype(&self, sc: &mut crate::localscope::LocalScope, value: Value) -> Result<(), Value> {
+    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
         self.obj.set_prototype(sc, value)
     }
 
-    fn get_prototype(&self, sc: &mut crate::localscope::LocalScope) -> Result<Value, Value> {
+    fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
         self.obj.get_prototype(sc)
     }
 
     fn apply(
         &self,
-        scope: &mut crate::localscope::LocalScope,
+        scope: &mut LocalScope,
         _callee: ObjectId,
         _this: This,
         args: Vec<Value>,
@@ -263,7 +251,7 @@ impl Object for PromiseRejecter {
         self.obj.own_keys(sc)
     }
 
-    fn type_of(&self, _: &Vm) -> super::Typeof {
+    fn type_of(&self, _: &Vm) -> Typeof {
         Typeof::Function
     }
 

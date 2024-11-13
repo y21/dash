@@ -185,7 +185,7 @@ fn const_checks_for_alloc<T, M>() {
         assert!(size_of::<T>() < 1024);
         assert!(size_of::<M>() < 256);
         // We could store its `drop_in_place` as well to support it but it's not needed ATP.
-        assert!(!std::mem::needs_drop::<M>());
+        assert!(!mem::needs_drop::<M>());
     }
 }
 
@@ -364,7 +364,7 @@ impl Chunk {
             alloc_start: allocation_start as u16,
             data_index,
             drop_in_place: unsafe {
-                std::mem::transmute::<unsafe fn(*mut T), unsafe fn(*const ())>(std::ptr::drop_in_place::<T> as _)
+                mem::transmute::<unsafe fn(*mut T), unsafe fn(*const ())>(ptr::drop_in_place::<T> as _)
             },
         };
         let info_id = if let Some(info_id) = info_id {
@@ -407,7 +407,7 @@ impl Chunk {
             data_index,
             alloc_start: self.at as u16,
             drop_in_place: unsafe {
-                std::mem::transmute::<unsafe fn(*mut T), unsafe fn(*const ())>(std::ptr::drop_in_place::<T> as _)
+                mem::transmute::<unsafe fn(*mut T), unsafe fn(*const ())>(ptr::drop_in_place::<T> as _)
             },
         });
 

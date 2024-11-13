@@ -644,12 +644,12 @@ pub fn for_each_js_iterator_element<B, F: FnMut(&mut LocalScope<'_>, Value) -> R
             break;
         }
         let value = item.get_property(scope, sym::value.into()).root(scope)?;
-        if let ControlFlow::Break(val) = f(scope, value)? {
-            return Ok(ControlFlow::Break(val));
+        if let Break(val) = f(scope, value)? {
+            return Ok(Break(val));
         }
     }
 
-    Ok(ControlFlow::Continue(()))
+    Ok(Continue(()))
 }
 
 pub fn from(cx: CallContext) -> Result<Value, Value> {

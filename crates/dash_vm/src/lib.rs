@@ -1,6 +1,6 @@
 #![cfg_attr(dash_lints, feature(register_tool))]
 #![cfg_attr(dash_lints, register_tool(dash_lints))]
-#![warn(clippy::redundant_clone)]
+#![warn(clippy::redundant_clone, unused_qualifications)]
 #![deny(clippy::disallowed_methods)]
 
 use std::ops::RangeBounds;

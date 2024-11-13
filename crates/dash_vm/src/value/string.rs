@@ -77,8 +77,8 @@ impl Object for JsString {
     fn get_own_property_descriptor(
         &self,
         sc: &mut LocalScope,
-        key: super::object::PropertyKey,
-    ) -> Result<Option<super::object::PropertyValue>, super::Unrooted> {
+        key: PropertyKey,
+    ) -> Result<Option<PropertyValue>, Unrooted> {
         if let PropertyKey::String(st) = key {
             if st.sym() == sym::length {
                 return Ok(Some(PropertyValue::static_empty(Value::number(self.len(sc) as f64))));
@@ -96,16 +96,11 @@ impl Object for JsString {
         Ok(None)
     }
 
-    fn set_property(
-        &self,
-        _: &mut LocalScope,
-        _: super::object::PropertyKey,
-        _: super::object::PropertyValue,
-    ) -> Result<(), Value> {
+    fn set_property(&self, _: &mut LocalScope, _: PropertyKey, _: PropertyValue) -> Result<(), Value> {
         Ok(())
     }
 
-    fn delete_property(&self, _: &mut LocalScope, _: super::object::PropertyKey) -> Result<super::Unrooted, Value> {
+    fn delete_property(&self, _: &mut LocalScope, _: PropertyKey) -> Result<Unrooted, Value> {
         Ok(Unrooted::new(Value::undefined()))
     }
 
@@ -123,7 +118,7 @@ impl Object for JsString {
         _: crate::gc::ObjectId,
         _: This,
         _: Vec<Value>,
-    ) -> Result<super::Unrooted, super::Unrooted> {
+    ) -> Result<Unrooted, Unrooted> {
         let v = self.res(scope).to_owned();
         throw!(scope, TypeError, "'{}' is not a function", v)
     }
