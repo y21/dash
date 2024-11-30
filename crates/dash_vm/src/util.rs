@@ -1,6 +1,6 @@
 use std::num::FpCategory;
 
-use dash_middle::interner::{sym, Symbol};
+use dash_middle::interner::{Symbol, sym};
 
 use crate::localscope::LocalScope;
 
@@ -15,13 +15,6 @@ pub fn unlikely(b: bool) -> bool {
     }
     b
 }
-
-/// https://doc.rust-lang.org/beta/nightly-rustc/rustc_data_structures/captures/trait.Captures.html
-/// and
-/// https://github.com/rust-lang/rust/issues/34511#issuecomment-373423999
-pub trait Captures<'a> {}
-
-impl<'a, T: ?Sized> Captures<'a> for T {}
 
 pub fn intern_f64(sc: &mut LocalScope, n: f64) -> Symbol {
     if n.trunc() == n && n >= 0.0 && n <= usize::MAX as f64 {

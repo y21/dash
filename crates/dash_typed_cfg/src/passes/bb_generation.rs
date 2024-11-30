@@ -106,7 +106,7 @@ pub struct BBGenerationCtxt<'a, 'q, Q> {
     pub query: &'q mut Q,
 }
 
-impl<'a, 'q, Q: BBGenerationQuery> BBGenerationCtxt<'a, 'q, Q> {
+impl<Q: BBGenerationQuery> BBGenerationCtxt<'_, '_, Q> {
     pub fn find_bbs(&mut self) {
         self.bbs.insert(
             0,

@@ -12,7 +12,7 @@ use dash_regex::Flags;
 
 use crate::{any, Parser};
 
-impl<'a, 'interner> Parser<'a, 'interner> {
+impl Parser<'_, '_> {
     pub fn parse_expression(&mut self) -> Option<Expr> {
         self.parse_sequence()
     }

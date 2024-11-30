@@ -164,7 +164,7 @@ impl<'vm> Deref for DispatchContext<'vm> {
     }
 }
 
-impl<'vm> DerefMut for DispatchContext<'vm> {
+impl DerefMut for DispatchContext<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.scope
     }

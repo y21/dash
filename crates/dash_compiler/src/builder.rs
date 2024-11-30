@@ -119,14 +119,14 @@ impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
     }
 }
 
-impl<'cx, 'interner> Deref for InstructionBuilder<'cx, 'interner> {
+impl<'interner> Deref for InstructionBuilder<'_, 'interner> {
     type Target = FunctionCompiler<'interner>;
     fn deref(&self) -> &Self::Target {
         self.inner
     }
 }
 
-impl<'cx, 'interner> DerefMut for InstructionBuilder<'cx, 'interner> {
+impl DerefMut for InstructionBuilder<'_, '_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.inner
     }

@@ -321,11 +321,11 @@ impl<'interner> FunctionCompiler<'interner> {
         let enclosing_function = self.scopes.enclosing_function_of(scope);
 
         if let Some(slot) = self.scopes[scope].find_local(ident) {
-            return Some((
+            Some((
                 slot,
                 self.scopes[enclosing_function].expect_function().locals[slot as usize].clone(),
                 enclosing_function,
-            ));
+            ))
         } else {
             let parent = self.scopes[scope].parent?;
             let parent_enclosing_function = self.scopes.enclosing_function_of(parent);
@@ -368,7 +368,7 @@ impl<'interner> FunctionCompiler<'interner> {
     }
 }
 
-impl<'interner> Visitor<Result<(), Error>> for FunctionCompiler<'interner> {
+impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
     fn accept(&mut self, Statement { kind, span }: Statement) -> Result<(), Error> {
         match kind {
             StatementKind::Expression(e) => self.visit_expression_statement(e),

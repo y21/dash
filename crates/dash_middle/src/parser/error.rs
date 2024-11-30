@@ -146,7 +146,7 @@ impl<'f, 'a, 'buf> DiagnosticBuilder<'f, 'a, 'buf> {
     }
 }
 
-impl<'f, 'a, 'buf> fmt::Display for DiagnosticBuilder<'f, 'a, 'buf> {
+impl fmt::Display for DiagnosticBuilder<'_, '_, '_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         macro_rules! write_style {
             ($sink:expr, $($style:ident) *, $s:expr) => {
@@ -256,7 +256,7 @@ fn line_data(source: &str, span: Span) -> LineData<'_> {
     }
 }
 
-impl<'a, 'buf> fmt::Display for FormattableError<'a, 'buf> {
+impl fmt::Display for FormattableError<'_, '_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut diag = DiagnosticBuilder::error(self);
         match *self.error {
@@ -422,7 +422,7 @@ pub struct FormattableErrors<'a, 'buf> {
     colors: bool,
 }
 
-impl<'a, 'buf> fmt::Display for FormattableErrors<'a, 'buf> {
+impl fmt::Display for FormattableErrors<'_, '_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for error in self.errors {
             FormattableError {

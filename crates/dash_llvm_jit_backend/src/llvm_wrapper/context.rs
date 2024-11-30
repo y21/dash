@@ -41,7 +41,7 @@ impl Context {
     }
 
     pub fn create_module(&mut self) -> Module {
-        self.create_module_with_name(CStr::from_bytes_with_nul(b"anon\0").unwrap())
+        self.create_module_with_name(c"anon")
     }
 
     pub fn i1_ty(&self) -> Ty {

@@ -7,8 +7,8 @@ use rustc_hir::def::{DefKind, Res};
 use rustc_hir::def_id::{DefId, LocalDefId};
 use rustc_hir::intravisit::FnKind;
 use rustc_hir::{self as hir};
-use rustc_index::bit_set::BitSet;
 use rustc_index::IndexVec;
+use rustc_index::bit_set::BitSet;
 use rustc_infer::infer::TyCtxtInferExt;
 use rustc_infer::traits::{Obligation, ObligationCause};
 use rustc_lint::{LateContext, LateLintPass};
@@ -18,8 +18,8 @@ use rustc_middle::mir::{self, BasicBlock, Body, Local};
 use rustc_middle::ty::{ParamEnv, Ty, TyCtxt};
 use rustc_middle::{bug, ty};
 use rustc_session::{declare_lint, impl_lint_pass};
-use rustc_span::source_map::Spanned;
 use rustc_span::Span;
+use rustc_span::source_map::Spanned;
 use rustc_target::abi::VariantIdx;
 use rustc_trait_selection::traits::ObligationCtxt;
 
@@ -181,7 +181,7 @@ struct PlaceVisitor<'a, 'b, 'tcx> {
     state: &'a mut TraverseState,
 }
 
-impl<'a, 'tcx> mir::visit::Visitor<'tcx> for PlaceVisitor<'a, '_, 'tcx> {
+impl<'tcx> mir::visit::Visitor<'tcx> for PlaceVisitor<'_, '_, 'tcx> {
     fn visit_place(&mut self, place: &mir::Place<'tcx>, context: mir::visit::PlaceContext, location: mir::Location) {
         let base_ty = self.mir.local_decls[place.local].ty;
 
@@ -347,13 +347,10 @@ fn traverse<'tcx>(
     match terminator.edges() {
         mir::TerminatorEdges::None => state,
         mir::TerminatorEdges::Single(bb) => traverse(cx, mir, state, bb),
-        mir::TerminatorEdges::Double(bb1, bb2) => TraverseState::join(
-            state.clone(),
-            [
-                traverse(cx, mir, state.clone(), bb1),
-                traverse(cx, mir, state.clone(), bb2),
-            ],
-        ),
+        mir::TerminatorEdges::Double(bb1, bb2) => TraverseState::join(state.clone(), [
+            traverse(cx, mir, state.clone(), bb1),
+            traverse(cx, mir, state.clone(), bb2),
+        ]),
         mir::TerminatorEdges::AssignOnReturn {
             return_,
             cleanup,
@@ -394,7 +391,7 @@ impl LateLintPass<'_> for MissingRoot {
         let mir = cx.tcx.optimized_mir(def_id);
         let locals = IndexVec::<Local, LocalState>::from_elem_n(LocalState::LiveBeforeBorrow, mir.local_decls.len());
 
-        let infcx = cx.tcx.infer_ctxt().build();
+        let infcx = cx.tcx.infer_ctxt().build(cx.typing_mode());
         let ocx = ObligationCtxt::new(&infcx);
         traverse(
             &mut TraverseCtxt {

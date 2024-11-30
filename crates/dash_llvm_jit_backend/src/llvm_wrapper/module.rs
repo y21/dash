@@ -33,7 +33,7 @@ impl Module {
     }
 
     pub fn create_c_function(&self, ty: &Ty) -> Function {
-        self.create_c_function_with_name(CStr::from_bytes_with_nul(b"anon\0").unwrap(), ty)
+        self.create_c_function_with_name(c"anon", ty)
     }
 
     pub fn run_pass_manager(&self, pm: &PassManager) {

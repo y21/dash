@@ -142,7 +142,7 @@ pub struct LocalScope<'vm> {
     _p: PhantomData<&'vm mut Vm>,
 }
 
-impl<'vm> LocalScope<'vm> {
+impl LocalScope<'_> {
     fn scope_data_mut(&mut self) -> &mut ScopeData {
         unsafe { self.scope_data.as_mut() }
     }
@@ -235,7 +235,7 @@ impl<'vm> LocalScope<'vm> {
 
 // TODO: remove this Deref impl
 // It's too prone to bugs due to similar methods
-impl<'a> Deref for LocalScope<'a> {
+impl Deref for LocalScope<'_> {
     type Target = Vm;
 
     fn deref(&self) -> &Self::Target {
@@ -243,13 +243,13 @@ impl<'a> Deref for LocalScope<'a> {
     }
 }
 
-impl<'a> DerefMut for LocalScope<'a> {
+impl DerefMut for LocalScope<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { &mut *self.vm }
     }
 }
 
-impl<'vm> Drop for LocalScope<'vm> {
+impl Drop for LocalScope<'_> {
     fn drop(&mut self) {
         let head = self.scopes.head;
         let data = self.scope_data_mut();

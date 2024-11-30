@@ -227,24 +227,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "clippy_config"
-version = "0.1.83"
-source = "git+https://github.com/rust-lang/rust-clippy?rev=7d7b298#7d7b298a4e26ee9998bc7756f740d65557ec67e2"
-dependencies = [
- "itertools 0.12.1",
- "serde",
- "toml",
-]
-
-[[package]]
 name = "clippy_utils"
-version = "0.1.83"
-source = "git+https://github.com/rust-lang/rust-clippy?rev=7d7b298#7d7b298a4e26ee9998bc7756f740d65557ec67e2"
+version = "0.1.85"
+source = "git+https://github.com/rust-lang/rust-clippy?rev=af1f78a#af1f78af05af5ff7dd2d8b31386f96ce9bfc7a8a"
 dependencies = [
  "arrayvec",
- "clippy_config",
  "itertools 0.12.1",
  "rustc_apfloat",
+ "serde",
 ]
 
 [[package]]
@@ -1947,15 +1937,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_spanned"
-version = "0.6.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb5b1b31579f3811bf615c144393417496f152e12ac8b7663bf664f4a815306d"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "serde_urlencoded"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2280,25 +2261,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "toml"
-version = "0.7.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd79e69d3b627db300ff956027cc6c3798cef26d22526befdfcd12feeb6d2257"
-dependencies = [
- "serde",
- "serde_spanned",
- "toml_datetime",
- "toml_edit",
-]
-
-[[package]]
 name = "toml_datetime"
 version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3550f4e9685620ac18a50ed434eb3aec30db8ba93b0287467bca5826ea25baf1"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "toml_edit"
@@ -2307,8 +2273,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b5bb770da30e5cbfde35a2d7b9b8a2c4b8ef89548a7a6aeab5c9a576e3e7421"
 dependencies = [
  "indexmap 2.2.5",
- "serde",
- "serde_spanned",
  "toml_datetime",
  "winnow",
 ]

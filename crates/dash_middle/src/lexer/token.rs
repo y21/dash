@@ -474,7 +474,7 @@ impl TokenType {
 
     pub fn fmt_for_expected_tys(&self) -> impl fmt::Display + '_ {
         struct DisplayExpectedTys<'a>(&'a TokenType);
-        impl<'a> fmt::Display for DisplayExpectedTys<'a> {
+        impl fmt::Display for DisplayExpectedTys<'_> {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 match *self.0 {
                     TokenType::DUMMY_IDENTIFIER => write!(f, "<identifier>"),

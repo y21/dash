@@ -4,7 +4,7 @@ use dash_middle::parser::types::{LiteralType, TypeSegment};
 
 use crate::Parser;
 
-impl<'a, 'interner> Parser<'a, 'interner> {
+impl Parser<'_, '_> {
     pub fn parse_type_segment(&mut self) -> Option<TypeSegment> {
         self.parse_union_type()
     }

@@ -52,7 +52,7 @@ pub struct TypeInferCtxt<'a, 'q, Q> {
     pub visited: HashSet<usize>,
 }
 
-impl<'a, 'q, Q: TypeInferQuery> TypeInferCtxt<'a, 'q, Q> {
+impl<Q: TypeInferQuery> TypeInferCtxt<'_, '_, Q> {
     fn get_or_insert_local_ty(&mut self, index: u16) -> Type {
         match self.local_tys.get(&index) {
             Some(ty) => ty.clone(),

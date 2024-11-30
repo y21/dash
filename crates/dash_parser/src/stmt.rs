@@ -16,7 +16,7 @@ use crate::{any, Parser};
 
 type ParameterList = Option<Vec<(Parameter, Option<Expr>, Option<TypeSegment>)>>;
 
-impl<'a, 'interner> Parser<'a, 'interner> {
+impl Parser<'_, '_> {
     pub fn parse_statement(&mut self) -> Option<Statement> {
         self.error_sync = false;
         let lo_span = self.current()?.span;

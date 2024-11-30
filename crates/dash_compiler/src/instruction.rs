@@ -24,7 +24,7 @@ macro_rules! simple_instruction {
     }
 }
 
-impl<'cx, 'interner> InstructionBuilder<'cx, 'interner> {
+impl InstructionBuilder<'_, '_> {
     pub fn build_jmp_header(&mut self, label: Label, is_local_label: bool) {
         self.write_all(&[0, 0]);
         match is_local_label {
