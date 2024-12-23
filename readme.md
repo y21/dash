@@ -1,79 +1,79 @@
 # dash
+
 ![Tests](https://github.com/y21/dash/actions/workflows/test.yml/badge.svg)
 ![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/y21/dash)
 
-ECMA-262 implementation in pure Rust. 
+Experimental JavaScript implementation in Rust.
 
 ## ⚠️ WIP
-This is a *WIP* and **not** yet production ready. It is actively being worked on and the API is constantly changing.
+
+This is a _WIP_ and **not** yet production ready. It is actively being worked on and the API is constantly changing.
 
 Current status: Not recommended for use in real projects. Feel free to experiment. The majority of language constructs are implemented and "work fine". It currently passes around 25% of test262.
 
 ## Usage
+
 ### Using the CLI
+
 ```js
-import * as http from '@std/http';
+const numbers = [1, 2, 3, 4, 5];
+const sum = numbers.reduce((acc, num) => acc + num, 0);
 
-// We already implement Optional Typing, so you can directly annotate parameters and variables with types
-// without having to use a third tool such as tsc
-function* counter(start: number) {
-    let num = start;
-    while (true) yield num++;
-}
-
-const numbers = counter(0);
-const port = 3030;
-
-http.listen(port, (ctx) => {
-    const next = numbers.next();
-    ctx.respond('Request count: ' + next.value);
-});
-
-console.log('Listening on port: ' + port);
+console.log(`Sum of array: ${sum}`);
 ```
+
+## Install
+
 ```sh
 # Install Rust
 $ curl -sSf https://sh.rustup.rs | sh
-# Clone repo
-$ git clone https://github.com/y21/dash
-# Build cli
-$ cargo install --path dash/cli
+
+# Build project
+$ cargo install --git https://github.com/y21/dash dash-cli
+
 # Optional: rename binary to `dashjs`
 $ mv ~/.cargo/bin/dash-cli ~/.cargo/bin/dashjs
+
 # Run the program (run with --help for help)
 $ dashjs run example.js
 ```
-Now open up your browser, navigate to http://localhost:3030, refresh a bunch of times and see the numbers go up.
 
 ### Embedding into a Rust application
-Note that the API is not stable. Things are constantly changing, so your code may break at any time when bumping the version, which is why it is highly recommended to lock in to a specific revision for now.
+
+Note that the API is very unstable. Things are constantly changing, so your code may break at any time when bumping the version, which is why it is highly recommended to lock in to a specific revision for now.
+The MSRV for this project is the version that is currently stable. No nightly should be required to build the project or to use it as a library (except for the custom linter in `lints/` which is only useful for development).
 
 - Cargo.toml
+
 ```toml
 [dependencies]
-dash_vm = { git = "https://github.com/y21/dash", features = ["eval"] }
+dash_vm = { git = "https://github.com/y21/dash", features = ["eval"], rev = "9401b84" }
 ```
+
 > The `eval` feature exposes a convenience `eval()` method on the `Vm` struct
-> that lets you specify a JavaScript source string directly.
+> that lets you specify a JavaScript source string directly instead of having to pass the different IRs around.
 
 - main.rs
+
 ```rs
 use dash_vm::Vm;
+use dash_vm::value::Root;
+use dash_vm::value::ops::conversions::ValueConversion;
 
 fn main() {
     let source = "const x = 42; x * x";
-
     let mut vm = Vm::new(Default::default());
-    let result = vm.eval(source, Default::default()).expect("JS Exception");
+    let mut scope = vm.scope();
+    let result = scope
+        .eval(source, Default::default())
+        .unwrap()
+        .root(&mut scope);
 
-    println!("Result: {}", match result {
-        Value::Number(n) => n,
-        _ => unreachable!()
-    });
+    println!("Result: {}", result.to_number(&mut scope).unwrap());
 }
 ```
-<sub>See `dash-cli/` for a more detailed example</sub>
 
 ### Node compatibility
-There's experimental support for node compatibility. If you want to try it out, pass `--features nodejs` to the cargo install/build command.
+
+There's experimental support for running scripts that use NodeJS APIs. If you want to try it out, pass `--features nodejs` to the cargo install/build command.
 When running dash, you can then pass `--node` and various node-specific things will be available to the JS environment, such as the `require` function.
