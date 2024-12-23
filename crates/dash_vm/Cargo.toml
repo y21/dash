@@ -9,8 +9,8 @@ edition = "2021"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(dash_lints)'] }
 
 [features]
-jit = ["dash_llvm_jit_backend", "dash_typed_cfg"]
-stress_gc = []                                    # allows stress testing the GC
+jit = ["dash_typed_cfg"]
+stress_gc = []           # allows stress testing the GC
 
 [dependencies]
 dash_middle = { path = "../dash_middle" }
@@ -21,7 +21,6 @@ dash_compiler = { path = "../dash_compiler", features = ["from_string"] }
 dash_optimizer = { path = "../dash_optimizer" }
 dash_regex = { path = "../dash_regex" }
 dash_log = { path = "../dash_log" }
-dash_llvm_jit_backend = { path = "../dash_llvm_jit_backend", optional = true }
 dash_typed_cfg = { path = "../dash_typed_cfg", optional = true }
 bitflags = "1.3.2"
 smallvec = { version = "1.9.0", features = ["const_generics"] }

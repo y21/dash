@@ -1,5 +1,4 @@
-use std::cell::{Cell, RefCell};
-use std::collections::HashSet;
+use std::cell::Cell;
 use std::rc::Rc;
 
 use dash_log::{Level, debug, span};
@@ -1797,7 +1796,6 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                 },
                 externals: cmp.externals.into(),
                 rest_local,
-                poison_ips: RefCell::new(HashSet::new()),
                 debug_symbols: cmp.debug_symbols,
                 source: Rc::clone(&ib.source),
                 references_arguments: cmp.references_arguments.is_some(),

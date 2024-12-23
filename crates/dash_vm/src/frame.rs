@@ -1,21 +1,21 @@
-use std::cell::{Cell, RefCell};
-use std::collections::{BTreeMap, HashSet};
+use std::cell::Cell;
+use std::collections::BTreeMap;
 use std::rc::Rc;
 
-use dash_middle::compiler::constant::{Buffer, Function};
 use dash_middle::compiler::CompileResult;
+use dash_middle::compiler::constant::{Buffer, Function};
 use dash_middle::parser::statement::{Asyncness, FunctionKind};
 use dash_proc_macro::Trace;
 
-use crate::gc::trace::{Trace, TraceCtxt};
 use crate::gc::ObjectId;
+use crate::gc::trace::{Trace, TraceCtxt};
 use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::string::JsString;
 use crate::value::{ExternalValue, Unrooted};
 
-use super::value::function::user::UserFunction;
 use super::value::Value;
+use super::value::function::user::UserFunction;
 
 #[derive(Debug, Clone, Copy, Trace)]
 pub struct TryBlock {
@@ -209,7 +209,6 @@ impl Frame {
             params: 0,
             ty: FunctionKind::Function(Asyncness::No),
             rest_local: None,
-            poison_ips: RefCell::new(HashSet::new()),
             source: cr.source,
             debug_symbols: cr.debug_symbols,
             references_arguments: false,

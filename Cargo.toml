@@ -29,7 +29,6 @@ members = [
     # (commented out so the project can be built in the root dir)
     #
     # "crates/dash_wasm",
-    # "crates/dash_llvm_jit_backend",
 ]
 resolver = "2"
 

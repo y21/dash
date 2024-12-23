@@ -1,6 +1,5 @@
 use core::fmt;
-use std::cell::{Cell, RefCell};
-use std::collections::HashSet;
+use std::cell::Cell;
 use std::rc::Rc;
 
 use dash_regex::{Flags, ParsedRegex};
@@ -10,8 +9,8 @@ use crate::indexvec::IndexThinVec;
 use crate::interner::Symbol;
 use crate::parser::statement::FunctionKind;
 
-use super::external::External;
 use super::DebugSymbols;
+use super::external::External;
 
 /// The instruction buffer.
 /// Uses interior mutability since we store it in a `Rc<Function>`
@@ -77,24 +76,12 @@ pub struct Function {
     pub externals: Box<[External]>,
     /// If the parameter list uses the rest operator ..., then this will be Some(local_id)
     pub rest_local: Option<u16>,
-    // JIT-poisoned code regions (instruction pointers)
-    // TODO: refactor this a bit so this isn't "visible" to e.g. the bytecode compiler with builder pattern
-    pub poison_ips: RefCell<HashSet<usize>>,
     pub source: Rc<str>,
     pub debug_symbols: DebugSymbols,
     pub references_arguments: bool,
     pub has_extends_clause: bool,
 }
 
-impl Function {
-    pub fn poison_ip(&self, ip: usize) {
-        self.poison_ips.borrow_mut().insert(ip);
-    }
-
-    pub fn is_poisoned_ip(&self, ip: usize) -> bool {
-        self.poison_ips.borrow().contains(&ip)
-    }
-}
 index_type!(NumberConstant u16);
 index_type!(BooleanConstant u16);
 index_type!(FunctionConstant u16);

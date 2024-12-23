@@ -173,7 +173,6 @@ unsafe impl Trace for dash_middle::compiler::constant::Function {
                 },
             externals: _,
             rest_local: _,
-            poison_ips: _,
             source: Rc { .. },
             debug_symbols: _,
             references_arguments: _,

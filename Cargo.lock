@@ -342,16 +342,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a81dae078cea95a014a339291cec439d2f232ebe854a9d672b796c6afafa9b7"
 
 [[package]]
-name = "cstr"
-version = "0.2.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8aa998c33a6d3271e3678950a22134cd7dd27cef86dee1b611b5b14207d1d90b"
-dependencies = [
- "proc-macro2",
- "quote",
-]
-
-[[package]]
 name = "csv"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -435,20 +425,6 @@ version = "0.3.0"
 dependencies = [
  "dash_middle",
  "either",
-]
-
-[[package]]
-name = "dash_llvm_jit_backend"
-version = "0.1.0"
-dependencies = [
- "bitvec",
- "cstr",
- "dash_log",
- "dash_middle",
- "dash_typed_cfg",
- "indexmap 1.9.3",
- "llvm-sys",
- "thiserror",
 ]
 
 [[package]]
@@ -651,7 +627,6 @@ dependencies = [
  "criterion",
  "dash_compiler",
  "dash_lexer",
- "dash_llvm_jit_backend",
  "dash_log",
  "dash_middle",
  "dash_optimizer",
@@ -1147,19 +1122,6 @@ name = "linux-raw-sys"
 version = "0.4.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "01cda141df6706de531b6c46c3a33ecca755538219bd484262fa09410c13539c"
-
-[[package]]
-name = "llvm-sys"
-version = "140.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3dc78e9857c0231ec11e3bdccf63870493fdc7d0570b0ea7d50bf5df0cb1a0c"
-dependencies = [
- "cc",
- "lazy_static",
- "libc",
- "regex",
- "semver",
-]
 
 [[package]]
 name = "lock_api"

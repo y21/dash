@@ -32,9 +32,6 @@ use rustc_hash::FxHashMap;
 use value::object::{extract_type, NamedObject};
 use value::{ExternalValue, PureBuiltin, Unpack, Unrooted, ValueKind};
 
-#[cfg(feature = "jit")]
-mod jit;
-
 pub mod dispatch;
 pub mod eval;
 pub mod frame;
@@ -88,8 +85,6 @@ pub struct Vm {
     /// or adding a property to a builtin, will cause this to be set to `false`, which in turn
     /// will disable many optimizations such as specialized intrinsics.
     builtins_pure: bool,
-    #[cfg(feature = "jit")]
-    jit: jit::Frontend,
 }
 
 impl Vm {
@@ -117,9 +112,6 @@ impl Vm {
             params,
             gc_rss_threshold,
             builtins_pure: true,
-
-            #[cfg(feature = "jit")]
-            jit: jit::Frontend::new(),
         };
         vm.prepare();
         vm
@@ -1546,32 +1538,6 @@ impl Vm {
 
     pub(crate) fn impure_builtins(&mut self) {
         self.builtins_pure = false;
-    }
-
-    // -- JIT specific methods --
-
-    /// Marks an instruction pointer (i.e. code region) as JIT-"poisoned".
-    /// It will replace the instruction with one that does not attempt to trigger a trace.
-    #[cfg(feature = "jit")]
-    pub(crate) fn poison_ip(&mut self, ip: usize) {
-        dash_log::warn!("ip poisoned: {}", ip);
-        self.active_frame().function.poison_ip(ip);
-    }
-
-    // TODO: move these to DispatchContext.
-    #[cfg(feature = "jit")]
-    pub(crate) fn record_conditional_jump(&mut self, ip: usize, did_jump: bool) {
-        use dash_typed_cfg::passes::bb_generation::ConditionalBranchAction;
-
-        if let Some(trace) = self.jit.recording_trace_mut() {
-            trace.record_conditional_jump(
-                ip,
-                match did_jump {
-                    true => ConditionalBranchAction::Taken,
-                    false => ConditionalBranchAction::NotTaken,
-                },
-            );
-        }
     }
 }
 

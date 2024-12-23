@@ -7,8 +7,8 @@ use crate::localscope::LocalScope;
 use crate::value::string::JsString;
 use crate::value::{ExternalValue, Root, Unrooted};
 
-use super::value::Value;
 use super::Vm;
+use super::value::Value;
 use dash_middle::compiler::instruction::Instruction;
 
 #[derive(Debug)]
@@ -551,7 +551,7 @@ mod handlers {
     use dash_middle::interner::sym;
     use dash_middle::iterator_with::{InfallibleIteratorWith, IteratorWith};
     use dash_middle::parser::statement::{Asyncness, FunctionKind as ParserFunctionKind};
-    use handlers::extract::{extract, ForwardSequence, FrontIteratorWith};
+    use handlers::extract::{ForwardSequence, FrontIteratorWith, extract};
     use hashbrown::hash_map::Entry;
     use if_chain::if_chain;
     use smallvec::SmallVec;
@@ -567,7 +567,7 @@ mod handlers {
     use crate::value::function::closure::Closure;
     use crate::value::function::generator::GeneratorFunction;
     use crate::value::function::user::UserFunction;
-    use crate::value::function::{adjust_stack_from_flat_call, Function, FunctionKind};
+    use crate::value::function::{Function, FunctionKind, adjust_stack_from_flat_call};
     use crate::value::object::{NamedObject, Object, ObjectMap, PropertyKey, PropertyValue, PropertyValueKind};
     use crate::value::ops::conversions::ValueConversion;
     use crate::value::ops::equality;
@@ -1178,16 +1178,10 @@ mod handlers {
     }
 
     pub fn jmpfalsep(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        #[cfg(feature = "jit")]
-        let ip = cx.active_frame().ip;
-
         let offset = cx.fetchw_and_inc_ip() as i16;
         let value = cx.pop_stack_rooted();
 
         let jump = !value.is_truthy(&mut cx.scope);
-
-        #[cfg(feature = "jit")]
-        cx.record_conditional_jump(ip, jump);
 
         if jump {
             let frame = cx.active_frame_mut();
@@ -1203,15 +1197,10 @@ mod handlers {
     }
 
     pub fn jmpfalsenp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        #[cfg(feature = "jit")]
-        let ip = cx.active_frame().ip;
         let offset = cx.fetchw_and_inc_ip() as i16;
         let value = cx.peek_stack();
 
         let jump = !value.is_truthy(&mut cx.scope);
-
-        #[cfg(feature = "jit")]
-        cx.record_conditional_jump(ip, jump);
 
         if jump {
             let frame = cx.active_frame_mut();
@@ -1227,16 +1216,10 @@ mod handlers {
     }
 
     pub fn jmptruep(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        #[cfg(feature = "jit")]
-        let ip = cx.active_frame().ip;
-
         let offset = cx.fetchw_and_inc_ip() as i16;
         let value = cx.pop_stack_rooted();
 
         let jump = value.is_truthy(&mut cx.scope);
-
-        #[cfg(feature = "jit")]
-        cx.record_conditional_jump(ip, jump);
 
         if jump {
             let frame = cx.active_frame_mut();
@@ -1252,15 +1235,10 @@ mod handlers {
     }
 
     pub fn jmptruenp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        #[cfg(feature = "jit")]
-        let ip = cx.active_frame().ip;
         let offset = cx.fetchw_and_inc_ip() as i16;
         let value = cx.peek_stack();
 
         let jump = value.is_truthy(&mut cx.scope);
-
-        #[cfg(feature = "jit")]
-        cx.record_conditional_jump(ip, jump);
 
         if jump {
             let frame = cx.active_frame_mut();
@@ -1276,15 +1254,10 @@ mod handlers {
     }
 
     pub fn jmpnullishp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        #[cfg(feature = "jit")]
-        let ip = cx.active_frame().ip;
         let offset = cx.fetchw_and_inc_ip() as i16;
         let value = cx.pop_stack_rooted();
 
         let jump = value.is_nullish();
-
-        #[cfg(feature = "jit")]
-        cx.record_conditional_jump(ip, jump);
 
         if jump {
             let frame = cx.active_frame_mut();
@@ -1300,15 +1273,10 @@ mod handlers {
     }
 
     pub fn jmpnullishnp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        #[cfg(feature = "jit")]
-        let ip = cx.active_frame().ip;
         let offset = cx.fetchw_and_inc_ip() as i16;
         let value = cx.peek_stack();
 
         let jump = value.is_nullish();
-
-        #[cfg(feature = "jit")]
-        cx.record_conditional_jump(ip, jump);
 
         if jump {
             let frame = cx.active_frame_mut();
@@ -1324,15 +1292,10 @@ mod handlers {
     }
 
     pub fn jmpundefinedp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        #[cfg(feature = "jit")]
-        let ip = cx.active_frame().ip;
         let offset = cx.fetchw_and_inc_ip() as i16;
         let value = cx.pop_stack_rooted();
 
         let jump = matches!(value.unpack(), ValueKind::Undefined(_));
-
-        #[cfg(feature = "jit")]
-        cx.record_conditional_jump(ip, jump);
 
         if jump {
             let frame = cx.active_frame_mut();
@@ -1348,15 +1311,10 @@ mod handlers {
     }
 
     pub fn jmpundefinednp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        #[cfg(feature = "jit")]
-        let ip = cx.active_frame().ip;
         let offset = cx.fetchw_and_inc_ip() as i16;
         let value = cx.peek_stack();
 
         let jump = matches!(value.unpack(), ValueKind::Null(_));
-
-        #[cfg(feature = "jit")]
-        cx.record_conditional_jump(ip, jump);
 
         if jump {
             let frame = cx.active_frame_mut();
@@ -1378,15 +1336,7 @@ mod handlers {
         // Note: this is an unconditional jump, so we don't push this into the trace as a conditional jump
 
         if offset.is_negative() {
-            #[cfg(feature = "jit")]
-            let old_ip = frame.ip;
-
             frame.ip -= -offset as usize;
-
-            // Negative jumps are (currently) always also a marker for the end of a loop
-            // and we want to JIT compile loops that run often
-            #[cfg(feature = "jit")]
-            crate::jit::handle_loop_end(&mut cx, old_ip);
         } else {
             frame.ip += offset as usize;
         }
