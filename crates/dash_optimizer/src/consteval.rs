@@ -4,8 +4,8 @@ use dash_middle::interner::StringInterner;
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::expr::{
     ArrayLiteral, ArrayMemberKind, AssignmentExpr, AssignmentTarget, BinaryExpr, CallArgumentKind, ConditionalExpr,
-    Expr, ExprKind, FunctionCall, GroupingExpr, LiteralExpr, ObjectLiteral, ObjectMemberKind, PropertyAccessExpr,
-    UnaryExpr,
+    Expr, ExprKind, FunctionCall, GroupingExpr, LiteralExpr, ObjectLiteral, ObjectMemberKind,
+    OptionalChainingExpression, PropertyAccessExpr, UnaryExpr,
 };
 use dash_middle::parser::statement::{
     BlockStatement, Class, ClassMemberValue, DoWhileLoop, ExportKind, ForInLoop, ForLoop, ForOfLoop,
@@ -251,6 +251,7 @@ impl<'b, 'interner> ConstFunctionEvalCtx<'b, 'interner> {
             ExprKind::Class(class) => self.visit_class_statement(class),
             ExprKind::Array(..) => self.visit_array_expression(expression),
             ExprKind::Object(..) => self.visit_object_expression(expression),
+            ExprKind::Chaining(OptionalChainingExpression { base, components: _ }) => self.visit(base),
             ExprKind::Compiled(..) => {}
             ExprKind::YieldStar(e) => self.visit(e),
             ExprKind::Empty => {}

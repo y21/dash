@@ -6,8 +6,6 @@ use std::mem::ManuallyDrop;
 use std::ops::RangeInclusive;
 use std::thread::ThreadId;
 
-use smallvec::SmallVec;
-
 const DIGIT: RangeInclusive<u8> = b'0'..=b'9';
 const OCTAL_DIGIT: RangeInclusive<u8> = b'0'..=b'7';
 const IDENTIFIER_START_LOWERCASE: RangeInclusive<u8> = b'a'..=b'z';
@@ -197,7 +195,7 @@ impl<T> fmt::Debug for SharedOnce<T> {
 }
 
 #[derive(Debug, Default)]
-pub struct LevelStack(SmallVec<[u8; 4]>);
+pub struct LevelStack(Vec<u8>);
 
 impl LevelStack {
     pub fn new() -> Self {

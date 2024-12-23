@@ -1,8 +1,9 @@
-use dash_middle::interner::{sym, Symbol};
-use dash_middle::lexer::token::{Token, TokenType, ASSIGNMENT_TYPES};
+use dash_middle::interner::{Symbol, sym};
+use dash_middle::lexer::token::{ASSIGNMENT_TYPES, Token, TokenType};
 use dash_middle::parser::error::Error;
 use dash_middle::parser::expr::{
     ArrayMemberKind, AssignmentExpr, AssignmentTarget, CallArgumentKind, Expr, ExprKind, LiteralExpr, ObjectMemberKind,
+    OptionalChainingComponent, OptionalChainingExpression, PropertyAccessExpr,
 };
 use dash_middle::parser::statement::{
     Asyncness, BlockStatement, FunctionDeclaration, FunctionKind, Parameter, ReturnStatement, Statement, StatementKind,
@@ -10,7 +11,7 @@ use dash_middle::parser::statement::{
 use dash_middle::sourcemap::Span;
 use dash_regex::Flags;
 
-use crate::{any, Parser};
+use crate::{Parser, any};
 
 impl Parser<'_, '_> {
     pub fn parse_expression(&mut self) -> Option<Expr> {
@@ -331,7 +332,12 @@ impl Parser<'_, '_> {
 
         while self
             .eat(
-                any(&[TokenType::LeftParen, TokenType::Dot, TokenType::LeftSquareBrace]),
+                any(&[
+                    TokenType::LeftParen,
+                    TokenType::Dot,
+                    TokenType::LeftSquareBrace,
+                    TokenType::OptionalDot,
+                ]),
                 false,
             )
             .is_some()
@@ -371,13 +377,34 @@ impl Parser<'_, '_> {
                 }
                 TokenType::Dot => {
                     let ident = self.expect_identifier_or_reserved_kw(true)?;
-                    let property = Expr {
-                        span: self.previous()?.span,
-                        kind: ExprKind::identifier(ident),
+                    if let ExprKind::Chaining(chain) = &mut expr.kind {
+                        chain.components.push(OptionalChainingComponent::Ident(ident));
+                        expr.span = expr.span.to(self.previous()?.span);
+                    } else {
+                        let property = Expr {
+                            span: self.previous()?.span,
+                            kind: ExprKind::identifier(ident),
+                        };
+                        expr = Expr {
+                            span: expr.span.to(property.span),
+                            kind: ExprKind::PropertyAccess(PropertyAccessExpr {
+                                computed: false,
+                                property: Box::new(property),
+                                target: Box::new(expr),
+                            }),
+                        };
+                    }
+                }
+                TokenType::OptionalDot => {
+                    let ident = self.expect_identifier_or_reserved_kw(true)?;
+                    let span = expr.span.to(self.previous()?.span);
+                    let chain = OptionalChainingExpression {
+                        base: Box::new(expr),
+                        components: vec![OptionalChainingComponent::Ident(ident)],
                     };
                     expr = Expr {
-                        span: expr.span.to(property.span),
-                        kind: ExprKind::property_access(false, expr, property),
+                        span,
+                        kind: ExprKind::Chaining(chain),
                     };
                 }
                 TokenType::LeftSquareBrace => {
@@ -553,31 +580,25 @@ impl Parser<'_, '_> {
                                 self.eat(TokenType::LeftBrace, true)?;
                                 let body = self.parse_block()?;
                                 let id = self.scope_count.inc();
-                                items.push((
-                                    key,
-                                    Expr {
-                                        span: current.span.to(self.previous()?.span),
-                                        kind: ExprKind::function(FunctionDeclaration {
-                                            id,
-                                            name: None,
-                                            parameters,
-                                            statements: body.0,
-                                            ty: FunctionKind::Function(Asyncness::No),
-                                            ty_segment: None,
-                                            constructor_initializers: None,
-                                            has_extends_clause: false,
-                                        }),
-                                    },
-                                ));
+                                items.push((key, Expr {
+                                    span: current.span.to(self.previous()?.span),
+                                    kind: ExprKind::function(FunctionDeclaration {
+                                        id,
+                                        name: None,
+                                        parameters,
+                                        statements: body.0,
+                                        ty: FunctionKind::Function(Asyncness::No),
+                                        ty_segment: None,
+                                        constructor_initializers: None,
+                                        has_extends_clause: false,
+                                    }),
+                                }));
                             } else {
                                 match key {
-                                    ObjectMemberKind::Static(name) => items.push((
-                                        key,
-                                        Expr {
-                                            span: token.span,
-                                            kind: ExprKind::identifier(name),
-                                        },
-                                    )),
+                                    ObjectMemberKind::Static(name) => items.push((key, Expr {
+                                        span: token.span,
+                                        kind: ExprKind::identifier(name),
+                                    })),
                                     ObjectMemberKind::Dynamic(..) => {
                                         self.error(Error::unexpected_token(token, TokenType::Colon));
                                         return None;
@@ -628,13 +649,10 @@ impl Parser<'_, '_> {
                                 constructor_initializers: None,
                                 has_extends_clause: false,
                             };
-                            items.push((
-                                key,
-                                Expr {
-                                    span: current.span.to(self.previous()?.span),
-                                    kind: ExprKind::function(fun),
-                                },
-                            ));
+                            items.push((key, Expr {
+                                span: current.span.to(self.previous()?.span),
+                                kind: ExprKind::function(fun),
+                            }));
                         }
                         ObjectMemberKind::DynamicGetter(_) | ObjectMemberKind::DynamicSetter(_) => {
                             unreachable!("never created")

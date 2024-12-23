@@ -2,11 +2,11 @@ use std::fmt::{self, Debug};
 
 use derive_more::Display;
 
-use crate::interner::{sym, Symbol};
+use crate::interner::{Symbol, sym};
 use crate::lexer::token::TokenType;
 use crate::sourcemap::Span;
 
-use super::statement::{fmt_list, Class, FunctionDeclaration};
+use super::statement::{Class, FunctionDeclaration, fmt_list};
 
 /// The sequence operator (`expr, expr`)
 pub type Seq = (Box<Expr>, Box<Expr>);
@@ -55,11 +55,37 @@ pub enum ExprKind {
     Array(ArrayLiteral),
     /// An object literal expression
     Object(ObjectLiteral),
+    /// An optional chaining expression
+    Chaining(OptionalChainingExpression),
     /// Compiled bytecode
     #[display(fmt = "<compiled>")]
     Compiled(Vec<u8>),
     /// An empty expression
     Empty,
+}
+
+#[derive(Debug, Clone)]
+pub struct OptionalChainingExpression {
+    pub base: Box<Expr>,
+    pub components: Vec<OptionalChainingComponent>,
+}
+
+impl fmt::Display for OptionalChainingExpression {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&*self.base, f)?;
+        f.write_str("?")?;
+        for component in &self.components {
+            match component {
+                OptionalChainingComponent::Ident(symbol) => write!(f, ".{symbol}")?,
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum OptionalChainingComponent {
+    Ident(Symbol),
 }
 
 #[derive(Debug, Clone, Display)]

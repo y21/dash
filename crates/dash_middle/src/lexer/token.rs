@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::interner::{sym, Symbol};
+use crate::interner::{Symbol, sym};
 use crate::sourcemap::Span;
 use derive_more::Display;
 
@@ -278,7 +278,13 @@ pub enum TokenType {
     Conditional,
 
     #[display(fmt = "?.")]
-    OptionalChaining,
+    OptionalDot,
+
+    #[display(fmt = "?.[")]
+    OptionalBracket,
+
+    #[display(fmt = "?.(")]
+    OptionalCall,
 
     #[display(fmt = "for")]
     For,

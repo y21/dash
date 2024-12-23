@@ -1,7 +1,7 @@
 use crate::interner::Symbol;
 use crate::parser::expr::{
     ArrayLiteral, AssignmentExpr, BinaryExpr, ConditionalExpr, Expr, ExprKind, FunctionCall, GroupingExpr, LiteralExpr,
-    ObjectLiteral, Postfix, Prefix, PropertyAccessExpr, Seq, UnaryExpr,
+    ObjectLiteral, OptionalChainingExpression, Postfix, Prefix, PropertyAccessExpr, Seq, UnaryExpr,
 };
 use crate::parser::statement::{
     BlockStatement, Class, DoWhileLoop, ExportKind, ForInLoop, ForLoop, ForOfLoop, FunctionDeclaration, IfStatement,
@@ -142,6 +142,8 @@ pub trait Visitor<V> {
     fn visit_labelled(&mut self, span: Span, label: Symbol, stmt: Box<Statement>) -> V;
 
     fn visit_yield_star(&mut self, span: Span, right: Box<Expr>) -> V;
+
+    fn visit_optional_chaining_expression(&mut self, span: Span, o: OptionalChainingExpression) -> V;
 }
 
 pub fn accept_default<T, V: Visitor<T>>(this: &mut V, Statement { kind, span }: Statement) -> T {
@@ -195,5 +197,6 @@ where
         ExprKind::Compiled(..) => on_empty(this),
         ExprKind::Empty => this.visit_empty_expr(),
         ExprKind::YieldStar(e) => this.visit_yield_star(span, e),
+        ExprKind::Chaining(c) => this.visit_optional_chaining_expression(span, c),
     }
 }

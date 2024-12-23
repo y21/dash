@@ -2,12 +2,12 @@ use std::cell::RefCell;
 
 use dash_log::debug;
 use dash_middle::compiler::scope::{BlockScope, CompileValueType, FunctionScope, Local, ScopeGraph, ScopeKind};
-use dash_middle::interner::{sym, Symbol};
+use dash_middle::interner::{Symbol, sym};
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::expr::{
     ArrayLiteral, ArrayMemberKind, AssignmentExpr, AssignmentTarget, BinaryExpr, CallArgumentKind, ConditionalExpr,
-    Expr, ExprKind, FunctionCall, GroupingExpr, LiteralExpr, ObjectLiteral, ObjectMemberKind, PropertyAccessExpr,
-    UnaryExpr,
+    Expr, ExprKind, FunctionCall, GroupingExpr, LiteralExpr, ObjectLiteral, ObjectMemberKind,
+    OptionalChainingExpression, PropertyAccessExpr, UnaryExpr,
 };
 use dash_middle::parser::statement::{
     Binding, BlockStatement, Class, ClassMemberKey, ClassMemberValue, DoWhileLoop, ExportKind, ForInLoop, ForLoop,
@@ -394,6 +394,7 @@ impl<'s> TypeInferCtx<'s> {
             ExprKind::Class(class) => self.visit_class_expression(class),
             ExprKind::Array(expr) => self.visit_array_expression(expr),
             ExprKind::Object(expr) => self.visit_object_expression(expr),
+            ExprKind::Chaining(OptionalChainingExpression { base, components: _ }) => self.visit(&**base),
             ExprKind::Compiled(..) => None,
             ExprKind::Empty => None,
             ExprKind::YieldStar(e) => {

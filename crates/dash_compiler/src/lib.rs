@@ -2,19 +2,19 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::rc::Rc;
 
-use dash_log::{debug, span, Level};
+use dash_log::{Level, debug, span};
 use dash_middle::compiler::constant::{Buffer, ConstantPool, Function, NumberConstant, SymbolConstant};
 use dash_middle::compiler::external::External;
 use dash_middle::compiler::instruction::{AssignKind, Instruction, IntrinsicOperation};
 use dash_middle::compiler::scope::{CompileValueType, LimitExceededError, Local, ScopeGraph};
 use dash_middle::compiler::{CompileResult, DebugSymbols, FunctionCallMetadata, StaticImportKind};
-use dash_middle::interner::{sym, StringInterner, Symbol};
+use dash_middle::interner::{StringInterner, Symbol, sym};
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::error::Error;
 use dash_middle::parser::expr::{
     ArrayLiteral, ArrayMemberKind, AssignmentExpr, AssignmentTarget, BinaryExpr, CallArgumentKind, ConditionalExpr,
-    Expr, ExprKind, FunctionCall, GroupingExpr, LiteralExpr, ObjectLiteral, ObjectMemberKind, Postfix,
-    PropertyAccessExpr, Seq, UnaryExpr,
+    Expr, ExprKind, FunctionCall, GroupingExpr, LiteralExpr, ObjectLiteral, ObjectMemberKind,
+    OptionalChainingComponent, OptionalChainingExpression, Postfix, PropertyAccessExpr, Seq, UnaryExpr,
 };
 use dash_middle::parser::statement::{
     Asyncness, Binding, BlockStatement, Class, ClassMember, ClassMemberKey, ClassMemberValue, DoWhileLoop, ExportKind,
@@ -25,9 +25,9 @@ use dash_middle::parser::statement::{
 use dash_middle::sourcemap::Span;
 use dash_middle::util::Counter;
 use dash_middle::visitor::Visitor;
+use dash_optimizer::OptLevel;
 use dash_optimizer::consteval::ConstFunctionEvalCtx;
 use dash_optimizer::type_infer::{InferMode, LocalDeclToSlot, NameResolutionResults, TypeInferCtx};
-use dash_optimizer::OptLevel;
 use for_each_loop::{ForEachDesugarCtxt, ForEachLoopKind};
 use instruction::compile_local_load;
 use jump_container::JumpContainer;
@@ -414,6 +414,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
             ExprKind::Class(e) => self.visit_class_expr(span, e),
             ExprKind::Array(e) => self.visit_array_literal(span, e),
             ExprKind::Object(e) => self.visit_object_literal(span, e),
+            ExprKind::Chaining(o) => self.visit_optional_chaining_expression(span, o),
             ExprKind::Compiled(mut buf) => {
                 self.current_function_mut().buf.append(&mut buf);
                 Ok(())
@@ -1529,6 +1530,35 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
         Ok(())
     }
 
+    fn visit_optional_chaining_expression(
+        &mut self,
+        span: Span,
+        chain: OptionalChainingExpression,
+    ) -> Result<(), Error> {
+        let mut ib = InstructionBuilder::new(self);
+        ib.accept_expr(*chain.base)?;
+
+        ib.build_jmpnullishnp(Label::IfBranch { branch_id: 0 }, true);
+
+        for component in chain.components {
+            match component {
+                OptionalChainingComponent::Ident(ident) => {
+                    ib.build_static_prop_access(ident, false)
+                        .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
+                }
+            }
+        }
+        ib.build_jmp(Label::IfEnd, true);
+
+        ib.add_local_label(Label::IfBranch { branch_id: 0 });
+        ib.build_undefined_constant()
+            .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
+
+        ib.add_local_label(Label::IfEnd);
+
+        Ok(())
+    }
+
     fn visit_sequence_expr(&mut self, _span: Span, (expr1, expr2): Seq) -> Result<(), Error> {
         self.accept_expr(*expr1)?;
         InstructionBuilder::new(self).build_pop();
@@ -2222,14 +2252,10 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
         // Class.prototype
         let class_prototype = Expr {
             span: Span::COMPILER_GENERATED,
-            kind: ExprKind::property_access(
-                false,
-                load_class_binding.clone(),
-                Expr {
-                    span: Span::COMPILER_GENERATED,
-                    kind: ExprKind::identifier(sym::prototype),
-                },
-            ),
+            kind: ExprKind::property_access(false, load_class_binding.clone(), Expr {
+                span: Span::COMPILER_GENERATED,
+                kind: ExprKind::identifier(sym::prototype),
+            }),
         };
 
         let methods = class.members.iter().filter(|member| {
@@ -2260,25 +2286,17 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                 kind: ExprKind::assignment(
                     Expr {
                         span: Span::COMPILER_GENERATED,
-                        kind: ExprKind::property_access(
-                            false,
-                            class_prototype.clone(),
-                            Expr {
-                                span: Span::COMPILER_GENERATED,
-                                kind: ExprKind::identifier(sym::__proto__),
-                            },
-                        ),
+                        kind: ExprKind::property_access(false, class_prototype.clone(), Expr {
+                            span: Span::COMPILER_GENERATED,
+                            kind: ExprKind::identifier(sym::__proto__),
+                        }),
                     },
                     Expr {
                         span: Span::COMPILER_GENERATED,
-                        kind: ExprKind::property_access(
-                            false,
-                            super_id.clone(),
-                            Expr {
-                                span: Span::COMPILER_GENERATED,
-                                kind: ExprKind::identifier(sym::prototype),
-                            },
-                        ),
+                        kind: ExprKind::property_access(false, super_id.clone(), Expr {
+                            span: Span::COMPILER_GENERATED,
+                            kind: ExprKind::identifier(sym::prototype),
+                        }),
                     },
                     TokenType::Assignment,
                 ),
@@ -2291,14 +2309,10 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                 kind: ExprKind::assignment(
                     Expr {
                         span: Span::COMPILER_GENERATED,
-                        kind: ExprKind::property_access(
-                            false,
-                            load_class_binding.clone(),
-                            Expr {
-                                span: Span::COMPILER_GENERATED,
-                                kind: ExprKind::identifier(sym::__proto__),
-                            },
-                        ),
+                        kind: ExprKind::property_access(false, load_class_binding.clone(), Expr {
+                            span: Span::COMPILER_GENERATED,
+                            kind: ExprKind::identifier(sym::__proto__),
+                        }),
                     },
                     super_id,
                     TokenType::Assignment,
