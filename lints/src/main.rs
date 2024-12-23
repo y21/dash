@@ -1,10 +1,10 @@
 #![feature(rustc_private, let_chains, box_patterns, if_let_guard)]
 #![deny(rust_2018_idioms)]
 
-use missing_root::{MissingRoot, MISSING_ROOT};
+use missing_root::{MISSING_ROOT, MissingRoot};
 use rustc_driver::{Callbacks, RunCompiler};
-use rustc_session::config::{ErrorOutputType, OptLevel};
 use rustc_session::EarlyDiagCtxt;
+use rustc_session::config::{ErrorOutputType, OptLevel};
 
 extern crate rustc_ast;
 extern crate rustc_driver;
@@ -45,9 +45,9 @@ fn main() {
 
     if args.iter().any(|arg| arg == "--cap-lints") || !args.iter().any(|arg| arg.contains("dash_vm")) {
         // dependencies
-        RunCompiler::new(&args[1..], &mut RustcCallbacks).run().unwrap();
+        RunCompiler::new(&args[1..], &mut RustcCallbacks).run();
     } else {
         args.extend(["--cfg", "dash_lints"].map(String::from));
-        RunCompiler::new(&args[1..], &mut PrimaryCallbacks).run().unwrap();
+        RunCompiler::new(&args[1..], &mut PrimaryCallbacks).run();
     }
 }

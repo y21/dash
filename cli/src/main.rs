@@ -1,6 +1,6 @@
 use std::backtrace::{Backtrace, BacktraceStatus};
 
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use clap::{Arg, Command};
 use colorful::Colorful;
 use dash_optimizer::OptLevel;
