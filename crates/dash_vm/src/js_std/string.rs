@@ -360,7 +360,7 @@ pub fn trim_start(cx: CallContext) -> Result<Value, Value> {
 
 pub fn trim_end(cx: CallContext) -> Result<Value, Value> {
     let string = cx.this.to_js_string(cx.scope)?;
-    let result = string.res(cx.scope).trim_start().to_owned();
+    let result = string.res(cx.scope).trim_end().to_owned();
     Ok(Value::string(cx.scope.intern(result.as_ref()).into()))
 }
 
