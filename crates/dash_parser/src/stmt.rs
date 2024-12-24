@@ -588,7 +588,7 @@ impl Parser<'_, '_> {
                         if let Some(sym) = name.ty.as_identifier() {
                             if rest.is_some() {
                                 // Only allow one rest operator
-                                self.error(Error::MultipleRestInDestructuring(name));
+                                self.error(Error::MultipleRestInDestructuring(name.span));
                                 return None;
                             }
 
@@ -665,7 +665,7 @@ impl Parser<'_, '_> {
                         if let Some(sym) = name.ty.as_identifier() {
                             if rest.is_some() {
                                 // Only allow one rest operator
-                                self.error(Error::MultipleRestInDestructuring(name));
+                                self.error(Error::MultipleRestInDestructuring(name.span));
                                 return None;
                             }
 

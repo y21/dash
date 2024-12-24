@@ -911,6 +911,7 @@ impl Parser<'_, '_> {
                 ExprKind::Object(ObjectLiteral(properties)) => {
                     let destructured_id = parser.local_count.inc();
                     let mut fields = Vec::with_capacity(properties.len());
+                    let mut rest = None;
                     for (key, value) in properties {
                         match key {
                             // `x: a` aliases x to 1
@@ -926,14 +927,22 @@ impl Parser<'_, '_> {
                             ObjectMemberKind::Default(symbol) => {
                                 fields.push((parser.local_count.inc(), symbol, None, Some(value)))
                             }
+                            ObjectMemberKind::Spread => {
+                                if rest.is_none() {
+                                    if let Some(symbol) = value.kind.as_identifier() {
+                                        rest = Some(parser.create_binding(symbol));
+                                    } else {
+                                        parser.error(Error::unexpected_token(value.span, TokenType::DUMMY_IDENTIFIER));
+                                    }
+                                } else {
+                                    parser.error(Error::MultipleRestInDestructuring(value.span))
+                                }
+                            }
                             _ => parser.error(Error::unexpected_token(value.span, TokenType::DUMMY_IDENTIFIER)),
                         }
                     }
 
-                    Some(Parameter::Pattern(destructured_id, Pattern::Object {
-                        fields,
-                        rest: None,
-                    }))
+                    Some(Parameter::Pattern(destructured_id, Pattern::Object { fields, rest }))
                 }
                 _ => {
                     parser.error(Error::Unimplemented(

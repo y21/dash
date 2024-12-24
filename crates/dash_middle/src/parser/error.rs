@@ -48,7 +48,7 @@ pub enum Error {
         expect: usize,
         token: Token,
     },
-    MultipleRestInDestructuring(Token),
+    MultipleRestInDestructuring(Span),
     RegexSyntaxError(Token, dash_regex::Error),
     IncompleteSpread(Token),
     /* Compiler */
@@ -311,7 +311,7 @@ impl fmt::Display for FormattableError<'_, '_> {
                 diag.message("incorrect number of parameters for accessor");
                 diag.span_error(span, format!("expected {expect}, got {got}"));
             }
-            Error::MultipleRestInDestructuring(Token { span, .. }) => {
+            Error::MultipleRestInDestructuring(span) => {
                 diag.message("multiple rest elements in destructuring");
                 diag.span_error(span, "second rest element defined here");
             }
