@@ -903,6 +903,48 @@ impl Parser<'_, '_> {
         prec: Vec<Expr>,
         rest_binding: Option<Symbol>,
     ) -> Option<Expr> {
+        fn expr_to_parameter(parser: &mut Parser<'_, '_>, expr: Expr) -> Option<Parameter> {
+            match expr.kind {
+                ExprKind::Literal(LiteralExpr::Identifier(ident)) => {
+                    Some(Parameter::Identifier(parser.create_binding(ident)))
+                }
+                ExprKind::Object(ObjectLiteral(properties)) => {
+                    let destructured_id = parser.local_count.inc();
+                    let mut fields = Vec::with_capacity(properties.len());
+                    for (key, value) in properties {
+                        match key {
+                            // `x: a` aliases x to 1
+                            ObjectMemberKind::Static(symbol) => {
+                                if let Some(alias) = value.kind.as_identifier() {
+                                    fields.push((parser.local_count.inc(), symbol, Some(alias), None))
+                                } else {
+                                    parser.error(Error::unexpected_token(value.span, TokenType::DUMMY_IDENTIFIER));
+                                    return None;
+                                }
+                            }
+                            // `x = 1` defaults x to 1
+                            ObjectMemberKind::Default(symbol) => {
+                                fields.push((parser.local_count.inc(), symbol, None, Some(value)))
+                            }
+                            _ => parser.error(Error::unexpected_token(value.span, TokenType::DUMMY_IDENTIFIER)),
+                        }
+                    }
+
+                    Some(Parameter::Pattern(destructured_id, Pattern::Object {
+                        fields,
+                        rest: None,
+                    }))
+                }
+                _ => {
+                    parser.error(Error::Unimplemented(
+                        expr.span,
+                        format!("only assignment and identifier expressions are supported as in closure parameter recovery: {expr:?}"),
+                    ));
+                    None
+                }
+            }
+        }
+
         let mut list = Vec::with_capacity(prec.len());
 
         // If it is arrow function, we need to convert everything to their arrow func equivalents
@@ -911,55 +953,19 @@ impl Parser<'_, '_> {
             // e.g. (a: number) => {}
             // we need to properly convert types here too
 
-            let (parameter, value) = match expr.kind {
-                ExprKind::Literal(LiteralExpr::Identifier(ident)) => {
-                    (Parameter::Identifier(self.create_binding(ident)), None)
-                }
-                ExprKind::Assignment(AssignmentExpr {
-                    left: AssignmentTarget::Expr(left),
-                    right,
-                    ..
-                }) => (
-                    Parameter::Identifier(self.create_binding(left.kind.as_identifier()?)),
-                    Some(*right),
-                ),
-                ExprKind::Object(ObjectLiteral(properties)) => {
-                    let destructured_id = self.local_count.inc();
-                    let mut fields = Vec::with_capacity(properties.len());
-                    for (key, value) in properties {
-                        match key {
-                            // `x: a` aliases x to 1
-                            ObjectMemberKind::Static(symbol) => {
-                                if let Some(alias) = value.kind.as_identifier() {
-                                    fields.push((self.local_count.inc(), symbol, Some(alias), None))
-                                } else {
-                                    self.error(Error::unexpected_token(value.span, TokenType::DUMMY_IDENTIFIER));
-                                    return None;
-                                }
-                            }
-                            // `x = 1` defaults x to 1
-                            ObjectMemberKind::Default(symbol) => {
-                                fields.push((self.local_count.inc(), symbol, None, Some(value)))
-                            }
-                            _ => self.error(Error::unexpected_token(value.span, TokenType::DUMMY_IDENTIFIER)),
-                        }
-                    }
-
-                    (
-                        Parameter::Pattern(destructured_id, Pattern::Object { fields, rest: None }),
-                        None,
-                    )
-                }
-                _ => {
-                    self.error(Error::Unimplemented(
-                        expr.span,
-                        format!("only assignment and identifier expressions are supported as in closure parameter recovery: {expr:?}"),
-                    ));
-                    return None;
-                }
+            let (expr, default) = if let ExprKind::Assignment(AssignmentExpr {
+                left: AssignmentTarget::Expr(expr),
+                right,
+                operator: TokenType::Assignment,
+            }) = expr.kind
+            {
+                (*expr, Some(*right))
+            } else {
+                (expr, None)
             };
+            let parameter = expr_to_parameter(self, expr)?;
 
-            list.push((parameter, value, None));
+            list.push((parameter, default, None));
         }
 
         if let Some(ident) = rest_binding {
