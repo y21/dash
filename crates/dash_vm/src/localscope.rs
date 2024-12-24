@@ -4,15 +4,15 @@ use std::ops::{Deref, DerefMut};
 
 use dash_middle::interner::Symbol;
 
+use crate::PromiseAction;
 use crate::gc::ObjectId;
 use crate::value::function::bound::BoundFunction;
 use crate::value::promise::{Promise, PromiseState};
 use crate::value::{Unpack, ValueContext, ValueKind};
-use crate::PromiseAction;
 
-use super::value::object::Object;
-use super::value::Value;
 use super::Vm;
+use super::value::Value;
+use super::value::object::Object;
 
 use std::ptr::NonNull;
 
@@ -231,6 +231,10 @@ impl LocalScope<'_> {
         self.scope_data_mut().strings.push(sym);
         sym
     }
+
+    pub fn mk_promise(&mut self) -> ObjectId {
+        self.register(Promise::new(self))
+    }
 }
 
 // TODO: remove this Deref impl
@@ -263,8 +267,8 @@ impl Drop for LocalScope<'_> {
 
 #[cfg(test)]
 mod tests {
-    use crate::value::string::JsString;
     use crate::Vm;
+    use crate::value::string::JsString;
 
     #[test]
     fn it_works() {

@@ -14,7 +14,7 @@ use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::promise::Promise;
 use dash_vm::value::{Unpack, Unrooted, Value};
-use dash_vm::{delegate, extract, throw, PromiseAction};
+use dash_vm::{PromiseAction, delegate, extract, throw};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::sync::{mpsc, oneshot};
@@ -198,11 +198,7 @@ fn tcplistener_accept(cx: CallContext) -> Result<Value, Value> {
             "TcpListener.accept called on non-TcpListener object"
         )
     };
-    // TODO: don't use handle after using scope. Enforce this at comptime somehow
-    let promise = {
-        let promise = Promise::new(cx.scope);
-        cx.scope.register(promise)
-    };
+    let promise = cx.scope.mk_promise();
 
     let promise_id = State::from_vm_mut(cx.scope).add_pending_promise(promise);
 

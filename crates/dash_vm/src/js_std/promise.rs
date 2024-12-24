@@ -8,7 +8,7 @@ use crate::value::object::{NamedObject, Object, PropertyKey};
 use crate::value::promise::{Promise, PromiseRejecter, PromiseResolver, PromiseState};
 use crate::value::root_ext::RootErrExt;
 use crate::value::{Root, Typeof, Unpack, Unrooted, Value, ValueContext, ValueKind};
-use crate::{delegate, extract, throw, Vm};
+use crate::{Vm, delegate, extract, throw};
 use dash_middle::interner::sym;
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
@@ -17,10 +17,7 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
         _ => throw!(cx.scope, TypeError, "Promise callback must be a function"),
     };
 
-    let promise = {
-        let p = Promise::new(cx.scope);
-        cx.scope.register(p)
-    };
+    let promise = cx.scope.mk_promise();
 
     let (resolve, reject) = {
         let r1 = PromiseResolver::new(cx.scope, promise);
@@ -29,11 +26,10 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     };
 
     initiator
-        .apply(
-            cx.scope,
-            This::Default,
-            vec![Value::object(resolve), Value::object(reject)],
-        )
+        .apply(cx.scope, This::Default, vec![
+            Value::object(resolve),
+            Value::object(reject),
+        ])
         .root_err(cx.scope)?;
 
     Ok(Value::object(cx.scope.register(promise)))
@@ -66,10 +62,7 @@ pub fn then(cx: CallContext) -> Result<Value, Value> {
 
     let mut state = promise.state().borrow_mut();
 
-    let then_promise = {
-        let p = Promise::new(cx.scope);
-        cx.scope.register(p)
-    };
+    let then_promise = cx.scope.mk_promise();
     let resolver = {
         let p = PromiseResolver::new(cx.scope, then_promise);
         cx.scope.register(p)

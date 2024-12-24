@@ -12,7 +12,7 @@ use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::promise::Promise;
 use dash_vm::value::string::JsString;
 use dash_vm::value::{Unpack, Value, ValueKind};
-use dash_vm::{delegate, extract, throw, PromiseAction, Vm};
+use dash_vm::{PromiseAction, Vm, delegate, extract, throw};
 use once_cell::sync::Lazy;
 use reqwest::{Client, Method};
 
@@ -57,8 +57,7 @@ fn fetch(cx: CallContext) -> Result<Value, Value> {
         (rt, etx)
     };
 
-    let promise = Promise::new(cx.scope);
-    let promise = cx.scope.register(promise);
+    let promise = cx.scope.mk_promise();
 
     let promise_id = State::from_vm_mut(cx.scope).add_pending_promise(promise);
 
@@ -122,8 +121,7 @@ fn http_response_text(cx: CallContext) -> Result<Value, Value> {
         None => throw!(cx.scope, Error, "HTTP Response already consumed"),
     };
 
-    let promise = Promise::new(cx.scope);
-    let promise = cx.scope.register(promise);
+    let promise = cx.scope.mk_promise();
 
     let promise_id = State::from_vm_mut(cx.scope).add_pending_promise(promise);
 

@@ -1,4 +1,4 @@
-use std::alloc::{alloc, dealloc, handle_alloc_error, Layout};
+use std::alloc::{Layout, alloc, dealloc, handle_alloc_error};
 use std::any::TypeId;
 use std::cell::Cell;
 use std::collections::BTreeMap;
@@ -10,12 +10,12 @@ use bitflags::bitflags;
 use smallvec::SmallVec;
 use trace::TraceCtxt;
 
+use crate::Vm;
 use crate::frame::This;
 use crate::localscope::LocalScope;
 use crate::value::object::{PropertyKey, PropertyValue};
 use crate::value::primitive::InternalSlots;
 use crate::value::{Typeof, Unrooted, Value};
-use crate::Vm;
 
 pub mod persistent;
 pub mod trace;

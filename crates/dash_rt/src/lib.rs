@@ -1,13 +1,13 @@
 use std::future::Future;
 
 use dash_compiler::FunctionCompiler;
+use dash_vm::PromiseAction;
 use dash_vm::frame::{Exports, Frame, This};
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::function::native::CallContext;
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::promise::Promise;
 use dash_vm::value::{Root, Value};
-use dash_vm::PromiseAction;
 use event::EventMessage;
 use state::State;
 
@@ -28,10 +28,7 @@ where
 {
     let event_tx = State::from_vm_mut(cx.scope).event_sender();
 
-    let promise = {
-        let promise = Promise::new(cx.scope);
-        cx.scope.register(promise)
-    };
+    let promise = cx.scope.mk_promise();
 
     let (promise_id, rt) = {
         let state = State::from_vm_mut(cx.scope);
