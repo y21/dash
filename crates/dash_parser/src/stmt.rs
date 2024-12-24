@@ -1,4 +1,4 @@
-use dash_middle::interner::{sym, Symbol};
+use dash_middle::interner::{Symbol, sym};
 use dash_middle::lexer::token::{Token, TokenType, VARIABLE_TYPES};
 use dash_middle::parser::error::Error;
 use dash_middle::parser::expr::{Expr, ExprKind};
@@ -12,7 +12,7 @@ use dash_middle::parser::statement::{
 use dash_middle::parser::types::TypeSegment;
 use dash_middle::sourcemap::Span;
 
-use crate::{any, Parser};
+use crate::{Parser, any};
 
 type ParameterList = Option<Vec<(Parameter, Option<Expr>, Option<TypeSegment>)>>;
 
@@ -595,7 +595,7 @@ impl Parser<'_, '_> {
                             rest = Some(self.create_binding(sym));
                             self.advance();
                         } else {
-                            self.error(Error::unexpected_token(name, TokenType::DUMMY_IDENTIFIER));
+                            self.error(Error::unexpected_token(name.span, TokenType::DUMMY_IDENTIFIER));
                             return None;
                         }
                     }
@@ -609,7 +609,7 @@ impl Parser<'_, '_> {
                                 self.advance();
                                 Some(alias)
                             } else {
-                                self.error(Error::unexpected_token(alias, TokenType::DUMMY_IDENTIFIER));
+                                self.error(Error::unexpected_token(alias.span, TokenType::DUMMY_IDENTIFIER));
                                 return None;
                             }
                         } else {
@@ -625,7 +625,7 @@ impl Parser<'_, '_> {
                         fields.push((self.local_count.inc(), name, alias, default));
                     }
                     _ => {
-                        self.error(Error::unexpected_token(cur, TokenType::DUMMY_IDENTIFIER));
+                        self.error(Error::unexpected_token(cur.span, TokenType::DUMMY_IDENTIFIER));
                         return None;
                     }
                 }
@@ -672,7 +672,7 @@ impl Parser<'_, '_> {
                             rest = Some(self.create_binding(sym));
                             self.advance();
                         } else {
-                            self.error(Error::unexpected_token(name, TokenType::DUMMY_IDENTIFIER));
+                            self.error(Error::unexpected_token(name.span, TokenType::DUMMY_IDENTIFIER));
                             return None;
                         }
                     }
@@ -687,7 +687,7 @@ impl Parser<'_, '_> {
                         fields.push(Some((self.create_binding(name), default)));
                     }
                     _ => {
-                        self.error(Error::unexpected_token(cur, TokenType::DUMMY_IDENTIFIER));
+                        self.error(Error::unexpected_token(cur.span, TokenType::DUMMY_IDENTIFIER));
                         return None;
                     }
                 }
@@ -838,7 +838,7 @@ impl Parser<'_, '_> {
                 }
                 _ => {
                     self.error(Error::unexpected_token(
-                        cur,
+                        cur.span,
                         &[TokenType::Case, TokenType::Default] as &[_],
                     ));
                     return None;

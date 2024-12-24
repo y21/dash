@@ -311,7 +311,19 @@ impl InstructionBuilder<'_, '_> {
 
         // Push in reverse order to match order in which the compiler pushes values onto the stack
         for member in constants.into_iter().rev() {
-            let kind_id = CompilerObjectMemberKind::from(&member) as u8;
+            let kind_id = match member {
+                ObjectMemberKind::Dynamic(..) => CompilerObjectMemberKind::Dynamic,
+                ObjectMemberKind::DynamicGetter(..) => CompilerObjectMemberKind::DynamicGetter,
+                ObjectMemberKind::Getter(..) => CompilerObjectMemberKind::Getter,
+                ObjectMemberKind::DynamicSetter(..) => CompilerObjectMemberKind::DynamicSetter,
+                ObjectMemberKind::Setter(..) => CompilerObjectMemberKind::Setter,
+                ObjectMemberKind::Static(..) => CompilerObjectMemberKind::Static,
+                ObjectMemberKind::Spread => CompilerObjectMemberKind::Spread,
+                ObjectMemberKind::Default(_) => {
+                    unimplementedc!(span, "defaults can only appear in object destructuring")
+                }
+            } as u8;
+
             match member {
                 ObjectMemberKind::Dynamic(_)
                 | ObjectMemberKind::DynamicGetter(_)
@@ -321,6 +333,7 @@ impl InstructionBuilder<'_, '_> {
                 ObjectMemberKind::Getter(name) | ObjectMemberKind::Setter(name) => {
                     compile_object_member_kind(self, span, name, kind_id)?
                 }
+                ObjectMemberKind::Default(_) => unreachable!(),
             }
         }
 

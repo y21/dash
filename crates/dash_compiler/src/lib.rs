@@ -35,6 +35,12 @@ use crate::builder::{InstructionBuilder, Label};
 
 use self::instruction::NamedExportKind;
 
+macro_rules! unimplementedc {
+    ($span:expr,$($what:expr),*) => {
+        return Err(Error::Unimplemented($span,format_args!($($what),*).to_string()))
+    };
+}
+
 pub mod builder;
 mod for_each_loop;
 #[cfg(feature = "from_string")]
@@ -43,12 +49,6 @@ pub mod instruction;
 pub mod transformations;
 
 mod jump_container;
-
-macro_rules! unimplementedc {
-    ($span:expr,$($what:expr),*) => {
-        return Err(Error::Unimplemented($span,format_args!($($what),*).to_string()))
-    };
-}
 
 #[derive(Debug, Clone, Copy)]
 enum Breakable {

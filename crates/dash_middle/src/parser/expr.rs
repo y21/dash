@@ -316,6 +316,9 @@ pub enum ObjectMemberKind {
     Static(Symbol),
     Spread,
     Dynamic(Expr),
+    /// `x = 1`
+    /// Only valid as part of object destructuring, i.e. `(({ x = 1 }) => x)({})` and `let { x = 1 } = {};`
+    Default(Symbol),
 }
 
 impl fmt::Display for ObjectMemberKind {
@@ -326,6 +329,7 @@ impl fmt::Display for ObjectMemberKind {
             Self::Setter(name) => write!(f, "set [{name}]"),
             Self::DynamicSetter(expr) => write!(f, "set [{expr}]"),
             Self::Static(name) => write!(f, "{name}"),
+            Self::Default(name) => write!(f, "{name}"),
             Self::Dynamic(expr) => write!(f, "[{expr}]"),
             Self::Spread => f.write_str("...<expression unavailable>"), // TODO: figure out a way to display it here
         }

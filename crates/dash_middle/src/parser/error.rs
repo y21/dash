@@ -36,7 +36,7 @@ pub enum Error {
     /// An unknown token was found
     UnknownToken(Token),
     InvalidEscapeSequence(Span),
-    UnexpectedToken(Token, TokenTypeSuggestion),
+    UnexpectedToken(Span, TokenTypeSuggestion),
     /// Unexpected end of file
     UnexpectedEof,
     /// Integer parsing failed
@@ -76,8 +76,8 @@ pub enum Error {
 }
 
 impl Error {
-    pub fn unexpected_token(token: Token, v: impl Into<TokenTypeSuggestion>) -> Self {
-        Self::UnexpectedToken(token, v.into())
+    pub fn unexpected_token(span: Span, v: impl Into<TokenTypeSuggestion>) -> Self {
+        Self::UnexpectedToken(span, v.into())
     }
 }
 
@@ -273,7 +273,7 @@ impl fmt::Display for FormattableError<'_, '_> {
                 diag.message("unexpected token");
                 diag.span_error(span, "");
             }
-            Error::UnexpectedToken(Token { span, .. }, sugg) => {
+            Error::UnexpectedToken(span, sugg) => {
                 diag.message("unexpected token");
                 diag.span_error(span, "");
                 match sugg {

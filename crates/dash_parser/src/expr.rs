@@ -2,11 +2,12 @@ use dash_middle::interner::{Symbol, sym};
 use dash_middle::lexer::token::{ASSIGNMENT_TYPES, Token, TokenType};
 use dash_middle::parser::error::Error;
 use dash_middle::parser::expr::{
-    ArrayMemberKind, AssignmentExpr, AssignmentTarget, CallArgumentKind, Expr, ExprKind, LiteralExpr, ObjectMemberKind,
-    OptionalChainingComponent, OptionalChainingExpression, PropertyAccessExpr,
+    ArrayMemberKind, AssignmentExpr, AssignmentTarget, CallArgumentKind, Expr, ExprKind, LiteralExpr, ObjectLiteral,
+    ObjectMemberKind, OptionalChainingComponent, OptionalChainingExpression, PropertyAccessExpr,
 };
 use dash_middle::parser::statement::{
-    Asyncness, BlockStatement, FunctionDeclaration, FunctionKind, Parameter, ReturnStatement, Statement, StatementKind,
+    Asyncness, BlockStatement, FunctionDeclaration, FunctionKind, Parameter, Pattern, ReturnStatement, Statement,
+    StatementKind,
 };
 use dash_middle::sourcemap::Span;
 use dash_regex::Flags;
@@ -559,7 +560,7 @@ impl Parser<'_, '_> {
                             if let Some(ident) = other.as_property_name() {
                                 ObjectMemberKind::Static(ident)
                             } else {
-                                self.error(Error::unexpected_token(token, TokenType::DUMMY_IDENTIFIER));
+                                self.error(Error::unexpected_token(token.span, TokenType::DUMMY_IDENTIFIER));
                                 return None;
                             }
                         }
@@ -568,6 +569,11 @@ impl Parser<'_, '_> {
                     match key {
                         ObjectMemberKind::Spread => {
                             items.push((key, self.parse_yield()?));
+                        }
+                        ObjectMemberKind::Static(name) if self.eat(TokenType::Assignment, false).is_some() => {
+                            // Parse `{ x = 3 }` for object destructuring.
+                            let value = self.parse_yield()?;
+                            items.push((ObjectMemberKind::Default(name), value));
                         }
                         ObjectMemberKind::Dynamic(..) | ObjectMemberKind::Static(..) => {
                             if self.eat(TokenType::Colon, false).is_some() {
@@ -600,7 +606,7 @@ impl Parser<'_, '_> {
                                         kind: ExprKind::identifier(name),
                                     })),
                                     ObjectMemberKind::Dynamic(..) => {
-                                        self.error(Error::unexpected_token(token, TokenType::Colon));
+                                        self.error(Error::unexpected_token(token.span, TokenType::Colon));
                                         return None;
                                     }
                                     _ => unreachable!(),
@@ -654,7 +660,9 @@ impl Parser<'_, '_> {
                                 kind: ExprKind::function(fun),
                             }));
                         }
-                        ObjectMemberKind::DynamicGetter(_) | ObjectMemberKind::DynamicSetter(_) => {
+                        ObjectMemberKind::DynamicGetter(_)
+                        | ObjectMemberKind::DynamicSetter(_)
+                        | ObjectMemberKind::Default(_) => {
                             unreachable!("never created")
                         }
                     }
@@ -903,24 +911,55 @@ impl Parser<'_, '_> {
             // e.g. (a: number) => {}
             // we need to properly convert types here too
 
-            let (ident, value) = match expr.kind {
-                ExprKind::Literal(LiteralExpr::Identifier(ident)) => (ident, None),
+            let (parameter, value) = match expr.kind {
+                ExprKind::Literal(LiteralExpr::Identifier(ident)) => {
+                    (Parameter::Identifier(self.create_binding(ident)), None)
+                }
                 ExprKind::Assignment(AssignmentExpr {
                     left: AssignmentTarget::Expr(left),
                     right,
                     ..
-                }) => (left.kind.as_identifier()?, Some(*right)),
+                }) => (
+                    Parameter::Identifier(self.create_binding(left.kind.as_identifier()?)),
+                    Some(*right),
+                ),
+                ExprKind::Object(ObjectLiteral(properties)) => {
+                    let destructured_id = self.local_count.inc();
+                    let mut fields = Vec::with_capacity(properties.len());
+                    for (key, value) in properties {
+                        match key {
+                            // `x: a` aliases x to 1
+                            ObjectMemberKind::Static(symbol) => {
+                                if let Some(alias) = value.kind.as_identifier() {
+                                    fields.push((self.local_count.inc(), symbol, Some(alias), None))
+                                } else {
+                                    self.error(Error::unexpected_token(value.span, TokenType::DUMMY_IDENTIFIER));
+                                    return None;
+                                }
+                            }
+                            // `x = 1` defaults x to 1
+                            ObjectMemberKind::Default(symbol) => {
+                                fields.push((self.local_count.inc(), symbol, None, Some(value)))
+                            }
+                            _ => self.error(Error::unexpected_token(value.span, TokenType::DUMMY_IDENTIFIER)),
+                        }
+                    }
+
+                    (
+                        Parameter::Pattern(destructured_id, Pattern::Object { fields, rest: None }),
+                        None,
+                    )
+                }
                 _ => {
                     self.error(Error::Unimplemented(
                         expr.span,
-                        "only assignment and identifier expressions are supported as in closure parameter recovery"
-                            .into(),
+                        format!("only assignment and identifier expressions are supported as in closure parameter recovery: {expr:?}"),
                     ));
                     return None;
                 }
             };
 
-            list.push((Parameter::Identifier(self.create_binding(ident)), value, None));
+            list.push((parameter, value, None));
         }
 
         if let Some(ident) = rest_binding {

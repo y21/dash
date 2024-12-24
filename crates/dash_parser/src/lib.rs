@@ -1,4 +1,4 @@
-use dash_log::{debug, span, Level};
+use dash_log::{Level, debug, span};
 use dash_middle::interner::{StringInterner, Symbol};
 use dash_middle::lexer::token::{Token, TokenType};
 use dash_middle::parser::error::{Error, TokenTypeSuggestion};
@@ -130,7 +130,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
         if !ok && emit_error {
             let current = *current;
-            self.error(Error::unexpected_token(current, ty));
+            self.error(Error::unexpected_token(current.span, ty));
         }
 
         ok
@@ -183,10 +183,8 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
     pub fn expect_identifier(&mut self, emit_error: bool) -> Option<Symbol> {
         self.eat(
-            (
-                |tok: Token| tok.ty.as_identifier(),
-                &[TokenType::DUMMY_IDENTIFIER] as &[_],
-            ),
+            (|tok: Token| tok.ty.as_identifier(), &[TokenType::DUMMY_IDENTIFIER]
+                as &[_]),
             emit_error,
         )
     }
@@ -255,7 +253,7 @@ impl<'a, 'interner> Parser<'a, 'interner> {
         if res.is_some() {
             self.advance();
         } else if emit_error {
-            self.error(Error::UnexpectedToken(current, matcher.suggestion()));
+            self.error(Error::UnexpectedToken(current.span, matcher.suggestion()));
         }
 
         res
