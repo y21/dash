@@ -1,25 +1,36 @@
+use ControlFlow::{Break, Continue};
 use std::cmp;
 use std::convert::Infallible;
 use std::ops::{ControlFlow, Range};
-use ControlFlow::{Break, Continue};
 
 use crate::frame::This;
 use crate::localscope::LocalScope;
 use crate::throw;
-use crate::value::array::{Array, ArrayIterator};
+use crate::value::array::{Array, ArrayIterator, require_valid_array_length};
 use crate::value::function::native::CallContext;
-use crate::value::object::{Object as _, PropertyValue};
+use crate::value::object::{Object as _, PropertyKey, PropertyValue};
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::ops::equality::strict_eq;
 use crate::value::root_ext::RootErrExt;
 use crate::value::string::JsString;
-use crate::value::{array, Root, Unpack, Value, ValueContext};
+use crate::value::{Root, Unpack, Value, ValueContext, array};
 use dash_middle::interner::sym;
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let size = cx.args.first().unwrap_or_undefined().to_length_u(cx.scope)?;
     let array = Array::with_hole(cx.scope, size);
     Ok(cx.scope.register(array).into())
+}
+
+fn wrapping_index_val(start: Value, cx: &mut CallContext, len: usize) -> Result<usize, Value> {
+    let start = start.to_integer_or_infinity(cx.scope)?;
+    Ok(if start == f64::NEG_INFINITY {
+        0
+    } else if start < 0.0 {
+        cmp::max(len as isize + start as isize, 0) as usize
+    } else {
+        cmp::min(start as isize, len as isize) as usize
+    })
 }
 
 fn join_inner(sc: &mut LocalScope, array: Value, separator: JsString) -> Result<Value, Value> {
@@ -168,17 +179,12 @@ pub fn some(cx: CallContext) -> Result<Value, Value> {
     Ok(Value::boolean(any_true))
 }
 
-pub fn fill(cx: CallContext) -> Result<Value, Value> {
+pub fn fill(mut cx: CallContext) -> Result<Value, Value> {
     let this = Value::object(cx.this.to_object(cx.scope)?);
     let len = this.length_of_array_like(cx.scope)?;
     let value = cx.args.first().unwrap_or_undefined();
 
-    let relative_start = cx.args.get(1).unwrap_or_undefined().to_integer_or_infinity(cx.scope)?;
-    let k = if relative_start < 0.0 {
-        cmp::max(len as isize + relative_start as isize, 0) as usize
-    } else {
-        cmp::min(relative_start as isize, len as isize) as usize
-    };
+    let k = wrapping_index_val(cx.args.get(1).unwrap_or_undefined(), &mut cx, len)?;
 
     let relative_end = cx
         .args
@@ -529,6 +535,11 @@ fn shift_array(
     shift_by: isize,
     range: Range<usize>,
 ) -> Result<(), Value> {
+    if shift_by == 0 {
+        // No shifting needs to happen (and can't, this short circuit is required by splice)
+        return Ok(());
+    }
+
     let range = range.start as isize..range.end as isize;
 
     let new_len = (range.end + shift_by) as usize;
@@ -751,4 +762,80 @@ pub fn sort(cx: CallContext) -> Result<Value, Value> {
     }
 
     Ok(cx.this)
+}
+
+pub fn splice(mut cx: CallContext) -> Result<Value, Value> {
+    let this = Value::object(cx.this.to_object(cx.scope)?);
+    let len = this.length_of_array_like(cx.scope)?;
+
+    let start = wrapping_index_val(cx.args.first().unwrap_or_undefined(), &mut cx, len)?;
+    let delete_count = match *cx.args {
+        // 8. If start is not present, then
+        [] => 0,
+        // 9. Else if deleteCount is not present, then
+        [_] => len - start,
+        // 10. Else, ...
+        [_, v, ..] => isize::clamp(v.to_integer_or_infinity(cx.scope)? as isize, 0, (len - start) as isize) as usize,
+    };
+    let item_count = cx.args.len().saturating_sub(2);
+
+    // TODO: often the returned array is unused; it may be possible to pass a "return value is used" flag to CallContexts
+
+    require_valid_array_length(cx.scope, delete_count)?;
+    let mut values = Vec::with_capacity(delete_count);
+    for k in 0..delete_count {
+        let from = cx.scope.intern_usize(start + k);
+
+        if let Some(delete_value) = this
+            .get_property_descriptor(cx.scope, PropertyKey::String(from.into()))
+            .root_err(cx.scope)?
+        {
+            values.push(delete_value);
+        }
+    }
+
+    if item_count <= delete_count {
+        // Since we delete more than we insert, overwrite elements at the delete index
+        for (i, value) in cx.args.iter().skip(2).enumerate() {
+            let i = cx.scope.intern_usize(i + start);
+            this.set_property(
+                cx.scope,
+                PropertyKey::String(i.into()),
+                PropertyValue::static_default(*value),
+            )?;
+        }
+
+        // Now shift the rest to the left and update the length
+        shift_array(
+            cx.scope,
+            &this,
+            len,
+            -(delete_count as isize - item_count as isize),
+            start + delete_count..len,
+        )?;
+    } else {
+        let items_to_insert = item_count - delete_count;
+        require_valid_array_length(cx.scope, len + items_to_insert)?;
+
+        // We can overwrite `delete_count` number of items without shifting to the right
+        // IOW, we only need to shift by `item_count - delete_count` to the right
+        shift_array(
+            cx.scope,
+            &this,
+            len,
+            items_to_insert as isize,
+            start + delete_count..len,
+        )?;
+
+        for (i, value) in cx.args.iter().skip(2).enumerate() {
+            let i = cx.scope.intern_usize(i + start);
+            this.set_property(
+                cx.scope,
+                PropertyKey::String(i.into()),
+                PropertyValue::static_default(*value),
+            )?;
+        }
+    }
+
+    Ok(cx.scope.register(Array::from_vec(cx.scope, values)).into())
 }

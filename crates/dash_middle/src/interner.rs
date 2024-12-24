@@ -224,6 +224,7 @@ pub mod sym {
                 sort,
                 unshift,
                 slice,
+                splice,
                 asyncIterator,
                 hasInstance,
                 iterator,

@@ -2,12 +2,12 @@ use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::panic;
 use std::sync::atomic::AtomicU32;
-use std::sync::{atomic, Mutex};
+use std::sync::{Mutex, atomic};
 
 use clap::ArgMatches;
+use dash_vm::Vm;
 use dash_vm::eval::EvalError;
 use dash_vm::params::VmParams;
-use dash_vm::Vm;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 

@@ -496,6 +496,7 @@ impl Vm {
                 (sym::reverse, scope.statics.array_reverse),
                 (sym::shift, scope.statics.array_shift),
                 (sym::sort, scope.statics.array_sort),
+                (sym::splice, scope.statics.array_splice),
                 (sym::unshift, scope.statics.array_unshift),
                 (sym::slice, scope.statics.array_slice),
                 (sym::lastIndexOf, scope.statics.array_last_index_of),

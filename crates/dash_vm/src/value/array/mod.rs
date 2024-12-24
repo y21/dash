@@ -7,11 +7,11 @@ use dash_proc_macro::Trace;
 use table::ArrayTable;
 
 use crate::frame::This;
-use crate::gc::trace::Trace;
 use crate::gc::ObjectId;
+use crate::gc::trace::Trace;
 use crate::localscope::LocalScope;
 use crate::value::object::PropertyDataDescriptor;
-use crate::{delegate, extract, throw, Vm};
+use crate::{Vm, delegate, extract, throw};
 use dash_middle::interner::sym;
 
 use super::object::{NamedObject, Object, PropertyKey, PropertyValue, PropertyValueKind};
@@ -23,10 +23,19 @@ use super::{Root, Unpack, Unrooted, Value};
 pub mod table;
 
 pub const MAX_LENGTH: u32 = 4294967295;
+pub const MAX_INDEX: u32 = MAX_LENGTH - 1;
+
+pub fn require_valid_array_length(scope: &mut LocalScope<'_>, len: usize) -> Result<(), Value> {
+    if len > MAX_LENGTH as usize {
+        throw!(scope, RangeError, "Invalid array length");
+    }
+    Ok(())
+}
 
 #[derive(Debug)]
 pub enum ArrayInner {
     // TODO: store Value, also support holes
+    // TODO: move away from `Vec`? we don't need a `usize` for the length as the max size fits in a u32
     Dense(Vec<PropertyValue>),
     Table(ArrayTable),
 }

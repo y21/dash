@@ -2,12 +2,12 @@ use dash_proc_macro::Trace;
 
 use crate::gc::{Allocator, ObjectId};
 use crate::js_std;
+use crate::value::PureBuiltin;
 use crate::value::error::{AggregateError, EvalError, RangeError, ReferenceError, SyntaxError, TypeError, URIError};
 use crate::value::function::{Function, FunctionKind};
 use crate::value::map::Map;
 use crate::value::regex::RegExp;
 use crate::value::set::Set;
-use crate::value::PureBuiltin;
 use dash_middle::interner::{self, sym};
 
 use super::value::array::{Array, ArrayIterator};
@@ -181,6 +181,7 @@ pub struct Statics {
     pub array_reverse: ObjectId,
     pub array_shift: ObjectId,
     pub array_sort: ObjectId,
+    pub array_splice: ObjectId,
     pub array_unshift: ObjectId,
     pub array_slice: ObjectId,
     pub array_last_index_of: ObjectId,
@@ -448,6 +449,7 @@ impl Statics {
             array_sort: function(gc, sym::sort, js_std::array::sort),
             array_unshift: function(gc, sym::unshift, js_std::array::unshift),
             array_slice: function(gc, sym::slice, js_std::array::slice),
+            array_splice: function(gc, sym::splice, js_std::array::splice),
             array_last_index_of: function(gc, sym::lastIndexOf, js_std::array::last_index_of),
             array_from: function(gc, sym::from, js_std::array::from),
             array_is_array: function(gc, sym::isArray, js_std::array::is_array),

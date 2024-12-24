@@ -394,7 +394,7 @@ impl<'s> TypeInferCtx<'s> {
             ExprKind::Class(class) => self.visit_class_expression(class),
             ExprKind::Array(expr) => self.visit_array_expression(expr),
             ExprKind::Object(expr) => self.visit_object_expression(expr),
-            ExprKind::Chaining(OptionalChainingExpression { base, components: _ }) => self.visit(&**base),
+            ExprKind::Chaining(OptionalChainingExpression { base, components: _ }) => self.visit(base),
             ExprKind::Compiled(..) => None,
             ExprKind::Empty => None,
             ExprKind::YieldStar(e) => {
