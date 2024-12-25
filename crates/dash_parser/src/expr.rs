@@ -2,8 +2,8 @@ use dash_middle::interner::{Symbol, sym};
 use dash_middle::lexer::token::{ASSIGNMENT_TYPES, Token, TokenType};
 use dash_middle::parser::error::Error;
 use dash_middle::parser::expr::{
-    ArrayMemberKind, AssignmentExpr, AssignmentTarget, CallArgumentKind, Expr, ExprKind, LiteralExpr, ObjectLiteral,
-    ObjectMemberKind, OptionalChainingComponent, OptionalChainingExpression, PropertyAccessExpr,
+    ArrayLiteral, ArrayMemberKind, AssignmentExpr, AssignmentTarget, CallArgumentKind, Expr, ExprKind, LiteralExpr,
+    ObjectLiteral, ObjectMemberKind, OptionalChainingComponent, OptionalChainingExpression, PropertyAccessExpr,
 };
 use dash_middle::parser::statement::{
     Asyncness, BlockStatement, FunctionDeclaration, FunctionKind, Parameter, Pattern, ReturnStatement, Statement,
@@ -921,10 +921,54 @@ impl Parser<'_, '_> {
         prec: Vec<Expr>,
         rest_binding: Option<Symbol>,
     ) -> Option<Expr> {
-        fn expr_to_parameter(parser: &mut Parser<'_, '_>, expr: Expr) -> Option<Parameter> {
+        fn expr_to_parameter(parser: &mut Parser<'_, '_>, expr: Expr) -> Result<Parameter, Error> {
             match expr.kind {
                 ExprKind::Literal(LiteralExpr::Identifier(ident)) => {
-                    Some(Parameter::Identifier(parser.create_binding(ident)))
+                    Ok(Parameter::Identifier(parser.create_binding(ident)))
+                }
+                ExprKind::Array(ArrayLiteral(elements)) => {
+                    let mut fields = Vec::with_capacity(elements.len());
+                    let mut rest = None;
+
+                    for member in elements {
+                        match member {
+                            ArrayMemberKind::Item(expr) => {
+                                let (expr, default) = if let ExprKind::Assignment(AssignmentExpr {
+                                    left: AssignmentTarget::Expr(left),
+                                    right,
+                                    operator: TokenType::Assignment,
+                                }) = expr.kind
+                                {
+                                    (*left, Some(*right))
+                                } else {
+                                    (expr, None)
+                                };
+
+                                if let Some(symbol) = expr.kind.as_identifier() {
+                                    fields.push(Some((parser.create_binding(symbol), default)));
+                                } else {
+                                    return Err(Error::unexpected_token(expr.span, TokenType::DUMMY_IDENTIFIER));
+                                }
+                            }
+                            ArrayMemberKind::Spread(expr) => {
+                                if rest.is_none() {
+                                    if let Some(symbol) = expr.kind.as_identifier() {
+                                        rest = Some(parser.create_binding(symbol));
+                                    } else {
+                                        return Err(Error::unexpected_token(expr.span, TokenType::DUMMY_IDENTIFIER));
+                                    }
+                                } else {
+                                    return Err(Error::MultipleRestInDestructuring(expr.span));
+                                }
+                            }
+                            ArrayMemberKind::Empty => fields.push(None),
+                        }
+                    }
+
+                    Ok(Parameter::Pattern(parser.local_count.inc(), Pattern::Array {
+                        fields,
+                        rest,
+                    }))
                 }
                 ExprKind::Object(ObjectLiteral(properties)) => {
                     let destructured_id = parser.local_count.inc();
@@ -937,8 +981,7 @@ impl Parser<'_, '_> {
                                 if let Some(alias) = value.kind.as_identifier() {
                                     fields.push((parser.local_count.inc(), symbol, Some(alias), None))
                                 } else {
-                                    parser.error(Error::unexpected_token(value.span, TokenType::DUMMY_IDENTIFIER));
-                                    return None;
+                                    return Err(Error::unexpected_token(value.span, TokenType::DUMMY_IDENTIFIER));
                                 }
                             }
                             // `x = 1` defaults x to 1
@@ -950,25 +993,24 @@ impl Parser<'_, '_> {
                                     if let Some(symbol) = value.kind.as_identifier() {
                                         rest = Some(parser.create_binding(symbol));
                                     } else {
-                                        parser.error(Error::unexpected_token(value.span, TokenType::DUMMY_IDENTIFIER));
+                                        return Err(Error::unexpected_token(value.span, TokenType::DUMMY_IDENTIFIER));
                                     }
                                 } else {
-                                    parser.error(Error::MultipleRestInDestructuring(value.span))
+                                    return Err(Error::MultipleRestInDestructuring(value.span));
                                 }
                             }
-                            _ => parser.error(Error::unexpected_token(value.span, TokenType::DUMMY_IDENTIFIER)),
+                            _ => return Err(Error::unexpected_token(value.span, TokenType::DUMMY_IDENTIFIER)),
                         }
                     }
 
-                    Some(Parameter::Pattern(destructured_id, Pattern::Object { fields, rest }))
+                    Ok(Parameter::Pattern(destructured_id, Pattern::Object { fields, rest }))
                 }
-                _ => {
-                    parser.error(Error::Unimplemented(
-                        expr.span,
-                        format!("only assignment and identifier expressions are supported as in closure parameter recovery: {expr:?}"),
-                    ));
-                    None
-                }
+                _ => Err(Error::Unimplemented(
+                    expr.span,
+                    format!(
+                        "only assignment and identifier expressions are supported as in closure parameter recovery: {expr:?}"
+                    ),
+                )),
             }
         }
 
@@ -990,7 +1032,14 @@ impl Parser<'_, '_> {
             } else {
                 (expr, None)
             };
-            let parameter = expr_to_parameter(self, expr)?;
+
+            let parameter = match expr_to_parameter(self, expr) {
+                Ok(p) => p,
+                Err(err) => {
+                    self.error(err);
+                    return None;
+                }
+            };
 
             list.push((parameter, default, None));
         }
