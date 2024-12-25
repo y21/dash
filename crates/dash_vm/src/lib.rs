@@ -1342,8 +1342,7 @@ impl Vm {
                 }
             } else if let Some(finally_ip) = finally_ip {
                 self.active_frame_mut().delayed_ret = Some(Err(err));
-                // `+ 1` because we need to jump over the `TryEnd` instruction since there won't be a try block to pop.
-                self.active_frame_mut().ip = finally_ip + 1;
+                self.active_frame_mut().ip = finally_ip;
             }
 
             Ok(())

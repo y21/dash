@@ -56,7 +56,7 @@ impl InstructionBuilder<'_, '_> {
         build_this Instruction::This,
         build_strict_eq Instruction::StrictEq,
         build_strict_ne Instruction::StrictNe,
-        build_try_end Instruction::TryEnd,
+        build_pop_try Instruction::PopTry,
         build_throw Instruction::Throw,
         build_yield Instruction::Yield,
         build_await Instruction::Await,

@@ -4,12 +4,12 @@ use std::ptr;
 use dash_middle::interner::sym;
 use dash_optimizer::OptLevel;
 
-use crate::gc::persistent::Persistent;
+use crate::Vm;
 use crate::gc::ObjectId;
+use crate::gc::persistent::Persistent;
 use crate::value::object::{NamedObject, Object, PropertyValue};
 use crate::value::primitive::{Null, Number, Symbol, Undefined};
 use crate::value::{Root, Unpack, Value, ValueKind};
-use crate::Vm;
 
 const INTERPRETER: &str = include_str!("interpreter.js");
 
@@ -613,6 +613,15 @@ simple_test!(
         }
     })() === 5);
     assert(o === '135');
+
+    // Issue #87
+    try {
+        try {
+            throw 1;
+        } catch(e) { }
+    
+        throw 1;
+    } catch(e) { }
 
     "#,
     Value::undefined()

@@ -57,7 +57,7 @@ pub enum Instruction {
     StrictEq,
     StrictNe,
     Try,
-    TryEnd,
+    PopTry,
     FinallyEnd,
     Throw,
     Yield,

@@ -7,7 +7,7 @@ use dash_middle::compiler::instruction::Instruction;
 use dash_middle::parser::statement::ScopeId;
 
 use crate::jump_container::JumpContainer;
-use crate::{jump_container, FunctionCompiler};
+use crate::{FunctionCompiler, jump_container};
 
 #[derive(Hash, Eq, PartialEq, Debug, Clone, Copy)]
 pub enum Label {

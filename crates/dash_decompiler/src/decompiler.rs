@@ -204,13 +204,10 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                 }
                 Instruction::Call => {
                     let meta = FunctionCallMetadata::from(self.read()?);
-                    self.handle_op_map_instr(
-                        "call",
-                        &[
-                            ("argc", &meta.value()),
-                            ("is_constructor_call", &meta.is_constructor_call()),
-                        ],
-                    );
+                    self.handle_op_map_instr("call", &[
+                        ("argc", &meta.value()),
+                        ("is_constructor_call", &meta.is_constructor_call()),
+                    ]);
                 }
                 Instruction::StaticPropAccess => {
                     let b = self.read_u16()?;
@@ -306,7 +303,7 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                 Instruction::StrictEq => self.handle_opless_instr("stricteq"),
                 Instruction::StrictNe => self.handle_opless_instr("strictne"),
                 Instruction::Try => self.handle_incw_op_instr("try")?, // TODO: show @offset like in JMP
-                Instruction::TryEnd => self.handle_opless_instr("tryend"),
+                Instruction::PopTry => self.handle_opless_instr("poptry"),
                 Instruction::FinallyEnd => self.handle_opless_instr("finallyend"),
                 Instruction::Throw => self.handle_opless_instr("throw"),
                 Instruction::Yield => self.handle_opless_instr("yield"),

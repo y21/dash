@@ -1843,7 +1843,7 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn try_end(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
+    pub fn pop_try(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         cx.try_blocks.pop();
         Ok(None)
     }
@@ -2363,7 +2363,7 @@ pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResu
         Instruction::StrictEq => handlers::strict_eq(cx),
         Instruction::StrictNe => handlers::strict_ne(cx),
         Instruction::Try => handlers::try_block(cx),
-        Instruction::TryEnd => handlers::try_end(cx),
+        Instruction::PopTry => handlers::pop_try(cx),
         Instruction::FinallyEnd => handlers::finally_end(cx),
         Instruction::Throw => handlers::throw(cx),
         Instruction::Yield => handlers::yield_(cx),

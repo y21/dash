@@ -1466,6 +1466,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
         let tc_depth = ib.current_function().try_depth;
         ib.accept_expr(stmt)?;
         if let Some(finally) = finally {
+            ib.build_pop_try();
             ib.write_instr(Instruction::DelayedReturn);
             ib.build_jmp(finally, false);
         } else {
@@ -1855,6 +1856,61 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
         Ok(())
     }
 
+    /// A try block is currently compiled to the following bytecode:
+    /// ```ignore
+    /// try
+    /// <try code> -- jmp to #catch on exception
+    /// poptry
+    /// jmp tryend
+    ///
+    /// catch:
+    /// <catch code>
+    /// poptry (if finally block exists, due to re-pushing with catch=None in handle_rt_error)
+    ///
+    /// -- If there's a finally block
+    /// finally:
+    /// tryend:
+    /// <finally code>
+    /// finallyend (executes any delayed returns)
+    ///
+    /// -- If there's no finally block
+    /// tryend:
+    /// poptry
+    /// ```
+    ///
+    /// We first emit a `try` instruction which takes two ip operands,
+    /// the ip for the start of the catch block and optionally the ip for the finally block.
+    /// The vm will push that into a `try_blocks` stack that we will look at the top at (at runtime) when an exception occurs.
+    /// (Initially this is just a placeholder 0 ip but it gets patched when we actually register the label later)
+    ///
+    /// It's important that we always cleanup the pushed trycatch as we might end up looking at the stack at any point,
+    /// so there are a few scenarios to consider.
+    /// We also need to pop it again at specific times so that throwing an exception from within different parts of the try block
+    /// do or don't jump to the same try block. (E.g., throwing an exception in a catch block should look for a different enclosing try-catch,
+    /// but throwing an exception in the try needs the same to be there.)
+    ///
+    /// 1.) Try block finishes without exceptions: we pop the try block and jump to the tryend label,
+    /// which is either the end of the try-catch entirely or is also the start of the finally code.
+    /// No trycatch block will be on the stack; finally block also does not need it.
+    ///
+    /// 2.) Try block runs into an exception: this is almost entirely handled at runtime,
+    /// but we look at the top of the trycatch stack, pop **iff** it's part of the same frame and then
+    /// jump to either its catch or finally ip. If we immediately jump to a finally, we also register a delayed_return
+    /// for the exception so we delay-throw it at the end of the finally block.
+    /// If the trycatch block has a finally, then we re-push with catch:None so we won't jump to the catch again
+    /// but will jump to the finally block.
+    ///
+    /// 3.) Try block returns: this may need to jump to a finally block, so try to find an enclosing finally
+    /// (may or may not be the same try block we're in), jump to it and pop the current try block.
+    ///
+    /// 4.) Catch block finishes without further exceptions: if there's a finally block,
+    /// then we've pushed a `{catch:None,finally_ip:...}` trycatch, so execute a poptry if there's a finally block.
+    /// We also naturally flow into the finally code without needing any jumps, if that block exists.
+    ///
+    /// 5.) Catch block runs into an exception: if there's a finally block, then we will jump to that since we've re-pushed one.
+    /// If there isn't one, we will find another enclosing try-catch block.
+    ///
+    /// 6.) Finally block: at this point the current try block must have been popped. At the end, execute any delayed_returns.
     fn visit_try_catch(&mut self, span: Span, TryCatch { try_, catch, finally }: TryCatch) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
@@ -1870,6 +1926,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
         ib.current_function_mut().try_depth -= 1;
         res?;
 
+        ib.build_pop_try();
         ib.build_jmp(Label::TryEnd, true);
 
         if catch.is_none() && finally.is_none() {
@@ -1894,6 +1951,10 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
             }
 
             ib.visit_block_statement(catch.body_span, catch.body)?;
+
+            if finally.is_some() {
+                ib.build_pop_try();
+            }
         }
         ib.current_function_mut().finally_labels.pop();
 
@@ -1901,7 +1962,6 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
             ib.current_function_mut()
                 .add_global_label(Label::Finally { finally_id });
             ib.add_local_label(Label::TryEnd);
-            ib.build_try_end();
 
             ib.accept(*finally)?;
 
@@ -1909,7 +1969,6 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
             ib.writew(ib.current_function().try_depth);
         } else {
             ib.add_local_label(Label::TryEnd);
-            ib.build_try_end();
         }
 
         Ok(())
