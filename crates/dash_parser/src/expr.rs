@@ -338,6 +338,7 @@ impl Parser<'_, '_> {
                     TokenType::Dot,
                     TokenType::LeftSquareBrace,
                     TokenType::OptionalDot,
+                    TokenType::OptionalSquareBrace,
                 ]),
                 false,
             )
@@ -411,9 +412,26 @@ impl Parser<'_, '_> {
                 TokenType::LeftSquareBrace => {
                     let property = self.parse_expression()?;
                     self.eat(TokenType::RightSquareBrace, true)?;
+                    if let ExprKind::Chaining(c) = &mut expr.kind {
+                        c.components.push(OptionalChainingComponent::Dyn(property));
+                        expr.span = expr.span.to(self.previous()?.span);
+                    } else {
+                        expr = Expr {
+                            span: expr.span.to(self.previous()?.span),
+                            kind: ExprKind::property_access(true, expr, property),
+                        };
+                    }
+                }
+                TokenType::OptionalSquareBrace => {
+                    let property = self.parse_expression()?;
+                    self.eat(TokenType::RightSquareBrace, true)?;
+                    let span = expr.span.to(self.previous()?.span);
                     expr = Expr {
-                        span: expr.span.to(property.span),
-                        kind: ExprKind::property_access(true, expr, property),
+                        span,
+                        kind: ExprKind::Chaining(OptionalChainingExpression {
+                            base: Box::new(expr),
+                            components: vec![OptionalChainingComponent::Dyn(property)],
+                        }),
                     };
                 }
                 _ => unreachable!(),

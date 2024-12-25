@@ -281,7 +281,7 @@ pub enum TokenType {
     OptionalDot,
 
     #[display(fmt = "?.[")]
-    OptionalBracket,
+    OptionalSquareBrace,
 
     #[display(fmt = "?.(")]
     OptionalCall,

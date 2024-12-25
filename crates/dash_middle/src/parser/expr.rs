@@ -77,6 +77,7 @@ impl fmt::Display for OptionalChainingExpression {
         for component in &self.components {
             match component {
                 OptionalChainingComponent::Ident(symbol) => write!(f, ".{symbol}")?,
+                OptionalChainingComponent::Dyn(expr) => write!(f, "[{expr}]")?,
             }
         }
         Ok(())
@@ -85,7 +86,10 @@ impl fmt::Display for OptionalChainingExpression {
 
 #[derive(Debug, Clone)]
 pub enum OptionalChainingComponent {
+    /// ?.x
     Ident(Symbol),
+    /// ?.[expr]
+    Dyn(Expr),
 }
 
 #[derive(Debug, Clone, Display)]

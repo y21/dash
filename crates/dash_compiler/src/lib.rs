@@ -1546,6 +1546,10 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                     ib.build_static_prop_access(ident, false)
                         .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
                 }
+                OptionalChainingComponent::Dyn(expr) => {
+                    ib.accept_expr(expr)?;
+                    ib.build_dynamic_prop_access(false);
+                }
             }
         }
         ib.build_jmp(Label::IfEnd, true);
