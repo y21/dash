@@ -2,7 +2,6 @@ use dash_middle::parser::error::IntoFormattableErrors;
 use dash_optimizer::OptLevel;
 use dash_rt::format_value;
 use dash_rt::runtime::Runtime;
-use dash_rt::state::State;
 use dash_vm::eval::EvalError;
 use dash_vm::value::Root;
 use std::fs;
@@ -53,7 +52,7 @@ fn run_normal_mode(path: &str, opt: OptLevel, quiet: bool, initial_gc_threshold:
 }
 
 async fn inner(source: String, opt: OptLevel, quiet: bool, initial_gc_threshold: Option<usize>) -> anyhow::Result<()> {
-    let mut rt = Runtime::new(initial_gc_threshold).await;
+    let mut rt = Runtime::new(initial_gc_threshold);
 
     let module = dash_rt_modules::init_modules();
     rt.set_module_manager(module);
@@ -76,11 +75,8 @@ async fn inner(source: String, opt: OptLevel, quiet: bool, initial_gc_threshold:
         println!("{}", format_value(value, &mut scope).unwrap());
     }
 
-    let state = State::from_vm_mut(&mut scope);
-    if state.needs_event_loop() {
-        drop(scope);
-        rt.run_event_loop().await;
-    }
+    drop(scope);
+    rt.run_event_loop().await;
 
     Ok(())
 }

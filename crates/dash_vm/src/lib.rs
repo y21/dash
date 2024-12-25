@@ -73,7 +73,7 @@ pub struct Vm {
     // We can't do that in Persistent's Drop code, because we don't have access to the VM there.
     external_refs: ExternalRefs,
     scopes: LocalScopeList,
-    statics: Box<Statics>,
+    pub statics: Box<Statics>,
     #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
     try_blocks: Vec<TryBlock>,
     #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]

@@ -2,16 +2,19 @@ use std::fmt::Debug;
 use std::time::SystemTime;
 
 use dash_middle::compiler::StaticImportKind;
+use dash_middle::interner::sym;
 use dash_optimizer::OptLevel;
 use dash_vm::eval::EvalError;
 use dash_vm::params::VmParams;
+use dash_vm::value::function::native::register_native_fn;
+use dash_vm::value::object::{Object, PropertyValue};
 use dash_vm::value::string::JsString;
-use dash_vm::value::{Unrooted, Value};
-use dash_vm::{throw, Vm};
+use dash_vm::value::{Root, Unpack, Unrooted, Value, ValueKind};
+use dash_vm::{Vm, throw};
 use tokio::sync::mpsc;
-use tracing::info;
 
 use crate::event::{EventMessage, EventSender};
+use crate::inspect::{self, InspectOptions};
 use crate::module::ModuleLoader;
 use crate::state::State;
 
@@ -23,7 +26,7 @@ pub struct Runtime {
 }
 
 impl Runtime {
-    pub async fn new(initial_gc_threshold: Option<usize>) -> Self {
+    pub fn new(initial_gc_threshold: Option<usize>) -> Self {
         let rt = tokio::runtime::Handle::current();
 
         let (etx, erx) = mpsc::unbounded_channel();
@@ -45,7 +48,38 @@ impl Runtime {
         }
 
         let vm = Vm::new(params);
-        Self { vm, event_rx: erx }
+
+        let mut this = Self { vm, event_rx: erx };
+        this.init_globals();
+        this
+    }
+
+    fn init_globals(&mut self) {
+        let scope = &mut self.vm.scope();
+        let global = scope.global();
+        let log = register_native_fn(scope, sym::log, |cx| {
+            if let [arg] = *cx.args {
+                if let ValueKind::String(s) = arg.unpack() {
+                    // Fast path
+                    println!("{}", s.res(cx.scope));
+                    return Ok(Value::undefined());
+                }
+            }
+
+            for arg in cx.args {
+                let string = inspect::inspect(arg, cx.scope, InspectOptions::default())?;
+                println!("{string} ");
+            }
+
+            Ok(Value::undefined())
+        });
+
+        global
+            .get_property(scope, sym::console.into())
+            .root(scope)
+            .unwrap()
+            .set_property(scope, sym::log.into(), PropertyValue::static_default(log.into()))
+            .unwrap();
     }
 
     pub fn vm_params(&mut self) -> &mut VmParams {
@@ -69,6 +103,10 @@ impl Runtime {
     }
 
     pub async fn run_event_loop(mut self) {
+        if !self.state().needs_event_loop() {
+            return;
+        }
+
         while let Some(message) = self.event_rx.recv().await {
             match message {
                 EventMessage::ScheduleCallback(fun) => {
@@ -79,9 +117,7 @@ impl Runtime {
                 }
             }
 
-            let state = State::from_vm_mut(&mut self.vm);
-            if !state.needs_event_loop() {
-                info!("Event loop finished");
+            if !self.state().needs_event_loop() {
                 return;
             }
         }

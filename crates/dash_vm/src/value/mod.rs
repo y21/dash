@@ -6,7 +6,6 @@ pub mod conversions;
 pub mod date;
 pub mod error;
 pub mod function;
-pub mod inspect;
 pub mod map;
 pub mod object;
 pub mod ops;
@@ -26,11 +25,11 @@ use dash_proc_macro::Trace;
 
 pub mod string;
 use crate::frame::This;
-use crate::gc::trace::{Trace, TraceCtxt};
 use crate::gc::ObjectId;
+use crate::gc::trace::{Trace, TraceCtxt};
 use crate::util::cold_path;
 use crate::value::primitive::{Null, Undefined};
-use crate::{delegate, throw, Vm};
+use crate::{Vm, delegate, throw};
 
 use self::object::{Object, PropertyKey, PropertyValue};
 use self::primitive::{InternalSlots, Number, Symbol};

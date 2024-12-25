@@ -4,7 +4,7 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use dash_log::debug;
 use dash_middle::parser::error::IntoFormattableErrors;
 use dash_optimizer::OptLevel;
@@ -19,7 +19,7 @@ use dash_vm::localscope::LocalScope;
 use dash_vm::value::array::Array;
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::{Root, Unpack, Unrooted, Value, ValueKind};
-use dash_vm::{delegate, extract, throw, Vm};
+use dash_vm::{Vm, delegate, extract, throw};
 use package::Package;
 use rustc_hash::FxHashMap;
 use state::Nodejs;
@@ -76,7 +76,7 @@ async fn run_inner_fallible(path: &str, opt: OptLevel, initial_gc_threshold: Opt
         ongoing_requires: RefCell::new(FxHashMap::default()),
     });
 
-    let mut rt = Runtime::new(initial_gc_threshold).await;
+    let mut rt = Runtime::new(initial_gc_threshold);
     let state @ state::State {
         sym:
             NodeSymbols {
@@ -137,9 +137,7 @@ async fn run_inner_fallible(path: &str, opt: OptLevel, initial_gc_threshold: Opt
         )
     })?;
 
-    if rt.state().needs_event_loop() {
-        rt.run_event_loop().await;
-    }
+    rt.run_event_loop().await;
 
     Ok(())
 }

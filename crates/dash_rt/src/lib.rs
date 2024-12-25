@@ -1,18 +1,17 @@
 use std::future::Future;
 
-use dash_compiler::FunctionCompiler;
 use dash_vm::PromiseAction;
-use dash_vm::frame::{Exports, Frame, This};
 use dash_vm::localscope::LocalScope;
+use dash_vm::value::Value;
 use dash_vm::value::function::native::CallContext;
-use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::promise::Promise;
-use dash_vm::value::{Root, Value};
 use event::EventMessage;
+use inspect::InspectOptions;
 use state::State;
 
 pub mod active_tasks;
 pub mod event;
+pub mod inspect;
 pub mod module;
 pub mod runtime;
 pub mod state;
@@ -59,31 +58,6 @@ where
     Ok(Value::object(promise))
 }
 
-pub fn format_value<'s>(value: Value, scope: &'s mut LocalScope) -> Result<&'s str, Value> {
-    let inspect_bc = FunctionCompiler::compile_str(
-        &mut scope.interner,
-        include_str!("../js/inspect.js"),
-        Default::default(),
-    )
-    .unwrap();
-
-    // TODO: we need to somehow add `CompileResult` as an external?
-
-    let Exports {
-        default: Some(inspect_fn),
-        ..
-    } = scope.execute_module(Frame::from_compile_result(inspect_bc)).unwrap()
-    else {
-        panic!("inspect module did not have a default export");
-    };
-
-    let result = inspect_fn
-        .root(scope)
-        .apply(scope, This::Default, vec![value])
-        .unwrap()
-        .root(scope)
-        .to_js_string(scope)
-        .unwrap();
-
-    Ok(result.res(scope))
+pub fn format_value(value: Value, scope: &mut LocalScope) -> Result<String, Value> {
+    inspect::inspect(value, scope, InspectOptions::default())
 }
