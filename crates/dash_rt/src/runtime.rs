@@ -68,8 +68,9 @@ impl Runtime {
 
             for arg in cx.args {
                 let string = inspect::inspect(arg, cx.scope, InspectOptions::default())?;
-                println!("{string} ");
+                print!("{string} ");
             }
+            println!();
 
             Ok(Value::undefined())
         });
