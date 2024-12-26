@@ -73,6 +73,7 @@ pub enum Error {
     MissingInitializerInDestructuring(Span),
     ArgumentsInRoot(Span),
     Unexpected(Span, &'static str),
+    NewTargetOutsideFunction(Span),
 }
 
 impl Error {
@@ -392,6 +393,10 @@ impl fmt::Display for FormattableError<'_, '_> {
                 diag.message("referencing `arguments` in the root function");
                 diag.span_error(span, "");
                 diag.help("this function is in the root context and is never called");
+            }
+            Error::NewTargetOutsideFunction(span) => {
+                diag.message("new.target outside of a function");
+                diag.span_error(span, "");
             }
             Error::Unexpected(span, descr) => {
                 diag.message(format!("unexpected {descr}"));

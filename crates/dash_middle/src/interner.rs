@@ -277,7 +277,8 @@ pub mod sym {
                 seal,
                 arguments,
                 propertyIsEnumerable,
-                apply
+                apply,
+                target
             }
         ]
     }

@@ -8,7 +8,7 @@ use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::array::{Array, ArrayIterator, require_valid_array_length};
 use crate::value::function::native::CallContext;
-use crate::value::object::{Object as _, PropertyKey, PropertyValue};
+use crate::value::object::{NamedObject, Object as _, PropertyKey, PropertyValue};
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::ops::equality::strict_eq;
 use crate::value::root_ext::RootErrExt;
@@ -18,7 +18,8 @@ use dash_middle::interner::sym;
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let size = cx.args.first().unwrap_or_undefined().to_length_u(cx.scope)?;
-    let array = Array::with_hole(cx.scope, size);
+    let obj = NamedObject::instance_for_new_target(cx.new_target.unwrap_or(cx.scope.statics.array_ctor), cx.scope)?;
+    let array = Array::with_hole(size, obj);
     Ok(cx.scope.register(array).into())
 }
 

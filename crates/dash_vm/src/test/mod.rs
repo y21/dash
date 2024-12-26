@@ -677,3 +677,22 @@ simple_test!(
     ",
     Value::undefined()
 );
+
+simple_test!(
+    new_target,
+    "
+    class Sup extends ReferenceError {
+        constructor() {
+            assert(new.target.name === 'Sub');
+            assert(new.target === Sub);
+            super();
+        }
+    }
+    class Sub extends Sup {}
+    assert(new Sub() instanceof Sub);
+    assert(new Sub() instanceof Sup);
+    assert(new Sub() instanceof ReferenceError);
+    assert(new Sub() instanceof Error);
+    ",
+    Value::undefined()
+);

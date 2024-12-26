@@ -397,6 +397,7 @@ impl<'s> TypeInferCtx<'s> {
             ExprKind::Chaining(OptionalChainingExpression { base, components: _ }) => self.visit(base),
             ExprKind::Compiled(..) => None,
             ExprKind::Empty => None,
+            ExprKind::NewTarget => None,
             ExprKind::YieldStar(e) => {
                 self.visit(e);
                 None

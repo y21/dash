@@ -4,7 +4,7 @@ use std::slice;
 use dash_vm::localscope::LocalScope;
 use dash_vm::throw;
 use dash_vm::value::error::Error;
-use dash_vm::value::function::native::{register_native_fn, CallContext};
+use dash_vm::value::function::native::{CallContext, register_native_fn};
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::typedarray::TypedArray;

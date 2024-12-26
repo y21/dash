@@ -5,7 +5,7 @@ macro_rules! throw {
             // for some reason it warns about unused mut when it really is required, remove when fixed. (rust#105149)
             #[allow(unused_mut)]
             let mut vm = $vm;
-            let err = $crate::value::error::$err::new(&mut vm as &mut $crate::localscope::LocalScope<'_>, $msg);
+            let err = $crate::value::error::$err::new(&mut vm as &mut $crate::localscope::LocalScope<'_>, $msg.into());
             let id: $crate::gc::ObjectId = vm.register(err);
             Value::object(id).into()
         })

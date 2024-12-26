@@ -15,7 +15,7 @@ use hashbrown::hash_map::Entry;
 use rustc_hash::FxHasher;
 
 use crate::localscope::LocalScope;
-use crate::{extract, throw, Vm};
+use crate::{Vm, extract, throw};
 
 use super::ops::conversions::ValueConversion;
 use super::primitive::{InternalSlots, Symbol};
@@ -24,9 +24,6 @@ use super::string::JsString;
 use super::{Root, Typeof, Unpack, Unrooted, Value, ValueContext, ValueKind};
 
 pub type ObjectMap<K, V> = hashbrown::HashMap<K, V, BuildHasherDefault<FxHasher>>;
-
-// only here for the time being, will be removed later
-fn __assert_trait_object_safety(_: Box<dyn Object>) {}
 
 pub trait Object: Debug + Trace {
     fn get_own_property(&self, sc: &mut LocalScope, this: This, key: PropertyKey) -> Result<Unrooted, Unrooted> {
@@ -83,6 +80,7 @@ pub trait Object: Debug + Trace {
         callee: ObjectId,
         this: This,
         args: Vec<Value>,
+        _new_target: ObjectId,
     ) -> Result<Unrooted, Unrooted> {
         self.apply(scope, callee, this, args)
     }
@@ -186,8 +184,9 @@ macro_rules! delegate {
             id: $crate::gc::ObjectId,
             this: $crate::frame::This,
             args: Vec<$crate::value::Value>,
+            new_target: $crate::gc::ObjectId,
         ) -> Result<$crate::value::Unrooted, $crate::value::Unrooted> {
-            $crate::value::object::Object::construct(&self.$field, sc, id, this, args)
+            $crate::value::object::Object::construct(&self.$field, sc, id, this, args, new_target)
         }
     };
     (override $field:ident, type_of) => {
@@ -525,6 +524,18 @@ impl NamedObject {
         }
     }
 
+    /// Takes a constructor `new_target` and instantiates it
+    pub fn instance_for_new_target(new_target: ObjectId, scope: &mut LocalScope) -> Result<Self, Value> {
+        let ValueKind::Object(prototype) = new_target
+            .get_property(scope, sym::prototype.into())
+            .root(scope)?
+            .unpack()
+        else {
+            throw!(scope, Error, "new.target prototype must be an object")
+        };
+        Ok(Self::with_prototype_and_constructor(prototype, new_target))
+    }
+
     /// Creates an empty object with a null prototype
     pub fn null() -> Self {
         Self {
@@ -597,13 +608,10 @@ impl Object for NamedObject {
     fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
         match key.as_string().map(JsString::sym) {
             Some(sym::__proto__) => {
-                return self.set_prototype(
-                    sc,
-                    match value.into_kind() {
-                        PropertyValueKind::Static(value) => value,
-                        _ => throw!(sc, TypeError, "Prototype cannot be a trap"),
-                    },
-                );
+                return self.set_prototype(sc, match value.into_kind() {
+                    PropertyValueKind::Static(value) => value,
+                    _ => throw!(sc, TypeError, "Prototype cannot be a trap"),
+                });
             }
             Some(sym::constructor) => {
                 let obj = if let PropertyValueKind::Static(val) = value.kind {
@@ -772,8 +780,9 @@ impl Object for ObjectId {
         callee: ObjectId,
         this: This,
         args: Vec<Value>,
+        new_target: ObjectId,
     ) -> Result<Unrooted, Unrooted> {
-        unsafe { (self.vtable(scope).js_construct)(self.data_ptr(scope), scope, callee, this, args) }
+        unsafe { (self.vtable(scope).js_construct)(self.data_ptr(scope), scope, callee, this, args, new_target) }
     }
 
     fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
@@ -818,8 +827,17 @@ impl ObjectId {
     }
 
     pub fn construct(&self, sc: &mut LocalScope, this: This, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
-        let callee = *self;
-        Object::construct(self, sc, callee, this, args)
+        Object::construct(self, sc, *self, this, args, *self)
+    }
+
+    pub fn construct_with_target(
+        &self,
+        sc: &mut LocalScope,
+        this: This,
+        args: Vec<Value>,
+        new_target: ObjectId,
+    ) -> Result<Unrooted, Unrooted> {
+        Object::construct(self, sc, *self, this, args, new_target)
     }
 
     pub fn set_integrity_level(self, sc: &mut LocalScope<'_>, level: IntegrityLevel) -> Result<(), Value> {

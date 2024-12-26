@@ -2,6 +2,7 @@ use dash_proc_macro::Trace;
 
 use crate::dispatch::HandleResult;
 use crate::frame::This;
+use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::value::{Unrooted, Value};
 
@@ -19,11 +20,9 @@ impl Closure {
         scope: &mut LocalScope,
         _this: This,
         args: Vec<Value>,
-        is_constructor_call: bool,
+        new_target: Option<ObjectId>,
     ) -> Result<Unrooted, Unrooted> {
-        let ret = self
-            .fun
-            .handle_function_call(scope, self.this, args, is_constructor_call)?;
+        let ret = self.fun.handle_function_call(scope, self.this, args, new_target)?;
 
         Ok(match ret {
             HandleResult::Return(v) => v,

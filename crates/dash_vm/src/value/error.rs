@@ -38,62 +38,24 @@ fn get_stack_trace(name: JsString, message: JsString, sc: &mut LocalScope<'_>) -
 }
 
 impl Error {
-    pub fn new<S: Into<String>>(sc: &mut LocalScope<'_>, message: S) -> Self {
-        Self::suberror(
-            sc,
-            sym::Error,
-            message,
-            sc.statics.error_ctor,
-            sc.statics.error_prototype,
-        )
-    }
-
-    pub fn new_with_js_string<S: Into<JsString>>(sc: &mut LocalScope<'_>, message: S) -> Self {
-        Self::suberror_with_js_string(
-            sc,
-            sym::Error,
-            message,
-            sc.statics.error_ctor,
-            sc.statics.error_prototype,
-        )
-    }
-
-    pub fn suberror_with_js_string<S1: Into<JsString>, S2: Into<JsString>>(
-        sc: &mut LocalScope<'_>,
-        name: S1,
-        message: S2,
-        ctor: ObjectId,
-        proto: ObjectId,
-    ) -> Self {
-        let name = name.into();
-        let message = message.into();
-        let stack = get_stack_trace(name, message, sc);
-
+    pub fn with_obj(obj: NamedObject, sc: &mut LocalScope<'_>, message: JsString) -> Self {
+        let name = sym::Error.into();
         Self {
             name,
             message,
-            stack,
-            obj: NamedObject::with_prototype_and_constructor(proto, ctor),
+            stack: get_stack_trace(name, message, sc),
+            obj,
         }
     }
 
-    pub fn suberror<S1: Into<JsString>, S2: Into<String>>(
-        sc: &mut LocalScope<'_>,
-        name: S1,
-        message: S2,
-        ctor: ObjectId,
-        proto: ObjectId,
-    ) -> Self {
-        let name = name.into();
-        let message = sc.intern(message.into().as_ref()).into();
-        let stack = get_stack_trace(name, message, sc);
+    pub fn new(sc: &mut LocalScope<'_>, message: String) -> Self {
+        let message = sc.intern(&*message).into();
 
-        Self {
-            name,
+        Self::with_obj(
+            NamedObject::with_prototype_and_constructor(sc.statics.error_prototype, sc.statics.error_ctor),
+            sc,
             message,
-            stack,
-            obj: NamedObject::with_prototype_and_constructor(proto, ctor),
-        }
+        )
     }
 
     pub fn empty() -> Self {
@@ -105,9 +67,9 @@ impl Error {
         }
     }
 
-    pub fn empty_with_name<S: Into<JsString>>(name: S) -> Self {
+    pub fn empty_with_name(name: JsString) -> Self {
         Self {
-            name: name.into(),
+            name,
             message: sym::empty.into(),
             stack: sym::empty.into(),
             obj: NamedObject::null(),
@@ -180,27 +142,32 @@ macro_rules! define_error_type {
             }
 
             impl $s {
-                pub fn new<S: Into<String>>(vm: &mut LocalScope<'_>, message: S) -> Self {
-                    let ctor = vm.statics.$ctor.clone();
-                    let proto = vm.statics.$proto.clone();
-
-                    Self {
-                        inner: Error::suberror(vm, $t, message, ctor, proto),
-                    }
+                pub fn new(vm: &mut LocalScope<'_>, message: String) -> Self {
+                    let message = vm.intern(&*message).into();
+                    let object = Self::object(vm);
+                    Self::new_with_js_string(vm, object, message)
                 }
 
-                pub fn new_with_js_string<S: Into<JsString>>(vm: &mut LocalScope<'_>, message: S) -> Self {
-                    let ctor = vm.statics.$ctor.clone();
-                    let proto = vm.statics.$proto.clone();
+                pub fn object(vm: &LocalScope<'_>) -> NamedObject {
+                    NamedObject::with_prototype_and_constructor(vm.statics.$proto, vm.statics.$ctor)
+                }
+
+                pub fn new_with_js_string(vm: &mut LocalScope<'_>, obj: NamedObject, message: JsString) -> Self {
+                    let name = $t.into();
 
                     Self {
-                        inner: Error::suberror_with_js_string(vm, $t, message, ctor, proto),
+                        inner: Error {
+                            name,
+                            message,
+                            stack: get_stack_trace(name, message, vm),
+                            obj
+                        }
                     }
                 }
 
                 pub fn empty() -> Self {
                     Self {
-                        inner: Error::empty_with_name($t),
+                        inner: Error::empty_with_name($t.into()),
                     }
                 }
             }

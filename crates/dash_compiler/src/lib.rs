@@ -6,7 +6,7 @@ use dash_middle::compiler::constant::{Buffer, ConstantPool, Function, NumberCons
 use dash_middle::compiler::external::External;
 use dash_middle::compiler::instruction::{AssignKind, Instruction, IntrinsicOperation};
 use dash_middle::compiler::scope::{CompileValueType, LimitExceededError, Local, ScopeGraph};
-use dash_middle::compiler::{CompileResult, DebugSymbols, FunctionCallMetadata, StaticImportKind};
+use dash_middle::compiler::{CompileResult, DebugSymbols, StaticImportKind};
 use dash_middle::interner::{StringInterner, Symbol, sym};
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::error::Error;
@@ -27,7 +27,7 @@ use dash_middle::visitor::Visitor;
 use dash_optimizer::OptLevel;
 use dash_optimizer::consteval::ConstFunctionEvalCtx;
 use dash_optimizer::type_infer::{InferMode, LocalDeclToSlot, NameResolutionResults, TypeInferCtx};
-use for_each_loop::{ForEachDesugarCtxt, ForEachLoopKind};
+use for_each::{ForEachDesugarCtxt, ForEachLoopKind};
 use instruction::compile_local_load;
 use jump_container::JumpContainer;
 
@@ -42,7 +42,8 @@ macro_rules! unimplementedc {
 }
 
 pub mod builder;
-mod for_each_loop;
+mod call;
+mod for_each;
 #[cfg(feature = "from_string")]
 pub mod from_string;
 pub mod instruction;
@@ -420,6 +421,19 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
             }
             ExprKind::YieldStar(e) => self.visit_yield_star(span, e),
             ExprKind::Empty => self.visit_empty_expr(),
+            ExprKind::NewTarget => self.visit_new_target(span),
+        }
+    }
+
+    fn visit_new_target(&mut self, span: Span) -> Result<(), Error> {
+        let mut ib = InstructionBuilder::new(self);
+        let function = ib.current_function();
+
+        if function.id != ScopeId::ROOT {
+            ib.build_new_target();
+            Ok(())
+        } else {
+            Err(Error::NewTargetOutsideFunction(span))
         }
     }
 
@@ -1203,260 +1217,8 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
         Ok(())
     }
 
-    fn visit_function_call(
-        &mut self,
-        span: Span,
-        FunctionCall {
-            constructor_call,
-            target,
-            arguments,
-        }: FunctionCall,
-    ) -> Result<(), Error> {
-        let target_span = target.span;
-        let mut ib = InstructionBuilder::new(self);
-        // TODO: this also needs to be specialized for assignment expressions with property access as target
-
-        /// Attempts to specialize a function call
-        ///
-        /// For example, if the expression is `Math.max(a, b)`, then we can skip
-        /// the overhead of a dynamic property lookup at runtime and emit a specialized `max` instruction.
-        /// Of course, the VM still needs a guard to account for bad code messing with builtins, e.g.
-        /// ```js
-        /// let k = input(); // assume k = "max", black box to the compiler
-        /// delete Math[k];
-        ///
-        /// Math.max(1, 2); // *should* throw a TypeError, but will not without a guard
-        /// ```
-        fn try_spec_function_call(
-            ib: &mut InstructionBuilder<'_, '_>,
-            target: &ExprKind,
-            arguments: &[CallArgumentKind],
-        ) -> Result<bool, Error> {
-            if let ExprKind::PropertyAccess(PropertyAccessExpr { target, property, .. }) = target {
-                let Some(target) = target.kind.as_identifier() else {
-                    return Ok(false);
-                };
-
-                let Some(property) = property.kind.as_identifier() else {
-                    return Ok(false);
-                };
-
-                let Ok(arg_len) = u8::try_from(arguments.len()) else {
-                    return Ok(false);
-                };
-
-                macro_rules! emit_spec {
-                    ($spec:expr) => {{
-                        for arg in arguments {
-                            if let CallArgumentKind::Normal(arg) = arg {
-                                // TODO: we dont actually need to clone, we could take mem::take, if worth it
-                                ib.accept_expr(arg.clone())?;
-                            } else {
-                                // Can't specialize spread args for now
-                                return Ok(false);
-                            }
-                        }
-                        $spec(ib, arg_len);
-                        return Ok(true);
-                    }};
-                }
-
-                match (target, property) {
-                    (sym::Math, sym::exp) => emit_spec!(InstructionBuilder::build_exp),
-                    (sym::Math, sym::log2) => emit_spec!(InstructionBuilder::build_log2),
-                    (sym::Math, sym::expm1) => emit_spec!(InstructionBuilder::build_expm1),
-                    (sym::Math, sym::cbrt) => emit_spec!(InstructionBuilder::build_cbrt),
-                    (sym::Math, sym::clz32) => emit_spec!(InstructionBuilder::build_clz32),
-                    (sym::Math, sym::atanh) => emit_spec!(InstructionBuilder::build_atanh),
-                    (sym::Math, sym::atan2) => emit_spec!(InstructionBuilder::build_atanh2),
-                    (sym::Math, sym::round) => emit_spec!(InstructionBuilder::build_round),
-                    (sym::Math, sym::acosh) => emit_spec!(InstructionBuilder::build_acosh),
-                    (sym::Math, sym::abs) => emit_spec!(InstructionBuilder::build_abs),
-                    (sym::Math, sym::sinh) => emit_spec!(InstructionBuilder::build_sinh),
-                    (sym::Math, sym::sin) => emit_spec!(InstructionBuilder::build_sin),
-                    (sym::Math, sym::ceil) => emit_spec!(InstructionBuilder::build_ceil),
-                    (sym::Math, sym::tan) => emit_spec!(InstructionBuilder::build_tan),
-                    (sym::Math, sym::trunc) => emit_spec!(InstructionBuilder::build_trunc),
-                    (sym::Math, sym::asinh) => emit_spec!(InstructionBuilder::build_asinh),
-                    (sym::Math, sym::log10) => emit_spec!(InstructionBuilder::build_log10),
-                    (sym::Math, sym::asin) => emit_spec!(InstructionBuilder::build_asin),
-                    (sym::Math, sym::random) => emit_spec!(InstructionBuilder::build_random),
-                    (sym::Math, sym::log1p) => emit_spec!(InstructionBuilder::build_log1p),
-                    (sym::Math, sym::sqrt) => emit_spec!(InstructionBuilder::build_sqrt),
-                    (sym::Math, sym::atan) => emit_spec!(InstructionBuilder::build_atan),
-                    (sym::Math, sym::log) => emit_spec!(InstructionBuilder::build_log),
-                    (sym::Math, sym::floor) => emit_spec!(InstructionBuilder::build_floor),
-                    (sym::Math, sym::cosh) => emit_spec!(InstructionBuilder::build_cosh),
-                    (sym::Math, sym::acos) => emit_spec!(InstructionBuilder::build_acos),
-                    (sym::Math, sym::cos) => emit_spec!(InstructionBuilder::build_cos),
-                    _ => {}
-                }
-            }
-            Ok(false)
-        }
-
-        if try_spec_function_call(&mut ib, &target.kind, &arguments)? {
-            return Ok(());
-        }
-
-        if let ExprKind::Literal(LiteralExpr::Identifier(sym::super_)) = target.kind {
-            // super() call lowering
-            let super_id = ib
-                .inner
-                .scopes
-                .add_unnameable_local(ib.current, sym::super_, None)
-                .map_err(|_| Error::LocalLimitExceeded(span))?;
-
-            // __super = new this.constructor.__proto__()
-            let superclass_constructor_call = Expr {
-                span: Span::COMPILER_GENERATED,
-                kind: ExprKind::function_call(
-                    Expr {
-                        span: Span::COMPILER_GENERATED,
-                        kind: ExprKind::property_access(
-                            false,
-                            Expr {
-                                span: Span::COMPILER_GENERATED,
-                                kind: ExprKind::property_access(
-                                    false,
-                                    Expr {
-                                        span: Span::COMPILER_GENERATED,
-                                        kind: ExprKind::identifier(sym::this),
-                                    },
-                                    Expr {
-                                        span: Span::COMPILER_GENERATED,
-                                        kind: ExprKind::identifier(sym::constructor),
-                                    },
-                                ),
-                            },
-                            Expr {
-                                span: Span::COMPILER_GENERATED,
-                                kind: ExprKind::identifier(sym::__proto__),
-                            },
-                        ),
-                    },
-                    arguments,
-                    true,
-                ),
-            };
-
-            ib.visit_expression_statement(Expr {
-                span: Span::COMPILER_GENERATED,
-                kind: ExprKind::assignment_local_space(super_id, superclass_constructor_call, TokenType::Assignment),
-            })?;
-
-            // __super.constructor = this.constructor
-            ib.visit_expression_statement(Expr {
-                span: Span::COMPILER_GENERATED,
-                kind: ExprKind::assignment(
-                    Expr {
-                        span: Span::COMPILER_GENERATED,
-                        kind: ExprKind::property_access(
-                            false,
-                            Expr {
-                                span: Span::COMPILER_GENERATED,
-                                kind: ExprKind::compiled(compile_local_load(super_id, false)),
-                            },
-                            Expr {
-                                span: Span::COMPILER_GENERATED,
-                                kind: ExprKind::identifier(sym::constructor),
-                            },
-                        ),
-                    },
-                    Expr {
-                        span: Span::COMPILER_GENERATED,
-                        kind: ExprKind::property_access(
-                            false,
-                            Expr {
-                                span: Span::COMPILER_GENERATED,
-                                kind: ExprKind::identifier(sym::this),
-                            },
-                            Expr {
-                                span: Span::COMPILER_GENERATED,
-                                kind: ExprKind::identifier(sym::constructor),
-                            },
-                        ),
-                    },
-                    TokenType::Assignment,
-                ),
-            })?;
-
-            // __super.__proto__ = this.__proto__
-            ib.visit_expression_statement(Expr {
-                span: Span::COMPILER_GENERATED,
-                kind: ExprKind::assignment(
-                    Expr {
-                        span: Span::COMPILER_GENERATED,
-                        kind: ExprKind::property_access(
-                            false,
-                            Expr {
-                                span: Span::COMPILER_GENERATED,
-                                kind: ExprKind::compiled(compile_local_load(super_id, false)),
-                            },
-                            Expr {
-                                span: Span::COMPILER_GENERATED,
-                                kind: ExprKind::identifier(sym::__proto__),
-                            },
-                        ),
-                    },
-                    Expr {
-                        span: Span::COMPILER_GENERATED,
-                        kind: ExprKind::property_access(
-                            false,
-                            Expr {
-                                span: Span::COMPILER_GENERATED,
-                                kind: ExprKind::identifier(sym::this),
-                            },
-                            Expr {
-                                span: Span::COMPILER_GENERATED,
-                                kind: ExprKind::identifier(sym::__proto__),
-                            },
-                        ),
-                    },
-                    TokenType::Assignment,
-                ),
-            })?;
-
-            // this = __super
-            ib.build_local_load(super_id, false);
-            ib.build_bind_this();
-
-            // Leave the instance on the stack as required by expressions
-            ib.build_this();
-
-            return Ok(());
-        }
-
-        let has_this = if let ExprKind::PropertyAccess(p) = target.kind {
-            ib.visit_property_access_expr(target.span, p, true)?;
-            true
-        } else {
-            ib.accept_expr(*target)?;
-            false
-        };
-
-        let argc = arguments.len();
-
-        let mut spread_arg_indices = Vec::new();
-
-        for (index, arg) in arguments.into_iter().enumerate() {
-            match arg {
-                CallArgumentKind::Normal(expr) => {
-                    ib.accept_expr(expr)?;
-                }
-                CallArgumentKind::Spread(expr) => {
-                    ib.accept_expr(expr)?;
-                    spread_arg_indices.push(index.try_into().unwrap());
-                }
-            }
-        }
-
-        let meta = FunctionCallMetadata::new_checked(argc, constructor_call, has_this)
-            .ok_or(Error::ParameterLimitExceeded(span))?;
-
-        ib.build_call(meta, spread_arg_indices, target_span);
-
-        Ok(())
+    fn visit_function_call(&mut self, span: Span, fc: FunctionCall) -> Result<(), Error> {
+        InstructionBuilder::new(self).lower_function_call_expr(span, fc)
     }
 
     fn visit_return_statement(&mut self, _span: Span, ReturnStatement(stmt): ReturnStatement) -> Result<(), Error> {
@@ -1777,10 +1539,13 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
             transformations::ast_insert_implicit_return(&mut statements);
 
             // Insert initializers
+            // FIXME: they need to be inserted after every super() call not at the start of the constructor.
             if let Some(members) = constructor_initializers {
-                let members = compile_class_members(ib, span, members)?;
-                ib.build_this();
-                ib.build_object_member_like_instruction(span, members, Instruction::AssignProperties)?;
+                if !members.is_empty() {
+                    let members = compile_class_members(ib, span, members)?;
+                    ib.build_this();
+                    ib.build_object_member_like_instruction(span, members, Instruction::AssignProperties)?;
+                }
             }
 
             let res = statements.into_iter().try_for_each(|stmt| ib.accept(stmt));
@@ -2274,7 +2039,31 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                     .scopes
                     .add_empty_function_scope(parent, &mut ib.inner.scope_counter);
 
-                (Vec::new(), Vec::new(), scope)
+                let statements = if class.extends.is_some() {
+                    // Implicit super(...arguments)
+                    let super_call = Statement {
+                        span,
+                        kind: StatementKind::Expression(Expr {
+                            span,
+                            kind: ExprKind::function_call(
+                                Expr {
+                                    span,
+                                    kind: ExprKind::identifier(sym::super_),
+                                },
+                                vec![CallArgumentKind::Spread(Expr {
+                                    span,
+                                    kind: ExprKind::identifier(sym::arguments),
+                                })],
+                                false,
+                            ),
+                        }),
+                    };
+                    vec![super_call]
+                } else {
+                    Vec::new()
+                };
+
+                (Vec::new(), statements, scope)
             }
         };
 

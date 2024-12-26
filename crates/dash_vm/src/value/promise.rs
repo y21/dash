@@ -3,10 +3,10 @@ use std::cell::RefCell;
 use dash_proc_macro::Trace;
 
 use crate::frame::This;
-use crate::gc::trace::{Trace, TraceCtxt};
 use crate::gc::ObjectId;
+use crate::gc::trace::{Trace, TraceCtxt};
 use crate::localscope::LocalScope;
-use crate::{extract, PromiseAction, Vm};
+use crate::{PromiseAction, Vm, extract};
 
 use super::object::{NamedObject, Object};
 use super::{Typeof, Unrooted, Value};
@@ -42,12 +42,19 @@ pub struct Promise {
 
 impl Promise {
     pub fn new(vm: &Vm) -> Self {
+        Self::with_obj(NamedObject::with_prototype_and_constructor(
+            vm.statics.promise_proto,
+            vm.statics.promise_ctor,
+        ))
+    }
+
+    pub fn with_obj(obj: NamedObject) -> Self {
         Self {
             state: RefCell::new(PromiseState::Pending {
                 reject: Vec::new(),
                 resolve: Vec::new(),
             }),
-            obj: NamedObject::with_prototype_and_constructor(vm.statics.promise_proto, vm.statics.promise_ctor),
+            obj,
         }
     }
     pub fn resolved(vm: &Vm, value: Value) -> Self {

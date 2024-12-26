@@ -7,6 +7,7 @@ use crate::js_std::array::for_each_js_iterator_element;
 use crate::throw;
 use crate::value::arraybuffer::ArrayBuffer;
 use crate::value::function::native::CallContext;
+use crate::value::object::NamedObject;
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::typedarray::{TypedArray, TypedArrayKind};
 use crate::value::{Root, Unpack, Value, ValueKind};
@@ -15,6 +16,11 @@ fn typedarray_constructor(cx: CallContext, kind: TypedArrayKind) -> Result<Value
     let Some(&arg) = cx.args.first() else {
         throw!(cx.scope, TypeError, "Missing argument")
     };
+
+    let Some(new_target) = cx.new_target else {
+        throw!(cx.scope, TypeError, "TypedArray constructor requires new")
+    };
+    let instance = NamedObject::instance_for_new_target(new_target, cx.scope)?;
 
     if let ValueKind::Object(obj) = arg.unpack() {
         if let Some(this) = obj.extract::<ArrayBuffer>(cx.scope) {
@@ -27,7 +33,7 @@ fn typedarray_constructor(cx: CallContext, kind: TypedArrayKind) -> Result<Value
                 );
             }
 
-            let array = TypedArray::new(cx.scope, obj, kind);
+            let array = TypedArray::with_obj(obj, kind, instance);
             return Ok(cx.scope.register(array).into());
         }
 
@@ -57,13 +63,13 @@ fn typedarray_constructor(cx: CallContext, kind: TypedArrayKind) -> Result<Value
             let buffer = ArrayBuffer::from_storage(cx.scope, values);
             let buffer = cx.scope.register(buffer);
 
-            let array = TypedArray::new(cx.scope, buffer, kind);
+            let array = TypedArray::with_obj(buffer, kind, instance);
             return Ok(cx.scope.register(array).into());
         }
     }
 
     let size = arg.to_number(cx.scope)? as usize;
-    let buffer = ArrayBuffer::with_capacity(cx.scope, size);
+    let buffer = ArrayBuffer::with_capacity(size, instance);
     let buffer = cx.scope.register(buffer);
 
     let array = TypedArray::new(cx.scope, buffer, kind);

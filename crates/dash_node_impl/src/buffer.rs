@@ -7,9 +7,9 @@ use dash_rt::typemap::Key;
 use dash_vm::gc::ObjectId;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::arraybuffer::ArrayBuffer;
-use dash_vm::value::function::native::{register_native_fn, CallContext};
+use dash_vm::value::function::native::{CallContext, register_native_fn};
 use dash_vm::value::function::{Function, FunctionKind};
-use dash_vm::value::object::{Object, PropertyValue};
+use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::primitive::Number;
 use dash_vm::value::typedarray::{TypedArray, TypedArrayKind};
@@ -55,13 +55,10 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     buffer_ctor.set_property(sc, buffer_sym.into(), PropertyValue::static_default(buffer_ctor.into()))?;
     buffer_ctor.set_property(sc, alloc_sym.into(), PropertyValue::static_default(alloc_fn.into()))?;
 
-    State::from_vm_mut(sc).store.insert(
-        BufferKey,
-        BufferState {
-            buffer_prototype,
-            buffer_ctor,
-        },
-    );
+    State::from_vm_mut(sc).store.insert(BufferKey, BufferState {
+        buffer_prototype,
+        buffer_ctor,
+    });
 
     Ok(buffer_ctor.into())
 }
@@ -162,7 +159,11 @@ fn from(cx: CallContext) -> Result<Value, Value> {
 
     let arraybuffer = cx.scope.register(ArrayBuffer::from_storage(cx.scope, buf));
     let instn = Buffer {
-        inner: TypedArray::new_with_proto_ctor(arraybuffer, TypedArrayKind::Uint8Array, buffer_prototype, buffer_ctor),
+        inner: TypedArray::with_obj(
+            arraybuffer,
+            TypedArrayKind::Uint8Array,
+            NamedObject::with_prototype_and_constructor(buffer_prototype, buffer_ctor),
+        ),
     };
 
     Ok(Value::object(cx.scope.register(instn)))
@@ -193,7 +194,11 @@ fn alloc(cx: CallContext) -> Result<Value, Value> {
     } = State::from_vm(cx.scope).store[BufferKey];
     let arraybuffer = cx.scope.register(ArrayBuffer::from_storage(cx.scope, buf));
     let instn = Buffer {
-        inner: TypedArray::new_with_proto_ctor(arraybuffer, TypedArrayKind::Uint8Array, buffer_prototype, buffer_ctor),
+        inner: TypedArray::with_obj(
+            arraybuffer,
+            TypedArrayKind::Uint8Array,
+            NamedObject::with_prototype_and_constructor(buffer_prototype, buffer_ctor),
+        ),
     };
 
     Ok(Value::object(cx.scope.register(instn)))

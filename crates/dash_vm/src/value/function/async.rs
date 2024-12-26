@@ -4,10 +4,10 @@ use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::value::object::{NamedObject, Object, PropertyKey};
-use crate::value::promise::{wrap_promise, Promise};
+use crate::value::promise::{Promise, wrap_promise};
 use crate::value::root_ext::RootErrExt;
 use crate::value::{Root, Typeof, Unpack, Unrooted, Value, ValueContext};
-use crate::{delegate, extract, throw, PromiseAction, Vm};
+use crate::{PromiseAction, Vm, delegate, extract, throw};
 use dash_middle::interner::sym;
 
 use super::generator::{GeneratorFunction, GeneratorIterator, GeneratorState};
@@ -32,11 +32,9 @@ impl AsyncFunction {
         callee: ObjectId,
         this: This,
         args: Vec<Value>,
-        is_constructor_call: bool,
+        new_target: Option<ObjectId>,
     ) -> Result<Value, Unrooted> {
-        let generator_iter = self
-            .inner
-            .handle_function_call(scope, callee, this, args, is_constructor_call)?;
+        let generator_iter = self.inner.handle_function_call(scope, callee, this, args, new_target)?;
 
         let result = scope
             .statics
@@ -177,11 +175,11 @@ impl Object for ThenTask {
                     let then_task = scope.register(then_task);
                     let value = wrap_promise(scope, value);
 
-                    scope.statics.promise_then.clone().apply(
-                        scope,
-                        This::Bound(value),
-                        vec![Value::object(then_task)],
-                    )?;
+                    scope
+                        .statics
+                        .promise_then
+                        .clone()
+                        .apply(scope, This::Bound(value), vec![Value::object(then_task)])?;
                 }
             }
             Err(value) => {

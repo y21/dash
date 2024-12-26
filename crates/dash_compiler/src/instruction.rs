@@ -5,7 +5,7 @@ use dash_middle::compiler::constant::{
 };
 use dash_middle::compiler::instruction::{AssignKind, Instruction, IntrinsicOperation};
 use dash_middle::compiler::{
-    ExportPropertyKind, FunctionCallMetadata, ObjectMemberKind as CompilerObjectMemberKind, StaticImportKind,
+    ExportPropertyKind, FunctionCallKind, ObjectMemberKind as CompilerObjectMemberKind, StaticImportKind,
 };
 use dash_middle::interner::Symbol;
 use dash_middle::parser::error::Error;
@@ -78,7 +78,8 @@ impl InstructionBuilder<'_, '_> {
         build_undef Instruction::Undef,
         build_symbol_iterator Instruction::CallSymbolIterator,
         build_for_in_iterator Instruction::CallForInIterator,
-        build_dynamic_delete Instruction::DeletePropertyDynamic
+        build_dynamic_delete Instruction::DeletePropertyDynamic,
+        build_new_target Instruction::NewTarget
     }
 
     pub fn build_ret(&mut self, tc_depth: u16) {
@@ -186,13 +187,22 @@ impl InstructionBuilder<'_, '_> {
         self.write(kind as u8);
     }
 
-    pub fn build_call(&mut self, meta: FunctionCallMetadata, spread_arg_indices: Vec<u8>, target_span: Span) {
+    pub fn build_call(
+        &mut self,
+        argc: u8,
+        preserve_this: bool,
+        kind: FunctionCallKind,
+        spread_arg_indices: Vec<u8>,
+        target_span: Span,
+    ) {
         let ip = self.current_function().buf.len();
         self.current_function_mut()
             .debug_symbols
             .add(ip.try_into().unwrap(), target_span);
         self.write_instr(Instruction::Call);
-        self.write(meta.into());
+        self.write(argc);
+        self.write_bool(preserve_this);
+        self.write(kind as u8);
         self.write(spread_arg_indices.len().try_into().unwrap());
         for index in spread_arg_indices {
             self.write(index);

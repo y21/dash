@@ -4,7 +4,7 @@ use dash_proc_macro::Trace;
 use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
-use crate::{extract, Vm};
+use crate::{Vm, extract};
 
 use super::arraybuffer::ArrayBuffer;
 use super::object::{NamedObject, Object, PropertyKey, PropertyValue};
@@ -48,12 +48,8 @@ pub struct TypedArray {
 }
 
 impl TypedArray {
-    pub fn new_with_proto_ctor(arraybuffer: ObjectId, kind: TypedArrayKind, proto: ObjectId, ctor: ObjectId) -> Self {
-        Self {
-            arraybuffer,
-            kind,
-            obj: NamedObject::with_prototype_and_constructor(proto, ctor),
-        }
+    pub fn with_obj(arraybuffer: ObjectId, kind: TypedArrayKind, obj: NamedObject) -> Self {
+        Self { arraybuffer, kind, obj }
     }
 
     pub fn new(vm: &Vm, arraybuffer: ObjectId, kind: TypedArrayKind) -> Self {
@@ -69,7 +65,11 @@ impl TypedArray {
             TypedArrayKind::Float64Array => (vm.statics.float64array_prototype, vm.statics.float64array_ctor),
         };
 
-        Self::new_with_proto_ctor(arraybuffer, kind, proto, ctor)
+        Self::with_obj(
+            arraybuffer,
+            kind,
+            NamedObject::with_prototype_and_constructor(proto, ctor),
+        )
     }
 
     pub fn kind(&self) -> TypedArrayKind {

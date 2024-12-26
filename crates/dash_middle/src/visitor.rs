@@ -144,6 +144,9 @@ pub trait Visitor<V> {
     fn visit_yield_star(&mut self, span: Span, right: Box<Expr>) -> V;
 
     fn visit_optional_chaining_expression(&mut self, span: Span, o: OptionalChainingExpression) -> V;
+
+    /// Visits the `new.target` expression
+    fn visit_new_target(&mut self, span: Span) -> V;
 }
 
 pub fn accept_default<T, V: Visitor<T>>(this: &mut V, Statement { kind, span }: Statement) -> T {
@@ -198,5 +201,6 @@ where
         ExprKind::Empty => this.visit_empty_expr(),
         ExprKind::YieldStar(e) => this.visit_yield_star(span, e),
         ExprKind::Chaining(c) => this.visit_optional_chaining_expression(span, c),
+        ExprKind::NewTarget => this.visit_new_target(span),
     }
 }

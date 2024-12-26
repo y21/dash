@@ -3,10 +3,10 @@ use std::cell::RefCell;
 use ahash::HashMap;
 use dash_proc_macro::Trace;
 
-use crate::{delegate, extract, Vm};
+use crate::{Vm, delegate, extract};
 
-use super::object::{NamedObject, Object};
 use super::Value;
+use super::object::{NamedObject, Object};
 
 #[derive(Debug, Trace)]
 pub struct Map {

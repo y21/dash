@@ -32,6 +32,8 @@ pub enum ExprKind {
     Assignment(AssignmentExpr),
     /// A function call expression
     Call(FunctionCall),
+    /// new.target
+    NewTarget,
     /// A conditional expression, i.e. `foo ? bar : baz`
     Conditional(ConditionalExpr),
     /// A property access expression, i.e. `foo.bar`

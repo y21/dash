@@ -320,13 +320,21 @@ impl Parser<'_, '_> {
 
     fn parse_field_access(&mut self) -> Option<Expr> {
         if self.eat(TokenType::New, false).is_some() {
-            self.new_level_stack
-                .inc_level()
-                .expect("Failed to increment `new` stack level");
+            if let Some(Token { ty: TokenType::Dot, .. }) = self.current() {
+                // new.target handled in parse_primary_expr
+                self.advance_back();
+            } else {
+                let new_span = self.previous()?.span;
 
-            let rval = self.parse_field_access()?;
+                self.new_level_stack
+                    .inc_level()
+                    .expect("Failed to increment `new` stack level");
 
-            return Some(rval);
+                let mut rval = self.parse_field_access()?;
+                rval.span = new_span.to(rval.span);
+
+                return Some(rval);
+            }
         }
 
         let mut expr = self.parse_primary_expr()?;
@@ -508,6 +516,15 @@ impl Parser<'_, '_> {
                 span: current.span,
                 kind: ExprKind::string_literal(sym),
             },
+            TokenType::New => {
+                self.eat(TokenType::Dot, true).unwrap();
+                self.eat(TokenType::Identifier(sym::target), true)?;
+                let span = current.span.to(self.previous()?.span);
+                Expr {
+                    span,
+                    kind: ExprKind::NewTarget,
+                }
+            }
             TokenType::LeftSquareBrace => {
                 let mut items = Vec::new();
                 while self.eat(TokenType::RightSquareBrace, false).is_none() {

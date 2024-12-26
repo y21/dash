@@ -14,14 +14,19 @@ use dash_middle::interner::sym;
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     match cx.args.first() {
         Some(v) => v.to_object(cx.scope).map(Value::object),
-        None => Ok(Value::object(cx.scope.register(NamedObject::new(cx.scope)))),
+        None => {
+            let new_target = cx.new_target.unwrap_or(cx.scope.statics.object_ctor);
+            let instance = NamedObject::instance_for_new_target(new_target, cx.scope)?;
+            Ok(Value::object(cx.scope.register(instance)))
+        }
     }
 }
 
 pub fn create(cx: CallContext) -> Result<Value, Value> {
     let prototype = cx.args.first().unwrap_or_undefined();
 
-    let obj = NamedObject::new(cx.scope);
+    let new_target = cx.new_target.unwrap_or(cx.scope.statics.object_ctor);
+    let obj = NamedObject::instance_for_new_target(new_target, cx.scope)?;
     obj.set_prototype(cx.scope, prototype)?;
 
     // TODO: second argument: ObjectDefineProperties
@@ -202,13 +207,10 @@ pub fn entries(cx: CallContext) -> Result<Value, Value> {
     for key in obj.own_keys(cx.scope)? {
         let key = PropertyKey::from_value(cx.scope, key)?;
         let value = obj.get_own_property(cx.scope, key).root(cx.scope)?;
-        let entry = Array::from_vec(
-            cx.scope,
-            vec![
-                PropertyValue::static_default(key.as_value()),
-                PropertyValue::static_default(value),
-            ],
-        );
+        let entry = Array::from_vec(cx.scope, vec![
+            PropertyValue::static_default(key.as_value()),
+            PropertyValue::static_default(value),
+        ]);
         entries.push(PropertyValue::static_default(Value::object(cx.scope.register(entry))));
     }
 

@@ -1,6 +1,7 @@
 use crate::throw;
 use crate::value::arraybuffer::ArrayBuffer;
 use crate::value::function::native::CallContext;
+use crate::value::object::NamedObject;
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::{Unpack, Value};
 
@@ -9,9 +10,12 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
         Some(length) => length.to_number(cx.scope)? as usize,
         None => 0,
     };
-
-    let buf = ArrayBuffer::with_capacity(cx.scope, length);
-    Ok(cx.scope.register(buf).into())
+    if let Some(new_target) = cx.new_target {
+        let buf = ArrayBuffer::with_capacity(length, NamedObject::instance_for_new_target(new_target, cx.scope)?);
+        Ok(cx.scope.register(buf).into())
+    } else {
+        throw!(cx.scope, TypeError, "ArrayBuffer constructor requires new")
+    }
 }
 
 pub fn byte_length(cx: CallContext) -> Result<Value, Value> {

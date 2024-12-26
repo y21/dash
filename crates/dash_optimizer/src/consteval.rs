@@ -255,6 +255,7 @@ impl<'b, 'interner> ConstFunctionEvalCtx<'b, 'interner> {
             ExprKind::Compiled(..) => {}
             ExprKind::YieldStar(e) => self.visit(e),
             ExprKind::Empty => {}
+            ExprKind::NewTarget => {}
         }
     }
 
@@ -527,6 +528,7 @@ fn expr_has_side_effects(expr: &Expr) -> bool {
         }
         ExprKind::Empty => false,
         ExprKind::Function(..) => false,
+        ExprKind::NewTarget => false,
         ExprKind::Grouping(GroupingExpr(grouping)) => grouping.iter().any(expr_has_side_effects),
         ExprKind::Literal(LiteralExpr::Boolean(..)) => false,
         ExprKind::Literal(LiteralExpr::Identifier(..)) => true, // might invoke a global getter

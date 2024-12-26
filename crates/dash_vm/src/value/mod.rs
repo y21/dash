@@ -319,8 +319,9 @@ impl Object for Value {
         _: ObjectId,
         this: This,
         args: Vec<Value>,
+        new_target: ObjectId,
     ) -> Result<Unrooted, Unrooted> {
-        self.construct(scope, this, args)
+        self.construct_with_target(scope, this, args, new_target)
     }
 
     fn internal_slots(&self, _: &Vm) -> Option<&dyn InternalSlots> {
@@ -615,8 +616,9 @@ impl Object for ExternalValue {
         _callee: ObjectId,
         this: This,
         args: Vec<Value>,
+        new_target: ObjectId,
     ) -> Result<Unrooted, Unrooted> {
-        self.inner.construct(scope, this, args)
+        self.inner.construct_with_target(scope, this, args, new_target)
     }
 }
 
@@ -688,6 +690,28 @@ impl Value {
         match self.unpack() {
             ValueKind::Object(o) => o.construct(sc, this, args),
             ValueKind::External(o) => o.inner(sc).construct(sc, this, args),
+            ValueKind::Number(n) => throw!(sc, TypeError, "{} is not a constructor", n),
+            ValueKind::Boolean(b) => throw!(sc, TypeError, "{} is not a constructor", b),
+            ValueKind::String(s) => {
+                let s = s.res(sc).to_owned();
+                throw!(sc, TypeError, "{} is not a constructor", s)
+            }
+            ValueKind::Undefined(_) => throw!(sc, TypeError, "undefined is not a constructor"),
+            ValueKind::Null(_) => throw!(sc, TypeError, "null is not a constructor"),
+            ValueKind::Symbol(s) => throw!(sc, TypeError, "{:?} is not a constructor", s),
+        }
+    }
+
+    pub fn construct_with_target(
+        &self,
+        sc: &mut LocalScope,
+        this: This,
+        args: Vec<Value>,
+        new_target: ObjectId,
+    ) -> Result<Unrooted, Unrooted> {
+        match self.unpack() {
+            ValueKind::Object(o) => o.construct_with_target(sc, this, args, new_target),
+            ValueKind::External(o) => o.inner(sc).construct_with_target(sc, this, args, new_target),
             ValueKind::Number(n) => throw!(sc, TypeError, "{} is not a constructor", n),
             ValueKind::Boolean(b) => throw!(sc, TypeError, "{} is not a constructor", b),
             ValueKind::String(s) => {

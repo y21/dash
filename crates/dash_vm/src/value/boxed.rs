@@ -2,12 +2,12 @@ use super::ops::conversions::{PreferredType, ValueConversion};
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::value::{JsString, PropertyKey, Unrooted};
-use crate::{delegate, extract, PropertyValue, Vm};
+use crate::{PropertyValue, Vm, delegate, extract};
 use dash_proc_macro::Trace;
 
+use super::Value;
 use super::object::{NamedObject, Object};
 use super::primitive::{InternalSlots, Symbol as PrimitiveSymbol};
-use super::Value;
 
 macro_rules! boxed_primitive {
     ($($name:ident $prototype:ident $constructor:ident $t:ty),*) => {

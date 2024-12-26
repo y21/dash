@@ -42,7 +42,7 @@ pub struct ObjectVTable {
     pub(crate) js_apply:
         unsafe fn(*const (), &mut LocalScope<'_>, ObjectId, This, Vec<Value>) -> Result<Unrooted, Unrooted>,
     pub(crate) js_construct:
-        unsafe fn(*const (), &mut LocalScope<'_>, ObjectId, This, Vec<Value>) -> Result<Unrooted, Unrooted>,
+        unsafe fn(*const (), &mut LocalScope<'_>, ObjectId, This, Vec<Value>, ObjectId) -> Result<Unrooted, Unrooted>,
     pub(crate) js_internal_slots: unsafe fn(*const (), &Vm) -> Option<*const dyn InternalSlots>,
     pub(crate) js_extract_type_raw: unsafe fn(*const (), &Vm, TypeId) -> Option<NonNull<()>>,
     pub(crate) js_own_keys: unsafe fn(*const (), sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value>,
@@ -84,8 +84,8 @@ macro_rules! object_vtable_for_ty {
                 js_apply: |ptr, scope, callee, this, args| unsafe {
                     <$ty as Object>::apply(&*(ptr.cast::<$ty>()), scope, callee, this, args)
                 },
-                js_construct: |ptr, scope, callee, this, args| unsafe {
-                    <$ty as Object>::construct(&*(ptr.cast::<$ty>()), scope, callee, this, args)
+                js_construct: |ptr, scope, callee, this, args, new_target| unsafe {
+                    <$ty as Object>::construct(&*(ptr.cast::<$ty>()), scope, callee, this, args, new_target)
                 },
                 js_internal_slots: |ptr, vm| unsafe {
                     <$ty as Object>::internal_slots(&*(ptr.cast::<$ty>()), vm)

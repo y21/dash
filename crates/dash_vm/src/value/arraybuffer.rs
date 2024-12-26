@@ -5,7 +5,7 @@ use dash_proc_macro::Trace;
 use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
-use crate::{delegate, extract, Vm};
+use crate::{Vm, delegate, extract};
 
 use super::object::{NamedObject, Object};
 use super::{Unrooted, Value};
@@ -28,16 +28,16 @@ impl ArrayBuffer {
     }
 
     pub fn new(vm: &Vm) -> Self {
-        Self::with_capacity(vm, 0)
+        Self::with_capacity(
+            0,
+            NamedObject::with_prototype_and_constructor(vm.statics.arraybuffer_prototype, vm.statics.arraybuffer_ctor),
+        )
     }
 
-    pub fn with_capacity(vm: &Vm, capacity: usize) -> Self {
+    pub fn with_capacity(capacity: usize, obj: NamedObject) -> Self {
         Self {
             storage: vec![Cell::new(0); capacity],
-            obj: NamedObject::with_prototype_and_constructor(
-                vm.statics.arraybuffer_prototype,
-                vm.statics.arraybuffer_ctor,
-            ),
+            obj,
         }
     }
 

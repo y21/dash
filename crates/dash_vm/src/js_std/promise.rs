@@ -17,7 +17,12 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
         _ => throw!(cx.scope, TypeError, "Promise callback must be a function"),
     };
 
-    let promise = cx.scope.mk_promise();
+    let Some(new_target) = cx.new_target else {
+        throw!(cx.scope, TypeError, "Promise constructor requires new")
+    };
+
+    let promise = Promise::with_obj(NamedObject::instance_for_new_target(new_target, cx.scope)?);
+    let promise = cx.scope.register(promise);
 
     let (resolve, reject) = {
         let r1 = PromiseResolver::new(cx.scope, promise);

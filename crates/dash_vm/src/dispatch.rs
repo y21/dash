@@ -175,7 +175,7 @@ mod extract {
     use std::marker::PhantomData;
 
     use dash_middle::compiler::constant::{NumberConstant, SymbolConstant};
-    use dash_middle::compiler::{ArrayMemberKind, ExportPropertyKind, ObjectMemberKind};
+    use dash_middle::compiler::{ArrayMemberKind, ExportPropertyKind, FunctionCallKind, ObjectMemberKind};
     use dash_middle::iterator_with::IteratorWith;
 
     use crate::gc::ObjectId;
@@ -541,13 +541,20 @@ mod extract {
             Ok(cx.fetchw_and_inc_ip())
         }
     }
+
+    impl ExtractBack for FunctionCallKind {
+        type Exception = Infallible;
+        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
+            Ok(Self::from_repr(cx.fetch_and_inc_ip()).unwrap())
+        }
+    }
 }
 
 mod handlers {
     use dash_middle::compiler::constant::{BooleanConstant, FunctionConstant, RegexConstant};
     use dash_middle::compiler::external::External;
     use dash_middle::compiler::instruction::{AssignKind, IntrinsicOperation};
-    use dash_middle::compiler::{FunctionCallMetadata, StaticImportKind};
+    use dash_middle::compiler::{FunctionCallKind, StaticImportKind};
     use dash_middle::interner::sym;
     use dash_middle::iterator_with::{InfallibleIteratorWith, IteratorWith};
     use dash_middle::parser::statement::{Asyncness, FunctionKind as ParserFunctionKind};
@@ -567,7 +574,7 @@ mod handlers {
     use crate::value::function::closure::Closure;
     use crate::value::function::generator::GeneratorFunction;
     use crate::value::function::user::UserFunction;
-    use crate::value::function::{Function, FunctionKind, adjust_stack_from_flat_call};
+    use crate::value::function::{Function, FunctionKind, adjust_stack_from_flat_call, this_for_new_target};
     use crate::value::object::{NamedObject, Object, ObjectMap, PropertyKey, PropertyValue, PropertyValueKind};
     use crate::value::ops::conversions::ValueConversion;
     use crate::value::ops::equality;
@@ -873,11 +880,11 @@ mod handlers {
                 Ok(Some(HandleResult::Return(Unrooted::new(value))))
             }
             FrameState::Function {
-                is_constructor_call,
+                new_target,
                 is_flat_call,
             } => {
                 if_chain! {
-                    if is_constructor_call && !matches!(value.unpack(), ValueKind::Object(_) | ValueKind::External(_));
+                    if new_target.is_some() && !matches!(value.unpack(), ValueKind::Object(_) | ValueKind::External(_));
                     then {
                         let this = this.this.to_value(&mut cx.scope)?;
                         // If this is a constructor call and the return value is not an object,
@@ -1021,19 +1028,46 @@ mod handlers {
         mut cx: DispatchContext<'_>,
         callee: Value,
         this: This,
-        function: &Function,
+        _function: &Function,
         user_function: &UserFunction,
         mut argc: usize,
-        is_constructor: bool,
+        kind: FunctionCallKind,
     ) -> Result<Option<HandleResult>, Unrooted> {
         let sp_before_call = cx.stack.len() - argc;
         let ValueKind::Object(callee) = callee.unpack() else {
             unreachable!("guaranteed by caller")
         };
 
-        let this = match is_constructor {
-            true => This::Bound(Value::object(function.new_instance(callee, &mut cx)?)),
-            false => this,
+        let (this, new_target) = match kind {
+            // new.target is always the callee in this codepath.
+            FunctionCallKind::Constructor => {
+                let this = if user_function.inner().has_extends_clause {
+                    let ValueKind::Object(super_constructor) = callee.get_prototype(&mut cx.scope)?.unpack() else {
+                        throw!(cx.scope, TypeError, "supertype constructor must be an object")
+                    };
+
+                    This::BeforeSuper { super_constructor }
+                } else {
+                    this_for_new_target(&mut cx.scope, callee)?
+                };
+
+                (this, Some(callee))
+            }
+            FunctionCallKind::Function => (this, None),
+            FunctionCallKind::Super => {
+                let this = if user_function.inner().has_extends_clause {
+                    let ValueKind::Object(super_constructor) = callee.get_prototype(&mut cx.scope)?.unpack() else {
+                        throw!(cx.scope, TypeError, "supertype constructor must be an object")
+                    };
+
+                    This::BeforeSuper { super_constructor }
+                } else {
+                    let new_target = cx.active_frame().new_target().unwrap();
+                    this_for_new_target(&mut cx.scope, new_target)?
+                };
+
+                (this, cx.active_frame().new_target())
+            }
         };
 
         let spread_arguments = cx.fetch_and_inc_ip();
@@ -1076,7 +1110,7 @@ mod handlers {
 
         let arguments = adjust_stack_from_flat_call(&mut cx, user_function, sp_before_call, argc);
 
-        let mut frame = Frame::from_function(this, user_function, is_constructor, true, arguments);
+        let mut frame = Frame::from_function(this, user_function, new_target, true, arguments);
         frame.set_sp(sp_before_call);
 
         cx.pad_stack_for_frame(&frame);
@@ -1091,7 +1125,7 @@ mod handlers {
         callee: Value,
         this: This,
         argc: usize,
-        is_constructor: bool,
+        function_call_kind: FunctionCallKind,
         call_ip: u16,
     ) -> Result<Option<HandleResult>, Unrooted> {
         let args = {
@@ -1132,10 +1166,13 @@ mod handlers {
 
         cx.scope.add_many(&args);
 
-        let ret = if is_constructor {
-            callee.construct(&mut cx, this, args)?
-        } else {
-            callee.apply_with_debug(&mut cx, this, args, call_ip)?
+        let ret = match function_call_kind {
+            FunctionCallKind::Constructor => callee.construct(&mut cx.scope, this, args)?,
+            FunctionCallKind::Super => {
+                let new_target = cx.active_frame().new_target().unwrap();
+                callee.construct_with_target(&mut cx.scope, this, args, new_target)?
+            }
+            FunctionCallKind::Function => callee.apply_with_debug(&mut cx.scope, this, args, call_ip)?,
         };
 
         // SAFETY: no need to root, we're directly pushing into the value stack which itself is a root
@@ -1146,34 +1183,42 @@ mod handlers {
     pub fn call(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let call_ip = cx.active_frame().ip as u16 - 1;
 
-        let meta = FunctionCallMetadata::from(cx.fetch_and_inc_ip());
-        let argc = usize::from(meta.value());
-        let is_constructor = meta.is_constructor_call();
-        let has_this = meta.is_object_call();
+        let argc = usize::from(cx.fetch_and_inc_ip());
+        let has_this = extract::<bool>(&mut cx);
+        let function_call_kind = extract::<FunctionCallKind>(&mut cx);
 
         let stack_len = cx.stack.len();
-        let (callee, this) = if has_this {
+        let (callee, this) = if function_call_kind == FunctionCallKind::Super {
+            let callee = match cx.active_frame().this {
+                This::BeforeSuper { super_constructor } => Value::object(super_constructor),
+                _ => throw!(
+                    cx.scope,
+                    TypeError,
+                    "super() must be called exactly once in a subclass constructor"
+                ),
+            };
+            (callee, This::Default)
+        } else if has_this {
             cx.stack[stack_len - argc - 2..].rotate_left(2);
             let (this, callee) = cx.pop_stack2_rooted();
             (callee, This::Bound(this))
         } else {
             cx.stack[stack_len - argc - 1..].rotate_left(1);
-            // NOTE: Does not need to be rooted for flat calls. `generic_call` manually roots it.
             let callee = cx.pop_stack_rooted();
             (callee, This::Default)
         };
 
         if let Some(function) = callee.unpack().downcast_ref::<Function>(&cx.scope) {
             match function.kind() {
-                FunctionKind::User(user) => call_flat(cx, callee, this, function, user, argc, is_constructor),
+                FunctionKind::User(user) => call_flat(cx, callee, this, function, user, argc, function_call_kind),
                 FunctionKind::Closure(closure) => {
                     let bound_this = closure.this;
-                    call_flat(cx, callee, bound_this, function, &closure.fun, argc, is_constructor)
+                    call_flat(cx, callee, bound_this, function, &closure.fun, argc, function_call_kind)
                 }
-                _ => call_generic(cx, callee, this, argc, is_constructor, call_ip),
+                _ => call_generic(cx, callee, this, argc, function_call_kind, call_ip),
             }
         } else {
-            call_generic(cx, callee, this, argc, is_constructor, call_ip)
+            call_generic(cx, callee, this, argc, function_call_kind, call_ip)
         }
     }
 
@@ -2311,6 +2356,19 @@ mod handlers {
         cx.stack.push(Value::object(arguments));
         Ok(None)
     }
+
+    pub fn new_target(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
+        if let FrameState::Function {
+            new_target: Some(new_target),
+            ..
+        } = cx.active_frame().state
+        {
+            cx.stack.push(Value::object(new_target));
+        } else {
+            cx.stack.push(Value::undefined());
+        }
+        Ok(None)
+    }
 }
 
 pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResult>, Unrooted> {
@@ -2403,6 +2461,7 @@ pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResu
         Instruction::ArrayDestruct => handlers::arraydestruct(cx),
         Instruction::AssignProperties => handlers::assign_properties(cx),
         Instruction::DelayedReturn => handlers::delayed_ret(cx),
+        Instruction::NewTarget => handlers::new_target(cx),
         Instruction::Nop => Ok(None),
     }
 }

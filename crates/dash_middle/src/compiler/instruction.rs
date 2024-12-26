@@ -97,6 +97,7 @@ pub enum Instruction {
     ArrayDestruct,
     AssignProperties,
     DelayedReturn,
+    NewTarget,
     // Nop exists solely for the sake of benchmarking the raw throughput of the VM dispatch loop
     Nop,
 }

@@ -4,7 +4,7 @@ use dash_proc_macro::Trace;
 use dash_regex::{Flags, ParsedRegex};
 
 use crate::gc::trace::{Trace, TraceCtxt};
-use crate::{delegate, extract, Vm};
+use crate::{Vm, delegate, extract};
 
 use super::object::{NamedObject, Object};
 use super::string::JsString;
@@ -45,6 +45,18 @@ impl RegExp {
                 last_index: Cell::new(0),
             }),
             object: NamedObject::with_prototype_and_constructor(vm.statics.regexp_prototype, vm.statics.regexp_ctor),
+        }
+    }
+
+    pub fn with_obj(regex: ParsedRegex, flags: Flags, source: JsString, object: NamedObject) -> Self {
+        Self {
+            inner: Some(RegExpInner {
+                regex,
+                flags,
+                source,
+                last_index: Cell::new(0),
+            }),
+            object,
         }
     }
 

@@ -5,7 +5,7 @@ use crate::throw;
 use crate::value::array::{Array, ArrayIterator};
 use crate::value::boxed::String as BoxedString;
 use crate::value::function::native::CallContext;
-use crate::value::object::{Object, PropertyValue};
+use crate::value::object::{NamedObject, Object, PropertyValue};
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::{Value, ValueContext};
 use std::cmp;
@@ -16,8 +16,9 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
         Some(arg) => arg.to_js_string(cx.scope)?,
         None => sym::empty.into(),
     };
-    if cx.is_constructor_call {
-        let boxed = BoxedString::new(cx.scope, value);
+
+    if let Some(new_target) = cx.new_target {
+        let boxed = BoxedString::with_obj(value, NamedObject::instance_for_new_target(new_target, cx.scope)?);
         Ok(Value::object(cx.scope.register(boxed)))
     } else {
         Ok(Value::string(value))

@@ -4,7 +4,7 @@ use derive_more::Display;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use crate::interner::{sym, Symbol};
+use crate::interner::{Symbol, sym};
 use crate::lexer::token::TokenType;
 use crate::sourcemap::Span;
 use crate::tree::TreeToken;

@@ -181,10 +181,10 @@ impl Array {
     }
 
     /// Creates a holey array with a given length
-    pub fn with_hole(vm: &Vm, len: usize) -> Self {
+    pub fn with_hole(len: usize, obj: NamedObject) -> Self {
         Self {
             items: RefCell::new(ArrayInner::Table(ArrayTable::with_len(len as u32))),
-            obj: get_named_object(vm),
+            obj,
         }
     }
 

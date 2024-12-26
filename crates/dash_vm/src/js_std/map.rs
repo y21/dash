@@ -1,13 +1,17 @@
-use dash_middle::interner::sym;
 use crate::throw;
 use crate::value::function::native::CallContext;
 use crate::value::map::Map;
-use crate::value::object::PropertyKey;
+use crate::value::object::{NamedObject, PropertyKey};
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::{Root, Unpack, Value, ValueContext};
+use dash_middle::interner::sym;
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
-    let map = Map::new(cx.scope);
+    let Some(new_target) = cx.new_target else {
+        throw!(cx.scope, TypeError, "Map constructor requires new")
+    };
+
+    let map = Map::with_obj(NamedObject::instance_for_new_target(new_target, cx.scope)?);
     if let Some(iter) = cx.args.first() {
         let len = iter.length_of_array_like(cx.scope)?;
 

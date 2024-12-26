@@ -132,11 +132,17 @@ fn inspect_inner_into(
             *s += &*("@@".to_owned() + scope.interner.resolve(symbol.sym()));
         }),
         ValueKind::Object(object) => {
-            let constructor = object.get_property(scope, sym::constructor.into()).root(scope)?;
-            let constructor_name = constructor
-                .get_property(scope, sym::name.into())
+            let constructor = object
+                .get_property(scope, sym::constructor.into())
                 .root(scope)?
-                .to_js_string(scope)?;
+                .into_option();
+            let constructor_name = constructor
+                .map(|c| c.get_property(scope, sym::name.into()))
+                .transpose()
+                .root(scope)?
+                .map(|n| n.to_js_string(scope).map(|s| s.sym()))
+                .transpose()?
+                .unwrap_or(sym::Object);
 
             if object.extract::<Array>(scope).is_some() {
                 return inspect_array_into(value, scope, options, depth, out);
@@ -152,7 +158,7 @@ fn inspect_inner_into(
                 .extract::<ArrayBuffer>(scope)
                 .or_else(|| object.extract::<TypedArray>(scope).map(|t| t.arraybuffer(scope)))
             {
-                inspect_arraybuffer_into(arraybuffer, constructor_name.sym(), out);
+                inspect_arraybuffer_into(arraybuffer, constructor_name, out);
                 return Ok(());
             }
 
@@ -171,8 +177,8 @@ fn inspect_inner_into(
                 return Ok(());
             }
 
-            if constructor != Value::object(scope.statics.object_ctor) {
-                *out += constructor_name.res(scope);
+            if constructor.is_some_and(|c| c != Value::object(scope.statics.object_ctor)) {
+                *out += scope.interner.resolve(constructor_name);
                 *out += " ";
             }
 

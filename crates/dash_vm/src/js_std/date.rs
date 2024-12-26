@@ -1,6 +1,7 @@
 use crate::throw;
 use crate::value::date::Date;
 use crate::value::function::native::CallContext;
+use crate::value::object::NamedObject;
 use crate::value::root_ext::RootErrExt;
 use crate::value::{Unpack, Value};
 
@@ -14,7 +15,9 @@ pub fn time_millis(cx: &mut CallContext) -> Result<u64, Value> {
 }
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
-    let date = Date::current(cx.scope)?;
+    // FIXME: `new` has special behavior
+    let new_target = cx.new_target.unwrap_or(cx.scope.statics.date_ctor);
+    let date = Date::new_with_object(NamedObject::instance_for_new_target(new_target, cx.scope)?, cx.scope)?;
     Ok(cx.scope.register(date).into())
 }
 

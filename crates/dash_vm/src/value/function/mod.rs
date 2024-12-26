@@ -7,11 +7,11 @@ use dash_proc_macro::Trace;
 
 use crate::dispatch::HandleResult;
 use crate::frame::This;
-use crate::gc::trace::{Trace, TraceCtxt};
 use crate::gc::ObjectId;
+use crate::gc::trace::{Trace, TraceCtxt};
 use crate::localscope::LocalScope;
 use crate::value::arguments::Arguments;
-use crate::{extract, Vm};
+use crate::{Vm, extract, throw};
 use dash_middle::interner::sym;
 
 use self::r#async::AsyncFunction;
@@ -24,7 +24,7 @@ use super::array::Array;
 use super::object::{NamedObject, Object, PropertyDataDescriptor, PropertyKey, PropertyValue, PropertyValueKind};
 use super::ops::conversions::ValueConversion;
 use super::string::JsString;
-use super::{Root, Typeof, Unrooted, Value};
+use super::{Root, Typeof, Unpack, Unrooted, Value, ValueKind};
 
 pub mod r#async;
 pub mod bound;
@@ -142,15 +142,17 @@ fn handle_call(
     callee: ObjectId,
     this: This,
     args: Vec<Value>,
-    is_constructor_call: bool,
+    new_target: Option<ObjectId>,
 ) -> Result<Unrooted, Unrooted> {
     match &fun.kind {
         FunctionKind::Native(native) => {
             let this = this.to_value(scope)?;
             // TODO: pass `This` to native fns as-is?
-            let cx = match is_constructor_call {
-                true => CallContext::constructor(args, scope, this),
-                false => CallContext::call(args, scope, this),
+            let cx = CallContext {
+                args,
+                scope,
+                this,
+                new_target,
             };
             match native(cx) {
                 Ok(v) => Ok(v.into()),
@@ -158,20 +160,34 @@ fn handle_call(
             }
         }
         FunctionKind::User(fun) => fun
-            .handle_function_call(scope, this, args, is_constructor_call)
+            .handle_function_call(scope, this, args, new_target)
             .map(|v| match v {
                 HandleResult::Return(v) => v,
                 HandleResult::Yield(..) | HandleResult::Await(..) => unreachable!(), // UserFunction cannot `yield`/`await`
             })
             .map_err(Into::into),
         FunctionKind::Async(fun) => fun
-            .handle_function_call(scope, callee, this, args, is_constructor_call)
+            .handle_function_call(scope, callee, this, args, new_target)
             .map(Into::into),
         FunctionKind::Generator(fun) => fun
-            .handle_function_call(scope, callee, this, args, is_constructor_call)
+            .handle_function_call(scope, callee, this, args, new_target)
             .map(Into::into),
-        FunctionKind::Closure(fun) => fun.handle_function_call(scope, this, args, is_constructor_call),
+        FunctionKind::Closure(fun) => fun.handle_function_call(scope, this, args, new_target),
     }
+}
+
+pub fn this_for_new_target(scope: &mut LocalScope<'_>, new_target: ObjectId) -> Result<This, Value> {
+    let ValueKind::Object(prototype) = new_target
+        .get_property(scope, sym::prototype.into())
+        .root(scope)?
+        .unpack()
+    else {
+        throw!(scope, Error, "new.target prototype must be an object")
+    };
+
+    Ok(This::Bound(Value::object(scope.register(
+        NamedObject::with_prototype_and_constructor(prototype, new_target),
+    ))))
 }
 
 impl Object for Function {
@@ -230,7 +246,7 @@ impl Object for Function {
         this: This,
         args: Vec<Value>,
     ) -> Result<Unrooted, Unrooted> {
-        handle_call(self, scope, callee, this, args, false)
+        handle_call(self, scope, callee, this, args, None)
     }
 
     fn construct(
@@ -239,6 +255,7 @@ impl Object for Function {
         callee: ObjectId,
         _this: This,
         args: Vec<Value>,
+        new_target: ObjectId,
     ) -> Result<Unrooted, Unrooted> {
         let this = 'this: {
             if let Some(user) = self.inner_user_function() {
@@ -246,15 +263,18 @@ impl Object for Function {
                     // We don't immediately create an instance when instantiating a subclass.
                     // The super() call desugaring will initialize `this`
 
-                    break 'this This::BeforeSuper;
+                    let ValueKind::Object(super_constructor) = self.get_prototype(scope)?.unpack() else {
+                        throw!(scope, TypeError, "supertype constructor must be an object")
+                    };
+
+                    break 'this This::BeforeSuper { super_constructor };
                 }
             }
 
-            let inst = self.new_instance(callee, scope)?;
-            This::Bound(Value::object(inst))
+            this_for_new_target(scope, new_target)?
         };
 
-        handle_call(self, scope, callee, this, args, true)
+        handle_call(self, scope, callee, this, args, Some(new_target))
     }
 
     fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {

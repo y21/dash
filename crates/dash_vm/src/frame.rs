@@ -44,8 +44,11 @@ unsafe impl Trace for Exports {
 pub enum FrameState {
     /// Regular function
     Function {
-        /// Whether the currently executing function is a constructor call
-        is_constructor_call: bool,
+        /// If this is a constructor call, then this is the target constructor that `new` was applied to
+        /// (for non-inheriting classes this is simply the class itself, but may also be a subclass
+        /// during evaluation of a superclass constructor).
+        /// Only `None` for non-constructor calls.
+        new_target: Option<ObjectId>,
         /// Whether this frame is a flat function call
         is_flat_call: bool,
     },
@@ -58,9 +61,11 @@ unsafe impl Trace for FrameState {
         match self {
             Self::Module(exports) => exports.trace(cx),
             Self::Function {
-                is_constructor_call: _,
+                new_target,
                 is_flat_call: _,
-            } => {}
+            } => {
+                new_target.trace(cx);
+            }
         }
     }
 }
@@ -95,9 +100,9 @@ unsafe impl Trace for LoopCounterMap {
 pub enum This {
     /// No `this` binding. Evaluates to the global object in non-strict mode, or undefined in strict mode
     Default,
-    /// Initial state of `this` in subclass constructors. Throws an error if attempted to evaluate.
+    /// Initial state of `this` in subclass constructors. Throws an error if attempted to evaluate as a value.
     /// Gets changed to `Bound` by the call to super().
-    BeforeSuper,
+    BeforeSuper { super_constructor: ObjectId },
     /// Bound as a value.
     Bound(Value),
 }
@@ -108,7 +113,10 @@ impl This {
             // TODO: once we have strict mode, eval to undefined
             This::Default => Ok(Value::object(scope.global)),
             This::Bound(value) => Ok(value),
-            This::BeforeSuper => throw!(scope, Error, "`super()` must be called before accessing `this`"),
+            This::BeforeSuper { .. } => {
+                // panic!();
+                throw!(scope, Error, "`super()` must be called before accessing `this`")
+            }
         }
     }
 }
@@ -117,7 +125,7 @@ unsafe impl Trace for This {
     fn trace(&self, cx: &mut TraceCtxt<'_>) {
         match *self {
             This::Default => {}
-            This::BeforeSuper => {}
+            This::BeforeSuper { super_constructor } => super_constructor.trace(cx),
             This::Bound(value) => value.trace(cx),
         }
     }
@@ -153,7 +161,7 @@ impl Frame {
     pub fn from_function(
         this: This,
         uf: &UserFunction,
-        is_constructor_call: bool,
+        new_target: Option<ObjectId>,
         is_flat_call: bool,
         arguments: Option<ObjectId>,
     ) -> Self {
@@ -167,7 +175,7 @@ impl Frame {
             delayed_ret: None,
             extra_stack_space: inner.locals - uf.inner().params,
             state: FrameState::Function {
-                is_constructor_call,
+                new_target,
                 is_flat_call,
             },
             loop_counter: LoopCounterMap::default(),
@@ -224,7 +232,7 @@ impl Frame {
             delayed_ret: None,
             extra_stack_space: cr.locals, /* - 0 params */
             state: FrameState::Function {
-                is_constructor_call: false,
+                new_target: None,
                 is_flat_call: false,
             },
             loop_counter: LoopCounterMap::default(),
@@ -243,5 +251,12 @@ impl Frame {
 
     pub fn set_sp(&mut self, sp: usize) {
         self.sp = sp;
+    }
+
+    pub fn new_target(&self) -> Option<ObjectId> {
+        match self.state {
+            FrameState::Function { new_target, .. } => new_target,
+            FrameState::Module(_) => None,
+        }
     }
 }

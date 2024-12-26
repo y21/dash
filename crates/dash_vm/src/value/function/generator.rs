@@ -3,13 +3,13 @@ use std::cell::RefCell;
 use dash_proc_macro::Trace;
 
 use crate::frame::{This, TryBlock};
-use crate::gc::trace::{Trace, TraceCtxt};
 use crate::gc::ObjectId;
+use crate::gc::trace::{Trace, TraceCtxt};
 use crate::localscope::LocalScope;
 use crate::value::arguments::Arguments;
 use crate::value::object::{NamedObject, Object};
 use crate::value::{Typeof, Unrooted, Value};
-use crate::{delegate, extract, Vm};
+use crate::{Vm, delegate, extract};
 
 use super::extend_stack_from_args;
 use super::user::UserFunction;
@@ -30,7 +30,7 @@ impl GeneratorFunction {
         callee: ObjectId,
         _this: This,
         args: Vec<Value>,
-        _is_constructor_call: bool,
+        _new_target: Option<ObjectId>,
     ) -> Result<Value, Unrooted> {
         let mut arguments = None;
         if self.function.inner().references_arguments {

@@ -2,7 +2,7 @@ use dash_middle::compiler::constant::{
     BooleanConstant, ConstantPool, FunctionConstant, NumberConstant, RegexConstant, SymbolConstant,
 };
 use dash_middle::compiler::instruction::{Instruction, IntrinsicOperation};
-use dash_middle::compiler::{FunctionCallMetadata, ObjectMemberKind};
+use dash_middle::compiler::{FunctionCallKind, ObjectMemberKind};
 use dash_middle::interner::StringInterner;
 use dash_middle::util::Reader;
 use std::fmt;
@@ -203,10 +203,15 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                     self.handle_op_instr("storelocal", &[&id, &kind]);
                 }
                 Instruction::Call => {
-                    let meta = FunctionCallMetadata::from(self.read()?);
+                    // let meta = FunctionCallMetadata::from(self.read()?);
+                    let argc = self.read()?;
+                    let preserve_this = self.read()? == 1;
+                    let kind = FunctionCallKind::from_repr(self.read()?).unwrap();
+
                     self.handle_op_map_instr("call", &[
-                        ("argc", &meta.value()),
-                        ("is_constructor_call", &meta.is_constructor_call()),
+                        ("argc", &argc),
+                        ("preserve_this", &preserve_this),
+                        ("kind", &format!("{kind:?}")),
                     ]);
                 }
                 Instruction::StaticPropAccess => {
@@ -428,6 +433,7 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                     self.handle_op_map_instr("arraydestruct", &[("count", &count)])
                 }
                 Instruction::AssignProperties => todo!(),
+                Instruction::NewTarget => self.handle_opless_instr("new.target"),
                 Instruction::Nop => self.handle_opless_instr("nop"),
             }
         }

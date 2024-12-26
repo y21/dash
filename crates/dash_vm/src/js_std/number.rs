@@ -1,15 +1,15 @@
 use crate::throw;
 use crate::util::intern_f64;
 use crate::value::function::native::CallContext;
-use crate::value::object::Object;
+use crate::value::object::{NamedObject, Object};
 use crate::value::ops::conversions::ValueConversion;
-use crate::value::primitive::{Number, MAX_SAFE_INTEGER, MIN_SAFE_INTEGER};
-use crate::value::{boxed, Unpack, Value, ValueContext, ValueKind};
+use crate::value::primitive::{MAX_SAFE_INTEGER, MIN_SAFE_INTEGER, Number};
+use crate::value::{Unpack, Value, ValueContext, ValueKind, boxed};
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let value = cx.args.first().unwrap_or_undefined().to_number(cx.scope)?;
-    if cx.is_constructor_call {
-        let value = boxed::Number::new(cx.scope, value);
+    if let Some(new_target) = cx.new_target {
+        let value = boxed::Number::with_obj(value, NamedObject::instance_for_new_target(new_target, cx.scope)?);
         Ok(Value::object(cx.scope.register(value)))
     } else {
         Ok(Value::number(value))

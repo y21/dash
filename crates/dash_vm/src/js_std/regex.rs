@@ -1,14 +1,14 @@
-use dash_middle::interner::sym;
 use crate::throw;
 use crate::value::array::Array;
 use crate::value::function::native::CallContext;
-use crate::value::object::PropertyValue;
+use crate::value::object::{NamedObject, PropertyValue};
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::regex::{RegExp, RegExpInner};
 use crate::value::{Unpack, Value, ValueContext};
+use dash_middle::interner::sym;
+use dash_regex::Flags;
 use dash_regex::matcher::Matcher as RegexMatcher;
 use dash_regex::parser::Parser as RegexParser;
-use dash_regex::Flags;
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let pattern = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
@@ -29,7 +29,13 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
         Err(err) => throw!(cx.scope, SyntaxError, "Regex parser error: {}", err),
     };
 
-    let regex = RegExp::new(nodes, flags, pattern, cx.scope);
+    let new_target = cx.new_target.unwrap_or(cx.scope.statics.regexp_ctor);
+    let regex = RegExp::with_obj(
+        nodes,
+        flags,
+        pattern,
+        NamedObject::instance_for_new_target(new_target, cx.scope)?,
+    );
 
     Ok(Value::object(cx.scope.register(regex)))
 }
