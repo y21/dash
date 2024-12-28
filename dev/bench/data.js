@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1735403384906,
+  "lastUpdate": 1735412132618,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -11501,6 +11501,60 @@ window.BENCHMARK_DATA = {
             "name": "exec tinycolor2 parse hex+toFilter",
             "value": 31183091,
             "range": "± 1371819",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "1479cdb2a899f3c3f19f7d8800721169408d8204",
+          "message": "don't use aliased name in object destructuring for the property",
+          "timestamp": "2024-12-28T19:51:23+01:00",
+          "tree_id": "9f46db3b708d4e212cc5f703997d0662650538a8",
+          "url": "https://github.com/y21/dash/commit/1479cdb2a899f3c3f19f7d8800721169408d8204"
+        },
+        "date": 1735412131393,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1640893,
+            "range": "± 30569",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 165710,
+            "range": "± 10418",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 122377,
+            "range": "± 11890",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse+compile tinycolor2",
+            "value": 2405580,
+            "range": "± 13780",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "exec tinycolor2 parse hex+toFilter",
+            "value": 30649690,
+            "range": "± 3010384",
             "unit": "ns/iter"
           }
         ]
