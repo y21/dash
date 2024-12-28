@@ -82,8 +82,8 @@ fn inspect_array_into(
     Ok(())
 }
 
-fn inspect_arraybuffer_into(arraybuffer: &ArrayBuffer, constructor: Symbol, out: &mut String) {
-    write!(out, "{constructor}({}) {{ ", arraybuffer.len()).unwrap();
+fn inspect_arraybuffer_into(sc: &LocalScope<'_>, arraybuffer: &ArrayBuffer, constructor: Symbol, out: &mut String) {
+    write!(out, "{}({}) {{ ", sc.interner.resolve(constructor), arraybuffer.len()).unwrap();
     for (i, byte) in arraybuffer.storage().iter().enumerate().take(32) {
         if i > 0 {
             *out += " ";
@@ -158,7 +158,7 @@ fn inspect_inner_into(
                 .extract::<ArrayBuffer>(scope)
                 .or_else(|| object.extract::<TypedArray>(scope).map(|t| t.arraybuffer(scope)))
             {
-                inspect_arraybuffer_into(arraybuffer, constructor_name, out);
+                inspect_arraybuffer_into(scope, arraybuffer, constructor_name, out);
                 return Ok(());
             }
 

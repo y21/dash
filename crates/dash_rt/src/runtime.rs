@@ -104,6 +104,8 @@ impl Runtime {
     }
 
     pub async fn run_event_loop(mut self) {
+        self.vm.process_async_tasks();
+
         if !self.state().needs_event_loop() {
             return;
         }
@@ -118,6 +120,7 @@ impl Runtime {
                 }
             }
 
+            self.vm.process_async_tasks();
             if !self.state().needs_event_loop() {
                 return;
             }
