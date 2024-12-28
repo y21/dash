@@ -2422,8 +2422,10 @@ fn compile_destructuring_pattern(
             ib.build_objdestruct(field_count, rest_id);
 
             for &(local, name, alias, ref default) in fields {
-                let name = alias.unwrap_or(name);
-                let id = ib.find_local_from_binding(Binding { id: local, ident: name });
+                let id = ib.find_local_from_binding(Binding {
+                    id: local,
+                    ident: alias.unwrap_or(name),
+                });
 
                 let NumberConstant(var_id) = ib
                     .current_function_mut()
