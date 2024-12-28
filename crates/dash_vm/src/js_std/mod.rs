@@ -1,5 +1,6 @@
+use crate::localscope::LocalScope;
 use crate::value::function::native::CallContext;
-use crate::value::Value;
+use crate::value::{ExceptionContext, Value};
 
 pub mod array;
 pub mod array_iterator;
@@ -21,6 +22,16 @@ pub mod set;
 pub mod string;
 pub mod symbol;
 pub mod typedarray;
+
+pub fn receiver_t<'a, T: 'static>(
+    sc: &mut LocalScope<'_>,
+    value: &'a Value,
+    what: &'static str,
+) -> Result<&'a T, Value> {
+    value
+        .extract(sc)
+        .or_type_err_args(sc, format_args!("{what} invoked on incompatible receiver"))
+}
 
 pub fn identity_this(cx: CallContext) -> Result<Value, Value> {
     Ok(cx.this)

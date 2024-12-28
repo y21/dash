@@ -9,15 +9,13 @@ use crate::value::function::native::CallContext;
 use crate::value::function::{Function, FunctionKind};
 use crate::value::object::{NamedObject, Object, PropertyValue};
 use crate::value::root_ext::RootErrExt;
-use crate::value::{Root, Unpack, Value, ValueContext};
+use crate::value::{Root, Value, ValueContext};
 use dash_middle::interner::sym;
 
+use super::receiver_t;
+
 pub fn next(cx: CallContext) -> Result<Value, Value> {
-    let generator = cx.this.unpack();
-    let generator = match generator.downcast_ref::<GeneratorIterator>(cx.scope) {
-        Some(it) => it,
-        None => throw!(cx.scope, TypeError, "Incompatible receiver"),
-    };
+    let generator = receiver_t::<GeneratorIterator>(cx.scope, &cx.this, "GeneratorIterator.prototype.next")?;
     let arg = cx.args.first().unwrap_or_undefined();
     let frame = {
         let (ip, old_stack, arguments, try_blocks) = match &mut *generator.state().borrow_mut() {

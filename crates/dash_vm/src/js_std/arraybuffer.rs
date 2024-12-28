@@ -1,9 +1,11 @@
 use crate::throw;
+use crate::value::Value;
 use crate::value::arraybuffer::ArrayBuffer;
 use crate::value::function::native::CallContext;
 use crate::value::object::NamedObject;
 use crate::value::ops::conversions::ValueConversion;
-use crate::value::{Unpack, Value};
+
+use super::receiver_t;
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let length = match cx.args.first() {
@@ -19,13 +21,6 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn byte_length(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.unpack();
-    let Some(this) = this.downcast_ref::<ArrayBuffer>(cx.scope) else {
-        throw!(
-            cx.scope,
-            TypeError,
-            "ArrayBuffer.prototype.byteLength called on non-ArrayBuffer"
-        )
-    };
+    let this = receiver_t::<ArrayBuffer>(cx.scope, &cx.this, "ArrayBuffer.prototype.byteLength")?;
     Ok(Value::number(this.len() as f64))
 }

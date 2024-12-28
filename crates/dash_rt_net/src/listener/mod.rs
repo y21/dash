@@ -7,6 +7,7 @@ use dash_rt::wrap_async;
 use dash_vm::frame::This;
 use dash_vm::gc::ObjectId;
 use dash_vm::gc::trace::{Trace, TraceCtxt};
+use dash_vm::js_std::receiver_t;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::arraybuffer::ArrayBuffer;
 use dash_vm::value::function::native::CallContext;
@@ -195,14 +196,7 @@ impl Object for TcpListenerHandle {
 }
 
 fn tcplistener_accept(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.unpack();
-    let Some(handle) = this.downcast_ref::<TcpListenerHandle>(cx.scope) else {
-        throw!(
-            cx.scope,
-            TypeError,
-            "TcpListener.accept called on non-TcpListener object"
-        )
-    };
+    let handle = receiver_t::<TcpListenerHandle>(cx.scope, &cx.this, "TcpListener.prototype.accept")?;
     let promise = cx.scope.mk_promise();
 
     let promise_id = State::from_vm_mut(cx.scope).add_pending_promise(promise);
@@ -280,10 +274,7 @@ impl Object for TcpStreamHandle {
 }
 
 fn tcpstream_write(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.unpack();
-    let Some(handle) = this.downcast_ref::<TcpStreamHandle>(cx.scope) else {
-        throw!(cx.scope, TypeError, "TcpStream.write called on non-TcpStream object")
-    };
+    let handle = receiver_t::<TcpStreamHandle>(cx.scope, &cx.this, "TcpStream.prototyep.write")?;
     let Some(arg) = cx.args.first().map(|v| v.unpack()) else {
         throw!(cx.scope, ReferenceError, "TcpStream.write called without an argument")
     };
@@ -310,10 +301,7 @@ fn tcpstream_write(cx: CallContext) -> Result<Value, Value> {
 }
 
 fn tcpstream_read(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.unpack();
-    let Some(handle) = this.downcast_ref::<TcpStreamHandle>(cx.scope) else {
-        throw!(cx.scope, TypeError, "TcpStream.write called on non-TcpStream object")
-    };
+    let handle = receiver_t::<TcpStreamHandle>(cx.scope, &cx.this, "TcpStream.prototype.write")?;
 
     let (tx, rx) = oneshot::channel();
 

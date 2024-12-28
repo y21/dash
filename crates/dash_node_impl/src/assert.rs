@@ -1,8 +1,8 @@
 use dash_vm::localscope::LocalScope;
 use dash_vm::throw;
-use dash_vm::value::function::native::{register_native_fn, CallContext};
+use dash_vm::value::function::native::{CallContext, register_native_fn};
 use dash_vm::value::ops::conversions::ValueConversion;
-use dash_vm::value::Value;
+use dash_vm::value::{ExceptionContext, Value};
 
 use crate::state::state_mut;
 use crate::symbols::NodeSymbols;
@@ -14,9 +14,7 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
 }
 
 fn js_assert(cx: CallContext) -> Result<Value, Value> {
-    let Some(value) = cx.args.first() else {
-        throw!(cx.scope, Error, "Missing valuel to assert")
-    };
+    let value = cx.args.first().or_type_err(cx.scope, "Missing value to assert")?;
     let message = cx.args.get(1);
 
     // TODO: throw AssertionError

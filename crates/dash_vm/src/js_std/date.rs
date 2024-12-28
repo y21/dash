@@ -1,9 +1,11 @@
 use crate::throw;
+use crate::value::Value;
 use crate::value::date::Date;
 use crate::value::function::native::CallContext;
 use crate::value::object::NamedObject;
 use crate::value::root_ext::RootErrExt;
-use crate::value::{Unpack, Value};
+
+use super::receiver_t;
 
 pub fn time_millis(cx: &mut CallContext) -> Result<u64, Value> {
     let callback = match cx.scope.params().time_millis_callback {
@@ -27,13 +29,6 @@ pub fn now(mut cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn get_time(cx: CallContext) -> Result<Value, Value> {
-    let Some(this) = cx
-        .this
-        .unpack()
-        .downcast_ref::<Date>(cx.scope)
-        .map(|date| date.timestamp)
-    else {
-        throw!(cx.scope, Error, "Incompatible receiver to Date.prototype.getTime")
-    };
-    Ok(Value::number(this as f64))
+    let this = receiver_t::<Date>(cx.scope, &cx.this, "Date.prototype.getTime")?;
+    Ok(Value::number(this.timestamp as f64))
 }

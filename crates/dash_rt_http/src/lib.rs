@@ -10,6 +10,7 @@ use dash_rt::state::State;
 use dash_vm::frame::This;
 use dash_vm::gc::persistent::Persistent;
 use dash_vm::gc::trace::{Trace, TraceCtxt};
+use dash_vm::js_std::receiver_t;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::function::native::CallContext;
 use dash_vm::value::function::{Function, FunctionKind};
@@ -17,7 +18,7 @@ use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::root_ext::RootErrExt;
 use dash_vm::value::string::JsString;
-use dash_vm::value::{Unpack, Value, ValueContext, ValueKind};
+use dash_vm::value::{ExceptionContext, Unpack, Value, ValueContext, ValueKind};
 use dash_vm::{delegate, extract, throw};
 use hyper::Body;
 use tokio::sync::oneshot;
@@ -168,15 +169,9 @@ impl Object for HttpContext {
 }
 
 fn ctx_respond(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.unpack();
-    let Some(this) = this.downcast_ref::<HttpContext>(cx.scope) else {
-        throw!(cx.scope, TypeError, "Missing this");
-    };
+    let this = receiver_t::<HttpContext>(cx.scope, &cx.this, "HttpContext.prototype.respond")?;
 
-    let sender = match this.sender.try_take() {
-        Some(sender) => sender,
-        None => throw!(cx.scope, Error, "Cannot respond twice"),
-    };
+    let sender = this.sender.try_take().or_err(cx.scope, "Cannot respond twice")?;
 
     let message = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
 

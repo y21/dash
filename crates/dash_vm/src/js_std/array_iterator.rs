@@ -1,16 +1,13 @@
-use crate::throw;
 use crate::value::array::ArrayIterator;
 use crate::value::function::native::CallContext;
 use crate::value::object::{NamedObject, Object, PropertyValue};
-use crate::value::{Root, Unpack, Value, ValueContext};
+use crate::value::{Root, Value, ValueContext};
 use dash_middle::interner::sym;
 
+use super::receiver_t;
+
 pub fn next(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.unpack();
-    let iterator = match this.downcast_ref::<ArrayIterator>(cx.scope) {
-        Some(it) => it,
-        None => throw!(cx.scope, TypeError, "Incompatible receiver"),
-    };
+    let iterator = receiver_t::<ArrayIterator>(cx.scope, &cx.this, "ArrayIterator.prototype.next")?;
 
     let next = iterator.next(cx.scope).root(cx.scope)?;
     let done = next.is_none();

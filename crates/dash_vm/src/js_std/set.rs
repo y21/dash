@@ -3,7 +3,9 @@ use crate::value::function::native::CallContext;
 use crate::value::object::{NamedObject, PropertyKey};
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::set::Set;
-use crate::value::{Root, Unpack, Value, ValueContext};
+use crate::value::{Root, Value, ValueContext};
+
+use super::receiver_t;
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let Some(new_target) = cx.new_target else {
@@ -28,60 +30,34 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn add(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.unpack();
-    let this = match this.downcast_ref::<Set>(cx.scope) {
-        Some(set) => set,
-        _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
-    };
-
     let item = cx.args.first().unwrap_or_undefined();
-    this.add(item);
+    receiver_t::<Set>(cx.scope, &cx.this, "Set.prototype.add")?.add(item);
 
     Ok(cx.this)
 }
 
 pub fn has(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.unpack();
-    let this = match this.downcast_ref::<Set>(cx.scope) {
-        Some(set) => set,
-        _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
-    };
-
     let item = cx.args.first().unwrap_or_undefined();
-    Ok(Value::boolean(this.has(&item)))
+    Ok(Value::boolean(
+        receiver_t::<Set>(cx.scope, &cx.this, "Set.prototype.has")?.has(&item),
+    ))
 }
 
 pub fn delete(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.unpack();
-    let this = match this.downcast_ref::<Set>(cx.scope) {
-        Some(set) => set,
-        _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
-    };
-
     let item = cx.args.first().unwrap_or_undefined();
-    let did_delete = this.delete(&item);
+    let did_delete = receiver_t::<Set>(cx.scope, &cx.this, "Set.prototype.delete")?.delete(&item);
 
     Ok(Value::boolean(did_delete))
 }
 
 pub fn clear(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.unpack();
-    let this = match this.downcast_ref::<Set>(cx.scope) {
-        Some(set) => set,
-        _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
-    };
-
-    this.clear();
+    receiver_t::<Set>(cx.scope, &cx.this, "Set.prototype.clear")?.clear();
 
     Ok(Value::undefined())
 }
 
 pub fn size(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.unpack();
-    let this = match this.downcast_ref::<Set>(cx.scope) {
-        Some(set) => set,
-        _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
-    };
-
-    Ok(Value::number(this.size() as f64))
+    Ok(Value::number(
+        receiver_t::<Set>(cx.scope, &cx.this, "Set.prototype.size")?.size() as f64,
+    ))
 }

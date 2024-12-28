@@ -4,6 +4,7 @@ use dash_rt::event::EventMessage;
 use dash_rt::module::ModuleLoader;
 use dash_rt::state::State;
 use dash_vm::gc::trace::{Trace, TraceCtxt};
+use dash_vm::js_std::receiver_t;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::error::Error;
 use dash_vm::value::function::native::CallContext;
@@ -11,7 +12,7 @@ use dash_vm::value::function::{Function, FunctionKind};
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::promise::Promise;
 use dash_vm::value::string::JsString;
-use dash_vm::value::{Unpack, Value, ValueKind};
+use dash_vm::value::{ExceptionContext, Unpack, Value, ValueKind};
 use dash_vm::{PromiseAction, Vm, delegate, extract, throw};
 use once_cell::sync::Lazy;
 use reqwest::{Client, Method};
@@ -100,14 +101,7 @@ fn fetch(cx: CallContext) -> Result<Value, Value> {
 }
 
 fn http_response_text(cx: CallContext) -> Result<Value, Value> {
-    let this = match cx.this.unpack() {
-        ValueKind::Object(obj) => obj,
-        _ => throw!(cx.scope, TypeError, "Expected a this value"),
-    };
-    let this = match this.extract::<HttpResponse>(cx.scope) {
-        Some(resp) => resp,
-        None => throw!(cx.scope, TypeError, "Invalid receiver, expected HttpResponse"),
-    };
+    let this = receiver_t::<HttpResponse>(cx.scope, &cx.this, "Response.prototype.text")?;
 
     let (rt, event_tx) = {
         let state = State::from_vm_mut(cx.scope);
@@ -116,10 +110,10 @@ fn http_response_text(cx: CallContext) -> Result<Value, Value> {
         (rt, etx)
     };
 
-    let response = match this.response.try_take() {
-        Some(response) => response,
-        None => throw!(cx.scope, Error, "HTTP Response already consumed"),
-    };
+    let response = this
+        .response
+        .try_take()
+        .or_err(cx.scope, "HTTP Response already consumed")?;
 
     let promise = cx.scope.mk_promise();
 

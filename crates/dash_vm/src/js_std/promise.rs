@@ -11,6 +11,8 @@ use crate::value::{Root, Typeof, Unpack, Unrooted, Value, ValueContext, ValueKin
 use crate::{Vm, delegate, extract, throw};
 use dash_middle::interner::sym;
 
+use super::receiver_t;
+
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let initiator = match cx.args.first() {
         Some(v) if matches!(v.type_of(cx.scope), Typeof::Function) => v,
@@ -54,11 +56,7 @@ pub fn reject(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn then(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.unpack();
-    let promise = match this.downcast_ref::<Promise>(cx.scope) {
-        Some(promise) => promise,
-        None => throw!(cx.scope, TypeError, "Receiver must be a promise"),
-    };
+    let promise = receiver_t::<Promise>(cx.scope, &cx.this, "Promise.prototype.then")?;
 
     let handler = match cx.args.first().unpack() {
         Some(ValueKind::Object(obj)) if matches!(obj.type_of(cx.scope), Typeof::Function) => obj,

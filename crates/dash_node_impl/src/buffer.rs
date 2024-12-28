@@ -5,6 +5,7 @@ use dash_proc_macro::Trace;
 use dash_rt::state::State;
 use dash_rt::typemap::Key;
 use dash_vm::gc::ObjectId;
+use dash_vm::js_std::receiver_t;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::arraybuffer::ArrayBuffer;
 use dash_vm::value::function::native::{CallContext, register_native_fn};
@@ -13,7 +14,7 @@ use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::primitive::Number;
 use dash_vm::value::typedarray::{TypedArray, TypedArrayKind};
-use dash_vm::value::{Root, Unpack, Value, ValueKind};
+use dash_vm::value::{ExceptionContext, Root, Unpack, Value, ValueKind};
 use dash_vm::{delegate, extract, throw};
 
 use crate::state::state_mut;
@@ -80,10 +81,7 @@ fn write_byte(cx: CallContext, endianness: Endianness, size: usize) -> Result<Va
         None => 0,
     };
 
-    let this = cx.this.unpack();
-    let Some(buf) = this.downcast_ref::<Buffer>(cx.scope) else {
-        throw!(cx.scope, TypeError, "Incompatible Buffer.write* receiver")
-    };
+    let buf = receiver_t::<Buffer>(cx.scope, &cx.this, "Buffer.prototype.write*")?;
     let buf = if let Some(buf) = buf.inner.arraybuffer(cx.scope).storage().get(offset..) {
         buf
     } else {
@@ -142,9 +140,10 @@ fn from(cx: CallContext) -> Result<Value, Value> {
         buffer_ctor,
     } = State::from_vm(cx.scope).store[BufferKey];
 
-    let Some(source) = cx.args.first() else {
-        throw!(cx.scope, Error, "Missing source to `Buffer.from`")
-    };
+    let source = cx
+        .args
+        .first()
+        .or_type_err(cx.scope, "Missing source to `Buffer.from`")?;
 
     let length = source.length_of_array_like(cx.scope)?;
     let mut buf = Vec::with_capacity(length);
@@ -170,9 +169,10 @@ fn from(cx: CallContext) -> Result<Value, Value> {
 }
 
 fn alloc(cx: CallContext) -> Result<Value, Value> {
-    let Some(size) = cx.args.first() else {
-        throw!(cx.scope, Error, "Missing size argument to `Buffer.alloc`")
-    };
+    let size = cx
+        .args
+        .first()
+        .or_type_err(cx.scope, "Missing size argument to `Buffer.alloc`")?;
     let size = size.to_number(cx.scope)? as usize;
 
     let fill = cx.args.get(1).copied();

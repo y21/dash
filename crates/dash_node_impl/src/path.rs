@@ -3,10 +3,10 @@ use std::path::{self, Path, PathBuf};
 use dash_middle::interner::sym;
 use dash_vm::localscope::LocalScope;
 use dash_vm::throw;
-use dash_vm::value::function::native::{register_native_fn, CallContext};
+use dash_vm::value::function::native::{CallContext, register_native_fn};
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
-use dash_vm::value::{Unpack, Value, ValueKind};
+use dash_vm::value::{ExceptionContext, Unpack, Value, ValueKind};
 
 use crate::state::state_mut;
 
@@ -22,9 +22,7 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
 }
 
 fn parse_path(cx: CallContext) -> Result<Value, Value> {
-    let Some(path) = cx.args.first() else {
-        throw!(cx.scope, Error, "missing path to parse");
-    };
+    let path = cx.args.first().or_type_err(cx.scope, "Missing path to path")?;
     let path = path.to_js_string(cx.scope)?;
     let path = Path::new(path.res(cx.scope));
     let dir = if path.is_dir() {

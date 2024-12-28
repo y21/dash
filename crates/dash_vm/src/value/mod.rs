@@ -823,7 +823,6 @@ impl Typeof {
 pub trait ValueContext {
     fn unwrap_or_undefined(self) -> Value;
     fn unwrap_or_null(self) -> Value;
-    // fn context<S: Into<Rc<str>>>(self, vm: &mut Vm, message: S) -> Result<Value, Value>;
 }
 
 impl ValueContext for Option<Value> {
@@ -844,32 +843,39 @@ impl ValueContext for Option<Value> {
 
 impl ValueContext for Option<&Value> {
     fn unwrap_or_undefined(self) -> Value {
-        match self {
-            Some(x) => *x,
-            None => Value::undefined(),
-        }
+        self.copied().unwrap_or_undefined()
     }
 
     fn unwrap_or_null(self) -> Value {
-        match self {
-            Some(x) => *x,
-            None => Value::null(),
-        }
+        self.copied().unwrap_or_null()
     }
 }
 
-impl<E> ValueContext for Result<Value, E> {
-    fn unwrap_or_undefined(self) -> Value {
+pub trait ExceptionContext<T> {
+    fn or_type_err(self, sc: &mut LocalScope<'_>, message: &str) -> Result<T, Value>;
+    fn or_err(self, sc: &mut LocalScope<'_>, message: &str) -> Result<T, Value>;
+    fn or_type_err_args(self, sc: &mut LocalScope<'_>, args: std::fmt::Arguments) -> Result<T, Value>;
+}
+
+impl<T> ExceptionContext<T> for Option<T> {
+    fn or_type_err(self, sc: &mut LocalScope<'_>, message: &str) -> Result<T, Value> {
         match self {
-            Ok(x) => x,
-            Err(_) => Value::undefined(),
+            Some(v) => Ok(v),
+            None => throw!(sc, TypeError, "{}", message),
         }
     }
 
-    fn unwrap_or_null(self) -> Value {
+    fn or_type_err_args(self, sc: &mut LocalScope<'_>, args: std::fmt::Arguments) -> Result<T, Value> {
         match self {
-            Ok(x) => x,
-            Err(_) => Value::null(),
+            Some(v) => Ok(v),
+            None => throw!(sc, TypeError, "{:?}", args),
+        }
+    }
+
+    fn or_err(self, sc: &mut LocalScope<'_>, message: &str) -> Result<T, Value> {
+        match self {
+            Some(v) => Ok(v),
+            None => throw!(sc, TypeError, "{}", message),
         }
     }
 }

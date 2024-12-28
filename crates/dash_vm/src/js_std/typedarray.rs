@@ -4,6 +4,7 @@ use std::ops::ControlFlow;
 
 use crate::frame::This;
 use crate::js_std::array::for_each_js_iterator_element;
+use crate::js_std::receiver_t;
 use crate::throw;
 use crate::value::arraybuffer::ArrayBuffer;
 use crate::value::function::native::CallContext;
@@ -89,11 +90,7 @@ macro_rules! typedarray {
 }
 
 pub fn fill(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.unpack();
-    let this = match this.downcast_ref::<TypedArray>(cx.scope) {
-        Some(this) => this,
-        None => throw!(cx.scope, TypeError, "Invalid receiver"),
-    };
+    let this = receiver_t::<TypedArray>(cx.scope, &cx.this, "TypedArray.prototype.fill")?;
     let value = match cx.args.first() {
         Some(value) => value.to_number(cx.scope)?,
         None => throw!(cx.scope, TypeError, "Missing fill value"), // TODO: shouldn't throw

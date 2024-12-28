@@ -1,11 +1,13 @@
 use crate::frame::This;
 use crate::throw;
+use crate::value::function::Function;
 use crate::value::function::bound::BoundFunction;
 use crate::value::function::native::CallContext;
-use crate::value::function::Function;
 use crate::value::object::Object;
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::{Root, Typeof, Unpack, Value, ValueKind};
+
+use super::receiver_t;
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     throw!(cx.scope, Error, "Dynamic code compilation is currently not supported")
@@ -70,10 +72,7 @@ pub fn call(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn to_string(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.unpack();
-    let Some(this) = this.downcast_ref::<Function>(cx.scope) else {
-        throw!(cx.scope, TypeError, "Incompatible receiver");
-    };
+    let this = receiver_t::<Function>(cx.scope, &cx.this, "Function.prototype.toString")?;
     let name = format!(
         "function {}() {{ [native code] }}",
         this.name().map(|s| s.res(cx.scope)).unwrap_or_default()

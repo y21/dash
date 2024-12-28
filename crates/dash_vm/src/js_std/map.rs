@@ -3,8 +3,10 @@ use crate::value::function::native::CallContext;
 use crate::value::map::Map;
 use crate::value::object::{NamedObject, PropertyKey};
 use crate::value::ops::conversions::ValueConversion;
-use crate::value::{Root, Unpack, Value, ValueContext};
+use crate::value::{Root, Value, ValueContext};
 use dash_middle::interner::sym;
+
+use super::receiver_t;
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let Some(new_target) = cx.new_target else {
@@ -34,72 +36,40 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn set(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.unpack();
-    let this = match this.downcast_ref::<Map>(cx.scope) {
-        Some(map) => map,
-        _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
-    };
-
     let k = cx.args.first().unwrap_or_undefined();
     let v = cx.args.get(1).unwrap_or_undefined();
-    this.set(k, v);
+    receiver_t::<Map>(cx.scope, &cx.this, "Map.prototype.set")?.set(k, v);
 
     Ok(cx.this)
 }
 
 pub fn has(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.unpack();
-    let this = match this.downcast_ref::<Map>(cx.scope) {
-        Some(map) => map,
-        _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
-    };
-
     let item = cx.args.first().unwrap_or_undefined();
-    Ok(Value::boolean(this.has(&item)))
+    Ok(Value::boolean(
+        receiver_t::<Map>(cx.scope, &cx.this, "Map.prototype.has")?.has(&item),
+    ))
 }
 
 pub fn get(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.unpack();
-    let this = match this.downcast_ref::<Map>(cx.scope) {
-        Some(map) => map,
-        _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
-    };
-
     let item = cx.args.first().unwrap_or_undefined();
-    Ok(this.get(&item).unwrap_or_undefined())
+    Ok(receiver_t::<Map>(cx.scope, &cx.this, "Map.prototype.get")?
+        .get(&item)
+        .unwrap_or_undefined())
 }
 
 pub fn delete(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.unpack();
-    let this = match this.downcast_ref::<Map>(cx.scope) {
-        Some(map) => map,
-        _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
-    };
-
     let item = cx.args.first().unwrap_or_undefined();
-    let did_delete = this.delete(&item);
-
+    let did_delete = receiver_t::<Map>(cx.scope, &cx.this, "Map.prototype.delete")?.delete(&item);
     Ok(Value::boolean(did_delete))
 }
 
 pub fn clear(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.unpack();
-    let this = match this.downcast_ref::<Map>(cx.scope) {
-        Some(map) => map,
-        _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
-    };
-
-    this.clear();
-
+    receiver_t::<Map>(cx.scope, &cx.this, "Map.prototype.clear")?.clear();
     Ok(Value::undefined())
 }
 
 pub fn size(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.unpack();
-    let this = match this.downcast_ref::<Map>(cx.scope) {
-        Some(map) => map,
-        _ => throw!(cx.scope, TypeError, "Incompatible receiver"),
-    };
-
-    Ok(Value::number(this.size() as f64))
+    Ok(Value::number(
+        receiver_t::<Map>(cx.scope, &cx.this, "Map.prototype.size")?.size() as f64,
+    ))
 }
