@@ -885,6 +885,59 @@ impl Vm {
             &mut scope,
         );
         
+        let weakmap_ctor = register(
+            scope.statics.weakmap_constructor,
+            function_proto,
+            function_ctor,
+            [],
+            [],
+            [],
+            Some((sym::WeakMap, scope.statics.weakmap_prototype)),
+            &mut scope
+        );
+
+        register(
+            scope.statics.weakmap_prototype,
+            object_proto,
+            weakmap_ctor,
+            [
+                (sym::set, scope.statics.weakmap_set),
+                (sym::has, scope.statics.weakmap_has),
+                (sym::get, scope.statics.weakmap_get),
+                (sym::delete, scope.statics.weakmap_delete),
+            ],
+            [],
+            [],
+            None,
+            &mut scope
+        );
+        
+        let weakset_ctor = register(
+            scope.statics.weakset_constructor,
+            function_proto,
+            function_ctor,
+            [],
+            [],
+            [],
+            Some((sym::WeakSet, scope.statics.weakset_prototype)),
+            &mut scope
+        );
+
+        register(
+            scope.statics.weakset_prototype,
+            object_proto,
+            weakset_ctor,
+            [
+                (sym::add, scope.statics.weakset_add),
+                (sym::has, scope.statics.weakset_has),
+                (sym::delete, scope.statics.weakset_delete),
+            ],
+            [],
+            [],
+            None,
+            &mut scope
+        );
+
         let regexp_ctor = register(
             scope.statics.regexp_ctor,
             function_proto,
@@ -1152,6 +1205,8 @@ impl Vm {
                 (sym::Object, object_ctor),
                 (sym::Set, set_ctor),
                 (sym::Map, map_ctor),
+                (sym::WeakMap, weakmap_ctor),
+                (sym::WeakSet, weakset_ctor),
                 (sym::console, console),
                 (sym::Math, math),
                 (sym::Number, number_ctor),

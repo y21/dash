@@ -14,6 +14,8 @@ pub mod promise;
 pub mod regex;
 pub mod set;
 pub mod typedarray;
+pub mod weakmap;
+pub mod weakset;
 
 use std::any::TypeId;
 use std::ops::ControlFlow;

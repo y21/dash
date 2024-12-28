@@ -22,6 +22,8 @@ pub mod set;
 pub mod string;
 pub mod symbol;
 pub mod typedarray;
+pub mod weakmap;
+pub mod weakset;
 
 pub fn receiver_t<'a, T: 'static>(
     sc: &mut LocalScope<'_>,

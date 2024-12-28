@@ -8,6 +8,8 @@ use crate::value::function::{Function, FunctionKind};
 use crate::value::map::Map;
 use crate::value::regex::RegExp;
 use crate::value::set::Set;
+use crate::value::weakmap::WeakMap;
+use crate::value::weakset::WeakSet;
 use dash_middle::interner::{self, sym};
 
 use super::value::array::{Array, ArrayIterator};
@@ -246,6 +248,17 @@ pub struct Statics {
     pub map_delete: ObjectId,
     pub map_clear: ObjectId,
     pub map_size: ObjectId,
+    pub weakmap_constructor: ObjectId,
+    pub weakmap_prototype: ObjectId,
+    pub weakmap_set: ObjectId,
+    pub weakmap_has: ObjectId,
+    pub weakmap_get: ObjectId,
+    pub weakmap_delete: ObjectId,
+    pub weakset_constructor: ObjectId,
+    pub weakset_prototype: ObjectId,
+    pub weakset_add: ObjectId,
+    pub weakset_has: ObjectId,
+    pub weakset_delete: ObjectId,
     pub regexp_ctor: ObjectId,
     pub regexp_prototype: ObjectId,
     pub regexp_test: ObjectId,
@@ -525,6 +538,17 @@ impl Statics {
             date_get_time: function(gc, sym::getTime, js_std::date::get_time),
             json_ctor: function(gc, sym::JSON, js_std::json::constructor),
             json_parse: function(gc, sym::parse, js_std::json::parse),
+            weakmap_constructor: function(gc, sym::WeakMap, js_std::weakmap::constructor),
+            weakmap_prototype: builtin_object(gc, WeakMap::null()),
+            weakmap_set: function(gc, sym::set, js_std::weakmap::set),
+            weakmap_has: function(gc, sym::has, js_std::weakmap::has),
+            weakmap_get: function(gc, sym::get, js_std::weakmap::get),
+            weakmap_delete: function(gc, sym::delete, js_std::weakmap::delete),
+            weakset_constructor: function(gc, sym::WeakSet, js_std::weakset::constructor),
+            weakset_prototype: builtin_object(gc, WeakSet::null()),
+            weakset_add: function(gc, sym::add, js_std::weakset::add),
+            weakset_has: function(gc, sym::has, js_std::weakset::has),
+            weakset_delete: function(gc, sym::delete, js_std::weakset::delete),
         }
     }
 }
