@@ -4,7 +4,7 @@ use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::value::object::{NamedObject, Object};
 use crate::value::{Typeof, Unrooted, Value};
-use crate::{delegate, extract, Vm};
+use crate::{Vm, delegate, extract};
 
 #[derive(Debug, Trace)]
 pub struct BoundFunction {
@@ -47,8 +47,8 @@ impl Object for BoundFunction {
     ) -> Result<Unrooted, Unrooted> {
         let target_this = self.this.map_or(this, This::Bound);
 
-        // TODO: args should be concatenated with self.args
-        let target_args = self.args.clone().unwrap_or(args);
+        let mut target_args = self.args.clone().unwrap_or_default();
+        target_args.extend(args);
 
         self.callee.apply(scope, target_this, target_args)
     }
