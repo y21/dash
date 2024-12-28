@@ -738,7 +738,7 @@ impl Parser<'_, '_> {
 
             // Parse default value
             let default = if self.eat(TokenType::Assignment, false).is_some() {
-                Some(self.parse_expression()?)
+                Some(self.parse_expression_no_comma()?)
             } else {
                 None
             };
