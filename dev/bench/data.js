@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1735248503903,
+  "lastUpdate": 1735353372180,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -11231,6 +11231,60 @@ window.BENCHMARK_DATA = {
             "name": "exec tinycolor2 parse hex+toFilter",
             "value": 31308261,
             "range": "± 3884571",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "ca4668cb5b27f82f648ce7f85cadd2a88d60c6a7",
+          "message": "add exception and receiver helper functions and use them",
+          "timestamp": "2024-12-28T03:31:55+01:00",
+          "tree_id": "3bee103394e48f7a7cc7ea288c891e983c5a0c32",
+          "url": "https://github.com/y21/dash/commit/ca4668cb5b27f82f648ce7f85cadd2a88d60c6a7"
+        },
+        "date": 1735353370916,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1685467,
+            "range": "± 25146",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 160895,
+            "range": "± 9305",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 115450,
+            "range": "± 15575",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse+compile tinycolor2",
+            "value": 2407303,
+            "range": "± 83662",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "exec tinycolor2 parse hex+toFilter",
+            "value": 32667061,
+            "range": "± 2370272",
             "unit": "ns/iter"
           }
         ]
