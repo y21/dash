@@ -7,7 +7,7 @@ use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::expr::{
     ArrayLiteral, ArrayMemberKind, AssignmentExpr, AssignmentTarget, BinaryExpr, CallArgumentKind, ConditionalExpr,
     Expr, ExprKind, FunctionCall, GroupingExpr, LiteralExpr, ObjectLiteral, ObjectMemberKind,
-    OptionalChainingExpression, PropertyAccessExpr, UnaryExpr,
+    OptionalChainingComponent, OptionalChainingExpression, PropertyAccessExpr, UnaryExpr,
 };
 use dash_middle::parser::statement::{
     Binding, BlockStatement, Class, ClassMemberKey, ClassMemberValue, DoWhileLoop, ExportKind, ForInLoop, ForLoop,
@@ -394,7 +394,7 @@ impl<'s> TypeInferCtx<'s> {
             ExprKind::Class(class) => self.visit_class_expression(class),
             ExprKind::Array(expr) => self.visit_array_expression(expr),
             ExprKind::Object(expr) => self.visit_object_expression(expr),
-            ExprKind::Chaining(OptionalChainingExpression { base, components: _ }) => self.visit(base),
+            ExprKind::Chaining(chain) => self.visit_chaining_expression(chain),
             ExprKind::Compiled(..) => None,
             ExprKind::Empty => None,
             ExprKind::NewTarget => None,
@@ -403,6 +403,28 @@ impl<'s> TypeInferCtx<'s> {
                 None
             }
         }
+    }
+
+    pub fn visit_chaining_expression(
+        &mut self,
+        OptionalChainingExpression { base, components }: &OptionalChainingExpression,
+    ) -> Option<CompileValueType> {
+        self.visit(base);
+        for component in components {
+            match component {
+                OptionalChainingComponent::Ident {
+                    preserve_this: _,
+                    property: _,
+                } => {}
+                OptionalChainingComponent::Dyn {
+                    property,
+                    preserve_this: _,
+                } => drop(self.visit(property)),
+                OptionalChainingComponent::Call(arguments) => self.visit_call_arguments(arguments),
+                OptionalChainingComponent::Construct(arguments) => self.visit_call_arguments(arguments),
+            }
+        }
+        None
     }
 
     pub fn visit_binary_expression(
@@ -550,13 +572,17 @@ impl<'s> TypeInferCtx<'s> {
         FunctionCall { target, arguments, .. }: &FunctionCall,
     ) -> Option<CompileValueType> {
         self.visit(target);
+        self.visit_call_arguments(arguments);
+        None
+    }
+
+    pub fn visit_call_arguments(&mut self, arguments: &[CallArgumentKind]) {
         for argument in arguments {
             match argument {
                 CallArgumentKind::Normal(expr) => drop(self.visit(expr)),
                 CallArgumentKind::Spread(expr) => drop(self.visit(expr)),
             }
         }
-        None
     }
 
     pub fn visit_conditional_expression(

@@ -78,8 +78,11 @@ impl fmt::Display for OptionalChainingExpression {
         f.write_str("?")?;
         for component in &self.components {
             match component {
-                OptionalChainingComponent::Ident(symbol) => write!(f, ".{symbol}")?,
-                OptionalChainingComponent::Dyn(expr) => write!(f, "[{expr}]")?,
+                OptionalChainingComponent::Ident { property, .. } => write!(f, ".{property}")?,
+                OptionalChainingComponent::Dyn { property, .. } => write!(f, "[{property}]")?,
+                OptionalChainingComponent::Call(args) | OptionalChainingComponent::Construct(args) => {
+                    fmt_list(f, args, ", ")?
+                }
             }
         }
         Ok(())
@@ -89,9 +92,13 @@ impl fmt::Display for OptionalChainingExpression {
 #[derive(Debug, Clone)]
 pub enum OptionalChainingComponent {
     /// ?.x
-    Ident(Symbol),
+    Ident { property: Symbol, preserve_this: bool },
     /// ?.[expr]
-    Dyn(Expr),
+    Dyn { property: Expr, preserve_this: bool },
+    /// ?.(args)
+    Call(Vec<CallArgumentKind>),
+    /// new ...?.(args)
+    Construct(Vec<CallArgumentKind>),
 }
 
 #[derive(Debug, Clone, Display)]

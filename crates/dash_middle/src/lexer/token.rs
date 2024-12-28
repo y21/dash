@@ -284,7 +284,7 @@ pub enum TokenType {
     OptionalSquareBrace,
 
     #[display(fmt = "?.(")]
-    OptionalCall,
+    OptionalLeftParen,
 
     #[display(fmt = "for")]
     For,

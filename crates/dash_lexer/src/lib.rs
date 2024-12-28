@@ -575,7 +575,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
             b'?' => self.conditional_token(TokenType::Conditional, &[
                 ("?=", TokenType::LogicalNullishAssignment),
                 (".[", TokenType::OptionalSquareBrace),
-                (".(", TokenType::OptionalCall),
+                (".(", TokenType::OptionalLeftParen),
                 ("?", TokenType::NullishCoalescing),
                 (".", TokenType::OptionalDot),
             ]),

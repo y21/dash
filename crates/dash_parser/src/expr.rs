@@ -347,6 +347,7 @@ impl Parser<'_, '_> {
                     TokenType::LeftSquareBrace,
                     TokenType::OptionalDot,
                     TokenType::OptionalSquareBrace,
+                    TokenType::OptionalLeftParen,
                 ]),
                 false,
             )
@@ -355,7 +356,8 @@ impl Parser<'_, '_> {
             let previous = self.previous()?.ty;
 
             match previous {
-                TokenType::LeftParen => {
+                TokenType::LeftParen | TokenType::OptionalLeftParen => {
+                    let is_optional = previous == TokenType::OptionalLeftParen;
                     let mut arguments = Vec::new();
 
                     // Disassociate any new expressions in arguments such that `new x(() => x());`
@@ -380,20 +382,53 @@ impl Parser<'_, '_> {
                         self.new_level_stack.dec_level().expect("Missing `new` level stack");
                     }
 
-                    expr = Expr {
-                        span: expr.span.to(self.previous()?.span),
-                        kind: ExprKind::function_call(expr, arguments, is_constructor_call),
-                    };
+                    if is_optional {
+                        let component = if is_constructor_call {
+                            OptionalChainingComponent::Construct(arguments)
+                        } else {
+                            OptionalChainingComponent::Call(arguments)
+                        };
+                        if let ExprKind::Chaining(c) = &mut expr.kind {
+                            // If this is a method call (i.e. the previous chain component is a property access,
+                            // we need to preserve its `this` binding)
+                            if let Some(last) = c.components.last_mut() {
+                                match last {
+                                    OptionalChainingComponent::Ident { preserve_this, .. }
+                                    | OptionalChainingComponent::Dyn { preserve_this, .. } => *preserve_this = true,
+                                    OptionalChainingComponent::Call(_) | OptionalChainingComponent::Construct(_) => {}
+                                }
+                            }
+
+                            c.components.push(component);
+                            expr.span = expr.span.to(self.previous()?.span);
+                        } else {
+                            expr = Expr {
+                                span: expr.span.to(self.previous()?.span),
+                                kind: ExprKind::Chaining(OptionalChainingExpression {
+                                    base: Box::new(expr),
+                                    components: vec![component],
+                                }),
+                            }
+                        }
+                    } else {
+                        expr = Expr {
+                            span: expr.span.to(self.previous()?.span),
+                            kind: ExprKind::function_call(expr, arguments, is_constructor_call),
+                        };
+                    }
                 }
                 TokenType::Dot => {
-                    let ident = self.expect_identifier_or_reserved_kw(true)?;
+                    let property = self.expect_identifier_or_reserved_kw(true)?;
                     if let ExprKind::Chaining(chain) = &mut expr.kind {
-                        chain.components.push(OptionalChainingComponent::Ident(ident));
+                        chain.components.push(OptionalChainingComponent::Ident {
+                            property,
+                            preserve_this: false,
+                        });
                         expr.span = expr.span.to(self.previous()?.span);
                     } else {
                         let property = Expr {
                             span: self.previous()?.span,
-                            kind: ExprKind::identifier(ident),
+                            kind: ExprKind::identifier(property),
                         };
                         expr = Expr {
                             span: expr.span.to(property.span),
@@ -406,11 +441,14 @@ impl Parser<'_, '_> {
                     }
                 }
                 TokenType::OptionalDot => {
-                    let ident = self.expect_identifier_or_reserved_kw(true)?;
+                    let property = self.expect_identifier_or_reserved_kw(true)?;
                     let span = expr.span.to(self.previous()?.span);
                     let chain = OptionalChainingExpression {
                         base: Box::new(expr),
-                        components: vec![OptionalChainingComponent::Ident(ident)],
+                        components: vec![OptionalChainingComponent::Ident {
+                            property,
+                            preserve_this: false,
+                        }],
                     };
                     expr = Expr {
                         span,
@@ -421,7 +459,10 @@ impl Parser<'_, '_> {
                     let property = self.parse_expression()?;
                     self.eat(TokenType::RightSquareBrace, true)?;
                     if let ExprKind::Chaining(c) = &mut expr.kind {
-                        c.components.push(OptionalChainingComponent::Dyn(property));
+                        c.components.push(OptionalChainingComponent::Dyn {
+                            property,
+                            preserve_this: false,
+                        });
                         expr.span = expr.span.to(self.previous()?.span);
                     } else {
                         expr = Expr {
@@ -438,7 +479,10 @@ impl Parser<'_, '_> {
                         span,
                         kind: ExprKind::Chaining(OptionalChainingExpression {
                             base: Box::new(expr),
-                            components: vec![OptionalChainingComponent::Dyn(property)],
+                            components: vec![OptionalChainingComponent::Dyn {
+                                property,
+                                preserve_this: false,
+                            }],
                         }),
                     };
                 }

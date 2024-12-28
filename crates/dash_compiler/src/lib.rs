@@ -6,7 +6,7 @@ use dash_middle::compiler::constant::{Buffer, ConstantPool, Function, NumberCons
 use dash_middle::compiler::external::External;
 use dash_middle::compiler::instruction::{AssignKind, Instruction, IntrinsicOperation};
 use dash_middle::compiler::scope::{CompileValueType, LimitExceededError, Local, ScopeGraph};
-use dash_middle::compiler::{CompileResult, DebugSymbols, StaticImportKind};
+use dash_middle::compiler::{CompileResult, DebugSymbols, FunctionCallKind, StaticImportKind};
 use dash_middle::interner::{StringInterner, Symbol, sym};
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::error::Error;
@@ -1298,21 +1298,67 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
         chain: OptionalChainingExpression,
     ) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
-        ib.accept_expr(*chain.base)?;
+
+        let preserve_this_for_base = matches!(
+            chain.components.first(),
+            Some(OptionalChainingComponent::Call(_) | OptionalChainingComponent::Construct(_))
+        );
+
+        if let Expr {
+            span,
+            kind: ExprKind::PropertyAccess(p),
+        } = *chain.base
+        {
+            ib.visit_property_access_expr(span, p, preserve_this_for_base)?;
+        } else {
+            ib.accept_expr(*chain.base)?;
+        }
 
         ib.build_jmpnullishnp(Label::IfBranch { branch_id: 0 }, true);
 
+        let mut prev_property_access = preserve_this_for_base;
         for component in chain.components {
+            let is_property_access = matches!(
+                component,
+                OptionalChainingComponent::Dyn { .. } | OptionalChainingComponent::Ident { .. }
+            );
+
             match component {
-                OptionalChainingComponent::Ident(ident) => {
-                    ib.build_static_prop_access(ident, false)
+                OptionalChainingComponent::Ident {
+                    property,
+                    preserve_this,
+                } => {
+                    ib.build_static_prop_access(property, preserve_this)
                         .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
                 }
-                OptionalChainingComponent::Dyn(expr) => {
-                    ib.accept_expr(expr)?;
-                    ib.build_dynamic_prop_access(false);
+                OptionalChainingComponent::Dyn {
+                    property,
+                    preserve_this,
+                } => {
+                    ib.accept_expr(property)?;
+                    ib.build_dynamic_prop_access(preserve_this);
+                }
+                OptionalChainingComponent::Call(arguments) => {
+                    ib.lower_function_call_common(
+                        span,
+                        span,
+                        prev_property_access,
+                        FunctionCallKind::Function,
+                        arguments,
+                    )?;
+                }
+                OptionalChainingComponent::Construct(arguments) => {
+                    ib.lower_function_call_common(
+                        span,
+                        span,
+                        prev_property_access,
+                        FunctionCallKind::Constructor,
+                        arguments,
+                    )?;
                 }
             }
+
+            prev_property_access = is_property_access;
         }
         ib.build_jmp(Label::IfEnd, true);
 

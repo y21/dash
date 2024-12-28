@@ -133,7 +133,8 @@ impl InstructionBuilder<'_, '_> {
         self.lower_function_call_common(span, target_span, has_this, kind, fc.arguments)
     }
 
-    fn lower_function_call_common(
+    /// Lowers parts of a function call, assuming that the receiver is on the stack
+    pub fn lower_function_call_common(
         &mut self,
         span: Span,
         target_span: Span,
