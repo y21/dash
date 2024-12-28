@@ -1,7 +1,7 @@
 use dash_vm::localscope::LocalScope;
-use dash_vm::value::object::NamedObject;
-use dash_vm::value::string::JsString;
 use dash_vm::value::Value;
+use dash_vm::value::object::{NamedObject, Object, PropertyValue};
+use dash_vm::value::string::JsString;
 
 use crate::state::state_mut;
 
@@ -39,7 +39,7 @@ pub fn load_native_module(sc: &mut LocalScope<'_>, arg: JsString) -> Result<Opti
         arg.sym();
         sc;
         state.sym.assert => (state_mut(sc).assert_cache, crate::assert::init_module),
-        state.sym.fs => (state_mut(sc).fs_cache, dash_rt_fs::sync::init_module),
+        state.sym.fs => (state_mut(sc).fs_cache, init_fs_module),
         state.sym.fetch => (state_mut(sc).fetch_cache, dash_rt_fetch::init_module),
         state.sym.path => (state_mut(sc).path_cache, crate::path::init_module),
         state.sym.events => (state_mut(sc).events_cache, crate::events::init_module),
@@ -63,4 +63,12 @@ fn init_dummy_empty_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
 
 fn init_timers_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     dash_rt_timers::import(sc)
+}
+
+fn init_fs_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let sync = dash_rt_fs::sync::init_module(sc)?;
+    let promises = dash_rt_fs::promises::init_module(sc)?;
+    let key = state_mut(sc).sym.promises;
+    sync.set_property(sc, key.into(), PropertyValue::static_default(promises))?;
+    Ok(sync)
 }
