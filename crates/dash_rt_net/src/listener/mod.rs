@@ -5,6 +5,7 @@ use dash_rt::event::EventMessage;
 use dash_rt::state::State;
 use dash_rt::wrap_async;
 use dash_vm::frame::This;
+use dash_vm::gc::ObjectId;
 use dash_vm::gc::trace::{Trace, TraceCtxt};
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::arraybuffer::ArrayBuffer;
@@ -79,6 +80,7 @@ impl Object for TcpListenerConstructor {
         _callee: dash_vm::gc::ObjectId,
         _this: This,
         args: Vec<Value>,
+        new_target: ObjectId,
     ) -> Result<Unrooted, Unrooted> {
         let Some(value) = args.first() else {
             throw!(
@@ -134,7 +136,7 @@ impl Object for TcpListenerConstructor {
             }
         });
 
-        let handle = TcpListenerHandle::new(tx, scope)?;
+        let handle = TcpListenerHandle::new(NamedObject::instance_for_new_target(new_target, scope)?, tx, scope)?;
         Ok(Value::object(scope.register(handle)).into())
     }
 
@@ -164,8 +166,11 @@ unsafe impl Trace for TcpListenerHandle {
 }
 
 impl TcpListenerHandle {
-    pub fn new(sender: mpsc::Sender<TcpListenerBridgeMessage>, sc: &mut LocalScope) -> Result<Self, Value> {
-        let object = NamedObject::new(sc);
+    pub fn new(
+        object: NamedObject,
+        sender: mpsc::Sender<TcpListenerBridgeMessage>,
+        sc: &mut LocalScope,
+    ) -> Result<Self, Value> {
         let name = sc.intern("accept");
         let accept_fn = Function::new(sc, Some(name.into()), FunctionKind::Native(tcplistener_accept));
         let accept_fn = sc.register(accept_fn);
