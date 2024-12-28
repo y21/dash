@@ -1,7 +1,7 @@
 use std::mem;
 
 use crate::dispatch::HandleResult;
-use crate::frame::{Frame, This};
+use crate::frame::Frame;
 use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::function::generator::{GeneratorIterator, GeneratorState};
@@ -18,14 +18,15 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
     let generator = receiver_t::<GeneratorIterator>(cx.scope, &cx.this, "GeneratorIterator.prototype.next")?;
     let arg = cx.args.first().unwrap_or_undefined();
     let frame = {
-        let (ip, old_stack, arguments, try_blocks) = match &mut *generator.state().borrow_mut() {
+        let (ip, old_stack, arguments, try_blocks, this) = match &mut *generator.state().borrow_mut() {
             GeneratorState::Finished => return create_generator_value(cx.scope, true, None),
             GeneratorState::Running {
                 ip,
                 stack,
                 arguments,
                 try_blocks,
-            } => (*ip, mem::take(stack), arguments.take(), mem::take(try_blocks)),
+                this,
+            } => (*ip, mem::take(stack), arguments.take(), mem::take(try_blocks), *this),
         };
 
         let function = generator.function();
@@ -39,7 +40,7 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
         let current_sp = cx.scope.stack_size();
         cx.scope.try_extend_stack(old_stack).root_err(cx.scope)?;
 
-        let mut frame = Frame::from_function(This::Default, function, None, false, arguments);
+        let mut frame = Frame::from_function(this, function, None, false, arguments);
         frame.set_ip(ip);
         frame.set_sp(current_sp);
 
@@ -99,6 +100,7 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
                 stack,
                 arguments: frame.arguments,
                 try_blocks,
+                this: frame.this,
             });
 
             create_generator_value(cx.scope, false, Some(value))

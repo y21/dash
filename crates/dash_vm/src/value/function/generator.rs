@@ -28,7 +28,7 @@ impl GeneratorFunction {
         &self,
         scope: &mut LocalScope,
         callee: ObjectId,
-        _this: This,
+        this: This,
         args: Vec<Value>,
         _new_target: Option<ObjectId>,
     ) -> Result<Value, Unrooted> {
@@ -50,7 +50,7 @@ impl GeneratorFunction {
             scope.stack.drain(sp..).collect::<Vec<_>>()
         };
 
-        let iter = GeneratorIterator::new(callee, scope, args, arguments, Vec::new());
+        let iter = GeneratorIterator::new(callee, scope, args, arguments, Vec::new(), this);
         Ok(Value::object(scope.register(iter)))
     }
 }
@@ -63,6 +63,7 @@ pub enum GeneratorState {
         stack: Vec<Value>,
         try_blocks: Vec<TryBlock>,
         arguments: Option<ObjectId>,
+        this: This,
     },
 }
 
@@ -84,10 +85,12 @@ unsafe impl Trace for GeneratorState {
                 stack,
                 arguments,
                 try_blocks,
+                this,
             } => {
                 stack.trace(cx);
                 arguments.trace(cx);
                 try_blocks.trace(cx);
+                this.trace(cx);
             }
         }
     }
@@ -107,6 +110,7 @@ impl GeneratorIterator {
         stack: Vec<Value>,
         arguments: Option<ObjectId>,
         try_blocks: Vec<TryBlock>,
+        this: This,
     ) -> Self {
         Self {
             function,
@@ -116,6 +120,7 @@ impl GeneratorIterator {
                 stack,
                 arguments,
                 try_blocks,
+                this,
             }),
         }
     }

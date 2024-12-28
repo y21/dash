@@ -85,10 +85,7 @@ impl AsyncFunction {
                     Ok(promise)
                 }
             }
-            Err(value) => {
-                let promise = wrap_promise(scope, value);
-                Err(promise.into())
-            }
+            Err(value) => Err(value.into()),
         }
     }
 }
