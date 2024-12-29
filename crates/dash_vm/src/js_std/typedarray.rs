@@ -7,6 +7,7 @@ use crate::js_std::array::for_each_js_iterator_element;
 use crate::js_std::receiver_t;
 use crate::throw;
 use crate::value::arraybuffer::ArrayBuffer;
+use crate::value::function::args::CallArgs;
 use crate::value::function::native::CallContext;
 use crate::value::object::NamedObject;
 use crate::value::ops::conversions::ValueConversion;
@@ -43,7 +44,9 @@ fn typedarray_constructor(cx: CallContext, kind: TypedArrayKind) -> Result<Value
             .root(cx.scope)?
             .into_option()
         {
-            let iterator = iterator.apply(cx.scope, This::Bound(arg), Vec::new()).root(cx.scope)?;
+            let iterator = iterator
+                .apply(cx.scope, This::Bound(arg), CallArgs::empty())
+                .root(cx.scope)?;
             let mut values = Vec::new();
             for_each_js_iterator_element(cx.scope, iterator, |scope, value| {
                 use TypedArrayKind::*;

@@ -570,6 +570,7 @@ mod handlers {
     use crate::util::unlikely;
     use crate::value::array::table::ArrayTable;
     use crate::value::array::{Array, ArrayIterator};
+    use crate::value::function::args::CallArgs;
     use crate::value::function::r#async::AsyncFunction;
     use crate::value::function::closure::Closure;
     use crate::value::function::generator::GeneratorFunction;
@@ -1129,7 +1130,7 @@ mod handlers {
         call_ip: u16,
     ) -> Result<Option<HandleResult>, Unrooted> {
         let args = {
-            let mut args = Vec::with_capacity(argc);
+            let mut args = SmallVec::with_capacity(argc);
 
             let len = cx.fetch_and_inc_ip();
             let spread_indices: SmallVec<[_; 4]> = (0..len).map(|_| cx.fetch_and_inc_ip()).collect();
@@ -1167,12 +1168,12 @@ mod handlers {
         cx.scope.add_many(&args);
 
         let ret = match function_call_kind {
-            FunctionCallKind::Constructor => callee.construct(&mut cx.scope, this, args)?,
+            FunctionCallKind::Constructor => callee.construct(&mut cx.scope, this, args.into())?,
             FunctionCallKind::Super => {
                 let new_target = cx.active_frame().new_target().unwrap();
-                callee.construct_with_target(&mut cx.scope, this, args, new_target)?
+                callee.construct_with_target(&mut cx.scope, this, args.into(), new_target)?
             }
-            FunctionCallKind::Function => callee.apply_with_debug(&mut cx.scope, this, args, call_ip)?,
+            FunctionCallKind::Function => callee.apply_with_debug(&mut cx.scope, this, args.into(), call_ip)?,
         };
 
         // SAFETY: no need to root, we're directly pushing into the value stack which itself is a root
@@ -2034,7 +2035,7 @@ mod handlers {
         let iterable = value
             .get_property(&mut cx, PropertyKey::Symbol(symbol_iterator))?
             .root(&mut cx.scope);
-        let iterator = iterable.apply(&mut cx, This::Bound(value), Vec::new())?;
+        let iterator = iterable.apply(&mut cx, This::Bound(value), CallArgs::empty())?;
         cx.push_stack(iterator);
         Ok(None)
     }
@@ -2258,7 +2259,7 @@ mod handlers {
         macro_rules! fn_call {
             ($fun:ident, $k:expr, $v:expr) => {{
                 let argc = cx.fetch_and_inc_ip();
-                let args = cx.pop_stack_many(argc.into()).collect::<Vec<_>>();
+                let args = cx.pop_stack_many(argc.into()).collect::<CallArgs>();
                 let fun = cx.statics.$fun.clone();
 
                 if unlikely(!cx.builtins_purity()) {

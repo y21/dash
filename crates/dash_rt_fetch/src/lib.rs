@@ -92,7 +92,7 @@ fn fetch(cx: CallContext) -> Result<Value, Value> {
                 }
             };
 
-            sc.drive_promise(action, promise, vec![req]);
+            sc.drive_promise(action, promise, [req].into());
             sc.process_async_tasks();
         })));
     });
@@ -139,7 +139,7 @@ fn http_response_text(cx: CallContext) -> Result<Value, Value> {
                 }
             };
 
-            sc.drive_promise(action, promise, vec![value]);
+            sc.drive_promise(action, promise, [value].into());
             sc.process_async_tasks();
         })));
     });

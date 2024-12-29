@@ -6,6 +6,7 @@ use crate::localscope::LocalScope;
 use crate::value::boxed::String as BoxedString;
 use crate::{extract, throw, Vm};
 
+use super::function::args::CallArgs;
 use super::object::{Object, PropertyKey, PropertyValue};
 use super::ops::conversions::{PreferredType, ValueConversion};
 use super::primitive::{array_like_keys, InternalSlots};
@@ -117,7 +118,7 @@ impl Object for JsString {
         scope: &mut LocalScope,
         _: crate::gc::ObjectId,
         _: This,
-        _: Vec<Value>,
+        _: CallArgs,
     ) -> Result<Unrooted, Unrooted> {
         let v = self.res(scope).to_owned();
         throw!(scope, TypeError, "'{}' is not a function", v)

@@ -2,6 +2,7 @@ use dash_proc_macro::Trace;
 
 use crate::frame::This;
 use crate::gc::ObjectId;
+use crate::value::function::args::CallArgs;
 use crate::value::function::bound::BoundFunction;
 use crate::value::function::native::CallContext;
 use crate::value::object::{NamedObject, Object, PropertyKey};
@@ -33,10 +34,11 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     };
 
     initiator
-        .apply(cx.scope, This::Default, vec![
-            Value::object(resolve),
-            Value::object(reject),
-        ])
+        .apply(
+            cx.scope,
+            This::Default,
+            [Value::object(resolve), Value::object(reject)].into(),
+        )
         .root_err(cx.scope)?;
 
     Ok(Value::object(cx.scope.register(promise)))
@@ -78,7 +80,7 @@ pub fn then(cx: CallContext) -> Result<Value, Value> {
     match &mut *state {
         PromiseState::Pending { resolve, .. } => resolve.push(then_task),
         PromiseState::Resolved(value) => {
-            let bf = BoundFunction::new(cx.scope, then_task, None, Some(vec![*value]));
+            let bf = BoundFunction::new(cx.scope, then_task, None, [*value].into());
             let bf = cx.scope.register(bf);
             cx.scope.add_async_task(bf);
         }
@@ -128,10 +130,13 @@ impl Object for ThenTask {
         scope: &mut crate::localscope::LocalScope,
         _callee: ObjectId,
         _this: This,
-        args: Vec<Value>,
+        args: CallArgs,
     ) -> Result<Unrooted, Unrooted> {
         let resolved = args.first().unwrap_or_undefined();
-        let ret = self.handler.apply(scope, This::Default, vec![resolved]).root(scope)?;
+        let ret = self
+            .handler
+            .apply(scope, This::Default, [resolved].into())
+            .root(scope)?;
 
         let ret_then = ret
             .get_property(scope, PropertyKey::String(sym::then.into()))?
@@ -140,13 +145,13 @@ impl Object for ThenTask {
         match ret_then.unpack() {
             ValueKind::Undefined(..) => {
                 // Not a promise. Call resolver(value)
-                let bf = BoundFunction::new(scope, self.resolver, None, Some(vec![ret]));
+                let bf = BoundFunction::new(scope, self.resolver, None, [ret].into());
                 let bf = scope.register(bf);
                 scope.add_async_task(bf);
             }
             _ => {
                 // Is a promise. Call value.then(resolver)
-                ret_then.apply(scope, This::Bound(ret), vec![Value::object(self.resolver)])?;
+                ret_then.apply(scope, This::Bound(ret), [Value::object(self.resolver)].into())?;
             }
         }
 

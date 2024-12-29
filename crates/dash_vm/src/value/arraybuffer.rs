@@ -7,8 +7,9 @@ use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::{Vm, delegate, extract};
 
+use super::Unrooted;
+use super::function::args::CallArgs;
 use super::object::{NamedObject, Object};
-use super::{Unrooted, Value};
 
 #[derive(Debug, Trace)]
 pub struct ArrayBuffer {
@@ -79,7 +80,7 @@ impl Object for ArrayBuffer {
         scope: &mut LocalScope,
         callee: ObjectId,
         this: This,
-        args: Vec<Value>,
+        args: CallArgs,
     ) -> Result<Unrooted, Unrooted> {
         self.obj.apply(scope, callee, this, args)
     }

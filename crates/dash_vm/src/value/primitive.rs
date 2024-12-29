@@ -8,9 +8,10 @@ use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::util::intern_f64;
-use crate::{extract, throw, Vm};
+use crate::{Vm, extract, throw};
 
 use super::boxed::{Boolean as BoxedBoolean, Number as BoxedNumber, Symbol as BoxedSymbol};
+use super::function::args::CallArgs;
 use super::object::{Object, PropertyKey, PropertyValue};
 use super::ops::conversions::{PreferredType, ValueConversion};
 use super::string::JsString;
@@ -52,7 +53,7 @@ impl Object for f64 {
         scope: &mut LocalScope,
         _callee: ObjectId,
         _this: This,
-        _args: Vec<Value>,
+        _args: CallArgs,
     ) -> Result<Unrooted, Unrooted> {
         throw!(scope, TypeError, "number is not a function")
     }
@@ -102,7 +103,7 @@ impl Object for bool {
         scope: &mut LocalScope,
         _callee: ObjectId,
         _this: This,
-        _args: Vec<Value>,
+        _args: CallArgs,
     ) -> Result<Unrooted, Unrooted> {
         throw!(scope, TypeError, "boolean is not a function")
     }
@@ -173,7 +174,7 @@ impl Object for Undefined {
         sc: &mut LocalScope,
         _callee: ObjectId,
         _this: This,
-        _args: Vec<Value>,
+        _args: CallArgs,
     ) -> Result<Unrooted, Unrooted> {
         throw!(sc, TypeError, "undefined is not a function")
     }
@@ -227,7 +228,7 @@ impl Object for Null {
         sc: &mut LocalScope,
         _callee: ObjectId,
         _this: This,
-        _args: Vec<Value>,
+        _args: CallArgs,
     ) -> Result<Unrooted, Unrooted> {
         throw!(sc, TypeError, "null is not a function")
     }
@@ -285,7 +286,7 @@ impl Object for Symbol {
         scope: &mut LocalScope,
         _callee: ObjectId,
         _this: This,
-        _args: Vec<Value>,
+        _args: CallArgs,
     ) -> Result<Unrooted, Unrooted> {
         throw!(scope, TypeError, "symbol is not a function")
     }
@@ -524,7 +525,7 @@ impl Object for Number {
         scope: &mut LocalScope,
         callee: ObjectId,
         this: This,
-        args: Vec<Value>,
+        args: CallArgs,
     ) -> Result<Unrooted, Unrooted> {
         self.0.apply(scope, callee, this, args)
     }

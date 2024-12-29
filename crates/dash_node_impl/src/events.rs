@@ -9,7 +9,8 @@ use dash_rt::typemap::Key;
 use dash_vm::frame::This;
 use dash_vm::gc::ObjectId;
 use dash_vm::localscope::LocalScope;
-use dash_vm::value::function::native::{register_native_fn, CallContext};
+use dash_vm::value::function::args::CallArgs;
+use dash_vm::value::function::native::{CallContext, register_native_fn};
 use dash_vm::value::function::{Function, FunctionKind};
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
@@ -65,13 +66,10 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
         sc.register(event_emitter_ctor)
     };
 
-    State::from_vm_mut(sc).store.insert(
-        EventsKey,
-        EventsState {
-            event_emitter_constructor: event_emitter_ctor,
-            event_emitter_prototype,
-        },
-    );
+    State::from_vm_mut(sc).store.insert(EventsKey, EventsState {
+        event_emitter_constructor: event_emitter_ctor,
+        event_emitter_prototype,
+    });
 
     event_emitter_ctor.set_property(
         sc,
@@ -159,7 +157,9 @@ fn emit(cx: CallContext) -> Result<Value, Value> {
         let mut did_emit = false;
         if let Some(handlers) = this.handlers.borrow().get(&name.sym()) {
             for handler in handlers {
-                handler.apply(sc, This::Bound(cx.this), args.to_owned()).root_err(sc)?;
+                handler
+                    .apply(sc, This::Bound(cx.this), CallArgs::from(args))
+                    .root_err(sc)?;
                 did_emit = true;
             }
         }

@@ -10,6 +10,7 @@ use crate::localscope::LocalScope;
 use crate::value::arguments::Arguments;
 use crate::value::{ExternalValue, Root, Value};
 
+use super::args::CallArgs;
 use super::extend_stack_from_args;
 
 #[derive(Debug, Clone, Trace)]
@@ -35,7 +36,7 @@ impl UserFunction {
         &self,
         scope: &mut LocalScope,
         this: This,
-        args: Vec<Value>,
+        args: CallArgs,
         new_target: Option<ObjectId>,
     ) -> Result<HandleResult, Value> {
         let sp = scope.stack.len();

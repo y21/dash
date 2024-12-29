@@ -17,6 +17,7 @@ use rustc_hash::FxHasher;
 use crate::localscope::LocalScope;
 use crate::{Vm, extract, throw};
 
+use super::function::args::CallArgs;
 use super::ops::conversions::ValueConversion;
 use super::primitive::{InternalSlots, Symbol};
 use super::root_ext::RootErrExt;
@@ -66,20 +67,15 @@ pub trait Object: Debug + Trace {
 
     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value>;
 
-    fn apply(
-        &self,
-        scope: &mut LocalScope,
-        callee: ObjectId,
-        this: This,
-        args: Vec<Value>,
-    ) -> Result<Unrooted, Unrooted>;
+    fn apply(&self, scope: &mut LocalScope, callee: ObjectId, this: This, args: CallArgs)
+    -> Result<Unrooted, Unrooted>;
 
     fn construct(
         &self,
         scope: &mut LocalScope,
         callee: ObjectId,
         this: This,
-        args: Vec<Value>,
+        args: CallArgs,
         _new_target: ObjectId,
     ) -> Result<Unrooted, Unrooted> {
         self.apply(scope, callee, this, args)
@@ -172,7 +168,7 @@ macro_rules! delegate {
             sc: &mut $crate::localscope::LocalScope,
             id: $crate::gc::ObjectId,
             this: $crate::frame::This,
-            args: Vec<$crate::value::Value>,
+            args: $crate::value::function::args::CallArgs,
         ) -> Result<$crate::value::Unrooted, $crate::value::Unrooted> {
             $crate::value::object::Object::apply(&self.$field, sc, id, this, args)
         }
@@ -183,7 +179,7 @@ macro_rules! delegate {
             sc: &mut $crate::localscope::LocalScope,
             id: $crate::gc::ObjectId,
             this: $crate::frame::This,
-            args: Vec<$crate::value::Value>,
+            args: $crate::value::function::args::CallArgs,
             new_target: $crate::gc::ObjectId,
         ) -> Result<$crate::value::Unrooted, $crate::value::Unrooted> {
             $crate::value::object::Object::construct(&self.$field, sc, id, this, args, new_target)
@@ -445,7 +441,7 @@ impl PropertyValueKind {
         match *self {
             Self::Static(value) => Ok(value.into()),
             Self::Trap { get, .. } => match get {
-                Some(id) => id.apply(sc, this, Vec::new()),
+                Some(id) => id.apply(sc, this, CallArgs::empty()),
                 None => Ok(Value::undefined().into()),
             },
         }
@@ -680,7 +676,7 @@ impl Object for NamedObject {
         _sc: &mut LocalScope,
         _handle: ObjectId,
         _this: This,
-        _args: Vec<Value>,
+        _args: CallArgs,
     ) -> Result<Unrooted, Unrooted> {
         Ok(Value::undefined().into())
     }
@@ -769,7 +765,7 @@ impl Object for ObjectId {
         scope: &mut LocalScope,
         callee: ObjectId,
         this: This,
-        args: Vec<Value>,
+        args: CallArgs,
     ) -> Result<Unrooted, Unrooted> {
         unsafe { (self.vtable(scope).js_apply)(self.data_ptr(scope), scope, callee, this, args) }
     }
@@ -779,7 +775,7 @@ impl Object for ObjectId {
         scope: &mut LocalScope,
         callee: ObjectId,
         this: This,
-        args: Vec<Value>,
+        args: CallArgs,
         new_target: ObjectId,
     ) -> Result<Unrooted, Unrooted> {
         unsafe { (self.vtable(scope).js_construct)(self.data_ptr(scope), scope, callee, this, args, new_target) }
@@ -821,12 +817,12 @@ impl ObjectId {
         Object::get_own_property(&self, sc, This::Bound(Value::object(self)), key)
     }
 
-    pub fn apply(&self, sc: &mut LocalScope, this: This, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
+    pub fn apply(&self, sc: &mut LocalScope, this: This, args: CallArgs) -> Result<Unrooted, Unrooted> {
         let callee = *self;
         Object::apply(self, sc, callee, this, args)
     }
 
-    pub fn construct(&self, sc: &mut LocalScope, this: This, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
+    pub fn construct(&self, sc: &mut LocalScope, this: This, args: CallArgs) -> Result<Unrooted, Unrooted> {
         Object::construct(self, sc, *self, this, args, *self)
     }
 
@@ -834,7 +830,7 @@ impl ObjectId {
         &self,
         sc: &mut LocalScope,
         this: This,
-        args: Vec<Value>,
+        args: CallArgs,
         new_target: ObjectId,
     ) -> Result<Unrooted, Unrooted> {
         Object::construct(self, sc, *self, this, args, new_target)
@@ -870,11 +866,11 @@ impl Persistent {
         self.id().get_property(sc, key)
     }
 
-    pub fn apply(&self, sc: &mut LocalScope, this: This, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
+    pub fn apply(&self, sc: &mut LocalScope, this: This, args: CallArgs) -> Result<Unrooted, Unrooted> {
         self.id().apply(sc, this, args)
     }
 
-    pub fn construct(&self, sc: &mut LocalScope, this: This, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
+    pub fn construct(&self, sc: &mut LocalScope, this: This, args: CallArgs) -> Result<Unrooted, Unrooted> {
         self.id().construct(sc, this, args)
     }
 

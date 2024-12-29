@@ -8,6 +8,7 @@ use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::{delegate, extract};
 
+use super::function::args::CallArgs;
 use super::object::{NamedObject, Object, PropertyKey, PropertyValue};
 use super::string::JsString;
 use super::{Unrooted, Value};
@@ -112,7 +113,7 @@ impl Object for Error {
         scope: &mut LocalScope,
         callee: ObjectId,
         this: This,
-        args: Vec<Value>,
+        args: CallArgs,
     ) -> Result<Unrooted, Unrooted> {
         self.obj.apply(scope, callee, this, args)
     }

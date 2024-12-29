@@ -8,6 +8,7 @@ use crate::gc::trace::{Trace, TraceCtxt};
 use crate::localscope::LocalScope;
 use crate::{PromiseAction, Vm, extract};
 
+use super::function::args::CallArgs;
 use super::object::{NamedObject, Object};
 use super::{Typeof, Unrooted, Value};
 
@@ -109,7 +110,7 @@ impl Object for Promise {
         scope: &mut LocalScope,
         callee: ObjectId,
         this: This,
-        args: Vec<Value>,
+        args: CallArgs,
     ) -> Result<Unrooted, Unrooted> {
         self.obj.apply(scope, callee, this, args)
     }
@@ -171,7 +172,7 @@ impl Object for PromiseResolver {
         scope: &mut LocalScope,
         _callee: ObjectId,
         _this: This,
-        args: Vec<Value>,
+        args: CallArgs,
     ) -> Result<Unrooted, Unrooted> {
         scope.drive_promise(
             PromiseAction::Resolve,
@@ -243,7 +244,7 @@ impl Object for PromiseRejecter {
         scope: &mut LocalScope,
         _callee: ObjectId,
         _this: This,
-        args: Vec<Value>,
+        args: CallArgs,
     ) -> Result<Unrooted, Unrooted> {
         scope.drive_promise(
             PromiseAction::Reject,

@@ -4,8 +4,9 @@ use crate::dispatch::HandleResult;
 use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
-use crate::value::{Unrooted, Value};
+use crate::value::Unrooted;
 
+use super::args::CallArgs;
 use super::user::UserFunction;
 
 #[derive(Trace, Debug)]
@@ -19,7 +20,7 @@ impl Closure {
         &self,
         scope: &mut LocalScope,
         _this: This,
-        args: Vec<Value>,
+        args: CallArgs,
         new_target: Option<ObjectId>,
     ) -> Result<Unrooted, Unrooted> {
         let ret = self.fun.handle_function_call(scope, self.this, args, new_target)?;

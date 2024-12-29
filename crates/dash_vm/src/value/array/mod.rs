@@ -14,6 +14,7 @@ use crate::value::object::PropertyDataDescriptor;
 use crate::{Vm, delegate, extract, throw};
 use dash_middle::interner::sym;
 
+use super::function::args::CallArgs;
 use super::object::{NamedObject, Object, PropertyKey, PropertyValue, PropertyValueKind};
 use super::ops::conversions::ValueConversion;
 use super::primitive::array_like_keys;
@@ -293,7 +294,7 @@ impl Object for Array {
         scope: &mut LocalScope,
         callee: ObjectId,
         this: This,
-        args: Vec<Value>,
+        args: CallArgs,
     ) -> Result<Unrooted, Unrooted> {
         self.obj.apply(scope, callee, this, args)
     }
@@ -341,7 +342,7 @@ impl Object for ArrayIterator {
         scope: &mut LocalScope,
         callee: ObjectId,
         this: This,
-        args: Vec<Value>,
+        args: CallArgs,
     ) -> Result<Unrooted, Unrooted> {
         self.obj.apply(scope, callee, this, args)
     }

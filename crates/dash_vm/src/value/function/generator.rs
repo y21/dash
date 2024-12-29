@@ -11,6 +11,7 @@ use crate::value::object::{NamedObject, Object};
 use crate::value::{Typeof, Unrooted, Value};
 use crate::{Vm, delegate, extract};
 
+use super::args::CallArgs;
 use super::extend_stack_from_args;
 use super::user::UserFunction;
 
@@ -29,7 +30,7 @@ impl GeneratorFunction {
         scope: &mut LocalScope,
         callee: ObjectId,
         this: This,
-        args: Vec<Value>,
+        args: CallArgs,
         _new_target: Option<ObjectId>,
     ) -> Result<Value, Unrooted> {
         let mut arguments = None;
@@ -164,7 +165,7 @@ impl Object for GeneratorIterator {
         scope: &mut LocalScope,
         callee: ObjectId,
         this: This,
-        args: Vec<Value>,
+        args: CallArgs,
     ) -> Result<Unrooted, Unrooted> {
         self.obj.apply(scope, callee, this, args)
     }

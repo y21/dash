@@ -6,16 +6,18 @@ use crate::value::object::{NamedObject, Object};
 use crate::value::{Typeof, Unrooted, Value};
 use crate::{Vm, delegate, extract};
 
+use super::args::CallArgs;
+
 #[derive(Debug, Trace)]
 pub struct BoundFunction {
     callee: ObjectId,
     this: Option<Value>,
-    args: Option<Vec<Value>>,
+    args: CallArgs,
     obj: NamedObject,
 }
 
 impl BoundFunction {
-    pub fn new(vm: &Vm, callee: ObjectId, this: Option<Value>, args: Option<Vec<Value>>) -> Self {
+    pub fn new(vm: &Vm, callee: ObjectId, this: Option<Value>, args: CallArgs) -> Self {
         Self {
             callee,
             this,
@@ -43,11 +45,11 @@ impl Object for BoundFunction {
         scope: &mut crate::localscope::LocalScope,
         _callee: ObjectId,
         this: This,
-        args: Vec<Value>,
+        args: CallArgs,
     ) -> Result<Unrooted, Unrooted> {
         let target_this = self.this.map_or(this, This::Bound);
 
-        let mut target_args = self.args.clone().unwrap_or_default();
+        let mut target_args = self.args.clone();
         target_args.extend(args);
 
         self.callee.apply(scope, target_this, target_args)

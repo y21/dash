@@ -4,6 +4,7 @@ use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::value::Value;
 
+use super::args::CallArgs;
 use super::{Function, FunctionKind};
 
 // TODO: return Unrooted?
@@ -16,7 +17,7 @@ pub fn register_native_fn(sc: &mut LocalScope<'_>, name: Symbol, fun: NativeFunc
 
 #[derive(Debug)]
 pub struct CallContext<'s, 'c> {
-    pub args: Vec<Value>,
+    pub args: CallArgs,
     pub scope: &'c mut LocalScope<'s>,
     pub this: Value,
     pub new_target: Option<ObjectId>,

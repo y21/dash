@@ -7,6 +7,7 @@ use crate::localscope::LocalScope;
 use crate::{Vm, extract};
 
 use super::arraybuffer::ArrayBuffer;
+use super::function::args::CallArgs;
 use super::object::{NamedObject, Object, PropertyKey, PropertyValue};
 use super::ops::conversions::ValueConversion;
 use super::{Root, Unrooted, Value};
@@ -196,7 +197,7 @@ impl Object for TypedArray {
         scope: &mut LocalScope,
         callee: ObjectId,
         this: This,
-        args: Vec<Value>,
+        args: CallArgs,
     ) -> Result<Unrooted, Unrooted> {
         self.obj.apply(scope, callee, this, args)
     }

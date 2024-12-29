@@ -38,25 +38,29 @@ pub fn apply(cx: CallContext) -> Result<Value, Value> {
     };
 
     target_callee
-        .apply(cx.scope, target_this.map_or(This::Default, This::Bound), target_args)
+        .apply(
+            cx.scope,
+            target_this.map_or(This::Default, This::Bound),
+            target_args.into(),
+        )
         .root(cx.scope)
 }
 
 pub fn bind(cx: CallContext) -> Result<Value, Value> {
     let target_this = cx.args.first().cloned();
-    let target_args = cx.args.get(1..).map(|s| s.to_vec());
+    let target_args = cx.args.get(1..).map(|s| s.to_vec()).unwrap_or_default();
     let target_callee = match cx.this.unpack() {
         ValueKind::Object(o) if matches!(o.type_of(cx.scope), Typeof::Function) => o,
         _ => throw!(cx.scope, TypeError, "Bound value must be a function"),
     };
 
-    let bf = BoundFunction::new(cx.scope, target_callee, target_this, target_args);
+    let bf = BoundFunction::new(cx.scope, target_callee, target_this, target_args.into());
     Ok(Value::object(cx.scope.register(bf)))
 }
 
 pub fn call(cx: CallContext) -> Result<Value, Value> {
     let target_this = cx.args.first().cloned();
-    let target_args = cx.args.get(1..).map(|s| s.to_vec());
+    let target_args = cx.args.get(1..).map(|s| s.to_vec()).unwrap_or_default();
     let target_callee = match cx.this.unpack() {
         ValueKind::Object(o) if matches!(o.type_of(cx.scope), Typeof::Function) => o,
         _ => throw!(cx.scope, TypeError, "Bound value must be a function"),
@@ -66,7 +70,7 @@ pub fn call(cx: CallContext) -> Result<Value, Value> {
         .apply(
             cx.scope,
             target_this.map_or(This::Default, This::Bound),
-            target_args.unwrap_or_default(),
+            target_args.into(),
         )
         .root(cx.scope)
 }

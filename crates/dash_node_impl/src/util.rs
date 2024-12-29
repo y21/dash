@@ -2,7 +2,8 @@ use dash_middle::interner::sym;
 use dash_vm::frame::This;
 use dash_vm::localscope::LocalScope;
 use dash_vm::throw;
-use dash_vm::value::function::native::{register_native_fn, CallContext};
+use dash_vm::value::function::args::CallArgs;
+use dash_vm::value::function::native::{CallContext, register_native_fn};
 use dash_vm::value::object::{NamedObject, Object, PropertyDataDescriptor, PropertyValue, PropertyValueKind};
 use dash_vm::value::{Root, Typeof, Value, ValueContext};
 
@@ -39,17 +40,13 @@ fn inherits(cx: CallContext) -> Result<Value, Value> {
     }
 
     let super_inst = super_ctor
-        .construct(cx.scope, This::Default, Vec::new())
+        .construct(cx.scope, This::Default, CallArgs::empty())
         .root(cx.scope)?;
 
-    super_inst.set_property(
-        cx.scope,
-        sym::constructor.into(),
-        PropertyValue {
-            kind: PropertyValueKind::Static(ctor),
-            descriptor: PropertyDataDescriptor::WRITABLE | PropertyDataDescriptor::CONFIGURABLE,
-        },
-    )?;
+    super_inst.set_property(cx.scope, sym::constructor.into(), PropertyValue {
+        kind: PropertyValueKind::Static(ctor),
+        descriptor: PropertyDataDescriptor::WRITABLE | PropertyDataDescriptor::CONFIGURABLE,
+    })?;
 
     ctor.set_property(
         cx.scope,

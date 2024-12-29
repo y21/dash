@@ -29,6 +29,7 @@ use gc::trace::{Trace, TraceCtxt};
 use gc::{Allocator, ObjectId};
 use localscope::{scope, LocalScopeList};
 use rustc_hash::FxHashMap;
+use value::function::args::CallArgs;
 use value::object::{extract_type, NamedObject};
 use value::{ExternalValue, PureBuiltin, Unpack, Unrooted, ValueKind};
 
@@ -1439,7 +1440,7 @@ impl Vm {
             scope.add_ref(task);
 
             debug!("process task {:?}", task);
-            if let Err(ex) = task.apply(&mut scope, This::Default, Vec::new()) {
+            if let Err(ex) = task.apply(&mut scope, This::Default, CallArgs::empty()) {
                 if let Some(callback) = scope.params.unhandled_task_exception_callback() {
                     let ex = ex.root(&mut scope);
                     error!("uncaught async task exception");

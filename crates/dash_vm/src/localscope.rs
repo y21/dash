@@ -6,6 +6,7 @@ use dash_middle::interner::Symbol;
 
 use crate::PromiseAction;
 use crate::gc::ObjectId;
+use crate::value::function::args::CallArgs;
 use crate::value::function::bound::BoundFunction;
 use crate::value::promise::{Promise, PromiseState};
 use crate::value::{Unpack, ValueContext, ValueKind};
@@ -185,7 +186,7 @@ impl LocalScope<'_> {
         handle
     }
 
-    pub fn drive_promise(&mut self, action: PromiseAction, promise: &Promise, args: Vec<Value>) {
+    pub fn drive_promise(&mut self, action: PromiseAction, promise: &Promise, args: CallArgs) {
         let arg = args.first().unwrap_or_undefined();
         let mut state = promise.state().borrow_mut();
 
@@ -196,7 +197,7 @@ impl LocalScope<'_> {
             };
 
             for handler in handlers {
-                let bf = BoundFunction::new(self, handler, None, Some(args.clone()));
+                let bf = BoundFunction::new(self, handler, None, args.clone());
                 let bf = self.register(bf);
                 self.add_async_task(bf);
             }

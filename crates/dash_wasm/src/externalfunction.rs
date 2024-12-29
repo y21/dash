@@ -46,7 +46,7 @@ impl Object for ExternalFunction {
         self.1.get_prototype(sc)
     }
 
-    fn apply(&self, scope: &mut LocalScope, _callee: Handle, _this: Value, args: Vec<Value>) -> Result<Value, Value> {
+    fn apply(&self, scope: &mut LocalScope, _callee: Handle, _this: Value, args: CallArgs) -> Result<Value, Value> {
         let this = wasm_bindgen::JsValue::UNDEFINED;
 
         let args = args

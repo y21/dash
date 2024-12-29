@@ -10,6 +10,7 @@ use crate::value::{Root, Typeof, Unpack, Unrooted, Value, ValueContext};
 use crate::{PromiseAction, Vm, delegate, extract, throw};
 use dash_middle::interner::sym;
 
+use super::args::CallArgs;
 use super::generator::{GeneratorFunction, GeneratorIterator, GeneratorState};
 use super::user::UserFunction;
 
@@ -31,7 +32,7 @@ impl AsyncFunction {
         scope: &mut LocalScope,
         callee: ObjectId,
         this: This,
-        args: Vec<Value>,
+        args: CallArgs,
         new_target: Option<ObjectId>,
     ) -> Result<Value, Unrooted> {
         let generator_iter = self.inner.handle_function_call(scope, callee, this, args, new_target)?;
@@ -40,7 +41,7 @@ impl AsyncFunction {
             .statics
             .generator_iterator_next
             .clone()
-            .apply(scope, This::Bound(generator_iter), Vec::new())
+            .apply(scope, This::Bound(generator_iter), CallArgs::empty())
             .root(scope)
             .and_then(|result| {
                 result
@@ -78,7 +79,7 @@ impl AsyncFunction {
                                 Ok(value) => value,
                                 Err(value) => value,
                             }),
-                            vec![Value::object(then_task)],
+                            [Value::object(then_task)].into(),
                         )
                         .root_err(scope)?;
 
@@ -128,7 +129,7 @@ impl Object for ThenTask {
         scope: &mut LocalScope,
         _callee: ObjectId,
         _this: This,
-        args: Vec<Value>,
+        args: CallArgs,
     ) -> Result<Unrooted, Unrooted> {
         let promise_value = args.first().unwrap_or_undefined();
 
@@ -138,7 +139,7 @@ impl Object for ThenTask {
             .statics
             .generator_iterator_next
             .clone()
-            .apply(scope, This::Bound(self.generator_iter), vec![promise_value])
+            .apply(scope, This::Bound(self.generator_iter), [promise_value].into())
             .root(scope)
             .and_then(|result| {
                 result
@@ -165,18 +166,18 @@ impl Object for ThenTask {
                     scope.drive_promise(
                         PromiseAction::Resolve,
                         self.final_promise.extract::<Promise>(scope).unwrap(),
-                        vec![value],
+                        [value].into(),
                     );
                 } else {
                     let then_task = ThenTask::new(scope, self.generator_iter, self.final_promise);
                     let then_task = scope.register(then_task);
                     let value = wrap_promise(scope, value);
 
-                    scope
-                        .statics
-                        .promise_then
-                        .clone()
-                        .apply(scope, This::Bound(value), vec![Value::object(then_task)])?;
+                    scope.statics.promise_then.clone().apply(
+                        scope,
+                        This::Bound(value),
+                        [Value::object(then_task)].into(),
+                    )?;
                 }
             }
             Err(value) => {
@@ -184,7 +185,7 @@ impl Object for ThenTask {
                 scope.drive_promise(
                     PromiseAction::Reject,
                     self.final_promise.extract::<Promise>(scope).unwrap(),
-                    vec![value],
+                    [value].into(),
                 );
             }
         }

@@ -3,6 +3,7 @@ use std::cmp::Ordering;
 use std::fmt::{self, Debug};
 use std::iter::{self};
 
+use args::CallArgs;
 use dash_proc_macro::Trace;
 
 use crate::dispatch::HandleResult;
@@ -26,6 +27,7 @@ use super::ops::conversions::ValueConversion;
 use super::string::JsString;
 use super::{Root, Typeof, Unpack, Unrooted, Value, ValueKind};
 
+pub mod args;
 pub mod r#async;
 pub mod bound;
 pub mod closure;
@@ -141,7 +143,7 @@ fn handle_call(
     scope: &mut LocalScope,
     callee: ObjectId,
     this: This,
-    args: Vec<Value>,
+    args: CallArgs,
     new_target: Option<ObjectId>,
 ) -> Result<Unrooted, Unrooted> {
     match &fun.kind {
@@ -244,7 +246,7 @@ impl Object for Function {
         scope: &mut LocalScope,
         callee: ObjectId,
         this: This,
-        args: Vec<Value>,
+        args: CallArgs,
     ) -> Result<Unrooted, Unrooted> {
         handle_call(self, scope, callee, this, args, None)
     }
@@ -254,7 +256,7 @@ impl Object for Function {
         scope: &mut LocalScope,
         callee: ObjectId,
         _this: This,
-        args: Vec<Value>,
+        args: CallArgs,
         new_target: ObjectId,
     ) -> Result<Unrooted, Unrooted> {
         let this = 'this: {
@@ -352,7 +354,7 @@ pub(crate) fn adjust_stack_from_flat_call(
 }
 
 /// Extends the VM stack with provided arguments
-fn extend_stack_from_args(args: Vec<Value>, expected_args: usize, scope: &mut LocalScope, is_rest: bool) {
+fn extend_stack_from_args(args: CallArgs, expected_args: usize, scope: &mut LocalScope, is_rest: bool) {
     // Insert at most [param_count] amount of provided arguments on the stack
     // In the compiler we allocate local space for every parameter
     scope.stack.extend(args.iter().take(expected_args).cloned());

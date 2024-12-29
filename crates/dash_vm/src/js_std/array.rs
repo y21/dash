@@ -7,6 +7,7 @@ use crate::frame::This;
 use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::array::{Array, ArrayIterator, require_valid_array_length};
+use crate::value::function::args::CallArgs;
 use crate::value::function::native::CallContext;
 use crate::value::object::{NamedObject, Object as _, PropertyKey, PropertyValue};
 use crate::value::ops::conversions::ValueConversion;
@@ -142,7 +143,7 @@ pub fn every(cx: CallContext) -> Result<Value, Value> {
 
     let all_true = for_each_element(cx.scope, this, |scope, elem, idx| {
         if callback
-            .apply(scope, This::Bound(cb_this), vec![elem, idx, this])
+            .apply(scope, This::Bound(cb_this), [elem, idx, this].into())
             .root(scope)?
             .to_boolean(scope)?
         {
@@ -166,7 +167,7 @@ pub fn some(cx: CallContext) -> Result<Value, Value> {
 
     let any_true = for_each_element(cx.scope, this, |scope, elem, idx| {
         if callback
-            .apply(scope, This::Bound(cb_this), vec![elem, idx, this])
+            .apply(scope, This::Bound(cb_this), [elem, idx, this].into())
             .root(scope)?
             .to_boolean(scope)?
         {
@@ -224,7 +225,7 @@ pub fn filter(cx: CallContext) -> Result<Value, Value> {
 
     let (Break(()) | Continue(())) = for_each_element(cx.scope, this, |scope, elem, idx| {
         if callback
-            .apply(scope, This::Bound(cb_this), vec![elem, idx, this])
+            .apply(scope, This::Bound(cb_this), [elem, idx, this].into())
             .root(scope)?
             .to_boolean(scope)?
         {
@@ -255,7 +256,7 @@ pub fn reduce(cx: CallContext) -> Result<Value, Value> {
         (_, None) => {
             let pkv = this.get_property(cx.scope, sym::zero.into()).root(cx.scope)?;
             let pkv2 = this.get_property(cx.scope, sym::one.into()).root(cx.scope)?;
-            let args = vec![pkv, pkv2, Value::number(1_f64)];
+            let args = [pkv, pkv2, Value::number(1_f64)].into();
             (2, callback.apply(cx.scope, This::Default, args).root(cx.scope)?)
         }
     };
@@ -263,7 +264,7 @@ pub fn reduce(cx: CallContext) -> Result<Value, Value> {
     for k in start..len {
         let pk = cx.scope.intern_usize(k);
         let pkv = this.get_property(cx.scope, pk.into()).root(cx.scope)?;
-        let args = vec![accumulator, pkv, Value::number(k as f64), this];
+        let args = [accumulator, pkv, Value::number(k as f64), this].into();
         accumulator = callback.apply(cx.scope, This::Default, args).root(cx.scope)?;
     }
 
@@ -280,7 +281,7 @@ pub fn find(cx: CallContext) -> Result<Value, Value> {
 
     let element = for_each_element(cx.scope, this, |scope, elem, idx| {
         if callback
-            .apply(scope, This::Bound(cb_this), vec![elem, idx, this])
+            .apply(scope, This::Bound(cb_this), [elem, idx, this].into())
             .root(scope)?
             .to_boolean(scope)?
         {
@@ -306,7 +307,7 @@ pub fn find_index(cx: CallContext) -> Result<Value, Value> {
 
     let element = for_each_element(cx.scope, this, |scope, elem, idx| {
         if callback
-            .apply(scope, This::Bound(cb_this), vec![elem, idx, this])
+            .apply(scope, This::Bound(cb_this), [elem, idx, this].into())
             .root(scope)?
             .to_boolean(scope)?
         {
@@ -336,7 +337,7 @@ pub fn for_each(cx: CallContext) -> Result<Value, Value> {
 
     let (Break(()) | Continue(())) = for_each_element(cx.scope, this, |scope, elem, idx| {
         callback
-            .apply(scope, This::Bound(cb_this), vec![elem, idx, this])
+            .apply(scope, This::Bound(cb_this), [elem, idx, this].into())
             .root_err(scope)?;
         Ok(Continue(()))
     })?;
@@ -435,7 +436,7 @@ pub fn map(cx: CallContext) -> Result<Value, Value> {
 
     let (Break(()) | Continue(())) = for_each_element(cx.scope, this, |scope, elem, idx| {
         let mapped = callback
-            .apply(scope, This::Bound(cb_this), vec![elem, idx, this])
+            .apply(scope, This::Bound(cb_this), [elem, idx, this].into())
             .root(scope)?;
         values.push(PropertyValue::static_default(mapped));
         Ok(Continue(()))
@@ -650,7 +651,7 @@ pub fn for_each_js_iterator_element<B, F: FnMut(&mut LocalScope<'_>, Value) -> R
 ) -> Result<ControlFlow<B>, Value> {
     let next = iter.get_property(scope, sym::next.into()).root(scope)?;
     loop {
-        let item = next.apply(scope, This::Bound(iter), Vec::new()).root(scope)?;
+        let item = next.apply(scope, This::Bound(iter), CallArgs::empty()).root(scope)?;
         let done = item.get_property(scope, sym::done.into()).root(scope)?.is_truthy(scope);
         if done {
             break;
@@ -670,7 +671,7 @@ pub fn from(cx: CallContext) -> Result<Value, Value> {
 
         for_each_js_iterator_element(scope, items, |scope, value| {
             let value = match &mapper {
-                Some(mapper) => mapper.apply(scope, This::Default, vec![value]).root(scope)?,
+                Some(mapper) => mapper.apply(scope, This::Default, [value].into()).root(scope)?,
                 None => value,
             };
             values.push(PropertyValue::static_default(value));
@@ -690,7 +691,7 @@ pub fn from(cx: CallContext) -> Result<Value, Value> {
             let i = scope.intern_usize(i);
             let value = items.get_property(scope, i.into()).root(scope)?;
             let value = match &mapper {
-                Some(mapper) => mapper.apply(scope, This::Default, vec![value]).root(scope)?,
+                Some(mapper) => mapper.apply(scope, This::Default, [value].into()).root(scope)?,
                 None => value,
             };
             values.push(PropertyValue::static_default(value));
@@ -716,7 +717,7 @@ pub fn from(cx: CallContext) -> Result<Value, Value> {
     match items_iterator {
         Some(iterator) => {
             let iterator = iterator
-                .apply(cx.scope, This::Bound(items), Vec::new())
+                .apply(cx.scope, This::Bound(items), CallArgs::empty())
                 .root(cx.scope)?;
             with_iterator(cx.scope, iterator, mapper)
         }
@@ -749,7 +750,7 @@ pub fn sort(cx: CallContext) -> Result<Value, Value> {
             let previous = this.get_property(cx.scope, prev_idx.into()).root(cx.scope)?;
             let current = this.get_property(cx.scope, idx.into()).root(cx.scope)?;
             let ordering = compare_fn
-                .apply(cx.scope, This::Default, vec![previous, current])
+                .apply(cx.scope, This::Default, [previous, current].into())
                 .root(cx.scope)?
                 .to_int32(cx.scope)?;
 

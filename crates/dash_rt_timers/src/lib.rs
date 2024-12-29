@@ -10,7 +10,8 @@ use dash_vm::frame::This;
 use dash_vm::gc::persistent::Persistent;
 use dash_vm::localscope::LocalScope;
 use dash_vm::throw;
-use dash_vm::value::function::native::{register_native_fn, CallContext};
+use dash_vm::value::function::args::CallArgs;
+use dash_vm::value::function::native::{CallContext, register_native_fn};
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::string::JsString;
@@ -82,7 +83,7 @@ fn set_timeout(cx: CallContext) -> Result<Value, Value> {
             let mut sc = rt.vm_mut().scope();
             let callback = callback.get();
 
-            if let Err(err) = callback.apply(&mut sc, This::Default, Vec::new()) {
+            if let Err(err) = callback.apply(&mut sc, This::Default, CallArgs::empty()) {
                 eprintln!("Unhandled error in timer callback: {err:?}");
             }
 
@@ -109,7 +110,7 @@ fn set_immediate(cx: CallContext) -> Result<Value, Value> {
         let callback = callback.get();
         let mut sc = rt.vm_mut().scope();
 
-        if let Err(err) = callback.apply(&mut sc, This::Default, Vec::new()) {
+        if let Err(err) = callback.apply(&mut sc, This::Default, CallArgs::empty()) {
             eprintln!("Unhandled error in timer callback: {err:?}");
         }
     })));

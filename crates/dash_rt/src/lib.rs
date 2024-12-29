@@ -50,7 +50,7 @@ where
                 Ok(ok) => (ok, PromiseAction::Resolve),
                 Err(err) => (err, PromiseAction::Reject),
             };
-            scope.drive_promise(action, promise, vec![arg]);
+            scope.drive_promise(action, promise, [arg].into());
             scope.process_async_tasks();
         })));
     });

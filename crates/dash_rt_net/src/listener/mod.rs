@@ -10,6 +10,7 @@ use dash_vm::gc::trace::{Trace, TraceCtxt};
 use dash_vm::js_std::receiver_t;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::arraybuffer::ArrayBuffer;
+use dash_vm::value::function::args::CallArgs;
 use dash_vm::value::function::native::CallContext;
 use dash_vm::value::function::{Function, FunctionKind};
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
@@ -70,7 +71,7 @@ impl Object for TcpListenerConstructor {
         scope: &mut dash_vm::localscope::LocalScope,
         _callee: dash_vm::gc::ObjectId,
         _this: This,
-        _args: Vec<dash_vm::value::Value>,
+        _args: CallArgs,
     ) -> Result<dash_vm::value::Unrooted, dash_vm::value::Unrooted> {
         throw!(scope, Error, "TcpListener should be called as a constructor")
     }
@@ -80,7 +81,7 @@ impl Object for TcpListenerConstructor {
         scope: &mut dash_vm::localscope::LocalScope,
         _callee: dash_vm::gc::ObjectId,
         _this: This,
-        args: Vec<Value>,
+        args: CallArgs,
         new_target: ObjectId,
     ) -> Result<Unrooted, Unrooted> {
         let Some(value) = args.first() else {
@@ -129,7 +130,7 @@ impl Object for TcpListenerConstructor {
                             let stream_handle = TcpStreamHandle::new(&mut scope, writer_tx, reader_tx).unwrap();
                             let stream_handle = scope.register(stream_handle);
 
-                            scope.drive_promise(PromiseAction::Resolve, promise, vec![Value::object(stream_handle)]);
+                            scope.drive_promise(PromiseAction::Resolve, promise, [Value::object(stream_handle)].into());
                             scope.process_async_tasks();
                         })));
                     }

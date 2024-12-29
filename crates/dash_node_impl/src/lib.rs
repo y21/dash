@@ -17,6 +17,7 @@ use dash_vm::frame::This;
 use dash_vm::gc::ObjectId;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::array::Array;
+use dash_vm::value::function::args::CallArgs;
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::{Root, Unpack, Unrooted, Value, ValueKind};
 use dash_vm::{Vm, delegate, extract, throw};
@@ -230,8 +231,12 @@ fn execute_node_module(
 
     let dirname = Value::string(scope.intern(dir_path.to_str().expect("invalid utf-8 path")).into());
     let filename = Value::string(scope.intern(file_path.to_str().expect("invalid utf-8 path")).into());
-    fun.apply(scope, This::Default, vec![exports, module, require, dirname, filename])
-        .map_err(|err| (EvalError::Exception(err), code))?;
+    fun.apply(
+        scope,
+        This::Default,
+        [exports, module, require, dirname, filename].into(),
+    )
+    .map_err(|err| (EvalError::Exception(err), code))?;
 
     Ok(module)
 }
@@ -278,7 +283,7 @@ impl Object for RequireFunction {
         scope: &mut LocalScope,
         _callee: dash_vm::gc::ObjectId,
         _this: This,
-        args: Vec<Value>,
+        args: CallArgs,
     ) -> Result<Unrooted, Unrooted> {
         let Some(ValueKind::String(raw_arg)) = args.first().unpack() else {
             throw!(scope, Error, "require() expects a string argument");

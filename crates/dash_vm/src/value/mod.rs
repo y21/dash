@@ -24,6 +24,7 @@ use std::ptr;
 use dash_middle::interner::{self, sym};
 use dash_middle::util::ThreadSafeStorage;
 use dash_proc_macro::Trace;
+use function::args::CallArgs;
 
 pub mod string;
 use crate::frame::This;
@@ -285,7 +286,7 @@ impl Object for Value {
         }
     }
 
-    fn apply(&self, scope: &mut LocalScope, _: ObjectId, this: This, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
+    fn apply(&self, scope: &mut LocalScope, _: ObjectId, this: This, args: CallArgs) -> Result<Unrooted, Unrooted> {
         self.apply(scope, this, args)
     }
 
@@ -320,7 +321,7 @@ impl Object for Value {
         scope: &mut LocalScope,
         _: ObjectId,
         this: This,
-        args: Vec<Value>,
+        args: CallArgs,
         new_target: ObjectId,
     ) -> Result<Unrooted, Unrooted> {
         self.construct_with_target(scope, this, args, new_target)
@@ -607,7 +608,7 @@ impl Object for ExternalValue {
         scope: &mut LocalScope,
         _callee: ObjectId,
         this: This,
-        args: Vec<Value>,
+        args: CallArgs,
     ) -> Result<Unrooted, Unrooted> {
         self.inner.apply(scope, this, args)
     }
@@ -617,7 +618,7 @@ impl Object for ExternalValue {
         scope: &mut LocalScope,
         _callee: ObjectId,
         this: This,
-        args: Vec<Value>,
+        args: CallArgs,
         new_target: ObjectId,
     ) -> Result<Unrooted, Unrooted> {
         self.inner.construct_with_target(scope, this, args, new_target)
@@ -645,7 +646,7 @@ impl Value {
         }
     }
 
-    pub fn apply(&self, sc: &mut LocalScope, this: This, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
+    pub fn apply(&self, sc: &mut LocalScope, this: This, args: CallArgs) -> Result<Unrooted, Unrooted> {
         match self.unpack() {
             ValueKind::Object(o) => o.apply(sc, this, args),
             ValueKind::External(o) => o.inner(sc).apply(sc, this, args),
@@ -666,7 +667,7 @@ impl Value {
         &self,
         sc: &mut LocalScope,
         this: This,
-        args: Vec<Value>,
+        args: CallArgs,
         ip: u16,
     ) -> Result<Unrooted, Unrooted> {
         match self.unpack() {
@@ -688,7 +689,7 @@ impl Value {
         }
     }
 
-    pub fn construct(&self, sc: &mut LocalScope, this: This, args: Vec<Value>) -> Result<Unrooted, Unrooted> {
+    pub fn construct(&self, sc: &mut LocalScope, this: This, args: CallArgs) -> Result<Unrooted, Unrooted> {
         match self.unpack() {
             ValueKind::Object(o) => o.construct(sc, this, args),
             ValueKind::External(o) => o.inner(sc).construct(sc, this, args),
@@ -708,7 +709,7 @@ impl Value {
         &self,
         sc: &mut LocalScope,
         this: This,
-        args: Vec<Value>,
+        args: CallArgs,
         new_target: ObjectId,
     ) -> Result<Unrooted, Unrooted> {
         match self.unpack() {
