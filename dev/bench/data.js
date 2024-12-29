@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1735426462048,
+  "lastUpdate": 1735433225644,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -11663,6 +11663,60 @@ window.BENCHMARK_DATA = {
             "name": "exec tinycolor2 parse hex+toFilter",
             "value": 30900165,
             "range": "± 2195222",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "39e42fe311457521d40630f787c4611a35433f55",
+          "message": "SSO function call arguments",
+          "timestamp": "2024-12-29T01:42:53+01:00",
+          "tree_id": "dc4b279061b6fae110dd425291fd111b6a5bb870",
+          "url": "https://github.com/y21/dash/commit/39e42fe311457521d40630f787c4611a35433f55"
+        },
+        "date": 1735433225040,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1618699,
+            "range": "± 31420",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 169047,
+            "range": "± 9730",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 127139,
+            "range": "± 17386",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse+compile tinycolor2",
+            "value": 2420335,
+            "range": "± 64101",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "exec tinycolor2 parse hex+toFilter",
+            "value": 29053536,
+            "range": "± 2852559",
             "unit": "ns/iter"
           }
         ]
