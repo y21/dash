@@ -9,6 +9,7 @@ use crate::gc::ObjectId;
 use crate::gc::persistent::Persistent;
 use crate::value::object::{NamedObject, Object, PropertyValue};
 use crate::value::primitive::{Null, Number, Symbol, Undefined};
+use crate::value::propertykey::ToPropertyKey;
 use crate::value::{Root, Unpack, Value, ValueKind};
 
 const INTERPRETER: &str = include_str!("interpreter.js");
@@ -120,7 +121,7 @@ fn simple() {
         .root(&mut scope);
     scope.perform_gc();
     let value = array
-        .get_property(sym::zero.into(), &mut scope)
+        .get_property(sym::zero.to_key(&mut scope), &mut scope)
         .unwrap()
         .root(&mut scope);
     assert_eq!(scope.stack.len(), 0);
@@ -142,7 +143,7 @@ fn persistent_trace() {
         let key = scope.intern("foo");
         object
             .set_property(
-                key.into(),
+                key.to_key(&mut scope),
                 PropertyValue::static_default(Value::object(dummy_string)),
                 &mut scope,
             )
@@ -171,7 +172,10 @@ fn persistent_trace() {
     // Check that p1 and object are still alive after GC.
     let mut scope = vm.scope();
     let key = scope.intern("foo");
-    let p = p1.get_property(&mut scope, key.into()).unwrap().root(&mut scope);
+    let p = p1
+        .get_property(key.to_key(&mut scope), &mut scope)
+        .unwrap()
+        .root(&mut scope);
     assert!(p.unpack().downcast_ref::<NamedObject>(&scope).is_some());
 }
 

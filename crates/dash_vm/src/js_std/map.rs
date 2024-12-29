@@ -3,7 +3,7 @@ use crate::value::function::native::CallContext;
 use crate::value::map::Map;
 use crate::value::object::NamedObject;
 use crate::value::ops::conversions::ValueConversion;
-use crate::value::propertykey::PropertyKey;
+use crate::value::propertykey::ToPropertyKey;
 use crate::value::{Root, Value, ValueContext};
 use dash_middle::interner::sym;
 
@@ -19,16 +19,9 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
         let len = iter.length_of_array_like(cx.scope)?;
 
         for i in 0..len {
-            let i = cx.scope.intern_usize(i);
-            let item = iter
-                .get_property(PropertyKey::String(i.into()), cx.scope)
-                .root(cx.scope)?;
-            let k = item
-                .get_property(PropertyKey::String(sym::zero.into()), cx.scope)
-                .root(cx.scope)?;
-            let v = item
-                .get_property(PropertyKey::String(sym::one.into()), cx.scope)
-                .root(cx.scope)?;
+            let item = iter.get_property(i.to_key(cx.scope), cx.scope).root(cx.scope)?;
+            let k = item.get_property(sym::zero.to_key(cx.scope), cx.scope).root(cx.scope)?;
+            let v = item.get_property(sym::one.to_key(cx.scope), cx.scope).root(cx.scope)?;
             map.set(k, v);
         }
     }

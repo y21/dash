@@ -12,7 +12,7 @@ use crate::value::function::native::CallContext;
 use crate::value::object::{NamedObject, Object as _, PropertyValue};
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::ops::equality::strict_eq;
-use crate::value::propertykey::PropertyKey;
+use crate::value::propertykey::ToPropertyKey;
 use crate::value::root_ext::RootErrExt;
 use crate::value::string::JsString;
 use crate::value::{Root, Unpack, Value, ValueContext, array};
@@ -46,8 +46,7 @@ fn join_inner(sc: &mut LocalScope, array: Value, separator: JsString) -> Result<
             result.push_str(separator.res(sc));
         }
 
-        let i = sc.intern_usize(i);
-        let element = array.get_property(i.into(), sc).root(sc)?;
+        let element = array.get_property(i.to_key(sc), sc).root(sc)?;
         if !element.is_nullish() {
             let s = element.to_js_string(sc)?;
             result.push_str(s.res(sc));
@@ -64,8 +63,7 @@ fn for_each_element<B>(
 ) -> Result<ControlFlow<B>, Value> {
     let len = this.length_of_array_like(scope)?;
     for k in 0..len {
-        let pk = scope.intern_usize(k);
-        if let Some(value) = this.get_property_descriptor(pk.into(), scope).root_err(scope)? {
+        if let Some(value) = this.get_property_descriptor(k.to_key(scope), scope).root_err(scope)? {
             let value = value.get_or_apply(scope, This::Bound(this)).root(scope)?;
             if let Break(value) = f(scope, value, Value::number(k as f64))? {
                 return Ok(Break(value));
@@ -103,8 +101,8 @@ pub fn at(cx: CallContext) -> Result<Value, Value> {
         return Ok(Value::undefined());
     }
 
-    let index = cx.scope.intern_usize(index as usize);
-    this.get_property(index.into(), cx.scope).root(cx.scope)
+    this.get_property((index as usize).to_key(cx.scope), cx.scope)
+        .root(cx.scope)
 }
 
 pub fn concat(cx: CallContext) -> Result<Value, Value> {
@@ -115,13 +113,12 @@ pub fn concat(cx: CallContext) -> Result<Value, Value> {
     for arg in &cx.args {
         let len = arg.length_of_array_like(cx.scope)?;
         for i in 0..len {
-            let i = cx.scope.intern_usize(i);
-            let element = arg.get_property(i.into(), cx.scope).root(cx.scope)?;
+            let element = arg.get_property(i.to_key(cx.scope), cx.scope).root(cx.scope)?;
             array.push(PropertyValue::static_default(element));
         }
     }
 
-    let array = Array::from_vec(cx.scope, array);
+    let array = Array::from_vec(array, cx.scope);
 
     Ok(cx.scope.register(array).into())
 }
@@ -235,7 +232,7 @@ pub fn filter(cx: CallContext) -> Result<Value, Value> {
         Ok(Continue(()))
     })?;
 
-    let values = Array::from_vec(cx.scope, values);
+    let values = Array::from_vec(values, cx.scope);
 
     Ok(cx.scope.register(values).into())
 }
@@ -251,20 +248,19 @@ pub fn reduce(cx: CallContext) -> Result<Value, Value> {
         (0, Some(_)) => return Ok(initial_value.unwrap()),
         (_, Some(initial)) => (0, initial),
         (1, None) => {
-            let pkv = this.get_property(sym::zero.into(), cx.scope).root(cx.scope)?;
+            let pkv = this.get_property(sym::zero.to_key(cx.scope), cx.scope).root(cx.scope)?;
             return Ok(pkv);
         }
         (_, None) => {
-            let pkv = this.get_property(sym::zero.into(), cx.scope).root(cx.scope)?;
-            let pkv2 = this.get_property(sym::one.into(), cx.scope).root(cx.scope)?;
+            let pkv = this.get_property(sym::zero.to_key(cx.scope), cx.scope).root(cx.scope)?;
+            let pkv2 = this.get_property(sym::one.to_key(cx.scope), cx.scope).root(cx.scope)?;
             let args = [pkv, pkv2, Value::number(1_f64)].into();
             (2, callback.apply(This::Default, args, cx.scope).root(cx.scope)?)
         }
     };
 
     for k in start..len {
-        let pk = cx.scope.intern_usize(k);
-        let pkv = this.get_property(pk.into(), cx.scope).root(cx.scope)?;
+        let pkv = this.get_property(k.to_key(cx.scope), cx.scope).root(cx.scope)?;
         let args = [accumulator, pkv, Value::number(k as f64), this].into();
         accumulator = callback.apply(This::Default, args, cx.scope).root(cx.scope)?;
     }
@@ -352,8 +348,7 @@ pub fn includes(cx: CallContext) -> Result<Value, Value> {
     let search_element = cx.args.first().unwrap_or_undefined();
 
     for k in 0..len {
-        let pk = cx.scope.intern_usize(k);
-        let pkv = this.get_property(pk.into(), cx.scope).root(cx.scope)?;
+        let pkv = this.get_property(k.to_key(cx.scope), cx.scope).root(cx.scope)?;
         if strict_eq(pkv, search_element) {
             return Ok(true.into());
         }
@@ -384,8 +379,7 @@ pub fn index_of(cx: CallContext) -> Result<Value, Value> {
     };
 
     for k in from_index..len {
-        let pk = cx.scope.intern_usize(k);
-        let pkv = this.get_property(pk.into(), cx.scope).root(cx.scope)?;
+        let pkv = this.get_property(k.to_key(cx.scope), cx.scope).root(cx.scope)?;
         if strict_eq(pkv, search_element) {
             return Ok(Value::number(k as f64));
         }
@@ -416,8 +410,7 @@ pub fn last_index_of(cx: CallContext) -> Result<Value, Value> {
     };
 
     for k in (0..=from_index).rev() {
-        let pk = cx.scope.intern_usize(k);
-        let pkv = this.get_property(pk.into(), cx.scope).root(cx.scope)?;
+        let pkv = this.get_property(k.to_key(cx.scope), cx.scope).root(cx.scope)?;
         if strict_eq(pkv, search_element) {
             return Ok(Value::number(k as f64));
         }
@@ -443,7 +436,7 @@ pub fn map(cx: CallContext) -> Result<Value, Value> {
         Ok(Continue(()))
     })?;
 
-    let values = Array::from_vec(cx.scope, values);
+    let values = Array::from_vec(values, cx.scope);
 
     Ok(cx.scope.register(values).into())
 }
@@ -457,10 +450,9 @@ pub fn pop(cx: CallContext) -> Result<Value, Value> {
     }
 
     let new_len = len - 1;
-    let new_len_sym = cx.scope.intern_usize(len - 1);
-    let value = this.delete_property(new_len_sym.into(), cx.scope)?.root(cx.scope);
+    let value = this.delete_property(new_len.to_key(cx.scope), cx.scope)?.root(cx.scope);
     this.set_property(
-        sym::length.into(),
+        sym::length.to_key(cx.scope),
         PropertyValue::static_default(Value::number(new_len as f64)),
         cx.scope,
     )?;
@@ -475,8 +467,11 @@ pub fn push(cx: CallContext) -> Result<Value, Value> {
     let mut last = Value::undefined();
 
     if cx.args.is_empty() {
-        let len = cx.scope.intern_usize(len);
-        this.set_property(len.into(), PropertyValue::static_default(Value::undefined()), cx.scope)?;
+        this.set_property(
+            len.to_key(cx.scope),
+            PropertyValue::static_default(Value::undefined()),
+            cx.scope,
+        )?;
     }
 
     for (idx, arg) in cx.args.into_iter().enumerate() {
@@ -493,12 +488,11 @@ pub fn reverse(cx: CallContext) -> Result<Value, Value> {
 
     // Strategy: Given [1,2,3,4,5], swap `i` with `len - i - 1` for every index `i` in `0..len / 2`
     for k in 0..len / 2 {
-        let pk = cx.scope.intern_usize(k);
-        let pkv = this.get_property(pk.into(), cx.scope).root(cx.scope)?;
-        let pk2 = cx.scope.intern_usize(len - k - 1);
-        let pk2v = this.get_property(pk2.into(), cx.scope).root(cx.scope)?;
-        this.set_property(pk.into(), PropertyValue::static_default(pk2v), cx.scope)?;
-        this.set_property(pk2.into(), PropertyValue::static_default(pkv), cx.scope)?;
+        let pkv = this.get_property(k.to_key(cx.scope), cx.scope).root(cx.scope)?;
+        let k2 = len - k - 1;
+        let pk2v = this.get_property(k2.to_key(cx.scope), cx.scope).root(cx.scope)?;
+        this.set_property(k.to_key(cx.scope), PropertyValue::static_default(pk2v), cx.scope)?;
+        this.set_property(k2.to_key(cx.scope), PropertyValue::static_default(pkv), cx.scope)?;
     }
 
     Ok(this)
@@ -512,17 +506,18 @@ pub fn shift(cx: CallContext) -> Result<Value, Value> {
         return Ok(Value::undefined());
     }
 
-    let prop = this.delete_property(sym::zero.into(), cx.scope)?.root(cx.scope);
+    let prop = this
+        .delete_property(sym::zero.to_key(cx.scope), cx.scope)?
+        .root(cx.scope);
 
     for k in 1..len {
-        let pk = cx.scope.intern_usize(k);
-        let prev_pk = cx.scope.intern_usize(k - 1);
-        let pkv = this.get_property(pk.into(), cx.scope).root(cx.scope)?;
-        this.set_property(prev_pk.into(), PropertyValue::static_default(pkv), cx.scope)?;
+        let prev_pk = k - 1;
+        let pkv = this.get_property(k.to_key(cx.scope), cx.scope).root(cx.scope)?;
+        this.set_property(prev_pk.to_key(cx.scope), PropertyValue::static_default(pkv), cx.scope)?;
     }
 
     this.set_property(
-        sym::length.into(),
+        sym::length.to_key(cx.scope),
         PropertyValue::static_default(Value::number((len - 1) as f64)),
         cx.scope,
     )?;
@@ -552,7 +547,7 @@ fn shift_array(
     // Technically this isn't needed, and we can just let the array grow as needed, but this is for clarity
     if range.end + shift_by > len as isize {
         arr.set_property(
-            sym::length.into(),
+            sym::length.to_key(scope),
             PropertyValue::static_default(Value::number(new_len as f64)),
             scope,
         )?;
@@ -562,15 +557,15 @@ fn shift_array(
     for k in range {
         let pk = scope.intern_isize(k);
         let shift_pk = scope.intern_isize(k + shift_by);
-        let pkv = arr.get_property(pk.into(), scope).root(scope)?;
-        arr.set_property(shift_pk.into(), PropertyValue::static_default(pkv), scope)?;
+        let pkv = arr.get_property(pk.to_key(scope), scope).root(scope)?;
+        arr.set_property(shift_pk.to_key(scope), PropertyValue::static_default(pkv), scope)?;
     }
 
     // If the shift_by is negative, we need to delete the remaining elements at the end that were shifted
     // This must be done after the shifting, otherwise we would be deleting elements before they can be shifted
     if shift_by < 0 {
         arr.set_property(
-            sym::length.into(),
+            sym::length.to_key(scope),
             PropertyValue::static_default(Value::number(new_len as f64)),
             scope,
         )?;
@@ -588,8 +583,7 @@ pub fn unshift(cx: CallContext) -> Result<Value, Value> {
     shift_array(cx.scope, &this, len, arg_len as isize, 0..len)?;
 
     for (idx, arg) in cx.args.into_iter().enumerate() {
-        let idx = cx.scope.intern_usize(idx);
-        this.set_property(idx.into(), PropertyValue::static_default(arg), cx.scope)?;
+        this.set_property(idx.to_key(cx.scope), PropertyValue::static_default(arg), cx.scope)?;
     }
 
     Ok(Value::number(new_len as f64))
@@ -624,12 +618,11 @@ pub fn slice(cx: CallContext) -> Result<Value, Value> {
     let mut values = Vec::new();
 
     for k in start..end {
-        let pk = cx.scope.intern_usize(k);
-        let pkv = this.get_property(pk.into(), cx.scope).root(cx.scope)?;
+        let pkv = this.get_property(k.to_key(cx.scope), cx.scope).root(cx.scope)?;
         values.push(PropertyValue::static_default(pkv));
     }
 
-    let values = Array::from_vec(cx.scope, values);
+    let values = Array::from_vec(values, cx.scope);
 
     Ok(cx.scope.register(values).into())
 }
@@ -650,14 +643,17 @@ pub fn for_each_js_iterator_element<B, F: FnMut(&mut LocalScope<'_>, Value) -> R
     iter: Value,
     mut f: F,
 ) -> Result<ControlFlow<B>, Value> {
-    let next = iter.get_property(sym::next.into(), scope).root(scope)?;
+    let next = iter.get_property(sym::next.to_key(scope), scope).root(scope)?;
     loop {
         let item = next.apply(This::Bound(iter), CallArgs::empty(), scope).root(scope)?;
-        let done = item.get_property(sym::done.into(), scope).root(scope)?.is_truthy(scope);
+        let done = item
+            .get_property(sym::done.to_key(scope), scope)
+            .root(scope)?
+            .is_truthy(scope);
         if done {
             break;
         }
-        let value = item.get_property(sym::value.into(), scope).root(scope)?;
+        let value = item.get_property(sym::value.to_key(scope), scope).root(scope)?;
         if let Break(val) = f(scope, value)? {
             return Ok(Break(val));
         }
@@ -679,7 +675,7 @@ pub fn from(cx: CallContext) -> Result<Value, Value> {
             Ok(ControlFlow::<Infallible, _>::Continue(()))
         })?;
 
-        let values = Array::from_vec(scope, values);
+        let values = Array::from_vec(values, scope);
         Ok(Value::object(scope.register(values)))
     }
 
@@ -689,8 +685,7 @@ pub fn from(cx: CallContext) -> Result<Value, Value> {
         let mut values = Vec::new();
 
         for i in 0..len {
-            let i = scope.intern_usize(i);
-            let value = items.get_property(i.into(), scope).root(scope)?;
+            let value = items.get_property(i.to_key(scope), scope).root(scope)?;
             let value = match &mapper {
                 Some(mapper) => mapper.apply(This::Default, [value].into(), scope).root(scope)?,
                 None => value,
@@ -698,7 +693,7 @@ pub fn from(cx: CallContext) -> Result<Value, Value> {
             values.push(PropertyValue::static_default(value));
         }
 
-        let values = Array::from_vec(scope, values);
+        let values = Array::from_vec(values, scope);
         Ok(Value::object(scope.register(values)))
     }
 
@@ -710,7 +705,7 @@ pub fn from(cx: CallContext) -> Result<Value, Value> {
     let items_iterator = {
         let iterator = cx.scope.statics.symbol_iterator;
         items
-            .get_property(iterator.into(), cx.scope)
+            .get_property(iterator.to_key(cx.scope), cx.scope)
             .root(cx.scope)?
             .into_option()
     };
@@ -745,19 +740,23 @@ pub fn sort(cx: CallContext) -> Result<Value, Value> {
 
     for i in 1..len {
         for j in (1..=i).rev() {
-            let idx = cx.scope.intern_usize(j);
-            let prev_idx = cx.scope.intern_usize(j - 1);
+            let idx = j;
+            let prev_idx = j - 1;
 
-            let previous = this.get_property(prev_idx.into(), cx.scope).root(cx.scope)?;
-            let current = this.get_property(idx.into(), cx.scope).root(cx.scope)?;
+            let previous = this.get_property(prev_idx.to_key(cx.scope), cx.scope).root(cx.scope)?;
+            let current = this.get_property(idx.to_key(cx.scope), cx.scope).root(cx.scope)?;
             let ordering = compare_fn
                 .apply(This::Default, [previous, current].into(), cx.scope)
                 .root(cx.scope)?
                 .to_int32(cx.scope)?;
 
             if ordering > 0 {
-                this.set_property(prev_idx.into(), PropertyValue::static_default(current), cx.scope)?;
-                this.set_property(idx.into(), PropertyValue::static_default(previous), cx.scope)?;
+                this.set_property(
+                    prev_idx.to_key(cx.scope),
+                    PropertyValue::static_default(current),
+                    cx.scope,
+                )?;
+                this.set_property(idx.to_key(cx.scope), PropertyValue::static_default(previous), cx.scope)?;
             } else {
                 break;
             }
@@ -787,10 +786,10 @@ pub fn splice(mut cx: CallContext) -> Result<Value, Value> {
     require_valid_array_length(cx.scope, delete_count)?;
     let mut values = Vec::with_capacity(delete_count);
     for k in 0..delete_count {
-        let from = cx.scope.intern_usize(start + k);
+        let from = start + k;
 
         if let Some(delete_value) = this
-            .get_property_descriptor(PropertyKey::String(from.into()), cx.scope)
+            .get_property_descriptor(from.to_key(cx.scope), cx.scope)
             .root_err(cx.scope)?
         {
             values.push(delete_value);
@@ -800,12 +799,8 @@ pub fn splice(mut cx: CallContext) -> Result<Value, Value> {
     if item_count <= delete_count {
         // Since we delete more than we insert, overwrite elements at the delete index
         for (i, value) in cx.args.iter().skip(2).enumerate() {
-            let i = cx.scope.intern_usize(i + start);
-            this.set_property(
-                PropertyKey::String(i.into()),
-                PropertyValue::static_default(*value),
-                cx.scope,
-            )?;
+            let i = i + start;
+            this.set_property(i.to_key(cx.scope), PropertyValue::static_default(*value), cx.scope)?;
         }
 
         // Now shift the rest to the left and update the length
@@ -831,14 +826,10 @@ pub fn splice(mut cx: CallContext) -> Result<Value, Value> {
         )?;
 
         for (i, value) in cx.args.iter().skip(2).enumerate() {
-            let i = cx.scope.intern_usize(i + start);
-            this.set_property(
-                PropertyKey::String(i.into()),
-                PropertyValue::static_default(*value),
-                cx.scope,
-            )?;
+            let i = i + start;
+            this.set_property(i.to_key(cx.scope), PropertyValue::static_default(*value), cx.scope)?;
         }
     }
 
-    Ok(cx.scope.register(Array::from_vec(cx.scope, values)).into())
+    Ok(cx.scope.register(Array::from_vec(values, cx.scope)).into())
 }

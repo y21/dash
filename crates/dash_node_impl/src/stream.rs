@@ -7,6 +7,7 @@ use dash_vm::value::Value;
 use dash_vm::value::function::native::register_native_fn;
 use dash_vm::value::function::{Function, FunctionKind};
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
+use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::{delegate, extract};
 
 use crate::state::state_mut;
@@ -46,11 +47,15 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
 
     let readable_fn = register_native_fn(sc, readable_sym, |_sc| Ok(Value::undefined()));
     stream_ctor.set_property(
-        readable_sym.into(),
+        readable_sym.to_key(sc),
         PropertyValue::static_default(readable_fn.into()),
         sc,
     )?;
-    stream_ctor.set_property(stream_sym.into(), PropertyValue::static_default(stream_ctor.into()), sc)?;
+    stream_ctor.set_property(
+        stream_sym.to_key(sc),
+        PropertyValue::static_default(stream_ctor.into()),
+        sc,
+    )?;
 
     State::from_vm_mut(sc).store.insert(StreamKey, StreamState {
         stream_prototype,

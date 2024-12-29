@@ -13,6 +13,7 @@ use dash_vm::value::function::{Function, FunctionKind};
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::primitive::Number;
+use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::typedarray::{TypedArray, TypedArrayKind};
 use dash_vm::value::{ExceptionContext, Root, Unpack, Value, ValueKind};
 use dash_vm::{delegate, extract, throw};
@@ -39,8 +40,8 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     };
     let wu32be = register_native_fn(sc, wu32be_sym, |cx| write_byte(cx, Endianness::Big, 4));
     let wu32le = register_native_fn(sc, wu32le_sym, |cx| write_byte(cx, Endianness::Little, 4));
-    buffer_prototype.set_property(wu32be_sym.into(), PropertyValue::static_default(wu32be.into()), sc)?;
-    buffer_prototype.set_property(wu32le_sym.into(), PropertyValue::static_default(wu32le.into()), sc)?;
+    buffer_prototype.set_property(wu32be_sym.to_key(sc), PropertyValue::static_default(wu32be.into()), sc)?;
+    buffer_prototype.set_property(wu32le_sym.to_key(sc), PropertyValue::static_default(wu32le.into()), sc)?;
 
     let buffer_ctor = Function::new(
         sc,
@@ -52,9 +53,13 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
 
     let from_fn = register_native_fn(sc, sym::from, from);
     let alloc_fn = register_native_fn(sc, alloc_sym, alloc);
-    buffer_ctor.set_property(sym::from.into(), PropertyValue::static_default(from_fn.into()), sc)?;
-    buffer_ctor.set_property(buffer_sym.into(), PropertyValue::static_default(buffer_ctor.into()), sc)?;
-    buffer_ctor.set_property(alloc_sym.into(), PropertyValue::static_default(alloc_fn.into()), sc)?;
+    buffer_ctor.set_property(sym::from.to_key(sc), PropertyValue::static_default(from_fn.into()), sc)?;
+    buffer_ctor.set_property(
+        buffer_sym.to_key(sc),
+        PropertyValue::static_default(buffer_ctor.into()),
+        sc,
+    )?;
+    buffer_ctor.set_property(alloc_sym.to_key(sc), PropertyValue::static_default(alloc_fn.into()), sc)?;
 
     State::from_vm_mut(sc).store.insert(BufferKey, BufferState {
         buffer_prototype,
@@ -148,9 +153,8 @@ fn from(cx: CallContext) -> Result<Value, Value> {
     let length = source.length_of_array_like(cx.scope)?;
     let mut buf = Vec::with_capacity(length);
     for i in 0..length {
-        let i = cx.scope.intern_usize(i);
         let item = source
-            .get_property(i.into(), cx.scope)
+            .get_property(i.to_key(cx.scope), cx.scope)
             .root(cx.scope)?
             .to_number(cx.scope)? as u8;
         buf.push(Cell::new(item));

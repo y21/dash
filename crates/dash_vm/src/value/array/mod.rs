@@ -18,7 +18,7 @@ use super::function::args::CallArgs;
 use super::object::{NamedObject, Object, PropertyValue, PropertyValueKind};
 use super::ops::conversions::ValueConversion;
 use super::primitive::array_like_keys;
-use super::propertykey::PropertyKey;
+use super::propertykey::{PropertyKey, ToPropertyKey};
 use super::root_ext::RootErrExt;
 use super::{Root, Unpack, Unrooted, Value};
 
@@ -168,7 +168,7 @@ impl Array {
     }
 
     /// Creates a non-holey array from a vec of values
-    pub fn from_vec(vm: &Vm, items: Vec<PropertyValue>) -> Self {
+    pub fn from_vec(items: Vec<PropertyValue>, vm: &Vm) -> Self {
         Self {
             items: RefCell::new(ArrayInner::Dense(items)),
             obj: get_named_object(vm),
@@ -220,71 +220,58 @@ impl Object for Array {
     ) -> Result<Option<PropertyValue>, Unrooted> {
         let items = self.items.borrow();
 
-        if let PropertyKey::String(key) = &key {
-            if key.sym() == sym::length {
-                return Ok(Some(PropertyValue {
-                    kind: PropertyValueKind::Static(Value::number(items.len() as f64)),
-                    descriptor: PropertyDataDescriptor::WRITABLE,
-                }));
-            }
-
-            if let Ok(index) = key.res(sc).parse::<u32>() {
-                if index < MAX_LENGTH {
-                    if let Some(element) = items.get(index) {
-                        match element {
-                            MaybeHoley::Some(v) => return Ok(Some(v)),
-                            MaybeHoley::Hole => return Ok(None),
-                        }
+        if let Some(index) = key.index() {
+            if index < MAX_LENGTH {
+                if let Some(element) = items.get(index) {
+                    match element {
+                        MaybeHoley::Some(v) => return Ok(Some(v)),
+                        MaybeHoley::Hole => return Ok(None),
                     }
                 }
             }
+        } else if let Some(sym::length) = key.to_js_string(sc) {
+            return Ok(Some(PropertyValue {
+                kind: PropertyValueKind::Static(Value::number(items.len() as f64)),
+                descriptor: PropertyDataDescriptor::WRITABLE,
+            }));
         }
 
         self.obj.get_property_descriptor(key, sc)
     }
 
     fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
-        if let PropertyKey::String(key) = &key {
-            if key.sym() == sym::length {
-                // TODO: this shouldnt be undefined
-                let value = value.kind().get_or_apply(sc, This::Default).root(sc)?;
-                if let Ok(new_len) = u32::try_from(value.to_number(sc)? as usize) {
-                    self.items.borrow_mut().resize(new_len);
-                    return Ok(());
-                }
+        if let Some(index) = key.index() {
+            if index < MAX_LENGTH {
+                self.items.borrow_mut().set(index, value);
 
-                throw!(sc, RangeError, "Invalid array length")
+                return Ok(());
+            }
+        } else if let Some(sym::length) = key.to_js_string(sc) {
+            let value = value.kind().get_or_apply(sc, This::Default).root(sc)?;
+            if let Ok(new_len) = u32::try_from(value.to_number(sc)? as usize) {
+                self.items.borrow_mut().resize(new_len);
+                return Ok(());
             }
 
-            if let Ok(index) = key.res(sc).parse::<u32>() {
-                if index < MAX_LENGTH {
-                    self.items.borrow_mut().set(index, value);
-
-                    return Ok(());
-                }
-            }
+            throw!(sc, RangeError, "Invalid array length")
         }
 
         self.obj.set_property(key, value, sc)
     }
 
     fn delete_property(&self, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Value> {
-        if let PropertyKey::String(key) = &key {
-            if key.sym() == sym::length {
-                return Ok(Unrooted::new(Value::undefined()));
-            }
-
-            if let Ok(index) = key.res(sc).parse::<u32>() {
-                if index < MAX_LENGTH {
-                    let mut items = self.items.borrow_mut();
-                    match items.delete(index) {
-                        Some(MaybeHoley::Some(value)) => {
-                            return value.get_or_apply(sc, This::Default).root_err(sc);
-                        }
-                        Some(MaybeHoley::Hole) | None => return Ok(Value::undefined().into()),
+        if let Some(index) = key.index() {
+            if index < MAX_LENGTH {
+                let mut items = self.items.borrow_mut();
+                match items.delete(index) {
+                    Some(MaybeHoley::Some(value)) => {
+                        return value.get_or_apply(sc, This::Default).root_err(sc);
                     }
+                    Some(MaybeHoley::Hole) | None => return Ok(Value::undefined().into()),
                 }
             }
+        } else if let Some(sym::length) = key.to_js_string(sc) {
+            return Ok(Unrooted::new(Value::undefined()));
         }
 
         self.obj.delete_property(key, sc)
@@ -380,8 +367,7 @@ impl ArrayIterator {
 
         if index < self.length {
             self.index.set(index + 1);
-            let index = sc.intern_usize(index);
-            self.value.get_property(index.into(), sc).map(Some)
+            self.value.get_property(index.to_key(sc), sc).map(Some)
         } else {
             Ok(None)
         }
@@ -410,8 +396,7 @@ pub fn spec_array_get_property(scope: &mut LocalScope<'_>, target: &Value, index
         }
     }
 
-    let index = scope.intern_usize(index);
-    match target.get_property(index.into(), scope) {
+    match target.get_property(index.to_key(scope), scope) {
         Ok(v) => Ok(v),
         Err(v) => Ok(v),
     }
@@ -436,6 +421,5 @@ pub fn spec_array_set_property(
         }
     }
 
-    let index = scope.intern_usize(index);
-    target.set_property(index.into(), value, scope)
+    target.set_property(index.to_key(scope), value, scope)
 }

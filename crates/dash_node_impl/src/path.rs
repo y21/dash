@@ -6,6 +6,7 @@ use dash_vm::throw;
 use dash_vm::value::function::native::{CallContext, register_native_fn};
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
+use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::{ExceptionContext, Unpack, Value, ValueKind};
 
 use crate::state::state_mut;
@@ -15,8 +16,16 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     let parse_sym = state_mut(sc).sym.parse;
     let parse_path = register_native_fn(sc, parse_sym, parse_path);
     let join_path = register_native_fn(sc, sym::join, join_path);
-    exports.set_property(parse_sym.into(), PropertyValue::static_default(parse_path.into()), sc)?;
-    exports.set_property(sym::join.into(), PropertyValue::static_default(join_path.into()), sc)?;
+    exports.set_property(
+        parse_sym.to_key(sc),
+        PropertyValue::static_default(parse_path.into()),
+        sc,
+    )?;
+    exports.set_property(
+        sym::join.to_key(sc),
+        PropertyValue::static_default(join_path.into()),
+        sc,
+    )?;
 
     Ok(sc.register(exports).into())
 }
@@ -38,7 +47,7 @@ fn parse_path(cx: CallContext) -> Result<Value, Value> {
     let object = cx.scope.register(object);
     let dir_sym = state_mut(cx.scope).sym.dir;
     object.set_property(
-        dir_sym.into(),
+        dir_sym.to_key(cx.scope),
         PropertyValue::static_default(Value::string(dir.into())),
         cx.scope,
     )?;

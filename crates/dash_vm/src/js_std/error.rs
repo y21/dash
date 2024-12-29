@@ -4,6 +4,7 @@ use crate::value::error::{
 use crate::value::function::native::CallContext;
 use crate::value::object::NamedObject;
 use crate::value::ops::conversions::ValueConversion;
+use crate::value::propertykey::ToPropertyKey;
 use crate::value::{Root, Value, ValueContext};
 use dash_middle::interner::sym;
 
@@ -49,7 +50,7 @@ pub fn error_constructor(cx: CallContext) -> Result<Value, Value> {
 
 pub fn to_string(cx: CallContext) -> Result<Value, Value> {
     cx.this
-        .get_property(sym::stack.into(), cx.scope)
+        .get_property(sym::stack.to_key(cx.scope), cx.scope)
         .root(cx.scope)
         .and_then(|v| v.to_js_string(cx.scope).map(Value::string))
 }

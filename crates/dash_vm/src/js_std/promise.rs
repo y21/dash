@@ -8,7 +8,7 @@ use crate::value::function::bound::BoundFunction;
 use crate::value::function::native::CallContext;
 use crate::value::object::{NamedObject, Object};
 use crate::value::promise::{Promise, PromiseRejecter, PromiseResolver, PromiseState};
-use crate::value::propertykey::PropertyKey;
+use crate::value::propertykey::ToPropertyKey;
 use crate::value::root_ext::RootErrExt;
 use crate::value::{Root, Typeof, Unpack, Unrooted, Value, ValueContext, ValueKind};
 use crate::{Vm, delegate, extract, throw};
@@ -140,9 +140,7 @@ impl Object for ThenTask {
             .apply(This::Default, [resolved].into(), scope)
             .root(scope)?;
 
-        let ret_then = ret
-            .get_property(PropertyKey::String(sym::then.into()), scope)?
-            .root(scope);
+        let ret_then = ret.get_property(sym::then.to_key(scope), scope)?.root(scope);
 
         match ret_then.unpack() {
             ValueKind::Undefined(..) => {

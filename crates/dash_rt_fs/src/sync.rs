@@ -7,6 +7,7 @@ use dash_vm::value::error::Error;
 use dash_vm::value::function::native::{CallContext, register_native_fn};
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
+use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::typedarray::TypedArray;
 use dash_vm::value::{Value, ValueContext};
 
@@ -18,12 +19,12 @@ pub fn init_module(sc: &mut LocalScope) -> Result<Value, Value> {
 
     let module = NamedObject::new(sc);
     module.set_property(
-        read_file_sync_sym.into(),
+        read_file_sync_sym.to_key(sc),
         PropertyValue::static_default(Value::object(read_file_sync_value)),
         sc,
     )?;
     module.set_property(
-        write_file_sync_sym.into(),
+        write_file_sync_sym.to_key(sc),
         PropertyValue::static_default(Value::object(write_file_sync_value)),
         sc,
     )?;

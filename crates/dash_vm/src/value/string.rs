@@ -31,6 +31,10 @@ impl PartialEq<Symbol> for JsString {
 }
 
 impl JsString {
+    pub const fn from_sym(sym: Symbol) -> Self {
+        Self { sym }
+    }
+
     pub fn sym(self) -> Symbol {
         self.sym
     }
@@ -81,18 +85,16 @@ impl Object for JsString {
         key: PropertyKey,
         sc: &mut LocalScope,
     ) -> Result<Option<PropertyValue>, Unrooted> {
-        if let PropertyKey::String(st) = key {
-            if st.sym() == sym::length {
-                return Ok(Some(PropertyValue::static_empty(Value::number(self.len(sc) as f64))));
-            }
+        // TODO: method for unpacking into either string or numeric
 
-            if let Ok(index) = st.res(sc).parse::<usize>() {
-                let bytes = self.res(sc).as_bytes();
-                if let Some(&byte) = bytes.get(index) {
-                    let s = sc.intern((byte as char).to_string().as_ref());
-                    return Ok(Some(PropertyValue::static_non_enumerable(Value::string(s.into()))));
-                }
+        if let Some(index) = key.index_usize() {
+            let bytes = self.res(sc).as_bytes();
+            if let Some(&byte) = bytes.get(index) {
+                let s = sc.intern((byte as char).to_string().as_ref());
+                return Ok(Some(PropertyValue::static_non_enumerable(Value::string(s.into()))));
             }
+        } else if let Some(sym::length) = key.to_js_string(sc) {
+            return Ok(Some(PropertyValue::static_empty(Value::number(self.len(sc) as f64))));
         }
 
         Ok(None)

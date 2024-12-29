@@ -8,6 +8,7 @@ use dash_vm::eval::EvalError;
 use dash_vm::params::VmParams;
 use dash_vm::value::function::native::register_native_fn;
 use dash_vm::value::object::{Object, PropertyValue};
+use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::string::JsString;
 use dash_vm::value::{Root, Unpack, Unrooted, Value, ValueKind};
 use dash_vm::{Vm, throw};
@@ -76,10 +77,10 @@ impl Runtime {
         });
 
         global
-            .get_property(sym::console.into(), scope)
+            .get_property(sym::console.to_key(scope), scope)
             .root(scope)
             .unwrap()
-            .set_property(sym::log.into(), PropertyValue::static_default(log.into()), scope)
+            .set_property(sym::log.to_key(scope), PropertyValue::static_default(log.into()), scope)
             .unwrap();
     }
 

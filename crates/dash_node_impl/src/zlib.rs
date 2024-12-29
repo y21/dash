@@ -6,6 +6,7 @@ use dash_vm::localscope::LocalScope;
 use dash_vm::value::Value;
 use dash_vm::value::function::{Function, FunctionKind};
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
+use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::{delegate, extract};
 
 use crate::state::state_mut;
@@ -42,7 +43,7 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
 
     let exports = sc.register(NamedObject::new(sc));
     exports.set_property(
-        inflate_sym.into(),
+        inflate_sym.to_key(sc),
         PropertyValue::static_default(inflate_ctor.into()),
         sc,
     )?;

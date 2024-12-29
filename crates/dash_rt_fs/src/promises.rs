@@ -5,6 +5,7 @@ use dash_vm::value::function::native::CallContext;
 use dash_vm::value::function::{Function, FunctionKind};
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
+use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::{Value, ValueContext};
 
 pub fn init_module(sc: &mut LocalScope) -> Result<Value, Value> {
@@ -14,7 +15,7 @@ pub fn init_module(sc: &mut LocalScope) -> Result<Value, Value> {
 
     let module = NamedObject::new(sc);
     module.set_property(
-        name.into(),
+        name.to_key(sc),
         PropertyValue::static_default(Value::object(read_file_value)),
         sc,
     )?;

@@ -331,7 +331,7 @@ pub fn split(cx: CallContext) -> Result<Value, Value> {
             .collect()
     };
 
-    let array = Array::from_vec(cx.scope, result);
+    let array = Array::from_vec(result, cx.scope);
     Ok(cx.scope.register(array).into())
 }
 
@@ -475,7 +475,7 @@ pub fn iterator(cx: CallContext) -> Result<Value, Value> {
         .map(Value::string)
         .map(PropertyValue::static_default)
         .collect::<Vec<_>>();
-    let chars = Array::from_vec(cx.scope, chars);
+    let chars = Array::from_vec(chars, cx.scope);
     let chars = cx.scope.register(chars);
     let iter = ArrayIterator::new(cx.scope, Value::object(chars))?;
     let iter = cx.scope.register(iter);

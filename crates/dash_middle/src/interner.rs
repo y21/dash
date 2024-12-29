@@ -390,9 +390,14 @@ impl StringInterner {
     }
 
     pub fn intern_isize(&mut self, val: isize) -> Symbol {
-        // for now this just calls `intern`, but we might want to specialize this
-        let string = val.to_string();
-        self.intern(string.as_ref())
+        if val >= 0 {
+            // fast path
+            self.intern_usize(val as usize)
+        } else {
+            // for now this just calls `intern`, but we might want to specialize this
+            let string = val.to_string();
+            self.intern(string.as_ref())
+        }
     }
 
     pub fn intern_char(&mut self, val: char) -> Symbol {

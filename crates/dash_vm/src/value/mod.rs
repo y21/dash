@@ -26,6 +26,7 @@ use dash_middle::interner::{self, sym};
 use dash_middle::util::ThreadSafeStorage;
 use dash_proc_macro::Trace;
 use function::args::CallArgs;
+use propertykey::ToPropertyKey;
 
 pub mod string;
 use crate::frame::This;
@@ -786,7 +787,7 @@ impl Value {
         }
 
         // Look if self[prototype] == ctor.prototype, repeat for all objects in self's prototype chain
-        let target_proto = ctor.get_property(sym::prototype.into(), sc).root(sc)?;
+        let target_proto = ctor.get_property(sym::prototype.to_key(sc), sc).root(sc)?;
         self.for_each_prototype(sc, |_, proto| {
             Ok(if proto == &target_proto {
                 ControlFlow::Break(())

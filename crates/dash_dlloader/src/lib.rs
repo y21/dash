@@ -9,6 +9,7 @@ use dash_vm::value::function::native::CallContext;
 use dash_vm::value::function::{Function, FunctionKind};
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
+use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::string::JsString;
 use libloading::Library;
 
@@ -27,7 +28,11 @@ impl ModuleLoader for DllModule {
         let load = sc.intern("load");
         let load_sync = Function::new(sc, Some(load.into()), FunctionKind::Native(load_sync));
         let load_sync = sc.register(load_sync);
-        object.set_property(load.into(), PropertyValue::static_default(Value::object(load_sync)), sc)?;
+        object.set_property(
+            load.to_key(sc),
+            PropertyValue::static_default(Value::object(load_sync)),
+            sc,
+        )?;
 
         Ok(Some(Value::object(sc.register(object))))
     }

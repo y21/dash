@@ -14,6 +14,7 @@ use dash_vm::value::function::native::{CallContext, register_native_fn};
 use dash_vm::value::function::{Function, FunctionKind};
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
+use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::root_ext::RootErrExt;
 use dash_vm::value::{Unpack, Value, ValueKind};
 use dash_vm::{delegate, extract, throw};
@@ -36,9 +37,9 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
             handlers: RefCell::new(FxHashMap::default()),
         };
         let on_fn = register_native_fn(sc, on_sym, on);
-        event_emitter_prototype.set_property(on_sym.into(), PropertyValue::static_default(on_fn.into()), sc)?;
+        event_emitter_prototype.set_property(on_sym.to_key(sc), PropertyValue::static_default(on_fn.into()), sc)?;
         let emit_fn = register_native_fn(sc, emit_sym, emit);
-        event_emitter_prototype.set_property(emit_sym.into(), PropertyValue::static_default(emit_fn.into()), sc)?;
+        event_emitter_prototype.set_property(emit_sym.to_key(sc), PropertyValue::static_default(emit_fn.into()), sc)?;
         sc.register(event_emitter_prototype)
     };
 
@@ -72,7 +73,7 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     });
 
     event_emitter_ctor.set_property(
-        event_emitter_sym.into(),
+        event_emitter_sym.to_key(sc),
         PropertyValue::static_default(event_emitter_ctor.into()),
         sc,
     )?;

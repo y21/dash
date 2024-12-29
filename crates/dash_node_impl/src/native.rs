@@ -1,6 +1,7 @@
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::Value;
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
+use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::string::JsString;
 
 use crate::state::state_mut;
@@ -69,6 +70,6 @@ fn init_fs_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     let sync = dash_rt_fs::sync::init_module(sc)?;
     let promises = dash_rt_fs::promises::init_module(sc)?;
     let key = state_mut(sc).sym.promises;
-    sync.set_property(key.into(), PropertyValue::static_default(promises), sc)?;
+    sync.set_property(key.to_key(sc), PropertyValue::static_default(promises), sc)?;
     Ok(sync)
 }

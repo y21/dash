@@ -31,6 +31,7 @@ use localscope::{scope, LocalScopeList};
 use rustc_hash::FxHashMap;
 use value::function::args::CallArgs;
 use value::object::{extract_type, NamedObject};
+use value::propertykey::ToPropertyKey;
 use value::{ExternalValue, PureBuiltin, Unpack, Unrooted, ValueKind};
 
 pub mod dispatch;
@@ -153,7 +154,7 @@ impl Vm {
             // LocalScope needs to be the last parameter because we don't have two phase borrows in user code
             scope: &mut LocalScope<'_>,
         ) -> ObjectId {
-            base.set_property(sym::constructor.into(), PropertyValue::static_non_enumerable(constructor.into()),scope).unwrap();
+            base.set_property(sym::constructor.to_key(scope), PropertyValue::static_non_enumerable(constructor.into()),scope).unwrap();
             base.set_prototype(prototype.into(),scope).unwrap();
 
             for (key, value) in methods {
@@ -167,7 +168,7 @@ impl Vm {
                     None,
                     scope,
                 );
-                base.set_property(key.into(), PropertyValue::static_non_enumerable(value.into()), scope).unwrap();
+                base.set_property(key.to_key(scope), PropertyValue::static_non_enumerable(value.into()), scope).unwrap();
             }
 
             for (key, value) in symbols {
@@ -181,7 +182,7 @@ impl Vm {
                     None,
                     scope,
                 );
-                base.set_property(key.into(), PropertyValue::static_empty(value.into()), scope).unwrap();
+                base.set_property(key.to_key(scope), PropertyValue::static_empty(value.into()), scope).unwrap();
             }
 
             for (key, value, descriptor) in fields {
@@ -189,7 +190,7 @@ impl Vm {
                     kind: PropertyValueKind::Static(value),
                     descriptor: descriptor.unwrap_or_default()
                 };
-                base.set_property(key.into(), value, scope).unwrap();
+                base.set_property(key.to_key(scope), value, scope).unwrap();
             }
 
             if let Some((proto_name, proto_val)) = fn_prototype {

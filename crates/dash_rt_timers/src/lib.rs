@@ -14,6 +14,7 @@ use dash_vm::value::function::args::CallArgs;
 use dash_vm::value::function::native::{CallContext, register_native_fn};
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
+use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::string::JsString;
 use dash_vm::value::{Unpack, Value, ValueKind};
 
@@ -42,7 +43,7 @@ pub fn import(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     let set_timeout = register_native_fn(sc, set_timeout_sym, set_timeout);
 
     obj.set_property(
-        set_timeout_sym.into(),
+        set_timeout_sym.to_key(sc),
         PropertyValue::static_default(set_timeout.into()),
         sc,
     )?;
@@ -50,7 +51,7 @@ pub fn import(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     let set_immediate_sym = sc.intern("setImmediate");
     let set_immediate = register_native_fn(sc, set_immediate_sym, set_immediate);
     obj.set_property(
-        set_immediate_sym.into(),
+        set_immediate_sym.to_key(sc),
         PropertyValue::static_default(set_immediate.into()),
         sc,
     )?;
@@ -83,7 +84,7 @@ fn set_timeout(cx: CallContext) -> Result<Value, Value> {
             let mut sc = rt.vm_mut().scope();
             let callback = callback.get();
 
-            if let Err(err) = callback.apply(&mut sc, This::Default, CallArgs::empty()) {
+            if let Err(err) = callback.apply(This::Default, CallArgs::empty(), &mut sc) {
                 eprintln!("Unhandled error in timer callback: {err:?}");
             }
 
@@ -110,7 +111,7 @@ fn set_immediate(cx: CallContext) -> Result<Value, Value> {
         let callback = callback.get();
         let mut sc = rt.vm_mut().scope();
 
-        if let Err(err) = callback.apply(&mut sc, This::Default, CallArgs::empty()) {
+        if let Err(err) = callback.apply(This::Default, CallArgs::empty(), &mut sc) {
             eprintln!("Unhandled error in timer callback: {err:?}");
         }
     })));

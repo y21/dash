@@ -16,7 +16,7 @@ use dash_vm::value::function::{Function, FunctionKind};
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::promise::Promise;
-use dash_vm::value::propertykey::PropertyKey;
+use dash_vm::value::propertykey::{PropertyKey, ToPropertyKey};
 use dash_vm::value::{Unpack, Unrooted, Value};
 use dash_vm::{PromiseAction, delegate, extract, throw};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -177,7 +177,11 @@ impl TcpListenerHandle {
         let name = sc.intern("accept");
         let accept_fn = Function::new(sc, Some(name.into()), FunctionKind::Native(tcplistener_accept));
         let accept_fn = sc.register(accept_fn);
-        object.set_property(name.into(), PropertyValue::static_default(Value::object(accept_fn)), sc)?;
+        object.set_property(
+            name.to_key(sc),
+            PropertyValue::static_default(Value::object(accept_fn)),
+            sc,
+        )?;
         Ok(Self { object, sender })
     }
 }
@@ -229,7 +233,7 @@ impl TcpStreamHandle {
         let write_fn = Function::new(scope, Some(name.into()), FunctionKind::Native(tcpstream_write));
         let write_fn = scope.register(write_fn);
         object.set_property(
-            name.into(),
+            name.to_key(scope),
             PropertyValue::static_default(Value::object(write_fn)),
             scope,
         )?;
@@ -237,7 +241,7 @@ impl TcpStreamHandle {
         let read_fn = Function::new(scope, Some(name.into()), FunctionKind::Native(tcpstream_read));
         let read_fn = scope.register(read_fn);
         object.set_property(
-            name.into(),
+            name.to_key(scope),
             PropertyValue::static_default(Value::object(read_fn)),
             scope,
         )?;

@@ -89,7 +89,8 @@ impl Object for TypedArray {
         key: PropertyKey,
         sc: &mut LocalScope,
     ) -> Result<Option<PropertyValue>, Unrooted> {
-        if let Some(Ok(index)) = key.as_string().map(|k| k.res(sc).parse::<usize>()) {
+        // TODO: wrong when String no longer stores numbers
+        if let Some(index) = key.index_usize() {
             let arraybuffer = self.arraybuffer(sc);
 
             let bytes = arraybuffer.storage();
@@ -126,7 +127,7 @@ impl Object for TypedArray {
             if let Some(value) = value {
                 return Ok(Some(PropertyValue::static_default(Value::number(value))));
             }
-        } else if key.as_string().is_some_and(|s| s.sym() == sym::length) {
+        } else if key.to_js_string(sc) == Some(sym::length) {
             let len = self.arraybuffer(sc).len();
             // TODO: make this a getter once we support getting the arraybuffer from subclasses
             return Ok(Some(PropertyValue::static_default(Value::number(len as f64))));
@@ -136,7 +137,7 @@ impl Object for TypedArray {
     }
 
     fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
-        if let Some(Ok(index)) = key.as_string().map(|k| k.res(sc).parse::<usize>()) {
+        if let Some(index) = key.index_usize() {
             let arraybuffer = self.arraybuffer.extract::<ArrayBuffer>(sc);
 
             // TODO: not undefined as this

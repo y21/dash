@@ -1,6 +1,7 @@
 use crate::value::array::ArrayIterator;
 use crate::value::function::native::CallContext;
 use crate::value::object::{NamedObject, Object, PropertyValue};
+use crate::value::propertykey::ToPropertyKey;
 use crate::value::{Root, Value, ValueContext};
 use dash_middle::interner::sym;
 
@@ -14,12 +15,12 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
 
     let obj = NamedObject::new(cx.scope);
     obj.set_property(
-        sym::value.into(),
+        sym::value.to_key(cx.scope),
         PropertyValue::static_default(next.unwrap_or_undefined()),
         cx.scope,
     )?;
     obj.set_property(
-        sym::done.into(),
+        sym::done.to_key(cx.scope),
         PropertyValue::static_default(Value::boolean(done)),
         cx.scope,
     )?;

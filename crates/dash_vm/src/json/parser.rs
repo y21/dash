@@ -8,7 +8,7 @@ use crate::localscope::LocalScope;
 use crate::value::Value;
 use crate::value::array::Array;
 use crate::value::object::{NamedObject, ObjectMap, PropertyValue};
-use crate::value::propertykey::PropertyKey;
+use crate::value::propertykey::ToPropertyKey;
 
 /// An error that occurred during parsing JSON
 ///
@@ -172,7 +172,7 @@ impl<'a, 'sc, 'vm> Parser<'a, 'sc, 'vm> {
                     arr.push(PropertyValue::static_default(self.parse()?));
                 }
 
-                let arr = Array::from_vec(self.sc, arr);
+                let arr = Array::from_vec(arr, self.sc);
                 Ok(Value::object(self.sc.register(arr)))
             }
             b'{' => {
@@ -197,7 +197,7 @@ impl<'a, 'sc, 'vm> Parser<'a, 'sc, 'vm> {
                     self.skip_whitespaces(); // spaces
                     self.idx += 1; // :
                     let value = self.parse()?;
-                    obj.insert(PropertyKey::String(key.into()), PropertyValue::static_default(value));
+                    obj.insert(key.to_key(self.sc), PropertyValue::static_default(value));
                 }
 
                 let obj = NamedObject::with_values(self.sc, obj);

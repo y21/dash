@@ -11,6 +11,7 @@ use crate::value::function::args::CallArgs;
 use crate::value::function::native::CallContext;
 use crate::value::object::NamedObject;
 use crate::value::ops::conversions::ValueConversion;
+use crate::value::propertykey::ToPropertyKey;
 use crate::value::typedarray::{TypedArray, TypedArrayKind};
 use crate::value::{Root, Unpack, Value, ValueKind};
 
@@ -40,7 +41,7 @@ fn typedarray_constructor(cx: CallContext, kind: TypedArrayKind) -> Result<Value
         }
 
         if let Some(iterator) = obj
-            .get_property(cx.scope.statics.symbol_iterator.into(), cx.scope)
+            .get_property(cx.scope.statics.symbol_iterator.to_key(cx.scope), cx.scope)
             .root(cx.scope)?
             .into_option()
         {

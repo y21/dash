@@ -8,6 +8,7 @@ use crate::value::function::generator::{GeneratorIterator, GeneratorState};
 use crate::value::function::native::CallContext;
 use crate::value::function::{Function, FunctionKind};
 use crate::value::object::{NamedObject, Object, PropertyValue};
+use crate::value::propertykey::ToPropertyKey;
 use crate::value::root_ext::RootErrExt;
 use crate::value::{Root, Value, ValueContext};
 use dash_middle::interner::sym;
@@ -110,9 +111,13 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
 
 fn create_generator_value(scope: &mut LocalScope, done: bool, value: Option<Value>) -> Result<Value, Value> {
     let obj = NamedObject::new(scope);
-    obj.set_property(sym::done.into(), PropertyValue::static_default(done.into()), scope)?;
     obj.set_property(
-        sym::value.into(),
+        sym::done.to_key(scope),
+        PropertyValue::static_default(done.into()),
+        scope,
+    )?;
+    obj.set_property(
+        sym::value.to_key(scope),
         PropertyValue::static_default(value.unwrap_or_undefined()),
         scope,
     )?;

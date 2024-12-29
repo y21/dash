@@ -19,9 +19,8 @@ use crate::{Vm, extract, throw};
 
 use super::function::args::CallArgs;
 use super::primitive::InternalSlots;
-use super::propertykey::PropertyKey;
+use super::propertykey::{PropertyKey, ToPropertyKey};
 use super::root_ext::RootErrExt;
-use super::string::JsString;
 use super::{Root, Typeof, Unpack, Unrooted, Value, ValueContext, ValueKind};
 
 pub type ObjectMap<K, V> = hashbrown::HashMap<K, V, BuildHasherDefault<FxHasher>>;
@@ -302,18 +301,18 @@ impl PropertyValue {
 
         match self.kind {
             PropertyValueKind::Static(value) => {
-                obj.set_property(sym::value.into(), PropertyValue::static_default(value), sc)?;
+                obj.set_property(sym::value.to_key(sc), PropertyValue::static_default(value), sc)?;
             }
             PropertyValueKind::Trap { get, set } => {
                 let get = get.map(Value::object).unwrap_or_undefined();
                 let set = set.map(Value::object).unwrap_or_undefined();
-                obj.set_property(sym::get.into(), PropertyValue::static_default(get), sc)?;
-                obj.set_property(sym::set.into(), PropertyValue::static_default(set), sc)?;
+                obj.set_property(sym::get.to_key(sc), PropertyValue::static_default(get), sc)?;
+                obj.set_property(sym::set.to_key(sc), PropertyValue::static_default(set), sc)?;
             }
         }
 
         obj.set_property(
-            sym::writable.into(),
+            sym::writable.to_key(sc),
             PropertyValue::static_default(Value::boolean(
                 self.descriptor.contains(PropertyDataDescriptor::WRITABLE),
             )),
@@ -321,7 +320,7 @@ impl PropertyValue {
         )?;
 
         obj.set_property(
-            sym::enumerable.into(),
+            sym::enumerable.to_key(sc),
             PropertyValue::static_default(Value::boolean(
                 self.descriptor.contains(PropertyDataDescriptor::ENUMERABLE),
             )),
@@ -329,7 +328,7 @@ impl PropertyValue {
         )?;
 
         obj.set_property(
-            sym::configurable.into(),
+            sym::configurable.to_key(sc),
             PropertyValue::static_default(Value::boolean(
                 self.descriptor.contains(PropertyDataDescriptor::CONFIGURABLE),
             )),
@@ -341,9 +340,15 @@ impl PropertyValue {
 
     pub fn from_descriptor_value(sc: &mut LocalScope<'_>, value: Value) -> Result<Self, Value> {
         let mut flags = PropertyDataDescriptor::empty();
-        let configurable = value.get_property(sym::configurable.into(), sc).root(sc)?.into_option();
-        let enumerable = value.get_property(sym::enumerable.into(), sc).root(sc)?.into_option();
-        let writable = value.get_property(sym::writable.into(), sc).root(sc)?.into_option();
+        let configurable = value
+            .get_property(sym::configurable.to_key(sc), sc)
+            .root(sc)?
+            .into_option();
+        let enumerable = value
+            .get_property(sym::enumerable.to_key(sc), sc)
+            .root(sc)?
+            .into_option();
+        let writable = value.get_property(sym::writable.to_key(sc), sc).root(sc)?.into_option();
 
         if configurable.is_some_and(|v| v.is_truthy(sc)) {
             flags |= PropertyDataDescriptor::CONFIGURABLE;
@@ -357,12 +362,12 @@ impl PropertyValue {
 
         // TODO: make sure that if value is set, get/set are not
 
-        let static_value = value.get_property(sym::value.into(), sc).root(sc)?.into_option();
+        let static_value = value.get_property(sym::value.to_key(sc), sc).root(sc)?.into_option();
         let kind = match static_value {
             Some(static_value) => PropertyValueKind::Static(static_value),
             None => {
                 let get = value
-                    .get_property(sym::get.into(), sc)
+                    .get_property(sym::get.to_key(sc), sc)
                     .root(sc)?
                     .into_option()
                     .and_then(|v| match v.unpack() {
@@ -370,7 +375,7 @@ impl PropertyValue {
                         _ => None,
                     });
                 let set = value
-                    .get_property(sym::set.into(), sc)
+                    .get_property(sym::set.to_key(sc), sc)
                     .root(sc)?
                     .into_option()
                     .and_then(|v| match v.unpack() {
@@ -464,7 +469,7 @@ impl NamedObject {
     /// Takes a constructor `new_target` and instantiates it
     pub fn instance_for_new_target(new_target: ObjectId, scope: &mut LocalScope) -> Result<Self, Value> {
         let ValueKind::Object(prototype) = new_target
-            .get_property(sym::prototype.into(), scope)
+            .get_property(sym::prototype.to_key(scope), scope)
             .root(scope)?
             .unpack()
         else {
@@ -522,17 +527,15 @@ impl Object for NamedObject {
         key: PropertyKey,
         sc: &mut LocalScope,
     ) -> Result<Option<PropertyValue>, Unrooted> {
-        if let PropertyKey::String(st) = &key {
-            match st.sym() {
-                sym::__proto__ => return Ok(Some(PropertyValue::static_default(self.get_prototype(sc)?))),
-                sym::constructor => {
-                    return Ok(Some(PropertyValue::static_default(
-                        self.constructor.borrow().map(Value::object).unwrap_or_undefined(),
-                    )));
-                }
-                _ => {}
+        match key.to_js_string(sc) {
+            Some(sym::__proto__) => return Ok(Some(PropertyValue::static_default(self.get_prototype(sc)?))),
+            Some(sym::constructor) => {
+                return Ok(Some(PropertyValue::static_default(
+                    self.constructor.borrow().map(Value::object).unwrap_or_undefined(),
+                )));
             }
-        };
+            _ => {}
+        }
 
         let values = self.values.borrow();
         if let Some(value) = values.get(&key).cloned() {
@@ -543,7 +546,7 @@ impl Object for NamedObject {
     }
 
     fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
-        match key.as_string().map(JsString::sym) {
+        match key.to_js_string(sc) {
             Some(sym::__proto__) => {
                 return self.set_prototype(
                     match value.into_kind() {
@@ -644,9 +647,9 @@ impl Object for NamedObject {
         }
     }
 
-    fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         let values = self.values.borrow();
-        Ok(values.keys().map(PropertyKey::as_value).collect())
+        Ok(values.keys().map(|k| k.to_value(sc)).collect())
     }
 
     extract!(self);
@@ -806,15 +809,15 @@ pub enum IntegrityLevel {
 }
 
 impl Persistent {
-    pub fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Unrooted> {
+    pub fn get_property(&self, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Unrooted> {
         self.id().get_property(key, sc)
     }
 
-    pub fn apply(&self, sc: &mut LocalScope, this: This, args: CallArgs) -> Result<Unrooted, Unrooted> {
+    pub fn apply(&self, this: This, args: CallArgs, sc: &mut LocalScope) -> Result<Unrooted, Unrooted> {
         self.id().apply(this, args, sc)
     }
 
-    pub fn construct(&self, sc: &mut LocalScope, this: This, args: CallArgs) -> Result<Unrooted, Unrooted> {
+    pub fn construct(&self, this: This, args: CallArgs, sc: &mut LocalScope) -> Result<Unrooted, Unrooted> {
         self.id().construct(this, args, sc)
     }
 

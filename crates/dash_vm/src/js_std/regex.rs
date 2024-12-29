@@ -120,7 +120,7 @@ pub fn exec(cx: CallContext<'_, '_>) -> Result<Value, Value> {
             })
             .collect();
 
-        let groups = Array::from_vec(cx.scope, groups);
+        let groups = Array::from_vec(groups, cx.scope);
         Ok(Value::object(cx.scope.register(groups)))
     } else {
         if is_global {

@@ -8,7 +8,7 @@ use dash_vm::util::intern_f64;
 use dash_vm::value::array::{Array, ArrayIterator};
 use dash_vm::value::arraybuffer::ArrayBuffer;
 use dash_vm::value::error::Error;
-use dash_vm::value::propertykey::PropertyKey;
+use dash_vm::value::propertykey::{PropertyKey, ToPropertyKey};
 use dash_vm::value::typedarray::TypedArray;
 use dash_vm::value::{Typeof, Unpack, ValueKind};
 
@@ -134,11 +134,11 @@ fn inspect_inner_into(
         }),
         ValueKind::Object(object) => {
             let constructor = object
-                .get_property(sym::constructor.into(), scope)
+                .get_property(sym::constructor.to_key(scope), scope)
                 .root(scope)?
                 .into_option();
             let constructor_name = constructor
-                .map(|c| c.get_property(sym::name.into(), scope))
+                .map(|c| c.get_property(sym::name.to_key(scope), scope))
                 .transpose()
                 .root(scope)?
                 .map(|n| n.to_js_string(scope).map(|s| s.sym()))
@@ -165,7 +165,7 @@ fn inspect_inner_into(
 
             if object.type_of(scope) == Typeof::Function {
                 let name = object
-                    .get_own_property(sym::name.into(), scope)
+                    .get_own_property(sym::name.to_key(scope), scope)
                     .root(scope)?
                     .into_option()
                     .map(|v| v.to_js_string(scope))
@@ -194,23 +194,22 @@ fn inspect_inner_into(
                             *out += ", ";
                         }
 
-                        match key {
-                            PropertyKey::String(string) => {
-                                let string = string.res(scope);
-                                if string.bytes().any(|v| {
-                                    dash_middle::util::is_identifier_start(v) || dash_middle::util::is_alpha(v)
-                                }) {
-                                    *out += string;
-                                } else {
-                                    colored(out, options, GREEN, |s| *s += &*debug_inspect_string(string));
-                                }
+                        if let Some(key) = key.to_js_string(scope) {
+                            let string = scope.interner.resolve(key);
+
+                            if string
+                                .bytes()
+                                .any(|v| dash_middle::util::is_identifier_start(v) || dash_middle::util::is_alpha(v))
+                            {
+                                *out += string;
+                            } else {
+                                colored(out, options, GREEN, |s| *s += &*debug_inspect_string(string));
                             }
-                            PropertyKey::Symbol(symbol) => {
-                                *out += "[";
-                                inspect_inner_into(Value::symbol(symbol), scope, options, depth + 1, out)?;
-                                *out += "]";
-                            }
-                        };
+                        } else {
+                            *out += "[";
+                            inspect_inner_into(key.to_value(scope), scope, options, depth + 1, out)?;
+                            *out += "]";
+                        }
 
                         *out += ": ";
 

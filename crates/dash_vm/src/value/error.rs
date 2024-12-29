@@ -85,16 +85,10 @@ impl Object for Error {
         key: PropertyKey,
         sc: &mut LocalScope,
     ) -> Result<Option<PropertyValue>, Unrooted> {
-        match key {
-            PropertyKey::String(s) if s.sym() == sym::name => {
-                Ok(Some(PropertyValue::static_default(Value::string(self.name))))
-            }
-            PropertyKey::String(s) if s.sym() == sym::message => {
-                Ok(Some(PropertyValue::static_default(Value::string(self.message))))
-            }
-            PropertyKey::String(s) if s.sym() == sym::stack => {
-                Ok(Some(PropertyValue::static_default(Value::string(self.stack))))
-            }
+        match key.to_js_string(sc) {
+            Some(sym::name) => Ok(Some(PropertyValue::static_default(Value::string(self.name)))),
+            Some(sym::message) => Ok(Some(PropertyValue::static_default(Value::string(self.message)))),
+            Some(sym::stack) => Ok(Some(PropertyValue::static_default(Value::string(self.stack)))),
             _ => self.obj.get_property_descriptor(key, sc),
         }
     }

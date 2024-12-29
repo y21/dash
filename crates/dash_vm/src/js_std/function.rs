@@ -5,6 +5,7 @@ use crate::value::function::bound::BoundFunction;
 use crate::value::function::native::CallContext;
 use crate::value::object::Object;
 use crate::value::ops::conversions::ValueConversion;
+use crate::value::propertykey::ToPropertyKey;
 use crate::value::{Root, Typeof, Unpack, Value, ValueKind};
 
 use super::receiver_t;
@@ -21,7 +22,7 @@ pub fn apply(cx: CallContext) -> Result<Value, Value> {
         } else {
             let mut target_args = vec![];
             for i in 0..array.length_of_array_like(cx.scope)? {
-                let sym = cx.scope.intern_usize(i).into();
+                let sym = i.to_key(cx.scope);
 
                 let arg_i = array.get_property(sym, cx.scope).root(cx.scope)?;
                 target_args.push(arg_i);

@@ -7,7 +7,7 @@ use crate::value::array::Array;
 use crate::value::function::native::CallContext;
 use crate::value::object::{IntegrityLevel, NamedObject, Object, PropertyDataDescriptor, PropertyValue};
 use crate::value::ops::conversions::ValueConversion;
-use crate::value::propertykey::PropertyKey;
+use crate::value::propertykey::{PropertyKey, ToPropertyKey};
 use crate::value::root_ext::RootErrExt;
 use crate::value::{Root, Typeof, Unpack, Value, ValueContext, ValueKind};
 use dash_middle::interner::sym;
@@ -39,16 +39,16 @@ pub fn keys(cx: CallContext) -> Result<Value, Value> {
     let obj = cx.args.first().unwrap_or_undefined().to_object(cx.scope)?;
     // FIXME: own_keys should probably takes an `enumerable: bool`
     let keys = obj.own_keys(cx.scope)?;
-    let array = Array::from_vec(cx.scope, keys.into_iter().map(PropertyValue::static_default).collect());
+    let array = Array::from_vec(keys.into_iter().map(PropertyValue::static_default).collect(), cx.scope);
     Ok(cx.scope.register(array).into())
 }
 
 pub fn to_string(cx: CallContext) -> Result<Value, Value> {
     fn to_string_inner(scope: &mut LocalScope<'_>, o: ObjectId) -> Result<Value, Value> {
         let constructor = o
-            .get_property(sym::constructor.into(), scope)
+            .get_property(sym::constructor.to_key(scope), scope)
             .root(scope)?
-            .get_property(sym::name.into(), scope)
+            .get_property(sym::name.to_key(scope), scope)
             .root(scope)?
             .to_js_string(scope)?;
 
@@ -115,7 +115,7 @@ pub fn get_own_property_descriptors(cx: CallContext) -> Result<Value, Value> {
         descriptors.push(PropertyValue::static_default(descriptor));
     }
 
-    let descriptors = Array::from_vec(cx.scope, descriptors);
+    let descriptors = Array::from_vec(descriptors, cx.scope);
     Ok(Value::object(cx.scope.register(descriptors)))
 }
 
@@ -148,9 +148,10 @@ pub fn define_property(cx: CallContext) -> Result<Value, Value> {
     let property = match cx.args.get(1) {
         Some(other) => {
             if let ValueKind::Symbol(sym) = other.unpack() {
-                PropertyKey::Symbol(sym)
+                sym.to_key(cx.scope)
             } else {
-                PropertyKey::from(other.to_js_string(cx.scope)?)
+                // TODO: we should just do this in PropertyKey directly
+                other.to_js_string(cx.scope)?.to_key(cx.scope)
             }
         }
         _ => throw!(cx.scope, TypeError, "Property must be a string or symbol"),
@@ -180,9 +181,9 @@ pub fn define_properties(cx: CallContext) -> Result<Value, Value> {
     let properties = cx.args.get(1).unwrap_or_undefined();
     for key in properties.own_keys(cx.scope)? {
         let key = key.to_js_string(cx.scope)?;
-        let descriptor = properties.get_property(key.into(), cx.scope).root(cx.scope)?;
+        let descriptor = properties.get_property(key.to_key(cx.scope), cx.scope).root(cx.scope)?;
         let descriptor = PropertyValue::from_descriptor_value(cx.scope, descriptor)?;
-        object.set_property(key.into(), descriptor, cx.scope)?;
+        object.set_property(key.to_key(cx.scope), descriptor, cx.scope)?;
     }
 
     Ok(Value::object(object))
@@ -208,14 +209,17 @@ pub fn entries(cx: CallContext) -> Result<Value, Value> {
     for key in obj.own_keys(cx.scope)? {
         let key = PropertyKey::from_value(cx.scope, key)?;
         let value = obj.get_own_property(key, cx.scope).root(cx.scope)?;
-        let entry = Array::from_vec(cx.scope, vec![
-            PropertyValue::static_default(key.as_value()),
-            PropertyValue::static_default(value),
-        ]);
+        let entry = Array::from_vec(
+            vec![
+                PropertyValue::static_default(key.to_value(cx.scope)),
+                PropertyValue::static_default(value),
+            ],
+            cx.scope,
+        );
         entries.push(PropertyValue::static_default(Value::object(cx.scope.register(entry))));
     }
 
-    let entries = Array::from_vec(cx.scope, entries);
+    let entries = Array::from_vec(entries, cx.scope);
     Ok(Value::object(cx.scope.register(entries)))
 }
 

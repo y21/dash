@@ -24,7 +24,7 @@ use self::user::UserFunction;
 use super::array::Array;
 use super::object::{NamedObject, Object, PropertyDataDescriptor, PropertyValue, PropertyValueKind};
 use super::ops::conversions::ValueConversion;
-use super::propertykey::PropertyKey;
+use super::propertykey::{PropertyKey, ToPropertyKey};
 use super::string::JsString;
 use super::{Root, Typeof, Unpack, Unrooted, Value, ValueKind};
 
@@ -181,7 +181,7 @@ fn handle_call(
 
 pub fn this_for_new_target(scope: &mut LocalScope<'_>, new_target: ObjectId) -> Result<This, Value> {
     let ValueKind::Object(prototype) = new_target
-        .get_property(sym::prototype.into(), scope)
+        .get_property(sym::prototype.to_key(scope), scope)
         .root(scope)?
         .unpack()
     else {
@@ -199,36 +199,34 @@ impl Object for Function {
         key: PropertyKey,
         sc: &mut LocalScope,
     ) -> Result<Option<PropertyValue>, Unrooted> {
-        if let Some(key) = key.as_string() {
-            match key.sym() {
-                sym::name => {
-                    let name = self.name().unwrap_or_else(|| sym::empty.into());
+        match key.to_js_string(sc) {
+            Some(sym::name) => {
+                let name = self.name().unwrap_or_else(|| sym::empty.into());
+                return Ok(Some(PropertyValue {
+                    kind: PropertyValueKind::Static(Value::string(name)),
+                    descriptor: PropertyDataDescriptor::CONFIGURABLE,
+                }));
+            }
+            Some(sym::length) => {
+                if let Some(function) = self.inner_user_function() {
                     return Ok(Some(PropertyValue {
-                        kind: PropertyValueKind::Static(Value::string(name)),
+                        kind: PropertyValueKind::Static(Value::number(function.inner().params as f64)),
                         descriptor: PropertyDataDescriptor::CONFIGURABLE,
                     }));
                 }
-                sym::length => {
-                    if let Some(function) = self.inner_user_function() {
-                        return Ok(Some(PropertyValue {
-                            kind: PropertyValueKind::Static(Value::number(function.inner().params as f64)),
-                            descriptor: PropertyDataDescriptor::CONFIGURABLE,
-                        }));
-                    }
-                }
-                sym::prototype => {
-                    let prototype = self.get_or_set_prototype(sc);
-                    return Ok(Some(PropertyValue::static_empty(Value::object(prototype))));
-                }
-                _ => {}
             }
+            Some(sym::prototype) => {
+                let prototype = self.get_or_set_prototype(sc);
+                return Ok(Some(PropertyValue::static_empty(Value::object(prototype))));
+            }
+            _ => {}
         }
 
         self.obj.get_own_property_descriptor(key, sc)
     }
 
     fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
-        if let Some(sym::prototype) = key.as_string().map(JsString::sym) {
+        if let Some(sym::prototype) = key.to_js_string(sc) {
             let prototype = value.get_or_apply(sc, This::Default).root(sc)?;
             // TODO: function prototype does not need to be an object
             *self.prototype.borrow_mut() = Some(prototype.to_object(sc)?);
@@ -331,7 +329,7 @@ pub(crate) fn adjust_stack_from_flat_call(
             .map(PropertyValue::static_default)
             .collect();
 
-        let array = Array::from_vec(scope, args);
+        let array = Array::from_vec(args, scope);
         let array = scope.register(array);
         Some(Value::object(array))
     } else {
@@ -374,7 +372,7 @@ fn extend_stack_from_args(args: CallArgs, expected_args: usize, scope: &mut Loca
             .map(|s| s.iter().cloned().map(PropertyValue::static_default).collect())
             .unwrap_or_default();
 
-        let array = Array::from_vec(scope, args);
+        let array = Array::from_vec(args, scope);
         let array = scope.register(array);
         scope.stack.push(Value::object(array));
     }

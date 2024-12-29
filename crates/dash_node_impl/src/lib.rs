@@ -19,6 +19,7 @@ use dash_vm::localscope::LocalScope;
 use dash_vm::value::array::Array;
 use dash_vm::value::function::args::CallArgs;
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
+use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::{Root, Unpack, Unrooted, Value, ValueKind};
 use dash_vm::{Vm, delegate, extract, throw};
 use package::Package;
@@ -96,7 +97,7 @@ async fn run_inner_fallible(path: &str, opt: OptLevel, initial_gc_threshold: Opt
         global
             .clone()
             .set_property(
-                global_sym.into(),
+                global_sym.to_key(scope),
                 PropertyValue::static_default(Value::object(global)),
                 scope,
             )
@@ -104,18 +105,25 @@ async fn run_inner_fallible(path: &str, opt: OptLevel, initial_gc_threshold: Opt
 
         let process = create_process_object(scope);
         global
-            .set_property(process_sym.into(), PropertyValue::static_default(process.into()), scope)
+            .set_property(
+                process_sym.to_key(scope),
+                PropertyValue::static_default(process.into()),
+                scope,
+            )
             .unwrap();
 
         let buffer = buffer::init_module(scope).unwrap();
         global
-            .set_property(buffer_sym.into(), PropertyValue::static_default(buffer), scope)
+            .set_property(buffer_sym.to_key(scope), PropertyValue::static_default(buffer), scope)
             .unwrap();
         let timer = dash_rt_timers::import(scope).unwrap();
-        let set_timeout = timer.get_property(set_timeout_sym.into(), scope).unwrap().root(scope);
+        let set_timeout = timer
+            .get_property(set_timeout_sym.to_key(scope), scope)
+            .unwrap()
+            .root(scope);
         global
             .set_property(
-                set_timeout_sym.into(),
+                set_timeout_sym.to_key(scope),
                 PropertyValue::static_default(set_timeout),
                 scope,
             )
@@ -148,16 +156,16 @@ fn create_process_object(sc: &mut LocalScope<'_>) -> ObjectId {
     let env = NamedObject::new(sc);
     let env = sc.register(env);
     let env_k = sc.intern("env");
-    obj.set_property(env_k.into(), PropertyValue::static_default(env.into()), sc)
+    obj.set_property(env_k.to_key(sc), PropertyValue::static_default(env.into()), sc)
         .unwrap();
 
     let argv_k = sc.intern("argv");
     let argv = env::args()
         .map(|arg| PropertyValue::static_default(Value::string(sc.intern(arg).into())))
         .collect::<Vec<_>>();
-    let argv = Array::from_vec(sc, argv);
+    let argv = Array::from_vec(argv, sc);
     let argv = sc.register(argv);
-    obj.set_property(argv_k.into(), PropertyValue::static_default(argv.into()), sc)
+    obj.set_property(argv_k.to_key(sc), PropertyValue::static_default(argv.into()), sc)
         .unwrap();
 
     let versions_k = sc.intern("versions");
@@ -166,14 +174,18 @@ fn create_process_object(sc: &mut LocalScope<'_>) -> ObjectId {
     let version = sc.intern(env!("CARGO_PKG_VERSION"));
     versions
         .set_property(
-            dash_k.into(),
+            dash_k.to_key(sc),
             PropertyValue::static_default(Value::string(version.into())),
             sc,
         )
         .unwrap();
     let versions = sc.register(versions);
-    obj.set_property(versions_k.into(), PropertyValue::static_default(versions.into()), sc)
-        .unwrap();
+    obj.set_property(
+        versions_k.to_key(sc),
+        PropertyValue::static_default(versions.into()),
+        sc,
+    )
+    .unwrap();
 
     sc.register(obj)
 }
@@ -212,7 +224,7 @@ fn execute_node_module(
     }));
     let key = scope.intern("exports");
     module
-        .set_property(key.into(), PropertyValue::static_default(exports), scope)
+        .set_property(key.to_key(scope), PropertyValue::static_default(exports), scope)
         .unwrap();
 
     global_state
@@ -309,7 +321,7 @@ impl Object for RequireFunction {
 
             if let Some(module) = self.state.ongoing_requires.borrow().get(&canonicalized_path) {
                 debug!(%arg, "resolved module (cache)");
-                return module.get_property(exports.into(), scope);
+                return module.get_property(exports.to_key(scope), scope);
             }
 
             let source = match std::fs::read_to_string(&canonicalized_path) {
@@ -339,7 +351,7 @@ impl Object for RequireFunction {
                     }
                 };
 
-                module.get_property(exports.into(), scope)
+                module.get_property(exports.to_key(scope), scope)
             }
         } else if let Some(o) = native::load_native_module(scope, raw_arg)? {
             Ok(o.into())
@@ -384,7 +396,7 @@ impl Object for RequireFunction {
                 }
             };
 
-            module.get_property(exports.into(), scope)
+            module.get_property(exports.to_key(scope), scope)
         };
         debug!(%arg, "resolved module");
         result

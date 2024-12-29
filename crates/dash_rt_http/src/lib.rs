@@ -16,6 +16,7 @@ use dash_vm::value::function::native::CallContext;
 use dash_vm::value::function::{Function, FunctionKind};
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
+use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::root_ext::RootErrExt;
 use dash_vm::value::string::JsString;
 use dash_vm::value::{ExceptionContext, Unpack, Value, ValueContext, ValueKind};
@@ -42,7 +43,7 @@ impl ModuleLoader for HttpModule {
         let listen = Function::new(sc, None, FunctionKind::Native(listen));
         let listen = sc.register(listen);
         let key = sc.intern("listen");
-        module.set_property(key.into(), PropertyValue::static_default(listen.into()), sc)?;
+        module.set_property(key.to_key(sc), PropertyValue::static_default(listen.into()), sc)?;
 
         let module = sc.register(module);
         Ok(Some(module.into()))
@@ -95,12 +96,16 @@ pub fn listen(cx: CallContext) -> Result<Value, Value> {
                     let name = scope.intern("respond");
                     let fun = Function::new(&scope, Some(name.into()), FunctionKind::Native(ctx_respond));
                     let fun = scope.register(fun);
-                    ctx.set_property(name.into(), PropertyValue::static_default(fun.into()), &mut scope)
-                        .unwrap();
+                    ctx.set_property(
+                        name.to_key(&mut scope),
+                        PropertyValue::static_default(fun.into()),
+                        &mut scope,
+                    )
+                    .unwrap();
 
                     let ctx = Value::object(scope.register(ctx));
 
-                    if let Err(err) = cb.apply(&mut scope, This::Default, [ctx].into()).root_err(&mut scope) {
+                    if let Err(err) = cb.apply(This::Default, [ctx].into(), &mut scope).root_err(&mut scope) {
                         match err.to_js_string(&mut scope) {
                             Ok(err) => eprintln!("Unhandled exception in HTTP handler! {}", err.res(&scope)),
                             Err(..) => eprintln!("Unhandled exception in exception toString method in HTTP handler!"),

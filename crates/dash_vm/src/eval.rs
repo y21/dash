@@ -9,6 +9,7 @@ use dash_parser::Parser;
 use crate::frame::Frame;
 use crate::localscope::LocalScope;
 use crate::value::object::{NamedObject, Object, PropertyValue};
+use crate::value::propertykey::ToPropertyKey;
 use crate::value::{Root, Unrooted, Value};
 use crate::{Vm, throw};
 
@@ -66,7 +67,7 @@ impl Vm {
 
                 if let Some(default) = exports.default {
                     let default = default.root(sc);
-                    export_obj.set_property(sym::default.into(), PropertyValue::static_default(default), sc)?;
+                    export_obj.set_property(sym::default.to_key(sc), PropertyValue::static_default(default), sc)?;
                 }
 
                 Value::object(sc.register(export_obj))
@@ -75,7 +76,7 @@ impl Vm {
 
         for (k, v) in exports.named {
             let v = v.root(sc);
-            export_obj.set_property(k.into(), PropertyValue::static_default(v), sc)?;
+            export_obj.set_property(k.to_key(sc), PropertyValue::static_default(v), sc)?;
         }
 
         Ok(export_obj.into())

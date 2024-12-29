@@ -1,64 +1,130 @@
+use dash_middle::interner;
+
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::localscope::LocalScope;
+use crate::value::ops::conversions::ValueConversion;
+use crate::value::{Unpack, ValueKind};
 
-use super::ops::conversions::ValueConversion;
-use super::primitive::Symbol;
+use super::Value;
+use super::primitive::{Number, Symbol};
 use super::string::JsString;
-use super::{Unpack, Value, ValueKind};
 
-// TODO: optimization opportunity: some kind of Number variant for faster indexing without .to_string()
+/// A property key: either a string or a symbol.
+///
+/// For optimization purposes internally here we differentiate between numeric and non-numeric keys
+/// and types that can have numeric indices can use this via the `index` method to support indexing without having
+/// to intern strings, but otherwise the `to_js_string` method should be used to get a string out of it (and will automatically
+/// deal with interning numeric keys).
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub enum PropertyKey {
+pub struct PropertyKey(PropertyKeyInner);
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub enum PropertyKeyInner {
     String(JsString),
     Symbol(Symbol),
+    Index(u32),
 }
 
 unsafe impl Trace for PropertyKey {
     fn trace(&self, cx: &mut TraceCtxt<'_>) {
-        match self {
-            PropertyKey::String(s) => s.trace(cx),
-            PropertyKey::Symbol(s) => s.trace(cx),
+        let Self(inner) = self;
+        match inner {
+            PropertyKeyInner::String(s) => s.trace(cx),
+            PropertyKeyInner::Symbol(s) => s.trace(cx),
+            PropertyKeyInner::Index(_) => {}
         }
     }
 }
 
-impl From<JsString> for PropertyKey {
-    fn from(value: JsString) -> Self {
-        PropertyKey::String(value)
-    }
+pub trait ToPropertyKey {
+    fn to_key(self, sc: &mut LocalScope<'_>) -> PropertyKey;
 }
-impl From<dash_middle::interner::Symbol> for PropertyKey {
-    fn from(value: dash_middle::interner::Symbol) -> Self {
-        PropertyKey::String(value.into())
+
+impl ToPropertyKey for interner::Symbol {
+    fn to_key(self, sc: &mut LocalScope<'_>) -> PropertyKey {
+        PropertyKey::from_js_string(self.into(), sc)
     }
 }
 
-impl From<Symbol> for PropertyKey {
-    fn from(s: Symbol) -> Self {
-        PropertyKey::Symbol(s)
+impl ToPropertyKey for Symbol {
+    fn to_key(self, _: &mut LocalScope<'_>) -> PropertyKey {
+        PropertyKey(PropertyKeyInner::Symbol(self))
+    }
+}
+
+impl ToPropertyKey for JsString {
+    fn to_key(self, sc: &mut LocalScope<'_>) -> PropertyKey {
+        PropertyKey::from_js_string(self, sc)
+    }
+}
+
+impl ToPropertyKey for usize {
+    fn to_key(self, sc: &mut LocalScope<'_>) -> PropertyKey {
+        if let Ok(u) = u32::try_from(self) {
+            PropertyKey(PropertyKeyInner::Index(u))
+        } else {
+            PropertyKey(PropertyKeyInner::String(sc.intern_usize(self).into()))
+        }
     }
 }
 
 impl PropertyKey {
-    pub fn as_value(&self) -> Value {
-        match *self {
-            PropertyKey::String(s) => Value::string(s),
-            PropertyKey::Symbol(s) => Value::symbol(s),
+    pub fn to_js_string(self, sc: &mut LocalScope<'_>) -> Option<interner::Symbol> {
+        match self.0 {
+            PropertyKeyInner::String(string) => Some(string.sym()),
+            PropertyKeyInner::Index(u) => Some(sc.intern_usize(u as usize)),
+            PropertyKeyInner::Symbol(_) => None,
+        }
+    }
+
+    pub fn any_js_string(self, sc: &mut LocalScope<'_>) -> interner::Symbol {
+        match self.0 {
+            PropertyKeyInner::String(js_string) => js_string.sym(),
+            PropertyKeyInner::Index(u) => sc.intern_usize(u as usize),
+            PropertyKeyInner::Symbol(symbol) => symbol.sym(),
+        }
+    }
+
+    pub fn to_value(&self, sc: &mut LocalScope<'_>) -> Value {
+        match self.0 {
+            PropertyKeyInner::String(s) => Value::string(s),
+            PropertyKeyInner::Index(u) => Value::string(sc.intern_usize(u as usize).into()),
+            PropertyKeyInner::Symbol(s) => Value::symbol(s),
+        }
+    }
+
+    pub fn index(&self) -> Option<u32> {
+        if let PropertyKeyInner::Index(idx) = self.0 {
+            Some(idx)
+        } else {
+            None
+        }
+    }
+
+    pub fn index_usize(&self) -> Option<usize> {
+        self.index().map(|i| i as usize)
+    }
+
+    pub fn from_js_string(string: JsString, sc: &mut LocalScope<'_>) -> Self {
+        if let Ok(n) = string.res(sc).parse::<u32>() {
+            Self(PropertyKeyInner::Index(n))
+        } else {
+            Self(PropertyKeyInner::String(string))
         }
     }
 
     pub fn from_value(sc: &mut LocalScope<'_>, value: Value) -> Result<Self, Value> {
         // TODO: call ToPrimitive as specified by ToPropertyKey in the spec?
         match value.unpack() {
-            ValueKind::Symbol(s) => Ok(Self::Symbol(s)),
-            _ => Ok(PropertyKey::String(value.to_js_string(sc)?)),
+            ValueKind::Symbol(s) => Ok(Self(PropertyKeyInner::Symbol(s))),
+            ValueKind::Number(Number(n)) if n.trunc() == n && n >= 0.0 && n < u32::MAX as f64 => {
+                Ok(Self(PropertyKeyInner::Index(n as u32)))
+            }
+            _ => Ok(Self::from_js_string(value.to_js_string(sc)?, sc)),
         }
     }
 
-    pub fn as_string(&self) -> Option<JsString> {
-        match self {
-            PropertyKey::String(s) => Some(*s),
-            _ => None,
-        }
+    pub fn inner(&self) -> PropertyKeyInner {
+        self.0
     }
 }

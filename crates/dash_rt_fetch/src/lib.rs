@@ -11,6 +11,7 @@ use dash_vm::value::function::native::CallContext;
 use dash_vm::value::function::{Function, FunctionKind};
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::promise::Promise;
+use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::string::JsString;
 use dash_vm::value::{ExceptionContext, Unpack, Value, ValueKind};
 use dash_vm::{PromiseAction, Vm, delegate, extract, throw};
@@ -81,7 +82,7 @@ fn fetch(cx: CallContext) -> Result<Value, Value> {
                     let text_fun = Function::new(&sc, Some(text.into()), FunctionKind::Native(http_response_text));
                     let text_fun = Value::object(sc.register(text_fun));
 
-                    obj.set_property(text.into(), PropertyValue::static_default(text_fun), &mut sc)
+                    obj.set_property(text.to_key(&mut sc), PropertyValue::static_default(text_fun), &mut sc)
                         .unwrap();
 
                     (Value::object(sc.register(obj)), PromiseAction::Resolve)

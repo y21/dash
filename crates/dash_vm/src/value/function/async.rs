@@ -5,7 +5,7 @@ use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::value::object::{NamedObject, Object};
 use crate::value::promise::{Promise, wrap_promise};
-use crate::value::propertykey::PropertyKey;
+use crate::value::propertykey::ToPropertyKey;
 use crate::value::root_ext::RootErrExt;
 use crate::value::{Root, Typeof, Unpack, Unrooted, Value, ValueContext};
 use crate::{PromiseAction, Vm, delegate, extract, throw};
@@ -44,11 +44,7 @@ impl AsyncFunction {
             .clone()
             .apply(This::Bound(generator_iter), CallArgs::empty(), scope)
             .root(scope)
-            .and_then(|result| {
-                result
-                    .get_property(PropertyKey::String(sym::value.into()), scope)
-                    .root(scope)
-            });
+            .and_then(|result| result.get_property(sym::value.to_key(scope), scope).root(scope));
 
         match result {
             Ok(value) => {
@@ -142,11 +138,7 @@ impl Object for ThenTask {
             .clone()
             .apply(This::Bound(self.generator_iter), [promise_value].into(), scope)
             .root(scope)
-            .and_then(|result| {
-                result
-                    .get_property(PropertyKey::String(sym::value.into()), scope)
-                    .root(scope)
-            });
+            .and_then(|result| result.get_property(sym::value.to_key(scope), scope).root(scope));
 
         // - Repeat what we are doing above.
         // Check if generator iterator is done:

@@ -8,6 +8,7 @@ use crate::value::boxed::{Boolean, Number as BoxedNumber, String as BoxedString,
 use crate::value::function::args::CallArgs;
 use crate::value::object::Object;
 use crate::value::primitive::{MAX_SAFE_INTEGERF, Number};
+use crate::value::propertykey::ToPropertyKey;
 use crate::value::string::JsString;
 use crate::value::{Root, Typeof, Unpack, Value, ValueKind};
 
@@ -119,7 +120,7 @@ impl ValueConversion for Value {
 
         // a. Let exoticToPrim be ? GetMethod(input, @@toPrimitive).
         let to_primitive = sc.statics.symbol_to_primitive;
-        let exotic_to_prim = self.get_property(to_primitive.into(), sc).root(sc)?.into_option();
+        let exotic_to_prim = self.get_property(to_primitive.to_key(sc), sc).root(sc)?.into_option();
 
         // b. If exoticToPrim is not undefined, then
         if let Some(exotic_to_prim) = exotic_to_prim {
@@ -151,7 +152,7 @@ impl ValueConversion for Value {
     }
 
     fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value> {
-        self.get_property(sym::length.into(), sc).root(sc)?.to_length_u(sc)
+        self.get_property(sym::length.to_key(sc), sc).root(sc)?.to_length_u(sc)
     }
 
     fn to_object(&self, sc: &mut LocalScope) -> Result<ObjectId, Value> {
@@ -200,7 +201,7 @@ impl Value {
         };
 
         for name in method_names {
-            let method = self.get_property(name.into(), sc).root(sc)?;
+            let method = self.get_property(name.to_key(sc), sc).root(sc)?;
             if matches!(method.type_of(sc), Typeof::Function) {
                 let result = method.apply(This::Bound(*self), CallArgs::empty(), sc).root(sc)?;
                 if !matches!(result.unpack(), ValueKind::Object(_)) {

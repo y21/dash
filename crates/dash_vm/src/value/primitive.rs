@@ -143,18 +143,14 @@ impl Object for Undefined {
         key: PropertyKey,
         sc: &mut LocalScope,
     ) -> Result<Option<PropertyValue>, Unrooted> {
-        let key = match key {
-            PropertyKey::String(s) => s.res(sc).to_owned(),
-            PropertyKey::Symbol(s) => sc.interner.resolve(s.sym()).to_owned(),
-        };
+        let key = key.any_js_string(sc);
+        let key = sc.interner.resolve(key).to_owned();
         throw!(sc, TypeError, "Cannot read property {} of undefined", key)
     }
 
     fn set_property(&self, key: PropertyKey, _value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
-        let key = match key {
-            PropertyKey::String(s) => s.res(sc).to_owned(),
-            PropertyKey::Symbol(s) => sc.interner.resolve(s.sym()).to_owned(),
-        };
+        let key = key.any_js_string(sc);
+        let key = sc.interner.resolve(key).to_owned();
         throw!(sc, TypeError, "Cannot set property {:?} of undefined", key)
     }
 
@@ -197,18 +193,14 @@ impl Object for Null {
         key: PropertyKey,
         sc: &mut LocalScope,
     ) -> Result<Option<PropertyValue>, Unrooted> {
-        let key = match key {
-            PropertyKey::String(s) => s.res(sc).to_owned(),
-            PropertyKey::Symbol(s) => sc.interner.resolve(s.sym()).to_owned(),
-        };
+        let key = key.any_js_string(sc);
+        let key = sc.interner.resolve(key).to_owned();
         throw!(sc, TypeError, "Cannot read property {} of null", key)
     }
 
     fn set_property(&self, key: PropertyKey, _value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
-        let key = match key {
-            PropertyKey::String(s) => s.res(sc).to_owned(),
-            PropertyKey::Symbol(s) => sc.interner.resolve(s.sym()).to_owned(),
-        };
+        let key = key.any_js_string(sc);
+        let key = sc.interner.resolve(key).to_owned();
         throw!(sc, TypeError, "Cannot set property {:?} of null", key)
     }
 
