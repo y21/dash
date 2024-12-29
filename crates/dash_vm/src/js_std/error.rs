@@ -49,7 +49,7 @@ pub fn error_constructor(cx: CallContext) -> Result<Value, Value> {
 
 pub fn to_string(cx: CallContext) -> Result<Value, Value> {
     cx.this
-        .get_property(cx.scope, sym::stack.into())
+        .get_property(sym::stack.into(), cx.scope)
         .root(cx.scope)
         .and_then(|v| v.to_js_string(cx.scope).map(Value::string))
 }

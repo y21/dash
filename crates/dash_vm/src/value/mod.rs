@@ -221,57 +221,57 @@ unsafe impl Trace for Value {
 impl Object for Value {
     fn get_own_property_descriptor(
         &self,
-        sc: &mut LocalScope,
         key: PropertyKey,
+        sc: &mut LocalScope,
     ) -> Result<Option<PropertyValue>, Unrooted> {
         match self.unpack() {
-            ValueKind::Number(n) => n.get_own_property_descriptor(sc, key),
-            ValueKind::Boolean(b) => b.get_own_property_descriptor(sc, key),
-            ValueKind::String(s) => s.get_own_property_descriptor(sc, key),
-            ValueKind::Undefined(u) => u.get_own_property_descriptor(sc, key),
-            ValueKind::Null(n) => n.get_own_property_descriptor(sc, key),
-            ValueKind::Symbol(s) => s.get_own_property_descriptor(sc, key),
-            ValueKind::Object(o) => o.get_own_property_descriptor(sc, key),
-            ValueKind::External(e) => e.get_own_property_descriptor(sc, key),
+            ValueKind::Number(n) => n.get_own_property_descriptor(key, sc),
+            ValueKind::Boolean(b) => b.get_own_property_descriptor(key, sc),
+            ValueKind::String(s) => s.get_own_property_descriptor(key, sc),
+            ValueKind::Undefined(u) => u.get_own_property_descriptor(key, sc),
+            ValueKind::Null(n) => n.get_own_property_descriptor(key, sc),
+            ValueKind::Symbol(s) => s.get_own_property_descriptor(key, sc),
+            ValueKind::Object(o) => o.get_own_property_descriptor(key, sc),
+            ValueKind::External(e) => e.get_own_property_descriptor(key, sc),
         }
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
+    fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
         match self.unpack() {
-            ValueKind::Object(h) => h.set_property(sc, key, value),
-            ValueKind::Number(n) => n.set_property(sc, key, value),
-            ValueKind::Boolean(b) => b.set_property(sc, key, value),
-            ValueKind::String(s) => s.set_property(sc, key, value),
-            ValueKind::External(h) => h.set_property(sc, key, value),
-            ValueKind::Undefined(u) => u.set_property(sc, key, value),
-            ValueKind::Null(n) => n.set_property(sc, key, value),
-            ValueKind::Symbol(s) => s.set_property(sc, key, value),
+            ValueKind::Object(h) => h.set_property(key, value, sc),
+            ValueKind::Number(n) => n.set_property(key, value, sc),
+            ValueKind::Boolean(b) => b.set_property(key, value, sc),
+            ValueKind::String(s) => s.set_property(key, value, sc),
+            ValueKind::External(h) => h.set_property(key, value, sc),
+            ValueKind::Undefined(u) => u.set_property(key, value, sc),
+            ValueKind::Null(n) => n.set_property(key, value, sc),
+            ValueKind::Symbol(s) => s.set_property(key, value, sc),
         }
     }
 
-    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
+    fn delete_property(&self, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Value> {
         match self.unpack() {
-            ValueKind::Object(o) => o.delete_property(sc, key),
-            ValueKind::Number(n) => n.delete_property(sc, key),
-            ValueKind::Boolean(b) => b.delete_property(sc, key),
-            ValueKind::String(s) => s.delete_property(sc, key),
-            ValueKind::External(o) => o.delete_property(sc, key),
-            ValueKind::Undefined(u) => u.delete_property(sc, key),
-            ValueKind::Null(n) => n.delete_property(sc, key),
-            ValueKind::Symbol(s) => s.delete_property(sc, key),
+            ValueKind::Object(o) => o.delete_property(key, sc),
+            ValueKind::Number(n) => n.delete_property(key, sc),
+            ValueKind::Boolean(b) => b.delete_property(key, sc),
+            ValueKind::String(s) => s.delete_property(key, sc),
+            ValueKind::External(o) => o.delete_property(key, sc),
+            ValueKind::Undefined(u) => u.delete_property(key, sc),
+            ValueKind::Null(n) => n.delete_property(key, sc),
+            ValueKind::Symbol(s) => s.delete_property(key, sc),
         }
     }
 
-    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
+    fn set_prototype(&self, value: Value, sc: &mut LocalScope) -> Result<(), Value> {
         match self.unpack() {
-            ValueKind::Number(n) => n.set_prototype(sc, value),
-            ValueKind::Boolean(b) => b.set_prototype(sc, value),
-            ValueKind::String(s) => s.set_prototype(sc, value),
-            ValueKind::Undefined(u) => u.set_prototype(sc, value),
-            ValueKind::Null(n) => n.set_prototype(sc, value),
-            ValueKind::Symbol(s) => s.set_prototype(sc, value),
-            ValueKind::Object(o) => o.set_prototype(sc, value),
-            ValueKind::External(e) => e.set_prototype(sc, value),
+            ValueKind::Number(n) => n.set_prototype(value, sc),
+            ValueKind::Boolean(b) => b.set_prototype(value, sc),
+            ValueKind::String(s) => s.set_prototype(value, sc),
+            ValueKind::Undefined(u) => u.set_prototype(value, sc),
+            ValueKind::Null(n) => n.set_prototype(value, sc),
+            ValueKind::Symbol(s) => s.set_prototype(value, sc),
+            ValueKind::Object(o) => o.set_prototype(value, sc),
+            ValueKind::External(e) => e.set_prototype(value, sc),
         }
     }
 
@@ -288,8 +288,8 @@ impl Object for Value {
         }
     }
 
-    fn apply(&self, scope: &mut LocalScope, _: ObjectId, this: This, args: CallArgs) -> Result<Unrooted, Unrooted> {
-        self.apply(scope, this, args)
+    fn apply(&self, _: ObjectId, this: This, args: CallArgs, scope: &mut LocalScope) -> Result<Unrooted, Unrooted> {
+        self.apply(this, args, scope)
     }
 
     fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
@@ -320,13 +320,13 @@ impl Object for Value {
 
     fn construct(
         &self,
-        scope: &mut LocalScope,
         _: ObjectId,
         this: This,
         args: CallArgs,
         new_target: ObjectId,
+        scope: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
-        self.construct_with_target(scope, this, args, new_target)
+        self.construct_with_target(this, args, new_target, scope)
     }
 
     fn internal_slots(&self, _: &Vm) -> Option<&dyn InternalSlots> {
@@ -607,23 +607,23 @@ impl Object for ExternalValue {
 
     fn apply(
         &self,
-        scope: &mut LocalScope,
         _callee: ObjectId,
         this: This,
         args: CallArgs,
+        scope: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
-        self.inner.apply(scope, this, args)
+        self.inner.apply(this, args, scope)
     }
 
     fn construct(
         &self,
-        scope: &mut LocalScope,
         _callee: ObjectId,
         this: This,
         args: CallArgs,
         new_target: ObjectId,
+        scope: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
-        self.inner.construct_with_target(scope, this, args, new_target)
+        self.inner.construct_with_target(this, args, new_target, scope)
     }
 }
 
@@ -634,24 +634,24 @@ impl Value {
         Some(unsafe { ptr.cast::<T>().as_ref() })
     }
 
-    pub fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Unrooted> {
+    pub fn get_property(&self, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Unrooted> {
         match self.unpack() {
-            ValueKind::Object(o) => o.get_property(sc, key),
+            ValueKind::Object(o) => o.get_property(key, sc),
             // TODO: autobox primitives
-            ValueKind::Number(n) => n.get_property(sc, This::Bound(*self), key),
-            ValueKind::Boolean(b) => b.get_property(sc, This::Bound(*self), key),
-            ValueKind::String(s) => s.get_property(sc, This::Bound(*self), key),
-            ValueKind::External(o) => o.inner(sc).get_property(sc, key),
-            ValueKind::Undefined(u) => u.get_property(sc, This::Bound(*self), key),
-            ValueKind::Null(n) => n.get_property(sc, This::Bound(*self), key),
-            ValueKind::Symbol(s) => s.get_property(sc, This::Bound(*self), key),
+            ValueKind::Number(n) => n.get_property(This::Bound(*self), key, sc),
+            ValueKind::Boolean(b) => b.get_property(This::Bound(*self), key, sc),
+            ValueKind::String(s) => s.get_property(This::Bound(*self), key, sc),
+            ValueKind::External(o) => o.inner(sc).get_property(key, sc),
+            ValueKind::Undefined(u) => u.get_property(This::Bound(*self), key, sc),
+            ValueKind::Null(n) => n.get_property(This::Bound(*self), key, sc),
+            ValueKind::Symbol(s) => s.get_property(This::Bound(*self), key, sc),
         }
     }
 
-    pub fn apply(&self, sc: &mut LocalScope, this: This, args: CallArgs) -> Result<Unrooted, Unrooted> {
+    pub fn apply(&self, this: This, args: CallArgs, sc: &mut LocalScope) -> Result<Unrooted, Unrooted> {
         match self.unpack() {
-            ValueKind::Object(o) => o.apply(sc, this, args),
-            ValueKind::External(o) => o.inner(sc).apply(sc, this, args),
+            ValueKind::Object(o) => o.apply(this, args, sc),
+            ValueKind::External(o) => o.inner(sc).apply(this, args, sc),
             ValueKind::Number(n) => throw!(sc, TypeError, "{} is not a function", n),
             ValueKind::Boolean(b) => throw!(sc, TypeError, "{} is not a function", b),
             ValueKind::String(s) => {
@@ -667,14 +667,14 @@ impl Value {
     /// Calls a function with debug information. This will print the function being attempted to call as written in the source code.
     pub(crate) fn apply_with_debug(
         &self,
-        sc: &mut LocalScope,
         this: This,
         args: CallArgs,
         ip: u16,
+        sc: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
         match self.unpack() {
-            ValueKind::Object(o) => o.apply(sc, this, args),
-            ValueKind::External(o) => o.inner(sc).apply(sc, this, args),
+            ValueKind::Object(o) => o.apply(this, args, sc),
+            ValueKind::External(o) => o.inner(sc).apply(this, args, sc),
             _ => {
                 cold_path();
 
@@ -691,10 +691,10 @@ impl Value {
         }
     }
 
-    pub fn construct(&self, sc: &mut LocalScope, this: This, args: CallArgs) -> Result<Unrooted, Unrooted> {
+    pub fn construct(&self, this: This, args: CallArgs, sc: &mut LocalScope) -> Result<Unrooted, Unrooted> {
         match self.unpack() {
-            ValueKind::Object(o) => o.construct(sc, this, args),
-            ValueKind::External(o) => o.inner(sc).construct(sc, this, args),
+            ValueKind::Object(o) => o.construct(this, args, sc),
+            ValueKind::External(o) => o.inner(sc).construct(this, args, sc),
             ValueKind::Number(n) => throw!(sc, TypeError, "{} is not a constructor", n),
             ValueKind::Boolean(b) => throw!(sc, TypeError, "{} is not a constructor", b),
             ValueKind::String(s) => {
@@ -709,14 +709,14 @@ impl Value {
 
     pub fn construct_with_target(
         &self,
-        sc: &mut LocalScope,
         this: This,
         args: CallArgs,
         new_target: ObjectId,
+        sc: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
         match self.unpack() {
-            ValueKind::Object(o) => o.construct_with_target(sc, this, args, new_target),
-            ValueKind::External(o) => o.inner(sc).construct_with_target(sc, this, args, new_target),
+            ValueKind::Object(o) => o.construct_with_target(this, args, new_target, sc),
+            ValueKind::External(o) => o.inner(sc).construct_with_target(this, args, new_target, sc),
             ValueKind::Number(n) => throw!(sc, TypeError, "{} is not a constructor", n),
             ValueKind::Boolean(b) => throw!(sc, TypeError, "{} is not a constructor", b),
             ValueKind::String(s) => {
@@ -786,7 +786,7 @@ impl Value {
         }
 
         // Look if self[prototype] == ctor.prototype, repeat for all objects in self's prototype chain
-        let target_proto = ctor.get_property(sc, sym::prototype.into()).root(sc)?;
+        let target_proto = ctor.get_property(sym::prototype.into(), sc).root(sc)?;
         self.for_each_prototype(sc, |_, proto| {
             Ok(if proto == &target_proto {
                 ControlFlow::Break(())
@@ -925,19 +925,19 @@ impl<O: Object + 'static> Object for PureBuiltin<O> {
         type_of
     );
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
+    fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
         sc.impure_builtins();
-        self.inner.set_property(sc, key, value)
+        self.inner.set_property(key, value, sc)
     }
 
-    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
+    fn delete_property(&self, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Value> {
         sc.impure_builtins();
-        self.inner.delete_property(sc, key)
+        self.inner.delete_property(key, sc)
     }
 
-    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
+    fn set_prototype(&self, value: Value, sc: &mut LocalScope) -> Result<(), Value> {
         sc.impure_builtins();
-        self.inner.set_prototype(sc, value)
+        self.inner.set_prototype(value, sc)
     }
 
     fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {

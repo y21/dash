@@ -82,8 +82,8 @@ impl Error {
 impl Object for Error {
     fn get_own_property_descriptor(
         &self,
-        sc: &mut LocalScope,
         key: PropertyKey,
+        sc: &mut LocalScope,
     ) -> Result<Option<PropertyValue>, Unrooted> {
         match key {
             PropertyKey::String(s) if s.sym() == sym::name => {
@@ -95,32 +95,32 @@ impl Object for Error {
             PropertyKey::String(s) if s.sym() == sym::stack => {
                 Ok(Some(PropertyValue::static_default(Value::string(self.stack))))
             }
-            _ => self.obj.get_property_descriptor(sc, key),
+            _ => self.obj.get_property_descriptor(key, sc),
         }
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
+    fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
         // TODO: this should special case name/stack
-        self.obj.set_property(sc, key, value)
+        self.obj.set_property(key, value, sc)
     }
 
-    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
+    fn delete_property(&self, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Value> {
         // TODO: delete/clear property
-        self.obj.delete_property(sc, key)
+        self.obj.delete_property(key, sc)
     }
 
     fn apply(
         &self,
-        scope: &mut LocalScope,
         callee: ObjectId,
         this: This,
         args: CallArgs,
+        scope: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
-        self.obj.apply(scope, callee, this, args)
+        self.obj.apply(callee, this, args, scope)
     }
 
-    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
-        self.obj.set_prototype(sc, value)
+    fn set_prototype(&self, value: Value, sc: &mut LocalScope) -> Result<(), Value> {
+        self.obj.set_prototype(value, sc)
     }
 
     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {

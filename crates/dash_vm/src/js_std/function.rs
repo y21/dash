@@ -23,7 +23,7 @@ pub fn apply(cx: CallContext) -> Result<Value, Value> {
             for i in 0..array.length_of_array_like(cx.scope)? {
                 let sym = cx.scope.intern_usize(i).into();
 
-                let arg_i = array.get_property(cx.scope, sym).root(cx.scope)?;
+                let arg_i = array.get_property(sym, cx.scope).root(cx.scope)?;
                 target_args.push(arg_i);
             }
             target_args
@@ -39,9 +39,9 @@ pub fn apply(cx: CallContext) -> Result<Value, Value> {
 
     target_callee
         .apply(
-            cx.scope,
             target_this.map_or(This::Default, This::Bound),
             target_args.into(),
+            cx.scope,
         )
         .root(cx.scope)
 }
@@ -68,9 +68,9 @@ pub fn call(cx: CallContext) -> Result<Value, Value> {
 
     target_callee
         .apply(
-            cx.scope,
             target_this.map_or(This::Default, This::Bound),
             target_args.into(),
+            cx.scope,
         )
         .root(cx.scope)
 }

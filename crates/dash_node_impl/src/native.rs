@@ -69,6 +69,6 @@ fn init_fs_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     let sync = dash_rt_fs::sync::init_module(sc)?;
     let promises = dash_rt_fs::promises::init_module(sc)?;
     let key = state_mut(sc).sym.promises;
-    sync.set_property(sc, key.into(), PropertyValue::static_default(promises))?;
+    sync.set_property(key.into(), PropertyValue::static_default(promises), sc)?;
     Ok(sync)
 }

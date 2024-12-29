@@ -27,58 +27,58 @@ use super::{Root, Typeof, Unpack, Unrooted, Value, ValueContext, ValueKind};
 pub type ObjectMap<K, V> = hashbrown::HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
 pub trait Object: Debug + Trace {
-    fn get_own_property(&self, sc: &mut LocalScope, this: This, key: PropertyKey) -> Result<Unrooted, Unrooted> {
+    fn get_own_property(&self, this: This, key: PropertyKey, sc: &mut LocalScope<'_>) -> Result<Unrooted, Unrooted> {
         delegate_get_own_property(self, this, sc, key)
     }
 
     fn get_own_property_descriptor(
         &self,
-        sc: &mut LocalScope,
         key: PropertyKey,
+        sc: &mut LocalScope,
     ) -> Result<Option<PropertyValue>, Unrooted>;
 
-    fn get_property(&self, sc: &mut LocalScope, this: This, key: PropertyKey) -> Result<Unrooted, Unrooted> {
+    fn get_property(&self, this: This, key: PropertyKey, sc: &mut LocalScope<'_>) -> Result<Unrooted, Unrooted> {
         delegate_get_property(self, this, sc, key)
     }
 
     fn get_property_descriptor(
         &self,
-        sc: &mut LocalScope,
         key: PropertyKey,
+        sc: &mut LocalScope,
     ) -> Result<Option<PropertyValue>, Unrooted> {
-        let own_descriptor = self.get_own_property_descriptor(sc, key)?;
+        let own_descriptor = self.get_own_property_descriptor(key, sc)?;
         if own_descriptor.is_some() {
             return Ok(own_descriptor);
         }
 
         match self.get_prototype(sc)?.unpack() {
-            ValueKind::Object(object) => object.get_property_descriptor(sc, key),
-            ValueKind::External(object) => object.get_own_property_descriptor(sc, key),
+            ValueKind::Object(object) => object.get_property_descriptor(key, sc),
+            ValueKind::External(object) => object.get_own_property_descriptor(key, sc),
             ValueKind::Null(..) => Ok(None),
             _ => unreachable!(),
         }
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value>;
+    fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value>;
 
-    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value>;
+    fn delete_property(&self, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Value>;
 
-    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value>;
+    fn set_prototype(&self, value: Value, sc: &mut LocalScope) -> Result<(), Value>;
 
     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value>;
 
-    fn apply(&self, scope: &mut LocalScope, callee: ObjectId, this: This, args: CallArgs)
+    fn apply(&self, callee: ObjectId, this: This, args: CallArgs, scope: &mut LocalScope)
     -> Result<Unrooted, Unrooted>;
 
     fn construct(
         &self,
-        scope: &mut LocalScope,
         callee: ObjectId,
         this: This,
         args: CallArgs,
         _new_target: ObjectId,
+        scope: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
-        self.apply(scope, callee, this, args)
+        self.apply(callee, this, args, scope)
     }
 
     // TODO: require returning a special kind of pointer wrapper that needs unsafe to construct
@@ -103,53 +103,53 @@ macro_rules! delegate {
     (override $field:ident, get_own_property_descriptor) => {
         fn get_own_property_descriptor(
             &self,
-            sc: &mut $crate::localscope::LocalScope,
             key: $crate::value::propertykey::PropertyKey,
+            sc: &mut $crate::localscope::LocalScope,
         ) -> Result<Option<$crate::value::object::PropertyValue>, $crate::value::Unrooted> {
-            self.$field.get_own_property_descriptor(sc, key)
+            self.$field.get_own_property_descriptor(key, sc)
         }
     };
     (override $field:ident, get_property) => {
         fn get_property(
             &self,
-            sc: &mut $crate::localscope::LocalScope,
             this: $crate::frame::This,
             key: $crate::value::propertykey::PropertyKey,
+            sc: &mut $crate::localscope::LocalScope,
         ) -> Result<$crate::value::Unrooted, $crate::value::Unrooted> {
-            $crate::value::object::Object::get_property(&self.$field, sc, this, key)
+            $crate::value::object::Object::get_property(&self.$field, this, key, sc)
         }
     };
     (override $field:ident, get_property_descriptor) => {
         fn get_property_descriptor(
             &self,
-            sc: &mut $crate::localscope::LocalScope,
             key: $crate::value::propertykey::PropertyKey,
+            sc: &mut $crate::localscope::LocalScope,
         ) -> Result<Option<$crate::value::object::PropertyValue>, $crate::value::Unrooted> {
-            self.$field.get_property_descriptor(sc, key)
+            self.$field.get_property_descriptor(key, sc)
         }
     };
     (override $field:ident, set_property) => {
         fn set_property(
             &self,
-            sc: &mut $crate::localscope::LocalScope,
             key: $crate::value::propertykey::PropertyKey,
             value: $crate::value::object::PropertyValue,
+            sc: &mut $crate::localscope::LocalScope,
         ) -> Result<(), $crate::value::Value> {
-            self.$field.set_property(sc, key, value)
+            self.$field.set_property(key, value, sc)
         }
     };
     (override $field:ident, delete_property) => {
         fn delete_property(
             &self,
-            sc: &mut $crate::localscope::LocalScope,
             key: $crate::value::propertykey::PropertyKey,
+            sc: &mut $crate::localscope::LocalScope,
         ) -> Result<$crate::value::Unrooted, $crate::value::Value> {
-            self.$field.delete_property(sc, key)
+            self.$field.delete_property(key, sc)
         }
     };
     (override $field:ident, set_prototype) => {
-        fn set_prototype(&self, sc: &mut $crate::localscope::LocalScope, value: $crate::value::Value) -> Result<(), $crate::value::Value> {
-            self.$field.set_prototype(sc, value)
+        fn set_prototype(&self, value: $crate::value::Value, sc: &mut $crate::localscope::LocalScope) -> Result<(), $crate::value::Value> {
+            self.$field.set_prototype(value, sc)
         }
     };
     (override $field:ident, get_prototype) => {
@@ -165,24 +165,24 @@ macro_rules! delegate {
     (override $field:ident, apply) => {
         fn apply(
             &self,
-            sc: &mut $crate::localscope::LocalScope,
             id: $crate::gc::ObjectId,
             this: $crate::frame::This,
             args: $crate::value::function::args::CallArgs,
+            sc: &mut $crate::localscope::LocalScope,
         ) -> Result<$crate::value::Unrooted, $crate::value::Unrooted> {
-            $crate::value::object::Object::apply(&self.$field, sc, id, this, args)
+            $crate::value::object::Object::apply(&self.$field, id, this, args, sc)
         }
     };
     (override $field:ident, construct) => {
         fn construct(
             &self,
-            sc: &mut $crate::localscope::LocalScope,
             id: $crate::gc::ObjectId,
             this: $crate::frame::This,
             args: $crate::value::function::args::CallArgs,
             new_target: $crate::gc::ObjectId,
+            sc: &mut $crate::localscope::LocalScope,
         ) -> Result<$crate::value::Unrooted, $crate::value::Unrooted> {
-            $crate::value::object::Object::construct(&self.$field, sc, id, this, args, new_target)
+            $crate::value::object::Object::construct(&self.$field, id, this, args, new_target, sc)
         }
     };
     (override $field:ident, type_of) => {
@@ -302,38 +302,38 @@ impl PropertyValue {
 
         match self.kind {
             PropertyValueKind::Static(value) => {
-                obj.set_property(sc, sym::value.into(), PropertyValue::static_default(value))?;
+                obj.set_property(sym::value.into(), PropertyValue::static_default(value), sc)?;
             }
             PropertyValueKind::Trap { get, set } => {
                 let get = get.map(Value::object).unwrap_or_undefined();
                 let set = set.map(Value::object).unwrap_or_undefined();
-                obj.set_property(sc, sym::get.into(), PropertyValue::static_default(get))?;
-                obj.set_property(sc, sym::set.into(), PropertyValue::static_default(set))?;
+                obj.set_property(sym::get.into(), PropertyValue::static_default(get), sc)?;
+                obj.set_property(sym::set.into(), PropertyValue::static_default(set), sc)?;
             }
         }
 
         obj.set_property(
-            sc,
             sym::writable.into(),
             PropertyValue::static_default(Value::boolean(
                 self.descriptor.contains(PropertyDataDescriptor::WRITABLE),
             )),
+            sc,
         )?;
 
         obj.set_property(
-            sc,
             sym::enumerable.into(),
             PropertyValue::static_default(Value::boolean(
                 self.descriptor.contains(PropertyDataDescriptor::ENUMERABLE),
             )),
+            sc,
         )?;
 
         obj.set_property(
-            sc,
             sym::configurable.into(),
             PropertyValue::static_default(Value::boolean(
                 self.descriptor.contains(PropertyDataDescriptor::CONFIGURABLE),
             )),
+            sc,
         )?;
 
         Ok(Value::object(sc.register(obj)))
@@ -341,9 +341,9 @@ impl PropertyValue {
 
     pub fn from_descriptor_value(sc: &mut LocalScope<'_>, value: Value) -> Result<Self, Value> {
         let mut flags = PropertyDataDescriptor::empty();
-        let configurable = value.get_property(sc, sym::configurable.into()).root(sc)?.into_option();
-        let enumerable = value.get_property(sc, sym::enumerable.into()).root(sc)?.into_option();
-        let writable = value.get_property(sc, sym::writable.into()).root(sc)?.into_option();
+        let configurable = value.get_property(sym::configurable.into(), sc).root(sc)?.into_option();
+        let enumerable = value.get_property(sym::enumerable.into(), sc).root(sc)?.into_option();
+        let writable = value.get_property(sym::writable.into(), sc).root(sc)?.into_option();
 
         if configurable.is_some_and(|v| v.is_truthy(sc)) {
             flags |= PropertyDataDescriptor::CONFIGURABLE;
@@ -357,12 +357,12 @@ impl PropertyValue {
 
         // TODO: make sure that if value is set, get/set are not
 
-        let static_value = value.get_property(sc, sym::value.into()).root(sc)?.into_option();
+        let static_value = value.get_property(sym::value.into(), sc).root(sc)?.into_option();
         let kind = match static_value {
             Some(static_value) => PropertyValueKind::Static(static_value),
             None => {
                 let get = value
-                    .get_property(sc, sym::get.into())
+                    .get_property(sym::get.into(), sc)
                     .root(sc)?
                     .into_option()
                     .and_then(|v| match v.unpack() {
@@ -370,7 +370,7 @@ impl PropertyValue {
                         _ => None,
                     });
                 let set = value
-                    .get_property(sc, sym::set.into())
+                    .get_property(sym::set.into(), sc)
                     .root(sc)?
                     .into_option()
                     .and_then(|v| match v.unpack() {
@@ -425,7 +425,7 @@ impl PropertyValueKind {
         match *self {
             Self::Static(value) => Ok(value.into()),
             Self::Trap { get, .. } => match get {
-                Some(id) => id.apply(sc, this, CallArgs::empty()),
+                Some(id) => id.apply(this, CallArgs::empty(), sc),
                 None => Ok(Value::undefined().into()),
             },
         }
@@ -464,7 +464,7 @@ impl NamedObject {
     /// Takes a constructor `new_target` and instantiates it
     pub fn instance_for_new_target(new_target: ObjectId, scope: &mut LocalScope) -> Result<Self, Value> {
         let ValueKind::Object(prototype) = new_target
-            .get_property(scope, sym::prototype.into())
+            .get_property(sym::prototype.into(), scope)
             .root(scope)?
             .unpack()
         else {
@@ -519,8 +519,8 @@ unsafe impl Trace for NamedObject {
 impl Object for NamedObject {
     fn get_own_property_descriptor(
         &self,
-        sc: &mut LocalScope,
         key: PropertyKey,
+        sc: &mut LocalScope,
     ) -> Result<Option<PropertyValue>, Unrooted> {
         if let PropertyKey::String(st) = &key {
             match st.sym() {
@@ -542,13 +542,16 @@ impl Object for NamedObject {
         Ok(None)
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
+    fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
         match key.as_string().map(JsString::sym) {
             Some(sym::__proto__) => {
-                return self.set_prototype(sc, match value.into_kind() {
-                    PropertyValueKind::Static(value) => value,
-                    _ => throw!(sc, TypeError, "Prototype cannot be a trap"),
-                });
+                return self.set_prototype(
+                    match value.into_kind() {
+                        PropertyValueKind::Static(value) => value,
+                        _ => throw!(sc, TypeError, "Prototype cannot be a trap"),
+                    },
+                    sc,
+                );
             }
             Some(sym::constructor) => {
                 let obj = if let PropertyValueKind::Static(val) = value.kind {
@@ -584,7 +587,7 @@ impl Object for NamedObject {
         Ok(())
     }
 
-    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
+    fn delete_property(&self, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Value> {
         let mut values = self.values.borrow_mut();
         let value = values.remove(&key);
 
@@ -614,15 +617,15 @@ impl Object for NamedObject {
 
     fn apply(
         &self,
-        _sc: &mut LocalScope,
         _handle: ObjectId,
         _this: This,
         _args: CallArgs,
+        _sc: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
         Ok(Value::undefined().into())
     }
 
-    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
+    fn set_prototype(&self, value: Value, sc: &mut LocalScope) -> Result<(), Value> {
         match value.unpack() {
             ValueKind::Null(_) => self.prototype.replace(None),
             ValueKind::Object(handle) => self.prototype.replace(Some(handle)),
@@ -661,40 +664,40 @@ impl ObjectId {
 // TODO: can these be inherent methods? or do we actually require the `ObjectId: Object` trait obligation anywhere?
 // then they also wouldn't need to take &self
 impl Object for ObjectId {
-    fn get_own_property(&self, sc: &mut LocalScope, this: This, key: PropertyKey) -> Result<Unrooted, Unrooted> {
-        unsafe { (self.vtable(sc).js_get_own_property)(self.data_ptr(sc), sc, this, key) }
+    fn get_own_property(&self, this: This, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Unrooted> {
+        unsafe { (self.vtable(sc).js_get_own_property)(self.data_ptr(sc), this, key, sc) }
     }
 
     fn get_own_property_descriptor(
         &self,
-        sc: &mut LocalScope,
         key: PropertyKey,
+        sc: &mut LocalScope,
     ) -> Result<Option<PropertyValue>, Unrooted> {
-        unsafe { (self.vtable(sc).js_get_own_property_descriptor)(self.data_ptr(sc), sc, key) }
+        unsafe { (self.vtable(sc).js_get_own_property_descriptor)(self.data_ptr(sc), key, sc) }
     }
 
-    fn get_property(&self, sc: &mut LocalScope, this: This, key: PropertyKey) -> Result<Unrooted, Unrooted> {
-        unsafe { (self.vtable(sc).js_get_property)(self.data_ptr(sc), sc, this, key) }
+    fn get_property(&self, this: This, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Unrooted> {
+        unsafe { (self.vtable(sc).js_get_property)(self.data_ptr(sc), this, key, sc) }
     }
 
     fn get_property_descriptor(
         &self,
-        sc: &mut LocalScope,
         key: PropertyKey,
+        sc: &mut LocalScope,
     ) -> Result<Option<PropertyValue>, Unrooted> {
-        unsafe { (self.vtable(sc).js_get_property_descriptor)(self.data_ptr(sc), sc, key) }
+        unsafe { (self.vtable(sc).js_get_property_descriptor)(self.data_ptr(sc), key, sc) }
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
-        unsafe { (self.vtable(sc).js_set_property)(self.data_ptr(sc), sc, key, value) }
+    fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
+        unsafe { (self.vtable(sc).js_set_property)(self.data_ptr(sc), key, value, sc) }
     }
 
-    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
-        unsafe { (self.vtable(sc).js_delete_property)(self.data_ptr(sc), sc, key) }
+    fn delete_property(&self, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Value> {
+        unsafe { (self.vtable(sc).js_delete_property)(self.data_ptr(sc), key, sc) }
     }
 
-    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
-        unsafe { (self.vtable(sc).js_set_prototype)(self.data_ptr(sc), sc, value) }
+    fn set_prototype(&self, value: Value, sc: &mut LocalScope) -> Result<(), Value> {
+        unsafe { (self.vtable(sc).js_set_prototype)(self.data_ptr(sc), value, sc) }
     }
 
     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
@@ -703,23 +706,23 @@ impl Object for ObjectId {
 
     fn apply(
         &self,
-        scope: &mut LocalScope,
         callee: ObjectId,
         this: This,
         args: CallArgs,
+        scope: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
-        unsafe { (self.vtable(scope).js_apply)(self.data_ptr(scope), scope, callee, this, args) }
+        unsafe { (self.vtable(scope).js_apply)(self.data_ptr(scope), callee, this, args, scope) }
     }
 
     fn construct(
         &self,
-        scope: &mut LocalScope,
         callee: ObjectId,
         this: This,
         args: CallArgs,
         new_target: ObjectId,
+        scope: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
-        unsafe { (self.vtable(scope).js_construct)(self.data_ptr(scope), scope, callee, this, args, new_target) }
+        unsafe { (self.vtable(scope).js_construct)(self.data_ptr(scope), callee, this, args, new_target, scope) }
     }
 
     fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
@@ -750,47 +753,47 @@ impl ObjectId {
         extract_type::<T>(self, vm)
     }
 
-    pub fn get_property(self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Unrooted> {
-        Object::get_property(&self, sc, This::Bound(Value::object(self)), key)
+    pub fn get_property(self, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Unrooted> {
+        Object::get_property(&self, This::Bound(Value::object(self)), key, sc)
     }
 
-    pub fn get_own_property(self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Unrooted> {
-        Object::get_own_property(&self, sc, This::Bound(Value::object(self)), key)
+    pub fn get_own_property(self, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Unrooted> {
+        Object::get_own_property(&self, This::Bound(Value::object(self)), key, sc)
     }
 
-    pub fn apply(&self, sc: &mut LocalScope, this: This, args: CallArgs) -> Result<Unrooted, Unrooted> {
+    pub fn apply(&self, this: This, args: CallArgs, sc: &mut LocalScope) -> Result<Unrooted, Unrooted> {
         let callee = *self;
-        Object::apply(self, sc, callee, this, args)
+        Object::apply(self, callee, this, args, sc)
     }
 
-    pub fn construct(&self, sc: &mut LocalScope, this: This, args: CallArgs) -> Result<Unrooted, Unrooted> {
-        Object::construct(self, sc, *self, this, args, *self)
+    pub fn construct(&self, this: This, args: CallArgs, sc: &mut LocalScope) -> Result<Unrooted, Unrooted> {
+        Object::construct(self, *self, this, args, *self, sc)
     }
 
     pub fn construct_with_target(
         &self,
-        sc: &mut LocalScope,
         this: This,
         args: CallArgs,
         new_target: ObjectId,
+        sc: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
-        Object::construct(self, sc, *self, this, args, new_target)
+        Object::construct(self, *self, this, args, new_target, sc)
     }
 
-    pub fn set_integrity_level(self, sc: &mut LocalScope<'_>, level: IntegrityLevel) -> Result<(), Value> {
+    pub fn set_integrity_level(self, level: IntegrityLevel, sc: &mut LocalScope<'_>) -> Result<(), Value> {
         // TODO: invoke [[PreventExtensions]]
         let keys = self.own_keys(sc)?;
         for key in keys {
             let key = PropertyKey::from_value(sc, key)?;
 
-            if let Some(mut desc) = self.get_own_property_descriptor(sc, key).root_err(sc)? {
+            if let Some(mut desc) = self.get_own_property_descriptor(key, sc).root_err(sc)? {
                 desc.descriptor.remove(PropertyDataDescriptor::CONFIGURABLE);
                 if let IntegrityLevel::Frozen = level {
                     if let PropertyValueKind::Static(_) = desc.kind {
                         desc.descriptor.remove(PropertyDataDescriptor::WRITABLE);
                     }
                 }
-                self.set_property(sc, key, desc)?;
+                self.set_property(key, desc, sc)?;
             }
         }
         Ok(())
@@ -804,15 +807,15 @@ pub enum IntegrityLevel {
 
 impl Persistent {
     pub fn get_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Unrooted> {
-        self.id().get_property(sc, key)
+        self.id().get_property(key, sc)
     }
 
     pub fn apply(&self, sc: &mut LocalScope, this: This, args: CallArgs) -> Result<Unrooted, Unrooted> {
-        self.id().apply(sc, this, args)
+        self.id().apply(this, args, sc)
     }
 
     pub fn construct(&self, sc: &mut LocalScope, this: This, args: CallArgs) -> Result<Unrooted, Unrooted> {
-        self.id().construct(sc, this, args)
+        self.id().construct(this, args, sc)
     }
 
     // FIXME: should override typeof, internal_slots, etc.
@@ -825,7 +828,7 @@ pub fn delegate_get_property<T: Object + ?Sized>(
     sc: &mut LocalScope,
     key: PropertyKey,
 ) -> Result<Unrooted, Unrooted> {
-    this.get_property_descriptor(sc, key)
+    this.get_property_descriptor(key, sc)
         .map(|x| x.unwrap_or_else(|| PropertyValue::static_default(Value::undefined())))
         .and_then(|x| x.get_or_apply(sc, this_value))
 }
@@ -836,7 +839,7 @@ pub fn delegate_get_own_property<T: Object + ?Sized>(
     sc: &mut LocalScope,
     key: PropertyKey,
 ) -> Result<Unrooted, Unrooted> {
-    this.get_own_property_descriptor(sc, key)
+    this.get_own_property_descriptor(key, sc)
         .map(|x| x.unwrap_or_else(|| PropertyValue::static_default(Value::undefined())))
         .and_then(|x| x.get_or_apply(sc, this_value))
 }

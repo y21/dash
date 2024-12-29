@@ -42,17 +42,17 @@ pub fn import(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     let set_timeout = register_native_fn(sc, set_timeout_sym, set_timeout);
 
     obj.set_property(
-        sc,
         set_timeout_sym.into(),
         PropertyValue::static_default(set_timeout.into()),
+        sc,
     )?;
 
     let set_immediate_sym = sc.intern("setImmediate");
     let set_immediate = register_native_fn(sc, set_immediate_sym, set_immediate);
     obj.set_property(
-        sc,
         set_immediate_sym.into(),
         PropertyValue::static_default(set_immediate.into()),
+        sc,
     )?;
 
     Ok(Value::object(sc.register(obj)))

@@ -153,8 +153,8 @@ impl Vm {
             // LocalScope needs to be the last parameter because we don't have two phase borrows in user code
             scope: &mut LocalScope<'_>,
         ) -> ObjectId {
-            base.set_property(scope, sym::constructor.into(), PropertyValue::static_non_enumerable(constructor.into())).unwrap();
-            base.set_prototype(scope, prototype.into()).unwrap();
+            base.set_property(sym::constructor.into(), PropertyValue::static_non_enumerable(constructor.into()),scope).unwrap();
+            base.set_prototype(prototype.into(),scope).unwrap();
 
             for (key, value) in methods {
                 register(
@@ -167,7 +167,7 @@ impl Vm {
                     None,
                     scope,
                 );
-                base.set_property(scope, key.into(), PropertyValue::static_non_enumerable(value.into())).unwrap();
+                base.set_property(key.into(), PropertyValue::static_non_enumerable(value.into()), scope).unwrap();
             }
 
             for (key, value) in symbols {
@@ -181,7 +181,7 @@ impl Vm {
                     None,
                     scope,
                 );
-                base.set_property(scope, key.into(), PropertyValue::static_empty(value.into())).unwrap();
+                base.set_property(key.into(), PropertyValue::static_empty(value.into()), scope).unwrap();
             }
 
             for (key, value, descriptor) in fields {
@@ -189,7 +189,7 @@ impl Vm {
                     kind: PropertyValueKind::Static(value),
                     descriptor: descriptor.unwrap_or_default()
                 };
-                base.set_property(scope, key.into(), value).unwrap();
+                base.set_property(key.into(), value, scope).unwrap();
             }
 
             if let Some((proto_name, proto_val)) = fn_prototype {
@@ -1440,7 +1440,7 @@ impl Vm {
             scope.add_ref(task);
 
             debug!("process task {:?}", task);
-            if let Err(ex) = task.apply(&mut scope, This::Default, CallArgs::empty()) {
+            if let Err(ex) = task.apply(This::Default, CallArgs::empty(),&mut scope) {
                 if let Some(callback) = scope.params.unhandled_task_exception_callback() {
                     let ex = ex.root(&mut scope);
                     error!("uncaught async task exception");

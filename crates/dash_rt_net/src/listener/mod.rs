@@ -29,33 +29,33 @@ pub struct TcpListenerConstructor {}
 impl Object for TcpListenerConstructor {
     fn get_own_property_descriptor(
         &self,
-        _sc: &mut dash_vm::localscope::LocalScope,
         _key: PropertyKey,
+        _sc: &mut dash_vm::localscope::LocalScope,
     ) -> Result<Option<dash_vm::value::object::PropertyValue>, dash_vm::value::Unrooted> {
         Ok(None)
     }
 
     fn set_property(
         &self,
-        _sc: &mut dash_vm::localscope::LocalScope,
         _key: PropertyKey,
         _value: dash_vm::value::object::PropertyValue,
+        _sc: &mut dash_vm::localscope::LocalScope,
     ) -> Result<(), dash_vm::value::Value> {
         Ok(())
     }
 
     fn delete_property(
         &self,
-        _sc: &mut dash_vm::localscope::LocalScope,
         _key: PropertyKey,
+        _sc: &mut dash_vm::localscope::LocalScope,
     ) -> Result<dash_vm::value::Unrooted, dash_vm::value::Value> {
         Ok(Unrooted::new(Value::undefined()))
     }
 
     fn set_prototype(
         &self,
-        _sc: &mut dash_vm::localscope::LocalScope,
         _value: dash_vm::value::Value,
+        _sc: &mut dash_vm::localscope::LocalScope,
     ) -> Result<(), dash_vm::value::Value> {
         Ok(())
     }
@@ -69,21 +69,21 @@ impl Object for TcpListenerConstructor {
 
     fn apply(
         &self,
-        scope: &mut dash_vm::localscope::LocalScope,
         _callee: dash_vm::gc::ObjectId,
         _this: This,
         _args: CallArgs,
+        scope: &mut dash_vm::localscope::LocalScope,
     ) -> Result<dash_vm::value::Unrooted, dash_vm::value::Unrooted> {
         throw!(scope, Error, "TcpListener should be called as a constructor")
     }
 
     fn construct(
         &self,
-        scope: &mut dash_vm::localscope::LocalScope,
         _callee: dash_vm::gc::ObjectId,
         _this: This,
         args: CallArgs,
         new_target: ObjectId,
+        scope: &mut dash_vm::localscope::LocalScope,
     ) -> Result<Unrooted, Unrooted> {
         let Some(value) = args.first() else {
             throw!(
@@ -177,7 +177,7 @@ impl TcpListenerHandle {
         let name = sc.intern("accept");
         let accept_fn = Function::new(sc, Some(name.into()), FunctionKind::Native(tcplistener_accept));
         let accept_fn = sc.register(accept_fn);
-        object.set_property(sc, name.into(), PropertyValue::static_default(Value::object(accept_fn)))?;
+        object.set_property(name.into(), PropertyValue::static_default(Value::object(accept_fn)), sc)?;
         Ok(Self { object, sender })
     }
 }
@@ -229,17 +229,17 @@ impl TcpStreamHandle {
         let write_fn = Function::new(scope, Some(name.into()), FunctionKind::Native(tcpstream_write));
         let write_fn = scope.register(write_fn);
         object.set_property(
-            scope,
             name.into(),
             PropertyValue::static_default(Value::object(write_fn)),
+            scope,
         )?;
         let name = scope.intern("read");
         let read_fn = Function::new(scope, Some(name.into()), FunctionKind::Native(tcpstream_read));
         let read_fn = scope.register(read_fn);
         object.set_property(
-            scope,
             name.into(),
             PropertyValue::static_default(Value::object(read_fn)),
+            scope,
         )?;
         Ok(Self {
             object,

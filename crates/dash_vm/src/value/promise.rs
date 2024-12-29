@@ -79,22 +79,22 @@ impl Promise {
 impl Object for Promise {
     fn get_own_property_descriptor(
         &self,
-        sc: &mut LocalScope,
         key: PropertyKey,
+        sc: &mut LocalScope,
     ) -> Result<Option<PropertyValue>, Unrooted> {
-        self.obj.get_own_property_descriptor(sc, key)
+        self.obj.get_own_property_descriptor(key, sc)
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
-        self.obj.set_property(sc, key, value)
+    fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
+        self.obj.set_property(key, value, sc)
     }
 
-    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
-        self.obj.delete_property(sc, key)
+    fn delete_property(&self, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Value> {
+        self.obj.delete_property(key, sc)
     }
 
-    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
-        self.obj.set_prototype(sc, value)
+    fn set_prototype(&self, value: Value, sc: &mut LocalScope) -> Result<(), Value> {
+        self.obj.set_prototype(value, sc)
     }
 
     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
@@ -103,12 +103,12 @@ impl Object for Promise {
 
     fn apply(
         &self,
-        scope: &mut LocalScope,
         callee: ObjectId,
         this: This,
         args: CallArgs,
+        scope: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
-        self.obj.apply(scope, callee, this, args)
+        self.obj.apply(callee, this, args, scope)
     }
 
     fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
@@ -136,22 +136,22 @@ impl PromiseResolver {
 impl Object for PromiseResolver {
     fn get_own_property_descriptor(
         &self,
-        sc: &mut LocalScope,
         key: PropertyKey,
+        sc: &mut LocalScope,
     ) -> Result<Option<PropertyValue>, Unrooted> {
-        self.obj.get_own_property_descriptor(sc, key)
+        self.obj.get_own_property_descriptor(key, sc)
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
-        self.obj.set_property(sc, key, value)
+    fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
+        self.obj.set_property(key, value, sc)
     }
 
-    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
-        self.obj.delete_property(sc, key)
+    fn delete_property(&self, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Value> {
+        self.obj.delete_property(key, sc)
     }
 
-    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
-        self.obj.set_prototype(sc, value)
+    fn set_prototype(&self, value: Value, sc: &mut LocalScope) -> Result<(), Value> {
+        self.obj.set_prototype(value, sc)
     }
 
     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
@@ -160,10 +160,10 @@ impl Object for PromiseResolver {
 
     fn apply(
         &self,
-        scope: &mut LocalScope,
         _callee: ObjectId,
         _this: This,
         args: CallArgs,
+        scope: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
         scope.drive_promise(
             PromiseAction::Resolve,
@@ -203,22 +203,22 @@ impl PromiseRejecter {
 impl Object for PromiseRejecter {
     fn get_own_property_descriptor(
         &self,
-        sc: &mut LocalScope,
         key: PropertyKey,
+        sc: &mut LocalScope,
     ) -> Result<Option<PropertyValue>, Unrooted> {
-        self.obj.get_own_property_descriptor(sc, key)
+        self.obj.get_own_property_descriptor(key, sc)
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
-        self.obj.set_property(sc, key, value)
+    fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
+        self.obj.set_property(key, value, sc)
     }
 
-    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
-        self.obj.delete_property(sc, key)
+    fn delete_property(&self, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Value> {
+        self.obj.delete_property(key, sc)
     }
 
-    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
-        self.obj.set_prototype(sc, value)
+    fn set_prototype(&self, value: Value, sc: &mut LocalScope) -> Result<(), Value> {
+        self.obj.set_prototype(value, sc)
     }
 
     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
@@ -227,10 +227,10 @@ impl Object for PromiseRejecter {
 
     fn apply(
         &self,
-        scope: &mut LocalScope,
         _callee: ObjectId,
         _this: This,
         args: CallArgs,
+        scope: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
         scope.drive_promise(
             PromiseAction::Reject,

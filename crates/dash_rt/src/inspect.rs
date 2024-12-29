@@ -134,11 +134,11 @@ fn inspect_inner_into(
         }),
         ValueKind::Object(object) => {
             let constructor = object
-                .get_property(scope, sym::constructor.into())
+                .get_property(sym::constructor.into(), scope)
                 .root(scope)?
                 .into_option();
             let constructor_name = constructor
-                .map(|c| c.get_property(scope, sym::name.into()))
+                .map(|c| c.get_property(sym::name.into(), scope))
                 .transpose()
                 .root(scope)?
                 .map(|n| n.to_js_string(scope).map(|s| s.sym()))
@@ -165,7 +165,7 @@ fn inspect_inner_into(
 
             if object.type_of(scope) == Typeof::Function {
                 let name = object
-                    .get_own_property(scope, sym::name.into())
+                    .get_own_property(sym::name.into(), scope)
                     .root(scope)?
                     .into_option()
                     .map(|v| v.to_js_string(scope))
@@ -188,7 +188,7 @@ fn inspect_inner_into(
             for (i, key) in keys.into_iter().enumerate() {
                 let key = PropertyKey::from_value(scope, key)?;
 
-                if let Some(property_value) = object.get_own_property_descriptor(scope, key).root_err(scope)? {
+                if let Some(property_value) = object.get_own_property_descriptor(key, scope).root_err(scope)? {
                     if property_value.descriptor.contains(PropertyDataDescriptor::ENUMERABLE) {
                         if i > 0 {
                             *out += ", ";

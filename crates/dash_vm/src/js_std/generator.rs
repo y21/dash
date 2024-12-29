@@ -110,11 +110,11 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
 
 fn create_generator_value(scope: &mut LocalScope, done: bool, value: Option<Value>) -> Result<Value, Value> {
     let obj = NamedObject::new(scope);
-    obj.set_property(scope, sym::done.into(), PropertyValue::static_default(done.into()))?;
+    obj.set_property(sym::done.into(), PropertyValue::static_default(done.into()), scope)?;
     obj.set_property(
-        scope,
         sym::value.into(),
         PropertyValue::static_default(value.unwrap_or_undefined()),
+        scope,
     )?;
     Ok(scope.register(obj).into())
 }

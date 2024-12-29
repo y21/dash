@@ -14,14 +14,14 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
 
     let obj = NamedObject::new(cx.scope);
     obj.set_property(
-        cx.scope,
         sym::value.into(),
         PropertyValue::static_default(next.unwrap_or_undefined()),
+        cx.scope,
     )?;
     obj.set_property(
-        cx.scope,
         sym::done.into(),
         PropertyValue::static_default(Value::boolean(done)),
+        cx.scope,
     )?;
 
     Ok(cx.scope.register(obj).into())

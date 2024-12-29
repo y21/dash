@@ -14,9 +14,9 @@ pub fn init_module(sc: &mut LocalScope) -> Result<Value, Value> {
 
     let module = NamedObject::new(sc);
     module.set_property(
-        sc,
         name.into(),
         PropertyValue::static_default(Value::object(read_file_value)),
+        sc,
     )?;
 
     Ok(Value::object(sc.register(module)))

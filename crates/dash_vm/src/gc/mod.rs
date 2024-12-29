@@ -30,21 +30,22 @@ pub struct ObjectVTable {
     pub(crate) trace: unsafe fn(*const (), &mut TraceCtxt<'_>),
     pub(crate) debug_fmt: unsafe fn(*const (), &mut core::fmt::Formatter<'_>) -> core::fmt::Result,
     pub(crate) js_get_own_property:
-        unsafe fn(*const (), &mut LocalScope<'_>, This, PropertyKey) -> Result<Unrooted, Unrooted>,
+        unsafe fn(*const (), This, PropertyKey, &mut LocalScope<'_>) -> Result<Unrooted, Unrooted>,
     pub(crate) js_get_own_property_descriptor:
-        unsafe fn(*const (), &mut LocalScope<'_>, PropertyKey) -> Result<Option<PropertyValue>, Unrooted>,
-    pub(crate) js_get_property: unsafe fn(*const (), &mut LocalScope, This, PropertyKey) -> Result<Unrooted, Unrooted>,
+        unsafe fn(*const (), PropertyKey, &mut LocalScope<'_>) -> Result<Option<PropertyValue>, Unrooted>,
+    pub(crate) js_get_property:
+        unsafe fn(*const (), This, PropertyKey, &mut LocalScope<'_>) -> Result<Unrooted, Unrooted>,
     pub(crate) js_get_property_descriptor:
-        unsafe fn(*const (), &mut LocalScope<'_>, PropertyKey) -> Result<Option<PropertyValue>, Unrooted>,
+        unsafe fn(*const (), PropertyKey, &mut LocalScope<'_>) -> Result<Option<PropertyValue>, Unrooted>,
     pub(crate) js_set_property:
-        unsafe fn(*const (), &mut LocalScope<'_>, PropertyKey, PropertyValue) -> Result<(), Value>,
-    pub(crate) js_delete_property: unsafe fn(*const (), &mut LocalScope<'_>, PropertyKey) -> Result<Unrooted, Value>,
-    pub(crate) js_set_prototype: unsafe fn(*const (), &mut LocalScope<'_>, Value) -> Result<(), Value>,
+        unsafe fn(*const (), PropertyKey, PropertyValue, &mut LocalScope<'_>) -> Result<(), Value>,
+    pub(crate) js_delete_property: unsafe fn(*const (), PropertyKey, &mut LocalScope<'_>) -> Result<Unrooted, Value>,
+    pub(crate) js_set_prototype: unsafe fn(*const (), Value, &mut LocalScope<'_>) -> Result<(), Value>,
     pub(crate) js_get_prototype: unsafe fn(*const (), &mut LocalScope<'_>) -> Result<Value, Value>,
     pub(crate) js_apply:
-        unsafe fn(*const (), &mut LocalScope<'_>, ObjectId, This, CallArgs) -> Result<Unrooted, Unrooted>,
+        unsafe fn(*const (), ObjectId, This, CallArgs, &mut LocalScope<'_>) -> Result<Unrooted, Unrooted>,
     pub(crate) js_construct:
-        unsafe fn(*const (), &mut LocalScope<'_>, ObjectId, This, CallArgs, ObjectId) -> Result<Unrooted, Unrooted>,
+        unsafe fn(*const (), ObjectId, This, CallArgs, ObjectId, &mut LocalScope<'_>) -> Result<Unrooted, Unrooted>,
     pub(crate) js_internal_slots: unsafe fn(*const (), &Vm) -> Option<*const dyn InternalSlots>,
     pub(crate) js_extract_type_raw: unsafe fn(*const (), &Vm, TypeId) -> Option<NonNull<()>>,
     pub(crate) js_own_keys: unsafe fn(*const (), sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value>,
@@ -61,33 +62,33 @@ macro_rules! object_vtable_for_ty {
             &$crate::gc::ObjectVTable {
                 trace: |ptr, ctxt| unsafe { <$ty as $crate::gc::trace::Trace>::trace(&*(ptr.cast::<$ty>()), ctxt) },
                 debug_fmt: |ptr, f| unsafe { <$ty as std::fmt::Debug>::fmt(&*(ptr.cast::<$ty>()), f) },
-                js_get_own_property: |ptr, scope, this, key| unsafe {
-                    <$ty as Object>::get_own_property(&*(ptr.cast::<$ty>()), scope, this, key)
+                js_get_own_property: |ptr, this, key, scope| unsafe {
+                    <$ty as Object>::get_own_property(&*(ptr.cast::<$ty>()), this, key, scope)
                 },
-                js_get_own_property_descriptor: |ptr, scope, key| unsafe {
-                    <$ty as Object>::get_own_property_descriptor(&*(ptr.cast::<$ty>()), scope, key)
+                js_get_own_property_descriptor: |ptr, key, scope| unsafe {
+                    <$ty as Object>::get_own_property_descriptor(&*(ptr.cast::<$ty>()), key, scope)
                 },
-                js_get_property: |ptr, scope, this, key| unsafe {
-                    <$ty as Object>::get_property(&*(ptr.cast::<$ty>()), scope, this, key)
+                js_get_property: |ptr, this, key, scope| unsafe {
+                    <$ty as Object>::get_property(&*(ptr.cast::<$ty>()), this, key, scope)
                 },
-                js_get_property_descriptor: |ptr, scope, key| unsafe {
-                    <$ty as Object>::get_property_descriptor(&*(ptr.cast::<$ty>()), scope, key)
+                js_get_property_descriptor: |ptr, key, scope| unsafe {
+                    <$ty as Object>::get_property_descriptor(&*(ptr.cast::<$ty>()), key, scope)
                 },
-                js_set_property: |ptr, scope, key, value| unsafe {
-                    <$ty as Object>::set_property(&*(ptr.cast::<$ty>()), scope, key, value)
+                js_set_property: |ptr, key, value, scope| unsafe {
+                    <$ty as Object>::set_property(&*(ptr.cast::<$ty>()), key, value, scope)
                 },
-                js_delete_property: |ptr, scope, key| unsafe {
-                    <$ty as Object>::delete_property(&*(ptr.cast::<$ty>()), scope, key)
+                js_delete_property: |ptr, key, scope| unsafe {
+                    <$ty as Object>::delete_property(&*(ptr.cast::<$ty>()), key, scope)
                 },
-                js_set_prototype: |ptr, scope, proto| unsafe {
-                    <$ty as Object>::set_prototype(&*(ptr.cast::<$ty>()), scope, proto)
+                js_set_prototype: |ptr, proto, scope| unsafe {
+                    <$ty as Object>::set_prototype(&*(ptr.cast::<$ty>()), proto, scope)
                 },
                 js_get_prototype: |ptr, scope| unsafe { <$ty as Object>::get_prototype(&*(ptr.cast::<$ty>()), scope) },
-                js_apply: |ptr, scope, callee, this, args| unsafe {
-                    <$ty as Object>::apply(&*(ptr.cast::<$ty>()), scope, callee, this, args)
+                js_apply: |ptr, callee, this, args, scope| unsafe {
+                    <$ty as Object>::apply(&*(ptr.cast::<$ty>()), callee, this, args, scope)
                 },
-                js_construct: |ptr, scope, callee, this, args, new_target| unsafe {
-                    <$ty as Object>::construct(&*(ptr.cast::<$ty>()), scope, callee, this, args, new_target)
+                js_construct: |ptr, callee, this, args, new_target, scope| unsafe {
+                    <$ty as Object>::construct(&*(ptr.cast::<$ty>()), callee, this, args, new_target, scope)
                 },
                 js_internal_slots: |ptr, vm| unsafe {
                     <$ty as Object>::internal_slots(&*(ptr.cast::<$ty>()), vm)

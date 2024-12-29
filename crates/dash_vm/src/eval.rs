@@ -66,7 +66,7 @@ impl Vm {
 
                 if let Some(default) = exports.default {
                     let default = default.root(sc);
-                    export_obj.set_property(sc, sym::default.into(), PropertyValue::static_default(default))?;
+                    export_obj.set_property(sym::default.into(), PropertyValue::static_default(default), sc)?;
                 }
 
                 Value::object(sc.register(export_obj))
@@ -75,7 +75,7 @@ impl Vm {
 
         for (k, v) in exports.named {
             let v = v.root(sc);
-            export_obj.set_property(sc, k.into(), PropertyValue::static_default(v))?;
+            export_obj.set_property(k.into(), PropertyValue::static_default(v), sc)?;
         }
 
         Ok(export_obj.into())

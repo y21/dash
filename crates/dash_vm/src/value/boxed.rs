@@ -49,14 +49,14 @@ macro_rules! boxed_primitive {
 
                 fn get_own_property_descriptor(
                     &self,
-                    sc: &mut LocalScope,
                     key: PropertyKey,
+                    sc: &mut LocalScope,
                 ) -> Result<Option<PropertyValue>, Unrooted> {
-                    if let Some(x) = self.inner.get_own_property_descriptor(sc, key.clone())? {
+                    if let Some(x) = self.inner.get_own_property_descriptor(key.clone(), sc)? {
                         return Ok(Some(x));
                     }
 
-                    return self.obj.get_own_property_descriptor(sc, key);
+                    return self.obj.get_own_property_descriptor(key, sc);
                 }
 
                 fn internal_slots(&self, _: &Vm) -> Option<&dyn InternalSlots> {

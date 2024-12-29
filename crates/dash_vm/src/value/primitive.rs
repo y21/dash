@@ -26,21 +26,21 @@ pub const MIN_SAFE_INTEGERF: f64 = -9007199254740991f64;
 impl Object for f64 {
     fn get_own_property_descriptor(
         &self,
-        _sc: &mut LocalScope,
         _key: PropertyKey,
+        _sc: &mut LocalScope,
     ) -> Result<Option<PropertyValue>, Unrooted> {
         Ok(None)
     }
 
-    fn set_property(&self, _sc: &mut LocalScope, _key: PropertyKey, _value: PropertyValue) -> Result<(), Value> {
+    fn set_property(&self, _key: PropertyKey, _value: PropertyValue, _sc: &mut LocalScope) -> Result<(), Value> {
         Ok(())
     }
 
-    fn delete_property(&self, _sc: &mut LocalScope, _key: PropertyKey) -> Result<Unrooted, Value> {
+    fn delete_property(&self, _key: PropertyKey, _sc: &mut LocalScope) -> Result<Unrooted, Value> {
         Ok(Unrooted::new(Value::undefined()))
     }
 
-    fn set_prototype(&self, _sc: &mut LocalScope, _value: Value) -> Result<(), Value> {
+    fn set_prototype(&self, _value: Value, _sc: &mut LocalScope) -> Result<(), Value> {
         // TODO: Reflect.setPrototypeOf(this, value); should throw
         Ok(())
     }
@@ -51,10 +51,10 @@ impl Object for f64 {
 
     fn apply(
         &self,
-        scope: &mut LocalScope,
         _callee: ObjectId,
         _this: This,
         _args: CallArgs,
+        scope: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
         throw!(scope, TypeError, "number is not a function")
     }
@@ -77,21 +77,21 @@ impl Object for f64 {
 impl Object for bool {
     fn get_own_property_descriptor(
         &self,
-        _sc: &mut LocalScope,
         _key: PropertyKey,
+        _sc: &mut LocalScope,
     ) -> Result<Option<PropertyValue>, Unrooted> {
         Ok(None)
     }
 
-    fn set_property(&self, _sc: &mut LocalScope, _key: PropertyKey, _value: PropertyValue) -> Result<(), Value> {
+    fn set_property(&self, _key: PropertyKey, _value: PropertyValue, _sc: &mut LocalScope) -> Result<(), Value> {
         Ok(())
     }
 
-    fn delete_property(&self, _sc: &mut LocalScope, _key: PropertyKey) -> Result<Unrooted, Value> {
+    fn delete_property(&self, _key: PropertyKey, _sc: &mut LocalScope) -> Result<Unrooted, Value> {
         Ok(Unrooted::new(Value::undefined()))
     }
 
-    fn set_prototype(&self, _sc: &mut LocalScope, _value: Value) -> Result<(), Value> {
+    fn set_prototype(&self, _value: Value, _sc: &mut LocalScope) -> Result<(), Value> {
         Ok(())
     }
 
@@ -101,10 +101,10 @@ impl Object for bool {
 
     fn apply(
         &self,
-        scope: &mut LocalScope,
         _callee: ObjectId,
         _this: This,
         _args: CallArgs,
+        scope: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
         throw!(scope, TypeError, "boolean is not a function")
     }
@@ -140,8 +140,8 @@ pub struct Null;
 impl Object for Undefined {
     fn get_own_property_descriptor(
         &self,
-        sc: &mut LocalScope,
         key: PropertyKey,
+        sc: &mut LocalScope,
     ) -> Result<Option<PropertyValue>, Unrooted> {
         let key = match key {
             PropertyKey::String(s) => s.res(sc).to_owned(),
@@ -150,7 +150,7 @@ impl Object for Undefined {
         throw!(sc, TypeError, "Cannot read property {} of undefined", key)
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, _value: PropertyValue) -> Result<(), Value> {
+    fn set_property(&self, key: PropertyKey, _value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
         let key = match key {
             PropertyKey::String(s) => s.res(sc).to_owned(),
             PropertyKey::Symbol(s) => sc.interner.resolve(s.sym()).to_owned(),
@@ -158,11 +158,11 @@ impl Object for Undefined {
         throw!(sc, TypeError, "Cannot set property {:?} of undefined", key)
     }
 
-    fn delete_property(&self, _sc: &mut LocalScope, _key: PropertyKey) -> Result<Unrooted, Value> {
+    fn delete_property(&self, _key: PropertyKey, _sc: &mut LocalScope) -> Result<Unrooted, Value> {
         Ok(Unrooted::new(Value::undefined()))
     }
 
-    fn set_prototype(&self, sc: &mut LocalScope, _value: Value) -> Result<(), Value> {
+    fn set_prototype(&self, _value: Value, sc: &mut LocalScope) -> Result<(), Value> {
         throw!(sc, TypeError, "Cannot set prototype of undefined")
     }
 
@@ -172,10 +172,10 @@ impl Object for Undefined {
 
     fn apply(
         &self,
-        sc: &mut LocalScope,
         _callee: ObjectId,
         _this: This,
         _args: CallArgs,
+        sc: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
         throw!(sc, TypeError, "undefined is not a function")
     }
@@ -194,8 +194,8 @@ impl Object for Undefined {
 impl Object for Null {
     fn get_own_property_descriptor(
         &self,
-        sc: &mut LocalScope,
         key: PropertyKey,
+        sc: &mut LocalScope,
     ) -> Result<Option<PropertyValue>, Unrooted> {
         let key = match key {
             PropertyKey::String(s) => s.res(sc).to_owned(),
@@ -204,7 +204,7 @@ impl Object for Null {
         throw!(sc, TypeError, "Cannot read property {} of null", key)
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, _value: PropertyValue) -> Result<(), Value> {
+    fn set_property(&self, key: PropertyKey, _value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
         let key = match key {
             PropertyKey::String(s) => s.res(sc).to_owned(),
             PropertyKey::Symbol(s) => sc.interner.resolve(s.sym()).to_owned(),
@@ -212,11 +212,11 @@ impl Object for Null {
         throw!(sc, TypeError, "Cannot set property {:?} of null", key)
     }
 
-    fn delete_property(&self, _sc: &mut LocalScope, _key: PropertyKey) -> Result<Unrooted, Value> {
+    fn delete_property(&self, _key: PropertyKey, _sc: &mut LocalScope) -> Result<Unrooted, Value> {
         Ok(Unrooted::new(Value::undefined()))
     }
 
-    fn set_prototype(&self, sc: &mut LocalScope, _value: Value) -> Result<(), Value> {
+    fn set_prototype(&self, _value: Value, sc: &mut LocalScope) -> Result<(), Value> {
         throw!(sc, TypeError, "Cannot set prototype of null")
     }
 
@@ -226,10 +226,10 @@ impl Object for Null {
 
     fn apply(
         &self,
-        sc: &mut LocalScope,
         _callee: ObjectId,
         _this: This,
         _args: CallArgs,
+        sc: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
         throw!(sc, TypeError, "null is not a function")
     }
@@ -260,21 +260,21 @@ impl Symbol {
 impl Object for Symbol {
     fn get_own_property_descriptor(
         &self,
-        _sc: &mut LocalScope,
         _key: PropertyKey,
+        _sc: &mut LocalScope,
     ) -> Result<Option<PropertyValue>, Unrooted> {
         Ok(None)
     }
 
-    fn set_property(&self, _sc: &mut LocalScope, _key: PropertyKey, _value: PropertyValue) -> Result<(), Value> {
+    fn set_property(&self, _key: PropertyKey, _value: PropertyValue, _sc: &mut LocalScope) -> Result<(), Value> {
         Ok(())
     }
 
-    fn delete_property(&self, _sc: &mut LocalScope, _key: PropertyKey) -> Result<Unrooted, Value> {
+    fn delete_property(&self, _key: PropertyKey, _sc: &mut LocalScope) -> Result<Unrooted, Value> {
         Ok(Unrooted::new(Value::undefined()))
     }
 
-    fn set_prototype(&self, _sc: &mut LocalScope, _value: Value) -> Result<(), Value> {
+    fn set_prototype(&self, _value: Value, _sc: &mut LocalScope) -> Result<(), Value> {
         Ok(())
     }
 
@@ -284,10 +284,10 @@ impl Object for Symbol {
 
     fn apply(
         &self,
-        scope: &mut LocalScope,
         _callee: ObjectId,
         _this: This,
         _args: CallArgs,
+        scope: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
         throw!(scope, TypeError, "symbol is not a function")
     }
@@ -499,22 +499,22 @@ impl Hash for Number {
 impl Object for Number {
     fn get_own_property_descriptor(
         &self,
-        sc: &mut LocalScope,
         key: PropertyKey,
+        sc: &mut LocalScope,
     ) -> Result<Option<PropertyValue>, Unrooted> {
-        self.0.get_own_property_descriptor(sc, key)
+        self.0.get_own_property_descriptor(key, sc)
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
-        self.0.set_property(sc, key, value)
+    fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
+        self.0.set_property(key, value, sc)
     }
 
-    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
-        self.0.delete_property(sc, key)
+    fn delete_property(&self, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Value> {
+        self.0.delete_property(key, sc)
     }
 
-    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
-        self.0.set_prototype(sc, value)
+    fn set_prototype(&self, value: Value, sc: &mut LocalScope) -> Result<(), Value> {
+        self.0.set_prototype(value, sc)
     }
 
     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
@@ -523,12 +523,12 @@ impl Object for Number {
 
     fn apply(
         &self,
-        scope: &mut LocalScope,
         callee: ObjectId,
         this: This,
         args: CallArgs,
+        scope: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
-        self.0.apply(scope, callee, this, args)
+        self.0.apply(callee, this, args, scope)
     }
 
     fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {

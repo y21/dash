@@ -76,10 +76,10 @@ impl Runtime {
         });
 
         global
-            .get_property(scope, sym::console.into())
+            .get_property(sym::console.into(), scope)
             .root(scope)
             .unwrap()
-            .set_property(scope, sym::log.into(), PropertyValue::static_default(log.into()))
+            .set_property(sym::log.into(), PropertyValue::static_default(log.into()), scope)
             .unwrap();
     }
 

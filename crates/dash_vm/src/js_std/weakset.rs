@@ -20,7 +20,7 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
         for i in 0..len {
             let i = cx.scope.intern_usize(i);
             let item = iter
-                .get_property(cx.scope, PropertyKey::String(i.into()))
+                .get_property(PropertyKey::String(i.into()), cx.scope)
                 .root(cx.scope)?;
 
             weakset.add(item);

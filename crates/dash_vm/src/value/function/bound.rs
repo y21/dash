@@ -2,6 +2,7 @@ use dash_proc_macro::Trace;
 
 use crate::frame::This;
 use crate::gc::ObjectId;
+use crate::localscope::LocalScope;
 use crate::value::object::{NamedObject, Object};
 use crate::value::{Typeof, Unrooted, Value};
 use crate::{Vm, delegate, extract};
@@ -42,17 +43,17 @@ impl Object for BoundFunction {
 
     fn apply(
         &self,
-        scope: &mut crate::localscope::LocalScope,
         _callee: ObjectId,
         this: This,
         args: CallArgs,
+        scope: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
         let target_this = self.this.map_or(this, This::Bound);
 
         let mut target_args = self.args.clone();
         target_args.extend(args);
 
-        self.callee.apply(scope, target_this, target_args)
+        self.callee.apply(target_this, target_args, scope)
     }
 
     fn type_of(&self, _: &Vm) -> Typeof {

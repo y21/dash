@@ -518,7 +518,7 @@ mod extract {
                 }
                 ExportPropertyKind::Global => {
                     let ident = extract::<IdentW>(cx).0;
-                    let value = cx.global().get_property(&mut cx.scope, ident.into())?;
+                    let value = cx.global().get_property(ident.into(), &mut cx.scope)?;
                     Self(value, ident)
                 }
             })
@@ -931,7 +931,7 @@ mod handlers {
                     throw!(&mut cx, ReferenceError, "{} is not defined", name)
                 }
             },
-            None => cx.global.get_property(&mut cx, name.into())?,
+            None => cx.global.get_property(name.into(), &mut cx.scope)?,
         };
 
         cx.push_stack(value);
@@ -949,13 +949,15 @@ mod handlers {
                 let value = cx
                     .global
                     .clone()
-                    .get_property(&mut cx, PropertyKey::String(name))
+                    .get_property(PropertyKey::String(name), &mut cx.scope)
                     .root(&mut cx.scope)?;
 
                 let res = $op(value, right, &mut cx)?;
-                cx.global
-                    .clone()
-                    .set_property(&mut cx, name.into(), PropertyValue::static_default(res.clone()))?;
+                cx.global.clone().set_property(
+                    name.into(),
+                    PropertyValue::static_default(res.clone()),
+                    &mut cx.scope,
+                )?;
                 cx.stack.push(res);
             }};
         }
@@ -965,15 +967,17 @@ mod handlers {
                 let value = cx
                     .global
                     .clone()
-                    .get_property(&mut cx, PropertyKey::String(name))
+                    .get_property(PropertyKey::String(name), &mut cx.scope)
                     .root(&mut cx.scope)?;
                 let value = Value::number(value.to_number(&mut cx)?);
 
                 let right = Value::number(1.0);
                 let res = $op(value, right, &mut cx)?;
-                cx.global
-                    .clone()
-                    .set_property(&mut cx, name.into(), PropertyValue::static_default(res.clone()))?;
+                cx.global.clone().set_property(
+                    name.into(),
+                    PropertyValue::static_default(res.clone()),
+                    &mut cx.scope,
+                )?;
                 cx.stack.push(res);
             }};
         }
@@ -983,7 +987,7 @@ mod handlers {
                 let value = cx
                     .global
                     .clone()
-                    .get_property(&mut cx, PropertyKey::String(name))
+                    .get_property(PropertyKey::String(name), &mut cx.scope)
                     .root(&mut cx.scope)?;
                 let value = Value::number(value.to_number(&mut cx)?);
 
@@ -991,7 +995,7 @@ mod handlers {
                 let res = $op(value, right, &mut cx)?;
                 cx.global
                     .clone()
-                    .set_property(&mut cx, name.into(), PropertyValue::static_default(res))?;
+                    .set_property(name.into(), PropertyValue::static_default(res), &mut cx.scope)?;
                 cx.stack.push(value);
             }};
         }
@@ -1002,7 +1006,7 @@ mod handlers {
 
                 cx.global
                     .clone()
-                    .set_property(&mut cx, name.into(), PropertyValue::static_default(value))?;
+                    .set_property(name.into(), PropertyValue::static_default(value), &mut cx.scope)?;
                 cx.stack.push(value);
             }
             AssignKind::AddAssignment => op!(Value::add),
@@ -1092,7 +1096,7 @@ mod handlers {
 
                 for i in 0..length {
                     let i = cx.scope.intern_usize(i);
-                    let value = iterable.get_property(&mut cx, i.into())?.root(&mut cx.scope);
+                    let value = iterable.get_property(i.into(), &mut cx.scope)?.root(&mut cx.scope);
                     splice_args.push(value);
                 }
                 cx.stack.splice(
@@ -1153,7 +1157,7 @@ mod handlers {
                         let len = value.length_of_array_like(&mut cx.scope)?;
                         for i in 0..len {
                             let i = cx.scope.intern_usize(i);
-                            let value = value.get_property(&mut cx, i.into())?.root(&mut cx.scope);
+                            let value = value.get_property(i.into(), &mut cx.scope)?.root(&mut cx.scope);
                             // NB: no need to push into `refs` since we already rooted it
                             args.push(value);
                         }
@@ -1170,12 +1174,12 @@ mod handlers {
         cx.scope.add_many(&args);
 
         let ret = match function_call_kind {
-            FunctionCallKind::Constructor => callee.construct(&mut cx.scope, this, args.into())?,
+            FunctionCallKind::Constructor => callee.construct(this, args.into(), &mut cx.scope)?,
             FunctionCallKind::Super => {
                 let new_target = cx.active_frame().new_target().unwrap();
-                callee.construct_with_target(&mut cx.scope, this, args.into(), new_target)?
+                callee.construct_with_target(this, args.into(), new_target, &mut cx.scope)?
             }
-            FunctionCallKind::Function => callee.apply_with_debug(&mut cx.scope, this, args.into(), call_ip)?,
+            FunctionCallKind::Function => callee.apply_with_debug(this, args.into(), call_ip, &mut cx.scope)?,
         };
 
         // SAFETY: no need to root, we're directly pushing into the value stack which itself is a root
@@ -1478,7 +1482,7 @@ mod handlers {
                     for i in 0..len {
                         let i = cx.scope.intern_usize(i);
 
-                        let value = source.get_property(&mut cx.scope, i.into())?.root(&mut cx.scope);
+                        let value = source.get_property(i.into(), &mut cx.scope)?.root(&mut cx.scope);
                         fun(ArrayElement::Single(value));
                     }
                 }
@@ -1552,7 +1556,7 @@ mod handlers {
                     if let ValueKind::Object(object) = value.unpack() {
                         for key in object.own_keys(&mut cx.scope)? {
                             let key = PropertyKey::from_value(&mut cx.scope, key)?;
-                            let value = object.get_property(&mut cx, key)?.root(&mut cx.scope);
+                            let value = object.get_property(key, &mut cx.scope)?.root(&mut cx.scope);
                             obj.insert(key, PropertyValue::static_default(value));
                         }
                     }
@@ -1577,9 +1581,9 @@ mod handlers {
             let is_getter = matches!(property, ObjectProperty::Getter { .. });
 
             match property {
-                ObjectProperty::Static { key, value } => target.set_property(&mut cx.scope, key, value)?,
+                ObjectProperty::Static { key, value } => target.set_property(key, value, &mut cx.scope)?,
                 ObjectProperty::Getter { key, value } | ObjectProperty::Setter { key, value } => {
-                    let prop = target.get_property_descriptor(&mut cx.scope, key)?;
+                    let prop = target.get_property_descriptor(key, &mut cx.scope)?;
                     let prop = match prop {
                         Some(mut prop) => {
                             if let PropertyValueKind::Trap { get, set } = &mut prop.kind {
@@ -1600,7 +1604,7 @@ mod handlers {
                         }
                     };
 
-                    target.set_property(&mut cx.scope, key, prop)?;
+                    target.set_property(key, prop, &mut cx.scope)?;
                 }
                 ObjectProperty::Spread(_) => unimplemented!("spread operator in AssignProperties"),
             }
@@ -1621,7 +1625,7 @@ mod handlers {
             cx.pop_stack_rooted()
         };
 
-        let value = target.get_property(&mut cx, ident.into())?;
+        let value = target.get_property(ident.into(), &mut cx.scope)?;
         cx.push_stack(value);
         Ok(None)
     }
@@ -1638,10 +1642,16 @@ mod handlers {
                 let target = target.root(&mut cx.scope);
                 let value = value.root(&mut cx.scope);
 
-                let p = target.get_property(&mut cx, key.into())?.root(&mut cx.scope);
+                let p = target
+                    .get_property(key.into(), &mut cx.scope)?
+                    .root(&mut cx.scope);
                 let res = $op(p, value, &mut cx)?;
 
-                target.set_property(&mut cx, key.into(), PropertyValue::static_default(res.clone()))?;
+                target.set_property(
+                    key.into(),
+                    PropertyValue::static_default(res.clone()),
+                    &mut cx.scope,
+                )?;
                 cx.stack.push(res);
             }};
         }
@@ -1649,11 +1659,13 @@ mod handlers {
         macro_rules! postfix {
             ($op:expr) => {{
                 let target = cx.pop_stack_rooted();
-                let prop = target.get_property(&mut cx, key.into())?.root(&mut cx.scope);
+                let prop = target
+                    .get_property(key.into(), &mut cx.scope)?
+                    .root(&mut cx.scope);
                 let prop = Value::number(prop.to_number(&mut cx)?);
                 let one = Value::number(1.0);
                 let res = $op(prop, one, &mut cx)?;
-                target.set_property(&mut cx, key.into(), PropertyValue::static_default(res))?;
+                target.set_property(key.into(), PropertyValue::static_default(res), &mut cx.scope)?;
                 cx.stack.push(prop);
             }};
         }
@@ -1661,12 +1673,18 @@ mod handlers {
         macro_rules! prefix {
             ($op:expr) => {{
                 let target = cx.pop_stack_rooted();
-                let prop = target.get_property(&mut cx, key.into())?.root(&mut cx.scope);
+                let prop = target
+                    .get_property(key.into(), &mut cx.scope)?
+                    .root(&mut cx.scope);
                 let prop = Value::number(prop.to_number(&mut cx)?);
                 // TODO: check that it encodes at comptime, if not make a constant Value::ONE
                 let one = Value::number(1.0);
                 let res = $op(prop, one, &mut cx)?;
-                target.set_property(&mut cx, key.into(), PropertyValue::static_default(res.clone()))?;
+                target.set_property(
+                    key.into(),
+                    PropertyValue::static_default(res.clone()),
+                    &mut cx.scope,
+                )?;
                 cx.stack.push(res);
             }};
         }
@@ -1676,7 +1694,7 @@ mod handlers {
                 let (target, value) = cx.pop_stack2_new();
                 let target = target.root(&mut cx.scope);
                 let value = value.root(&mut cx.scope);
-                target.set_property(&mut cx, key.into(), PropertyValue::static_default(value))?;
+                target.set_property(key.into(), PropertyValue::static_default(value), &mut cx.scope)?;
                 cx.stack.push(value);
             }
             AssignKind::AddAssignment => op!(Value::add),
@@ -1708,11 +1726,13 @@ mod handlers {
                 let (target, value, key) = cx.pop_stack3_rooted();
 
                 let key = PropertyKey::from_value(&mut cx, key)?;
-                let prop = target.get_property(&mut cx, key.clone())?.root(&mut cx.scope);
+                let prop = target
+                    .get_property(key.clone(), &mut cx.scope)?
+                    .root(&mut cx.scope);
 
                 let result = $op(prop, value, &mut cx)?;
 
-                target.set_property(&mut cx, key, PropertyValue::static_default(result.clone()))?;
+                target.set_property(key, PropertyValue::static_default(result.clone()), &mut cx.scope)?;
                 cx.stack.push(result);
             }};
         }
@@ -1721,11 +1741,13 @@ mod handlers {
             ($op:expr) => {{
                 let (target, key) = cx.pop_stack2_rooted();
                 let key = PropertyKey::from_value(&mut cx, key)?;
-                let prop = target.get_property(&mut cx, key.clone())?.root(&mut cx.scope);
+                let prop = target
+                    .get_property(key.clone(), &mut cx.scope)?
+                    .root(&mut cx.scope);
                 let prop = Value::number(prop.to_number(&mut cx)?);
                 let one = Value::number(1.0);
                 let res = $op(prop, one, &mut cx)?;
-                target.set_property(&mut cx, key, PropertyValue::static_default(res))?;
+                target.set_property(key, PropertyValue::static_default(res), &mut cx.scope)?;
                 cx.stack.push(prop);
             }};
         }
@@ -1734,11 +1756,13 @@ mod handlers {
             ($op:expr) => {{
                 let (target, key) = cx.pop_stack2_rooted();
                 let key = PropertyKey::from_value(&mut cx, key)?;
-                let prop = target.get_property(&mut cx, key.clone())?.root(&mut cx.scope);
+                let prop = target
+                    .get_property(key.clone(), &mut cx.scope)?
+                    .root(&mut cx.scope);
                 let prop = Value::number(prop.to_number(&mut cx)?);
                 let one = Value::number(1.0);
                 let res = $op(prop, one, &mut cx)?;
-                target.set_property(&mut cx, key, PropertyValue::static_default(res.clone()))?;
+                target.set_property(key, PropertyValue::static_default(res.clone()), &mut cx.scope)?;
                 cx.stack.push(res);
             }};
         }
@@ -1749,7 +1773,7 @@ mod handlers {
 
                 let key = PropertyKey::from_value(&mut cx, key)?;
 
-                target.set_property(&mut cx, key, PropertyValue::static_default(value))?;
+                target.set_property(key, PropertyValue::static_default(value), &mut cx.scope)?;
                 cx.stack.push(value);
             }
             AssignKind::AddAssignment => op!(Value::add),
@@ -1786,7 +1810,7 @@ mod handlers {
 
         let key = PropertyKey::from_value(&mut cx, key)?;
 
-        let value = target.get_property(&mut cx, key)?;
+        let value = target.get_property(key, &mut cx.scope)?;
         cx.push_stack(value);
         Ok(None)
     }
@@ -1910,7 +1934,7 @@ mod handlers {
     pub fn type_of_ident(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let id = cx.fetchw_and_inc_ip();
         let ident = JsString::from(cx.constants().symbols[SymbolConstant(id)]);
-        let prop = cx.global.get_property(&mut cx.scope, ident.into())?.root(&mut cx.scope);
+        let prop = cx.global.get_property(ident.into(), &mut cx.scope)?.root(&mut cx.scope);
 
         let ty = prop.type_of(&cx.scope).as_value();
         cx.stack.push(ty);
@@ -2035,9 +2059,9 @@ mod handlers {
         let value = cx.pop_stack_rooted();
         let symbol_iterator = cx.statics.symbol_iterator;
         let iterable = value
-            .get_property(&mut cx, PropertyKey::Symbol(symbol_iterator))?
+            .get_property(PropertyKey::Symbol(symbol_iterator), &mut cx.scope)?
             .root(&mut cx.scope);
-        let iterator = iterable.apply(&mut cx, This::Bound(value), CallArgs::empty())?;
+        let iterator = iterable.apply(This::Bound(value), CallArgs::empty(), &mut cx.scope)?;
         cx.push_stack(iterator);
         Ok(None)
     }
@@ -2065,7 +2089,7 @@ mod handlers {
     pub fn delete_property_dynamic(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let (property, target) = cx.pop_stack2_rooted();
         let key = PropertyKey::from_value(&mut cx, property)?;
-        let value = target.delete_property(&mut cx, key)?;
+        let value = target.delete_property(key, &mut cx.scope)?;
 
         // TODO: not correct, as `undefined` might have been the actual value
         let did_delete = !matches!(value.root(&mut cx.scope).unpack(), ValueKind::Undefined(..));
@@ -2077,7 +2101,7 @@ mod handlers {
         let target = cx.pop_stack_rooted();
         let cid = cx.fetchw_and_inc_ip();
         let con = JsString::from(cx.constants().symbols[SymbolConstant(cid)]);
-        let value = target.delete_property(&mut cx, con.into())?;
+        let value = target.delete_property(con.into(), &mut cx.scope)?;
 
         // TODO: not correct, as `undefined` might have been the actual value
         let did_delete = !matches!(value.root(&mut cx.scope).unpack(), ValueKind::Undefined(..));
@@ -2100,7 +2124,7 @@ mod handlers {
                 idents.push(ident);
             }
 
-            let mut prop = obj.get_property(&mut cx, ident.into())?.root(&mut cx.scope);
+            let mut prop = obj.get_property(ident.into(), &mut cx.scope)?.root(&mut cx.scope);
             if has_default {
                 // NB: we need to at least pop it from the stack even if the property exists
                 let default = cx.pop_stack_rooted();
@@ -2124,8 +2148,8 @@ mod handlers {
             let rest = NamedObject::new(&cx.scope);
             let rest = cx.scope.register(rest);
             for key in keys {
-                let value = obj.get_property(&mut cx.scope, key.into())?.root(&mut cx.scope);
-                rest.set_property(&mut cx.scope, key.into(), PropertyValue::static_default(value))?;
+                let value = obj.get_property(key.into(), &mut cx.scope)?.root(&mut cx.scope);
+                rest.set_property(key.into(), PropertyValue::static_default(value), &mut cx.scope)?;
             }
 
             cx.set_local(rest_id.into(), Value::object(rest).into());
@@ -2143,7 +2167,7 @@ mod handlers {
             if let Some((has_default, NumberWConstant(id))) = id {
                 let id = id as usize;
                 let key = cx.scope.intern_usize(i);
-                let mut prop = array.get_property(&mut cx.scope, key.into())?.root(&mut cx.scope);
+                let mut prop = array.get_property(key.into(), &mut cx.scope)?.root(&mut cx.scope);
 
                 if has_default {
                     // NB: we need to at least pop it from the stack even if the property exists
@@ -2273,15 +2297,15 @@ mod handlers {
                     let k = cx
                         .global
                         .clone()
-                        .get_property(&mut cx, $k.into())?
+                        .get_property($k.into(), &mut cx.scope)?
                         .root(&mut cx.scope);
-                    let fun = k.get_property(&mut cx, $v.into())?.root(&mut cx.scope);
-                    let result = fun.apply(&mut cx, This::Default, args)?;
+                    let fun = k.get_property($v.into(), &mut cx.scope)?.root(&mut cx.scope);
+                    let result = fun.apply(This::Default, args, &mut cx.scope)?;
                     cx.push_stack(result);
                 } else {
                     // Fastpath: call builtin directly
                     // TODO: should we add to externals?
-                    let result = fun.apply(&mut cx, This::Default, args)?;
+                    let result = fun.apply(This::Default, args, &mut cx.scope)?;
                     cx.push_stack(result);
                 }
             }};

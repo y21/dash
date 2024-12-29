@@ -40,12 +40,12 @@ fn typedarray_constructor(cx: CallContext, kind: TypedArrayKind) -> Result<Value
         }
 
         if let Some(iterator) = obj
-            .get_property(cx.scope, cx.scope.statics.symbol_iterator.into())
+            .get_property(cx.scope.statics.symbol_iterator.into(), cx.scope)
             .root(cx.scope)?
             .into_option()
         {
             let iterator = iterator
-                .apply(cx.scope, This::Bound(arg), CallArgs::empty())
+                .apply(This::Bound(arg), CallArgs::empty(), cx.scope)
                 .root(cx.scope)?;
             let mut values = Vec::new();
             for_each_js_iterator_element(cx.scope, iterator, |scope, value| {

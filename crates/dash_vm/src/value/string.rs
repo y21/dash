@@ -78,8 +78,8 @@ impl ValueConversion for JsString {
 impl Object for JsString {
     fn get_own_property_descriptor(
         &self,
-        sc: &mut LocalScope,
         key: PropertyKey,
+        sc: &mut LocalScope,
     ) -> Result<Option<PropertyValue>, Unrooted> {
         if let PropertyKey::String(st) = key {
             if st.sym() == sym::length {
@@ -98,15 +98,15 @@ impl Object for JsString {
         Ok(None)
     }
 
-    fn set_property(&self, _: &mut LocalScope, _: PropertyKey, _: PropertyValue) -> Result<(), Value> {
+    fn set_property(&self, _: PropertyKey, _: PropertyValue, _: &mut LocalScope) -> Result<(), Value> {
         Ok(())
     }
 
-    fn delete_property(&self, _: &mut LocalScope, _: PropertyKey) -> Result<Unrooted, Value> {
+    fn delete_property(&self, _: PropertyKey, _: &mut LocalScope) -> Result<Unrooted, Value> {
         Ok(Unrooted::new(Value::undefined()))
     }
 
-    fn set_prototype(&self, _: &mut LocalScope, _: Value) -> Result<(), Value> {
+    fn set_prototype(&self, _: Value, _: &mut LocalScope) -> Result<(), Value> {
         Ok(())
     }
 
@@ -116,10 +116,10 @@ impl Object for JsString {
 
     fn apply(
         &self,
-        scope: &mut LocalScope,
         _: crate::gc::ObjectId,
         _: This,
         _: CallArgs,
+        scope: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
         let v = self.res(scope).to_owned();
         throw!(scope, TypeError, "'{}' is not a function", v)

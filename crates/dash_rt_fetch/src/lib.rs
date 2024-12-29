@@ -81,7 +81,7 @@ fn fetch(cx: CallContext) -> Result<Value, Value> {
                     let text_fun = Function::new(&sc, Some(text.into()), FunctionKind::Native(http_response_text));
                     let text_fun = Value::object(sc.register(text_fun));
 
-                    obj.set_property(&mut sc, text.into(), PropertyValue::static_default(text_fun))
+                    obj.set_property(text.into(), PropertyValue::static_default(text_fun), &mut sc)
                         .unwrap();
 
                     (Value::object(sc.register(obj)), PromiseAction::Resolve)

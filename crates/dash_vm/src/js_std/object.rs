@@ -28,7 +28,7 @@ pub fn create(cx: CallContext) -> Result<Value, Value> {
 
     let new_target = cx.new_target.unwrap_or(cx.scope.statics.object_ctor);
     let obj = NamedObject::instance_for_new_target(new_target, cx.scope)?;
-    obj.set_prototype(cx.scope, prototype)?;
+    obj.set_prototype(prototype, cx.scope)?;
 
     // TODO: second argument: ObjectDefineProperties
 
@@ -46,9 +46,9 @@ pub fn keys(cx: CallContext) -> Result<Value, Value> {
 pub fn to_string(cx: CallContext) -> Result<Value, Value> {
     fn to_string_inner(scope: &mut LocalScope<'_>, o: ObjectId) -> Result<Value, Value> {
         let constructor = o
-            .get_property(scope, sym::constructor.into())
+            .get_property(sym::constructor.into(), scope)
             .root(scope)?
-            .get_property(scope, sym::name.into())
+            .get_property(sym::name.into(), scope)
             .root(scope)?
             .to_js_string(scope)?;
 
@@ -82,7 +82,7 @@ pub fn get_own_property_descriptor(cx: CallContext) -> Result<Value, Value> {
     let k = cx.args.get(1).unwrap_or_undefined();
     let k = PropertyKey::from_value(cx.scope, k)?;
 
-    Ok(o.get_property_descriptor(cx.scope, k)
+    Ok(o.get_property_descriptor(k, cx.scope)
         .root_err(cx.scope)?
         .map(|d| d.to_descriptor_value(cx.scope))
         .transpose()?
@@ -106,7 +106,7 @@ pub fn get_own_property_descriptors(cx: CallContext) -> Result<Value, Value> {
     for key in keys {
         let key = PropertyKey::from_value(cx.scope, key)?;
         let descriptor = o
-            .get_property_descriptor(cx.scope, key)
+            .get_property_descriptor(key, cx.scope)
             .root_err(cx.scope)?
             .map(|d| d.to_descriptor_value(cx.scope))
             .transpose()?
@@ -131,7 +131,7 @@ pub fn has_own_property(cx: CallContext) -> Result<Value, Value> {
 
     let key = cx.args.first().unwrap_or_undefined();
     let key = PropertyKey::from_value(cx.scope, key)?;
-    let desc = o.get_property_descriptor(cx.scope, key).root_err(cx.scope)?;
+    let desc = o.get_property_descriptor(key, cx.scope).root_err(cx.scope)?;
     Ok(Value::boolean(desc.is_some()))
 }
 
@@ -162,7 +162,7 @@ pub fn define_property(cx: CallContext) -> Result<Value, Value> {
 
     let value = PropertyValue::from_descriptor_value(cx.scope, Value::object(descriptor))?;
 
-    object.set_property(cx.scope, property, value)?;
+    object.set_property(property, value, cx.scope)?;
 
     Ok(Value::object(object))
 }
@@ -180,9 +180,9 @@ pub fn define_properties(cx: CallContext) -> Result<Value, Value> {
     let properties = cx.args.get(1).unwrap_or_undefined();
     for key in properties.own_keys(cx.scope)? {
         let key = key.to_js_string(cx.scope)?;
-        let descriptor = properties.get_property(cx.scope, key.into()).root(cx.scope)?;
+        let descriptor = properties.get_property(key.into(), cx.scope).root(cx.scope)?;
         let descriptor = PropertyValue::from_descriptor_value(cx.scope, descriptor)?;
-        object.set_property(cx.scope, key.into(), descriptor)?;
+        object.set_property(key.into(), descriptor, cx.scope)?;
     }
 
     Ok(Value::object(object))
@@ -195,8 +195,8 @@ pub fn assign(cx: CallContext) -> Result<Value, Value> {
         let source = source.to_object(cx.scope)?;
         for key in source.own_keys(cx.scope)? {
             let key = PropertyKey::from_value(cx.scope, key)?;
-            let desc = source.get_own_property(cx.scope, key).root(cx.scope)?;
-            to.set_property(cx.scope, key, PropertyValue::static_default(desc))?;
+            let desc = source.get_own_property(key, cx.scope).root(cx.scope)?;
+            to.set_property(key, PropertyValue::static_default(desc), cx.scope)?;
         }
     }
     Ok(Value::object(to))
@@ -207,7 +207,7 @@ pub fn entries(cx: CallContext) -> Result<Value, Value> {
     let obj = cx.args.first().unwrap_or_undefined().to_object(cx.scope)?;
     for key in obj.own_keys(cx.scope)? {
         let key = PropertyKey::from_value(cx.scope, key)?;
-        let value = obj.get_own_property(cx.scope, key).root(cx.scope)?;
+        let value = obj.get_own_property(key, cx.scope).root(cx.scope)?;
         let entry = Array::from_vec(cx.scope, vec![
             PropertyValue::static_default(key.as_value()),
             PropertyValue::static_default(value),
@@ -227,7 +227,7 @@ pub fn get_prototype_of(cx: CallContext) -> Result<Value, Value> {
 pub fn set_prototype_of(cx: CallContext) -> Result<Value, Value> {
     let obj = cx.args.first().unwrap_or_undefined().to_object(cx.scope)?;
     let target = cx.args.get(1).unwrap_or_undefined();
-    obj.set_prototype(cx.scope, target)?;
+    obj.set_prototype(target, cx.scope)?;
     Ok(Value::object(obj))
 }
 
@@ -254,7 +254,7 @@ pub fn is_prototype_of(cx: CallContext) -> Result<Value, Value> {
 pub fn property_is_enumerable(cx: CallContext) -> Result<Value, Value> {
     let prop = PropertyKey::from_value(cx.scope, cx.args.first().unwrap_or_undefined())?;
     let obj = cx.this.to_object(cx.scope)?;
-    let desc = obj.get_own_property_descriptor(cx.scope, prop).root_err(cx.scope)?;
+    let desc = obj.get_own_property_descriptor(prop, cx.scope).root_err(cx.scope)?;
     Ok(Value::boolean(desc.is_some_and(|val| {
         val.descriptor.contains(PropertyDataDescriptor::ENUMERABLE)
     })))
@@ -263,7 +263,7 @@ pub fn property_is_enumerable(cx: CallContext) -> Result<Value, Value> {
 pub fn freeze(cx: CallContext) -> Result<Value, Value> {
     let arg = cx.args.first().unwrap_or_undefined();
     if let ValueKind::Object(o) = arg.unpack() {
-        o.set_integrity_level(cx.scope, IntegrityLevel::Frozen)?;
+        o.set_integrity_level(IntegrityLevel::Frozen, cx.scope)?;
         Ok(Value::object(o))
     } else {
         Ok(arg)
@@ -273,7 +273,7 @@ pub fn freeze(cx: CallContext) -> Result<Value, Value> {
 pub fn seal(cx: CallContext) -> Result<Value, Value> {
     let arg = cx.args.first().unwrap_or_undefined();
     if let ValueKind::Object(o) = arg.unpack() {
-        o.set_integrity_level(cx.scope, IntegrityLevel::Sealed)?;
+        o.set_integrity_level(IntegrityLevel::Sealed, cx.scope)?;
         Ok(Value::object(o))
     } else {
         Ok(arg)

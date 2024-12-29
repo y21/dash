@@ -120,7 +120,7 @@ fn simple() {
         .root(&mut scope);
     scope.perform_gc();
     let value = array
-        .get_property(&mut scope, sym::zero.into())
+        .get_property(sym::zero.into(), &mut scope)
         .unwrap()
         .root(&mut scope);
     assert_eq!(scope.stack.len(), 0);
@@ -142,9 +142,9 @@ fn persistent_trace() {
         let key = scope.intern("foo");
         object
             .set_property(
-                &mut scope,
                 key.into(),
                 PropertyValue::static_default(Value::object(dummy_string)),
+                &mut scope,
             )
             .unwrap();
         scope.register(object)

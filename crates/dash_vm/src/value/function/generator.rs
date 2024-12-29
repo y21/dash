@@ -162,12 +162,12 @@ impl Object for GeneratorIterator {
 
     fn apply(
         &self,
-        scope: &mut LocalScope,
         callee: ObjectId,
         this: This,
         args: CallArgs,
+        scope: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
-        self.obj.apply(scope, callee, this, args)
+        self.obj.apply(callee, this, args, scope)
     }
 
     fn type_of(&self, _: &Vm) -> Typeof {

@@ -181,7 +181,7 @@ fn handle_call(
 
 pub fn this_for_new_target(scope: &mut LocalScope<'_>, new_target: ObjectId) -> Result<This, Value> {
     let ValueKind::Object(prototype) = new_target
-        .get_property(scope, sym::prototype.into())
+        .get_property(sym::prototype.into(), scope)
         .root(scope)?
         .unpack()
     else {
@@ -196,8 +196,8 @@ pub fn this_for_new_target(scope: &mut LocalScope<'_>, new_target: ObjectId) -> 
 impl Object for Function {
     fn get_own_property_descriptor(
         &self,
-        sc: &mut LocalScope,
         key: PropertyKey,
+        sc: &mut LocalScope,
     ) -> Result<Option<PropertyValue>, Unrooted> {
         if let Some(key) = key.as_string() {
             match key.sym() {
@@ -224,10 +224,10 @@ impl Object for Function {
             }
         }
 
-        self.obj.get_own_property_descriptor(sc, key)
+        self.obj.get_own_property_descriptor(key, sc)
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
+    fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
         if let Some(sym::prototype) = key.as_string().map(JsString::sym) {
             let prototype = value.get_or_apply(sc, This::Default).root(sc)?;
             // TODO: function prototype does not need to be an object
@@ -235,30 +235,30 @@ impl Object for Function {
             return Ok(());
         }
 
-        self.obj.set_property(sc, key, value)
+        self.obj.set_property(key, value, sc)
     }
 
-    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
-        self.obj.delete_property(sc, key)
+    fn delete_property(&self, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Value> {
+        self.obj.delete_property(key, sc)
     }
 
     fn apply(
         &self,
-        scope: &mut LocalScope,
         callee: ObjectId,
         this: This,
         args: CallArgs,
+        scope: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
         handle_call(self, scope, callee, this, args, None)
     }
 
     fn construct(
         &self,
-        scope: &mut LocalScope,
         callee: ObjectId,
         _this: This,
         args: CallArgs,
         new_target: ObjectId,
+        scope: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
         let this = 'this: {
             if let Some(user) = self.inner_user_function() {
@@ -280,8 +280,8 @@ impl Object for Function {
         handle_call(self, scope, callee, this, args, Some(new_target))
     }
 
-    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
-        self.obj.set_prototype(sc, value)
+    fn set_prototype(&self, value: Value, sc: &mut LocalScope) -> Result<(), Value> {
+        self.obj.set_prototype(value, sc)
     }
 
     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {

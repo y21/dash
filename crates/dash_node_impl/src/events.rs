@@ -36,9 +36,9 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
             handlers: RefCell::new(FxHashMap::default()),
         };
         let on_fn = register_native_fn(sc, on_sym, on);
-        event_emitter_prototype.set_property(sc, on_sym.into(), PropertyValue::static_default(on_fn.into()))?;
+        event_emitter_prototype.set_property(on_sym.into(), PropertyValue::static_default(on_fn.into()), sc)?;
         let emit_fn = register_native_fn(sc, emit_sym, emit);
-        event_emitter_prototype.set_property(sc, emit_sym.into(), PropertyValue::static_default(emit_fn.into()))?;
+        event_emitter_prototype.set_property(emit_sym.into(), PropertyValue::static_default(emit_fn.into()), sc)?;
         sc.register(event_emitter_prototype)
     };
 
@@ -72,9 +72,9 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     });
 
     event_emitter_ctor.set_property(
-        sc,
         event_emitter_sym.into(),
         PropertyValue::static_default(event_emitter_ctor.into()),
+        sc,
     )?;
 
     Ok(Value::object(event_emitter_ctor))
@@ -158,7 +158,7 @@ fn emit(cx: CallContext) -> Result<Value, Value> {
         if let Some(handlers) = this.handlers.borrow().get(&name.sym()) {
             for handler in handlers {
                 handler
-                    .apply(sc, This::Bound(cx.this), CallArgs::from(args))
+                    .apply(This::Bound(cx.this), CallArgs::from(args), sc)
                     .root_err(sc)?;
                 did_emit = true;
             }

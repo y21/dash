@@ -42,11 +42,11 @@ impl AsyncFunction {
             .statics
             .generator_iterator_next
             .clone()
-            .apply(scope, This::Bound(generator_iter), CallArgs::empty())
+            .apply(This::Bound(generator_iter), CallArgs::empty(), scope)
             .root(scope)
             .and_then(|result| {
                 result
-                    .get_property(scope, PropertyKey::String(sym::value.into()))
+                    .get_property(PropertyKey::String(sym::value.into()), scope)
                     .root(scope)
             });
 
@@ -75,12 +75,12 @@ impl AsyncFunction {
                         .promise_then
                         .clone()
                         .apply(
-                            scope,
                             This::Bound(match result {
                                 Ok(value) => value,
                                 Err(value) => value,
                             }),
                             [Value::object(then_task)].into(),
+                            scope,
                         )
                         .root_err(scope)?;
 
@@ -127,10 +127,10 @@ impl Object for ThenTask {
 
     fn apply(
         &self,
-        scope: &mut LocalScope,
         _callee: ObjectId,
         _this: This,
         args: CallArgs,
+        scope: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
         let promise_value = args.first().unwrap_or_undefined();
 
@@ -140,11 +140,11 @@ impl Object for ThenTask {
             .statics
             .generator_iterator_next
             .clone()
-            .apply(scope, This::Bound(self.generator_iter), [promise_value].into())
+            .apply(This::Bound(self.generator_iter), [promise_value].into(), scope)
             .root(scope)
             .and_then(|result| {
                 result
-                    .get_property(scope, PropertyKey::String(sym::value.into()))
+                    .get_property(PropertyKey::String(sym::value.into()), scope)
                     .root(scope)
             });
 
@@ -175,9 +175,9 @@ impl Object for ThenTask {
                     let value = wrap_promise(scope, value);
 
                     scope.statics.promise_then.clone().apply(
-                        scope,
                         This::Bound(value),
                         [Value::object(then_task)].into(),
+                        scope,
                     )?;
                 }
             }

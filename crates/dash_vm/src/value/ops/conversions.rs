@@ -119,7 +119,7 @@ impl ValueConversion for Value {
 
         // a. Let exoticToPrim be ? GetMethod(input, @@toPrimitive).
         let to_primitive = sc.statics.symbol_to_primitive;
-        let exotic_to_prim = self.get_property(sc, to_primitive.into()).root(sc)?.into_option();
+        let exotic_to_prim = self.get_property(to_primitive.into(), sc).root(sc)?.into_option();
 
         // b. If exoticToPrim is not undefined, then
         if let Some(exotic_to_prim) = exotic_to_prim {
@@ -130,7 +130,7 @@ impl ValueConversion for Value {
 
             // iv. Let result be ? Call(exoticToPrim, input, « hint »).
             let result = exotic_to_prim
-                .apply(sc, This::Bound(*self), [preferred_type].into())
+                .apply(This::Bound(*self), [preferred_type].into(), sc)
                 .root(sc)?;
 
             // If Type(result) is not Object, return result.
@@ -151,7 +151,7 @@ impl ValueConversion for Value {
     }
 
     fn length_of_array_like(&self, sc: &mut LocalScope) -> Result<usize, Value> {
-        self.get_property(sc, sym::length.into()).root(sc)?.to_length_u(sc)
+        self.get_property(sym::length.into(), sc).root(sc)?.to_length_u(sc)
     }
 
     fn to_object(&self, sc: &mut LocalScope) -> Result<ObjectId, Value> {
@@ -200,9 +200,9 @@ impl Value {
         };
 
         for name in method_names {
-            let method = self.get_property(sc, name.into()).root(sc)?;
+            let method = self.get_property(name.into(), sc).root(sc)?;
             if matches!(method.type_of(sc), Typeof::Function) {
-                let result = method.apply(sc, This::Bound(*self), CallArgs::empty()).root(sc)?;
+                let result = method.apply(This::Bound(*self), CallArgs::empty(), sc).root(sc)?;
                 if !matches!(result.unpack(), ValueKind::Object(_)) {
                     return Ok(result);
                 }

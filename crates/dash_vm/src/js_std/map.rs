@@ -21,13 +21,13 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
         for i in 0..len {
             let i = cx.scope.intern_usize(i);
             let item = iter
-                .get_property(cx.scope, PropertyKey::String(i.into()))
+                .get_property(PropertyKey::String(i.into()), cx.scope)
                 .root(cx.scope)?;
             let k = item
-                .get_property(cx.scope, PropertyKey::String(sym::zero.into()))
+                .get_property(PropertyKey::String(sym::zero.into()), cx.scope)
                 .root(cx.scope)?;
             let v = item
-                .get_property(cx.scope, PropertyKey::String(sym::one.into()))
+                .get_property(PropertyKey::String(sym::one.into()), cx.scope)
                 .root(cx.scope)?;
             map.set(k, v);
         }

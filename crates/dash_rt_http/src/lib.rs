@@ -42,7 +42,7 @@ impl ModuleLoader for HttpModule {
         let listen = Function::new(sc, None, FunctionKind::Native(listen));
         let listen = sc.register(listen);
         let key = sc.intern("listen");
-        module.set_property(sc, key.into(), PropertyValue::static_default(listen.into()))?;
+        module.set_property(key.into(), PropertyValue::static_default(listen.into()), sc)?;
 
         let module = sc.register(module);
         Ok(Some(module.into()))
@@ -95,7 +95,7 @@ pub fn listen(cx: CallContext) -> Result<Value, Value> {
                     let name = scope.intern("respond");
                     let fun = Function::new(&scope, Some(name.into()), FunctionKind::Native(ctx_respond));
                     let fun = scope.register(fun);
-                    ctx.set_property(&mut scope, name.into(), PropertyValue::static_default(fun.into()))
+                    ctx.set_property(name.into(), PropertyValue::static_default(fun.into()), &mut scope)
                         .unwrap();
 
                     let ctx = Value::object(scope.register(ctx));

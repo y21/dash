@@ -1,9 +1,9 @@
 use dash_middle::compiler::StaticImportKind;
 use dash_rt::module::ModuleLoader;
 use dash_vm::localscope::LocalScope;
+use dash_vm::value::Value;
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::string::JsString;
-use dash_vm::value::Value;
 
 use crate::listener::TcpListenerConstructor;
 
@@ -27,9 +27,9 @@ impl ModuleLoader for NetModule {
         let tcplistener = sc.register(TcpListenerConstructor {});
         let name = sc.intern("TcpListener");
         exports.set_property(
-            sc,
             name.into(),
             PropertyValue::static_default(Value::object(tcplistener)),
+            sc,
         )?;
 
         Ok(Some(Value::object(sc.register(exports))))

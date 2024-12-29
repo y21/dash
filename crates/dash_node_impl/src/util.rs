@@ -20,8 +20,8 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
 
     let inherits = register_native_fn(sc, inherits_sym, inherits);
     let inspect = register_native_fn(sc, inspect_sym, inspect);
-    exports.set_property(sc, inherits_sym.into(), PropertyValue::static_default(inherits.into()))?;
-    exports.set_property(sc, inspect_sym.into(), PropertyValue::static_default(inspect.into()))?;
+    exports.set_property(inherits_sym.into(), PropertyValue::static_default(inherits.into()), sc)?;
+    exports.set_property(inspect_sym.into(), PropertyValue::static_default(inspect.into()), sc)?;
 
     Ok(exports.into())
 }
@@ -40,18 +40,22 @@ fn inherits(cx: CallContext) -> Result<Value, Value> {
     }
 
     let super_inst = super_ctor
-        .construct(cx.scope, This::Default, CallArgs::empty())
+        .construct(This::Default, CallArgs::empty(), cx.scope)
         .root(cx.scope)?;
 
-    super_inst.set_property(cx.scope, sym::constructor.into(), PropertyValue {
-        kind: PropertyValueKind::Static(ctor),
-        descriptor: PropertyDataDescriptor::WRITABLE | PropertyDataDescriptor::CONFIGURABLE,
-    })?;
+    super_inst.set_property(
+        sym::constructor.into(),
+        PropertyValue {
+            kind: PropertyValueKind::Static(ctor),
+            descriptor: PropertyDataDescriptor::WRITABLE | PropertyDataDescriptor::CONFIGURABLE,
+        },
+        cx.scope,
+    )?;
 
     ctor.set_property(
-        cx.scope,
         sym::prototype.into(),
         PropertyValue::static_default(super_inst),
+        cx.scope,
     )?;
 
     Ok(Value::undefined())

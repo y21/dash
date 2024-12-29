@@ -215,8 +215,8 @@ impl Array {
 impl Object for Array {
     fn get_own_property_descriptor(
         &self,
-        sc: &mut LocalScope,
         key: PropertyKey,
+        sc: &mut LocalScope,
     ) -> Result<Option<PropertyValue>, Unrooted> {
         let items = self.items.borrow();
 
@@ -240,10 +240,10 @@ impl Object for Array {
             }
         }
 
-        self.obj.get_property_descriptor(sc, key)
+        self.obj.get_property_descriptor(key, sc)
     }
 
-    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
+    fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
         if let PropertyKey::String(key) = &key {
             if key.sym() == sym::length {
                 // TODO: this shouldnt be undefined
@@ -265,10 +265,10 @@ impl Object for Array {
             }
         }
 
-        self.obj.set_property(sc, key, value)
+        self.obj.set_property(key, value, sc)
     }
 
-    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
+    fn delete_property(&self, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Value> {
         if let PropertyKey::String(key) = &key {
             if key.sym() == sym::length {
                 return Ok(Unrooted::new(Value::undefined()));
@@ -287,21 +287,21 @@ impl Object for Array {
             }
         }
 
-        self.obj.delete_property(sc, key)
+        self.obj.delete_property(key, sc)
     }
 
     fn apply(
         &self,
-        scope: &mut LocalScope,
         callee: ObjectId,
         this: This,
         args: CallArgs,
+        scope: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
-        self.obj.apply(scope, callee, this, args)
+        self.obj.apply(callee, this, args, scope)
     }
 
-    fn set_prototype(&self, sc: &mut LocalScope, value: Value) -> Result<(), Value> {
-        self.obj.set_prototype(sc, value)
+    fn set_prototype(&self, value: Value, sc: &mut LocalScope) -> Result<(), Value> {
+        self.obj.set_prototype(value, sc)
     }
 
     fn get_prototype(&self, sc: &mut LocalScope) -> Result<Value, Value> {
@@ -340,12 +340,12 @@ impl Object for ArrayIterator {
 
     fn apply(
         &self,
-        scope: &mut LocalScope,
         callee: ObjectId,
         this: This,
         args: CallArgs,
+        scope: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
-        self.obj.apply(scope, callee, this, args)
+        self.obj.apply(callee, this, args, scope)
     }
 
     extract!(self);
@@ -381,7 +381,7 @@ impl ArrayIterator {
         if index < self.length {
             self.index.set(index + 1);
             let index = sc.intern_usize(index);
-            self.value.get_property(sc, index.into()).map(Some)
+            self.value.get_property(index.into(), sc).map(Some)
         } else {
             Ok(None)
         }
@@ -411,7 +411,7 @@ pub fn spec_array_get_property(scope: &mut LocalScope<'_>, target: &Value, index
     }
 
     let index = scope.intern_usize(index);
-    match target.get_property(scope, index.into()) {
+    match target.get_property(index.into(), scope) {
         Ok(v) => Ok(v),
         Err(v) => Ok(v),
     }
@@ -437,5 +437,5 @@ pub fn spec_array_set_property(
     }
 
     let index = scope.intern_usize(index);
-    target.set_property(scope, index.into(), value)
+    target.set_property(index.into(), value, scope)
 }
