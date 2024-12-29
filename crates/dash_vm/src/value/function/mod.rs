@@ -22,8 +22,9 @@ use self::native::{CallContext, NativeFunction};
 use self::user::UserFunction;
 
 use super::array::Array;
-use super::object::{NamedObject, Object, PropertyDataDescriptor, PropertyKey, PropertyValue, PropertyValueKind};
+use super::object::{NamedObject, Object, PropertyDataDescriptor, PropertyValue, PropertyValueKind};
 use super::ops::conversions::ValueConversion;
+use super::propertykey::PropertyKey;
 use super::string::JsString;
 use super::{Root, Typeof, Unpack, Unrooted, Value, ValueKind};
 

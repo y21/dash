@@ -9,7 +9,8 @@ use crate::localscope::LocalScope;
 use crate::{PromiseAction, Vm, extract};
 
 use super::function::args::CallArgs;
-use super::object::{NamedObject, Object};
+use super::object::{NamedObject, Object, PropertyValue};
+use super::propertykey::PropertyKey;
 use super::{Typeof, Unrooted, Value};
 
 #[derive(Debug)]
@@ -79,21 +80,16 @@ impl Object for Promise {
     fn get_own_property_descriptor(
         &self,
         sc: &mut LocalScope,
-        key: super::object::PropertyKey,
-    ) -> Result<Option<super::object::PropertyValue>, Unrooted> {
+        key: PropertyKey,
+    ) -> Result<Option<PropertyValue>, Unrooted> {
         self.obj.get_own_property_descriptor(sc, key)
     }
 
-    fn set_property(
-        &self,
-        sc: &mut LocalScope,
-        key: crate::value::object::PropertyKey,
-        value: crate::value::object::PropertyValue,
-    ) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
         self.obj.set_property(sc, key, value)
     }
 
-    fn delete_property(&self, sc: &mut LocalScope, key: crate::value::object::PropertyKey) -> Result<Unrooted, Value> {
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
         self.obj.delete_property(sc, key)
     }
 
@@ -141,21 +137,16 @@ impl Object for PromiseResolver {
     fn get_own_property_descriptor(
         &self,
         sc: &mut LocalScope,
-        key: super::object::PropertyKey,
-    ) -> Result<Option<super::object::PropertyValue>, Unrooted> {
+        key: PropertyKey,
+    ) -> Result<Option<PropertyValue>, Unrooted> {
         self.obj.get_own_property_descriptor(sc, key)
     }
 
-    fn set_property(
-        &self,
-        sc: &mut LocalScope,
-        key: crate::value::object::PropertyKey,
-        value: crate::value::object::PropertyValue,
-    ) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
         self.obj.set_property(sc, key, value)
     }
 
-    fn delete_property(&self, sc: &mut LocalScope, key: crate::value::object::PropertyKey) -> Result<Unrooted, Value> {
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
         self.obj.delete_property(sc, key)
     }
 
@@ -213,21 +204,16 @@ impl Object for PromiseRejecter {
     fn get_own_property_descriptor(
         &self,
         sc: &mut LocalScope,
-        key: super::object::PropertyKey,
-    ) -> Result<Option<super::object::PropertyValue>, Unrooted> {
+        key: PropertyKey,
+    ) -> Result<Option<PropertyValue>, Unrooted> {
         self.obj.get_own_property_descriptor(sc, key)
     }
 
-    fn set_property(
-        &self,
-        sc: &mut LocalScope,
-        key: crate::value::object::PropertyKey,
-        value: crate::value::object::PropertyValue,
-    ) -> Result<(), Value> {
+    fn set_property(&self, sc: &mut LocalScope, key: PropertyKey, value: PropertyValue) -> Result<(), Value> {
         self.obj.set_property(sc, key, value)
     }
 
-    fn delete_property(&self, sc: &mut LocalScope, key: crate::value::object::PropertyKey) -> Result<Unrooted, Value> {
+    fn delete_property(&self, sc: &mut LocalScope, key: PropertyKey) -> Result<Unrooted, Value> {
         self.obj.delete_property(sc, key)
     }
 

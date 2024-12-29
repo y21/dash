@@ -1,8 +1,9 @@
 use crate::throw;
 use crate::value::function::native::CallContext;
 use crate::value::map::Map;
-use crate::value::object::{NamedObject, PropertyKey};
+use crate::value::object::NamedObject;
 use crate::value::ops::conversions::ValueConversion;
+use crate::value::propertykey::PropertyKey;
 use crate::value::{Root, Value, ValueContext};
 use dash_middle::interner::sym;
 

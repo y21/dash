@@ -12,8 +12,9 @@ use crate::{Vm, extract, throw};
 
 use super::boxed::{Boolean as BoxedBoolean, Number as BoxedNumber, Symbol as BoxedSymbol};
 use super::function::args::CallArgs;
-use super::object::{Object, PropertyKey, PropertyValue};
+use super::object::{Object, PropertyValue};
 use super::ops::conversions::{PreferredType, ValueConversion};
+use super::propertykey::PropertyKey;
 use super::string::JsString;
 use super::{Typeof, Unrooted, Value};
 

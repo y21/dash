@@ -1,15 +1,16 @@
-use dash_middle::interner::{sym, Symbol};
+use dash_middle::interner::{Symbol, sym};
 use dash_proc_macro::Trace;
 
 use crate::frame::This;
 use crate::localscope::LocalScope;
 use crate::value::boxed::String as BoxedString;
-use crate::{extract, throw, Vm};
+use crate::{Vm, extract, throw};
 
 use super::function::args::CallArgs;
-use super::object::{Object, PropertyKey, PropertyValue};
+use super::object::{Object, PropertyValue};
 use super::ops::conversions::{PreferredType, ValueConversion};
-use super::primitive::{array_like_keys, InternalSlots};
+use super::primitive::{InternalSlots, array_like_keys};
+use super::propertykey::PropertyKey;
 use super::{Typeof, Unrooted, Value};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Trace)]

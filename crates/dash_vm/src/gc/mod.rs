@@ -14,8 +14,9 @@ use crate::Vm;
 use crate::frame::This;
 use crate::localscope::LocalScope;
 use crate::value::function::args::CallArgs;
-use crate::value::object::{PropertyKey, PropertyValue};
+use crate::value::object::PropertyValue;
 use crate::value::primitive::InternalSlots;
+use crate::value::propertykey::PropertyKey;
 use crate::value::{Typeof, Unrooted, Value};
 
 pub mod persistent;

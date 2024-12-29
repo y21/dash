@@ -11,6 +11,7 @@ pub mod object;
 pub mod ops;
 pub mod primitive;
 pub mod promise;
+pub mod propertykey;
 pub mod regex;
 pub mod set;
 pub mod typedarray;
@@ -34,10 +35,11 @@ use crate::util::cold_path;
 use crate::value::primitive::{Null, Undefined};
 use crate::{Vm, delegate, throw};
 
-use self::object::{Object, PropertyKey, PropertyValue};
+use self::object::{Object, PropertyValue};
 use self::primitive::{InternalSlots, Number, Symbol};
 use self::string::JsString;
 use super::localscope::LocalScope;
+use crate::value::propertykey::PropertyKey;
 
 /// Implements the `Object::extract_type_raw` function by checking the type id of the implementer and the provided fields
 #[macro_export]

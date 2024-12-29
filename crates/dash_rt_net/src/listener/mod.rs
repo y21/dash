@@ -16,6 +16,7 @@ use dash_vm::value::function::{Function, FunctionKind};
 use dash_vm::value::object::{NamedObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::promise::Promise;
+use dash_vm::value::propertykey::PropertyKey;
 use dash_vm::value::{Unpack, Unrooted, Value};
 use dash_vm::{PromiseAction, delegate, extract, throw};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -29,7 +30,7 @@ impl Object for TcpListenerConstructor {
     fn get_own_property_descriptor(
         &self,
         _sc: &mut dash_vm::localscope::LocalScope,
-        _key: dash_vm::value::object::PropertyKey,
+        _key: PropertyKey,
     ) -> Result<Option<dash_vm::value::object::PropertyValue>, dash_vm::value::Unrooted> {
         Ok(None)
     }
@@ -37,7 +38,7 @@ impl Object for TcpListenerConstructor {
     fn set_property(
         &self,
         _sc: &mut dash_vm::localscope::LocalScope,
-        _key: dash_vm::value::object::PropertyKey,
+        _key: PropertyKey,
         _value: dash_vm::value::object::PropertyValue,
     ) -> Result<(), dash_vm::value::Value> {
         Ok(())
@@ -46,7 +47,7 @@ impl Object for TcpListenerConstructor {
     fn delete_property(
         &self,
         _sc: &mut dash_vm::localscope::LocalScope,
-        _key: dash_vm::value::object::PropertyKey,
+        _key: PropertyKey,
     ) -> Result<dash_vm::value::Unrooted, dash_vm::value::Value> {
         Ok(Unrooted::new(Value::undefined()))
     }

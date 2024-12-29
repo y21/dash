@@ -4,8 +4,9 @@ use dash_proc_macro::Trace;
 use crate::localscope::LocalScope;
 use crate::{delegate, extract};
 
-use super::object::{NamedObject, Object, PropertyKey, PropertyValue};
 use super::Value;
+use super::object::{NamedObject, Object, PropertyValue};
+use super::propertykey::PropertyKey;
 
 #[derive(Debug, Clone, Trace)]
 pub struct Arguments {

@@ -5,9 +5,10 @@ use std::str::Utf8Error;
 use dash_middle::util;
 
 use crate::localscope::LocalScope;
-use crate::value::array::Array;
-use crate::value::object::{NamedObject, ObjectMap, PropertyKey, PropertyValue};
 use crate::value::Value;
+use crate::value::array::Array;
+use crate::value::object::{NamedObject, ObjectMap, PropertyValue};
+use crate::value::propertykey::PropertyKey;
 
 /// An error that occurred during parsing JSON
 ///
@@ -60,43 +61,6 @@ impl From<Utf8Error> for ConversionError {
         Self::Utf8Error(u)
     }
 }
-
-// impl<'a> Value<'a> {
-//     /// Attempts to convert a JSON value to a JavaScript value
-//     pub(crate) fn into_js_value(self, vm: &VM) -> Result<JsValue, ConversionError> {
-//         match self {
-//             Self::String(s) => std::str::from_utf8(s)
-//                 .map(String::from)
-//                 .map(|s| vm.create_js_value(s))
-//                 .map_err(Into::into),
-//             Self::Number(n) => Ok(vm.create_js_value(n)),
-//             Self::Bool(b) => Ok(vm.create_js_value(b)),
-//             Self::Array(arr) => Ok(vm.create_js_value(Array::new({
-//                 let mut js_arr = Vec::with_capacity(arr.len());
-
-//                 for value in arr {
-//                     js_arr.push(value.into_js_value(vm).map(|v| v.into_handle(vm))?);
-//                 }
-
-//                 js_arr
-//             }))),
-//             Self::Object(obj) => {
-//                 let mut js_obj = vm.create_object();
-
-//                 for (key, value) in obj {
-//                     let key = std::str::from_utf8(key)?;
-//                     js_obj.set_property(
-//                         String::from(key).into_boxed_str(),
-//                         value.into_js_value(vm)?.into_handle(vm),
-//                     );
-//                 }
-
-//                 Ok(js_obj)
-//             }
-//             Self::Null => Ok(JsValue::new(ValueKind::Null)),
-//         }
-//     }
-// }
 
 /// A tiny, zero-copy JSON parser that borrows from the input string
 pub struct Parser<'a, 'sc, 'vm> {

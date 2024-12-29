@@ -18,8 +18,8 @@ use crate::localscope::LocalScope;
 use crate::{Vm, extract, throw};
 
 use super::function::args::CallArgs;
-use super::ops::conversions::ValueConversion;
-use super::primitive::{InternalSlots, Symbol};
+use super::primitive::InternalSlots;
+use super::propertykey::PropertyKey;
 use super::root_ext::RootErrExt;
 use super::string::JsString;
 use super::{Root, Typeof, Unpack, Unrooted, Value, ValueContext, ValueKind};
@@ -104,7 +104,7 @@ macro_rules! delegate {
         fn get_own_property_descriptor(
             &self,
             sc: &mut $crate::localscope::LocalScope,
-            key: $crate::value::object::PropertyKey,
+            key: $crate::value::propertykey::PropertyKey,
         ) -> Result<Option<$crate::value::object::PropertyValue>, $crate::value::Unrooted> {
             self.$field.get_own_property_descriptor(sc, key)
         }
@@ -114,7 +114,7 @@ macro_rules! delegate {
             &self,
             sc: &mut $crate::localscope::LocalScope,
             this: $crate::frame::This,
-            key: $crate::value::object::PropertyKey,
+            key: $crate::value::propertykey::PropertyKey,
         ) -> Result<$crate::value::Unrooted, $crate::value::Unrooted> {
             $crate::value::object::Object::get_property(&self.$field, sc, this, key)
         }
@@ -123,7 +123,7 @@ macro_rules! delegate {
         fn get_property_descriptor(
             &self,
             sc: &mut $crate::localscope::LocalScope,
-            key: $crate::value::object::PropertyKey,
+            key: $crate::value::propertykey::PropertyKey,
         ) -> Result<Option<$crate::value::object::PropertyValue>, $crate::value::Unrooted> {
             self.$field.get_property_descriptor(sc, key)
         }
@@ -132,7 +132,7 @@ macro_rules! delegate {
         fn set_property(
             &self,
             sc: &mut $crate::localscope::LocalScope,
-            key: $crate::value::object::PropertyKey,
+            key: $crate::value::propertykey::PropertyKey,
             value: $crate::value::object::PropertyValue,
         ) -> Result<(), $crate::value::Value> {
             self.$field.set_property(sc, key, value)
@@ -142,7 +142,7 @@ macro_rules! delegate {
         fn delete_property(
             &self,
             sc: &mut $crate::localscope::LocalScope,
-            key: $crate::value::object::PropertyKey,
+            key: $crate::value::propertykey::PropertyKey,
         ) -> Result<$crate::value::Unrooted, $crate::value::Value> {
             self.$field.delete_property(sc, key)
         }
@@ -208,22 +208,6 @@ pub struct NamedObject {
     prototype: RefCell<Option<ObjectId>>,
     constructor: RefCell<Option<ObjectId>>,
     values: RefCell<ObjectMap<PropertyKey, PropertyValue>>,
-}
-
-// TODO: optimization opportunity: some kind of Number variant for faster indexing without .to_string()
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub enum PropertyKey {
-    String(JsString),
-    Symbol(Symbol),
-}
-
-unsafe impl Trace for PropertyKey {
-    fn trace(&self, cx: &mut TraceCtxt<'_>) {
-        match self {
-            PropertyKey::String(s) => s.trace(cx),
-            PropertyKey::Symbol(s) => s.trace(cx),
-        }
-    }
 }
 
 bitflags! {
@@ -460,49 +444,6 @@ unsafe impl Trace for PropertyValueKind {
                     set.trace(cx);
                 }
             }
-        }
-    }
-}
-
-impl PropertyKey {
-    pub fn as_string(&self) -> Option<JsString> {
-        match self {
-            PropertyKey::String(s) => Some(*s),
-            _ => None,
-        }
-    }
-}
-
-impl From<JsString> for PropertyKey {
-    fn from(value: JsString) -> Self {
-        PropertyKey::String(value)
-    }
-}
-impl From<dash_middle::interner::Symbol> for PropertyKey {
-    fn from(value: dash_middle::interner::Symbol) -> Self {
-        PropertyKey::String(value.into())
-    }
-}
-
-impl From<Symbol> for PropertyKey {
-    fn from(s: Symbol) -> Self {
-        PropertyKey::Symbol(s)
-    }
-}
-
-impl PropertyKey {
-    pub fn as_value(&self) -> Value {
-        match *self {
-            PropertyKey::String(s) => Value::string(s),
-            PropertyKey::Symbol(s) => Value::symbol(s),
-        }
-    }
-
-    pub fn from_value(sc: &mut LocalScope, value: Value) -> Result<Self, Value> {
-        // TODO: call ToPrimitive as specified by ToPropertyKey in the spec?
-        match value.unpack() {
-            ValueKind::Symbol(s) => Ok(Self::Symbol(s)),
-            _ => Ok(PropertyKey::String(value.to_js_string(sc)?)),
         }
     }
 }

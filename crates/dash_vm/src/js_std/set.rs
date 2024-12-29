@@ -1,7 +1,8 @@
 use crate::throw;
 use crate::value::function::native::CallContext;
-use crate::value::object::{NamedObject, PropertyKey};
+use crate::value::object::NamedObject;
 use crate::value::ops::conversions::ValueConversion;
+use crate::value::propertykey::PropertyKey;
 use crate::value::set::Set;
 use crate::value::{Root, Value, ValueContext};
 

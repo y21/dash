@@ -9,9 +9,10 @@ use crate::localscope::LocalScope;
 use crate::{delegate, extract};
 
 use super::function::args::CallArgs;
-use super::object::{NamedObject, Object, PropertyKey, PropertyValue};
+use super::object::{NamedObject, Object, PropertyValue};
 use super::string::JsString;
 use super::{Unrooted, Value};
+use crate::value::propertykey::PropertyKey;
 
 #[derive(Debug, Trace)]
 pub struct Error {

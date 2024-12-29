@@ -8,10 +8,11 @@ use dash_vm::util::intern_f64;
 use dash_vm::value::array::{Array, ArrayIterator};
 use dash_vm::value::arraybuffer::ArrayBuffer;
 use dash_vm::value::error::Error;
+use dash_vm::value::propertykey::PropertyKey;
 use dash_vm::value::typedarray::TypedArray;
 use dash_vm::value::{Typeof, Unpack, ValueKind};
 
-use dash_vm::value::object::{Object, PropertyDataDescriptor, PropertyKey, PropertyValueKind};
+use dash_vm::value::object::{Object, PropertyDataDescriptor, PropertyValueKind};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::primitive::Number;
 use dash_vm::value::root_ext::RootErrExt;

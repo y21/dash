@@ -15,9 +15,10 @@ use crate::{Vm, delegate, extract, throw};
 use dash_middle::interner::sym;
 
 use super::function::args::CallArgs;
-use super::object::{NamedObject, Object, PropertyKey, PropertyValue, PropertyValueKind};
+use super::object::{NamedObject, Object, PropertyValue, PropertyValueKind};
 use super::ops::conversions::ValueConversion;
 use super::primitive::array_like_keys;
+use super::propertykey::PropertyKey;
 use super::root_ext::RootErrExt;
 use super::{Root, Unpack, Unrooted, Value};
 

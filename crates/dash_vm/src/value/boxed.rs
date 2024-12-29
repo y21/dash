@@ -1,7 +1,8 @@
 use super::ops::conversions::{PreferredType, ValueConversion};
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
-use crate::value::{JsString, PropertyKey, Unrooted};
+use crate::value::propertykey::PropertyKey;
+use crate::value::{JsString, Unrooted};
 use crate::{PropertyValue, Vm, delegate, extract};
 use dash_proc_macro::Trace;
 

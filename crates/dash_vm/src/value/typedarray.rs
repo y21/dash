@@ -8,8 +8,9 @@ use crate::{Vm, extract};
 
 use super::arraybuffer::ArrayBuffer;
 use super::function::args::CallArgs;
-use super::object::{NamedObject, Object, PropertyKey, PropertyValue};
+use super::object::{NamedObject, Object, PropertyValue};
 use super::ops::conversions::ValueConversion;
+use super::propertykey::PropertyKey;
 use super::{Root, Unrooted, Value};
 
 #[derive(Debug, Copy, Clone)]

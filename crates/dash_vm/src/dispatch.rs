@@ -179,8 +179,9 @@ mod extract {
     use dash_middle::iterator_with::IteratorWith;
 
     use crate::gc::ObjectId;
-    use crate::value::object::{PropertyKey, PropertyValue};
+    use crate::value::object::PropertyValue;
     use crate::value::ops::conversions::ValueConversion;
+    use crate::value::propertykey::PropertyKey;
     use crate::value::string::JsString;
     use crate::value::{Unpack, Unrooted, Value, ValueKind};
 
@@ -576,10 +577,11 @@ mod handlers {
     use crate::value::function::generator::GeneratorFunction;
     use crate::value::function::user::UserFunction;
     use crate::value::function::{Function, FunctionKind, adjust_stack_from_flat_call, this_for_new_target};
-    use crate::value::object::{NamedObject, Object, ObjectMap, PropertyKey, PropertyValue, PropertyValueKind};
+    use crate::value::object::{NamedObject, Object, ObjectMap, PropertyValue, PropertyValueKind};
     use crate::value::ops::conversions::ValueConversion;
     use crate::value::ops::equality;
     use crate::value::primitive::Number;
+    use crate::value::propertykey::PropertyKey;
     use crate::value::regex::RegExp;
     use crate::value::{Unpack, ValueKind};
 
