@@ -2,10 +2,11 @@
 #![deny(rust_2018_idioms)]
 
 use missing_root::{MISSING_ROOT, MissingRoot};
-use rustc_driver::{Callbacks, RunCompiler};
+use rustc_driver::{Callbacks, run_compiler};
 use rustc_session::EarlyDiagCtxt;
 use rustc_session::config::{ErrorOutputType, OptLevel};
 
+extern crate rustc_abi;
 extern crate rustc_ast;
 extern crate rustc_driver;
 extern crate rustc_hir;
@@ -16,7 +17,6 @@ extern crate rustc_lint;
 extern crate rustc_middle;
 extern crate rustc_session;
 extern crate rustc_span;
-extern crate rustc_target;
 extern crate rustc_trait_selection;
 
 mod missing_root;
@@ -41,13 +41,13 @@ fn main() {
     let early_dcx = EarlyDiagCtxt::new(ErrorOutputType::default());
     rustc_driver::init_rustc_env_logger(&early_dcx);
 
-    let mut args = rustc_driver::args::raw_args(&early_dcx).unwrap();
+    let mut args = rustc_driver::args::raw_args(&early_dcx);
 
     if args.iter().any(|arg| arg == "--cap-lints") || !args.iter().any(|arg| arg.contains("dash_vm")) {
         // dependencies
-        RunCompiler::new(&args[1..], &mut RustcCallbacks).run();
+        run_compiler(&args[1..], &mut RustcCallbacks);
     } else {
         args.extend(["--cfg", "dash_lints"].map(String::from));
-        RunCompiler::new(&args[1..], &mut PrimaryCallbacks).run();
+        run_compiler(&args[1..], &mut PrimaryCallbacks);
     }
 }

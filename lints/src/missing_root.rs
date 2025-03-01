@@ -1,26 +1,24 @@
 use std::iter;
 
 use clippy_utils::def_path_res;
-use mir::visit::MirVisitable as _;
+use rustc_abi::VariantIdx;
 use rustc_ast::Mutability;
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::def_id::{DefId, LocalDefId};
 use rustc_hir::intravisit::FnKind;
 use rustc_hir::{self as hir};
 use rustc_index::IndexVec;
-use rustc_index::bit_set::BitSet;
+use rustc_index::bit_set::DenseBitSet;
 use rustc_infer::infer::TyCtxtInferExt;
 use rustc_infer::traits::{Obligation, ObligationCause};
 use rustc_lint::{LateContext, LateLintPass};
-use rustc_middle::mir::tcx::PlaceTy;
 use rustc_middle::mir::visit::Visitor;
-use rustc_middle::mir::{self, BasicBlock, Body, Local};
+use rustc_middle::mir::{self, BasicBlock, Body, Local, PlaceTy};
 use rustc_middle::ty::{ParamEnv, Ty, TyCtxt};
 use rustc_middle::{bug, ty};
 use rustc_session::{declare_lint, impl_lint_pass};
 use rustc_span::Span;
 use rustc_span::source_map::Spanned;
-use rustc_target::abi::VariantIdx;
 use rustc_trait_selection::traits::ObligationCtxt;
 
 use crate::utils::has_no_gc_attr;
@@ -129,7 +127,7 @@ struct TraverseCtxt<'a, 'tcx> {
     tcx: TyCtxt<'tcx>,
     fn_def_id: LocalDefId,
     lint: &'a mut MissingRoot,
-    visited_bbs: BitSet<BasicBlock>,
+    visited_bbs: DenseBitSet<BasicBlock>,
 }
 
 impl<'tcx> TraverseCtxt<'_, 'tcx> {
@@ -270,7 +268,7 @@ fn traverse<'tcx>(
             // Specifically allow assignments of scope-like things.
             // This is itself part of the special casing for fn call terminators down below
         } else {
-            stmt.apply(location, vis);
+            vis.visit_statement(stmt, location);
         }
     }
 
@@ -341,16 +339,19 @@ fn traverse<'tcx>(
     } else if let mir::TerminatorKind::Drop { .. } = terminator.kind {
         // Allow drops
     } else {
-        terminator.apply(location, vis);
+        vis.visit_terminator(terminator, location);
     }
 
     match terminator.edges() {
         mir::TerminatorEdges::None => state,
         mir::TerminatorEdges::Single(bb) => traverse(cx, mir, state, bb),
-        mir::TerminatorEdges::Double(bb1, bb2) => TraverseState::join(state.clone(), [
-            traverse(cx, mir, state.clone(), bb1),
-            traverse(cx, mir, state.clone(), bb2),
-        ]),
+        mir::TerminatorEdges::Double(bb1, bb2) => TraverseState::join(
+            state.clone(),
+            [
+                traverse(cx, mir, state.clone(), bb1),
+                traverse(cx, mir, state.clone(), bb2),
+            ],
+        ),
         mir::TerminatorEdges::AssignOnReturn {
             return_,
             cleanup,
@@ -400,7 +401,7 @@ impl LateLintPass<'_> for MissingRoot {
                 tcx: cx.tcx,
                 fn_def_id: def_id,
                 lint: self,
-                visited_bbs: BitSet::new_empty(mir.basic_blocks.len()),
+                visited_bbs: DenseBitSet::new_empty(mir.basic_blocks.len()),
             },
             mir,
             TraverseState { locals },
