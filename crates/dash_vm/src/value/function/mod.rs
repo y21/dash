@@ -340,7 +340,7 @@ pub(crate) fn adjust_stack_from_flat_call(
         Ordering::Less => {
             scope
                 .stack
-                .extend(iter::repeat(Value::undefined()).take(expected_args - argc));
+                .extend(iter::repeat_n(Value::undefined(), expected_args - argc));
         }
         Ordering::Greater => {
             scope.stack.truncate(old_sp + expected_args);
@@ -362,7 +362,7 @@ fn extend_stack_from_args(args: CallArgs, expected_args: usize, scope: &mut Loca
     if expected_args > args.len() {
         scope
             .stack
-            .extend(iter::repeat(Value::undefined()).take(expected_args - args.len()));
+            .extend(iter::repeat_n(Value::undefined(), expected_args - args.len()));
     }
 
     // Finally insert Value::Object([]) if this function uses the rest operator

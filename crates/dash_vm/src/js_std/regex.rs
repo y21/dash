@@ -65,7 +65,7 @@ pub fn test(cx: CallContext) -> Result<Value, Value> {
         return Ok(Value::boolean(false));
     }
 
-    let mut matcher = RegexMatcher::new(regex, text[last_index.get()..].as_bytes());
+    let mut matcher = RegexMatcher::new(regex, &text.as_bytes()[last_index.get()..]);
     if matcher.matches() {
         if is_global {
             last_index.set(last_index.get() + matcher.groups.get(0).unwrap().end);
@@ -102,7 +102,7 @@ pub fn exec(cx: CallContext<'_, '_>) -> Result<Value, Value> {
         return Ok(Value::null());
     }
 
-    let mut matcher = RegexMatcher::new(regex, text[last_index.get()..].as_bytes());
+    let mut matcher = RegexMatcher::new(regex, &text.as_bytes()[last_index.get()..]);
     if matcher.matches() {
         if is_global {
             last_index.set(last_index.get() + matcher.groups.get(0).unwrap().end);

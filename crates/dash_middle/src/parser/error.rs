@@ -238,11 +238,11 @@ struct LineData<'a> {
 }
 
 fn line_data(source: &str, span: Span) -> LineData<'_> {
-    let start_index = rfind(source[..span.lo as usize].as_bytes(), b"\n")
+    let start_index = rfind(&source.as_bytes()[..span.lo as usize], b"\n")
         .map(|x| x + 1)
         .unwrap_or(0);
 
-    let end_index = memchr(b'\n', source[span.hi as usize..].as_bytes())
+    let end_index = memchr(b'\n', &source.as_bytes()[span.hi as usize..])
         .map(|x| x + span.hi as usize)
         .unwrap_or(source.len());
 

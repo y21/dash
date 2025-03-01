@@ -136,7 +136,7 @@ pub struct ScopeGraph {
 impl ScopeGraph {
     pub fn new(count: usize) -> Self {
         Self {
-            scopes: iter::repeat(Scope::new(ScopeKind::Uninit, None)).take(count).collect(),
+            scopes: iter::repeat_n(Scope::new(ScopeKind::Uninit, None), count).collect(),
         }
     }
 

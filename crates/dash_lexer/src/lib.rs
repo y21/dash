@@ -269,7 +269,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
         match lexeme {
             Some(lexeme) => lexeme.to_mut().push_str(segment),
             None => *lexeme = Some(Cow::Borrowed(segment)),
-        };
+        }
 
         self.advance();
         let escape = self.current_real();
@@ -306,7 +306,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
                         self.error(Error::UnexpectedEof);
                         return;
                     }
-                };
+                }
             }
             b'u' => {
                 self.advance();
@@ -632,7 +632,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
                     self.error(Error::UnknownCharacter(self.span(), cur));
                 }
             }
-        };
+        }
         Some(())
     }
 
@@ -648,7 +648,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
                 }
                 b'\r' | b'\t' | b' ' => {}
                 _ => return,
-            };
+            }
 
             self.advance();
         }
@@ -663,7 +663,7 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
                 Some(b'/') => self.skip_single_line_comment(),
                 Some(b'*') => self.skip_multi_line_comment(),
                 _ => {}
-            };
+            }
         }
     }
 
