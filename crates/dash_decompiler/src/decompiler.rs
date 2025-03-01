@@ -147,7 +147,7 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                         ),
                         Instruction::Regex => (
                             "regex",
-                            &self.interner.resolve(self.constants.regexes[RegexConstant(id)].2) as &dyn fmt::Display,
+                            &self.interner.resolve(self.constants.regexes[RegexConstant(id)].1) as &dyn fmt::Display,
                         ),
                         _ => unreachable!(),
                     };

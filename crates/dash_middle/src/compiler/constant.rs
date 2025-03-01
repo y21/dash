@@ -2,7 +2,7 @@ use core::fmt;
 use std::cell::Cell;
 use std::rc::Rc;
 
-use dash_regex::{Flags, ParsedRegex};
+use dash_regex::Regex;
 
 use crate::index_type;
 use crate::indexvec::IndexThinVec;
@@ -96,7 +96,7 @@ pub struct ConstantPool {
     pub symbols: IndexThinVec<Symbol, SymbolConstant>,
     pub booleans: IndexThinVec<bool, BooleanConstant>,
     pub functions: IndexThinVec<Rc<Function>, FunctionConstant>,
-    pub regexes: IndexThinVec<(ParsedRegex, Flags, Symbol), RegexConstant>,
+    pub regexes: IndexThinVec<(Regex, Symbol), RegexConstant>,
 }
 
 pub struct LimitExceededError;
@@ -120,6 +120,6 @@ impl ConstantPool {
         add_symbol(symbols, Symbol) -> SymbolConstant,
         add_boolean(booleans, bool) -> BooleanConstant,
         add_function(functions, Rc<Function>) -> FunctionConstant,
-        add_regex(regexes, (ParsedRegex, Flags, Symbol)) -> RegexConstant
+        add_regex(regexes, (Regex, Symbol)) -> RegexConstant
     );
 }

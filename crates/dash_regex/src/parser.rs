@@ -1,7 +1,5 @@
 use std::mem;
 
-use serde::{Deserialize, Serialize};
-
 use crate::error::Error;
 use crate::node::{Anchor, CharacterClassItem, GroupCaptureMode, MetaSequence, Node};
 
@@ -12,7 +10,7 @@ pub struct Parser<'a> {
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "format", derive(serde::Serialize, serde::Deserialize))]
 pub struct ParsedRegex {
     pub nodes: Vec<Node>,
     pub group_count: usize,
@@ -101,12 +99,14 @@ impl<'a> Parser<'a> {
         Ok(node)
     }
 
-    fn read_int(&mut self) -> Result<usize, Error> {
-        let mut number = 0;
+    fn read_u32(&mut self) -> Result<u32, Error> {
+        let mut number = 0u32;
         while let Some(byte) = self.current() {
             match byte {
                 b'0'..=b'9' => {
-                    number = number * 10 + (byte - b'0') as usize;
+                    number = number.checked_mul(10).ok_or(Error::Overflow)?;
+                    number = number.checked_add((byte - b'0') as u32).ok_or(Error::Overflow)?;
+
                     self.advance();
                 }
                 _ => return Ok(number),
@@ -116,7 +116,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_bounded_repetition(&mut self, node: Node) -> Result<Node, Error> {
-        let min = self.read_int()?;
+        let min = self.read_u32()?;
         match self.current() {
             Some(b',') => {
                 self.advance();
@@ -126,7 +126,7 @@ impl<'a> Parser<'a> {
                         Ok(Node::unbounded_max_repetition(node, min))
                     }
                     _ => {
-                        let max = self.read_int()?;
+                        let max = self.read_u32()?;
                         self.advance(); // }
                         Ok(Node::repetition(node, min, max))
                     }

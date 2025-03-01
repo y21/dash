@@ -6,9 +6,7 @@ use crate::value::ops::conversions::ValueConversion;
 use crate::value::regex::{RegExp, RegExpInner};
 use crate::value::{Value, ValueContext};
 use dash_middle::interner::sym;
-use dash_regex::Flags;
-use dash_regex::matcher::Matcher as RegexMatcher;
-use dash_regex::parser::Parser as RegexParser;
+use dash_regex::{EvalSuccess, Flags};
 
 use super::receiver_t;
 
@@ -26,7 +24,7 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
         None => Flags::empty(),
     };
 
-    let nodes = match RegexParser::new(pattern.res(cx.scope).as_bytes()).parse_all() {
+    let nodes = match dash_regex::compile(pattern.res(cx.scope), flags) {
         Ok(nodes) => nodes,
         Err(err) => throw!(cx.scope, SyntaxError, "Regex parser error: {}", err),
     };
@@ -34,7 +32,6 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let new_target = cx.new_target.unwrap_or(cx.scope.statics.regexp_ctor);
     let regex = RegExp::with_obj(
         nodes,
-        flags,
         pattern,
         NamedObject::instance_for_new_target(new_target, cx.scope)?,
     );
@@ -47,35 +44,32 @@ pub fn test(cx: CallContext) -> Result<Value, Value> {
 
     let regex = receiver_t::<RegExp>(cx.scope, &cx.this, "RegExp.prototype.test")?;
 
-    let RegExpInner {
-        regex,
-        last_index,
-        flags,
-        ..
-    } = match regex.inner() {
+    let RegExpInner { regex, last_index, .. } = match regex.inner() {
         Some(nodes) => nodes,
         None => throw!(cx.scope, TypeError, "Receiver must be an initialized RegExp object"),
     };
 
     let text = text.res(cx.scope);
-    let is_global = flags.contains(Flags::GLOBAL);
+    let is_global = regex.flags().contains(Flags::GLOBAL);
 
     if is_global && last_index.get() >= text.len() {
         last_index.set(0);
         return Ok(Value::boolean(false));
     }
 
-    let mut matcher = RegexMatcher::new(regex, &text.as_bytes()[last_index.get()..]);
-    if matcher.matches() {
-        if is_global {
-            last_index.set(last_index.get() + matcher.groups.get(0).unwrap().end);
+    match regex.eval(&text[last_index.get()..]) {
+        Ok(EvalSuccess { groups }) => {
+            if is_global {
+                last_index.set(last_index.get() + groups[0].unwrap().1 as usize);
+            }
+            Ok(Value::boolean(true))
         }
-        Ok(Value::boolean(true))
-    } else {
-        if is_global {
-            last_index.set(0);
+        Err(_) => {
+            if is_global {
+                last_index.set(0);
+            }
+            Ok(Value::boolean(false))
         }
-        Ok(Value::boolean(false))
     }
 }
 
@@ -84,49 +78,44 @@ pub fn exec(cx: CallContext<'_, '_>) -> Result<Value, Value> {
 
     let regex = receiver_t::<RegExp>(cx.scope, &cx.this, "RegExp.prototype.exec")?;
 
-    let RegExpInner {
-        regex,
-        last_index,
-        flags,
-        ..
-    } = match regex.inner() {
+    let RegExpInner { regex, last_index, .. } = match regex.inner() {
         Some(nodes) => nodes,
         None => throw!(cx.scope, TypeError, "Receiver must be an initialized RegExp object"),
     };
 
     let text = text.res(cx.scope).to_owned();
-    let is_global = flags.contains(Flags::GLOBAL);
+    let is_global = regex.flags().contains(Flags::GLOBAL);
 
     if is_global && last_index.get() >= text.len() {
         last_index.set(0);
         return Ok(Value::null());
     }
 
-    let mut matcher = RegexMatcher::new(regex, &text.as_bytes()[last_index.get()..]);
-    if matcher.matches() {
-        if is_global {
-            last_index.set(last_index.get() + matcher.groups.get(0).unwrap().end);
+    match regex.eval(&text[last_index.get()..]) {
+        Ok(EvalSuccess { groups }) => {
+            if is_global {
+                last_index.set(last_index.get() + groups[0].unwrap().1 as usize);
+            }
+
+            let groups = groups
+                .into_iter()
+                .map(|group| {
+                    let sub = match group {
+                        Some((from, to, _)) => cx.scope.intern(&text[from as usize..to as usize]).into(),
+                        None => sym::null.into(),
+                    };
+                    PropertyValue::static_default(Value::string(sub))
+                })
+                .collect();
+
+            let groups = Array::from_vec(groups, cx.scope);
+            Ok(Value::object(cx.scope.register(groups)))
         }
-
-        let groups = matcher
-            .groups
-            .iter()
-            .map(|g| {
-                let sub = match g {
-                    Some(r) => cx.scope.intern(&text[r]).into(),
-                    None => sym::null.into(),
-                };
-                PropertyValue::static_default(Value::string(sub))
-            })
-            .collect();
-
-        let groups = Array::from_vec(groups, cx.scope);
-        Ok(Value::object(cx.scope.register(groups)))
-    } else {
-        if is_global {
-            last_index.set(0);
+        Err(_) => {
+            if is_global {
+                last_index.set(0);
+            }
+            Ok(Value::null())
         }
-
-        Ok(Value::null())
     }
 }

@@ -10,7 +10,6 @@ use dash_middle::parser::statement::{
     StatementKind,
 };
 use dash_middle::sourcemap::Span;
-use dash_regex::Flags;
 
 use crate::{Parser, any};
 
@@ -874,14 +873,9 @@ impl Parser<'_, '_> {
                 // Trim / prefix and suffix
                 let full = self.interner.resolve(literal);
                 let full = &full[1..full.len() - 1];
-                let (nodes, flags) = match dash_regex::Parser::new(full.as_bytes()).parse_all().and_then(|node| {
-                    self.interner
-                        .resolve(flags)
-                        .parse::<Flags>()
-                        .map_err(Into::into)
-                        .map(|flags| (node, flags))
-                }) {
-                    Ok((nodes, flags)) => (nodes, flags),
+                let flags = self.interner.resolve(flags);
+                let regex = match dash_regex::compile(full, flags) {
+                    Ok(regex) => regex,
                     Err(err) => {
                         let tok = *self.previous().unwrap();
                         self.error(Error::RegexSyntaxError(tok, err));
@@ -890,7 +884,7 @@ impl Parser<'_, '_> {
                 };
                 Expr {
                     span: current.span,
-                    kind: ExprKind::regex_literal(nodes, flags, literal),
+                    kind: ExprKind::regex_literal(regex, literal),
                 }
             }
             other if other.is_identifier() => {

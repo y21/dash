@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use dash_middle::compiler::constant::ConstantPool;
 use dash_middle::interner::StringInterner;
-use dash_regex::{Flags, ParsedRegex};
+use dash_regex::Regex;
 
 use crate::value::Unrooted;
 use crate::value::primitive::{Null, Number, Undefined};
@@ -184,7 +184,7 @@ unsafe impl Trace for dash_middle::compiler::constant::Function {
         booleans.as_slice().trace(cx);
         functions.as_slice().trace(cx);
 
-        for (ParsedRegex { .. }, Flags { .. }, sym) in regexes.as_slice() {
+        for (Regex { .. }, sym) in regexes.as_slice() {
             sym.trace(cx);
         }
     }

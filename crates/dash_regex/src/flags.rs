@@ -1,12 +1,11 @@
 use std::str::FromStr;
 
 use bitflags::bitflags;
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-    #[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
+    #[cfg_attr(feature = "format", derive(serde::Serialize, serde::Deserialize))]
     pub struct Flags: u8 {
         const GLOBAL = 1;
         const IGNORE_CASE = 2;

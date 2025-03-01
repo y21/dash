@@ -9,7 +9,7 @@ pub enum CharacterClassItem {
 }
 
 #[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum GroupCaptureMode {
     /// `(?:...)`
     None,
@@ -24,8 +24,8 @@ pub enum Node {
     MetaSequence(MetaSequence),
     Repetition {
         node: Box<Node>,
-        min: usize,
-        max: Option<usize>,
+        min: u32,
+        max: Option<u32>,
     },
     LiteralCharacter(u8),
     CharacterClass(Vec<CharacterClassItem>),
@@ -36,14 +36,14 @@ pub enum Node {
 }
 
 impl Node {
-    pub fn unbounded_max_repetition(node: Node, min: usize) -> Self {
+    pub fn unbounded_max_repetition(node: Node, min: u32) -> Self {
         Self::Repetition {
             node: Box::new(node),
             min,
             max: None,
         }
     }
-    pub fn repetition(node: Node, min: usize, max: usize) -> Self {
+    pub fn repetition(node: Node, min: u32, max: u32) -> Self {
         Self::Repetition {
             node: Box::new(node),
             min,
@@ -56,15 +56,25 @@ impl Node {
 }
 
 #[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MetaSequence {
     Digit,
     Word,
     Whitespace,
 }
 
+impl MetaSequence {
+    pub fn matches(self, c: u8) -> bool {
+        match self {
+            MetaSequence::Digit => c.is_ascii_digit(),
+            MetaSequence::Word => c.is_ascii_alphanumeric() || c == b'_',
+            MetaSequence::Whitespace => c.is_ascii_whitespace(),
+        }
+    }
+}
+
 #[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Anchor {
     StartOfString,
     EndOfString,
