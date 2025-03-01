@@ -57,10 +57,13 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
         sc,
     )?;
 
-    State::from_vm_mut(sc).store.insert(StreamKey, StreamState {
-        stream_prototype,
-        stream_ctor,
-    });
+    State::from_vm_mut(sc).store.insert(
+        StreamKey,
+        StreamState {
+            stream_prototype,
+            stream_ctor,
+        },
+    );
 
     Ok(stream_ctor.into())
 }

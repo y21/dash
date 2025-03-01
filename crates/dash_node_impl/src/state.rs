@@ -2,8 +2,8 @@ use std::cell::OnceCell;
 
 use dash_proc_macro::Trace;
 use dash_rt::typemap::Key;
-use dash_vm::value::Value;
 use dash_vm::Vm;
+use dash_vm::value::Value;
 
 use crate::symbols::NodeSymbols;
 

@@ -665,25 +665,31 @@ impl Parser<'_, '_> {
                                 self.eat(TokenType::LeftBrace, true)?;
                                 let body = self.parse_block()?;
                                 let id = self.scope_count.inc();
-                                items.push((key, Expr {
-                                    span: current.span.to(self.previous()?.span),
-                                    kind: ExprKind::function(FunctionDeclaration {
-                                        id,
-                                        name: None,
-                                        parameters,
-                                        statements: body.0,
-                                        ty: FunctionKind::Function(Asyncness::No),
-                                        ty_segment: None,
-                                        constructor_initializers: None,
-                                        has_extends_clause: false,
-                                    }),
-                                }));
+                                items.push((
+                                    key,
+                                    Expr {
+                                        span: current.span.to(self.previous()?.span),
+                                        kind: ExprKind::function(FunctionDeclaration {
+                                            id,
+                                            name: None,
+                                            parameters,
+                                            statements: body.0,
+                                            ty: FunctionKind::Function(Asyncness::No),
+                                            ty_segment: None,
+                                            constructor_initializers: None,
+                                            has_extends_clause: false,
+                                        }),
+                                    },
+                                ));
                             } else {
                                 match key {
-                                    ObjectMemberKind::Static(name) => items.push((key, Expr {
-                                        span: token.span,
-                                        kind: ExprKind::identifier(name),
-                                    })),
+                                    ObjectMemberKind::Static(name) => items.push((
+                                        key,
+                                        Expr {
+                                            span: token.span,
+                                            kind: ExprKind::identifier(name),
+                                        },
+                                    )),
                                     ObjectMemberKind::Dynamic(..) => {
                                         self.error(Error::unexpected_token(token.span, TokenType::Colon));
                                         return None;
@@ -734,10 +740,13 @@ impl Parser<'_, '_> {
                                 constructor_initializers: None,
                                 has_extends_clause: false,
                             };
-                            items.push((key, Expr {
-                                span: current.span.to(self.previous()?.span),
-                                kind: ExprKind::function(fun),
-                            }));
+                            items.push((
+                                key,
+                                Expr {
+                                    span: current.span.to(self.previous()?.span),
+                                    kind: ExprKind::function(fun),
+                                },
+                            ));
                         }
                         ObjectMemberKind::DynamicGetter(_)
                         | ObjectMemberKind::DynamicSetter(_)
@@ -1026,10 +1035,10 @@ impl Parser<'_, '_> {
                         }
                     }
 
-                    Ok(Parameter::Pattern(parser.local_count.inc(), Pattern::Array {
-                        fields,
-                        rest,
-                    }))
+                    Ok(Parameter::Pattern(
+                        parser.local_count.inc(),
+                        Pattern::Array { fields, rest },
+                    ))
                 }
                 ExprKind::Object(ObjectLiteral(properties)) => {
                     let destructured_id = parser.local_count.inc();

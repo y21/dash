@@ -99,53 +99,60 @@ impl<'a, 'cx, 'interner> ForEachDesugarCtxt<'a, 'cx, 'interner> {
 
     /// Emits a loop, assuming that `iterator_local` has been initialized with the iterator
     pub fn compile_loop(&mut self, label: Option<Symbol>, body: Box<Statement>) -> Result<(), Error> {
-        self.ib.visit_while_loop(Span::COMPILER_GENERATED, label, WhileLoop {
-            condition: Expr {
-                span: Span::COMPILER_GENERATED,
-                kind: ExprKind::unary(TokenType::LogicalNot, Expr {
+        self.ib.visit_while_loop(
+            Span::COMPILER_GENERATED,
+            label,
+            WhileLoop {
+                condition: Expr {
                     span: Span::COMPILER_GENERATED,
-                    kind: ExprKind::property_access(
-                        false,
+                    kind: ExprKind::unary(
+                        TokenType::LogicalNot,
                         Expr {
                             span: Span::COMPILER_GENERATED,
-                            kind: ExprKind::assignment_local_space(
-                                self.gen_step_local,
+                            kind: ExprKind::property_access(
+                                false,
                                 Expr {
                                     span: Span::COMPILER_GENERATED,
-                                    kind: ExprKind::function_call(
+                                    kind: ExprKind::assignment_local_space(
+                                        self.gen_step_local,
                                         Expr {
                                             span: Span::COMPILER_GENERATED,
-                                            kind: ExprKind::property_access(
-                                                false,
+                                            kind: ExprKind::function_call(
                                                 Expr {
                                                     span: Span::COMPILER_GENERATED,
-                                                    kind: ExprKind::compiled(compile_local_load(
-                                                        self.iterator_local,
+                                                    kind: ExprKind::property_access(
                                                         false,
-                                                    )),
+                                                        Expr {
+                                                            span: Span::COMPILER_GENERATED,
+                                                            kind: ExprKind::compiled(compile_local_load(
+                                                                self.iterator_local,
+                                                                false,
+                                                            )),
+                                                        },
+                                                        Expr {
+                                                            span: Span::COMPILER_GENERATED,
+                                                            kind: ExprKind::identifier(sym::next),
+                                                        },
+                                                    ),
                                                 },
-                                                Expr {
-                                                    span: Span::COMPILER_GENERATED,
-                                                    kind: ExprKind::identifier(sym::next),
-                                                },
+                                                Vec::new(),
+                                                false,
                                             ),
                                         },
-                                        Vec::new(),
-                                        false,
+                                        TokenType::Assignment,
                                     ),
                                 },
-                                TokenType::Assignment,
+                                Expr {
+                                    span: Span::COMPILER_GENERATED,
+                                    kind: ExprKind::identifier(sym::done),
+                                },
                             ),
                         },
-                        Expr {
-                            span: Span::COMPILER_GENERATED,
-                            kind: ExprKind::identifier(sym::done),
-                        },
                     ),
-                }),
+                },
+                body,
             },
-            body,
-        })?;
+        )?;
 
         Ok(())
     }

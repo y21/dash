@@ -1,15 +1,15 @@
 use std::io::Write;
 use std::{fs, io};
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use clap::ArgMatches;
 use dash_compiler::transformations;
 use dash_middle::interner::StringInterner;
 use dash_middle::parser::error::IntoFormattableErrors;
 use dash_middle::parser::statement::ScopeId;
+use dash_optimizer::OptLevel;
 use dash_optimizer::consteval::ConstFunctionEvalCtx;
 use dash_optimizer::type_infer::name_res;
-use dash_optimizer::OptLevel;
 
 pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
     let dump_ir = arg.is_present("ir");

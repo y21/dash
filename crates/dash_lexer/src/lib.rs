@@ -506,42 +506,57 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
             b',' => self.token(TokenType::Comma),
             b'.' if self.current().is_some_and(|d| d.is_ascii_digit()) => self.read_number_literal(),
             b'.' => self.token(TokenType::Dot),
-            b'-' => self.conditional_token(TokenType::Minus, &[
-                ("-", TokenType::Decrement),
-                ("=", TokenType::SubtractionAssignment),
-            ]),
-            b'+' => self.conditional_token(TokenType::Plus, &[
-                ("+", TokenType::Increment),
-                ("=", TokenType::AdditionAssignment),
-            ]),
-            b'*' => self.conditional_token(TokenType::Star, &[
-                ("*=", TokenType::ExponentiationAssignment),
-                ("*", TokenType::Exponentiation),
-                ("=", TokenType::MultiplicationAssignment),
-            ]),
-            b'|' => self.conditional_token(TokenType::BitwiseOr, &[
-                ("|=", TokenType::LogicalOrAssignment),
-                ("=", TokenType::BitwiseOrAssignment),
-                ("|", TokenType::LogicalOr),
-            ]),
+            b'-' => self.conditional_token(
+                TokenType::Minus,
+                &[("-", TokenType::Decrement), ("=", TokenType::SubtractionAssignment)],
+            ),
+            b'+' => self.conditional_token(
+                TokenType::Plus,
+                &[("+", TokenType::Increment), ("=", TokenType::AdditionAssignment)],
+            ),
+            b'*' => self.conditional_token(
+                TokenType::Star,
+                &[
+                    ("*=", TokenType::ExponentiationAssignment),
+                    ("*", TokenType::Exponentiation),
+                    ("=", TokenType::MultiplicationAssignment),
+                ],
+            ),
+            b'|' => self.conditional_token(
+                TokenType::BitwiseOr,
+                &[
+                    ("|=", TokenType::LogicalOrAssignment),
+                    ("=", TokenType::BitwiseOrAssignment),
+                    ("|", TokenType::LogicalOr),
+                ],
+            ),
             b'^' => self.conditional_token(TokenType::BitwiseXor, &[("=", TokenType::BitwiseXorAssignment)]),
-            b'&' => self.conditional_token(TokenType::BitwiseAnd, &[
-                ("&=", TokenType::LogicalAndAssignment),
-                ("=", TokenType::BitwiseAndAssignment),
-                ("&", TokenType::LogicalAnd),
-            ]),
-            b'>' => self.conditional_token(TokenType::Greater, &[
-                (">>=", TokenType::UnsignedRightShiftAssignment),
-                (">=", TokenType::RightShiftAssignment),
-                (">>", TokenType::UnsignedRightShift),
-                ("=", TokenType::GreaterEqual),
-                (">", TokenType::RightShift),
-            ]),
-            b'<' => self.conditional_token(TokenType::Less, &[
-                ("<=", TokenType::LeftShiftAssignment),
-                ("=", TokenType::LessEqual),
-                ("<", TokenType::LeftShift),
-            ]),
+            b'&' => self.conditional_token(
+                TokenType::BitwiseAnd,
+                &[
+                    ("&=", TokenType::LogicalAndAssignment),
+                    ("=", TokenType::BitwiseAndAssignment),
+                    ("&", TokenType::LogicalAnd),
+                ],
+            ),
+            b'>' => self.conditional_token(
+                TokenType::Greater,
+                &[
+                    (">>=", TokenType::UnsignedRightShiftAssignment),
+                    (">=", TokenType::RightShiftAssignment),
+                    (">>", TokenType::UnsignedRightShift),
+                    ("=", TokenType::GreaterEqual),
+                    (">", TokenType::RightShift),
+                ],
+            ),
+            b'<' => self.conditional_token(
+                TokenType::Less,
+                &[
+                    ("<=", TokenType::LeftShiftAssignment),
+                    ("=", TokenType::LessEqual),
+                    ("<", TokenType::LeftShift),
+                ],
+            ),
             b'%' => self.conditional_token(TokenType::Remainder, &[("=", TokenType::RemainderAssignment)]),
             b'/' => match self.tokens.last() {
                 // '/' is very ambiguous, probably the most ambiguous character in the grammar
@@ -567,26 +582,32 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
                 None => self.read_regex_literal(),
                 _ => self.conditional_token(TokenType::Slash, &[("=", TokenType::DivisionAssignment)]),
             },
-            b'!' => self.conditional_token(TokenType::LogicalNot, &[
-                ("==", TokenType::StrictInequality),
-                ("=", TokenType::Inequality),
-            ]),
+            b'!' => self.conditional_token(
+                TokenType::LogicalNot,
+                &[("==", TokenType::StrictInequality), ("=", TokenType::Inequality)],
+            ),
             b'~' => self.token(TokenType::BitwiseNot),
-            b'?' => self.conditional_token(TokenType::Conditional, &[
-                ("?=", TokenType::LogicalNullishAssignment),
-                (".[", TokenType::OptionalSquareBrace),
-                (".(", TokenType::OptionalLeftParen),
-                ("?", TokenType::NullishCoalescing),
-                (".", TokenType::OptionalDot),
-            ]),
+            b'?' => self.conditional_token(
+                TokenType::Conditional,
+                &[
+                    ("?=", TokenType::LogicalNullishAssignment),
+                    (".[", TokenType::OptionalSquareBrace),
+                    (".(", TokenType::OptionalLeftParen),
+                    ("?", TokenType::NullishCoalescing),
+                    (".", TokenType::OptionalDot),
+                ],
+            ),
             b'#' => self.token(TokenType::Hash),
             b':' => self.token(TokenType::Colon),
             b';' => self.token(TokenType::Semicolon),
-            b'=' => self.conditional_token(TokenType::Assignment, &[
-                ("==", TokenType::StrictEquality),
-                ("=", TokenType::Equality),
-                (">", TokenType::FatArrow),
-            ]),
+            b'=' => self.conditional_token(
+                TokenType::Assignment,
+                &[
+                    ("==", TokenType::StrictEquality),
+                    ("=", TokenType::Equality),
+                    (">", TokenType::FatArrow),
+                ],
+            ),
             b'"' | b'\'' => self.read_string_literal(),
             b'`' => self.read_template_literal_segment(),
             _ => {

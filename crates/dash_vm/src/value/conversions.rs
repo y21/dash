@@ -1,7 +1,7 @@
 use crate::gc::ObjectId;
 
-use super::primitive::Symbol;
 use super::Value;
+use super::primitive::Symbol;
 
 impl From<ObjectId> for Value {
     fn from(object: ObjectId) -> Self {

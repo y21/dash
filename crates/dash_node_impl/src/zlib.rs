@@ -48,10 +48,13 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
         sc,
     )?;
 
-    State::from_vm_mut(sc).store.insert(ZlibKey, ZlibState {
-        inflate_prototype,
-        inflate_ctor,
-    });
+    State::from_vm_mut(sc).store.insert(
+        ZlibKey,
+        ZlibState {
+            inflate_prototype,
+            inflate_ctor,
+        },
+    );
 
     Ok(exports.into())
 }

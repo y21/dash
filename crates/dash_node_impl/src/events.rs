@@ -67,10 +67,13 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
         sc.register(event_emitter_ctor)
     };
 
-    State::from_vm_mut(sc).store.insert(EventsKey, EventsState {
-        event_emitter_constructor: event_emitter_ctor,
-        event_emitter_prototype,
-    });
+    State::from_vm_mut(sc).store.insert(
+        EventsKey,
+        EventsState {
+            event_emitter_constructor: event_emitter_ctor,
+            event_emitter_prototype,
+        },
+    );
 
     event_emitter_ctor.set_property(
         event_emitter_sym.to_key(sc),

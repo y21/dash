@@ -2,9 +2,9 @@
 #![cfg_attr(dash_lints, register_tool(dash_lints))]
 #![allow(path_statements, dead_code, clippy::no_effect)]
 
+use dash_vm::Vm;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::Unrooted;
-use dash_vm::Vm;
 
 fn make_unrooted() -> Unrooted {
     todo!()

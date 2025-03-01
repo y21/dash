@@ -4,11 +4,11 @@ use dash_middle::compiler::StaticImportKind;
 
 use crate::gc::trace::Trace;
 use crate::localscope::LocalScope;
-use crate::value::string::JsString;
 use crate::value::Unrooted;
+use crate::value::string::JsString;
 
-use super::value::Value;
 use super::Vm;
+use super::value::Value;
 
 pub type MathRandomCallback = fn(vm: &mut Vm) -> Result<f64, Unrooted>;
 pub type TimeMillisCallback = fn(vm: &mut Vm) -> Result<u64, Unrooted>;

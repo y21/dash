@@ -121,10 +121,13 @@ pub fn hoist_declarations(
         }
 
         if !stmts.is_empty() {
-            stmts.insert(0, Statement {
-                span: Span::COMPILER_GENERATED,
-                kind: StatementKind::Block(BlockStatement(prepend, *id)),
-            });
+            stmts.insert(
+                0,
+                Statement {
+                    span: Span::COMPILER_GENERATED,
+                    kind: StatementKind::Block(BlockStatement(prepend, *id)),
+                },
+            );
         }
     }
 
@@ -197,9 +200,12 @@ pub fn hoist_declarations(
     if !ast.is_empty() {
         let block_id = scopes.add_empty_block_scope(at, counter);
 
-        ast.insert(0, Statement {
-            span: Span::COMPILER_GENERATED,
-            kind: StatementKind::Block(BlockStatement(prepend_function_assigns, block_id)),
-        });
+        ast.insert(
+            0,
+            Statement {
+                span: Span::COMPILER_GENERATED,
+                kind: StatementKind::Block(BlockStatement(prepend_function_assigns, block_id)),
+            },
+        );
     }
 }

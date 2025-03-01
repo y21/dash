@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use smallvec::{smallvec, SmallVec};
+use smallvec::{SmallVec, smallvec};
 
 use crate::node::Node;
 use crate::parser::ParsedRegex;

@@ -2,8 +2,8 @@ use std::fmt::Debug;
 
 use dash_middle::compiler::StaticImportKind;
 use dash_vm::localscope::LocalScope;
-use dash_vm::value::string::JsString;
 use dash_vm::value::Value;
+use dash_vm::value::string::JsString;
 
 #[derive(Debug)]
 pub struct NoopModule;

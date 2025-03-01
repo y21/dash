@@ -1,10 +1,10 @@
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use dash_compiler::FunctionCompiler;
 use dash_middle::interner::StringInterner;
 use dash_optimizer::OptLevel;
+use dash_vm::Vm;
 use dash_vm::frame::Frame;
 use dash_vm::params::VmParams;
-use dash_vm::Vm;
 
 const CODE: &str = include_str!("../src/test/interpreter.js");
 const FIBONACCI_RECURSIVE: &str = r"

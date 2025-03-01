@@ -5,7 +5,7 @@ use dash_rt::module::ModuleLoader;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::string::JsString;
 use dash_vm::value::{Root, Value};
-use dash_vm::{throw, Vm};
+use dash_vm::{Vm, throw};
 use indexmap::IndexSet;
 
 #[derive(Debug, Default)]

@@ -3,34 +3,34 @@
 #![warn(clippy::redundant_clone, unused_qualifications)]
 #![deny(clippy::disallowed_methods)]
 
+use std::fmt;
 use std::ops::RangeBounds;
 use std::vec::Drain;
-use std::fmt;
 
 use crate::util::cold_path;
+use crate::value::Root;
 use crate::value::function::Function;
 use crate::value::object::{PropertyDataDescriptor, PropertyValueKind};
 use crate::value::primitive::Symbol;
-use crate::value::Root;
 
 use self::dispatch::HandleResult;
 use self::frame::{Exports, Frame, FrameState, TryBlock};
 use self::localscope::LocalScope;
 use self::params::VmParams;
 use self::statics::Statics;
-use self::value::object::{Object, PropertyValue};
 use self::value::Value;
+use self::value::object::{Object, PropertyValue};
 
-use dash_log::{debug, error, span, Level};
+use dash_log::{Level, debug, error, span};
 use dash_middle::compiler::instruction::Instruction;
-use dash_middle::interner::{self, sym, StringInterner};
+use dash_middle::interner::{self, StringInterner, sym};
 use frame::This;
 use gc::trace::{Trace, TraceCtxt};
 use gc::{Allocator, ObjectId};
-use localscope::{scope, LocalScopeList};
+use localscope::{LocalScopeList, scope};
 use rustc_hash::FxHashMap;
 use value::function::args::CallArgs;
-use value::object::{extract_type, NamedObject};
+use value::object::{NamedObject, extract_type};
 use value::propertykey::ToPropertyKey;
 use value::{ExternalValue, PureBuiltin, Unpack, Unrooted, ValueKind};
 
@@ -96,9 +96,7 @@ impl Vm {
         let statics = Statics::new(&mut alloc);
         // TODO: global __proto__ and constructor
         let global: ObjectId = alloc.alloc_object(PureBuiltin::new(NamedObject::null()));
-        let gc_rss_threshold = params
-            .initial_gc_rss_threshold
-            .unwrap_or(DEFAULT_GC_RSS_THRESHOLD);
+        let gc_rss_threshold = params.initial_gc_rss_threshold.unwrap_or(DEFAULT_GC_RSS_THRESHOLD);
 
         let mut vm = Self {
             frames: Vec::new(),
@@ -202,7 +200,7 @@ impl Vm {
 
         let mut scope = self.scope();
         let global = scope.global;
-        
+
         let function_ctor = register(
             scope.statics.function_ctor,
             scope.statics.function_proto,
@@ -213,7 +211,7 @@ impl Vm {
             Some((sym::Function, scope.statics.function_proto)),
             &mut scope,
         );
-        
+
         let function_proto = register(
             scope.statics.function_proto,
             scope.statics.object_prototype,
@@ -229,7 +227,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         let object_ctor = register(
             scope.statics.object_ctor,
             function_proto,
@@ -255,7 +253,7 @@ impl Vm {
             Some((sym::Object, scope.statics.object_prototype)),
             &mut scope,
         );
-        
+
         let object_proto = register(
             scope.statics.object_prototype,
             Value::null(),
@@ -271,7 +269,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         let console = register(
             scope.statics.console,
             object_proto,
@@ -284,7 +282,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         let math = register(
             scope.statics.math,
             object_proto,
@@ -329,7 +327,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         let number_ctor = register(
             scope.statics.number_ctor,
             function_proto,
@@ -355,7 +353,7 @@ impl Vm {
             Some((sym::Number, scope.statics.number_prototype)),
             &mut scope,
         );
-        
+
         register(
             scope.statics.number_prototype,
             object_proto,
@@ -370,7 +368,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         let boolean_ctor = register(
             scope.statics.boolean_ctor,
             function_proto,
@@ -381,7 +379,7 @@ impl Vm {
             Some((sym::Boolean, scope.statics.boolean_prototype)),
             &mut scope,
         );
-        
+
         register(
             scope.statics.boolean_prototype,
             object_proto,
@@ -395,7 +393,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         let string_ctor = register(
             scope.statics.string_ctor,
             function_proto,
@@ -408,7 +406,7 @@ impl Vm {
             Some((sym::String, scope.statics.string_prototype)),
             &mut scope,
         );
-        
+
         register(
            scope.statics.string_prototype,
            scope.statics.object_prototype,
@@ -454,7 +452,7 @@ impl Vm {
            None,
            &mut scope,
         );
-        
+
         let array_ctor = register(
             scope.statics.array_ctor,
             function_proto,
@@ -468,7 +466,7 @@ impl Vm {
             Some((sym::Array, scope.statics.array_prototype)),
             &mut scope,
         );
-        
+
         register(
             scope.statics.array_prototype,
             object_proto,
@@ -508,7 +506,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         register(
             scope.statics.array_iterator_prototype,
             object_proto, // TODO: wrong
@@ -523,7 +521,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         register(
             scope.statics.generator_iterator_prototype,
             object_proto, // TODO: wrong
@@ -538,7 +536,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         let symbol_ctor = register(
             scope.statics.symbol_ctor,
             function_proto,
@@ -562,7 +560,7 @@ impl Vm {
             Some((sym::JsSymbol, scope.statics.symbol_prototype)),
             &mut scope,
         );
-        
+
         let error_ctor = register(
             scope.statics.error_ctor,
             function_proto,
@@ -573,7 +571,7 @@ impl Vm {
             Some((sym::Error, scope.statics.error_prototype)),
             &mut scope,
         );
-        
+
         register(
             scope.statics.error_prototype,
             object_proto,
@@ -586,7 +584,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         let arraybuffer_ctor = register(
             scope.statics.arraybuffer_ctor,
             function_proto,
@@ -597,7 +595,7 @@ impl Vm {
             Some((sym::ArrayBuffer, scope.statics.arraybuffer_prototype)),
             &mut scope,
         );
-        
+
         register(
             scope.statics.arraybuffer_prototype,
             object_proto,
@@ -610,7 +608,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         let u8array_ctor = register(
             scope.statics.uint8array_ctor,
             function_proto,
@@ -621,7 +619,7 @@ impl Vm {
             Some((sym::Uint8Array, scope.statics.uint8array_prototype)),
             &mut scope,
         );
-        
+
         register(
             scope.statics.uint8array_prototype,
             object_proto,
@@ -634,7 +632,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         let i8array_ctor = register(
             scope.statics.int8array_ctor,
             function_proto,
@@ -645,7 +643,7 @@ impl Vm {
             Some((sym::Int8Array, scope.statics.int8array_prototype)),
             &mut scope,
         );
-        
+
         register(
             scope.statics.int8array_prototype,
             object_proto,
@@ -658,7 +656,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         let u16array_ctor = register(
             scope.statics.uint16array_ctor,
             function_proto,
@@ -669,7 +667,7 @@ impl Vm {
             Some((sym::Uint16Array, scope.statics.uint16array_prototype)),
             &mut scope,
         );
-        
+
         register(
             scope.statics.uint16array_prototype,
             object_proto,
@@ -682,7 +680,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         let i16array_ctor = register(
             scope.statics.int16array_ctor,
             function_proto,
@@ -693,7 +691,7 @@ impl Vm {
             Some((sym::Int16Array, scope.statics.int16array_prototype)),
             &mut scope,
         );
-        
+
         register(
             scope.statics.int16array_prototype,
             object_proto,
@@ -706,7 +704,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         let u32array_ctor = register(
             scope.statics.uint32array_ctor,
             function_proto,
@@ -717,7 +715,7 @@ impl Vm {
             Some((sym::Uint32Array, scope.statics.uint32array_prototype)),
             &mut scope,
         );
-        
+
         register(
             scope.statics.uint32array_prototype,
             object_proto,
@@ -730,7 +728,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         let i32array_ctor = register(
             scope.statics.int32array_ctor,
             function_proto,
@@ -741,7 +739,7 @@ impl Vm {
             Some((sym::Int32Array, scope.statics.int32array_prototype)),
             &mut scope,
         );
-        
+
         register(
             scope.statics.int32array_prototype,
             object_proto,
@@ -754,7 +752,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         let f32array_ctor = register(
             scope.statics.float32array_ctor,
             function_proto,
@@ -765,7 +763,7 @@ impl Vm {
             Some((sym::Float32Array, scope.statics.float32array_prototype)),
             &mut scope,
         );
-        
+
         register(
             scope.statics.float32array_prototype,
             object_proto,
@@ -778,7 +776,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         let f64array_ctor = register(
             scope.statics.float64array_ctor,
             function_proto,
@@ -789,7 +787,7 @@ impl Vm {
             Some((sym::Float64Array, scope.statics.float64array_prototype)),
             &mut scope,
         );
-        
+
         register(
             scope.statics.float64array_prototype,
             object_proto,
@@ -802,7 +800,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         let promise_ctor = register(
             scope.statics.promise_ctor,
             function_proto,
@@ -816,7 +814,7 @@ impl Vm {
             Some((sym::Promise, scope.statics.promise_proto)),
             &mut scope,
         );
-        
+
         register(
             scope.statics.promise_proto,
             object_proto,
@@ -829,7 +827,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         let set_ctor = register(
             scope.statics.set_constructor,
             function_proto,
@@ -840,7 +838,7 @@ impl Vm {
             Some((sym::Set, scope.statics.set_prototype)),
             &mut scope,
         );
-        
+
         register(
             scope.statics.set_prototype,
             object_proto,
@@ -857,7 +855,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         let map_ctor = register(
             scope.statics.map_constructor,
             function_proto,
@@ -868,7 +866,7 @@ impl Vm {
             Some((sym::Map, scope.statics.map_prototype)),
             &mut scope,
         );
-        
+
         register(
             scope.statics.map_prototype,
             object_proto,
@@ -886,7 +884,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         let weakmap_ctor = register(
             scope.statics.weakmap_constructor,
             function_proto,
@@ -913,7 +911,7 @@ impl Vm {
             None,
             &mut scope
         );
-        
+
         let weakset_ctor = register(
             scope.statics.weakset_constructor,
             function_proto,
@@ -950,7 +948,7 @@ impl Vm {
             Some((sym::RegExp, scope.statics.regexp_prototype)),
             &mut scope,
         );
-        
+
         register(
             scope.statics.regexp_prototype,
             object_proto,
@@ -964,7 +962,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         let eval_error_ctor = register(
             scope.statics.eval_error_ctor,
             function_proto,
@@ -975,7 +973,7 @@ impl Vm {
             Some((sym::EvalError, scope.statics.eval_error_prototype)),
             &mut scope,
         );
-        
+
         register(
             scope.statics.eval_error_prototype,
             scope.statics.error_prototype,
@@ -988,7 +986,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         let range_error_ctor = register(
             scope.statics.range_error_ctor,
             function_proto,
@@ -999,7 +997,7 @@ impl Vm {
             Some((sym::RangeError, scope.statics.range_error_prototype)),
             &mut scope,
         );
-        
+
         register(
             scope.statics.range_error_prototype,
             scope.statics.error_prototype,
@@ -1012,7 +1010,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         let reference_error_ctor = register(
             scope.statics.reference_error_ctor,
             function_proto,
@@ -1023,7 +1021,7 @@ impl Vm {
             Some((sym::ReferenceError, scope.statics.reference_error_prototype)),
             &mut scope,
         );
-        
+
         register(
             scope.statics.reference_error_prototype,
             scope.statics.error_prototype,
@@ -1036,7 +1034,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         let syntax_error_ctor = register(
             scope.statics.syntax_error_ctor,
             function_proto,
@@ -1047,7 +1045,7 @@ impl Vm {
             Some((sym::SyntaxError, scope.statics.syntax_error_prototype)),
             &mut scope,
         );
-        
+
         register(
             scope.statics.syntax_error_prototype,
             scope.statics.error_prototype,
@@ -1060,7 +1058,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         let type_error_ctor = register(
             scope.statics.type_error_ctor,
             function_proto,
@@ -1071,7 +1069,7 @@ impl Vm {
             Some((sym::TypeError, scope.statics.type_error_prototype)),
             &mut scope,
         );
-        
+
         register(
             scope.statics.type_error_prototype,
             scope.statics.error_prototype,
@@ -1084,7 +1082,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         let uri_error_ctor = register(
             scope.statics.uri_error_ctor,
             function_proto,
@@ -1095,7 +1093,7 @@ impl Vm {
             Some((sym::URIError, scope.statics.uri_error_prototype)),
             &mut scope,
         );
-        
+
         register(
             scope.statics.uri_error_prototype,
             scope.statics.error_prototype,
@@ -1108,7 +1106,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         let aggregate_error_ctor = register(
             scope.statics.aggregate_error_ctor,
             function_proto,
@@ -1119,7 +1117,7 @@ impl Vm {
             Some((sym::AggregateError, scope.statics.aggregate_error_prototype)),
             &mut scope,
         );
-        
+
         register(
             scope.statics.aggregate_error_prototype,
             scope.statics.error_prototype,
@@ -1132,7 +1130,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         let date_ctor = register(
             scope.statics.date_ctor,
             function_proto,
@@ -1145,7 +1143,7 @@ impl Vm {
             Some((sym::Date, scope.statics.date_prototype)),
             &mut scope,
         );
-        
+
         register(
             scope.statics.date_prototype,
             object_proto,
@@ -1158,7 +1156,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         let json_ctor = register(
             scope.statics.json_ctor,
             function_proto,
@@ -1171,7 +1169,7 @@ impl Vm {
             None,
             &mut scope,
         );
-        
+
         register(
             global,
             object_proto,
@@ -1268,11 +1266,14 @@ impl Vm {
     }
 
     /// Fetches a local and unboxes any externals.
-    /// 
+    ///
     /// This is usually the method you want to use, since handling externals specifically is not
     /// typically useful.
     pub(crate) fn get_local(&self, id: usize) -> Option<Value> {
-        self.stack.get(self.get_frame_sp() + id).cloned().map(|v| v.unbox_external(self))
+        self.stack
+            .get(self.get_frame_sp() + id)
+            .cloned()
+            .map(|v| v.unbox_external(self))
     }
 
     pub(crate) fn get_external(&self, id: usize) -> Option<ExternalValue> {
@@ -1361,7 +1362,12 @@ impl Vm {
         debug!("handling rt error @{max_fp}");
         // Using .last() here instead of .pop() because there is a possibility that we
         // can't use this block (read the comment above the if statement try_fp < max_fp)
-        if let Some(&TryBlock { catch_ip, finally_ip, frame_ip: try_fp }) = self.try_blocks.last() {
+        if let Some(&TryBlock {
+            catch_ip,
+            finally_ip,
+            frame_ip: try_fp,
+        }) = self.try_blocks.last()
+        {
             // if we're in a try-catch block, we need to jump to it
 
             // Do not unwind further than we are allowed to. If the last try block is "outside" of
@@ -1386,15 +1392,15 @@ impl Vm {
                     // u16::MAX is used to indicate that there is no variable binding in the catch block
                     self.set_local(catch_binding as usize, err);
                 }
-                
+
                 // If we have both a catch_ip and finally_ip, then re-push it but with the catch_ip set to None
                 // and then jump to the old catch_ip.
                 // Reason: when we then throw an exception within this catch, we correctly jump to the finally.
                 if let Some(finally_ip) = finally_ip {
-                    self.try_blocks.push(TryBlock{
+                    self.try_blocks.push(TryBlock {
                         catch_ip: None,
                         finally_ip: Some(finally_ip),
-                        frame_ip: try_fp
+                        frame_ip: try_fp,
                     });
                 }
             } else if let Some(finally_ip) = finally_ip {
@@ -1441,7 +1447,7 @@ impl Vm {
             scope.add_ref(task);
 
             debug!("process task {:?}", task);
-            if let Err(ex) = task.apply(This::Default, CallArgs::empty(),&mut scope) {
+            if let Err(ex) = task.apply(This::Default, CallArgs::empty(), &mut scope) {
                 if let Some(callback) = scope.params.unhandled_task_exception_callback() {
                     let ex = ex.root(&mut scope);
                     error!("uncaught async task exception");

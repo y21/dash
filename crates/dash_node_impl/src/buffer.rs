@@ -61,10 +61,13 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     )?;
     buffer_ctor.set_property(alloc_sym.to_key(sc), PropertyValue::static_default(alloc_fn.into()), sc)?;
 
-    State::from_vm_mut(sc).store.insert(BufferKey, BufferState {
-        buffer_prototype,
-        buffer_ctor,
-    });
+    State::from_vm_mut(sc).store.insert(
+        BufferKey,
+        BufferState {
+            buffer_prototype,
+            buffer_ctor,
+        },
+    );
 
     Ok(buffer_ctor.into())
 }

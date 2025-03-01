@@ -2,9 +2,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use dash_vm::gc::trace::Trace;
-use dash_vm::gc::ObjectId;
 use dash_vm::Vm;
+use dash_vm::gc::ObjectId;
+use dash_vm::gc::trace::Trace;
 use rustc_hash::FxHashMap;
 
 use crate::active_tasks::TaskIds;

@@ -208,11 +208,14 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                     let preserve_this = self.read()? == 1;
                     let kind = FunctionCallKind::from_repr(self.read()?).unwrap();
 
-                    self.handle_op_map_instr("call", &[
-                        ("argc", &argc),
-                        ("preserve_this", &preserve_this),
-                        ("kind", &format!("{kind:?}")),
-                    ]);
+                    self.handle_op_map_instr(
+                        "call",
+                        &[
+                            ("argc", &argc),
+                            ("preserve_this", &preserve_this),
+                            ("kind", &format!("{kind:?}")),
+                        ],
+                    );
                 }
                 Instruction::StaticPropAccess => {
                     let b = self.read_u16()?;

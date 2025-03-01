@@ -8,9 +8,9 @@ use dash_middle::compiler::constant::ConstantPool;
 use dash_middle::interner::StringInterner;
 use dash_regex::{Flags, ParsedRegex};
 
+use crate::value::Unrooted;
 use crate::value::primitive::{Null, Number, Undefined};
 use crate::value::typedarray::TypedArrayKind;
-use crate::value::Unrooted;
 
 use super::{AllocFlags, Allocator, ObjectId};
 

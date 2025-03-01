@@ -183,8 +183,10 @@ impl<'a, 'interner> Parser<'a, 'interner> {
 
     pub fn expect_identifier(&mut self, emit_error: bool) -> Option<Symbol> {
         self.eat(
-            (|tok: Token| tok.ty.as_identifier(), &[TokenType::DUMMY_IDENTIFIER]
-                as &[_]),
+            (
+                |tok: Token| tok.ty.as_identifier(),
+                &[TokenType::DUMMY_IDENTIFIER] as &[_],
+            ),
             emit_error,
         )
     }
