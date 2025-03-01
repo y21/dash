@@ -449,25 +449,31 @@ impl Chunk {
     /// The given `LocalAllocId` must have been allocated in this chunk.
     pub unsafe fn data(&self, LocalAllocId(id): LocalAllocId) -> *const () {
         // SAFETY: Caller checks that LocalAllocId belongs to this chunk
-        // The ids are always indices into the buf
-        self.data.add(id as usize).as_ptr().cast()
+        unsafe {
+            // The ids are always indices into the buf
+            self.data.add(id as usize).as_ptr().cast()
+        }
     }
 
     pub unsafe fn metadata<M>(&self, LocalAllocId(id): LocalAllocId) -> *const M {
-        let ptr = self.data.add(id as usize).as_ptr();
-        let offset = *ptr.sub(1);
-        ptr.sub(offset as usize).cast()
+        unsafe {
+            let ptr = self.data.add(id as usize).as_ptr();
+            let offset = *ptr.sub(1);
+            ptr.sub(offset as usize).cast()
+        }
     }
 
     pub unsafe fn info_id(&self, LocalAllocId(id): LocalAllocId) -> u16 {
-        let ptr = self.data.add(id as usize).as_ptr();
-        let metadata_offset = *ptr.sub(1);
-        let info_index_offset = metadata_offset as usize + size_of::<u16>();
-        ptr.sub(info_index_offset).cast::<u16>().read_unaligned()
+        unsafe {
+            let ptr = self.data.add(id as usize).as_ptr();
+            let metadata_offset = *ptr.sub(1);
+            let info_index_offset = metadata_offset as usize + size_of::<u16>();
+            ptr.sub(info_index_offset).cast::<u16>().read_unaligned()
+        }
     }
 
     pub unsafe fn info(&self, id: LocalAllocId) -> &AllocInfo {
-        &self.info[self.info_id(id) as usize]
+        unsafe { &self.info[self.info_id(id) as usize] }
     }
 }
 
@@ -639,33 +645,35 @@ impl Allocator {
     /// Callers must ensure that objects that are deleted as a result of not having been marked are never accessed again.
     /// In practice this is ensured by marking everything reachable first.
     pub unsafe fn sweep(&mut self) {
-        for (chunk_id, chunk) in self.chunks.iter().enumerate() {
-            let chunk_id = ChunkId(chunk_id as u32);
+        unsafe {
+            for (chunk_id, chunk) in self.chunks.iter().enumerate() {
+                let chunk_id = ChunkId(chunk_id as u32);
 
-            let info_iter = chunk
-                .info
-                .iter()
-                .enumerate()
-                .filter(|(_, info)| info.flags.get().contains(AllocFlags::INITIALIZED));
+                let info_iter = chunk
+                    .info
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, info)| info.flags.get().contains(AllocFlags::INITIALIZED));
 
-            for (info_id, info) in info_iter {
-                if !info.flags.get().contains(AllocFlags::VISITED) {
-                    // Object did not get visited
-                    let ptr = chunk.data.as_ptr().add(info.data_index as usize).cast::<()>();
-                    (info.drop_in_place)(ptr);
-                    info.flags.set(info.flags.get() - AllocFlags::INITIALIZED);
-                    self.free_list
-                        .entry(info.total_alloc_size)
-                        .or_default()
-                        .push(FreeListEntry {
-                            allocation_start_index: info.alloc_start,
-                            chunk: chunk_id,
-                            info_id: Some(info_id as u16),
-                        });
+                for (info_id, info) in info_iter {
+                    if !info.flags.get().contains(AllocFlags::VISITED) {
+                        // Object did not get visited
+                        let ptr = chunk.data.as_ptr().add(info.data_index as usize).cast::<()>();
+                        (info.drop_in_place)(ptr);
+                        info.flags.set(info.flags.get() - AllocFlags::INITIALIZED);
+                        self.free_list
+                            .entry(info.total_alloc_size)
+                            .or_default()
+                            .push(FreeListEntry {
+                                allocation_start_index: info.alloc_start,
+                                chunk: chunk_id,
+                                info_id: Some(info_id as u16),
+                            });
 
-                    self.rss -= info.total_alloc_size as usize;
-                } else {
-                    info.flags.set(info.flags.get() - AllocFlags::VISITED);
+                        self.rss -= info.total_alloc_size as usize;
+                    } else {
+                        info.flags.set(info.flags.get() - AllocFlags::VISITED);
+                    }
                 }
             }
         }

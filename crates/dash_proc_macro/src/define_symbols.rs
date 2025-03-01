@@ -85,8 +85,8 @@ pub fn define_symbols_impl(tt: TokenStream) -> TokenStream {
     let (keyword_end, ..) = symbols
         .iter()
         .enumerate()
-        .filter(|(_, &(k, ..))| k == Kind::Symbol)
-        .last()
+        .filter(|&(_, &(k, ..))| k == Kind::Symbol)
+        .next_back()
         .unwrap();
 
     let keyword_start = keyword_start as u32;

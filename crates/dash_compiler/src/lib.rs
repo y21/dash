@@ -2148,10 +2148,14 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
         // Class.prototype
         let class_prototype = Expr {
             span: Span::COMPILER_GENERATED,
-            kind: ExprKind::property_access(false, load_class_binding.clone(), Expr {
-                span: Span::COMPILER_GENERATED,
-                kind: ExprKind::identifier(sym::prototype),
-            }),
+            kind: ExprKind::property_access(
+                false,
+                load_class_binding.clone(),
+                Expr {
+                    span: Span::COMPILER_GENERATED,
+                    kind: ExprKind::identifier(sym::prototype),
+                },
+            ),
         };
 
         let methods = class.members.iter().filter(|member| {
@@ -2182,17 +2186,25 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                 kind: ExprKind::assignment(
                     Expr {
                         span: Span::COMPILER_GENERATED,
-                        kind: ExprKind::property_access(false, class_prototype.clone(), Expr {
-                            span: Span::COMPILER_GENERATED,
-                            kind: ExprKind::identifier(sym::__proto__),
-                        }),
+                        kind: ExprKind::property_access(
+                            false,
+                            class_prototype.clone(),
+                            Expr {
+                                span: Span::COMPILER_GENERATED,
+                                kind: ExprKind::identifier(sym::__proto__),
+                            },
+                        ),
                     },
                     Expr {
                         span: Span::COMPILER_GENERATED,
-                        kind: ExprKind::property_access(false, super_id.clone(), Expr {
-                            span: Span::COMPILER_GENERATED,
-                            kind: ExprKind::identifier(sym::prototype),
-                        }),
+                        kind: ExprKind::property_access(
+                            false,
+                            super_id.clone(),
+                            Expr {
+                                span: Span::COMPILER_GENERATED,
+                                kind: ExprKind::identifier(sym::prototype),
+                            },
+                        ),
                     },
                     TokenType::Assignment,
                 ),
@@ -2205,10 +2217,14 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                 kind: ExprKind::assignment(
                     Expr {
                         span: Span::COMPILER_GENERATED,
-                        kind: ExprKind::property_access(false, load_class_binding.clone(), Expr {
-                            span: Span::COMPILER_GENERATED,
-                            kind: ExprKind::identifier(sym::__proto__),
-                        }),
+                        kind: ExprKind::property_access(
+                            false,
+                            load_class_binding.clone(),
+                            Expr {
+                                span: Span::COMPILER_GENERATED,
+                                kind: ExprKind::identifier(sym::__proto__),
+                            },
+                        ),
                     },
                     super_id,
                     TokenType::Assignment,

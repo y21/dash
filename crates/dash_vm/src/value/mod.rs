@@ -585,7 +585,9 @@ impl ExternalValue {
     pub unsafe fn replace(vm: &mut Vm, this: ExternalValue, value: Value) {
         assert!(this.inner.extract::<Value>(vm).is_some());
         let data = vm.alloc.data(this.inner).cast_mut().cast::<Value>();
-        ptr::write(data, value);
+        unsafe {
+            ptr::write(data, value);
+        }
     }
 }
 

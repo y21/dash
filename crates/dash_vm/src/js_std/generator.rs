@@ -32,7 +32,7 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
 
         let function = generator.function();
         let function = match function.extract::<Function>(cx.scope).map(|fun| fun.kind()) {
-            Some(FunctionKind::Generator(gen)) => &gen.function,
+            Some(FunctionKind::Generator(generator)) => &generator.function,
             Some(FunctionKind::Async(fun)) => &fun.inner.function,
             _ => throw!(cx.scope, TypeError, "Incompatible generator function"),
         };

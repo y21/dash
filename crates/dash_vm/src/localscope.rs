@@ -63,7 +63,7 @@ pub fn scope(vm: &mut Vm) -> LocalScope<'_> {
 
 impl Drop for LocalScopeList {
     fn drop(&mut self) {
-        let Self { mut head, list } = self;
+        let Self { mut head, ref mut list } = *self;
 
         let mut drop_count = 0;
         while let Some(ptr) = head {
