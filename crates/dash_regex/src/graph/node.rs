@@ -41,6 +41,7 @@ pub enum NodeKind {
     GroupEnd {
         group_id: Option<u32>,
     },
+    End,
 }
 
 #[derive(Debug, Copy, Clone)]

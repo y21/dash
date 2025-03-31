@@ -45,24 +45,24 @@ pub fn number_groups(regex: &ParsedRegex) -> CaptureGroupMap {
     map
 }
 
-pub fn build(group_numbers: &CaptureGroupMap, regex: &ParsedRegex) -> (Graph, Option<NodeId>) {
+pub fn build(group_numbers: &CaptureGroupMap, regex: &ParsedRegex) -> (Graph, NodeId) {
     fn lower_repetition(
         graph: &mut BuildGraph,
         group_numbers: &CaptureGroupMap,
         node: &ParseNode,
         min: u32,
         max: Option<u32>,
-        next: Option<NodeId>,
+        next: NodeId,
     ) -> NodeId {
         let end_id = graph.push(Node {
-            next,
+            next: Some(next),
             kind: NodeKind::RepetitionEnd {
                 start: NodeId::DUMMY, // will be set later
             },
         });
-        let inner_id = inner(graph, group_numbers, slice::from_ref(node), Some(end_id)).unwrap();
+        let inner_id = inner(graph, group_numbers, slice::from_ref(node), end_id);
         let start_id = graph.push(Node {
-            next,
+            next: Some(next),
             kind: NodeKind::RepetitionStart {
                 min,
                 max,
@@ -80,26 +80,26 @@ pub fn build(group_numbers: &CaptureGroupMap, regex: &ParsedRegex) -> (Graph, Op
         graph: &mut BuildGraph,
         group_numbers: &CaptureGroupMap,
         nodes: &[ParseNode],
-        outer_next: Option<NodeId>,
-    ) -> Option<NodeId> {
+        outer_next: NodeId,
+    ) -> NodeId {
         if let Some((current, rest)) = nodes.split_first() {
             let next = inner(graph, group_numbers, rest, outer_next);
             match *current {
-                ParseNode::AnyCharacter => Some(graph.push(Node {
-                    next,
+                ParseNode::AnyCharacter => graph.push(Node {
+                    next: Some(next),
                     kind: NodeKind::AnyCharacter,
-                })),
-                ParseNode::MetaSequence(meta) => Some(graph.push(Node {
-                    next,
+                }),
+                ParseNode::MetaSequence(meta) => graph.push(Node {
+                    next: Some(next),
                     kind: NodeKind::Meta(meta),
-                })),
+                }),
                 ParseNode::Repetition { ref node, min, max } => {
-                    Some(lower_repetition(graph, group_numbers, node, min, max, next))
+                    lower_repetition(graph, group_numbers, node, min, max, next)
                 }
-                ParseNode::LiteralCharacter(literal) => Some(graph.push(Node {
-                    next,
+                ParseNode::LiteralCharacter(literal) => graph.push(Node {
+                    next: Some(next),
                     kind: NodeKind::Literal(literal),
-                })),
+                }),
                 ParseNode::CharacterClass(ref parse_items) => {
                     let items = parse_items
                         .iter()
@@ -118,35 +118,35 @@ pub fn build(group_numbers: &CaptureGroupMap, regex: &ParsedRegex) -> (Graph, Op
                         })
                         .collect::<Box<[_]>>();
 
-                    Some(graph.push(Node {
-                        next,
+                    graph.push(Node {
+                        next: Some(next),
                         kind: NodeKind::CharacterClass(items),
-                    }))
+                    })
                 }
-                ParseNode::Anchor(anchor) => Some(graph.push(Node {
-                    next,
+                ParseNode::Anchor(anchor) => graph.push(Node {
+                    next: Some(next),
                     kind: NodeKind::Anchor(anchor),
-                })),
+                }),
                 ParseNode::Or(ref left, ref right) => {
-                    let left = inner(graph, group_numbers, left, next).unwrap();
-                    let right = inner(graph, group_numbers, right, next).unwrap();
-                    Some(graph.push(Node {
-                        next,
+                    let left = inner(graph, group_numbers, left, next);
+                    let right = inner(graph, group_numbers, right, next);
+                    graph.push(Node {
+                        next: Some(next),
                         kind: NodeKind::Or(left, right),
-                    }))
+                    })
                 }
-                ParseNode::Optional(ref node) => Some(lower_repetition(graph, group_numbers, node, 0, Some(1), next)),
+                ParseNode::Optional(ref node) => lower_repetition(graph, group_numbers, node, 0, Some(1), next),
                 ParseNode::Group(_, ref nodes) => {
                     let group_id = group_numbers.get(&(current as *const ParseNode)).copied();
                     let end = graph.push(Node {
-                        next,
+                        next: Some(next),
                         kind: NodeKind::GroupEnd { group_id },
                     });
-                    let inner_id = inner(graph, group_numbers, nodes, Some(end)).unwrap();
-                    Some(graph.push(Node {
+                    let inner_id = inner(graph, group_numbers, nodes, end);
+                    graph.push(Node {
                         next: Some(inner_id),
                         kind: NodeKind::GroupStart { group_id },
-                    }))
+                    })
                 }
             }
         } else {
@@ -155,6 +155,10 @@ pub fn build(group_numbers: &CaptureGroupMap, regex: &ParsedRegex) -> (Graph, Op
     }
 
     let mut graph = BuildGraph::new();
-    let root = inner(&mut graph, group_numbers, &regex.nodes, None);
+    let end = graph.push(Node {
+        kind: NodeKind::End,
+        next: None,
+    });
+    let root = inner(&mut graph, group_numbers, &regex.nodes, end);
     (graph.finalize(), root)
 }

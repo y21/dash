@@ -20,6 +20,7 @@ struct Shared<'a> {
     graph: &'a Graph,
     /// The offset of `full_input` in the *original* input string.
     offset_from_original: u32,
+    end_offset: Option<u32>,
 }
 impl Shared<'_> {
     /// Returns the offset of the passed in slice relative to the full input.
@@ -149,7 +150,8 @@ fn step(shared: &mut Shared<'_>, cx: Cx<'_>, node_id: NodeId, mut remaining: &[u
         NodeKind::RepetitionEnd { start } => {
             let end_off = shared.offset_of(remaining);
             if cx.current_repetition_start.get().unwrap() == end_off {
-                // We haven't made any progress in this repetition iteration and won't.
+                // We haven't made any progress in this repetition iteration and won't. Treat this as the end of the regex.
+                shared.end_offset = Some(shared.offset_of(remaining));
                 return true;
             } else {
                 return step(shared, cx.for_node(shared, start, node_id, remaining), start, remaining);
@@ -198,6 +200,11 @@ fn step(shared: &mut Shared<'_>, cx: Cx<'_>, node_id: NodeId, mut remaining: &[u
             }
             true
         }
+        NodeKind::End => {
+            shared.end_offset = Some(shared.offset_of(remaining));
+            assert!(node.next.is_none());
+            return true;
+        }
     };
 
     if let Some(next) = node.next {
@@ -215,11 +222,6 @@ pub struct EvalSuccess {
 pub struct NoMatch;
 
 pub fn eval(regex: &Regex, mut input: &[u8]) -> Result<EvalSuccess, NoMatch> {
-    let Some(root) = regex.root else {
-        // Nothing to do for empty regexes.
-        return Ok(EvalSuccess { groups: Box::default() });
-    };
-
     let mut processed_groups = vec![None; regex.group_count as usize].into_boxed_slice();
     let mut pending_groups = vec![(None, None); regex.group_count as usize].into_boxed_slice();
     let mut offset_from_original = 0;
@@ -227,7 +229,7 @@ pub fn eval(regex: &Regex, mut input: &[u8]) -> Result<EvalSuccess, NoMatch> {
         // TODO: add a fast reject path where we find the first required character and seek to it in `input`
         processed_groups[0] = Some((
             offset_from_original,
-            offset_from_original + input.len() as u32,
+            offset_from_original,
             ProcessedGroupState::Confirmed,
         ));
         processed_groups[1..].fill(None);
@@ -239,7 +241,7 @@ pub fn eval(regex: &Regex, mut input: &[u8]) -> Result<EvalSuccess, NoMatch> {
             parent: None,
         };
         let (current_repetition_count, current_repetition_start, outer_cx) =
-            if let NodeKind::RepetitionStart { .. } = regex.graph[root].kind {
+            if let NodeKind::RepetitionStart { .. } = regex.graph[regex.root].kind {
                 (Some(0), Some(0), Some(&outer_cx))
             } else {
                 (None, None, None)
@@ -251,6 +253,7 @@ pub fn eval(regex: &Regex, mut input: &[u8]) -> Result<EvalSuccess, NoMatch> {
             offset_from_original,
             pending_groups: &mut pending_groups,
             processed_groups: &mut processed_groups,
+            end_offset: None,
         };
         let cx = Cx {
             current_repetition_count: Cell::new(current_repetition_count),
@@ -258,7 +261,8 @@ pub fn eval(regex: &Regex, mut input: &[u8]) -> Result<EvalSuccess, NoMatch> {
             parent: outer_cx,
         };
 
-        if step(&mut shared, cx, root, input) {
+        if step(&mut shared, cx, regex.root, input) {
+            processed_groups[0].as_mut().unwrap().1 += shared.end_offset.unwrap();
             return Ok(EvalSuccess {
                 groups: processed_groups,
             });

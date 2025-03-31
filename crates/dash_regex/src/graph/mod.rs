@@ -14,7 +14,7 @@ use crate::parser::ParsedRegex;
 pub struct Regex {
     graph: Graph,
     flags: Flags,
-    root: Option<NodeId>,
+    root: NodeId,
     group_count: u32,
 }
 
