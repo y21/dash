@@ -153,7 +153,9 @@ impl<'a> Parser<'a> {
                 Some(b'-') => {
                     self.advance();
                     match nodes.last() {
-                        Some(&CharacterClassItem::Node(Node::LiteralCharacter(start))) => {
+                        Some(&CharacterClassItem::Node(Node::LiteralCharacter(start)))
+                            if start.is_ascii_alphanumeric() =>
+                        {
                             let end = self.next_byte().ok_or(Error::UnexpectedEof)?;
                             nodes.pop();
                             nodes.push(CharacterClassItem::Range(start, end));
@@ -161,7 +163,15 @@ impl<'a> Parser<'a> {
                         _ => nodes.push(CharacterClassItem::Node(Node::LiteralCharacter(b'-'))),
                     }
                 }
-                _ => nodes.push(CharacterClassItem::Node(self.parse_primary()?)),
+                Some(b'\\') => {
+                    self.advance();
+                    nodes.push(CharacterClassItem::Node(self.parse_escape()?));
+                }
+                Some(other) => {
+                    self.advance();
+                    nodes.push(CharacterClassItem::Node(Node::LiteralCharacter(other)))
+                }
+                None => break,
             }
         }
 
