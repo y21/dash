@@ -133,13 +133,8 @@ impl InstructionBuilder<'_, '_> {
         Ok(())
     }
 
-    pub fn build_regex_constant(
-        &mut self,
-        regex: dash_regex::ParsedRegex,
-        flags: dash_regex::Flags,
-        sym: Symbol,
-    ) -> Result<(), LimitExceededError> {
-        let RegexConstant(id) = self.current_function_mut().cp.add_regex((regex, flags, sym))?;
+    pub fn build_regex_constant(&mut self, regex: dash_regex::Regex, sym: Symbol) -> Result<(), LimitExceededError> {
+        let RegexConstant(id) = self.current_function_mut().cp.add_regex((regex, sym))?;
         self.write_instr(Instruction::Regex);
         self.writew(id);
         Ok(())

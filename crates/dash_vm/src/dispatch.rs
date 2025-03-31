@@ -618,9 +618,9 @@ mod handlers {
 
     pub fn regex_constant(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let id = cx.fetchw_and_inc_ip();
-        let (nodes, flags, source) = &cx.constants().regexes[RegexConstant(id)];
+        let (regex, source) = &cx.constants().regexes[RegexConstant(id)];
 
-        let regex = RegExp::new(nodes.clone(), *flags, JsString::from(*source), &cx.scope);
+        let regex = RegExp::new(regex.clone(), JsString::from(*source), &cx.scope);
         let regex = cx.scope.register(regex);
         cx.push_stack(Value::object(regex).into());
         Ok(None)

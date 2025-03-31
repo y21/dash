@@ -5,3 +5,5 @@ target
 *.json
 *.sh
 dash-cli/tests
+typeck
+jimp-testing

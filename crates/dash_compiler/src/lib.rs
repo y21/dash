@@ -606,7 +606,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
             LiteralExpr::Number(n) => ib.build_number_constant(n),
             LiteralExpr::String(s) => ib.build_string_constant(s),
             LiteralExpr::Identifier(_) => unreachable!("identifiers are handled in visit_identifier_expression"),
-            LiteralExpr::Regex(regex, flags, sym) => ib.build_regex_constant(regex, flags, sym),
+            LiteralExpr::Regex(regex, sym) => ib.build_regex_constant(regex, sym),
             LiteralExpr::Null => ib.build_null_constant(),
             LiteralExpr::Undefined => ib.build_undefined_constant(),
         };
