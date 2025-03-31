@@ -68,6 +68,16 @@ pub fn test() {
     // Backtracking
     assert_matches_groups(&compile("x(.+)x", "").unwrap(), "vxxxv", &["x"]);
     assert_matches_groups(&compile(".(.)+abcd", "").unwrap(), "vxabcdabcabcabcabc", &["x"]);
-    assert_matches_groups(&compile("(.+)+a", "").unwrap(), "bba", &["bb"]);
-    assert_matches_groups(&compile("(.+)+ac", "").unwrap(), "bacbaabaabaa", &["b"]);
+    assert_matches_groups(&compile("(.+)+a", "").unwrap(), "ba", &["b"]);
+    // Degenerate backtracking
+    assert_matches_groups(&compile("(.+)+ac", "").unwrap(), "bacbaabaabaabaa", &["b"]);
+
+    assert_matches_groups(&compile("(ab+){3,}", "").unwrap(), "ababab", &["ab"]);
+    assert_matches_groups(&compile("(([ab]+)b){3,}", "").unwrap(), "abababaa", &["ab", "a"]);
+    assert!(compile("(([ab]+)b){3,}", "").unwrap().eval("ababaaaa").is_err());
+    assert!(compile("(([ab]+)b){3,}", "").unwrap().eval("ababaaba").is_ok());
+
+    // Infinite regex needs to terminate eventually
+    assert_matches_groups(&compile("(.?)+", "").unwrap(), "", &[""]);
+    assert_matches_groups(&compile("(.?)+", "").unwrap(), "aa", &["a"]);
 }
