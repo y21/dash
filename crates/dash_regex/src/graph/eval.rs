@@ -110,7 +110,10 @@ fn step(shared: &mut Shared<'_>, cx: Cx<'_>, node_id: NodeId, mut remaining: &[u
             cx = cx.parent.unwrap();
             current_repetition_count >= min
         }
-        NodeKind::Anchor(Anchor::StartOfString) => remaining.len() == shared.full_input.len(),
+        NodeKind::Anchor(Anchor::StartOfString) => {
+            // Make sure it's both at the start of the current attempt as well as from all previous failed attempts
+            shared.offset_from_original == 0 && remaining.len() == shared.full_input.len()
+        }
         NodeKind::Anchor(Anchor::EndOfString) => remaining.is_empty(),
         NodeKind::Meta(meta) => {
             if let Some((_, rest)) = remaining.split_first().filter(|&(&c, _)| meta.matches(c)) {

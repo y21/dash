@@ -80,4 +80,8 @@ pub fn test() {
     // Infinite regex needs to terminate eventually
     assert_matches_groups(&compile("(.?)+", "").unwrap(), "", &[""]);
     assert_matches_groups(&compile("(.?)+", "").unwrap(), "aa", &["a"]);
+
+    // ^ anchor must not match when retrying substrings
+    assert!(!compile("^m", "").unwrap().matches("ama"));
+    assert!(compile("^m", "").unwrap().matches("ma"));
 }
