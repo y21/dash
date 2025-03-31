@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1740800544562,
+  "lastUpdate": 1743452692895,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -11825,6 +11825,60 @@ window.BENCHMARK_DATA = {
             "name": "exec tinycolor2 parse hex+toFilter",
             "value": 33657140,
             "range": "± 2519125",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "Timo",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1469ee8b6206ccf58c1547ecec1b9174e116286a",
+          "message": "Merge pull request #95 from y21/backtrack-regex\n\nRewrite regex engine to support arbitrary backtracking",
+          "timestamp": "2025-03-31T22:20:06+02:00",
+          "tree_id": "fc958a557c85b5a2874a6f8e292b2073bfa76706",
+          "url": "https://github.com/y21/dash/commit/1469ee8b6206ccf58c1547ecec1b9174e116286a"
+        },
+        "date": 1743452692246,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1634515,
+            "range": "± 35465",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 182267,
+            "range": "± 13951",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 135008,
+            "range": "± 13203",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse+compile tinycolor2",
+            "value": 2478203,
+            "range": "± 65984",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "exec tinycolor2 parse hex+toFilter",
+            "value": 32635592,
+            "range": "± 1435164",
             "unit": "ns/iter"
           }
         ]
