@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1743452692895,
+  "lastUpdate": 1743626100644,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -11879,6 +11879,60 @@ window.BENCHMARK_DATA = {
             "name": "exec tinycolor2 parse hex+toFilter",
             "value": 32635592,
             "range": "± 1435164",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "6924bfa7ef5fc51959ae2e7bbea08f8c865d6665",
+          "message": "fix up `frame_idx` in try blocks when resuming generator and make it 0-based\n\nFixes #96",
+          "timestamp": "2025-04-02T22:30:47+02:00",
+          "tree_id": "8f3a301f16e5b122754513488be6efa437275bf0",
+          "url": "https://github.com/y21/dash/commit/6924bfa7ef5fc51959ae2e7bbea08f8c865d6665"
+        },
+        "date": 1743626100032,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1636483,
+            "range": "± 22087",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 171084,
+            "range": "± 10474",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 112092,
+            "range": "± 20138",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse+compile tinycolor2",
+            "value": 2405646,
+            "range": "± 23113",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "exec tinycolor2 parse hex+toFilter",
+            "value": 31852936,
+            "range": "± 1982472",
             "unit": "ns/iter"
           }
         ]
