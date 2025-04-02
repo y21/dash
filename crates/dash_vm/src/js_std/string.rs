@@ -1,4 +1,5 @@
 use dash_middle::interner::sym;
+use dash_regex::Flags;
 
 use crate::localscope::LocalScope;
 use crate::throw;
@@ -7,9 +8,11 @@ use crate::value::boxed::String as BoxedString;
 use crate::value::function::native::CallContext;
 use crate::value::object::{NamedObject, Object, PropertyValue};
 use crate::value::ops::conversions::ValueConversion;
+use crate::value::regex::RegExp;
 use crate::value::{Value, ValueContext};
 use std::cmp;
 use std::fmt::Write;
+use std::ops::Range;
 
 pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let value = match cx.args.first() {
@@ -281,18 +284,44 @@ pub fn repeat(cx: CallContext) -> Result<Value, Value> {
 }
 
 pub fn replace(cx: CallContext) -> Result<Value, Value> {
-    // TODO: once we have regexp, we can properly implement this
     let string = cx.this.to_js_string(cx.scope)?;
 
-    let search_string = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
-
+    let search_string = cx.args.first().unwrap_or_undefined();
     let replace_value = cx.args.get(1).unwrap_or_undefined().to_js_string(cx.scope)?;
 
-    let string = string
-        .res(cx.scope)
-        .replacen(search_string.res(cx.scope), replace_value.res(cx.scope), 1);
+    let string = if let Some(regex) = search_string.extract::<RegExp>(cx.scope) {
+        let Some(inner_regex) = regex.inner() else {
+            throw!(cx.scope, TypeError, "invalid regex object")
+        };
 
-    Ok(Value::string(cx.scope.intern(string).into()))
+        let replace_string = replace_value.res(cx.scope);
+
+        let mut rest = string.res(cx.scope);
+        let mut output = String::with_capacity(rest.len());
+        while let Ok(res) = inner_regex.regex.eval(rest) {
+            let Range { start, end } = res.full_match();
+
+            output.push_str(&rest[..start as usize]);
+            output.push_str(replace_string);
+
+            rest = &rest[end as usize..];
+            if !inner_regex.regex.flags().contains(Flags::GLOBAL) {
+                break;
+            }
+        }
+        output.push_str(rest);
+
+        cx.scope.intern(output).into()
+    } else {
+        let search_string = search_string.to_js_string(cx.scope)?;
+
+        let string = string
+            .res(cx.scope)
+            .replacen(search_string.res(cx.scope), replace_value.res(cx.scope), 1);
+        cx.scope.intern(string).into()
+    };
+
+    Ok(Value::string(string))
 }
 
 pub fn replace_all(cx: CallContext) -> Result<Value, Value> {

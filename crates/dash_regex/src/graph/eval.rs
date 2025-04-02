@@ -1,4 +1,5 @@
 use std::cell::Cell;
+use std::ops::Range;
 
 use crate::graph::node::CharacterClassItem;
 use crate::node::Anchor;
@@ -219,6 +220,13 @@ fn step(shared: &mut Shared<'_>, cx: Cx<'_>, node_id: NodeId, mut remaining: &[u
 #[derive(Debug)]
 pub struct EvalSuccess {
     pub groups: Box<[Option<(u32, u32, ProcessedGroupState)>]>,
+}
+
+impl EvalSuccess {
+    pub fn full_match(&self) -> Range<u32> {
+        let (start, end, _) = self.groups[0].unwrap();
+        start..end
+    }
 }
 
 #[derive(Debug)]
