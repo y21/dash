@@ -850,12 +850,12 @@ mod handlers {
 
         if let Some(ret) = cx.active_frame_mut().delayed_ret.take() {
             let ret = ret?.root(&mut cx.scope);
-            let frame_ip = cx.frames.len();
+            let frame_idx = cx.frames.len() - 1;
             // NOTE: the try block was re-pushed in handle_rt_error
             let enclosing_finally = cx
                 .try_blocks
                 .iter()
-                .find_map(|tc| if tc.frame_ip == frame_ip { tc.finally_ip } else { None });
+                .find_map(|tc| if tc.frame_idx == frame_idx { tc.finally_ip } else { None });
 
             if let Some(finally) = enclosing_finally {
                 let lower_tcp = cx.try_blocks.len() - usize::from(tc_depth);
@@ -1924,12 +1924,12 @@ mod handlers {
 
         let catch_ip = compute_dist_ip();
         let finally_ip = compute_dist_ip();
-        let frame_ip = cx.frames.len();
+        let frame_idx = cx.frames.len() - 1;
 
         cx.try_blocks.push(TryBlock {
             catch_ip,
             finally_ip,
-            frame_ip,
+            frame_idx,
         });
 
         Ok(None)

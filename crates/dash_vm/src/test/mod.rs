@@ -700,3 +700,20 @@ simple_test!(
     ",
     Value::undefined()
 );
+
+simple_test!(
+    try_after_generator_yield,
+    "
+    // Issue #96
+    function* gen() {
+        try {
+            yield 0;
+            throw 1;
+        } catch {}
+    }
+    let x = gen();
+    (() => assert(x.next().value === 0))();
+    assert(x.next().done);
+    ",
+    Value::undefined()
+);

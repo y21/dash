@@ -19,7 +19,7 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
     let generator = receiver_t::<GeneratorIterator>(cx.scope, &cx.this, "GeneratorIterator.prototype.next")?;
     let arg = cx.args.first().unwrap_or_undefined();
     let frame = {
-        let (ip, old_stack, arguments, try_blocks, this) = match &mut *generator.state().borrow_mut() {
+        let (ip, old_stack, arguments, mut try_blocks, this) = match &mut *generator.state().borrow_mut() {
             GeneratorState::Finished => return create_generator_value(cx.scope, true, None),
             GeneratorState::Running {
                 ip,
@@ -29,6 +29,11 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
                 this,
             } => (*ip, mem::take(stack), arguments.take(), mem::take(try_blocks), *this),
         };
+
+        for tb in &mut try_blocks {
+            // frame_idx is 0-based, but we haven't pushed the frame yet and will later, which will make this correct.
+            tb.frame_idx = cx.scope.frames.len();
+        }
 
         let function = generator.function();
         let function = match function.extract::<Function>(cx.scope).map(|fun| fun.kind()) {
@@ -76,7 +81,7 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
             // Async functions are desugared to generators, so `await` is treated equivalent to `yield`, for now...
             let value = value.root(cx.scope);
 
-            let fp = cx.scope.frames.len();
+            let frame_idx = cx.scope.frames.len() - 1;
             let frame = cx.scope.pop_frame().expect("Generator frame is missing");
             let stack = cx.scope.drain_stack(frame.sp..).collect::<Vec<_>>();
 
@@ -86,7 +91,7 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
                 .try_blocks
                 .iter()
                 .rev()
-                .take_while(|b| b.frame_ip == fp)
+                .take_while(|b| b.frame_idx == frame_idx)
                 .count();
 
             let total_try_blocks = cx.scope.try_blocks.len();

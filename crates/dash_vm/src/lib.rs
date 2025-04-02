@@ -1365,7 +1365,7 @@ impl Vm {
         if let Some(&TryBlock {
             catch_ip,
             finally_ip,
-            frame_ip: try_fp,
+            frame_idx: try_fp,
         }) = self.try_blocks.last()
         {
             // if we're in a try-catch block, we need to jump to it
@@ -1382,7 +1382,7 @@ impl Vm {
             self.try_blocks.pop();
 
             // Unwind frames
-            drop(self.frames.drain(try_fp..));
+            drop(self.frames.drain(try_fp + 1..));
 
             if let Some(catch_ip) = catch_ip {
                 self.active_frame_mut().ip = catch_ip;
@@ -1400,7 +1400,7 @@ impl Vm {
                     self.try_blocks.push(TryBlock {
                         catch_ip: None,
                         finally_ip: Some(finally_ip),
-                        frame_ip: try_fp,
+                        frame_idx: try_fp,
                     });
                 }
             } else if let Some(finally_ip) = finally_ip {
@@ -1486,7 +1486,7 @@ impl Vm {
     }
 
     fn handle_instruction_loop(&mut self) -> Result<HandleResult, Unrooted> {
-        let fp = self.frames.len();
+        let fp = self.frames.len() - 1;
 
         loop {
             #[cfg(feature = "stress_gc")]

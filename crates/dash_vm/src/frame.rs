@@ -21,7 +21,8 @@ use super::value::function::user::UserFunction;
 pub struct TryBlock {
     pub catch_ip: Option<usize>,
     pub finally_ip: Option<usize>,
-    pub frame_ip: usize,
+    /// The frame index
+    pub frame_idx: usize,
 }
 
 #[derive(Debug, Clone, Default)]
