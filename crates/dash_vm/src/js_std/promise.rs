@@ -168,7 +168,12 @@ impl Object for ThenTask {
             .apply(This::Default, [resolved].into(), scope)
             .root(scope)?;
 
-        let ret_then = ret.get_property(sym::then.to_key(scope), scope)?.root(scope);
+        let ret_then = ret
+            .into_option()
+            .map(|ret| ret.get_property(sym::then.to_key(scope), scope))
+            .transpose()?
+            .root(scope)
+            .unwrap_or_undefined();
 
         match ret_then.unpack() {
             ValueKind::Undefined(..) => {
