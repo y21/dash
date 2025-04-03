@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1743699179036,
+  "lastUpdate": 1743717726615,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -11987,6 +11987,60 @@ window.BENCHMARK_DATA = {
             "name": "exec tinycolor2 parse hex+toFilter",
             "value": 31891770,
             "range": "± 2875953",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "f3120724cf3068b289b8a5737e0307f614ec5f71",
+          "message": "don't try to read `then` of undefined when chaining promises",
+          "timestamp": "2025-04-03T23:31:31+02:00",
+          "tree_id": "c63a8f8de6f7f20776d24d440b2f6adaa759586c",
+          "url": "https://github.com/y21/dash/commit/f3120724cf3068b289b8a5737e0307f614ec5f71"
+        },
+        "date": 1743717725950,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1608408,
+            "range": "± 23091",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 165828,
+            "range": "± 14301",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 111434,
+            "range": "± 18652",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse+compile tinycolor2",
+            "value": 2419955,
+            "range": "± 35581",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "exec tinycolor2 parse hex+toFilter",
+            "value": 32216956,
+            "range": "± 2167945",
             "unit": "ns/iter"
           }
         ]
