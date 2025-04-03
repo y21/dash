@@ -69,31 +69,52 @@ pub fn reject(cx: CallContext) -> Result<Value, Value> {
 pub fn then(cx: CallContext) -> Result<Value, Value> {
     let promise = receiver_t::<Promise>(cx.scope, &cx.this, "Promise.prototype.then")?;
 
-    let handler = match cx.args.first().unpack() {
-        Some(ValueKind::Object(obj)) if matches!(obj.type_of(cx.scope), Typeof::Function) => obj,
-        _ => throw!(cx.scope, TypeError, "Promise handler must be a function"),
+    let fulfill_handler = match cx.args.first().unpack() {
+        Some(ValueKind::Object(obj)) if matches!(obj.type_of(cx.scope), Typeof::Function) => Some(obj),
+        _ => None,
+    };
+    let reject_handler = match cx.args.get(1).unpack() {
+        Some(ValueKind::Object(obj)) if matches!(obj.type_of(cx.scope), Typeof::Function) => Some(obj),
+        _ => None,
     };
 
     let mut state = promise.state().borrow_mut();
 
     let then_promise = cx.scope.mk_promise();
-    let resolver = {
-        let p = PromiseResolver::new(cx.scope, then_promise);
-        cx.scope.register(p)
-    };
-    let then_task = {
-        let t = ThenTask::new(cx.scope, then_promise, handler, resolver);
-        cx.scope.register(t)
-    };
+    let fulfill_handler = fulfill_handler.map(|handler| {
+        let resolver = cx.scope.register(PromiseResolver::new(cx.scope, then_promise));
+        cx.scope
+            .register(ThenTask::new(cx.scope, then_promise, handler, resolver))
+    });
+    let reject_handler = reject_handler.map(|handler| {
+        let rejecter = cx.scope.register(PromiseRejecter::new(cx.scope, then_promise));
+        cx.scope
+            .register(ThenTask::new(cx.scope, then_promise, handler, rejecter))
+    });
 
     match &mut *state {
-        PromiseState::Pending { resolve, .. } => resolve.push(then_task),
-        PromiseState::Resolved(value) => {
-            let bf = BoundFunction::new(cx.scope, then_task, None, [*value].into());
-            let bf = cx.scope.register(bf);
-            cx.scope.add_async_task(bf);
+        PromiseState::Pending { resolve, reject } => {
+            if let Some(handler) = fulfill_handler {
+                resolve.push(handler);
+            }
+            if let Some(handler) = reject_handler {
+                reject.push(handler);
+            }
         }
-        PromiseState::Rejected(..) => {}
+        PromiseState::Resolved(value) => {
+            if let Some(handler) = fulfill_handler {
+                let bf = BoundFunction::new(cx.scope, handler, None, [*value].into());
+                let bf = cx.scope.register(bf);
+                cx.scope.add_async_task(bf);
+            }
+        }
+        PromiseState::Rejected(value) => {
+            if let Some(handler) = reject_handler {
+                let bf = BoundFunction::new(cx.scope, handler, None, [*value].into());
+                let bf = cx.scope.register(bf);
+                cx.scope.add_async_task(bf);
+            }
+        }
     }
 
     Ok(Value::object(then_promise))

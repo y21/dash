@@ -42,6 +42,12 @@ impl Runtime {
 
         params = params
             .set_time_millis_callback(time_callback)
+            .set_unhandled_task_exception_callback(|scope, value| {
+                let insp = inspect::inspect(value, scope, InspectOptions::default())
+                    .unwrap_or_else(|_| "<failed to inspect unhandled exception>".into());
+
+                tracing::error!("unhandled async task exception: {insp}");
+            })
             .set_state(Box::new(state));
 
         if let Some(threshold) = initial_gc_threshold {

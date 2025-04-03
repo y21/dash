@@ -122,7 +122,13 @@ fn bootstrap_generator(
 }
 
 pub fn next(cx: CallContext) -> Result<Value, Value> {
-    bootstrap_generator(cx.scope, cx.this, &|scope, frame| scope.execute_frame_raw(frame))
+    let val = cx.args.first().unwrap_or_undefined();
+    bootstrap_generator(cx.scope, cx.this, &|scope, frame| {
+        // We're going to resume the generator after having evaluated a `yield` expression,
+        // which expects a value to be on the stack (the resumed value)
+        scope.stack.push(val);
+        scope.execute_frame_raw(frame)
+    })
 }
 
 pub fn throw(cx: CallContext) -> Result<Value, Value> {

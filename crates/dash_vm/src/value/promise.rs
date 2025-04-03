@@ -253,7 +253,7 @@ impl Object for PromiseRejecter {
 }
 
 /// Wraps the passed value in a resolved promise, unless it already is a promise
-pub fn wrap_promise(scope: &mut LocalScope, value: Value) -> Value {
+pub fn wrap_resolved_promise(scope: &mut LocalScope, value: Value) -> Value {
     if value.extract::<Promise>(scope).is_some() {
         return value;
     }

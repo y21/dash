@@ -4,7 +4,7 @@ use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::value::object::{NamedObject, Object};
-use crate::value::promise::{Promise, wrap_promise};
+use crate::value::promise::{Promise, wrap_resolved_promise};
 use crate::value::propertykey::ToPropertyKey;
 use crate::value::root_ext::RootErrExt;
 use crate::value::{Root, Typeof, Unpack, Unrooted, Value, ValueContext};
@@ -55,16 +55,13 @@ impl AsyncFunction {
 
                 if is_done {
                     // Promise in resolved state
-                    let promise = wrap_promise(scope, value);
+                    let promise = wrap_resolved_promise(scope, value);
                     Ok(promise)
                 } else {
                     // Promise in pending state
-                    let final_promise = Promise::new(scope);
-                    let final_promise = scope.register(final_promise);
-                    let then_task = ThenTask::new(scope, generator_iter, final_promise);
-                    let then_task = scope.register(then_task);
-
+                    let final_promise = scope.register(Promise::new(scope));
                     let promise = Value::object(final_promise);
+                    let (resolve, reject) = ThenTask::resolve_reject_pair(scope, generator_iter, final_promise);
 
                     scope
                         .statics
@@ -75,7 +72,7 @@ impl AsyncFunction {
                                 Ok(value) => value,
                                 Err(value) => value,
                             }),
-                            [Value::object(then_task)].into(),
+                            [resolve, reject].into(),
                             scope,
                         )
                         .root_err(scope)?;
@@ -89,22 +86,33 @@ impl AsyncFunction {
 }
 
 /// A callable object that is passed to `.then()` on awaited promises.
-/// Calling this will drive the async function to the next await or return point.
+/// Calling this will drive the async function to the next await or return point, either by resolving or rejecting it.
 #[derive(Debug, Trace)]
 pub struct ThenTask {
     /// The inner generator iterator of the async function
     generator_iter: Value,
     final_promise: ObjectId,
     obj: NamedObject,
+    action: PromiseAction,
 }
 
 impl ThenTask {
-    pub fn new(vm: &Vm, generator_iter: Value, final_promise: ObjectId) -> Self {
+    pub fn new(vm: &Vm, generator_iter: Value, final_promise: ObjectId, action: PromiseAction) -> Self {
         Self {
             generator_iter,
             obj: NamedObject::new(vm),
             final_promise,
+            action,
         }
+    }
+    pub fn resolve_reject_pair(
+        scope: &mut LocalScope<'_>,
+        generator_iter: Value,
+        final_promise: ObjectId,
+    ) -> (Value, Value) {
+        let resolve = scope.register(Self::new(scope, generator_iter, final_promise, PromiseAction::Resolve));
+        let reject = scope.register(Self::new(scope, generator_iter, final_promise, PromiseAction::Reject));
+        (Value::object(resolve), Value::object(reject))
     }
 }
 
@@ -130,12 +138,13 @@ impl Object for ThenTask {
     ) -> Result<Unrooted, Unrooted> {
         let promise_value = args.first().unwrap_or_undefined();
 
-        // Call GeneratorIterator.prototype.next on the generator of async function
+        // Call GeneratorIterator.prototype.(next|throw) on the generator of async function
+        let progress_fn = match self.action {
+            PromiseAction::Resolve => scope.statics.generator_iterator_next,
+            PromiseAction::Reject => scope.statics.generator_iterator_throw,
+        };
         // TODO: this probably wont work because when it gets to an await point, the generator doesnt know how to handle it
-        let value = scope
-            .statics
-            .generator_iterator_next
-            .clone()
+        let value = progress_fn
             .apply(This::Bound(self.generator_iter), [promise_value].into(), scope)
             .root(scope)
             .and_then(|result| result.get_property(sym::value.to_key(scope), scope).root(scope));
@@ -162,15 +171,14 @@ impl Object for ThenTask {
                         [value].into(),
                     );
                 } else {
-                    let then_task = ThenTask::new(scope, self.generator_iter, self.final_promise);
-                    let then_task = scope.register(then_task);
-                    let value = wrap_promise(scope, value);
+                    let (resolve, reject) = Self::resolve_reject_pair(scope, self.generator_iter, self.final_promise);
+                    let value = wrap_resolved_promise(scope, value);
 
-                    scope.statics.promise_then.clone().apply(
-                        This::Bound(value),
-                        [Value::object(then_task)].into(),
-                        scope,
-                    )?;
+                    scope
+                        .statics
+                        .promise_then
+                        .clone()
+                        .apply(This::Bound(value), [resolve, reject].into(), scope)?;
                 }
             }
             Err(value) => {
