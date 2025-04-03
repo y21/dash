@@ -191,6 +191,7 @@ pub struct Statics {
     pub array_is_array: ObjectId,
     pub generator_iterator_prototype: ObjectId,
     pub generator_iterator_next: ObjectId,
+    pub generator_iterator_throw: ObjectId,
     pub error_ctor: ObjectId,
     pub error_prototype: ObjectId,
     pub error_to_string: ObjectId,
@@ -471,6 +472,7 @@ impl Statics {
                 builtin_object(gc, GeneratorIterator::empty(obj))
             },
             generator_iterator_next: function(gc, sym::next, js_std::generator::next),
+            generator_iterator_throw: function(gc, sym::throw, js_std::generator::throw),
             error_ctor: function(gc, sym::Error, js_std::error::error_constructor),
             error_prototype: builtin_object(gc, Error::empty()),
             error_to_string: function(gc, sym::toString, js_std::error::to_string),

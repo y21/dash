@@ -528,6 +528,7 @@ impl Vm {
             function_ctor, // TODO: ^
             [
                 (sym::next, scope.statics.generator_iterator_next),
+                (sym::throw,scope.statics.generator_iterator_throw)
             ],
             [
                 (scope.statics.symbol_iterator, scope.statics.identity_this),
@@ -1604,9 +1605,19 @@ impl Vm {
     }
 }
 
+#[derive(Debug)]
 pub enum PromiseAction {
     Resolve,
     Reject,
+}
+
+unsafe impl Trace for PromiseAction {
+    fn trace(&self, _: &mut TraceCtxt<'_>) {
+        match self {
+            PromiseAction::Resolve => {}
+            PromiseAction::Reject => {}
+        }
+    }
 }
 
 impl fmt::Debug for Vm {
