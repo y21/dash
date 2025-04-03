@@ -48,15 +48,22 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
 
 pub fn resolve(cx: CallContext) -> Result<Value, Value> {
     let value = cx.args.first().unwrap_or_undefined();
-    // TODO: do not wrap thenable values in another promise
-    let promise = Promise::resolved(cx.scope, value);
-    Ok(Value::object(cx.scope.register(promise)))
+    if value.extract::<Promise>(cx.scope).is_some() {
+        Ok(value)
+    } else {
+        let promise = Promise::resolved(cx.scope, value);
+        Ok(Value::object(cx.scope.register(promise)))
+    }
 }
 
 pub fn reject(cx: CallContext) -> Result<Value, Value> {
     let value = cx.args.first().unwrap_or_undefined();
-    let promise = Promise::resolved(cx.scope, value);
-    Ok(Value::object(cx.scope.register(promise)))
+    if value.extract::<Promise>(cx.scope).is_some() {
+        Ok(value)
+    } else {
+        let promise = Promise::rejected(cx.scope, value);
+        Ok(Value::object(cx.scope.register(promise)))
+    }
 }
 
 pub fn then(cx: CallContext) -> Result<Value, Value> {
