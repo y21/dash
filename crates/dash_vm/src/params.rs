@@ -2,6 +2,7 @@ use std::any::Any;
 
 use dash_middle::compiler::StaticImportKind;
 
+use crate::UncaughtExceptionSource;
 use crate::gc::trace::Trace;
 use crate::localscope::LocalScope;
 use crate::value::Unrooted;
@@ -15,7 +16,7 @@ pub type TimeMillisCallback = fn(vm: &mut Vm) -> Result<u64, Unrooted>;
 pub type StaticImportCallback = fn(vm: &mut Vm, ty: StaticImportKind, path: JsString) -> Result<Unrooted, Unrooted>;
 pub type DynamicImportCallback = fn(vm: &mut Vm, val: Value) -> Result<Unrooted, Unrooted>;
 pub type DebuggerCallback = fn(vm: &mut Vm) -> Result<(), Value>;
-pub type UnhandledTaskException = fn(vm: &mut LocalScope, exception: Value);
+pub type UnhandledTaskException = fn(vm: &mut LocalScope, exception: Value, source: UncaughtExceptionSource);
 
 pub trait State: Any + Trace {
     fn as_any(&self) -> &dyn Any;

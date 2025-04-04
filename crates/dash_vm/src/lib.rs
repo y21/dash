@@ -3,9 +3,10 @@
 #![warn(clippy::redundant_clone, unused_qualifications)]
 #![deny(clippy::disallowed_methods)]
 
-use std::fmt;
+use std::collections::VecDeque;
 use std::ops::RangeBounds;
 use std::vec::Drain;
+use std::{fmt, mem};
 
 use crate::util::cold_path;
 use crate::value::Root;
@@ -28,9 +29,10 @@ use frame::This;
 use gc::trace::{Trace, TraceCtxt};
 use gc::{Allocator, ObjectId};
 use localscope::{LocalScopeList, scope};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use value::function::args::CallArgs;
 use value::object::{NamedObject, extract_type};
+use value::promise::{Promise, PromiseState};
 use value::propertykey::ToPropertyKey;
 use value::{ExternalValue, PureBuiltin, Unpack, Unrooted, ValueKind};
 
@@ -53,19 +55,26 @@ pub const MAX_FRAME_STACK_SIZE: usize = 1024;
 pub const MAX_STACK_SIZE: usize = 8192;
 const DEFAULT_GC_RSS_THRESHOLD: usize = 1024 * 1024;
 
+#[derive(Debug)]
+pub enum UncaughtExceptionSource {
+    Promise,
+    Task,
+}
+
 #[derive(Clone, Default)]
 pub struct ExternalRefs(pub std::rc::Rc<std::cell::RefCell<FxHashMap<ObjectId, u32>>>);
 
 pub struct Vm {
     #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
     frames: Vec<Frame>,
-    async_tasks: Vec<ObjectId>,
-    // TODO: the inner vec of the stack should be private for soundness
-    // popping from the stack must return `Unrooted`
     stack: Vec<Value>,
+    scopes: LocalScopeList,
     alloc: Allocator,
+    gc_rss_threshold: usize,
     pub interner: StringInterner,
     global: ObjectId,
+    async_tasks: VecDeque<ObjectId>,
+    rejected_promises: FxHashSet<ObjectId>,
     // "External refs" currently refers to existing `Persistent<T>`s.
     // Persistent values already manage the reference count when cloning or dropping them
     // and are stored in the Handle itself, but we still need to keep track of them so we can
@@ -74,13 +83,11 @@ pub struct Vm {
     // We insert into this in `Persistent::new`, and remove from it during the tracing phase.
     // We can't do that in Persistent's Drop code, because we don't have access to the VM there.
     external_refs: ExternalRefs,
-    scopes: LocalScopeList,
     pub statics: Box<Statics>,
     #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
     try_blocks: Vec<TryBlock>,
     #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
     params: VmParams,
-    gc_rss_threshold: usize,
     /// Keeps track of the "purity" of the builtins of this VM.
     /// Purity here refers to whether builtins have been (in one way or another) mutated.
     /// Removing a property from the global object (e.g. `Math`) or any other builtin,
@@ -100,11 +107,12 @@ impl Vm {
 
         let mut vm = Self {
             frames: Vec::new(),
-            async_tasks: Vec::new(),
+            async_tasks: VecDeque::new(),
             stack: Vec::with_capacity(512),
             alloc,
             interner: StringInterner::new(),
             global,
+            rejected_promises: FxHashSet::default(),
             external_refs: ExternalRefs::default(),
             scopes: LocalScopeList::new(),
             statics: Box::new(statics),
@@ -1430,7 +1438,7 @@ impl Vm {
 
     /// Adds a function to the async task queue.
     pub fn add_async_task(&mut self, fun: ObjectId) {
-        self.async_tasks.push(fun);
+        self.async_tasks.push_back(fun);
     }
 
     pub fn has_async_tasks(&self) -> bool {
@@ -1442,20 +1450,37 @@ impl Vm {
         debug!("process async tasks");
         debug!(async_task_count = %self.async_tasks.len());
 
-        while let Some(task) = self.async_tasks.pop() {
-            let mut scope = self.scope();
-
+        let mut scope = self.scope();
+        while let Some(task) = scope.async_tasks.pop_front() {
             scope.add_ref(task);
 
             debug!("process task {:?}", task);
             if let Err(ex) = task.apply(This::Default, CallArgs::empty(), &mut scope) {
+                error!("uncaught async task exception");
                 if let Some(callback) = scope.params.unhandled_task_exception_callback() {
                     let ex = ex.root(&mut scope);
-                    error!("uncaught async task exception");
-                    callback(&mut scope, ex);
+                    callback(&mut scope, ex, UncaughtExceptionSource::Task);
                 }
             }
         }
+
+        // We're removing the rejected promises from `self`, making them unreachable from the GC, so root them beforehand.
+        let rejected_promises = mem::take(&mut scope.rejected_promises);
+        for promise in rejected_promises.iter().copied() {
+            scope.add_ref(promise);
+        }
+
+        for promise_id in rejected_promises.iter() {
+            let promise = promise_id.extract::<Promise>(&scope).unwrap();
+            if let PromiseState::Rejected { value, caught: false } = *promise.state().borrow() {
+                if let Some(callback) = scope.params.unhandled_task_exception_callback {
+                    callback(&mut scope, value, UncaughtExceptionSource::Promise);
+                }
+            }
+        }
+
+        // Small optimization that lets us keep the capacity on the set
+        scope.rejected_promises = rejected_promises;
     }
 
     /// Executes a frame in this VM and initializes local variables (excluding parameters)
@@ -1555,6 +1580,8 @@ impl Vm {
         self.frames.trace(&mut cx);
         debug!("trace async tasks");
         self.async_tasks.trace(&mut cx);
+        debug!("trace rejected promises");
+        self.rejected_promises.trace(&mut cx);
         debug!("trace stack");
         self.stack.trace(&mut cx);
         debug!("trace globals");
@@ -1605,7 +1632,7 @@ impl Vm {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum PromiseAction {
     Resolve,
     Reject,

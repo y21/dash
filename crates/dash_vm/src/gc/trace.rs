@@ -1,6 +1,6 @@
 use std::any::TypeId;
 use std::cell::{Cell, OnceCell, RefCell};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -72,6 +72,11 @@ unsafe impl<T: Trace> Trace for Vec<T> {
         self.as_slice().trace(cx);
     }
 }
+unsafe impl<T: Trace> Trace for VecDeque<T> {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
+        self.iter().for_each(|t| t.trace(cx));
+    }
+}
 
 unsafe impl<A: Trace, B: Trace> Trace for (A, B) {
     fn trace(&self, cx: &mut TraceCtxt<'_>) {
@@ -80,7 +85,7 @@ unsafe impl<A: Trace, B: Trace> Trace for (A, B) {
     }
 }
 
-unsafe impl<T: Trace> Trace for HashSet<T> {
+unsafe impl<T: Trace, S> Trace for HashSet<T, S> {
     fn trace(&self, cx: &mut TraceCtxt<'_>) {
         for t in self.iter() {
             t.trace(cx);
@@ -190,6 +195,23 @@ unsafe impl Trace for dash_middle::compiler::constant::Function {
     }
 }
 
+unsafe impl Trace for ObjectId {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
+        let (data, metadata) = cx.alloc.resolve_raw(*self);
+        let info = cx.alloc.info(*self);
+
+        unsafe {
+            let flags = info.flags.get();
+            if flags.contains(AllocFlags::VISITED) {
+                // Already marked
+                return;
+            }
+            info.flags.set(flags | AllocFlags::VISITED);
+            ((*metadata).trace)(data, cx);
+        };
+    }
+}
+
 unsafe_empty_trace!(
     usize,
     u8,
@@ -209,20 +231,3 @@ unsafe_empty_trace!(
     (),
     TypeId
 );
-
-unsafe impl Trace for ObjectId {
-    fn trace(&self, cx: &mut TraceCtxt<'_>) {
-        let (data, metadata) = cx.alloc.resolve_raw(*self);
-        let info = cx.alloc.info(*self);
-
-        unsafe {
-            let flags = info.flags.get();
-            if flags.contains(AllocFlags::VISITED) {
-                // Already marked
-                return;
-            }
-            info.flags.set(flags | AllocFlags::VISITED);
-            ((*metadata).trace)(data, cx);
-        };
-    }
-}

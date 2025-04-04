@@ -125,13 +125,18 @@ impl Object for TcpListenerConstructor {
                         });
                         event_tx.send(EventMessage::ScheduleCallback(Box::new(move |rt| {
                             let mut scope = rt.vm_mut().scope();
-                            let promise = State::from_vm_mut(&mut scope).take_promise(promise_id);
-                            let promise = promise.extract::<Promise>(&scope).unwrap();
+                            let promise_id = State::from_vm_mut(&mut scope).take_promise(promise_id);
+                            let promise = promise_id.extract::<Promise>(&scope).unwrap();
 
                             let stream_handle = TcpStreamHandle::new(&mut scope, writer_tx, reader_tx).unwrap();
                             let stream_handle = scope.register(stream_handle);
 
-                            scope.drive_promise(PromiseAction::Resolve, promise, [Value::object(stream_handle)].into());
+                            scope.drive_promise(
+                                PromiseAction::Resolve,
+                                promise,
+                                promise_id,
+                                [Value::object(stream_handle)].into(),
+                            );
                             scope.process_async_tasks();
                         })));
                     }

@@ -4,7 +4,7 @@ use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::value::object::{NamedObject, Object};
-use crate::value::promise::{Promise, wrap_resolved_promise};
+use crate::value::promise::{Promise, PromiseState, wrap_resolved_promise};
 use crate::value::propertykey::ToPropertyKey;
 use crate::value::root_ext::RootErrExt;
 use crate::value::{Root, Typeof, Unpack, Unrooted, Value, ValueContext};
@@ -12,6 +12,7 @@ use crate::{PromiseAction, Vm, delegate, extract, throw};
 use dash_middle::interner::sym;
 
 use super::args::CallArgs;
+use super::bound::BoundFunction;
 use super::generator::{GeneratorFunction, GeneratorIterator, GeneratorState};
 use super::user::UserFunction;
 
@@ -72,7 +73,7 @@ impl AsyncFunction {
                                 Ok(value) => value,
                                 Err(value) => value,
                             }),
-                            [resolve, reject].into(),
+                            [Value::object(resolve), Value::object(reject)].into(),
                             scope,
                         )
                         .root_err(scope)?;
@@ -109,10 +110,10 @@ impl ThenTask {
         scope: &mut LocalScope<'_>,
         generator_iter: Value,
         final_promise: ObjectId,
-    ) -> (Value, Value) {
+    ) -> (ObjectId, ObjectId) {
         let resolve = scope.register(Self::new(scope, generator_iter, final_promise, PromiseAction::Resolve));
         let reject = scope.register(Self::new(scope, generator_iter, final_promise, PromiseAction::Reject));
-        (Value::object(resolve), Value::object(reject))
+        (resolve, reject)
     }
 }
 
@@ -168,17 +169,33 @@ impl Object for ThenTask {
                     scope.drive_promise(
                         PromiseAction::Resolve,
                         self.final_promise.extract::<Promise>(scope).unwrap(),
+                        self.final_promise,
                         [value].into(),
                     );
                 } else {
-                    let (resolve, reject) = Self::resolve_reject_pair(scope, self.generator_iter, self.final_promise);
+                    let (resolver, rejecter) =
+                        Self::resolve_reject_pair(scope, self.generator_iter, self.final_promise);
                     let value = wrap_resolved_promise(scope, value);
 
-                    scope
-                        .statics
-                        .promise_then
-                        .clone()
-                        .apply(This::Bound(value), [resolve, reject].into(), scope)?;
+                    if let Some(promise) = value.extract::<Promise>(scope) {
+                        match &mut *promise.state().borrow_mut() {
+                            PromiseState::Pending { resolve, reject } => {
+                                resolve.push(resolver);
+                                reject.push(rejecter);
+                            }
+                            PromiseState::Resolved(value) => {
+                                let bf = BoundFunction::new(scope, resolver, None, [*value].into());
+                                let bf = scope.register(bf);
+                                scope.add_async_task(bf);
+                            }
+                            PromiseState::Rejected { value, caught } => {
+                                *caught = true;
+                                let bf = BoundFunction::new(scope, rejecter, None, [*value].into());
+                                let bf = scope.register(bf);
+                                scope.add_async_task(bf);
+                            }
+                        }
+                    }
                 }
             }
             Err(value) => {
@@ -186,6 +203,7 @@ impl Object for ThenTask {
                 scope.drive_promise(
                     PromiseAction::Reject,
                     self.final_promise.extract::<Promise>(scope).unwrap(),
+                    self.final_promise,
                     [value].into(),
                 );
             }

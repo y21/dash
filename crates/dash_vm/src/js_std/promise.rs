@@ -62,7 +62,7 @@ pub fn reject(cx: CallContext) -> Result<Value, Value> {
         Ok(value)
     } else {
         let promise = Promise::rejected(cx.scope, value);
-        Ok(Value::object(cx.scope.register(promise)))
+        Ok(Value::object(promise))
     }
 }
 
@@ -81,15 +81,14 @@ pub fn then(cx: CallContext) -> Result<Value, Value> {
     let mut state = promise.state().borrow_mut();
 
     let then_promise = cx.scope.mk_promise();
+    let resolver = cx.scope.register(PromiseResolver::new(cx.scope, then_promise));
     let fulfill_handler = fulfill_handler.map(|handler| {
-        let resolver = cx.scope.register(PromiseResolver::new(cx.scope, then_promise));
         cx.scope
             .register(ThenTask::new(cx.scope, then_promise, handler, resolver))
     });
     let reject_handler = reject_handler.map(|handler| {
-        let rejecter = cx.scope.register(PromiseRejecter::new(cx.scope, then_promise));
         cx.scope
-            .register(ThenTask::new(cx.scope, then_promise, handler, rejecter))
+            .register(ThenTask::new(cx.scope, then_promise, handler, resolver))
     });
 
     match &mut *state {
@@ -108,8 +107,9 @@ pub fn then(cx: CallContext) -> Result<Value, Value> {
                 cx.scope.add_async_task(bf);
             }
         }
-        PromiseState::Rejected(value) => {
+        PromiseState::Rejected { value, caught } => {
             if let Some(handler) = reject_handler {
+                *caught = true;
                 let bf = BoundFunction::new(cx.scope, handler, None, [*value].into());
                 let bf = cx.scope.register(bf);
                 cx.scope.add_async_task(bf);

@@ -40,9 +40,9 @@ where
         let data = fut.await;
 
         event_tx.send(EventMessage::ScheduleCallback(Box::new(move |rt| {
-            let promise = State::from_vm_mut(rt.vm_mut()).take_promise(promise_id);
+            let promise_id = State::from_vm_mut(rt.vm_mut()).take_promise(promise_id);
             let mut scope = rt.vm_mut().scope();
-            let promise = promise.extract::<Promise>(&scope).unwrap();
+            let promise = promise_id.extract::<Promise>(&scope).unwrap();
 
             let data = convert(&mut scope, data);
 
@@ -50,7 +50,7 @@ where
                 Ok(ok) => (ok, PromiseAction::Resolve),
                 Err(err) => (err, PromiseAction::Reject),
             };
-            scope.drive_promise(action, promise, [arg].into());
+            scope.drive_promise(action, promise, promise_id, [arg].into());
             scope.process_async_tasks();
         })));
     });

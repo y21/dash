@@ -186,15 +186,19 @@ impl LocalScope<'_> {
         handle
     }
 
-    pub fn drive_promise(&mut self, action: PromiseAction, promise: &Promise, args: CallArgs) {
+    pub fn drive_promise(&mut self, action: PromiseAction, promise: &Promise, promise_id: ObjectId, args: CallArgs) {
         let arg = args.first().unwrap_or_undefined();
         let mut state = promise.state().borrow_mut();
+
+        let mut has_handler = false;
 
         if let PromiseState::Pending { resolve, reject } = &mut *state {
             let handlers = match action {
                 PromiseAction::Resolve => mem::take(resolve),
                 PromiseAction::Reject => mem::take(reject),
             };
+
+            has_handler = !handlers.is_empty();
 
             for handler in handlers {
                 let bf = BoundFunction::new(self, handler, None, args.clone());
@@ -205,7 +209,13 @@ impl LocalScope<'_> {
 
         *state = match action {
             PromiseAction::Resolve => PromiseState::Resolved(arg),
-            PromiseAction::Reject => PromiseState::Rejected(arg),
+            PromiseAction::Reject => {
+                self.rejected_promises.insert(promise_id);
+                PromiseState::Rejected {
+                    value: arg,
+                    caught: has_handler,
+                }
+            }
         };
     }
 

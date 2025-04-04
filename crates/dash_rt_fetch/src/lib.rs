@@ -72,8 +72,8 @@ fn fetch(cx: CallContext) -> Result<Value, Value> {
 
         event_tx.send(EventMessage::ScheduleCallback(Box::new(move |rt| {
             let mut sc = rt.vm_mut().scope();
-            let promise = State::from_vm_mut(&mut sc).take_promise(promise_id);
-            let promise = promise.extract::<Promise>(&sc).unwrap();
+            let promise_id = State::from_vm_mut(&mut sc).take_promise(promise_id);
+            let promise = promise_id.extract::<Promise>(&sc).unwrap();
 
             let (req, action) = match req {
                 Ok(resp) => {
@@ -93,7 +93,7 @@ fn fetch(cx: CallContext) -> Result<Value, Value> {
                 }
             };
 
-            sc.drive_promise(action, promise, [req].into());
+            sc.drive_promise(action, promise, promise_id, [req].into());
             sc.process_async_tasks();
         })));
     });
@@ -125,8 +125,8 @@ fn http_response_text(cx: CallContext) -> Result<Value, Value> {
 
         event_tx.send(EventMessage::ScheduleCallback(Box::new(move |rt| {
             let mut sc = rt.vm_mut().scope();
-            let promise = State::from_vm_mut(&mut sc).take_promise(promise_id);
-            let promise = promise.extract::<Promise>(&sc).unwrap();
+            let promise_id = State::from_vm_mut(&mut sc).take_promise(promise_id);
+            let promise = promise_id.extract::<Promise>(&sc).unwrap();
 
             let (value, action) = match text {
                 Ok(text) => {
@@ -140,7 +140,7 @@ fn http_response_text(cx: CallContext) -> Result<Value, Value> {
                 }
             };
 
-            sc.drive_promise(action, promise, [value].into());
+            sc.drive_promise(action, promise, promise_id, [value].into());
             sc.process_async_tasks();
         })));
     });

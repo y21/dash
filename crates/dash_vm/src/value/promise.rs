@@ -20,7 +20,10 @@ pub enum PromiseState {
         reject: Vec<ObjectId>,
     },
     Resolved(Value),
-    Rejected(Value),
+    Rejected {
+        value: Value,
+        caught: bool,
+    },
 }
 
 unsafe impl Trace for PromiseState {
@@ -31,7 +34,7 @@ unsafe impl Trace for PromiseState {
                 reject.trace(cx);
             }
             Self::Resolved(v) => v.trace(cx),
-            Self::Rejected(v) => v.trace(cx),
+            Self::Rejected { value, caught: _ } => value.trace(cx),
         }
     }
 }
@@ -59,18 +62,23 @@ impl Promise {
             obj,
         }
     }
+
     pub fn resolved(vm: &Vm, value: Value) -> Self {
         Self {
             state: RefCell::new(PromiseState::Resolved(value)),
             obj: NamedObject::with_prototype_and_constructor(vm.statics.promise_proto, vm.statics.promise_ctor),
         }
     }
-    pub fn rejected(vm: &Vm, value: Value) -> Self {
-        Self {
-            state: RefCell::new(PromiseState::Rejected(value)),
-            obj: NamedObject::with_prototype_and_constructor(vm.statics.promise_proto, vm.statics.promise_ctor),
-        }
+
+    pub fn rejected(scope: &mut LocalScope, value: Value) -> ObjectId {
+        let this = scope.register(Self {
+            state: RefCell::new(PromiseState::Rejected { value, caught: false }),
+            obj: NamedObject::with_prototype_and_constructor(scope.statics.promise_proto, scope.statics.promise_ctor),
+        });
+        scope.rejected_promises.insert(this);
+        this
     }
+
     pub fn state(&self) -> &RefCell<PromiseState> {
         &self.state
     }
@@ -168,6 +176,7 @@ impl Object for PromiseResolver {
         scope.drive_promise(
             PromiseAction::Resolve,
             self.promise.extract::<Promise>(scope).unwrap(),
+            self.promise,
             args,
         );
 
@@ -235,6 +244,7 @@ impl Object for PromiseRejecter {
         scope.drive_promise(
             PromiseAction::Reject,
             self.promise.extract::<Promise>(scope).unwrap(),
+            self.promise,
             args,
         );
 
