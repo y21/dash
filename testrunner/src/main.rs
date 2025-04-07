@@ -1,4 +1,4 @@
-use clap::{Arg, Command};
+use clap::{Arg, ArgAction, Command};
 
 mod cmd;
 mod util;
@@ -10,9 +10,14 @@ fn main() -> anyhow::Result<()> {
         .subcommand(
             Command::new("run")
                 .override_help("Runs the testrunner")
-                .arg(Arg::new("path").long("path").takes_value(true))
-                .arg(Arg::new("disable-threads").long("disable-threads").required(false))
-                .arg(Arg::new("verbose").long("verbose").takes_value(false)),
+                .arg(Arg::new("path").long("path"))
+                .arg(
+                    Arg::new("disable-threads")
+                        .long("disable-threads")
+                        .action(ArgAction::SetTrue)
+                        .required(false),
+                )
+                .arg(Arg::new("verbose").long("verbose").action(ArgAction::SetTrue)),
         );
 
     match app.get_matches().subcommand() {

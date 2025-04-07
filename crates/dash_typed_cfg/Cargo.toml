@@ -7,5 +7,5 @@ edition = "2024"
 
 [dependencies]
 dash_middle = { path = "../dash_middle" }
-thiserror = "1.0.38"
+thiserror = "2.0.12"
 bitvec = "1.0.1"

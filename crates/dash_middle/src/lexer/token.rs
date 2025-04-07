@@ -10,352 +10,352 @@ use derive_more::Display;
 /// produce an abstract syntax tree.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Display)]
 pub enum TokenType {
-    #[display(fmt = "(")]
+    #[display("(")]
     LeftParen,
 
-    #[display(fmt = ")")]
+    #[display(")")]
     RightParen,
 
-    #[display(fmt = "{{")]
+    #[display("{{")]
     LeftBrace,
 
-    #[display(fmt = "}}")]
+    #[display("}}")]
     RightBrace,
 
-    #[display(fmt = "$")]
+    #[display("$")]
     Dollar,
 
-    #[display(fmt = "[")]
+    #[display("[")]
     LeftSquareBrace,
 
-    #[display(fmt = "]")]
+    #[display("]")]
     RightSquareBrace,
 
-    #[display(fmt = ",")]
+    #[display(",")]
     Comma,
 
-    #[display(fmt = ".")]
+    #[display(".")]
     Dot,
 
-    #[display(fmt = "-")]
+    #[display("-")]
     Minus,
 
-    #[display(fmt = "--")]
+    #[display("--")]
     Decrement,
 
-    #[display(fmt = "+")]
+    #[display("+")]
     Plus,
 
-    #[display(fmt = ":")]
+    #[display(":")]
     Colon,
 
-    #[display(fmt = "++")]
+    #[display("++")]
     Increment,
 
-    #[display(fmt = "++")]
+    #[display("++")]
     PrefixIncrement,
 
-    #[display(fmt = "--")]
+    #[display("--")]
     PrefixDecrement,
 
-    #[display(fmt = "++")]
+    #[display("++")]
     PostfixIncrement,
 
-    #[display(fmt = "--")]
+    #[display("--")]
     PostfixDecrement,
 
-    #[display(fmt = "*")]
+    #[display("*")]
     Star,
 
-    #[display(fmt = "/")]
+    #[display("/")]
     Slash,
 
-    #[display(fmt = ";")]
+    #[display(";")]
     Semicolon,
 
-    #[display(fmt = "=")]
+    #[display("=")]
     Assignment,
 
-    #[display(fmt = "+=")]
+    #[display("+=")]
     AdditionAssignment,
 
-    #[display(fmt = "-=")]
+    #[display("-=")]
     SubtractionAssignment,
 
-    #[display(fmt = "*=")]
+    #[display("*=")]
     MultiplicationAssignment,
 
-    #[display(fmt = "/=")]
+    #[display("/=")]
     DivisionAssignment,
 
-    #[display(fmt = "%=")]
+    #[display("%=")]
     RemainderAssignment,
 
-    #[display(fmt = "%")]
+    #[display("%")]
     Remainder,
 
-    #[display(fmt = "**=")]
+    #[display("**=")]
     ExponentiationAssignment,
 
-    #[display(fmt = "**")]
+    #[display("**")]
     Exponentiation,
 
-    #[display(fmt = "<<")]
+    #[display("<<")]
     LeftShift,
 
-    #[display(fmt = "<<=")]
+    #[display("<<=")]
     LeftShiftAssignment,
 
-    #[display(fmt = ">>=")]
+    #[display(">>=")]
     RightShiftAssignment,
 
-    #[display(fmt = ">>")]
+    #[display(">>")]
     RightShift,
 
-    #[display(fmt = ">>=")]
+    #[display(">>=")]
     UnsignedRightShiftAssignment,
 
-    #[display(fmt = ">>>")]
+    #[display(">>>")]
     UnsignedRightShift,
 
-    #[display(fmt = "&=")]
+    #[display("&=")]
     BitwiseAndAssignment,
 
-    #[display(fmt = "&")]
+    #[display("&")]
     BitwiseAnd,
 
-    #[display(fmt = "|=")]
+    #[display("|=")]
     BitwiseOrAssignment,
 
-    #[display(fmt = "|")]
+    #[display("|")]
     BitwiseOr,
 
-    #[display(fmt = "^=")]
+    #[display("^=")]
     BitwiseXorAssignment,
 
-    #[display(fmt = "^")]
+    #[display("^")]
     BitwiseXor,
 
-    #[display(fmt = "~")]
+    #[display("~")]
     BitwiseNot,
 
-    #[display(fmt = "&&=")]
+    #[display("&&=")]
     LogicalAndAssignment,
 
-    #[display(fmt = "&&")]
+    #[display("&&")]
     LogicalAnd,
 
-    #[display(fmt = "||=")]
+    #[display("||=")]
     LogicalOrAssignment,
 
-    #[display(fmt = "||")]
+    #[display("||")]
     LogicalOr,
 
-    #[display(fmt = "??=")]
+    #[display("??=")]
     LogicalNullishAssignment,
 
-    #[display(fmt = "??")]
+    #[display("??")]
     NullishCoalescing,
 
-    #[display(fmt = "!")]
+    #[display("!")]
     LogicalNot,
 
-    #[display(fmt = "==")]
+    #[display("==")]
     Equality,
 
-    #[display(fmt = "===")]
+    #[display("===")]
     StrictEquality,
 
-    #[display(fmt = "!=")]
+    #[display("!=")]
     Inequality,
 
-    #[display(fmt = "!==")]
+    #[display("!==")]
     StrictInequality,
 
-    #[display(fmt = ">")]
+    #[display(">")]
     Greater,
 
-    #[display(fmt = ">=")]
+    #[display(">=")]
     GreaterEqual,
 
-    #[display(fmt = "<")]
+    #[display("<")]
     Less,
 
-    #[display(fmt = "<=")]
+    #[display("<=")]
     LessEqual,
 
     /// Identifier: foo
     ///
     /// Note: for checking if a [`TokenType`] is an identifier, use the is_identifier method, as
     /// there are certain tokens that are valid identifiers but aren't necessarily of the type `TokenType::Identifier`
-    #[display(fmt = "<ident>")]
+    #[display("<ident>")]
     Identifier(Symbol),
 
     /// String: "foo"
     String(Symbol),
 
     /// Template literal segment: `foo`
-    #[display(fmt = "<template literal>")]
+    #[display("<template literal>")]
     TemplateLiteral(Symbol),
 
     /// Number: 42
     NumberDec(Symbol),
 
     /// Regex literal: /a+b/g
-    #[display(fmt = "<regex literal>")]
+    #[display("<regex literal>")]
     RegexLiteral { literal: Symbol, flags: Symbol },
 
-    #[display(fmt = "0x")]
+    #[display("0x")]
     NumberHex(Symbol),
 
-    #[display(fmt = "0b")]
+    #[display("0b")]
     NumberBin(Symbol),
 
-    #[display(fmt = "0o")]
+    #[display("0o")]
     NumberOct(Symbol),
 
-    #[display(fmt = "if")]
+    #[display("if")]
     If,
 
-    #[display(fmt = "else")]
+    #[display("else")]
     Else,
 
-    #[display(fmt = "function")]
+    #[display("function")]
     Function,
 
-    #[display(fmt = "class")]
+    #[display("class")]
     Class,
 
-    #[display(fmt = "extends")]
+    #[display("extends")]
     Extends,
 
-    #[display(fmt = "static")]
+    #[display("static")]
     Static,
 
-    #[display(fmt = "var")]
+    #[display("var")]
     Var,
 
-    #[display(fmt = "let")]
+    #[display("let")]
     Let,
 
-    #[display(fmt = "const")]
+    #[display("const")]
     Const,
 
-    #[display(fmt = "return")]
+    #[display("return")]
     Return,
 
-    #[display(fmt = "throw")]
+    #[display("throw")]
     Throw,
 
-    #[display(fmt = "try")]
+    #[display("try")]
     Try,
 
-    #[display(fmt = "catch")]
+    #[display("catch")]
     Catch,
 
-    #[display(fmt = "finally")]
+    #[display("finally")]
     Finally,
 
-    #[display(fmt = "false")]
+    #[display("false")]
     FalseLit,
 
-    #[display(fmt = "true")]
+    #[display("true")]
     TrueLit,
 
-    #[display(fmt = "null")]
+    #[display("null")]
     NullLit,
 
-    #[display(fmt = "undefined")]
+    #[display("undefined")]
     UndefinedLit,
 
-    #[display(fmt = "yield")]
+    #[display("yield")]
     Yield,
 
-    #[display(fmt = "new")]
+    #[display("new")]
     New,
 
     /// Condition: foo ? bar : baz
     Conditional,
 
-    #[display(fmt = "?.")]
+    #[display("?.")]
     OptionalDot,
 
-    #[display(fmt = "?.[")]
+    #[display("?.[")]
     OptionalSquareBrace,
 
-    #[display(fmt = "?.(")]
+    #[display("?.(")]
     OptionalLeftParen,
 
-    #[display(fmt = "for")]
+    #[display("for")]
     For,
 
-    #[display(fmt = "while")]
+    #[display("while")]
     While,
 
-    #[display(fmt = "do")]
+    #[display("do")]
     Do,
 
-    #[display(fmt = "in")]
+    #[display("in")]
     In,
 
-    #[display(fmt = "instanceof")]
+    #[display("instanceof")]
     Instanceof,
 
-    #[display(fmt = "await ")]
+    #[display("await ")]
     Await,
 
-    #[display(fmt = "delete ")]
+    #[display("delete ")]
     Delete,
 
-    #[display(fmt = "void ")]
+    #[display("void ")]
     Void,
 
-    #[display(fmt = "typeof ")]
+    #[display("typeof ")]
     Typeof,
 
-    #[display(fmt = "break")]
+    #[display("break")]
     Break,
 
-    #[display(fmt = "continue")]
+    #[display("continue")]
     Continue,
 
-    #[display(fmt = "import")]
+    #[display("import")]
     Import,
 
-    #[display(fmt = "export")]
+    #[display("export")]
     Export,
 
-    #[display(fmt = "default")]
+    #[display("default")]
     Default,
 
-    #[display(fmt = "debugger")]
+    #[display("debugger")]
     Debugger,
 
-    #[display(fmt = "of")]
+    #[display("of")]
     Of,
 
-    #[display(fmt = "=>")]
+    #[display("=>")]
     FatArrow,
 
-    #[display(fmt = "#")]
+    #[display("#")]
     Hash,
 
-    #[display(fmt = "switch")]
+    #[display("switch")]
     Switch,
 
-    #[display(fmt = "case")]
+    #[display("case")]
     Case,
 
-    #[display(fmt = "get")]
+    #[display("get")]
     Get,
 
-    #[display(fmt = "set")]
+    #[display("set")]
     Set,
 
-    #[display(fmt = "async")]
+    #[display("async")]
     Async,
 
-    #[display(fmt = "EOF")]
+    #[display("EOF")]
     Eof,
 }
 

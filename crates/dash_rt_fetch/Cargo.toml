@@ -6,7 +6,7 @@ edition = "2024"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-reqwest = "0.11.14"
+reqwest = "0.12.15"
 dash_rt = { path = "../dash_rt" }
 dash_vm = { path = "../dash_vm" }
 dash_middle = { path = "../dash_middle" }

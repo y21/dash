@@ -8,7 +8,7 @@ use dash_vm::eval::EvalError;
 use dash_vm::value::Root;
 
 pub fn eval(args: &ArgMatches) -> anyhow::Result<()> {
-    let source = args.value_of("source").context("Missing source")?;
+    let source = args.get_one::<String>("source").context("Missing source")?;
     let opt = *args.get_one::<OptLevel>("opt").unwrap();
 
     tokio::runtime::Runtime::new()?.block_on(async move {

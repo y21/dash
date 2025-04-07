@@ -9,4 +9,4 @@ edition = "2024"
 dash_rt = { path = "../dash_rt" }
 dash_vm = { path = "../dash_vm", features = [] }
 dash_middle = { path = "../dash_middle" }
-indexmap = "1.9.1"
+indexmap = "2.9.0"

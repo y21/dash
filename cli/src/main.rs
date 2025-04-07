@@ -1,9 +1,9 @@
 use std::backtrace::{Backtrace, BacktraceStatus};
 
-use anyhow::{Context, bail};
-use clap::{Arg, Command};
-use colorful::Colorful;
+use anyhow::bail;
+use clap::{Arg, ArgAction, Command};
 use dash_optimizer::OptLevel;
+use owo_colors::OwoColorize;
 
 mod cmd;
 mod util;
@@ -14,16 +14,14 @@ fn main() -> anyhow::Result<()> {
     let opt_level = Arg::new("opt")
         .short('O')
         .long("opt")
-        .value_parser(|val: &_| OptLevel::from_level(val).context("unknown opt level"))
-        .default_value("1")
-        .possible_values(["0", "1", "2"]);
+        .value_parser(|val: &_| OptLevel::from_level(val).ok_or("unknown opt level (must be between 0 and 3)"))
+        .default_value("1");
 
-    let nodejs = Arg::new("node").long("node").takes_value(false);
+    let nodejs = Arg::new("node").long("node").action(ArgAction::SetTrue);
 
     let initial_gc_threshold = Arg::new("initial-gc-threshold")
         .help("Sets the initial GC object threshold, i.e. the RSS at which the first GC cycle triggers.")
         .long("initial-gc-threshold")
-        .takes_value(true)
         .required(false);
 
     let app = Command::new("dash")
@@ -39,8 +37,8 @@ fn main() -> anyhow::Result<()> {
             Command::new("run")
                 .override_help("Run a JavaScript file")
                 .arg(Arg::new("file").required(true))
-                .arg(Arg::new("timing").short('t').long("timing").takes_value(false))
-                .arg(Arg::new("quiet").short('q').long("quiet").takes_value(false))
+                .arg(Arg::new("timing").short('t').long("timing").action(ArgAction::SetTrue))
+                .arg(Arg::new("quiet").short('q').long("quiet").action(ArgAction::SetTrue))
                 .arg(opt_level.clone())
                 .arg(nodejs)
                 .arg(initial_gc_threshold.clone()),
@@ -50,12 +48,12 @@ fn main() -> anyhow::Result<()> {
             Command::new("dump")
                 .override_help("Dumps intermediate code representation")
                 .arg(Arg::new("file").required(true))
-                .arg(Arg::new("ir").long("ir").takes_value(false))
-                .arg(Arg::new("ast").long("ast").takes_value(false))
-                .arg(Arg::new("js").long("js").takes_value(false))
-                .arg(Arg::new("bytecode").long("bytecode").takes_value(false))
-                .arg(Arg::new("tokens").long("tokens").takes_value(false))
-                .arg(Arg::new("types").long("types").takes_value(false))
+                .arg(Arg::new("ir").long("ir").action(ArgAction::SetTrue))
+                .arg(Arg::new("ast").long("ast").action(ArgAction::SetTrue))
+                .arg(Arg::new("js").long("js").action(ArgAction::SetTrue))
+                .arg(Arg::new("bytecode").long("bytecode").action(ArgAction::SetTrue))
+                .arg(Arg::new("tokens").long("tokens").action(ArgAction::SetTrue))
+                .arg(Arg::new("types").long("types").action(ArgAction::SetTrue))
                 .arg(opt_level),
         );
 

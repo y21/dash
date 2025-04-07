@@ -12,11 +12,11 @@ decompile = []
 [dependencies]
 dash_regex = { path = "../dash_regex" }
 dash_middle = { path = "../dash_middle" }
-strum = "0.24.0"
-strum_macros = "0.24.0"
+strum = "0.27.0"
+strum_macros = "0.27.0"
 dash_parser = { path = "../dash_parser", optional = true }
 dash_lexer = { path = "../dash_lexer", optional = true }
 dash_optimizer = { path = "../dash_optimizer" }
 dash_log = { path = "../dash_log" }
 tracing = "0.1.37"
-rustc-hash = "1.1.0"
+rustc-hash = "2.1.0"

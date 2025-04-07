@@ -26,7 +26,7 @@ pub enum ExprKind {
     Literal(LiteralExpr),
     /// Represents an unary expression, i.e. `-foo`, `+bar`, `await foo`
     Unary(UnaryExpr),
-    #[display(fmt = "yield* {_0}")]
+    #[display("yield* {_0}")]
     YieldStar(Box<Expr>),
     /// An assignment expression, i.e. `foo = bar`
     Assignment(AssignmentExpr),
@@ -39,13 +39,13 @@ pub enum ExprKind {
     /// A property access expression, i.e. `foo.bar`
     PropertyAccess(PropertyAccessExpr),
     /// A sequence expression, i.e. `foo, bar`
-    #[display(fmt = "{}, {}", "_0.0", "_0.1")]
+    #[display("{}, {}", _0.0, _0.1)]
     Sequence(Seq),
     /// Any prefix expression, i.e. `++foo`
-    #[display(fmt = "{}{}", "_0.0", "_0.1")]
+    #[display("{}{}", _0.0, _0.1)]
     Prefix(Prefix),
     /// Any postfix expression, i.e. `foo++`
-    #[display(fmt = "{}{}", "_0.1", "_0.0")]
+    #[display("{}{}", _0.1, _0.0)]
     Postfix(Postfix),
     /// An expression that evaluates to a function object
     ///
@@ -60,7 +60,7 @@ pub enum ExprKind {
     /// An optional chaining expression
     Chaining(OptionalChainingExpression),
     /// Compiled bytecode
-    #[display(fmt = "<compiled>")]
+    #[display("<compiled>")]
     Compiled(Vec<u8>),
     /// An empty expression
     Empty,
@@ -102,7 +102,7 @@ pub enum OptionalChainingComponent {
 }
 
 #[derive(Debug, Clone, Display)]
-#[display(fmt = "{kind}")]
+#[display("{kind}")]
 pub struct Expr {
     pub kind: ExprKind,
     pub span: Span,
@@ -396,7 +396,7 @@ impl fmt::Display for PropertyAccessExpr {
 
 /// A conditional expression
 #[derive(Debug, Clone, Display)]
-#[display(fmt = "{condition} ? {then} : {el}")]
+#[display("{condition} ? {then} : {el}")]
 pub struct ConditionalExpr {
     /// The first part of a conditional expression, the condition
     pub condition: Box<Expr>,
@@ -465,7 +465,7 @@ impl AssignmentTarget {
 
 /// An assignment expression
 #[derive(Debug, Clone, Display)]
-#[display(fmt = "{left} {operator} {right}")]
+#[display("{left} {operator} {right}")]
 pub struct AssignmentExpr {
     /// The lefthand side (place-expression)
     pub left: AssignmentTarget,
@@ -504,7 +504,7 @@ impl AssignmentExpr {
 
 /// Any binary expression
 #[derive(Debug, Clone, Display)]
-#[display(fmt = "{left} {operator} {right}")]
+#[display("{left} {operator} {right}")]
 pub struct BinaryExpr {
     /// Lefthand side
     pub left: Box<Expr>,
@@ -548,16 +548,16 @@ pub enum LiteralExpr {
     /// Number literal
     Number(f64),
     /// String literal, borrowed from input string
-    #[display(fmt = "\"{_0}\"")]
+    #[display("\"{_0}\"")]
     String(Symbol),
 
-    #[display(fmt = "/{_1}/")]
+    #[display("/{_1}/")]
     Regex(dash_regex::Regex, Symbol),
 
-    #[display(fmt = "null")]
+    #[display("null")]
     Null,
 
-    #[display(fmt = "undefined")]
+    #[display("undefined")]
     Undefined,
 }
 
@@ -580,7 +580,7 @@ impl LiteralExpr {
 
 /// Unary expression
 #[derive(Debug, Clone, Display)]
-#[display(fmt = "{operator}{expr}")]
+#[display("{operator}{expr}")]
 pub struct UnaryExpr {
     /// The operator that was used
     pub operator: TokenType,

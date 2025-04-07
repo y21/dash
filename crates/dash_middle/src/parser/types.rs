@@ -8,13 +8,13 @@ fn fmt_segments(s: &[TypeSegment]) -> String {
 
 #[derive(Debug, Clone, Display, PartialEq)]
 pub enum TypeSegment {
-    #[display(fmt = "{_0} | {_1}")]
+    #[display("{_0} | {_1}")]
     Union(Box<TypeSegment>, Box<TypeSegment>),
-    #[display(fmt = "{_0} & {_1}")]
+    #[display("{_0} & {_1}")]
     Intersect(Box<TypeSegment>, Box<TypeSegment>),
-    #[display(fmt = "{_0}[]")]
+    #[display("{_0}[]")]
     Array(Box<TypeSegment>),
-    #[display(fmt = "{_0}<{}>", "fmt_segments(_1)")]
+    #[display("{_0}<{}>", fmt_segments(_1))]
     Generic(Box<TypeSegment>, Vec<TypeSegment>),
     Literal(LiteralType),
 }

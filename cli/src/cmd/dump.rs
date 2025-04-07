@@ -1,7 +1,7 @@
 use std::io::Write;
 use std::{fs, io};
 
-use anyhow::{Context, anyhow};
+use anyhow::anyhow;
 use clap::ArgMatches;
 use dash_compiler::transformations;
 use dash_middle::interner::StringInterner;
@@ -12,15 +12,15 @@ use dash_optimizer::consteval::ConstFunctionEvalCtx;
 use dash_optimizer::type_infer::name_res;
 
 pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
-    let dump_ir = arg.is_present("ir");
-    let dump_ast = arg.is_present("ast");
-    let dump_js = arg.is_present("js");
-    let dump_bytecode = arg.is_present("bytecode");
-    let dump_tokens = arg.is_present("tokens");
-    let dump_types = arg.is_present("types");
+    let dump_ir = *arg.get_one::<bool>("ir").unwrap();
+    let dump_ast = *arg.get_one::<bool>("ast").unwrap();
+    let dump_js = *arg.get_one::<bool>("js").unwrap();
+    let dump_bytecode = *arg.get_one::<bool>("bytecode").unwrap();
+    let dump_tokens = *arg.get_one::<bool>("tokens").unwrap();
+    let dump_types = *arg.get_one::<bool>("types").unwrap();
 
     let opt = *arg.get_one::<OptLevel>("opt").unwrap();
-    let path = arg.value_of("file").context("Missing file")?;
+    let path = arg.get_one::<String>("file").unwrap();
     let source = fs::read_to_string(path)?;
 
     let interner = &mut StringInterner::new();

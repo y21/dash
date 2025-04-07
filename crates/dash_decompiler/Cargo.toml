@@ -5,4 +5,4 @@ edition = "2024"
 
 [dependencies]
 dash_middle = { path = "../dash_middle" }
-thiserror = "1.0.34"
+thiserror = "2.0.12"

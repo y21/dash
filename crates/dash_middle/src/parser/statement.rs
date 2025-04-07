@@ -18,7 +18,7 @@ pub enum StatementKind {
     /// Expression statement
     // TODO: this could _technically_ be just ExprKind since the span is the exact same,
     // but we wouldn't really save on anything because the enum is big either way
-    #[display(fmt = "{_0};")]
+    #[display("{_0};")]
     Expression(Expr),
     /// Variable declaration
     Variable(VariableDeclarations),
@@ -45,31 +45,31 @@ pub enum StatementKind {
     /// A switch statement
     Switch(SwitchStatement),
     /// Continue loop statement
-    #[display(fmt = "continue;")]
+    #[display("continue;")]
     Continue(Option<Symbol>),
     /// Break loop statement
-    #[display(fmt = "break;")]
+    #[display("break;")]
     Break(Option<Symbol>),
     /// Debugger statement
-    #[display(fmt = "debugger;")]
+    #[display("debugger;")]
     Debugger,
     /// A labelled statement:
     ///
     ///     foo: { break foo; }
     ///
     /// is represented as Labelled(foo, Expr(Block(Break(foo))))
-    #[display(fmt = "{_0}: {_1}")]
+    #[display("{_0}: {_1}")]
     Labelled(Symbol, Box<Statement>),
     /// An empty statement
     ///
     /// This is impossible to occur in JavaScript code, however a statement may be folded to an empty statement
     /// if it does not have any side effects.
-    #[display(fmt = ";")]
+    #[display(";")]
     Empty,
 }
 
 #[derive(Debug, Clone, Display)]
-#[display(fmt = "{kind}")]
+#[display("{kind}")]
 pub struct Statement {
     pub kind: StatementKind,
     pub span: Span,
@@ -119,20 +119,20 @@ impl StatementKind {
 #[derive(Debug, Clone, Display)]
 pub enum SpecifierKind {
     /// A raw identifier
-    #[display(fmt = "{_0}")]
+    #[display("{_0}")]
     Ident(Binding),
 }
 
 /// Type of import statement
 #[derive(Debug, Clone, Display)]
 pub enum ImportKind {
-    #[display(fmt = "import({_0})")]
+    #[display("import({_0})")]
     Dynamic(Expr),
     /// import foo from "bar"
-    #[display(fmt = "import {_0} from \"{_1}\"")]
+    #[display("import {_0} from \"{_1}\"")]
     DefaultAs(SpecifierKind, Symbol),
     /// import * as foo from "bar"
-    #[display(fmt = "import * as {_0} from \"{_1}\"")]
+    #[display("import * as {_0} from \"{_1}\"")]
     AllAs(SpecifierKind, Symbol),
 }
 
@@ -178,11 +178,7 @@ impl ImportKind {
 
 /// A catch statement
 #[derive(Debug, Clone, Display)]
-#[display(
-    fmt = "catch ({}) {{ {} }}",
-    "binding.map(|b| b.ident).unwrap_or(sym::empty)",
-    "body"
-)]
+#[display("catch ({}) {{ {} }}", binding.map(|b| b.ident).unwrap_or(sym::empty), body)]
 pub struct Catch {
     pub body_span: Span,
     /// The body of a catch statement
@@ -243,7 +239,7 @@ impl TryCatch {
 
 /// A return statement
 #[derive(Debug, Clone, Display)]
-#[display(fmt = "return {_0}")]
+#[display("return {_0}")]
 pub struct ReturnStatement(pub Expr);
 
 /// A loop statement
@@ -280,7 +276,7 @@ impl From<DoWhileLoop> for Loop {
 }
 
 #[derive(Debug, Clone, Display)]
-#[display(fmt = "do {body} while ({condition})")]
+#[display("do {body} while ({condition})")]
 pub struct DoWhileLoop {
     pub body: Box<Statement>,
     pub condition: Expr,
@@ -298,7 +294,7 @@ impl DoWhileLoop {
 
 /// A for..of loop
 #[derive(Debug, Clone, Display)]
-#[display(fmt = "for ({binding} of {expr}) {{ {body} }}")]
+#[display("for ({binding} of {expr}) {{ {body} }}")]
 pub struct ForOfLoop {
     /// The binding of this loop
     pub binding: VariableBinding,
@@ -368,7 +364,7 @@ impl ForLoop {
 
 /// A for..in loop
 #[derive(Debug, Clone, Display)]
-#[display(fmt = "for ({binding} in {expr}) {{ {body} }}")]
+#[display("for ({binding} in {expr}) {{ {body} }}")]
 pub struct ForInLoop {
     /// The binding of this loop
     pub binding: VariableBinding,
@@ -381,7 +377,7 @@ pub struct ForInLoop {
 
 /// A while loop
 #[derive(Debug, Clone, Display)]
-#[display(fmt = "while ({condition}) {{ {body} }}")]
+#[display("while ({condition}) {{ {body} }}")]
 pub struct WhileLoop {
     /// The condition of this while loop, used to determine when to stop iterating
     pub condition: Expr,
@@ -412,7 +408,7 @@ pub enum FunctionKind {
 }
 
 #[derive(Debug, Clone, Copy, Display, PartialEq)]
-#[display(fmt = "{ident}")]
+#[display("{ident}")]
 pub struct Binding {
     pub ident: Symbol,
     pub id: LocalId,
@@ -651,22 +647,22 @@ pub struct SwitchCase {
 #[derive(Debug, Clone, Copy, Display, PartialEq, Eq, PartialOrd, Ord)]
 pub enum VariableDeclarationKind {
     /// Var: lifetime extends to function scope
-    #[display(fmt = "var")]
+    #[display("var")]
     Var,
 
     /// Let: lifetime limited to block scope
-    #[display(fmt = "let")]
+    #[display("let")]
     Let,
 
     /// Const: lifetime limited to block scope and no reassigns allowed
-    #[display(fmt = "const")]
+    #[display("const")]
     Const,
 
     /// Unnameable variables cannot be referred to by JavaScript code directly and are created by the compiler
     ///
     /// Multiple unnamed variables of the same name can exist in a function's `locals` vec and all `find` operations
     /// on the `ScopeGraph` will never consider unnamed variables.
-    #[display(fmt = "__intrinsic_var")]
+    #[display("__intrinsic_var")]
     Unnameable,
 }
 
@@ -772,7 +768,7 @@ impl From<TokenType> for VariableDeclarationKind {
 
 /// A variable binding
 #[derive(Debug, Clone, Display)]
-#[display(fmt = "{kind} {name}")]
+#[display("{kind} {name}")]
 pub struct VariableBinding {
     /// The name/identifier of this variable
     pub name: VariableDeclarationName,
@@ -931,8 +927,8 @@ pub enum ClassMemberValue {
 pub enum Parameter {
     Identifier(Binding),
     SpreadIdentifier(Binding),
-    #[display(fmt = "{_1}")]
+    #[display("{_1}")]
     Pattern(LocalId, Pattern),
-    #[display(fmt = "{_1}")]
+    #[display("{_1}")]
     SpreadPattern(LocalId, Pattern),
 }

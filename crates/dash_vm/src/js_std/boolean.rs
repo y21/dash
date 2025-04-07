@@ -1,6 +1,6 @@
 use crate::throw;
 use crate::value::function::native::CallContext;
-use crate::value::object::{OrdObject, Object};
+use crate::value::object::{Object, OrdObject};
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::{Value, ValueContext, boxed};
 use dash_middle::interner::sym;
@@ -22,9 +22,11 @@ pub fn to_string(cx: CallContext) -> Result<Value, Value> {
         .internal_slots(cx.scope)
         .and_then(|slots| slots.boolean_value(cx.scope))
     {
-        Ok(Value::string(
-            value.then(|| sym::true_.into()).unwrap_or_else(|| sym::false_.into()),
-        ))
+        Ok(Value::string(if value {
+            sym::true_.into()
+        } else {
+            sym::false_.into()
+        }))
     } else {
         throw!(
             cx.scope,

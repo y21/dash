@@ -4,10 +4,10 @@ use dash_rt::format_value;
 use dash_rt::runtime::Runtime;
 use dash_vm::eval::EvalError;
 use dash_vm::value::Root;
-use rustyline::Editor;
+use rustyline::DefaultEditor;
 
 pub fn repl() -> anyhow::Result<()> {
-    let mut rl = Editor::<()>::new();
+    let mut rl = DefaultEditor::new()?;
 
     tokio::runtime::Runtime::new()?.block_on(async move {
         let mut rt = Runtime::new(None);
@@ -17,7 +17,7 @@ pub fn repl() -> anyhow::Result<()> {
                 continue;
             }
 
-            rl.add_history_entry(&input);
+            rl.add_history_entry(&input).unwrap();
 
             rt.vm_mut().with_scope(|scope| {
                 match scope.eval(&input, OptLevel::Aggressive) {

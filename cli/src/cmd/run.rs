@@ -5,22 +5,21 @@ use dash_rt::runtime::Runtime;
 use dash_vm::eval::EvalError;
 use dash_vm::value::Root;
 use std::fs;
-use std::str::FromStr;
 use std::time::Instant;
 
 use anyhow::Context;
 use clap::ArgMatches;
 
 pub fn run(args: &ArgMatches) -> anyhow::Result<()> {
-    let path = args.value_of("file").context("Missing source")?;
-    let nodejs = args.is_present("node");
+    let path = args.get_one::<String>("file").context("Missing source")?;
+    let nodejs = *args.get_one::<bool>("node").unwrap();
     let initial_gc_threshold = args
-        .value_of("initial-gc-threshold")
-        .map(<usize as FromStr>::from_str)
+        .get_one::<&str>("initial-gc-threshold")
+        .map(|v| v.parse())
         .transpose()?;
     let opt = *args.get_one::<OptLevel>("opt").unwrap();
-    let before = args.is_present("timing").then(Instant::now);
-    let quiet = args.is_present("quiet");
+    let before = args.get_one::<bool>("timing").unwrap().then(Instant::now);
+    let quiet = *args.get_one::<bool>("quiet").unwrap();
 
     if nodejs {
         #[cfg(feature = "nodejs")]

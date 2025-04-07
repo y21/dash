@@ -218,6 +218,7 @@ struct Chunk {
 }
 
 bitflags! {
+    #[derive(Copy, Clone)]
     struct AllocFlags: u8 {
         const INITIALIZED = 1;
         const VISITED = 1 << 1;

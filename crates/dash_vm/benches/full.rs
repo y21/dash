@@ -51,7 +51,8 @@ pub fn benchmark(cr: &mut Criterion) {
     let mut tinycolor2 = ureq::get("https://www.unpkg.com/tinycolor2@1.6.0/cjs/tinycolor.js")
         .call()
         .unwrap()
-        .into_string()
+        .into_body()
+        .read_to_string()
         .unwrap();
     tinycolor2.insert_str(0, "let exports = {}; let module = {exports};");
     tinycolor2.push_str(

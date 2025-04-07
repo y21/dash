@@ -1,16 +1,16 @@
 use super::CompileResult;
 
-const BYTECODE_VERSION: u32 = 4;
+const BYTECODE_VERSION: u32 = 5;
 
-pub fn serialize(cr: CompileResult) -> bincode::Result<Vec<u8>> {
+pub fn serialize(cr: CompileResult) -> Result<Vec<u8>, bincode::error::EncodeError> {
     let mut buffer = BYTECODE_VERSION.to_le_bytes().to_vec();
-    bincode::serialize_into(&mut buffer, &cr)?;
+    bincode::serde::encode_into_std_write(cr, &mut buffer, bincode::config::standard())?;
     Ok(buffer)
 }
 
 #[derive(Debug)]
 pub enum DeserializeError {
-    Bincode(bincode::Error),
+    Bincode(bincode::error::DecodeError),
     InvalidVersion,
 }
 
@@ -22,5 +22,8 @@ pub fn deserialize(buf: &[u8]) -> Result<CompileResult, DeserializeError> {
         return Err(DeserializeError::InvalidVersion);
     }
 
-    bincode::deserialize(&buf[4..]).map_err(DeserializeError::Bincode)
+    let (cr, _) =
+        bincode::serde::decode_from_slice(&buf[4..], bincode::config::standard()).map_err(DeserializeError::Bincode)?;
+
+    Ok(cr)
 }

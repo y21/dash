@@ -146,8 +146,8 @@ impl Runtime {
 #[cfg(feature = "random")]
 fn random_callback(_: &mut Vm) -> Result<f64, Unrooted> {
     use rand::Rng;
-    let mut rng = rand::thread_rng();
-    Ok(rng.gen())
+    let mut rng = rand::rng();
+    Ok(rng.random())
 }
 
 fn time_callback(_: &mut Vm) -> Result<u64, Unrooted> {

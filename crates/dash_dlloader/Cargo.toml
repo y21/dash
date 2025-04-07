@@ -9,4 +9,4 @@ edition = "2024"
 dash_vm = { path = "../dash_vm" }
 dash_middle = { path = "../dash_middle" }
 dash_rt = { path = "../dash_rt" }
-libloading = "0.7"
+libloading = "0.8"

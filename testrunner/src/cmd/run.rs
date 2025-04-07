@@ -14,9 +14,10 @@ use serde::Deserialize;
 use crate::util;
 
 pub fn run(matches: &ArgMatches) -> anyhow::Result<()> {
-    let path = matches.value_of("path").unwrap_or("../test262/test");
-    let verbose = matches.is_present("verbose");
-    let single_threaded = matches.is_present("disable-threads");
+    let path = matches.get_one::<String>("path");
+    let path = path.map_or("../test262/test", |v| &**v);
+    let verbose = *matches.get_one::<bool>("verbose").unwrap();
+    let single_threaded = *matches.get_one::<bool>("disable-threads").unwrap();
     let files = if path.ends_with(".js") {
         vec![OsString::from(path)]
     } else {

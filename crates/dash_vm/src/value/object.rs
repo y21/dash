@@ -211,6 +211,7 @@ pub struct OrdObject {
 }
 
 bitflags! {
+    #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct PropertyDataDescriptor: u8 {
         const CONFIGURABLE = 1 << 0;
         const ENUMERABLE = 1 << 1;

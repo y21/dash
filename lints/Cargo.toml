@@ -7,7 +7,7 @@ edition = "2024"
 clippy_utils = { git = "https://github.com/rust-lang/rust-clippy", rev = "f74d7ce" }
 
 [dev-dependencies]
-prettydiff = "0.7.0"
+prettydiff = "0.8.0"
 
 [[test]]
 name = "uitest"
