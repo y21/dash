@@ -6,7 +6,7 @@ use dash_vm::localscope::LocalScope;
 use dash_vm::value::Value;
 use dash_vm::value::function::native::register_native_fn;
 use dash_vm::value::function::{Function, FunctionKind};
-use dash_vm::value::object::{NamedObject, Object, PropertyValue};
+use dash_vm::value::object::{OrdObject, Object, PropertyValue};
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::{delegate, extract};
 
@@ -22,7 +22,7 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
 
     // TODO: helper function for creating a (prototype, constructor) tuple
     let stream_prototype = sc.register(Stream {
-        object: NamedObject::new(sc),
+        object: OrdObject::new(sc),
     });
 
     let stream_ctor = Function::new(
@@ -37,7 +37,7 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
             Ok(cx
                 .scope
                 .register(Stream {
-                    object: NamedObject::with_prototype_and_constructor(stream_prototype, stream_ctor),
+                    object: OrdObject::with_prototype_and_constructor(stream_prototype, stream_ctor),
                 })
                 .into())
         }),
@@ -81,7 +81,7 @@ struct StreamState {
 
 #[derive(Debug, Trace)]
 struct Stream {
-    object: NamedObject,
+    object: OrdObject,
 }
 
 impl Object for Stream {

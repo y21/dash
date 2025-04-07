@@ -22,7 +22,7 @@ use self::native::{CallContext, NativeFunction};
 use self::user::UserFunction;
 
 use super::array::Array;
-use super::object::{NamedObject, Object, PropertyDataDescriptor, PropertyValue, PropertyValueKind};
+use super::object::{OrdObject, Object, PropertyDataDescriptor, PropertyValue, PropertyValueKind};
 use super::ops::conversions::ValueConversion;
 use super::propertykey::{PropertyKey, ToPropertyKey};
 use super::string::JsString;
@@ -72,7 +72,7 @@ impl Debug for FunctionKind {
 pub struct Function {
     name: RefCell<Option<JsString>>,
     kind: FunctionKind,
-    obj: NamedObject,
+    obj: OrdObject,
     prototype: RefCell<Option<ObjectId>>,
 }
 
@@ -81,11 +81,11 @@ impl Function {
         Self::with_obj(
             name,
             kind,
-            NamedObject::with_prototype_and_constructor(vm.statics.function_proto, vm.statics.function_ctor),
+            OrdObject::with_prototype_and_constructor(vm.statics.function_proto, vm.statics.function_ctor),
         )
     }
 
-    pub fn with_obj(name: Option<JsString>, kind: FunctionKind, obj: NamedObject) -> Self {
+    pub fn with_obj(name: Option<JsString>, kind: FunctionKind, obj: OrdObject) -> Self {
         Self {
             name: RefCell::new(name),
             kind,
@@ -116,7 +116,7 @@ impl Function {
 
     pub fn get_or_set_prototype(&self, scope: &mut LocalScope) -> ObjectId {
         *self.prototype.borrow_mut().get_or_insert_with(|| {
-            let proto = NamedObject::new(scope);
+            let proto = OrdObject::new(scope);
             scope.register(proto)
         })
     }
@@ -124,7 +124,7 @@ impl Function {
     /// Creates a new instance of this function.
     pub fn new_instance(&self, this_handle: ObjectId, scope: &mut LocalScope) -> Result<ObjectId, Value> {
         let prototype = self.get_or_set_prototype(scope);
-        let this = scope.register(NamedObject::with_prototype_and_constructor(prototype, this_handle));
+        let this = scope.register(OrdObject::with_prototype_and_constructor(prototype, this_handle));
         Ok(this)
     }
 
@@ -189,7 +189,7 @@ pub fn this_for_new_target(scope: &mut LocalScope<'_>, new_target: ObjectId) -> 
     };
 
     Ok(This::Bound(Value::object(scope.register(
-        NamedObject::with_prototype_and_constructor(prototype, new_target),
+        OrdObject::with_prototype_and_constructor(prototype, new_target),
     ))))
 }
 

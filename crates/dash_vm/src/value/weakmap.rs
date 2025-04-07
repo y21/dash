@@ -4,7 +4,7 @@ use crate::{delegate, extract};
 
 use super::Value;
 use super::map::Map;
-use super::object::{NamedObject, Object};
+use super::object::{OrdObject, Object};
 
 #[derive(Debug, Trace)]
 pub struct WeakMap {
@@ -13,14 +13,14 @@ pub struct WeakMap {
 }
 
 impl WeakMap {
-    pub fn with_obj(object: NamedObject) -> Self {
+    pub fn with_obj(object: OrdObject) -> Self {
         Self {
             map: Map::with_obj(object),
         }
     }
 
     pub fn null() -> Self {
-        Self::with_obj(NamedObject::null())
+        Self::with_obj(OrdObject::null())
     }
 
     pub fn set(&self, key: Value, value: Value) {

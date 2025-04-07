@@ -14,7 +14,7 @@ use dash_vm::js_std::receiver_t;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::function::native::CallContext;
 use dash_vm::value::function::{Function, FunctionKind};
-use dash_vm::value::object::{NamedObject, Object, PropertyValue};
+use dash_vm::value::object::{OrdObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::root_ext::RootErrExt;
@@ -39,7 +39,7 @@ impl ModuleLoader for HttpModule {
             return Ok(None);
         }
 
-        let module = NamedObject::new(sc);
+        let module = OrdObject::new(sc);
         let listen = Function::new(sc, None, FunctionKind::Native(listen));
         let listen = sc.register(listen);
         let key = sc.intern("listen");
@@ -138,7 +138,7 @@ pub fn listen(cx: CallContext) -> Result<Value, Value> {
 #[derive(Debug)]
 struct HttpContext {
     sender: SharedOnce<Sender<Body>>,
-    obj: NamedObject,
+    obj: OrdObject,
 }
 
 unsafe impl Trace for HttpContext {
@@ -151,7 +151,7 @@ impl HttpContext {
     pub fn new(sc: &mut LocalScope, sender: Sender<Body>) -> Self {
         Self {
             sender: SharedOnce::new(sender),
-            obj: NamedObject::new(sc),
+            obj: OrdObject::new(sc),
         }
     }
 }

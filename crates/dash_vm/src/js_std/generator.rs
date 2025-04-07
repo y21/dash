@@ -7,7 +7,7 @@ use crate::throw;
 use crate::value::function::generator::{GeneratorIterator, GeneratorState};
 use crate::value::function::native::CallContext;
 use crate::value::function::{Function, FunctionKind};
-use crate::value::object::{NamedObject, Object, PropertyValue};
+use crate::value::object::{OrdObject, Object, PropertyValue};
 use crate::value::propertykey::ToPropertyKey;
 use crate::value::root_ext::RootErrExt;
 use crate::value::{Root, Unrooted, Value, ValueContext};
@@ -142,7 +142,7 @@ pub fn throw(cx: CallContext) -> Result<Value, Value> {
 }
 
 fn create_generator_value(scope: &mut LocalScope, done: bool, value: Option<Value>) -> Result<Value, Value> {
-    let obj = NamedObject::new(scope);
+    let obj = OrdObject::new(scope);
     obj.set_property(
         sym::done.to_key(scope),
         PropertyValue::static_default(done.into()),

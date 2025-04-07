@@ -9,7 +9,7 @@ use crate::throw;
 use crate::value::arraybuffer::ArrayBuffer;
 use crate::value::function::args::CallArgs;
 use crate::value::function::native::CallContext;
-use crate::value::object::NamedObject;
+use crate::value::object::OrdObject;
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::propertykey::ToPropertyKey;
 use crate::value::typedarray::{TypedArray, TypedArrayKind};
@@ -23,7 +23,7 @@ fn typedarray_constructor(cx: CallContext, kind: TypedArrayKind) -> Result<Value
     let Some(new_target) = cx.new_target else {
         throw!(cx.scope, TypeError, "TypedArray constructor requires new")
     };
-    let instance = NamedObject::instance_for_new_target(new_target, cx.scope)?;
+    let instance = OrdObject::instance_for_new_target(new_target, cx.scope)?;
 
     if let ValueKind::Object(obj) = arg.unpack() {
         if let Some(this) = obj.extract::<ArrayBuffer>(cx.scope) {

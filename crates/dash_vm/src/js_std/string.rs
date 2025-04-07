@@ -6,7 +6,7 @@ use crate::throw;
 use crate::value::array::{Array, ArrayIterator};
 use crate::value::boxed::String as BoxedString;
 use crate::value::function::native::CallContext;
-use crate::value::object::{NamedObject, Object, PropertyValue};
+use crate::value::object::{OrdObject, Object, PropertyValue};
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::regex::RegExp;
 use crate::value::{Value, ValueContext};
@@ -21,7 +21,7 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     };
 
     if let Some(new_target) = cx.new_target {
-        let boxed = BoxedString::with_obj(value, NamedObject::instance_for_new_target(new_target, cx.scope)?);
+        let boxed = BoxedString::with_obj(value, OrdObject::instance_for_new_target(new_target, cx.scope)?);
         Ok(Value::object(cx.scope.register(boxed)))
     } else {
         Ok(Value::string(value))

@@ -4,7 +4,7 @@ use dash_vm::localscope::LocalScope;
 use dash_vm::throw;
 use dash_vm::value::function::args::CallArgs;
 use dash_vm::value::function::native::{CallContext, register_native_fn};
-use dash_vm::value::object::{NamedObject, Object, PropertyDataDescriptor, PropertyValue, PropertyValueKind};
+use dash_vm::value::object::{OrdObject, Object, PropertyDataDescriptor, PropertyValue, PropertyValueKind};
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::{Root, Typeof, Value, ValueContext};
 
@@ -17,7 +17,7 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
         inspect: inspect_sym,
         ..
     } = state_mut(sc).sym;
-    let exports = sc.register(NamedObject::new(sc));
+    let exports = sc.register(OrdObject::new(sc));
 
     let inherits = register_native_fn(sc, inherits_sym, inherits);
     let inspect = register_native_fn(sc, inspect_sym, inspect);

@@ -9,7 +9,7 @@ use dash_vm::localscope::LocalScope;
 use dash_vm::value::error::Error;
 use dash_vm::value::function::native::CallContext;
 use dash_vm::value::function::{Function, FunctionKind};
-use dash_vm::value::object::{NamedObject, Object, PropertyValue};
+use dash_vm::value::object::{OrdObject, Object, PropertyValue};
 use dash_vm::value::promise::Promise;
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::string::JsString;
@@ -151,14 +151,14 @@ fn http_response_text(cx: CallContext) -> Result<Value, Value> {
 #[derive(Debug)]
 struct HttpResponse {
     response: SharedOnce<reqwest::Response>,
-    obj: NamedObject,
+    obj: OrdObject,
 }
 
 impl HttpResponse {
     pub fn new(response: reqwest::Response, vm: &Vm) -> Self {
         Self {
             response: SharedOnce::new(response),
-            obj: NamedObject::new(vm),
+            obj: OrdObject::new(vm),
         }
     }
 }

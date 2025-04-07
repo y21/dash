@@ -12,7 +12,7 @@ use dash_vm::localscope::LocalScope;
 use dash_vm::value::function::args::CallArgs;
 use dash_vm::value::function::native::{CallContext, register_native_fn};
 use dash_vm::value::function::{Function, FunctionKind};
-use dash_vm::value::object::{NamedObject, Object, PropertyValue};
+use dash_vm::value::object::{OrdObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::root_ext::RootErrExt;
@@ -33,7 +33,7 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
 
     let event_emitter_prototype = {
         let event_emitter_prototype = EventEmitter {
-            object: NamedObject::new(sc),
+            object: OrdObject::new(sc),
             handlers: RefCell::new(FxHashMap::default()),
         };
         let on_fn = register_native_fn(sc, on_sym, on);
@@ -54,7 +54,7 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
                 } = State::from_vm(cx.scope).store[EventsKey];
 
                 let emitter = EventEmitter {
-                    object: NamedObject::with_prototype_and_constructor(
+                    object: OrdObject::with_prototype_and_constructor(
                         event_emitter_prototype,
                         event_emitter_constructor,
                     ),
@@ -86,7 +86,7 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
 
 #[derive(Debug, Trace)]
 pub struct EventEmitter {
-    object: NamedObject,
+    object: OrdObject,
     handlers: RefCell<FxHashMap<Symbol, Vec<ObjectId>>>,
 }
 

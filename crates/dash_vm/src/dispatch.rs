@@ -583,7 +583,7 @@ mod handlers {
     use crate::value::function::generator::GeneratorFunction;
     use crate::value::function::user::UserFunction;
     use crate::value::function::{Function, FunctionKind, adjust_stack_from_flat_call, this_for_new_target};
-    use crate::value::object::{NamedObject, Object, ObjectMap, PropertyValue, PropertyValueKind};
+    use crate::value::object::{OrdObject, Object, ObjectMap, PropertyValue, PropertyValueKind};
     use crate::value::ops::conversions::ValueConversion;
     use crate::value::ops::equality;
     use crate::value::primitive::Number;
@@ -929,7 +929,7 @@ mod handlers {
         let id = cx.fetchw_and_inc_ip();
         let name = JsString::from(cx.constants().symbols[SymbolConstant(id)]);
 
-        let value = match cx.global.clone().extract::<NamedObject>(&cx.scope) {
+        let value = match cx.global.clone().extract::<OrdObject>(&cx.scope) {
             Some(value) => match value.get_raw_property(name.to_key(&mut cx.scope)) {
                 Some(value) => value.kind().get_or_apply(&mut cx, This::Default)?,
                 None => {
@@ -1576,7 +1576,7 @@ mod handlers {
             }
         }
 
-        let obj = NamedObject::with_values(&cx, obj);
+        let obj = OrdObject::with_values(&cx, obj);
 
         let handle = cx.scope.register(obj);
         cx.stack.push(handle.into());
@@ -2170,7 +2170,7 @@ mod handlers {
                 })
                 .collect::<Vec<_>>();
 
-            let rest = NamedObject::new(&cx.scope);
+            let rest = OrdObject::new(&cx.scope);
             let rest = cx.scope.register(rest);
             for key in keys {
                 let value = obj

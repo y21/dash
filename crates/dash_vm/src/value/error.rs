@@ -9,7 +9,7 @@ use crate::localscope::LocalScope;
 use crate::{delegate, extract};
 
 use super::function::args::CallArgs;
-use super::object::{NamedObject, Object, PropertyValue};
+use super::object::{Object, OrdObject, PropertyValue};
 use super::string::JsString;
 use super::{Unrooted, Value};
 use crate::value::propertykey::PropertyKey;
@@ -19,7 +19,7 @@ pub struct Error {
     pub name: JsString,
     pub message: JsString,
     pub stack: JsString,
-    pub obj: NamedObject,
+    pub obj: OrdObject,
 }
 
 fn get_stack_trace(name: JsString, message: JsString, sc: &mut LocalScope<'_>) -> JsString {
@@ -40,7 +40,7 @@ fn get_stack_trace(name: JsString, message: JsString, sc: &mut LocalScope<'_>) -
 }
 
 impl Error {
-    pub fn with_obj(obj: NamedObject, sc: &mut LocalScope<'_>, message: JsString) -> Self {
+    pub fn with_obj(obj: OrdObject, sc: &mut LocalScope<'_>, message: JsString) -> Self {
         let name = sym::Error.into();
         Self {
             name,
@@ -54,7 +54,7 @@ impl Error {
         let message = sc.intern(&*message).into();
 
         Self::with_obj(
-            NamedObject::with_prototype_and_constructor(sc.statics.error_prototype, sc.statics.error_ctor),
+            OrdObject::with_prototype_and_constructor(sc.statics.error_prototype, sc.statics.error_ctor),
             sc,
             message,
         )
@@ -65,7 +65,7 @@ impl Error {
             name: sym::Error.into(),
             message: sym::empty.into(),
             stack: sym::empty.into(),
-            obj: NamedObject::null(),
+            obj: OrdObject::null(),
         }
     }
 
@@ -74,7 +74,7 @@ impl Error {
             name,
             message: sym::empty.into(),
             stack: sym::empty.into(),
-            obj: NamedObject::null(),
+            obj: OrdObject::null(),
         }
     }
 }
@@ -144,11 +144,11 @@ macro_rules! define_error_type {
                     Self::new_with_js_string(vm, object, message)
                 }
 
-                pub fn object(vm: &LocalScope<'_>) -> NamedObject {
-                    NamedObject::with_prototype_and_constructor(vm.statics.$proto, vm.statics.$ctor)
+                pub fn object(vm: &LocalScope<'_>) -> OrdObject {
+                    OrdObject::with_prototype_and_constructor(vm.statics.$proto, vm.statics.$ctor)
                 }
 
-                pub fn new_with_js_string(vm: &mut LocalScope<'_>, obj: NamedObject, message: JsString) -> Self {
+                pub fn new_with_js_string(vm: &mut LocalScope<'_>, obj: OrdObject, message: JsString) -> Self {
                     let name = $t.into();
 
                     Self {

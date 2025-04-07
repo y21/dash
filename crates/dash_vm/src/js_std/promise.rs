@@ -6,7 +6,7 @@ use crate::localscope::LocalScope;
 use crate::value::function::args::CallArgs;
 use crate::value::function::bound::BoundFunction;
 use crate::value::function::native::CallContext;
-use crate::value::object::{NamedObject, Object};
+use crate::value::object::{Object, OrdObject};
 use crate::value::promise::{Promise, PromiseRejecter, PromiseResolver, PromiseState};
 use crate::value::propertykey::ToPropertyKey;
 use crate::value::root_ext::RootErrExt;
@@ -26,7 +26,7 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
         throw!(cx.scope, TypeError, "Promise constructor requires new")
     };
 
-    let promise = Promise::with_obj(NamedObject::instance_for_new_target(new_target, cx.scope)?);
+    let promise = Promise::with_obj(OrdObject::instance_for_new_target(new_target, cx.scope)?);
     let promise = cx.scope.register(promise);
 
     let (resolve, reject) = {
@@ -120,15 +120,12 @@ pub fn then(cx: CallContext) -> Result<Value, Value> {
     Ok(Value::object(then_promise))
 }
 
-// TODO: Promise.prototype.catch
-
 #[derive(Debug, Trace)]
 struct ThenTask {
-    // TODO: make a type like CastHandle<Promise> that implements Deref by downcasting
     then_promise: ObjectId,
     handler: ObjectId,
     resolver: ObjectId,
-    obj: NamedObject,
+    obj: OrdObject,
 }
 
 impl ThenTask {
@@ -137,7 +134,7 @@ impl ThenTask {
             then_promise,
             handler,
             resolver,
-            obj: NamedObject::new(vm),
+            obj: OrdObject::new(vm),
         }
     }
 }

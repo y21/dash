@@ -1,6 +1,6 @@
 use crate::throw;
 use crate::value::function::native::CallContext;
-use crate::value::object::NamedObject;
+use crate::value::object::OrdObject;
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::propertykey::ToPropertyKey;
 use crate::value::set::Set;
@@ -13,7 +13,7 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
         throw!(cx.scope, TypeError, "Set constructor requires new")
     };
 
-    let set = Set::with_obj(NamedObject::instance_for_new_target(new_target, cx.scope)?);
+    let set = Set::with_obj(OrdObject::instance_for_new_target(new_target, cx.scope)?);
     if let Some(iter) = cx.args.first() {
         let len = iter.length_of_array_like(cx.scope)?;
 

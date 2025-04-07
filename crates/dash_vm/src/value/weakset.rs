@@ -3,7 +3,7 @@ use dash_proc_macro::Trace;
 use crate::{delegate, extract};
 
 use super::Value;
-use super::object::{NamedObject, Object};
+use super::object::{OrdObject, Object};
 use super::set::Set;
 
 #[derive(Debug, Trace)]
@@ -13,14 +13,14 @@ pub struct WeakSet {
 }
 
 impl WeakSet {
-    pub fn with_obj(object: NamedObject) -> Self {
+    pub fn with_obj(object: OrdObject) -> Self {
         Self {
             set: Set::with_obj(object),
         }
     }
 
     pub fn null() -> Self {
-        Self::with_obj(NamedObject::null())
+        Self::with_obj(OrdObject::null())
     }
 
     pub fn add(&self, key: Value) {

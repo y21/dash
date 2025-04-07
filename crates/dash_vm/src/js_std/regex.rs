@@ -1,7 +1,7 @@
 use crate::throw;
 use crate::value::array::Array;
 use crate::value::function::native::CallContext;
-use crate::value::object::{NamedObject, PropertyValue};
+use crate::value::object::{OrdObject, PropertyValue};
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::regex::{RegExp, RegExpInner};
 use crate::value::{Value, ValueContext};
@@ -33,7 +33,7 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let regex = RegExp::with_obj(
         nodes,
         pattern,
-        NamedObject::instance_for_new_target(new_target, cx.scope)?,
+        OrdObject::instance_for_new_target(new_target, cx.scope)?,
     );
 
     Ok(Value::object(cx.scope.register(regex)))

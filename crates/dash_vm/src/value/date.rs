@@ -4,17 +4,17 @@ use crate::localscope::LocalScope;
 use crate::{delegate, extract, throw};
 
 use super::Value;
-use super::object::{NamedObject, Object};
+use super::object::{OrdObject, Object};
 use super::root_ext::RootErrExt;
 
 #[derive(Debug, Trace)]
 pub struct Date {
     pub timestamp: u64,
-    object: NamedObject,
+    object: OrdObject,
 }
 
 impl Date {
-    pub fn new_with_object(object: NamedObject, sc: &mut LocalScope<'_>) -> Result<Self, Value> {
+    pub fn new_with_object(object: OrdObject, sc: &mut LocalScope<'_>) -> Result<Self, Value> {
         let Some(cb) = sc.params.time_millis_callback else {
             throw!(sc, Error, "failed to get time")
         };

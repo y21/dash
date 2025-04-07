@@ -5,7 +5,7 @@ use dash_vm::gc::ObjectId;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::Value;
 use dash_vm::value::function::{Function, FunctionKind};
-use dash_vm::value::object::{NamedObject, Object, PropertyValue};
+use dash_vm::value::object::{OrdObject, Object, PropertyValue};
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::{delegate, extract};
 
@@ -18,7 +18,7 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     } = state_mut(sc).sym;
 
     let inflate_prototype = sc.register(Inflate {
-        object: NamedObject::new(sc),
+        object: OrdObject::new(sc),
     });
 
     let inflate_ctor = Function::new(
@@ -33,7 +33,7 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
             Ok(cx
                 .scope
                 .register(Inflate {
-                    object: NamedObject::with_prototype_and_constructor(inflate_prototype, inflate_ctor),
+                    object: OrdObject::with_prototype_and_constructor(inflate_prototype, inflate_ctor),
                 })
                 .into())
         }),
@@ -41,7 +41,7 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     inflate_ctor.set_fn_prototype(inflate_prototype);
     let inflate_ctor = sc.register(inflate_ctor);
 
-    let exports = sc.register(NamedObject::new(sc));
+    let exports = sc.register(OrdObject::new(sc));
     exports.set_property(
         inflate_sym.to_key(sc),
         PropertyValue::static_default(inflate_ctor.into()),
@@ -72,7 +72,7 @@ struct ZlibState {
 
 #[derive(Debug, Trace)]
 struct Inflate {
-    object: NamedObject,
+    object: OrdObject,
 }
 
 impl Object for Inflate {

@@ -20,7 +20,7 @@ use super::value::boxed::{
 use super::value::error::Error;
 use super::value::function::generator::GeneratorIterator;
 use super::value::function::native::NativeFunction;
-use super::value::object::{NamedObject, Object};
+use super::value::object::{Object, OrdObject};
 use super::value::primitive::Symbol;
 
 #[derive(Trace)]
@@ -277,11 +277,11 @@ fn builtin_object<O: Object + 'static>(gc: &mut Allocator, obj: O) -> ObjectId {
 }
 
 fn empty_object(gc: &mut Allocator) -> ObjectId {
-    gc.alloc_object(NamedObject::null())
+    gc.alloc_object(OrdObject::null())
 }
 
 fn function(gc: &mut Allocator, name: interner::Symbol, cb: NativeFunction) -> ObjectId {
-    let f = Function::with_obj(Some(name.into()), FunctionKind::Native(cb), NamedObject::null());
+    let f = Function::with_obj(Some(name.into()), FunctionKind::Native(cb), OrdObject::null());
     gc.alloc_object(PureBuiltin::new(f))
 }
 
@@ -329,14 +329,14 @@ impl Statics {
             object_freeze: function(gc, sym::freeze, js_std::object::freeze),
             object_seal: function(gc, sym::seal, js_std::object::seal),
             number_ctor: function(gc, sym::Number, js_std::number::constructor),
-            number_prototype: builtin_object(gc, BoxedNumber::with_obj(0.0, NamedObject::null())),
+            number_prototype: builtin_object(gc, BoxedNumber::with_obj(0.0, OrdObject::null())),
             number_tostring: function(gc, sym::toString, js_std::number::to_string),
             number_valueof: function(gc, sym::valueOf, js_std::number::value_of),
             boolean_ctor: function(gc, sym::Boolean, js_std::boolean::constructor),
             boolean_tostring: function(gc, sym::toString, js_std::boolean::to_string),
-            boolean_prototype: builtin_object(gc, BoxedBoolean::with_obj(false, NamedObject::null())),
+            boolean_prototype: builtin_object(gc, BoxedBoolean::with_obj(false, OrdObject::null())),
             string_ctor: function(gc, sym::String, js_std::string::constructor),
-            string_prototype: builtin_object(gc, BoxedString::with_obj(sym::empty.into(), NamedObject::null())),
+            string_prototype: builtin_object(gc, BoxedString::with_obj(sym::empty.into(), OrdObject::null())),
             is_nan: function(gc, sym::isNaN, js_std::global::is_nan),
             eval: function(gc, sym::eval, js_std::global::eval),
             is_finite: function(gc, sym::isFinite, js_std::global::is_finite),
@@ -416,14 +416,14 @@ impl Statics {
             string_iterator: function(gc, sym::iterator, js_std::string::iterator),
             array_ctor: function(gc, sym::Array, js_std::array::constructor),
             array_tostring: function(gc, sym::toString, js_std::array::to_string),
-            array_prototype: builtin_object(gc, Array::with_obj(NamedObject::null())),
+            array_prototype: builtin_object(gc, Array::with_obj(OrdObject::null())),
             array_join: function(gc, sym::join, js_std::array::join),
             array_values: function(gc, sym::values, js_std::array::values),
             array_reverse: function(gc, sym::reverse, js_std::array::reverse),
             symbol_ctor: function(gc, sym::JsSymbol, js_std::symbol::constructor),
             symbol_prototype: builtin_object(
                 gc,
-                BoxedSymbol::with_obj(Symbol::new(sym::empty.into()), NamedObject::null()),
+                BoxedSymbol::with_obj(Symbol::new(sym::empty.into()), OrdObject::null()),
             ),
             symbol_async_iterator: Symbol::new(sym::asyncIterator.into()),
             symbol_has_instance: Symbol::new(sym::hasInstance.into()),
@@ -519,7 +519,7 @@ impl Statics {
             set_add: function(gc, sym::add, js_std::set::add),
             set_has: function(gc, sym::has, js_std::set::has),
             set_delete: function(gc, sym::delete, js_std::set::delete),
-            set_prototype: builtin_object(gc, Set::with_obj(NamedObject::null())),
+            set_prototype: builtin_object(gc, Set::with_obj(OrdObject::null())),
             set_clear: function(gc, sym::clear, js_std::set::clear),
             set_size: function(gc, sym::size, js_std::set::size),
             map_constructor: function(gc, sym::Map, js_std::map::constructor),
@@ -527,7 +527,7 @@ impl Statics {
             map_get: function(gc, sym::get, js_std::map::get),
             map_has: function(gc, sym::has, js_std::map::has),
             map_delete: function(gc, sym::delete, js_std::map::delete),
-            map_prototype: builtin_object(gc, Map::with_obj(NamedObject::null())),
+            map_prototype: builtin_object(gc, Map::with_obj(OrdObject::null())),
             map_clear: function(gc, sym::clear, js_std::map::clear),
             map_size: function(gc, sym::size, js_std::map::size),
             regexp_ctor: function(gc, sym::RegExp, js_std::regex::constructor),
@@ -535,7 +535,7 @@ impl Statics {
             regexp_test: function(gc, sym::test, js_std::regex::test),
             regexp_exec: function(gc, sym::exec, js_std::regex::exec),
             date_ctor: function(gc, sym::Date, js_std::date::constructor),
-            date_prototype: builtin_object(gc, NamedObject::null()),
+            date_prototype: builtin_object(gc, OrdObject::null()),
             date_now: function(gc, sym::now, js_std::date::now),
             date_get_time: function(gc, sym::getTime, js_std::date::get_time),
             json_ctor: function(gc, sym::JSON, js_std::json::constructor),

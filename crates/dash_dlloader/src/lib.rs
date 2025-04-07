@@ -7,7 +7,7 @@ use dash_vm::throw;
 use dash_vm::value::Value;
 use dash_vm::value::function::native::CallContext;
 use dash_vm::value::function::{Function, FunctionKind};
-use dash_vm::value::object::{NamedObject, Object, PropertyValue};
+use dash_vm::value::object::{OrdObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::string::JsString;
@@ -24,7 +24,7 @@ impl ModuleLoader for DllModule {
             return Ok(None);
         }
 
-        let object = NamedObject::new(sc);
+        let object = OrdObject::new(sc);
         let load = sc.intern("load");
         let load_sync = Function::new(sc, Some(load.into()), FunctionKind::Native(load_sync));
         let load_sync = sc.register(load_sync);

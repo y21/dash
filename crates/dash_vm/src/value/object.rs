@@ -202,8 +202,9 @@ macro_rules! delegate {
     };
 }
 
+/// An **ordinary** object (object with default behavior for the internal methods).
 #[derive(Debug, Clone)]
-pub struct NamedObject {
+pub struct OrdObject {
     prototype: RefCell<Option<ObjectId>>,
     constructor: RefCell<Option<ObjectId>>,
     values: RefCell<ObjectMap<PropertyKey, PropertyValue>>,
@@ -297,7 +298,7 @@ impl PropertyValue {
     }
 
     pub fn to_descriptor_value(&self, sc: &mut LocalScope) -> Result<Value, Value> {
-        let obj = NamedObject::new(sc);
+        let obj = OrdObject::new(sc);
 
         match self.kind {
             PropertyValueKind::Static(value) => {
@@ -453,7 +454,7 @@ unsafe impl Trace for PropertyValueKind {
     }
 }
 
-impl NamedObject {
+impl OrdObject {
     pub fn new(vm: &Vm) -> Self {
         Self::with_values(vm, ObjectMap::default())
     }
@@ -508,7 +509,7 @@ impl NamedObject {
     }
 }
 
-unsafe impl Trace for NamedObject {
+unsafe impl Trace for OrdObject {
     fn trace(&self, cx: &mut TraceCtxt<'_>) {
         let Self {
             prototype,
@@ -521,7 +522,7 @@ unsafe impl Trace for NamedObject {
     }
 }
 
-impl Object for NamedObject {
+impl Object for OrdObject {
     fn get_own_property_descriptor(
         &self,
         key: PropertyKey,

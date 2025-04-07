@@ -8,7 +8,7 @@ use crate::{Vm, extract};
 
 use super::arraybuffer::ArrayBuffer;
 use super::function::args::CallArgs;
-use super::object::{NamedObject, Object, PropertyValue};
+use super::object::{OrdObject, Object, PropertyValue};
 use super::ops::conversions::ValueConversion;
 use super::propertykey::PropertyKey;
 use super::{Root, Unrooted, Value};
@@ -46,11 +46,11 @@ impl TypedArrayKind {
 pub struct TypedArray {
     arraybuffer: ObjectId,
     kind: TypedArrayKind,
-    obj: NamedObject,
+    obj: OrdObject,
 }
 
 impl TypedArray {
-    pub fn with_obj(arraybuffer: ObjectId, kind: TypedArrayKind, obj: NamedObject) -> Self {
+    pub fn with_obj(arraybuffer: ObjectId, kind: TypedArrayKind, obj: OrdObject) -> Self {
         Self { arraybuffer, kind, obj }
     }
 
@@ -70,7 +70,7 @@ impl TypedArray {
         Self::with_obj(
             arraybuffer,
             kind,
-            NamedObject::with_prototype_and_constructor(proto, ctor),
+            OrdObject::with_prototype_and_constructor(proto, ctor),
         )
     }
 

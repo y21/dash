@@ -6,7 +6,7 @@ use dash_regex::Regex;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::{Vm, delegate, extract};
 
-use super::object::{NamedObject, Object};
+use super::object::{OrdObject, Object};
 use super::string::JsString;
 
 #[derive(Debug)]
@@ -30,7 +30,7 @@ unsafe impl Trace for RegExpInner {
 #[derive(Debug, Trace)]
 pub struct RegExp {
     inner: Option<RegExpInner>,
-    object: NamedObject,
+    object: OrdObject,
 }
 
 impl RegExp {
@@ -41,11 +41,11 @@ impl RegExp {
                 source,
                 last_index: Cell::new(0),
             }),
-            object: NamedObject::with_prototype_and_constructor(vm.statics.regexp_prototype, vm.statics.regexp_ctor),
+            object: OrdObject::with_prototype_and_constructor(vm.statics.regexp_prototype, vm.statics.regexp_ctor),
         }
     }
 
-    pub fn with_obj(regex: Regex, source: JsString, object: NamedObject) -> Self {
+    pub fn with_obj(regex: Regex, source: JsString, object: OrdObject) -> Self {
         Self {
             inner: Some(RegExpInner {
                 regex,
@@ -59,7 +59,7 @@ impl RegExp {
     pub fn empty() -> Self {
         Self {
             inner: None,
-            object: NamedObject::null(),
+            object: OrdObject::null(),
         }
     }
 

@@ -2,7 +2,7 @@ use crate::value::error::{
     AggregateError, Error, EvalError, RangeError, ReferenceError, SyntaxError, TypeError, URIError,
 };
 use crate::value::function::native::CallContext;
-use crate::value::object::NamedObject;
+use crate::value::object::OrdObject;
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::propertykey::ToPropertyKey;
 use crate::value::{Root, Value, ValueContext};
@@ -14,7 +14,7 @@ macro_rules! define_other_error_constructors {
             pub fn $fun(mut cx: CallContext) -> Result<Value, Value> {
                 let message = cx.args.first().unwrap_or_undefined().to_js_string(&mut cx.scope)?;
                 let obj = if let Some(new_target) = cx.new_target {
-                    NamedObject::instance_for_new_target(new_target, cx.scope)?
+                    OrdObject::instance_for_new_target(new_target, cx.scope)?
                 } else {
                     $t::object(cx.scope)
                 };
@@ -40,7 +40,7 @@ pub fn error_constructor(cx: CallContext) -> Result<Value, Value> {
 
     let new_target = cx.new_target.unwrap_or(cx.scope.statics.error_ctor);
     let err = Error::with_obj(
-        NamedObject::instance_for_new_target(new_target, cx.scope)?,
+        OrdObject::instance_for_new_target(new_target, cx.scope)?,
         cx.scope,
         message.unwrap_or(sym::empty.into()),
     );

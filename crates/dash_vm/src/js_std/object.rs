@@ -5,7 +5,7 @@ use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::array::Array;
 use crate::value::function::native::CallContext;
-use crate::value::object::{IntegrityLevel, NamedObject, Object, PropertyDataDescriptor, PropertyValue};
+use crate::value::object::{IntegrityLevel, OrdObject, Object, PropertyDataDescriptor, PropertyValue};
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::propertykey::{PropertyKey, ToPropertyKey};
 use crate::value::root_ext::RootErrExt;
@@ -17,7 +17,7 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
         Some(v) => v.to_object(cx.scope).map(Value::object),
         None => {
             let new_target = cx.new_target.unwrap_or(cx.scope.statics.object_ctor);
-            let instance = NamedObject::instance_for_new_target(new_target, cx.scope)?;
+            let instance = OrdObject::instance_for_new_target(new_target, cx.scope)?;
             Ok(Value::object(cx.scope.register(instance)))
         }
     }
@@ -27,7 +27,7 @@ pub fn create(cx: CallContext) -> Result<Value, Value> {
     let prototype = cx.args.first().unwrap_or_undefined();
 
     let new_target = cx.new_target.unwrap_or(cx.scope.statics.object_ctor);
-    let obj = NamedObject::instance_for_new_target(new_target, cx.scope)?;
+    let obj = OrdObject::instance_for_new_target(new_target, cx.scope)?;
     obj.set_prototype(prototype, cx.scope)?;
 
     // TODO: second argument: ObjectDefineProperties

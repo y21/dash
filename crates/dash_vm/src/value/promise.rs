@@ -9,7 +9,7 @@ use crate::localscope::LocalScope;
 use crate::{PromiseAction, Vm, extract};
 
 use super::function::args::CallArgs;
-use super::object::{NamedObject, Object, PropertyValue};
+use super::object::{OrdObject, Object, PropertyValue};
 use super::propertykey::PropertyKey;
 use super::{Typeof, Unrooted, Value};
 
@@ -42,18 +42,18 @@ unsafe impl Trace for PromiseState {
 #[derive(Debug, Trace)]
 pub struct Promise {
     state: RefCell<PromiseState>,
-    obj: NamedObject,
+    obj: OrdObject,
 }
 
 impl Promise {
     pub fn new(vm: &Vm) -> Self {
-        Self::with_obj(NamedObject::with_prototype_and_constructor(
+        Self::with_obj(OrdObject::with_prototype_and_constructor(
             vm.statics.promise_proto,
             vm.statics.promise_ctor,
         ))
     }
 
-    pub fn with_obj(obj: NamedObject) -> Self {
+    pub fn with_obj(obj: OrdObject) -> Self {
         Self {
             state: RefCell::new(PromiseState::Pending {
                 reject: Vec::new(),
@@ -66,14 +66,14 @@ impl Promise {
     pub fn resolved(vm: &Vm, value: Value) -> Self {
         Self {
             state: RefCell::new(PromiseState::Resolved(value)),
-            obj: NamedObject::with_prototype_and_constructor(vm.statics.promise_proto, vm.statics.promise_ctor),
+            obj: OrdObject::with_prototype_and_constructor(vm.statics.promise_proto, vm.statics.promise_ctor),
         }
     }
 
     pub fn rejected(scope: &mut LocalScope, value: Value) -> ObjectId {
         let this = scope.register(Self {
             state: RefCell::new(PromiseState::Rejected { value, caught: false }),
-            obj: NamedObject::with_prototype_and_constructor(scope.statics.promise_proto, scope.statics.promise_ctor),
+            obj: OrdObject::with_prototype_and_constructor(scope.statics.promise_proto, scope.statics.promise_ctor),
         });
         scope.rejected_promises.insert(this);
         this
@@ -129,14 +129,14 @@ impl Object for Promise {
 #[derive(Debug, Trace)]
 pub struct PromiseResolver {
     promise: ObjectId,
-    obj: NamedObject,
+    obj: OrdObject,
 }
 
 impl PromiseResolver {
     pub fn new(vm: &Vm, promise: ObjectId) -> Self {
         Self {
             promise,
-            obj: NamedObject::new(vm),
+            obj: OrdObject::new(vm),
         }
     }
 }
@@ -197,14 +197,14 @@ impl Object for PromiseResolver {
 #[derive(Debug, Trace)]
 pub struct PromiseRejecter {
     promise: ObjectId,
-    obj: NamedObject,
+    obj: OrdObject,
 }
 
 impl PromiseRejecter {
     pub fn new(vm: &Vm, promise: ObjectId) -> Self {
         Self {
             promise,
-            obj: NamedObject::new(vm),
+            obj: OrdObject::new(vm),
         }
     }
 }

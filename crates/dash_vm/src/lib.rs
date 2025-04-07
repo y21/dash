@@ -31,7 +31,7 @@ use gc::{Allocator, ObjectId};
 use localscope::{LocalScopeList, scope};
 use rustc_hash::{FxHashMap, FxHashSet};
 use value::function::args::CallArgs;
-use value::object::{NamedObject, extract_type};
+use value::object::{OrdObject, extract_type};
 use value::promise::{Promise, PromiseState};
 use value::propertykey::ToPropertyKey;
 use value::{ExternalValue, PureBuiltin, Unpack, Unrooted, ValueKind};
@@ -102,7 +102,7 @@ impl Vm {
         let mut alloc = Allocator::new();
         let statics = Statics::new(&mut alloc);
         // TODO: global __proto__ and constructor
-        let global: ObjectId = alloc.alloc_object(PureBuiltin::new(NamedObject::null()));
+        let global: ObjectId = alloc.alloc_object(PureBuiltin::new(OrdObject::null()));
         let gc_rss_threshold = params.initial_gc_rss_threshold.unwrap_or(DEFAULT_GC_RSS_THRESHOLD);
 
         let mut vm = Self {

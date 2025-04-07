@@ -6,23 +6,23 @@ use dash_proc_macro::Trace;
 use crate::{Vm, delegate, extract};
 
 use super::Value;
-use super::object::{NamedObject, Object};
+use super::object::{OrdObject, Object};
 
 #[derive(Debug, Trace)]
 pub struct Map {
     inner: RefCell<HashMap<Value, Value>>,
-    obj: NamedObject,
+    obj: OrdObject,
 }
 
 impl Map {
     pub fn new(vm: &Vm) -> Self {
-        Self::with_obj(NamedObject::with_prototype_and_constructor(
+        Self::with_obj(OrdObject::with_prototype_and_constructor(
             vm.statics.map_prototype,
             vm.statics.map_constructor,
         ))
     }
 
-    pub fn with_obj(obj: NamedObject) -> Self {
+    pub fn with_obj(obj: OrdObject) -> Self {
         Self {
             inner: RefCell::new(HashMap::default()),
             obj,

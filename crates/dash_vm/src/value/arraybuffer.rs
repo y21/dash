@@ -9,19 +9,19 @@ use crate::{Vm, delegate, extract};
 
 use super::Unrooted;
 use super::function::args::CallArgs;
-use super::object::{NamedObject, Object};
+use super::object::{OrdObject, Object};
 
 #[derive(Debug, Trace)]
 pub struct ArrayBuffer {
     storage: Vec<Cell<u8>>,
-    obj: NamedObject,
+    obj: OrdObject,
 }
 
 impl ArrayBuffer {
     pub fn from_storage(vm: &Vm, storage: Vec<Cell<u8>>) -> Self {
         Self {
             storage,
-            obj: NamedObject::with_prototype_and_constructor(
+            obj: OrdObject::with_prototype_and_constructor(
                 vm.statics.arraybuffer_prototype,
                 vm.statics.arraybuffer_ctor,
             ),
@@ -31,11 +31,11 @@ impl ArrayBuffer {
     pub fn new(vm: &Vm) -> Self {
         Self::with_capacity(
             0,
-            NamedObject::with_prototype_and_constructor(vm.statics.arraybuffer_prototype, vm.statics.arraybuffer_ctor),
+            OrdObject::with_prototype_and_constructor(vm.statics.arraybuffer_prototype, vm.statics.arraybuffer_ctor),
         )
     }
 
-    pub fn with_capacity(capacity: usize, obj: NamedObject) -> Self {
+    pub fn with_capacity(capacity: usize, obj: OrdObject) -> Self {
         Self {
             storage: vec![Cell::new(0); capacity],
             obj,
@@ -45,7 +45,7 @@ impl ArrayBuffer {
     pub fn empty() -> Self {
         Self {
             storage: Vec::new(),
-            obj: NamedObject::null(),
+            obj: OrdObject::null(),
         }
     }
 

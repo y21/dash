@@ -18,7 +18,7 @@ use dash_vm::gc::ObjectId;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::array::Array;
 use dash_vm::value::function::args::CallArgs;
-use dash_vm::value::object::{NamedObject, Object, PropertyValue};
+use dash_vm::value::object::{OrdObject, Object, PropertyValue};
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::{Root, Unpack, Unrooted, Value, ValueKind};
 use dash_vm::{Vm, delegate, extract, throw};
@@ -152,8 +152,8 @@ async fn run_inner_fallible(path: &str, opt: OptLevel, initial_gc_threshold: Opt
 }
 
 fn create_process_object(sc: &mut LocalScope<'_>) -> ObjectId {
-    let obj = NamedObject::new(sc);
-    let env = NamedObject::new(sc);
+    let obj = OrdObject::new(sc);
+    let env = OrdObject::new(sc);
     let env = sc.register(env);
     let env_k = sc.intern("env");
     obj.set_property(env_k.to_key(sc), PropertyValue::static_default(env.into()), sc)
@@ -170,7 +170,7 @@ fn create_process_object(sc: &mut LocalScope<'_>) -> ObjectId {
 
     let versions_k = sc.intern("versions");
     let dash_k = sc.intern("dash");
-    let versions = NamedObject::new(sc);
+    let versions = OrdObject::new(sc);
     let version = sc.intern(env!("CARGO_PKG_VERSION"));
     versions
         .set_property(
@@ -214,13 +214,13 @@ fn execute_node_module(
     let file_path = file_path.canonicalize().unwrap();
 
     debug!(?dir_path, ?file_path);
-    let exports = Value::object(scope.register(NamedObject::new(scope)));
-    let module = Value::object(scope.register(NamedObject::new(scope)));
+    let exports = Value::object(scope.register(OrdObject::new(scope)));
+    let module = Value::object(scope.register(OrdObject::new(scope)));
     let require = Value::object(scope.register(RequireFunction {
         current_dir: dir_path.to_owned(),
         state: global_state.clone(),
         package,
-        object: NamedObject::new(scope),
+        object: OrdObject::new(scope),
     }));
     let key = scope.intern("exports");
     module
@@ -272,7 +272,7 @@ struct RequireFunction {
     current_dir: PathBuf,
     package: Rc<PackageState>,
     state: Rc<GlobalState>,
-    object: NamedObject,
+    object: OrdObject,
 }
 
 impl Object for RequireFunction {

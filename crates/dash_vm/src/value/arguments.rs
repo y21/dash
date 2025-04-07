@@ -5,12 +5,12 @@ use crate::localscope::LocalScope;
 use crate::{delegate, extract};
 
 use super::Value;
-use super::object::{NamedObject, Object, ObjectMap, PropertyValue};
+use super::object::{OrdObject, Object, ObjectMap, PropertyValue};
 use super::propertykey::ToPropertyKey;
 
 #[derive(Debug, Clone, Trace)]
 pub struct Arguments {
-    object: NamedObject,
+    object: OrdObject,
 }
 
 impl Arguments {
@@ -27,7 +27,7 @@ impl Arguments {
         );
 
         Self {
-            object: NamedObject::null_with_values(args),
+            object: OrdObject::null_with_values(args),
         }
     }
 }

@@ -3,7 +3,7 @@ use dash_proc_macro::Trace;
 use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
-use crate::value::object::{NamedObject, Object};
+use crate::value::object::{OrdObject, Object};
 use crate::value::promise::{Promise, PromiseState, wrap_resolved_promise};
 use crate::value::propertykey::ToPropertyKey;
 use crate::value::root_ext::RootErrExt;
@@ -93,7 +93,7 @@ pub struct ThenTask {
     /// The inner generator iterator of the async function
     generator_iter: Value,
     final_promise: ObjectId,
-    obj: NamedObject,
+    obj: OrdObject,
     action: PromiseAction,
 }
 
@@ -101,7 +101,7 @@ impl ThenTask {
     pub fn new(vm: &Vm, generator_iter: Value, final_promise: ObjectId, action: PromiseAction) -> Self {
         Self {
             generator_iter,
-            obj: NamedObject::new(vm),
+            obj: OrdObject::new(vm),
             final_promise,
             action,
         }

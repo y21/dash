@@ -15,7 +15,7 @@ use crate::{Vm, delegate, extract, throw};
 use dash_middle::interner::sym;
 
 use super::function::args::CallArgs;
-use super::object::{NamedObject, Object, PropertyValue, PropertyValueKind};
+use super::object::{OrdObject, Object, PropertyValue, PropertyValueKind};
 use super::ops::conversions::ValueConversion;
 use super::primitive::array_like_keys;
 use super::propertykey::{PropertyKey, ToPropertyKey};
@@ -155,11 +155,11 @@ unsafe impl Trace for ArrayInner {
 #[derive(Debug, Trace)]
 pub struct Array {
     pub items: RefCell<ArrayInner>,
-    obj: NamedObject,
+    obj: OrdObject,
 }
 
-fn get_named_object(vm: &Vm) -> NamedObject {
-    NamedObject::with_prototype_and_constructor(vm.statics.array_prototype, vm.statics.array_ctor)
+fn get_named_object(vm: &Vm) -> OrdObject {
+    OrdObject::with_prototype_and_constructor(vm.statics.array_prototype, vm.statics.array_ctor)
 }
 
 impl Array {
@@ -183,7 +183,7 @@ impl Array {
     }
 
     /// Creates a holey array with a given length
-    pub fn with_hole(len: usize, obj: NamedObject) -> Self {
+    pub fn with_hole(len: usize, obj: OrdObject) -> Self {
         Self {
             items: RefCell::new(ArrayInner::Table(ArrayTable::with_len(len as u32))),
             obj,
@@ -204,7 +204,7 @@ impl Array {
         assert!(matches!(*self.items.borrow(), ArrayInner::Dense(_)));
     }
 
-    pub fn with_obj(obj: NamedObject) -> Self {
+    pub fn with_obj(obj: OrdObject) -> Self {
         Self {
             items: RefCell::new(ArrayInner::Dense(Vec::new())),
             obj,
@@ -309,7 +309,7 @@ pub struct ArrayIterator {
     index: Cell<usize>,
     length: usize,
     value: Value,
-    obj: NamedObject,
+    obj: OrdObject,
 }
 
 impl Object for ArrayIterator {
@@ -346,7 +346,7 @@ impl ArrayIterator {
             index: Cell::new(0),
             length,
             value,
-            obj: NamedObject::with_prototype_and_constructor(
+            obj: OrdObject::with_prototype_and_constructor(
                 sc.statics.array_iterator_prototype,
                 sc.statics.object_ctor,
             ),
@@ -358,7 +358,7 @@ impl ArrayIterator {
             index: Cell::new(0),
             length: 0,
             value: Value::null(),
-            obj: NamedObject::null(),
+            obj: OrdObject::null(),
         }
     }
 

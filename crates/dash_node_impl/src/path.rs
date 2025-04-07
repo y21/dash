@@ -4,7 +4,7 @@ use dash_middle::interner::sym;
 use dash_vm::localscope::LocalScope;
 use dash_vm::throw;
 use dash_vm::value::function::native::{CallContext, register_native_fn};
-use dash_vm::value::object::{NamedObject, Object, PropertyValue};
+use dash_vm::value::object::{OrdObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::{ExceptionContext, Unpack, Value, ValueKind};
@@ -12,7 +12,7 @@ use dash_vm::value::{ExceptionContext, Unpack, Value, ValueKind};
 use crate::state::state_mut;
 
 pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
-    let exports = NamedObject::new(sc);
+    let exports = OrdObject::new(sc);
     let parse_sym = state_mut(sc).sym.parse;
     let parse_path = register_native_fn(sc, parse_sym, parse_path);
     let join_path = register_native_fn(sc, sym::join, join_path);
@@ -43,7 +43,7 @@ fn parse_path(cx: CallContext) -> Result<Value, Value> {
         Some(path) => cx.scope.intern(path.to_owned()),
         None => throw!(cx.scope, Error, "malformed path"),
     };
-    let object = NamedObject::new(cx.scope);
+    let object = OrdObject::new(cx.scope);
     let object = cx.scope.register(object);
     let dir_sym = state_mut(cx.scope).sym.dir;
     object.set_property(

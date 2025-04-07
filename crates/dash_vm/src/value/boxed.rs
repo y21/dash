@@ -7,7 +7,7 @@ use crate::{PropertyValue, Vm, delegate, extract};
 use dash_proc_macro::Trace;
 
 use super::Value;
-use super::object::{NamedObject, Object};
+use super::object::{Object, OrdObject};
 use super::primitive::{InternalSlots, Symbol as PrimitiveSymbol};
 
 macro_rules! boxed_primitive {
@@ -16,17 +16,17 @@ macro_rules! boxed_primitive {
             #[derive(Debug, Trace)]
             pub struct $name {
                 inner: $t,
-                obj: NamedObject
+                obj: OrdObject
             }
 
             impl $name {
                 pub fn new(vm: &mut Vm, value: $t) -> Self {
                     let prototype = vm.statics.$prototype.clone();
                     let ctor = vm.statics.$constructor.clone();
-                    Self { inner: value, obj: NamedObject::with_prototype_and_constructor(prototype, ctor) }
+                    Self { inner: value, obj: OrdObject::with_prototype_and_constructor(prototype, ctor) }
                 }
 
-                pub fn with_obj(value: $t, obj: NamedObject) -> Self {
+                pub fn with_obj(value: $t, obj: OrdObject) -> Self {
                     Self { inner: value, obj }
                 }
 

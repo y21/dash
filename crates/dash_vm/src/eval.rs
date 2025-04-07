@@ -8,7 +8,7 @@ use dash_parser::Parser;
 
 use crate::frame::Frame;
 use crate::localscope::LocalScope;
-use crate::value::object::{NamedObject, Object, PropertyValue};
+use crate::value::object::{OrdObject, Object, PropertyValue};
 use crate::value::propertykey::ToPropertyKey;
 use crate::value::{Root, Unrooted, Value};
 use crate::{Vm, throw};
@@ -58,12 +58,12 @@ impl Vm {
             StaticImportKind::Default => match exports.default {
                 Some(obj) => obj.root(sc),
                 None => {
-                    let o = NamedObject::new(sc);
+                    let o = OrdObject::new(sc);
                     Value::object(sc.register(o))
                 }
             },
             StaticImportKind::All => {
-                let export_obj = NamedObject::new(sc);
+                let export_obj = OrdObject::new(sc);
 
                 if let Some(default) = exports.default {
                     let default = default.root(sc);

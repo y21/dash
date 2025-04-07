@@ -1,6 +1,6 @@
 use crate::throw;
 use crate::value::function::native::CallContext;
-use crate::value::object::{NamedObject, Object};
+use crate::value::object::{OrdObject, Object};
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::{Value, ValueContext, boxed};
 use dash_middle::interner::sym;
@@ -9,7 +9,7 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
     let value = cx.args.first().unwrap_or_undefined().to_boolean(cx.scope)?;
 
     if let Some(new_target) = cx.new_target {
-        let value = boxed::Boolean::with_obj(value, NamedObject::instance_for_new_target(new_target, cx.scope)?);
+        let value = boxed::Boolean::with_obj(value, OrdObject::instance_for_new_target(new_target, cx.scope)?);
         Ok(Value::object(cx.scope.register(value)))
     } else {
         Ok(Value::boolean(value))

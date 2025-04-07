@@ -10,7 +10,7 @@ use dash_vm::localscope::LocalScope;
 use dash_vm::value::arraybuffer::ArrayBuffer;
 use dash_vm::value::function::native::{CallContext, register_native_fn};
 use dash_vm::value::function::{Function, FunctionKind};
-use dash_vm::value::object::{NamedObject, Object, PropertyValue};
+use dash_vm::value::object::{OrdObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::primitive::Number;
 use dash_vm::value::propertykey::ToPropertyKey;
@@ -168,7 +168,7 @@ fn from(cx: CallContext) -> Result<Value, Value> {
         inner: TypedArray::with_obj(
             arraybuffer,
             TypedArrayKind::Uint8Array,
-            NamedObject::with_prototype_and_constructor(buffer_prototype, buffer_ctor),
+            OrdObject::with_prototype_and_constructor(buffer_prototype, buffer_ctor),
         ),
     };
 
@@ -204,7 +204,7 @@ fn alloc(cx: CallContext) -> Result<Value, Value> {
         inner: TypedArray::with_obj(
             arraybuffer,
             TypedArrayKind::Uint8Array,
-            NamedObject::with_prototype_and_constructor(buffer_prototype, buffer_ctor),
+            OrdObject::with_prototype_and_constructor(buffer_prototype, buffer_ctor),
         ),
     };
 

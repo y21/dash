@@ -13,7 +13,7 @@ use dash_vm::value::arraybuffer::ArrayBuffer;
 use dash_vm::value::function::args::CallArgs;
 use dash_vm::value::function::native::CallContext;
 use dash_vm::value::function::{Function, FunctionKind};
-use dash_vm::value::object::{NamedObject, Object, PropertyValue};
+use dash_vm::value::object::{Object, OrdObject, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::promise::Promise;
 use dash_vm::value::propertykey::{PropertyKey, ToPropertyKey};
@@ -144,7 +144,7 @@ impl Object for TcpListenerConstructor {
             }
         });
 
-        let handle = TcpListenerHandle::new(NamedObject::instance_for_new_target(new_target, scope)?, tx, scope)?;
+        let handle = TcpListenerHandle::new(OrdObject::instance_for_new_target(new_target, scope)?, tx, scope)?;
         Ok(Value::object(scope.register(handle)).into())
     }
 
@@ -161,7 +161,7 @@ enum TcpListenerBridgeMessage {
 
 #[derive(Debug)]
 struct TcpListenerHandle {
-    object: NamedObject,
+    object: OrdObject,
     sender: mpsc::Sender<TcpListenerBridgeMessage>,
 }
 
@@ -175,7 +175,7 @@ unsafe impl Trace for TcpListenerHandle {
 
 impl TcpListenerHandle {
     pub fn new(
-        object: NamedObject,
+        object: OrdObject,
         sender: mpsc::Sender<TcpListenerBridgeMessage>,
         sc: &mut LocalScope,
     ) -> Result<Self, Value> {
@@ -222,7 +222,7 @@ fn tcplistener_accept(cx: CallContext) -> Result<Value, Value> {
 
 #[derive(Debug)]
 struct TcpStreamHandle {
-    object: NamedObject,
+    object: OrdObject,
     writer_tx: mpsc::UnboundedSender<Box<[u8]>>,
     reader_tx: mpsc::UnboundedSender<oneshot::Sender<Box<[u8]>>>,
 }
@@ -233,7 +233,7 @@ impl TcpStreamHandle {
         writer_tx: mpsc::UnboundedSender<Box<[u8]>>,
         reader_tx: mpsc::UnboundedSender<oneshot::Sender<Box<[u8]>>>,
     ) -> Result<Self, Value> {
-        let object = NamedObject::new(scope);
+        let object = OrdObject::new(scope);
         let name = scope.intern("write");
         let write_fn = Function::new(scope, Some(name.into()), FunctionKind::Native(tcpstream_write));
         let write_fn = scope.register(write_fn);

@@ -12,7 +12,7 @@ use dash_vm::localscope::LocalScope;
 use dash_vm::throw;
 use dash_vm::value::function::args::CallArgs;
 use dash_vm::value::function::native::{CallContext, register_native_fn};
-use dash_vm::value::object::{NamedObject, Object, PropertyValue};
+use dash_vm::value::object::{OrdObject, Object, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::string::JsString;
@@ -37,7 +37,7 @@ impl ModuleLoader for TimersModule {
 }
 
 pub fn import(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
-    let obj = NamedObject::new(sc);
+    let obj = OrdObject::new(sc);
 
     let set_timeout_sym = sc.intern("setTimeout");
     let set_timeout = register_native_fn(sc, set_timeout_sym, set_timeout);

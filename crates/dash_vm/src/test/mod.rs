@@ -7,7 +7,7 @@ use dash_optimizer::OptLevel;
 use crate::Vm;
 use crate::gc::ObjectId;
 use crate::gc::persistent::Persistent;
-use crate::value::object::{NamedObject, Object, PropertyValue};
+use crate::value::object::{OrdObject, Object, PropertyValue};
 use crate::value::primitive::{Null, Number, Symbol, Undefined};
 use crate::value::propertykey::ToPropertyKey;
 use crate::value::{Root, Unpack, Value, ValueKind};
@@ -138,8 +138,8 @@ fn persistent_trace() {
     let mut vm = Vm::new(Default::default());
     let object = {
         let mut scope = vm.scope();
-        let dummy_string = scope.register(NamedObject::null());
-        let object = NamedObject::new(&scope);
+        let dummy_string = scope.register(OrdObject::null());
+        let object = OrdObject::new(&scope);
         let key = scope.intern("foo");
         object
             .set_property(
@@ -176,7 +176,7 @@ fn persistent_trace() {
         .get_property(key.to_key(&mut scope), &mut scope)
         .unwrap()
         .root(&mut scope);
-    assert!(p.unpack().downcast_ref::<NamedObject>(&scope).is_some());
+    assert!(p.unpack().downcast_ref::<OrdObject>(&scope).is_some());
 }
 
 #[test]

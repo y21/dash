@@ -7,7 +7,7 @@ use crate::gc::ObjectId;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::localscope::LocalScope;
 use crate::value::arguments::Arguments;
-use crate::value::object::{NamedObject, Object};
+use crate::value::object::{OrdObject, Object};
 use crate::value::{Typeof, Unrooted, Value};
 use crate::{Vm, delegate, extract};
 
@@ -100,7 +100,7 @@ unsafe impl Trace for GeneratorState {
 #[derive(Debug, Trace)]
 pub struct GeneratorIterator {
     function: ObjectId,
-    obj: NamedObject,
+    obj: OrdObject,
     state: RefCell<GeneratorState>,
 }
 
@@ -115,7 +115,7 @@ impl GeneratorIterator {
     ) -> Self {
         Self {
             function,
-            obj: NamedObject::with_prototype_and_constructor(vm.statics.generator_iterator_prototype, function),
+            obj: OrdObject::with_prototype_and_constructor(vm.statics.generator_iterator_prototype, function),
             state: RefCell::new(GeneratorState::Running {
                 ip: 0,
                 stack,
@@ -129,7 +129,7 @@ impl GeneratorIterator {
     pub fn empty(function: ObjectId) -> Self {
         Self {
             function,
-            obj: NamedObject::null(),
+            obj: OrdObject::null(),
             state: RefCell::new(GeneratorState::Finished),
         }
     }

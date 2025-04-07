@@ -1,6 +1,6 @@
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::Value;
-use dash_vm::value::object::{NamedObject, Object, PropertyValue};
+use dash_vm::value::object::{OrdObject, Object, PropertyValue};
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::string::JsString;
 
@@ -58,7 +58,7 @@ pub fn load_native_module(sc: &mut LocalScope<'_>, arg: JsString) -> Result<Opti
 }
 
 fn init_dummy_empty_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
-    let exports = NamedObject::new(sc);
+    let exports = OrdObject::new(sc);
     Ok(Value::object(sc.register(exports)))
 }
 

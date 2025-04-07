@@ -3,7 +3,7 @@ use dash_proc_macro::Trace;
 use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
-use crate::value::object::{NamedObject, Object};
+use crate::value::object::{OrdObject, Object};
 use crate::value::{Typeof, Unrooted, Value};
 use crate::{Vm, delegate, extract};
 
@@ -14,7 +14,7 @@ pub struct BoundFunction {
     callee: ObjectId,
     this: Option<Value>,
     args: CallArgs,
-    obj: NamedObject,
+    obj: OrdObject,
 }
 
 impl BoundFunction {
@@ -23,7 +23,7 @@ impl BoundFunction {
             callee,
             this,
             args,
-            obj: NamedObject::new(vm),
+            obj: OrdObject::new(vm),
         }
     }
 }
