@@ -49,7 +49,8 @@ fn typedarray_constructor(cx: CallContext, kind: TypedArrayKind) -> Result<Value
                 .apply(This::Bound(arg), CallArgs::empty(), cx.scope)
                 .root(cx.scope)?;
             let mut values = Vec::new();
-            for_each_js_iterator_element(cx.scope, iterator, |scope, value| {
+
+            let ControlFlow::Continue(()) = for_each_js_iterator_element(cx.scope, iterator, |scope, value| {
                 use TypedArrayKind::*;
 
                 let value = value.to_number(scope)?;

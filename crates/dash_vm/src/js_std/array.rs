@@ -9,7 +9,7 @@ use crate::throw;
 use crate::value::array::{Array, ArrayIterator, require_valid_array_length};
 use crate::value::function::args::CallArgs;
 use crate::value::function::native::CallContext;
-use crate::value::object::{OrdObject, Object as _, PropertyValue};
+use crate::value::object::{Object as _, OrdObject, PropertyValue};
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::ops::equality::strict_eq;
 use crate::value::propertykey::ToPropertyKey;
@@ -666,7 +666,7 @@ pub fn from(cx: CallContext) -> Result<Value, Value> {
     fn with_iterator(scope: &mut LocalScope, items: Value, mapper: Option<Value>) -> Result<Value, Value> {
         let mut values = Vec::new();
 
-        for_each_js_iterator_element(scope, items, |scope, value| {
+        let Continue(()) = for_each_js_iterator_element(scope, items, |scope, value| {
             let value = match &mapper {
                 Some(mapper) => mapper.apply(This::Default, [value].into(), scope).root(scope)?,
                 None => value,
