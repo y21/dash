@@ -6,7 +6,7 @@ use dash_regex::Regex;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::{Vm, delegate, extract};
 
-use super::object::{OrdObject, Object};
+use super::object::{Object, OrdObject};
 use super::string::JsString;
 
 #[derive(Debug)]
@@ -41,7 +41,7 @@ impl RegExp {
                 source,
                 last_index: Cell::new(0),
             }),
-            object: OrdObject::with_prototype_and_constructor(vm.statics.regexp_prototype, vm.statics.regexp_ctor),
+            object: OrdObject::with_prototype(vm.statics.regexp_prototype),
         }
     }
 

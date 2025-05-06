@@ -8,7 +8,7 @@ use crate::{Vm, extract};
 
 use super::arraybuffer::ArrayBuffer;
 use super::function::args::CallArgs;
-use super::object::{OrdObject, Object, PropertyValue};
+use super::object::{Object, OrdObject, PropertyValue};
 use super::ops::conversions::ValueConversion;
 use super::propertykey::PropertyKey;
 use super::{Root, Unrooted, Value};
@@ -55,22 +55,20 @@ impl TypedArray {
     }
 
     pub fn new(vm: &Vm, arraybuffer: ObjectId, kind: TypedArrayKind) -> Self {
-        let (proto, ctor) = match kind {
-            TypedArrayKind::Uint8Array => (vm.statics.uint8array_prototype, vm.statics.uint8array_ctor),
-            TypedArrayKind::Uint8ClampedArray => (vm.statics.uint8array_prototype, vm.statics.uint8array_ctor),
-            TypedArrayKind::Int8Array => (vm.statics.int8array_prototype, vm.statics.int8array_ctor),
-            TypedArrayKind::Int16Array => (vm.statics.int16array_prototype, vm.statics.int16array_ctor),
-            TypedArrayKind::Uint16Array => (vm.statics.uint16array_prototype, vm.statics.uint16array_ctor),
-            TypedArrayKind::Int32Array => (vm.statics.int32array_prototype, vm.statics.int32array_ctor),
-            TypedArrayKind::Uint32Array => (vm.statics.uint32array_prototype, vm.statics.uint32array_ctor),
-            TypedArrayKind::Float32Array => (vm.statics.float32array_prototype, vm.statics.float32array_ctor),
-            TypedArrayKind::Float64Array => (vm.statics.float64array_prototype, vm.statics.float64array_ctor),
-        };
-
         Self::with_obj(
             arraybuffer,
             kind,
-            OrdObject::with_prototype_and_constructor(proto, ctor),
+            OrdObject::with_prototype(match kind {
+                TypedArrayKind::Uint8Array => vm.statics.uint8array_prototype,
+                TypedArrayKind::Uint8ClampedArray => vm.statics.uint8array_prototype,
+                TypedArrayKind::Int8Array => vm.statics.int8array_prototype,
+                TypedArrayKind::Int16Array => vm.statics.int16array_prototype,
+                TypedArrayKind::Uint16Array => vm.statics.uint16array_prototype,
+                TypedArrayKind::Int32Array => vm.statics.int32array_prototype,
+                TypedArrayKind::Uint32Array => vm.statics.uint32array_prototype,
+                TypedArrayKind::Float32Array => vm.statics.float32array_prototype,
+                TypedArrayKind::Float64Array => vm.statics.float64array_prototype,
+            }),
         )
     }
 

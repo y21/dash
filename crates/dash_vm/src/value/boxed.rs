@@ -11,7 +11,7 @@ use super::object::{Object, OrdObject};
 use super::primitive::{InternalSlots, Symbol as PrimitiveSymbol};
 
 macro_rules! boxed_primitive {
-    ($($name:ident $prototype:ident $constructor:ident $t:ty),*) => {
+    ($($name:ident $prototype:ident $t:ty),*) => {
         $(
             #[derive(Debug, Trace)]
             pub struct $name {
@@ -22,8 +22,7 @@ macro_rules! boxed_primitive {
             impl $name {
                 pub fn new(vm: &mut Vm, value: $t) -> Self {
                     let prototype = vm.statics.$prototype.clone();
-                    let ctor = vm.statics.$constructor.clone();
-                    Self { inner: value, obj: OrdObject::with_prototype_and_constructor(prototype, ctor) }
+                    Self { inner: value, obj: OrdObject::with_prototype(prototype) }
                 }
 
                 pub fn with_obj(value: $t, obj: OrdObject) -> Self {
@@ -96,10 +95,10 @@ macro_rules! boxed_primitive {
 }
 
 boxed_primitive! {
-    Number number_prototype number_ctor f64, // TODO: should this store a primitive::Number?
-    Boolean boolean_prototype boolean_ctor bool,
-    String string_prototype string_ctor JsString,
-    Symbol symbol_prototype symbol_ctor PrimitiveSymbol
+    Number number_prototype f64, // TODO: should this store a primitive::Number?
+    Boolean boolean_prototype bool,
+    String string_prototype JsString,
+    Symbol symbol_prototype PrimitiveSymbol
 }
 
 impl InternalSlots for Number {

@@ -219,7 +219,51 @@ unsafe impl Trace for Value {
 }
 
 // TODO: can we just get rid of this impl if ExternalValue stores ValueId instead of ObjectId which should remove the need for having an object vtable for value
+#[warn(clippy::missing_trait_methods)]
 impl Object for Value {
+    fn get_property(&self, this: This, key: PropertyKey, sc: &mut LocalScope<'_>) -> Result<Unrooted, Unrooted> {
+        match self.unpack() {
+            ValueKind::Object(o) => o.get_property(key, sc),
+            ValueKind::Number(n) => n.get_property(this, key, sc),
+            ValueKind::Boolean(b) => b.get_property(this, key, sc),
+            ValueKind::String(s) => s.get_property(this, key, sc),
+            ValueKind::External(e) => e.get_property(this, key, sc),
+            ValueKind::Undefined(u) => u.get_property(this, key, sc),
+            ValueKind::Null(n) => n.get_property(this, key, sc),
+            ValueKind::Symbol(s) => s.get_property(this, key, sc),
+        }
+    }
+
+    fn get_own_property(&self, this: This, key: PropertyKey, sc: &mut LocalScope<'_>) -> Result<Unrooted, Unrooted> {
+        match self.unpack() {
+            ValueKind::Object(o) => o.get_own_property(key, sc),
+            ValueKind::Number(n) => n.get_own_property(this, key, sc),
+            ValueKind::Boolean(b) => b.get_own_property(this, key, sc),
+            ValueKind::String(s) => s.get_own_property(this, key, sc),
+            ValueKind::External(e) => e.get_own_property(this, key, sc),
+            ValueKind::Undefined(u) => u.get_own_property(this, key, sc),
+            ValueKind::Null(n) => n.get_own_property(this, key, sc),
+            ValueKind::Symbol(s) => s.get_own_property(this, key, sc),
+        }
+    }
+
+    fn get_property_descriptor(
+        &self,
+        key: PropertyKey,
+        sc: &mut LocalScope,
+    ) -> Result<Option<PropertyValue>, Unrooted> {
+        match self.unpack() {
+            ValueKind::Number(n) => n.get_property_descriptor(key, sc),
+            ValueKind::Boolean(b) => b.get_property_descriptor(key, sc),
+            ValueKind::String(s) => s.get_property_descriptor(key, sc),
+            ValueKind::Undefined(u) => u.get_property_descriptor(key, sc),
+            ValueKind::Null(n) => n.get_property_descriptor(key, sc),
+            ValueKind::Symbol(s) => s.get_property_descriptor(key, sc),
+            ValueKind::Object(o) => o.get_property_descriptor(key, sc),
+            ValueKind::External(e) => e.get_property_descriptor(key, sc),
+        }
+    }
+
     fn get_own_property_descriptor(
         &self,
         key: PropertyKey,

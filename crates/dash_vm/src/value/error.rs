@@ -53,11 +53,7 @@ impl Error {
     pub fn new(sc: &mut LocalScope<'_>, message: String) -> Self {
         let message = sc.intern(&*message).into();
 
-        Self::with_obj(
-            OrdObject::with_prototype_and_constructor(sc.statics.error_prototype, sc.statics.error_ctor),
-            sc,
-            message,
-        )
+        Self::with_obj(OrdObject::with_prototype(sc.statics.error_prototype), sc, message)
     }
 
     pub fn empty() -> Self {
@@ -130,7 +126,7 @@ impl Object for Error {
 
 // Other types of errors
 macro_rules! define_error_type {
-    ( $($s:ident, $t:expr, $proto:ident, $ctor:ident);* ) => {
+    ( $($s:ident, $t:expr, $proto:ident);* ) => {
         $(
             #[derive(Debug, Trace)]
             pub struct $s {
@@ -145,7 +141,7 @@ macro_rules! define_error_type {
                 }
 
                 pub fn object(vm: &LocalScope<'_>) -> OrdObject {
-                    OrdObject::with_prototype_and_constructor(vm.statics.$proto, vm.statics.$ctor)
+                    OrdObject::with_prototype(vm.statics.$proto)
                 }
 
                 pub fn new_with_js_string(vm: &mut LocalScope<'_>, obj: OrdObject, message: JsString) -> Self {
@@ -189,11 +185,11 @@ macro_rules! define_error_type {
 }
 
 define_error_type!(
-    EvalError, sym::EvalError, eval_error_prototype, eval_error_ctor;
-    RangeError, sym::RangeError, range_error_prototype, range_error_ctor;
-    ReferenceError, sym::ReferenceError, reference_error_prototype, reference_error_ctor;
-    SyntaxError, sym::SyntaxError, syntax_error_prototype, syntax_error_ctor;
-    TypeError, sym::TypeError, type_error_prototype, type_error_ctor;
-    URIError, sym::URIError, uri_error_prototype, uri_error_ctor;
-    AggregateError, sym::AggregateError, aggregate_error_prototype, aggregate_error_ctor
+    EvalError, sym::EvalError, eval_error_prototype;
+    RangeError, sym::RangeError, range_error_prototype;
+    ReferenceError, sym::ReferenceError, reference_error_prototype;
+    SyntaxError, sym::SyntaxError, syntax_error_prototype;
+    TypeError, sym::TypeError, type_error_prototype;
+    URIError, sym::URIError, uri_error_prototype;
+    AggregateError, sym::AggregateError, aggregate_error_prototype
 );

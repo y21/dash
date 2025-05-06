@@ -566,7 +566,6 @@ mod handlers {
     use dash_middle::iterator_with::{InfallibleIteratorWith, IteratorWith};
     use dash_middle::parser::statement::{Asyncness, FunctionKind as ParserFunctionKind};
     use handlers::extract::{ForwardSequence, FrontIteratorWith, extract};
-    use hashbrown::hash_map::Entry;
     use if_chain::if_chain;
     use smallvec::SmallVec;
     use std::ops::{Add, ControlFlow, Div, Mul, Rem, Sub};
@@ -583,7 +582,7 @@ mod handlers {
     use crate::value::function::generator::GeneratorFunction;
     use crate::value::function::user::UserFunction;
     use crate::value::function::{Function, FunctionKind, adjust_stack_from_flat_call, this_for_new_target};
-    use crate::value::object::{OrdObject, Object, ObjectMap, PropertyValue, PropertyValueKind};
+    use crate::value::object::{Object, OrdObject, PropertyValue, PropertyValueKind};
     use crate::value::ops::conversions::ValueConversion;
     use crate::value::ops::equality;
     use crate::value::primitive::Number;
@@ -930,7 +929,7 @@ mod handlers {
         let name = JsString::from(cx.constants().symbols[SymbolConstant(id)]);
 
         let value = match cx.global.clone().extract::<OrdObject>(&cx.scope) {
-            Some(value) => match value.get_raw_property(name.to_key(&mut cx.scope)) {
+            Some(value) => match value.get_own_property_descriptor(name.to_key(&mut cx.scope), &mut cx.scope)? {
                 Some(value) => value.kind().get_or_apply(&mut cx, This::Default)?,
                 None => {
                     let name = name.res(&cx.scope).to_owned();
@@ -1546,37 +1545,38 @@ mod handlers {
     pub fn objlit(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let mut iter = BackwardSequence::<ObjectProperty>::new_u16(&mut cx);
 
-        let mut obj = ObjectMap::default();
+        let obj = OrdObject::new(&cx.scope);
         while let Some(property) = iter.next(&mut cx) {
             match property? {
-                ObjectProperty::Static { key, value } => drop(obj.insert(key, value)),
-                ObjectProperty::Getter { key, value } => match obj.entry(key) {
-                    Entry::Occupied(mut entry) => match &mut entry.get_mut().kind {
-                        PropertyValueKind::Static(_) => drop(entry.insert(PropertyValue::getter_default(value))),
-                        PropertyValueKind::Trap { get, .. } => *get = Some(value),
-                    },
-                    Entry::Vacant(entry) => drop(entry.insert(PropertyValue::getter_default(value))),
+                ObjectProperty::Static { key, value } => drop(obj.set_property(key, value, &mut cx.scope)),
+                ObjectProperty::Getter { key, value } => match obj.get_own_property_descriptor(key, &mut cx.scope)? {
+                    Some(prop) => {
+                        obj.set_property(key, prop.with_getter(value), &mut cx.scope)?;
+                    }
+                    None => {
+                        obj.set_property(key, PropertyValue::getter_default(value), &mut cx.scope)?;
+                    }
                 },
-                ObjectProperty::Setter { key, value } => match obj.entry(key) {
-                    Entry::Occupied(mut entry) => match &mut entry.get_mut().kind {
-                        PropertyValueKind::Static(_) => drop(entry.insert(PropertyValue::setter_default(value))),
-                        PropertyValueKind::Trap { set, .. } => *set = Some(value),
-                    },
-                    Entry::Vacant(entry) => drop(entry.insert(PropertyValue::setter_default(value))),
+                ObjectProperty::Setter { key, value } => match obj.get_own_property_descriptor(key, &mut cx.scope)? {
+                    Some(prop) => {
+                        obj.set_property(key, prop.with_setter(value), &mut cx.scope)?;
+                    }
+                    None => {
+                        obj.set_property(key, PropertyValue::setter_default(value), &mut cx.scope)?;
+                    }
                 },
                 ObjectProperty::Spread(value) => {
                     if let ValueKind::Object(object) = value.unpack() {
                         for key in object.own_keys(&mut cx.scope)? {
                             let key = PropertyKey::from_value(&mut cx.scope, key)?;
-                            let value = object.get_property(key, &mut cx.scope)?.root(&mut cx.scope);
-                            obj.insert(key, PropertyValue::static_default(value));
+                            if let Some(value) = object.get_own_property_descriptor(key, &mut cx.scope)? {
+                                obj.set_property(key, value, &mut cx.scope)?;
+                            }
                         }
                     }
                 }
             }
         }
-
-        let obj = OrdObject::with_values(&cx, obj);
 
         let handle = cx.scope.register(obj);
         cx.stack.push(handle.into());
@@ -1626,16 +1626,57 @@ mod handlers {
     }
 
     pub fn staticpropertyaccess(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
+        // let (id, cache) = {
+        //     let frame = cx.active_frame_mut();
+        //     let ip = frame.ip;
+        //     frame.function.buffer.with(|buf| unsafe {
+        //         let id = u16::from_ne_bytes(buf.get_unchecked(ip..ip + 2).try_into().unwrap());
+        //         let cache = u32::from_ne_bytes(buf.get_unchecked(ip + 2..ip + 6).try_into().unwrap());
+        //         frame.ip += 6;
+        //         (id, cache)
+        //     })
+        // };
         let id = cx.fetchw_and_inc_ip();
+
         let ident = JsString::from(cx.constants().symbols[SymbolConstant(id)]);
 
         let preserve_this = cx.fetch_and_inc_ip() == 1;
+        let cache = cx.fetchw32_and_inc_ip();
 
         let target = if preserve_this {
             cx.peek_stack()
         } else {
             cx.pop_stack_rooted()
         };
+
+        if ident.sym() == sym::length {
+            let k = sym::from.to_key(&mut cx.scope);
+            let i = std::time::Instant::now();
+            let c = 1000000;
+            let mut x = None;
+            let (data, fun) = match target.unpack() {
+                ValueKind::Object(object) => {
+                    let data = object.data_ptr(&cx.scope);
+                    let vt = object.vtable(&cx.scope);
+                    // unsafe {
+                    //     ||
+                    // }
+                    (data, vt.js_get_property_descriptor)
+                }
+                _ => unreachable!(),
+            };
+            if let Some(target_) = target.extract::<OrdObject>(&cx.scope) {
+                for _ in 0..c {
+                    x = unsafe { Some(fun(data, k, &mut cx.scope)) };
+                    // x = Some(target.get_property_descriptor(k, &mut cx.scope).unwrap());
+                }
+                let e = i.elapsed();
+                dbg!(e / c);
+                // dbg!(x);
+                // assert!(x.unwrap().root(&mut cx.scope));
+            }
+            // dbg!(x.unwrap().root(&mut cx.scope).unpack());
+        }
 
         let value = target.get_property(ident.to_key(&mut cx.scope), &mut cx.scope)?;
         cx.push_stack(value);

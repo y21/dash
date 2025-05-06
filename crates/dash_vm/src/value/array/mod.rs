@@ -15,7 +15,7 @@ use crate::{Vm, delegate, extract, throw};
 use dash_middle::interner::sym;
 
 use super::function::args::CallArgs;
-use super::object::{OrdObject, Object, PropertyValue, PropertyValueKind};
+use super::object::{Object, OrdObject, PropertyValue, PropertyValueKind};
 use super::ops::conversions::ValueConversion;
 use super::primitive::array_like_keys;
 use super::propertykey::{PropertyKey, ToPropertyKey};
@@ -158,27 +158,23 @@ pub struct Array {
     obj: OrdObject,
 }
 
-fn get_named_object(vm: &Vm) -> OrdObject {
-    OrdObject::with_prototype_and_constructor(vm.statics.array_prototype, vm.statics.array_ctor)
-}
-
 impl Array {
     pub fn new(vm: &Vm) -> Self {
-        Self::with_obj(get_named_object(vm))
+        Self::with_obj(OrdObject::with_prototype(vm.statics.array_prototype))
     }
 
     /// Creates a non-holey array from a vec of values
     pub fn from_vec(items: Vec<PropertyValue>, vm: &Vm) -> Self {
         Self {
             items: RefCell::new(ArrayInner::Dense(items)),
-            obj: get_named_object(vm),
+            obj: OrdObject::with_prototype(vm.statics.array_prototype),
         }
     }
 
     pub fn from_table(vm: &Vm, table: ArrayTable) -> Self {
         Self {
             items: RefCell::new(ArrayInner::Table(table)),
-            obj: get_named_object(vm),
+            obj: OrdObject::with_prototype(vm.statics.array_prototype),
         }
     }
 
@@ -346,10 +342,7 @@ impl ArrayIterator {
             index: Cell::new(0),
             length,
             value,
-            obj: OrdObject::with_prototype_and_constructor(
-                sc.statics.array_iterator_prototype,
-                sc.statics.object_ctor,
-            ),
+            obj: OrdObject::with_prototype(sc.statics.array_iterator_prototype),
         })
     }
 
