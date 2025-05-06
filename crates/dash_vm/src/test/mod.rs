@@ -7,7 +7,7 @@ use dash_optimizer::OptLevel;
 use crate::Vm;
 use crate::gc::ObjectId;
 use crate::gc::persistent::Persistent;
-use crate::value::object::{OrdObject, Object, PropertyValue};
+use crate::value::object::{Object, OrdObject, PropertyValue};
 use crate::value::primitive::{Null, Number, Symbol, Undefined};
 use crate::value::propertykey::ToPropertyKey;
 use crate::value::{Root, Unpack, Value, ValueKind};

@@ -6,7 +6,7 @@ use dash_proc_macro::Trace;
 use crate::{Vm, delegate, extract};
 
 use super::Value;
-use super::object::{OrdObject, Object};
+use super::object::{Object, OrdObject};
 
 #[derive(Debug, Trace)]
 pub struct Set {
@@ -16,10 +16,7 @@ pub struct Set {
 
 impl Set {
     pub fn new(vm: &Vm) -> Self {
-        Self::with_obj(OrdObject::with_prototype_and_constructor(
-            vm.statics.set_prototype,
-            vm.statics.set_constructor,
-        ))
+        Self::with_obj(OrdObject::with_prototype(vm.statics.set_prototype))
     }
 
     pub fn with_obj(obj: OrdObject) -> Self {

@@ -22,7 +22,7 @@ use self::native::{CallContext, NativeFunction};
 use self::user::UserFunction;
 
 use super::array::Array;
-use super::object::{OrdObject, Object, PropertyDataDescriptor, PropertyValue, PropertyValueKind};
+use super::object::{Object, OrdObject, PropertyDataDescriptor, PropertyValue, PropertyValueKind};
 use super::ops::conversions::ValueConversion;
 use super::propertykey::{PropertyKey, ToPropertyKey};
 use super::string::JsString;
@@ -78,11 +78,7 @@ pub struct Function {
 
 impl Function {
     pub fn new(vm: &Vm, name: Option<JsString>, kind: FunctionKind) -> Self {
-        Self::with_obj(
-            name,
-            kind,
-            OrdObject::with_prototype_and_constructor(vm.statics.function_proto, vm.statics.function_ctor),
-        )
+        Self::with_obj(name, kind, OrdObject::with_prototype(vm.statics.function_proto))
     }
 
     pub fn with_obj(name: Option<JsString>, kind: FunctionKind, obj: OrdObject) -> Self {
@@ -114,7 +110,7 @@ impl Function {
         *self.prototype.borrow()
     }
 
-    pub fn get_or_set_prototype(&self, scope: &mut LocalScope) -> ObjectId {
+    pub fn get_or_set_prototype(&self, scope: &mut LocalScope<'_>) -> ObjectId {
         *self.prototype.borrow_mut().get_or_insert_with(|| {
             let proto = OrdObject::new(scope);
             scope.register(proto)
@@ -122,9 +118,9 @@ impl Function {
     }
 
     /// Creates a new instance of this function.
-    pub fn new_instance(&self, this_handle: ObjectId, scope: &mut LocalScope) -> Result<ObjectId, Value> {
+    pub fn new_instance(&self, scope: &mut LocalScope) -> Result<ObjectId, Value> {
         let prototype = self.get_or_set_prototype(scope);
-        let this = scope.register(OrdObject::with_prototype_and_constructor(prototype, this_handle));
+        let this = scope.register(OrdObject::with_prototype(prototype));
         Ok(this)
     }
 
@@ -188,9 +184,9 @@ pub fn this_for_new_target(scope: &mut LocalScope<'_>, new_target: ObjectId) -> 
         throw!(scope, Error, "new.target prototype must be an object")
     };
 
-    Ok(This::Bound(Value::object(scope.register(
-        OrdObject::with_prototype_and_constructor(prototype, new_target),
-    ))))
+    Ok(This::Bound(Value::object(
+        scope.register(OrdObject::with_prototype(prototype)),
+    )))
 }
 
 impl Object for Function {

@@ -12,9 +12,9 @@ use dash_vm::localscope::LocalScope;
 use dash_vm::value::function::args::CallArgs;
 use dash_vm::value::function::native::{CallContext, register_native_fn};
 use dash_vm::value::function::{Function, FunctionKind};
-use dash_vm::value::object::{OrdObject, Object, PropertyValue};
+use dash_vm::value::object::{Object, OrdObject, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
-use dash_vm::value::propertykey::ToPropertyKey;
+use dash_vm::value::propertykey::{PropertyKey, ToPropertyKey};
 use dash_vm::value::root_ext::RootErrExt;
 use dash_vm::value::{Unpack, Value, ValueKind};
 use dash_vm::{delegate, extract, throw};
@@ -50,14 +50,10 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
             FunctionKind::Native(|cx| {
                 let EventsState {
                     event_emitter_prototype,
-                    event_emitter_constructor,
                 } = State::from_vm(cx.scope).store[EventsKey];
 
                 let emitter = EventEmitter {
-                    object: OrdObject::with_prototype_and_constructor(
-                        event_emitter_prototype,
-                        event_emitter_constructor,
-                    ),
+                    object: OrdObject::with_prototype(event_emitter_prototype),
                     handlers: RefCell::new(FxHashMap::default()),
                 };
                 Ok(cx.scope.register(emitter).into())
@@ -66,11 +62,15 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
         event_emitter_ctor.set_fn_prototype(event_emitter_prototype);
         sc.register(event_emitter_ctor)
     };
+    event_emitter_prototype.set_property(
+        PropertyKey::CONSTRUCTOR,
+        PropertyValue::static_default(event_emitter_ctor.into()),
+        sc,
+    )?;
 
     State::from_vm_mut(sc).store.insert(
         EventsKey,
         EventsState {
-            event_emitter_constructor: event_emitter_ctor,
             event_emitter_prototype,
         },
     );
@@ -98,7 +98,6 @@ impl Key for EventsKey {
 #[derive(Debug, Trace)]
 struct EventsState {
     event_emitter_prototype: ObjectId,
-    event_emitter_constructor: ObjectId,
 }
 
 impl Object for EventEmitter {

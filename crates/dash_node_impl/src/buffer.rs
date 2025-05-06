@@ -10,10 +10,10 @@ use dash_vm::localscope::LocalScope;
 use dash_vm::value::arraybuffer::ArrayBuffer;
 use dash_vm::value::function::native::{CallContext, register_native_fn};
 use dash_vm::value::function::{Function, FunctionKind};
-use dash_vm::value::object::{OrdObject, Object, PropertyValue};
+use dash_vm::value::object::{Object, OrdObject, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::primitive::Number;
-use dash_vm::value::propertykey::ToPropertyKey;
+use dash_vm::value::propertykey::{PropertyKey, ToPropertyKey};
 use dash_vm::value::typedarray::{TypedArray, TypedArrayKind};
 use dash_vm::value::{ExceptionContext, Root, Unpack, Value, ValueKind};
 use dash_vm::{delegate, extract, throw};
@@ -29,8 +29,6 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
         writeUInt32LE: wu32le_sym,
         ..
     } = state_mut(sc).sym;
-
-    // TODO: helper function for creating a (prototype, constructor) tuple
 
     let buffer_prototype = {
         let arraybuffer = sc.register(ArrayBuffer::new(sc));
@@ -50,6 +48,11 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     );
     buffer_ctor.set_fn_prototype(buffer_prototype);
     let buffer_ctor = sc.register(buffer_ctor);
+    buffer_prototype.set_property(
+        PropertyKey::CONSTRUCTOR,
+        PropertyValue::static_default(buffer_ctor.into()),
+        sc,
+    )?;
 
     let from_fn = register_native_fn(sc, sym::from, from);
     let alloc_fn = register_native_fn(sc, alloc_sym, alloc);
@@ -61,13 +64,9 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     )?;
     buffer_ctor.set_property(alloc_sym.to_key(sc), PropertyValue::static_default(alloc_fn.into()), sc)?;
 
-    State::from_vm_mut(sc).store.insert(
-        BufferKey,
-        BufferState {
-            buffer_prototype,
-            buffer_ctor,
-        },
-    );
+    State::from_vm_mut(sc)
+        .store
+        .insert(BufferKey, BufferState { buffer_prototype });
 
     Ok(buffer_ctor.into())
 }
@@ -119,7 +118,6 @@ impl Key for BufferKey {
 #[derive(Debug, Trace)]
 struct BufferState {
     buffer_prototype: ObjectId,
-    buffer_ctor: ObjectId,
 }
 
 #[derive(Debug, Trace)]
@@ -143,10 +141,7 @@ impl Object for Buffer {
 }
 
 fn from(cx: CallContext) -> Result<Value, Value> {
-    let BufferState {
-        buffer_prototype,
-        buffer_ctor,
-    } = State::from_vm(cx.scope).store[BufferKey];
+    let BufferState { buffer_prototype } = State::from_vm(cx.scope).store[BufferKey];
 
     let source = cx
         .args
@@ -168,7 +163,7 @@ fn from(cx: CallContext) -> Result<Value, Value> {
         inner: TypedArray::with_obj(
             arraybuffer,
             TypedArrayKind::Uint8Array,
-            OrdObject::with_prototype_and_constructor(buffer_prototype, buffer_ctor),
+            OrdObject::with_prototype(buffer_prototype),
         ),
     };
 
@@ -195,16 +190,13 @@ fn alloc(cx: CallContext) -> Result<Value, Value> {
         vec![Cell::new(0); size]
     };
 
-    let BufferState {
-        buffer_prototype,
-        buffer_ctor,
-    } = State::from_vm(cx.scope).store[BufferKey];
+    let BufferState { buffer_prototype, .. } = State::from_vm(cx.scope).store[BufferKey];
     let arraybuffer = cx.scope.register(ArrayBuffer::from_storage(cx.scope, buf));
     let instn = Buffer {
         inner: TypedArray::with_obj(
             arraybuffer,
             TypedArrayKind::Uint8Array,
-            OrdObject::with_prototype_and_constructor(buffer_prototype, buffer_ctor),
+            OrdObject::with_prototype(buffer_prototype),
         ),
     };
 

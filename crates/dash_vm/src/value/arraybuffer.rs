@@ -9,7 +9,7 @@ use crate::{Vm, delegate, extract};
 
 use super::Unrooted;
 use super::function::args::CallArgs;
-use super::object::{OrdObject, Object};
+use super::object::{Object, OrdObject};
 
 #[derive(Debug, Trace)]
 pub struct ArrayBuffer {
@@ -21,18 +21,12 @@ impl ArrayBuffer {
     pub fn from_storage(vm: &Vm, storage: Vec<Cell<u8>>) -> Self {
         Self {
             storage,
-            obj: OrdObject::with_prototype_and_constructor(
-                vm.statics.arraybuffer_prototype,
-                vm.statics.arraybuffer_ctor,
-            ),
+            obj: OrdObject::with_prototype(vm.statics.arraybuffer_prototype),
         }
     }
 
     pub fn new(vm: &Vm) -> Self {
-        Self::with_capacity(
-            0,
-            OrdObject::with_prototype_and_constructor(vm.statics.arraybuffer_prototype, vm.statics.arraybuffer_ctor),
-        )
+        Self::with_capacity(0, OrdObject::with_prototype(vm.statics.arraybuffer_prototype))
     }
 
     pub fn with_capacity(capacity: usize, obj: OrdObject) -> Self {

@@ -6,8 +6,8 @@ use dash_vm::localscope::LocalScope;
 use dash_vm::value::Value;
 use dash_vm::value::function::native::register_native_fn;
 use dash_vm::value::function::{Function, FunctionKind};
-use dash_vm::value::object::{OrdObject, Object, PropertyValue};
-use dash_vm::value::propertykey::ToPropertyKey;
+use dash_vm::value::object::{Object, OrdObject, PropertyValue};
+use dash_vm::value::propertykey::{PropertyKey, ToPropertyKey};
 use dash_vm::{delegate, extract};
 
 use crate::state::state_mut;
@@ -20,7 +20,6 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
         ..
     } = state_mut(sc).sym;
 
-    // TODO: helper function for creating a (prototype, constructor) tuple
     let stream_prototype = sc.register(Stream {
         object: OrdObject::new(sc),
     });
@@ -29,21 +28,23 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
         sc,
         Some(stream_sym.into()),
         FunctionKind::Native(|cx| {
-            let StreamState {
-                stream_prototype,
-                stream_ctor,
-            } = State::from_vm(cx.scope).store[StreamKey];
+            let StreamState { stream_prototype } = State::from_vm(cx.scope).store[StreamKey];
 
             Ok(cx
                 .scope
                 .register(Stream {
-                    object: OrdObject::with_prototype_and_constructor(stream_prototype, stream_ctor),
+                    object: OrdObject::with_prototype(stream_prototype),
                 })
                 .into())
         }),
     );
     stream_ctor.set_fn_prototype(stream_prototype);
     let stream_ctor = sc.register(stream_ctor);
+    stream_prototype.set_property(
+        PropertyKey::CONSTRUCTOR,
+        PropertyValue::static_default(stream_ctor.into()),
+        sc,
+    )?;
 
     let readable_fn = register_native_fn(sc, readable_sym, |_sc| Ok(Value::undefined()));
     stream_ctor.set_property(
@@ -57,13 +58,9 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
         sc,
     )?;
 
-    State::from_vm_mut(sc).store.insert(
-        StreamKey,
-        StreamState {
-            stream_prototype,
-            stream_ctor,
-        },
-    );
+    State::from_vm_mut(sc)
+        .store
+        .insert(StreamKey, StreamState { stream_prototype });
 
     Ok(stream_ctor.into())
 }
@@ -76,7 +73,6 @@ impl Key for StreamKey {
 #[derive(Debug, Trace)]
 struct StreamState {
     stream_prototype: ObjectId,
-    stream_ctor: ObjectId,
 }
 
 #[derive(Debug, Trace)]

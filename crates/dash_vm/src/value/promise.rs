@@ -9,7 +9,7 @@ use crate::localscope::LocalScope;
 use crate::{PromiseAction, Vm, extract};
 
 use super::function::args::CallArgs;
-use super::object::{OrdObject, Object, PropertyValue};
+use super::object::{Object, OrdObject, PropertyValue};
 use super::propertykey::PropertyKey;
 use super::{Typeof, Unrooted, Value};
 
@@ -47,10 +47,7 @@ pub struct Promise {
 
 impl Promise {
     pub fn new(vm: &Vm) -> Self {
-        Self::with_obj(OrdObject::with_prototype_and_constructor(
-            vm.statics.promise_proto,
-            vm.statics.promise_ctor,
-        ))
+        Self::with_obj(OrdObject::with_prototype(vm.statics.promise_proto))
     }
 
     pub fn with_obj(obj: OrdObject) -> Self {
@@ -66,14 +63,14 @@ impl Promise {
     pub fn resolved(vm: &Vm, value: Value) -> Self {
         Self {
             state: RefCell::new(PromiseState::Resolved(value)),
-            obj: OrdObject::with_prototype_and_constructor(vm.statics.promise_proto, vm.statics.promise_ctor),
+            obj: OrdObject::with_prototype(vm.statics.promise_proto),
         }
     }
 
     pub fn rejected(scope: &mut LocalScope, value: Value) -> ObjectId {
         let this = scope.register(Self {
             state: RefCell::new(PromiseState::Rejected { value, caught: false }),
-            obj: OrdObject::with_prototype_and_constructor(scope.statics.promise_proto, scope.statics.promise_ctor),
+            obj: OrdObject::with_prototype(scope.statics.promise_proto),
         });
         scope.rejected_promises.insert(this);
         this

@@ -1,4 +1,4 @@
-use dash_middle::interner;
+use dash_middle::interner::{self, sym};
 
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::localscope::LocalScope;
@@ -16,7 +16,7 @@ use super::string::JsString;
 /// to intern strings, but otherwise the `to_js_string` method should be used to get a string out of it (and will automatically
 /// deal with interning numeric keys).
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub struct PropertyKey(PropertyKeyInner);
+pub struct PropertyKey(pub PropertyKeyInner);
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum PropertyKeyInner {
@@ -69,6 +69,9 @@ impl ToPropertyKey for usize {
 }
 
 impl PropertyKey {
+    pub const PROTO: PropertyKey = PropertyKey(PropertyKeyInner::String(JsString::from_sym(sym::__proto__)));
+    pub const CONSTRUCTOR: PropertyKey = PropertyKey(PropertyKeyInner::String(JsString::from_sym(sym::constructor)));
+
     pub fn to_js_string(self, sc: &mut LocalScope<'_>) -> Option<interner::Symbol> {
         match self.0 {
             PropertyKeyInner::String(string) => Some(string.sym()),

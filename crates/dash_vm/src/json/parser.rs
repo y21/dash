@@ -7,7 +7,7 @@ use dash_middle::util;
 use crate::localscope::LocalScope;
 use crate::value::Value;
 use crate::value::array::Array;
-use crate::value::object::{OrdObject, ObjectMap, PropertyValue};
+use crate::value::object::{Object, OrdObject, PropertyValue};
 use crate::value::propertykey::ToPropertyKey;
 
 /// An error that occurred during parsing JSON
@@ -176,10 +176,9 @@ impl<'a, 'sc, 'vm> Parser<'a, 'sc, 'vm> {
                 Ok(Value::object(self.sc.register(arr)))
             }
             b'{' => {
-                let mut obj = ObjectMap::default();
-
                 self.idx += 1;
 
+                let obj = OrdObject::new(self.sc);
                 while let Some(cur) = self.skip_to_relevant_token() {
                     match cur {
                         b'}' => break,
@@ -197,10 +196,9 @@ impl<'a, 'sc, 'vm> Parser<'a, 'sc, 'vm> {
                     self.skip_whitespaces(); // spaces
                     self.idx += 1; // :
                     let value = self.parse()?;
-                    obj.insert(key.to_key(self.sc), PropertyValue::static_default(value));
+                    obj.set_property(key.to_key(self.sc), PropertyValue::static_default(value), self.sc)
+                        .unwrap();
                 }
-
-                let obj = OrdObject::with_values(self.sc, obj);
 
                 Ok(Value::object(self.sc.register(obj)))
             }

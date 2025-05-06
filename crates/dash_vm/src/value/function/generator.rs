@@ -7,7 +7,7 @@ use crate::gc::ObjectId;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::localscope::LocalScope;
 use crate::value::arguments::Arguments;
-use crate::value::object::{OrdObject, Object};
+use crate::value::object::{Object, OrdObject};
 use crate::value::{Typeof, Unrooted, Value};
 use crate::{Vm, delegate, extract};
 
@@ -115,7 +115,7 @@ impl GeneratorIterator {
     ) -> Self {
         Self {
             function,
-            obj: OrdObject::with_prototype_and_constructor(vm.statics.generator_iterator_prototype, function),
+            obj: OrdObject::with_prototype(vm.statics.generator_iterator_prototype),
             state: RefCell::new(GeneratorState::Running {
                 ip: 0,
                 stack,
