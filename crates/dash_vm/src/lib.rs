@@ -1264,6 +1264,21 @@ impl Vm {
         u16::from_ne_bytes(value)
     }
 
+    /// Fetches a wide value (16-bit) in the currently executing frame
+    /// and increments the instruction pointer
+    #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
+    pub(crate) fn fetchw32_and_inc_ip(&mut self) -> u32 {
+        let frame = self.active_frame_mut();
+        let value: [u8; 4] = frame.function.buffer.with(|buf| {
+            buf[frame.ip..frame.ip + 4]
+                .try_into()
+                .expect("Failed to get wide instruction")
+        });
+
+        frame.ip += 4;
+        u32::from_ne_bytes(value)
+    }
+
     #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
     pub(crate) fn get_frame_sp(&self) -> usize {
         self.active_frame().sp

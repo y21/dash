@@ -124,6 +124,29 @@ impl OrdObject {
 }
 
 impl Object for OrdObject {
+    fn get_property_descriptor(
+        &self,
+        key: PropertyKey,
+        sc: &mut LocalScope,
+    ) -> Result<Option<PropertyValue>, Unrooted> {
+        if let Some(pv) = self.get_own_property_descriptor(key, sc)? {
+            Ok(Some(pv))
+        } else {
+            #[cold]
+            fn f() {}
+            f();
+            eprintln!("SLOW PATH!!! {key:?}");
+            if let InnerOrdObject::Linear(l) = &*self.0.borrow() {
+                let ks = l
+                    .raw_keys()
+                    .iter()
+                    .map(|v| sc.interner.resolve(interner::Symbol::from_raw(*v)))
+                    .collect::<Vec<_>>();
+                println!("Keys: {ks:?}")
+            }
+            self.get_prototype(sc)?.get_property_descriptor(key, sc)
+        }
+    }
     fn get_own_property_descriptor(
         &self,
         key: PropertyKey,
@@ -860,7 +883,7 @@ impl PropertyVec {
         let descriptors = unsafe {
             align_ptr_mut(
                 values
-                    .add(self.len() as usize)
+                    .add(self.capacity().get() as usize)
                     .cast::<InternalLinearPropertyVecDescriptor>(),
             )
         };
@@ -880,7 +903,7 @@ impl PropertyVec {
         let descriptors = unsafe {
             align_ptr(
                 values
-                    .add(self.len() as usize)
+                    .add(self.capacity().get() as usize)
                     .cast::<InternalLinearPropertyVecDescriptor>(),
             )
         };
