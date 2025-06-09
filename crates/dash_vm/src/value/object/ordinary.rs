@@ -1,5 +1,6 @@
 use std::alloc::Layout;
 use std::cell::RefCell;
+use std::fmt::Debug;
 use std::iter;
 use std::mem::MaybeUninit;
 use std::num::NonZero;
@@ -24,12 +25,12 @@ use super::{Object, PropertyDataDescriptor, PropertyValue, PropertyValueKind};
 #[derive(Copy, Clone)]
 struct X86Features {
     sse2: bool,
-    avx: bool,
+    avx2: bool,
 }
 
 static X86_FEATURES: LazyLock<X86Features> = LazyLock::new(|| X86Features {
     sse2: is_x86_feature_detected!("sse2"),
-    avx: is_x86_feature_detected!("avx"),
+    avx2: is_x86_feature_detected!("avx2"),
 });
 
 #[derive(Debug)]
@@ -120,6 +121,14 @@ impl OrdObject {
             throw!(scope, Error, "new.target prototype must be an object")
         };
         Ok(Self::with_prototype(prototype))
+    }
+
+    pub fn dump(&self, sc: &mut LocalScope<'_>) -> Result<(), Unrooted> {
+        for key in self.own_keys(sc)? {
+            let value = self.get_property(This::Default, PropertyKey::from_value(sc, key)?, sc)?;
+            eprintln!("{:?} -> {:?}", key.unpack(), value.root(sc).unpack());
+        }
+        Ok(())
     }
 }
 
@@ -532,7 +541,7 @@ impl PropertyVec {
             let (insert_at_index, raw_key) = match key.inner() {
                 PropertyKeyInner::String(js_string) => (self.symbol_key_index_offset(), js_string.sym().raw()),
                 PropertyKeyInner::Symbol(symbol) => (self.index_key_index_offset(), symbol.sym().raw()),
-                PropertyKeyInner::Index(idx) => (self.index_key_index_offset() + self.index_key_count(), idx), // TODO: is -1 really correct?
+                PropertyKeyInner::Index(idx) => (self.index_key_index_offset() + self.index_key_count(), idx),
             };
 
             let len = self.len() as usize;
@@ -603,45 +612,29 @@ impl PropertyVec {
     }
 
     pub fn delete_property(&mut self, key: PropertyKey) -> Option<PropertyValue> {
-        let index = self.find_key_index(key)?;
-        let value = self.property_value_at_index(index as usize);
+        let index = self.find_key_index(key)? as usize;
+        let value = self.property_value_at_index(index);
 
-        // Goal: Swap the last element with the one we want to delete, then shift everything after the last element 1 to the left.
-
-        let last_index = match key.inner() {
-            PropertyKeyInner::String(..) => self.symbol_key_index_offset() - 1,
-            PropertyKeyInner::Symbol(..) => self.index_key_index_offset() - 1,
-            PropertyKeyInner::Index(_) => self.index_key_index_offset() + self.index_key_count() - 1,
-        };
-
-        fn delete_from_section<T>(ptr: *mut MaybeUninit<T>, index: usize, last_index: usize, section_len: usize) {
-            let slice = unsafe { std::slice::from_raw_parts_mut(ptr, section_len) };
-            slice.swap(index, last_index);
-            slice[last_index..].rotate_left(1);
+        fn delete_from_section<T>(ptr: *mut MaybeUninit<T>, index: usize, section_len: usize) {
+            let section = unsafe { std::slice::from_raw_parts_mut(ptr, section_len) };
+            section[index..].rotate_left(1);
         }
 
         let len = self.len() as usize;
 
-        delete_from_section(
-            self.data_mut().cast::<MaybeUninit<u32>>(),
-            index as usize,
-            last_index as usize,
-            len,
-        );
+        delete_from_section(self.data_mut().cast::<MaybeUninit<u32>>(), index, len);
 
         delete_from_section(
             self.values_start_mut()
                 .cast::<MaybeUninit<InternalLinearPropertyVecValue>>(),
-            index as usize,
-            len - 1,
+            index,
             len,
         );
 
         delete_from_section(
             self.descriptors_start_mut()
                 .cast::<MaybeUninit<InternalLinearPropertyVecDescriptor>>(),
-            index as usize,
-            len - 1,
+            index,
             len,
         );
 
@@ -658,16 +651,14 @@ impl PropertyVec {
         Some(value)
     }
 
-    fn property_value_at_index(&self, index: usize) -> PropertyValue {
+    pub fn property_value_at_index(&self, index: usize) -> PropertyValue {
         assert!(index < self.len() as usize);
         let (values, descriptors) = self.values_descriptors();
         let value = unsafe { *values.get_unchecked(index) };
         let descriptor = unsafe { *descriptors.get_unchecked(index) };
-        // let value = self.values()[index];
-        // let descriptor = self.descriptors()[index];
+
         let mut norm_descriptor = PropertyDataDescriptor::empty();
 
-        // TODO: make sure this compiles to good asm
         if descriptor.contains(InternalLinearPropertyVecDescriptor::CONFIGURABLE) {
             norm_descriptor |= PropertyDataDescriptor::CONFIGURABLE;
         }
@@ -701,10 +692,14 @@ impl PropertyVec {
     }
 
     fn find_key_index(&self, key: PropertyKey) -> Option<u32> {
-        let (keys, search) = match key.inner() {
-            PropertyKeyInner::String(js_string) => (self.string_keys(), js_string.sym().raw()),
-            PropertyKeyInner::Symbol(symbol) => (self.symbol_keys(), symbol.sym().raw()),
-            PropertyKeyInner::Index(sym) => (self.index_keys(), sym),
+        let (keys, off, search) = match key.inner() {
+            PropertyKeyInner::String(js_string) => (self.string_keys(), 0, js_string.sym().raw()),
+            PropertyKeyInner::Symbol(symbol) => (self.symbol_keys(), self.string_key_count(), symbol.sym().raw()),
+            PropertyKeyInner::Index(sym) => (
+                self.index_keys(),
+                self.string_key_count() + self.symbol_key_count(),
+                sym,
+            ),
         };
 
         // For small N
@@ -719,7 +714,7 @@ impl PropertyVec {
             }
         }
 
-        match keys.len() {
+        let relative = match keys.len() {
             0 => None,
             1 => unsafe { check::<1>(keys, search) },
             2 => unsafe { check::<2>(keys, search) },
@@ -754,7 +749,7 @@ impl PropertyVec {
 
                 let mut chunk_index = 0;
                 #[cfg(target_arch = "x86_64")]
-                let rem = if cpufeatures.avx {
+                let rem = if cpufeatures.avx2 {
                     // SAFETY: we checked that we have avx enabled
                     match unsafe { chunk_search8_avx(keys, search, &mut chunk_index) } {
                         Ok(v) => break 'search Some(v),
@@ -767,7 +762,6 @@ impl PropertyVec {
                         Err(rem) => rem,
                     }
                 } else {
-                    // TODO: portable autovectorized loops
                     keys
                 };
                 #[cfg(not(target_arch = "x86_64"))]
@@ -778,7 +772,9 @@ impl PropertyVec {
                     .position(|v| v == search)
                     .map(|v| v as u32 + chunk_index)
             }
-        }
+        };
+
+        relative.map(|v| v + off)
     }
 
     pub fn len(&self) -> u32 {
@@ -789,6 +785,7 @@ impl PropertyVec {
         unsafe { (*self.0.as_ptr()).cap }
     }
 
+    /// Returns a pointer to the start of the DST data
     pub fn data(&self) -> *const () {
         unsafe { (&raw const (*self.0.as_ptr()).data).cast() }
     }
@@ -797,18 +794,23 @@ impl PropertyVec {
         unsafe { (&raw mut (*self.0.as_ptr()).data).cast() }
     }
 
+    /// Returns a pointer to the start of the string keys
     fn string_keys_start(&self) -> *const u32 {
+        // Strings are always at the start of the data section
         self.data().cast()
     }
 
+    /// Returns the number of string keys
     fn string_key_count(&self) -> u32 {
         unsafe { (*self.0.as_ptr()).string_key_count }
     }
 
+    /// Returns the number of symbol keys
     fn symbol_key_count(&self) -> u32 {
         unsafe { (*self.0.as_ptr()).symbol_key_count }
     }
 
+    /// Returns the number of index keys
     fn index_key_count(&self) -> u32 {
         unsafe {
             let ptr = self.0.as_ptr();
@@ -816,14 +818,17 @@ impl PropertyVec {
         }
     }
 
+    /// Returns a slice of string keys
     fn string_keys(&self) -> &[u32] {
         unsafe { std::slice::from_raw_parts(self.string_keys_start(), self.string_key_count() as usize) }
     }
 
+    /// Returns a pointer to the start of the symbol keys
     fn symbol_keys_start(&self) -> *const u32 {
         unsafe { self.string_keys_start().add(self.string_key_count() as usize) }
     }
 
+    /// Returns a slice of symbol keys
     fn symbol_keys(&self) -> &[u32] {
         unsafe { std::slice::from_raw_parts(self.symbol_keys_start(), self.symbol_key_count() as usize) }
     }
@@ -843,14 +848,17 @@ impl PropertyVec {
         unsafe { self.symbol_key_index_offset() + (*self.0.as_ptr()).symbol_key_count }
     }
 
+    /// Returns a pointer to the start of the index keys
     fn index_keys_start(&self) -> *const u32 {
         unsafe { self.symbol_keys_start().add(self.symbol_key_count() as usize) }
     }
 
+    /// Returns a slice of index keys
     fn index_keys(&self) -> &[u32] {
         unsafe { std::slice::from_raw_parts(self.index_keys_start(), self.index_key_count() as usize) }
     }
 
+    /// Returns a pointer to the start of the values section
     pub fn values_start(&self) -> *const InternalLinearPropertyVecValue {
         let cap = self.capacity().get();
         let base = unsafe {
@@ -862,6 +870,7 @@ impl PropertyVec {
         unsafe { align_ptr(base) }
     }
 
+    /// Returns a mutable pointer to the start of the values section
     pub fn values_start_mut(&mut self) -> *mut InternalLinearPropertyVecValue {
         let cap = self.capacity().get();
         let base = unsafe {
@@ -873,6 +882,7 @@ impl PropertyVec {
         unsafe { align_ptr_mut(base) }
     }
 
+    /// Returns a mutable slice of values and descriptors.
     pub fn values_descriptors_mut(
         &mut self,
     ) -> (
@@ -969,11 +979,12 @@ impl Drop for PropertyVec {
 /// SAFETY:
 /// * sse2 must be available
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "sse2")]
 unsafe fn chunk_search4_sse2<'a>(slice: &'a [u32], search: u32, chunk_index: &mut u32) -> Result<u32, &'a [u32]> {
     use std::arch::x86_64::*;
 
     debug_assert!(X86_FEATURES.sse2);
-    let search = unsafe { _mm_set1_epi32(search.cast_signed()) };
+    let search = _mm_set1_epi32(search.cast_signed());
 
     let mut chunks = slice.chunks_exact(4);
     for chunk in chunks.by_ref() {
@@ -987,17 +998,18 @@ unsafe fn chunk_search4_sse2<'a>(slice: &'a [u32], search: u32, chunk_index: &mu
 
 /// SAFETY:
 /// * sse2 must be available
+/// * slice must contain at least 4 elements
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "sse2")]
 unsafe fn search4_sse2(slice: &[u32], search: std::arch::x86_64::__m128i) -> Option<u32> {
     use std::arch::x86_64::*;
 
     debug_assert!(X86_FEATURES.sse2);
     unsafe { std::hint::assert_unchecked(slice.len() >= 4) };
 
-    // // SAFETY: this is a `&[u32]`, so it's properly aligned, and the caller ensures that len >= 4
     let vec = unsafe { _mm_loadu_si128(slice.as_ptr().cast()) };
-    let mask = unsafe { _mm_cmpeq_epi32(vec, search) };
-    let mask = unsafe { _mm_movemask_epi8(mask) };
+    let mask = _mm_cmpeq_epi32(vec, search);
+    let mask = _mm_movemask_epi8(mask);
 
     if mask != 0 {
         Some(mask.trailing_zeros() >> 2)
@@ -1007,17 +1019,18 @@ unsafe fn search4_sse2(slice: &[u32], search: std::arch::x86_64::__m128i) -> Opt
 }
 
 /// SAFETY:
-/// * avx must be available
+/// * avx2 must be available
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
 unsafe fn chunk_search8_avx<'a>(slice: &'a [u32], search: u32, chunk_index: &mut u32) -> Result<u32, &'a [u32]> {
     use std::arch::x86_64::*;
 
-    debug_assert!(X86_FEATURES.avx);
-    let search = unsafe { _mm256_set1_epi32(search.cast_signed()) };
+    debug_assert!(X86_FEATURES.avx2);
+    let search = _mm256_set1_epi32(search.cast_signed());
 
     let mut chunks = slice.chunks_exact(8);
     for chunk in chunks.by_ref() {
-        if let Some(value) = unsafe { search8_avx(chunk, search) } {
+        if let Some(value) = unsafe { search8_avx2(chunk, search) } {
             return Ok(*chunk_index + value);
         }
         *chunk_index += 8;
@@ -1026,18 +1039,19 @@ unsafe fn chunk_search8_avx<'a>(slice: &'a [u32], search: u32, chunk_index: &mut
 }
 
 /// SAFETY:
-/// * avx must be available
+/// * avx2 must be available
+/// * slice must contain at least 8 elements
 #[cfg(target_arch = "x86_64")]
-unsafe fn search8_avx(slice: &[u32], search: std::arch::x86_64::__m256i) -> Option<u32> {
+#[target_feature(enable = "avx2")]
+unsafe fn search8_avx2(slice: &[u32], search: std::arch::x86_64::__m256i) -> Option<u32> {
     use std::arch::x86_64::*;
 
-    debug_assert!(X86_FEATURES.avx);
+    debug_assert!(X86_FEATURES.avx2);
     unsafe { std::hint::assert_unchecked(slice.len() >= 8) };
 
-    // SAFETY: this is a `&[u32]`, so it's properly aligned, and the caller ensures that len >= 8
     let vec = unsafe { _mm256_loadu_si256(slice.as_ptr().cast()) };
-    let mask = unsafe { _mm256_cmpeq_epi32(vec, search) };
-    let mask = unsafe { _mm256_movemask_epi8(mask) };
+    let mask = _mm256_cmpeq_epi32(vec, search);
+    let mask = _mm256_movemask_epi8(mask);
 
     if mask != 0 {
         Some(mask.trailing_zeros() >> 2)
@@ -1055,7 +1069,7 @@ struct Aligned4Zst;
 /// |----------------------------------------------|----------------------------------------------------|-----------------------------------|
 /// | K0,K1,K2,K3,K4,...,Kn   <... spare capacity> | (0, null), (getter, setter) <... spare capacity>   | CWEV,CWET <... spare capacity>    |
 ///
-/// Storing the interned u32 keys all next to each other optimizes cache coherency and allows for more optimized SSE2/AVX search.
+/// Storing the interned u32 keys all next to each other optimizes cache coherency and allows for more optimized SSE2/AVX2 search.
 ///
 /// The order of keys are (from most likely to least likely):
 /// 1.) String keys (`PropertyKeyInner::String`)
@@ -1071,4 +1085,106 @@ struct PropertyVecAllocation {
     symbol_key_count: u32,
     prototype: PropertyValue,
     data: [Aligned4Zst; 0],
+}
+
+#[cfg(test)]
+mod tests {
+
+    use std::time::Instant;
+
+    use rand::seq::SliceRandom;
+
+    use crate::Vm;
+    use crate::frame::This;
+    use crate::value::object::{Object, PropertyValue};
+    use crate::value::ops::conversions::ValueConversion;
+    use crate::value::primitive::Symbol;
+    use crate::value::propertykey::{PropertyKey, ToPropertyKey};
+    use crate::value::string::JsString;
+    use crate::value::{Root, Unpack, Value, ValueKind};
+
+    use super::OrdObject;
+
+    #[test]
+    fn bench() {
+        let mut vm = Vm::new(Default::default());
+        let sc = &mut vm.scope();
+        let obj = sc.register(OrdObject::null());
+        let props = 10;
+
+        for i in 0..props {
+            let k1 = sc.intern(format!("k{i}"));
+            let symk = Symbol::new(k1.into()).to_key(sc);
+            let symv = PropertyValue::static_default(Value::number((i + 10) as f64));
+            let strk = JsString::from_sym(k1).to_key(sc);
+            let strv = PropertyValue::static_default(Value::number((i + 100) as f64));
+            let numk = i.to_key(sc);
+            let numv = PropertyValue::static_default(Value::number((i + 1000) as f64));
+
+            obj.set_property(symk, symv, sc).unwrap();
+            obj.set_property(strk, strv, sc).unwrap();
+            obj.set_property(numk, numv, sc).unwrap();
+        }
+
+        let mut syms = (0..props)
+            .map(|v| JsString::from_sym(sc.intern(format!("k{v}").as_str())).to_key(sc))
+            .collect::<Vec<_>>();
+        let count = 5000000;
+        for _ in 0..32 {
+            let i = Instant::now();
+            syms.shuffle(&mut rand::rng());
+            for _ in 0..count {
+                for sym in syms.iter().copied() {
+                    std::hint::black_box(obj.get_property(sym, sc));
+                }
+            }
+            let elapsed = i.elapsed();
+            dbg!(elapsed / (count * syms.len()) as u32);
+        }
+    }
+
+    #[test]
+    fn basic_ops() {
+        let mut vm = Vm::new(Default::default());
+        let sc = &mut vm.scope();
+        let obj = OrdObject::null();
+
+        for i in 0..100 {
+            let k1 = sc.intern(format!("k{i}"));
+            let symk = Symbol::new(k1.into()).to_key(sc);
+            let symv = PropertyValue::static_default(Value::number((i + 10) as f64));
+            let strk = JsString::from_sym(k1).to_key(sc);
+            let strv = PropertyValue::static_default(Value::number((i + 100) as f64));
+            let numk = i.to_key(sc);
+            let numv = PropertyValue::static_default(Value::number((i + 1000) as f64));
+
+            // Test property setting
+            obj.set_property(symk, symv, sc).unwrap();
+            obj.set_property(strk, strv, sc).unwrap();
+            obj.set_property(numk, numv, sc).unwrap();
+
+            assert_eq!(obj.get_own_property_descriptor(symk, sc).unwrap().unwrap(), symv);
+            assert_eq!(obj.get_own_property_descriptor(strk, sc).unwrap().unwrap(), strv);
+            assert_eq!(obj.get_own_property_descriptor(numk, sc).unwrap().unwrap(), numv);
+
+            // Test deleting
+            obj.delete_property(strk, sc).unwrap();
+
+            assert_eq!(obj.get_own_property_descriptor(strk, sc).unwrap(), None);
+            assert_eq!(obj.get_own_property_descriptor(symk, sc).unwrap().unwrap(), symv);
+            assert_eq!(obj.get_own_property_descriptor(numk, sc).unwrap().unwrap(), numv);
+            if i % 2 == 0 {
+                obj.delete_property(symk, sc).unwrap();
+                assert_eq!(obj.get_own_property_descriptor(strk, sc).unwrap(), None);
+                assert_eq!(obj.get_own_property_descriptor(symk, sc).unwrap(), None);
+                assert_eq!(obj.get_own_property_descriptor(numk, sc).unwrap().unwrap(), numv);
+            }
+            if i % 8 == 0 {
+                obj.delete_property(numk, sc).unwrap();
+                assert_eq!(obj.get_own_property_descriptor(strk, sc).unwrap(), None);
+                assert_eq!(obj.get_own_property_descriptor(symk, sc).unwrap(), None);
+                assert_eq!(obj.get_own_property_descriptor(numk, sc).unwrap(), None);
+            }
+        }
+    }
 }
