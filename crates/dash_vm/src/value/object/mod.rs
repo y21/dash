@@ -7,6 +7,7 @@ use crate::frame::This;
 use crate::gc::persistent::Persistent;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::gc::{ObjectId, ObjectVTable};
+use crate::util::cold_path;
 use bitflags::bitflags;
 use dash_middle::interner::sym;
 use dash_proc_macro::Trace;
@@ -229,21 +230,25 @@ pub struct PropertyValue {
 }
 
 impl PropertyValue {
+    #[inline]
     pub fn new(kind: PropertyValueKind, descriptor: PropertyDataDescriptor) -> Self {
         Self { kind, descriptor }
     }
 
-    /// Convenience function for creating a static property with a default descriptor (all bits set to 1)
+    /// Convenience function for creating a static property with a default descriptor
+    #[inline]
     pub fn static_default(value: Value) -> Self {
         Self::new(PropertyValueKind::Static(value), Default::default())
     }
 
     /// Convenience function for creating a static property with an empty descriptor (all bits set to 0)
+    #[inline]
     pub fn static_empty(value: Value) -> Self {
         Self::new(PropertyValueKind::Static(value), PropertyDataDescriptor::empty())
     }
 
     /// Convenience function for creating a static, non-enumerable property
+    #[inline]
     pub fn static_non_enumerable(value: Value) -> Self {
         Self::new(
             PropertyValueKind::Static(value),
@@ -251,6 +256,7 @@ impl PropertyValue {
         )
     }
 
+    #[inline]
     pub fn getter_default(value: ObjectId) -> Self {
         Self::new(
             PropertyValueKind::Trap {
@@ -261,6 +267,7 @@ impl PropertyValue {
         )
     }
 
+    #[inline]
     pub fn setter_default(value: ObjectId) -> Self {
         Self::new(
             PropertyValueKind::Trap {
@@ -271,22 +278,27 @@ impl PropertyValue {
         )
     }
 
+    #[inline]
     pub fn kind(&self) -> &PropertyValueKind {
         &self.kind
     }
 
+    #[inline]
     pub fn kind_mut(&mut self) -> &mut PropertyValueKind {
         &mut self.kind
     }
 
+    #[inline]
     pub fn into_parts(self) -> (PropertyValueKind, PropertyDataDescriptor) {
         (self.kind, self.descriptor)
     }
 
+    #[inline]
     pub fn into_kind(self) -> PropertyValueKind {
         self.kind
     }
 
+    #[inline]
     pub fn get_or_apply(&self, sc: &mut LocalScope, this: This) -> Result<Unrooted, Unrooted> {
         self.kind.get_or_apply(sc, this)
     }
@@ -646,10 +658,20 @@ pub fn delegate_get_property<T: Object + ?Sized>(
     sc: &mut LocalScope,
     key: PropertyKey,
 ) -> Result<Unrooted, Unrooted> {
-    this.get_property_descriptor(key, sc)
-        .map(|x| x.unwrap_or_else(|| PropertyValue::static_default(Value::undefined())))
-        .and_then(|x| x.get_or_apply(sc, this_value))
+    let desc = match this.get_property_descriptor(key, sc) {
+        Ok(Some(desc)) => desc,
+        Ok(None) => {
+            return Ok(Value::undefined().into());
+        }
+        Err(err) => {
+            cold_path();
+            return Err(err);
+        }
+    };
+
+    desc.get_or_apply(sc, this_value)
 }
+
 /// Delegates a get_property call to get_property_descriptor and converts the return value respectively
 pub fn delegate_get_own_property<T: Object + ?Sized>(
     this: &T,

@@ -13,6 +13,7 @@ use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::localscope::LocalScope;
+use crate::util::cold_path;
 use crate::value::function::args::CallArgs;
 use crate::value::primitive::Symbol;
 use crate::value::propertykey::{PropertyKey, PropertyKeyInner, ToPropertyKey};
@@ -72,11 +73,20 @@ unsafe impl Trace for OrdObject {
                 let (values, descriptors) = property_vec.values_descriptors();
 
                 for (&value, &descriptor) in iter::zip(values, descriptors) {
-                    if descriptor.is_trap() {
-                        let (get, set) = unsafe { value.trap };
+                    if descriptor.contains(InternalLinearPropertyVecDescriptor::GET) {
+                        // SAFETY: descriptor contains `GET`, so `value.trap.get` is initialized
+                        let get = unsafe { value.trap.get.assume_init() };
                         get.trace(cx);
+                    }
+
+                    if descriptor.contains(InternalLinearPropertyVecDescriptor::SET) {
+                        // SAFETY: descriptor contains `SET`, so `value.trap.set` is initialized
+                        let set = unsafe { value.trap.set.assume_init() };
                         set.trace(cx);
-                    } else {
+                    }
+
+                    if !descriptor.intersects(InternalLinearPropertyVecDescriptor::GET_SET) {
+                        // SAFETY: descriptor contains neither `GET` nor `SET`, so this is a `value.static_`
                         let value = unsafe { value.static_ };
                         value.trace(cx);
                     }
@@ -132,53 +142,55 @@ impl OrdObject {
     }
 }
 
+#[inline(always)] // Very hot, forcing inline reduces runtime in some lookup microbenchmarks by up to 60%
+fn get_own_property_descriptor_inline(object: &OrdObject, key: PropertyKey) -> Result<Option<PropertyValue>, Unrooted> {
+    // TODO: stop handling __proto__ here and do that in the handler instead?
+
+    match *object.0.borrow() {
+        InnerOrdObject::Cow { prototype } => {
+            if key == PropertyKey::PROTO {
+                Ok(Some(prototype))
+            } else {
+                Ok(None)
+            }
+        }
+        InnerOrdObject::Linear(ref property_vec) => {
+            if key == PropertyKey::PROTO {
+                Ok(Some(property_vec.get_prototype()))
+            } else {
+                Ok(property_vec.get_property(key))
+            }
+        }
+    }
+}
+
 impl Object for OrdObject {
+    #[inline(always)]
     fn get_property_descriptor(
         &self,
         key: PropertyKey,
         sc: &mut LocalScope,
     ) -> Result<Option<PropertyValue>, Unrooted> {
-        if let Some(pv) = self.get_own_property_descriptor(key, sc)? {
-            Ok(Some(pv))
-        } else {
-            #[cold]
-            fn f() {}
-            f();
-            eprintln!("SLOW PATH!!! {key:?}");
-            if let InnerOrdObject::Linear(l) = &*self.0.borrow() {
-                let ks = l
-                    .raw_keys()
-                    .iter()
-                    .map(|v| sc.interner.resolve(interner::Symbol::from_raw(*v)))
-                    .collect::<Vec<_>>();
-                println!("Keys: {ks:?}")
+        match get_own_property_descriptor_inline(self, key) {
+            Ok(Some(v)) => Ok(Some(v)),
+            Ok(None) => {
+                cold_path();
+                self.get_prototype(sc)?.get_property_descriptor(key, sc)
             }
-            self.get_prototype(sc)?.get_property_descriptor(key, sc)
+            Err(err) => {
+                cold_path();
+                Err(err)
+            }
         }
     }
+
+    #[inline(always)]
     fn get_own_property_descriptor(
         &self,
         key: PropertyKey,
         _: &mut LocalScope<'_>,
     ) -> Result<Option<PropertyValue>, Unrooted> {
-        // TODO: stop handling __proto__ here and do that in the handler instead?
-
-        match *self.0.borrow() {
-            InnerOrdObject::Cow { prototype } => {
-                if key == PropertyKey::PROTO {
-                    Ok(Some(prototype))
-                } else {
-                    Ok(None)
-                }
-            }
-            InnerOrdObject::Linear(ref property_vec) => {
-                if key == PropertyKey::PROTO {
-                    Ok(Some(property_vec.get_prototype()))
-                } else {
-                    Ok(property_vec.get_property(key))
-                }
-            }
-        }
+        get_own_property_descriptor_inline(self, key)
     }
 
     fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope<'_>) -> Result<(), Value> {
@@ -329,26 +341,32 @@ impl Object for OrdObject {
 }
 
 bitflags::bitflags! {
-    #[derive(Debug, Copy, Clone)]
+    #[derive(Debug, Copy, Clone, PartialEq)]
     struct InternalLinearPropertyVecDescriptor: u8 {
         const CONFIGURABLE = 1 << 0;
         const ENUMERABLE = 1 << 1;
         const WRITABLE = 1 << 2;
-        const TRAP = 1 << 3;
+        const GET = 1 << 3;
+        const SET = 1 << 4;
     }
 }
 
 impl InternalLinearPropertyVecDescriptor {
-    fn is_trap(self) -> bool {
-        self.contains(Self::TRAP)
-    }
+    const GET_SET: Self = Self::union(Self::GET, Self::SET);
+}
+
+#[derive(Copy, Clone)]
+struct InternalLinearPropertyVecTrap {
+    // Initialized if `InternalLinearPropertyVecDescriptor` contains `GET`
+    get: MaybeUninit<ObjectId>,
+    // Initialized if `InternalLinearPropertyVecDescriptor` contains `SET`
+    set: MaybeUninit<ObjectId>,
 }
 
 // discriminant indicated by `InternalLinearPropertyVecDescriptor`
 #[derive(Copy, Clone)]
 union InternalLinearPropertyVecValue {
-    // TODO: we really need ObjectId to have a niche
-    trap: (Option<ObjectId>, Option<ObjectId>),
+    trap: InternalLinearPropertyVecTrap,
     static_: Value,
 }
 
@@ -368,8 +386,25 @@ fn property_value_to_internal(
 
     let value = match value.kind {
         PropertyValueKind::Trap { get, set } => {
-            descriptor |= InternalLinearPropertyVecDescriptor::TRAP;
-            InternalLinearPropertyVecValue { trap: (get, set) }
+            let get = match get {
+                Some(get) => {
+                    descriptor |= InternalLinearPropertyVecDescriptor::GET;
+                    MaybeUninit::new(get)
+                }
+                None => MaybeUninit::uninit(),
+            };
+
+            let set = match set {
+                Some(set) => {
+                    descriptor |= InternalLinearPropertyVecDescriptor::SET;
+                    MaybeUninit::new(set)
+                }
+                None => MaybeUninit::uninit(),
+            };
+
+            InternalLinearPropertyVecValue {
+                trap: InternalLinearPropertyVecTrap { get, set },
+            }
         }
         PropertyValueKind::Static(value) => InternalLinearPropertyVecValue { static_: value },
     };
@@ -512,11 +547,10 @@ impl PropertyVec {
                 return SetPropertyResult::NotWritable;
             }
 
-            if descriptor.is_trap() {
-                let (_, set) = unsafe { value.trap };
-                if let Some(set) = set {
-                    return SetPropertyResult::InvokeSetter(set);
-                }
+            if descriptor.contains(InternalLinearPropertyVecDescriptor::SET) {
+                // SAFETY: descriptor contains `SET`, so `value.trap.set` is initialized
+                let set = unsafe { value.trap.set.assume_init() };
+                return SetPropertyResult::InvokeSetter(set);
             }
 
             *value = val;
@@ -561,24 +595,7 @@ impl PropertyVec {
                 raw_key,
             );
 
-            let mut descriptor = InternalLinearPropertyVecDescriptor::empty();
-            if value.descriptor.contains(PropertyDataDescriptor::CONFIGURABLE) {
-                descriptor |= InternalLinearPropertyVecDescriptor::CONFIGURABLE;
-            }
-            if value.descriptor.contains(PropertyDataDescriptor::ENUMERABLE) {
-                descriptor |= InternalLinearPropertyVecDescriptor::ENUMERABLE;
-            }
-            if value.descriptor.contains(PropertyDataDescriptor::WRITABLE) {
-                descriptor |= InternalLinearPropertyVecDescriptor::WRITABLE;
-            }
-
-            let value = match value.kind {
-                PropertyValueKind::Trap { get, set } => {
-                    descriptor |= InternalLinearPropertyVecDescriptor::TRAP;
-                    InternalLinearPropertyVecValue { trap: (get, set) }
-                }
-                PropertyValueKind::Static(value) => InternalLinearPropertyVecValue { static_: value },
-            };
+            let (value, descriptor) = property_value_to_internal(value);
 
             insert_section(
                 self.values_start_mut()
@@ -653,6 +670,7 @@ impl PropertyVec {
 
     pub fn property_value_at_index(&self, index: usize) -> PropertyValue {
         assert!(index < self.len() as usize);
+
         let (values, descriptors) = self.values_descriptors();
         let value = unsafe { *values.get_unchecked(index) };
         let descriptor = unsafe { *descriptors.get_unchecked(index) };
@@ -669,12 +687,29 @@ impl PropertyVec {
             norm_descriptor |= PropertyDataDescriptor::WRITABLE;
         }
 
-        if descriptor.is_trap() {
-            let (get, set) = unsafe { value.trap };
-
-            PropertyValue::new(PropertyValueKind::Trap { get, set }, norm_descriptor)
-        } else {
-            PropertyValue::new(PropertyValueKind::Static(unsafe { value.static_ }), norm_descriptor)
+        match descriptor {
+            InternalLinearPropertyVecDescriptor::GET => PropertyValue::new(
+                PropertyValueKind::Trap {
+                    get: Some(unsafe { value.trap.get.assume_init() }),
+                    set: None,
+                },
+                norm_descriptor,
+            ),
+            InternalLinearPropertyVecDescriptor::SET => PropertyValue::new(
+                PropertyValueKind::Trap {
+                    get: None,
+                    set: Some(unsafe { value.trap.set.assume_init() }),
+                },
+                norm_descriptor,
+            ),
+            InternalLinearPropertyVecDescriptor::GET_SET => PropertyValue::new(
+                PropertyValueKind::Trap {
+                    get: Some(unsafe { value.trap.get.assume_init() }),
+                    set: Some(unsafe { value.trap.set.assume_init() }),
+                },
+                norm_descriptor,
+            ),
+            _ => PropertyValue::new(PropertyValueKind::Static(unsafe { value.static_ }), norm_descriptor),
         }
     }
 
@@ -1093,15 +1128,19 @@ mod tests {
     use std::time::Instant;
 
     use rand::seq::SliceRandom;
+    use rustc_hash::FxHashMap;
 
     use crate::Vm;
     use crate::frame::This;
+    use crate::gc::{AllocId, ObjectId};
+    use crate::localscope::LocalScope;
+    use crate::value::object::ordinary::{InnerOrdObject, PropertyVec};
     use crate::value::object::{Object, PropertyValue};
     use crate::value::ops::conversions::ValueConversion;
     use crate::value::primitive::Symbol;
     use crate::value::propertykey::{PropertyKey, ToPropertyKey};
     use crate::value::string::JsString;
-    use crate::value::{Root, Unpack, Value, ValueKind};
+    use crate::value::{Root, Unpack, Unrooted, Value, ValueKind};
 
     use super::OrdObject;
 
@@ -1110,7 +1149,11 @@ mod tests {
         let mut vm = Vm::new(Default::default());
         let sc = &mut vm.scope();
         let obj = sc.register(OrdObject::null());
-        let props = 10;
+        // let obj =PropertyKey
+        // let mut obj2 = FxHashMap::default();
+        // let obj = OrdObject::null();
+        // let mut pv = PropertyVec::new(PropertyValue::static_default(Value::null()));
+        let props = std::env::var("PROP_COUNT").unwrap().parse::<usize>().unwrap();
 
         for i in 0..props {
             let k1 = sc.intern(format!("k{i}"));
@@ -1121,21 +1164,72 @@ mod tests {
             let numk = i.to_key(sc);
             let numv = PropertyValue::static_default(Value::number((i + 1000) as f64));
 
+            // pv.set_property(symk, symv);
+            // pv.set_property(strk, strv);
+            // pv.set_property(numk, numv);
             obj.set_property(symk, symv, sc).unwrap();
             obj.set_property(strk, strv, sc).unwrap();
             obj.set_property(numk, numv, sc).unwrap();
+            // obj2.insert(symk, symv);
+            // obj2.insert(strk, strv);
+            // obj2.insert(numk, numv);
         }
 
         let mut syms = (0..props)
             .map(|v| JsString::from_sym(sc.intern(format!("k{v}").as_str())).to_key(sc))
             .collect::<Vec<_>>();
-        let count = 5000000;
+        let count = std::env::var("ITER_COUNT").unwrap().parse::<usize>().unwrap();
+        // let get_descriptor = std::hint::black_box(
+        //     get_descriptor_wrapper
+        //         as for<'a, 'b, 'c> fn(
+        //             &'a mut (u32, Result<Option<PropertyValue>, Unrooted>),
+        //             ObjectId,
+        //             PropertyKey,
+        //             &'b mut LocalScope<'c>,
+        //         ) -> _,
+        // );
+        // std::hint::black_box(get_descriptor(&mut (0, Ok(None)), obj, syms[0], sc));
+
         for _ in 0..32 {
             let i = Instant::now();
             syms.shuffle(&mut rand::rng());
             for _ in 0..count {
+                // #[inline(never)]
+                // fn f(
+                //     out: &mut Result<Option<PropertyValue>, Unrooted>,
+                //     ord: &OrdObject,
+                //     key: PropertyKey,
+                //     sc: &mut LocalScope,
+                // ) {
+                //     ord.get_own_property_descriptor(key, sc);
+
+                //     *out = std::hint::black_box(Ok(None));
+                //     // Ok(Some(v.unwrap()))
+                //     // unsafe { Ok(Some(v.unwrap_unchecked().unwrap_unchecked())) }
+                //     // if let Some(v) = ord.get_own_property_descriptor(key, sc).unwrap().unwrap()? {
+                //     //     Ok(Some(v))
+                //     // } else {
+                //     //     panic!();
+                //     // }
+                // }
+
+                // #[inline(never)]
+                // fn cust_get_property(
+                //     obj: &OrdObject,
+                //     key: PropertyKey,
+                //     sc: &mut LocalScope,
+                // ) -> (Result<Unrooted, Unrooted>, Value) {
+                //     std::hint::black_box((obj.get_property(This::Default, key, sc), Value::null()))
+                // }
+
                 for sym in syms.iter().copied() {
+                    // let mut ret = &mut (0, Ok(None));
+                    // std::hint::black_box(cust_get_property(&obj, sym, sc));
                     std::hint::black_box(obj.get_property(sym, sc));
+
+                    // std::hint::black_box(pv.get_property(sym));
+
+                    // std::hint::black_box(obj2.get(&sym));
                 }
             }
             let elapsed = i.elapsed();
