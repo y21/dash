@@ -187,7 +187,13 @@ impl Object for OrdObject {
             Ok(None) => {
                 cold_path();
                 drop(cell);
-                self.get_prototype(sc)?.get_property_descriptor(key, sc)
+
+                match self.get_prototype(sc)?.unpack() {
+                    ValueKind::Object(object) => object.get_property_descriptor(key, sc),
+                    ValueKind::External(object) => object.get_own_property_descriptor(key, sc),
+                    ValueKind::Null(..) => Ok(None),
+                    _ => unreachable!(),
+                }
             }
             Err(err) => {
                 cold_path();
