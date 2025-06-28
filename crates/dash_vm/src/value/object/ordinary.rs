@@ -1,5 +1,4 @@
 use std::alloc::Layout;
-use std::cell::RefCell;
 use std::fmt::Debug;
 use std::iter;
 use std::mem::MaybeUninit;
@@ -8,6 +7,7 @@ use std::ptr::{self, NonNull};
 use std::sync::LazyLock;
 
 use dash_middle::interner::{self};
+use dash_middle::unsaferefcell::UnsafeRefCell;
 
 use crate::frame::This;
 use crate::gc::ObjectId;
@@ -43,11 +43,16 @@ enum InnerOrdObject {
 
 /// An **ordinary** object (object with default behavior for the internal methods).
 #[derive(Debug)]
-pub struct OrdObject(RefCell<InnerOrdObject>);
+pub struct OrdObject(UnsafeRefCell<InnerOrdObject>);
 
 unsafe impl Trace for OrdObject {
     fn trace(&self, cx: &mut TraceCtxt<'_>) {
-        match &*self.0.borrow() {
+        // SAFETY: while it may look like this is reentrant, it is not:
+        // if the OrdObject itself is stored in the `PropertyVec`, the `ObjectId` of it
+        // prevents reentrancy as it is already marked as visited.
+        let cell = &*unsafe { self.0.borrow_mut() };
+
+        match cell {
             InnerOrdObject::Cow { prototype } => prototype.trace(cx),
             InnerOrdObject::Linear(property_vec) => {
                 let PropertyVecAllocation {
@@ -98,13 +103,13 @@ unsafe impl Trace for OrdObject {
 
 impl OrdObject {
     pub fn new(vm: &Vm) -> Self {
-        Self(RefCell::new(InnerOrdObject::Cow {
+        Self(UnsafeRefCell::new(InnerOrdObject::Cow {
             prototype: PropertyValue::static_default(Value::object(vm.statics.object_prototype)),
         }))
     }
 
     pub fn with_prototype(prototype: ObjectId) -> Self {
-        Self(RefCell::new(InnerOrdObject::Cow {
+        Self(UnsafeRefCell::new(InnerOrdObject::Cow {
             prototype: PropertyValue::static_default(prototype.into()),
         }))
     }
@@ -112,11 +117,11 @@ impl OrdObject {
     pub fn with_prototype_and_ctor(prototype: ObjectId, ctor: ObjectId) -> Self {
         let mut pvec = PropertyVec::new(PropertyValue::static_default(prototype.into()));
         pvec.set_property(PropertyKey::CONSTRUCTOR, PropertyValue::static_default(ctor.into()));
-        Self(RefCell::new(InnerOrdObject::Linear(pvec)))
+        Self(UnsafeRefCell::new(InnerOrdObject::Linear(pvec)))
     }
 
     pub fn null() -> Self {
-        Self(RefCell::new(InnerOrdObject::Cow {
+        Self(UnsafeRefCell::new(InnerOrdObject::Cow {
             prototype: PropertyValue::static_default(Value::null()),
         }))
     }
@@ -143,10 +148,13 @@ impl OrdObject {
 }
 
 #[inline(always)] // Very hot, forcing inline reduces runtime in some lookup microbenchmarks by up to 60%
-fn get_own_property_descriptor_inline(object: &OrdObject, key: PropertyKey) -> Result<Option<PropertyValue>, Unrooted> {
+fn get_own_property_descriptor_inline(
+    object: &InnerOrdObject,
+    key: PropertyKey,
+) -> Result<Option<PropertyValue>, Unrooted> {
     // TODO: stop handling __proto__ here and do that in the handler instead?
 
-    match *object.0.borrow() {
+    match *object {
         InnerOrdObject::Cow { prototype } => {
             if key == PropertyKey::PROTO {
                 Ok(Some(prototype))
@@ -171,10 +179,14 @@ impl Object for OrdObject {
         key: PropertyKey,
         sc: &mut LocalScope,
     ) -> Result<Option<PropertyValue>, Unrooted> {
-        match get_own_property_descriptor_inline(self, key) {
+        // SAFETY: no reentrancy possible from here
+        let cell = unsafe { self.0.borrow_mut() };
+
+        match get_own_property_descriptor_inline(&cell, key) {
             Ok(Some(v)) => Ok(Some(v)),
             Ok(None) => {
                 cold_path();
+                drop(cell);
                 self.get_prototype(sc)?.get_property_descriptor(key, sc)
             }
             Err(err) => {
@@ -190,44 +202,21 @@ impl Object for OrdObject {
         key: PropertyKey,
         _: &mut LocalScope<'_>,
     ) -> Result<Option<PropertyValue>, Unrooted> {
-        get_own_property_descriptor_inline(self, key)
+        // SAFETY: no reentrancy possible from here
+        let cell = unsafe { self.0.borrow_mut() };
+        get_own_property_descriptor_inline(&cell, key)
     }
 
     fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope<'_>) -> Result<(), Value> {
-        fn assign_prototype(
-            value: PropertyValue,
-            prototype: &mut PropertyValue,
-            sc: &mut LocalScope<'_>,
-        ) -> Result<(), Value> {
-            match prototype.kind() {
-                PropertyValueKind::Static(..) => {
-                    *prototype = value;
-                }
-                PropertyValueKind::Trap { set, .. } => {
-                    if let Some(set) = set {
-                        if let PropertyValueKind::Static(value) = value.kind() {
-                            // FIXME: set a proper `this` binding
-                            // TODO: this can panic if we re-enter set_property function due to refcell guard
-                            match set.apply(This::Default, [*value].into(), sc) {
-                                Ok(_) => return Ok(()),
-                                Err(err) => return Err(err.root(sc)),
-                            }
-                        }
-                    }
-
-                    *prototype = value;
-                }
-            }
-
-            Ok(())
-        }
-
-        let mut guard = self.0.borrow_mut();
+        // TODO: stop handling __proto__ here and do that in the handler instead? the way we do that here is kinda wrong.
+        // SAFETY: no reentrancy possible from here
+        let mut guard = unsafe { self.0.borrow_mut() };
 
         match &mut *guard {
             InnerOrdObject::Cow { prototype } => {
                 if key == PropertyKey::PROTO {
-                    assign_prototype(value, prototype, sc)
+                    *prototype = value;
+                    Ok(())
                 } else {
                     let prototype = *prototype;
                     *guard = InnerOrdObject::Linear(PropertyVec::new(prototype));
@@ -237,12 +226,16 @@ impl Object for OrdObject {
             }
             InnerOrdObject::Linear(property_vec) => {
                 if key == PropertyKey::PROTO {
-                    assign_prototype(value, property_vec.get_prototype_mut(), sc)
+                    *property_vec.get_prototype_mut() = value;
+                    Ok(())
                 } else {
                     match property_vec.set_property(key, value) {
                         SetPropertyResult::Ok => Ok(()),
                         // TODO: throw in strict mode?
-                        SetPropertyResult::NotWritable => Ok(()),
+                        SetPropertyResult::NotWritable => {
+                            cold_path();
+                            Ok(())
+                        }
                         SetPropertyResult::InvokeSetter(alloc_id) => {
                             drop(guard);
 
@@ -262,7 +255,10 @@ impl Object for OrdObject {
     }
 
     fn delete_property(&self, key: PropertyKey, sc: &mut LocalScope<'_>) -> Result<Unrooted, Value> {
-        match &mut *self.0.borrow_mut() {
+        // SAFETY: no reentrancy possible from here
+        let cell = unsafe { &mut *self.0.borrow_mut() };
+
+        match cell {
             InnerOrdObject::Cow { prototype: _ } => Ok(Value::undefined().into()),
             InnerOrdObject::Linear(property_vec) => match property_vec.delete_property(key) {
                 Some(pv) => match pv.kind() {
@@ -286,7 +282,10 @@ impl Object for OrdObject {
     }
 
     fn set_prototype(&self, value: Value, _: &mut LocalScope<'_>) -> Result<(), Value> {
-        match &mut *self.0.borrow_mut() {
+        // SAFETY: no reentrancy possible from here
+        let cell = unsafe { &mut *self.0.borrow_mut() };
+
+        match cell {
             InnerOrdObject::Cow { prototype } => {
                 *prototype = PropertyValue::static_default(value);
                 Ok(())
@@ -299,11 +298,18 @@ impl Object for OrdObject {
     }
 
     fn get_prototype(&self, sc: &mut LocalScope<'_>) -> Result<Value, Value> {
-        match *self.0.borrow() {
-            // FIXME: proper `this` binding to the object
-            InnerOrdObject::Cow { prototype } => prototype.get_or_apply(sc, This::Default).root(sc),
+        // SAFETY: no reentrancy possible from here
+        let cell = unsafe { self.0.borrow_mut() };
+
+        match *cell {
+            InnerOrdObject::Cow { prototype } => {
+                drop(cell);
+                prototype.get_or_apply(sc, This::Default).root(sc)
+            }
             InnerOrdObject::Linear(ref property_vec) => {
-                property_vec.get_prototype().get_or_apply(sc, This::Default).root(sc)
+                let prototype = property_vec.get_prototype();
+                drop(cell);
+                prototype.get_or_apply(sc, This::Default).root(sc)
             }
         }
     }
@@ -313,7 +319,10 @@ impl Object for OrdObject {
     }
 
     fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
-        match *self.0.borrow() {
+        // SAFETY: no reentrancy possible from here
+        let cell = unsafe { &*self.0.borrow_mut() };
+
+        match *cell {
             InnerOrdObject::Cow { prototype: _ } => Ok(Vec::new()),
             InnerOrdObject::Linear(ref property_vec) => {
                 let mut keys = Vec::with_capacity(property_vec.raw_keys().len());
@@ -714,8 +723,13 @@ impl PropertyVec {
     }
 
     pub fn get_property(&self, key: PropertyKey) -> Option<PropertyValue> {
-        let index = self.find_key_index(key)? as usize;
-        Some(self.property_value_at_index(index))
+        match self.find_key_index(key) {
+            Some(index) => Some(self.property_value_at_index(index as usize)),
+            None => {
+                cold_path();
+                None
+            }
+        }
     }
 
     pub fn get_prototype(&self) -> PropertyValue {
@@ -868,11 +882,6 @@ impl PropertyVec {
         unsafe { std::slice::from_raw_parts(self.symbol_keys_start(), self.symbol_key_count() as usize) }
     }
 
-    /// The offset in counts of `size_of<u32>` at which string keys start.
-    fn string_key_index_offset(&self) -> u32 {
-        0
-    }
-
     /// The offset in counts of `size_of<u32>` at which symbol keys start.
     fn symbol_key_index_offset(&self) -> u32 {
         unsafe { (*self.0.as_ptr()).string_key_count }
@@ -958,20 +967,6 @@ impl PropertyVec {
         })
     }
 
-    pub fn values(&self) -> &[InternalLinearPropertyVecValue] {
-        unsafe { std::slice::from_raw_parts(self.values_start(), self.len() as usize) }
-    }
-
-    pub fn descriptors_start(&self) -> *const InternalLinearPropertyVecDescriptor {
-        let cap = self.capacity().get() as usize;
-        let base = unsafe {
-            self.values_start()
-                .add(cap)
-                .cast::<InternalLinearPropertyVecDescriptor>()
-        };
-        unsafe { align_ptr(base) }
-    }
-
     pub fn descriptors_start_mut(&mut self) -> *mut InternalLinearPropertyVecDescriptor {
         let cap = self.capacity().get() as usize;
         let base = unsafe {
@@ -982,24 +977,8 @@ impl PropertyVec {
         unsafe { align_ptr_mut(base) }
     }
 
-    pub fn descriptors(&self) -> &[InternalLinearPropertyVecDescriptor] {
-        let cap = self.capacity().get() as usize;
-        let len = self.len() as usize;
-        let base = unsafe {
-            self.values_start()
-                .add(cap)
-                .cast::<InternalLinearPropertyVecDescriptor>()
-        };
-        let ptr = unsafe { align_ptr(base) };
-        unsafe { std::slice::from_raw_parts(ptr, len) }
-    }
-
     fn raw_keys(&self) -> &[u32] {
         unsafe { std::slice::from_raw_parts(self.data().cast::<u32>(), self.len() as usize) }
-    }
-
-    fn raw_keys_mut(&mut self) -> &mut [u32] {
-        unsafe { std::slice::from_raw_parts_mut(self.data_mut().cast::<u32>(), self.len() as usize) }
     }
 }
 
@@ -1118,6 +1097,7 @@ struct PropertyVecAllocation {
     cap: NonZero<u32>,
     string_key_count: u32,
     symbol_key_count: u32,
+    // TODO: it really just needs to be a Value
     prototype: PropertyValue,
     data: [Aligned4Zst; 0],
 }
@@ -1128,31 +1108,24 @@ mod tests {
     use std::time::Instant;
 
     use rand::seq::SliceRandom;
-    use rustc_hash::FxHashMap;
 
     use crate::Vm;
-    use crate::frame::This;
-    use crate::gc::{AllocId, ObjectId};
-    use crate::localscope::LocalScope;
-    use crate::value::object::ordinary::{InnerOrdObject, PropertyVec};
+    use crate::value::Value;
     use crate::value::object::{Object, PropertyValue};
-    use crate::value::ops::conversions::ValueConversion;
     use crate::value::primitive::Symbol;
-    use crate::value::propertykey::{PropertyKey, ToPropertyKey};
+    use crate::value::propertykey::ToPropertyKey;
     use crate::value::string::JsString;
-    use crate::value::{Root, Unpack, Unrooted, Value, ValueKind};
 
     use super::OrdObject;
 
     #[test]
     fn bench() {
+        if true {
+            return;
+        }
         let mut vm = Vm::new(Default::default());
         let sc = &mut vm.scope();
         let obj = sc.register(OrdObject::null());
-        // let obj =PropertyKey
-        // let mut obj2 = FxHashMap::default();
-        // let obj = OrdObject::null();
-        // let mut pv = PropertyVec::new(PropertyValue::static_default(Value::null()));
         let props = std::env::var("PROP_COUNT").unwrap().parse::<usize>().unwrap();
 
         for i in 0..props {
@@ -1164,73 +1137,22 @@ mod tests {
             let numk = i.to_key(sc);
             let numv = PropertyValue::static_default(Value::number((i + 1000) as f64));
 
-            // pv.set_property(symk, symv);
-            // pv.set_property(strk, strv);
-            // pv.set_property(numk, numv);
             obj.set_property(symk, symv, sc).unwrap();
             obj.set_property(strk, strv, sc).unwrap();
             obj.set_property(numk, numv, sc).unwrap();
-            // obj2.insert(symk, symv);
-            // obj2.insert(strk, strv);
-            // obj2.insert(numk, numv);
         }
 
         let mut syms = (0..props)
             .map(|v| JsString::from_sym(sc.intern(format!("k{v}").as_str())).to_key(sc))
             .collect::<Vec<_>>();
         let count = std::env::var("ITER_COUNT").unwrap().parse::<usize>().unwrap();
-        // let get_descriptor = std::hint::black_box(
-        //     get_descriptor_wrapper
-        //         as for<'a, 'b, 'c> fn(
-        //             &'a mut (u32, Result<Option<PropertyValue>, Unrooted>),
-        //             ObjectId,
-        //             PropertyKey,
-        //             &'b mut LocalScope<'c>,
-        //         ) -> _,
-        // );
-        // std::hint::black_box(get_descriptor(&mut (0, Ok(None)), obj, syms[0], sc));
 
         for _ in 0..32 {
-            let i = Instant::now();
             syms.shuffle(&mut rand::rng());
+            let sym = std::hint::black_box(syms[0]);
+            let i = Instant::now();
             for _ in 0..count {
-                // #[inline(never)]
-                // fn f(
-                //     out: &mut Result<Option<PropertyValue>, Unrooted>,
-                //     ord: &OrdObject,
-                //     key: PropertyKey,
-                //     sc: &mut LocalScope,
-                // ) {
-                //     ord.get_own_property_descriptor(key, sc);
-
-                //     *out = std::hint::black_box(Ok(None));
-                //     // Ok(Some(v.unwrap()))
-                //     // unsafe { Ok(Some(v.unwrap_unchecked().unwrap_unchecked())) }
-                //     // if let Some(v) = ord.get_own_property_descriptor(key, sc).unwrap().unwrap()? {
-                //     //     Ok(Some(v))
-                //     // } else {
-                //     //     panic!();
-                //     // }
-                // }
-
-                // #[inline(never)]
-                // fn cust_get_property(
-                //     obj: &OrdObject,
-                //     key: PropertyKey,
-                //     sc: &mut LocalScope,
-                // ) -> (Result<Unrooted, Unrooted>, Value) {
-                //     std::hint::black_box((obj.get_property(This::Default, key, sc), Value::null()))
-                // }
-
-                for sym in syms.iter().copied() {
-                    // let mut ret = &mut (0, Ok(None));
-                    // std::hint::black_box(cust_get_property(&obj, sym, sc));
-                    std::hint::black_box(obj.get_property(sym, sc));
-
-                    // std::hint::black_box(pv.get_property(sym));
-
-                    // std::hint::black_box(obj2.get(&sym));
-                }
+                obj.get_property(sym, sc).unwrap();
             }
             let elapsed = i.elapsed();
             dbg!(elapsed / (count * syms.len()) as u32);

@@ -1626,57 +1626,17 @@ mod handlers {
     }
 
     pub fn staticpropertyaccess(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        // let (id, cache) = {
-        //     let frame = cx.active_frame_mut();
-        //     let ip = frame.ip;
-        //     frame.function.buffer.with(|buf| unsafe {
-        //         let id = u16::from_ne_bytes(buf.get_unchecked(ip..ip + 2).try_into().unwrap());
-        //         let cache = u32::from_ne_bytes(buf.get_unchecked(ip + 2..ip + 6).try_into().unwrap());
-        //         frame.ip += 6;
-        //         (id, cache)
-        //     })
-        // };
         let id = cx.fetchw_and_inc_ip();
 
         let ident = JsString::from(cx.constants().symbols[SymbolConstant(id)]);
 
         let preserve_this = cx.fetch_and_inc_ip() == 1;
-        let cache = cx.fetchw32_and_inc_ip();
 
         let target = if preserve_this {
             cx.peek_stack()
         } else {
             cx.pop_stack_rooted()
         };
-
-        if ident.sym() == sym::length {
-            let k = sym::from.to_key(&mut cx.scope);
-            let i = std::time::Instant::now();
-            let c = 1000000;
-            let mut x = None;
-            let (data, fun) = match target.unpack() {
-                ValueKind::Object(object) => {
-                    let data = object.data_ptr(&cx.scope);
-                    let vt = object.vtable(&cx.scope);
-                    // unsafe {
-                    //     ||
-                    // }
-                    (data, vt.js_get_property_descriptor)
-                }
-                _ => unreachable!(),
-            };
-            if let Some(target_) = target.extract::<OrdObject>(&cx.scope) {
-                for _ in 0..c {
-                    x = unsafe { Some(fun(data, k, &mut cx.scope)) };
-                    // x = Some(target.get_property_descriptor(k, &mut cx.scope).unwrap());
-                }
-                let e = i.elapsed();
-                dbg!(e / c);
-                // dbg!(x);
-                // assert!(x.unwrap().root(&mut cx.scope));
-            }
-            // dbg!(x.unwrap().root(&mut cx.scope).unpack());
-        }
 
         let value = target.get_property(ident.to_key(&mut cx.scope), &mut cx.scope)?;
         cx.push_stack(value);

@@ -6,5 +6,6 @@ pub mod lexer;
 pub mod parser;
 pub mod sourcemap;
 pub mod tree;
+pub mod unsaferefcell;
 pub mod util;
 pub mod visitor;

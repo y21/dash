@@ -254,7 +254,6 @@ impl InstructionBuilder<'_, '_> {
         self.write_instr(Instruction::StaticPropAccess);
         self.writew(id);
         self.write(preserve_this.into());
-        self.write_all(&1234123456u32.to_ne_bytes());
 
         Ok(())
     }

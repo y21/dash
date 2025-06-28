@@ -6,6 +6,7 @@ use crate::localscope::LocalScope;
 
 /// Marks the code path leading to this call as cold, or "unlikely"
 #[cold]
+#[inline]
 pub fn cold_path() {}
 
 /// Marks the boolean as unlikely to be true.
