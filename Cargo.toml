@@ -37,5 +37,8 @@ lto = "fat"
 codegen-units = 1
 debug = true
 
+[profile.release.package.testrunner]
+debug-assertions = true
+
 [profile.dev]
 debug = true

@@ -66,6 +66,7 @@ impl<T> Deref for UnsafeRef<'_, T> {
     type Target = T;
     #[inline]
     fn deref(&self) -> &Self::Target {
+        #[cfg_attr(not(debug_assertions), expect(noop_method_call))]
         self.0.deref()
     }
 }
