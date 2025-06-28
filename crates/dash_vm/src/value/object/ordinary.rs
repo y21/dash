@@ -47,10 +47,9 @@ pub struct OrdObject(UnsafeRefCell<InnerOrdObject>);
 
 unsafe impl Trace for OrdObject {
     fn trace(&self, cx: &mut TraceCtxt<'_>) {
-        // SAFETY: while it may look like this is reentrant, it is not:
-        // if the OrdObject itself is stored in the `PropertyVec`, the `ObjectId` of it
-        // prevents reentrancy as it is already marked as visited.
-        let cell = &*unsafe { self.0.borrow_mut() };
+        // SAFETY: we may re-enter during tracing, but we only immutable borrow it ever so that's fine.
+        // none of the methods calling borrow_mut() can be reached during tracing since they require a &mut LocalScope
+        let cell = &*unsafe { self.0.borrow() };
 
         match cell {
             InnerOrdObject::Cow { prototype } => prototype.trace(cx),
@@ -180,7 +179,7 @@ impl Object for OrdObject {
         sc: &mut LocalScope,
     ) -> Result<Option<PropertyValue>, Unrooted> {
         // SAFETY: no reentrancy possible from here
-        let cell = unsafe { self.0.borrow_mut() };
+        let cell = unsafe { self.0.borrow() };
 
         match get_own_property_descriptor_inline(&cell, key) {
             Ok(Some(v)) => Ok(Some(v)),
@@ -209,7 +208,7 @@ impl Object for OrdObject {
         _: &mut LocalScope<'_>,
     ) -> Result<Option<PropertyValue>, Unrooted> {
         // SAFETY: no reentrancy possible from here
-        let cell = unsafe { self.0.borrow_mut() };
+        let cell = unsafe { self.0.borrow() };
         get_own_property_descriptor_inline(&cell, key)
     }
 
@@ -305,7 +304,7 @@ impl Object for OrdObject {
 
     fn get_prototype(&self, sc: &mut LocalScope<'_>) -> Result<Value, Value> {
         // SAFETY: no reentrancy possible from here
-        let cell = unsafe { self.0.borrow_mut() };
+        let cell = unsafe { self.0.borrow() };
 
         match *cell {
             InnerOrdObject::Cow { prototype } => {
@@ -326,7 +325,7 @@ impl Object for OrdObject {
 
     fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
         // SAFETY: no reentrancy possible from here
-        let cell = unsafe { &*self.0.borrow_mut() };
+        let cell = unsafe { &*self.0.borrow() };
 
         match *cell {
             InnerOrdObject::Cow { prototype: _ } => Ok(Vec::new()),
@@ -562,13 +561,27 @@ impl PropertyVec {
                 return SetPropertyResult::NotWritable;
             }
 
-            if descriptor.contains(InternalLinearPropertyVecDescriptor::SET) {
-                // SAFETY: descriptor contains `SET`, so `value.trap.set` is initialized
-                let set = unsafe { value.trap.set.assume_init() };
-                return SetPropertyResult::InvokeSetter(set);
+            if descriptor.contains(InternalLinearPropertyVecDescriptor::GET_SET) {
+                cold_path();
+                if descr.contains(InternalLinearPropertyVecDescriptor::GET) {
+                    unsafe {
+                        value.trap.get = val.trap.get;
+                    }
+                }
+                if descr.contains(InternalLinearPropertyVecDescriptor::SET) {
+                    unsafe {
+                        value.trap.set = val.trap.set;
+                    }
+                }
+                if descriptor.contains(InternalLinearPropertyVecDescriptor::SET) {
+                    // SAFETY: descriptor contains `SET`, so `value.trap.set` is initialized
+                    let set = unsafe { value.trap.set.assume_init() };
+                    return SetPropertyResult::InvokeSetter(set);
+                }
+            } else {
+                *value = val;
             }
 
-            *value = val;
             *descriptor = descr;
 
             SetPropertyResult::Ok
@@ -702,7 +715,7 @@ impl PropertyVec {
             norm_descriptor |= PropertyDataDescriptor::WRITABLE;
         }
 
-        match descriptor {
+        match descriptor.intersection(InternalLinearPropertyVecDescriptor::GET_SET) {
             InternalLinearPropertyVecDescriptor::GET => PropertyValue::new(
                 PropertyValueKind::Trap {
                     get: Some(unsafe { value.trap.get.assume_init() }),

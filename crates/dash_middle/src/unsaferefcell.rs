@@ -1,14 +1,14 @@
 #[cfg(not(debug_assertions))]
 use std::cell::UnsafeCell;
 #[cfg(debug_assertions)]
-use std::cell::{RefCell, RefMut};
+use std::cell::{Ref, RefCell, RefMut};
 use std::ops::{Deref, DerefMut};
 
 /// Semantically, this is equivalent to an `UnsafeCell<T>`,
 /// i.e. it's unsafe to borrow and must be proven by the caller
 /// to be safe.
 ///
-/// In debug builds it panics if the value is already borrowed mutably,
+/// In debug builds it panics if the value is already borrowed,
 /// but this is only for extra sanity checks.
 #[derive(Debug)]
 pub struct UnsafeRefCell<T> {
@@ -30,7 +30,7 @@ impl<T> UnsafeRefCell<T> {
     }
 
     /// # Safety
-    /// The caller must ensure that no other `UnsafeRefMut`s coexist.
+    /// The caller must ensure that no other `UnsafeRefMut`s or `UnsafeRef`s coexist.
     #[inline]
     pub unsafe fn borrow_mut(&self) -> UnsafeRefMut<'_, T> {
         #[cfg(debug_assertions)]
@@ -39,9 +39,34 @@ impl<T> UnsafeRefCell<T> {
         }
         #[cfg(not(debug_assertions))]
         {
-            // SAFETY: The caller must ensure that no other mutable references exist.
+            // SAFETY: The caller must ensure that no other (mutable) references exist.
             UnsafeRefMut(unsafe { &mut *self.cell.get() })
         }
+    }
+
+    /// # Safety
+    /// The caller must ensure that no other `UnsafeRefMut`s coexist.
+    pub unsafe fn borrow(&self) -> UnsafeRef<'_, T> {
+        #[cfg(debug_assertions)]
+        {
+            UnsafeRef(self.cell.borrow())
+        }
+        #[cfg(not(debug_assertions))]
+        {
+            // SAFETY: The caller must ensure that no mutable references exist.
+            UnsafeRef(unsafe { &*self.cell.get() })
+        }
+    }
+}
+
+#[repr(transparent)]
+pub struct UnsafeRef<'a, T>(#[cfg(debug_assertions)] Ref<'a, T>, #[cfg(not(debug_assertions))] &'a T);
+
+impl<T> Deref for UnsafeRef<'_, T> {
+    type Target = T;
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        self.0.deref()
     }
 }
 
