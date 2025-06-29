@@ -29,10 +29,10 @@ use function::args::CallArgs;
 use propertykey::ToPropertyKey;
 
 pub mod string;
-use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::util::cold_path;
+use crate::value::object::This;
 use crate::value::primitive::{Null, Undefined};
 use crate::{Vm, delegate, throw};
 
@@ -156,6 +156,12 @@ impl Value {
 
     pub fn external(id: ObjectId) -> Self {
         Self(Self::EXTERNAL_MASK | id.raw() as u64)
+    }
+
+    /// Constructs a value from its raw bits.
+    #[inline]
+    pub fn from_raw(raw: u64) -> Self {
+        Self(raw)
     }
 }
 
@@ -685,13 +691,13 @@ impl Value {
         match self.unpack() {
             ValueKind::Object(o) => o.get_property(key, sc),
             // TODO: autobox primitives
-            ValueKind::Number(n) => n.get_property(This::Bound(*self), key, sc),
-            ValueKind::Boolean(b) => b.get_property(This::Bound(*self), key, sc),
-            ValueKind::String(s) => s.get_property(This::Bound(*self), key, sc),
+            ValueKind::Number(n) => n.get_property(This::bound(*self), key, sc),
+            ValueKind::Boolean(b) => b.get_property(This::bound(*self), key, sc),
+            ValueKind::String(s) => s.get_property(This::bound(*self), key, sc),
             ValueKind::External(o) => o.inner(sc).get_property(key, sc),
-            ValueKind::Undefined(u) => u.get_property(This::Bound(*self), key, sc),
-            ValueKind::Null(n) => n.get_property(This::Bound(*self), key, sc),
-            ValueKind::Symbol(s) => s.get_property(This::Bound(*self), key, sc),
+            ValueKind::Undefined(u) => u.get_property(This::bound(*self), key, sc),
+            ValueKind::Null(n) => n.get_property(This::bound(*self), key, sc),
+            ValueKind::Symbol(s) => s.get_property(This::bound(*self), key, sc),
         }
     }
 

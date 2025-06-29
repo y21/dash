@@ -1,9 +1,8 @@
 use dash_proc_macro::Trace;
 
-use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
-use crate::value::object::{OrdObject, Object};
+use crate::value::object::{Object, OrdObject, This};
 use crate::value::promise::{Promise, PromiseState, wrap_resolved_promise};
 use crate::value::propertykey::ToPropertyKey;
 use crate::value::root_ext::RootErrExt;
@@ -43,7 +42,7 @@ impl AsyncFunction {
             .statics
             .generator_iterator_next
             .clone()
-            .apply(This::Bound(generator_iter), CallArgs::empty(), scope)
+            .apply(This::bound(generator_iter), CallArgs::empty(), scope)
             .root(scope)
             .and_then(|result| result.get_property(sym::value.to_key(scope), scope).root(scope));
 
@@ -69,7 +68,7 @@ impl AsyncFunction {
                         .promise_then
                         .clone()
                         .apply(
-                            This::Bound(match result {
+                            This::bound(match result {
                                 Ok(value) => value,
                                 Err(value) => value,
                             }),
@@ -146,7 +145,7 @@ impl Object for ThenTask {
         };
         // TODO: this probably wont work because when it gets to an await point, the generator doesnt know how to handle it
         let value = progress_fn
-            .apply(This::Bound(self.generator_iter), [promise_value].into(), scope)
+            .apply(This::bound(self.generator_iter), [promise_value].into(), scope)
             .root(scope)
             .and_then(|result| result.get_property(sym::value.to_key(scope), scope).root(scope));
 

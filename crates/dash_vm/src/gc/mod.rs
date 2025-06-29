@@ -11,10 +11,9 @@ use smallvec::SmallVec;
 use trace::TraceCtxt;
 
 use crate::Vm;
-use crate::frame::This;
 use crate::localscope::LocalScope;
 use crate::value::function::args::CallArgs;
-use crate::value::object::PropertyValue;
+use crate::value::object::{PropertyValue, This};
 use crate::value::primitive::InternalSlots;
 use crate::value::propertykey::PropertyKey;
 use crate::value::{Typeof, Unrooted, Value};
@@ -119,6 +118,7 @@ pub struct AllocId<M> {
 }
 
 impl<M> AllocId<M> {
+    #[inline]
     pub(crate) fn from_raw(id_and_chunk: PackedInnerAllocId) -> Self {
         Self {
             id_and_chunk,

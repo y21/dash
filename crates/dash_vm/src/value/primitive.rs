@@ -4,10 +4,10 @@ use std::{fmt, iter};
 use dash_middle::interner::{self, sym};
 use dash_proc_macro::Trace;
 
-use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::util::intern_f64;
+use crate::value::object::This;
 use crate::{Vm, extract, throw};
 
 use super::boxed::{Boolean as BoxedBoolean, Number as BoxedNumber, Symbol as BoxedSymbol};

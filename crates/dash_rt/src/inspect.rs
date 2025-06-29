@@ -2,7 +2,6 @@ use std::fmt::Write;
 
 use dash_middle::interner::{Symbol, sym};
 
-use dash_vm::frame::This;
 use dash_vm::localscope::LocalScope;
 use dash_vm::util::intern_f64;
 use dash_vm::value::array::{Array, ArrayIterator};
@@ -12,7 +11,7 @@ use dash_vm::value::propertykey::{PropertyKey, ToPropertyKey};
 use dash_vm::value::typedarray::TypedArray;
 use dash_vm::value::{Typeof, Unpack, ValueKind};
 
-use dash_vm::value::object::{Object, PropertyDataDescriptor, PropertyValueKind};
+use dash_vm::value::object::{Object, PropertyDataDescriptor, PropertyValueKind, This};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::primitive::Number;
 use dash_vm::value::root_ext::RootErrExt;
@@ -218,7 +217,7 @@ fn inspect_inner_into(
                                 if options.invoke_getters {
                                     colored(out, options, GREY, |s| *s += "(computed) ");
                                     inspect_inner_into(
-                                        property_value.get_or_apply(scope, This::Bound(value)).root(scope)?,
+                                        property_value.get_or_apply(scope, This::bound(value)).root(scope)?,
                                         scope,
                                         options,
                                         depth + 1,

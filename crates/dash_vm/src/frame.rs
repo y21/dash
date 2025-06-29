@@ -9,12 +9,10 @@ use dash_proc_macro::Trace;
 
 use crate::gc::ObjectId;
 use crate::gc::trace::{Trace, TraceCtxt};
-use crate::localscope::LocalScope;
-use crate::throw;
+use crate::value::object::This;
 use crate::value::string::JsString;
 use crate::value::{ExternalValue, Unrooted};
 
-use super::value::Value;
 use super::value::function::user::UserFunction;
 
 #[derive(Debug, Clone, Copy, Trace)]
@@ -95,41 +93,6 @@ impl LoopCounterMap {
 
 unsafe impl Trace for LoopCounterMap {
     fn trace(&self, _: &mut TraceCtxt<'_>) {}
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum This {
-    /// No `this` binding. Evaluates to the global object in non-strict mode, or undefined in strict mode
-    Default,
-    /// Initial state of `this` in subclass constructors. Throws an error if attempted to evaluate as a value.
-    /// Gets changed to `Bound` by the call to super().
-    BeforeSuper { super_constructor: ObjectId },
-    /// Bound as a value.
-    Bound(Value),
-}
-
-impl This {
-    pub fn to_value(self, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
-        match self {
-            // TODO: once we have strict mode, eval to undefined
-            This::Default => Ok(Value::object(scope.global)),
-            This::Bound(value) => Ok(value),
-            This::BeforeSuper { .. } => {
-                // panic!();
-                throw!(scope, Error, "`super()` must be called before accessing `this`")
-            }
-        }
-    }
-}
-
-unsafe impl Trace for This {
-    fn trace(&self, cx: &mut TraceCtxt<'_>) {
-        match *self {
-            This::Default => {}
-            This::BeforeSuper { super_constructor } => super_constructor.trace(cx),
-            This::Bound(value) => value.trace(cx),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Trace)]
@@ -225,7 +188,7 @@ impl Frame {
         };
 
         Self {
-            this: This::Default,
+            this: This::default(),
             function: Rc::new(fun),
             externals: Vec::new().into(),
             ip: 0,

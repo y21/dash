@@ -1,9 +1,8 @@
 use dash_proc_macro::Trace;
 
-use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
-use crate::value::object::{OrdObject, Object};
+use crate::value::object::{Object, OrdObject, This};
 use crate::value::{Typeof, Unrooted, Value};
 use crate::{Vm, delegate, extract};
 
@@ -48,7 +47,7 @@ impl Object for BoundFunction {
         args: CallArgs,
         scope: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
-        let target_this = self.this.map_or(this, This::Bound);
+        let target_this = self.this.map_or(this, This::bound);
 
         let mut target_args = self.args.clone();
         target_args.extend(args);

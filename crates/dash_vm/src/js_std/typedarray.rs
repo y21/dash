@@ -2,14 +2,13 @@ use std::cell::Cell;
 use std::convert::Infallible;
 use std::ops::ControlFlow;
 
-use crate::frame::This;
 use crate::js_std::array::for_each_js_iterator_element;
 use crate::js_std::receiver_t;
 use crate::throw;
 use crate::value::arraybuffer::ArrayBuffer;
 use crate::value::function::args::CallArgs;
 use crate::value::function::native::CallContext;
-use crate::value::object::OrdObject;
+use crate::value::object::{OrdObject, This};
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::propertykey::ToPropertyKey;
 use crate::value::typedarray::{TypedArray, TypedArrayKind};
@@ -46,7 +45,7 @@ fn typedarray_constructor(cx: CallContext, kind: TypedArrayKind) -> Result<Value
             .into_option()
         {
             let iterator = iterator
-                .apply(This::Bound(arg), CallArgs::empty(), cx.scope)
+                .apply(This::bound(arg), CallArgs::empty(), cx.scope)
                 .root(cx.scope)?;
             let mut values = Vec::new();
 

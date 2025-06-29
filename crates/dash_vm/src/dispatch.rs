@@ -571,7 +571,7 @@ mod handlers {
     use std::ops::{Add, ControlFlow, Div, Mul, Rem, Sub};
     use std::rc::Rc;
 
-    use crate::frame::{FrameState, This, TryBlock};
+    use crate::frame::{FrameState, TryBlock};
     use crate::throw;
     use crate::util::unlikely;
     use crate::value::array::table::ArrayTable;
@@ -582,7 +582,7 @@ mod handlers {
     use crate::value::function::generator::GeneratorFunction;
     use crate::value::function::user::UserFunction;
     use crate::value::function::{Function, FunctionKind, adjust_stack_from_flat_call, this_for_new_target};
-    use crate::value::object::{Object, OrdObject, PropertyValue, PropertyValueKind};
+    use crate::value::object::{Object, OrdObject, PropertyValue, PropertyValueKind, This, ThisKind};
     use crate::value::ops::conversions::ValueConversion;
     use crate::value::ops::equality;
     use crate::value::primitive::Number;
@@ -930,7 +930,7 @@ mod handlers {
 
         let value = match cx.global.clone().extract::<OrdObject>(&cx.scope) {
             Some(value) => match value.get_own_property_descriptor(name.to_key(&mut cx.scope), &mut cx.scope)? {
-                Some(value) => value.kind().get_or_apply(&mut cx, This::Default)?,
+                Some(value) => value.kind().get_or_apply(&mut cx, This::default())?,
                 None => {
                     let name = name.res(&cx.scope).to_owned();
                     throw!(&mut cx, ReferenceError, "{} is not defined", name)
@@ -1062,7 +1062,7 @@ mod handlers {
                         throw!(cx.scope, TypeError, "supertype constructor must be an object")
                     };
 
-                    This::BeforeSuper { super_constructor }
+                    This::before_super(super_constructor)
                 } else {
                     this_for_new_target(&mut cx.scope, callee)?
                 };
@@ -1076,7 +1076,7 @@ mod handlers {
                         throw!(cx.scope, TypeError, "supertype constructor must be an object")
                     };
 
-                    This::BeforeSuper { super_constructor }
+                    This::before_super(super_constructor)
                 } else {
                     let new_target = cx.active_frame().new_target().unwrap();
                     this_for_new_target(&mut cx.scope, new_target)?
@@ -1207,23 +1207,23 @@ mod handlers {
 
         let stack_len = cx.stack.len();
         let (callee, this) = if function_call_kind == FunctionCallKind::Super {
-            let callee = match cx.active_frame().this {
-                This::BeforeSuper { super_constructor } => Value::object(super_constructor),
+            let callee = match cx.active_frame().this.kind() {
+                ThisKind::BeforeSuper { super_constructor } => Value::object(super_constructor),
                 _ => throw!(
                     cx.scope,
                     TypeError,
                     "super() must be called exactly once in a subclass constructor"
                 ),
             };
-            (callee, This::Default)
+            (callee, This::default())
         } else if has_this {
             cx.stack[stack_len - argc - 2..].rotate_left(2);
             let (this, callee) = cx.pop_stack2_rooted();
-            (callee, This::Bound(this))
+            (callee, This::bound(this))
         } else {
             cx.stack[stack_len - argc - 1..].rotate_left(1);
             let callee = cx.pop_stack_rooted();
-            (callee, This::Default)
+            (callee, This::default())
         };
 
         if let Some(function) = callee.unpack().downcast_ref::<Function>(&cx.scope) {
@@ -2050,7 +2050,7 @@ mod handlers {
 
     pub fn bindthis(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let value = cx.pop_stack_rooted();
-        cx.active_frame_mut().this = This::Bound(value);
+        cx.active_frame_mut().this = This::bound(value);
         Ok(None)
     }
 
@@ -2085,7 +2085,7 @@ mod handlers {
         let iterable = value
             .get_property(symbol_iterator.to_key(&mut cx.scope), &mut cx.scope)?
             .root(&mut cx.scope);
-        let iterator = iterable.apply(This::Bound(value), CallArgs::empty(), &mut cx.scope)?;
+        let iterator = iterable.apply(This::bound(value), CallArgs::empty(), &mut cx.scope)?;
         cx.push_stack(iterator);
         Ok(None)
     }
@@ -2335,12 +2335,12 @@ mod handlers {
                     let fun = k
                         .get_property($v.to_key(&mut cx.scope), &mut cx.scope)?
                         .root(&mut cx.scope);
-                    let result = fun.apply(This::Default, args, &mut cx.scope)?;
+                    let result = fun.apply(This::default(), args, &mut cx.scope)?;
                     cx.push_stack(result);
                 } else {
                     // Fastpath: call builtin directly
                     // TODO: should we add to externals?
-                    let result = fun.apply(This::Default, args, &mut cx.scope)?;
+                    let result = fun.apply(This::default(), args, &mut cx.scope)?;
                     cx.push_stack(result);
                 }
             }};

@@ -9,12 +9,12 @@ use std::sync::LazyLock;
 use dash_middle::interner::{self};
 use dash_middle::unsaferefcell::UnsafeRefCell;
 
-use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::localscope::LocalScope;
 use crate::util::cold_path;
 use crate::value::function::args::CallArgs;
+use crate::value::object::This;
 use crate::value::primitive::Symbol;
 use crate::value::propertykey::{PropertyKey, PropertyKeyInner, ToPropertyKey};
 use crate::value::string::JsString;
@@ -139,7 +139,7 @@ impl OrdObject {
 
     pub fn dump(&self, sc: &mut LocalScope<'_>) -> Result<(), Unrooted> {
         for key in self.own_keys(sc)? {
-            let value = self.get_property(This::Default, PropertyKey::from_value(sc, key)?, sc)?;
+            let value = self.get_property(This::default(), PropertyKey::from_value(sc, key)?, sc)?;
             eprintln!("{:?} -> {:?}", key.unpack(), value.root(sc).unpack());
         }
         Ok(())
@@ -245,7 +245,7 @@ impl Object for OrdObject {
                             drop(guard);
 
                             if let PropertyValueKind::Static(value) = value.kind() {
-                                match alloc_id.apply(This::Default, [*value].into(), sc) {
+                                match alloc_id.apply(This::default(), [*value].into(), sc) {
                                     Ok(_) => Ok(()),
                                     Err(err) => Err(err.root(sc)),
                                 }
@@ -309,12 +309,12 @@ impl Object for OrdObject {
         match *cell {
             InnerOrdObject::Cow { prototype } => {
                 drop(cell);
-                prototype.get_or_apply(sc, This::Default).root(sc)
+                prototype.get_or_apply(sc, This::default()).root(sc)
             }
             InnerOrdObject::Linear(ref property_vec) => {
                 let prototype = property_vec.get_prototype();
                 drop(cell);
-                prototype.get_or_apply(sc, This::Default).root(sc)
+                prototype.get_or_apply(sc, This::default()).root(sc)
             }
         }
     }

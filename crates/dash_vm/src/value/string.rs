@@ -1,9 +1,9 @@
 use dash_middle::interner::{Symbol, sym};
 use dash_proc_macro::Trace;
 
-use crate::frame::This;
 use crate::localscope::LocalScope;
 use crate::value::boxed::String as BoxedString;
+use crate::value::object::This;
 use crate::{Vm, extract, throw};
 
 use super::function::args::CallArgs;

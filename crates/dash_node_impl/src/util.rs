@@ -1,10 +1,9 @@
 use dash_middle::interner::sym;
-use dash_vm::frame::This;
 use dash_vm::localscope::LocalScope;
 use dash_vm::throw;
 use dash_vm::value::function::args::CallArgs;
 use dash_vm::value::function::native::{CallContext, register_native_fn};
-use dash_vm::value::object::{OrdObject, Object, PropertyDataDescriptor, PropertyValue, PropertyValueKind};
+use dash_vm::value::object::{Object, OrdObject, PropertyDataDescriptor, PropertyValue, PropertyValueKind, This};
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::{Root, Typeof, Value, ValueContext};
 
@@ -49,7 +48,7 @@ fn inherits(cx: CallContext) -> Result<Value, Value> {
     }
 
     let super_inst = super_ctor
-        .construct(This::Default, CallArgs::empty(), cx.scope)
+        .construct(This::default(), CallArgs::empty(), cx.scope)
         .root(cx.scope)?;
 
     super_inst.set_property(

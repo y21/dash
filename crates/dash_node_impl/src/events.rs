@@ -6,13 +6,12 @@ use dash_middle::interner::Symbol;
 use dash_proc_macro::Trace;
 use dash_rt::state::State;
 use dash_rt::typemap::Key;
-use dash_vm::frame::This;
 use dash_vm::gc::ObjectId;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::function::args::CallArgs;
 use dash_vm::value::function::native::{CallContext, register_native_fn};
 use dash_vm::value::function::{Function, FunctionKind};
-use dash_vm::value::object::{Object, OrdObject, PropertyValue};
+use dash_vm::value::object::{Object, OrdObject, PropertyValue, This};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::propertykey::{PropertyKey, ToPropertyKey};
 use dash_vm::value::root_ext::RootErrExt;
@@ -161,7 +160,7 @@ fn emit(cx: CallContext) -> Result<Value, Value> {
         if let Some(handlers) = this.handlers.borrow().get(&name.sym()) {
             for handler in handlers {
                 handler
-                    .apply(This::Bound(cx.this), CallArgs::from(args), sc)
+                    .apply(This::bound(cx.this), CallArgs::from(args), sc)
                     .root_err(sc)?;
                 did_emit = true;
             }

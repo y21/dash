@@ -1,9 +1,8 @@
-use crate::frame::This;
 use crate::throw;
 use crate::value::function::Function;
 use crate::value::function::bound::BoundFunction;
 use crate::value::function::native::CallContext;
-use crate::value::object::Object;
+use crate::value::object::{Object, This};
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::propertykey::ToPropertyKey;
 use crate::value::{Root, Typeof, Unpack, Value, ValueKind};
@@ -40,7 +39,7 @@ pub fn apply(cx: CallContext) -> Result<Value, Value> {
 
     target_callee
         .apply(
-            target_this.map_or(This::Default, This::Bound),
+            target_this.map_or(This::default(), This::bound),
             target_args.into(),
             cx.scope,
         )
@@ -69,7 +68,7 @@ pub fn call(cx: CallContext) -> Result<Value, Value> {
 
     target_callee
         .apply(
-            target_this.map_or(This::Default, This::Bound),
+            target_this.map_or(This::default(), This::bound),
             target_args.into(),
             cx.scope,
         )

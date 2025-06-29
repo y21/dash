@@ -2,9 +2,9 @@ use std::cell::Cell;
 
 use dash_proc_macro::Trace;
 
-use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
+use crate::value::object::This;
 use crate::{Vm, delegate, extract};
 
 use super::Unrooted;

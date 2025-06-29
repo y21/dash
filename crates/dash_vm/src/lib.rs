@@ -11,7 +11,7 @@ use std::{fmt, mem};
 use crate::util::cold_path;
 use crate::value::Root;
 use crate::value::function::Function;
-use crate::value::object::{PropertyDataDescriptor, PropertyValueKind};
+use crate::value::object::{PropertyDataDescriptor, PropertyValueKind, This};
 use crate::value::primitive::Symbol;
 
 use self::dispatch::HandleResult;
@@ -25,7 +25,6 @@ use self::value::object::{Object, PropertyValue};
 use dash_log::{Level, debug, error, span};
 use dash_middle::compiler::instruction::Instruction;
 use dash_middle::interner::{self, StringInterner, sym};
-use frame::This;
 use gc::trace::{Trace, TraceCtxt};
 use gc::{Allocator, ObjectId};
 use localscope::{LocalScopeList, scope};
@@ -1455,7 +1454,7 @@ impl Vm {
             scope.add_ref(task);
 
             debug!("process task {:?}", task);
-            if let Err(ex) = task.apply(This::Default, CallArgs::empty(), &mut scope) {
+            if let Err(ex) = task.apply(This::default(), CallArgs::empty(), &mut scope) {
                 error!("uncaught async task exception");
                 if let Some(callback) = scope.params.unhandled_task_exception_callback() {
                     let ex = ex.root(&mut scope);

@@ -7,14 +7,13 @@ use dash_middle::util::{SharedOnce, ThreadSafeStorage};
 use dash_rt::event::EventMessage;
 use dash_rt::module::ModuleLoader;
 use dash_rt::state::State;
-use dash_vm::frame::This;
 use dash_vm::gc::persistent::Persistent;
 use dash_vm::gc::trace::{Trace, TraceCtxt};
 use dash_vm::js_std::receiver_t;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::function::native::CallContext;
 use dash_vm::value::function::{Function, FunctionKind};
-use dash_vm::value::object::{Object, OrdObject, PropertyValue};
+use dash_vm::value::object::{Object, OrdObject, PropertyValue, This};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::root_ext::RootErrExt;
@@ -105,7 +104,7 @@ pub fn listen(cx: CallContext) -> Result<Value, Value> {
 
                     let ctx = Value::object(scope.register(ctx));
 
-                    if let Err(err) = cb.apply(This::Default, [ctx].into(), &mut scope).root_err(&mut scope) {
+                    if let Err(err) = cb.apply(This::default(), [ctx].into(), &mut scope).root_err(&mut scope) {
                         match err.to_js_string(&mut scope) {
                             Ok(err) => eprintln!("Unhandled exception in HTTP handler! {}", err.res(&scope)),
                             Err(..) => eprintln!("Unhandled exception in exception toString method in HTTP handler!"),

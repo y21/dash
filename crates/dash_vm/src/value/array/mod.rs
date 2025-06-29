@@ -6,11 +6,10 @@ use dash_log::debug;
 use dash_proc_macro::Trace;
 use table::ArrayTable;
 
-use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::gc::trace::Trace;
 use crate::localscope::LocalScope;
-use crate::value::object::PropertyDataDescriptor;
+use crate::value::object::{PropertyDataDescriptor, This};
 use crate::{Vm, delegate, extract, throw};
 use dash_middle::interner::sym;
 
@@ -243,7 +242,7 @@ impl Object for Array {
                 return Ok(());
             }
         } else if let Some(sym::length) = key.to_js_string(sc) {
-            let value = value.kind().get_or_apply(sc, This::Default).root(sc)?;
+            let value = value.kind().get_or_apply(sc, This::default()).root(sc)?;
             if let Ok(new_len) = u32::try_from(value.to_number(sc)? as usize) {
                 self.items.borrow_mut().resize(new_len);
                 return Ok(());
@@ -261,7 +260,7 @@ impl Object for Array {
                 let mut items = self.items.borrow_mut();
                 match items.delete(index) {
                     Some(MaybeHoley::Some(value)) => {
-                        return value.get_or_apply(sc, This::Default).root_err(sc);
+                        return value.get_or_apply(sc, This::default()).root_err(sc);
                     }
                     Some(MaybeHoley::Hole) | None => return Ok(Value::undefined().into()),
                 }
@@ -382,7 +381,7 @@ pub fn spec_array_get_property(scope: &mut LocalScope<'_>, target: &Value, index
             if let Some(arr) = target.unpack().downcast_ref::<Array>(scope) {
                 let inner = arr.items.borrow();
                 return match inner.get(index) {
-                    Some(MaybeHoley::Some(value)) => value.get_or_apply(scope, This::Default),
+                    Some(MaybeHoley::Some(value)) => value.get_or_apply(scope, This::default()),
                     Some(MaybeHoley::Hole) | None => Ok(Value::undefined().into()),
                 };
             }

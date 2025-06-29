@@ -4,10 +4,11 @@ use dash_middle::compiler::constant::Function;
 use dash_proc_macro::Trace;
 
 use crate::dispatch::HandleResult;
-use crate::frame::{Frame, This};
+use crate::frame::Frame;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::value::arguments::Arguments;
+use crate::value::object::This;
 use crate::value::{ExternalValue, Root, Value};
 
 use super::args::CallArgs;

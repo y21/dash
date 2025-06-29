@@ -1,10 +1,10 @@
 use dash_proc_macro::Trace;
 
 use crate::dispatch::HandleResult;
-use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::value::Unrooted;
+use crate::value::object::This;
 
 use super::args::CallArgs;
 use super::user::UserFunction;

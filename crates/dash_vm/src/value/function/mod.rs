@@ -7,11 +7,11 @@ use args::CallArgs;
 use dash_proc_macro::Trace;
 
 use crate::dispatch::HandleResult;
-use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::localscope::LocalScope;
 use crate::value::arguments::Arguments;
+use crate::value::object::This;
 use crate::{Vm, extract, throw};
 use dash_middle::interner::sym;
 
@@ -184,7 +184,7 @@ pub fn this_for_new_target(scope: &mut LocalScope<'_>, new_target: ObjectId) -> 
         throw!(scope, Error, "new.target prototype must be an object")
     };
 
-    Ok(This::Bound(Value::object(
+    Ok(This::bound(Value::object(
         scope.register(OrdObject::with_prototype(prototype)),
     )))
 }
@@ -223,7 +223,7 @@ impl Object for Function {
 
     fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
         if let Some(sym::prototype) = key.to_js_string(sc) {
-            let prototype = value.get_or_apply(sc, This::Default).root(sc)?;
+            let prototype = value.get_or_apply(sc, This::default()).root(sc)?;
             // TODO: function prototype does not need to be an object
             *self.prototype.borrow_mut() = Some(prototype.to_object(sc)?);
             return Ok(());
@@ -264,7 +264,7 @@ impl Object for Function {
                         throw!(scope, TypeError, "supertype constructor must be an object")
                     };
 
-                    break 'this This::BeforeSuper { super_constructor };
+                    break 'this This::before_super(super_constructor);
                 }
             }
 

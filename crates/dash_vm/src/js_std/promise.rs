@@ -1,12 +1,11 @@
 use dash_proc_macro::Trace;
 
-use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::value::function::args::CallArgs;
 use crate::value::function::bound::BoundFunction;
 use crate::value::function::native::CallContext;
-use crate::value::object::{Object, OrdObject};
+use crate::value::object::{Object, OrdObject, This};
 use crate::value::promise::{Promise, PromiseRejecter, PromiseResolver, PromiseState};
 use crate::value::propertykey::ToPropertyKey;
 use crate::value::root_ext::RootErrExt;
@@ -37,7 +36,7 @@ pub fn constructor(cx: CallContext) -> Result<Value, Value> {
 
     initiator
         .apply(
-            This::Default,
+            This::default(),
             [Value::object(resolve), Value::object(reject)].into(),
             cx.scope,
         )
@@ -162,7 +161,7 @@ impl Object for ThenTask {
         let resolved = args.first().unwrap_or_undefined();
         let ret = self
             .handler
-            .apply(This::Default, [resolved].into(), scope)
+            .apply(This::default(), [resolved].into(), scope)
             .root(scope)?;
 
         let ret_then = ret
@@ -181,7 +180,7 @@ impl Object for ThenTask {
             }
             _ => {
                 // Is a promise. Call value.then(resolver)
-                ret_then.apply(This::Bound(ret), [Value::object(self.resolver)].into(), scope)?;
+                ret_then.apply(This::bound(ret), [Value::object(self.resolver)].into(), scope)?;
             }
         }
 

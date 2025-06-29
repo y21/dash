@@ -3,9 +3,9 @@ use std::fmt::Write;
 use dash_middle::interner::sym;
 use dash_proc_macro::Trace;
 
-use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
+use crate::value::object::This;
 use crate::{delegate, extract};
 
 use super::function::args::CallArgs;

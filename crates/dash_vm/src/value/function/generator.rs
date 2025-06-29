@@ -2,12 +2,12 @@ use std::cell::RefCell;
 
 use dash_proc_macro::Trace;
 
-use crate::frame::{This, TryBlock};
+use crate::frame::TryBlock;
 use crate::gc::ObjectId;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::localscope::LocalScope;
 use crate::value::arguments::Arguments;
-use crate::value::object::{Object, OrdObject};
+use crate::value::object::{Object, OrdObject, This};
 use crate::value::{Typeof, Unrooted, Value};
 use crate::{Vm, delegate, extract};
 

@@ -63,8 +63,8 @@ impl ArrayTable {
     }
 
     pub fn get(&self, index: u32) -> Option<MaybeHoley<PropertyValue>> {
-        match self.map.get(&index) {
-            Some(v) => Some(MaybeHoley::Some(v.clone())),
+        match self.map.get(&index).copied() {
+            Some(v) => Some(MaybeHoley::Some(v)),
             None => {
                 if index < self.len {
                     Some(MaybeHoley::Hole)

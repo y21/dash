@@ -3,7 +3,6 @@ use std::fmt::Debug;
 use std::hash::BuildHasherDefault;
 use std::ptr::NonNull;
 
-use crate::frame::This;
 use crate::gc::persistent::Persistent;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::gc::{ObjectId, ObjectVTable};
@@ -24,6 +23,8 @@ use super::{Root, Typeof, Unpack, Unrooted, Value, ValueContext, ValueKind};
 
 pub mod ordinary;
 pub use ordinary::OrdObject;
+pub mod this;
+pub use this::{This, ThisKind};
 
 pub type ObjectMap<K, V> = hashbrown::HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
@@ -113,7 +114,7 @@ macro_rules! delegate {
     (override $field:ident, get_property) => {
         fn get_property(
             &self,
-            this: $crate::frame::This,
+            this: $crate::value::object::This,
             key: $crate::value::propertykey::PropertyKey,
             sc: &mut $crate::localscope::LocalScope,
         ) -> Result<$crate::value::Unrooted, $crate::value::Unrooted> {
@@ -167,7 +168,7 @@ macro_rules! delegate {
         fn apply(
             &self,
             id: $crate::gc::ObjectId,
-            this: $crate::frame::This,
+            this: $crate::value::object::This,
             args: $crate::value::function::args::CallArgs,
             sc: &mut $crate::localscope::LocalScope,
         ) -> Result<$crate::value::Unrooted, $crate::value::Unrooted> {
@@ -178,7 +179,7 @@ macro_rules! delegate {
         fn construct(
             &self,
             id: $crate::gc::ObjectId,
-            this: $crate::frame::This,
+            this: $crate::value::object::This,
             args: $crate::value::function::args::CallArgs,
             new_target: $crate::gc::ObjectId,
             sc: &mut $crate::localscope::LocalScope,
@@ -584,11 +585,11 @@ impl ObjectId {
     }
 
     pub fn get_property(self, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Unrooted> {
-        Object::get_property(&self, This::Bound(Value::object(self)), key, sc)
+        Object::get_property(&self, This::bound(Value::object(self)), key, sc)
     }
 
     pub fn get_own_property(self, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Unrooted> {
-        Object::get_own_property(&self, This::Bound(Value::object(self)), key, sc)
+        Object::get_own_property(&self, This::bound(Value::object(self)), key, sc)
     }
 
     pub fn apply(&self, this: This, args: CallArgs, sc: &mut LocalScope) -> Result<Unrooted, Unrooted> {

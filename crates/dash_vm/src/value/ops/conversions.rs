@@ -1,12 +1,11 @@
 use dash_middle::interner::sym;
 
-use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::boxed::{Boolean, Number as BoxedNumber, String as BoxedString, Symbol as BoxedSymbol};
 use crate::value::function::args::CallArgs;
-use crate::value::object::Object;
+use crate::value::object::{Object, This};
 use crate::value::primitive::{MAX_SAFE_INTEGERF, Number};
 use crate::value::propertykey::ToPropertyKey;
 use crate::value::string::JsString;
@@ -131,7 +130,7 @@ impl ValueConversion for Value {
 
             // iv. Let result be ? Call(exoticToPrim, input, « hint »).
             let result = exotic_to_prim
-                .apply(This::Bound(*self), [preferred_type].into(), sc)
+                .apply(This::bound(*self), [preferred_type].into(), sc)
                 .root(sc)?;
 
             // If Type(result) is not Object, return result.
@@ -203,7 +202,7 @@ impl Value {
         for name in method_names {
             let method = self.get_property(name.to_key(sc), sc).root(sc)?;
             if matches!(method.type_of(sc), Typeof::Function) {
-                let result = method.apply(This::Bound(*self), CallArgs::empty(), sc).root(sc)?;
+                let result = method.apply(This::bound(*self), CallArgs::empty(), sc).root(sc)?;
                 if !matches!(result.unpack(), ValueKind::Object(_)) {
                     return Ok(result);
                 }

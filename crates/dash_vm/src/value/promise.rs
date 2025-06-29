@@ -2,10 +2,10 @@ use std::cell::RefCell;
 
 use dash_proc_macro::Trace;
 
-use crate::frame::This;
 use crate::gc::ObjectId;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::localscope::LocalScope;
+use crate::value::object::This;
 use crate::{PromiseAction, Vm, extract};
 
 use super::function::args::CallArgs;
