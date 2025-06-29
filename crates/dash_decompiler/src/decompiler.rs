@@ -220,9 +220,6 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                 Instruction::StaticPropAccess => {
                     let b = self.read_u16()?;
                     let _preserve_this = self.read()?;
-                    for _ in 0..4 {
-                        self.read()?;
-                    }
                     let ident = self
                         .interner
                         .resolve(self.constants.symbols[SymbolConstant(b)])

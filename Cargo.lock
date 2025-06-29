@@ -641,7 +641,6 @@ dependencies = [
  "dash_typed_cfg",
  "hashbrown",
  "if_chain",
- "rand 0.9.1",
  "rustc-hash",
  "smallvec",
  "ureq",
