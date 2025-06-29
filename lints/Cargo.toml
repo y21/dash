@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-clippy_utils = { git = "https://github.com/rust-lang/rust-clippy", rev = "f74d7ce" }
+clippy_utils = { git = "https://github.com/rust-lang/rust-clippy", rev = "428208e" }
 
 [dev-dependencies]
 prettydiff = "0.8.0"

@@ -1,9 +1,9 @@
 use std::iter;
 
-use clippy_utils::def_path_res;
+use clippy_utils::paths::{PathNS, lookup_path_str};
 use rustc_abi::VariantIdx;
 use rustc_ast::Mutability;
-use rustc_hir::def::{DefKind, Res};
+use rustc_hir::def::DefKind;
 use rustc_hir::def_id::{DefId, LocalDefId};
 use rustc_hir::intravisit::FnKind;
 use rustc_hir::{self as hir};
@@ -43,7 +43,7 @@ macro_rules! required_items {
         impl RequiredItems {
             fn init(&mut self, cx: &LateContext<'_>) {
                 $(
-                    self.$field = Some(unique_res(cx, &$respath, defkind!($struct_or_trait)));
+                    self.$field = Some(unique_res(cx, $respath, defkind!($struct_or_trait)));
                 )+
             }
 
@@ -56,11 +56,11 @@ macro_rules! required_items {
     };
 }
 required_items!(
-    trait root => ["dash_vm", "value", "Root"],
-    struct vm => ["dash_vm", "Vm"],
-    struct allocator => ["dash_vm", "gc", "Allocator"],
-    struct scope => ["dash_vm", "localscope", "LocalScope"],
-    struct dispatchcx => ["dash_vm", "dispatch", "DispatchContext"]
+    trait root => "dash_vm::value::Root",
+    struct vm => "dash_vm::Vm",
+    struct allocator => "dash_vm::Allocator",
+    struct scope => "dash_vm::localscope::LocalScope",
+    struct dispatchcx => "dash_vm::dispatch::DispatchContext"
 );
 
 #[derive(Default)]
@@ -99,10 +99,10 @@ impl MissingRoot {
     }
 }
 
-fn unique_res(cx: &LateContext<'_>, path: &[&str], kind: DefKind) -> DefId {
-    let mut unrooted_res = def_path_res(cx.tcx, path).into_iter();
-    if let Some(Res::Def(res_kind, def_id)) = unrooted_res.next()
-        && res_kind == kind
+fn unique_res(cx: &LateContext<'_>, path: &str, kind: DefKind) -> DefId {
+    let mut unrooted_res = lookup_path_str(cx.tcx, PathNS::Type, path).into_iter();
+    if let Some(def_id) = unrooted_res.next()
+        && cx.tcx.def_kind(def_id) == kind
         && unrooted_res.next().is_none()
     {
         def_id

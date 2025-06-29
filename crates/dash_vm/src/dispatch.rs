@@ -120,7 +120,7 @@ impl<'vm> DispatchContext<'vm> {
         (a, b, c)
     }
 
-    pub fn pop_stack_many(&mut self, count: usize) -> Drain<Value> {
+    pub fn pop_stack_many(&mut self, count: usize) -> Drain<'_, Value> {
         let pos = self.stack.len() - count;
         self.stack.drain(pos..)
     }

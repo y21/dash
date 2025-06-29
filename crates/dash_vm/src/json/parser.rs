@@ -28,7 +28,7 @@ pub enum JsonParseError {
 
 impl JsonParseError {
     /// Tries to format a JSON error
-    pub fn to_string(&self) -> Cow<str> {
+    pub fn to_string(&self) -> Cow<'_, str> {
         match self {
             Self::UnexpectedEof => Cow::Borrowed("Unexpected end of JSON input"),
             Self::UnexpectedToken(token, position) => {
@@ -49,7 +49,7 @@ pub enum ConversionError {
 
 impl ConversionError {
     /// Formats this error by calling to_string on the underlying error
-    pub fn to_string(&self) -> Cow<str> {
+    pub fn to_string(&self) -> Cow<'_, str> {
         match self {
             Self::Utf8Error(u) => Cow::Owned(u.to_string()),
         }

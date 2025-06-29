@@ -1126,8 +1126,6 @@ mod tests {
 
     use std::time::Instant;
 
-    use rand::seq::SliceRandom;
-
     use crate::Vm;
     use crate::value::Value;
     use crate::value::object::{Object, PropertyValue};
@@ -1167,7 +1165,6 @@ mod tests {
         let count = std::env::var("ITER_COUNT").unwrap().parse::<usize>().unwrap();
 
         for _ in 0..32 {
-            syms.shuffle(&mut rand::rng());
             let sym = std::hint::black_box(syms[0]);
             let i = Instant::now();
             for _ in 0..count {
