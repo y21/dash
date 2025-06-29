@@ -528,37 +528,37 @@ impl<'s> TypeInferCtx<'s> {
         let right_type = self.visit(right);
 
         // Also propagate assignment to target
-        if let ExprKind::Literal(LiteralExpr::Identifier(ident)) = &left.kind {
-            if let Some(local) = self.find_local(*ident) {
-                let left_type = local.inferred_type();
-                let left_type_ref = left_type.borrow();
+        if let ExprKind::Literal(LiteralExpr::Identifier(ident)) = &left.kind
+            && let Some(local) = self.find_local(*ident)
+        {
+            let left_type = local.inferred_type();
+            let left_type_ref = left_type.borrow();
 
-                if left_type_ref.as_ref() == right_type.as_ref() {
-                    // Assign value is the same, no change.
-                } else {
-                    debug!(
-                        "variable {} changed type {:?} -> {:?}",
-                        ident, left_type_ref, right_type
-                    );
+            if left_type_ref.as_ref() == right_type.as_ref() {
+                // Assign value is the same, no change.
+            } else {
+                debug!(
+                    "variable {} changed type {:?} -> {:?}",
+                    ident, left_type_ref, right_type
+                );
 
-                    match (left_type_ref.as_ref(), right_type.as_ref()) {
-                        (Some(left), Some(right)) => {
-                            let left = left.clone();
-                            let right = right.clone();
-                            drop(left_type_ref);
-                            update_ty(
-                                left_type,
-                                Some(CompileValueType::Either(Box::new(left), Box::new(right))),
-                            );
-                        }
-                        (_, Some(right)) => {
-                            drop(left_type_ref);
-                            update_ty(left_type, Some(CompileValueType::Maybe(Box::new(right.clone()))));
-                        }
-                        (_, _) => {
-                            drop(left_type_ref);
-                            update_ty(left_type, None);
-                        }
+                match (left_type_ref.as_ref(), right_type.as_ref()) {
+                    (Some(left), Some(right)) => {
+                        let left = left.clone();
+                        let right = right.clone();
+                        drop(left_type_ref);
+                        update_ty(
+                            left_type,
+                            Some(CompileValueType::Either(Box::new(left), Box::new(right))),
+                        );
+                    }
+                    (_, Some(right)) => {
+                        drop(left_type_ref);
+                        update_ty(left_type, Some(CompileValueType::Maybe(Box::new(right.clone()))));
+                    }
+                    (_, _) => {
+                        drop(left_type_ref);
+                        update_ty(left_type, None);
                     }
                 }
             }

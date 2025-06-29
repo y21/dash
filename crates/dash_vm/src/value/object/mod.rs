@@ -619,10 +619,10 @@ impl ObjectId {
 
             if let Some(mut desc) = self.get_own_property_descriptor(key, sc).root_err(sc)? {
                 desc.descriptor.remove(PropertyDataDescriptor::CONFIGURABLE);
-                if let IntegrityLevel::Frozen = level {
-                    if let PropertyValueKind::Static(_) = desc.kind {
-                        desc.descriptor.remove(PropertyDataDescriptor::WRITABLE);
-                    }
+                if let IntegrityLevel::Frozen = level
+                    && let PropertyValueKind::Static(_) = desc.kind
+                {
+                    desc.descriptor.remove(PropertyDataDescriptor::WRITABLE);
                 }
                 self.set_property(key, desc, sc)?;
             }

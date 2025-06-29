@@ -73,10 +73,10 @@ impl ArrayInner {
     }
 
     fn transition_to_dense_if_no_holes(&mut self) {
-        if let ArrayInner::Table(table) = self {
-            if !table.has_holes() {
-                *self = Self::Dense(table.take_into_sorted_array());
-            }
+        if let ArrayInner::Table(table) = self
+            && !table.has_holes()
+        {
+            *self = Self::Dense(table.take_into_sorted_array());
         }
     }
 
@@ -216,12 +216,12 @@ impl Object for Array {
         let items = self.items.borrow();
 
         if let Some(index) = key.index() {
-            if index < MAX_LENGTH {
-                if let Some(element) = items.get(index) {
-                    match element {
-                        MaybeHoley::Some(v) => return Ok(Some(v)),
-                        MaybeHoley::Hole => return Ok(None),
-                    }
+            if index < MAX_LENGTH
+                && let Some(element) = items.get(index)
+            {
+                match element {
+                    MaybeHoley::Some(v) => return Ok(Some(v)),
+                    MaybeHoley::Hole => return Ok(None),
                 }
             }
         } else if let Some(sym::length) = key.to_js_string(sc) {
@@ -376,16 +376,15 @@ impl ArrayIterator {
 
 /// Equivalent to calling get_property, but specialized for arrays
 pub fn spec_array_get_property(scope: &mut LocalScope<'_>, target: &Value, index: usize) -> Result<Unrooted, Unrooted> {
-    if let Ok(index) = u32::try_from(index) {
-        if index < MAX_LENGTH {
-            if let Some(arr) = target.unpack().downcast_ref::<Array>(scope) {
-                let inner = arr.items.borrow();
-                return match inner.get(index) {
-                    Some(MaybeHoley::Some(value)) => value.get_or_apply(scope, This::default()),
-                    Some(MaybeHoley::Hole) | None => Ok(Value::undefined().into()),
-                };
-            }
-        }
+    if let Ok(index) = u32::try_from(index)
+        && index < MAX_LENGTH
+        && let Some(arr) = target.unpack().downcast_ref::<Array>(scope)
+    {
+        let inner = arr.items.borrow();
+        return match inner.get(index) {
+            Some(MaybeHoley::Some(value)) => value.get_or_apply(scope, This::default()),
+            Some(MaybeHoley::Hole) | None => Ok(Value::undefined().into()),
+        };
     }
 
     match target.get_property(index.to_key(scope), scope) {
@@ -405,11 +404,11 @@ pub fn spec_array_set_property(
     if let Some(arr) = target.unpack().downcast_ref::<Array>(scope) {
         let mut inner = arr.items.borrow_mut();
 
-        if let Ok(index) = u32::try_from(index) {
-            if index < MAX_LENGTH {
-                inner.set(index, value);
-                return Ok(());
-            }
+        if let Ok(index) = u32::try_from(index)
+            && index < MAX_LENGTH
+        {
+            inner.set(index, value);
+            return Ok(());
         }
     }
 

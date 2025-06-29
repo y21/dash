@@ -22,7 +22,7 @@ pub fn define_symbols_impl(tt: TokenStream) -> TokenStream {
             let kind = match strukt.path.segments.last().unwrap().ident.to_string().as_ref() {
                 "Keywords" => Kind::Keyword,
                 "Symbols" => Kind::Symbol,
-                other => panic!("unknown struct: {}", other),
+                other => panic!("unknown struct: {other}"),
             };
 
             for field in strukt.fields {
@@ -50,10 +50,10 @@ pub fn define_symbols_impl(tt: TokenStream) -> TokenStream {
     let mut js_idents = HashSet::new();
     for (_, rust_sym, js_sym) in &symbols {
         if !rust_idents.insert(rust_sym) {
-            panic!("duplicate rust ident: {}", rust_sym);
+            panic!("duplicate rust ident: {rust_sym}");
         }
         if !js_idents.insert(js_sym) {
-            panic!("duplicate js ident: {}", js_sym);
+            panic!("duplicate js ident: {js_sym}");
         }
     }
 

@@ -255,17 +255,17 @@ impl Object for Function {
         scope: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
         let this = 'this: {
-            if let Some(user) = self.inner_user_function() {
-                if user.inner().has_extends_clause {
-                    // We don't immediately create an instance when instantiating a subclass.
-                    // The super() call desugaring will initialize `this`
+            if let Some(user) = self.inner_user_function()
+                && user.inner().has_extends_clause
+            {
+                // We don't immediately create an instance when instantiating a subclass.
+                // The super() call desugaring will initialize `this`
 
-                    let ValueKind::Object(super_constructor) = self.get_prototype(scope)?.unpack() else {
-                        throw!(scope, TypeError, "supertype constructor must be an object")
-                    };
+                let ValueKind::Object(super_constructor) = self.get_prototype(scope)?.unpack() else {
+                    throw!(scope, TypeError, "supertype constructor must be an object")
+                };
 
-                    break 'this This::before_super(super_constructor);
-                }
+                break 'this This::before_super(super_constructor);
             }
 
             this_for_new_target(scope, new_target)?

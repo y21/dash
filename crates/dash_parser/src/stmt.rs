@@ -45,12 +45,12 @@ impl Parser<'_, '_> {
             TokenType::Debugger => Some(StatementKind::Debugger),
             TokenType::Semicolon => Some(StatementKind::Empty),
             other => 'other: {
-                if let TokenType::Identifier(label) = other {
-                    if self.eat(TokenType::Colon, false).is_some() {
-                        // `foo: <statement that can be broken out of>`
-                        let stmt = self.parse_statement()?;
-                        break 'other Some(StatementKind::Labelled(label, Box::new(stmt)));
-                    }
+                if let TokenType::Identifier(label) = other
+                    && self.eat(TokenType::Colon, false).is_some()
+                {
+                    // `foo: <statement that can be broken out of>`
+                    let stmt = self.parse_statement()?;
+                    break 'other Some(StatementKind::Labelled(label, Box::new(stmt)));
                 }
 
                 // We've skipped the current character because of the statement cases that skip the current token

@@ -538,10 +538,10 @@ fn expr_has_side_effects(expr: &Expr) -> bool {
         ExprKind::Literal(LiteralExpr::Regex(..)) => false,
         ExprKind::Literal(LiteralExpr::String(..)) => false,
         ExprKind::Object(ObjectLiteral(object)) => object.iter().any(|(kind, expr)| {
-            if let ObjectMemberKind::Dynamic(dynamic) = kind {
-                if expr_has_side_effects(dynamic) {
-                    return true;
-                }
+            if let ObjectMemberKind::Dynamic(dynamic) = kind
+                && expr_has_side_effects(dynamic)
+            {
+                return true;
             };
             expr_has_side_effects(expr)
         }),

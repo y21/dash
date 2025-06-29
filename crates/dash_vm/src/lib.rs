@@ -1428,7 +1428,7 @@ impl Vm {
         for (i, v) in self.stack.iter().enumerate() {
             print!("{i}: ");
             match v.unpack() {
-                ValueKind::Object(o) => println!("{:#?}", o),
+                ValueKind::Object(o) => println!("{o:#?}"),
                 ValueKind::External(o) => println!("[[external]]: {:#?}", o.inner(self)),
                 v => println!("{v:?}"),
             }
@@ -1471,10 +1471,10 @@ impl Vm {
 
         for promise_id in rejected_promises.iter() {
             let promise = promise_id.extract::<Promise>(&scope).unwrap();
-            if let PromiseState::Rejected { value, caught: false } = *promise.state().borrow() {
-                if let Some(callback) = scope.params.unhandled_task_exception_callback {
-                    callback(&mut scope, value, UncaughtExceptionSource::Promise);
-                }
+            if let PromiseState::Rejected { value, caught: false } = *promise.state().borrow()
+                && let Some(callback) = scope.params.unhandled_task_exception_callback
+            {
+                callback(&mut scope, value, UncaughtExceptionSource::Promise);
             }
         }
 

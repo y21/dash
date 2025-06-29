@@ -43,7 +43,7 @@ pub fn run_with_nodejs_mnemnoics(path: &str, opt: OptLevel, initial_gc_threshold
 
     tokio_rt.block_on(async move {
         if let Err(err) = run_inner_fallible(path, opt, initial_gc_threshold).await {
-            eprintln!("{}", err);
+            eprintln!("{err}");
         }
     });
 

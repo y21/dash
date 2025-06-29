@@ -358,14 +358,14 @@ impl<'a, 'interner> Lexer<'a, 'interner> {
                 continue;
             }
 
-            if cur == b'$' {
-                if let Some(b'{') = self.peek() {
-                    // String interpolation
-                    found_end = true;
-                    is_interpolated = true;
-                    self.template_literal_depths_stack.push(0);
-                    break;
-                }
+            if cur == b'$'
+                && let Some(b'{') = self.peek()
+            {
+                // String interpolation
+                found_end = true;
+                is_interpolated = true;
+                self.template_literal_depths_stack.push(0);
+                break;
             }
 
             if cur == b'\n' {

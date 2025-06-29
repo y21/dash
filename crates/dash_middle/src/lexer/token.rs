@@ -486,7 +486,7 @@ impl TokenType {
                     TokenType::DUMMY_IDENTIFIER => write!(f, "<identifier>"),
                     TokenType::DUMMY_TEMPLATE_LITERAL => write!(f, "<template literal>"),
                     TokenType::DUMMY_STRING => write!(f, "<string>"),
-                    other => write!(f, "{}", other),
+                    other => write!(f, "{other}"),
                 }
             }
         }

@@ -34,8 +34,8 @@ impl JsonParseError {
             Self::UnexpectedToken(token, position) => {
                 Cow::Owned(format!("Unexpected token {} at position {}", *token as char, *position))
             }
-            Self::Utf8Error(_, pos) => Cow::Owned(format!("Utf8 Error at position {}", pos)),
-            Self::ParseFloatError(_, pos) => Cow::Owned(format!("Failed to parse number at position {}", pos)),
+            Self::Utf8Error(_, pos) => Cow::Owned(format!("Utf8 Error at position {pos}")),
+            Self::ParseFloatError(_, pos) => Cow::Owned(format!("Failed to parse number at position {pos}")),
         }
     }
 }

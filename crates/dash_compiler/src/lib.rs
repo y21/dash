@@ -644,12 +644,11 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
         // Typeof operator evaluates its operand differently if it's an identifier and there is no such local variable, so special case it here
         // `typeof x` does not throw an error if the variable does not exist,
         // `typeof x.a` does throw an error
-        if let TokenType::Typeof = operator {
-            if let ExprKind::Literal(LiteralExpr::Identifier(ident)) = expr.kind {
-                if ib.find_local(ident).is_none() {
-                    return ib.build_typeof_global_ident(span, ident);
-                }
-            }
+        if let TokenType::Typeof = operator
+            && let ExprKind::Literal(LiteralExpr::Identifier(ident)) = expr.kind
+            && ib.find_local(ident).is_none()
+        {
+            return ib.build_typeof_global_ident(span, ident);
         }
 
         // Delete operator works different from other unary operators
@@ -1586,12 +1585,12 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
 
             // Insert initializers
             // FIXME: they need to be inserted after every super() call not at the start of the constructor.
-            if let Some(members) = constructor_initializers {
-                if !members.is_empty() {
-                    let members = compile_class_members(ib, span, members)?;
-                    ib.build_this();
-                    ib.build_object_member_like_instruction(span, members, Instruction::AssignProperties)?;
-                }
+            if let Some(members) = constructor_initializers
+                && !members.is_empty()
+            {
+                let members = compile_class_members(ib, span, members)?;
+                ib.build_this();
+                ib.build_object_member_like_instruction(span, members, Instruction::AssignProperties)?;
             }
 
             let res = statements.into_iter().try_for_each(|stmt| ib.accept(stmt));
@@ -2468,7 +2467,6 @@ fn compile_destructuring_pattern(
                 .try_into()
                 .map_err(|_| Error::DestructureLimitExceeded(at))?;
 
-            #[expect(clippy::manual_flatten, reason = "pattern contains an inner Some()")]
             for field in fields.iter().rev() {
                 if let Some((_, Some(default))) = field {
                     ib.accept_expr(default.clone())?;

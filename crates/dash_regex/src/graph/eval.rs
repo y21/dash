@@ -92,11 +92,11 @@ fn step(shared: &mut Shared<'_>, cx: Cx<'_>, node_id: NodeId, mut remaining: &[u
         NodeKind::RepetitionStart { min, max, inner } => 'arm: {
             let current_repetition_count = cx.current_repetition_count.get().unwrap();
 
-            if let Some(max) = max {
-                if current_repetition_count >= max {
-                    // We've done `max` number of iterations.
-                    break 'arm true;
-                }
+            if let Some(max) = max
+                && current_repetition_count >= max
+            {
+                // We've done `max` number of iterations.
+                break 'arm true;
             }
 
             if step(shared, cx.for_node(shared, inner, node_id, remaining), inner, remaining) {
