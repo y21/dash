@@ -16,6 +16,7 @@ pub struct FrameId(pub u32);
 pub struct FrameStack {
     // Implementation detail: we split the frame data simply because certain fields are so frequently accessed
     // that we would like to inline that directly into the struct so as to be able to read it without indirection.
+    current_base: Option<BaseFrame>,
     base: Vec<BaseFrame>,
     extended: Vec<ExtendedFrame>,
 }
@@ -23,23 +24,37 @@ pub struct FrameStack {
 impl FrameStack {
     pub fn new() -> Self {
         Self {
+            current_base: None,
             base: Vec::new(),
             extended: Vec::new(),
         }
     }
 
-    // Internal functions
+    fn pop_base(&mut self) -> BaseFrame {
+        let current = self.current_base.take().expect("no active frame");
+        if let Some(next) = self.base.pop() {
+            self.current_base = Some(next);
+        }
+        current
+    }
+
+    fn push_base(&mut self, base: BaseFrame) {
+        if let Some(current) = self.current_base.take() {
+            self.base.push(current);
+        }
+        self.current_base = Some(base);
+    }
 
     fn current_base(&self) -> BaseFrame {
-        self.base.last().expect("no active base frame").clone()
+        self.current_base.clone().expect("no active frame")
     }
 
     fn current_base_ref(&self) -> &BaseFrame {
-        self.base.last().expect("no active base frame")
+        self.current_base.as_ref().expect("no active frame")
     }
 
     fn current_base_mut(&mut self) -> &mut BaseFrame {
-        self.base.last_mut().expect("no active frame")
+        self.current_base.as_mut().expect("no active frame")
     }
 
     fn current_extended(&self) -> &ExtendedFrame {
@@ -137,7 +152,7 @@ impl FrameStack {
 
     pub fn pop(&mut self) -> Frame {
         let extended = self.extended.pop().expect("no active frame");
-        let base = self.base.pop().expect("no active frame");
+        let base = self.pop_base();
         Frame {
             function: base.function,
             ip: base.ip,
@@ -154,7 +169,7 @@ impl FrameStack {
 
     pub fn pop_discard(&mut self) {
         self.extended.pop();
-        self.base.pop();
+        self.pop_base();
     }
 
     pub fn current_id(&self) -> FrameId {
@@ -162,9 +177,15 @@ impl FrameStack {
     }
 
     /// "Unwinds" to a frame, i.e. removing all frames above the specified frame.
-    pub fn unwind_to(&mut self, frame_id: FrameId) {
-        self.extended.drain(frame_id.0 as usize + 1..);
-        self.base.drain(frame_id.0 as usize + 1..);
+    pub fn unwind_to(&mut self, FrameId(frame_id): FrameId) {
+        if frame_id + 1 < self.len() {
+            // We need to pop _at least_ one frame.
+            let target = self.base[frame_id as usize].clone();
+            self.base.truncate(frame_id as usize);
+            self.current_base = Some(target);
+        }
+
+        self.extended.truncate(frame_id as usize + 1);
     }
 
     pub fn len(&self) -> u32 {
@@ -173,7 +194,7 @@ impl FrameStack {
 
     pub fn push(&mut self, frame: Frame) -> Result<(), ()> {
         if self.len() < MAX_FRAME_COUNT {
-            self.base.push(BaseFrame {
+            self.push_base(BaseFrame {
                 ip: frame.ip,
                 function: frame.function,
             });
@@ -194,6 +215,9 @@ impl FrameStack {
     }
 
     pub fn function_name_iter(&self) -> impl DoubleEndedIterator<Item = Option<Symbol>> {
-        self.base.iter().map(|frame| frame.function.name)
+        self.base
+            .iter()
+            .chain(self.current_base.iter())
+            .map(|frame| frame.function.name)
     }
 }
