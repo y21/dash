@@ -1,4 +1,6 @@
 use dash_middle::compiler::constant::ConstantPool;
+use dash_middle::index_type;
+use dash_middle::indexvec::IndexVec;
 use dash_middle::interner::Symbol;
 use dash_proc_macro::Trace;
 
@@ -9,24 +11,26 @@ use crate::value::{ExternalValue, Unrooted};
 
 const MAX_FRAME_COUNT: u32 = 1024;
 
-#[derive(Debug, Clone, Copy, Trace, PartialEq, Eq, PartialOrd, Ord)]
-pub struct FrameId(pub u32);
+index_type! {
+    #[derive(Debug, Clone, Copy, Trace, PartialEq, Eq, PartialOrd, Ord)]
+    pub struct FrameId(pub u32);
+}
 
 #[derive(Trace)]
 pub struct FrameStack {
     // Implementation detail: we split the frame data simply because certain fields are so frequently accessed
     // that we would like to inline that directly into the struct so as to be able to read it without indirection.
     current_base: Option<BaseFrame>,
-    base: Vec<BaseFrame>,
-    extended: Vec<ExtendedFrame>,
+    base: IndexVec<BaseFrame, FrameId>,
+    extended: IndexVec<ExtendedFrame, FrameId>,
 }
 
 impl FrameStack {
     pub fn new() -> Self {
         Self {
             current_base: None,
-            base: Vec::new(),
-            extended: Vec::new(),
+            base: IndexVec::new(),
+            extended: IndexVec::new(),
         }
     }
 
@@ -173,19 +177,19 @@ impl FrameStack {
     }
 
     pub fn current_id(&self) -> FrameId {
-        FrameId(self.extended.len() as u32 - 1)
+        FrameId(self.extended.len() - 1)
     }
 
     /// "Unwinds" to a frame, i.e. removing all frames above the specified frame.
-    pub fn unwind_to(&mut self, FrameId(frame_id): FrameId) {
-        if frame_id + 1 < self.len() {
+    pub fn unwind_to(&mut self, frame_id: FrameId) {
+        if frame_id.0 + 1 < self.len() {
             // We need to pop _at least_ one frame.
-            let target = self.base[frame_id as usize].clone();
-            self.base.truncate(frame_id as usize);
+            let target = self.base[frame_id].clone();
+            self.base.truncate(frame_id.0);
             self.current_base = Some(target);
         }
 
-        self.extended.truncate(frame_id as usize + 1);
+        self.extended.truncate(frame_id.0 + 1);
     }
 
     pub fn len(&self) -> u32 {

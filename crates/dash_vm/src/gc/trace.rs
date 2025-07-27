@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use dash_middle::compiler::constant::ConstantPool;
+use dash_middle::indexvec::{Index, IndexVec};
 use dash_middle::interner::StringInterner;
 use dash_regex::Regex;
 
@@ -72,6 +73,13 @@ unsafe impl<T: Trace> Trace for Vec<T> {
         self.as_slice().trace(cx);
     }
 }
+
+unsafe impl<T: Trace, I: Index> Trace for IndexVec<T, I> {
+    fn trace(&self, cx: &mut TraceCtxt<'_>) {
+        self.as_slice().trace(cx);
+    }
+}
+
 unsafe impl<T: Trace> Trace for VecDeque<T> {
     fn trace(&self, cx: &mut TraceCtxt<'_>) {
         self.iter().for_each(|t| t.trace(cx));

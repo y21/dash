@@ -5,7 +5,7 @@ use std::rc::Rc;
 use dash_regex::Regex;
 
 use crate::index_type;
-use crate::indexvec::IndexThinVec;
+use crate::indexthinvec::IndexThinVec;
 use crate::interner::Symbol;
 use crate::parser::statement::FunctionKind;
 
@@ -82,11 +82,18 @@ pub struct Function {
     pub has_extends_clause: bool,
 }
 
-index_type!(NumberConstant u16);
-index_type!(BooleanConstant u16);
-index_type!(FunctionConstant u16);
-index_type!(RegexConstant u16);
-index_type!(SymbolConstant u16);
+index_type!(
+    #[derive(Copy, Default, Debug, Clone)]
+    pub struct NumberConstant(pub u16);
+    #[derive(Copy, Default, Debug, Clone)]
+    pub struct BooleanConstant(pub u16);
+    #[derive(Copy, Default, Debug, Clone)]
+    pub struct FunctionConstant(pub u16);
+    #[derive(Copy, Default, Debug, Clone)]
+    pub struct RegexConstant(pub u16);
+    #[derive(Copy, Default, Debug, Clone)]
+    pub struct SymbolConstant(pub u16);
+);
 
 #[cfg_attr(feature = "format", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Default, Debug, Clone)]
@@ -108,7 +115,10 @@ macro_rules! define_push_methods {
                 &mut self,
                 val: $valty,
             ) -> Result<$constant, LimitExceededError> {
-                self.$field.try_push(val).map_err(|_| LimitExceededError)
+                match self.$field.try_push(val) {
+                    Some(index) => Ok(index),
+                    None => Err(LimitExceededError),
+                }
             }
         )*
     };

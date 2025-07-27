@@ -1,4 +1,5 @@
 pub mod compiler;
+pub mod indexthinvec;
 pub mod indexvec;
 pub mod interner;
 pub mod iterator_with;
