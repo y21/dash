@@ -1231,43 +1231,23 @@ impl Vm {
         );
     }
 
-    pub(crate) fn active_frame(&self) -> &Frame {
-        self.frames.current()
-    }
-
-    #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
-    pub(crate) fn active_frame_mut(&mut self) -> &mut Frame {
-        self.frames.current_mut()
-    }
-
     /// Fetches the current instruction/value in the currently executing frame
     /// and increments the instruction pointer
     #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
     pub(crate) fn fetch_and_inc_ip(&mut self) -> u8 {
-        let frame = self.active_frame_mut();
-        let ip = frame.ip;
-        frame.ip += 1;
-        frame.function.buffer.with(|buf| buf[ip])
+        self.frames.fetch_and_inc_ip()
     }
 
     /// Fetches a wide value (16-bit) in the currently executing frame
     /// and increments the instruction pointer
     #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
     pub(crate) fn fetchw_and_inc_ip(&mut self) -> u16 {
-        let frame = self.active_frame_mut();
-        let value: [u8; 2] = frame.function.buffer.with(|buf| {
-            buf[frame.ip..frame.ip + 2]
-                .try_into()
-                .expect("Failed to get wide instruction")
-        });
-
-        frame.ip += 2;
-        u16::from_ne_bytes(value)
+        self.frames.fetchw_and_inc_ip()
     }
 
     #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
     pub(crate) fn get_frame_sp(&self) -> usize {
-        self.active_frame().sp
+        self.frames.current_sp()
     }
 
     /// Fetches a local, while also preserving external values
@@ -1286,8 +1266,8 @@ impl Vm {
             .map(|v| v.unbox_external(self))
     }
 
-    pub(crate) fn get_external(&self, id: usize) -> Option<ExternalValue> {
-        self.active_frame().externals.get(id).copied()
+    pub(crate) fn get_external(&self, id: usize) -> ExternalValue {
+        self.frames.current_external(id)
     }
 
     #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
@@ -1382,7 +1362,7 @@ impl Vm {
             // the frame that this execution context was instantiated in, then we can't jump there.
             if try_fp < max_fp {
                 // TODO: don't duplicate this code
-                self.frames.pop();
+                self.frames.pop_discard();
                 return Err(err);
             }
 
@@ -1393,7 +1373,7 @@ impl Vm {
             self.frames.unwind_to(try_fp);
 
             if let Some(catch_ip) = catch_ip {
-                self.active_frame_mut().ip = catch_ip;
+                self.frames.set_ip(catch_ip);
 
                 let catch_binding = self.fetchw_and_inc_ip();
                 if catch_binding != u16::MAX {
@@ -1412,8 +1392,8 @@ impl Vm {
                     });
                 }
             } else if let Some(finally_ip) = finally_ip {
-                self.active_frame_mut().delayed_ret = Some(Err(err));
-                self.active_frame_mut().ip = finally_ip;
+                self.frames.set_delayed_ret(Some(Err(err)));
+                self.frames.set_ip(finally_ip);
             }
 
             Ok(())

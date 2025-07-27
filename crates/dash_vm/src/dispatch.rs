@@ -53,9 +53,7 @@ impl<'vm> DispatchContext<'vm> {
     }
 
     pub fn get_external(&mut self, index: usize) -> ExternalValue {
-        self.scope
-            .get_external(index)
-            .expect("Bytecode attempted to reference invalid external")
+        self.scope.get_external(index)
     }
 
     pub fn pop_frame(&mut self) -> Frame {
@@ -137,17 +135,8 @@ impl<'vm> DispatchContext<'vm> {
         Ok(None)
     }
 
-    pub fn active_frame(&self) -> &Frame {
-        self.frames.current()
-    }
-
-    #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
-    pub fn active_frame_mut(&mut self) -> &mut Frame {
-        self.frames.current_mut()
-    }
-
     pub fn constants(&self) -> &ConstantPool {
-        &self.active_frame().function.constants
+        self.frames.current_constants()
     }
 }
 
@@ -640,7 +629,7 @@ mod handlers {
                 let id = usize::from(id);
 
                 let val = if is_nested_external {
-                    sc.get_external(id).expect("Referenced local not found")
+                    sc.get_external(id)
                 } else {
                     let v = sc.get_local_raw(id).expect("Referenced local not found");
 
@@ -677,7 +666,7 @@ mod handlers {
             ParserFunctionKind::Function(Asyncness::No) => FunctionKind::User(fun),
             ParserFunctionKind::Arrow => FunctionKind::Closure(Closure {
                 fun,
-                this: cx.scope.active_frame().this,
+                this: cx.scope.frames.current_this(),
             }),
             ParserFunctionKind::Generator => FunctionKind::Generator(GeneratorFunction::new(fun)),
         };
@@ -834,14 +823,14 @@ mod handlers {
 
     pub fn delayed_ret(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let value = cx.pop_stack();
-        cx.active_frame_mut().delayed_ret = Some(Ok(value));
+        cx.frames.set_delayed_ret(Some(Ok(value)));
         Ok(None)
     }
 
     pub fn finally_end(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let tc_depth = cx.fetchw_and_inc_ip();
 
-        if let Some(ret) = cx.active_frame_mut().delayed_ret.take() {
+        if let Some(ret) = cx.frames.take_delayed_ret() {
             let ret = ret?.root(&mut cx.scope);
             let frame_idx = cx.frames.current_id();
             // NOTE: the try block was re-pushed in handle_rt_error
@@ -853,7 +842,7 @@ mod handlers {
             if let Some(finally) = enclosing_finally {
                 let lower_tcp = cx.try_blocks.len() - usize::from(tc_depth);
                 drop(cx.try_blocks.drain(lower_tcp..));
-                cx.active_frame_mut().ip = finally;
+                cx.frames.set_ip(finally);
             } else {
                 let this = cx.pop_frame();
                 return ret_inner(cx, tc_depth, ret, this);
@@ -1072,11 +1061,11 @@ mod handlers {
 
                     This::before_super(super_constructor)
                 } else {
-                    let new_target = cx.active_frame().new_target().unwrap();
+                    let new_target = cx.frames.current_state().new_target().unwrap();
                     this_for_new_target(&mut cx.scope, new_target)?
                 };
 
-                (this, cx.active_frame().new_target())
+                (this, cx.frames.current_state().new_target())
             }
         };
 
@@ -1181,7 +1170,7 @@ mod handlers {
         let ret = match function_call_kind {
             FunctionCallKind::Constructor => callee.construct(this, args.into(), &mut cx.scope)?,
             FunctionCallKind::Super => {
-                let new_target = cx.active_frame().new_target().unwrap();
+                let new_target = cx.frames.current_state().new_target().unwrap();
                 callee.construct_with_target(this, args.into(), new_target, &mut cx.scope)?
             }
             FunctionCallKind::Function => callee.apply_with_debug(this, args.into(), call_ip, &mut cx.scope)?,
@@ -1193,7 +1182,8 @@ mod handlers {
     }
 
     pub fn call(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let call_ip = cx.active_frame().ip as u16 - 1;
+        // FIXME: sketchy assumption
+        let call_ip = cx.frames.current_ip() as u16 - 1;
 
         let argc = usize::from(cx.fetch_and_inc_ip());
         let has_this = extract::<bool>(&mut cx);
@@ -1201,7 +1191,7 @@ mod handlers {
 
         let stack_len = cx.stack.len();
         let (callee, this) = if function_call_kind == FunctionCallKind::Super {
-            let callee = match cx.active_frame().this.kind() {
+            let callee = match cx.frames.current_this().kind() {
                 ThisKind::BeforeSuper { super_constructor } => Value::object(super_constructor),
                 _ => throw!(
                     cx.scope,
@@ -1241,13 +1231,9 @@ mod handlers {
         let jump = !value.is_truthy(&mut cx.scope);
 
         if jump {
-            let frame = cx.active_frame_mut();
+            let ip = cx.frames.current_ip();
 
-            if offset.is_negative() {
-                frame.ip -= -offset as usize;
-            } else {
-                frame.ip += offset as usize;
-            }
+            cx.frames.set_ip((ip as isize + offset as isize) as usize);
         }
 
         Ok(None)
@@ -1260,13 +1246,9 @@ mod handlers {
         let jump = !value.is_truthy(&mut cx.scope);
 
         if jump {
-            let frame = cx.active_frame_mut();
+            let ip = cx.frames.current_ip();
 
-            if offset.is_negative() {
-                frame.ip -= -offset as usize;
-            } else {
-                frame.ip += offset as usize;
-            }
+            cx.frames.set_ip((ip as isize + offset as isize) as usize);
         }
 
         Ok(None)
@@ -1279,13 +1261,9 @@ mod handlers {
         let jump = value.is_truthy(&mut cx.scope);
 
         if jump {
-            let frame = cx.active_frame_mut();
+            let ip = cx.frames.current_ip();
 
-            if offset.is_negative() {
-                frame.ip -= -offset as usize;
-            } else {
-                frame.ip += offset as usize;
-            }
+            cx.frames.set_ip((ip as isize + offset as isize) as usize);
         }
 
         Ok(None)
@@ -1298,13 +1276,9 @@ mod handlers {
         let jump = value.is_truthy(&mut cx.scope);
 
         if jump {
-            let frame = cx.active_frame_mut();
+            let ip = cx.frames.current_ip();
 
-            if offset.is_negative() {
-                frame.ip -= -offset as usize;
-            } else {
-                frame.ip += offset as usize;
-            }
+            cx.frames.set_ip((ip as isize + offset as isize) as usize);
         }
 
         Ok(None)
@@ -1317,13 +1291,9 @@ mod handlers {
         let jump = value.is_nullish();
 
         if jump {
-            let frame = cx.active_frame_mut();
+            let ip = cx.frames.current_ip();
 
-            if offset.is_negative() {
-                frame.ip -= -offset as usize;
-            } else {
-                frame.ip += offset as usize;
-            }
+            cx.frames.set_ip((ip as isize + offset as isize) as usize);
         }
 
         Ok(None)
@@ -1336,13 +1306,9 @@ mod handlers {
         let jump = value.is_nullish();
 
         if jump {
-            let frame = cx.active_frame_mut();
+            let ip = cx.frames.current_ip();
 
-            if offset.is_negative() {
-                frame.ip -= -offset as usize;
-            } else {
-                frame.ip += offset as usize;
-            }
+            cx.frames.set_ip((ip as isize + offset as isize) as usize);
         }
 
         Ok(None)
@@ -1355,13 +1321,9 @@ mod handlers {
         let jump = matches!(value.unpack(), ValueKind::Undefined(_));
 
         if jump {
-            let frame = cx.active_frame_mut();
+            let ip = cx.frames.current_ip();
 
-            if offset.is_negative() {
-                frame.ip -= -offset as usize;
-            } else {
-                frame.ip += offset as usize;
-            }
+            cx.frames.set_ip((ip as isize + offset as isize) as usize);
         }
 
         Ok(None)
@@ -1374,13 +1336,9 @@ mod handlers {
         let jump = matches!(value.unpack(), ValueKind::Null(_));
 
         if jump {
-            let frame = cx.active_frame_mut();
+            let ip = cx.frames.current_ip();
 
-            if offset.is_negative() {
-                frame.ip -= -offset as usize;
-            } else {
-                frame.ip += offset as usize;
-            }
+            cx.frames.set_ip((ip as isize + offset as isize) as usize);
         }
 
         Ok(None)
@@ -1388,15 +1346,9 @@ mod handlers {
 
     pub fn jmp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let offset = cx.fetchw_and_inc_ip() as i16;
-        let frame = cx.active_frame_mut();
+        let ip = cx.frames.current_ip();
 
-        // Note: this is an unconditional jump, so we don't push this into the trace as a conditional jump
-
-        if offset.is_negative() {
-            frame.ip -= -offset as usize;
-        } else {
-            frame.ip += offset as usize;
-        }
+        cx.frames.set_ip((ip as isize + offset as isize) as usize);
 
         Ok(None)
     }
@@ -1854,7 +1806,7 @@ mod handlers {
                 let value = Value::external(cx.get_external(id.into()).id()).unbox_external(&cx.scope);
                 let right = cx.pop_stack_rooted();
                 let res = $op(value, right, &mut cx)?;
-                let external = cx.scope.get_external(id.into()).unwrap().clone();
+                let external = cx.scope.get_external(id.into());
                 assign_to_external(&mut cx.scope, external, res.clone());
                 cx.stack.push(res);
             }};
@@ -1865,7 +1817,7 @@ mod handlers {
                 let value = Value::external(cx.get_external(id.into()).id()).unbox_external(&cx.scope);
                 let right = Value::number(1.0);
                 let res = $op(value, right, &mut cx)?;
-                let external = cx.scope.get_external(id.into()).unwrap().clone();
+                let external = cx.scope.get_external(id.into());
                 assign_to_external(&mut cx.scope, external, res.clone());
                 cx.stack.push(res);
             }};
@@ -1876,7 +1828,7 @@ mod handlers {
                 let value = Value::external(cx.get_external(id.into()).id()).unbox_external(&cx.scope);
                 let right = Value::number(1.0);
                 let res = $op(value, right, &mut cx)?;
-                let external = cx.scope.get_external(id.into()).unwrap().clone();
+                let external = cx.scope.get_external(id.into());
                 assign_to_external(&mut cx.scope, external, res);
                 cx.stack.push(value);
             }};
@@ -1885,7 +1837,7 @@ mod handlers {
         match kind {
             AssignKind::Assignment => {
                 let value = cx.pop_stack_rooted();
-                let external = cx.scope.get_external(id.into()).unwrap();
+                let external = cx.scope.get_external(id.into());
                 assign_to_external(&mut cx.scope, external, value);
                 cx.stack.push(value);
             }
@@ -1913,7 +1865,7 @@ mod handlers {
     pub fn try_block(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let mut compute_dist_ip = || {
             let distance = extract::<Option<u16>>(&mut cx)?;
-            let ip = cx.active_frame().ip;
+            let ip = cx.frames.current_ip();
             Some(ip + distance as usize)
         };
 
@@ -2003,9 +1955,8 @@ mod handlers {
     pub fn export_default(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         // NOTE: Does not need to be rooted. Storing it in frame state counts as being rooted.
         let value = cx.pop_stack();
-        let frame = cx.active_frame_mut();
 
-        match &mut frame.state {
+        match cx.frames.current_state_mut() {
             FrameState::Module(module) => {
                 module.default = Some(value);
             }
@@ -2020,7 +1971,7 @@ mod handlers {
         while let Some(prop) = iter.next(&mut cx) {
             let ExportProperty(value, ident) = prop?;
 
-            match &mut cx.active_frame_mut().state {
+            match cx.frames.current_state_mut() {
                 FrameState::Module(exports) => exports.named.push((ident, value)),
                 _ => throw!(cx, Error, "Export is only available at the top level in modules"),
             }
@@ -2037,14 +1988,14 @@ mod handlers {
     }
 
     pub fn this(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let value = cx.active_frame().this.to_value(&mut cx.scope)?;
+        let value = cx.frames.current_this().to_value(&mut cx.scope)?;
         cx.stack.push(value);
         Ok(None)
     }
 
     pub fn bindthis(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let value = cx.pop_stack_rooted();
-        cx.active_frame_mut().this = This::bound(value);
+        cx.frames.set_this(This::bound(value));
         Ok(None)
     }
 
@@ -2298,13 +2249,7 @@ mod handlers {
             let ValueKind::Number(Number(left)) = value.unpack() else {
                 unreachable!()
             };
-            let frame = vm.frames.current_mut();
-            let ip = frame.ip;
-            let right = frame
-                .function
-                .buffer
-                .with(|buf| u32::from_ne_bytes(buf[ip..ip + 4].try_into().unwrap()) as f64);
-            frame.ip += 4;
+            let right = vm.frames.fetch32_and_inc_ip() as f64;
 
             *value = Value::boolean(f(left, right));
         }
@@ -2406,9 +2351,10 @@ mod handlers {
 
     pub fn arguments(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let arguments = cx
-            .active_frame()
-            .arguments
-            .expect("`arguments` was never set despite being referenced in bytecode");
+            .frames
+            .current_arguments()
+            .expect("use of `arguments` should have been found by compiler");
+
         cx.stack.push(Value::object(arguments));
         Ok(None)
     }
@@ -2417,7 +2363,7 @@ mod handlers {
         if let FrameState::Function {
             new_target: Some(new_target),
             ..
-        } = cx.active_frame().state
+        } = *cx.frames.current_state()
         {
             cx.stack.push(Value::object(new_target));
         } else {

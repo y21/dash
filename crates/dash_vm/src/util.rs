@@ -10,8 +10,17 @@ use crate::localscope::LocalScope;
 pub fn cold_path() {}
 
 /// Marks the boolean as unlikely to be true.
+#[inline]
 pub fn unlikely(b: bool) -> bool {
     if b {
+        cold_path();
+    }
+    b
+}
+
+#[inline]
+pub fn likely(b: bool) -> bool {
+    if !b {
         cold_path();
     }
     b

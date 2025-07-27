@@ -731,13 +731,7 @@ impl Value {
             _ => {
                 cold_path();
 
-                let frame = sc.active_frame();
-                let snippet = frame
-                    .function
-                    .debug_symbols
-                    .get(ip)
-                    .res(&frame.function.source)
-                    .to_owned();
+                let snippet = sc.frames.resolve_ip_debuginfo(ip).to_owned();
 
                 throw!(sc, TypeError, "{} is not a function", snippet)
             }

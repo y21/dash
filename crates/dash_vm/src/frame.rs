@@ -56,6 +56,15 @@ pub enum FrameState {
     Module(Exports),
 }
 
+impl FrameState {
+    pub fn new_target(&self) -> Option<ObjectId> {
+        match *self {
+            FrameState::Function { new_target, .. } => new_target,
+            FrameState::Module(_) => None,
+        }
+    }
+}
+
 unsafe impl Trace for FrameState {
     fn trace(&self, cx: &mut TraceCtxt<'_>) {
         match self {
@@ -94,6 +103,36 @@ impl LoopCounterMap {
 
 unsafe impl Trace for LoopCounterMap {
     fn trace(&self, _: &mut TraceCtxt<'_>) {}
+}
+
+#[derive(Debug, Clone, Trace)]
+pub struct BaseFrame {
+    pub ip: usize,
+    pub function: Rc<Function>,
+}
+
+#[derive(Debug, Clone, Trace)]
+pub struct ExtendedFrame {
+    /// Extra stack space allocated at the start of frame execution, currently only used for local variables
+    /// (excluding function parameters, as they are pushed onto the stack in Function::apply)
+    pub extra_stack_space: usize,
+    /// Contains local variable values from the outer scope
+    pub externals: Rc<[ExternalValue]>,
+    pub this: This,
+    pub sp: usize,
+    pub state: FrameState,
+    /// When evaluating a `return` op in a try/catch with a finally block,
+    /// this will be set to Some(Ok(that_value)).
+    /// Exceptions thrown will set it to Err(exception).
+    pub delayed_ret: Option<Result<Unrooted, Unrooted>>,
+
+    /// The `arguments` object.
+    /// For optimization purposes, this is `None` in frames whose function never references `arguments`,
+    /// because there's no reason to construct it in those cases.
+    pub arguments: Option<ObjectId>,
+
+    /// Counts the number of backjumps to a particular loop header, to find hot loops
+    pub loop_counter: LoopCounterMap,
 }
 
 #[derive(Debug, Clone, Trace)]
@@ -216,12 +255,5 @@ impl Frame {
 
     pub fn set_sp(&mut self, sp: usize) {
         self.sp = sp;
-    }
-
-    pub fn new_target(&self) -> Option<ObjectId> {
-        match self.state {
-            FrameState::Function { new_target, .. } => new_target,
-            FrameState::Module(_) => None,
-        }
     }
 }
