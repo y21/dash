@@ -7,6 +7,7 @@ use dash_middle::compiler::constant::{Buffer, Function};
 use dash_middle::parser::statement::{Asyncness, FunctionKind};
 use dash_proc_macro::Trace;
 
+use crate::framestack::FrameId;
 use crate::gc::ObjectId;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::value::object::This;
@@ -20,7 +21,7 @@ pub struct TryBlock {
     pub catch_ip: Option<usize>,
     pub finally_ip: Option<usize>,
     /// The frame index
-    pub frame_idx: usize,
+    pub frame_idx: FrameId,
 }
 
 #[derive(Debug, Clone, Default)]

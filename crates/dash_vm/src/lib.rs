@@ -8,6 +8,7 @@ use std::ops::RangeBounds;
 use std::vec::Drain;
 use std::{fmt, mem};
 
+use crate::framestack::{FrameId, FrameStack};
 use crate::util::cold_path;
 use crate::value::Root;
 use crate::value::function::Function;
@@ -38,6 +39,7 @@ use value::{ExternalValue, PureBuiltin, Unpack, Unrooted, ValueKind};
 pub mod dispatch;
 pub mod eval;
 pub mod frame;
+mod framestack;
 pub mod gc;
 pub mod js_std;
 pub mod json;
@@ -65,7 +67,7 @@ pub struct ExternalRefs(pub std::rc::Rc<std::cell::RefCell<FxHashMap<ObjectId, u
 
 pub struct Vm {
     #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
-    frames: Vec<Frame>,
+    frames: FrameStack,
     stack: Vec<Value>,
     scopes: LocalScopeList,
     alloc: Allocator,
@@ -105,7 +107,7 @@ impl Vm {
         let gc_rss_threshold = params.initial_gc_rss_threshold.unwrap_or(DEFAULT_GC_RSS_THRESHOLD);
 
         let mut vm = Self {
-            frames: Vec::new(),
+            frames: FrameStack::new(),
             async_tasks: VecDeque::new(),
             stack: Vec::with_capacity(512),
             alloc,
@@ -1230,12 +1232,12 @@ impl Vm {
     }
 
     pub(crate) fn active_frame(&self) -> &Frame {
-        self.frames.last().expect("frames stack is empty")
+        self.frames.current()
     }
 
     #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
     pub(crate) fn active_frame_mut(&mut self) -> &mut Frame {
-        self.frames.last_mut().expect("frames stack is empty")
+        self.frames.current_mut()
     }
 
     /// Fetches the current instruction/value in the currently executing frame
@@ -1312,9 +1314,7 @@ impl Vm {
     }
 
     pub(crate) fn try_push_frame(&mut self, frame: Frame) -> Result<(), Unrooted> {
-        if self.frames.len() <= MAX_FRAME_STACK_SIZE {
-            self.frames.push(frame);
-        } else {
+        if let Err(()) = self.frames.push(frame) {
             cold_path();
             // This is a bit sus (we're creating a temporary scope for the error creation and returning it past its scope),
             // but the error type is `Unrooted`, so it needs to be re-rooted at callsite anyway.
@@ -1344,7 +1344,7 @@ impl Vm {
         self.stack.len()
     }
 
-    pub(crate) fn pop_frame(&mut self) -> Option<Frame> {
+    pub(crate) fn pop_frame(&mut self) -> Frame {
         self.frames.pop()
     }
 
@@ -1366,8 +1366,8 @@ impl Vm {
         Unrooted::new(value)
     }
 
-    fn handle_rt_error(&mut self, err: Unrooted, max_fp: usize) -> Result<(), Unrooted> {
-        debug!("handling rt error @{max_fp}");
+    fn handle_rt_error(&mut self, err: Unrooted, max_fp: FrameId) -> Result<(), Unrooted> {
+        debug!("handling rt error @{}", max_fp.0);
         // Using .last() here instead of .pop() because there is a possibility that we
         // can't use this block (read the comment above the if statement try_fp < max_fp)
         if let Some(&TryBlock {
@@ -1390,7 +1390,7 @@ impl Vm {
             self.try_blocks.pop();
 
             // Unwind frames
-            drop(self.frames.drain(try_fp + 1..));
+            self.frames.unwind_to(try_fp);
 
             if let Some(catch_ip) = catch_ip {
                 self.active_frame_mut().ip = catch_ip;
@@ -1511,7 +1511,7 @@ impl Vm {
     }
 
     fn handle_instruction_loop(&mut self) -> Result<HandleResult, Unrooted> {
-        let fp = self.frames.len() - 1;
+        let fp = self.frames.current_id();
 
         loop {
             #[cfg(feature = "stress_gc")]
@@ -1540,7 +1540,7 @@ impl Vm {
         frame.sp = self.stack.len();
         self.execute_frame(frame)?;
 
-        let frame = self.frames.pop().expect("Missing module frame");
+        let frame = self.frames.pop();
         Ok(match frame.state {
             FrameState::Module(exports) => exports,
             _ => unreachable!(),

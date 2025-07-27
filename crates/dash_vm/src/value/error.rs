@@ -27,12 +27,8 @@ fn get_stack_trace(name: JsString, message: JsString, sc: &mut LocalScope<'_>) -
     let message = message.res(sc);
     let mut stack = format!("{name}: {message}");
 
-    for frame in sc.frames.iter().rev().take(10) {
-        let name = frame
-            .function
-            .name
-            .map(|s| sc.interner.resolve(s))
-            .unwrap_or("<anonymous>");
+    for name in sc.frames.function_name_iter().rev().take(10) {
+        let name = name.map(|s| sc.interner.resolve(s)).unwrap_or("<anonymous>");
         let _ = write!(stack, "\n  at {name}");
     }
 

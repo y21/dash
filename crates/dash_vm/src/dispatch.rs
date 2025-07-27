@@ -59,9 +59,7 @@ impl<'vm> DispatchContext<'vm> {
     }
 
     pub fn pop_frame(&mut self) -> Frame {
-        self.frames
-            .pop()
-            .expect("Bytecode attempted to pop frame, but no frames exist")
+        self.frames.pop()
     }
 
     pub fn pop_stack(&mut self) -> Unrooted {
@@ -140,16 +138,12 @@ impl<'vm> DispatchContext<'vm> {
     }
 
     pub fn active_frame(&self) -> &Frame {
-        self.frames
-            .last()
-            .expect("Dispatch Context attempted to reference missing frame")
+        self.frames.current()
     }
 
     #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
     pub fn active_frame_mut(&mut self) -> &mut Frame {
-        self.frames
-            .last_mut()
-            .expect("Dispatch Context attempted to reference missing frame")
+        self.frames.current_mut()
     }
 
     pub fn constants(&self) -> &ConstantPool {
@@ -849,7 +843,7 @@ mod handlers {
 
         if let Some(ret) = cx.active_frame_mut().delayed_ret.take() {
             let ret = ret?.root(&mut cx.scope);
-            let frame_idx = cx.frames.len() - 1;
+            let frame_idx = cx.frames.current_id();
             // NOTE: the try block was re-pushed in handle_rt_error
             let enclosing_finally = cx
                 .try_blocks
@@ -884,7 +878,7 @@ mod handlers {
         match this.state {
             FrameState::Module(_) => {
                 // Put it back on the frame stack, because we'll need it in Vm::execute_module
-                cx.frames.push(this);
+                cx.frames.push(this).expect("frame was just popped");
                 Ok(Some(HandleResult::Return(Unrooted::new(value))))
             }
             FrameState::Function {
@@ -1925,7 +1919,7 @@ mod handlers {
 
         let catch_ip = compute_dist_ip();
         let finally_ip = compute_dist_ip();
-        let frame_idx = cx.frames.len() - 1;
+        let frame_idx = cx.frames.current_id();
 
         cx.try_blocks.push(TryBlock {
             catch_ip,
@@ -2304,7 +2298,7 @@ mod handlers {
             let ValueKind::Number(Number(left)) = value.unpack() else {
                 unreachable!()
             };
-            let frame = vm.frames.last_mut().unwrap();
+            let frame = vm.frames.current_mut();
             let ip = frame.ip;
             let right = frame
                 .function

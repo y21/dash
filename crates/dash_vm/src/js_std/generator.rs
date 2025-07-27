@@ -2,12 +2,13 @@ use std::mem;
 
 use crate::dispatch::HandleResult;
 use crate::frame::Frame;
+use crate::framestack::FrameId;
 use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::function::generator::{GeneratorIterator, GeneratorState};
 use crate::value::function::native::CallContext;
 use crate::value::function::{Function, FunctionKind};
-use crate::value::object::{OrdObject, Object, PropertyValue};
+use crate::value::object::{Object, OrdObject, PropertyValue};
 use crate::value::propertykey::ToPropertyKey;
 use crate::value::root_ext::RootErrExt;
 use crate::value::{Root, Unrooted, Value, ValueContext};
@@ -43,7 +44,7 @@ fn bootstrap_generator(
 
         for tb in &mut try_blocks {
             // frame_idx is 0-based, but we haven't pushed the frame yet and will later, which will make this correct.
-            tb.frame_idx = scope.frames.len();
+            tb.frame_idx = FrameId(scope.frames.len());
         }
 
         let function = generator.function();
@@ -90,8 +91,8 @@ fn bootstrap_generator(
             // Async functions are desugared to generators, so `await` is treated equivalent to `yield`, for now...
             let value = value.root(scope);
 
-            let frame_idx = scope.frames.len() - 1;
-            let frame = scope.pop_frame().expect("Generator frame is missing");
+            let frame_idx = scope.frames.current_id();
+            let frame = scope.pop_frame();
             let stack = scope.drain_stack(frame.sp..).collect::<Vec<_>>();
 
             // Save any try blocks part of this frame
@@ -134,7 +135,7 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
 pub fn throw(cx: CallContext) -> Result<Value, Value> {
     let val = cx.args.first().unwrap_or_undefined();
     bootstrap_generator(cx.scope, cx.this, &|scope, frame| {
-        let fp = scope.frames.len();
+        let fp = FrameId(scope.frames.len());
         scope.try_push_frame(frame)?;
         scope.handle_rt_error(val.into(), fp)?; // FIXME: is this `?` fine?
         scope.handle_instruction_loop()

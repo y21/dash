@@ -1159,7 +1159,7 @@ mod tests {
             obj.set_property(numk, numv, sc).unwrap();
         }
 
-        let mut syms = (0..props)
+        let syms = (0..props)
             .map(|v| JsString::from_sym(sc.intern(format!("k{v}").as_str())).to_key(sc))
             .collect::<Vec<_>>();
         let count = std::env::var("ITER_COUNT").unwrap().parse::<usize>().unwrap();
