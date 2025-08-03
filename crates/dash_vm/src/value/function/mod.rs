@@ -313,7 +313,7 @@ pub(crate) fn adjust_stack_from_flat_call(
     // Conveniently, the arguments are all on the stack, in the order
     // we need it to be in, so we don't need to move anything there for that part.
 
-    let expected_args = user_function.inner().params;
+    let expected_args = user_function.inner().params as usize;
 
     // NB: Order is important, this needs to happen before pushing remaining
     // missing undefined values and truncating

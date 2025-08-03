@@ -8,6 +8,7 @@ use std::ops::RangeBounds;
 use std::vec::Drain;
 use std::{fmt, mem};
 
+use crate::frame::Sp;
 use crate::framestack::{FrameId, FrameStack};
 use crate::util::cold_path;
 use crate::value::Root;
@@ -24,7 +25,9 @@ use self::value::Value;
 use self::value::object::{Object, PropertyValue};
 
 use dash_log::{Level, debug, error, span};
+use dash_middle::compiler::external::ExternalId;
 use dash_middle::compiler::instruction::Instruction;
+use dash_middle::compiler::scope::BackLocalId;
 use dash_middle::interner::{self, StringInterner, sym};
 use gc::trace::{Trace, TraceCtxt};
 use gc::{Allocator, ObjectId};
@@ -1246,34 +1249,34 @@ impl Vm {
     }
 
     #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
-    pub(crate) fn get_frame_sp(&self) -> usize {
+    pub(crate) fn get_frame_sp(&self) -> Sp {
         self.frames.current_sp()
     }
 
-    /// Fetches a local, while also preserving external values
-    pub(crate) fn get_local_raw(&self, id: usize) -> Option<Value> {
-        self.stack.get(self.get_frame_sp() + id).cloned()
+    fn stack_index_of_local_id(&self, BackLocalId(id): BackLocalId) -> usize {
+        self.get_frame_sp().0 as usize + id as usize
     }
 
-    /// Fetches a local and unboxes any externals.
+    /// Fetches a local, while also preserving `Value::External`
+    pub(crate) fn get_local_raw(&self, id: BackLocalId) -> Option<Value> {
+        self.stack.get(self.stack_index_of_local_id(id)).cloned()
+    }
+
+    /// Fetches a local and unboxes `Value::External`.
     ///
     /// This is usually the method you want to use, since handling externals specifically is not
     /// typically useful.
-    pub(crate) fn get_local(&self, id: usize) -> Option<Value> {
-        self.stack
-            .get(self.get_frame_sp() + id)
-            .cloned()
-            .map(|v| v.unbox_external(self))
+    pub(crate) fn get_local(&self, id: BackLocalId) -> Option<Value> {
+        self.get_local_raw(id).map(|v| v.unbox_external(self))
     }
 
-    pub(crate) fn get_external(&self, id: usize) -> ExternalValue {
+    pub(crate) fn get_external(&self, id: ExternalId) -> ExternalValue {
         self.frames.current_external(id)
     }
 
     #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
-    pub(crate) fn set_local(&mut self, id: usize, value: Unrooted) {
-        let sp = self.get_frame_sp();
-        let idx = sp + id;
+    pub(crate) fn set_local(&mut self, id: BackLocalId, value: Unrooted) {
+        let idx = self.stack_index_of_local_id(id);
 
         // SAFETY: GC cannot trigger here
         // and value will become a root here, therefore this is ok
@@ -1320,8 +1323,8 @@ impl Vm {
         Ok(())
     }
 
-    pub(crate) fn stack_size(&self) -> usize {
-        self.stack.len()
+    pub(crate) fn active_sp(&self) -> Sp {
+        Sp(self.stack.len() as u32)
     }
 
     pub(crate) fn pop_frame(&mut self) -> Frame {
@@ -1378,7 +1381,7 @@ impl Vm {
                 let catch_binding = self.fetchw_and_inc_ip();
                 if catch_binding != u16::MAX {
                     // u16::MAX is used to indicate that there is no variable binding in the catch block
-                    self.set_local(catch_binding as usize, err);
+                    self.set_local(BackLocalId(catch_binding), err);
                 }
 
                 // If we have both a catch_ip and finally_ip, then re-push it but with the catch_ip set to None
@@ -1476,8 +1479,7 @@ impl Vm {
 
     /// Does the necessary stack management that needs to be done before executing a JavaScript frame
     pub(crate) fn pad_stack_for_frame(&mut self, frame: &Frame) {
-        let pad_to = self.stack.len() + frame.extra_stack_space;
-        debug!(pad_to);
+        let pad_to = self.stack.len() + frame.extra_stack_space as usize;
         // TODO: check that the stack space won't exceed our stack frame limit
         self.stack.resize(pad_to, Value::undefined());
     }
@@ -1517,7 +1519,7 @@ impl Vm {
 
     pub fn execute_module(&mut self, mut frame: Frame) -> Result<Exports, Unrooted> {
         frame.state = FrameState::Module(Exports::default());
-        frame.sp = self.stack.len();
+        frame.sp = Sp(self.stack.len() as u32);
         self.execute_frame(frame)?;
 
         let frame = self.frames.pop();

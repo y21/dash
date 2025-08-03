@@ -1,6 +1,8 @@
 use std::mem;
 
+use dash_middle::compiler::external::PossiblyExternalId;
 use dash_middle::compiler::instruction::AssignKind;
+use dash_middle::compiler::scope::BackLocalId;
 use dash_middle::interner::{Symbol, sym};
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::error::Error;
@@ -24,9 +26,9 @@ pub enum ForEachLoopKind {
 /// (for..in and for..of), as well as `yield*`
 pub struct ForEachDesugarCtxt<'a, 'cx, 'interner> {
     /// The local that stores the iterator
-    iterator_local: u16,
+    iterator_local: BackLocalId,
     /// The local that stores the intermediate next() call result
-    gen_step_local: u16,
+    gen_step_local: BackLocalId,
     ib: &'a mut InstructionBuilder<'cx, 'interner>,
 }
 
@@ -55,7 +57,7 @@ impl<'a, 'cx, 'interner> ForEachDesugarCtxt<'a, 'cx, 'interner> {
             ForEachLoopKind::ForIn => self.ib.build_for_in_iterator(),
         }
         self.ib
-            .build_local_store(AssignKind::Assignment, self.iterator_local, false);
+            .build_local_store(AssignKind::Assignment, PossiblyExternalId::Local(self.iterator_local));
         self.ib.build_pop();
         Ok(())
     }
@@ -68,7 +70,7 @@ impl<'a, 'cx, 'interner> ForEachDesugarCtxt<'a, 'cx, 'interner> {
                 false,
                 Expr {
                     span: Span::COMPILER_GENERATED,
-                    kind: ExprKind::compiled(compile_local_load(self.gen_step_local, false)),
+                    kind: ExprKind::compiled(compile_local_load(PossiblyExternalId::Local(self.gen_step_local))),
                 },
                 Expr {
                     span: Span::COMPILER_GENERATED,
@@ -125,8 +127,7 @@ impl<'a, 'cx, 'interner> ForEachDesugarCtxt<'a, 'cx, 'interner> {
                                                         Expr {
                                                             span: Span::COMPILER_GENERATED,
                                                             kind: ExprKind::compiled(compile_local_load(
-                                                                self.iterator_local,
-                                                                false,
+                                                                PossiblyExternalId::Local(self.iterator_local),
                                                             )),
                                                         },
                                                         Expr {

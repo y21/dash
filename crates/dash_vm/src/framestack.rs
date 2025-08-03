@@ -1,10 +1,11 @@
 use dash_middle::compiler::constant::ConstantPool;
+use dash_middle::compiler::external::ExternalId;
 use dash_middle::index_type;
 use dash_middle::indexvec::IndexVec;
 use dash_middle::interner::Symbol;
 use dash_proc_macro::Trace;
 
-use crate::frame::{BaseFrame, ExtendedFrame, Frame, FrameState};
+use crate::frame::{BaseFrame, ExtendedFrame, Frame, FrameState, Ip, Sp};
 use crate::gc::ObjectId;
 use crate::value::object::This;
 use crate::value::{ExternalValue, Unrooted};
@@ -73,11 +74,11 @@ impl FrameStack {
         self.current_extended_mut().delayed_ret.take()
     }
 
-    pub fn current_sp(&self) -> usize {
-        self.current_extended().sp
+    pub fn current_sp(&self) -> Sp {
+        self.current_base().sp
     }
 
-    pub fn current_ip(&self) -> usize {
+    pub fn current_ip(&self) -> Ip {
         self.current_base().ip
     }
 
@@ -85,8 +86,8 @@ impl FrameStack {
         self.current_extended().this
     }
 
-    pub fn current_external(&self, id: usize) -> ExternalValue {
-        self.current_extended().externals[id].clone()
+    pub fn current_external(&self, id: ExternalId) -> ExternalValue {
+        self.current_extended().externals[id.0 as usize].clone()
     }
 
     pub fn current_constants(&self) -> &ConstantPool {
@@ -105,7 +106,7 @@ impl FrameStack {
         self.current_extended().arguments
     }
 
-    pub fn set_ip(&mut self, ip: usize) {
+    pub fn set_ip(&mut self, ip: Ip) {
         let base = self.current_base_mut();
         base.ip = ip;
     }
@@ -120,29 +121,23 @@ impl FrameStack {
         extended.this = this;
     }
 
-    pub fn resolve_ip_debuginfo(&self, ip: u16) -> &str {
+    pub fn resolve_ip_debuginfo(&self, Ip(ip): Ip) -> &str {
         let base = self.current_base_ref();
         base.function.debug_symbols.get(ip).res(&base.function.source)
     }
 
     pub fn fetch_and_inc_ip(&mut self) -> u8 {
         let base = self.current_base_mut();
-        let ip = base.ip;
+        let Ip(ip) = base.ip;
         base.ip += 1;
-        base.function.buffer.with(|buf| buf[ip as usize])
+        base.function.buffer.at(ip)
     }
 
     fn fetch_n_and_inc_ip<const N: usize>(&mut self) -> [u8; N] {
         let base = self.current_base_mut();
-        let value: [u8; N] = base.function.buffer.with(|buf| {
-            // Intermediate `as u32` cast is needed to make overflow on the addition impossible and help LLVM
-            // collapse the two bounds checks into one.
-            // FIXME: store `ip` as `u32` directly to avoid this
-            buf[base.ip as u32 as usize..base.ip as u32 as usize + N]
-                .try_into()
-                .expect("Failed to get wide instruction")
-        });
-        base.ip += N;
+        let Ip(ip) = base.ip;
+        let value = base.function.buffer.copy_range::<N>(ip);
+        base.ip += N as u32;
         value
     }
 
@@ -163,7 +158,7 @@ impl FrameStack {
             extra_stack_space: extended.extra_stack_space,
             externals: extended.externals,
             this: extended.this,
-            sp: extended.sp,
+            sp: base.sp,
             state: extended.state,
             delayed_ret: extended.delayed_ret,
             arguments: extended.arguments,
@@ -200,13 +195,13 @@ impl FrameStack {
         if self.len() < MAX_FRAME_COUNT {
             self.push_base(BaseFrame {
                 ip: frame.ip,
+                sp: frame.sp,
                 function: frame.function,
             });
             self.extended.push(ExtendedFrame {
                 extra_stack_space: frame.extra_stack_space,
                 externals: frame.externals,
                 this: frame.this,
-                sp: frame.sp,
                 state: frame.state,
                 delayed_ret: frame.delayed_ret,
                 arguments: frame.arguments,

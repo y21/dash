@@ -54,14 +54,14 @@ fn bootstrap_generator(
             _ => throw!(scope, TypeError, "Incompatible generator function"),
         };
 
-        let current_sp = scope.stack_size();
+        let current_sp = scope.active_sp();
         #[expect(clippy::question_mark_used)] // FIXME: is this correct? the generator state is left empty
         scope.try_extend_stack(old_stack).root_err(scope)?;
         scope.try_blocks.extend(try_blocks);
 
         let mut frame = Frame::from_function(this, function, None, false, arguments);
-        frame.set_ip(ip);
-        frame.set_sp(current_sp);
+        frame.ip = ip;
+        frame.sp = current_sp;
 
         if !generator.did_run() {
             // If it hasn't run before, do the stack space management initially (push undefined values for locals)
@@ -93,7 +93,7 @@ fn bootstrap_generator(
 
             let frame_idx = scope.frames.current_id();
             let frame = scope.pop_frame();
-            let stack = scope.drain_stack(frame.sp..).collect::<Vec<_>>();
+            let stack = scope.drain_stack(frame.sp.0 as usize..).collect::<Vec<_>>();
 
             // Save any try blocks part of this frame
             let frame_try_blocks = scope

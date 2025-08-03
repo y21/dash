@@ -1,7 +1,10 @@
 use std::cell::RefCell;
 
 use dash_log::debug;
-use dash_middle::compiler::scope::{BlockScope, CompileValueType, FunctionScope, Local, ScopeGraph, ScopeKind};
+use dash_middle::compiler::scope::{
+    BackLocalId, BlockScope, CompileValueType, FunctionScope, Local, ScopeGraph, ScopeKind,
+};
+use dash_middle::indexvec::IndexVec;
 use dash_middle::interner::{Symbol, sym};
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::expr::{
@@ -11,17 +14,18 @@ use dash_middle::parser::expr::{
 };
 use dash_middle::parser::statement::{
     Binding, BlockStatement, Class, ClassMemberKey, ClassMemberValue, DoWhileLoop, ExportKind, ForInLoop, ForLoop,
-    ForOfLoop, FunctionDeclaration, IfStatement, ImportKind, LocalId, Loop, Parameter, Pattern, ReturnStatement,
+    ForOfLoop, FrontLocalId, FunctionDeclaration, IfStatement, ImportKind, Loop, Parameter, Pattern, ReturnStatement,
     ScopeId, SpecifierKind, Statement, StatementKind, SwitchCase, SwitchStatement, TryCatch, VariableBinding,
     VariableDeclaration, VariableDeclarationKind, VariableDeclarationName, VariableDeclarations, WhileLoop,
 };
 
+/// Mapping from frontend locals to backend locals.
 #[derive(Debug)]
-pub struct LocalDeclToSlot(Vec<u16>);
+pub struct LocalDeclToSlot(IndexVec<BackLocalId, FrontLocalId>);
 
 impl LocalDeclToSlot {
-    pub fn slot_from_local(&self, local: LocalId) -> u16 {
-        self.0[local.0]
+    pub fn slot_from_local(&self, local: FrontLocalId) -> BackLocalId {
+        self.0[local]
     }
 }
 
@@ -46,7 +50,9 @@ pub struct TypeInferCtx<'s> {
 impl<'s> TypeInferCtx<'s> {
     pub fn new(mut mode: InferMode<'s>) -> Self {
         if let InferMode::Discover(scopes, _) = &mut mode {
-            scopes[ScopeId::ROOT].kind = ScopeKind::Function(FunctionScope { locals: Vec::new() });
+            scopes[ScopeId::ROOT].kind = ScopeKind::Function(FunctionScope {
+                locals: IndexVec::new(),
+            });
         }
 
         Self {
@@ -92,7 +98,9 @@ impl<'s> TypeInferCtx<'s> {
             InferMode::Discover(scopes, _) => {
                 let scope = &mut scopes[id];
                 scope.parent = Some(parent);
-                scope.kind = ScopeKind::Function(FunctionScope { locals: Vec::new() });
+                scope.kind = ScopeKind::Function(FunctionScope {
+                    locals: IndexVec::new(),
+                });
 
                 f(self);
             }
@@ -132,7 +140,7 @@ impl<'s> TypeInferCtx<'s> {
                 //         && scopes[enclosing_function].expect_function().locals[slot as usize].kind
                 //             == VariableDeclarationKind::Var
                 // );
-                decls.0[binding.id.0] = slot;
+                decls.0[binding.id] = slot;
             } else {
                 let local_id = scopes[enclosing_function]
                     .expect_function_mut()
@@ -144,7 +152,7 @@ impl<'s> TypeInferCtx<'s> {
                     .unwrap();
 
                 scopes[at].declarations.push((binding.ident, local_id));
-                decls.0[binding.id.0] = local_id;
+                decls.0[binding.id] = local_id;
             }
         }
     }
@@ -473,7 +481,7 @@ impl<'s> TypeInferCtx<'s> {
         let res = scopes.find(self.current, ident)?;
 
         let local_enclosing_function = scopes.enclosing_function_of(res.scope);
-        let local = &scopes[local_enclosing_function].expect_function().locals[res.slot as usize];
+        let local = &scopes[local_enclosing_function].expect_function().locals[res.slot];
 
         if local_enclosing_function != self.current_function {
             let mut ty = local.inferred_type.borrow_mut();
@@ -708,8 +716,8 @@ pub struct NameResolutionResults {
 }
 
 pub fn name_res(ast: &[Statement], scope_count: usize, local_count: usize) -> NameResolutionResults {
-    let mut scopes = ScopeGraph::new(scope_count);
-    let mut locals = LocalDeclToSlot(vec![0; local_count]);
+    let mut scopes = ScopeGraph::new(scope_count as u32);
+    let mut locals = LocalDeclToSlot(IndexVec::repeat_n(BackLocalId(0), local_count as u32));
     let mut tcx = TypeInferCtx::new(InferMode::Discover(&mut scopes, &mut locals));
     tcx.visit_many_statements(ast);
     NameResolutionResults {

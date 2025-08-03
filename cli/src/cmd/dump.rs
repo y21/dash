@@ -42,7 +42,7 @@ pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
     let nameres = name_res(&ast, scope_counter.len(), local_counter.len());
 
     if dump_types {
-        for local in &nameres.scopes[ScopeId::ROOT].expect_function().locals {
+        for local in nameres.scopes[ScopeId::ROOT].expect_function().locals.iter() {
             let ty = local.inferred_type().borrow();
             println!("{}: {ty:?}", interner.resolve(local.name));
         }

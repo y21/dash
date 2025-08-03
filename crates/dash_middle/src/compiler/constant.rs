@@ -4,8 +4,11 @@ use std::rc::Rc;
 
 use dash_regex::Regex;
 
+use crate::compiler::external::ExternalId;
+use crate::compiler::scope::BackLocalId;
 use crate::index_type;
 use crate::indexthinvec::IndexThinVec;
+use crate::indexvec::IndexVec;
 use crate::interner::Symbol;
 use crate::parser::statement::FunctionKind;
 
@@ -15,9 +18,29 @@ use super::external::External;
 /// The instruction buffer.
 /// Uses interior mutability since we store it in a `Rc<Function>`
 /// and we want to be able to optimize the bytecode
-pub struct Buffer(pub Cell<Box<[u8]>>);
+pub struct Buffer(Cell<Box<[u8]>>);
 
 impl Buffer {
+    pub fn new(buf: Box<[u8]>) -> Self {
+        Self(Cell::new(buf))
+    }
+
+    #[inline]
+    pub fn at(&self, ip: u32) -> u8 {
+        // SAFETY: while we're holding the `&[u8]`, there cannot exist other mutable references to that buffer
+        let slice = unsafe { &*(*self.0.as_ptr()) };
+        slice[ip as usize]
+    }
+
+    #[inline]
+    pub fn copy_range<const N: usize>(&self, ip: u32) -> [u8; N] {
+        // SAFETY: while we're holding the `&[u8]`, there cannot exist other mutable references to that buffer
+        let slice = unsafe { &*(*self.0.as_ptr()) };
+        slice[ip as usize..ip as usize + N]
+            .try_into()
+            .expect("Failed to copy range")
+    }
+
     pub fn with<R>(&self, fun: impl FnOnce(&[u8]) -> R) -> R {
         let buf = self.0.take();
         // this can genuinely happen for empty functions
@@ -70,12 +93,12 @@ pub struct Function {
     pub name: Option<Symbol>,
     pub buffer: Buffer,
     pub ty: FunctionKind,
-    pub locals: usize,
-    pub params: usize,
+    pub locals: u16,
+    pub params: u16,
     pub constants: ConstantPool,
-    pub externals: Box<[External]>,
+    pub externals: IndexVec<External, ExternalId>,
     /// If the parameter list uses the rest operator ..., then this will be Some(local_id)
-    pub rest_local: Option<u16>,
+    pub rest_local: Option<BackLocalId>,
     pub source: Rc<str>,
     pub debug_symbols: DebugSymbols,
     pub references_arguments: bool,
@@ -132,4 +155,19 @@ impl ConstantPool {
         add_function(functions, Rc<Function>) -> FunctionConstant,
         add_regex(regexes, (Regex, Symbol)) -> RegexConstant
     );
+
+    pub fn shrink_to_fit(&mut self) {
+        let Self {
+            numbers,
+            symbols,
+            booleans,
+            functions,
+            regexes,
+        } = self;
+        numbers.shrink_to_fit();
+        symbols.shrink_to_fit();
+        booleans.shrink_to_fit();
+        functions.shrink_to_fit();
+        regexes.shrink_to_fit();
+    }
 }

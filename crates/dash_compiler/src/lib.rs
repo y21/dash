@@ -1,12 +1,12 @@
-use std::cell::Cell;
 use std::rc::Rc;
 
 use dash_log::{Level, debug, span};
 use dash_middle::compiler::constant::{Buffer, ConstantPool, Function, NumberConstant, SymbolConstant};
-use dash_middle::compiler::external::External;
+use dash_middle::compiler::external::{External, ExternalId, PossiblyExternalId};
 use dash_middle::compiler::instruction::{AssignKind, Instruction, IntrinsicOperation};
-use dash_middle::compiler::scope::{CompileValueType, LimitExceededError, Local, ScopeGraph};
+use dash_middle::compiler::scope::{BackLocalId, CompileValueType, LimitExceededError, Local, ScopeGraph};
 use dash_middle::compiler::{CompileResult, DebugSymbols, FunctionCallKind, StaticImportKind};
+use dash_middle::indexvec::IndexVec;
 use dash_middle::interner::{StringInterner, Symbol, sym};
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::error::Error;
@@ -84,7 +84,7 @@ struct FunctionLocalState {
     switch_counter: usize,
     id: ScopeId,
     debug_symbols: DebugSymbols,
-    externals: Vec<External>,
+    externals: IndexVec<External, ExternalId>,
     /// Whether this function references `arguments` anywhere in its body
     ///
     /// Also tracks the span for error reporting, but is discarded past the compiler stage.
@@ -122,7 +122,7 @@ impl FunctionLocalState {
             switch_counter: 0,
             id,
             debug_symbols: DebugSymbols::default(),
-            externals: Vec::new(),
+            externals: IndexVec::new(),
             references_arguments: None,
         }
     }
@@ -299,71 +299,71 @@ impl<'interner> FunctionCompiler<'interner> {
 
     /// Adds an external to the current [`FunctionLocalState`] if it's not already present
     /// and returns its ID
-    fn add_external_to_func(&mut self, func_id: ScopeId, external_id: u16, is_nested_external: bool) -> usize {
+    fn add_external_to_func(&mut self, func_id: ScopeId, external_id: PossiblyExternalId) -> ExternalId {
         let fun = self.function_stack.iter_mut().rev().find(|f| f.id == func_id);
         let externals = &mut fun.unwrap().externals;
-        if let Some(id) = externals
-            .iter()
-            .position(|ext| ext.id == external_id && ext.is_nested_external == is_nested_external)
-        {
-            id
+        if let Some(id) = externals.iter().position(|ext| ext.id == external_id) {
+            ExternalId(id.try_into().unwrap())
         } else {
-            externals.push(External {
-                id: external_id,
-                is_nested_external,
-            });
-            externals.len() - 1
+            externals.push(External { id: external_id })
         }
     }
 
     /// Returns the scope id of the function that stores the local.
-    fn find_local_in_scope(&mut self, ident: Symbol, scope: ScopeId) -> Option<(u16, Local, ScopeId)> {
+    fn find_local_in_scope(&mut self, ident: Symbol, scope: ScopeId) -> Option<(PossiblyExternalId, Local, ScopeId)> {
         let enclosing_function = self.scopes.enclosing_function_of(scope);
 
         if let Some(slot) = self.scopes[scope].find_local(ident) {
             Some((
-                slot,
-                self.scopes[enclosing_function].expect_function().locals[slot as usize].clone(),
+                PossiblyExternalId::Local(slot),
+                self.scopes[enclosing_function].expect_function().locals[slot].clone(),
                 enclosing_function,
             ))
         } else {
             let parent = self.scopes[scope].parent?;
             let parent_enclosing_function = self.scopes.enclosing_function_of(parent);
-            let (local_id, local, src_function) = self.find_local_in_scope(ident, parent)?;
+            let parent_same_function = parent_enclosing_function == enclosing_function;
+
+            let (external_id, local, src_function) = self.find_local_in_scope(ident, parent)?;
             let local = local.clone();
 
-            if parent_enclosing_function == enclosing_function {
-                // if the parent scope is in the same function, then the parent has already dealt with the external
-                // and we can just return it right away without having to add it (again)
-                return Some((local_id, local, src_function));
+            if parent_same_function {
+                // if the parent scope is in the same function, then there's no external bookkeeping
+                // necessary; the parent function has already dealt with adding it
+                // (or this isn't an external at all)
+                return Some((external_id, local, src_function));
             }
 
-            // at this point, we know we crossed a function boundary, so store it in the externals
-            // and return our external id
-
-            let nested_external = src_function != parent_enclosing_function;
-
-            let external_id = self.add_external_to_func(enclosing_function, local_id, nested_external);
-            Some((external_id.try_into().unwrap(), local, src_function))
+            let external_id = self.add_external_to_func(enclosing_function, external_id);
+            Some((PossiblyExternalId::External(external_id), local, src_function))
         }
     }
+
     /// Tries to dynamically find a local in the current- or surrounding scopes.
     ///
     /// If a local variable is found in a parent scope, it is marked as an extern local
-    pub fn find_local(&mut self, ident: Symbol) -> Option<(u16, Local, bool)> {
+    pub fn find_local(&mut self, ident: Symbol) -> Option<(PossiblyExternalId, Local)> {
         let scope = self.current;
         let enclosing_function = self.scopes.enclosing_function_of(scope);
         self.find_local_in_scope(ident, scope)
-            .map(|(id, loc, target_fn_scope)| (id, loc, target_fn_scope != enclosing_function))
+            .map(|(id, loc, target_fn_scope)| {
+                assert!(
+                    (matches!(id, PossiblyExternalId::Local(_)) && target_fn_scope == enclosing_function)
+                        || (matches!(id, PossiblyExternalId::External(_)) && target_fn_scope != enclosing_function),
+                    "INVARIANT VIOLATION: LocalOrigin is wrong"
+                );
+                // ^ TODO: remove after checking this is true ^
+                (id, loc)
+            })
     }
 
-    /// This is the same as `find_local` but should be used
+    /// This is the same as `find_local` for non-external locals but should be used
     /// when type_infer must have discovered/registered the local variable in the current scope.
-    fn find_local_from_binding(&mut self, binding: Binding) -> u16 {
+    fn find_local_from_binding(&mut self, binding: Binding) -> BackLocalId {
         self.decl_to_slot.slot_from_local(binding.id)
     }
 
-    fn add_unnameable_local(&mut self, name: Symbol) -> Result<u16, LimitExceededError> {
+    fn add_unnameable_local(&mut self, name: Symbol) -> Result<BackLocalId, LimitExceededError> {
         self.scopes.add_unnameable_local(self.current, name, None)
     }
 }
@@ -628,7 +628,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                 ib.build_arguments();
             }
             ident => match ib.find_local(ident) {
-                Some((index, _, is_extern)) => ib.build_local_load(index, is_extern),
+                Some((id, _)) => ib.build_local_load(id),
                 _ => ib
                     .build_global_load(ident)
                     .map_err(|_| Error::ConstantPoolLimitExceeded(span))?,
@@ -776,7 +776,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
 
                     if let Some(expr) = value {
                         ib.accept_expr(expr)?;
-                        ib.build_local_store(AssignKind::Assignment, slot, false);
+                        ib.build_local_store(AssignKind::Assignment, PossiblyExternalId::Local(slot));
                         ib.build_pop();
                     }
                 }
@@ -866,7 +866,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
 
         ib.visit_function_expr(span, fun)?;
         if let Some(var_id) = var_id {
-            ib.build_local_store(AssignKind::Assignment, var_id, false);
+            ib.build_local_store(AssignKind::Assignment, PossiblyExternalId::Local(var_id));
         }
         ib.build_pop();
         Ok(())
@@ -938,7 +938,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                 ExprKind::Literal(LiteralExpr::Identifier(ident)) => {
                     let local = ib.find_local(ident);
 
-                    if let Some((id, local, is_extern)) = local {
+                    if let Some((id, local)) = local {
                         if let VariableDeclarationKind::Const = local.kind {
                             return Err(Error::ConstAssignment(span));
                         }
@@ -946,7 +946,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                         macro_rules! assign {
                             ($kind:expr) => {{
                                 ib.accept_expr(*right)?;
-                                ib.build_local_store($kind, id, is_extern);
+                                ib.build_local_store($kind, id);
                             }};
                         }
 
@@ -1118,7 +1118,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                                         unimplementedc!(span, "rest binding must be an identifier")
                                     };
 
-                                    let Some((local, _, false)) = ib.find_local(ident) else {
+                                    let Some((PossiblyExternalId::Local(local), _)) = ib.find_local(ident) else {
                                         unimplementedc!(span, "rest binding must be defined in the current function")
                                     };
 
@@ -1132,7 +1132,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
 
                             let object_local = ib.add_unnameable_local(sym::empty).map_err(|_| Error::LocalLimitExceeded(span))?;
                             ib.accept_expr(*right)?;
-                            ib.build_local_store(AssignKind::Assignment, object_local, false);
+                            ib.build_local_store(AssignKind::Assignment, PossiblyExternalId::Local(object_local));
 
                             ib.build_objdestruct((object.len() - rest.is_some() as usize).try_into().map_err(|_| Error::DestructureLimitExceeded(span))?, rest);
 
@@ -1146,14 +1146,14 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                                     unimplementedc!(span, "binding must be an identifier")
                                 };
 
-                                let Some((local, _, false)) = ib.find_local(alias) else {
+                                let Some((PossiblyExternalId::Local(local), _)) = ib.find_local(alias) else {
                                     unimplementedc!(span, "binding must be defined in the current function")
                                 };
 
                                 let NumberConstant(var_id) = ib
                                     .current_function_mut()
                                     .cp
-                                    .add_number(local as f64)
+                                    .add_number(local.0 as f64)
                                     .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
                                 let SymbolConstant(ident_id) = ib
                                     .current_function_mut()
@@ -1161,16 +1161,16 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                                     .add_symbol(name)
                                     .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
                                 ib.write_bool(false); // Defaults are unsupported
-                                ib.writew(var_id);
+                                ib.writew(var_id); // FIXME: stop using constants and write the id into bytecode directly
                                 ib.writew(ident_id);
                             }
 
-                            ib.build_local_load(object_local, false);
+                            ib.build_local_load(PossiblyExternalId::Local(object_local));
                         },
                         ExprKind::Array(ArrayLiteral(array)) => {
                             let array_local = ib.add_unnameable_local(sym::empty).map_err(|_| Error::LocalLimitExceeded(span))?;
                             ib.accept_expr(*right)?;
-                            ib.build_local_store(AssignKind::Assignment, array_local, false);
+                            ib.build_local_store(AssignKind::Assignment, PossiblyExternalId::Local(array_local));
 
                             ib.build_arraydestruct(array.len().try_into().map_err(|_| Error::LocalLimitExceeded(span))?);
 
@@ -1184,14 +1184,14 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                                             unimplementedc!(span, "binding must be an identifier")
                                         };
 
-                                        let Some((local, _, false)) = ib.find_local(alias) else {
+                                        let Some((PossiblyExternalId::Local(local), _)) = ib.find_local(alias) else {
                                             unimplementedc!(span, "binding must be defined in the current function")
                                         };
 
                                         let NumberConstant(var_id) = ib
                                             .current_function_mut()
                                             .cp
-                                            .add_number(local as f64)
+                                            .add_number(local.0 as f64)
                                             .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
 
                                         ib.write_bool(false); // Defaults are unsupported
@@ -1201,7 +1201,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                                 }
                             }
 
-                            ib.build_local_load(array_local, false);
+                            ib.build_local_load(PossiblyExternalId::Local(array_local));
                         }
                         _ => unimplementedc!(span, "assignment to non-identifier")
                     }
@@ -1209,7 +1209,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
             },
             AssignmentTarget::LocalId(id) => {
                 ib.accept_expr(*right)?;
-                ib.build_local_store(AssignKind::Assignment, id, false);
+                ib.build_local_store(AssignKind::Assignment, PossiblyExternalId::Local(id));
             }
         }
 
@@ -1383,11 +1383,13 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
 
         match expr.kind {
             ExprKind::Literal(LiteralExpr::Identifier(ident)) => {
-                if let Some((id, loc, is_extern)) = ib.find_local(ident) {
+                if let Some((id, loc)) = ib.find_local(ident) {
                     let ty = loc.inferred_type().borrow();
 
                     // Specialize guaranteed local number increment
-                    if let (Ok(id), Some(CompileValueType::Number), false) = (u8::try_from(id), &*ty, is_extern) {
+                    if let (PossiblyExternalId::Local(BackLocalId(id)), Some(CompileValueType::Number)) = (id, &*ty)
+                        && let Ok(id) = u8::try_from(id)
+                    {
                         match tt {
                             TokenType::Increment => ib.build_postfix_inc_local_num(id),
                             TokenType::Decrement => ib.build_postfix_dec_local_num(id),
@@ -1397,8 +1399,8 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                     }
 
                     match tt {
-                        TokenType::Increment => ib.build_local_store(AssignKind::PostfixIncrement, id, is_extern),
-                        TokenType::Decrement => ib.build_local_store(AssignKind::PostfixDecrement, id, is_extern),
+                        TokenType::Increment => ib.build_local_store(AssignKind::PostfixIncrement, id),
+                        TokenType::Decrement => ib.build_local_store(AssignKind::PostfixDecrement, id),
                         _ => unreachable!("Token never emitted"),
                     }
                 } else {
@@ -1454,11 +1456,13 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
 
         match expr.kind {
             ExprKind::Literal(LiteralExpr::Identifier(ident)) => {
-                if let Some((id, loc, is_extern)) = ib.find_local(ident) {
+                if let Some((id, loc)) = ib.find_local(ident) {
                     let ty = loc.inferred_type().borrow();
 
                     // Specialize guaranteed local number increment
-                    if let (Ok(id), Some(CompileValueType::Number), false) = (u8::try_from(id), &*ty, is_extern) {
+                    if let (PossiblyExternalId::Local(BackLocalId(id)), Some(CompileValueType::Number)) = (id, &*ty)
+                        && let Ok(id) = u8::try_from(id)
+                    {
                         match tt {
                             TokenType::Increment => ib.build_prefix_inc_local_num(id),
                             TokenType::Decrement => ib.build_prefix_dec_local_num(id),
@@ -1468,8 +1472,8 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                     }
 
                     match tt {
-                        TokenType::Increment => ib.build_local_store(AssignKind::PrefixIncrement, id, is_extern),
-                        TokenType::Decrement => ib.build_local_store(AssignKind::PrefixDecrement, id, is_extern),
+                        TokenType::Increment => ib.build_local_store(AssignKind::PrefixIncrement, id),
+                        TokenType::Decrement => ib.build_local_store(AssignKind::PrefixDecrement, id),
                         _ => unreachable!("Token never emitted"),
                     }
                 } else {
@@ -1555,14 +1559,14 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                 if let Some(default) = default {
                     let mut sub_ib = InstructionBuilder::new(ib);
                     // First, load parameter
-                    sub_ib.build_local_load(id, false);
+                    sub_ib.build_local_load(PossiblyExternalId::Local(id));
                     // Jump to InitParamWithDefaultValue if param is undefined
                     sub_ib.build_jmpundefinedp(Label::InitParamWithDefaultValue, true);
                     // If it isn't undefined, it won't jump to InitParamWithDefaultValue, so we jump to the end
                     sub_ib.build_jmp(Label::FinishParamDefaultValueInit, true);
                     sub_ib.add_local_label(Label::InitParamWithDefaultValue);
                     sub_ib.accept_expr(default.clone())?;
-                    sub_ib.build_local_store(AssignKind::Assignment, id, false);
+                    sub_ib.build_local_store(AssignKind::Assignment, PossiblyExternalId::Local(id));
 
                     sub_ib.add_local_label(Label::FinishParamDefaultValueInit);
                 }
@@ -1572,7 +1576,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                         ib,
                         Expr {
                             span,
-                            kind: ExprKind::Compiled(compile_local_load(id, false)),
+                            kind: ExprKind::Compiled(compile_local_load(PossiblyExternalId::Local(id))),
                         },
                         pat,
                         span,
@@ -1595,21 +1599,27 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
 
             let res = statements.into_iter().try_for_each(|stmt| ib.accept(stmt));
 
-            let cmp = ib.function_stack.pop().expect("Missing function state");
+            let mut cmp = ib.function_stack.pop().expect("Missing function state");
             res?; // Cannot early return error in the loop as we need to pop the function state in any case
             let locals = ib.scopes[id].expect_function().locals.len();
 
+            // Strip away some extra unnecessary excess capacity - we're not going to push any more elements into it.
+            cmp.externals.shrink_to_fit();
+            cmp.cp.shrink_to_fit();
+
             let function = Function {
-                buffer: Buffer(Cell::new(cmp.buf.into())),
+                buffer: Buffer::new(cmp.buf.into()),
                 constants: cmp.cp,
                 locals,
                 name: name.map(|binding| binding.ident),
                 ty,
                 params: match arguments.last() {
-                    Some((Parameter::SpreadPattern(..) | Parameter::SpreadIdentifier(_), ..)) => arguments.len() - 1,
-                    _ => arguments.len(),
+                    Some((Parameter::SpreadPattern(..) | Parameter::SpreadIdentifier(_), ..)) => {
+                        arguments.len() as u16 - 1
+                    }
+                    _ => arguments.len() as u16,
                 },
-                externals: cmp.externals.into(),
+                externals: cmp.externals,
                 rest_local,
                 debug_symbols: cmp.debug_symbols,
                 source: Rc::clone(&ib.source),
@@ -1754,12 +1764,12 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
             if let Some(binding) = catch.binding {
                 let id = ib.find_local_from_binding(binding);
 
-                if id == u16::MAX {
+                if id.0 == u16::MAX {
                     // Max u16 value is reserved for "no binding"
                     return Err(Error::LocalLimitExceeded(span));
                 }
 
-                ib.writew(id);
+                ib.writew(id.0);
             } else {
                 ib.writew(u16::MAX);
             }
@@ -1936,9 +1946,10 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                         .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
 
                     match ib.find_local(name) {
-                        Some((loc_id, _, is_extern)) => {
-                            // Top level exports shouldn't be able to refer to extern locals
-                            assert!(!is_extern);
+                        Some((loc_id, _)) => {
+                            let PossiblyExternalId::Local(loc_id) = loc_id else {
+                                unreachable!("top level export shouldn't be able to refer to extern locals")
+                            };
 
                             it.push(NamedExportKind::Local { loc_id, ident_id });
                         }
@@ -2061,7 +2072,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
 
                 Some(Expr {
                     span: Span::COMPILER_GENERATED,
-                    kind: ExprKind::Compiled(compile_local_load(extend_id, false)),
+                    kind: ExprKind::Compiled(compile_local_load(PossiblyExternalId::Local(extend_id))),
                 })
             }
             None => None,
@@ -2141,7 +2152,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
         })?;
         let load_class_binding = Expr {
             span: Span::COMPILER_GENERATED,
-            kind: ExprKind::Compiled(compile_local_load(binding_id, false)),
+            kind: ExprKind::Compiled(compile_local_load(PossiblyExternalId::Local(binding_id))),
         };
 
         // Class.prototype
@@ -2348,10 +2359,10 @@ fn compile_switch_naive(
 
     // Store condition in temporary
     ib.accept_expr(condition)?;
-    ib.build_local_store(AssignKind::Assignment, condition_id, false);
+    ib.build_local_store(AssignKind::Assignment, PossiblyExternalId::Local(condition_id));
     ib.build_pop();
 
-    let local_load = compile_local_load(condition_id, false);
+    let local_load = compile_local_load(PossiblyExternalId::Local(condition_id));
 
     let case_count = cases.len().try_into().unwrap();
 
@@ -2445,7 +2456,7 @@ fn compile_destructuring_pattern(
                 let NumberConstant(var_id) = ib
                     .current_function_mut()
                     .cp
-                    .add_number(id as f64)
+                    .add_number(id.0 as f64)
                     .map_err(|_| Error::ConstantPoolLimitExceeded(at))?;
                 let SymbolConstant(ident_id) = ib
                     .current_function_mut()
@@ -2485,7 +2496,7 @@ fn compile_destructuring_pattern(
                     let NumberConstant(id) = ib
                         .current_function_mut()
                         .cp
-                        .add_number(id as f64)
+                        .add_number(id.0 as f64)
                         .map_err(|_| Error::ConstantPoolLimitExceeded(at))?;
 
                     ib.write_bool(default.is_some());

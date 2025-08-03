@@ -4,10 +4,10 @@ use derive_more::Display;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+use crate::index_type;
 use crate::interner::{Symbol, sym};
 use crate::lexer::token::TokenType;
 use crate::sourcemap::Span;
-use crate::tree::TreeToken;
 
 use super::expr::{Expr, ExprKind};
 use super::types::TypeSegment;
@@ -411,21 +411,24 @@ pub enum FunctionKind {
 #[display("{ident}")]
 pub struct Binding {
     pub ident: Symbol,
-    pub id: LocalId,
+    pub id: FrontLocalId,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[repr(transparent)]
-pub struct LocalId(pub usize);
+index_type! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    #[repr(transparent)]
+    pub struct FrontLocalId(u32);
 
-impl From<usize> for LocalId {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    #[repr(transparent)]
+    pub struct ScopeId(pub u32);
+}
+
+impl From<usize> for FrontLocalId {
     fn from(value: usize) -> Self {
-        LocalId(value)
+        FrontLocalId(value as u32)
     }
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[repr(transparent)]
-pub struct ScopeId(pub usize);
 
 impl ScopeId {
     /// The root function of
@@ -434,25 +437,7 @@ impl ScopeId {
 
 impl From<usize> for ScopeId {
     fn from(value: usize) -> Self {
-        ScopeId(value)
-    }
-}
-
-impl From<ScopeId> for usize {
-    fn from(val: ScopeId) -> Self {
-        val.0
-    }
-}
-
-impl From<ScopeId> for TreeToken {
-    fn from(value: ScopeId) -> Self {
-        Self::new(value.0)
-    }
-}
-
-impl From<TreeToken> for ScopeId {
-    fn from(value: TreeToken) -> Self {
-        Self(value.into())
+        ScopeId(value as u32)
     }
 }
 
@@ -673,7 +658,7 @@ pub enum Pattern {
         /// Fields to destructure
         ///
         /// Destructured fields can also be aliased with ` { a: b } = { a: 3 }` and have default values
-        fields: Vec<(LocalId, Symbol, Option<Symbol>, Option<Expr>)>,
+        fields: Vec<(FrontLocalId, Symbol, Option<Symbol>, Option<Expr>)>,
         /// The rest element, if present
         rest: Option<Binding>,
     },
@@ -928,7 +913,7 @@ pub enum Parameter {
     Identifier(Binding),
     SpreadIdentifier(Binding),
     #[display("{_1}")]
-    Pattern(LocalId, Pattern),
+    Pattern(FrontLocalId, Pattern),
     #[display("{_1}")]
-    SpreadPattern(LocalId, Pattern),
+    SpreadPattern(FrontLocalId, Pattern),
 }

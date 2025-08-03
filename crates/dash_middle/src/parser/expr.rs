@@ -2,6 +2,7 @@ use std::fmt::{self, Debug};
 
 use derive_more::Display;
 
+use crate::compiler::scope::BackLocalId;
 use crate::interner::{Symbol, sym};
 use crate::lexer::token::TokenType;
 use crate::sourcemap::Span;
@@ -160,7 +161,7 @@ impl ExprKind {
     }
 
     /// Creates an assignment expression
-    pub fn assignment_local_space(l: u16, r: Expr, op: TokenType) -> Self {
+    pub fn assignment_local_space(l: BackLocalId, r: Expr, op: TokenType) -> Self {
         Self::Assignment(AssignmentExpr::new_local_place(l, r, op))
     }
 
@@ -451,7 +452,7 @@ pub enum AssignmentTarget {
     /// Assignment to an expression-place
     Expr(Box<Expr>),
     /// Assignment to a local id (i.e. previously allocated stack space)
-    LocalId(u16),
+    LocalId(BackLocalId),
 }
 
 impl AssignmentTarget {
@@ -493,7 +494,7 @@ impl AssignmentExpr {
         }
     }
     /// Convenient method for `AssignmentExpr::new(AssignmentTarget::LocalId(left), right, op)`
-    pub fn new_local_place(l: u16, r: Expr, op: TokenType) -> Self {
+    pub fn new_local_place(l: BackLocalId, r: Expr, op: TokenType) -> Self {
         Self {
             left: AssignmentTarget::LocalId(l),
             right: Box::new(r),

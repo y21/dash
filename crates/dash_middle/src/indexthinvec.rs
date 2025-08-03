@@ -22,6 +22,10 @@ impl<T, I: Index> IndexThinVec<T, I> {
     pub fn as_slice(&self) -> &[T] {
         &self.0
     }
+
+    pub fn shrink_to_fit(&mut self) {
+        self.0.shrink_to_fit();
+    }
 }
 impl<T, I: Index> std::ops::Index<I> for IndexThinVec<T, I> {
     type Output = T;

@@ -2,7 +2,7 @@ use std::cell::RefCell;
 
 use dash_proc_macro::Trace;
 
-use crate::frame::TryBlock;
+use crate::frame::{Ip, TryBlock};
 use crate::gc::ObjectId;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::localscope::LocalScope;
@@ -47,7 +47,7 @@ impl GeneratorFunction {
             // we can avoid extending into the stack just to drain + collect again
             let inner = self.function.inner();
             let sp = scope.stack.len();
-            extend_stack_from_args(args, inner.params, scope, inner.rest_local.is_some());
+            extend_stack_from_args(args, inner.params.into(), scope, inner.rest_local.is_some());
             scope.stack.drain(sp..).collect::<Vec<_>>()
         };
 
@@ -60,7 +60,7 @@ impl GeneratorFunction {
 pub enum GeneratorState {
     Finished,
     Running {
-        ip: usize,
+        ip: Ip,
         stack: Vec<Value>,
         try_blocks: Vec<TryBlock>,
         arguments: Option<ObjectId>,
@@ -72,7 +72,7 @@ impl GeneratorState {
     pub fn did_run(&self) -> bool {
         match self {
             Self::Finished => true,
-            Self::Running { ip, .. } => *ip != 0,
+            Self::Running { ip, .. } => ip.0 != 0,
         }
     }
 }
@@ -117,7 +117,7 @@ impl GeneratorIterator {
             function,
             obj: OrdObject::with_prototype(vm.statics.generator_iterator_prototype),
             state: RefCell::new(GeneratorState::Running {
-                ip: 0,
+                ip: Ip(0),
                 stack,
                 arguments,
                 try_blocks,

@@ -1,4 +1,6 @@
 use dash_middle::compiler::constant::{ConstantPool, NumberConstant, SymbolConstant};
+use dash_middle::compiler::external::ExternalId;
+use dash_middle::compiler::scope::BackLocalId;
 use std::ops::{Deref, DerefMut};
 use std::vec::Drain;
 
@@ -46,13 +48,13 @@ impl<'vm> DispatchContext<'vm> {
         Self { scope }
     }
 
-    pub fn get_local(&mut self, index: usize) -> Value {
+    pub fn get_local(&mut self, index: BackLocalId) -> Value {
         self.scope
             .get_local(index)
             .expect("Bytecode attempted to reference invalid local")
     }
 
-    pub fn get_external(&mut self, index: usize) -> ExternalValue {
+    pub fn get_external(&mut self, index: ExternalId) -> ExternalValue {
         self.scope.get_external(index)
     }
 
@@ -158,6 +160,7 @@ mod extract {
     use std::marker::PhantomData;
 
     use dash_middle::compiler::constant::{NumberConstant, SymbolConstant};
+    use dash_middle::compiler::scope::BackLocalId;
     use dash_middle::compiler::{ArrayMemberKind, ExportPropertyKind, FunctionCallKind, ObjectMemberKind};
     use dash_middle::iterator_with::IteratorWith;
 
@@ -482,7 +485,7 @@ mod extract {
 
         fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
             let local_id = cx.fetchw_and_inc_ip();
-            Ok(Self(cx.get_local(local_id.into())))
+            Ok(Self(cx.get_local(BackLocalId(local_id))))
         }
     }
 
@@ -542,7 +545,7 @@ mod extract {
 
 mod handlers {
     use dash_middle::compiler::constant::{BooleanConstant, FunctionConstant, RegexConstant};
-    use dash_middle::compiler::external::External;
+    use dash_middle::compiler::external::{External, PossiblyExternalId};
     use dash_middle::compiler::instruction::{AssignKind, IntrinsicOperation};
     use dash_middle::compiler::{FunctionCallKind, StaticImportKind};
     use dash_middle::interner::sym;
@@ -554,7 +557,7 @@ mod handlers {
     use std::ops::{Add, ControlFlow, Div, Mul, Rem, Sub};
     use std::rc::Rc;
 
-    use crate::frame::{FrameState, TryBlock};
+    use crate::frame::{FrameState, Ip, Sp, TryBlock};
     use crate::throw;
     use crate::util::unlikely;
     use crate::value::array::table::ArrayTable;
@@ -625,27 +628,26 @@ mod handlers {
         ) -> Vec<ExternalValue> {
             let mut externals = Vec::new();
 
-            for External { id, is_nested_external } in function.externals.iter().copied() {
-                let id = usize::from(id);
+            for External { id } in function.externals.iter().copied() {
+                let value = match id {
+                    PossiblyExternalId::Local(id) => {
+                        let value = sc.get_local_raw(id).expect("Referenced local not found");
 
-                let val = if is_nested_external {
-                    sc.get_external(id)
-                } else {
-                    let v = sc.get_local_raw(id).expect("Referenced local not found");
-
-                    match v.unpack() {
-                        ValueKind::External(v) => v,
-                        _ => {
-                            // TODO: comment what's happening here -- Value -> Handle -> ExternaValue(..)
-
-                            let ext_id = sc.register(v);
-                            sc.set_local(id, Value::external(ext_id).into());
-                            ExternalValue::new(sc, ext_id)
+                        // "Box up" the value at the local slot by wrapping it in a `Value::External`,
+                        // if it isn't already.
+                        match value.unpack() {
+                            ValueKind::External(value) => value,
+                            _ => {
+                                let ext_id = sc.register(value);
+                                sc.set_local(id, Value::external(ext_id).into());
+                                ExternalValue::new(sc, ext_id)
+                            }
                         }
                     }
+                    PossiblyExternalId::External(id) => sc.get_external(id),
                 };
 
-                externals.push(val);
+                externals.push(value);
             }
 
             externals
@@ -862,7 +864,7 @@ mod handlers {
         drop(cx.try_blocks.drain(lower_tcp..));
 
         // Drain all the stack space from this frame
-        drop(cx.stack.drain(this.sp..));
+        drop(cx.stack.drain(this.sp.0 as usize..));
 
         match this.state {
             FrameState::Module(_) => {
@@ -1111,7 +1113,7 @@ mod handlers {
         let arguments = adjust_stack_from_flat_call(&mut cx, user_function, sp_before_call, argc);
 
         let mut frame = Frame::from_function(this, user_function, new_target, true, arguments);
-        frame.set_sp(sp_before_call);
+        frame.sp = Sp(sp_before_call as u32);
 
         cx.pad_stack_for_frame(&frame);
         cx.try_push_frame(frame)?;
@@ -1126,7 +1128,7 @@ mod handlers {
         this: This,
         argc: usize,
         function_call_kind: FunctionCallKind,
-        call_ip: u16,
+        call_ip: Ip,
     ) -> Result<Option<HandleResult>, Unrooted> {
         let args = {
             let mut args = SmallVec::with_capacity(argc);
@@ -1183,7 +1185,7 @@ mod handlers {
 
     pub fn call(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         // FIXME: sketchy assumption
-        let call_ip = cx.frames.current_ip() as u16 - 1;
+        let call_ip = cx.frames.current_ip() - 1;
 
         let argc = usize::from(cx.fetch_and_inc_ip());
         let has_this = extract::<bool>(&mut cx);
@@ -1232,8 +1234,7 @@ mod handlers {
 
         if jump {
             let ip = cx.frames.current_ip();
-
-            cx.frames.set_ip((ip as isize + offset as isize) as usize);
+            cx.frames.set_ip(ip + offset);
         }
 
         Ok(None)
@@ -1247,8 +1248,7 @@ mod handlers {
 
         if jump {
             let ip = cx.frames.current_ip();
-
-            cx.frames.set_ip((ip as isize + offset as isize) as usize);
+            cx.frames.set_ip(ip + offset);
         }
 
         Ok(None)
@@ -1262,8 +1262,7 @@ mod handlers {
 
         if jump {
             let ip = cx.frames.current_ip();
-
-            cx.frames.set_ip((ip as isize + offset as isize) as usize);
+            cx.frames.set_ip(ip + offset);
         }
 
         Ok(None)
@@ -1277,8 +1276,7 @@ mod handlers {
 
         if jump {
             let ip = cx.frames.current_ip();
-
-            cx.frames.set_ip((ip as isize + offset as isize) as usize);
+            cx.frames.set_ip(ip + offset);
         }
 
         Ok(None)
@@ -1292,8 +1290,7 @@ mod handlers {
 
         if jump {
             let ip = cx.frames.current_ip();
-
-            cx.frames.set_ip((ip as isize + offset as isize) as usize);
+            cx.frames.set_ip(ip + offset);
         }
 
         Ok(None)
@@ -1307,8 +1304,7 @@ mod handlers {
 
         if jump {
             let ip = cx.frames.current_ip();
-
-            cx.frames.set_ip((ip as isize + offset as isize) as usize);
+            cx.frames.set_ip(ip + offset);
         }
 
         Ok(None)
@@ -1322,8 +1318,7 @@ mod handlers {
 
         if jump {
             let ip = cx.frames.current_ip();
-
-            cx.frames.set_ip((ip as isize + offset as isize) as usize);
+            cx.frames.set_ip(ip + offset);
         }
 
         Ok(None)
@@ -1337,8 +1332,7 @@ mod handlers {
 
         if jump {
             let ip = cx.frames.current_ip();
-
-            cx.frames.set_ip((ip as isize + offset as isize) as usize);
+            cx.frames.set_ip(ip + offset);
         }
 
         Ok(None)
@@ -1346,15 +1340,15 @@ mod handlers {
 
     pub fn jmp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let offset = cx.fetchw_and_inc_ip() as i16;
-        let ip = cx.frames.current_ip();
 
-        cx.frames.set_ip((ip as isize + offset as isize) as usize);
+        let ip = cx.frames.current_ip();
+        cx.frames.set_ip(ip + offset);
 
         Ok(None)
     }
 
     pub fn storelocal(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let id = cx.fetchw_and_inc_ip() as usize;
+        let id = BackLocalId(cx.fetchw_and_inc_ip());
         let kind = AssignKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
 
         macro_rules! op {
@@ -1418,8 +1412,8 @@ mod handlers {
     }
 
     pub fn ldlocal(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let id = cx.fetchw_and_inc_ip();
-        let value = cx.get_local(id.into());
+        let id = BackLocalId(cx.fetchw_and_inc_ip());
+        let value = cx.get_local(id);
 
         cx.stack.push(value);
         Ok(None)
@@ -1783,8 +1777,8 @@ mod handlers {
     }
 
     pub fn ldlocalext(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let id = cx.fetchw_and_inc_ip();
-        let value = Value::external(cx.get_external(id.into()).id());
+        let id = ExternalId(cx.fetchw_and_inc_ip());
+        let value = Value::external(cx.get_external(id).id());
 
         // Unbox external values such that any use will create a copy
         let value = value.unbox_external(&cx.scope);
@@ -1798,15 +1792,15 @@ mod handlers {
     }
 
     pub fn storelocalext(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let id = cx.fetchw_and_inc_ip();
+        let id = ExternalId(cx.fetchw_and_inc_ip());
         let kind = AssignKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
 
         macro_rules! op {
             ($op:expr) => {{
-                let value = Value::external(cx.get_external(id.into()).id()).unbox_external(&cx.scope);
+                let value = Value::external(cx.get_external(id).id()).unbox_external(&cx.scope);
                 let right = cx.pop_stack_rooted();
                 let res = $op(value, right, &mut cx)?;
-                let external = cx.scope.get_external(id.into());
+                let external = cx.scope.get_external(id);
                 assign_to_external(&mut cx.scope, external, res.clone());
                 cx.stack.push(res);
             }};
@@ -1814,10 +1808,10 @@ mod handlers {
 
         macro_rules! prefix {
             ($op:expr) => {{
-                let value = Value::external(cx.get_external(id.into()).id()).unbox_external(&cx.scope);
+                let value = Value::external(cx.get_external(id).id()).unbox_external(&cx.scope);
                 let right = Value::number(1.0);
                 let res = $op(value, right, &mut cx)?;
-                let external = cx.scope.get_external(id.into());
+                let external = cx.scope.get_external(id);
                 assign_to_external(&mut cx.scope, external, res.clone());
                 cx.stack.push(res);
             }};
@@ -1825,10 +1819,10 @@ mod handlers {
 
         macro_rules! postfix {
             ($op:expr) => {{
-                let value = Value::external(cx.get_external(id.into()).id()).unbox_external(&cx.scope);
+                let value = Value::external(cx.get_external(id).id()).unbox_external(&cx.scope);
                 let right = Value::number(1.0);
                 let res = $op(value, right, &mut cx)?;
-                let external = cx.scope.get_external(id.into());
+                let external = cx.scope.get_external(id);
                 assign_to_external(&mut cx.scope, external, res);
                 cx.stack.push(value);
             }};
@@ -1837,7 +1831,7 @@ mod handlers {
         match kind {
             AssignKind::Assignment => {
                 let value = cx.pop_stack_rooted();
-                let external = cx.scope.get_external(id.into());
+                let external = cx.scope.get_external(id);
                 assign_to_external(&mut cx.scope, external, value);
                 cx.stack.push(value);
             }
@@ -1866,7 +1860,7 @@ mod handlers {
         let mut compute_dist_ip = || {
             let distance = extract::<Option<u16>>(&mut cx)?;
             let ip = cx.frames.current_ip();
-            Some(ip + distance as usize)
+            Some(ip + distance as u32)
         };
 
         let catch_ip = compute_dist_ip();
@@ -1937,7 +1931,7 @@ mod handlers {
 
     pub fn import_static(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let ty = StaticImportKind::from_repr(cx.fetch_and_inc_ip()).expect("Invalid import kind");
-        let local_id = cx.fetchw_and_inc_ip();
+        let local_id = BackLocalId(cx.fetchw_and_inc_ip());
         let path_id = cx.fetchw_and_inc_ip();
 
         let path = cx.constants().symbols[SymbolConstant(path_id)];
@@ -1947,7 +1941,7 @@ mod handlers {
             None => throw!(cx, Error, "Static imports are disabled for this context."),
         };
 
-        cx.set_local(local_id.into(), value);
+        cx.set_local(local_id, value);
 
         Ok(None)
     }
@@ -2081,7 +2075,7 @@ mod handlers {
     pub fn objdestruct(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let rest_id = match cx.fetchw_and_inc_ip() {
             u16::MAX => None,
-            n => Some(n),
+            n => Some(BackLocalId(n)),
         };
         let obj = cx.pop_stack_rooted();
 
@@ -2103,7 +2097,7 @@ mod handlers {
                     prop = default;
                 }
             }
-            cx.set_local(id as usize, prop.into());
+            cx.set_local(BackLocalId(id as u16), prop.into());
         }
 
         if let Some(rest_id) = rest_id {
@@ -2142,7 +2136,7 @@ mod handlers {
 
         while let Some((i, id)) = iter.next_infallible(&mut cx) {
             if let Some((has_default, NumberWConstant(id))) = id {
-                let id = id as usize;
+                let id = BackLocalId(id as u16);
                 let mut prop = array
                     .get_property(i.to_key(&mut cx.scope), &mut cx.scope)?
                     .root(&mut cx.scope);
@@ -2206,25 +2200,25 @@ mod handlers {
 
         macro_rules! postfix {
             ($op:tt) => {{
-                let id = cx.fetch_and_inc_ip();
-                let local = match cx.get_local(id.into()).unpack() {
+                let id = BackLocalId(cx.fetch_and_inc_ip() as u16);
+                let local = match cx.get_local(id).unpack() {
                     ValueKind::Number(n) => n,
                     _ => unreachable!(),
                 };
-                cx.set_local(id.into(), Value::number(local.0 $op 1.0).into());
+                cx.set_local(id, Value::number(local.0 $op 1.0).into());
                 cx.stack.push(Value::number(local.0));
             }};
         }
 
         macro_rules! prefix {
             ($op:tt) => {{
-                let id = cx.fetch_and_inc_ip();
-                let local = match cx.get_local(id.into()).unpack() {
+                let id = BackLocalId(cx.fetch_and_inc_ip() as u16);
+                let local = match cx.get_local(id).unpack() {
                     ValueKind::Number(n) => n,
                     _ => unreachable!(),
                 };
                 let new = Value::number(local.0 $op 1.0);
-                cx.set_local(id.into(), new.into());
+                cx.set_local(id, new.into());
                 cx.stack.push(new);
             }};
         }

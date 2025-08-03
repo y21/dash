@@ -4,7 +4,7 @@ use dash_middle::compiler::constant::Function;
 use dash_proc_macro::Trace;
 
 use crate::dispatch::HandleResult;
-use crate::frame::Frame;
+use crate::frame::{Frame, Sp};
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::value::arguments::Arguments;
@@ -49,10 +49,10 @@ impl UserFunction {
             arguments = Some(args);
         }
 
-        extend_stack_from_args(args, self.inner.params, scope, self.inner.rest_local.is_some());
+        extend_stack_from_args(args, self.inner.params.into(), scope, self.inner.rest_local.is_some());
 
         let mut frame = Frame::from_function(this, self, new_target, false, arguments);
-        frame.set_sp(sp);
+        frame.sp = Sp(sp as u32);
 
         match scope.execute_frame(frame) {
             Ok(v) => Ok(v),

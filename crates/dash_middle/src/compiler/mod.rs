@@ -3,6 +3,8 @@ use std::rc::Rc;
 use constant::ConstantPool;
 use strum_macros::FromRepr;
 
+use crate::compiler::external::ExternalId;
+use crate::indexvec::IndexVec;
 use crate::parser;
 use crate::sourcemap::Span;
 
@@ -23,8 +25,8 @@ pub mod scope;
 pub struct CompileResult {
     pub instructions: Vec<u8>,
     pub cp: ConstantPool,
-    pub locals: usize,
-    pub externals: Vec<External>,
+    pub locals: u16,
+    pub externals: IndexVec<External, ExternalId>,
     pub debug_symbols: DebugSymbols,
     pub source: Rc<str>,
 }
@@ -33,10 +35,10 @@ pub struct CompileResult {
 // IMPL DETAILS: We intentionally use a rather "dense" representation to save memory, even if it slows down the error path.
 #[cfg_attr(feature = "format", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Default)]
-pub struct DebugSymbols(Vec<(u16, Span)>);
+pub struct DebugSymbols(Vec<(u32, Span)>);
 
 impl DebugSymbols {
-    pub fn add(&mut self, ip: u16, symbol: Span) {
+    pub fn add(&mut self, ip: u32, symbol: Span) {
         #[cfg(debug_assertions)]
         {
             if let Some(&(last_ip, _)) = self.0.last() {
@@ -48,7 +50,7 @@ impl DebugSymbols {
         self.0.push((ip, symbol));
     }
 
-    pub fn get(&self, ip: u16) -> Span {
+    pub fn get(&self, ip: u32) -> Span {
         self.0
             .binary_search_by_key(&ip, |(ip, _)| *ip)
             .ok()
@@ -56,7 +58,7 @@ impl DebugSymbols {
             .unwrap()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &(u16, Span)> {
+    pub fn iter(&self) -> impl Iterator<Item = &(u32, Span)> {
         self.0.iter()
     }
 }

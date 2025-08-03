@@ -29,6 +29,7 @@ use function::args::CallArgs;
 use propertykey::ToPropertyKey;
 
 pub mod string;
+use crate::frame::Ip;
 use crate::gc::ObjectId;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::util::cold_path;
@@ -722,7 +723,7 @@ impl Value {
         &self,
         this: This,
         args: CallArgs,
-        ip: u16,
+        ip: Ip,
         sc: &mut LocalScope,
     ) -> Result<Unrooted, Unrooted> {
         match self.unpack() {

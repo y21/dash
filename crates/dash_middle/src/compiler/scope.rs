@@ -1,14 +1,23 @@
 use std::cell::RefCell;
-use std::iter;
 use std::ops::{Index, IndexMut};
 
+use crate::indexvec::{self, IndexVec};
 use crate::interner::Symbol;
 use crate::parser::statement::{ScopeId, VariableDeclarationKind};
 use crate::util::Counter;
-use crate::with;
+use crate::{index_type, with};
 
 #[derive(Debug)]
 pub struct LimitExceededError;
+
+index_type! {
+    /// Local indices "in the backend", i.e. used by the compiler and the VM.
+    /// As opposed to [`FrontLocalId`], which is given out for "syntactic locals" during parsing.
+    /// Frontend locals are lowered to backend locals during name res.
+    #[derive(derive_more::Display, Debug, Copy, Clone, PartialEq)]
+    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+    pub struct BackLocalId(pub u16);
+}
 
 #[derive(Debug, Clone)]
 pub struct FunctionScope {
@@ -16,13 +25,11 @@ pub struct FunctionScope {
     /// Every scope that this function encloses (including the function's `Scope` itself) will have its own declarations.
     /// Some scopes may not have any declarations at all, such as unnameable locals.
     /// There can also be multiple locals with the same name.
-    pub locals: Vec<Local>,
+    pub locals: IndexVec<Local, BackLocalId>,
 }
 impl FunctionScope {
-    pub fn add_local(&mut self, local: Local) -> Result<u16, LimitExceededError> {
-        let id = self.locals.len();
-        self.locals.push(local);
-        id.try_into().map_err(|_| LimitExceededError)
+    pub fn add_local(&mut self, local: Local) -> Result<BackLocalId, LimitExceededError> {
+        self.locals.try_push(local).ok_or(LimitExceededError)
     }
 }
 
@@ -46,7 +53,7 @@ pub struct Scope {
     /// All variable declarations in this scope.
     /// It contains the identifier, as well as the local slot
     /// (index into `functions` of the enclosing function scope).
-    pub declarations: Vec<(Symbol, u16)>,
+    pub declarations: Vec<(Symbol, BackLocalId)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -109,34 +116,36 @@ impl Scope {
     }
     /// Looks for a local **in this scope** (only): it does not look in upper scopes.
     /// Consider using `ScopeGraph::find_local` instead if you need that
-    pub fn find_local(&self, name: Symbol) -> Option<u16> {
+    pub fn find_local(&self, name: Symbol) -> Option<BackLocalId> {
         self.declarations
             .iter()
             .find_map(|&(name2, slot)| (name2 == name).then_some(slot))
     }
 }
+
 impl Index<ScopeId> for ScopeGraph {
     type Output = Scope;
 
     fn index(&self, index: ScopeId) -> &Self::Output {
-        &self.scopes[index.0]
+        &self.scopes[index]
     }
 }
+
 impl IndexMut<ScopeId> for ScopeGraph {
     fn index_mut(&mut self, index: ScopeId) -> &mut Self::Output {
-        &mut self.scopes[index.0]
+        &mut self.scopes[index]
     }
 }
 
 #[derive(Debug)]
 pub struct ScopeGraph {
-    scopes: Vec<Scope>,
+    scopes: IndexVec<Scope, ScopeId>,
 }
 
 impl ScopeGraph {
-    pub fn new(count: usize) -> Self {
+    pub fn new(count: <ScopeId as indexvec::Index>::Repr) -> Self {
         Self {
-            scopes: iter::repeat_n(Scope::new(ScopeKind::Uninit, None), count).collect(),
+            scopes: IndexVec::repeat_n(Scope::new(ScopeKind::Uninit, None), count),
         }
     }
 
@@ -156,7 +165,9 @@ impl ScopeGraph {
 
         self[at].subscopes.push(id);
         self.scopes.push(Scope {
-            kind: ScopeKind::Function(FunctionScope { locals: Vec::new() }),
+            kind: ScopeKind::Function(FunctionScope {
+                locals: IndexVec::new(),
+            }),
             declarations: Vec::new(),
             parent: Some(at),
             subscopes: Vec::new(),
@@ -188,7 +199,7 @@ impl ScopeGraph {
         at: ScopeId,
         name: Symbol,
         ty: Option<CompileValueType>,
-    ) -> Result<u16, LimitExceededError> {
+    ) -> Result<BackLocalId, LimitExceededError> {
         let enclosing_function = self.enclosing_function_of(at);
 
         with!(self[enclosing_function].expect_function_mut(), |fun| {
@@ -213,12 +224,12 @@ impl ScopeGraph {
     pub fn find_local(&self, at: ScopeId, name: Symbol) -> Option<&Local> {
         self.find(at, name).map(|FindResult { slot, scope, .. }| {
             let function = self.enclosing_function_of(scope);
-            &self[function].expect_function().locals[slot as usize]
+            &self[function].expect_function().locals[slot]
         })
     }
 }
 
 pub struct FindResult {
-    pub slot: u16,
+    pub slot: BackLocalId,
     pub scope: ScopeId,
 }

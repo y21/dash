@@ -223,6 +223,7 @@ unsafe impl Trace for ObjectId {
 unsafe_empty_trace!(
     usize,
     u8,
+    u16,
     u32,
     u64,
     f64,

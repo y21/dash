@@ -3,7 +3,7 @@ use dash_middle::interner::{StringInterner, Symbol};
 use dash_middle::lexer::token::{Token, TokenType};
 use dash_middle::parser::error::{Error, TokenTypeSuggestion};
 use dash_middle::parser::expr::{Expr, ExprKind};
-use dash_middle::parser::statement::{Binding, LocalId, ScopeId, Statement};
+use dash_middle::parser::statement::{Binding, FrontLocalId, ScopeId, Statement};
 use dash_middle::sourcemap::{SourceMap, Span};
 use dash_middle::util::{Counter, LevelStack};
 
@@ -11,7 +11,7 @@ mod expr;
 mod stmt;
 mod types;
 
-pub type ParseResult = Result<(Vec<Statement>, Counter<ScopeId>, Counter<LocalId>), Vec<Error>>;
+pub type ParseResult = Result<(Vec<Statement>, Counter<ScopeId>, Counter<FrontLocalId>), Vec<Error>>;
 
 /// A JavaScript source code parser
 pub struct Parser<'a, 'interner> {
@@ -23,7 +23,7 @@ pub struct Parser<'a, 'interner> {
     source: SourceMap<'a>,
     new_level_stack: LevelStack,
     scope_count: Counter<ScopeId>,
-    local_count: Counter<LocalId>,
+    local_count: Counter<FrontLocalId>,
 }
 
 impl<'a, 'interner> Parser<'a, 'interner> {

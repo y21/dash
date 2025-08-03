@@ -1,9 +1,11 @@
-use std::cell::Cell;
 use std::collections::BTreeMap;
+use std::ops::{Add, AddAssign, Sub};
 use std::rc::Rc;
 
 use dash_middle::compiler::CompileResult;
 use dash_middle::compiler::constant::{Buffer, Function};
+use dash_middle::index_type;
+use dash_middle::indexvec::IndexVec;
 use dash_middle::parser::statement::{Asyncness, FunctionKind};
 use dash_proc_macro::Trace;
 
@@ -18,8 +20,8 @@ use super::value::function::user::UserFunction;
 
 #[derive(Debug, Clone, Copy, Trace)]
 pub struct TryBlock {
-    pub catch_ip: Option<usize>,
-    pub finally_ip: Option<usize>,
+    pub catch_ip: Option<Ip>,
+    pub finally_ip: Option<Ip>,
     /// The frame index
     pub frame_idx: FrameId,
 }
@@ -93,10 +95,10 @@ impl LoopCounter {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct LoopCounterMap(BTreeMap<usize, LoopCounter>);
+pub struct LoopCounterMap(BTreeMap<Ip, LoopCounter>);
 
 impl LoopCounterMap {
-    pub fn get_or_insert(&mut self, id: usize) -> &mut LoopCounter {
+    pub fn get_or_insert(&mut self, id: Ip) -> &mut LoopCounter {
         self.0.entry(id).or_default()
     }
 }
@@ -105,9 +107,49 @@ unsafe impl Trace for LoopCounterMap {
     fn trace(&self, _: &mut TraceCtxt<'_>) {}
 }
 
+index_type!(
+    /// An instruction pointer.
+    #[derive(Debug, Clone, Copy, Trace, PartialEq, Eq, PartialOrd, Ord)]
+    pub struct Ip(pub u32);
+    /// A stack pointer.
+    #[derive(Debug, Clone, Copy, Trace, PartialEq, Eq, PartialOrd, Ord)]
+    pub struct Sp(pub u32);
+);
+
+impl AddAssign<u32> for Ip {
+    fn add_assign(&mut self, rhs: u32) {
+        self.0 += rhs;
+    }
+}
+
+impl Add<u32> for Ip {
+    type Output = Self;
+
+    fn add(self, rhs: u32) -> Self::Output {
+        Self(self.0 + rhs)
+    }
+}
+
+impl Add<i16> for Ip {
+    type Output = Self;
+
+    fn add(self, rhs: i16) -> Self::Output {
+        Self((self.0 as i64 + rhs as i64) as u32)
+    }
+}
+
+impl Sub<u32> for Ip {
+    type Output = Self;
+
+    fn sub(self, rhs: u32) -> Self::Output {
+        Self(self.0 - rhs)
+    }
+}
+
 #[derive(Debug, Clone, Trace)]
 pub struct BaseFrame {
-    pub ip: usize,
+    pub ip: Ip,
+    pub sp: Sp,
     pub function: Rc<Function>,
 }
 
@@ -115,11 +157,10 @@ pub struct BaseFrame {
 pub struct ExtendedFrame {
     /// Extra stack space allocated at the start of frame execution, currently only used for local variables
     /// (excluding function parameters, as they are pushed onto the stack in Function::apply)
-    pub extra_stack_space: usize,
+    pub extra_stack_space: u16,
     /// Contains local variable values from the outer scope
     pub externals: Rc<[ExternalValue]>,
     pub this: This,
-    pub sp: usize,
     pub state: FrameState,
     /// When evaluating a `return` op in a try/catch with a finally block,
     /// this will be set to Some(Ok(that_value)).
@@ -138,14 +179,14 @@ pub struct ExtendedFrame {
 #[derive(Debug, Clone, Trace)]
 pub struct Frame {
     pub function: Rc<Function>,
-    pub ip: usize,
+    pub ip: Ip,
     /// Extra stack space allocated at the start of frame execution, currently only used for local variables
     /// (excluding function parameters, as they are pushed onto the stack in Function::apply)
-    pub extra_stack_space: usize,
+    pub extra_stack_space: u16,
     /// Contains local variable values from the outer scope
     pub externals: Rc<[ExternalValue]>,
     pub this: This,
-    pub sp: usize,
+    pub sp: Sp,
     pub state: FrameState,
     /// When evaluating a `return` op in a try/catch with a finally block,
     /// this will be set to Some(Ok(that_value)).
@@ -174,10 +215,10 @@ impl Frame {
             this,
             function: inner.clone(),
             externals: uf.externals().clone(),
-            ip: 0,
-            sp: 0,
+            ip: Ip(0),
+            sp: Sp(0),
             delayed_ret: None,
-            extra_stack_space: inner.locals - uf.inner().params,
+            extra_stack_space: inner.locals - inner.params,
             state: FrameState::Function {
                 new_target,
                 is_flat_call,
@@ -193,10 +234,10 @@ impl Frame {
             this,
             function: inner.clone(),
             externals: uf.externals().clone(),
-            ip: 0,
-            sp: 0,
+            ip: Ip(0),
+            sp: Sp(0),
             delayed_ret: None,
-            extra_stack_space: inner.locals - uf.inner().params,
+            extra_stack_space: inner.locals - inner.params,
             state: FrameState::Module(Exports::default()),
             loop_counter: LoopCounterMap::default(),
             arguments,
@@ -213,9 +254,9 @@ impl Frame {
         debug_assert!(cr.externals.is_empty());
 
         let fun = Function {
-            buffer: Buffer(Cell::new(cr.instructions.into())),
+            buffer: Buffer::new(cr.instructions.into()),
             constants: cr.cp,
-            externals: Vec::new().into(),
+            externals: IndexVec::new(),
             locals: cr.locals,
             name: None,
             params: 0,
@@ -231,8 +272,8 @@ impl Frame {
             this: This::default(),
             function: Rc::new(fun),
             externals: Vec::new().into(),
-            ip: 0,
-            sp: 0,
+            ip: Ip(0),
+            sp: Sp(0),
             delayed_ret: None,
             extra_stack_space: cr.locals, /* - 0 params */
             state: FrameState::Function {
@@ -243,17 +284,5 @@ impl Frame {
             // Root function never has arguments
             arguments: None,
         }
-    }
-
-    pub fn set_extra_stack_space(&mut self, size: usize) {
-        self.extra_stack_space = size;
-    }
-
-    pub fn set_ip(&mut self, ip: usize) {
-        self.ip = ip;
-    }
-
-    pub fn set_sp(&mut self, sp: usize) {
-        self.sp = sp;
     }
 }

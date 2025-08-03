@@ -3,7 +3,9 @@ use std::rc::Rc;
 use dash_middle::compiler::constant::{
     BooleanConstant, Function, FunctionConstant, LimitExceededError, NumberConstant, RegexConstant, SymbolConstant,
 };
+use dash_middle::compiler::external::{ExternalId, PossiblyExternalId};
 use dash_middle::compiler::instruction::{AssignKind, Instruction, IntrinsicOperation};
+use dash_middle::compiler::scope::BackLocalId;
 use dash_middle::compiler::{
     ExportPropertyKind, FunctionCallKind, ObjectMemberKind as CompilerObjectMemberKind, StaticImportKind,
 };
@@ -108,8 +110,8 @@ impl InstructionBuilder<'_, '_> {
         }
     }
 
-    pub fn build_local_load(&mut self, index: u16, is_extern: bool) {
-        compile_local_load_into(&mut self.current_function_mut().buf, index, is_extern);
+    pub fn build_local_load(&mut self, id: PossiblyExternalId) {
+        compile_local_load_into(&mut self.current_function_mut().buf, id);
     }
 
     pub fn build_string_constant(&mut self, sym: Symbol) -> Result<(), LimitExceededError> {
@@ -172,13 +174,17 @@ impl InstructionBuilder<'_, '_> {
         Ok(())
     }
 
-    pub fn build_local_store(&mut self, kind: AssignKind, id: u16, is_extern: bool) {
-        if is_extern {
-            self.write_instr(Instruction::StoreLocalExt);
-        } else {
-            self.write_instr(Instruction::StoreLocal);
+    pub fn build_local_store(&mut self, kind: AssignKind, id: PossiblyExternalId) {
+        match id {
+            PossiblyExternalId::Local(BackLocalId(id)) => {
+                self.write_instr(Instruction::StoreLocal);
+                self.writew(id);
+            }
+            PossiblyExternalId::External(ExternalId(id)) => {
+                self.write_instr(Instruction::StoreLocalExt);
+                self.writew(id);
+            }
         }
-        self.writew(id);
         self.write(kind as u8);
     }
 
@@ -345,10 +351,10 @@ impl InstructionBuilder<'_, '_> {
         Ok(())
     }
 
-    pub fn build_static_import(&mut self, import: StaticImportKind, local_id: u16, path_id: SymbolConstant) {
+    pub fn build_static_import(&mut self, import: StaticImportKind, local_id: BackLocalId, path_id: SymbolConstant) {
         self.write_instr(Instruction::ImportStatic);
         self.write(import as u8);
-        self.writew(local_id);
+        self.writew(local_id.0);
         self.writew(path_id.0);
     }
 
@@ -375,7 +381,7 @@ impl InstructionBuilder<'_, '_> {
             match kind {
                 NamedExportKind::Local { loc_id, ident_id } => {
                     self.write(ExportPropertyKind::Local as u8);
-                    self.writew(loc_id);
+                    self.writew(loc_id.0);
                     self.writew(ident_id.0);
                 }
                 NamedExportKind::Global { ident_id } => {
@@ -389,13 +395,13 @@ impl InstructionBuilder<'_, '_> {
     }
 
     // TODO: encode this using Option<NonMaxU16>
-    pub fn build_objdestruct(&mut self, count: u16, rest: Option<u16>) {
+    pub fn build_objdestruct(&mut self, count: u16, rest: Option<BackLocalId>) {
         self.write_instr(Instruction::ObjDestruct);
         self.writew(rest.map_or_else(
             || u16::MAX,
-            |v| {
-                assert!(v != u16::MAX);
-                v
+            |BackLocalId(id)| {
+                assert!(id != u16::MAX);
+                id
             },
         ));
         self.writew(count);
@@ -620,22 +626,32 @@ impl InstructionBuilder<'_, '_> {
 
 #[derive(Copy, Clone)]
 pub enum NamedExportKind {
-    Local { loc_id: u16, ident_id: SymbolConstant },
-    Global { ident_id: SymbolConstant },
+    Local {
+        loc_id: BackLocalId,
+        ident_id: SymbolConstant,
+    },
+    Global {
+        ident_id: SymbolConstant,
+    },
 }
 
-pub fn compile_local_load_into(out: &mut Vec<u8>, index: u16, is_extern: bool) {
-    if is_extern {
-        out.push(Instruction::LdLocalExt as u8);
-    } else {
-        out.push(Instruction::LdLocal as u8);
-    }
+pub fn compile_local_load_into(out: &mut Vec<u8>, id: PossiblyExternalId) {
+    let index = match id {
+        PossiblyExternalId::External(ExternalId(id)) => {
+            out.push(Instruction::LdLocalExt as u8);
+            id
+        }
+        PossiblyExternalId::Local(BackLocalId(id)) => {
+            out.push(Instruction::LdLocal as u8);
+            id
+        }
+    };
     out.extend_from_slice(&index.to_ne_bytes());
 }
 
 /// Convenience function for creating a vec and calling `compile_local_load_into`.
-pub fn compile_local_load(index: u16, is_extern: bool) -> Vec<u8> {
+pub fn compile_local_load(id: PossiblyExternalId) -> Vec<u8> {
     let mut out = Vec::new();
-    compile_local_load_into(&mut out, index, is_extern);
+    compile_local_load_into(&mut out, id);
     out
 }

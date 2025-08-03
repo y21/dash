@@ -8,7 +8,7 @@ use dash_parser::Parser;
 
 use crate::frame::Frame;
 use crate::localscope::LocalScope;
-use crate::value::object::{OrdObject, Object, PropertyValue};
+use crate::value::object::{Object, OrdObject, PropertyValue};
 use crate::value::propertykey::ToPropertyKey;
 use crate::value::{Root, Unrooted, Value};
 use crate::{Vm, throw};
@@ -34,7 +34,7 @@ impl Vm {
             .compile_ast(ast, true)
             .map_err(|err| EvalError::Middle(vec![err]))?;
         let mut frame = Frame::from_compile_result(cr);
-        frame.set_sp(self.stack_size());
+        frame.sp = self.active_sp();
         let val = self.execute_frame(frame).map_err(EvalError::Exception)?;
         Ok(val.into_value())
     }
