@@ -480,6 +480,13 @@ impl Chunk {
 
 impl Drop for Chunk {
     fn drop(&mut self) {
+        for info in self.info.iter() {
+            if info.flags.get().contains(AllocFlags::INITIALIZED) {
+                let ptr = unsafe { self.data.as_ptr().add(info.data_index as usize).cast::<()>() };
+                unsafe { (info.drop_in_place)(ptr) };
+            }
+        }
+
         unsafe {
             dealloc(self.data.as_ptr(), Self::layout());
         }
