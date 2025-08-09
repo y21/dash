@@ -17,15 +17,15 @@ use crate::value::string::JsString;
 use crate::value::{Root, Unpack, Value, ValueContext, array};
 use dash_middle::interner::sym;
 
-pub fn constructor(cx: CallContext) -> Result<Value, Value> {
-    let size = cx.args.first().unwrap_or_undefined().to_length_u(cx.scope)?;
-    let obj = OrdObject::instance_for_new_target(cx.new_target.unwrap_or(cx.scope.statics.array_ctor), cx.scope)?;
+pub fn constructor(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let size = cx.args.first().unwrap_or_undefined().to_length_u(scope)?;
+    let obj = OrdObject::instance_for_new_target(cx.new_target.unwrap_or(scope.statics.array_ctor), scope)?;
     let array = Array::with_hole(size, obj);
-    Ok(cx.scope.register(array).into())
+    Ok(scope.register(array).into())
 }
 
-fn wrapping_index_val(start: Value, cx: &mut CallContext, len: usize) -> Result<usize, Value> {
-    let start = start.to_integer_or_infinity(cx.scope)?;
+fn wrapping_index_val(start: Value, scope: &mut LocalScope<'_>, len: usize) -> Result<usize, Value> {
+    let start = start.to_integer_or_infinity(scope)?;
     Ok(if start == f64::NEG_INFINITY {
         0
     } else if start < 0.0 {
@@ -35,7 +35,7 @@ fn wrapping_index_val(start: Value, cx: &mut CallContext, len: usize) -> Result<
     })
 }
 
-fn join_inner(sc: &mut LocalScope, array: Value, separator: JsString) -> Result<Value, Value> {
+fn join_inner(sc: &mut LocalScope<'_>, array: Value, separator: JsString) -> Result<Value, Value> {
     let length = array.length_of_array_like(sc)?;
 
     let mut result = String::new();
@@ -54,7 +54,6 @@ fn join_inner(sc: &mut LocalScope, array: Value, separator: JsString) -> Result<
 
     Ok(Value::string(sc.intern(result).into()))
 }
-
 fn for_each_element<B>(
     scope: &mut LocalScope<'_>,
     this: Value,
@@ -72,25 +71,24 @@ fn for_each_element<B>(
 
     Ok(Continue(()))
 }
-
-pub fn to_string(cx: CallContext) -> Result<Value, Value> {
-    join_inner(cx.scope, cx.this, sym::comma.into())
+pub fn to_string(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    join_inner(scope, cx.this, sym::comma.into())
 }
 
-pub fn join(cx: CallContext) -> Result<Value, Value> {
-    let sep = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
-    join_inner(cx.scope, cx.this, sep)
+pub fn join(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let sep = cx.args.first().unwrap_or_undefined().to_js_string(scope)?;
+    join_inner(scope, cx.this, sep)
 }
 
-pub fn values(cx: CallContext) -> Result<Value, Value> {
-    let iter = ArrayIterator::new(cx.scope, cx.this)?;
-    Ok(cx.scope.register(iter).into())
+pub fn values(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let iter = ArrayIterator::new(scope, cx.this)?;
+    Ok(scope.register(iter).into())
 }
 
-pub fn at(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::object(cx.this.to_object(cx.scope)?);
-    let len = this.length_of_array_like(cx.scope)? as i64;
-    let mut index = cx.args.first().unwrap_or_undefined().to_integer_or_infinity(cx.scope)? as i64;
+pub fn at(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let this = Value::object(cx.this.to_object(scope)?);
+    let len = this.length_of_array_like(scope)? as i64;
+    let mut index = cx.args.first().unwrap_or_undefined().to_integer_or_infinity(scope)? as i64;
 
     if index < 0 {
         index += len;
@@ -100,45 +98,44 @@ pub fn at(cx: CallContext) -> Result<Value, Value> {
         return Ok(Value::undefined());
     }
 
-    this.get_property((index as usize).to_key(cx.scope), cx.scope)
-        .root(cx.scope)
+    this.get_property((index as usize).to_key(scope), scope).root(scope)
 }
 
-pub fn concat(cx: CallContext) -> Result<Value, Value> {
-    let _this = Value::object(cx.this.to_object(cx.scope)?);
+pub fn concat(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let _this = Value::object(cx.this.to_object(scope)?);
     let mut array = Vec::new();
     // TODO: add elements from `this` to `array`
 
     for arg in &cx.args {
-        let len = arg.length_of_array_like(cx.scope)?;
+        let len = arg.length_of_array_like(scope)?;
         for i in 0..len {
-            let element = arg.get_property(i.to_key(cx.scope), cx.scope).root(cx.scope)?;
+            let element = arg.get_property(i.to_key(scope), scope).root(scope)?;
             array.push(PropertyValue::static_default(element));
         }
     }
 
-    let array = Array::from_vec(array, cx.scope);
+    let array = Array::from_vec(array, scope);
 
-    Ok(cx.scope.register(array).into())
+    Ok(scope.register(array).into())
 }
 
-pub fn entries(cx: CallContext) -> Result<Value, Value> {
-    throw!(cx.scope, Error, "Not implemented")
+pub fn entries(_: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    throw!(scope, Error, "Not implemented")
 }
 
-pub fn keys(cx: CallContext) -> Result<Value, Value> {
-    throw!(cx.scope, Error, "Not implemented")
+pub fn keys(_: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    throw!(scope, Error, "Not implemented")
 }
 
-pub fn every(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::object(cx.this.to_object(cx.scope)?);
+pub fn every(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let this = Value::object(cx.this.to_object(scope)?);
     let callback = cx.args.first().unwrap_or_undefined();
     let cb_this = match cx.args.get(1) {
-        Some(v) => Value::object(v.to_object(cx.scope)?),
+        Some(v) => Value::object(v.to_object(scope)?),
         None => Value::undefined(),
     };
 
-    let all_true = for_each_element(cx.scope, this, |scope, elem, idx| {
+    let all_true = for_each_element(scope, this, |scope, elem, idx| {
         if callback
             .apply(This::bound(cb_this), [elem, idx, this].into(), scope)
             .root(scope)?
@@ -154,15 +151,15 @@ pub fn every(cx: CallContext) -> Result<Value, Value> {
     Ok(Value::boolean(all_true))
 }
 
-pub fn some(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::object(cx.this.to_object(cx.scope)?);
+pub fn some(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let this = Value::object(cx.this.to_object(scope)?);
     let callback = cx.args.first().unwrap_or_undefined();
     let cb_this = match cx.args.get(1) {
-        Some(v) => Value::object(v.to_object(cx.scope)?),
+        Some(v) => Value::object(v.to_object(scope)?),
         None => Value::undefined(),
     };
 
-    let any_true = for_each_element(cx.scope, this, |scope, elem, idx| {
+    let any_true = for_each_element(scope, this, |scope, elem, idx| {
         if callback
             .apply(This::bound(cb_this), [elem, idx, this].into(), scope)
             .root(scope)?
@@ -178,17 +175,17 @@ pub fn some(cx: CallContext) -> Result<Value, Value> {
     Ok(Value::boolean(any_true))
 }
 
-pub fn fill(mut cx: CallContext) -> Result<Value, Value> {
-    let this = Value::object(cx.this.to_object(cx.scope)?);
-    let len = this.length_of_array_like(cx.scope)?;
+pub fn fill(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let this = Value::object(cx.this.to_object(scope)?);
+    let len = this.length_of_array_like(scope)?;
     let value = cx.args.first().unwrap_or_undefined();
 
-    let k = wrapping_index_val(cx.args.get(1).unwrap_or_undefined(), &mut cx, len)?;
+    let k = wrapping_index_val(cx.args.get(1).unwrap_or_undefined(), scope, len)?;
 
     let relative_end = cx
         .args
         .get(2)
-        .map(|v| v.to_integer_or_infinity(cx.scope))
+        .map(|v| v.to_integer_or_infinity(scope))
         .transpose()?
         .unwrap_or(len as f64);
 
@@ -201,26 +198,26 @@ pub fn fill(mut cx: CallContext) -> Result<Value, Value> {
     };
 
     for i in k..final_ {
-        array::spec_array_set_property(cx.scope, &this, i, PropertyValue::static_default(value))?;
+        array::spec_array_set_property(scope, &this, i, PropertyValue::static_default(value))?;
     }
 
-    if let Some(arr) = this.unpack().downcast_ref::<Array>(cx.scope) {
+    if let Some(arr) = this.unpack().downcast_ref::<Array>(scope) {
         arr.try_convert_to_non_holey();
     }
 
     Ok(this)
 }
 
-pub fn filter(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::object(cx.this.to_object(cx.scope)?);
+pub fn filter(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let this = Value::object(cx.this.to_object(scope)?);
     let callback = cx.args.first().unwrap_or_undefined();
     let cb_this = match cx.args.get(1) {
-        Some(v) => Value::object(v.to_object(cx.scope)?),
+        Some(v) => Value::object(v.to_object(scope)?),
         None => Value::undefined(),
     };
     let mut values = Vec::new();
 
-    let (Break(()) | Continue(())) = for_each_element(cx.scope, this, |scope, elem, idx| {
+    let (Break(()) | Continue(())) = for_each_element(scope, this, |scope, elem, idx| {
         if callback
             .apply(This::bound(cb_this), [elem, idx, this].into(), scope)
             .root(scope)?
@@ -231,51 +228,51 @@ pub fn filter(cx: CallContext) -> Result<Value, Value> {
         Ok(Continue(()))
     })?;
 
-    let values = Array::from_vec(values, cx.scope);
+    let values = Array::from_vec(values, scope);
 
-    Ok(cx.scope.register(values).into())
+    Ok(scope.register(values).into())
 }
 
-pub fn reduce(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::object(cx.this.to_object(cx.scope)?);
-    let len = this.length_of_array_like(cx.scope)?;
+pub fn reduce(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let this = Value::object(cx.this.to_object(scope)?);
+    let len = this.length_of_array_like(scope)?;
     let callback = cx.args.first().unwrap_or_undefined();
     let initial_value = cx.args.get(1).copied();
 
     let (start, mut accumulator) = match (len, initial_value) {
-        (0, None) => throw!(cx.scope, TypeError, "Reduce of empty array with no initial value"),
+        (0, None) => throw!(scope, TypeError, "Reduce of empty array with no initial value"),
         (0, Some(_)) => return Ok(initial_value.unwrap()),
         (_, Some(initial)) => (0, initial),
         (1, None) => {
-            let pkv = this.get_property(sym::zero.to_key(cx.scope), cx.scope).root(cx.scope)?;
+            let pkv = this.get_property(sym::zero.to_key(scope), scope).root(scope)?;
             return Ok(pkv);
         }
         (_, None) => {
-            let pkv = this.get_property(sym::zero.to_key(cx.scope), cx.scope).root(cx.scope)?;
-            let pkv2 = this.get_property(sym::one.to_key(cx.scope), cx.scope).root(cx.scope)?;
+            let pkv = this.get_property(sym::zero.to_key(scope), scope).root(scope)?;
+            let pkv2 = this.get_property(sym::one.to_key(scope), scope).root(scope)?;
             let args = [pkv, pkv2, Value::number(1_f64)].into();
-            (2, callback.apply(This::default(), args, cx.scope).root(cx.scope)?)
+            (2, callback.apply(This::default(), args, scope).root(scope)?)
         }
     };
 
     for k in start..len {
-        let pkv = this.get_property(k.to_key(cx.scope), cx.scope).root(cx.scope)?;
+        let pkv = this.get_property(k.to_key(scope), scope).root(scope)?;
         let args = [accumulator, pkv, Value::number(k as f64), this].into();
-        accumulator = callback.apply(This::default(), args, cx.scope).root(cx.scope)?;
+        accumulator = callback.apply(This::default(), args, scope).root(scope)?;
     }
 
     Ok(accumulator)
 }
 
-pub fn find(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::object(cx.this.to_object(cx.scope)?);
+pub fn find(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let this = Value::object(cx.this.to_object(scope)?);
     let callback = cx.args.first().unwrap_or_undefined();
     let cb_this = match cx.args.get(1) {
-        Some(v) => Value::object(v.to_object(cx.scope)?),
+        Some(v) => Value::object(v.to_object(scope)?),
         None => Value::undefined(),
     };
 
-    let element = for_each_element(cx.scope, this, |scope, elem, idx| {
+    let element = for_each_element(scope, this, |scope, elem, idx| {
         if callback
             .apply(This::bound(cb_this), [elem, idx, this].into(), scope)
             .root(scope)?
@@ -293,15 +290,15 @@ pub fn find(cx: CallContext) -> Result<Value, Value> {
     })
 }
 
-pub fn find_index(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::object(cx.this.to_object(cx.scope)?);
+pub fn find_index(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let this = Value::object(cx.this.to_object(scope)?);
     let callback = cx.args.first().unwrap_or_undefined();
     let cb_this = match cx.args.get(1) {
-        Some(v) => Value::object(v.to_object(cx.scope)?),
+        Some(v) => Value::object(v.to_object(scope)?),
         None => Value::undefined(),
     };
 
-    let element = for_each_element(cx.scope, this, |scope, elem, idx| {
+    let element = for_each_element(scope, this, |scope, elem, idx| {
         if callback
             .apply(This::bound(cb_this), [elem, idx, this].into(), scope)
             .root(scope)?
@@ -319,19 +316,19 @@ pub fn find_index(cx: CallContext) -> Result<Value, Value> {
     })
 }
 
-pub fn flat(cx: CallContext) -> Result<Value, Value> {
-    throw!(cx.scope, Error, "Not implemented")
+pub fn flat(_: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    throw!(scope, Error, "Not implemented")
 }
 
-pub fn for_each(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::object(cx.this.to_object(cx.scope)?);
+pub fn for_each(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let this = Value::object(cx.this.to_object(scope)?);
     let callback = cx.args.first().unwrap_or_undefined();
     let cb_this = match cx.args.get(1) {
-        Some(v) => Value::object(v.to_object(cx.scope)?),
+        Some(v) => Value::object(v.to_object(scope)?),
         None => Value::undefined(),
     };
 
-    let (Break(()) | Continue(())) = for_each_element(cx.scope, this, |scope, elem, idx| {
+    let (Break(()) | Continue(())) = for_each_element(scope, this, |scope, elem, idx| {
         callback
             .apply(This::bound(cb_this), [elem, idx, this].into(), scope)
             .root_err(scope)?;
@@ -341,13 +338,13 @@ pub fn for_each(cx: CallContext) -> Result<Value, Value> {
     Ok(Value::undefined())
 }
 
-pub fn includes(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::object(cx.this.to_object(cx.scope)?);
-    let len = this.length_of_array_like(cx.scope)?;
+pub fn includes(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let this = Value::object(cx.this.to_object(scope)?);
+    let len = this.length_of_array_like(scope)?;
     let search_element = cx.args.first().unwrap_or_undefined();
 
     for k in 0..len {
-        let pkv = this.get_property(k.to_key(cx.scope), cx.scope).root(cx.scope)?;
+        let pkv = this.get_property(k.to_key(scope), scope).root(scope)?;
         if strict_eq(pkv, search_element) {
             return Ok(true.into());
         }
@@ -356,15 +353,15 @@ pub fn includes(cx: CallContext) -> Result<Value, Value> {
     Ok(false.into())
 }
 
-pub fn index_of(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::object(cx.this.to_object(cx.scope)?);
-    let len = this.length_of_array_like(cx.scope)?;
+pub fn index_of(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let this = Value::object(cx.this.to_object(scope)?);
+    let len = this.length_of_array_like(scope)?;
     if len == 0 {
         return Ok(Value::number(-1.));
     }
 
     let search_element = cx.args.first().unwrap_or_undefined();
-    let from_index = cx.args.get(1).unwrap_or_undefined().to_integer_or_infinity(cx.scope)?;
+    let from_index = cx.args.get(1).unwrap_or_undefined().to_integer_or_infinity(scope)?;
     if from_index == f64::INFINITY {
         return Ok(Value::number(-1.));
     } else if from_index == f64::NEG_INFINITY {
@@ -378,7 +375,7 @@ pub fn index_of(cx: CallContext) -> Result<Value, Value> {
     };
 
     for k in from_index..len {
-        let pkv = this.get_property(k.to_key(cx.scope), cx.scope).root(cx.scope)?;
+        let pkv = this.get_property(k.to_key(scope), scope).root(scope)?;
         if strict_eq(pkv, search_element) {
             return Ok(Value::number(k as f64));
         }
@@ -387,16 +384,16 @@ pub fn index_of(cx: CallContext) -> Result<Value, Value> {
     Ok(Value::number(-1.0))
 }
 
-pub fn last_index_of(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::object(cx.this.to_object(cx.scope)?);
-    let len = this.length_of_array_like(cx.scope)?;
+pub fn last_index_of(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let this = Value::object(cx.this.to_object(scope)?);
+    let len = this.length_of_array_like(scope)?;
     if len == 0 {
         return Ok(Value::number(-1.));
     }
 
     let search_element = cx.args.first().unwrap_or_undefined();
     let from_index = if let Some(from_index) = cx.args.get(1) {
-        from_index.to_integer_or_infinity(cx.scope)?
+        from_index.to_integer_or_infinity(scope)?
     } else {
         -1.
     };
@@ -409,7 +406,7 @@ pub fn last_index_of(cx: CallContext) -> Result<Value, Value> {
     };
 
     for k in (0..=from_index).rev() {
-        let pkv = this.get_property(k.to_key(cx.scope), cx.scope).root(cx.scope)?;
+        let pkv = this.get_property(k.to_key(scope), scope).root(scope)?;
         if strict_eq(pkv, search_element) {
             return Ok(Value::number(k as f64));
         }
@@ -418,16 +415,16 @@ pub fn last_index_of(cx: CallContext) -> Result<Value, Value> {
     Ok(Value::number(-1.0))
 }
 
-pub fn map(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::object(cx.this.to_object(cx.scope)?);
+pub fn map(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let this = Value::object(cx.this.to_object(scope)?);
     let callback = cx.args.first().unwrap_or_undefined();
     let cb_this = match cx.args.get(1) {
-        Some(v) => Value::object(v.to_object(cx.scope)?),
+        Some(v) => Value::object(v.to_object(scope)?),
         None => Value::undefined(),
     };
     let mut values = Vec::new();
 
-    let (Break(()) | Continue(())) = for_each_element(cx.scope, this, |scope, elem, idx| {
+    let (Break(()) | Continue(())) = for_each_element(scope, this, |scope, elem, idx| {
         let mapped = callback
             .apply(This::bound(cb_this), [elem, idx, this].into(), scope)
             .root(scope)?;
@@ -435,90 +432,88 @@ pub fn map(cx: CallContext) -> Result<Value, Value> {
         Ok(Continue(()))
     })?;
 
-    let values = Array::from_vec(values, cx.scope);
+    let values = Array::from_vec(values, scope);
 
-    Ok(cx.scope.register(values).into())
+    Ok(scope.register(values).into())
 }
 
-pub fn pop(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::object(cx.this.to_object(cx.scope)?);
-    let len = this.length_of_array_like(cx.scope)?;
+pub fn pop(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let this = Value::object(cx.this.to_object(scope)?);
+    let len = this.length_of_array_like(scope)?;
 
     if len == 0 {
         return Ok(Value::undefined());
     }
 
     let new_len = len - 1;
-    let value = this.delete_property(new_len.to_key(cx.scope), cx.scope)?.root(cx.scope);
+    let value = this.delete_property(new_len.to_key(scope), scope)?.root(scope);
     this.set_property(
-        sym::length.to_key(cx.scope),
+        sym::length.to_key(scope),
         PropertyValue::static_default(Value::number(new_len as f64)),
-        cx.scope,
+        scope,
     )?;
 
     Ok(value)
 }
 
-pub fn push(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::object(cx.this.to_object(cx.scope)?);
-    let len = this.length_of_array_like(cx.scope)?;
+pub fn push(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let this = Value::object(cx.this.to_object(scope)?);
+    let len = this.length_of_array_like(scope)?;
 
     let mut last = Value::undefined();
 
     if cx.args.is_empty() {
         this.set_property(
-            len.to_key(cx.scope),
+            len.to_key(scope),
             PropertyValue::static_default(Value::undefined()),
-            cx.scope,
+            scope,
         )?;
     }
 
     for (idx, arg) in cx.args.into_iter().enumerate() {
         last = arg;
-        array::spec_array_set_property(cx.scope, &this, idx + len, PropertyValue::static_default(arg))?;
+        array::spec_array_set_property(scope, &this, idx + len, PropertyValue::static_default(arg))?;
     }
 
     Ok(last)
 }
 
-pub fn reverse(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::object(cx.this.to_object(cx.scope)?);
-    let len = this.length_of_array_like(cx.scope)?;
+pub fn reverse(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let this = Value::object(cx.this.to_object(scope)?);
+    let len = this.length_of_array_like(scope)?;
 
     // Strategy: Given [1,2,3,4,5], swap `i` with `len - i - 1` for every index `i` in `0..len / 2`
     for k in 0..len / 2 {
-        let pkv = this.get_property(k.to_key(cx.scope), cx.scope).root(cx.scope)?;
+        let pkv = this.get_property(k.to_key(scope), scope).root(scope)?;
         let k2 = len - k - 1;
-        let pk2v = this.get_property(k2.to_key(cx.scope), cx.scope).root(cx.scope)?;
-        this.set_property(k.to_key(cx.scope), PropertyValue::static_default(pk2v), cx.scope)?;
-        this.set_property(k2.to_key(cx.scope), PropertyValue::static_default(pkv), cx.scope)?;
+        let pk2v = this.get_property(k2.to_key(scope), scope).root(scope)?;
+        this.set_property(k.to_key(scope), PropertyValue::static_default(pk2v), scope)?;
+        this.set_property(k2.to_key(scope), PropertyValue::static_default(pkv), scope)?;
     }
 
     Ok(this)
 }
 
-pub fn shift(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::object(cx.this.to_object(cx.scope)?);
-    let len = this.length_of_array_like(cx.scope)?;
+pub fn shift(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let this = Value::object(cx.this.to_object(scope)?);
+    let len = this.length_of_array_like(scope)?;
 
     if len == 0 {
         return Ok(Value::undefined());
     }
 
-    let prop = this
-        .delete_property(sym::zero.to_key(cx.scope), cx.scope)?
-        .root(cx.scope);
+    let prop = this.delete_property(sym::zero.to_key(scope), scope)?.root(scope);
 
     for k in 1..len {
         let prev_pk = k - 1;
-        let pkv = this.get_property(k.to_key(cx.scope), cx.scope).root(cx.scope)?;
-        this.set_property(prev_pk.to_key(cx.scope), PropertyValue::static_default(pkv), cx.scope)?;
+        let pkv = this.get_property(k.to_key(scope), scope).root(scope)?;
+        this.set_property(prev_pk.to_key(scope), PropertyValue::static_default(pkv), scope)?;
     }
 
     this.set_property(
-        sym::length.to_key(cx.scope),
+        sym::length.to_key(scope),
         PropertyValue::static_default(Value::number((len - 1) as f64)),
-        cx.scope,
+        scope,
     )?;
 
     Ok(prop)
@@ -573,16 +568,16 @@ fn shift_array(
     Ok(())
 }
 
-pub fn unshift(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::object(cx.this.to_object(cx.scope)?);
-    let len = this.length_of_array_like(cx.scope)?;
+pub fn unshift(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let this = Value::object(cx.this.to_object(scope)?);
+    let len = this.length_of_array_like(scope)?;
     let arg_len = cx.args.len();
     let new_len = len + cx.args.len();
 
-    shift_array(cx.scope, &this, len, arg_len as isize, 0..len)?;
+    shift_array(scope, &this, len, arg_len as isize, 0..len)?;
 
     for (idx, arg) in cx.args.into_iter().enumerate() {
-        this.set_property(idx.to_key(cx.scope), PropertyValue::static_default(arg), cx.scope)?;
+        this.set_property(idx.to_key(scope), PropertyValue::static_default(arg), scope)?;
     }
 
     Ok(Value::number(new_len as f64))
@@ -597,17 +592,17 @@ fn to_slice_index(index: isize, len: usize) -> usize {
     }
 }
 
-pub fn slice(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::object(cx.this.to_object(cx.scope)?);
-    let len = this.length_of_array_like(cx.scope)?;
+pub fn slice(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let this = Value::object(cx.this.to_object(scope)?);
+    let len = this.length_of_array_like(scope)?;
 
     let start = match cx.args.first() {
-        Some(v) => to_slice_index(v.to_int32(cx.scope)? as isize, len),
+        Some(v) => to_slice_index(v.to_int32(scope)? as isize, len),
         None => 0,
     };
 
     let end = match cx.args.get(1) {
-        Some(v) => to_slice_index(v.to_int32(cx.scope)? as isize, len),
+        Some(v) => to_slice_index(v.to_int32(scope)? as isize, len),
         None => len,
     };
 
@@ -617,22 +612,22 @@ pub fn slice(cx: CallContext) -> Result<Value, Value> {
     let mut values = Vec::new();
 
     for k in start..end {
-        let pkv = this.get_property(k.to_key(cx.scope), cx.scope).root(cx.scope)?;
+        let pkv = this.get_property(k.to_key(scope), scope).root(scope)?;
         values.push(PropertyValue::static_default(pkv));
     }
 
-    let values = Array::from_vec(values, cx.scope);
+    let values = Array::from_vec(values, scope);
 
-    Ok(cx.scope.register(values).into())
+    Ok(scope.register(values).into())
 }
 
-pub fn is_array(cx: CallContext) -> Result<Value, Value> {
+pub fn is_array(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
     Ok(Value::boolean(
         cx.args
             .first()
             .unwrap_or_undefined()
             .unpack()
-            .downcast_ref::<Array>(cx.scope)
+            .downcast_ref::<Array>(scope)
             .is_some(),
     ))
 }
@@ -661,7 +656,7 @@ pub fn for_each_js_iterator_element<B, F: FnMut(&mut LocalScope<'_>, Value) -> R
     Ok(Continue(()))
 }
 
-pub fn from(cx: CallContext) -> Result<Value, Value> {
+pub fn from(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
     fn with_iterator(scope: &mut LocalScope, items: Value, mapper: Option<Value>) -> Result<Value, Value> {
         let mut values = Vec::new();
 
@@ -702,21 +697,21 @@ pub fn from(cx: CallContext) -> Result<Value, Value> {
     let mapper = args.next();
 
     let items_iterator = {
-        let iterator = cx.scope.statics.symbol_iterator;
+        let iterator = scope.statics.symbol_iterator;
         items
-            .get_property(iterator.to_key(cx.scope), cx.scope)
-            .root(cx.scope)?
+            .get_property(iterator.to_key(scope), scope)
+            .root(scope)?
             .into_option()
     };
 
     match items_iterator {
         Some(iterator) => {
             let iterator = iterator
-                .apply(This::bound(items), CallArgs::empty(), cx.scope)
-                .root(cx.scope)?;
-            with_iterator(cx.scope, iterator, mapper)
+                .apply(This::bound(items), CallArgs::empty(), scope)
+                .root(scope)?;
+            with_iterator(scope, iterator, mapper)
         }
-        None => with_array_like(cx.scope, items, mapper),
+        None => with_array_like(scope, items, mapper),
     }
 }
 
@@ -725,13 +720,13 @@ pub fn from(cx: CallContext) -> Result<Value, Value> {
 // It's worth noting that we unfortunately cannot use the sorting algorithm in the standard library,
 // since that must happen in a closure that needs to return an `Ordering`, without the ability to
 // return errors, but calling into JS can throw exceptions.
-pub fn sort(cx: CallContext) -> Result<Value, Value> {
-    let this = Value::object(cx.this.to_object(cx.scope)?);
-    let len = this.length_of_array_like(cx.scope)?;
+pub fn sort(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let this = Value::object(cx.this.to_object(scope)?);
+    let len = this.length_of_array_like(scope)?;
 
     let Some(compare_fn) = cx.args.first().cloned() else {
         throw!(
-            cx.scope,
+            scope,
             Error,
             "Array.prototype.sort currently requires an explicit compare function, try `.sort((a, b) => a - b)` to sort from lowest to highest"
         );
@@ -742,20 +737,16 @@ pub fn sort(cx: CallContext) -> Result<Value, Value> {
             let idx = j;
             let prev_idx = j - 1;
 
-            let previous = this.get_property(prev_idx.to_key(cx.scope), cx.scope).root(cx.scope)?;
-            let current = this.get_property(idx.to_key(cx.scope), cx.scope).root(cx.scope)?;
+            let previous = this.get_property(prev_idx.to_key(scope), scope).root(scope)?;
+            let current = this.get_property(idx.to_key(scope), scope).root(scope)?;
             let ordering = compare_fn
-                .apply(This::default(), [previous, current].into(), cx.scope)
-                .root(cx.scope)?
-                .to_int32(cx.scope)?;
+                .apply(This::default(), [previous, current].into(), scope)
+                .root(scope)?
+                .to_int32(scope)?;
 
             if ordering > 0 {
-                this.set_property(
-                    prev_idx.to_key(cx.scope),
-                    PropertyValue::static_default(current),
-                    cx.scope,
-                )?;
-                this.set_property(idx.to_key(cx.scope), PropertyValue::static_default(previous), cx.scope)?;
+                this.set_property(prev_idx.to_key(scope), PropertyValue::static_default(current), scope)?;
+                this.set_property(idx.to_key(scope), PropertyValue::static_default(previous), scope)?;
             } else {
                 break;
             }
@@ -765,31 +756,31 @@ pub fn sort(cx: CallContext) -> Result<Value, Value> {
     Ok(cx.this)
 }
 
-pub fn splice(mut cx: CallContext) -> Result<Value, Value> {
-    let this = Value::object(cx.this.to_object(cx.scope)?);
-    let len = this.length_of_array_like(cx.scope)?;
+pub fn splice(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let this = Value::object(cx.this.to_object(scope)?);
+    let len = this.length_of_array_like(scope)?;
 
-    let start = wrapping_index_val(cx.args.first().unwrap_or_undefined(), &mut cx, len)?;
+    let start = wrapping_index_val(cx.args.first().unwrap_or_undefined(), scope, len)?;
     let delete_count = match *cx.args {
         // 8. If start is not present, then
         [] => 0,
         // 9. Else if deleteCount is not present, then
         [_] => len - start,
         // 10. Else, ...
-        [_, v, ..] => isize::clamp(v.to_integer_or_infinity(cx.scope)? as isize, 0, (len - start) as isize) as usize,
+        [_, v, ..] => isize::clamp(v.to_integer_or_infinity(scope)? as isize, 0, (len - start) as isize) as usize,
     };
     let item_count = cx.args.len().saturating_sub(2);
 
     // TODO: often the returned array is unused; it may be possible to pass a "return value is used" flag to CallContexts
 
-    require_valid_array_length(cx.scope, delete_count)?;
+    require_valid_array_length(scope, delete_count)?;
     let mut values = Vec::with_capacity(delete_count);
     for k in 0..delete_count {
         let from = start + k;
 
         if let Some(delete_value) = this
-            .get_property_descriptor(from.to_key(cx.scope), cx.scope)
-            .root_err(cx.scope)?
+            .get_property_descriptor(from.to_key(scope), scope)
+            .root_err(scope)?
         {
             values.push(delete_value);
         }
@@ -799,12 +790,12 @@ pub fn splice(mut cx: CallContext) -> Result<Value, Value> {
         // Since we delete more than we insert, overwrite elements at the delete index
         for (i, value) in cx.args.iter().skip(2).enumerate() {
             let i = i + start;
-            this.set_property(i.to_key(cx.scope), PropertyValue::static_default(*value), cx.scope)?;
+            this.set_property(i.to_key(scope), PropertyValue::static_default(*value), scope)?;
         }
 
         // Now shift the rest to the left and update the length
         shift_array(
-            cx.scope,
+            scope,
             &this,
             len,
             -(delete_count as isize - item_count as isize),
@@ -812,23 +803,17 @@ pub fn splice(mut cx: CallContext) -> Result<Value, Value> {
         )?;
     } else {
         let items_to_insert = item_count - delete_count;
-        require_valid_array_length(cx.scope, len + items_to_insert)?;
+        require_valid_array_length(scope, len + items_to_insert)?;
 
         // We can overwrite `delete_count` number of items without shifting to the right
         // IOW, we only need to shift by `item_count - delete_count` to the right
-        shift_array(
-            cx.scope,
-            &this,
-            len,
-            items_to_insert as isize,
-            start + delete_count..len,
-        )?;
+        shift_array(scope, &this, len, items_to_insert as isize, start + delete_count..len)?;
 
         for (i, value) in cx.args.iter().skip(2).enumerate() {
             let i = i + start;
-            this.set_property(i.to_key(cx.scope), PropertyValue::static_default(*value), cx.scope)?;
+            this.set_property(i.to_key(scope), PropertyValue::static_default(*value), scope)?;
         }
     }
 
-    Ok(cx.scope.register(Array::from_vec(values, cx.scope)).into())
+    Ok(scope.register(Array::from_vec(values, scope)).into())
 }

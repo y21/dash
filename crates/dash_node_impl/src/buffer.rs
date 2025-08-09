@@ -36,15 +36,15 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
             inner: TypedArray::new(sc, arraybuffer, TypedArrayKind::Uint8Array),
         })
     };
-    let wu32be = register_native_fn(sc, wu32be_sym, |cx| write_byte(cx, Endianness::Big, 4));
-    let wu32le = register_native_fn(sc, wu32le_sym, |cx| write_byte(cx, Endianness::Little, 4));
+    let wu32be = register_native_fn(sc, wu32be_sym, |cx, scope| write_byte(cx, scope, Endianness::Big, 4));
+    let wu32le = register_native_fn(sc, wu32le_sym, |cx, scope| write_byte(cx, scope, Endianness::Little, 4));
     buffer_prototype.set_property(wu32be_sym.to_key(sc), PropertyValue::static_default(wu32be.into()), sc)?;
     buffer_prototype.set_property(wu32le_sym.to_key(sc), PropertyValue::static_default(wu32le.into()), sc)?;
 
     let buffer_ctor = Function::new(
         sc,
         Some(buffer_sym.into()),
-        FunctionKind::Native(|cx| throw!(cx.scope, Error, "Buffer() constructor unsupported")),
+        FunctionKind::Native(|_, scope| throw!(scope, Error, "Buffer() constructor unsupported")),
     );
     buffer_ctor.set_fn_prototype(buffer_prototype);
     let buffer_ctor = sc.register(buffer_ctor);
@@ -77,22 +77,27 @@ enum Endianness {
     Big,
 }
 
-fn write_byte(cx: CallContext, endianness: Endianness, size: usize) -> Result<Value, Value> {
+fn write_byte(
+    cx: CallContext,
+    scope: &mut LocalScope<'_>,
+    endianness: Endianness,
+    size: usize,
+) -> Result<Value, Value> {
     // TODO: can we just merge this with the TypedArray builtin logic?
     let Some(ValueKind::Number(Number(value))) = cx.args.first().map(|s| s.unpack()) else {
-        throw!(cx.scope, Error, "Invalid 'value' argument type")
+        throw!(scope, Error, "Invalid 'value' argument type")
     };
     let offset = match cx.args.get(1).map(|v| v.unpack()) {
         Some(ValueKind::Number(Number(n))) => n as usize,
-        Some(_) => throw!(cx.scope, TypeError, "Invalid 'offset' argument type"),
+        Some(_) => throw!(scope, TypeError, "Invalid 'offset' argument type"),
         None => 0,
     };
 
-    let buf = receiver_t::<Buffer>(cx.scope, &cx.this, "Buffer.prototype.write*")?;
-    let buf = if let Some(buf) = buf.inner.arraybuffer(cx.scope).storage().get(offset..) {
+    let buf = receiver_t::<Buffer>(scope, &cx.this, "Buffer.prototype.write*")?;
+    let buf = if let Some(buf) = buf.inner.arraybuffer(scope).storage().get(offset..) {
         buf
     } else {
-        throw!(cx.scope, Error, "out of range")
+        throw!(scope, Error, "out of range")
     };
     let bytes = match (size, endianness) {
         (1, Endianness::Little) => &u8::to_le_bytes(value as u8) as &[_],
@@ -140,25 +145,22 @@ impl Object for Buffer {
     extract!(self, inner);
 }
 
-fn from(cx: CallContext) -> Result<Value, Value> {
-    let BufferState { buffer_prototype } = State::from_vm(cx.scope).store[BufferKey];
+fn from(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let BufferState { buffer_prototype } = State::from_vm(scope).store[BufferKey];
 
-    let source = cx
-        .args
-        .first()
-        .or_type_err(cx.scope, "Missing source to `Buffer.from`")?;
+    let source = cx.args.first().or_type_err(scope, "Missing source to `Buffer.from`")?;
 
-    let length = source.length_of_array_like(cx.scope)?;
+    let length = source.length_of_array_like(scope)?;
     let mut buf = Vec::with_capacity(length);
     for i in 0..length {
         let item = source
-            .get_property(i.to_key(cx.scope), cx.scope)
-            .root(cx.scope)?
-            .to_number(cx.scope)? as u8;
+            .get_property(i.to_key(scope), scope)
+            .root(scope)?
+            .to_number(scope)? as u8;
         buf.push(Cell::new(item));
     }
 
-    let arraybuffer = cx.scope.register(ArrayBuffer::from_storage(cx.scope, buf));
+    let arraybuffer = scope.register(ArrayBuffer::from_storage(scope, buf));
     let instn = Buffer {
         inner: TypedArray::with_obj(
             arraybuffer,
@@ -167,15 +169,15 @@ fn from(cx: CallContext) -> Result<Value, Value> {
         ),
     };
 
-    Ok(Value::object(cx.scope.register(instn)))
+    Ok(Value::object(scope.register(instn)))
 }
 
-fn alloc(cx: CallContext) -> Result<Value, Value> {
+fn alloc(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
     let size = cx
         .args
         .first()
-        .or_type_err(cx.scope, "Missing size argument to `Buffer.alloc`")?;
-    let size = size.to_number(cx.scope)? as usize;
+        .or_type_err(scope, "Missing size argument to `Buffer.alloc`")?;
+    let size = size.to_number(scope)? as usize;
 
     let fill = cx.args.get(1).copied();
 
@@ -184,14 +186,14 @@ fn alloc(cx: CallContext) -> Result<Value, Value> {
         if let ValueKind::Number(Number(num)) = unpacked {
             vec![Cell::new(num as u8); size]
         } else {
-            throw!(cx.scope, Error, "invalid fill argument to Buffer.alloc: {:?}", unpacked)
+            throw!(scope, Error, "invalid fill argument to Buffer.alloc: {:?}", unpacked)
         }
     } else {
         vec![Cell::new(0); size]
     };
 
-    let BufferState { buffer_prototype, .. } = State::from_vm(cx.scope).store[BufferKey];
-    let arraybuffer = cx.scope.register(ArrayBuffer::from_storage(cx.scope, buf));
+    let BufferState { buffer_prototype, .. } = State::from_vm(scope).store[BufferKey];
+    let arraybuffer = scope.register(ArrayBuffer::from_storage(scope, buf));
     let instn = Buffer {
         inner: TypedArray::with_obj(
             arraybuffer,
@@ -200,5 +202,5 @@ fn alloc(cx: CallContext) -> Result<Value, Value> {
         ),
     };
 
-    Ok(Value::object(cx.scope.register(instn)))
+    Ok(Value::object(scope.register(instn)))
 }

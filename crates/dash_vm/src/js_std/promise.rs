@@ -15,81 +15,76 @@ use dash_middle::interner::sym;
 
 use super::receiver_t;
 
-pub fn constructor(cx: CallContext) -> Result<Value, Value> {
+pub fn constructor(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
     let initiator = match cx.args.first() {
-        Some(v) if matches!(v.type_of(cx.scope), Typeof::Function) => v,
-        _ => throw!(cx.scope, TypeError, "Promise callback must be a function"),
+        Some(v) if matches!(v.type_of(scope), Typeof::Function) => v,
+        _ => throw!(scope, TypeError, "Promise callback must be a function"),
     };
 
     let Some(new_target) = cx.new_target else {
-        throw!(cx.scope, TypeError, "Promise constructor requires new")
+        throw!(scope, TypeError, "Promise constructor requires new")
     };
 
-    let promise = Promise::with_obj(OrdObject::instance_for_new_target(new_target, cx.scope)?);
-    let promise = cx.scope.register(promise);
+    let promise = Promise::with_obj(OrdObject::instance_for_new_target(new_target, scope)?);
+    let promise = scope.register(promise);
 
     let (resolve, reject) = {
-        let r1 = PromiseResolver::new(cx.scope, promise);
-        let r2 = PromiseRejecter::new(cx.scope, promise);
-        (cx.scope.register(r1), cx.scope.register(r2))
+        let r1 = PromiseResolver::new(scope, promise);
+        let r2 = PromiseRejecter::new(scope, promise);
+        (scope.register(r1), scope.register(r2))
     };
 
     initiator
         .apply(
             This::default(),
             [Value::object(resolve), Value::object(reject)].into(),
-            cx.scope,
+            scope,
         )
-        .root_err(cx.scope)?;
+        .root_err(scope)?;
 
-    Ok(Value::object(cx.scope.register(promise)))
+    Ok(Value::object(scope.register(promise)))
 }
 
-pub fn resolve(cx: CallContext) -> Result<Value, Value> {
+pub fn resolve(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
     let value = cx.args.first().unwrap_or_undefined();
-    if value.extract::<Promise>(cx.scope).is_some() {
+    if value.extract::<Promise>(scope).is_some() {
         Ok(value)
     } else {
-        let promise = Promise::resolved(cx.scope, value);
-        Ok(Value::object(cx.scope.register(promise)))
+        let promise = Promise::resolved(scope, value);
+        Ok(Value::object(scope.register(promise)))
     }
 }
 
-pub fn reject(cx: CallContext) -> Result<Value, Value> {
+pub fn reject(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
     let value = cx.args.first().unwrap_or_undefined();
-    if value.extract::<Promise>(cx.scope).is_some() {
+    if value.extract::<Promise>(scope).is_some() {
         Ok(value)
     } else {
-        let promise = Promise::rejected(cx.scope, value);
+        let promise = Promise::rejected(scope, value);
         Ok(Value::object(promise))
     }
 }
 
-pub fn then(cx: CallContext) -> Result<Value, Value> {
-    let promise = receiver_t::<Promise>(cx.scope, &cx.this, "Promise.prototype.then")?;
+pub fn then(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let promise = receiver_t::<Promise>(scope, &cx.this, "Promise.prototype.then")?;
 
     let fulfill_handler = match cx.args.first().unpack() {
-        Some(ValueKind::Object(obj)) if matches!(obj.type_of(cx.scope), Typeof::Function) => Some(obj),
+        Some(ValueKind::Object(obj)) if matches!(obj.type_of(scope), Typeof::Function) => Some(obj),
         _ => None,
     };
     let reject_handler = match cx.args.get(1).unpack() {
-        Some(ValueKind::Object(obj)) if matches!(obj.type_of(cx.scope), Typeof::Function) => Some(obj),
+        Some(ValueKind::Object(obj)) if matches!(obj.type_of(scope), Typeof::Function) => Some(obj),
         _ => None,
     };
 
+    let then_promise = scope.mk_promise();
+    let resolver = scope.register(PromiseResolver::new(scope, then_promise));
+    let fulfill_handler =
+        fulfill_handler.map(|handler| scope.register(ThenTask::new(scope, then_promise, handler, resolver)));
+    let reject_handler =
+        reject_handler.map(|handler| scope.register(ThenTask::new(scope, then_promise, handler, resolver)));
+
     let mut state = promise.state().borrow_mut();
-
-    let then_promise = cx.scope.mk_promise();
-    let resolver = cx.scope.register(PromiseResolver::new(cx.scope, then_promise));
-    let fulfill_handler = fulfill_handler.map(|handler| {
-        cx.scope
-            .register(ThenTask::new(cx.scope, then_promise, handler, resolver))
-    });
-    let reject_handler = reject_handler.map(|handler| {
-        cx.scope
-            .register(ThenTask::new(cx.scope, then_promise, handler, resolver))
-    });
-
     match &mut *state {
         PromiseState::Pending { resolve, reject } => {
             if let Some(handler) = fulfill_handler {
@@ -101,17 +96,17 @@ pub fn then(cx: CallContext) -> Result<Value, Value> {
         }
         PromiseState::Resolved(value) => {
             if let Some(handler) = fulfill_handler {
-                let bf = BoundFunction::new(cx.scope, handler, None, [*value].into());
-                let bf = cx.scope.register(bf);
-                cx.scope.add_async_task(bf);
+                let bf = BoundFunction::new(scope, handler, None, [*value].into());
+                let bf = scope.register(bf);
+                scope.add_async_task(bf);
             }
         }
         PromiseState::Rejected { value, caught } => {
             if let Some(handler) = reject_handler {
                 *caught = true;
-                let bf = BoundFunction::new(cx.scope, handler, None, [*value].into());
-                let bf = cx.scope.register(bf);
-                cx.scope.add_async_task(bf);
+                let bf = BoundFunction::new(scope, handler, None, [*value].into());
+                let bf = scope.register(bf);
+                scope.add_async_task(bf);
             }
         }
     }

@@ -32,48 +32,48 @@ pub fn init_module(sc: &mut LocalScope) -> Result<Value, Value> {
     Ok(Value::object(sc.register(module)))
 }
 
-fn read_file_sync(cx: CallContext) -> Result<Value, Value> {
+fn read_file_sync(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
     let path = cx
         .args
         .first()
         .unwrap_or_undefined()
-        .to_js_string(cx.scope)?
-        .res(cx.scope)
+        .to_js_string(scope)?
+        .res(scope)
         .to_owned();
 
     match std::fs::read_to_string(path) {
-        Ok(s) => Ok(Value::string(cx.scope.intern(s.as_ref()).into())),
+        Ok(s) => Ok(Value::string(scope.intern(s.as_ref()).into())),
         Err(err) => {
-            let err = Error::new(cx.scope, err.to_string());
-            Err(Value::object(cx.scope.register(err)))
+            let err = Error::new(scope, err.to_string());
+            Err(Value::object(scope.register(err)))
         }
     }
 }
 
-fn write_file_sync(cx: CallContext) -> Result<Value, Value> {
+fn write_file_sync(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
     let [path, buf] = *cx.args else {
         throw!(
-            cx.scope,
+            scope,
             Error,
             "Invalid arguments passed to fs.writeFileSync(path, buf)"
         )
     };
-    let path = path.to_js_string(cx.scope)?;
-    if let Some(array) = buf.extract::<TypedArray>(cx.scope) {
-        let path = Path::new(path.res(cx.scope));
+    let path = path.to_js_string(scope)?;
+    if let Some(array) = buf.extract::<TypedArray>(scope) {
+        let path = Path::new(path.res(scope));
 
-        let storage = array.arraybuffer(cx.scope).storage();
+        let storage = array.arraybuffer(scope).storage();
         // SAFETY: Cell<u8> has the same layout as u8
         let view = unsafe { slice::from_raw_parts(storage.as_ptr().cast::<u8>(), storage.len()) };
 
         match std::fs::write(path, view) {
             Ok(()) => Ok(Value::undefined()),
             Err(err) => {
-                let err = Error::new(cx.scope, err.to_string());
-                Err(Value::object(cx.scope.register(err)))
+                let err = Error::new(scope, err.to_string());
+                Err(Value::object(scope.register(err)))
             }
         }
     } else {
-        throw!(cx.scope, TypeError, "Invalid source passed to fs.writeFileSync")
+        throw!(scope, TypeError, "Invalid source passed to fs.writeFileSync")
     }
 }

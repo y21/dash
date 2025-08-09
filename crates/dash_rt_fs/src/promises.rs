@@ -6,7 +6,7 @@ use dash_vm::localscope::LocalScope;
 use dash_vm::throw;
 use dash_vm::value::error::Error;
 use dash_vm::value::function::native::{CallContext, register_native_fn};
-use dash_vm::value::object::{OrdObject, Object, PropertyValue};
+use dash_vm::value::object::{Object, OrdObject, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::typedarray::TypedArray;
@@ -33,16 +33,16 @@ pub fn init_module(sc: &mut LocalScope) -> Result<Value, Value> {
     Ok(Value::object(sc.register(module)))
 }
 
-fn read_file(cx: CallContext) -> Result<Value, Value> {
+fn read_file(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
     let path = cx
         .args
         .first()
         .unwrap_or_undefined()
-        .to_js_string(cx.scope)?
-        .res(cx.scope)
+        .to_js_string(scope)?
+        .res(scope)
         .to_owned();
 
-    wrap_async(cx, tokio::fs::read_to_string(path), |sc, res| match res {
+    wrap_async(scope, tokio::fs::read_to_string(path), |sc, res| match res {
         Ok(s) => Ok(Value::string(sc.intern(s.as_ref()).into())),
         Err(e) => {
             let err = Error::new(sc, e.to_string());
@@ -51,26 +51,22 @@ fn read_file(cx: CallContext) -> Result<Value, Value> {
     })
 }
 
-fn write_file(cx: CallContext) -> Result<Value, Value> {
+fn write_file(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
     let [path, buf] = *cx.args else {
-        throw!(
-            cx.scope,
-            Error,
-            "Invalid arguments passed to fs.writeFileSync(path, buf)"
-        )
+        throw!(scope, Error, "Invalid arguments passed to fs.writeFileSync(path, buf)")
     };
-    let path = path.to_js_string(cx.scope)?;
-    if let Some(array) = buf.extract::<TypedArray>(cx.scope) {
-        let path = PathBuf::from(path.res(cx.scope));
+    let path = path.to_js_string(scope)?;
+    if let Some(array) = buf.extract::<TypedArray>(scope) {
+        let path = PathBuf::from(path.res(scope));
 
         let storage = array
-            .arraybuffer(cx.scope)
+            .arraybuffer(scope)
             .storage()
             .iter()
             .map(Cell::get)
             .collect::<Vec<_>>();
 
-        wrap_async(cx, tokio::fs::write(path, storage), |sc, res| match res {
+        wrap_async(scope, tokio::fs::write(path, storage), |sc, res| match res {
             Ok(()) => Ok(Value::undefined()),
             Err(err) => {
                 let err = Error::new(sc, err.to_string());
@@ -78,6 +74,6 @@ fn write_file(cx: CallContext) -> Result<Value, Value> {
             }
         })
     } else {
-        throw!(cx.scope, TypeError, "Invalid source passed to fs.writeFileSync")
+        throw!(scope, TypeError, "Invalid source passed to fs.writeFileSync")
     }
 }

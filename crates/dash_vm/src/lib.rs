@@ -73,6 +73,7 @@ pub struct Vm {
     #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
     frames: FrameStack,
     stack: Vec<Value>,
+    #[expect(dead_code)]
     rootstack: RootStack,
     scopes: LocalScopeList,
     alloc: Allocator,

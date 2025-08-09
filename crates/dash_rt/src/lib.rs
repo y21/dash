@@ -3,7 +3,6 @@ use std::future::Future;
 use dash_vm::PromiseAction;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::Value;
-use dash_vm::value::function::native::CallContext;
 use dash_vm::value::promise::Promise;
 use event::EventMessage;
 use inspect::InspectOptions;
@@ -18,19 +17,19 @@ pub mod state;
 pub mod typemap;
 
 // TODO: move elsewhere? util module?
-pub fn wrap_async<Fut, Fun, T, E>(cx: CallContext, fut: Fut, convert: Fun) -> Result<Value, Value>
+pub fn wrap_async<Fut, Fun, T, E>(scope: &mut LocalScope<'_>, fut: Fut, convert: Fun) -> Result<Value, Value>
 where
     Fut: Future<Output = Result<T, E>> + Send + 'static,
     Fun: FnOnce(&mut LocalScope, Result<T, E>) -> Result<Value, Value> + Send + Sync + 'static,
     T: Send + Sync + 'static,
     E: Send + Sync + 'static,
 {
-    let event_tx = State::from_vm_mut(cx.scope).event_sender();
+    let event_tx = State::from_vm_mut(scope).event_sender();
 
-    let promise = cx.scope.mk_promise();
+    let promise = scope.mk_promise();
 
     let (promise_id, rt) = {
-        let state = State::from_vm_mut(cx.scope);
+        let state = State::from_vm_mut(scope);
         let pid = state.add_pending_promise(promise);
         let rt = state.rt_handle();
         (pid, rt)

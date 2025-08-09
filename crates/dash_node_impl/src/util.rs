@@ -34,43 +34,43 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     Ok(exports.into())
 }
 
-fn inherits(cx: CallContext) -> Result<Value, Value> {
+fn inherits(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
     let [ctor, super_ctor] = *cx.args else {
-        throw!(cx.scope, Error, "expected 2 arguments to util.inherits")
+        throw!(scope, Error, "expected 2 arguments to util.inherits")
     };
 
-    if ctor.type_of(cx.scope) != Typeof::Function {
-        throw!(cx.scope, TypeError, "expected function for the \"ctor\" argument");
+    if ctor.type_of(scope) != Typeof::Function {
+        throw!(scope, TypeError, "expected function for the \"ctor\" argument");
     }
 
-    if super_ctor.type_of(cx.scope) != Typeof::Function {
-        throw!(cx.scope, TypeError, "expected function for the \"super_ctor\" argument");
+    if super_ctor.type_of(scope) != Typeof::Function {
+        throw!(scope, TypeError, "expected function for the \"super_ctor\" argument");
     }
 
     let super_inst = super_ctor
-        .construct(This::default(), CallArgs::empty(), cx.scope)
-        .root(cx.scope)?;
+        .construct(This::default(), CallArgs::empty(), scope)
+        .root(scope)?;
 
     super_inst.set_property(
-        sym::constructor.to_key(cx.scope),
+        sym::constructor.to_key(scope),
         PropertyValue {
             kind: PropertyValueKind::Static(ctor),
             descriptor: PropertyDataDescriptor::WRITABLE | PropertyDataDescriptor::CONFIGURABLE,
         },
-        cx.scope,
+        scope,
     )?;
 
     ctor.set_property(
-        sym::prototype.to_key(cx.scope),
+        sym::prototype.to_key(scope),
         PropertyValue::static_default(super_inst),
-        cx.scope,
+        scope,
     )?;
 
     Ok(Value::undefined())
 }
 
-fn inspect(cx: CallContext) -> Result<Value, Value> {
+fn inspect(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
     let value = cx.args.first().unwrap_or_undefined();
-    let formatted = dash_rt::format_value(value, cx.scope)?.to_owned();
-    Ok(Value::string(cx.scope.intern(formatted).into()))
+    let formatted = dash_rt::format_value(value, scope)?.to_owned();
+    Ok(Value::string(scope.intern(formatted).into()))
 }

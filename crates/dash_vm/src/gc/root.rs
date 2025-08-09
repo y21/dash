@@ -4,7 +4,7 @@ use std::ops::Deref;
 use crate::gc::ObjectId;
 use crate::gc::trace::Trace;
 use crate::value::Value;
-use crate::value::function::native::NewCallContext;
+use crate::value::function::native::CallContext;
 
 #[derive(PartialEq, Eq)]
 pub enum ExternalRoot {
@@ -38,7 +38,7 @@ impl<T: Trace + 'static> IntoExternalRoot for RefCell<T> {
         ExternalRoot::Trace(self as *const dyn Trace)
     }
 }
-impl IntoExternalRoot for NewCallContext {
+impl IntoExternalRoot for CallContext {
     fn into_external_root(&self) -> ExternalRoot {
         ExternalRoot::Trace(self as *const dyn Trace)
     }

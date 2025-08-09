@@ -205,11 +205,11 @@ impl Object for TcpListenerHandle {
     extract!(self);
 }
 
-fn tcplistener_accept(cx: CallContext) -> Result<Value, Value> {
-    let handle = receiver_t::<TcpListenerHandle>(cx.scope, &cx.this, "TcpListener.prototype.accept")?;
-    let promise = cx.scope.mk_promise();
+fn tcplistener_accept(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let handle = receiver_t::<TcpListenerHandle>(scope, &cx.this, "TcpListener.prototype.accept")?;
+    let promise = scope.mk_promise();
 
-    let promise_id = State::from_vm_mut(cx.scope).add_pending_promise(promise);
+    let promise_id = State::from_vm_mut(scope).add_pending_promise(promise);
 
     handle
         .sender
@@ -283,17 +283,13 @@ impl Object for TcpStreamHandle {
     extract!(self);
 }
 
-fn tcpstream_write(cx: CallContext) -> Result<Value, Value> {
-    let handle = receiver_t::<TcpStreamHandle>(cx.scope, &cx.this, "TcpStream.prototyep.write")?;
+fn tcpstream_write(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let handle = receiver_t::<TcpStreamHandle>(scope, &cx.this, "TcpStream.prototyep.write")?;
     let Some(arg) = cx.args.first().map(|v| v.unpack()) else {
-        throw!(cx.scope, ReferenceError, "TcpStream.write called without an argument")
+        throw!(scope, ReferenceError, "TcpStream.write called without an argument")
     };
-    let Some(value) = arg.downcast_ref::<ArrayBuffer>(cx.scope) else {
-        throw!(
-            cx.scope,
-            TypeError,
-            "TcpStream.write called with non-ArrayBuffer argument"
-        )
+    let Some(value) = arg.downcast_ref::<ArrayBuffer>(scope) else {
+        throw!(scope, TypeError, "TcpStream.write called with non-ArrayBuffer argument")
     };
 
     // As of 8/2/2023, gets correctly optimized to a memcpy
@@ -310,14 +306,14 @@ fn tcpstream_write(cx: CallContext) -> Result<Value, Value> {
     Ok(Value::undefined())
 }
 
-fn tcpstream_read(cx: CallContext) -> Result<Value, Value> {
-    let handle = receiver_t::<TcpStreamHandle>(cx.scope, &cx.this, "TcpStream.prototype.write")?;
+fn tcpstream_read(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let handle = receiver_t::<TcpStreamHandle>(scope, &cx.this, "TcpStream.prototype.write")?;
 
     let (tx, rx) = oneshot::channel();
 
     handle.reader_tx.send(tx).unwrap();
 
-    wrap_async(cx, rx, |sc, ret| {
+    wrap_async(scope, rx, |sc, ret| {
         let ret = ret.unwrap();
         let buf = Vec::from(ret).into_iter().map(Cell::new).collect::<Vec<_>>();
         let buf = ArrayBuffer::from_storage(sc, buf);

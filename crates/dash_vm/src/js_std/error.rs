@@ -1,3 +1,4 @@
+use crate::localscope::LocalScope;
 use crate::value::error::{
     AggregateError, Error, EvalError, RangeError, ReferenceError, SyntaxError, TypeError, URIError,
 };
@@ -11,16 +12,16 @@ use dash_middle::interner::sym;
 macro_rules! define_other_error_constructors {
     ( $( $fun:ident $t:ident ),* ) => {
         $(
-            pub fn $fun(mut cx: CallContext) -> Result<Value, Value> {
-                let message = cx.args.first().unwrap_or_undefined().to_js_string(&mut cx.scope)?;
+            pub fn $fun(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+                let message = cx.args.first().unwrap_or_undefined().to_js_string( scope)?;
                 let obj = if let Some(new_target) = cx.new_target {
-                    OrdObject::instance_for_new_target(new_target, cx.scope)?
+                    OrdObject::instance_for_new_target(new_target, scope)?
                 } else {
-                    $t::object(cx.scope)
+                    $t::object(scope)
                 };
-                let error = $t::new_with_js_string(cx.scope, obj, message);
+                let error = $t::new_with_js_string(scope, obj, message);
 
-                Ok(cx.scope.register(error).into())
+                Ok(scope.register(error).into())
             }
         )*
     };
@@ -35,22 +36,22 @@ define_other_error_constructors!(
     aggregate_error_constructor AggregateError
 );
 
-pub fn error_constructor(cx: CallContext) -> Result<Value, Value> {
-    let message = cx.args.first().cloned().map(|v| v.to_js_string(cx.scope)).transpose()?;
+pub fn error_constructor(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let message = cx.args.first().cloned().map(|v| v.to_js_string(scope)).transpose()?;
 
-    let new_target = cx.new_target.unwrap_or(cx.scope.statics.error_ctor);
+    let new_target = cx.new_target.unwrap_or(scope.statics.error_ctor);
     let err = Error::with_obj(
-        OrdObject::instance_for_new_target(new_target, cx.scope)?,
-        cx.scope,
+        OrdObject::instance_for_new_target(new_target, scope)?,
+        scope,
         message.unwrap_or(sym::empty.into()),
     );
 
-    Ok(cx.scope.register(err).into())
+    Ok(scope.register(err).into())
 }
 
-pub fn to_string(cx: CallContext) -> Result<Value, Value> {
+pub fn to_string(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
     cx.this
-        .get_property(sym::stack.to_key(cx.scope), cx.scope)
-        .root(cx.scope)
-        .and_then(|v| v.to_js_string(cx.scope).map(Value::string))
+        .get_property(sym::stack.to_key(scope), scope)
+        .root(scope)
+        .and_then(|v| v.to_js_string(scope).map(Value::string))
 }

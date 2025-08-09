@@ -46,16 +46,16 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
         let event_emitter_ctor = Function::new(
             sc,
             Some(event_emitter_sym.into()),
-            FunctionKind::Native(|cx| {
+            FunctionKind::Native(|_, scope| {
                 let EventsState {
                     event_emitter_prototype,
-                } = State::from_vm(cx.scope).store[EventsKey];
+                } = State::from_vm(scope).store[EventsKey];
 
                 let emitter = EventEmitter {
                     object: OrdObject::with_prototype(event_emitter_prototype),
                     handlers: RefCell::new(FxHashMap::default()),
                 };
-                Ok(cx.scope.register(emitter).into())
+                Ok(scope.register(emitter).into())
             }),
         );
         event_emitter_ctor.set_fn_prototype(event_emitter_prototype);
@@ -133,15 +133,15 @@ fn with_event_emitter(
     }
 }
 
-fn on(cx: CallContext) -> Result<Value, Value> {
+fn on(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
     let [name, cb] = *cx.args else {
-        throw!(cx.scope, Error, "expected an event name and callback function");
+        throw!(scope, Error, "expected an event name and callback function");
     };
-    let name = name.to_js_string(cx.scope)?;
+    let name = name.to_js_string(scope)?;
     let ValueKind::Object(cb) = cb.unpack() else {
-        throw!(cx.scope, Error, "expected callback to be a function")
+        throw!(scope, Error, "expected callback to be a function")
     };
-    with_event_emitter(cx.scope, cx.this, |_, this| {
+    with_event_emitter(scope, cx.this, |_, this| {
         match this.handlers.borrow_mut().entry(name.sym()) {
             Entry::Occupied(mut entry) => entry.get_mut().push(cb),
             Entry::Vacant(entry) => drop(entry.insert(vec![cb])),
@@ -150,12 +150,12 @@ fn on(cx: CallContext) -> Result<Value, Value> {
     })
 }
 
-fn emit(cx: CallContext) -> Result<Value, Value> {
+fn emit(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
     let [name, args @ ..] = &*cx.args else {
-        throw!(cx.scope, Error, "expected an event name");
+        throw!(scope, Error, "expected an event name");
     };
-    let name = name.to_js_string(cx.scope)?;
-    with_event_emitter(cx.scope, cx.this, |sc, this| {
+    let name = name.to_js_string(scope)?;
+    with_event_emitter(scope, cx.this, |sc, this| {
         let mut did_emit = false;
         if let Some(handlers) = this.handlers.borrow().get(&name.sym()) {
             for handler in handlers {

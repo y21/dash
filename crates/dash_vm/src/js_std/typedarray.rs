@@ -4,6 +4,7 @@ use std::ops::ControlFlow;
 
 use crate::js_std::array::for_each_js_iterator_element;
 use crate::js_std::receiver_t;
+use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::arraybuffer::ArrayBuffer;
 use crate::value::function::args::CallArgs;
@@ -14,21 +15,21 @@ use crate::value::propertykey::ToPropertyKey;
 use crate::value::typedarray::{TypedArray, TypedArrayKind};
 use crate::value::{Root, Unpack, Value, ValueKind};
 
-fn typedarray_constructor(cx: CallContext, kind: TypedArrayKind) -> Result<Value, Value> {
+fn typedarray_constructor(cx: CallContext, scope: &mut LocalScope<'_>, kind: TypedArrayKind) -> Result<Value, Value> {
     let Some(&arg) = cx.args.first() else {
-        throw!(cx.scope, TypeError, "Missing argument")
+        throw!(scope, TypeError, "Missing argument")
     };
 
     let Some(new_target) = cx.new_target else {
-        throw!(cx.scope, TypeError, "TypedArray constructor requires new")
+        throw!(scope, TypeError, "TypedArray constructor requires new")
     };
-    let instance = OrdObject::instance_for_new_target(new_target, cx.scope)?;
+    let instance = OrdObject::instance_for_new_target(new_target, scope)?;
 
     if let ValueKind::Object(obj) = arg.unpack() {
-        if let Some(this) = obj.extract::<ArrayBuffer>(cx.scope) {
+        if let Some(this) = obj.extract::<ArrayBuffer>(scope) {
             if this.len() % kind.bytes_per_element() != 0 {
                 throw!(
-                    cx.scope,
+                    scope,
                     RangeError,
                     "Length of array buffer must be a multiple of {}",
                     kind.bytes_per_element()
@@ -36,20 +37,18 @@ fn typedarray_constructor(cx: CallContext, kind: TypedArrayKind) -> Result<Value
             }
 
             let array = TypedArray::with_obj(obj, kind, instance);
-            return Ok(cx.scope.register(array).into());
+            return Ok(scope.register(array).into());
         }
 
         if let Some(iterator) = obj
-            .get_property(cx.scope.statics.symbol_iterator.to_key(cx.scope), cx.scope)
-            .root(cx.scope)?
+            .get_property(scope.statics.symbol_iterator.to_key(scope), scope)
+            .root(scope)?
             .into_option()
         {
-            let iterator = iterator
-                .apply(This::bound(arg), CallArgs::empty(), cx.scope)
-                .root(cx.scope)?;
+            let iterator = iterator.apply(This::bound(arg), CallArgs::empty(), scope).root(scope)?;
             let mut values = Vec::new();
 
-            let ControlFlow::Continue(()) = for_each_js_iterator_element(cx.scope, iterator, |scope, value| {
+            let ControlFlow::Continue(()) = for_each_js_iterator_element(scope, iterator, |scope, value| {
                 use TypedArrayKind::*;
 
                 let value = value.to_number(scope)?;
@@ -65,20 +64,20 @@ fn typedarray_constructor(cx: CallContext, kind: TypedArrayKind) -> Result<Value
                 Ok(ControlFlow::<Infallible, _>::Continue(()))
             })?;
 
-            let buffer = ArrayBuffer::from_storage(cx.scope, values);
-            let buffer = cx.scope.register(buffer);
+            let buffer = ArrayBuffer::from_storage(scope, values);
+            let buffer = scope.register(buffer);
 
             let array = TypedArray::with_obj(buffer, kind, instance);
-            return Ok(cx.scope.register(array).into());
+            return Ok(scope.register(array).into());
         }
     }
 
-    let size = arg.to_number(cx.scope)? as usize;
+    let size = arg.to_number(scope)? as usize;
     let buffer = ArrayBuffer::with_capacity(size, instance);
-    let buffer = cx.scope.register(buffer);
+    let buffer = scope.register(buffer);
 
-    let array = TypedArray::new(cx.scope, buffer, kind);
-    Ok(cx.scope.register(array).into())
+    let array = TypedArray::new(scope, buffer, kind);
+    Ok(scope.register(array).into())
 }
 
 macro_rules! typedarray {
@@ -86,20 +85,20 @@ macro_rules! typedarray {
         pub mod $module {
             use super::*;
 
-            pub fn constructor(cx: CallContext) -> Result<Value, Value> {
-                typedarray_constructor(cx, $kind)
+            pub fn constructor(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+                typedarray_constructor(cx, scope, $kind)
             }
         }
     };
 }
 
-pub fn fill(cx: CallContext) -> Result<Value, Value> {
-    let this = receiver_t::<TypedArray>(cx.scope, &cx.this, "TypedArray.prototype.fill")?;
+pub fn fill(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let this = receiver_t::<TypedArray>(scope, &cx.this, "TypedArray.prototype.fill")?;
     let value = match cx.args.first() {
-        Some(value) => value.to_number(cx.scope)?,
-        None => throw!(cx.scope, TypeError, "Missing fill value"), // TODO: shouldn't throw
+        Some(value) => value.to_number(scope)?,
+        None => throw!(scope, TypeError, "Missing fill value"), // TODO: shouldn't throw
     };
-    let buf = this.arraybuffer(cx.scope).storage();
+    let buf = this.arraybuffer(scope).storage();
 
     macro_rules! fill_typed_array {
         ($ty:ty) => {{

@@ -1,3 +1,4 @@
+use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::array::Array;
 use crate::value::function::native::CallContext;
@@ -10,46 +11,42 @@ use dash_regex::{EvalSuccess, Flags};
 
 use super::receiver_t;
 
-pub fn constructor(cx: CallContext) -> Result<Value, Value> {
-    let pattern = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
+pub fn constructor(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let pattern = cx.args.first().unwrap_or_undefined().to_js_string(scope)?;
     let flags = match cx
         .args
         .get(1)
-        .map(|v| v.to_js_string(cx.scope))
+        .map(|v| v.to_js_string(scope))
         .transpose()?
-        .map(|s| s.res(cx.scope).parse::<Flags>())
+        .map(|s| s.res(scope).parse::<Flags>())
     {
         Some(Ok(flags)) => flags,
-        Some(Err(err)) => throw!(cx.scope, SyntaxError, "Invalid RegExp flags: {:?}", err),
+        Some(Err(err)) => throw!(scope, SyntaxError, "Invalid RegExp flags: {:?}", err),
         None => Flags::empty(),
     };
 
-    let nodes = match dash_regex::compile(pattern.res(cx.scope), flags) {
+    let nodes = match dash_regex::compile(pattern.res(scope), flags) {
         Ok(nodes) => nodes,
-        Err(err) => throw!(cx.scope, SyntaxError, "Regex parser error: {}", err),
+        Err(err) => throw!(scope, SyntaxError, "Regex parser error: {}", err),
     };
 
-    let new_target = cx.new_target.unwrap_or(cx.scope.statics.regexp_ctor);
-    let regex = RegExp::with_obj(
-        nodes,
-        pattern,
-        OrdObject::instance_for_new_target(new_target, cx.scope)?,
-    );
+    let new_target = cx.new_target.unwrap_or(scope.statics.regexp_ctor);
+    let regex = RegExp::with_obj(nodes, pattern, OrdObject::instance_for_new_target(new_target, scope)?);
 
-    Ok(Value::object(cx.scope.register(regex)))
+    Ok(Value::object(scope.register(regex)))
 }
 
-pub fn test(cx: CallContext) -> Result<Value, Value> {
-    let text = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
+pub fn test(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let text = cx.args.first().unwrap_or_undefined().to_js_string(scope)?;
 
-    let regex = receiver_t::<RegExp>(cx.scope, &cx.this, "RegExp.prototype.test")?;
+    let regex = receiver_t::<RegExp>(scope, &cx.this, "RegExp.prototype.test")?;
 
     let RegExpInner { regex, last_index, .. } = match regex.inner() {
         Some(nodes) => nodes,
-        None => throw!(cx.scope, TypeError, "Receiver must be an initialized RegExp object"),
+        None => throw!(scope, TypeError, "Receiver must be an initialized RegExp object"),
     };
 
-    let text = text.res(cx.scope);
+    let text = text.res(scope);
     let is_global = regex.flags().contains(Flags::GLOBAL);
 
     if is_global && last_index.get() >= text.len() {
@@ -73,17 +70,17 @@ pub fn test(cx: CallContext) -> Result<Value, Value> {
     }
 }
 
-pub fn exec(cx: CallContext<'_, '_>) -> Result<Value, Value> {
-    let text = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
+pub fn exec(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let text = cx.args.first().unwrap_or_undefined().to_js_string(scope)?;
 
-    let regex = receiver_t::<RegExp>(cx.scope, &cx.this, "RegExp.prototype.exec")?;
+    let regex = receiver_t::<RegExp>(scope, &cx.this, "RegExp.prototype.exec")?;
 
     let RegExpInner { regex, last_index, .. } = match regex.inner() {
         Some(nodes) => nodes,
-        None => throw!(cx.scope, TypeError, "Receiver must be an initialized RegExp object"),
+        None => throw!(scope, TypeError, "Receiver must be an initialized RegExp object"),
     };
 
-    let text = text.res(cx.scope).to_owned();
+    let text = text.res(scope).to_owned();
     let is_global = regex.flags().contains(Flags::GLOBAL);
 
     if is_global && last_index.get() >= text.len() {
@@ -101,15 +98,15 @@ pub fn exec(cx: CallContext<'_, '_>) -> Result<Value, Value> {
                 .into_iter()
                 .map(|group| {
                     let sub = match group {
-                        Some((from, to, _)) => cx.scope.intern(&text[from as usize..to as usize]).into(),
+                        Some((from, to, _)) => scope.intern(&text[from as usize..to as usize]).into(),
                         None => sym::null.into(),
                     };
                     PropertyValue::static_default(Value::string(sub))
                 })
                 .collect();
 
-            let groups = Array::from_vec(groups, cx.scope);
-            Ok(Value::object(cx.scope.register(groups)))
+            let groups = Array::from_vec(groups, scope);
+            Ok(Value::object(scope.register(groups)))
         }
         Err(_) => {
             if is_global {

@@ -138,7 +138,7 @@ pub fn infer(s: &str) -> Result<JsValue, String> {
     cfx.visit_many_statements(&mut ast, FuncId::ROOT);
     let mut out = String::new();
 
-    for local in tcx.scope_mut(FuncId::ROOT).locals() {
+    for local in tscope_mut(FuncId::ROOT).locals() {
         if let VariableDeclarationName::Identifier(ident) = local.binding().name {
             let ty = local.inferred_type().borrow();
             let _ = writeln!(out, "{ident}: {ty:?} ");

@@ -7,7 +7,7 @@ use dash_vm::throw;
 use dash_vm::value::Value;
 use dash_vm::value::function::native::CallContext;
 use dash_vm::value::function::{Function, FunctionKind};
-use dash_vm::value::object::{OrdObject, Object, PropertyValue};
+use dash_vm::value::object::{Object, OrdObject, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::string::JsString;
@@ -51,24 +51,24 @@ macro_rules! dashdl {
     };
 }
 
-pub fn load_sync(mut cx: CallContext) -> Result<Value, Value> {
+pub fn load_sync(mut cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
     let path = match cx.args.first() {
         Some(first) => first,
-        None => throw!(cx.scope, ReferenceError, "Missing path to dynamic library"),
+        None => throw!(scope, ReferenceError, "Missing path to dynamic library"),
     };
 
-    let path = ValueConversion::to_js_string(path, cx.scope)?;
+    let path = ValueConversion::to_js_string(path, scope)?;
 
     unsafe {
-        let lib = match Library::new(path.res(cx.scope)) {
+        let lib = match Library::new(path.res(scope)) {
             // TODO: Currently we (intentionally) leak all dlopen'd handles, because we don't know exactly when we should close it
             Ok(lib) => ManuallyDrop::new(lib),
-            Err(err) => throw!(cx.scope, Error, "{}", err),
+            Err(err) => throw!(scope, Error, "{}", err),
         };
 
         let init: libloading::Symbol<InitFunction> = match lib.get(b"dashjs_init_module\0") {
             Ok(sym) => sym,
-            Err(err) => throw!(cx.scope, Error, "{}", err),
+            Err(err) => throw!(scope, Error, "{}", err),
         };
 
         let mut ret = Ok(Value::undefined());

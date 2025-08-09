@@ -6,7 +6,7 @@ use crate::throw;
 use crate::value::array::{Array, ArrayIterator};
 use crate::value::boxed::String as BoxedString;
 use crate::value::function::native::CallContext;
-use crate::value::object::{OrdObject, Object, PropertyValue};
+use crate::value::object::{Object, OrdObject, PropertyValue};
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::regex::RegExp;
 use crate::value::{Value, ValueContext};
@@ -14,33 +14,25 @@ use std::cmp;
 use std::fmt::Write;
 use std::ops::Range;
 
-pub fn constructor(cx: CallContext) -> Result<Value, Value> {
+pub fn constructor(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
     let value = match cx.args.first() {
-        Some(arg) => arg.to_js_string(cx.scope)?,
+        Some(arg) => arg.to_js_string(scope)?,
         None => sym::empty.into(),
     };
 
     if let Some(new_target) = cx.new_target {
-        let boxed = BoxedString::with_obj(value, OrdObject::instance_for_new_target(new_target, cx.scope)?);
-        Ok(Value::object(cx.scope.register(boxed)))
+        let boxed = BoxedString::with_obj(value, OrdObject::instance_for_new_target(new_target, scope)?);
+        Ok(Value::object(scope.register(boxed)))
     } else {
         Ok(Value::string(value))
     }
 }
 
-pub fn to_string(cx: CallContext) -> Result<Value, Value> {
-    if let Some(value) = cx
-        .this
-        .internal_slots(cx.scope)
-        .and_then(|prim| prim.string_value(cx.scope))
-    {
+pub fn to_string(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    if let Some(value) = cx.this.internal_slots(scope).and_then(|prim| prim.string_value(scope)) {
         Ok(Value::string(value))
     } else {
-        throw!(
-            cx.scope,
-            TypeError,
-            "String.prototype.toString called on non-string value"
-        )
+        throw!(scope, TypeError, "String.prototype.toString called on non-string value")
     }
 }
 
@@ -80,8 +72,8 @@ fn create_html(
 macro_rules! define_html_methods_no_attribute {
     ($($function:ident: $name:ident),*) => {
         $(
-            pub fn $function(cx: CallContext) -> Result<Value, Value> {
-                create_html(cx.scope, cx.this, stringify!($name), None)
+            pub fn $function(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+                create_html(scope, cx.this, stringify!($name), None)
             }
         )*
     };
@@ -90,9 +82,9 @@ macro_rules! define_html_methods_no_attribute {
 macro_rules! define_html_methods_with_attribute {
     ($($function:ident: $name:ident, $attribute:ident),*) => {
         $(
-            pub fn $function(cx: CallContext) -> Result<Value, Value> {
+            pub fn $function(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
                 let attribute = cx.args.first().unwrap_or_undefined();
-                create_html(cx.scope, cx.this, stringify!($name), Some((stringify!($attribute), attribute)))
+                create_html(scope, cx.this, stringify!($name), Some((stringify!($attribute), attribute)))
             }
         )*
     };
@@ -115,19 +107,19 @@ define_html_methods_with_attribute! {
     link: a, href
 }
 
-pub fn char_at(cx: CallContext) -> Result<Value, Value> {
-    let index = cx.args.first().unwrap_or_undefined().to_number(cx.scope)? as usize;
-    let this = cx.this.to_js_string(cx.scope)?.res(cx.scope);
+pub fn char_at(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let index = cx.args.first().unwrap_or_undefined().to_number(scope)? as usize;
+    let this = cx.this.to_js_string(scope)?.res(scope);
     // TODO: this isn't right, but it is what it is
     match this.as_bytes().get(index) {
-        Some(&c) => Ok(Value::string(cx.scope.intern_char(c as char).into())),
+        Some(&c) => Ok(Value::string(scope.intern_char(c as char).into())),
         None => Ok(Value::undefined()),
     }
 }
 
-pub fn char_code_at(cx: CallContext) -> Result<Value, Value> {
-    let index = cx.args.first().unwrap_or_undefined().to_number(cx.scope)? as usize;
-    let this = cx.this.to_js_string(cx.scope)?.res(cx.scope);
+pub fn char_code_at(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let index = cx.args.first().unwrap_or_undefined().to_number(scope)? as usize;
+    let this = cx.this.to_js_string(scope)?.res(scope);
     // TODO: this isn't right, but it is what it is
     match this.as_bytes().get(index) {
         Some(&c) => Ok(Value::number(c as f64)),
@@ -135,72 +127,72 @@ pub fn char_code_at(cx: CallContext) -> Result<Value, Value> {
     }
 }
 
-pub fn concat(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.to_js_string(cx.scope)?;
+pub fn concat(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let this = cx.this.to_js_string(scope)?;
 
     let concat = if cx.args.len() > 1 {
         // avoid interning every concatenation
-        let mut concat = String::from(this.res(cx.scope));
+        let mut concat = String::from(this.res(scope));
         for value in &cx.args {
-            concat += value.to_js_string(cx.scope)?.res(cx.scope);
+            concat += value.to_js_string(scope)?.res(scope);
         }
         concat
     } else {
-        let other = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
-        String::from(this.res(cx.scope)) + other.res(cx.scope)
+        let other = cx.args.first().unwrap_or_undefined().to_js_string(scope)?;
+        String::from(this.res(scope)) + other.res(scope)
     };
 
-    Ok(Value::string(cx.scope.intern(concat.as_ref()).into()))
+    Ok(Value::string(scope.intern(concat.as_ref()).into()))
 }
 
-pub fn ends_with(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.to_js_string(cx.scope)?;
-    let other = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
-    Ok(Value::boolean(this.res(cx.scope).ends_with(other.res(cx.scope))))
+pub fn ends_with(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let this = cx.this.to_js_string(scope)?;
+    let other = cx.args.first().unwrap_or_undefined().to_js_string(scope)?;
+    Ok(Value::boolean(this.res(scope).ends_with(other.res(scope))))
 }
 
-pub fn starts_with(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.to_js_string(cx.scope)?;
-    let other = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
-    Ok(Value::boolean(this.res(cx.scope).starts_with(other.res(cx.scope))))
+pub fn starts_with(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let this = cx.this.to_js_string(scope)?;
+    let other = cx.args.first().unwrap_or_undefined().to_js_string(scope)?;
+    Ok(Value::boolean(this.res(scope).starts_with(other.res(scope))))
 }
 
-pub fn includes(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.to_js_string(cx.scope)?;
-    let other = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
-    Ok(Value::boolean(this.res(cx.scope).contains(other.res(cx.scope))))
+pub fn includes(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let this = cx.this.to_js_string(scope)?;
+    let other = cx.args.first().unwrap_or_undefined().to_js_string(scope)?;
+    Ok(Value::boolean(this.res(scope).contains(other.res(scope))))
 }
 
-pub fn index_of(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.to_js_string(cx.scope)?;
-    let other = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
+pub fn index_of(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let this = cx.this.to_js_string(scope)?;
+    let other = cx.args.first().unwrap_or_undefined().to_js_string(scope)?;
     let start_index = match cx.args.get(1) {
-        Some(n) => n.to_length_u(cx.scope)?,
+        Some(n) => n.to_length_u(scope)?,
         None => 0,
     };
-    let this = this.res(cx.scope);
+    let this = this.res(scope);
     let pos = this
         .get(start_index..)
         .unwrap_or("")
-        .find(other.res(cx.scope))
+        .find(other.res(scope))
         .map(|i| (start_index + i) as f64)
         .unwrap_or(-1.0);
     Ok(Value::number(pos))
 }
 
-pub fn last_index_of(cx: CallContext) -> Result<Value, Value> {
-    let this = cx.this.to_js_string(cx.scope)?;
-    let other = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
+pub fn last_index_of(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let this = cx.this.to_js_string(scope)?;
+    let other = cx.args.first().unwrap_or_undefined().to_js_string(scope)?;
     let end_index = match cx.args.get(1) {
-        Some(n) => n.to_length_u(cx.scope)? + 1,
-        None => this.res(cx.scope).len(),
+        Some(n) => n.to_length_u(scope)? + 1,
+        None => this.res(scope).len(),
     };
 
-    let this = this.res(cx.scope);
+    let this = this.res(scope);
     let pos = this
         .get(..end_index)
         .unwrap_or(this)
-        .rfind(other.res(cx.scope))
+        .rfind(other.res(scope))
         .map(|i| i as f64)
         .unwrap_or(-1.0);
     Ok(Value::number(pos))
@@ -211,15 +203,15 @@ enum PadPlacement {
     End,
 }
 
-fn string_pad(cx: CallContext, placement: PadPlacement) -> Result<Value, Value> {
+fn string_pad(cx: CallContext, scope: &mut LocalScope<'_>, placement: PadPlacement) -> Result<Value, Value> {
     // 1. Let S be ? ToString(O).
-    let s = cx.this.to_js_string(cx.scope)?;
+    let s = cx.this.to_js_string(scope)?;
 
     // 2. Let intMaxLength be ℝ(? ToLength(maxLength)).
-    let int_max_length = cx.args.get(1).unwrap_or_undefined().to_length_u(cx.scope)?;
+    let int_max_length = cx.args.get(1).unwrap_or_undefined().to_length_u(scope)?;
 
     // 3. Let stringLength be the length of S.
-    let string_length = s.res(cx.scope).len();
+    let string_length = s.res(scope).len();
 
     // If intMaxLength ≤ stringLength, return S.
     if int_max_length <= string_length {
@@ -229,7 +221,7 @@ fn string_pad(cx: CallContext, placement: PadPlacement) -> Result<Value, Value> 
     // 5. If fillString is undefined, let filler be the String value consisting solely of the code unit 0x0020 (SPACE).
     let filler = if let Some(filler) = cx.args.get(2) {
         // Else, let filler be ? ToString(fillString).
-        let filler = filler.to_js_string(cx.scope)?.res(cx.scope);
+        let filler = filler.to_js_string(scope)?.res(scope);
 
         // 7. If filler is the empty String, return S.
         if filler.is_empty() {
@@ -250,53 +242,53 @@ fn string_pad(cx: CallContext, placement: PadPlacement) -> Result<Value, Value> 
     // 10. If placement is start, return the string-concatenation of truncatedStringFiller and S.
     // Else, return the string-concatenation of S and truncatedStringFiller.
     let string = match placement {
-        PadPlacement::Start => truncated_string_filler + s.res(cx.scope),
-        PadPlacement::End => String::from(s.res(cx.scope)) + &truncated_string_filler,
+        PadPlacement::Start => truncated_string_filler + s.res(scope),
+        PadPlacement::End => String::from(s.res(scope)) + &truncated_string_filler,
     };
-    Ok(Value::string(cx.scope.intern(string.as_ref()).into()))
+    Ok(Value::string(scope.intern(string.as_ref()).into()))
 }
 
-pub fn pad_end(cx: CallContext) -> Result<Value, Value> {
-    string_pad(cx, PadPlacement::End)
+pub fn pad_end(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    string_pad(cx, scope, PadPlacement::End)
 }
 
-pub fn pad_start(cx: CallContext) -> Result<Value, Value> {
-    string_pad(cx, PadPlacement::Start)
+pub fn pad_start(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    string_pad(cx, scope, PadPlacement::Start)
 }
 
-pub fn repeat(cx: CallContext) -> Result<Value, Value> {
+pub fn repeat(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
     // 1. Let O be ? ToString(string).
-    let o = cx.this.to_js_string(cx.scope)?;
+    let o = cx.this.to_js_string(scope)?;
 
     // 2. Let n be ? ToInteger(times).
-    let n = cx.args.first().unwrap_or_undefined().to_integer_or_infinity(cx.scope)?;
+    let n = cx.args.first().unwrap_or_undefined().to_integer_or_infinity(scope)?;
 
     // 3. If n < 0, throw a RangeError exception.
     if n < 0.0 {
-        throw!(cx.scope, RangeError, "Invalid count value");
+        throw!(scope, RangeError, "Invalid count value");
     }
 
     // 4. Let result be the String value that is the concatenation of n copies of O.
-    let result = o.res(cx.scope).repeat(n as usize);
+    let result = o.res(scope).repeat(n as usize);
 
     // 5. Return result.
-    Ok(Value::string(cx.scope.intern(result).into()))
+    Ok(Value::string(scope.intern(result).into()))
 }
 
-pub fn replace(cx: CallContext) -> Result<Value, Value> {
-    let string = cx.this.to_js_string(cx.scope)?;
+pub fn replace(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let string = cx.this.to_js_string(scope)?;
 
     let search_string = cx.args.first().unwrap_or_undefined();
-    let replace_value = cx.args.get(1).unwrap_or_undefined().to_js_string(cx.scope)?;
+    let replace_value = cx.args.get(1).unwrap_or_undefined().to_js_string(scope)?;
 
-    let string = if let Some(regex) = search_string.extract::<RegExp>(cx.scope) {
+    let string = if let Some(regex) = search_string.extract::<RegExp>(scope) {
         let Some(inner_regex) = regex.inner() else {
-            throw!(cx.scope, TypeError, "invalid regex object")
+            throw!(scope, TypeError, "invalid regex object")
         };
 
-        let replace_string = replace_value.res(cx.scope);
+        let replace_string = replace_value.res(scope);
 
-        let mut rest = string.res(cx.scope);
+        let mut rest = string.res(scope);
         let mut output = String::with_capacity(rest.len());
         while let Ok(res) = inner_regex.regex.eval(rest) {
             let Range { start, end } = res.full_match();
@@ -311,103 +303,103 @@ pub fn replace(cx: CallContext) -> Result<Value, Value> {
         }
         output.push_str(rest);
 
-        cx.scope.intern(output).into()
+        scope.intern(output).into()
     } else {
-        let search_string = search_string.to_js_string(cx.scope)?;
+        let search_string = search_string.to_js_string(scope)?;
 
         let string = string
-            .res(cx.scope)
-            .replacen(search_string.res(cx.scope), replace_value.res(cx.scope), 1);
-        cx.scope.intern(string).into()
+            .res(scope)
+            .replacen(search_string.res(scope), replace_value.res(scope), 1);
+        scope.intern(string).into()
     };
 
     Ok(Value::string(string))
 }
 
-pub fn replace_all(cx: CallContext) -> Result<Value, Value> {
-    let string = cx.this.to_js_string(cx.scope)?;
+pub fn replace_all(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let string = cx.this.to_js_string(scope)?;
 
-    let search_string = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
+    let search_string = cx.args.first().unwrap_or_undefined().to_js_string(scope)?;
 
-    let replace_value = cx.args.get(1).unwrap_or_undefined().to_js_string(cx.scope)?;
+    let replace_value = cx.args.get(1).unwrap_or_undefined().to_js_string(scope)?;
 
     let string = string
-        .res(cx.scope)
-        .replace(search_string.res(cx.scope), replace_value.res(cx.scope));
+        .res(scope)
+        .replace(search_string.res(scope), replace_value.res(scope));
 
-    Ok(Value::string(cx.scope.intern(string).into()))
+    Ok(Value::string(scope.intern(string).into()))
 }
 
-pub fn split(cx: CallContext) -> Result<Value, Value> {
-    let string = cx.this.to_js_string(cx.scope)?.res(cx.scope).to_owned();
+pub fn split(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let string = cx.this.to_js_string(scope)?.res(scope).to_owned();
     let separator = cx
         .args
         .first()
         .unwrap_or_undefined()
-        .to_js_string(cx.scope)?
-        .res(cx.scope)
+        .to_js_string(scope)?
+        .res(scope)
         .to_owned();
 
     let result = if separator.is_empty() {
         string
             .chars()
-            .map(|c| PropertyValue::static_default(Value::string(cx.scope.intern_char(c).into())))
+            .map(|c| PropertyValue::static_default(Value::string(scope.intern_char(c).into())))
             .collect()
     } else {
         string
             .split(&separator)
-            .map(|s| PropertyValue::static_default(Value::string(cx.scope.intern(s).into())))
+            .map(|s| PropertyValue::static_default(Value::string(scope.intern(s).into())))
             .collect()
     };
 
-    let array = Array::from_vec(result, cx.scope);
-    Ok(cx.scope.register(array).into())
+    let array = Array::from_vec(result, scope);
+    Ok(scope.register(array).into())
 }
 
-pub fn to_uppercase(cx: CallContext) -> Result<Value, Value> {
-    let string = cx.this.to_js_string(cx.scope)?;
-    let result = string.res(cx.scope).to_uppercase();
-    Ok(Value::string(cx.scope.intern(result).into()))
+pub fn to_uppercase(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let string = cx.this.to_js_string(scope)?;
+    let result = string.res(scope).to_uppercase();
+    Ok(Value::string(scope.intern(result).into()))
 }
 
-pub fn to_lowercase(cx: CallContext) -> Result<Value, Value> {
-    let string = cx.this.to_js_string(cx.scope)?;
-    let result = string.res(cx.scope).to_lowercase();
-    Ok(Value::string(cx.scope.intern(result).into()))
+pub fn to_lowercase(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let string = cx.this.to_js_string(scope)?;
+    let result = string.res(scope).to_lowercase();
+    Ok(Value::string(scope.intern(result).into()))
 }
 
-pub fn trim(cx: CallContext) -> Result<Value, Value> {
-    let string = cx.this.to_js_string(cx.scope)?;
-    let result = string.res(cx.scope).trim().to_owned();
-    Ok(Value::string(cx.scope.intern(result.as_ref()).into()))
+pub fn trim(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let string = cx.this.to_js_string(scope)?;
+    let result = string.res(scope).trim().to_owned();
+    Ok(Value::string(scope.intern(result.as_ref()).into()))
 }
 
-pub fn trim_start(cx: CallContext) -> Result<Value, Value> {
-    let string = cx.this.to_js_string(cx.scope)?;
-    let result = string.res(cx.scope).trim_start().to_owned();
-    Ok(Value::string(cx.scope.intern(result.as_ref()).into()))
+pub fn trim_start(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let string = cx.this.to_js_string(scope)?;
+    let result = string.res(scope).trim_start().to_owned();
+    Ok(Value::string(scope.intern(result.as_ref()).into()))
 }
 
-pub fn trim_end(cx: CallContext) -> Result<Value, Value> {
-    let string = cx.this.to_js_string(cx.scope)?;
-    let result = string.res(cx.scope).trim_end().to_owned();
-    Ok(Value::string(cx.scope.intern(result.as_ref()).into()))
+pub fn trim_end(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let string = cx.this.to_js_string(scope)?;
+    let result = string.res(scope).trim_end().to_owned();
+    Ok(Value::string(scope.intern(result.as_ref()).into()))
 }
 
-pub fn from_char_code(cx: CallContext) -> Result<Value, Value> {
-    let code = cx.args.first().unwrap_or_undefined().to_int32(cx.scope)?;
+pub fn from_char_code(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let code = cx.args.first().unwrap_or_undefined().to_int32(scope)?;
     let s = char::from_u32(code as u32).unwrap_or(char::REPLACEMENT_CHARACTER);
-    Ok(Value::string(cx.scope.intern_char(s).into()))
+    Ok(Value::string(scope.intern_char(s).into()))
 }
 
-pub fn substr(cx: CallContext) -> Result<Value, Value> {
-    let string = cx.this.to_js_string(cx.scope)?;
+pub fn substr(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let string = cx.this.to_js_string(scope)?;
     let (start, end) = {
         let start = match cx.args.first() {
             Some(arg) => {
-                let num = arg.to_int32(cx.scope)?;
+                let num = arg.to_int32(scope)?;
                 if num < 0 {
-                    (num + string.len(cx.scope) as i32) as usize
+                    (num + string.len(scope) as i32) as usize
                 } else {
                     num as usize
                 }
@@ -415,31 +407,31 @@ pub fn substr(cx: CallContext) -> Result<Value, Value> {
             None => 0,
         };
         let end = match cx.args.get(1) {
-            Some(arg) => arg.to_int32(cx.scope)? as usize,
-            None => string.len(cx.scope),
+            Some(arg) => arg.to_int32(scope)? as usize,
+            None => string.len(scope),
         };
 
         (start, start + end)
     };
 
-    let end = end.min(string.len(cx.scope));
+    let end = end.min(string.len(scope));
 
-    let bytes = string.res(cx.scope).as_bytes().get(start..end).unwrap_or(&[]);
+    let bytes = string.res(scope).as_bytes().get(start..end).unwrap_or(&[]);
     let result = String::from_utf8_lossy(bytes).into_owned();
 
-    Ok(Value::string(cx.scope.intern(result.as_ref()).into()))
+    Ok(Value::string(scope.intern(result.as_ref()).into()))
 }
 
-pub fn substring(cx: CallContext) -> Result<Value, Value> {
-    let string = cx.this.to_js_string(cx.scope)?;
+pub fn substring(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let string = cx.this.to_js_string(scope)?;
     let (mut start, mut end) = {
         let start = match cx.args.first() {
-            Some(arg) => arg.to_int32(cx.scope)?.max(0) as usize,
+            Some(arg) => arg.to_int32(scope)?.max(0) as usize,
             None => 0,
         };
         let end = match cx.args.get(1) {
-            Some(arg) => (arg.to_int32(cx.scope)? as usize).min(string.len(cx.scope)),
-            None => string.len(cx.scope),
+            Some(arg) => (arg.to_int32(scope)? as usize).min(string.len(scope)),
+            None => string.len(scope),
         };
 
         (start, end)
@@ -449,21 +441,21 @@ pub fn substring(cx: CallContext) -> Result<Value, Value> {
         std::mem::swap(&mut start, &mut end);
     }
 
-    let bytes = string.res(cx.scope).as_bytes().get(start..end).unwrap_or(&[]);
+    let bytes = string.res(scope).as_bytes().get(start..end).unwrap_or(&[]);
     let result = String::from_utf8_lossy(bytes).into_owned();
 
-    Ok(Value::string(cx.scope.intern(result.as_ref()).into()))
+    Ok(Value::string(scope.intern(result.as_ref()).into()))
 }
 
-pub fn slice(cx: CallContext) -> Result<Value, Value> {
-    let string = cx.this.to_js_string(cx.scope)?;
-    let len = string.len(cx.scope);
+pub fn slice(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let string = cx.this.to_js_string(scope)?;
+    let len = string.len(scope);
 
     // 4. Let intStart be ? ToIntegerOrInfinity(start).
     // 5. If intStart = -∞, let from be 0.
     // 6. Else if intStart < 0, let from be max(len + intStart, 0).
     // 7. Else, let from be min(intStart, len).
-    let int_start = cx.args.first().unwrap_or_undefined().to_integer_or_infinity(cx.scope)?;
+    let int_start = cx.args.first().unwrap_or_undefined().to_integer_or_infinity(scope)?;
     let from = if int_start == f64::NEG_INFINITY {
         0
     } else if int_start < 0. {
@@ -473,7 +465,7 @@ pub fn slice(cx: CallContext) -> Result<Value, Value> {
     };
     // 8. If end is undefined, let intEnd be len; else let intEnd be ? ToIntegerOrInfinity(end).
     let int_end = match cx.args.get(1) {
-        Some(v) => v.to_integer_or_infinity(cx.scope)?,
+        Some(v) => v.to_integer_or_infinity(scope)?,
         None => len as f64,
     };
     // 9. If intEnd = -∞, let to be 0.
@@ -490,24 +482,24 @@ pub fn slice(cx: CallContext) -> Result<Value, Value> {
     if from >= to {
         Ok(Value::string(sym::empty.into()))
     } else {
-        let bytes = string.res(cx.scope).as_bytes().get(from..to).unwrap_or(&[]);
+        let bytes = string.res(scope).as_bytes().get(from..to).unwrap_or(&[]);
         let result = String::from_utf8_lossy(bytes).into_owned();
-        Ok(Value::string(cx.scope.intern(result).into()))
+        Ok(Value::string(scope.intern(result).into()))
     }
 }
 
-pub fn iterator(cx: CallContext) -> Result<Value, Value> {
-    let string = cx.this.to_js_string(cx.scope)?.res(cx.scope).to_owned();
+pub fn iterator(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let string = cx.this.to_js_string(scope)?.res(scope).to_owned();
     let chars = string
         .chars()
-        .map(|c| cx.scope.intern_char(c).into())
+        .map(|c| scope.intern_char(c).into())
         .map(Value::string)
         .map(PropertyValue::static_default)
         .collect::<Vec<_>>();
-    let chars = Array::from_vec(chars, cx.scope);
-    let chars = cx.scope.register(chars);
-    let iter = ArrayIterator::new(cx.scope, Value::object(chars))?;
-    let iter = cx.scope.register(iter);
+    let chars = Array::from_vec(chars, scope);
+    let chars = scope.register(chars);
+    let iter = ArrayIterator::new(scope, Value::object(chars))?;
+    let iter = scope.register(iter);
 
     Ok(Value::object(iter))
 }

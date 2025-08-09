@@ -35,6 +35,6 @@ pub fn receiver_t<'a, T: 'static>(
         .or_type_err_args(sc, format_args!("{what} invoked on incompatible receiver"))
 }
 
-pub fn identity_this(cx: CallContext) -> Result<Value, Value> {
+pub fn identity_this(cx: CallContext, _: &mut LocalScope<'_>) -> Result<Value, Value> {
     Ok(cx.this)
 }

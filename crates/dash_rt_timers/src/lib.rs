@@ -58,20 +58,20 @@ pub fn import(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     Ok(Value::object(sc.register(obj)))
 }
 
-fn set_timeout(cx: CallContext) -> Result<Value, Value> {
+fn set_timeout(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
     let callback = match cx.args.first().unpack() {
         Some(ValueKind::Object(cb)) => cb,
-        _ => throw!(cx.scope, TypeError, "missing callback function argument"),
+        _ => throw!(scope, TypeError, "missing callback function argument"),
     };
 
-    let callback = Arc::new(ThreadSafeStorage::new(Persistent::new(cx.scope, callback)));
+    let callback = Arc::new(ThreadSafeStorage::new(Persistent::new(scope, callback)));
 
     let delay = match cx.args.get(1) {
-        Some(delay) => delay.to_int32(cx.scope)? as u64,
-        None => throw!(cx.scope, TypeError, "Missing delay argument"),
+        Some(delay) => delay.to_int32(scope)? as u64,
+        None => throw!(scope, TypeError, "Missing delay argument"),
     };
 
-    let state = State::from_vm_mut(cx.scope);
+    let state = State::from_vm_mut(scope);
     let tx = state.event_sender();
     let tid = state.tasks.add();
 
@@ -94,15 +94,15 @@ fn set_timeout(cx: CallContext) -> Result<Value, Value> {
     Ok(Value::undefined())
 }
 
-fn set_immediate(cx: CallContext) -> Result<Value, Value> {
+fn set_immediate(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
     let callback = match cx.args.first().unpack() {
         Some(ValueKind::Object(cb)) => cb,
-        _ => throw!(cx.scope, TypeError, "missing callback function argument"),
+        _ => throw!(scope, TypeError, "missing callback function argument"),
     };
 
-    let callback = ThreadSafeStorage::new(Persistent::new(cx.scope, callback));
+    let callback = ThreadSafeStorage::new(Persistent::new(scope, callback));
 
-    let state = State::from_vm_mut(cx.scope);
+    let state = State::from_vm_mut(scope);
     let tid = state.tasks.add();
     let tx = state.event_sender();
     tx.send(EventMessage::ScheduleCallback(Box::new(move |rt| {

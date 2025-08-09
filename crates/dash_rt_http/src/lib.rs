@@ -49,17 +49,17 @@ impl ModuleLoader for HttpModule {
     }
 }
 
-pub fn listen(cx: CallContext) -> Result<Value, Value> {
-    let port = cx.args.first().unwrap_or_undefined().to_int32(cx.scope)?;
+pub fn listen(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let port = cx.args.first().unwrap_or_undefined().to_int32(scope)?;
     let cb = match cx.args.get(1).unpack() {
         Some(ValueKind::Object(o)) => o,
-        _ => throw!(cx.scope, TypeError, "Expected callback function as second argument"),
+        _ => throw!(scope, TypeError, "Expected callback function as second argument"),
     };
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port as u16));
 
     let (task_id, event_tx, rt) = {
-        let state = State::from_vm_mut(cx.scope);
+        let state = State::from_vm_mut(scope);
         let task_id = state.tasks.add();
         let event_tx = state.event_sender();
         let rt = state.rt_handle();
@@ -67,7 +67,7 @@ pub fn listen(cx: CallContext) -> Result<Value, Value> {
     };
 
     let cb_ref = {
-        let p = Persistent::new(cx.scope, cb);
+        let p = Persistent::new(scope, cb);
         Arc::new(ThreadSafeStorage::new(p))
     };
 
@@ -172,14 +172,14 @@ impl Object for HttpContext {
     extract!(self);
 }
 
-fn ctx_respond(cx: CallContext) -> Result<Value, Value> {
-    let this = receiver_t::<HttpContext>(cx.scope, &cx.this, "HttpContext.prototype.respond")?;
+fn ctx_respond(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let this = receiver_t::<HttpContext>(scope, &cx.this, "HttpContext.prototype.respond")?;
 
-    let sender = this.sender.try_take().or_err(cx.scope, "Cannot respond twice")?;
+    let sender = this.sender.try_take().or_err(scope, "Cannot respond twice")?;
 
-    let message = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
+    let message = cx.args.first().unwrap_or_undefined().to_js_string(scope)?;
 
-    if sender.send(Body::from(message.res(cx.scope).to_owned())).is_err() {
+    if sender.send(Body::from(message.res(scope).to_owned())).is_err() {
         eprintln!("Failed to respond to HTTP event.");
     }
 

@@ -122,9 +122,9 @@ fn bootstrap_generator(
     }
 }
 
-pub fn next(cx: CallContext) -> Result<Value, Value> {
+pub fn next(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
     let val = cx.args.first().unwrap_or_undefined();
-    bootstrap_generator(cx.scope, cx.this, &|scope, frame| {
+    bootstrap_generator(scope, cx.this, &|scope, frame| {
         // We're going to resume the generator after having evaluated a `yield` expression,
         // which expects a value to be on the stack (the resumed value)
         scope.stack.push(val);
@@ -132,9 +132,9 @@ pub fn next(cx: CallContext) -> Result<Value, Value> {
     })
 }
 
-pub fn throw(cx: CallContext) -> Result<Value, Value> {
+pub fn throw(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
     let val = cx.args.first().unwrap_or_undefined();
-    bootstrap_generator(cx.scope, cx.this, &|scope, frame| {
+    bootstrap_generator(scope, cx.this, &|scope, frame| {
         let fp = FrameId(scope.frames.len());
         scope.try_push_frame(frame)?;
         scope.handle_rt_error(val.into(), fp)?; // FIXME: is this `?` fine?

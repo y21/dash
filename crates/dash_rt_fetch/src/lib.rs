@@ -9,7 +9,7 @@ use dash_vm::localscope::LocalScope;
 use dash_vm::value::error::Error;
 use dash_vm::value::function::native::CallContext;
 use dash_vm::value::function::{Function, FunctionKind};
-use dash_vm::value::object::{OrdObject, Object, PropertyValue};
+use dash_vm::value::object::{Object, OrdObject, PropertyValue};
 use dash_vm::value::promise::Promise;
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::string::JsString;
@@ -46,22 +46,22 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     Ok(Value::object(fun))
 }
 
-fn fetch(cx: CallContext) -> Result<Value, Value> {
+fn fetch(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
     let url = match cx.args.first().unpack() {
-        Some(ValueKind::String(url)) => url.res(cx.scope).to_owned(),
-        _ => throw!(cx.scope, TypeError, "Expected a string as the first argument"),
+        Some(ValueKind::String(url)) => url.res(scope).to_owned(),
+        _ => throw!(scope, TypeError, "Expected a string as the first argument"),
     };
 
     let (rt, event_tx) = {
-        let state = State::from_vm_mut(cx.scope);
+        let state = State::from_vm_mut(scope);
         let etx = state.event_sender();
         let rt = state.rt_handle();
         (rt, etx)
     };
 
-    let promise = cx.scope.mk_promise();
+    let promise = scope.mk_promise();
 
-    let promise_id = State::from_vm_mut(cx.scope).add_pending_promise(promise);
+    let promise_id = State::from_vm_mut(scope).add_pending_promise(promise);
 
     rt.spawn(async move {
         let req = REQWEST
@@ -101,11 +101,11 @@ fn fetch(cx: CallContext) -> Result<Value, Value> {
     Ok(Value::object(promise))
 }
 
-fn http_response_text(cx: CallContext) -> Result<Value, Value> {
-    let this = receiver_t::<HttpResponse>(cx.scope, &cx.this, "Response.prototype.text")?;
+fn http_response_text(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let this = receiver_t::<HttpResponse>(scope, &cx.this, "Response.prototype.text")?;
 
     let (rt, event_tx) = {
-        let state = State::from_vm_mut(cx.scope);
+        let state = State::from_vm_mut(scope);
         let etx = state.event_sender();
         let rt = state.rt_handle();
         (rt, etx)
@@ -114,11 +114,11 @@ fn http_response_text(cx: CallContext) -> Result<Value, Value> {
     let response = this
         .response
         .try_take()
-        .or_err(cx.scope, "HTTP Response already consumed")?;
+        .or_err(scope, "HTTP Response already consumed")?;
 
-    let promise = cx.scope.mk_promise();
+    let promise = scope.mk_promise();
 
-    let promise_id = State::from_vm_mut(cx.scope).add_pending_promise(promise);
+    let promise_id = State::from_vm_mut(scope).add_pending_promise(promise);
 
     rt.spawn(async move {
         let text = response.text().await;

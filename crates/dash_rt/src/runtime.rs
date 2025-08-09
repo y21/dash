@@ -64,17 +64,17 @@ impl Runtime {
     fn init_globals(&mut self) {
         let scope = &mut self.vm.scope();
         let global = scope.global();
-        let log = register_native_fn(scope, sym::log, |cx| {
+        let log = register_native_fn(scope, sym::log, |cx, scope| {
             if let [arg] = *cx.args {
                 if let ValueKind::String(s) = arg.unpack() {
                     // Fast path
-                    println!("{}", s.res(cx.scope));
+                    println!("{}", s.res(scope));
                     return Ok(Value::undefined());
                 }
             }
 
             for arg in cx.args {
-                let string = inspect::inspect(arg, cx.scope, InspectOptions::default())?;
+                let string = inspect::inspect(arg, scope, InspectOptions::default())?;
                 print!("{string} ");
             }
             println!();

@@ -147,13 +147,8 @@ fn handle_call(
         FunctionKind::Native(native) => {
             let this = this.to_value(scope)?;
             // TODO: pass `This` to native fns as-is?
-            let cx = CallContext {
-                args,
-                scope,
-                this,
-                new_target,
-            };
-            match native(cx) {
+            let cx = CallContext { args, this, new_target };
+            match native(cx, scope) {
                 Ok(v) => Ok(v.into()),
                 Err(v) => Err(v.into()),
             }

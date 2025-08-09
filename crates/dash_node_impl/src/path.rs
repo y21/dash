@@ -4,7 +4,7 @@ use dash_middle::interner::sym;
 use dash_vm::localscope::LocalScope;
 use dash_vm::throw;
 use dash_vm::value::function::native::{CallContext, register_native_fn};
-use dash_vm::value::object::{OrdObject, Object, PropertyValue};
+use dash_vm::value::object::{Object, OrdObject, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::{ExceptionContext, Unpack, Value, ValueKind};
@@ -30,38 +30,38 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     Ok(sc.register(exports).into())
 }
 
-fn parse_path(cx: CallContext) -> Result<Value, Value> {
-    let path = cx.args.first().or_type_err(cx.scope, "Missing path to path")?;
-    let path = path.to_js_string(cx.scope)?;
-    let path = Path::new(path.res(cx.scope));
+fn parse_path(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
+    let path = cx.args.first().or_type_err(scope, "Missing path to path")?;
+    let path = path.to_js_string(scope)?;
+    let path = Path::new(path.res(scope));
     let dir = if path.is_dir() {
         path.to_str()
     } else {
         path.parent().and_then(Path::to_str)
     };
     let dir = match dir {
-        Some(path) => cx.scope.intern(path.to_owned()),
-        None => throw!(cx.scope, Error, "malformed path"),
+        Some(path) => scope.intern(path.to_owned()),
+        None => throw!(scope, Error, "malformed path"),
     };
-    let object = OrdObject::new(cx.scope);
-    let object = cx.scope.register(object);
-    let dir_sym = state_mut(cx.scope).sym.dir;
+    let object = OrdObject::new(scope);
+    let object = scope.register(object);
+    let dir_sym = state_mut(scope).sym.dir;
     object.set_property(
-        dir_sym.to_key(cx.scope),
+        dir_sym.to_key(scope),
         PropertyValue::static_default(Value::string(dir.into())),
-        cx.scope,
+        scope,
     )?;
-    Ok(cx.scope.register(object).into())
+    Ok(scope.register(object).into())
 }
 
-fn join_path(cx: CallContext) -> Result<Value, Value> {
+fn join_path(cx: CallContext, scope: &mut LocalScope<'_>) -> Result<Value, Value> {
     let mut path = PathBuf::new();
 
     for arg in &cx.args {
         let value = match arg.unpack() {
-            ValueKind::String(s) => s.res(cx.scope),
+            ValueKind::String(s) => s.res(scope),
             other => throw!(
-                cx.scope,
+                scope,
                 TypeError,
                 "expected string argument to path.join, got {:?}",
                 other
@@ -77,7 +77,5 @@ fn join_path(cx: CallContext) -> Result<Value, Value> {
         }
     }
 
-    Ok(Value::string(
-        cx.scope.intern(path.display().to_string().as_str()).into(),
-    ))
+    Ok(Value::string(scope.intern(path.display().to_string().as_str()).into()))
 }
