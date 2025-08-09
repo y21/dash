@@ -10,6 +10,7 @@ use std::{fmt, mem};
 
 use crate::frame::Sp;
 use crate::framestack::{FrameId, FrameStack};
+use crate::gc::root::RootStack;
 use crate::util::cold_path;
 use crate::value::Root;
 use crate::value::function::Function;
@@ -72,6 +73,7 @@ pub struct Vm {
     #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
     frames: FrameStack,
     stack: Vec<Value>,
+    rootstack: RootStack,
     scopes: LocalScopeList,
     alloc: Allocator,
     gc_rss_threshold: usize,
@@ -113,6 +115,7 @@ impl Vm {
             frames: FrameStack::new(),
             async_tasks: VecDeque::new(),
             stack: Vec::with_capacity(512),
+            rootstack: RootStack::new(),
             alloc,
             interner: StringInterner::new(),
             global,

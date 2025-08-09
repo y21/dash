@@ -19,6 +19,7 @@ use crate::value::propertykey::PropertyKey;
 use crate::value::{Typeof, Unrooted, Value};
 
 pub mod persistent;
+pub mod root;
 pub mod trace;
 
 pub type ObjectId = AllocId<&'static ObjectVTable>;
