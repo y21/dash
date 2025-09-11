@@ -3,6 +3,7 @@ use std::ffi::{OsStr, OsString};
 use std::panic;
 use std::sync::atomic::AtomicU32;
 use std::sync::{Mutex, atomic};
+use std::time::Instant;
 
 use clap::ArgMatches;
 use dash_vm::Vm;
@@ -14,19 +15,17 @@ use dash_vm::value::{Root, Unpack, ValueKind};
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 
-use crate::util;
-
 pub fn run(matches: &ArgMatches) -> anyhow::Result<()> {
     let path = matches.get_one::<String>("path");
-    let path = path.map_or("../test262/test", |v| &**v);
+    let path = path.map_or("../test262/test/**/*.js", |v| &**v);
     let slevel = matches.get_one::<String>("level").unwrap_or(&"".to_string()).clone();
     let c = matches.get_one::<bool>("color").unwrap().clone();
     let single_threaded = *matches.get_one::<bool>("disable-threads").unwrap();
-    let files = if path.ends_with(".js") {
-        vec![OsString::from(path)]
-    } else {
-        util::get_all_files(OsStr::new(path))?
-    };
+    let files = glob::glob(path)
+        .unwrap()
+        .map(|x| x.map(|mut x| x.as_mut_os_string().clone()))
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
 
     let level = slevel.contains('o') as u8 | ((slevel.contains('e') as u8) << 1) | ((slevel.contains('p') as u8) << 2);
     // println!("{level:b}");
@@ -66,6 +65,7 @@ fn run_inner(files: Vec<OsString>, level: u8, single_threaded: bool, c: bool) ->
         counter.fetch_add(1, atomic::Ordering::Relaxed);
     };
 
+    let i = Instant::now();
     if single_threaded {
         for file in files {
             run_file(&file);
@@ -80,16 +80,17 @@ fn run_inner(files: Vec<OsString>, level: u8, single_threaded: bool, c: bool) ->
             }
         });
     }
+    let e = i.elapsed();
 
     let passes = counter.passes.load(atomic::Ordering::Relaxed);
     let fails = counter.fails.load(atomic::Ordering::Relaxed);
     let panics = counter.panics.load(atomic::Ordering::Relaxed);
     let rate = ((passes as f32) / (file_count as f32)) * 100.0;
-    println!("== Result ==");
+    println!("{}== Result =={}", ansi(c, 36), ansi(c, 0));
     println!("   {}OK{} {passes} ({rate:.2}%)", ansi(c, 32), ansi(c, 0));
     println!("  {}ERR{} {fails}", ansi(c, 33), ansi(c, 0));
     println!("{}PANIC{} {panics}", ansi(c, 31), ansi(c, 0));
-
+    println!("{}tests took {}s{}", ansi(c, 36), e.as_secs_f64(), ansi(c, 0));
     Ok(())
 }
 
@@ -182,11 +183,7 @@ fn run_test(setup: &str, path: &OsStr, level: u8, c: bool) -> RunResult {
         match (vm.eval(&contents, Default::default()), negative.map(|n| n.phase)) {
             (Ok(_), None) => {
                 if level & 1 != 0 {
-                    println!(
-                        "   {}OK{} {label}",
-                        ansi(c, 32),
-                        ansi(c, 0)
-                    )
+                    println!("   {}OK{} {label}", ansi(c, 32), ansi(c, 0))
                 }
                 RunResult::Pass
             }
@@ -204,11 +201,7 @@ fn run_test(setup: &str, path: &OsStr, level: u8, c: bool) -> RunResult {
                     match result {
                         RunResult::Pass => {
                             if level & 1 != 0 {
-                                println!(
-                                    "   {}OK{} {label}",
-                                    ansi(c, 32),
-                                    ansi(c, 0)
-                                )
+                                println!("   {}OK{} {label}", ansi(c, 32), ansi(c, 0))
                             }
                         }
                         RunResult::Fail => {
@@ -240,11 +233,7 @@ fn run_test(setup: &str, path: &OsStr, level: u8, c: bool) -> RunResult {
                                 }
                             };
                             if level & 0b10 != 0 {
-                                println!(
-                                    "  {}ERR{} {label}: {s}",
-                                    ansi(c, 33),
-                                    ansi(c, 0),
-                                );
+                                println!("  {}ERR{} {label}: {s}", ansi(c, 33), ansi(c, 0),);
                             }
                         }
                         RunResult::Panic => {}
