@@ -1,4 +1,5 @@
-
+[unstable]
+codegen-backend=true
 [profile.dev]
 # override cranelift because the testrunner WILL require unwinding support
 codegen-backend = "llvm"
