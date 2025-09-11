@@ -36,8 +36,5 @@ resolver = "2"
 lto = "fat"
 codegen-units = 1
 
-[profile.release.package.testrunner]
-debug-assertions = true
-
 [profile.dev]
 debug = true

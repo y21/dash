@@ -3,33 +3,38 @@ use std::ffi::{OsStr, OsString};
 use std::panic;
 use std::sync::atomic::AtomicU32;
 use std::sync::{Mutex, atomic};
+use std::time::Instant;
 
 use clap::ArgMatches;
 use dash_vm::Vm;
 use dash_vm::eval::EvalError;
 use dash_vm::params::VmParams;
+use dash_vm::value::propertykey::PropertyKey;
+use dash_vm::value::string::JsString;
+use dash_vm::value::{Root, Unpack, ValueKind};
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 
-use crate::util;
-
 pub fn run(matches: &ArgMatches) -> anyhow::Result<()> {
     let path = matches.get_one::<String>("path");
-    let path = path.map_or("../test262/test", |v| &**v);
-    let verbose = *matches.get_one::<bool>("verbose").unwrap();
+    let path = path.map_or("../test262/test/**/*.js", |v| &**v);
+    let slevel = matches.get_one::<String>("level").unwrap_or(&"".to_string()).clone();
+    let c = matches.get_one::<bool>("color").unwrap().clone();
     let single_threaded = *matches.get_one::<bool>("disable-threads").unwrap();
-    let files = if path.ends_with(".js") {
-        vec![OsString::from(path)]
-    } else {
-        util::get_all_files(OsStr::new(path))?
-    };
+    let files = glob::glob(path)
+        .unwrap()
+        .map(|x| x.map(|mut x| x.as_mut_os_string().clone()))
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
 
-    run_inner(files, verbose, single_threaded)?;
+    let level = slevel.contains('o') as u8 | ((slevel.contains('e') as u8) << 1) | ((slevel.contains('p') as u8) << 2);
+    // println!("{level:b}");
+    run_inner(files, level, single_threaded, c)?;
 
     Ok(())
 }
 
-fn run_inner(files: Vec<OsString>, verbose: bool, single_threaded: bool) -> anyhow::Result<()> {
+fn run_inner(files: Vec<OsString>, level: u8, single_threaded: bool, c: bool) -> anyhow::Result<()> {
     let setup: String = {
         let sta = std::fs::read_to_string("../test262/harness/sta.js")?;
         let assert = std::fs::read_to_string("../test262/harness/assert.js")?;
@@ -49,7 +54,7 @@ fn run_inner(files: Vec<OsString>, verbose: bool, single_threaded: bool) -> anyh
     let file_count = files.len();
 
     let run_file = |file: &OsString| {
-        let result = run_test(&setup, file, verbose);
+        let result = run_test(&setup, file, level, c);
 
         let counter = match result {
             RunResult::Pass => &counter.passes,
@@ -60,6 +65,7 @@ fn run_inner(files: Vec<OsString>, verbose: bool, single_threaded: bool) -> anyh
         counter.fetch_add(1, atomic::Ordering::Relaxed);
     };
 
+    let i = Instant::now();
     if single_threaded {
         for file in files {
             run_file(&file);
@@ -74,16 +80,17 @@ fn run_inner(files: Vec<OsString>, verbose: bool, single_threaded: bool) -> anyh
             }
         });
     }
+    let e = i.elapsed();
 
     let passes = counter.passes.load(atomic::Ordering::Relaxed);
     let fails = counter.fails.load(atomic::Ordering::Relaxed);
     let panics = counter.panics.load(atomic::Ordering::Relaxed);
     let rate = ((passes as f32) / (file_count as f32)) * 100.0;
-    println!("== Result ===");
-    println!("Passes: {passes} ({rate:.2}%)",);
-    println!("Fails: {fails}");
-    println!("Panics: {panics}");
-
+    println!("{}== Result =={}", ansi(c, 36), ansi(c, 0));
+    println!("   {}OK{} {passes} ({rate:.2}%)", ansi(c, 32), ansi(c, 0));
+    println!("  {}ERR{} {fails}", ansi(c, 33), ansi(c, 0));
+    println!("{}PANIC{} {panics}", ansi(c, 31), ansi(c, 0));
+    println!("{}tests took {}s{}", ansi(c, 36), e.as_secs_f64(), ansi(c, 0));
     Ok(())
 }
 
@@ -134,7 +141,11 @@ fn get_harness_code(path: &str) -> String {
     code.clone()
 }
 
-fn run_test(setup: &str, path: &OsStr, verbose: bool) -> RunResult {
+fn ansi(color: bool, n: u8) -> String {
+    if !color { String::new() } else { format!("\x1b[{n}m") }
+}
+
+fn run_test(setup: &str, path: &OsStr, level: u8, c: bool) -> RunResult {
     let mut negative = None;
     let contents = std::fs::read_to_string(path).unwrap();
     let mut prelude = String::from(setup);
@@ -148,11 +159,34 @@ fn run_test(setup: &str, path: &OsStr, verbose: bool) -> RunResult {
         negative = metadata.negative;
     }
     let contents = format!("{prelude}{contents}");
-
+    let label = path.to_string_lossy().to_string();
+    panic::set_hook(Box::new(move |p| {
+        if level & 0b100 != 0 {
+            println!(
+                "{}PANIC{} {label}: {} {}{}{}",
+                ansi(c, 31),
+                ansi(c, 0),
+                p.payload()
+                    .downcast_ref::<&str>()
+                    .map(|x| x.to_string())
+                    .or_else(|| p.payload().downcast_ref::<String>().cloned())
+                    .unwrap(),
+                ansi(c, 2),
+                p.location().unwrap(),
+                ansi(c, 0)
+            );
+        }
+    }));
+    let label = path.to_string_lossy().to_string();
     let maybe_pass = panic::catch_unwind(move || {
         let mut vm = Vm::new(VmParams::default());
         match (vm.eval(&contents, Default::default()), negative.map(|n| n.phase)) {
-            (Ok(_), None) => RunResult::Pass,
+            (Ok(_), None) => {
+                if level & 1 != 0 {
+                    println!("   {}OK{} {label}", ansi(c, 32), ansi(c, 0))
+                }
+                RunResult::Pass
+            }
             (Ok(_), Some(..)) => RunResult::Fail,
             (Err(err), negative) => {
                 let result = match (&err, negative) {
@@ -163,23 +197,46 @@ fn run_test(setup: &str, path: &OsStr, verbose: bool) -> RunResult {
                     (_, Some(..)) => RunResult::Fail,
                 };
 
-                if let RunResult::Fail = result {
-                    if verbose {
-                        let s = match &err {
-                            EvalError::Middle(errs) => format!("{errs:?}"),
-                            EvalError::Exception(_ex) => {
-                                // let mut sc = LocalScope::new(&mut vm);
-                                // match ex.to_string(&mut sc) {
-                                //     Ok(s) => ToString::to_string(&s),
-                                //     Err(err) => format!("{err:?}"),
-                                // }
-
-                                // displaying certain JS error "structures" like above causes a weird stack overflow.
-                                // requires further investigation. for now just display some hardcoded string
-                                "<js error>".into()
+                {
+                    match result {
+                        RunResult::Pass => {
+                            if level & 1 != 0 {
+                                println!("   {}OK{} {label}", ansi(c, 32), ansi(c, 0))
                             }
-                        };
-                        println!("Error in {:?}: {s}", path.to_str());
+                        }
+                        RunResult::Fail => {
+                            let s = match &err {
+                                EvalError::Middle(errs) => format!("{errs:?}"),
+                                EvalError::Exception(ex) => {
+                                    let mut scope = vm.scope();
+                                    let t = ex.root(&mut scope);
+                                    let tos = scope.interner.intern("message");
+                                    if let ValueKind::Object(u) = t.unpack() {
+                                        let z = u
+                                            .get_own_property(
+                                                PropertyKey::from_js_string(JsString::from_sym(tos), &mut scope),
+                                                &mut scope,
+                                            )
+                                            .unwrap();
+                                        if let ValueKind::String(zr) = z.root(&mut scope).unpack() {
+                                            format!("{}", zr.res(&mut scope))
+                                        } else {
+                                            format!("?")
+                                        }
+                                    } else {
+                                        format!("?")
+                                    }
+
+                                    // displaying certain JS error "structures" like above causes a weird stack overflow.
+                                    // requires further investigation. for now just display some hardcoded string
+                                    // "<js error>".into()
+                                }
+                            };
+                            if level & 0b10 != 0 {
+                                println!("  {}ERR{} {label}: {s}", ansi(c, 33), ansi(c, 0),);
+                            }
+                        }
+                        RunResult::Panic => {}
                     }
                 }
 
@@ -190,9 +247,6 @@ fn run_test(setup: &str, path: &OsStr, verbose: bool) -> RunResult {
 
     match maybe_pass {
         Ok(res) => res,
-        Err(_) => {
-            println!("Panic in {}", path.to_str().unwrap());
-            RunResult::Panic
-        }
+        Err(_) => RunResult::Panic,
     }
 }

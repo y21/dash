@@ -17,7 +17,13 @@ fn main() -> anyhow::Result<()> {
                         .action(ArgAction::SetTrue)
                         .required(false),
                 )
-                .arg(Arg::new("verbose").long("verbose").action(ArgAction::SetTrue)),
+                .arg(
+                    Arg::new("color")
+                        .long("color")
+                        .action(ArgAction::SetTrue)
+                        .required(false),
+                )
+                .arg(Arg::new("level").long("level")),
         );
 
     match app.get_matches().subcommand() {
