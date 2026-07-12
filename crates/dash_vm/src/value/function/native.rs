@@ -18,7 +18,6 @@ pub fn register_native_fn(sc: &mut LocalScope<'_>, name: Symbol, fun: NativeFunc
 #[derive(Debug)]
 pub struct CallContext<'s, 'c> {
     pub args: CallArgs,
-    // TODO: remove the indirection here -- LocalScope is basically a thin reference (+ a counter) now, so we can just pass it by value
     pub scope: &'c mut LocalScope<'s>,
     pub this: Value,
     pub new_target: Option<ObjectId>,
