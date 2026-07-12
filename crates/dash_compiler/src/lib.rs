@@ -2315,7 +2315,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
 /// }
 /// ```
 /// to
-/// ```
+/// ```ignore
 /// _1 = condition
 ///
 /// case_w_cond:

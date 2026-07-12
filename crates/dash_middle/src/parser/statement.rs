@@ -54,8 +54,9 @@ pub enum StatementKind {
     #[display("debugger;")]
     Debugger,
     /// A labelled statement:
-    ///
-    ///     foo: { break foo; }
+    /// ```js
+    /// foo: { break foo; }
+    /// ```
     ///
     /// is represented as Labelled(foo, Expr(Block(Break(foo))))
     #[display("{_0}: {_1}")]
