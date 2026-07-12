@@ -95,8 +95,8 @@ impl<'vm> DispatchContext<'vm> {
 
     pub fn pop_stack2_rooted(&mut self) -> (Value, Value) {
         let [a, b] = self.pop_stack_const();
-        self.scope.add_value(a);
-        self.scope.add_value(b);
+        self.scope.add(a);
+        self.scope.add(b);
         (a, b)
     }
 
@@ -112,9 +112,9 @@ impl<'vm> DispatchContext<'vm> {
 
     pub fn pop_stack3_rooted(&mut self) -> (Value, Value, Value) {
         let [a, b, c] = self.pop_stack_const();
-        self.scope.add_value(a);
-        self.scope.add_value(b);
-        self.scope.add_value(c);
+        self.scope.add(a);
+        self.scope.add(b);
+        self.scope.add(c);
         (a, b, c)
     }
 
@@ -330,7 +330,7 @@ mod extract {
         fn extract_front<U>(seq: &mut ForwardSequence<U>, cx: &mut DispatchContext<'_>) -> Result<Self, Self::Error> {
             seq.stack_index += 1;
             let value = cx.stack[seq.stack_index - 1];
-            cx.scope.add_value(value);
+            cx.scope.add(value);
             Ok(value)
         }
     }
@@ -2256,7 +2256,7 @@ mod handlers {
 
                 if unlikely(!cx.builtins_purity()) {
                     for arg in &args {
-                        cx.scope.add_value(arg.clone());
+                        cx.scope.add(arg.clone());
                     }
 
                     // Builtins impure, fallback to slow dynamic property lookup

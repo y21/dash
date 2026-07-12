@@ -268,15 +268,15 @@ impl Object for OrdObject {
             InnerOrdObject::Linear(property_vec) => match property_vec.delete_property(key) {
                 Some(pv) => match pv.kind() {
                     PropertyValueKind::Static(v) => {
-                        sc.add_value(*v);
+                        sc.add(*v);
                         Ok((*v).into())
                     }
                     PropertyValueKind::Trap { get, set } => {
                         if let Some(get) = get {
-                            sc.add_ref(*get);
+                            sc.add(*get);
                         }
                         if let Some(set) = set {
-                            sc.add_ref(*set);
+                            sc.add(*set);
                         }
                         Ok(Value::undefined().into())
                     }

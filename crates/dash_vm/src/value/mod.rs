@@ -554,7 +554,7 @@ pub mod root_ext {
 impl Root for Unrooted {
     type Rooted = Value;
     fn root(self, scope: &mut LocalScope<'_>) -> Self::Rooted {
-        scope.add_value(self.value);
+        scope.add(self.value);
         self.value
     }
 }

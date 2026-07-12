@@ -10,6 +10,7 @@ use std::{fmt, mem};
 
 use crate::frame::Sp;
 use crate::framestack::{FrameId, FrameStack};
+use crate::localscope::ShadowRoot;
 use crate::util::cold_path;
 use crate::value::Root;
 use crate::value::function::Function;
@@ -31,7 +32,6 @@ use dash_middle::compiler::scope::BackLocalId;
 use dash_middle::interner::{self, StringInterner, sym};
 use gc::trace::{Trace, TraceCtxt};
 use gc::{Allocator, ObjectId};
-use localscope::{LocalScopeList, scope};
 use rustc_hash::{FxHashMap, FxHashSet};
 use value::function::args::CallArgs;
 use value::object::{OrdObject, extract_type};
@@ -72,7 +72,7 @@ pub struct Vm {
     #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
     frames: FrameStack,
     stack: Vec<Value>,
-    scopes: LocalScopeList,
+    shadow_roots: Vec<ShadowRoot>,
     alloc: Allocator,
     gc_rss_threshold: usize,
     pub interner: StringInterner,
@@ -118,7 +118,7 @@ impl Vm {
             global,
             rejected_promises: FxHashSet::default(),
             external_refs: ExternalRefs::default(),
-            scopes: LocalScopeList::new(),
+            shadow_roots: Vec::new(),
             statics: Box::new(statics),
             try_blocks: Vec::new(),
             params,
@@ -130,7 +130,7 @@ impl Vm {
     }
 
     pub fn scope(&mut self) -> LocalScope<'_> {
-        scope(self)
+        LocalScope::new(self)
     }
 
     pub fn global(&self) -> ObjectId {
@@ -1434,7 +1434,7 @@ impl Vm {
 
         let mut scope = self.scope();
         while let Some(task) = scope.async_tasks.pop_front() {
-            scope.add_ref(task);
+            scope.add(task);
 
             debug!("process task {:?}", task);
             if let Err(ex) = task.apply(This::default(), CallArgs::empty(), &mut scope) {
@@ -1449,7 +1449,7 @@ impl Vm {
         // We're removing the rejected promises from `self`, making them unreachable from the GC, so root them beforehand.
         let rejected_promises = mem::take(&mut scope.rejected_promises);
         for promise in rejected_promises.iter().copied() {
-            scope.add_ref(promise);
+            scope.add(promise);
         }
 
         for promise_id in rejected_promises.iter() {
@@ -1567,8 +1567,8 @@ impl Vm {
         self.stack.trace(&mut cx);
         debug!("trace globals");
         self.global.trace(&mut cx);
-        debug!("trace scopes");
-        self.scopes.trace(&mut cx);
+        debug!("trace shadow roots");
+        self.shadow_roots.trace(&mut cx);
         if let Some(state) = self.params.state_raw() {
             debug!("trace state");
             state.trace(&mut cx);
