@@ -3,6 +3,7 @@ use std::iter;
 use clippy_utils::paths::{PathNS, lookup_path_str};
 use rustc_abi::VariantIdx;
 use rustc_ast::Mutability;
+use rustc_errors::DiagDecorator;
 use rustc_hir::def::DefKind;
 use rustc_hir::def_id::{DefId, LocalDefId};
 use rustc_hir::intravisit::FnKind;
@@ -17,8 +18,7 @@ use rustc_middle::mir::{self, BasicBlock, Body, Local, PlaceTy};
 use rustc_middle::ty::{ParamEnv, Ty, TyCtxt};
 use rustc_middle::{bug, ty};
 use rustc_session::{declare_lint, impl_lint_pass};
-use rustc_span::Span;
-use rustc_span::source_map::Spanned;
+use rustc_span::{Span, Spanned};
 use rustc_trait_selection::traits::ObligationCtxt;
 
 use crate::utils::has_no_gc_attr;
@@ -135,7 +135,7 @@ impl<'tcx> TraverseCtxt<'_, 'tcx> {
         let trait_ref = ty::TraitRef::new(self.tcx, self.lint.items.root(), [ty::GenericArg::from(ty.peel_refs())]);
         let obligation = Obligation::new(self.tcx, ObligationCause::dummy(), self.param_env, trait_ref);
         self.ocx.register_obligation(obligation);
-        self.ocx.select_all_or_error().is_empty()
+        self.ocx.evaluate_obligations_error_on_ambiguity().is_empty()
     }
 }
 
@@ -191,10 +191,15 @@ impl<'tcx> mir::visit::Visitor<'tcx> for PlaceVisitor<'_, '_, 'tcx> {
                 self.state.locals[place.local] = LocalState::LiveBeforeBorrow;
             } else {
                 let hir_id = self.cx.tcx.local_def_id_to_hir_id(self.cx.fn_def_id);
-                self.cx.tcx.node_span_lint(MISSING_ROOT, hir_id, self.span, |diag| {
-                    diag.primary_message("use of unrooted value after mutable scope borrow");
-                    diag.span_note(killed_at, "scope mutably borrowed here");
-                });
+                self.cx.tcx.emit_node_span_lint(
+                    MISSING_ROOT,
+                    hir_id,
+                    self.span,
+                    DiagDecorator(|diag| {
+                        diag.primary_message("use of unrooted value after mutable scope borrow");
+                        diag.span_note(killed_at, "scope mutably borrowed here");
+                    }),
+                );
             }
         }
 
@@ -297,7 +302,7 @@ fn traverse<'tcx>(
     {
         if let mir::Operand::Constant(ct) = func
             && let ty::FnDef(callee_def_id, _) = *ct.ty().kind()
-            && (vis.cx.tcx.trait_of_item(callee_def_id) == Some(vis.cx.tcx.lang_items().deref_mut_trait().unwrap())
+            && (vis.cx.tcx.trait_of_assoc(callee_def_id) == Some(vis.cx.tcx.lang_items().deref_mut_trait().unwrap())
                 || has_no_gc_attr(vis.cx.tcx, callee_def_id))
         {
             // Allow derefs (and anything that is annotated with #[trusted_no_gc]).

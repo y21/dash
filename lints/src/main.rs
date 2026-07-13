@@ -1,4 +1,4 @@
-#![feature(rustc_private, let_chains, box_patterns, if_let_guard)]
+#![feature(rustc_private, box_patterns)]
 #![deny(rust_2018_idioms)]
 
 use missing_root::{MISSING_ROOT, MissingRoot};
@@ -9,6 +9,7 @@ use rustc_session::config::{ErrorOutputType, OptLevel};
 extern crate rustc_abi;
 extern crate rustc_ast;
 extern crate rustc_driver;
+extern crate rustc_errors;
 extern crate rustc_hir;
 extern crate rustc_index;
 extern crate rustc_infer;
@@ -30,7 +31,7 @@ impl Callbacks for PrimaryCallbacks {
     fn config(&mut self, config: &mut rustc_interface::interface::Config) {
         config.register_lints = Some(Box::new(|_, lints| {
             lints.register_lints(&[MISSING_ROOT]);
-            lints.register_late_pass(|_| Box::new(MissingRoot::default()));
+            lints.register_late_lint_pass(Box::new(|_| Box::new(MissingRoot::default())));
         }));
         config.opts.unstable_opts.mir_opt_level = Some(0);
         config.opts.optimize = OptLevel::No;
