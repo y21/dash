@@ -660,6 +660,10 @@ impl PropertyVec {
         let index = self.find_key_index(key)? as usize;
         let value = self.property_value_at_index(index);
 
+        if !value.descriptor.contains(PropertyDataDescriptor::CONFIGURABLE) {
+            return None;
+        }
+
         fn delete_from_section<T>(ptr: *mut MaybeUninit<T>, index: usize, section_len: usize) {
             let section = unsafe { std::slice::from_raw_parts_mut(ptr, section_len) };
             section[index..].rotate_left(1);

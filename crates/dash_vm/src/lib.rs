@@ -359,7 +359,6 @@ impl Vm {
                 (sym::MIN_VALUE, Value::number(f64::MIN), Some(PropertyDataDescriptor::empty())),
                 (sym::NEGATIVE_INFINITY, Value::number(f64::NEG_INFINITY), Some(PropertyDataDescriptor::empty())),
                 (sym::POSITIVE_INFINITY, Value::number(f64::INFINITY), Some(PropertyDataDescriptor::empty())),
-                // TODO: this needs to be writable: false, causes test262 language/types/number/S8.5_A14_T1.js to fail
                 (sym::NaN, Value::number(f64::NAN), Some(PropertyDataDescriptor::empty()))
             ],
             Some((sym::Number, scope.statics.number_prototype)),
