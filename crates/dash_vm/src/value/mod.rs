@@ -511,6 +511,27 @@ impl Unrooted {
             None
         }
     }
+
+    /// Returns whether this value is truthy or falsy according to JavaScript semantics.
+    pub fn is_truthy(&self, sc: &mut LocalScope) -> bool {
+        // NB: Value::is_truthy does not do anything with the GC, so no rooting is needed
+        self.value.is_truthy(sc)
+    }
+
+    /// Returns whether this value is null or undefined according to JavaScript semantics.
+    pub fn is_nullish(&self) -> bool {
+        self.value.is_nullish()
+    }
+
+    /// Returns whether this value is the undefined value.
+    pub fn is_undefined(&self) -> bool {
+        matches!(self.value.unpack(), ValueKind::Undefined(_))
+    }
+
+    /// Returns whether this value is the null value.
+    pub fn is_null(&self) -> bool {
+        matches!(self.value.unpack(), ValueKind::Null(_))
+    }
 }
 
 pub trait Root {

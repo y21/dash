@@ -60,6 +60,18 @@ unsafe impl Trace for ShadowRoot {
     }
 }
 
+type ShadowRoots = Vec<ShadowRoot>;
+
+fn push_shadow_root(roots: &mut ShadowRoots, root: impl TryShadowRoot) {
+    if let Some(root) = root.try_into_shadow_root() {
+        roots.push(root);
+    }
+}
+
+fn push_shadow_roots(roots: &mut ShadowRoots, new_roots: impl IntoIterator<Item = impl TryShadowRoot>) {
+    new_roots.into_iter().for_each(|root| push_shadow_root(roots, root));
+}
+
 #[derive(Debug)]
 pub struct LocalScope<'a> {
     vm: &'a mut Vm,
@@ -73,15 +85,23 @@ impl<'a> LocalScope<'a> {
         Self { vm, stack_len }
     }
 
+    pub fn drain_stack_rooted(&mut self, n: usize) -> impl Iterator<Item = Value> {
+        let start = self.vm.stack.len() - n;
+
+        // NB: pushing roots needs to happen separately first (not part of the iterator chain)
+        // since the iterator is lazy
+        push_shadow_roots(&mut self.vm.shadow_roots, &self.vm.stack[start..]);
+
+        self.vm.stack.drain(start..)
+    }
+
     #[cfg_attr(dash_lints, dash_lints::trusted_no_gc)]
     pub fn add(&mut self, root: impl TryShadowRoot) {
-        if let Some(shadow_root) = root.try_into_shadow_root() {
-            self.vm.shadow_roots.push(shadow_root);
-        }
+        push_shadow_root(&mut self.vm.shadow_roots, root);
     }
 
     pub fn add_many(&mut self, roots: impl IntoIterator<Item = impl TryShadowRoot>) {
-        roots.into_iter().for_each(|root| self.add(root));
+        push_shadow_roots(&mut self.vm.shadow_roots, roots);
     }
 
     pub fn drive_promise(&mut self, action: PromiseAction, promise: &Promise, promise_id: ObjectId, args: CallArgs) {

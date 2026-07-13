@@ -2,7 +2,6 @@ use dash_middle::compiler::constant::{ConstantPool, NumberConstant, SymbolConsta
 use dash_middle::compiler::external::ExternalId;
 use dash_middle::compiler::scope::BackLocalId;
 use std::ops::{Deref, DerefMut};
-use std::vec::Drain;
 
 use crate::frame::Frame;
 use crate::localscope::LocalScope;
@@ -70,67 +69,41 @@ impl<'vm> DispatchContext<'vm> {
         self.scope.pop_stack_unwrap().root(&mut self.scope)
     }
 
-    pub fn peek_stack(&mut self) -> Value {
-        *self
-            .stack
-            .last()
-            .expect("Bytecode attempted to peek stack value, but nothing was on the stack")
+    pub fn peek_stack(&mut self) -> Unrooted {
+        Unrooted::new(
+            *self
+                .stack
+                .last()
+                .expect("Bytecode attempted to peek stack value, but nothing was on the stack"),
+        )
     }
 
-    // TODO: !! should return [Unrooted; N] !!
-    fn pop_stack_const<const N: usize>(&mut self) -> [Value; N] {
+    fn pop_stack_const<const N: usize>(&mut self) -> [Unrooted; N] {
         assert!(self.stack.len() >= N);
-        // SAFETY: n pops are safe because we've checked the length
-        // Sadly unsafe is needed here, see https://github.com/rust-lang/rust/issues/71257
-        // TODO: remove this once the issue is fixed
-        let mut arr: [Value; N] = std::array::from_fn(|_| unsafe { self.stack.pop().unwrap_unchecked() });
+        let mut arr: [Unrooted; N] = std::array::from_fn(|_| Unrooted::new(self.stack.pop().unwrap()));
         arr.reverse();
         arr
     }
 
-    pub fn pop_stack2_new(&mut self) -> (Unrooted, Unrooted) {
-        let [a, b] = self.pop_stack_const().map(Unrooted::new);
-        (a, b)
-    }
-
     pub fn pop_stack2_rooted(&mut self) -> (Value, Value) {
         let [a, b] = self.pop_stack_const();
-        self.scope.add(a);
-        self.scope.add(b);
-        (a, b)
-    }
-
-    pub fn pop_stack3(&mut self) -> (Value, Value, Value) {
-        let [a, b, c] = self.pop_stack_const();
-        (a, b, c)
-    }
-
-    pub fn pop_stack3_new(&mut self) -> (Unrooted, Unrooted, Unrooted) {
-        let [a, b, c] = self.pop_stack_const().map(Unrooted::new);
-        (a, b, c)
+        (a.root(&mut self.scope), b.root(&mut self.scope))
     }
 
     pub fn pop_stack3_rooted(&mut self) -> (Value, Value, Value) {
         let [a, b, c] = self.pop_stack_const();
-        self.scope.add(a);
-        self.scope.add(b);
-        self.scope.add(c);
-        (a, b, c)
-    }
-
-    pub fn pop_stack_many(&mut self, count: usize) -> Drain<'_, Value> {
-        let pos = self.stack.len() - count;
-        self.stack.drain(pos..)
+        (
+            a.root(&mut self.scope),
+            b.root(&mut self.scope),
+            c.root(&mut self.scope),
+        )
     }
 
     pub fn evaluate_binary_with_scope<F>(&mut self, fun: F) -> Result<Option<HandleResult>, Unrooted>
     where
         F: Fn(Value, Value, &mut LocalScope) -> Result<Value, Value>,
     {
-        let (left, right) = self.pop_stack2_new();
-
-        let left = left.root(&mut self.scope);
-        let right = right.root(&mut self.scope);
+        let (left, right) = self.pop_stack2_rooted();
 
         let result = fun(left, right, self)?;
         self.stack.push(result);
@@ -1136,16 +1109,14 @@ mod handlers {
             let len = cx.fetch_and_inc_ip();
             let spread_indices: SmallVec<[_; 4]> = (0..len).map(|_| cx.fetch_and_inc_ip()).collect();
 
-            let iter = cx.pop_stack_many(argc);
+            let raw_args = cx.drain_stack_rooted(argc);
 
             if len == 0 {
                 // Fast path for no spread arguments
-                for value in iter {
-                    args.push(value);
-                }
+                args.extend(raw_args);
             } else {
-                let raw_args: SmallVec<[_; 4]> = iter.collect();
                 let mut indices_iter = spread_indices.into_iter().peekable();
+                let raw_args = raw_args.collect::<SmallVec<[Value; 3]>>();
 
                 for (index, value) in raw_args.into_iter().enumerate() {
                     if indices_iter.peek().is_some_and(|&v| usize::from(v) == index) {
@@ -1228,7 +1199,7 @@ mod handlers {
 
     pub fn jmpfalsep(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let offset = cx.fetchw_and_inc_ip() as i16;
-        let value = cx.pop_stack_rooted();
+        let value = cx.pop_stack();
 
         let jump = !value.is_truthy(&mut cx.scope);
 
@@ -1256,7 +1227,7 @@ mod handlers {
 
     pub fn jmptruep(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let offset = cx.fetchw_and_inc_ip() as i16;
-        let value = cx.pop_stack_rooted();
+        let value = cx.pop_stack();
 
         let jump = value.is_truthy(&mut cx.scope);
 
@@ -1284,7 +1255,7 @@ mod handlers {
 
     pub fn jmpnullishp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let offset = cx.fetchw_and_inc_ip() as i16;
-        let value = cx.pop_stack_rooted();
+        let value = cx.pop_stack();
 
         let jump = value.is_nullish();
 
@@ -1312,9 +1283,9 @@ mod handlers {
 
     pub fn jmpundefinedp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let offset = cx.fetchw_and_inc_ip() as i16;
-        let value = cx.pop_stack_rooted();
+        let value = cx.pop_stack();
 
-        let jump = matches!(value.unpack(), ValueKind::Undefined(_));
+        let jump = value.is_undefined();
 
         if jump {
             let ip = cx.frames.current_ip();
@@ -1328,7 +1299,7 @@ mod handlers {
         let offset = cx.fetchw_and_inc_ip() as i16;
         let value = cx.peek_stack();
 
-        let jump = matches!(value.unpack(), ValueKind::Null(_));
+        let jump = value.is_undefined();
 
         if jump {
             let ip = cx.frames.current_ip();
@@ -1573,9 +1544,9 @@ mod handlers {
         let preserve_this = cx.fetch_and_inc_ip() == 1;
 
         let target = if preserve_this {
-            cx.peek_stack()
+            cx.peek_stack().root(&mut cx.scope)
         } else {
-            cx.pop_stack_rooted()
+            cx.pop_stack().root(&mut cx.scope)
         };
 
         let value = target.get_property(ident.to_key(&mut cx.scope), &mut cx.scope)?;
@@ -1590,10 +1561,7 @@ mod handlers {
 
         macro_rules! op {
             ($op:expr) => {{
-                let (target, value) = cx.pop_stack2_new();
-
-                let target = target.root(&mut cx.scope);
-                let value = value.root(&mut cx.scope);
+                let (target, value) = cx.pop_stack2_rooted();
 
                 let p = target
                     .get_property(key.to_key(&mut cx.scope), &mut cx.scope)?
@@ -1648,9 +1616,7 @@ mod handlers {
 
         match kind {
             AssignKind::Assignment => {
-                let (target, value) = cx.pop_stack2_new();
-                let target = target.root(&mut cx.scope);
-                let value = value.root(&mut cx.scope);
+                let (target, value) = cx.pop_stack2_rooted();
                 target.set_property(
                     key.to_key(&mut cx.scope),
                     PropertyValue::static_default(value),
@@ -1764,9 +1730,9 @@ mod handlers {
         let preserve_this = cx.fetch_and_inc_ip() == 1;
 
         let target = if preserve_this {
-            cx.peek_stack()
+            cx.peek_stack().root(&mut cx.scope)
         } else {
-            cx.pop_stack_rooted()
+            cx.pop_stack().root(&mut cx.scope)
         };
 
         let key = PropertyKey::from_value(&mut cx, key)?;
@@ -2251,7 +2217,7 @@ mod handlers {
         macro_rules! fn_call {
             ($fun:ident, $k:expr, $v:expr) => {{
                 let argc = cx.fetch_and_inc_ip();
-                let args = cx.pop_stack_many(argc.into()).collect::<CallArgs>();
+                let args = cx.drain_stack_rooted(argc.into()).collect::<CallArgs>();
                 let fun = cx.statics.$fun.clone();
 
                 if unlikely(!cx.builtins_purity()) {
