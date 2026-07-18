@@ -303,7 +303,7 @@ impl Parser<'_, '_> {
     }
 
     fn parse_postfix(&mut self) -> Option<Expr> {
-        let expr = self.parse_field_access()?;
+        let expr = self.parse_new(true)?;
         if self
             .eat(any(&[TokenType::Increment, TokenType::Decrement]), false)
             .is_some()
@@ -317,107 +317,67 @@ impl Parser<'_, '_> {
         Some(expr)
     }
 
-    fn parse_field_access(&mut self) -> Option<Expr> {
-        if self.eat(TokenType::New, false).is_some() {
-            if let Some(Token { ty: TokenType::Dot, .. }) = self.current() {
-                // new.target handled in parse_primary_expr
-                self.advance_back();
+    fn parse_new(&mut self, parse_calls: bool) -> Option<Expr> {
+        let new_start_span = self.current()?.span;
+        let lhs = if self.eat(TokenType::New, false).is_some() {
+            if self.eat(TokenType::Dot, false).is_some() {
+                // must be `new.target`
+                self.eat(TokenType::Identifier(sym::target), true)?;
+                let span = new_start_span.to(self.previous()?.span);
+                Expr {
+                    span,
+                    kind: ExprKind::NewTarget,
+                }
             } else {
-                let new_span = self.previous()?.span;
+                // `new <expr>`
+                let callee = self.parse_new(false)?;
 
-                self.new_level_stack
-                    .inc_level()
-                    .expect("Failed to increment `new` stack level");
-
-                let mut rval = self.parse_field_access()?;
-                rval.span = new_span.to(rval.span);
-
-                return Some(rval);
+                if let Some(ty) = self.eat(any(&[TokenType::LeftParen, TokenType::OptionalLeftParen]), false) {
+                    self.parse_call_parentheses(ty == TokenType::OptionalLeftParen, true, callee)?
+                } else {
+                    Expr {
+                        kind: ExprKind::function_call(callee, Vec::new(), true),
+                        span: new_start_span.to(self.previous()?.span),
+                    }
+                }
             }
-        }
+        } else {
+            self.parse_member_access()?
+        };
+        self.parse_member_access_and_maybe_call(lhs, parse_calls)
+    }
 
-        let mut expr = self.parse_primary_expr()?;
+    fn parse_member_access(&mut self) -> Option<Expr> {
+        let expr = self.parse_primary_expr()?;
+        self.parse_member_access_and_maybe_call(expr, false)
+    }
 
-        while self
-            .eat(
-                any(&[
-                    TokenType::LeftParen,
-                    TokenType::Dot,
-                    TokenType::LeftSquareBrace,
-                    TokenType::OptionalDot,
-                    TokenType::OptionalSquareBrace,
-                    TokenType::OptionalLeftParen,
-                ]),
-                false,
-            )
-            .is_some()
-        {
+    /// Factored out logic for parsing member access expressions and optionally calls
+    fn parse_member_access_and_maybe_call(&mut self, mut expr: Expr, parse_calls: bool) -> Option<Expr> {
+        let matcher: &[_] = match parse_calls {
+            true => &[
+                TokenType::Dot,
+                TokenType::LeftSquareBrace,
+                TokenType::OptionalDot,
+                TokenType::OptionalSquareBrace,
+                TokenType::LeftParen,
+                TokenType::OptionalLeftParen,
+            ],
+            false => &[
+                TokenType::Dot,
+                TokenType::LeftSquareBrace,
+                TokenType::OptionalDot,
+                TokenType::OptionalSquareBrace,
+            ],
+        };
+
+        while self.eat(any(matcher), false).is_some() {
             let previous = self.previous()?.ty;
 
             match previous {
-                TokenType::LeftParen | TokenType::OptionalLeftParen => {
-                    let is_optional = previous == TokenType::OptionalLeftParen;
-                    let mut arguments = Vec::new();
-
-                    // Disassociate any new expressions in arguments such that `new x(() => x());`
-                    // is parsed as having the `new` operator only apply to the `x` identifier.
-                    self.new_level_stack.add_level();
-                    // TODO: refactor to `parse_expr_list`
-                    while self.eat(TokenType::RightParen, false).is_none() {
-                        _ = self.eat(TokenType::Comma, false);
-
-                        if let Some(spread) = self.parse_spread_operator(false) {
-                            arguments.push(CallArgumentKind::Spread(spread));
-                        } else {
-                            arguments.push(CallArgumentKind::Normal(self.parse_yield()?));
-                        }
-                    }
-                    self.new_level_stack.pop_level().expect("Missing `new` level stack");
-
-                    // End of function call.
-                    let level = self.new_level_stack.cur_level().expect("Missing `new` level stack");
-                    let is_constructor_call = level > 0;
-                    if is_constructor_call {
-                        self.new_level_stack.dec_level().expect("Missing `new` level stack");
-                    }
-
-                    if is_optional {
-                        let component = if is_constructor_call {
-                            OptionalChainingComponent::Construct(arguments)
-                        } else {
-                            OptionalChainingComponent::Call(arguments)
-                        };
-                        if let ExprKind::Chaining(c) = &mut expr.kind {
-                            // If this is a method call (i.e. the previous chain component is a property access,
-                            // we need to preserve its `this` binding)
-                            if let Some(last) = c.components.last_mut() {
-                                match last {
-                                    OptionalChainingComponent::Ident { preserve_this, .. }
-                                    | OptionalChainingComponent::Dyn { preserve_this, .. } => *preserve_this = true,
-                                    OptionalChainingComponent::Call(_) | OptionalChainingComponent::Construct(_) => {}
-                                }
-                            }
-
-                            c.components.push(component);
-                            expr.span = expr.span.to(self.previous()?.span);
-                        } else {
-                            expr = Expr {
-                                span: expr.span.to(self.previous()?.span),
-                                kind: ExprKind::Chaining(OptionalChainingExpression {
-                                    base: Box::new(expr),
-                                    components: vec![component],
-                                }),
-                            }
-                        }
-                    } else {
-                        expr = Expr {
-                            span: expr.span.to(self.previous()?.span),
-                            kind: ExprKind::function_call(expr, arguments, is_constructor_call),
-                        };
-                    }
-                }
                 TokenType::Dot => {
                     let property = self.expect_identifier_or_reserved_kw(true)?;
+
                     if let ExprKind::Chaining(chain) = &mut expr.kind {
                         chain.components.push(OptionalChainingComponent::Ident {
                             property,
@@ -485,11 +445,62 @@ impl Parser<'_, '_> {
                         }),
                     };
                 }
+                TokenType::LeftParen | TokenType::OptionalLeftParen if parse_calls => {
+                    expr = self.parse_call_parentheses(previous == TokenType::OptionalLeftParen, false, expr)?;
+                }
                 _ => unreachable!(),
             }
         }
 
         Some(expr)
+    }
+
+    /// Parses a call expression after the callee and the `(` has been consumed
+    fn parse_call_parentheses(&mut self, is_optional: bool, is_constructor: bool, mut callee: Expr) -> Option<Expr> {
+        let mut arguments = Vec::new();
+
+        // TODO: refactor to `parse_expr_list`
+        while self.eat(TokenType::RightParen, false).is_none() {
+            _ = self.eat(TokenType::Comma, false);
+
+            if let Some(spread) = self.parse_spread_operator(false) {
+                arguments.push(CallArgumentKind::Spread(spread));
+            } else {
+                arguments.push(CallArgumentKind::Normal(self.parse_yield()?));
+            }
+        }
+
+        if is_optional {
+            let component = OptionalChainingComponent::Call(arguments);
+            if let ExprKind::Chaining(c) = &mut callee.kind {
+                // If this is a method call (i.e. the previous chain component is a property access,
+                // we need to preserve its `this` binding)
+                if let Some(last) = c.components.last_mut() {
+                    match last {
+                        OptionalChainingComponent::Ident { preserve_this, .. }
+                        | OptionalChainingComponent::Dyn { preserve_this, .. } => *preserve_this = true,
+                        OptionalChainingComponent::Call(_) | OptionalChainingComponent::Construct(_) => {}
+                    }
+                }
+
+                c.components.push(component);
+                callee.span = callee.span.to(self.previous()?.span);
+                Some(callee)
+            } else {
+                Some(Expr {
+                    span: callee.span.to(self.previous()?.span),
+                    kind: ExprKind::Chaining(OptionalChainingExpression {
+                        base: Box::new(callee),
+                        components: vec![component],
+                    }),
+                })
+            }
+        } else {
+            Some(Expr {
+                span: callee.span.to(self.previous()?.span),
+                kind: ExprKind::function_call(callee, arguments, is_constructor),
+            })
+        }
     }
 
     /// Tries to parse a spread operator (...<expr>). The argument specifies if it's required.
@@ -559,15 +570,6 @@ impl Parser<'_, '_> {
                 span: current.span,
                 kind: ExprKind::string_literal(sym),
             },
-            TokenType::New => {
-                self.eat(TokenType::Dot, true).unwrap();
-                self.eat(TokenType::Identifier(sym::target), true)?;
-                let span = current.span.to(self.previous()?.span);
-                Expr {
-                    span,
-                    kind: ExprKind::NewTarget,
-                }
-            }
             TokenType::LeftSquareBrace => {
                 let mut items = Vec::new();
                 while self.eat(TokenType::RightSquareBrace, false).is_none() {
@@ -777,7 +779,6 @@ impl Parser<'_, '_> {
                     return self.parse_arrow_function_end(current.span, Vec::new(), None);
                 }
 
-                self.new_level_stack.add_level();
                 let mut exprs = Vec::new();
                 let mut rest_binding = None;
 
@@ -800,7 +801,6 @@ impl Parser<'_, '_> {
                     // rewriting the arrow AST transformation to recursively fold sequences
                     exprs.push(self.parse_yield()?);
                 }
-                self.new_level_stack.pop_level();
 
                 // This is an arrow function if the next token is an arrow (`=>`)
                 if self.eat(TokenType::FatArrow, false).is_some() {
@@ -949,11 +949,7 @@ impl Parser<'_, '_> {
 
         self.eat(TokenType::LeftBrace, true)?;
 
-        self.new_level_stack.add_level();
-
         let BlockStatement(statements, scope_id) = self.parse_block()?;
-
-        self.new_level_stack.pop_level().unwrap();
 
         Some((
             FunctionDeclaration {

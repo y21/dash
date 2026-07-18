@@ -21,7 +21,6 @@ pub struct Parser<'a, 'interner> {
     idx: usize,
     interner: &'interner mut StringInterner,
     source: SourceMap<'a>,
-    new_level_stack: LevelStack,
     scope_count: Counter<ScopeId>,
     local_count: Counter<FrontLocalId>,
 }
@@ -49,7 +48,6 @@ impl<'a, 'interner> Parser<'a, 'interner> {
             error_sync: false,
             idx: 0,
             source: SourceMap::new(input),
-            new_level_stack: level_stack,
             interner,
             scope_count,
             local_count: Counter::new(),
