@@ -587,7 +587,7 @@ impl Parser<'_, '_> {
                 let rbrace_span = self.previous()?.span;
                 Expr {
                     span: current.span.to(rbrace_span),
-                    kind: ExprKind::array_literal(items),
+                    kind: ExprKind::array_literal(items, false),
                 }
             }
             TokenType::LeftBrace => {
@@ -755,7 +755,7 @@ impl Parser<'_, '_> {
                 let rbrace_span = self.previous()?.span;
                 Expr {
                     span: current.span.to(rbrace_span),
-                    kind: ExprKind::object_literal(items),
+                    kind: ExprKind::object_literal(items, false), // `parenthesized` is set by the caller
                 }
             }
             // TODO: this unwrap is not safe
@@ -812,7 +812,19 @@ impl Parser<'_, '_> {
                     return None;
                 }
 
-                Expr::grouping(exprs)
+                if exprs.len() == 1 {
+                    let mut expr = exprs.into_iter().next().unwrap();
+
+                    match &mut expr.kind {
+                        ExprKind::Object(ObjectLiteral { parenthesized, .. })
+                        | ExprKind::Array(ArrayLiteral { parenthesized, .. }) => *parenthesized = true,
+                        _ => {}
+                    }
+
+                    expr
+                } else {
+                    Expr::grouping(exprs)
+                }
             }
             TokenType::Async => {
                 if self.eat(TokenType::Function, false).is_some() {
@@ -978,7 +990,10 @@ impl Parser<'_, '_> {
                 ExprKind::Literal(LiteralExpr::Identifier(ident)) => {
                     Ok(Parameter::Identifier(parser.create_binding(ident)))
                 }
-                ExprKind::Array(ArrayLiteral(elements)) => {
+                ExprKind::Array(ArrayLiteral {
+                    members: elements,
+                    parenthesized: _,
+                }) => {
                     let mut fields = Vec::with_capacity(elements.len());
                     let mut rest = None;
 
@@ -1022,7 +1037,10 @@ impl Parser<'_, '_> {
                         Pattern::Array { fields, rest },
                     ))
                 }
-                ExprKind::Object(ObjectLiteral(properties)) => {
+                ExprKind::Object(ObjectLiteral {
+                    members: properties,
+                    parenthesized: _,
+                }) => {
                     let destructured_id = parser.local_count.inc();
                     let mut fields = Vec::with_capacity(properties.len());
                     let mut rest = None;

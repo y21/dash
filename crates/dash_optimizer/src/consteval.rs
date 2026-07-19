@@ -260,7 +260,11 @@ impl<'b, 'interner> ConstFunctionEvalCtx<'b, 'interner> {
     }
 
     fn visit_array_expression(&mut self, array_expr: &mut Expr) {
-        let ExprKind::Array(ArrayLiteral(array)) = &mut array_expr.kind else {
+        let ExprKind::Array(ArrayLiteral {
+            members: array,
+            parenthesized: _,
+        }) = &mut array_expr.kind
+        else {
             unreachable!()
         };
 
@@ -274,11 +278,15 @@ impl<'b, 'interner> ConstFunctionEvalCtx<'b, 'interner> {
     }
 
     fn visit_object_expression(&mut self, object_expr: &mut Expr) {
-        let ExprKind::Object(ObjectLiteral(object)) = &mut object_expr.kind else {
+        let ExprKind::Object(ObjectLiteral {
+            members,
+            parenthesized: _,
+        }) = &mut object_expr.kind
+        else {
             unreachable!()
         };
 
-        for (kind, expr) in object {
+        for (kind, expr) in members {
             if let ObjectMemberKind::Dynamic(expr) = kind {
                 self.visit(expr);
             }
@@ -517,7 +525,10 @@ fn stmt_has_side_effects(stmt: &Statement) -> bool {
 
 fn expr_has_side_effects(expr: &Expr) -> bool {
     match &expr.kind {
-        ExprKind::Array(ArrayLiteral(array)) => array.iter().any(|k| match k {
+        ExprKind::Array(ArrayLiteral {
+            members: array,
+            parenthesized: _,
+        }) => array.iter().any(|k| match k {
             ArrayMemberKind::Item(e) => expr_has_side_effects(e),
             ArrayMemberKind::Spread(e) => expr_has_side_effects(e),
             ArrayMemberKind::Empty => false,
@@ -537,7 +548,10 @@ fn expr_has_side_effects(expr: &Expr) -> bool {
         ExprKind::Literal(LiteralExpr::Number(..)) => false,
         ExprKind::Literal(LiteralExpr::Regex(..)) => false,
         ExprKind::Literal(LiteralExpr::String(..)) => false,
-        ExprKind::Object(ObjectLiteral(object)) => object.iter().any(|(kind, expr)| {
+        ExprKind::Object(ObjectLiteral {
+            members,
+            parenthesized: _,
+        }) => members.iter().any(|(kind, expr)| {
             if let ObjectMemberKind::Dynamic(dynamic) = kind
                 && expr_has_side_effects(dynamic)
             {

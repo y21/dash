@@ -1299,7 +1299,10 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                 }
                 _ => {
                     match &left.kind {
-                        ExprKind::Object(ObjectLiteral(object)) => {
+                        ExprKind::Object(ObjectLiteral {
+                            members: object,
+                            parenthesized: false,
+                        }) => {
                             let mut rest = None;
 
                             for (kind, expr) in object {
@@ -1357,14 +1360,14 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
 
                             ib.build_local_load(PossiblyExternalId::Local(object_local));
                         },
-                        ExprKind::Array(ArrayLiteral(array)) => {
+                        ExprKind::Array(ArrayLiteral{members,parenthesized:_}) => {
                             let array_local = ib.add_unnameable_local(sym::empty).map_err(|_| Error::LocalLimitExceeded(span))?;
                             ib.accept_expr(*right)?;
                             ib.build_local_store(AssignKind::Assignment, PossiblyExternalId::Local(array_local));
 
-                            ib.build_arraydestruct(array.len().try_into().map_err(|_| Error::LocalLimitExceeded(span))?);
+                            ib.build_arraydestruct(members.len().try_into().map_err(|_| Error::LocalLimitExceeded(span))?);
 
-                            for kind in array {
+                            for kind in members {
                                 match kind {
                                     ArrayMemberKind::Empty => ib.write_bool(false),
                                     ArrayMemberKind::Item(expr) => {
@@ -1719,13 +1722,20 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
         self.visit_function_expr_possibly_constructor(span, func, None)
     }
 
-    fn visit_array_literal(&mut self, _: Span, ArrayLiteral(exprs): ArrayLiteral) -> Result<(), Error> {
+    fn visit_array_literal(
+        &mut self,
+        _: Span,
+        ArrayLiteral {
+            members,
+            parenthesized: _,
+        }: ArrayLiteral,
+    ) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         let mut component_count = 0;
         let mut stack_values = 0;
-        let mut kinds = Vec::with_capacity(exprs.len());
-        let mut exprs = exprs.into_iter().peekable();
+        let mut kinds = Vec::with_capacity(members.len());
+        let mut exprs = members.into_iter().peekable();
 
         while let Some(kind) = exprs.next() {
             kinds.push(dash_middle::compiler::ArrayMemberKind::from(&kind) as u8);
@@ -1757,7 +1767,14 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
         Ok(())
     }
 
-    fn visit_object_literal(&mut self, span: Span, ObjectLiteral(exprs): ObjectLiteral) -> Result<(), Error> {
+    fn visit_object_literal(
+        &mut self,
+        span: Span,
+        ObjectLiteral {
+            members: exprs,
+            parenthesized: _,
+        }: ObjectLiteral,
+    ) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         let (members, member_stack_values) = compile_object_members(&mut ib, exprs.iter().cloned())?;

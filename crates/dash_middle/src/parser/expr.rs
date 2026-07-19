@@ -180,12 +180,12 @@ impl ExprKind {
         Self::Literal(LiteralExpr::String(s))
     }
 
-    pub fn array_literal(a: Vec<ArrayMemberKind>) -> Self {
-        Self::Array(ArrayLiteral(a))
+    pub fn array_literal(members: Vec<ArrayMemberKind>, parenthesized: bool) -> Self {
+        Self::Array(ArrayLiteral { members, parenthesized })
     }
 
-    pub fn object_literal(o: Vec<(ObjectMemberKind, Expr)>) -> Self {
-        Self::Object(ObjectLiteral(o))
+    pub fn object_literal(members: Vec<(ObjectMemberKind, Expr)>, parenthesized: bool) -> Self {
+        Self::Object(ObjectLiteral { members, parenthesized })
     }
 
     /// Creates an identifier literal expression
@@ -311,12 +311,15 @@ impl fmt::Display for ArrayMemberKind {
 
 /// An array literal expression (`[expr, expr]`)
 #[derive(Debug, Clone)]
-pub struct ArrayLiteral(pub Vec<ArrayMemberKind>);
+pub struct ArrayLiteral {
+    pub members: Vec<ArrayMemberKind>,
+    pub parenthesized: bool,
+}
 
 impl fmt::Display for ArrayLiteral {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "[")?;
-        fmt_list(f, &self.0, ",")?;
+        fmt_list(f, &self.members, ",")?;
         write!(f, "]")
     }
 }
@@ -352,13 +355,16 @@ impl fmt::Display for ObjectMemberKind {
 
 /// An object literal expression (`{ k: "v" }`)
 #[derive(Debug, Clone)]
-pub struct ObjectLiteral(pub Vec<(ObjectMemberKind, Expr)>);
+pub struct ObjectLiteral {
+    pub members: Vec<(ObjectMemberKind, Expr)>,
+    pub parenthesized: bool,
+}
 
 impl fmt::Display for ObjectLiteral {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{{")?;
 
-        for (i, (k, v)) in self.0.iter().enumerate() {
+        for (i, (k, v)) in self.members.iter().enumerate() {
             if i > 0 {
                 write!(f, ", ")?;
             }

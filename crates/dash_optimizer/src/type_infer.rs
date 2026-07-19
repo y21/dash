@@ -684,7 +684,13 @@ impl<'s> TypeInferCtx<'s> {
         None
     }
 
-    pub fn visit_array_expression(&mut self, ArrayLiteral(expr): &ArrayLiteral) -> Option<CompileValueType> {
+    pub fn visit_array_expression(
+        &mut self,
+        ArrayLiteral {
+            members: expr,
+            parenthesized: _,
+        }: &ArrayLiteral,
+    ) -> Option<CompileValueType> {
         for kind in expr {
             match kind {
                 ArrayMemberKind::Spread(expr) => {
@@ -699,8 +705,14 @@ impl<'s> TypeInferCtx<'s> {
         Some(CompileValueType::Array)
     }
 
-    pub fn visit_object_expression(&mut self, ObjectLiteral(expr): &ObjectLiteral) -> Option<CompileValueType> {
-        for (kind, expr) in expr {
+    pub fn visit_object_expression(
+        &mut self,
+        ObjectLiteral {
+            members,
+            parenthesized: _,
+        }: &ObjectLiteral,
+    ) -> Option<CompileValueType> {
+        for (kind, expr) in members {
             if let ObjectMemberKind::Dynamic(expr) = kind {
                 self.visit(expr);
             }
