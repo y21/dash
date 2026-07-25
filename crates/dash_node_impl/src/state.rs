@@ -26,6 +26,7 @@ pub struct State {
     pub timers_cache: OnceCell<Value>,
     pub buffer_cache: OnceCell<Value>,
     pub child_process_cache: OnceCell<Value>,
+    pub os_cache: OnceCell<Value>,
 }
 
 impl State {
@@ -48,6 +49,7 @@ impl State {
             timers_cache: OnceCell::new(),
             buffer_cache: OnceCell::new(),
             child_process_cache: OnceCell::new(),
+            os_cache: OnceCell::new(),
         }
     }
 }

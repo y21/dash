@@ -35,5 +35,6 @@ define_symbol_set!(#[derive(Trace)] NodeSymbols => [
     writeUInt32LE,
     setTimeout,
     promises,
-    child_process
+    child_process,
+    os
 ]);

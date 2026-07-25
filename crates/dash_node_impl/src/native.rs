@@ -54,7 +54,8 @@ pub fn load_native_module(sc: &mut LocalScope<'_>, arg: JsString) -> Result<Opti
         state.sym.util => (state_mut(sc).util_cache, crate::util::init_module),
         state.sym.timers => (state_mut(sc).timers_cache, init_timers_module),
         state.sym.buffer => (state_mut(sc).buffer_cache, crate::buffer::init_module),
-        state.sym.child_process => (state_mut(sc).child_process_cache, init_dummy_empty_module)
+        state.sym.child_process => (state_mut(sc).child_process_cache, init_dummy_empty_module),
+        state.sym.os => (state_mut(sc).os_cache, init_dummy_empty_module)
     }
 }
 
