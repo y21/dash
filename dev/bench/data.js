@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784983616338,
+  "lastUpdate": 1785007342041,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -12797,6 +12797,60 @@ window.BENCHMARK_DATA = {
             "name": "exec tinycolor2 parse hex+toFilter",
             "value": 23913556,
             "range": "± 508546",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "ddf4ce79642fcddf60fdd4d4ab344cd24293f15e",
+          "message": "compiler: delay member initializers until `super()` call for subclasses\n\nfixes #101",
+          "timestamp": "2026-07-25T21:15:59+02:00",
+          "tree_id": "de7925c154397e259eea0216a4274a723a910a3b",
+          "url": "https://github.com/y21/dash/commit/ddf4ce79642fcddf60fdd4d4ab344cd24293f15e"
+        },
+        "date": 1785007340690,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1295757,
+            "range": "± 16627",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 141987,
+            "range": "± 610",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 68808,
+            "range": "± 2082",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse+compile tinycolor2",
+            "value": 1712785,
+            "range": "± 8188",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "exec tinycolor2 parse hex+toFilter",
+            "value": 25654593,
+            "range": "± 275584",
             "unit": "ns/iter"
           }
         ]
