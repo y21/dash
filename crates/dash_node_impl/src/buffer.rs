@@ -121,8 +121,22 @@ struct BufferState {
 }
 
 #[derive(Debug, Trace)]
-struct Buffer {
+pub struct Buffer {
     inner: TypedArray,
+}
+
+impl Buffer {
+    pub fn from_storage(storage: Vec<Cell<u8>>, sc: &mut LocalScope<'_>) -> Self {
+        let BufferState { buffer_prototype } = State::from_vm(sc).store[BufferKey];
+        let arraybuffer = sc.register(ArrayBuffer::from_storage(sc, storage));
+        Self {
+            inner: TypedArray::with_obj(
+                arraybuffer,
+                TypedArrayKind::Uint8Array,
+                OrdObject::with_prototype(buffer_prototype),
+            ),
+        }
+    }
 }
 
 impl Object for Buffer {
@@ -141,8 +155,6 @@ impl Object for Buffer {
 }
 
 fn from(cx: CallContext) -> Result<Value, Value> {
-    let BufferState { buffer_prototype } = State::from_vm(cx.scope).store[BufferKey];
-
     let source = cx
         .args
         .first()
@@ -158,14 +170,7 @@ fn from(cx: CallContext) -> Result<Value, Value> {
         buf.push(Cell::new(item));
     }
 
-    let arraybuffer = cx.scope.register(ArrayBuffer::from_storage(cx.scope, buf));
-    let instn = Buffer {
-        inner: TypedArray::with_obj(
-            arraybuffer,
-            TypedArrayKind::Uint8Array,
-            OrdObject::with_prototype(buffer_prototype),
-        ),
-    };
+    let instn = Buffer::from_storage(buf, cx.scope);
 
     Ok(Value::object(cx.scope.register(instn)))
 }
@@ -190,15 +195,6 @@ fn alloc(cx: CallContext) -> Result<Value, Value> {
         vec![Cell::new(0); size]
     };
 
-    let BufferState { buffer_prototype, .. } = State::from_vm(cx.scope).store[BufferKey];
-    let arraybuffer = cx.scope.register(ArrayBuffer::from_storage(cx.scope, buf));
-    let instn = Buffer {
-        inner: TypedArray::with_obj(
-            arraybuffer,
-            TypedArrayKind::Uint8Array,
-            OrdObject::with_prototype(buffer_prototype),
-        ),
-    };
-
+    let instn = Buffer::from_storage(buf, cx.scope);
     Ok(Value::object(cx.scope.register(instn)))
 }

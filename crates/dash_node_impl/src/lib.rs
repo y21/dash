@@ -28,6 +28,7 @@ use symbols::NodeSymbols;
 
 mod assert;
 mod buffer;
+mod child_process;
 mod events;
 mod native;
 mod os;

@@ -38,5 +38,12 @@ define_symbol_set!(#[derive(Trace)] NodeSymbols => [
     child_process,
     os,
     isAbsolute,
-    tmpdir
+    tmpdir,
+    stdio,
+    output,
+    stdout,
+    stderr,
+    pid,
+    status,
+    spawnSync
 ]);
