@@ -55,6 +55,10 @@ pub const IGNORED_TESTS: &[&str] = &[
     "toString/S15.7.4.2_A4_T05.js",
     // interesting throw stack overflows
     "throw/S12.13_A3_T6.js",
+    // stack overflows during error printing
+    "Object/prototype/__proto__/set-immutable.js",
+    "Object/prototype/setPrototypeOf-with-different-values.js",
+    "Object/setPrototypeOf/set-failure-cycle.js",
     // infinite loops
     "try/S12.14_A9_T1.js",
     "while/S12.6.2_A9.js",

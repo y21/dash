@@ -8,6 +8,8 @@ use clap::ArgMatches;
 use dash_vm::Vm;
 use dash_vm::eval::EvalError;
 use dash_vm::params::VmParams;
+use dash_vm::value::Root;
+use dash_vm::value::ops::conversions::ValueConversion;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 
@@ -167,16 +169,12 @@ fn run_test(setup: &str, path: &OsStr, verbose: bool) -> RunResult {
                     if verbose {
                         let s = match &err {
                             EvalError::Middle(errs) => format!("{errs:?}"),
-                            EvalError::Exception(_ex) => {
-                                // let mut sc = LocalScope::new(&mut vm);
-                                // match ex.to_string(&mut sc) {
-                                //     Ok(s) => ToString::to_string(&s),
-                                //     Err(err) => format!("{err:?}"),
-                                // }
-
-                                // displaying certain JS error "structures" like above causes a weird stack overflow.
-                                // requires further investigation. for now just display some hardcoded string
-                                "<js error>".into()
+                            EvalError::Exception(ex) => {
+                                let mut scope = vm.scope();
+                                let ex = ex.root(&mut scope);
+                                ex.to_js_string(&mut scope)
+                                    .map(|s| s.res(&scope).to_owned())
+                                    .unwrap_or_else(|_| "<js error>".into())
                             }
                         };
                         println!("Error in {:?}: {s}", path.to_str());
