@@ -89,6 +89,8 @@ struct FunctionLocalState {
     ///
     /// Also tracks the span for error reporting, but is discarded past the compiler stage.
     references_arguments: Option<Span>,
+    /// If this is a subclass, then this vec contains the member initializers that need to be inserted after a `super()` call in the constructor.
+    member_initializers_for_super: Vec<ClassMember>,
 }
 
 macro_rules! exit_breakable {
@@ -124,6 +126,7 @@ impl FunctionLocalState {
             debug_symbols: DebugSymbols::default(),
             externals: IndexVec::new(),
             references_arguments: None,
+            member_initializers_for_super: Vec::new(),
         }
     }
 
@@ -205,6 +208,14 @@ pub struct FunctionCompiler<'interner> {
     #[allow(unused)]
     opt_level: OptLevel,
     source: Rc<str>,
+}
+
+struct ConstructorData {
+    /// Whether this function is a desugared class constructor and the class has an `extends` clause
+    has_extends_clause: bool,
+    /// If this function is a desugared class constructor,
+    /// then this contains all the instance members that need to be initialized.
+    initializers: Vec<ClassMember>,
 }
 
 impl<'interner> FunctionCompiler<'interner> {
@@ -365,6 +376,125 @@ impl<'interner> FunctionCompiler<'interner> {
 
     fn add_unnameable_local(&mut self, name: Symbol) -> Result<BackLocalId, LimitExceededError> {
         self.scopes.add_unnameable_local(self.current, name, None)
+    }
+
+    /// Shared logic between normal function expressions and class constructors
+    fn visit_function_expr_possibly_constructor(
+        &mut self,
+        span: Span,
+        FunctionDeclaration {
+            id,
+            name,
+            parameters: arguments,
+            mut statements,
+            ty,
+            ty_segment: _,
+        }: FunctionDeclaration,
+        constructor: Option<ConstructorData>,
+    ) -> Result<(), Error> {
+        let mut ib = InstructionBuilder::new(self);
+        ib.with_scope(id, |ib| {
+            ib.function_stack.push(FunctionLocalState::new(ty, id));
+
+            let mut rest_local = None;
+
+            for (param, default, _ty) in &arguments {
+                let id = match *param {
+                    Parameter::Identifier(binding) | Parameter::SpreadIdentifier(binding) => {
+                        ib.find_local_from_binding(binding)
+                    }
+                    Parameter::Pattern(id, _) | Parameter::SpreadPattern(id, _) => ib.decl_to_slot.slot_from_local(id),
+                };
+
+                if let Parameter::SpreadIdentifier(_) | Parameter::SpreadPattern(..) = param {
+                    rest_local = Some(id);
+                }
+
+                if let Some(default) = default {
+                    let mut sub_ib = InstructionBuilder::new(ib);
+                    // First, load parameter
+                    sub_ib.build_local_load(PossiblyExternalId::Local(id));
+                    // Jump to InitParamWithDefaultValue if param is undefined
+                    sub_ib.build_jmpundefinedp(Label::InitParamWithDefaultValue, true);
+                    // If it isn't undefined, it won't jump to InitParamWithDefaultValue, so we jump to the end
+                    sub_ib.build_jmp(Label::FinishParamDefaultValueInit, true);
+                    sub_ib.add_local_label(Label::InitParamWithDefaultValue);
+                    sub_ib.accept_expr(default.clone())?;
+                    sub_ib.build_local_store(AssignKind::Assignment, PossiblyExternalId::Local(id));
+
+                    sub_ib.add_local_label(Label::FinishParamDefaultValueInit);
+                }
+
+                if let Parameter::Pattern(_, pat) | Parameter::SpreadPattern(_, pat) = param {
+                    compile_destructuring_pattern(
+                        ib,
+                        Expr {
+                            span,
+                            kind: ExprKind::Compiled(compile_local_load(PossiblyExternalId::Local(id))),
+                        },
+                        pat,
+                        span,
+                    )?;
+                }
+            }
+
+            transformations::hoist_declarations(id, &mut ib.inner.scope_counter, &mut ib.inner.scopes, &mut statements);
+            transformations::ast_insert_implicit_return(&mut statements);
+
+            let has_extends_clause = constructor.as_ref().is_some_and(|ctor| ctor.has_extends_clause);
+            // Insert member initializers at the top of the constructor IFF this is not a subclass (i.e. no call to `super()`),
+            // or if it is a subclass, add it into the function's state so that it can be inserted after the `super()` call
+            if let Some(constructor) = constructor
+                && !constructor.initializers.is_empty()
+            {
+                if has_extends_clause {
+                    ib.current_function_mut().member_initializers_for_super = constructor.initializers;
+                } else {
+                    let (members, members_stack_values) = compile_class_members(ib, span, constructor.initializers)?;
+                    ib.build_this();
+                    ib.build_object_member_like_instruction(
+                        span,
+                        members,
+                        members_stack_values,
+                        Instruction::AssignProperties,
+                    )?;
+                }
+            }
+
+            let res = statements.into_iter().try_for_each(|stmt| ib.accept(stmt));
+
+            let mut cmp = ib.function_stack.pop().expect("Missing function state");
+            res?; // Cannot early return error in the loop as we need to pop the function state in any case
+            let locals = ib.scopes[id].expect_function().locals.len();
+
+            // Strip away some extra unnecessary excess capacity - we're not going to push any more elements into it.
+            cmp.externals.shrink_to_fit();
+            cmp.cp.shrink_to_fit();
+
+            let function = Function {
+                buffer: Buffer::new(cmp.buf.into()),
+                constants: cmp.cp,
+                locals,
+                name: name.map(|binding| binding.ident),
+                ty,
+                params: match arguments.last() {
+                    Some((Parameter::SpreadPattern(..) | Parameter::SpreadIdentifier(_), ..)) => {
+                        arguments.len() as u16 - 1
+                    }
+                    _ => arguments.len() as u16,
+                },
+                externals: cmp.externals,
+                rest_local,
+                debug_symbols: cmp.debug_symbols,
+                source: Rc::clone(&ib.source),
+                references_arguments: cmp.references_arguments.is_some(),
+                has_extends_clause,
+            };
+            ib.build_function_constant(function)
+                .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
+
+            Ok(())
+        })
     }
 }
 
@@ -1585,118 +1715,8 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
         Ok(())
     }
 
-    fn visit_function_expr(
-        &mut self,
-        span: Span,
-        FunctionDeclaration {
-            id,
-            name,
-            parameters: arguments,
-            mut statements,
-            ty,
-            ty_segment: _,
-            constructor_initializers,
-            has_extends_clause,
-        }: FunctionDeclaration,
-    ) -> Result<(), Error> {
-        let mut ib = InstructionBuilder::new(self);
-        ib.with_scope(id, |ib| {
-            ib.function_stack.push(FunctionLocalState::new(ty, id));
-
-            let mut rest_local = None;
-
-            for (param, default, _ty) in &arguments {
-                let id = match *param {
-                    Parameter::Identifier(binding) | Parameter::SpreadIdentifier(binding) => {
-                        ib.find_local_from_binding(binding)
-                    }
-                    Parameter::Pattern(id, _) | Parameter::SpreadPattern(id, _) => ib.decl_to_slot.slot_from_local(id),
-                };
-
-                if let Parameter::SpreadIdentifier(_) | Parameter::SpreadPattern(..) = param {
-                    rest_local = Some(id);
-                }
-
-                if let Some(default) = default {
-                    let mut sub_ib = InstructionBuilder::new(ib);
-                    // First, load parameter
-                    sub_ib.build_local_load(PossiblyExternalId::Local(id));
-                    // Jump to InitParamWithDefaultValue if param is undefined
-                    sub_ib.build_jmpundefinedp(Label::InitParamWithDefaultValue, true);
-                    // If it isn't undefined, it won't jump to InitParamWithDefaultValue, so we jump to the end
-                    sub_ib.build_jmp(Label::FinishParamDefaultValueInit, true);
-                    sub_ib.add_local_label(Label::InitParamWithDefaultValue);
-                    sub_ib.accept_expr(default.clone())?;
-                    sub_ib.build_local_store(AssignKind::Assignment, PossiblyExternalId::Local(id));
-
-                    sub_ib.add_local_label(Label::FinishParamDefaultValueInit);
-                }
-
-                if let Parameter::Pattern(_, pat) | Parameter::SpreadPattern(_, pat) = param {
-                    compile_destructuring_pattern(
-                        ib,
-                        Expr {
-                            span,
-                            kind: ExprKind::Compiled(compile_local_load(PossiblyExternalId::Local(id))),
-                        },
-                        pat,
-                        span,
-                    )?;
-                }
-            }
-
-            transformations::hoist_declarations(id, &mut ib.inner.scope_counter, &mut ib.inner.scopes, &mut statements);
-            transformations::ast_insert_implicit_return(&mut statements);
-
-            // Insert initializers
-            // FIXME: they need to be inserted after every super() call not at the start of the constructor.
-            if let Some(members) = constructor_initializers
-                && !members.is_empty()
-            {
-                let (members, members_stack_values) = compile_class_members(ib, span, members)?;
-                ib.build_this();
-                ib.build_object_member_like_instruction(
-                    span,
-                    members,
-                    members_stack_values,
-                    Instruction::AssignProperties,
-                )?;
-            }
-
-            let res = statements.into_iter().try_for_each(|stmt| ib.accept(stmt));
-
-            let mut cmp = ib.function_stack.pop().expect("Missing function state");
-            res?; // Cannot early return error in the loop as we need to pop the function state in any case
-            let locals = ib.scopes[id].expect_function().locals.len();
-
-            // Strip away some extra unnecessary excess capacity - we're not going to push any more elements into it.
-            cmp.externals.shrink_to_fit();
-            cmp.cp.shrink_to_fit();
-
-            let function = Function {
-                buffer: Buffer::new(cmp.buf.into()),
-                constants: cmp.cp,
-                locals,
-                name: name.map(|binding| binding.ident),
-                ty,
-                params: match arguments.last() {
-                    Some((Parameter::SpreadPattern(..) | Parameter::SpreadIdentifier(_), ..)) => {
-                        arguments.len() as u16 - 1
-                    }
-                    _ => arguments.len() as u16,
-                },
-                externals: cmp.externals,
-                rest_local,
-                debug_symbols: cmp.debug_symbols,
-                source: Rc::clone(&ib.source),
-                references_arguments: cmp.references_arguments.is_some(),
-                has_extends_clause,
-            };
-            ib.build_function_constant(function)
-                .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
-
-            Ok(())
-        })
+    fn visit_function_expr(&mut self, span: Span, func: FunctionDeclaration) -> Result<(), Error> {
+        self.visit_function_expr_possibly_constructor(span, func, None)
     }
 
     fn visit_array_literal(&mut self, _: Span, ArrayLiteral(exprs): ArrayLiteral) -> Result<(), Error> {
@@ -2201,21 +2221,19 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
             statements,
             ty: FunctionKind::Function(Asyncness::No),
             ty_segment: None,
-            constructor_initializers: Some(fields.clone().filter(|member| !member.static_).cloned().collect()),
-            has_extends_clause: class.extends.is_some(),
         };
 
-        ib.visit_expression_statement(Expr {
-            span: Span::COMPILER_GENERATED,
-            kind: ExprKind::Assignment(AssignmentExpr::new_local_place(
-                binding_id,
-                Expr {
-                    span,
-                    kind: ExprKind::Function(desugared_class),
-                },
-                TokenType::Assignment,
-            )),
-        })?;
+        ib.visit_function_expr_possibly_constructor(
+            span,
+            desugared_class,
+            Some(ConstructorData {
+                has_extends_clause: class.extends.is_some(),
+                initializers: fields.clone().filter(|member| !member.static_).cloned().collect(),
+            }),
+        )?;
+        ib.build_local_store(AssignKind::Assignment, PossiblyExternalId::Local(binding_id));
+        ib.build_pop();
+
         let load_class_binding = Expr {
             span: Span::COMPILER_GENERATED,
             kind: ExprKind::Compiled(compile_local_load(PossiblyExternalId::Local(binding_id))),

@@ -1,4 +1,5 @@
 use dash_middle::compiler::FunctionCallKind;
+use dash_middle::compiler::instruction::Instruction;
 use dash_middle::interner::sym;
 use dash_middle::parser::error::Error;
 use dash_middle::parser::expr::{CallArgumentKind, ExprKind, FunctionCall, LiteralExpr, PropertyAccessExpr};
@@ -6,6 +7,7 @@ use dash_middle::sourcemap::Span;
 use dash_middle::visitor::Visitor;
 
 use crate::builder::InstructionBuilder;
+use crate::compile_class_members;
 
 impl InstructionBuilder<'_, '_> {
     fn lower_super_call(&mut self, span: Span, fc: FunctionCall) -> Result<Result<(), FunctionCall>, Error> {
@@ -14,6 +16,13 @@ impl InstructionBuilder<'_, '_> {
             self.lower_function_call_common(span, fc.target.span, false, FunctionCallKind::Super, fc.arguments)?;
 
             self.build_bind_this();
+
+            let initializers = self.current_function().member_initializers_for_super.clone();
+            if !initializers.is_empty() {
+                let (members, stack_count) = compile_class_members(self, span, initializers)?;
+                self.build_this();
+                self.build_object_member_like_instruction(span, members, stack_count, Instruction::AssignProperties)?;
+            }
 
             // Leave the instance on the stack as required by expressions
             // FIXME: not even necessary, `super()` can't be used as an expression

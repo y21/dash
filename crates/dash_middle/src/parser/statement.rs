@@ -478,11 +478,6 @@ pub struct FunctionDeclaration {
     /// The type of function
     pub ty: FunctionKind,
     pub ty_segment: Option<TypeSegment>,
-    /// If this function is a desugared class constructor,
-    /// then this contains all the instance members that need to be initialized.
-    pub constructor_initializers: Option<Vec<ClassMember>>,
-    /// Whether this function is a desugared class constructor and the class has an `extends` clause
-    pub has_extends_clause: bool,
 }
 
 impl fmt::Display for FunctionDeclaration {

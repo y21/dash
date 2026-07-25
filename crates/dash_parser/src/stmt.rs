@@ -180,8 +180,6 @@ impl Parser<'_, '_> {
                         false => FunctionKind::Function(asyncness),
                     },
                     ty_segment: ty_seg,
-                    constructor_initializers: None,
-                    has_extends_clause: false,
                 };
 
                 members.push(ClassMember {

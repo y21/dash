@@ -677,8 +677,6 @@ impl Parser<'_, '_> {
                                             statements: body.0,
                                             ty: FunctionKind::Function(Asyncness::No),
                                             ty_segment: None,
-                                            constructor_initializers: None,
-                                            has_extends_clause: false,
                                         }),
                                     },
                                 ));
@@ -738,8 +736,6 @@ impl Parser<'_, '_> {
                                 statements: stmts,
                                 ty: FunctionKind::Function(Asyncness::No),
                                 ty_segment: None,
-                                constructor_initializers: None,
-                                has_extends_clause: false,
                             };
                             items.push((
                                 key,
@@ -849,8 +845,6 @@ impl Parser<'_, '_> {
                             // as if they're simply async functions
                             ty: FunctionKind::Function(Asyncness::Yes),
                             ty_segment: None,
-                            constructor_initializers: None,
-                            has_extends_clause: false,
                         }),
                     }
                 } else {
@@ -959,8 +953,6 @@ impl Parser<'_, '_> {
                 statements,
                 ty,
                 ty_segment: ty_seg,
-                constructor_initializers: None,
-                has_extends_clause: false,
             },
             self.previous()?.span,
         ))
@@ -1135,8 +1127,6 @@ impl Parser<'_, '_> {
                 statements: vec![body],
                 ty: FunctionKind::Arrow,
                 ty_segment: None,
-                constructor_initializers: None,
-                has_extends_clause: false,
             }),
         })
     }
