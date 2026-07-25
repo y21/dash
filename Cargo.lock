@@ -145,9 +145,9 @@ dependencies = [
 
 [[package]]
 name = "bumpalo"
-version = "3.17.0"
+version = "3.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1628fb46dfa0b37568d12e5edd512553eccf6a22a78e8bde00bb4aed84d5bdbf"
+checksum = "72f5acc6cb2ba439de613abc23857ec3d78374d8ed5ac84e9d11336e87da8649"
 
 [[package]]
 name = "bytes"
@@ -2323,11 +2323,14 @@ name = "testrunner"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bumpalo",
  "clap",
  "dash_optimizer",
  "dash_vm",
  "once_cell",
+ "owo-colors",
  "rayon",
+ "rustc-hash",
  "serde",
  "serde_yaml",
 ]

@@ -1,9 +1,10 @@
 use std::collections::HashMap;
-use std::ffi::{OsStr, OsString};
 use std::panic;
 use std::sync::atomic::AtomicU32;
-use std::sync::{Mutex, atomic};
+use std::sync::{Mutex, MutexGuard, atomic};
 
+use anyhow::Context;
+use bumpalo::Bump;
 use clap::ArgMatches;
 use dash_vm::Vm;
 use dash_vm::eval::EvalError;
@@ -11,27 +12,65 @@ use dash_vm::params::VmParams;
 use dash_vm::value::Root;
 use dash_vm::value::ops::conversions::ValueConversion;
 use once_cell::sync::Lazy;
+use owo_colors::{Style, Styled};
 use serde::Deserialize;
 
+use crate::cmd::differ::{diff_results_to_previous, strip_test262_prefix};
+use crate::cmd::results::ResultsMap;
 use crate::util;
 
 pub fn run(matches: &ArgMatches) -> anyhow::Result<()> {
+    let bump = Bump::new();
+
     let path = matches.get_one::<String>("path");
     let path = path.map_or("../test262/test", |v| &**v);
     let verbose = *matches.get_one::<bool>("verbose").unwrap();
     let single_threaded = *matches.get_one::<bool>("disable-threads").unwrap();
     let files = if path.ends_with(".js") {
-        vec![OsString::from(path)]
+        vec![path.to_string()]
     } else {
-        util::get_all_files(OsStr::new(path))?
+        util::get_all_files(&bump, path)?
     };
 
-    run_inner(files, verbose, single_threaded)?;
+    run_inner(&bump, files, verbose, single_threaded)?;
 
     Ok(())
 }
 
-fn run_inner(files: Vec<OsString>, verbose: bool, single_threaded: bool) -> anyhow::Result<()> {
+#[derive(Debug)]
+pub struct Results {
+    passes: AtomicU32,
+    fails: AtomicU32,
+    panics: AtomicU32,
+    results: Mutex<ResultsMap>,
+}
+
+impl Results {
+    pub fn new() -> Self {
+        Self {
+            passes: AtomicU32::new(0),
+            fails: AtomicU32::new(0),
+            panics: AtomicU32::new(0),
+            results: Mutex::new(ResultsMap::new(ResultsMap::DEFAULT_CAPACITY)),
+        }
+    }
+
+    pub fn register(&self, path: &str, result: RunResult) {
+        match result {
+            RunResult::Pass => self.passes.fetch_add(1, atomic::Ordering::Relaxed),
+            RunResult::Fail => self.fails.fetch_add(1, atomic::Ordering::Relaxed),
+            RunResult::Panic => self.panics.fetch_add(1, atomic::Ordering::Relaxed),
+        };
+
+        self.results.lock().unwrap().insert(path.to_string(), result);
+    }
+
+    pub fn results_map(&self) -> MutexGuard<'_, ResultsMap> {
+        self.results.lock().unwrap()
+    }
+}
+
+fn run_inner(bump: &Bump, files: Vec<String>, verbose: bool, single_threaded: bool) -> anyhow::Result<()> {
     let setup: String = {
         let sta = std::fs::read_to_string("../test262/harness/sta.js")?;
         let assert = std::fs::read_to_string("../test262/harness/assert.js")?;
@@ -40,26 +79,13 @@ fn run_inner(files: Vec<OsString>, verbose: bool, single_threaded: bool) -> anyh
         code
     };
 
-    #[derive(Default)]
-    struct Counter {
-        passes: AtomicU32,
-        fails: AtomicU32,
-        panics: AtomicU32,
-    }
-
-    let counter = Counter::default();
+    let results = Results::new();
     let file_count = files.len();
 
-    let run_file = |file: &OsString| {
+    let run_file = |file: &str| {
         let result = run_test(&setup, file, verbose);
 
-        let counter = match result {
-            RunResult::Pass => &counter.passes,
-            RunResult::Fail => &counter.fails,
-            RunResult::Panic => &counter.panics,
-        };
-
-        counter.fetch_add(1, atomic::Ordering::Relaxed);
+        results.register(strip_test262_prefix(file).unwrap_or(file), result);
     };
 
     if single_threaded {
@@ -77,23 +103,52 @@ fn run_inner(files: Vec<OsString>, verbose: bool, single_threaded: bool) -> anyh
         });
     }
 
-    let passes = counter.passes.load(atomic::Ordering::Relaxed);
-    let fails = counter.fails.load(atomic::Ordering::Relaxed);
-    let panics = counter.panics.load(atomic::Ordering::Relaxed);
+    let passes = results.passes.load(atomic::Ordering::Relaxed);
+    let fails = results.fails.load(atomic::Ordering::Relaxed);
+    let panics = results.panics.load(atomic::Ordering::Relaxed);
     let rate = ((passes as f32) / (file_count as f32)) * 100.0;
     println!("== Result ===");
     println!("Passes: {passes} ({rate:.2}%)",);
     println!("Fails: {fails}");
     println!("Panics: {panics}");
 
+    diff_results_to_previous(bump, &results).context("diffing results to previous")?;
     Ok(())
 }
 
-#[derive(Debug)]
-enum RunResult {
-    Pass,
-    Fail,
-    Panic,
+macro_rules! define_run_result_enum {
+    (
+        $($variant:ident = $value:expr),*
+    ) => {
+        #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+        pub enum RunResult {
+            $($variant = $value),*
+        }
+
+        impl RunResult {
+            pub fn from_u8(value: u8) -> Option<Self> {
+                match value {
+                    $($value => Some(RunResult::$variant),)*
+                    _ => None,
+                }
+            }
+        }
+    };
+}
+define_run_result_enum! {
+    Pass = 0,
+    Fail = 1,
+    Panic = 2
+}
+
+impl RunResult {
+    pub fn styled(self) -> Styled<&'static str> {
+        match self {
+            RunResult::Pass => Style::new().green().style("OK"),
+            RunResult::Fail => Style::new().red().style("FAIL"),
+            RunResult::Panic => Style::new().red().bright_yellow().style("PANIC"),
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -136,7 +191,7 @@ fn get_harness_code(path: &str) -> String {
     code.clone()
 }
 
-fn run_test(setup: &str, path: &OsStr, verbose: bool) -> RunResult {
+fn run_test(setup: &str, path: &str, verbose: bool) -> RunResult {
     let mut negative = None;
     let contents = std::fs::read_to_string(path).unwrap();
     let mut prelude = String::from(setup);
@@ -177,7 +232,7 @@ fn run_test(setup: &str, path: &OsStr, verbose: bool) -> RunResult {
                                     .unwrap_or_else(|_| "<js error>".into())
                             }
                         };
-                        println!("Error in {:?}: {s}", path.to_str());
+                        println!("Error in {:?}: {s}", path);
                     }
                 }
 
@@ -189,7 +244,7 @@ fn run_test(setup: &str, path: &OsStr, verbose: bool) -> RunResult {
     match maybe_pass {
         Ok(res) => res,
         Err(_) => {
-            println!("Panic in {}", path.to_str().unwrap());
+            println!("Panic in {}", path);
             RunResult::Panic
         }
     }

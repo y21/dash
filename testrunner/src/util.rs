@@ -1,6 +1,7 @@
-use std::ffi::{OsStr, OsString};
 use std::fs::DirEntry;
 use std::io;
+
+use bumpalo::Bump;
 
 // This is a list of tests that cannot be run currently, because they abort the process or run into an infinite loop
 pub const IGNORED_TESTS: &[&str] = &[
@@ -84,7 +85,7 @@ pub const IGNORED_TESTS: &[&str] = &[
 ];
 
 /// Returns a vector of path strings
-pub fn get_all_files(dir: &OsStr) -> io::Result<Vec<OsString>> {
+pub fn get_all_files(bump: &Bump, dir: &str) -> io::Result<Vec<String>> {
     let mut ve = Vec::new();
 
     let read_dir = std::fs::read_dir(dir)?;
@@ -92,13 +93,9 @@ pub fn get_all_files(dir: &OsStr) -> io::Result<Vec<OsString>> {
     for entry in read_dir {
         let entry: DirEntry = entry?;
 
-        let path = OsString::from(format!(
-            "{}/{}",
-            dir.to_str().unwrap(),
-            entry.file_name().as_os_str().to_str().unwrap()
-        ));
+        let path = format!("{}/{}", dir, entry.file_name().to_str().unwrap());
 
-        if IGNORED_TESTS.iter().any(|t| path.to_str().unwrap().ends_with(t)) {
+        if IGNORED_TESTS.iter().any(|t| path.ends_with(t)) {
             continue;
         }
 
@@ -106,7 +103,7 @@ pub fn get_all_files(dir: &OsStr) -> io::Result<Vec<OsString>> {
         if ty.is_file() {
             ve.push(path);
         } else if ty.is_dir() {
-            let files = get_all_files(&path)?;
+            let files = get_all_files(bump, &path)?;
             ve.extend(files);
         }
     }
