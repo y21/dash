@@ -6,6 +6,7 @@ use std::rc::Rc;
 
 use anyhow::{Context, anyhow};
 use dash_log::debug;
+use dash_middle::interner::sym;
 use dash_middle::parser::error::IntoFormattableErrors;
 use dash_optimizer::OptLevel;
 use dash_proc_macro::Trace;
@@ -17,6 +18,7 @@ use dash_vm::gc::ObjectId;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::array::Array;
 use dash_vm::value::function::args::CallArgs;
+use dash_vm::value::function::native::register_native_fn;
 use dash_vm::value::object::{Object, OrdObject, PropertyValue, This};
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::{Root, Unpack, Unrooted, Value, ValueKind};
@@ -37,6 +39,7 @@ mod path;
 mod state;
 mod stream;
 mod symbols;
+mod time_ext;
 mod util;
 mod zlib;
 
@@ -101,6 +104,8 @@ async fn run_inner_fallible<'a>(
                 process: process_sym,
                 Buffer: buffer_sym,
                 setTimeout: set_timeout_sym,
+                time: time_sym,
+                timeEnd: time_end_sym,
                 ..
             },
         ..
@@ -140,6 +145,27 @@ async fn run_inner_fallible<'a>(
             .set_property(
                 set_timeout_sym.to_key(scope),
                 PropertyValue::static_default(set_timeout),
+                scope,
+            )
+            .unwrap();
+
+        let console = global
+            .get_property(sym::console.to_key(scope), scope)
+            .unwrap()
+            .root(scope);
+        console
+            .set_property(
+                time_sym.to_key(scope),
+                PropertyValue::static_default(register_native_fn(scope, time_sym, time_ext::console_time).into()),
+                scope,
+            )
+            .unwrap();
+        console
+            .set_property(
+                time_end_sym.to_key(scope),
+                PropertyValue::static_default(
+                    register_native_fn(scope, time_end_sym, time_ext::console_time_end).into(),
+                ),
                 scope,
             )
             .unwrap();

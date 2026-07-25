@@ -9,13 +9,15 @@ use dash_vm::value::object::{Object, OrdObject, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::typedarray::TypedArray;
-use dash_vm::value::{Value, ValueContext};
+use dash_vm::value::{ExceptionContext, Value, ValueContext};
 
 pub fn init_module(sc: &mut LocalScope) -> Result<Value, Value> {
     let read_file_sync_sym = sc.intern("readFileSync");
     let write_file_sync_sym = sc.intern("writeFileSync");
+    let unlink_sym = sc.intern("unlinkSync");
     let read_file_sync_value = register_native_fn(sc, read_file_sync_sym, read_file_sync);
     let write_file_sync_value = register_native_fn(sc, write_file_sync_sym, write_file_sync);
+    let unlink_value = register_native_fn(sc, unlink_sym, unlink);
 
     let module = OrdObject::new(sc);
     module.set_property(
@@ -26,6 +28,11 @@ pub fn init_module(sc: &mut LocalScope) -> Result<Value, Value> {
     module.set_property(
         write_file_sync_sym.to_key(sc),
         PropertyValue::static_default(Value::object(write_file_sync_value)),
+        sc,
+    )?;
+    module.set_property(
+        unlink_sym.to_key(sc),
+        PropertyValue::static_default(Value::object(unlink_value)),
         sc,
     )?;
 
@@ -82,6 +89,24 @@ fn write_file_sync(cx: CallContext) -> Result<Value, Value> {
                 let err = Error::new(cx.scope, err.to_string());
                 Err(Value::object(cx.scope.register(err)))
             }
+        }
+    }
+}
+
+fn unlink(cx: CallContext) -> Result<Value, Value> {
+    let path = cx
+        .args
+        .first()
+        .or_type_err(cx.scope, "Missing path to unlink")?
+        .to_js_string(cx.scope)?
+        .res(cx.scope)
+        .to_owned();
+
+    match std::fs::remove_file(path) {
+        Ok(()) => Ok(Value::undefined()),
+        Err(err) => {
+            let err = Error::new(cx.scope, err.to_string());
+            Err(Value::object(cx.scope.register(err)))
         }
     }
 }

@@ -238,5 +238,6 @@ unsafe_empty_trace!(
     String,
     &str,
     (),
-    TypeId
+    TypeId,
+    std::time::Instant
 );

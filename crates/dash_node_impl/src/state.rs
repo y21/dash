@@ -1,15 +1,19 @@
 use std::cell::OnceCell;
+use std::time::Instant;
 
+use dash_middle::interner::Symbol;
 use dash_proc_macro::Trace;
 use dash_rt::typemap::Key;
 use dash_vm::Vm;
 use dash_vm::value::Value;
+use rustc_hash::FxHashMap;
 
 use crate::symbols::NodeSymbols;
 
 #[derive(Trace)]
 pub struct State {
     pub sym: NodeSymbols,
+    pub timer_map: FxHashMap<Symbol, Instant>,
     pub assert_cache: OnceCell<Value>,
     pub fs_cache: OnceCell<Value>,
     pub fetch_cache: OnceCell<Value>,
@@ -50,6 +54,7 @@ impl State {
             buffer_cache: OnceCell::new(),
             child_process_cache: OnceCell::new(),
             os_cache: OnceCell::new(),
+            timer_map: FxHashMap::default(),
         }
     }
 }

@@ -45,5 +45,7 @@ define_symbol_set!(#[derive(Trace)] NodeSymbols => [
     stderr,
     pid,
     status,
-    spawnSync
+    spawnSync,
+    time,
+    timeEnd
 ]);
