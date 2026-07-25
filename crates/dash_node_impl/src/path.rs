@@ -10,13 +10,19 @@ use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::{ExceptionContext, Unpack, Value, ValueKind};
 
 use crate::state::state_mut;
+use crate::symbols::NodeSymbols;
 
 pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     let exports = OrdObject::new(sc);
-    let parse_sym = state_mut(sc).sym.parse;
+    let NodeSymbols {
+        parse: parse_sym,
+        isAbsolute: is_absolute_sym,
+        ..
+    } = state_mut(sc).sym;
     let parse_path = register_native_fn(sc, parse_sym, parse_path);
     let join_path = register_native_fn(sc, sym::join, join_path);
     let resolve_path = register_native_fn(sc, sym::resolve, resolve_path);
+    let is_absolute_path = register_native_fn(sc, is_absolute_sym, is_absolute_path);
     exports.set_property(
         parse_sym.to_key(sc),
         PropertyValue::static_default(parse_path.into()),
@@ -30,6 +36,11 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     exports.set_property(
         sym::resolve.to_key(sc),
         PropertyValue::static_default(resolve_path.into()),
+        sc,
+    )?;
+    exports.set_property(
+        is_absolute_sym.to_key(sc),
+        PropertyValue::static_default(is_absolute_path.into()),
         sc,
     )?;
 
@@ -106,4 +117,14 @@ fn resolve_path(cx: CallContext) -> Result<Value, Value> {
         )),
         Err(err) => throw!(cx.scope, Error, "failed to canonicalize path: {}", err),
     }
+}
+
+fn is_absolute_path(cx: CallContext) -> Result<Value, Value> {
+    let path = cx
+        .args
+        .first()
+        .or_type_err(cx.scope, "Missing path to path.isAbsolute")?;
+    let path = path.to_js_string(cx.scope)?;
+    let path = Path::new(path.res(cx.scope));
+    Ok(Value::boolean(path.is_absolute()))
 }

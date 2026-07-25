@@ -36,5 +36,6 @@ define_symbol_set!(#[derive(Trace)] NodeSymbols => [
     setTimeout,
     promises,
     child_process,
-    os
+    os,
+    isAbsolute
 ]);
