@@ -518,6 +518,16 @@ simple_test!(
     assert(new (class { constructor() { return [42] } })()[0] == 42);
     let v = class V {};
     assert(v === V);
+
+    // Issue #101: evaluate subclass member initializers after super() call
+    class C9 {}
+    class C10 extends C9 {
+        v = 1;
+        constructor() {
+            super();
+        }
+    }
+    assert((new C10()).v === 1);
     "#,
     Value::undefined()
 );
