@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use dash_middle::parser::error::IntoFormattableErrors;
 
 use crate::eval::EvalError;
@@ -30,13 +32,24 @@ pub fn eval(cx: CallContext) -> Result<Value, Value> {
     }
 }
 
-pub fn log(cx: CallContext) -> Result<Value, Value> {
+fn log_into<W: Write>(cx: CallContext, get_writer: impl Fn() -> W) -> Result<(), Value> {
     for arg in cx.args {
         let tstr = arg.to_js_string(cx.scope)?;
-        println!("{} ", tstr.res(cx.scope));
+        let mut writer = get_writer();
+        let args = format_args!("{} ", tstr.res(cx.scope));
+        writer.write_fmt(args).unwrap();
+        writer.write_all(b"\n").unwrap();
     }
 
-    Ok(Value::undefined())
+    Ok(())
+}
+
+pub fn log_stdout(cx: CallContext) -> Result<Value, Value> {
+    log_into(cx, || std::io::stdout()).map(|_| Value::undefined())
+}
+
+pub fn log_stderr(cx: CallContext) -> Result<Value, Value> {
+    log_into(cx, || std::io::stderr()).map(|_| Value::undefined())
 }
 
 pub fn is_finite(cx: CallContext) -> Result<Value, Value> {

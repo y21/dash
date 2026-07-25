@@ -102,6 +102,7 @@ pub mod sym {
                 sqrt,
                 atan,
                 log,
+                error,
                 floor,
                 cosh,
                 acos,

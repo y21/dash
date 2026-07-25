@@ -288,6 +288,7 @@ impl Vm {
             object_ctor,
             [
                 (sym::log, scope.statics.console_log),
+                (sym::error, scope.statics.console_error),
             ],
             [],
             [],

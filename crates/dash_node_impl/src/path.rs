@@ -17,12 +17,17 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     let NodeSymbols {
         parse: parse_sym,
         isAbsolute: is_absolute_sym,
+        dirname: dirname_sym,
+        basename: basename_sym,
         ..
     } = state_mut(sc).sym;
     let parse_path = register_native_fn(sc, parse_sym, parse_path);
     let join_path = register_native_fn(sc, sym::join, join_path);
     let resolve_path = register_native_fn(sc, sym::resolve, resolve_path);
     let is_absolute_path = register_native_fn(sc, is_absolute_sym, is_absolute_path);
+    let dirname = register_native_fn(sc, dirname_sym, dirname);
+    let basename = register_native_fn(sc, basename_sym, basename);
+
     exports.set_property(
         parse_sym.to_key(sc),
         PropertyValue::static_default(parse_path.into()),
@@ -41,6 +46,16 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     exports.set_property(
         is_absolute_sym.to_key(sc),
         PropertyValue::static_default(is_absolute_path.into()),
+        sc,
+    )?;
+    exports.set_property(
+        dirname_sym.to_key(sc),
+        PropertyValue::static_default(dirname.into()),
+        sc,
+    )?;
+    exports.set_property(
+        basename_sym.to_key(sc),
+        PropertyValue::static_default(basename.into()),
         sc,
     )?;
 
@@ -127,8 +142,53 @@ fn is_absolute_path(cx: CallContext) -> Result<Value, Value> {
     let path = cx
         .args
         .first()
-        .or_type_err(cx.scope, "Missing path to path.isAbsolute")?;
-    let path = path.to_js_string(cx.scope)?;
+        .or_type_err(cx.scope, "Missing path to path.isAbsolute")?
+        .to_js_string(cx.scope)?;
     let path = Path::new(path.res(cx.scope));
     Ok(Value::boolean(path.is_absolute()))
+}
+
+fn dirname(cx: CallContext) -> Result<Value, Value> {
+    let path = cx
+        .args
+        .first()
+        .or_type_err(cx.scope, "Missing path to path.dirname")?
+        .to_js_string(cx.scope)?;
+    let path = Path::new(path.res(cx.scope));
+    let dir = match path.parent() {
+        Some(parent) => match parent.to_str() {
+            Some(s) => s.to_owned(),
+            None => throw!(cx.scope, Error, "invalid utf-8 in path"),
+        },
+        None => "/".to_owned(),
+    };
+    Ok(Value::string(cx.scope.intern(dir).into()))
+}
+
+fn basename(cx: CallContext) -> Result<Value, Value> {
+    let path = cx
+        .args
+        .first()
+        .or_type_err(cx.scope, "Missing path to path.basename")?
+        .to_js_string(cx.scope)?;
+
+    let suffix = cx.args.get(1);
+
+    let path = Path::new(path.res(cx.scope));
+    let base = match path.file_name() {
+        Some(name) => match name.to_str() {
+            Some(s) => s.to_owned(),
+            None => throw!(cx.scope, Error, "invalid utf-8 in path"),
+        },
+        None => throw!(cx.scope, Error, "path has no basename"),
+    };
+
+    let base = if let Some(suffix) = suffix {
+        let suffix = suffix.to_js_string(cx.scope)?.res(cx.scope);
+        base.strip_suffix(suffix).unwrap_or(&base)
+    } else {
+        &base
+    };
+
+    Ok(Value::string(cx.scope.intern(base).into()))
 }

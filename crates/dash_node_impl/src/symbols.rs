@@ -39,6 +39,8 @@ define_symbol_set!(#[derive(Trace)] NodeSymbols => [
     os,
     isAbsolute,
     tmpdir,
+    dirname,
+    basename,
     stdio,
     output,
     stdout,
