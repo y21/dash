@@ -4,7 +4,7 @@ use dash_middle::interner::sym;
 use dash_vm::localscope::LocalScope;
 use dash_vm::throw;
 use dash_vm::value::function::native::{CallContext, register_native_fn};
-use dash_vm::value::object::{OrdObject, Object, PropertyValue};
+use dash_vm::value::object::{Object, OrdObject, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::{ExceptionContext, Unpack, Value, ValueKind};
@@ -16,6 +16,7 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     let parse_sym = state_mut(sc).sym.parse;
     let parse_path = register_native_fn(sc, parse_sym, parse_path);
     let join_path = register_native_fn(sc, sym::join, join_path);
+    let resolve_path = register_native_fn(sc, sym::resolve, resolve_path);
     exports.set_property(
         parse_sym.to_key(sc),
         PropertyValue::static_default(parse_path.into()),
@@ -24,6 +25,11 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     exports.set_property(
         sym::join.to_key(sc),
         PropertyValue::static_default(join_path.into()),
+        sc,
+    )?;
+    exports.set_property(
+        sym::resolve.to_key(sc),
+        PropertyValue::static_default(resolve_path.into()),
         sc,
     )?;
 
@@ -80,4 +86,24 @@ fn join_path(cx: CallContext) -> Result<Value, Value> {
     Ok(Value::string(
         cx.scope.intern(path.display().to_string().as_str()).into(),
     ))
+}
+
+fn resolve_path(cx: CallContext) -> Result<Value, Value> {
+    let mut path = PathBuf::new();
+
+    for arg in cx.args.iter().rev() {
+        let value = arg.to_js_string(cx.scope)?.res(cx.scope);
+        if path.is_empty() {
+            path = Path::new(value).to_path_buf();
+        } else {
+            path = Path::new(value).join(path);
+        }
+    }
+
+    match path.canonicalize() {
+        Ok(path) => Ok(Value::string(
+            cx.scope.intern(path.display().to_string().as_str()).into(),
+        )),
+        Err(err) => throw!(cx.scope, Error, "failed to canonicalize path: {}", err),
+    }
 }
