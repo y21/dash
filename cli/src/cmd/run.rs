@@ -24,7 +24,17 @@ pub fn run(args: &ArgMatches) -> anyhow::Result<()> {
     if nodejs {
         #[cfg(feature = "nodejs")]
         {
-            dash_node_impl::run_with_nodejs_mnemnoics(path, opt, initial_gc_threshold)?;
+            let script_args = args
+                .get_many::<String>("script_args")
+                .unwrap_or_default()
+                .map(String::as_str);
+
+            dash_node_impl::run_with_nodejs_mnemnoics(dash_node_impl::NodeRunArgs {
+                path,
+                opt,
+                initial_gc_threshold,
+                script_args,
+            })?;
         }
         #[cfg(not(feature = "nodejs"))]
         {

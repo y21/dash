@@ -41,7 +41,8 @@ fn main() -> anyhow::Result<()> {
                 .arg(Arg::new("quiet").short('q').long("quiet").action(ArgAction::SetTrue))
                 .arg(opt_level.clone())
                 .arg(nodejs)
-                .arg(initial_gc_threshold.clone()),
+                .arg(initial_gc_threshold.clone())
+                .arg(Arg::new("script_args").trailing_var_arg(true).num_args(..)),
         )
         .subcommand(Command::new("repl").override_help("Enter a JavaScript REPL"))
         .subcommand(

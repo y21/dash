@@ -38,11 +38,18 @@ mod symbols;
 mod util;
 mod zlib;
 
-pub fn run_with_nodejs_mnemnoics(path: &str, opt: OptLevel, initial_gc_threshold: Option<usize>) -> anyhow::Result<()> {
+pub struct NodeRunArgs<'a, S> {
+    pub path: &'a str,
+    pub opt: OptLevel,
+    pub initial_gc_threshold: Option<usize>,
+    pub script_args: S,
+}
+
+pub fn run_with_nodejs_mnemnoics<'a>(args: NodeRunArgs<'a, impl Iterator<Item = &'a str>>) -> anyhow::Result<()> {
     let tokio_rt = tokio::runtime::Runtime::new()?;
 
     tokio_rt.block_on(async move {
-        if let Err(err) = run_inner_fallible(path, opt, initial_gc_threshold).await {
+        if let Err(err) = run_inner_fallible(args).await {
             eprintln!("{err}");
         }
     });
@@ -50,7 +57,14 @@ pub fn run_with_nodejs_mnemnoics(path: &str, opt: OptLevel, initial_gc_threshold
     Ok(())
 }
 
-async fn run_inner_fallible(path: &str, opt: OptLevel, initial_gc_threshold: Option<usize>) -> anyhow::Result<()> {
+async fn run_inner_fallible<'a>(
+    NodeRunArgs {
+        path,
+        opt,
+        initial_gc_threshold,
+        script_args,
+    }: NodeRunArgs<'a, impl Iterator<Item = &'a str>>,
+) -> anyhow::Result<()> {
     let path = Path::new(path);
     let package_state = if path.is_dir() {
         process_package_json(path)?
@@ -102,7 +116,7 @@ async fn run_inner_fallible(path: &str, opt: OptLevel, initial_gc_threshold: Opt
             )
             .unwrap();
 
-        let process = create_process_object(scope);
+        let process = create_process_object(scope, script_args)?;
         global
             .set_property(
                 process_sym.to_key(scope),
@@ -150,7 +164,10 @@ async fn run_inner_fallible(path: &str, opt: OptLevel, initial_gc_threshold: Opt
     Ok(())
 }
 
-fn create_process_object(sc: &mut LocalScope<'_>) -> ObjectId {
+fn create_process_object<'a>(
+    sc: &mut LocalScope<'_>,
+    script_args: impl Iterator<Item = &'a str>,
+) -> anyhow::Result<ObjectId> {
     let obj = OrdObject::new(sc);
     let env = OrdObject::new(sc);
     let env = sc.register(env);
@@ -158,10 +175,19 @@ fn create_process_object(sc: &mut LocalScope<'_>) -> ObjectId {
     obj.set_property(env_k.to_key(sc), PropertyValue::static_default(env.into()), sc)
         .unwrap();
 
+    let current_exe = env::current_exe().context("failed to get executable path")?;
+    let current_exe = current_exe.to_str().context("invalid utf-8 in executable path")?;
+
     let argv_k = sc.intern("argv");
-    let argv = env::args()
-        .map(|arg| PropertyValue::static_default(Value::string(sc.intern(arg).into())))
-        .collect::<Vec<_>>();
+    let mut argv = Vec::new();
+    argv.push(PropertyValue::static_default(Value::string(
+        sc.intern(current_exe).into(),
+    )));
+
+    for arg in script_args {
+        argv.push(PropertyValue::static_default(Value::string(sc.intern(arg).into())));
+    }
+
     let argv = Array::from_vec(argv, sc);
     let argv = sc.register(argv);
     obj.set_property(argv_k.to_key(sc), PropertyValue::static_default(argv.into()), sc)
@@ -186,7 +212,7 @@ fn create_process_object(sc: &mut LocalScope<'_>) -> ObjectId {
     )
     .unwrap();
 
-    sc.register(obj)
+    Ok(sc.register(obj))
 }
 
 fn process_package_json(path: &Path) -> Result<PackageState, anyhow::Error> {
