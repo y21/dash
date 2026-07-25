@@ -64,13 +64,13 @@ pub fn run_with_nodejs_mnemnoics<'a>(args: NodeRunArgs<'a, impl Iterator<Item = 
 
 async fn run_inner_fallible<'a>(
     NodeRunArgs {
-        path,
+        path: path_str,
         opt,
         initial_gc_threshold,
         script_args,
     }: NodeRunArgs<'a, impl Iterator<Item = &'a str>>,
 ) -> anyhow::Result<()> {
-    let path = Path::new(path);
+    let path = Path::new(path_str);
     let package_state = if path.is_dir() {
         process_package_json(path)?
     } else {
@@ -123,7 +123,7 @@ async fn run_inner_fallible<'a>(
             )
             .unwrap();
 
-        let process = create_process_object(scope, script_args)?;
+        let process = create_process_object(scope, path_str, script_args)?;
         global
             .set_property(
                 process_sym.to_key(scope),
@@ -194,6 +194,7 @@ async fn run_inner_fallible<'a>(
 
 fn create_process_object<'a>(
     sc: &mut LocalScope<'_>,
+    path: &'a str,
     script_args: impl Iterator<Item = &'a str>,
 ) -> anyhow::Result<ObjectId> {
     let obj = OrdObject::new(sc);
@@ -207,10 +208,13 @@ fn create_process_object<'a>(
     let current_exe = current_exe.to_str().context("invalid utf-8 in executable path")?;
 
     let argv_k = sc.intern("argv");
+    // For compatibility with nodejs (as scripts often do process.argv.slice(2)), process.argv becomes [path-to-dash, path-to-script, ...script-args],
+    // even if that isn't how dash is actually invoked.
     let mut argv = Vec::new();
     argv.push(PropertyValue::static_default(Value::string(
         sc.intern(current_exe).into(),
     )));
+    argv.push(PropertyValue::static_default(Value::string(sc.intern(path).into())));
 
     for arg in script_args {
         argv.push(PropertyValue::static_default(Value::string(sc.intern(arg).into())));
