@@ -435,7 +435,20 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                     }
                     self.handle_op_map_instr("arraydestruct", &[("count", &count)])
                 }
-                Instruction::AssignProperties => todo!(),
+                Instruction::AssignProperties => {
+                    let member_kind_count = self.read_u16()?;
+                    let stack_value_count = self.read_u16()?;
+                    for _ in 0..member_kind_count {
+                        self.read()?; // discard member kind
+                    }
+                    self.handle_op_map_instr(
+                        "assignproperties",
+                        &[
+                            ("member_kind_count", &member_kind_count),
+                            ("stack_value_count", &stack_value_count),
+                        ],
+                    )
+                }
                 Instruction::NewTarget => self.handle_opless_instr("new.target"),
                 Instruction::Nop => self.handle_opless_instr("nop"),
             }
