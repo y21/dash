@@ -17,3 +17,4 @@ serde = { version = "1.0.152", features = ["derive"] }
 bumpalo = "3.20.3"
 rustc-hash = "2.1.0"
 owo-colors = "4.2.0"
+arrayvec = "0.7.8"

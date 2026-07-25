@@ -13,6 +13,7 @@ use dash_vm::value::Root;
 use dash_vm::value::ops::conversions::ValueConversion;
 use once_cell::sync::Lazy;
 use owo_colors::{Style, Styled};
+use rayon::ThreadPoolBuilder;
 use serde::Deserialize;
 
 use crate::cmd::differ::{diff_results_to_previous, strip_test262_prefix};
@@ -27,7 +28,7 @@ pub fn run(matches: &ArgMatches) -> anyhow::Result<()> {
     let verbose = *matches.get_one::<bool>("verbose").unwrap();
     let single_threaded = *matches.get_one::<bool>("disable-threads").unwrap();
     let files = if path.ends_with(".js") {
-        vec![path.to_string()]
+        vec![&*bump.alloc_str(path)]
     } else {
         util::get_all_files(&bump, path)?
     };
@@ -38,14 +39,14 @@ pub fn run(matches: &ArgMatches) -> anyhow::Result<()> {
 }
 
 #[derive(Debug)]
-pub struct Results {
+pub struct Results<'bump> {
     passes: AtomicU32,
     fails: AtomicU32,
     panics: AtomicU32,
-    results: Mutex<ResultsMap>,
+    results: Mutex<ResultsMap<'bump>>,
 }
 
-impl Results {
+impl<'bump> Results<'bump> {
     pub fn new() -> Self {
         Self {
             passes: AtomicU32::new(0),
@@ -55,22 +56,27 @@ impl Results {
         }
     }
 
-    pub fn register(&self, path: &str, result: RunResult) {
+    pub fn register(&self, path: &'bump str, result: RunResult) {
         match result {
             RunResult::Pass => self.passes.fetch_add(1, atomic::Ordering::Relaxed),
             RunResult::Fail => self.fails.fetch_add(1, atomic::Ordering::Relaxed),
             RunResult::Panic => self.panics.fetch_add(1, atomic::Ordering::Relaxed),
         };
 
-        self.results.lock().unwrap().insert(path.to_string(), result);
+        self.results.lock().unwrap().insert(path, result);
     }
 
-    pub fn results_map(&self) -> MutexGuard<'_, ResultsMap> {
+    pub fn results_map(&self) -> MutexGuard<'_, ResultsMap<'bump>> {
         self.results.lock().unwrap()
     }
 }
 
-fn run_inner(bump: &Bump, files: Vec<String>, verbose: bool, single_threaded: bool) -> anyhow::Result<()> {
+fn run_inner<'bump>(
+    bump: &'bump Bump,
+    files: Vec<&'bump str>,
+    verbose: bool,
+    single_threaded: bool,
+) -> anyhow::Result<()> {
     let setup: String = {
         let sta = std::fs::read_to_string("../test262/harness/sta.js")?;
         let assert = std::fs::read_to_string("../test262/harness/assert.js")?;
@@ -82,7 +88,7 @@ fn run_inner(bump: &Bump, files: Vec<String>, verbose: bool, single_threaded: bo
     let results = Results::new();
     let file_count = files.len();
 
-    let run_file = |file: &str| {
+    let run_file = |file: &'bump str| {
         let result = run_test(&setup, file, verbose);
 
         results.register(strip_test262_prefix(file).unwrap_or(file), result);
@@ -93,7 +99,7 @@ fn run_inner(bump: &Bump, files: Vec<String>, verbose: bool, single_threaded: bo
             run_file(&file);
         }
     } else {
-        let tp = rayon::ThreadPoolBuilder::default().stack_size(8_000_000).build()?;
+        let tp = ThreadPoolBuilder::default().stack_size(8_000_000).build()?;
         tp.scope(|s| {
             for file in files {
                 s.spawn(move |_| {

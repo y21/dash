@@ -1,6 +1,8 @@
+use std::fmt::Write;
 use std::fs::DirEntry;
 use std::io;
 
+use arrayvec::ArrayString;
 use bumpalo::Bump;
 
 // This is a list of tests that cannot be run currently, because they abort the process or run into an infinite loop
@@ -85,7 +87,7 @@ pub const IGNORED_TESTS: &[&str] = &[
 ];
 
 /// Returns a vector of path strings
-pub fn get_all_files(bump: &Bump, dir: &str) -> io::Result<Vec<String>> {
+pub fn get_all_files<'bump>(bump: &'bump Bump, dir: &str) -> io::Result<Vec<&'bump str>> {
     let mut ve = Vec::new();
 
     let read_dir = std::fs::read_dir(dir)?;
@@ -93,7 +95,9 @@ pub fn get_all_files(bump: &Bump, dir: &str) -> io::Result<Vec<String>> {
     for entry in read_dir {
         let entry: DirEntry = entry?;
 
-        let path = format!("{}/{}", dir, entry.file_name().to_str().unwrap());
+        let mut path = ArrayString::<256>::new();
+        write!(path, "{}/{}", dir, entry.file_name().to_str().unwrap()).unwrap();
+        let path: &str = bump.alloc_str(&path);
 
         if IGNORED_TESTS.iter().any(|t| path.ends_with(t)) {
             continue;

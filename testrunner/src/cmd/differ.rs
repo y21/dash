@@ -36,7 +36,7 @@ fn find_last_result_file() -> anyhow::Result<Option<PathBuf>> {
     Ok(last_file.map(|(_, path)| path))
 }
 
-pub fn strip_test262_prefix<'a>(path: &'a str) -> anyhow::Result<&'a str> {
+pub fn strip_test262_prefix(path: &str) -> anyhow::Result<&str> {
     let (_, path) = path
         .split_once("test262/test")
         .context("path does not contain test262 in it")?;
@@ -66,7 +66,7 @@ fn write_results(results: &Results) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn parse_results_from_file(path: &Path) -> anyhow::Result<ResultsMap> {
+fn parse_results_from_file<'bump>(bump: &'bump Bump, path: &Path) -> anyhow::Result<ResultsMap<'bump>> {
     let mut results = ResultsMap::new(ResultsMap::DEFAULT_CAPACITY);
 
     let file = BufReader::new(File::open(path).context("opening results file")?);
@@ -78,7 +78,7 @@ fn parse_results_from_file(path: &Path) -> anyhow::Result<ResultsMap> {
             return Err(anyhow!("result is not a single byte: {result}"));
         };
         let result = RunResult::from_u8(byte).context("resolving run result")?;
-        results.insert(path.to_string(), result);
+        results.insert(bump.alloc_str(path), result);
     }
 
     Ok(results)
@@ -90,7 +90,7 @@ pub fn diff_results_to_previous(bump: &Bump, results: &Results) -> anyhow::Resul
     write_results(results).context("writing current results")?;
     if let Some(last_file) = last_file {
         // TODO: might not need to collect into a ResultsMap, maybe we can just iterate
-        let last_results = parse_results_from_file(&last_file)?;
+        let last_results = parse_results_from_file(bump, &last_file)?;
         let new_results = results.results_map();
         let mut missing_in_new = Vec::new();
 
@@ -110,7 +110,7 @@ pub fn diff_results_to_previous(bump: &Bump, results: &Results) -> anyhow::Resul
                 }
                 None => {
                     // Not present in the new result?
-                    missing_in_new.push(path.clone());
+                    missing_in_new.push(path);
                 }
             }
         }
