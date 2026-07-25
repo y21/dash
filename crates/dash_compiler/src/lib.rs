@@ -1422,6 +1422,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
         ib.build_jmp(Label::IfEnd, true);
 
         ib.add_local_label(Label::IfBranch { branch_id: 0 });
+        ib.build_pop();
         ib.build_undefined_constant()
             .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
 
