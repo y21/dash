@@ -1652,9 +1652,14 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
             if let Some(members) = constructor_initializers
                 && !members.is_empty()
             {
-                let members = compile_class_members(ib, span, members)?;
+                let (members, members_stack_values) = compile_class_members(ib, span, members)?;
                 ib.build_this();
-                ib.build_object_member_like_instruction(span, members, Instruction::AssignProperties)?;
+                ib.build_object_member_like_instruction(
+                    span,
+                    members,
+                    members_stack_values,
+                    Instruction::AssignProperties,
+                )?;
             }
 
             let res = statements.into_iter().try_for_each(|stmt| ib.accept(stmt));
@@ -1734,8 +1739,8 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
     fn visit_object_literal(&mut self, span: Span, ObjectLiteral(exprs): ObjectLiteral) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
-        let members = compile_object_members(&mut ib, exprs.iter().cloned())?;
-        ib.build_object_member_like_instruction(span, members, Instruction::ObjLit)?;
+        let (members, member_stack_values) = compile_object_members(&mut ib, exprs.iter().cloned())?;
+        ib.build_object_member_like_instruction(span, members, member_stack_values, Instruction::ObjLit)?;
 
         Ok(())
     }
@@ -2235,17 +2240,30 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
             )
         });
 
-        let static_m = compile_class_members(&mut ib, span, methods.clone().filter(|method| method.static_).cloned())?;
+        let (static_m, static_m_stack_values) =
+            compile_class_members(&mut ib, span, methods.clone().filter(|method| method.static_).cloned())?;
         ib.accept_expr(load_class_binding.clone())?;
-        ib.build_object_member_like_instruction(span, static_m, Instruction::AssignProperties)?;
+        ib.build_object_member_like_instruction(span, static_m, static_m_stack_values, Instruction::AssignProperties)?;
 
-        let prototype_m = compile_class_members(&mut ib, span, methods.filter(|method| !method.static_).cloned())?;
+        let (prototype_m, prototype_m_stack_values) =
+            compile_class_members(&mut ib, span, methods.filter(|method| !method.static_).cloned())?;
         ib.accept_expr(class_prototype.clone())?;
-        ib.build_object_member_like_instruction(span, prototype_m, Instruction::AssignProperties)?;
+        ib.build_object_member_like_instruction(
+            span,
+            prototype_m,
+            prototype_m_stack_values,
+            Instruction::AssignProperties,
+        )?;
 
-        let static_fields = compile_class_members(&mut ib, span, fields.filter(|member| member.static_).cloned())?;
+        let (static_fields, static_fields_stack_values) =
+            compile_class_members(&mut ib, span, fields.filter(|member| member.static_).cloned())?;
         ib.accept_expr(load_class_binding.clone())?;
-        ib.build_object_member_like_instruction(span, static_fields, Instruction::AssignProperties)?;
+        ib.build_object_member_like_instruction(
+            span,
+            static_fields,
+            static_fields_stack_values,
+            Instruction::AssignProperties,
+        )?;
 
         if let Some(super_id) = load_super_class {
             // Add the superclass' prototype to our prototype chain
@@ -2455,20 +2473,25 @@ fn compile_switch_naive(
     Ok(())
 }
 
+// TODO: make this return a struct instead of tuple
 fn compile_object_members(
     ib: &mut InstructionBuilder<'_, '_>,
     iter: impl IntoIterator<Item = (ObjectMemberKind, Expr)>,
-) -> Result<Vec<ObjectMemberKind>, Error> {
+) -> Result<(Vec<ObjectMemberKind>, u16), Error> {
     let iter = iter.into_iter();
 
+    let mut stack_values = 0;
     let mut members = Vec::with_capacity(iter.size_hint().0);
     for (member, value) in iter {
-        ib.accept_expr(value)?;
-
+        let mut accept_expr = |expr: Expr| -> Result<(), Error> {
+            ib.accept_expr(expr)?;
+            stack_values += 1;
+            Ok(())
+        };
         let mut push_and_accept = |ct: fn(Expr) -> ObjectMemberKind, expr: Expr| {
             // TODO: no clone really needed, the `expr` is not needed in ib.build_objlit
             members.push(ct(expr.clone()));
-            ib.accept_expr(expr)
+            accept_expr(expr)
         };
 
         match member {
@@ -2477,9 +2500,11 @@ fn compile_object_members(
             ObjectMemberKind::Dynamic(expr) => push_and_accept(ObjectMemberKind::Dynamic, expr)?,
             _ => members.push(member),
         }
+
+        accept_expr(value)?;
     }
 
-    Ok(members)
+    Ok((members, stack_values))
 }
 
 fn compile_destructuring_pattern(
@@ -2573,7 +2598,7 @@ fn compile_class_members(
     ib: &mut InstructionBuilder<'_, '_>,
     span: Span,
     it: impl IntoIterator<Item = ClassMember>,
-) -> Result<Vec<ObjectMemberKind>, Error> {
+) -> Result<(Vec<ObjectMemberKind>, u16), Error> {
     let mk_fn = |f| Expr {
         span,
         kind: ExprKind::function(f),

@@ -293,15 +293,17 @@ impl InstructionBuilder<'_, '_> {
         &mut self,
         span: Span,
         constants: Vec<ObjectMemberKind>,
+        stack_value_count: u16,
         instr: Instruction,
     ) -> Result<(), Error> {
-        let len: u16 = constants
+        let member_kind_count: u16 = constants
             .len()
             .try_into()
             .map_err(|_| Error::ObjectLitLimitExceeded(span))?;
 
         self.write_instr(instr);
-        self.writew(len);
+        self.writew(member_kind_count);
+        self.writew(stack_value_count);
 
         fn compile_object_member_kind(
             ib: &mut InstructionBuilder,
@@ -320,8 +322,7 @@ impl InstructionBuilder<'_, '_> {
             Ok(())
         }
 
-        // Push in reverse order to match order in which the compiler pushes values onto the stack
-        for member in constants.into_iter().rev() {
+        for member in constants.into_iter() {
             let kind_id = match member {
                 ObjectMemberKind::Dynamic(..) => CompilerObjectMemberKind::Dynamic,
                 ObjectMemberKind::DynamicGetter(..) => CompilerObjectMemberKind::DynamicGetter,

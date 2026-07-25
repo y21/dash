@@ -282,6 +282,18 @@ mod extract {
         }
     }
 
+    impl ExtractFront for Object {
+        type Error = Infallible;
+
+        fn extract_front<U>(seq: &mut ForwardSequence<U>, cx: &mut DispatchContext<'_>) -> Result<Self, Self::Error> {
+            let value: Value = extract_front(seq, cx);
+            match value.unpack() {
+                ValueKind::Object(o) => Ok(Self(o)),
+                _ => panic!("stack top must contain an object"),
+            }
+        }
+    }
+
     impl ExtractBack for ObjectMemberKind {
         type Exception = Infallible;
 
@@ -355,14 +367,14 @@ mod extract {
         A B C
     }
 
-    impl ExtractBack for ObjectProperty {
-        type Exception = Value;
+    impl ExtractFront for ObjectProperty {
+        type Error = Value;
 
-        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
+        fn extract_front<U>(seq: &mut ForwardSequence<U>, cx: &mut DispatchContext<'_>) -> Result<Self, Self::Error> {
             Ok(match extract(cx) {
                 ObjectMemberKind::Getter => {
                     let key = extract::<IdentW>(cx).0;
-                    let value = extract::<Object>(cx).0;
+                    let Object(value) = extract_front(seq, cx);
                     Self::Getter {
                         key: key.to_key(&mut cx.scope),
                         value,
@@ -370,7 +382,7 @@ mod extract {
                 }
                 ObjectMemberKind::Setter => {
                     let key = extract::<IdentW>(cx).0;
-                    let value = extract::<Object>(cx).0;
+                    let Object(value) = extract_front(seq, cx);
                     Self::Setter {
                         key: key.to_key(&mut cx.scope),
                         value,
@@ -378,7 +390,7 @@ mod extract {
                 }
                 ObjectMemberKind::Static => {
                     let key = extract::<IdentW>(cx).0;
-                    let value = extract(cx);
+                    let value = extract_front(seq, cx);
 
                     Self::Static {
                         key: key.to_key(&mut cx.scope),
@@ -386,8 +398,8 @@ mod extract {
                     }
                 }
                 ObjectMemberKind::Dynamic => {
-                    let key = extract(cx);
-                    let value = extract(cx);
+                    let key = extract_front(seq, cx);
+                    let value = extract_front(seq, cx);
 
                     Self::Static {
                         key: PropertyKey::from_value(&mut cx.scope, key)?,
@@ -395,8 +407,8 @@ mod extract {
                     }
                 }
                 ObjectMemberKind::DynamicGetter => {
-                    let key = extract(cx);
-                    let value = extract::<Object>(cx).0;
+                    let key = extract_front(seq, cx);
+                    let Object(value) = extract_front(seq, cx);
 
                     Self::Getter {
                         key: PropertyKey::from_value(&mut cx.scope, key)?,
@@ -404,15 +416,15 @@ mod extract {
                     }
                 }
                 ObjectMemberKind::DynamicSetter => {
-                    let key = extract(cx);
-                    let value = extract::<Object>(cx).0;
+                    let key = extract_front(seq, cx);
+                    let Object(value) = extract_front(seq, cx);
 
                     Self::Setter {
                         key: PropertyKey::from_value(&mut cx.scope, key)?,
                         value,
                     }
                 }
-                ObjectMemberKind::Spread => Self::Spread(extract(cx)),
+                ObjectMemberKind::Spread => Self::Spread(extract_front(seq, cx)),
             })
         }
     }
@@ -1454,10 +1466,12 @@ mod handlers {
     }
 
     pub fn objlit(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let mut iter = BackwardSequence::<ObjectProperty>::new_u16(&mut cx);
+        let key_count = cx.fetchw_and_inc_ip() as usize;
+        let stack_value_count = cx.fetchw_and_inc_ip() as usize;
+        let mut iter = ForwardSequence::<ObjectProperty>::from_len(&mut cx, key_count, stack_value_count);
 
         let obj = OrdObject::new(&cx.scope);
-        while let Some(property) = iter.next(&mut cx) {
+        while let Some(property) = iter.next_front(&mut cx) {
             match property? {
                 ObjectProperty::Static { key, value } => drop(obj.set_property(key, value, &mut cx.scope)),
                 ObjectProperty::Getter { key, value } => match obj.get_own_property_descriptor(key, &mut cx.scope)? {
@@ -1489,6 +1503,9 @@ mod handlers {
             }
         }
 
+        let stack_len = cx.stack.len();
+        cx.stack.truncate(stack_len - stack_value_count);
+
         let handle = cx.scope.register(obj);
         cx.stack.push(handle.into());
 
@@ -1496,10 +1513,13 @@ mod handlers {
     }
 
     pub fn assign_properties(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let mut iter = BackwardSequence::<ObjectProperty>::new_u16(&mut cx);
-        let target = cx.pop_stack_rooted();
+        let key_count = cx.fetchw_and_inc_ip() as usize;
+        let stack_value_count = cx.fetchw_and_inc_ip() as usize;
 
-        while let Some(property) = iter.next(&mut cx) {
+        let target = cx.pop_stack_rooted();
+        let mut iter = ForwardSequence::<ObjectProperty>::from_len(&mut cx, key_count, stack_value_count);
+
+        while let Some(property) = iter.next_front(&mut cx) {
             let property = property?;
             let is_getter = matches!(property, ObjectProperty::Getter { .. });
 
@@ -1532,6 +1552,9 @@ mod handlers {
                 ObjectProperty::Spread(_) => unimplemented!("spread operator in AssignProperties"),
             }
         }
+
+        let stack_len = cx.stack.len();
+        cx.stack.truncate(stack_len - stack_value_count);
 
         Ok(None)
     }
