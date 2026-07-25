@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785007342041,
+  "lastUpdate": 1785008739590,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -12851,6 +12851,60 @@ window.BENCHMARK_DATA = {
             "name": "exec tinycolor2 parse hex+toFilter",
             "value": 25654593,
             "range": "± 275584",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "3809797b88849012a93145f9a146cc30c22d183a",
+          "message": "add regression test for #101",
+          "timestamp": "2026-07-25T21:41:24+02:00",
+          "tree_id": "e5191c8892bc58b15c233f270aad4cf8782142e6",
+          "url": "https://github.com/y21/dash/commit/3809797b88849012a93145f9a146cc30c22d183a"
+        },
+        "date": 1785008738977,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1289768,
+            "range": "± 17976",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 139693,
+            "range": "± 634",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 69975,
+            "range": "± 379",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse+compile tinycolor2",
+            "value": 1712826,
+            "range": "± 26776",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "exec tinycolor2 parse hex+toFilter",
+            "value": 25487863,
+            "range": "± 218618",
             "unit": "ns/iter"
           }
         ]
