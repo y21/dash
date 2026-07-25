@@ -5,11 +5,12 @@ use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::array::{Array, ArrayIterator};
 use crate::value::boxed::String as BoxedString;
+use crate::value::function::args::CallArgs;
 use crate::value::function::native::CallContext;
-use crate::value::object::{OrdObject, Object, PropertyValue};
+use crate::value::object::{Object, OrdObject, PropertyValue, This};
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::regex::RegExp;
-use crate::value::{Value, ValueContext};
+use crate::value::{Root, Typeof, Value, ValueContext};
 use std::cmp;
 use std::fmt::Write;
 use std::ops::Range;
@@ -283,59 +284,105 @@ pub fn repeat(cx: CallContext) -> Result<Value, Value> {
     Ok(Value::string(cx.scope.intern(result).into()))
 }
 
-pub fn replace(cx: CallContext) -> Result<Value, Value> {
-    let string = cx.this.to_js_string(cx.scope)?;
+enum ReplaceFunction {
+    Replace,
+    ReplaceAll,
+}
 
-    let search_string = cx.args.first().unwrap_or_undefined();
-    let replace_value = cx.args.get(1).unwrap_or_undefined().to_js_string(cx.scope)?;
+/// Shared logic for `String.prototype.replace` and `String.prototype.replaceAll`.
+fn replace_inner(cx: CallContext, mode: ReplaceFunction) -> Result<Value, Value> {
+    let string = cx.this.to_js_string(cx.scope)?.res(cx.scope).to_owned();
 
-    let string = if let Some(regex) = search_string.extract::<RegExp>(cx.scope) {
+    let search = cx.args.first().unwrap_or_undefined();
+    let replace = cx.args.get(1).unwrap_or_undefined();
+
+    // NOTE: usually `replace` only replaces the first instance (ReplaceMode::First), whereas `replace_all` replaces all instances (ReplaceMode::All).
+    // However, if the search parameter is a regex, then whether we should stop after the first match can be overridden if /g is set.
+    let mut stop_after_first = matches!(mode, ReplaceFunction::Replace);
+
+    let find_next_match: &dyn Fn(&str) -> Option<Range<u32>> = if let Some(regex) = search.extract::<RegExp>(cx.scope) {
         let Some(inner_regex) = regex.inner() else {
             throw!(cx.scope, TypeError, "invalid regex object")
         };
+        let has_global_flag = inner_regex.regex.flags().contains(Flags::GLOBAL);
 
-        let replace_string = replace_value.res(cx.scope);
+        match mode {
+            ReplaceFunction::Replace => stop_after_first = !has_global_flag,
+            ReplaceFunction::ReplaceAll => {
+                if !has_global_flag {
+                    throw!(
+                        cx.scope,
+                        TypeError,
+                        "String.prototype.replaceAll called with a non-global RegExp argument"
+                    );
+                }
 
-        let mut rest = string.res(cx.scope);
-        let mut output = String::with_capacity(rest.len());
-        while let Ok(res) = inner_regex.regex.eval(rest) {
-            let Range { start, end } = res.full_match();
-
-            output.push_str(&rest[..start as usize]);
-            output.push_str(replace_string);
-
-            rest = &rest[end as usize..];
-            if !inner_regex.regex.flags().contains(Flags::GLOBAL) {
-                break;
+                stop_after_first = false;
             }
         }
-        output.push_str(rest);
 
-        cx.scope.intern(output).into()
+        &move |rest: &str| match inner_regex.regex.eval(rest) {
+            Ok(res) => Some(res.full_match()),
+            Err(_) => None,
+        }
     } else {
-        let search_string = search_string.to_js_string(cx.scope)?;
-
-        let string = string
-            .res(cx.scope)
-            .replacen(search_string.res(cx.scope), replace_value.res(cx.scope), 1);
-        cx.scope.intern(string).into()
+        let search = search.to_js_string(cx.scope)?.res(cx.scope).to_owned();
+        &move |rest: &str| {
+            rest.find(&search).map(|start| {
+                let end = start + search.len();
+                Range {
+                    start: start as u32,
+                    end: end as u32,
+                }
+            })
+        }
     };
 
-    Ok(Value::string(string))
+    let mut rest = &*string;
+    let mut output = String::with_capacity(rest.len());
+
+    while let Some(Range { start, end }) = find_next_match(rest) {
+        output.push_str(&rest[..start as usize]);
+
+        let replace_string = if let Typeof::Function = replace.type_of(cx.scope) {
+            replace
+                .apply(This::default(), CallArgs::empty(), cx.scope)
+                .root(cx.scope)?
+                .to_js_string(cx.scope)?
+                .res(cx.scope)
+        } else {
+            replace.to_js_string(cx.scope)?.res(cx.scope)
+        };
+
+        output.push_str(replace_string);
+
+        if start == end {
+            // If we're replacing an empty string, advance the search position by one to avoid an infinite loop.
+            if let Some((prev, next)) = rest.split_at_checked(1) {
+                output.push_str(prev);
+                rest = next;
+            } else {
+                break;
+            }
+        } else {
+            rest = &rest[end as usize..];
+        }
+
+        if stop_after_first {
+            break;
+        }
+    }
+    output.push_str(rest);
+
+    Ok(Value::string(cx.scope.intern(output).into()))
+}
+
+pub fn replace(cx: CallContext) -> Result<Value, Value> {
+    replace_inner(cx, ReplaceFunction::Replace)
 }
 
 pub fn replace_all(cx: CallContext) -> Result<Value, Value> {
-    let string = cx.this.to_js_string(cx.scope)?;
-
-    let search_string = cx.args.first().unwrap_or_undefined().to_js_string(cx.scope)?;
-
-    let replace_value = cx.args.get(1).unwrap_or_undefined().to_js_string(cx.scope)?;
-
-    let string = string
-        .res(cx.scope)
-        .replace(search_string.res(cx.scope), replace_value.res(cx.scope));
-
-    Ok(Value::string(cx.scope.intern(string).into()))
+    replace_inner(cx, ReplaceFunction::ReplaceAll)
 }
 
 pub fn split(cx: CallContext) -> Result<Value, Value> {
