@@ -85,11 +85,15 @@ fn join_path(cx: CallContext) -> Result<Value, Value> {
             ),
         };
 
-        for segment in value.split(path::MAIN_SEPARATOR) {
-            match segment {
-                ".." => drop(path.pop()),
-                "." => {}
-                _ => path.push(segment),
+        for component in Path::new(value).components() {
+            match component {
+                path::Component::CurDir => {}
+                path::Component::ParentDir => {
+                    path.pop();
+                }
+                path::Component::Prefix(_) | path::Component::RootDir | path::Component::Normal(_) => {
+                    path.push(component)
+                }
             }
         }
     }

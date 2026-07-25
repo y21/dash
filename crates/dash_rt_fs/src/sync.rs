@@ -5,7 +5,7 @@ use dash_vm::localscope::LocalScope;
 use dash_vm::throw;
 use dash_vm::value::error::Error;
 use dash_vm::value::function::native::{CallContext, register_native_fn};
-use dash_vm::value::object::{OrdObject, Object, PropertyValue};
+use dash_vm::value::object::{Object, OrdObject, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::typedarray::TypedArray;
@@ -61,7 +61,6 @@ fn write_file_sync(cx: CallContext) -> Result<Value, Value> {
     let path = path.to_js_string(cx.scope)?;
     if let Some(array) = buf.extract::<TypedArray>(cx.scope) {
         let path = Path::new(path.res(cx.scope));
-
         let storage = array.arraybuffer(cx.scope).storage();
         // SAFETY: Cell<u8> has the same layout as u8
         let view = unsafe { slice::from_raw_parts(storage.as_ptr().cast::<u8>(), storage.len()) };
@@ -74,6 +73,15 @@ fn write_file_sync(cx: CallContext) -> Result<Value, Value> {
             }
         }
     } else {
-        throw!(cx.scope, TypeError, "Invalid source passed to fs.writeFileSync")
+        // Not a buffer, treat it as a string
+        let buf = buf.to_js_string(cx.scope)?;
+        let path = Path::new(path.res(cx.scope));
+        match std::fs::write(path, buf.res(cx.scope).as_bytes()) {
+            Ok(()) => Ok(Value::undefined()),
+            Err(err) => {
+                let err = Error::new(cx.scope, err.to_string());
+                Err(Value::object(cx.scope.register(err)))
+            }
+        }
     }
 }
