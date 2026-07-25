@@ -30,6 +30,7 @@ mod assert;
 mod buffer;
 mod events;
 mod native;
+mod os;
 mod package;
 mod path;
 mod state;

@@ -37,5 +37,6 @@ define_symbol_set!(#[derive(Trace)] NodeSymbols => [
     promises,
     child_process,
     os,
-    isAbsolute
+    isAbsolute,
+    tmpdir
 ]);
