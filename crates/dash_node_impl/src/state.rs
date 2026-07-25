@@ -25,6 +25,7 @@ pub struct State {
     pub querystring_cache: OnceCell<Value>,
     pub timers_cache: OnceCell<Value>,
     pub buffer_cache: OnceCell<Value>,
+    pub child_process_cache: OnceCell<Value>,
 }
 
 impl State {
@@ -46,6 +47,7 @@ impl State {
             querystring_cache: OnceCell::new(),
             timers_cache: OnceCell::new(),
             buffer_cache: OnceCell::new(),
+            child_process_cache: OnceCell::new(),
         }
     }
 }
