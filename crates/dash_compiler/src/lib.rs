@@ -964,6 +964,33 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                             TokenType::BitwiseAndAssignment => assign!(AssignKind::BitAndAssignment),
                             TokenType::BitwiseOrAssignment => assign!(AssignKind::BitOrAssignment),
                             TokenType::BitwiseXorAssignment => assign!(AssignKind::BitXorAssignment),
+                            TokenType::LogicalOrAssignment => {
+                                // Desugar `x ||= y` to `x || (x = y)`
+                                ib.build_local_load(id);
+                                ib.build_jmptruenp(Label::IfEnd, true);
+                                ib.build_pop();
+                                ib.accept_expr(*right)?;
+                                ib.build_local_store(AssignKind::Assignment, id);
+                                ib.add_local_label(Label::IfEnd);
+                            }
+                            TokenType::LogicalAndAssignment => {
+                                // Desugar `x &&= y` to `x && (x = y)`
+                                ib.build_local_load(id);
+                                ib.build_jmpfalsenp(Label::IfEnd, true);
+                                ib.build_pop();
+                                ib.accept_expr(*right)?;
+                                ib.build_local_store(AssignKind::Assignment, id);
+                                ib.add_local_label(Label::IfEnd);
+                            }
+                            TokenType::LogicalNullishAssignment => {
+                                // Desugar `x ??= y` to `x ?? (x = y)`
+                                ib.build_local_load(id);
+                                ib.build_jmpnullishnp(Label::IfEnd, false);
+                                ib.build_pop();
+                                ib.accept_expr(*right)?;
+                                ib.build_local_store(AssignKind::Assignment, id);
+                                ib.add_local_label(Label::IfEnd);
+                            }
                             _ => unimplementedc!(span, "unknown assignment operator {}", operator.fmt_for_expected_tys()),
                         }
                     } else {
@@ -989,6 +1016,39 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                             TokenType::BitwiseAndAssignment => assign!(AssignKind::BitAndAssignment),
                             TokenType::BitwiseOrAssignment => assign!(AssignKind::BitOrAssignment),
                             TokenType::BitwiseXorAssignment => assign!(AssignKind::BitXorAssignment),
+                            TokenType::LogicalOrAssignment => {
+                                // Desugar `x ||= y` to `x || (x = y)`
+                                ib.build_global_load(ident)
+                                    .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
+                                ib.build_jmptruenp(Label::IfEnd, true);
+                                ib.build_pop();
+                                ib.accept_expr(*right)?;
+                                ib.build_global_store(AssignKind::Assignment, ident)
+                                    .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
+                                ib.add_local_label(Label::IfEnd);
+                            }
+                            TokenType::LogicalAndAssignment => {
+                                // Desugar `x &&= y` to `x && (x = y)`
+                                ib.build_global_load(ident)
+                                    .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
+                                ib.build_jmpfalsenp(Label::IfEnd, true);
+                                ib.build_pop();
+                                ib.accept_expr(*right)?;
+                                ib.build_global_store(AssignKind::Assignment, ident)
+                                    .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
+                                ib.add_local_label(Label::IfEnd);
+                            }
+                            TokenType::LogicalNullishAssignment => {
+                                // Desugar `x ??= y` to `x ?? (x = y)`
+                                ib.build_global_load(ident)
+                                    .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
+                                ib.build_jmpnullishnp(Label::IfEnd, false);
+                                ib.build_pop();
+                                ib.accept_expr(*right)?;
+                                ib.build_global_store(AssignKind::Assignment, ident)
+                                    .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
+                                ib.add_local_label(Label::IfEnd);
+                            }
                             _ => unimplementedc!(span, "unknown assignment operator {}", operator.fmt_for_expected_tys()),
                         }
                     }
