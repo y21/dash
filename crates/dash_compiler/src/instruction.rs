@@ -73,7 +73,6 @@ impl InstructionBuilder<'_, '_> {
         build_default_export Instruction::ExportDefault,
         build_debugger Instruction::Debugger,
         build_super Instruction::Super,
-        build_arguments Instruction::Arguments,
         build_global Instruction::Global,
         build_infinity Instruction::Infinity,
         build_nan Instruction::Nan,

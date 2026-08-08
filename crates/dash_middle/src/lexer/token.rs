@@ -265,8 +265,8 @@ pub enum TokenType {
     #[display("null")]
     NullLit,
 
-    #[display("undefined")]
-    UndefinedLit,
+    #[display("this")]
+    ThisLit,
 
     #[display("yield")]
     Yield,
@@ -424,7 +424,7 @@ impl TokenType {
             Self::TrueLit => Some(sym::true_),
             Self::FalseLit => Some(sym::false_),
             Self::NullLit => Some(sym::null),
-            Self::UndefinedLit => Some(sym::undefined),
+            Self::ThisLit => Some(sym::this),
             Self::Yield => Some(sym::yield_),
             Self::New => Some(sym::new),
             Self::For => Some(sym::for_),
@@ -510,7 +510,7 @@ pub fn as_token(s: Symbol) -> TokenType {
         sym::true_ => TokenType::TrueLit,
         sym::false_ => TokenType::FalseLit,
         sym::null => TokenType::NullLit,
-        sym::undefined => TokenType::UndefinedLit,
+        sym::this => TokenType::ThisLit,
         sym::yield_ => TokenType::Yield,
         sym::new => TokenType::New,
         sym::for_ => TokenType::For,

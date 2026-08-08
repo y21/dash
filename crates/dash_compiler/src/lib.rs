@@ -85,10 +85,11 @@ struct FunctionLocalState {
     id: ScopeId,
     debug_symbols: DebugSymbols,
     externals: IndexVec<External, ExternalId>,
-    /// Whether this function references `arguments` anywhere in its body
+    /// Whether this function references `arguments` *of this function* anywhere in its body
+    /// (note: not `arguments` of an enclosing function)
     ///
     /// Also tracks the span for error reporting, but is discarded past the compiler stage.
-    references_arguments: Option<Span>,
+    references_arguments: Option<(Span, BackLocalId)>,
     /// If this is a subclass, then this vec contains the member initializers that need to be inserted after a `super()` call in the constructor.
     member_initializers_for_super: Vec<ClassMember>,
 }
@@ -277,7 +278,7 @@ impl<'interner> FunctionCompiler<'interner> {
 
         let root = self.function_stack.pop().expect("No root function");
         assert_eq!(root.id, ScopeId::ROOT, "Function must be the root function");
-        if let Some(span) = root.references_arguments {
+        if let Some((span, _)) = root.references_arguments {
             return Err(Error::ArgumentsInRoot(span));
         }
         let root_function = self.scopes[root.id].expect_function();
@@ -300,6 +301,14 @@ impl<'interner> FunctionCompiler<'interner> {
         Ok(())
     }
 
+    fn function_mut_by_scope_id(&mut self, id: ScopeId) -> &mut FunctionLocalState {
+        self.function_stack
+            .iter_mut()
+            .rev()
+            .find(|f| f.id == id)
+            .expect("Function must be present")
+    }
+
     fn current_function(&self) -> &FunctionLocalState {
         self.function_stack.last().expect("Function must be present")
     }
@@ -311,8 +320,8 @@ impl<'interner> FunctionCompiler<'interner> {
     /// Adds an external to the current [`FunctionLocalState`] if it's not already present
     /// and returns its ID
     fn add_external_to_func(&mut self, func_id: ScopeId, external_id: PossiblyExternalId) -> ExternalId {
-        let fun = self.function_stack.iter_mut().rev().find(|f| f.id == func_id);
-        let externals = &mut fun.unwrap().externals;
+        let fun = self.function_mut_by_scope_id(func_id);
+        let externals = &mut fun.externals;
         if let Some(id) = externals.iter().position(|ext| ext.id == external_id) {
             ExternalId(id.try_into().unwrap())
         } else {
@@ -321,21 +330,29 @@ impl<'interner> FunctionCompiler<'interner> {
     }
 
     /// Returns the scope id of the function that stores the local.
-    fn find_local_in_scope(&mut self, ident: Symbol, scope: ScopeId) -> Option<(PossiblyExternalId, Local, ScopeId)> {
+    fn find_local_in_scope(
+        &mut self,
+        at: Span,
+        ident: Symbol,
+        scope: ScopeId,
+    ) -> Option<(PossiblyExternalId, Local, ScopeId)> {
         let enclosing_function = self.scopes.enclosing_function_of(scope);
 
         if let Some(slot) = self.scopes[scope].find_local(ident) {
-            Some((
-                PossiblyExternalId::Local(slot),
-                self.scopes[enclosing_function].expect_function().locals[slot].clone(),
-                enclosing_function,
-            ))
+            let function = &mut self.scopes[enclosing_function].expect_function();
+            let local = function.locals[slot].clone();
+
+            if local.kind == VariableDeclarationKind::Arguments {
+                self.function_mut_by_scope_id(enclosing_function).references_arguments = Some((at, slot));
+            }
+
+            Some((PossiblyExternalId::Local(slot), local, enclosing_function))
         } else {
             let parent = self.scopes[scope].parent?;
             let parent_enclosing_function = self.scopes.enclosing_function_of(parent);
             let parent_same_function = parent_enclosing_function == enclosing_function;
 
-            let (external_id, local, src_function) = self.find_local_in_scope(ident, parent)?;
+            let (external_id, local, src_function) = self.find_local_in_scope(at, ident, parent)?;
             let local = local.clone();
 
             if parent_same_function {
@@ -353,17 +370,17 @@ impl<'interner> FunctionCompiler<'interner> {
     /// Tries to dynamically find a local in the current- or surrounding scopes.
     ///
     /// If a local variable is found in a parent scope, it is marked as an extern local
-    pub fn find_local(&mut self, ident: Symbol) -> Option<(PossiblyExternalId, Local)> {
+    pub fn find_local(&mut self, at: Span, ident: Symbol) -> Option<(PossiblyExternalId, Local)> {
         let scope = self.current;
         let enclosing_function = self.scopes.enclosing_function_of(scope);
-        self.find_local_in_scope(ident, scope)
+        self.find_local_in_scope(at, ident, scope)
             .map(|(id, loc, target_fn_scope)| {
                 assert!(
                     (matches!(id, PossiblyExternalId::Local(_)) && target_fn_scope == enclosing_function)
                         || (matches!(id, PossiblyExternalId::External(_)) && target_fn_scope != enclosing_function),
                     "INVARIANT VIOLATION: LocalOrigin is wrong"
                 );
-                // ^ TODO: remove after checking this is true ^
+
                 (id, loc)
             })
     }
@@ -383,7 +400,8 @@ impl<'interner> FunctionCompiler<'interner> {
         &mut self,
         span: Span,
         FunctionDeclaration {
-            id,
+            body_scope,
+            parameters_scope,
             name,
             parameters: arguments,
             mut statements,
@@ -393,8 +411,8 @@ impl<'interner> FunctionCompiler<'interner> {
         constructor: Option<ConstructorData>,
     ) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
-        ib.with_scope(id, |ib| {
-            ib.function_stack.push(FunctionLocalState::new(ty, id));
+        ib.with_scope(parameters_scope, |ib| {
+            ib.function_stack.push(FunctionLocalState::new(ty, parameters_scope));
 
             let mut rest_local = None;
 
@@ -438,62 +456,70 @@ impl<'interner> FunctionCompiler<'interner> {
                 }
             }
 
-            transformations::hoist_declarations(id, &mut ib.inner.scope_counter, &mut ib.inner.scopes, &mut statements);
-            transformations::ast_insert_implicit_return(&mut statements);
+            ib.with_scope(body_scope, |ib| {
+                transformations::hoist_declarations(
+                    body_scope,
+                    &mut ib.inner.scope_counter,
+                    &mut ib.inner.scopes,
+                    &mut statements,
+                );
+                transformations::ast_insert_implicit_return(&mut statements);
 
-            let has_extends_clause = constructor.as_ref().is_some_and(|ctor| ctor.has_extends_clause);
-            // Insert member initializers at the top of the constructor IFF this is not a subclass (i.e. no call to `super()`),
-            // or if it is a subclass, add it into the function's state so that it can be inserted after the `super()` call
-            if let Some(constructor) = constructor
-                && !constructor.initializers.is_empty()
-            {
-                if has_extends_clause {
-                    ib.current_function_mut().member_initializers_for_super = constructor.initializers;
-                } else {
-                    let (members, members_stack_values) = compile_class_members(ib, span, constructor.initializers)?;
-                    ib.build_this();
-                    ib.build_object_member_like_instruction(
-                        span,
-                        members,
-                        members_stack_values,
-                        Instruction::AssignProperties,
-                    )?;
-                }
-            }
-
-            let res = statements.into_iter().try_for_each(|stmt| ib.accept(stmt));
-
-            let mut cmp = ib.function_stack.pop().expect("Missing function state");
-            res?; // Cannot early return error in the loop as we need to pop the function state in any case
-            let locals = ib.scopes[id].expect_function().locals.len();
-
-            // Strip away some extra unnecessary excess capacity - we're not going to push any more elements into it.
-            cmp.externals.shrink_to_fit();
-            cmp.cp.shrink_to_fit();
-
-            let function = Function {
-                buffer: Buffer::new(cmp.buf.into()),
-                constants: cmp.cp,
-                locals,
-                name: name.map(|binding| binding.ident),
-                ty,
-                params: match arguments.last() {
-                    Some((Parameter::SpreadPattern(..) | Parameter::SpreadIdentifier(_), ..)) => {
-                        arguments.len() as u16 - 1
+                let has_extends_clause = constructor.as_ref().is_some_and(|ctor| ctor.has_extends_clause);
+                // Insert member initializers at the top of the constructor IFF this is not a subclass (i.e. no call to `super()`),
+                // or if it is a subclass, add it into the function's state so that it can be inserted after the `super()` call
+                if let Some(constructor) = constructor
+                    && !constructor.initializers.is_empty()
+                {
+                    if has_extends_clause {
+                        ib.current_function_mut().member_initializers_for_super = constructor.initializers;
+                    } else {
+                        let (members, members_stack_values) =
+                            compile_class_members(ib, span, constructor.initializers)?;
+                        ib.build_this();
+                        ib.build_object_member_like_instruction(
+                            span,
+                            members,
+                            members_stack_values,
+                            Instruction::AssignProperties,
+                        )?;
                     }
-                    _ => arguments.len() as u16,
-                },
-                externals: cmp.externals,
-                rest_local,
-                debug_symbols: cmp.debug_symbols,
-                source: Rc::clone(&ib.source),
-                references_arguments: cmp.references_arguments.is_some(),
-                has_extends_clause,
-            };
-            ib.build_function_constant(function)
-                .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
+                }
 
-            Ok(())
+                let res = statements.into_iter().try_for_each(|stmt| ib.accept(stmt));
+
+                let mut cmp = ib.function_stack.pop().expect("Missing function state");
+                res?; // Cannot early return error in the loop as we need to pop the function state in any case
+                let locals = ib.scopes[parameters_scope].expect_function().locals.len();
+
+                // Strip away some extra unnecessary excess capacity - we're not going to push any more elements into it.
+                cmp.externals.shrink_to_fit();
+                cmp.cp.shrink_to_fit();
+
+                let function = Function {
+                    buffer: Buffer::new(cmp.buf.into()),
+                    constants: cmp.cp,
+                    locals,
+                    name: name.map(|binding| binding.ident),
+                    ty,
+                    params: match arguments.last() {
+                        Some((Parameter::SpreadPattern(..) | Parameter::SpreadIdentifier(_), ..)) => {
+                            arguments.len() as u16 - 1
+                        }
+                        _ => arguments.len() as u16,
+                    },
+                    externals: cmp.externals,
+                    rest_local,
+                    debug_symbols: cmp.debug_symbols,
+                    source: Rc::clone(&ib.source),
+                    arguments_local: cmp.references_arguments.map(|(_, local_id)| local_id),
+                    has_extends_clause,
+                };
+                ib.build_function_constant(function)
+                    .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
+
+                Ok(())
+            })
         })
     }
 }
@@ -731,38 +757,42 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
 
     fn visit_literal_expression(&mut self, span: Span, expr: LiteralExpr) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
-        let res = match expr {
-            LiteralExpr::Boolean(b) => ib.build_boolean_constant(b),
-            LiteralExpr::Number(n) => ib.build_number_constant(n),
-            LiteralExpr::String(s) => ib.build_string_constant(s),
+        match expr {
+            LiteralExpr::Boolean(b) => ib
+                .build_boolean_constant(b)
+                .map_err(|_| Error::ConstantPoolLimitExceeded(span)),
+            LiteralExpr::Number(n) => ib
+                .build_number_constant(n)
+                .map_err(|_| Error::ConstantPoolLimitExceeded(span)),
+            LiteralExpr::String(s) => ib
+                .build_string_constant(s)
+                .map_err(|_| Error::ConstantPoolLimitExceeded(span)),
             LiteralExpr::Identifier(_) => unreachable!("identifiers are handled in visit_identifier_expression"),
-            LiteralExpr::Regex(regex, sym) => ib.build_regex_constant(regex, sym),
-            LiteralExpr::Null => ib.build_null_constant(),
-            LiteralExpr::Undefined => ib.build_undefined_constant(),
-        };
-        res.map_err(|_| Error::ConstantPoolLimitExceeded(span))
+            LiteralExpr::Regex(regex, sym) => ib
+                .build_regex_constant(regex, sym)
+                .map_err(|_| Error::ConstantPoolLimitExceeded(span)),
+            LiteralExpr::Null => ib
+                .build_null_constant()
+                .map_err(|_| Error::ConstantPoolLimitExceeded(span)),
+            LiteralExpr::This => Ok(ib.build_this()),
+        }
     }
 
     fn visit_identifier_expression(&mut self, span: Span, ident: Symbol) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         match ident {
-            sym::this => ib.build_this(),
             // super() handled specifically in call visitor
             sym::super_ => unimplementedc!(span, "super keyword outside of a call"),
-            sym::globalThis => ib.build_global(),
-            sym::Infinity => ib.build_infinity(),
-            sym::NaN => ib.build_nan(),
-            sym::arguments => {
-                ib.current_function_mut().references_arguments = Some(span);
-                ib.build_arguments();
+            ident => {
+                let loc = ib.find_local(span, ident);
+                match loc {
+                    Some((id, _)) => ib.build_local_load(id),
+                    _ => ib
+                        .build_global_load(ident)
+                        .map_err(|_| Error::ConstantPoolLimitExceeded(span))?,
+                }
             }
-            ident => match ib.find_local(ident) {
-                Some((id, _)) => ib.build_local_load(id),
-                _ => ib
-                    .build_global_load(ident)
-                    .map_err(|_| Error::ConstantPoolLimitExceeded(span))?,
-            },
         };
 
         Ok(())
@@ -776,7 +806,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
         // `typeof x.a` does throw an error
         if let TokenType::Typeof = operator
             && let ExprKind::Literal(LiteralExpr::Identifier(ident)) = expr.kind
-            && ib.find_local(ident).is_none()
+            && ib.find_local(expr.span, ident).is_none()
         {
             return ib.build_typeof_global_ident(span, ident);
         }
@@ -1066,7 +1096,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
         match left {
             AssignmentTarget::Expr(left) => match left.kind {
                 ExprKind::Literal(LiteralExpr::Identifier(ident)) => {
-                    let local = ib.find_local(ident);
+                    let local = ib.find_local(left.span, ident);
 
                     if let Some((id, local)) = local {
                         if let VariableDeclarationKind::Const = local.kind {
@@ -1311,7 +1341,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                                         unimplementedc!(span, "rest binding must be an identifier")
                                     };
 
-                                    let Some((PossiblyExternalId::Local(local), _)) = ib.find_local(ident) else {
+                                    let Some((PossiblyExternalId::Local(local), _)) = ib.find_local(expr.span, ident) else {
                                         unimplementedc!(span, "rest binding must be defined in the current function")
                                     };
 
@@ -1339,7 +1369,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                                     unimplementedc!(span, "binding must be an identifier")
                                 };
 
-                                let Some((PossiblyExternalId::Local(local), _)) = ib.find_local(alias) else {
+                                let Some((PossiblyExternalId::Local(local), _)) = ib.find_local(expr.span, alias) else {
                                     unimplementedc!(span, "binding must be defined in the current function")
                                 };
 
@@ -1360,7 +1390,10 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
 
                             ib.build_local_load(PossiblyExternalId::Local(object_local));
                         },
-                        ExprKind::Array(ArrayLiteral{members,parenthesized:_}) => {
+                        ExprKind::Array(ArrayLiteral {
+                            members,
+                            parenthesized:false
+                        }) => {
                             let array_local = ib.add_unnameable_local(sym::empty).map_err(|_| Error::LocalLimitExceeded(span))?;
                             ib.accept_expr(*right)?;
                             ib.build_local_store(AssignKind::Assignment, PossiblyExternalId::Local(array_local));
@@ -1377,7 +1410,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                                             unimplementedc!(span, "binding must be an identifier")
                                         };
 
-                                        let Some((PossiblyExternalId::Local(local), _)) = ib.find_local(alias) else {
+                                        let Some((PossiblyExternalId::Local(local), _)) = ib.find_local(expr.span, alias) else {
                                             unimplementedc!(span, "binding must be defined in the current function")
                                         };
 
@@ -1577,7 +1610,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
 
         match expr.kind {
             ExprKind::Literal(LiteralExpr::Identifier(ident)) => {
-                if let Some((id, loc)) = ib.find_local(ident) {
+                if let Some((id, loc)) = ib.find_local(expr.span, ident) {
                     let ty = loc.inferred_type().borrow();
 
                     // Specialize guaranteed local number increment
@@ -1650,7 +1683,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
 
         match expr.kind {
             ExprKind::Literal(LiteralExpr::Identifier(ident)) => {
-                if let Some((id, loc)) = ib.find_local(ident) {
+                if let Some((id, loc)) = ib.find_local(expr.span, ident) {
                     let ty = loc.inferred_type().borrow();
 
                     // Specialize guaranteed local number increment
@@ -2048,7 +2081,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                         .add_symbol(name)
                         .map_err(|_| Error::ConstantPoolLimitExceeded(span))?;
 
-                    match ib.find_local(name) {
+                    match ib.find_local(span, name) {
                         Some((loc_id, _)) => {
                             let PossiblyExternalId::Local(loc_id) = loc_id else {
                                 unreachable!("top level export shouldn't be able to refer to extern locals")
@@ -2189,14 +2222,19 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                 .map_err(|_| Error::LocalLimitExceeded(span))?,
         };
 
-        let (parameters, statements, id) = match constructor {
-            Some(fun) => (fun.parameters, fun.statements, fun.id),
+        let (parameters, statements, body_scope, parameters_scope) = match constructor {
+            Some(fun) => (fun.parameters, fun.statements, fun.body_scope, fun.parameters_scope),
             None => {
                 let parent = ib.current;
-                let scope = ib
+                let parameters_scope =
+                    ib.inner
+                        .scopes
+                        .add_empty_function_scope(parent, &mut ib.inner.scope_counter, true);
+
+                let body_scope = ib
                     .inner
                     .scopes
-                    .add_empty_function_scope(parent, &mut ib.inner.scope_counter);
+                    .add_empty_block_scope(parameters_scope, &mut ib.inner.scope_counter);
 
                 let statements = if class.extends.is_some() {
                     // Implicit super(...arguments)
@@ -2222,7 +2260,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                     Vec::new()
                 };
 
-                (Vec::new(), statements, scope)
+                (Vec::new(), statements, body_scope, parameters_scope)
             }
         };
 
@@ -2232,7 +2270,8 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
             .filter(|member| matches!(member.value, ClassMemberValue::Field(_)));
 
         let desugared_class = FunctionDeclaration {
-            id,
+            body_scope,
+            parameters_scope,
             name: class.name,
             parameters,
             statements,

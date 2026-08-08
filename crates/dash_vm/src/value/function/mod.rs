@@ -301,7 +301,7 @@ pub(crate) fn adjust_stack_from_flat_call(
     argc: usize,
 ) -> Option<ObjectId> {
     let mut arguments = None;
-    if user_function.inner().references_arguments {
+    if user_function.inner().arguments_local.is_some() {
         let args = scope.stack[old_sp..].to_vec();
         // TODO: this assertion is wrong for (function(){ return arguments })(...[1, 2]). args.len() is correct
         debug_assert_eq!(args.len(), argc);

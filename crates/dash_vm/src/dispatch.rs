@@ -1100,7 +1100,7 @@ mod handlers {
         let mut frame = Frame::from_function(this, user_function, new_target, true, arguments);
         frame.sp = Sp(sp_before_call as u32);
 
-        cx.pad_stack_for_frame(&frame);
+        cx.init_stack_for_frame(&frame);
         cx.try_push_frame(frame)?;
 
         Ok(None)
@@ -2332,16 +2332,6 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn arguments(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let arguments = cx
-            .frames
-            .current_arguments()
-            .expect("use of `arguments` should have been found by compiler");
-
-        cx.stack.push(Value::object(arguments));
-        Ok(None)
-    }
-
     pub fn new_target(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         if let FrameState::Function {
             new_target: Some(new_target),
@@ -2432,7 +2422,6 @@ pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResu
         Instruction::Debugger => handlers::debugger(cx),
         Instruction::Global => handlers::global_this(cx),
         Instruction::Super => handlers::super_(cx),
-        Instruction::Arguments => handlers::arguments(cx),
         Instruction::Undef => handlers::undef(cx),
         Instruction::Await => handlers::await_(cx),
         Instruction::Nan => handlers::nan(cx),

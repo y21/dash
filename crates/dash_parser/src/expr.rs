@@ -562,9 +562,9 @@ impl Parser<'_, '_> {
                 span: current.span,
                 kind: ExprKind::null_literal(),
             },
-            TokenType::UndefinedLit => Expr {
+            TokenType::ThisLit => Expr {
                 span: current.span,
-                kind: ExprKind::undefined_literal(),
+                kind: ExprKind::this_literal(),
             },
             TokenType::String(sym) => Expr {
                 span: current.span,
@@ -665,13 +665,15 @@ impl Parser<'_, '_> {
                                 let parameters = self.parse_parameter_list()?;
                                 self.eat(TokenType::LeftBrace, true)?;
                                 let body = self.parse_block()?;
-                                let id = self.scope_count.inc();
+                                let body_scope = self.scope_count.inc();
+                                let parameters_scope = self.scope_count.inc();
                                 items.push((
                                     key,
                                     Expr {
                                         span: current.span.to(self.previous()?.span),
                                         kind: ExprKind::function(FunctionDeclaration {
-                                            id,
+                                            body_scope,
+                                            parameters_scope,
                                             name: None,
                                             parameters,
                                             statements: body.0,
@@ -728,10 +730,12 @@ impl Parser<'_, '_> {
 
                             self.eat(TokenType::LeftBrace, true)?;
                             let BlockStatement(stmts, scope_id) = self.parse_block()?;
+                            let parameters_scope = self.scope_count.inc();
 
                             let fun = FunctionDeclaration {
                                 name: None,
-                                id: scope_id,
+                                body_scope: scope_id,
+                                parameters_scope,
                                 parameters: params,
                                 statements: stmts,
                                 ty: FunctionKind::Function(Asyncness::No),
@@ -850,7 +854,8 @@ impl Parser<'_, '_> {
                         span: current.span.to(statement.span),
                         kind: ExprKind::function(FunctionDeclaration {
                             name: None,
-                            id: self.scope_count.inc(),
+                            body_scope: self.scope_count.inc(),
+                            parameters_scope: self.scope_count.inc(),
                             parameters: params,
                             statements: vec![statement],
                             // FIXME: this isn't correct -- we're currently desugaring async closures
@@ -956,11 +961,13 @@ impl Parser<'_, '_> {
         self.eat(TokenType::LeftBrace, true)?;
 
         let BlockStatement(statements, scope_id) = self.parse_block()?;
+        let parameters_scope = self.scope_count.inc();
 
         Some((
             FunctionDeclaration {
                 name,
-                id: scope_id,
+                body_scope: scope_id,
+                parameters_scope,
                 parameters: arguments,
                 statements,
                 ty,
@@ -1135,12 +1142,14 @@ impl Parser<'_, '_> {
             }
         };
 
-        let func_id = self.scope_count.inc();
+        let body_scope = self.scope_count.inc();
+        let parameters_scope = self.scope_count.inc();
         Some(Expr {
             span: pre_span.to(body.span),
             kind: ExprKind::function(FunctionDeclaration {
                 name: None,
-                id: func_id,
+                body_scope,
+                parameters_scope,
                 parameters: list,
                 statements: vec![body],
                 ty: FunctionKind::Arrow,

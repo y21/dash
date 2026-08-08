@@ -1,3 +1,4 @@
+use std::env;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Write};
 use std::path::{Path, PathBuf};
@@ -85,7 +86,10 @@ fn parse_results_from_file<'bump>(bump: &'bump Bump, path: &Path) -> anyhow::Res
 }
 
 pub fn diff_results_to_previous(bump: &Bump, results: &Results) -> anyhow::Result<()> {
-    let last_file = find_last_result_file().context("finding last result file")?;
+    let last_file = match env::var("TEST262_DIFF_FILE") {
+        Ok(path) => Some(PathBuf::from(path)),
+        Err(_) => find_last_result_file()?,
+    };
 
     write_results(results).context("writing current results")?;
     if let Some(last_file) = last_file {
@@ -117,10 +121,7 @@ pub fn diff_results_to_previous(bump: &Bump, results: &Results) -> anyhow::Resul
 
         if !missing_in_new.is_empty() {
             println!();
-            println!("Missing in new results:");
-            for path in missing_in_new {
-                println!("{path}");
-            }
+            println!("{} paths missing in new results", missing_in_new.len());
         }
 
         if new_results.len() != last_results.len() {

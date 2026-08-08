@@ -66,7 +66,7 @@ fn bootstrap_generator(
         if !generator.did_run() {
             // If it hasn't run before, do the stack space management initially (push undefined values for locals)
             // We only want to do this if the generator hasn't run already, because the locals are already in `old_stack`
-            scope.pad_stack_for_frame(&frame);
+            scope.init_stack_for_frame(&frame);
         }
 
         frame

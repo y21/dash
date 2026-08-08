@@ -188,7 +188,6 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                         &[&arg],
                     );
                 }
-                Instruction::Arguments => self.handle_opless_instr("arguments"),
                 Instruction::LdGlobal => {
                     let b = self.read_u16()?;
                     let ident = self

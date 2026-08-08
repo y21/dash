@@ -165,14 +165,16 @@ impl Parser<'_, '_> {
 
                 let body = self.parse_statement()?;
 
-                let func_id = self.scope_count.inc();
+                let body_scope = self.scope_count.inc();
+                let parameters_scope = self.scope_count.inc();
                 let func = FunctionDeclaration {
                     name: match key {
                         ClassMemberKey::Named(name) => Some(self.create_binding(name)),
                         // TODO: not correct, `class V { ['a']() {} }` should have its name set to 'a'
                         ClassMemberKey::Computed(_) => None,
                     },
-                    id: func_id,
+                    body_scope,
+                    parameters_scope,
                     parameters: arguments,
                     statements: vec![body],
                     ty: match is_generator {

@@ -461,7 +461,10 @@ impl From<bool> for Asyncness {
 /// A function declaration
 #[derive(Debug, Clone)]
 pub struct FunctionDeclaration {
-    pub id: ScopeId,
+    /// The scope of the body of the function
+    pub body_scope: ScopeId,
+    /// The scope of the parameters of the function
+    pub parameters_scope: ScopeId,
     /// The name of this function, if present
     pub name: Option<Binding>,
     /// Function parameter names
@@ -645,6 +648,10 @@ pub enum VariableDeclarationKind {
     /// on the `ScopeGraph` will never consider unnamed variables.
     #[display("__intrinsic_var")]
     Unnameable,
+
+    /// Implicit "arguments" object
+    #[display("arguments")]
+    Arguments,
 }
 
 #[derive(Debug, Clone)]

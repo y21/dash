@@ -99,9 +99,10 @@ pub struct Function {
     pub externals: IndexVec<External, ExternalId>,
     /// If the parameter list uses the rest operator ..., then this will be Some(local_id)
     pub rest_local: Option<BackLocalId>,
+    /// If this function mentions the `arguments` object, then this will be Some(local_id)
+    pub arguments_local: Option<BackLocalId>,
     pub source: Rc<str>,
     pub debug_symbols: DebugSymbols,
-    pub references_arguments: bool,
     pub has_extends_clause: bool,
 }
 

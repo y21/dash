@@ -34,7 +34,7 @@ impl GeneratorFunction {
         _new_target: Option<ObjectId>,
     ) -> Result<Value, Unrooted> {
         let mut arguments = None;
-        if self.function.inner().references_arguments {
+        if self.function.inner().arguments_local.is_some() {
             let args = Arguments::new(scope, args.iter().cloned());
             let args = scope.register(args);
             arguments = Some(args);

@@ -1,6 +1,6 @@
 use dash_log::debug;
 use dash_middle::compiler::scope::ScopeGraph;
-use dash_middle::interner::StringInterner;
+use dash_middle::interner::{StringInterner, sym};
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::expr::{
     ArrayLiteral, ArrayMemberKind, AssignmentExpr, AssignmentTarget, BinaryExpr, CallArgumentKind, ConditionalExpr,
@@ -489,7 +489,7 @@ impl<'b, 'interner> ConstFunctionEvalCtx<'b, 'interner> {
         FunctionDeclaration {
             parameters,
             statements,
-            id,
+            body_scope: id,
             ..
         }: &mut FunctionDeclaration,
     ) {
@@ -542,9 +542,10 @@ fn expr_has_side_effects(expr: &Expr) -> bool {
         ExprKind::NewTarget => false,
         ExprKind::Grouping(GroupingExpr(grouping)) => grouping.iter().any(expr_has_side_effects),
         ExprKind::Literal(LiteralExpr::Boolean(..)) => false,
+        ExprKind::Literal(LiteralExpr::Identifier(sym::this)) => false,
         ExprKind::Literal(LiteralExpr::Identifier(..)) => true, // might invoke a global getter
+        ExprKind::Literal(LiteralExpr::This) => false,
         ExprKind::Literal(LiteralExpr::Null) => false,
-        ExprKind::Literal(LiteralExpr::Undefined) => false,
         ExprKind::Literal(LiteralExpr::Number(..)) => false,
         ExprKind::Literal(LiteralExpr::Regex(..)) => false,
         ExprKind::Literal(LiteralExpr::String(..)) => false,

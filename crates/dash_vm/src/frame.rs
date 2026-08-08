@@ -264,7 +264,7 @@ impl Frame {
             rest_local: None,
             source: cr.source,
             debug_symbols: cr.debug_symbols,
-            references_arguments: false,
+            arguments_local: None,
             has_extends_clause: false,
         };
 

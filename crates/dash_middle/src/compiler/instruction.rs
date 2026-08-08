@@ -83,7 +83,6 @@ pub enum Instruction {
     Debugger,
     Global,
     Super,
-    Arguments,
     Undef,
     Await,
     Nan,

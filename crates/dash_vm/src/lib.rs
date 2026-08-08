@@ -1228,7 +1228,12 @@ impl Vm {
                 (sym::JSON, json_ctor),
             ],
             [],
-            [],
+            [
+                (sym::NaN, Value::number(f64::NAN), Some(PropertyDataDescriptor::empty())),
+                (sym::Infinity, Value::number(f64::INFINITY), Some(PropertyDataDescriptor::empty())),
+                (sym::undefined, Value::undefined(), Some(PropertyDataDescriptor::empty())),
+                (sym::globalThis, Value::object(global), Some(PropertyDataDescriptor::CONFIGURABLE | PropertyDataDescriptor::WRITABLE)),
+            ],
             None,
             &mut scope
         );
@@ -1472,16 +1477,26 @@ impl Vm {
         debug!("execute frame {:?}", frame.function.name);
         let span = span!(Level::TRACE, "vm frame");
         span.in_scope(|| {
-            self.pad_stack_for_frame(&frame);
+            self.init_stack_for_frame(&frame);
             self.execute_frame_raw(frame)
         })
     }
 
-    /// Does the necessary stack management that needs to be done before executing a JavaScript frame
-    pub(crate) fn pad_stack_for_frame(&mut self, frame: &Frame) {
+    /// Does the necessary stack management that needs to be done before executing a JavaScript frame:
+    /// Allocate stack space for the locals and inits the `arguments` local
+    pub(crate) fn init_stack_for_frame(&mut self, frame: &Frame) {
         let pad_to = self.stack.len() + frame.extra_stack_space as usize;
         // TODO: check that the stack space won't exceed our stack frame limit
         self.stack.resize(pad_to, Value::undefined());
+
+        let arguments_local = frame.function.arguments_local;
+        let arguments = frame.arguments;
+
+        if let Some(arguments) = arguments {
+            let id = arguments_local.unwrap();
+
+            self.stack[frame.sp.0 as usize + id.0 as usize] = Value::object(arguments);
+        }
     }
 
     /// Executes a frame in this VM, without doing any sort of stack management

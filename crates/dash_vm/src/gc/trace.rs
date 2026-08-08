@@ -188,8 +188,8 @@ unsafe impl Trace for dash_middle::compiler::constant::Function {
             rest_local: _,
             source: Rc { .. },
             debug_symbols: _,
-            references_arguments: _,
             has_extends_clause: _,
+            arguments_local: _,
         } = self;
         name.trace(cx);
         numbers.as_slice().trace(cx);

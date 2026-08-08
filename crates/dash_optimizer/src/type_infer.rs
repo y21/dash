@@ -14,9 +14,10 @@ use dash_middle::parser::expr::{
 };
 use dash_middle::parser::statement::{
     Binding, BlockStatement, Class, ClassMemberKey, ClassMemberValue, DoWhileLoop, ExportKind, ForInLoop, ForLoop,
-    ForOfLoop, FrontLocalId, FunctionDeclaration, IfStatement, ImportKind, Loop, Parameter, Pattern, ReturnStatement,
-    ScopeId, SpecifierKind, Statement, StatementKind, SwitchCase, SwitchStatement, TryCatch, VariableBinding,
-    VariableDeclaration, VariableDeclarationKind, VariableDeclarationName, VariableDeclarations, WhileLoop,
+    ForOfLoop, FrontLocalId, FunctionDeclaration, FunctionKind, IfStatement, ImportKind, Loop, Parameter, Pattern,
+    ReturnStatement, ScopeId, SpecifierKind, Statement, StatementKind, SwitchCase, SwitchStatement, TryCatch,
+    VariableBinding, VariableDeclaration, VariableDeclarationKind, VariableDeclarationName, VariableDeclarations,
+    WhileLoop,
 };
 
 /// Mapping from frontend locals to backend locals.
@@ -114,7 +115,8 @@ impl<'s> TypeInferCtx<'s> {
     fn add_local_in_scope(
         &mut self,
         at: ScopeId,
-        binding: Binding,
+        ident: Symbol,
+        id: Option<FrontLocalId>,
         kind: VariableDeclarationKind,
         ty: Option<CompileValueType>,
     ) {
@@ -122,16 +124,11 @@ impl<'s> TypeInferCtx<'s> {
             let enclosing_function = scopes.enclosing_function_of(at);
             if kind == VariableDeclarationKind::Var && at != enclosing_function {
                 // `var` declarations are hoisted to the top
-                self.add_local_in_scope(enclosing_function, binding, kind, ty);
+                self.add_local_in_scope(enclosing_function, ident, id, kind, ty);
                 return;
             }
 
-            if let Some((_, slot)) = scopes[at]
-                .declarations
-                .iter()
-                .copied()
-                .find(|decl| decl.0 == binding.ident)
-            {
+            if let Some((_, slot)) = scopes[at].declarations.iter().copied().find(|decl| decl.0 == ident) {
                 // This should be a normal error: it happens for e.g.
                 // let x = 1;
                 // let x = 2;
@@ -140,26 +137,34 @@ impl<'s> TypeInferCtx<'s> {
                 //         && scopes[enclosing_function].expect_function().locals[slot as usize].kind
                 //             == VariableDeclarationKind::Var
                 // );
-                decls.0[binding.id] = slot;
+                if let Some(id) = id {
+                    decls.0[id] = slot;
+                }
             } else {
                 let local_id = scopes[enclosing_function]
                     .expect_function_mut()
                     .add_local(Local {
-                        name: binding.ident,
+                        name: ident,
                         kind,
                         inferred_type: RefCell::new(ty),
                     })
                     .unwrap();
 
-                scopes[at].declarations.push((binding.ident, local_id));
-                decls.0[binding.id] = local_id;
+                scopes[at].declarations.push((ident, local_id));
+                if let Some(id) = id {
+                    decls.0[id] = local_id;
+                }
             }
         }
     }
 
     /// NOTE: in InferMode::View, this has no effect and is simply a no-op
     fn add_local(&mut self, binding: Binding, kind: VariableDeclarationKind, ty: Option<CompileValueType>) {
-        self.add_local_in_scope(self.current, binding, kind, ty)
+        self.add_local_in_scope(self.current, binding.ident, Some(binding.id), kind, ty)
+    }
+
+    fn add_local_no_id(&mut self, ident: Symbol, kind: VariableDeclarationKind, ty: Option<CompileValueType>) {
+        self.add_local_in_scope(self.current, ident, None, kind, ty)
     }
 
     pub fn visit_statement(&mut self, statement: &Statement) {
@@ -496,6 +501,7 @@ impl<'s> TypeInferCtx<'s> {
     pub fn visit_literal_expression(&mut self, expression: &LiteralExpr) -> Option<CompileValueType> {
         match expression {
             LiteralExpr::Boolean(..) => Some(CompileValueType::Boolean),
+            LiteralExpr::Identifier(sym::undefined) => Some(CompileValueType::Undefined),
             LiteralExpr::Identifier(identifier) => match self.find_local(*identifier) {
                 Some(local) => local.inferred_type().borrow().clone(),
                 _ => None,
@@ -504,7 +510,7 @@ impl<'s> TypeInferCtx<'s> {
             LiteralExpr::String(..) => Some(CompileValueType::String),
             LiteralExpr::Regex(..) => None,
             LiteralExpr::Null => Some(CompileValueType::Null),
-            LiteralExpr::Undefined => Some(CompileValueType::Undefined),
+            LiteralExpr::This => None,
         }
     }
 
@@ -634,19 +640,19 @@ impl<'s> TypeInferCtx<'s> {
         FunctionDeclaration {
             parameters,
             statements,
-            id,
+            body_scope,
+            parameters_scope,
             name,
+            ty,
             ..
         }: &FunctionDeclaration,
     ) -> Option<CompileValueType> {
-        let sub_func_id = *id;
-
         if let Some(name) = *name {
             debug!("visit function {name}");
 
             self.add_local(name, VariableDeclarationKind::Var, None);
         }
-        self.with_function_scope(sub_func_id, |this| {
+        self.with_function_scope(*parameters_scope, |this| {
             for (param, expr, _) in parameters {
                 match *param {
                     Parameter::Identifier(binding) | Parameter::SpreadIdentifier(binding) => {
@@ -676,9 +682,17 @@ impl<'s> TypeInferCtx<'s> {
                 }
             }
 
-            for stmt in statements {
-                this.visit_statement(stmt);
+            // Important: add `arguments` as a normal local after visiting the parameters so that it isn't treated as a real parameter.
+            // TODO: should check if any binding is named arguments and don't add it in that case.
+            if !matches!(ty, FunctionKind::Arrow) {
+                this.add_local_no_id(sym::arguments, VariableDeclarationKind::Arguments, None);
             }
+
+            this.with_block_scope(*body_scope, |this| {
+                for stmt in statements {
+                    this.visit_statement(stmt);
+                }
+            });
         });
 
         None

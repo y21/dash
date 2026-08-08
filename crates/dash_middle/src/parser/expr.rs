@@ -200,7 +200,11 @@ impl ExprKind {
 
     /// Creates an undefined literal expression
     pub fn undefined_literal() -> Self {
-        Self::Literal(LiteralExpr::Undefined)
+        Self::Literal(LiteralExpr::Identifier(sym::undefined))
+    }
+
+    pub fn this_literal() -> Self {
+        Self::Literal(LiteralExpr::This)
     }
 
     pub fn regex_literal(regex: dash_regex::Regex, source: Symbol) -> Self {
@@ -564,8 +568,8 @@ pub enum LiteralExpr {
     #[display("null")]
     Null,
 
-    #[display("undefined")]
-    Undefined,
+    #[display("this")]
+    This,
 }
 
 impl LiteralExpr {
@@ -579,8 +583,8 @@ impl LiteralExpr {
             Self::Number(n) => Some(*n != 0.0),
             Self::String(s) => Some(*s != sym::empty),
             Self::Null => Some(false),
-            Self::Undefined => Some(false),
             Self::Regex(..) => Some(true),
+            Self::This => None,
         }
     }
 }

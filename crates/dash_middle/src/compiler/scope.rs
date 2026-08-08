@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::ops::{Index, IndexMut};
 
 use crate::indexvec::{self, IndexVec};
-use crate::interner::Symbol;
+use crate::interner::{Symbol, sym};
 use crate::parser::statement::{ScopeId, VariableDeclarationKind};
 use crate::util::Counter;
 use crate::{index_type, with};
@@ -159,16 +159,30 @@ impl ScopeGraph {
         }
     }
 
-    pub fn add_empty_function_scope(&mut self, at: ScopeId, counter: &mut Counter<ScopeId>) -> ScopeId {
+    pub fn add_empty_function_scope(
+        &mut self,
+        at: ScopeId,
+        counter: &mut Counter<ScopeId>,
+        add_arguments_binding: bool,
+    ) -> ScopeId {
         let id = counter.inc();
         assert_eq!(self.scopes.len(), id.0);
 
+        let mut locals = IndexVec::new();
+        let mut declarations = Vec::new();
+        if add_arguments_binding {
+            let arguments_local = locals.push(Local {
+                inferred_type: RefCell::new(None),
+                kind: VariableDeclarationKind::Arguments,
+                name: sym::arguments,
+            });
+            declarations.push((sym::arguments, arguments_local));
+        }
+
         self[at].subscopes.push(id);
         self.scopes.push(Scope {
-            kind: ScopeKind::Function(FunctionScope {
-                locals: IndexVec::new(),
-            }),
-            declarations: Vec::new(),
+            kind: ScopeKind::Function(FunctionScope { locals }),
+            declarations,
             parent: Some(at),
             subscopes: Vec::new(),
         });
@@ -219,13 +233,6 @@ impl ScopeGraph {
             self.find(parent, name)
                 .map(|FindResult { slot, scope }| FindResult { slot, scope })
         }
-    }
-
-    pub fn find_local(&self, at: ScopeId, name: Symbol) -> Option<&Local> {
-        self.find(at, name).map(|FindResult { slot, scope, .. }| {
-            let function = self.enclosing_function_of(scope);
-            &self[function].expect_function().locals[slot]
-        })
     }
 }
 

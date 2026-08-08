@@ -6,7 +6,6 @@ use dash_middle::interner::Symbol;
 use dash_proc_macro::Trace;
 
 use crate::frame::{BaseFrame, ExtendedFrame, Frame, FrameState, Ip, Sp};
-use crate::gc::ObjectId;
 use crate::value::object::This;
 use crate::value::{ExternalValue, Unrooted};
 
@@ -100,10 +99,6 @@ impl FrameStack {
 
     pub fn current_state_mut(&mut self) -> &mut FrameState {
         &mut self.current_extended_mut().state
-    }
-
-    pub fn current_arguments(&self) -> Option<ObjectId> {
-        self.current_extended().arguments
     }
 
     pub fn set_ip(&mut self, ip: Ip) {

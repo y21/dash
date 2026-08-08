@@ -43,7 +43,7 @@ impl UserFunction {
         let sp = scope.stack.len();
 
         let mut arguments = None;
-        if self.inner.references_arguments {
+        if self.inner.arguments_local.is_some() {
             let args = Arguments::new(scope, args.iter().cloned());
             let args = scope.register(args);
             arguments = Some(args);
