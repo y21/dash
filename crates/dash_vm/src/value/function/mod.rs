@@ -186,7 +186,13 @@ fn handle_call(
         FunctionKind::Generator(fun) => fun
             .handle_function_call(scope, callee, this, args, new_target)
             .map(Into::into),
-        FunctionKind::Closure(fun) => fun.handle_function_call(scope, this, args, new_target),
+        FunctionKind::Closure(closure) => {
+            if new_target.is_some() {
+                throw!(scope, TypeError, "closure is not constructable");
+            }
+
+            closure.handle_function_call(scope, this, args, new_target)
+        }
     }
 }
 

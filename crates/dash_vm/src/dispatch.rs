@@ -1199,6 +1199,10 @@ mod handlers {
             match function.kind() {
                 FunctionKind::User(user) => call_flat(cx, callee, this, function, user, argc, function_call_kind),
                 FunctionKind::Closure(closure) => {
+                    if function_call_kind == FunctionCallKind::Constructor {
+                        throw!(cx.scope, TypeError, "closure cannot be called as a constructor")
+                    }
+
                     let bound_this = closure.this;
                     call_flat(cx, callee, bound_this, function, &closure.fun, argc, function_call_kind)
                 }
