@@ -553,7 +553,7 @@ mod handlers {
     use crate::value::function::generator::GeneratorFunction;
     use crate::value::function::user::UserFunction;
     use crate::value::function::{Function, FunctionKind, adjust_stack_from_flat_call, this_for_new_target};
-    use crate::value::object::{Object, OrdObject, PropertyValue, PropertyValueKind, This, ThisKind};
+    use crate::value::object::{Object, OrdObject, OwnKeysMode, PropertyValue, PropertyValueKind, This, ThisKind};
     use crate::value::ops::conversions::ValueConversion;
     use crate::value::ops::equality;
     use crate::value::primitive::Number;
@@ -726,7 +726,7 @@ mod handlers {
             let found = target
                 .for_each_prototype(sc, |sc, target| {
                     let contains = target
-                        .own_keys(sc)?
+                        .own_keys(sc, OwnKeysMode::All)?
                         .iter()
                         .any(|v| matches!(v.unpack(), ValueKind::String(s) if s == property));
 
@@ -1492,7 +1492,7 @@ mod handlers {
                 },
                 ObjectProperty::Spread(value) => {
                     if let ValueKind::Object(object) = value.unpack() {
-                        for key in object.own_keys(&mut cx.scope)? {
+                        for key in object.own_keys(&mut cx.scope, OwnKeysMode::OnlyEnumerable)? {
                             let key = PropertyKey::from_value(&mut cx.scope, key)?;
                             if let Some(value) = object.get_own_property_descriptor(key, &mut cx.scope)? {
                                 obj.set_property(key, value, &mut cx.scope)?;
@@ -2022,8 +2022,8 @@ mod handlers {
         let value = cx.pop_stack_rooted();
 
         let keys = match value.unpack() {
-            ValueKind::Object(obj) => obj.own_keys(&mut cx.scope)?,
-            ValueKind::External(obj) => obj.own_keys(&mut cx.scope)?,
+            ValueKind::Object(obj) => obj.own_keys(&mut cx.scope, OwnKeysMode::OnlyEnumerable)?,
+            ValueKind::External(obj) => obj.own_keys(&mut cx.scope, OwnKeysMode::OnlyEnumerable)?,
             _ => Vec::new(),
         }
         .into_iter()
@@ -2091,7 +2091,7 @@ mod handlers {
 
         if let Some(rest_id) = rest_id {
             let keys = obj
-                .own_keys(&mut cx.scope)?
+                .own_keys(&mut cx.scope, OwnKeysMode::OnlyEnumerable)?
                 .into_iter()
                 .filter_map(|s| match s.unpack() {
                     ValueKind::String(s) => (!idents.contains(&s)).then_some(s),

@@ -14,7 +14,7 @@ use crate::gc::trace::{Trace, TraceCtxt};
 use crate::localscope::LocalScope;
 use crate::util::cold_path;
 use crate::value::function::args::CallArgs;
-use crate::value::object::This;
+use crate::value::object::{OwnKeysMode, This};
 use crate::value::primitive::Symbol;
 use crate::value::propertykey::{PropertyKey, PropertyKeyInner, ToPropertyKey};
 use crate::value::string::JsString;
@@ -138,7 +138,7 @@ impl OrdObject {
     }
 
     pub fn dump(&self, sc: &mut LocalScope<'_>) -> Result<(), Unrooted> {
-        for key in self.own_keys(sc)? {
+        for key in self.own_keys(sc, OwnKeysMode::All)? {
             let value = self.get_property(This::default(), PropertyKey::from_value(sc, key)?, sc)?;
             eprintln!("{:?} -> {:?}", key.unpack(), value.root(sc).unpack());
         }
@@ -323,7 +323,7 @@ impl Object for OrdObject {
         throw!(scope, Error, "Attempted to call non-function object")
     }
 
-    fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+    fn own_keys(&self, _: &mut LocalScope<'_>, mode: OwnKeysMode) -> Result<Vec<Value>, Value> {
         // SAFETY: no reentrancy possible from here
         let cell = unsafe { &*self.0.borrow() };
 
@@ -332,18 +332,27 @@ impl Object for OrdObject {
             InnerOrdObject::Linear(ref property_vec) => {
                 let mut keys = Vec::with_capacity(property_vec.raw_keys().len());
 
-                for &sym in property_vec.string_keys() {
-                    keys.push(Value::string(JsString::from_sym(interner::Symbol::from_raw(sym))));
+                let (string_keys, string_descriptors) = property_vec.string_keys_descriptors();
+                for (&sym, &descriptor) in iter::zip(string_keys, string_descriptors) {
+                    if descriptor.should_enumerate(mode) {
+                        keys.push(Value::string(JsString::from_sym(interner::Symbol::from_raw(sym))));
+                    }
                 }
 
-                for &sym in property_vec.symbol_keys() {
-                    keys.push(Value::symbol(Symbol::new(JsString::from_sym(
-                        interner::Symbol::from_raw(sym),
-                    ))));
+                let (symbol_keys, symbol_descriptors) = property_vec.symbol_keys_descriptors();
+                for (&sym, &descriptor) in iter::zip(symbol_keys, symbol_descriptors) {
+                    if descriptor.should_enumerate(mode) {
+                        keys.push(Value::symbol(Symbol::new(JsString::from_sym(
+                            interner::Symbol::from_raw(sym),
+                        ))));
+                    }
                 }
 
-                for &index in property_vec.index_keys() {
-                    keys.push(Value::number(index as f64));
+                let (index_keys, index_descriptors) = property_vec.index_keys_descriptors();
+                for (&index, &descriptor) in iter::zip(index_keys, index_descriptors) {
+                    if descriptor.should_enumerate(mode) {
+                        keys.push(Value::number(index as f64));
+                    }
                 }
 
                 Ok(keys)
@@ -367,6 +376,13 @@ bitflags::bitflags! {
 
 impl InternalLinearPropertyVecDescriptor {
     const GET_SET: Self = Self::union(Self::GET, Self::SET);
+
+    fn should_enumerate(&self, mode: OwnKeysMode) -> bool {
+        match mode {
+            OwnKeysMode::All => true,
+            OwnKeysMode::OnlyEnumerable => self.contains(Self::ENUMERABLE),
+        }
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -895,6 +911,13 @@ impl PropertyVec {
         unsafe { std::slice::from_raw_parts(self.string_keys_start(), self.string_key_count() as usize) }
     }
 
+    fn string_keys_descriptors(&self) -> (&[u32], &[InternalLinearPropertyVecDescriptor]) {
+        let string_keys = self.string_keys();
+        let (_, descriptors) = self.values_descriptors();
+        let descriptors = &descriptors[0..string_keys.len()];
+        (string_keys, descriptors)
+    }
+
     /// Returns a pointer to the start of the symbol keys
     fn symbol_keys_start(&self) -> *const u32 {
         unsafe { self.string_keys_start().add(self.string_key_count() as usize) }
@@ -910,6 +933,13 @@ impl PropertyVec {
         unsafe { (*self.0.as_ptr()).string_key_count }
     }
 
+    fn symbol_keys_descriptors(&self) -> (&[u32], &[InternalLinearPropertyVecDescriptor]) {
+        let symbol_keys = self.symbol_keys();
+        let (_, descriptors) = self.values_descriptors();
+        let descriptors = &descriptors[self.symbol_key_index_offset() as usize..][..symbol_keys.len()];
+        (symbol_keys, descriptors)
+    }
+
     /// The offset in counts of `size_of<u32>` at which index keys start.
     fn index_key_index_offset(&self) -> u32 {
         unsafe { self.symbol_key_index_offset() + (*self.0.as_ptr()).symbol_key_count }
@@ -923,6 +953,13 @@ impl PropertyVec {
     /// Returns a slice of index keys
     fn index_keys(&self) -> &[u32] {
         unsafe { std::slice::from_raw_parts(self.index_keys_start(), self.index_key_count() as usize) }
+    }
+
+    fn index_keys_descriptors(&self) -> (&[u32], &[InternalLinearPropertyVecDescriptor]) {
+        let index_keys = self.index_keys();
+        let (_, descriptors) = self.values_descriptors();
+        let descriptors = &descriptors[self.index_key_index_offset() as usize..][..index_keys.len()];
+        (index_keys, descriptors)
     }
 
     /// Returns a pointer to the start of the values section

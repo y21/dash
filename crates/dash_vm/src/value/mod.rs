@@ -33,7 +33,7 @@ use crate::frame::Ip;
 use crate::gc::ObjectId;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::util::cold_path;
-use crate::value::object::This;
+use crate::value::object::{OwnKeysMode, This};
 use crate::value::primitive::{Null, Undefined};
 use crate::{Vm, delegate, throw};
 
@@ -344,16 +344,16 @@ impl Object for Value {
         self.apply(this, args, scope)
     }
 
-    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+    fn own_keys(&self, sc: &mut LocalScope<'_>, mode: OwnKeysMode) -> Result<Vec<Value>, Value> {
         match self.unpack() {
-            ValueKind::Number(n) => n.own_keys(sc),
-            ValueKind::Boolean(b) => b.own_keys(sc),
-            ValueKind::String(s) => s.own_keys(sc),
-            ValueKind::Undefined(u) => u.own_keys(sc),
-            ValueKind::Null(n) => n.own_keys(sc),
-            ValueKind::Symbol(s) => s.own_keys(sc),
-            ValueKind::Object(o) => o.own_keys(sc),
-            ValueKind::External(e) => e.own_keys(sc),
+            ValueKind::Number(n) => n.own_keys(sc, mode),
+            ValueKind::Boolean(b) => b.own_keys(sc, mode),
+            ValueKind::String(s) => s.own_keys(sc, mode),
+            ValueKind::Undefined(u) => u.own_keys(sc, mode),
+            ValueKind::Null(n) => n.own_keys(sc, mode),
+            ValueKind::Symbol(s) => s.own_keys(sc, mode),
+            ValueKind::Object(o) => o.own_keys(sc, mode),
+            ValueKind::External(e) => e.own_keys(sc, mode),
         }
     }
 
@@ -1009,8 +1009,8 @@ impl<O: Object + 'static> Object for PureBuiltin<O> {
         self.inner.set_prototype(value, sc)
     }
 
-    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
-        self.inner.own_keys(sc)
+    fn own_keys(&self, sc: &mut LocalScope<'_>, mode: OwnKeysMode) -> Result<Vec<Value>, Value> {
+        self.inner.own_keys(sc, mode)
     }
 
     fn internal_slots(&self, vm: &Vm) -> Option<&dyn InternalSlots> {

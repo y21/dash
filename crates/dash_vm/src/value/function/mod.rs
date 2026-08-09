@@ -11,7 +11,7 @@ use crate::gc::ObjectId;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::localscope::LocalScope;
 use crate::value::arguments::Arguments;
-use crate::value::object::This;
+use crate::value::object::{OwnKeysMode, This};
 use crate::{Vm, extract, throw};
 use dash_middle::interner::sym;
 
@@ -282,7 +282,7 @@ impl Object for Function {
         self.obj.get_prototype(sc)
     }
 
-    fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+    fn own_keys(&self, _: &mut LocalScope<'_>, _: OwnKeysMode) -> Result<Vec<Value>, Value> {
         Ok(vec![Value::string(sym::length.into()), Value::string(sym::name.into())])
     }
 

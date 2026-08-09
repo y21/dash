@@ -9,7 +9,7 @@ use table::ArrayTable;
 use crate::gc::ObjectId;
 use crate::gc::trace::Trace;
 use crate::localscope::LocalScope;
-use crate::value::object::{PropertyDataDescriptor, This};
+use crate::value::object::{OwnKeysMode, PropertyDataDescriptor, This};
 use crate::{Vm, delegate, extract, throw};
 use dash_middle::interner::sym;
 
@@ -290,7 +290,7 @@ impl Object for Array {
         self.obj.get_prototype(sc)
     }
 
-    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+    fn own_keys(&self, sc: &mut LocalScope<'_>, _: OwnKeysMode) -> Result<Vec<Value>, Value> {
         let items = self.items.borrow();
         // TODO: this should not include holey indices
         Ok(array_like_keys(sc, items.len() as usize).collect())

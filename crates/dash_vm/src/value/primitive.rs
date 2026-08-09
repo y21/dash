@@ -7,7 +7,7 @@ use dash_proc_macro::Trace;
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
 use crate::util::intern_f64;
-use crate::value::object::This;
+use crate::value::object::{OwnKeysMode, This};
 use crate::{Vm, extract, throw};
 
 use super::boxed::{Boolean as BoxedBoolean, Number as BoxedNumber, Symbol as BoxedSymbol};
@@ -59,7 +59,7 @@ impl Object for f64 {
         throw!(scope, TypeError, "number is not a function")
     }
 
-    fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+    fn own_keys(&self, _: &mut LocalScope<'_>, _: OwnKeysMode) -> Result<Vec<Value>, Value> {
         Ok(Vec::new())
     }
 
@@ -109,7 +109,7 @@ impl Object for bool {
         throw!(scope, TypeError, "boolean is not a function")
     }
 
-    fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+    fn own_keys(&self, _: &mut LocalScope<'_>, _: OwnKeysMode) -> Result<Vec<Value>, Value> {
         Ok(Vec::new())
     }
 
@@ -176,7 +176,7 @@ impl Object for Undefined {
         throw!(sc, TypeError, "undefined is not a function")
     }
 
-    fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+    fn own_keys(&self, _: &mut LocalScope<'_>, _: OwnKeysMode) -> Result<Vec<Value>, Value> {
         Ok(Vec::new())
     }
 
@@ -226,7 +226,7 @@ impl Object for Null {
         throw!(sc, TypeError, "null is not a function")
     }
 
-    fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+    fn own_keys(&self, _: &mut LocalScope<'_>, _: OwnKeysMode) -> Result<Vec<Value>, Value> {
         Ok(Vec::new())
     }
 
@@ -284,7 +284,7 @@ impl Object for Symbol {
         throw!(scope, TypeError, "symbol is not a function")
     }
 
-    fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+    fn own_keys(&self, _: &mut LocalScope<'_>, _: OwnKeysMode) -> Result<Vec<Value>, Value> {
         Ok(Vec::new())
     }
 
@@ -523,8 +523,8 @@ impl Object for Number {
         self.0.apply(callee, this, args, scope)
     }
 
-    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
-        self.0.own_keys(sc)
+    fn own_keys(&self, sc: &mut LocalScope<'_>, mode: OwnKeysMode) -> Result<Vec<Value>, Value> {
+        self.0.own_keys(sc, mode)
     }
 
     fn type_of(&self, vm: &Vm) -> Typeof {

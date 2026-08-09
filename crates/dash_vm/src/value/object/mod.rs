@@ -28,6 +28,12 @@ pub use this::{This, ThisKind};
 
 pub type ObjectMap<K, V> = hashbrown::HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
+#[derive(Debug, Copy, Clone)]
+pub enum OwnKeysMode {
+    All,
+    OnlyEnumerable,
+}
+
 pub trait Object: Debug + Trace {
     fn get_own_property(&self, this: This, key: PropertyKey, sc: &mut LocalScope<'_>) -> Result<Unrooted, Unrooted> {
         delegate_get_own_property(self, this, sc, key)
@@ -92,8 +98,7 @@ pub trait Object: Debug + Trace {
         None
     }
 
-    // TODO: change this to Vec<JsString>
-    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value>;
+    fn own_keys(&self, sc: &mut LocalScope<'_>, mode: OwnKeysMode) -> Result<Vec<Value>, Value>;
 
     fn type_of(&self, _: &Vm) -> Typeof {
         Typeof::Object
@@ -160,8 +165,8 @@ macro_rules! delegate {
         }
     };
     (override $field:ident, own_keys) => {
-        fn own_keys(&self, sc: &mut $crate::localscope::LocalScope<'_>) -> Result<Vec<$crate::value::Value>, $crate::value::Value> {
-            self.$field.own_keys(sc)
+        fn own_keys(&self, sc: &mut $crate::localscope::LocalScope<'_>, mode: $crate::value::object::OwnKeysMode) -> Result<Vec<$crate::value::Value>, $crate::value::Value> {
+            self.$field.own_keys(sc, mode)
         }
     };
     (override $field:ident, apply) => {
@@ -556,8 +561,8 @@ impl Object for ObjectId {
         unsafe { (self.vtable(scope).js_construct)(self.data_ptr(scope), callee, this, args, new_target, scope) }
     }
 
-    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
-        unsafe { (self.vtable(sc).js_own_keys)(self.data_ptr(sc), sc) }
+    fn own_keys(&self, sc: &mut LocalScope<'_>, mode: OwnKeysMode) -> Result<Vec<Value>, Value> {
+        unsafe { (self.vtable(sc).js_own_keys)(self.data_ptr(sc), sc, mode) }
     }
 
     fn type_of(&self, vm: &Vm) -> Typeof {
@@ -613,7 +618,7 @@ impl ObjectId {
 
     pub fn set_integrity_level(self, level: IntegrityLevel, sc: &mut LocalScope<'_>) -> Result<(), Value> {
         // TODO: invoke [[PreventExtensions]]
-        let keys = self.own_keys(sc)?;
+        let keys = self.own_keys(sc, OwnKeysMode::All)?;
         for key in keys {
             let key = PropertyKey::from_value(sc, key)?;
 

@@ -11,7 +11,7 @@ use dash_vm::value::propertykey::{PropertyKey, ToPropertyKey};
 use dash_vm::value::typedarray::TypedArray;
 use dash_vm::value::{Typeof, Unpack, ValueKind};
 
-use dash_vm::value::object::{Object, PropertyDataDescriptor, PropertyValueKind, This};
+use dash_vm::value::object::{Object, OwnKeysMode, PropertyDataDescriptor, PropertyValueKind, This};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::primitive::Number;
 use dash_vm::value::root_ext::RootErrExt;
@@ -183,7 +183,7 @@ fn inspect_inner_into(
             }
 
             *out += "{ ";
-            let keys = object.own_keys(scope)?;
+            let keys = object.own_keys(scope, OwnKeysMode::OnlyEnumerable)?;
             for (i, key) in keys.into_iter().enumerate() {
                 let key = PropertyKey::from_value(scope, key)?;
 

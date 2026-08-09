@@ -13,7 +13,7 @@ use trace::TraceCtxt;
 use crate::Vm;
 use crate::localscope::LocalScope;
 use crate::value::function::args::CallArgs;
-use crate::value::object::{PropertyValue, This};
+use crate::value::object::{OwnKeysMode, PropertyValue, This};
 use crate::value::primitive::InternalSlots;
 use crate::value::propertykey::PropertyKey;
 use crate::value::{Typeof, Unrooted, Value};
@@ -47,7 +47,8 @@ pub struct ObjectVTable {
         unsafe fn(*const (), ObjectId, This, CallArgs, ObjectId, &mut LocalScope<'_>) -> Result<Unrooted, Unrooted>,
     pub(crate) js_internal_slots: unsafe fn(*const (), &Vm) -> Option<*const dyn InternalSlots>,
     pub(crate) js_extract_type_raw: unsafe fn(*const (), &Vm, TypeId) -> Option<NonNull<()>>,
-    pub(crate) js_own_keys: unsafe fn(*const (), sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value>,
+    pub(crate) js_own_keys:
+        unsafe fn(*const (), sc: &mut LocalScope<'_>, mode: OwnKeysMode) -> Result<Vec<Value>, Value>,
     pub(crate) js_type_of: unsafe fn(*const (), _: &Vm) -> Typeof,
 }
 
@@ -96,7 +97,9 @@ macro_rules! object_vtable_for_ty {
                 js_extract_type_raw: |ptr, vm, id| unsafe {
                     <$ty as Object>::extract_type_raw(&*(ptr.cast::<$ty>()), vm, id)
                 },
-                js_own_keys: |ptr, scope| unsafe { <$ty as Object>::own_keys(&*(ptr.cast::<$ty>()), scope) },
+                js_own_keys: |ptr, scope, mode| unsafe {
+                    <$ty as Object>::own_keys(&*(ptr.cast::<$ty>()), scope, mode)
+                },
                 js_type_of: |ptr, vm| unsafe { <$ty as Object>::type_of(&*(ptr.cast::<$ty>()), vm) },
             }
         }

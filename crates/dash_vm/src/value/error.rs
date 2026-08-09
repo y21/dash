@@ -5,7 +5,7 @@ use dash_proc_macro::Trace;
 
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
-use crate::value::object::This;
+use crate::value::object::{OwnKeysMode, This};
 use crate::{delegate, extract};
 
 use super::function::args::CallArgs;
@@ -113,8 +113,8 @@ impl Object for Error {
         self.obj.get_prototype(sc)
     }
 
-    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
-        self.obj.own_keys(sc)
+    fn own_keys(&self, sc: &mut LocalScope<'_>, mode: OwnKeysMode) -> Result<Vec<Value>, Value> {
+        self.obj.own_keys(sc, mode)
     }
 
     extract!(self);

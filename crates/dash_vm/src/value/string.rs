@@ -3,7 +3,7 @@ use dash_proc_macro::Trace;
 
 use crate::localscope::LocalScope;
 use crate::value::boxed::String as BoxedString;
-use crate::value::object::This;
+use crate::value::object::{OwnKeysMode, This};
 use crate::{Vm, extract, throw};
 
 use super::function::args::CallArgs;
@@ -127,7 +127,7 @@ impl Object for JsString {
         throw!(scope, TypeError, "'{}' is not a function", v)
     }
 
-    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
+    fn own_keys(&self, sc: &mut LocalScope<'_>, _: OwnKeysMode) -> Result<Vec<Value>, Value> {
         let len = self.len(sc);
         Ok(array_like_keys(sc, len).collect())
     }

@@ -3,7 +3,7 @@ use dash_proc_macro::Trace;
 
 use crate::gc::ObjectId;
 use crate::localscope::LocalScope;
-use crate::value::object::This;
+use crate::value::object::{OwnKeysMode, This};
 use crate::{Vm, extract};
 
 use super::arraybuffer::ArrayBuffer;
@@ -202,8 +202,8 @@ impl Object for TypedArray {
         self.obj.apply(callee, this, args, scope)
     }
 
-    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
-        self.obj.own_keys(sc)
+    fn own_keys(&self, sc: &mut LocalScope<'_>, mode: OwnKeysMode) -> Result<Vec<Value>, Value> {
+        self.obj.own_keys(sc, mode)
     }
 
     extract!(self);

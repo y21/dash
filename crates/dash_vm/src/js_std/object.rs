@@ -5,7 +5,7 @@ use crate::localscope::LocalScope;
 use crate::throw;
 use crate::value::array::Array;
 use crate::value::function::native::CallContext;
-use crate::value::object::{IntegrityLevel, OrdObject, Object, PropertyDataDescriptor, PropertyValue};
+use crate::value::object::{IntegrityLevel, Object, OrdObject, OwnKeysMode, PropertyDataDescriptor, PropertyValue};
 use crate::value::ops::conversions::ValueConversion;
 use crate::value::propertykey::{PropertyKey, ToPropertyKey};
 use crate::value::root_ext::RootErrExt;
@@ -38,7 +38,7 @@ pub fn create(cx: CallContext) -> Result<Value, Value> {
 pub fn keys(cx: CallContext) -> Result<Value, Value> {
     let obj = cx.args.first().unwrap_or_undefined().to_object(cx.scope)?;
     // FIXME: own_keys should probably takes an `enumerable: bool`
-    let keys = obj.own_keys(cx.scope)?;
+    let keys = obj.own_keys(cx.scope, OwnKeysMode::OnlyEnumerable)?;
     let array = Array::from_vec(keys.into_iter().map(PropertyValue::static_default).collect(), cx.scope);
     Ok(cx.scope.register(array).into())
 }
@@ -101,7 +101,7 @@ pub fn get_own_property_descriptors(cx: CallContext) -> Result<Value, Value> {
     };
 
     let mut descriptors = Vec::new();
-    let keys = o.own_keys(cx.scope)?;
+    let keys = o.own_keys(cx.scope, OwnKeysMode::All)?;
 
     for key in keys {
         let key = PropertyKey::from_value(cx.scope, key)?;
@@ -179,7 +179,7 @@ pub fn define_properties(cx: CallContext) -> Result<Value, Value> {
     };
 
     let properties = cx.args.get(1).unwrap_or_undefined();
-    for key in properties.own_keys(cx.scope)? {
+    for key in properties.own_keys(cx.scope, OwnKeysMode::OnlyEnumerable)? {
         let key = key.to_js_string(cx.scope)?;
         let descriptor = properties.get_property(key.to_key(cx.scope), cx.scope).root(cx.scope)?;
         let descriptor = PropertyValue::from_descriptor_value(cx.scope, descriptor)?;
@@ -194,7 +194,7 @@ pub fn assign(cx: CallContext) -> Result<Value, Value> {
     let to = args.next().unwrap_or_undefined().to_object(cx.scope)?;
     for source in args {
         let source = source.to_object(cx.scope)?;
-        for key in source.own_keys(cx.scope)? {
+        for key in source.own_keys(cx.scope, OwnKeysMode::OnlyEnumerable)? {
             let key = PropertyKey::from_value(cx.scope, key)?;
             let desc = source.get_own_property(key, cx.scope).root(cx.scope)?;
             to.set_property(key, PropertyValue::static_default(desc), cx.scope)?;
@@ -206,7 +206,7 @@ pub fn assign(cx: CallContext) -> Result<Value, Value> {
 pub fn entries(cx: CallContext) -> Result<Value, Value> {
     let mut entries = Vec::new();
     let obj = cx.args.first().unwrap_or_undefined().to_object(cx.scope)?;
-    for key in obj.own_keys(cx.scope)? {
+    for key in obj.own_keys(cx.scope, OwnKeysMode::OnlyEnumerable)? {
         let key = PropertyKey::from_value(cx.scope, key)?;
         let value = obj.get_own_property(key, cx.scope).root(cx.scope)?;
         let entry = Array::from_vec(

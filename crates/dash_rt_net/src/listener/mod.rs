@@ -12,7 +12,7 @@ use dash_vm::value::arraybuffer::ArrayBuffer;
 use dash_vm::value::function::args::CallArgs;
 use dash_vm::value::function::native::CallContext;
 use dash_vm::value::function::{Function, FunctionKind};
-use dash_vm::value::object::{Object, OrdObject, PropertyValue, This};
+use dash_vm::value::object::{Object, OrdObject, OwnKeysMode, PropertyValue, This};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::promise::Promise;
 use dash_vm::value::propertykey::{PropertyKey, ToPropertyKey};
@@ -147,7 +147,11 @@ impl Object for TcpListenerConstructor {
         Ok(Value::object(scope.register(handle)).into())
     }
 
-    fn own_keys(&self, _: &mut LocalScope<'_>) -> Result<Vec<dash_vm::value::Value>, dash_vm::value::Value> {
+    fn own_keys(
+        &self,
+        _: &mut LocalScope<'_>,
+        _: OwnKeysMode,
+    ) -> Result<Vec<dash_vm::value::Value>, dash_vm::value::Value> {
         Ok(Vec::new())
     }
 

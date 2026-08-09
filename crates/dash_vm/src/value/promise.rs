@@ -5,7 +5,7 @@ use dash_proc_macro::Trace;
 use crate::gc::ObjectId;
 use crate::gc::trace::{Trace, TraceCtxt};
 use crate::localscope::LocalScope;
-use crate::value::object::This;
+use crate::value::object::{OwnKeysMode, This};
 use crate::{PromiseAction, Vm, extract};
 
 use super::function::args::CallArgs;
@@ -116,8 +116,8 @@ impl Object for Promise {
         self.obj.apply(callee, this, args, scope)
     }
 
-    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
-        self.obj.own_keys(sc)
+    fn own_keys(&self, sc: &mut LocalScope<'_>, mode: OwnKeysMode) -> Result<Vec<Value>, Value> {
+        self.obj.own_keys(sc, mode)
     }
 
     extract!(self);
@@ -180,8 +180,8 @@ impl Object for PromiseResolver {
         Ok(Value::undefined().into())
     }
 
-    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
-        self.obj.own_keys(sc)
+    fn own_keys(&self, sc: &mut LocalScope<'_>, mode: OwnKeysMode) -> Result<Vec<Value>, Value> {
+        self.obj.own_keys(sc, mode)
     }
 
     fn type_of(&self, _: &Vm) -> Typeof {
@@ -248,8 +248,8 @@ impl Object for PromiseRejecter {
         Ok(Value::undefined().into())
     }
 
-    fn own_keys(&self, sc: &mut LocalScope<'_>) -> Result<Vec<Value>, Value> {
-        self.obj.own_keys(sc)
+    fn own_keys(&self, sc: &mut LocalScope<'_>, mode: OwnKeysMode) -> Result<Vec<Value>, Value> {
+        self.obj.own_keys(sc, mode)
     }
 
     fn type_of(&self, _: &Vm) -> Typeof {
