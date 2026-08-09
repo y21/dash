@@ -303,8 +303,13 @@ impl Object for Function {
         self.obj.get_prototype(sc)
     }
 
-    fn own_keys(&self, _: &mut LocalScope<'_>, _: OwnKeysMode) -> Result<Vec<Value>, Value> {
-        Ok(vec![Value::string(sym::length.into()), Value::string(sym::name.into())])
+    fn own_keys(&self, _: &mut LocalScope<'_>, mode: OwnKeysMode) -> Result<Vec<Value>, Value> {
+        Ok(match mode {
+            OwnKeysMode::All | OwnKeysMode::AllStrings => {
+                vec![Value::string(sym::length.into()), Value::string(sym::name.into())]
+            }
+            OwnKeysMode::OnlyEnumerable | OwnKeysMode::AllSymbols => Vec::new(),
+        })
     }
 
     fn type_of(&self, _: &Vm) -> Typeof {
