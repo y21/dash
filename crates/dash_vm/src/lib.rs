@@ -336,6 +336,13 @@ impl Vm {
             [],
             [
                 (sym::PI, Value::number(std::f64::consts::PI), Some(PropertyDataDescriptor::empty())),
+                (sym::E, Value::number(std::f64::consts::E), Some(PropertyDataDescriptor::empty())),
+                (sym::LN10, Value::number(std::f64::consts::LN_10), Some(PropertyDataDescriptor::empty())),
+                (sym::LN2, Value::number(std::f64::consts::LN_2), Some(PropertyDataDescriptor::empty())),
+                (sym::LOG10E, Value::number(std::f64::consts::LOG10_E), Some(PropertyDataDescriptor::empty())),
+                (sym::LOG2E, Value::number(std::f64::consts::LOG2_E), Some(PropertyDataDescriptor::empty())),
+                (sym::SQRT1_2, Value::number(std::f64::consts::FRAC_1_SQRT_2), Some(PropertyDataDescriptor::empty())),
+                (sym::SQRT2, Value::number(std::f64::consts::SQRT_2), Some(PropertyDataDescriptor::empty()))
             ],
             None,
             &mut scope,
