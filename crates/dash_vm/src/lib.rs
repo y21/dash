@@ -1216,6 +1216,7 @@ impl Vm {
                 (sym::AggregateError, aggregate_error_ctor),
                 (sym::String, string_ctor),
                 (sym::Object, object_ctor),
+                (sym::Function, function_ctor),
                 (sym::Set, set_ctor),
                 (sym::Map, map_ctor),
                 (sym::WeakMap, weakmap_ctor),
