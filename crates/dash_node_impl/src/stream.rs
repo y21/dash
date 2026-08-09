@@ -27,16 +27,19 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     let stream_ctor = Function::new(
         sc,
         Some(stream_sym.into()),
-        FunctionKind::Native(|cx| {
-            let StreamState { stream_prototype } = State::from_vm(cx.scope).store[StreamKey];
+        FunctionKind::Native {
+            function: |cx| {
+                let StreamState { stream_prototype } = State::from_vm(cx.scope).store[StreamKey];
 
-            Ok(cx
-                .scope
-                .register(Stream {
-                    object: OrdObject::with_prototype(stream_prototype),
-                })
-                .into())
-        }),
+                Ok(cx
+                    .scope
+                    .register(Stream {
+                        object: OrdObject::with_prototype(stream_prototype),
+                    })
+                    .into())
+            },
+            constructable: true,
+        },
     );
     stream_ctor.set_fn_prototype(stream_prototype);
     let stream_ctor = sc.register(stream_ctor);
@@ -46,7 +49,7 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
         sc,
     )?;
 
-    let readable_fn = register_native_fn(sc, readable_sym, |_sc| Ok(Value::undefined()));
+    let readable_fn = register_native_fn(sc, readable_sym, false, |_sc| Ok(Value::undefined()));
     stream_ctor.set_property(
         readable_sym.to_key(sc),
         PropertyValue::static_default(readable_fn.into()),

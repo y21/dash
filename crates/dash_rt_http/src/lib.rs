@@ -11,8 +11,7 @@ use dash_vm::gc::persistent::Persistent;
 use dash_vm::gc::trace::{Trace, TraceCtxt};
 use dash_vm::js_std::receiver_t;
 use dash_vm::localscope::LocalScope;
-use dash_vm::value::function::native::CallContext;
-use dash_vm::value::function::{Function, FunctionKind};
+use dash_vm::value::function::native::{CallContext, register_native_fn};
 use dash_vm::value::object::{Object, OrdObject, PropertyValue, This};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::propertykey::ToPropertyKey;
@@ -39,9 +38,8 @@ impl ModuleLoader for HttpModule {
         }
 
         let module = OrdObject::new(sc);
-        let listen = Function::new(sc, None, FunctionKind::Native(listen));
-        let listen = sc.register(listen);
         let key = sc.intern("listen");
+        let listen = register_native_fn(sc, key, false, listen);
         module.set_property(key.to_key(sc), PropertyValue::static_default(listen.into()), sc)?;
 
         let module = sc.register(module);
@@ -93,8 +91,7 @@ pub fn listen(cx: CallContext) -> Result<Value, Value> {
 
                     let ctx = HttpContext::new(&mut scope, req_tx);
                     let name = scope.intern("respond");
-                    let fun = Function::new(&scope, Some(name.into()), FunctionKind::Native(ctx_respond));
-                    let fun = scope.register(fun);
+                    let fun = register_native_fn(&mut scope, name, false, ctx_respond);
                     ctx.set_property(
                         name.to_key(&mut scope),
                         PropertyValue::static_default(fun.into()),

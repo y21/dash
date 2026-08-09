@@ -64,7 +64,7 @@ impl Runtime {
     fn init_globals(&mut self) {
         let scope = &mut self.vm.scope();
         let global = scope.global();
-        let log = register_native_fn(scope, sym::log, |cx| {
+        let log = register_native_fn(scope, sym::log, false, |cx| {
             if let [arg] = *cx.args {
                 if let ValueKind::String(s) = arg.unpack() {
                     // Fast path

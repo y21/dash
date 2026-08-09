@@ -21,12 +21,12 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
         basename: basename_sym,
         ..
     } = state_mut(sc).sym;
-    let parse_path = register_native_fn(sc, parse_sym, parse_path);
-    let join_path = register_native_fn(sc, sym::join, join_path);
-    let resolve_path = register_native_fn(sc, sym::resolve, resolve_path);
-    let is_absolute_path = register_native_fn(sc, is_absolute_sym, is_absolute_path);
-    let dirname = register_native_fn(sc, dirname_sym, dirname);
-    let basename = register_native_fn(sc, basename_sym, basename);
+    let parse_path = register_native_fn(sc, parse_sym, false, parse_path);
+    let join_path = register_native_fn(sc, sym::join, false, join_path);
+    let resolve_path = register_native_fn(sc, sym::resolve, false, resolve_path);
+    let is_absolute_path = register_native_fn(sc, is_absolute_sym, false, is_absolute_path);
+    let dirname = register_native_fn(sc, dirname_sym, false, dirname);
+    let basename = register_native_fn(sc, basename_sym, false, basename);
 
     exports.set_property(
         parse_sym.to_key(sc),

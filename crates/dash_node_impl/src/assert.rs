@@ -9,7 +9,7 @@ use crate::symbols::NodeSymbols;
 
 pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     let NodeSymbols { assert: assert_sym, .. } = state_mut(sc).sym;
-    let js_assert = register_native_fn(sc, assert_sym, js_assert);
+    let js_assert = register_native_fn(sc, assert_sym, false, js_assert);
     Ok(Value::object(js_assert))
 }
 

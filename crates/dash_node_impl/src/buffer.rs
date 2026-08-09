@@ -36,15 +36,18 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
             inner: TypedArray::new(sc, arraybuffer, TypedArrayKind::Uint8Array),
         })
     };
-    let wu32be = register_native_fn(sc, wu32be_sym, |cx| write_byte(cx, Endianness::Big, 4));
-    let wu32le = register_native_fn(sc, wu32le_sym, |cx| write_byte(cx, Endianness::Little, 4));
+    let wu32be = register_native_fn(sc, wu32be_sym, false, |cx| write_byte(cx, Endianness::Big, 4));
+    let wu32le = register_native_fn(sc, wu32le_sym, false, |cx| write_byte(cx, Endianness::Little, 4));
     buffer_prototype.set_property(wu32be_sym.to_key(sc), PropertyValue::static_default(wu32be.into()), sc)?;
     buffer_prototype.set_property(wu32le_sym.to_key(sc), PropertyValue::static_default(wu32le.into()), sc)?;
 
     let buffer_ctor = Function::new(
         sc,
         Some(buffer_sym.into()),
-        FunctionKind::Native(|cx| throw!(cx.scope, Error, "Buffer() constructor unsupported")),
+        FunctionKind::Native {
+            constructable: true,
+            function: |cx| throw!(cx.scope, Error, "Buffer() constructor unsupported"),
+        },
     );
     buffer_ctor.set_fn_prototype(buffer_prototype);
     let buffer_ctor = sc.register(buffer_ctor);
@@ -54,8 +57,8 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
         sc,
     )?;
 
-    let from_fn = register_native_fn(sc, sym::from, from);
-    let alloc_fn = register_native_fn(sc, alloc_sym, alloc);
+    let from_fn = register_native_fn(sc, sym::from, false, from);
+    let alloc_fn = register_native_fn(sc, alloc_sym, false, alloc);
     buffer_ctor.set_property(sym::from.to_key(sc), PropertyValue::static_default(from_fn.into()), sc)?;
     buffer_ctor.set_property(
         buffer_sym.to_key(sc),

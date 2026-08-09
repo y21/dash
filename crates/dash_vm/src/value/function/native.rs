@@ -10,8 +10,20 @@ use super::{Function, FunctionKind};
 // TODO: return Unrooted?
 pub type NativeFunction = fn(cx: CallContext) -> Result<Value, Value>;
 
-pub fn register_native_fn(sc: &mut LocalScope<'_>, name: Symbol, fun: NativeFunction) -> ObjectId {
-    let fun = Function::new(sc, Some(name.into()), FunctionKind::Native(fun));
+pub fn register_native_fn(
+    sc: &mut LocalScope<'_>,
+    name: Symbol,
+    constructable: bool,
+    function: NativeFunction,
+) -> ObjectId {
+    let fun = Function::new(
+        sc,
+        Some(name.into()),
+        FunctionKind::Native {
+            function,
+            constructable,
+        },
+    );
     sc.register(fun)
 }
 

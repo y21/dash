@@ -21,7 +21,7 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
         ..
     } = state_mut(sc).sym;
 
-    let spawn_sync = register_native_fn(sc, spawn_sync_sym, spawn_sync);
+    let spawn_sync = register_native_fn(sc, spawn_sync_sym, false, spawn_sync);
     exports.set_property(
         spawn_sync_sym.to_key(sc),
         PropertyValue::static_default(spawn_sync.into()),

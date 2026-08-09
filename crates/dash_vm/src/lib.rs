@@ -527,7 +527,7 @@ impl Vm {
                 (sym::next, scope.statics.array_iterator_next),
             ],
             [
-                (scope.statics.symbol_iterator, scope.statics.identity_this),
+                (scope.statics.symbol_iterator, scope.statics.self_iterator),
             ],
             [],
             None,
@@ -543,7 +543,7 @@ impl Vm {
                 (sym::throw,scope.statics.generator_iterator_throw)
             ],
             [
-                (scope.statics.symbol_iterator, scope.statics.identity_this),
+                (scope.statics.symbol_iterator, scope.statics.self_iterator),
             ],
             [],
             None,

@@ -6,7 +6,7 @@ use dash_vm::localscope::LocalScope;
 use dash_vm::throw;
 use dash_vm::value::error::Error;
 use dash_vm::value::function::native::{CallContext, register_native_fn};
-use dash_vm::value::object::{OrdObject, Object, PropertyValue};
+use dash_vm::value::object::{Object, OrdObject, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::typedarray::TypedArray;
@@ -15,8 +15,8 @@ use dash_vm::value::{Value, ValueContext};
 pub fn init_module(sc: &mut LocalScope) -> Result<Value, Value> {
     let read_file_k = sc.intern("readFile");
     let write_file_k = sc.intern("writeFile");
-    let read_file_value = register_native_fn(sc, read_file_k, read_file);
-    let write_file_value = register_native_fn(sc, write_file_k, write_file);
+    let read_file_value = register_native_fn(sc, read_file_k, false, read_file);
+    let write_file_value = register_native_fn(sc, write_file_k, false, write_file);
 
     let module = OrdObject::new(sc);
     module.set_property(

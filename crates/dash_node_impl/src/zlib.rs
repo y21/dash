@@ -24,16 +24,19 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     let inflate_ctor = Function::new(
         sc,
         Some(inflate_sym.into()),
-        FunctionKind::Native(|cx| {
-            let ZlibState { inflate_prototype } = State::from_vm(cx.scope).store[ZlibKey];
+        FunctionKind::Native {
+            function: |cx| {
+                let ZlibState { inflate_prototype } = State::from_vm(cx.scope).store[ZlibKey];
 
-            Ok(cx
-                .scope
-                .register(Inflate {
-                    object: OrdObject::with_prototype(inflate_prototype),
-                })
-                .into())
-        }),
+                Ok(cx
+                    .scope
+                    .register(Inflate {
+                        object: OrdObject::with_prototype(inflate_prototype),
+                    })
+                    .into())
+            },
+            constructable: true,
+        },
     );
     inflate_ctor.set_fn_prototype(inflate_prototype);
     let inflate_ctor = sc.register(inflate_ctor);

@@ -12,7 +12,7 @@ use crate::symbols::NodeSymbols;
 pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     let exports = OrdObject::new(sc);
     let NodeSymbols { tmpdir: tmpdir_sym, .. } = state_mut(sc).sym;
-    let tmpdir_fn = register_native_fn(sc, tmpdir_sym, tmpdir);
+    let tmpdir_fn = register_native_fn(sc, tmpdir_sym, false, tmpdir);
     exports.set_property(
         tmpdir_sym.to_key(sc),
         PropertyValue::static_default(tmpdir_fn.into()),

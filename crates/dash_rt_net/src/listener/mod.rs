@@ -10,8 +10,7 @@ use dash_vm::js_std::receiver_t;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::arraybuffer::ArrayBuffer;
 use dash_vm::value::function::args::CallArgs;
-use dash_vm::value::function::native::CallContext;
-use dash_vm::value::function::{Function, FunctionKind};
+use dash_vm::value::function::native::{CallContext, register_native_fn};
 use dash_vm::value::object::{Object, OrdObject, OwnKeysMode, PropertyValue, This};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::promise::Promise;
@@ -183,11 +182,10 @@ impl TcpListenerHandle {
         sc: &mut LocalScope,
     ) -> Result<Self, Value> {
         let name = sc.intern("accept");
-        let accept_fn = Function::new(sc, Some(name.into()), FunctionKind::Native(tcplistener_accept));
-        let accept_fn = sc.register(accept_fn);
+        let accept = register_native_fn(sc, name, false, tcplistener_accept);
         object.set_property(
             name.to_key(sc),
-            PropertyValue::static_default(Value::object(accept_fn)),
+            PropertyValue::static_default(Value::object(accept)),
             sc,
         )?;
         Ok(Self { object, sender })
@@ -238,16 +236,14 @@ impl TcpStreamHandle {
     ) -> Result<Self, Value> {
         let object = OrdObject::new(scope);
         let name = scope.intern("write");
-        let write_fn = Function::new(scope, Some(name.into()), FunctionKind::Native(tcpstream_write));
-        let write_fn = scope.register(write_fn);
+        let write_fn = register_native_fn(scope, name, false, tcpstream_write);
         object.set_property(
             name.to_key(scope),
             PropertyValue::static_default(Value::object(write_fn)),
             scope,
         )?;
         let name = scope.intern("read");
-        let read_fn = Function::new(scope, Some(name.into()), FunctionKind::Native(tcpstream_read));
-        let read_fn = scope.register(read_fn);
+        let read_fn = register_native_fn(scope, name, false, tcpstream_read);
         object.set_property(
             name.to_key(scope),
             PropertyValue::static_default(Value::object(read_fn)),

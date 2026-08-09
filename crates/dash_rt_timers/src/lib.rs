@@ -39,7 +39,7 @@ pub fn import(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     let obj = OrdObject::new(sc);
 
     let set_timeout_sym = sc.intern("setTimeout");
-    let set_timeout = register_native_fn(sc, set_timeout_sym, set_timeout);
+    let set_timeout = register_native_fn(sc, set_timeout_sym, false, set_timeout);
 
     obj.set_property(
         set_timeout_sym.to_key(sc),
@@ -48,7 +48,7 @@ pub fn import(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     )?;
 
     let set_immediate_sym = sc.intern("setImmediate");
-    let set_immediate = register_native_fn(sc, set_immediate_sym, set_immediate);
+    let set_immediate = register_native_fn(sc, set_immediate_sym, false, set_immediate);
     obj.set_property(
         set_immediate_sym.to_key(sc),
         PropertyValue::static_default(set_immediate.into()),

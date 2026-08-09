@@ -156,7 +156,9 @@ async fn run_inner_fallible<'a>(
         console
             .set_property(
                 time_sym.to_key(scope),
-                PropertyValue::static_default(register_native_fn(scope, time_sym, time_ext::console_time).into()),
+                PropertyValue::static_default(
+                    register_native_fn(scope, time_sym, false, time_ext::console_time).into(),
+                ),
                 scope,
             )
             .unwrap();
@@ -164,7 +166,7 @@ async fn run_inner_fallible<'a>(
             .set_property(
                 time_end_sym.to_key(scope),
                 PropertyValue::static_default(
-                    register_native_fn(scope, time_end_sym, time_ext::console_time_end).into(),
+                    register_native_fn(scope, time_end_sym, false, time_ext::console_time_end).into(),
                 ),
                 scope,
             )

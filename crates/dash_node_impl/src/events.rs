@@ -35,9 +35,9 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
             object: OrdObject::new(sc),
             handlers: RefCell::new(FxHashMap::default()),
         };
-        let on_fn = register_native_fn(sc, on_sym, on);
+        let on_fn = register_native_fn(sc, on_sym, false, on);
         event_emitter_prototype.set_property(on_sym.to_key(sc), PropertyValue::static_default(on_fn.into()), sc)?;
-        let emit_fn = register_native_fn(sc, emit_sym, emit);
+        let emit_fn = register_native_fn(sc, emit_sym, false, emit);
         event_emitter_prototype.set_property(emit_sym.to_key(sc), PropertyValue::static_default(emit_fn.into()), sc)?;
         sc.register(event_emitter_prototype)
     };
@@ -46,17 +46,20 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
         let event_emitter_ctor = Function::new(
             sc,
             Some(event_emitter_sym.into()),
-            FunctionKind::Native(|cx| {
-                let EventsState {
-                    event_emitter_prototype,
-                } = State::from_vm(cx.scope).store[EventsKey];
+            FunctionKind::Native {
+                function: |cx| {
+                    let EventsState {
+                        event_emitter_prototype,
+                    } = State::from_vm(cx.scope).store[EventsKey];
 
-                let emitter = EventEmitter {
-                    object: OrdObject::with_prototype(event_emitter_prototype),
-                    handlers: RefCell::new(FxHashMap::default()),
-                };
-                Ok(cx.scope.register(emitter).into())
-            }),
+                    let emitter = EventEmitter {
+                        object: OrdObject::with_prototype(event_emitter_prototype),
+                        handlers: RefCell::new(FxHashMap::default()),
+                    };
+                    Ok(cx.scope.register(emitter).into())
+                },
+                constructable: true,
+            },
         );
         event_emitter_ctor.set_fn_prototype(event_emitter_prototype);
         sc.register(event_emitter_ctor)

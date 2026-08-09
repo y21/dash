@@ -37,7 +37,11 @@ pub mod native;
 pub mod user;
 
 pub enum FunctionKind {
-    Native(NativeFunction),
+    Native {
+        function: NativeFunction,
+        /// Whether this function can be used as a constructor
+        constructable: bool,
+    },
     User(UserFunction),
     Generator(GeneratorFunction),
     Async(AsyncFunction),
@@ -50,7 +54,10 @@ unsafe impl Trace for FunctionKind {
             Self::User(user) => user.trace(cx),
             Self::Generator(generator) => generator.trace(cx),
             Self::Async(async_) => async_.trace(cx),
-            Self::Native(_) => {}
+            Self::Native {
+                constructable: _,
+                function: _,
+            } => {}
             Self::Closure(user) => user.trace(cx),
         }
     }
@@ -59,7 +66,7 @@ unsafe impl Trace for FunctionKind {
 impl Debug for FunctionKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Native(..) => f.write_str("NativeFunction"),
+            Self::Native { .. } => f.write_str("NativeFunction"),
             Self::User(..) => f.write_str("UserFunction"),
             Self::Generator(..) => f.write_str("GeneratorFunction"),
             Self::Async(..) => f.write_str("AsyncFunction"),
@@ -130,7 +137,7 @@ impl Function {
             FunctionKind::Generator(generator) => Some(&generator.function),
             FunctionKind::Async(function) => Some(&function.inner.function),
             FunctionKind::Closure(closure) => Some(&closure.fun),
-            FunctionKind::Native(_) => None,
+            FunctionKind::Native { .. } => None,
         }
     }
 }
@@ -144,7 +151,15 @@ fn handle_call(
     new_target: Option<ObjectId>,
 ) -> Result<Unrooted, Unrooted> {
     match &fun.kind {
-        FunctionKind::Native(native) => {
+        FunctionKind::Native {
+            function,
+            constructable,
+        } => {
+            if !constructable && new_target.is_some() {
+                let name = fun.name().unwrap_or_else(|| sym::empty.into()).res(scope).to_owned();
+                throw!(scope, TypeError, "{} is not constructable", name);
+            }
+
             let this = this.to_value(scope)?;
             // TODO: pass `This` to native fns as-is?
             let cx = CallContext {
@@ -153,7 +168,7 @@ fn handle_call(
                 this,
                 new_target,
             };
-            match native(cx) {
+            match function(cx) {
                 Ok(v) => Ok(v.into()),
                 Err(v) => Err(v.into()),
             }

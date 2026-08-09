@@ -18,8 +18,8 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     } = state_mut(sc).sym;
     let exports = sc.register(OrdObject::new(sc));
 
-    let inherits = register_native_fn(sc, inherits_sym, inherits);
-    let inspect = register_native_fn(sc, inspect_sym, inspect);
+    let inherits = register_native_fn(sc, inherits_sym, false, inherits);
+    let inspect = register_native_fn(sc, inspect_sym, false, inspect);
     exports.set_property(
         inherits_sym.to_key(sc),
         PropertyValue::static_default(inherits.into()),

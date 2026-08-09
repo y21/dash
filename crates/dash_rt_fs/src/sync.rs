@@ -15,9 +15,9 @@ pub fn init_module(sc: &mut LocalScope) -> Result<Value, Value> {
     let read_file_sync_sym = sc.intern("readFileSync");
     let write_file_sync_sym = sc.intern("writeFileSync");
     let unlink_sym = sc.intern("unlinkSync");
-    let read_file_sync_value = register_native_fn(sc, read_file_sync_sym, read_file_sync);
-    let write_file_sync_value = register_native_fn(sc, write_file_sync_sym, write_file_sync);
-    let unlink_value = register_native_fn(sc, unlink_sym, unlink);
+    let read_file_sync_value = register_native_fn(sc, read_file_sync_sym, false, read_file_sync);
+    let write_file_sync_value = register_native_fn(sc, write_file_sync_sym, false, write_file_sync);
+    let unlink_value = register_native_fn(sc, unlink_sym, false, unlink);
 
     let module = OrdObject::new(sc);
     module.set_property(

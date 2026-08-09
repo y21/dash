@@ -7,9 +7,8 @@ use dash_vm::gc::trace::{Trace, TraceCtxt};
 use dash_vm::js_std::receiver_t;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::error::Error;
-use dash_vm::value::function::native::CallContext;
-use dash_vm::value::function::{Function, FunctionKind};
-use dash_vm::value::object::{OrdObject, Object, PropertyValue};
+use dash_vm::value::function::native::{CallContext, register_native_fn};
+use dash_vm::value::object::{Object, OrdObject, PropertyValue};
 use dash_vm::value::promise::Promise;
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::string::JsString;
@@ -40,8 +39,7 @@ static REQWEST: Lazy<Client> = Lazy::new(Client::new);
 
 pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     let name = sc.intern("fetch");
-    let fun = Function::new(sc, Some(name.into()), FunctionKind::Native(fetch));
-    let fun = sc.register(fun);
+    let fun = register_native_fn(sc, name, false, fetch);
 
     Ok(Value::object(fun))
 }
@@ -79,8 +77,7 @@ fn fetch(cx: CallContext) -> Result<Value, Value> {
                 Ok(resp) => {
                     let obj = HttpResponse::new(resp, &sc);
                     let text = sc.intern("text");
-                    let text_fun = Function::new(&sc, Some(text.into()), FunctionKind::Native(http_response_text));
-                    let text_fun = Value::object(sc.register(text_fun));
+                    let text_fun = Value::object(register_native_fn(&mut sc, text, false, http_response_text));
 
                     obj.set_property(text.to_key(&mut sc), PropertyValue::static_default(text_fun), &mut sc)
                         .unwrap();
