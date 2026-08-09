@@ -20,7 +20,7 @@ impl Arguments {
     ) -> Self {
         let args = args.into_iter();
         let len = args.len();
-        let object = OrdObject::null();
+        let object = OrdObject::new(scope);
 
         for (idx, arg) in args.enumerate() {
             object
