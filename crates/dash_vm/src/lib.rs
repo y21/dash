@@ -247,8 +247,8 @@ impl Vm {
             [
                 (sym::create, scope.statics.object_create),
                 (sym::keys, scope.statics.object_keys),
-                // FIXME: these are not the same
-                (sym::getOwnPropertyNames, scope.statics.object_keys),
+                (sym::getOwnPropertyNames, scope.statics.object_get_own_property_names),
+                (sym::getOwnPropertySymbols, scope.statics.object_get_own_property_symbols),
                 (sym::getOwnPropertyDescriptor, scope.statics.object_get_own_property_descriptor),
                 (sym::getOwnPropertyDescriptors, scope.statics.object_get_own_property_descriptors),
                 (sym::defineProperty, scope.statics.object_define_property),

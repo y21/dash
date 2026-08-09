@@ -28,10 +28,17 @@ pub use this::{This, ThisKind};
 
 pub type ObjectMap<K, V> = hashbrown::HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
+/// Decides which keys are returned by `own_keys`
 #[derive(Debug, Copy, Clone)]
 pub enum OwnKeysMode {
+    /// Return all keys.
     All,
+    /// Return all enumerable keys (any type).
     OnlyEnumerable,
+    /// Return all string keys (enumerable & non-enumerable).
+    AllStrings,
+    /// Return all symbol keys (enumerable & non-enumerable).
+    AllSymbols,
 }
 
 pub trait Object: Debug + Trace {

@@ -332,26 +332,38 @@ impl Object for OrdObject {
             InnerOrdObject::Linear(ref property_vec) => {
                 let mut keys = Vec::with_capacity(property_vec.raw_keys().len());
 
-                let (string_keys, string_descriptors) = property_vec.string_keys_descriptors();
-                for (&sym, &descriptor) in iter::zip(string_keys, string_descriptors) {
-                    if descriptor.should_enumerate(mode) {
-                        keys.push(Value::string(JsString::from_sym(interner::Symbol::from_raw(sym))));
+                let (include_strings, include_symbols, include_indices) = match mode {
+                    OwnKeysMode::All | OwnKeysMode::OnlyEnumerable => (true, true, true),
+                    OwnKeysMode::AllStrings => (true, false, false),
+                    OwnKeysMode::AllSymbols => (false, true, false),
+                };
+
+                if include_strings {
+                    let (string_keys, string_descriptors) = property_vec.string_keys_descriptors();
+                    for (&sym, &descriptor) in iter::zip(string_keys, string_descriptors) {
+                        if descriptor.should_enumerate(mode) {
+                            keys.push(Value::string(JsString::from_sym(interner::Symbol::from_raw(sym))));
+                        }
                     }
                 }
 
-                let (symbol_keys, symbol_descriptors) = property_vec.symbol_keys_descriptors();
-                for (&sym, &descriptor) in iter::zip(symbol_keys, symbol_descriptors) {
-                    if descriptor.should_enumerate(mode) {
-                        keys.push(Value::symbol(Symbol::new(JsString::from_sym(
-                            interner::Symbol::from_raw(sym),
-                        ))));
+                if include_symbols {
+                    let (symbol_keys, symbol_descriptors) = property_vec.symbol_keys_descriptors();
+                    for (&sym, &descriptor) in iter::zip(symbol_keys, symbol_descriptors) {
+                        if descriptor.should_enumerate(mode) {
+                            keys.push(Value::symbol(Symbol::new(JsString::from_sym(
+                                interner::Symbol::from_raw(sym),
+                            ))));
+                        }
                     }
                 }
 
-                let (index_keys, index_descriptors) = property_vec.index_keys_descriptors();
-                for (&index, &descriptor) in iter::zip(index_keys, index_descriptors) {
-                    if descriptor.should_enumerate(mode) {
-                        keys.push(Value::number(index as f64));
+                if include_indices {
+                    let (index_keys, index_descriptors) = property_vec.index_keys_descriptors();
+                    for (&index, &descriptor) in iter::zip(index_keys, index_descriptors) {
+                        if descriptor.should_enumerate(mode) {
+                            keys.push(Value::number(index as f64));
+                        }
                     }
                 }
 
@@ -381,6 +393,7 @@ impl InternalLinearPropertyVecDescriptor {
         match mode {
             OwnKeysMode::All => true,
             OwnKeysMode::OnlyEnumerable => self.contains(Self::ENUMERABLE),
+            OwnKeysMode::AllStrings | OwnKeysMode::AllSymbols => true,
         }
     }
 }

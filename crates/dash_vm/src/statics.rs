@@ -75,6 +75,8 @@ pub struct Statics {
     pub object_prototype: ObjectId,
     pub object_create: ObjectId,
     pub object_keys: ObjectId,
+    pub object_get_own_property_names: ObjectId,
+    pub object_get_own_property_symbols: ObjectId,
     pub object_to_string: ObjectId,
     pub object_get_own_property_descriptor: ObjectId,
     pub object_get_own_property_descriptors: ObjectId,
@@ -303,6 +305,16 @@ impl Statics {
             object_ctor: function(gc, sym::object, js_std::object::constructor),
             object_create: function(gc, sym::create, js_std::object::create),
             object_keys: function(gc, sym::keys, js_std::object::keys),
+            object_get_own_property_names: function(
+                gc,
+                sym::getOwnPropertyNames,
+                js_std::object::get_own_property_names,
+            ),
+            object_get_own_property_symbols: function(
+                gc,
+                sym::getOwnPropertySymbols,
+                js_std::object::get_own_property_symbols,
+            ),
             object_prototype: empty_object(gc),
             object_to_string: function(gc, sym::toString, js_std::object::to_string),
             object_get_own_property_descriptor: function(

@@ -37,8 +37,21 @@ pub fn create(cx: CallContext) -> Result<Value, Value> {
 
 pub fn keys(cx: CallContext) -> Result<Value, Value> {
     let obj = cx.args.first().unwrap_or_undefined().to_object(cx.scope)?;
-    // FIXME: own_keys should probably takes an `enumerable: bool`
     let keys = obj.own_keys(cx.scope, OwnKeysMode::OnlyEnumerable)?;
+    let array = Array::from_vec(keys.into_iter().map(PropertyValue::static_default).collect(), cx.scope);
+    Ok(cx.scope.register(array).into())
+}
+
+pub fn get_own_property_names(cx: CallContext) -> Result<Value, Value> {
+    let obj = cx.args.first().unwrap_or_undefined().to_object(cx.scope)?;
+    let keys = obj.own_keys(cx.scope, OwnKeysMode::AllStrings)?;
+    let array = Array::from_vec(keys.into_iter().map(PropertyValue::static_default).collect(), cx.scope);
+    Ok(cx.scope.register(array).into())
+}
+
+pub fn get_own_property_symbols(cx: CallContext) -> Result<Value, Value> {
+    let obj = cx.args.first().unwrap_or_undefined().to_object(cx.scope)?;
+    let keys = obj.own_keys(cx.scope, OwnKeysMode::AllSymbols)?;
     let array = Array::from_vec(keys.into_iter().map(PropertyValue::static_default).collect(), cx.scope);
     Ok(cx.scope.register(array).into())
 }
