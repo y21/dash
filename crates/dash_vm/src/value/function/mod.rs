@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::Cell;
 use std::cmp::Ordering;
 use std::fmt::{self, Debug};
 use std::iter::{self};
@@ -77,10 +77,11 @@ impl Debug for FunctionKind {
 
 #[derive(Debug, Trace)]
 pub struct Function {
-    name: RefCell<Option<JsString>>,
+    name: Cell<Option<JsString>>,
     kind: FunctionKind,
     obj: OrdObject,
-    prototype: RefCell<Option<ObjectId>>,
+    prototype: Cell<Option<ObjectId>>,
+    self_object_id: Cell<Option<ObjectId>>,
 }
 
 impl Function {
@@ -90,10 +91,11 @@ impl Function {
 
     pub fn with_obj(name: Option<JsString>, kind: FunctionKind, obj: OrdObject) -> Self {
         Self {
-            name: RefCell::new(name),
+            name: Cell::new(name),
             kind,
             obj,
-            prototype: RefCell::new(None),
+            prototype: Cell::new(None),
+            self_object_id: Cell::new(None),
         }
     }
 
@@ -102,26 +104,52 @@ impl Function {
     }
 
     pub fn set_name(&self, name: JsString) -> Option<JsString> {
-        self.name.borrow_mut().replace(name)
+        self.name.replace(Some(name))
     }
 
     pub fn name(&self) -> Option<JsString> {
-        *self.name.borrow()
+        self.name.get()
     }
 
     pub fn set_fn_prototype(&self, prototype: ObjectId) {
-        self.prototype.replace(Some(prototype));
+        self.prototype.set(Some(prototype));
+    }
+
+    pub fn set_self_object_id(&self, object_id: ObjectId) {
+        let current = self.self_object_id.get();
+        debug_assert!(current.is_none() || current == Some(object_id));
+        self.self_object_id.set(Some(object_id));
     }
 
     pub fn get_fn_prototype(&self) -> Option<ObjectId> {
-        *self.prototype.borrow()
+        self.prototype.get()
     }
 
     pub fn get_or_set_prototype(&self, scope: &mut LocalScope<'_>) -> ObjectId {
-        *self.prototype.borrow_mut().get_or_insert_with(|| {
-            let proto = OrdObject::new(scope);
-            scope.register(proto)
-        })
+        if let Some(prototype) = self.prototype.get() {
+            return prototype;
+        }
+
+        let proto = OrdObject::new(scope);
+        let proto = scope.register(proto);
+
+        debug_assert!(
+            self.self_object_id.get().is_some(),
+            "function self_object_id should be initialized before prototype access"
+        );
+
+        if let Some(constructor) = self.self_object_id.get() {
+            proto
+                .set_property(
+                    sym::constructor.to_key(scope),
+                    PropertyValue::static_non_enumerable(Value::object(constructor)),
+                    scope,
+                )
+                .expect("failed to set function prototype constructor");
+        }
+
+        self.prototype.set(Some(proto));
+        proto
     }
 
     /// Creates a new instance of this function.
@@ -246,7 +274,7 @@ impl Object for Function {
         if let Some(sym::prototype) = key.to_js_string(sc) {
             let prototype = value.get_or_apply(sc, This::default()).root(sc)?;
             // TODO: function prototype does not need to be an object
-            *self.prototype.borrow_mut() = Some(prototype.to_object(sc)?);
+            self.prototype.set(Some(prototype.to_object(sc)?));
             return Ok(());
         }
 

@@ -24,7 +24,11 @@ pub fn register_native_fn(
             constructable,
         },
     );
-    sc.register(fun)
+    let fun = sc.register(fun);
+    fun.extract::<Function>(sc)
+        .expect("registered native function must be a Function")
+        .set_self_object_id(fun);
+    fun
 }
 
 #[derive(Debug)]

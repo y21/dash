@@ -660,6 +660,10 @@ mod handlers {
 
         let function = Function::new(&cx.scope, name, kind);
         let function = cx.scope.register(function);
+        function
+            .extract::<Function>(&cx.scope)
+            .expect("registered function constant must be a Function")
+            .set_self_object_id(function);
         cx.push_stack(Value::object(function).into());
 
         Ok(None)

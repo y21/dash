@@ -292,7 +292,7 @@ fn function(gc: &mut Allocator, name: interner::Symbol, function: NativeFunction
         },
         OrdObject::null(),
     );
-    gc.alloc_object(PureBuiltin::new(f))
+    gc.alloc_object_cyclic(PureBuiltin::new(f), |id, fun| fun.inner().set_self_object_id(id))
 }
 
 impl Statics {

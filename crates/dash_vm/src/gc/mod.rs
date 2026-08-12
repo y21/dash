@@ -631,6 +631,20 @@ impl Allocator {
         self.alloc(o, object_vtable_for_ty!(O))
     }
 
+    pub fn alloc_object_cyclic<O, F>(&mut self, o: O, init: F) -> ObjectId
+    where
+        O: crate::value::object::Object + 'static,
+        F: FnOnce(ObjectId, &O),
+    {
+        let id = self.alloc_object(o);
+
+        // SAFETY: `id` was just allocated above as `O` in this allocator.
+        let object = unsafe { &*self.data(id).cast::<O>() };
+        init(id, object);
+
+        id
+    }
+
     pub fn resolve_raw<M>(&self, id: AllocId<M>) -> (*const (), *const M) {
         let chunk = self.chunk(id.chunk());
         let local = id.local();

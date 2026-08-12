@@ -980,6 +980,10 @@ impl<O: Object> PureBuiltin<O> {
     pub fn new(inner: O) -> Self {
         Self { inner }
     }
+
+    pub fn inner(&self) -> &O {
+        &self.inner
+    }
 }
 
 impl<O: Object + 'static> Object for PureBuiltin<O> {
