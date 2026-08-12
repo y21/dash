@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786275204795,
+  "lastUpdate": 1786556828278,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -13283,6 +13283,60 @@ window.BENCHMARK_DATA = {
             "name": "exec tinycolor2 parse hex+toFilter",
             "value": 26200171,
             "range": "± 183981",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "ffcc44fd3dbf08e3a1ef48eb97587dd130a74b35",
+          "message": "refactor Function creation to a builder",
+          "timestamp": "2026-08-12T19:35:07+02:00",
+          "tree_id": "99e65745e326f0ca1727bf991c703e540c8fca7c",
+          "url": "https://github.com/y21/dash/commit/ffcc44fd3dbf08e3a1ef48eb97587dd130a74b35"
+        },
+        "date": 1786556826375,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1318602,
+            "range": "± 22885",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 140312,
+            "range": "± 2774",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 73138,
+            "range": "± 1594",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse+compile tinycolor2",
+            "value": 1833803,
+            "range": "± 35647",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "exec tinycolor2 parse hex+toFilter",
+            "value": 24166793,
+            "range": "± 279335",
             "unit": "ns/iter"
           }
         ]
