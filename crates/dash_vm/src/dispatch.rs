@@ -658,7 +658,7 @@ mod handlers {
             ParserFunctionKind::Generator => FunctionKind::Generator(GeneratorFunction::new(fun)),
         };
 
-        let function = Function::new(&mut cx.scope, name, kind);
+        let function = Function::builder(kind).maybe_name(name).alloc_in_scope(&mut cx.scope);
         cx.push_stack(Value::object(function).into());
 
         Ok(None)

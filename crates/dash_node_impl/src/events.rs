@@ -42,28 +42,24 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
         sc.register(event_emitter_prototype)
     };
 
-    let event_emitter_ctor = {
-        let event_emitter_ctor = Function::new(
-            sc,
-            Some(event_emitter_sym.into()),
-            FunctionKind::Native {
-                function: |cx| {
-                    let EventsState {
-                        event_emitter_prototype,
-                    } = State::from_vm(cx.scope).store[EventsKey];
+    let event_emitter_ctor = Function::builder(FunctionKind::Native {
+        function: |cx| {
+            let EventsState {
+                event_emitter_prototype,
+            } = State::from_vm(cx.scope).store[EventsKey];
 
-                    let emitter = EventEmitter {
-                        object: OrdObject::with_prototype(event_emitter_prototype),
-                        handlers: RefCell::new(FxHashMap::default()),
-                    };
-                    Ok(cx.scope.register(emitter).into())
-                },
-                constructable: true,
-            },
-        );
-        event_emitter_ctor.set_fn_prototype(event_emitter_prototype);
-        sc.register(event_emitter_ctor)
-    };
+            let emitter = EventEmitter {
+                object: OrdObject::with_prototype(event_emitter_prototype),
+                handlers: RefCell::new(FxHashMap::default()),
+            };
+            Ok(cx.scope.register(emitter).into())
+        },
+        constructable: true,
+    })
+    .name(event_emitter_sym.into())
+    .fn_prototype(event_emitter_prototype)
+    .alloc_in_scope(sc);
+
     event_emitter_prototype.set_property(
         PropertyKey::CONSTRUCTOR,
         PropertyValue::static_default(event_emitter_ctor.into()),

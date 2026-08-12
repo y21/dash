@@ -284,15 +284,13 @@ fn empty_object(gc: &mut Allocator) -> ObjectId {
 }
 
 fn function(gc: &mut Allocator, name: interner::Symbol, function: NativeFunction, constructable: bool) -> ObjectId {
-    Function::alloc_with_obj(
-        gc,
-        Some(name.into()),
-        FunctionKind::Native {
-            function,
-            constructable,
-        },
-        OrdObject::null(),
-    )
+    Function::builder(FunctionKind::Native {
+        function,
+        constructable,
+    })
+    .name(name.into())
+    .with_obj(OrdObject::null())
+    .alloc_in_allocator(gc)
 }
 
 impl Statics {

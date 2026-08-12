@@ -41,16 +41,13 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     buffer_prototype.set_property(wu32be_sym.to_key(sc), PropertyValue::static_default(wu32be.into()), sc)?;
     buffer_prototype.set_property(wu32le_sym.to_key(sc), PropertyValue::static_default(wu32le.into()), sc)?;
 
-    let buffer_ctor = Function::new(
-        sc,
-        Some(buffer_sym.into()),
-        FunctionKind::Native {
-            constructable: true,
-            function: |cx| throw!(cx.scope, Error, "Buffer() constructor unsupported"),
-        },
-    );
-    buffer_ctor.set_fn_prototype(buffer_prototype);
-    let buffer_ctor = sc.register(buffer_ctor);
+    let buffer_ctor = Function::builder(FunctionKind::Native {
+        constructable: true,
+        function: |cx| throw!(cx.scope, Error, "Buffer() constructor unsupported"),
+    })
+    .name(buffer_sym.into())
+    .fn_prototype(buffer_prototype)
+    .alloc_in_scope(sc);
     buffer_prototype.set_property(
         PropertyKey::CONSTRUCTOR,
         PropertyValue::static_default(buffer_ctor.into()),

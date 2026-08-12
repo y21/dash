@@ -48,6 +48,73 @@ pub enum FunctionKind {
     Closure(Closure),
 }
 
+pub struct FunctionBuilder {
+    name: Option<JsString>,
+    kind: FunctionKind,
+    obj: Option<OrdObject>,
+    fn_prototype: Option<ObjectId>,
+}
+
+impl FunctionBuilder {
+    pub fn new(kind: FunctionKind) -> Self {
+        Self {
+            name: None,
+            kind,
+            obj: None,
+            fn_prototype: None,
+        }
+    }
+
+    pub fn maybe_name(mut self, name: Option<JsString>) -> Self {
+        self.name = name;
+        self
+    }
+
+    pub fn name(mut self, name: JsString) -> Self {
+        self.name = Some(name);
+        self
+    }
+
+    pub fn with_obj(mut self, obj: OrdObject) -> Self {
+        self.obj = Some(obj);
+        self
+    }
+
+    pub fn fn_prototype(mut self, fn_prototype: ObjectId) -> Self {
+        self.fn_prototype = Some(fn_prototype);
+        self
+    }
+
+    pub fn alloc_in_scope(self, scope: &mut LocalScope<'_>) -> ObjectId {
+        let obj = self
+            .obj
+            .unwrap_or_else(|| OrdObject::with_prototype(scope.statics.function_proto));
+        let function = Function::build_with_obj(self.name, self.kind, obj);
+        let fn_prototype = self.fn_prototype;
+
+        scope.register_cyclic(function, move |id, function| {
+            function.set_self_object_id(id);
+            if let Some(fn_prototype) = fn_prototype {
+                function.set_fn_prototype(fn_prototype);
+            }
+        })
+    }
+
+    pub fn alloc_in_allocator(self, alloc: &mut Allocator) -> ObjectId {
+        let obj = self.obj.unwrap_or_else(OrdObject::null);
+        let function = Function::build_with_obj(self.name, self.kind, obj);
+        let fn_prototype = self.fn_prototype;
+
+        alloc.alloc_object_cyclic(PureBuiltin::new(function), move |id, function| {
+            let function = function.inner();
+            function.set_self_object_id(id);
+            if let Some(fn_prototype) = fn_prototype {
+                function.set_fn_prototype(fn_prototype);
+            }
+        })
+    }
+}
+
 unsafe impl Trace for FunctionKind {
     fn trace(&self, cx: &mut TraceCtxt<'_>) {
         match self {
@@ -85,37 +152,8 @@ pub struct Function {
 }
 
 impl Function {
-    pub fn new(scope: &mut LocalScope<'_>, name: Option<JsString>, kind: FunctionKind) -> ObjectId {
-        Self::with_obj(
-            scope,
-            name,
-            kind,
-            OrdObject::with_prototype(scope.statics.function_proto),
-        )
-    }
-
-    pub fn with_obj(
-        scope: &mut LocalScope<'_>,
-        name: Option<JsString>,
-        kind: FunctionKind,
-        obj: OrdObject,
-    ) -> ObjectId {
-        let function = Self::build_with_obj(name, kind, obj);
-        scope.register_cyclic(function, |id, function| {
-            function.set_self_object_id(id);
-        })
-    }
-
-    pub fn alloc_with_obj(
-        alloc: &mut Allocator,
-        name: Option<JsString>,
-        kind: FunctionKind,
-        obj: OrdObject,
-    ) -> ObjectId {
-        let function = Self::build_with_obj(name, kind, obj);
-        alloc.alloc_object_cyclic(PureBuiltin::new(function), |id, function| {
-            function.inner().set_self_object_id(id);
-        })
+    pub fn builder(kind: FunctionKind) -> FunctionBuilder {
+        FunctionBuilder::new(kind)
     }
 
     fn build_with_obj(name: Option<JsString>, kind: FunctionKind, obj: OrdObject) -> Self {

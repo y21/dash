@@ -16,14 +16,12 @@ pub fn register_native_fn(
     constructable: bool,
     function: NativeFunction,
 ) -> ObjectId {
-    Function::new(
-        sc,
-        Some(name.into()),
-        FunctionKind::Native {
-            function,
-            constructable,
-        },
-    )
+    Function::builder(FunctionKind::Native {
+        function,
+        constructable,
+    })
+    .name(name.into())
+    .alloc_in_scope(sc)
 }
 
 #[derive(Debug)]

@@ -24,25 +24,22 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
         object: OrdObject::new(sc),
     });
 
-    let stream_ctor = Function::new(
-        sc,
-        Some(stream_sym.into()),
-        FunctionKind::Native {
-            function: |cx| {
-                let StreamState { stream_prototype } = State::from_vm(cx.scope).store[StreamKey];
+    let stream_ctor = Function::builder(FunctionKind::Native {
+        function: |cx| {
+            let StreamState { stream_prototype } = State::from_vm(cx.scope).store[StreamKey];
 
-                Ok(cx
-                    .scope
-                    .register(Stream {
-                        object: OrdObject::with_prototype(stream_prototype),
-                    })
-                    .into())
-            },
-            constructable: true,
+            Ok(cx
+                .scope
+                .register(Stream {
+                    object: OrdObject::with_prototype(stream_prototype),
+                })
+                .into())
         },
-    );
-    stream_ctor.set_fn_prototype(stream_prototype);
-    let stream_ctor = sc.register(stream_ctor);
+        constructable: true,
+    })
+    .name(stream_sym.into())
+    .fn_prototype(stream_prototype)
+    .alloc_in_scope(sc);
     stream_prototype.set_property(
         PropertyKey::CONSTRUCTOR,
         PropertyValue::static_default(stream_ctor.into()),

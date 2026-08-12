@@ -21,25 +21,23 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
         object: OrdObject::new(sc),
     });
 
-    let inflate_ctor = Function::new(
-        sc,
-        Some(inflate_sym.into()),
-        FunctionKind::Native {
-            function: |cx| {
-                let ZlibState { inflate_prototype } = State::from_vm(cx.scope).store[ZlibKey];
+    let inflate_ctor = Function::builder(FunctionKind::Native {
+        function: |cx| {
+            let ZlibState { inflate_prototype } = State::from_vm(cx.scope).store[ZlibKey];
 
-                Ok(cx
-                    .scope
-                    .register(Inflate {
-                        object: OrdObject::with_prototype(inflate_prototype),
-                    })
-                    .into())
-            },
-            constructable: true,
+            Ok(cx
+                .scope
+                .register(Inflate {
+                    object: OrdObject::with_prototype(inflate_prototype),
+                })
+                .into())
         },
-    );
-    inflate_ctor.set_fn_prototype(inflate_prototype);
-    let inflate_ctor = sc.register(inflate_ctor);
+        constructable: true,
+    })
+    .name(inflate_sym.into())
+    .fn_prototype(inflate_prototype)
+    .alloc_in_scope(sc);
+
     inflate_prototype.set_property(
         PropertyKey::CONSTRUCTOR,
         PropertyValue::static_default(inflate_ctor.into()),
