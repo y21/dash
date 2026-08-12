@@ -658,12 +658,7 @@ mod handlers {
             ParserFunctionKind::Generator => FunctionKind::Generator(GeneratorFunction::new(fun)),
         };
 
-        let function = Function::new(&cx.scope, name, kind);
-        let function = cx.scope.register(function);
-        function
-            .extract::<Function>(&cx.scope)
-            .expect("registered function constant must be a Function")
-            .set_self_object_id(function);
+        let function = Function::new(&mut cx.scope, name, kind);
         cx.push_stack(Value::object(function).into());
 
         Ok(None)

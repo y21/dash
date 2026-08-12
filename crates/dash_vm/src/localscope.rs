@@ -167,6 +167,16 @@ impl<'a> LocalScope<'a> {
         id
     }
 
+    pub fn register_cyclic<O, F>(&mut self, obj: O, init: F) -> ObjectId
+    where
+        O: Object + 'static,
+        F: FnOnce(ObjectId, &O),
+    {
+        let id = self.vm.alloc.alloc_object_cyclic(obj, init);
+        self.vm.shadow_roots.push(ShadowRoot::Object(id));
+        id
+    }
+
     pub fn mk_promise(&mut self) -> ObjectId {
         let promise = Promise::new(self);
         self.register(promise)

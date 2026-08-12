@@ -7,8 +7,8 @@ use args::CallArgs;
 use dash_proc_macro::Trace;
 
 use crate::dispatch::HandleResult;
-use crate::gc::ObjectId;
 use crate::gc::trace::{Trace, TraceCtxt};
+use crate::gc::{Allocator, ObjectId};
 use crate::localscope::LocalScope;
 use crate::value::arguments::Arguments;
 use crate::value::object::{OwnKeysMode, This};
@@ -26,7 +26,7 @@ use super::object::{Object, OrdObject, PropertyDataDescriptor, PropertyValue, Pr
 use super::ops::conversions::ValueConversion;
 use super::propertykey::{PropertyKey, ToPropertyKey};
 use super::string::JsString;
-use super::{Root, Typeof, Unpack, Unrooted, Value, ValueKind};
+use super::{PureBuiltin, Root, Typeof, Unpack, Unrooted, Value, ValueKind};
 
 pub mod args;
 pub mod r#async;
@@ -85,11 +85,40 @@ pub struct Function {
 }
 
 impl Function {
-    pub fn new(vm: &Vm, name: Option<JsString>, kind: FunctionKind) -> Self {
-        Self::with_obj(name, kind, OrdObject::with_prototype(vm.statics.function_proto))
+    pub fn new(scope: &mut LocalScope<'_>, name: Option<JsString>, kind: FunctionKind) -> ObjectId {
+        Self::with_obj(
+            scope,
+            name,
+            kind,
+            OrdObject::with_prototype(scope.statics.function_proto),
+        )
     }
 
-    pub fn with_obj(name: Option<JsString>, kind: FunctionKind, obj: OrdObject) -> Self {
+    pub fn with_obj(
+        scope: &mut LocalScope<'_>,
+        name: Option<JsString>,
+        kind: FunctionKind,
+        obj: OrdObject,
+    ) -> ObjectId {
+        let function = Self::build_with_obj(name, kind, obj);
+        scope.register_cyclic(function, |id, function| {
+            function.set_self_object_id(id);
+        })
+    }
+
+    pub fn alloc_with_obj(
+        alloc: &mut Allocator,
+        name: Option<JsString>,
+        kind: FunctionKind,
+        obj: OrdObject,
+    ) -> ObjectId {
+        let function = Self::build_with_obj(name, kind, obj);
+        alloc.alloc_object_cyclic(PureBuiltin::new(function), |id, function| {
+            function.inner().set_self_object_id(id);
+        })
+    }
+
+    fn build_with_obj(name: Option<JsString>, kind: FunctionKind, obj: OrdObject) -> Self {
         Self {
             name: Cell::new(name),
             kind,
