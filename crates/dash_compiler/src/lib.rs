@@ -1050,7 +1050,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
         ib.build_jmpfalsep(Label::LoopEnd { loop_id }, false);
 
         ib.accept(*body)?;
-        ib.build_jmp(Label::LoopCondition { loop_id }, false);
+        ib.build_loop_backjmp(Label::LoopCondition { loop_id }, false);
 
         ib.current_function_mut().add_global_label(Label::LoopEnd { loop_id });
 
@@ -1980,7 +1980,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                 ib.accept_expr(finalizer)?;
                 ib.build_pop();
             }
-            ib.build_jmp(Label::LoopCondition { loop_id }, false);
+            ib.build_loop_backjmp(Label::LoopCondition { loop_id }, false);
 
             ib.current_function_mut().add_global_label(Label::LoopEnd { loop_id });
             exit_breakable!(ib.current_function_mut(), Breakable::Loop { .. });

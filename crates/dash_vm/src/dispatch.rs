@@ -149,13 +149,14 @@ mod handlers {
         ImportStaticOperands, InstanceofOperands, IntrinsicCallOperands, IntrinsicKind, IntrinsicOperands,
         JmpFalseNoPopOperands, JmpFalsePopOperands, JmpNullishNoPopOperands, JmpNullishPopOperands, JmpOperands,
         JmpTrueNoPopOperands, JmpTruePopOperands, JmpUndefinedNoPopOperands, JmpUndefinedPopOperands, LdGlobalOperands,
-        LdLocalExtOperands, LdLocalOperands, LeOperands, LtOperands, MulOperands, NeOperands, NegOperands, NotOperands,
-        NumberConstantOperands, NumberConstantWide, NumberInline8, NumberInline32, ObjectDestructuringMember,
-        ObjectDestructuringOperands, ObjectInOperands, ObjectLiteralOperands, ObjectProperty, OptionDiscriminatedByte,
-        OptionNoneMax, PopOperands, PosOperands, PowOperands, RegexConstantOperands, RemOperands, RetOperands,
-        StaticPropertyAccessOperands, StaticPropertyAssignOperands, StoreGlobalOperands, StoreLocalExtOperands,
-        StoreLocalOperands, StrictEqOperands, StrictNeOperands, StringConstantOperands, SubOperands,
-        SymbolConstantWide, ThrowOperands, TryCatchDepth, TypeofIdentOperands, TypeofOperands, YieldOperands,
+        LdLocalExtOperands, LdLocalOperands, LeOperands, LoopBackjumpOperands, LtOperands, MulOperands, NeOperands,
+        NegOperands, NotOperands, NumberConstantOperands, NumberConstantWide, NumberInline8, NumberInline32,
+        ObjectDestructuringMember, ObjectDestructuringOperands, ObjectInOperands, ObjectLiteralOperands,
+        ObjectProperty, OptionDiscriminatedByte, OptionNoneMax, PopOperands, PosOperands, PowOperands,
+        RegexConstantOperands, RemOperands, RetOperands, StaticPropertyAccessOperands, StaticPropertyAssignOperands,
+        StoreGlobalOperands, StoreLocalExtOperands, StoreLocalOperands, StrictEqOperands, StrictNeOperands,
+        StringConstantOperands, SubOperands, SymbolConstantWide, ThrowOperands, TryCatchDepth, TypeofIdentOperands,
+        TypeofOperands, YieldOperands,
     };
     use dash_middle::interner::{Symbol, sym};
     use dash_middle::iterator_with::{self, InfallibleIteratorWith, IteratorWith};
@@ -168,8 +169,8 @@ mod handlers {
 
     use crate::frame::{FrameState, Ip, Sp, TryBlock};
     use crate::gc::ObjectId;
-    use crate::throw;
-    use crate::util::likely;
+    use crate::jit::JitReturn;
+    use crate::util::{likely, unlikely};
     use crate::value::array::table::ArrayTable;
     use crate::value::array::{Array, ArrayIterator};
     use crate::value::function::args::CallArgs;
@@ -184,6 +185,7 @@ mod handlers {
     use crate::value::propertykey::{PropertyKey, ToPropertyKey};
     use crate::value::regex::RegExp;
     use crate::value::{Unpack, ValueKind};
+    use crate::{jit, throw};
 
     use super::*;
 
@@ -1102,6 +1104,40 @@ mod handlers {
 
         let ip = cx.frames.current_ip();
         cx.frames.set_ip(ip + offset);
+
+        Ok(None)
+    }
+
+    pub fn loop_backjmp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
+        let LoopBackjumpOperands { hotness, offset } = extract_back_infallible(&mut cx);
+        let ip = cx.frames.current_ip();
+        let target_ip = ip + offset;
+
+        if unlikely(!hotness.is_disabled()) {
+            // Slow path: we've either iterated less than 128 times, or this is the 128th time and we can try to optimize.
+            let hotness = hotness.try_increment();
+
+            match hotness {
+                Some(hotness) => {
+                    // Still counting.
+                    cx.frames.set_byte(ip - 3, hotness.raw());
+                }
+                None => {
+                    // We've saturated the counter. Attempt to JIT.
+
+                    let func = jit::compile_loop_region(&mut cx.scope, target_ip, ip);
+                    let result = func.call(&mut cx);
+                    match result {
+                        JitReturn::Normal { ip } => {
+                            cx.frames.set_ip(ip);
+                        }
+                        JitReturn::Exception { value } => return Err(value),
+                    }
+                }
+            }
+        }
+
+        cx.frames.set_ip(target_ip);
 
         Ok(None)
     }
@@ -2144,98 +2180,124 @@ mod handlers {
         }
         Ok(None)
     }
+
+    pub fn nop(_: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
+        Ok(None)
+    }
+}
+
+macro_rules! define_instruction_lut {
+    (
+        $($variant:path => $handler:ident),*
+    ) => {
+        type HandlerFn = fn(DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted>;
+        pub static INSTRUCTION_LUT: [HandlerFn; 256] = {
+            let mut lut: [HandlerFn; 256] = [handlers::nop as HandlerFn; 256];
+            let mut i = 0;
+            $(
+                debug_assert!(i == $variant as usize);
+                debug_assert!(i < 256);
+                lut[i] = handlers::$handler;
+                i += 1;
+            )*
+            lut
+        };
+    };
+}
+
+define_instruction_lut! {
+    Instruction::Add => add,
+    Instruction::Sub => sub,
+    Instruction::Mul => mul,
+    Instruction::Div => div,
+    Instruction::Rem => rem,
+    Instruction::Pow => pow,
+    Instruction::Gt => gt,
+    Instruction::Ge => ge,
+    Instruction::Lt => lt,
+    Instruction::Le => le,
+    Instruction::Eq => eq,
+    Instruction::Ne => ne,
+    Instruction::Pop => pop,
+    Instruction::LdLocal => ldlocal,
+    Instruction::LdGlobal => ldglobal,
+    Instruction::String => string_constant,
+    Instruction::Boolean => boolean_constant,
+    Instruction::Number => number_constant,
+    Instruction::Regex => regex_constant,
+    Instruction::Null => null_constant,
+    Instruction::Undefined => undefined_constant,
+    Instruction::Function => function_constant,
+    Instruction::Pos => pos,
+    Instruction::Neg => neg,
+    Instruction::TypeOf => type_of,
+    Instruction::TypeOfGlobalIdent => type_of_ident,
+    Instruction::BitNot => bitnot,
+    Instruction::Not => not,
+    Instruction::StoreLocal => storelocal,
+    Instruction::StoreGlobal => storeglobal,
+    Instruction::Ret => ret,
+    Instruction::Call => call,
+    Instruction::JmpFalseP => jmpfalsep,
+    Instruction::Jmp => jmp,
+    Instruction::LoopBackJmp => loop_backjmp,
+    Instruction::StaticPropAccess => staticpropertyaccess,
+    Instruction::DynamicPropAccess => dynamicpropertyaccess,
+    Instruction::ArrayLit => arraylit,
+    Instruction::ObjLit => objlit,
+    Instruction::BindThis => bindthis,
+    Instruction::This => this,
+    Instruction::StaticPropAssign => staticpropertyassign,
+    Instruction::DynamicPropAssign => dynamicpropertyassign,
+    Instruction::LdLocalExt => ldlocalext,
+    Instruction::StoreLocalExt => storelocalext,
+    Instruction::StrictEq => strict_eq,
+    Instruction::StrictNe => strict_ne,
+    Instruction::Try => try_block,
+    Instruction::PopTry => pop_try,
+    Instruction::FinallyEnd => finally_end,
+    Instruction::Throw => throw,
+    Instruction::Yield => yield_,
+    Instruction::JmpFalseNP => jmpfalsenp,
+    Instruction::JmpTrueP => jmptruep,
+    Instruction::JmpTrueNP => jmptruenp,
+    Instruction::JmpNullishP => jmpnullishp,
+    Instruction::JmpNullishNP => jmpnullishnp,
+    Instruction::JmpUndefinedNP => jmpundefinednp,
+    Instruction::JmpUndefinedP => jmpundefinedp,
+    Instruction::BitOr => bitor,
+    Instruction::BitXor => bitxor,
+    Instruction::BitAnd => bitand,
+    Instruction::BitShl => bitshl,
+    Instruction::BitShr => bitshr,
+    Instruction::BitUshr => bitushr,
+    Instruction::ObjIn => objin,
+    Instruction::InstanceOf => instanceof,
+    Instruction::ImportDyn => import_dyn,
+    Instruction::ImportStatic => import_static,
+    Instruction::ExportDefault => export_default,
+    Instruction::ExportNamed => export_named,
+    Instruction::Debugger => debugger,
+    Instruction::Global => global_this,
+    Instruction::Super => super_,
+    Instruction::Undef => undef,
+    Instruction::Await => await_,
+    Instruction::Nan => nan,
+    Instruction::Infinity => infinity,
+    Instruction::IntrinsicOp => intrinsic_op,
+    Instruction::CallSymbolIterator => call_symbol_iterator,
+    Instruction::CallForInIterator => call_for_in_iterator,
+    Instruction::DeletePropertyStatic => delete_property_static,
+    Instruction::DeletePropertyDynamic => delete_property_dynamic,
+    Instruction::ObjDestruct => objdestruct,
+    Instruction::ArrayDestruct => arraydestruct,
+    Instruction::AssignProperties => assign_properties,
+    Instruction::DelayedReturn => delayed_ret,
+    Instruction::NewTarget => new_target,
+    Instruction::Nop => nop
 }
 
 pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResult>, Unrooted> {
     let cx = DispatchContext::new(vm.scope());
-    match instruction {
-        Instruction::Add => handlers::add(cx),
-        Instruction::Sub => handlers::sub(cx),
-        Instruction::Mul => handlers::mul(cx),
-        Instruction::Div => handlers::div(cx),
-        Instruction::Rem => handlers::rem(cx),
-        Instruction::Pow => handlers::pow(cx),
-        Instruction::Gt => handlers::gt(cx),
-        Instruction::Ge => handlers::ge(cx),
-        Instruction::Lt => handlers::lt(cx),
-        Instruction::Le => handlers::le(cx),
-        Instruction::Eq => handlers::eq(cx),
-        Instruction::Ne => handlers::ne(cx),
-        Instruction::Pop => handlers::pop(cx),
-        Instruction::LdLocal => handlers::ldlocal(cx),
-        Instruction::LdGlobal => handlers::ldglobal(cx),
-        Instruction::String => handlers::string_constant(cx),
-        Instruction::Boolean => handlers::boolean_constant(cx),
-        Instruction::Number => handlers::number_constant(cx),
-        Instruction::Regex => handlers::regex_constant(cx),
-        Instruction::Null => handlers::null_constant(cx),
-        Instruction::Undefined => handlers::undefined_constant(cx),
-        Instruction::Function => handlers::function_constant(cx),
-        Instruction::Pos => handlers::pos(cx),
-        Instruction::Neg => handlers::neg(cx),
-        Instruction::TypeOf => handlers::type_of(cx),
-        Instruction::TypeOfGlobalIdent => handlers::type_of_ident(cx),
-        Instruction::BitNot => handlers::bitnot(cx),
-        Instruction::Not => handlers::not(cx),
-        Instruction::StoreLocal => handlers::storelocal(cx),
-        Instruction::StoreGlobal => handlers::storeglobal(cx),
-        Instruction::Ret => handlers::ret(cx),
-        Instruction::Call => handlers::call(cx),
-        Instruction::JmpFalseP => handlers::jmpfalsep(cx),
-        Instruction::Jmp => handlers::jmp(cx),
-        Instruction::StaticPropAccess => handlers::staticpropertyaccess(cx),
-        Instruction::DynamicPropAccess => handlers::dynamicpropertyaccess(cx),
-        Instruction::ArrayLit => handlers::arraylit(cx),
-        Instruction::ObjLit => handlers::objlit(cx),
-        Instruction::BindThis => handlers::bindthis(cx),
-        Instruction::This => handlers::this(cx),
-        Instruction::StaticPropAssign => handlers::staticpropertyassign(cx),
-        Instruction::DynamicPropAssign => handlers::dynamicpropertyassign(cx),
-        Instruction::LdLocalExt => handlers::ldlocalext(cx),
-        Instruction::StoreLocalExt => handlers::storelocalext(cx),
-        Instruction::StrictEq => handlers::strict_eq(cx),
-        Instruction::StrictNe => handlers::strict_ne(cx),
-        Instruction::Try => handlers::try_block(cx),
-        Instruction::PopTry => handlers::pop_try(cx),
-        Instruction::FinallyEnd => handlers::finally_end(cx),
-        Instruction::Throw => handlers::throw(cx),
-        Instruction::Yield => handlers::yield_(cx),
-        Instruction::JmpFalseNP => handlers::jmpfalsenp(cx),
-        Instruction::JmpTrueP => handlers::jmptruep(cx),
-        Instruction::JmpTrueNP => handlers::jmptruenp(cx),
-        Instruction::JmpNullishP => handlers::jmpnullishp(cx),
-        Instruction::JmpNullishNP => handlers::jmpnullishnp(cx),
-        Instruction::JmpUndefinedNP => handlers::jmpundefinednp(cx),
-        Instruction::JmpUndefinedP => handlers::jmpundefinedp(cx),
-        Instruction::BitOr => handlers::bitor(cx),
-        Instruction::BitXor => handlers::bitxor(cx),
-        Instruction::BitAnd => handlers::bitand(cx),
-        Instruction::BitShl => handlers::bitshl(cx),
-        Instruction::BitShr => handlers::bitshr(cx),
-        Instruction::BitUshr => handlers::bitushr(cx),
-        Instruction::ObjIn => handlers::objin(cx),
-        Instruction::InstanceOf => handlers::instanceof(cx),
-        Instruction::ImportDyn => handlers::import_dyn(cx),
-        Instruction::ImportStatic => handlers::import_static(cx),
-        Instruction::ExportDefault => handlers::export_default(cx),
-        Instruction::ExportNamed => handlers::export_named(cx),
-        Instruction::Debugger => handlers::debugger(cx),
-        Instruction::Global => handlers::global_this(cx),
-        Instruction::Super => handlers::super_(cx),
-        Instruction::Undef => handlers::undef(cx),
-        Instruction::Await => handlers::await_(cx),
-        Instruction::Nan => handlers::nan(cx),
-        Instruction::Infinity => handlers::infinity(cx),
-        Instruction::IntrinsicOp => handlers::intrinsic_op(cx),
-        Instruction::CallSymbolIterator => handlers::call_symbol_iterator(cx),
-        Instruction::CallForInIterator => handlers::call_for_in_iterator(cx),
-        Instruction::DeletePropertyStatic => handlers::delete_property_static(cx),
-        Instruction::DeletePropertyDynamic => handlers::delete_property_dynamic(cx),
-        Instruction::ObjDestruct => handlers::objdestruct(cx),
-        Instruction::ArrayDestruct => handlers::arraydestruct(cx),
-        Instruction::AssignProperties => handlers::assign_properties(cx),
-        Instruction::DelayedReturn => handlers::delayed_ret(cx),
-        Instruction::NewTarget => handlers::new_target(cx),
-        Instruction::Nop => Ok(None),
-    }
+    INSTRUCTION_LUT[instruction as usize](cx)
 }

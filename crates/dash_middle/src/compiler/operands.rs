@@ -1281,3 +1281,51 @@ impl<S: ExtractSource> ExtractBack<S> for IntrinsicOperands<S> {
         Ok(Self(operands))
     }
 }
+
+#[derive(Debug, Copy, Clone)]
+pub struct LoopHotnessByte(u8);
+
+impl LoopHotnessByte {
+    const COUNTER_MASK: u8 = 0b01111111;
+    const DISABLED_MASK: u8 = !Self::COUNTER_MASK;
+
+    pub fn try_increment(self) -> Option<Self> {
+        let counter = self.0 & Self::COUNTER_MASK;
+        if counter == Self::COUNTER_MASK {
+            None
+        } else {
+            Some(Self(counter + 1))
+        }
+    }
+
+    pub fn is_disabled(self) -> bool {
+        self.0 & Self::DISABLED_MASK != 0
+    }
+
+    pub fn disable(self) -> Self {
+        Self(self.0 | Self::DISABLED_MASK)
+    }
+
+    pub fn raw(self) -> u8 {
+        self.0
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct LoopBackjumpOperands {
+    pub offset: i16,
+    pub hotness: LoopHotnessByte,
+}
+
+impl<S: ExtractSource> ExtractBack<S> for LoopBackjumpOperands {
+    type Exception = Infallible;
+
+    fn extract_back(cx: &mut S) -> Result<Self, Self::Exception> {
+        let [hotness, off1, off2] = cx.fetch_bytes();
+        let offset = i16::from_ne_bytes([off1, off2]);
+        Ok(Self {
+            offset,
+            hotness: LoopHotnessByte(hotness),
+        })
+    }
+}

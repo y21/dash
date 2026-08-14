@@ -1,4 +1,6 @@
-use dash_middle::compiler::constant::ConstantPool;
+use std::rc::Rc;
+
+use dash_middle::compiler::constant::{ConstantPool, Function};
 use dash_middle::compiler::external::ExternalId;
 use dash_middle::index_type;
 use dash_middle::indexvec::IndexVec;
@@ -85,6 +87,10 @@ impl FrameStack {
         self.current_extended().this
     }
 
+    pub fn current_fn(&self) -> &Rc<Function> {
+        &self.current_base_ref().function
+    }
+
     pub fn current_external(&self, id: ExternalId) -> ExternalValue {
         self.current_extended().externals[id.0 as usize].clone()
     }
@@ -140,6 +146,22 @@ impl FrameStack {
         u16::from_ne_bytes(self.fetch_n_and_inc_ip::<2>())
     }
 
+    pub fn fetch32_and_inc_ip(&mut self) -> u32 {
+        u32::from_ne_bytes(self.fetch_n_and_inc_ip::<4>())
+    }
+
+    pub fn with_current_bytecode<R>(&self, f: impl FnOnce(&[u8]) -> R) -> R {
+        let base = self.current_base_ref();
+        base.function.buffer.with(|buf| f(buf))
+    }
+
+    pub fn set_byte(&mut self, ip: Ip, value: u8) {
+        let base = self.current_base_mut();
+        base.function.buffer.with_mut(|buf| {
+            buf[ip.0 as usize] = value;
+        });
+    }
+
     pub fn pop(&mut self) -> Frame {
         let extended = self.extended.pop().expect("no active frame");
         let base = self.pop_base();
@@ -153,7 +175,6 @@ impl FrameStack {
             state: extended.state,
             delayed_ret: extended.delayed_ret,
             arguments: extended.arguments,
-            loop_counter: extended.loop_counter,
         }
     }
 
@@ -196,7 +217,6 @@ impl FrameStack {
                 state: frame.state,
                 delayed_ret: frame.delayed_ret,
                 arguments: frame.arguments,
-                loop_counter: frame.loop_counter,
             });
             Ok(())
         } else {

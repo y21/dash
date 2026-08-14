@@ -44,6 +44,7 @@ pub mod eval;
 pub mod frame;
 mod framestack;
 pub mod gc;
+mod jit;
 pub mod js_std;
 pub mod json;
 pub mod localscope;
@@ -98,6 +99,7 @@ pub struct Vm {
     /// or adding a property to a builtin, will cause this to be set to `false`, which in turn
     /// will disable many optimizations such as specialized intrinsics.
     builtins_pure: bool,
+    jit: jit::State,
 }
 
 impl Vm {
@@ -124,6 +126,7 @@ impl Vm {
             params,
             gc_rss_threshold,
             builtins_pure: true,
+            jit: jit::State::new(),
         };
         vm.prepare();
         vm
