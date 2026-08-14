@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::ops::{Add, AddAssign, Sub};
 use std::rc::Rc;
 
@@ -81,32 +80,6 @@ unsafe impl Trace for FrameState {
     }
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct LoopCounter(u32);
-
-impl LoopCounter {
-    pub fn inc(&mut self) {
-        self.0 += 1;
-    }
-
-    pub fn is_hot(&self) -> bool {
-        self.0 > 100
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct LoopCounterMap(BTreeMap<Ip, LoopCounter>);
-
-impl LoopCounterMap {
-    pub fn get_or_insert(&mut self, id: Ip) -> &mut LoopCounter {
-        self.0.entry(id).or_default()
-    }
-}
-
-unsafe impl Trace for LoopCounterMap {
-    fn trace(&self, _: &mut TraceCtxt<'_>) {}
-}
-
 index_type!(
     /// An instruction pointer.
     #[derive(Debug, Clone, Copy, Trace, PartialEq, Eq, PartialOrd, Ord)]
@@ -171,9 +144,6 @@ pub struct ExtendedFrame {
     /// For optimization purposes, this is `None` in frames whose function never references `arguments`,
     /// because there's no reason to construct it in those cases.
     pub arguments: Option<ObjectId>,
-
-    /// Counts the number of backjumps to a particular loop header, to find hot loops
-    pub loop_counter: LoopCounterMap,
 }
 
 #[derive(Debug, Clone, Trace)]
@@ -197,9 +167,6 @@ pub struct Frame {
     /// For optimization purposes, this is `None` in frames whose function never references `arguments`,
     /// because there's no reason to construct it in those cases.
     pub arguments: Option<ObjectId>,
-
-    /// Counts the number of backjumps to a particular loop header, to find hot loops
-    pub loop_counter: LoopCounterMap,
 }
 
 impl Frame {
@@ -223,7 +190,6 @@ impl Frame {
                 new_target,
                 is_flat_call,
             },
-            loop_counter: LoopCounterMap::default(),
             arguments,
         }
     }
@@ -239,7 +205,6 @@ impl Frame {
             delayed_ret: None,
             extra_stack_space: inner.locals - inner.params,
             state: FrameState::Module(Exports::default()),
-            loop_counter: LoopCounterMap::default(),
             arguments,
         }
     }
@@ -280,7 +245,6 @@ impl Frame {
                 new_target: None,
                 is_flat_call: false,
             },
-            loop_counter: LoopCounterMap::default(),
             // Root function never has arguments
             arguments: None,
         }

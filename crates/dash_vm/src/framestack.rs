@@ -157,7 +157,6 @@ impl FrameStack {
             state: extended.state,
             delayed_ret: extended.delayed_ret,
             arguments: extended.arguments,
-            loop_counter: extended.loop_counter,
         }
     }
 
@@ -200,7 +199,6 @@ impl FrameStack {
                 state: frame.state,
                 delayed_ret: frame.delayed_ret,
                 arguments: frame.arguments,
-                loop_counter: frame.loop_counter,
             });
             Ok(())
         } else {
