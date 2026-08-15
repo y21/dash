@@ -42,6 +42,8 @@ pub enum Instruction {
     Call,
     JmpFalseP,
     Jmp,
+    /// Same as `Jmp`, but specifically used for loops that jump back to the condition and are given an extra byte in the bytecode
+    LoopBackJmp,
     StaticPropAccess,
     DynamicPropAccess,
     ArrayLit,

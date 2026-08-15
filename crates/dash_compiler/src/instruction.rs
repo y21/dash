@@ -254,6 +254,12 @@ impl InstructionBuilder<'_, '_> {
         self.build_jmp_header(label, is_local_label);
     }
 
+    pub fn build_loop_backjmp(&mut self, label: Label, is_local_label: bool) {
+        self.write_instr(Instruction::LoopBackJmp);
+        self.write(0); // Hotness byte
+        self.build_jmp_header(label, is_local_label);
+    }
+
     pub fn build_static_prop_access(&mut self, ident: Symbol, preserve_this: bool) -> Result<(), LimitExceededError> {
         let SymbolConstant(id) = self.current_function_mut().cp.add_symbol(ident)?;
         self.write_instr(Instruction::StaticPropAccess);

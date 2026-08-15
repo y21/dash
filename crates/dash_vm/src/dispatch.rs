@@ -526,6 +526,28 @@ mod extract {
             Ok(Self::from_repr(cx.fetch_and_inc_ip()).unwrap())
         }
     }
+
+    #[derive(Debug, Copy, Clone)]
+    pub struct LoopHotnessByte(u8);
+
+    #[derive(Debug, Copy, Clone)]
+    pub struct LoopBackjumpData {
+        pub offset: i16,
+        pub hotness: LoopHotnessByte,
+    }
+
+    impl ExtractBack for LoopBackjumpData {
+        type Exception = Infallible;
+
+        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
+            let [hotness, off1, off2] = cx.frames.fetch_n_and_inc_ip::<3>();
+            let offset = i16::from_ne_bytes([off1, off2]);
+            Ok(Self {
+                offset,
+                hotness: LoopHotnessByte(hotness),
+            })
+        }
+    }
 }
 
 mod handlers {
@@ -542,6 +564,7 @@ mod handlers {
     use std::ops::{Add, ControlFlow, Div, Mul, Rem, Sub};
     use std::rc::Rc;
 
+    use crate::dispatch::extract::LoopBackjumpData;
     use crate::frame::{FrameState, Ip, Sp, TryBlock};
     use crate::throw;
     use crate::util::unlikely;
@@ -1329,6 +1352,14 @@ mod handlers {
 
         let ip = cx.frames.current_ip();
         cx.frames.set_ip(ip + offset);
+
+        Ok(None)
+    }
+
+    pub fn loop_backjmp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
+        let data = extract::<LoopBackjumpData>(&mut cx);
+        let ip = cx.frames.current_ip();
+        cx.frames.set_ip(ip + data.offset);
 
         Ok(None)
     }
@@ -2386,6 +2417,7 @@ pub fn handle(vm: &mut Vm, instruction: Instruction) -> Result<Option<HandleResu
         Instruction::Call => handlers::call(cx),
         Instruction::JmpFalseP => handlers::jmpfalsep(cx),
         Instruction::Jmp => handlers::jmp(cx),
+        Instruction::LoopBackJmp => handlers::loop_backjmp(cx),
         Instruction::StaticPropAccess => handlers::staticpropertyaccess(cx),
         Instruction::DynamicPropAccess => handlers::dynamicpropertyaccess(cx),
         Instruction::ArrayLit => handlers::arraylit(cx),

@@ -168,9 +168,13 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                 | Instruction::JmpTrueNP
                 | Instruction::JmpTrueP
                 | Instruction::JmpUndefinedNP
-                | Instruction::JmpUndefinedP => {
+                | Instruction::JmpUndefinedP
+                | Instruction::LoopBackJmp => {
                     let byte = self.read_i16()?;
                     let offset = (self.reader.offset() as isize) + byte as isize;
+                    if instr == Instruction::LoopBackJmp {
+                        self.read()?; // Hotness byte
+                    }
                     let arg = format!("@{offset:x}");
                     self.handle_op_instr(
                         match instr {
@@ -183,6 +187,7 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                             Instruction::JmpTrueP => "jmtruep",
                             Instruction::JmpUndefinedP => "jmpundefinedp",
                             Instruction::JmpUndefinedNP => "jmpundefinednp",
+                            Instruction::LoopBackJmp => "loopbackjmp",
                             _ => unreachable!(),
                         },
                         &[&arg],
