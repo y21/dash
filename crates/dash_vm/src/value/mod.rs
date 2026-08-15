@@ -75,6 +75,7 @@ macro_rules! extract {
 
 /// A packed JavaScript value.
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
+#[repr(transparent)] // necessary for JIT
 pub struct Value(u64);
 
 impl std::fmt::Debug for Value {
@@ -473,6 +474,7 @@ impl ValueKind {
 /// to prevent a situation in which the garbage collector collects
 /// the value while it is still being used.
 #[derive(Debug, Copy, Clone)]
+#[repr(transparent)] // necessary for JIT
 pub struct Unrooted {
     // Possible mini optimization: store a flag that indicates if the value is already rooted?
     value: Value,

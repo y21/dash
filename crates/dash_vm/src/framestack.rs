@@ -144,9 +144,9 @@ impl FrameStack {
         u32::from_ne_bytes(self.fetch_n_and_inc_ip::<4>())
     }
 
-    pub fn with_current_bytecode(&self, f: impl FnOnce(&[u8])) {
+    pub fn with_current_bytecode<R>(&self, f: impl FnOnce(&[u8]) -> R) -> R {
         let base = self.current_base_ref();
-        base.function.buffer.with(|buf| f(buf));
+        base.function.buffer.with(|buf| f(buf))
     }
 
     pub fn set_byte(&mut self, ip: Ip, value: u8) {
