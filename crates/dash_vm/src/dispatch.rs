@@ -592,8 +592,7 @@ mod handlers {
 
     use crate::dispatch::extract::LoopBackjumpData;
     use crate::frame::{FrameState, Ip, Sp, TryBlock};
-    use crate::throw;
-    use crate::util::{likely, unlikely};
+    use crate::util::unlikely;
     use crate::value::array::table::ArrayTable;
     use crate::value::array::{Array, ArrayIterator};
     use crate::value::function::args::CallArgs;
@@ -609,6 +608,7 @@ mod handlers {
     use crate::value::propertykey::{PropertyKey, ToPropertyKey};
     use crate::value::regex::RegExp;
     use crate::value::{Unpack, ValueKind};
+    use crate::{jit, throw};
 
     use self::extract::{ArrayElement, BackwardSequence, ExportProperty, IdentW, NumberWConstant, ObjectProperty};
 
@@ -1385,6 +1385,7 @@ mod handlers {
     pub fn loop_backjmp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let data = extract::<LoopBackjumpData>(&mut cx);
         let ip = cx.frames.current_ip();
+        let target_ip = ip + data.offset;
 
         if unlikely(!data.hotness.is_disabled()) {
             // Slow path: we've either iterated less than 128 times, or this is the 128th time and we can try to optimize.
@@ -1397,12 +1398,17 @@ mod handlers {
                 }
                 None => {
                     // We've saturated the counter. Attempt to JIT.
-                    cx.frames.set_byte(ip - 3, data.hotness.disable().raw())
+
+                    jit::compile_loop_region(&mut cx.scope, target_ip, ip);
+
+                    todo!();
+
+                    // cx.frames.set_byte(ip - 3, data.hotness.disable().raw())
                 }
             }
         }
 
-        cx.frames.set_ip(ip + data.offset);
+        cx.frames.set_ip(target_ip);
 
         Ok(None)
     }

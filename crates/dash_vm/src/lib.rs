@@ -44,6 +44,7 @@ pub mod eval;
 pub mod frame;
 mod framestack;
 pub mod gc;
+mod jit;
 pub mod js_std;
 pub mod json;
 pub mod localscope;
