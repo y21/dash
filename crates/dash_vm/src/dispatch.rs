@@ -530,6 +530,32 @@ mod extract {
     #[derive(Debug, Copy, Clone)]
     pub struct LoopHotnessByte(u8);
 
+    impl LoopHotnessByte {
+        const COUNTER_MASK: u8 = 0b01111111;
+        const DISABLED_MASK: u8 = !Self::COUNTER_MASK;
+
+        pub fn try_increment(self) -> Option<Self> {
+            let counter = self.0 & Self::COUNTER_MASK;
+            if counter == Self::COUNTER_MASK {
+                None
+            } else {
+                Some(Self(counter + 1))
+            }
+        }
+
+        pub fn is_disabled(self) -> bool {
+            self.0 & Self::DISABLED_MASK != 0
+        }
+
+        pub fn disable(self) -> Self {
+            Self(self.0 | Self::DISABLED_MASK)
+        }
+
+        pub fn raw(self) -> u8 {
+            self.0
+        }
+    }
+
     #[derive(Debug, Copy, Clone)]
     pub struct LoopBackjumpData {
         pub offset: i16,
@@ -567,7 +593,7 @@ mod handlers {
     use crate::dispatch::extract::LoopBackjumpData;
     use crate::frame::{FrameState, Ip, Sp, TryBlock};
     use crate::throw;
-    use crate::util::unlikely;
+    use crate::util::{likely, unlikely};
     use crate::value::array::table::ArrayTable;
     use crate::value::array::{Array, ArrayIterator};
     use crate::value::function::args::CallArgs;
@@ -1359,6 +1385,23 @@ mod handlers {
     pub fn loop_backjmp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let data = extract::<LoopBackjumpData>(&mut cx);
         let ip = cx.frames.current_ip();
+
+        if unlikely(!data.hotness.is_disabled()) {
+            // Slow path: we've either iterated less than 128 times, or this is the 128th time and we can try to optimize.
+            let hotness = data.hotness.try_increment();
+
+            match hotness {
+                Some(hotness) => {
+                    // Still counting.
+                    cx.frames.set_byte(ip - 3, hotness.raw());
+                }
+                None => {
+                    // We've saturated the counter. Attempt to JIT.
+                    cx.frames.set_byte(ip - 3, data.hotness.disable().raw())
+                }
+            }
+        }
+
         cx.frames.set_ip(ip + data.offset);
 
         Ok(None)
