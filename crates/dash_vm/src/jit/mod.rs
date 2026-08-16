@@ -161,10 +161,9 @@ pub fn compile_loop_region(scope: &mut LocalScope<'_>, start: Ip, end: Ip) {
             Ip(target as u32)
         }
 
-        let full_bytecode_len = bytecode.len();
         let bytecode = &bytecode[start.0 as usize..end.0 as usize];
 
-        let mut x86 = x86::Emitter::new(full_bytecode_len); // TODO: not needed to use the full bytecode len
+        let mut x86 = x86::Emitter::new(bytecode.len());
 
         // Prologue
         x86.push(x86::Register::Rbp);
@@ -195,19 +194,19 @@ pub fn compile_loop_region(scope: &mut LocalScope<'_>, start: Ip, end: Ip) {
 
         let mut i = 0;
         while i < bytecode.len() {
-            let instr_ip = start.0 + i as u32;
-            x86.mark_bytecode_ip(Ip(instr_ip));
+            x86.mark_bytecode_ip(Ip(i as u32));
 
             let instr = Instruction::from_repr(bytecode[i]).unwrap();
             i += 1;
-            let operands_ip = start.0 + i as u32;
+
+            // IP for the operands *in the full bytecode* of the function (not the sliced loop bytecode).
+            let operands_absolute_ip = start.0 + i as u32;
 
             match instr {
                 Instruction::JmpFalseP => {
                     let target_rel = i16::from_le_bytes([bytecode[i], bytecode[i + 1]]);
                     i += 2;
-                    let next_bc_ip = start.0 + i as u32;
-                    let target_bc_ip = target_from_relative(next_bc_ip, target_rel);
+                    let target_bc_ip = target_from_relative(i as u32, target_rel);
 
                     x86.mov_reg_mem_u8(
                         x86::Register::Rax,
@@ -223,8 +222,7 @@ pub fn compile_loop_region(scope: &mut LocalScope<'_>, start: Ip, end: Ip) {
                 Instruction::LoopBackJmp => {
                     let target_rel = i16::from_le_bytes([bytecode[i + 1], bytecode[i + 2]]);
                     i += 3;
-                    let next_bc_ip = start.0 + i as u32;
-                    let target_bc_ip = target_from_relative(next_bc_ip, target_rel);
+                    let target_bc_ip = target_from_relative(i as u32, target_rel);
 
                     x86.jmp_bytecode_ip(target_bc_ip);
                 }
@@ -234,28 +232,29 @@ pub fn compile_loop_region(scope: &mut LocalScope<'_>, start: Ip, end: Ip) {
                     match intrinsic {
                         IntrinsicOperation::LtNumLConstR | IntrinsicOperation::PostfixIncLocalNum => {
                             i += 1;
-                            emit_stub_for_instr(&mut x86, instr, operands_ip);
+                            emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
                         }
                         IntrinsicOperation::LtNumLConstR32 => {
                             i += 4;
-                            emit_stub_for_instr(&mut x86, instr, operands_ip);
+                            emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
                         }
                         _ => todo!(),
                     }
                 }
                 Instruction::LdLocal => {
                     i += 2;
-                    emit_stub_for_instr(&mut x86, instr, operands_ip);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
                 }
                 Instruction::Pop => {
-                    emit_stub_for_instr(&mut x86, instr, operands_ip);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
                 }
-                other => todo!("{other:?} @ {instr_ip:x}"),
+                other => todo!("{other:?} @ {i:x}"),
             }
         }
 
         // Exit branch (end-of-loop/end-of-bytecode)
-        x86.mark_bytecode_ip(start + i as u32);
+        assert!(i == bytecode.len());
+        x86.mark_bytecode_ip(Ip(i as u32));
         x86.mov_reg_imm32(x86::Register::Eax, 0);
 
         // Epilogue
