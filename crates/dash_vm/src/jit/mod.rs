@@ -7,6 +7,7 @@ use dash_middle::compiler::instruction::{Instruction, IntrinsicOperation};
 use crate::Vm;
 use crate::dispatch::{DispatchContext, INSTRUCTION_LUT};
 use crate::frame::Ip;
+use crate::jit::jumpresolver::InternalLabel;
 use crate::localscope::LocalScope;
 use crate::value::Unrooted;
 
@@ -188,6 +189,8 @@ pub fn compile_loop_region(scope: &mut LocalScope<'_>, start: Ip, end: Ip) {
             x86.mov_reg_imm32(x86::Register::Rsi, instr as u32);
             x86.mov_reg_imm32(x86::Register::Rdx, ip);
             x86.call_reg(x86::Register::R13);
+            x86.test_reg_reg(x86::Register::Rax, x86::Register::Rax);
+            x86.jne_internal_label(InternalLabel::StubStatusHandler);
         }
 
         let mut i = 0;
@@ -256,6 +259,7 @@ pub fn compile_loop_region(scope: &mut LocalScope<'_>, start: Ip, end: Ip) {
         x86.mov_reg_imm32(x86::Register::Eax, 0);
 
         // Epilogue
+        x86.mark_internal_label(InternalLabel::Epilogue);
         x86.add_rsp_imm8(8);
         x86.pop(x86::Register::R14);
         x86.pop(x86::Register::R13);
@@ -263,7 +267,8 @@ pub fn compile_loop_region(scope: &mut LocalScope<'_>, start: Ip, end: Ip) {
         x86.pop(x86::Register::Rbp);
         x86.ret();
 
-        // TODO: once we add more branches, the epilogue should get its own internal label that we jump to at the end
+        x86.mark_internal_label(InternalLabel::StubStatusHandler);
+        x86.jmp_internal_label(InternalLabel::Epilogue);
 
         mmap_jit_fn(x86.buffer())
     });

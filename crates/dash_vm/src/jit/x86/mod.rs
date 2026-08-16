@@ -20,6 +20,7 @@ mod opcodes {
     pub const PUSH_REG: u8 = 0x50;
     pub const POP_REG: u8 = 0x58;
     pub const CMP_AL_IMM8: u8 = 0x3C;
+    pub const TEST_R_R: u8 = 0x85;
     pub const JNE_REL32: u8 = 0x85;
     pub const JMP_REL32: u8 = 0xE9;
     pub const ADD_RM_IMM8: u8 = 0x83;
@@ -130,7 +131,7 @@ impl Emitter {
 
     pub fn mark_internal_label(&mut self, label: InternalLabel) {
         let x86_ip = self.offset();
-        let patch_sites = self.jumps.take_internal_references(label);
+        let patch_sites = self.jumps.resolve_internal_label(label, x86_ip);
         self.patch_sites_to(patch_sites, x86_ip);
     }
 
@@ -263,6 +264,35 @@ impl Emitter {
         self.buffer.extend_from_slice(&offset.to_le_bytes());
     }
 
+    pub fn test_reg_reg(&mut self, reg1: Register, reg2: Register) {
+        let mut rex = 0;
+        if reg1.needs_rex_prefix() {
+            rex |= rex::R;
+        }
+        if reg2.needs_rex_prefix() {
+            rex |= rex::B;
+        }
+
+        let is_64bit = reg1.is_64_bit();
+        assert!(
+            reg2.is_64_bit() == is_64bit,
+            "Source and destination registers must be of the same size"
+        );
+
+        if is_64bit {
+            rex |= rex::W;
+        }
+
+        if rex != 0 {
+            self.buffer.push(rex::BASE | rex);
+        }
+
+        self.buffer.push(opcodes::TEST_R_R);
+
+        let modrm = modrm::MOD_R | (reg1.reg_field() << 3) | reg2.reg_field();
+        self.buffer.push(modrm);
+    }
+
     pub fn jne_bytecode_ip(&mut self, target_bc_ip: Ip) {
         let patch_site = self.offset() + 2;
         if let Some(target_x86_ip) = self.jumps.add_user_reference(target_bc_ip, patch_site) {
@@ -275,8 +305,18 @@ impl Emitter {
 
     pub fn jne_internal_label(&mut self, label: InternalLabel) {
         let patch_site = self.offset() + 2;
-        self.jumps.add_internal_reference(label, patch_site);
         self.jne_imm32(0);
+        if let Some(target_x86_ip) = self.jumps.add_internal_reference(label, patch_site) {
+            self.patch_rel32(patch_site, target_x86_ip);
+        }
+    }
+
+    pub fn jmp_internal_label(&mut self, label: InternalLabel) {
+        let patch_site = self.offset() + 1;
+        self.jmp_imm32(0);
+        if let Some(target_x86_ip) = self.jumps.add_internal_reference(label, patch_site) {
+            self.patch_rel32(patch_site, target_x86_ip);
+        }
     }
 
     pub fn jmp_imm32(&mut self, offset: i32) {

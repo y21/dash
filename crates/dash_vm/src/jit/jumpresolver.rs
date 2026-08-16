@@ -21,6 +21,7 @@ impl Default for PatchData {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum InternalLabel {
     StubStatusHandler,
+    Epilogue,
 }
 
 /// Resolves branches from bytecode IPs to emitted x86 offsets.
@@ -31,14 +32,14 @@ pub enum InternalLabel {
 #[derive(Debug, Default)]
 pub struct JumpResolver {
     user_labels: Vec<PatchData>,
-    internal_unresolved: FxHashMap<InternalLabel, Vec<PatchSite>>,
+    internal_labels: FxHashMap<InternalLabel, PatchData>,
 }
 
 impl JumpResolver {
     pub fn new(bytecode_len: usize) -> Self {
         Self {
             user_labels: vec![PatchData::default(); bytecode_len + 1], // +1 for the end-of-bytecode label (exit branch)
-            internal_unresolved: FxHashMap::default(),
+            internal_labels: FxHashMap::default(),
         }
     }
 
@@ -77,13 +78,26 @@ impl JumpResolver {
         }
     }
 
-    /// Adds a patch site for an internal label (e.g. stub status handler).
-    pub fn add_internal_reference(&mut self, label: InternalLabel, patch_site: PatchSite) {
-        self.internal_unresolved.entry(label).or_default().push(patch_site);
+    pub fn add_internal_reference(&mut self, label: InternalLabel, patch_site: PatchSite) -> Option<X86Ip> {
+        let slot = self.internal_labels.entry(label).or_default();
+
+        match slot {
+            PatchData::Resolved { x86_ip } => Some(*x86_ip),
+            PatchData::Unresolved { references } => {
+                references.push(patch_site);
+                None
+            }
+        }
     }
 
-    /// Drains unresolved patch sites for an internal label.
-    pub fn take_internal_references(&mut self, label: InternalLabel) -> Vec<PatchSite> {
-        self.internal_unresolved.remove(&label).unwrap_or_default()
+    pub fn resolve_internal_label(&mut self, label: InternalLabel, x86_ip: X86Ip) -> Vec<PatchSite> {
+        let slot = self.internal_labels.entry(label).or_default();
+
+        match std::mem::replace(slot, PatchData::Resolved { x86_ip }) {
+            PatchData::Unresolved { references } => references,
+            PatchData::Resolved { .. } => {
+                panic!("duplicate internal label resolution for {label:?}")
+            }
+        }
     }
 }
