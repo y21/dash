@@ -1,8 +1,8 @@
 use std::ffi::c_void;
-use std::mem;
+use std::mem::{self, offset_of};
 use std::ptr::{self, NonNull};
 
-use dash_middle::compiler::instruction::Instruction;
+use dash_middle::compiler::instruction::{Instruction, IntrinsicOperation};
 
 use crate::Vm;
 use crate::dispatch::{DispatchContext, INSTRUCTION_LUT};
@@ -10,6 +10,7 @@ use crate::frame::Ip;
 use crate::localscope::LocalScope;
 use crate::value::Unrooted;
 
+mod jumpresolver;
 mod x86;
 
 #[derive(Debug)]
@@ -58,6 +59,7 @@ fn mmap_jit_fn(code: &[u8]) -> MmapFn {
     MmapFn { ptr, len: code.len() }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 #[repr(C)]
 pub enum HandlerStubStatus {
     Normal,
@@ -75,6 +77,9 @@ struct HandlerStubReturn {
     status: HandlerStubStatus,
     payload: HandlerStubPayload,
 }
+
+#[repr(C)]
+pub struct JitReturn(HandlerStubReturn);
 
 /// Called by JIT code to call a handler.
 extern "C" fn handler_stub(vm: &mut Vm, handler: u8, ip: u32) -> HandlerStubReturn {
@@ -99,7 +104,21 @@ extern "C" fn handler_stub(vm: &mut Vm, handler: u8, ip: u32) -> HandlerStubRetu
 #[repr(C)]
 struct JitVtable {
     stub_fn: extern "C" fn(&mut Vm, u8, u32) -> HandlerStubReturn,
+    last_value_is_truthy: extern "C" fn(&mut Vm, bool) -> bool,
 }
+
+extern "C" fn last_value_is_truthy(vm: &mut Vm, pop: bool) -> bool {
+    let result = vm.stack.last().unwrap().clone().is_truthy(&mut vm.scope());
+    if pop {
+        vm.stack.pop();
+    }
+    result
+}
+
+static JIT_VTABLE: JitVtable = JitVtable {
+    stub_fn: handler_stub,
+    last_value_is_truthy,
+};
 
 /*
 Parameter registers: RDI, RSI, RDX, RCX, R8, R9
@@ -134,11 +153,17 @@ at the end:
 */
 
 pub fn compile_loop_region(scope: &mut LocalScope<'_>, start: Ip, end: Ip) {
-    println!("{start:x?}..{end:x?}");
     let func = scope.frames.with_current_bytecode(|bytecode| {
+        fn target_from_relative(next_bc_ip: u32, rel: i16) -> Ip {
+            let target = next_bc_ip as i64 + rel as i64;
+            assert!(target >= 0, "computed negative bytecode ip target: {target}");
+            Ip(target as u32)
+        }
+
+        let full_bytecode_len = bytecode.len();
         let bytecode = &bytecode[start.0 as usize..end.0 as usize];
 
-        let mut x86 = x86::Emitter::new();
+        let mut x86 = x86::Emitter::new(full_bytecode_len); // TODO: not needed to use the full bytecode len
 
         // Prologue
         x86.push(x86::Register::Rbp);
@@ -146,44 +171,107 @@ pub fn compile_loop_region(scope: &mut LocalScope<'_>, start: Ip, end: Ip) {
         x86.push(x86::Register::R12);
         x86.mov_reg_reg(x86::Register::R12, x86::Register::Rdi);
         x86.push(x86::Register::R13);
+
         // Move the stub handler into r13
-        x86.mov_reg_mem_u8(x86::Register::R13, x86::Register::Rsi, 0);
+        x86.mov_reg_mem_u8(
+            x86::Register::R13,
+            x86::Register::Rsi,
+            offset_of!(JitVtable, stub_fn).try_into().unwrap(),
+        );
+        x86.push(x86::Register::R14);
+        x86.mov_reg_reg(x86::Register::R14, x86::Register::Rsi);
+        x86.sub_rsp_imm8(8); // align to 16 bytes
 
         // ... Body ...
-
-        let mut i = 0;
-        while i < bytecode.len() {
-            let instr = Instruction::from_repr(bytecode[i]).unwrap();
-            let ip = start.0 + i as u32 + 1;
-            dbg!(instr);
-
+        fn emit_stub_for_instr(x86: &mut x86::Emitter, instr: Instruction, ip: u32) {
             x86.mov_reg_reg(x86::Register::Rdi, x86::Register::R12);
             x86.mov_reg_imm32(x86::Register::Rsi, instr as u32);
             x86.mov_reg_imm32(x86::Register::Rdx, ip);
             x86.call_reg(x86::Register::R13);
-
-            break; // Just handle one op for now
         }
 
+        let mut i = 0;
+        while i < bytecode.len() {
+            let instr_ip = start.0 + i as u32;
+            x86.mark_bytecode_ip(Ip(instr_ip));
+
+            let instr = Instruction::from_repr(bytecode[i]).unwrap();
+            i += 1;
+            let operands_ip = start.0 + i as u32;
+
+            match instr {
+                Instruction::JmpFalseP => {
+                    let target_rel = i16::from_le_bytes([bytecode[i], bytecode[i + 1]]);
+                    i += 2;
+                    let next_bc_ip = start.0 + i as u32;
+                    let target_bc_ip = target_from_relative(next_bc_ip, target_rel);
+
+                    x86.mov_reg_mem_u8(
+                        x86::Register::Rax,
+                        x86::Register::R14,
+                        offset_of!(JitVtable, last_value_is_truthy).try_into().unwrap(),
+                    );
+                    x86.mov_reg_reg(x86::Register::Rdi, x86::Register::R12);
+                    x86.mov_reg_imm32(x86::Register::Rsi, 1);
+                    x86.call_reg(x86::Register::Rax);
+                    x86.cmp_reg_al_imm8(1);
+                    x86.jne_bytecode_ip(target_bc_ip);
+                }
+                Instruction::LoopBackJmp => {
+                    let target_rel = i16::from_le_bytes([bytecode[i + 1], bytecode[i + 2]]);
+                    i += 3;
+                    let next_bc_ip = start.0 + i as u32;
+                    let target_bc_ip = target_from_relative(next_bc_ip, target_rel);
+
+                    x86.jmp_bytecode_ip(target_bc_ip);
+                }
+                Instruction::IntrinsicOp => {
+                    let intrinsic = IntrinsicOperation::from_repr(bytecode[i]).unwrap();
+                    i += 1;
+                    match intrinsic {
+                        IntrinsicOperation::LtNumLConstR | IntrinsicOperation::PostfixIncLocalNum => {
+                            i += 1;
+                            emit_stub_for_instr(&mut x86, instr, operands_ip);
+                        }
+                        IntrinsicOperation::LtNumLConstR32 => {
+                            i += 4;
+                            emit_stub_for_instr(&mut x86, instr, operands_ip);
+                        }
+                        _ => todo!(),
+                    }
+                }
+                Instruction::LdLocal => {
+                    i += 2;
+                    emit_stub_for_instr(&mut x86, instr, operands_ip);
+                }
+                Instruction::Pop => {
+                    emit_stub_for_instr(&mut x86, instr, operands_ip);
+                }
+                other => todo!("{other:?} @ {instr_ip:x}"),
+            }
+        }
+
+        // Exit branch (end-of-loop/end-of-bytecode)
+        x86.mark_bytecode_ip(start + i as u32);
+        x86.mov_reg_imm32(x86::Register::Eax, 0);
+
         // Epilogue
+        x86.add_rsp_imm8(8);
+        x86.pop(x86::Register::R14);
         x86.pop(x86::Register::R13);
         x86.pop(x86::Register::R12);
         x86.pop(x86::Register::Rbp);
         x86.ret();
 
+        // TODO: once we add more branches, the epilogue should get its own internal label that we jump to at the end
+
         mmap_jit_fn(x86.buffer())
     });
 
-    println!("Compiled! {func:?}");
-
-    let vtable = JitVtable { stub_fn: handler_stub };
-    let res = unsafe { func.call2::<&mut Vm, &JitVtable, ()>(scope, &vtable) };
-    println!("Worked?");
-}
-
-#[test]
-fn test_x86() {
-    let mut x86 = x86::Emitter::new();
-    x86.mov_reg_mem_u8(x86::Register::R13, x86::Register::Rsi, 0);
-    println!("{:x?}", x86.buffer());
+    let res = unsafe { func.call2::<&mut Vm, &JitVtable, JitReturn>(scope, &JIT_VTABLE) };
+    assert!(
+        res.0.status == HandlerStubStatus::Normal,
+        "JITed code returned non-normal status: {:?}",
+        res.0.status
+    );
 }

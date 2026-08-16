@@ -156,7 +156,7 @@ impl<'interner, 'buf> FunctionDecompiler<'interner, 'buf> {
                 Instruction::Null => self.handle_opless_instr("null"),
                 Instruction::Undefined => self.handle_opless_instr("undefined"),
                 Instruction::LdLocal => {
-                    let b = self.read()?;
+                    let b = self.read_u16()?;
                     // TODO: use debug symbols to find the name
                     self.handle_op_instr("ldlocal", &[&b]);
                 }
