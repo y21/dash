@@ -189,7 +189,7 @@ pub fn compile_loop_region(scope: &mut LocalScope<'_>, start: Ip, end: Ip) {
             x86.mov_reg_imm32(x86::Register::Rsi, instr as u32);
             x86.mov_reg_imm32(x86::Register::Rdx, ip);
             x86.call_reg(x86::Register::R13);
-            x86.test_reg_reg(x86::Register::Rax, x86::Register::Rax);
+            x86.test_reg_reg(x86::Register::Eax, x86::Register::Eax);
             x86.jne_internal_label(InternalLabel::StubStatusHandler);
         }
 
