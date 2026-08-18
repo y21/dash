@@ -587,11 +587,13 @@ mod handlers {
     use handlers::extract::{ForwardSequence, FrontIteratorWith, extract};
     use if_chain::if_chain;
     use smallvec::SmallVec;
+    use std::assert_matches;
     use std::ops::{Add, ControlFlow, Div, Mul, Rem, Sub};
     use std::rc::Rc;
 
     use crate::dispatch::extract::LoopBackjumpData;
     use crate::frame::{FrameState, Ip, Sp, TryBlock};
+    use crate::jit::JitReturn;
     use crate::util::unlikely;
     use crate::value::array::table::ArrayTable;
     use crate::value::array::{Array, ArrayIterator};
@@ -1400,7 +1402,10 @@ mod handlers {
                     // We've saturated the counter. Attempt to JIT.
 
                     let func = jit::compile_loop_region(&mut cx.scope, target_ip, ip);
-                    func.call(&mut cx);
+                    let result = func.call(&mut cx);
+                    assert_matches!(result, JitReturn::Normal);
+
+                    todo!("synchronize ip")
                 }
             }
         }

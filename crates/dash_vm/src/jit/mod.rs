@@ -23,7 +23,27 @@ pub struct JitFnHandle(Rc<MmapFn>);
 
 impl JitFnHandle {
     pub fn call(&self, vm: &mut Vm) -> JitReturn {
-        self.0.call2::<&mut Vm, &JitVtable, JitReturn>(vm, &JIT_VTABLE)
+        self.0
+            .call2::<&mut Vm, &JitVtable, InternalJitReturn>(vm, &JIT_VTABLE)
+            .into()
+    }
+}
+
+#[repr(C)]
+struct InternalJitReturn(HandlerStubReturn);
+
+#[derive(Debug)]
+pub enum JitReturn {
+    Normal,
+    Exception(Unrooted),
+}
+
+impl From<InternalJitReturn> for JitReturn {
+    fn from(ret: InternalJitReturn) -> Self {
+        match ret.0.status {
+            HandlerStubStatus::Normal => JitReturn::Normal,
+            HandlerStubStatus::Exception => JitReturn::Exception(unsafe { ret.0.payload.value }),
+        }
     }
 }
 
@@ -45,9 +65,6 @@ struct HandlerStubReturn {
     status: HandlerStubStatus,
     payload: HandlerStubPayload,
 }
-
-#[repr(C)]
-pub struct JitReturn(HandlerStubReturn);
 
 /// Called by JIT code to call a handler.
 extern "C" fn handler_stub(vm: &mut Vm, handler: u8, ip: u32) -> HandlerStubReturn {
