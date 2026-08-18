@@ -1,6 +1,5 @@
-use std::ffi::c_void;
-use std::mem::{self, offset_of};
-use std::ptr::{self, NonNull};
+use std::mem::offset_of;
+use std::rc::Rc;
 
 use dash_middle::compiler::instruction::{Instruction, IntrinsicOperation};
 
@@ -8,56 +7,24 @@ use crate::Vm;
 use crate::dispatch::{DispatchContext, INSTRUCTION_LUT};
 use crate::frame::Ip;
 use crate::jit::jumpresolver::InternalLabel;
+use crate::jit::mmap::MmapFn;
 use crate::localscope::LocalScope;
 use crate::value::Unrooted;
 
 mod jumpresolver;
+mod mmap;
+mod state;
 mod x86;
 
+pub use state::State;
+
 #[derive(Debug)]
-pub struct MmapFn {
-    ptr: NonNull<c_void>,
-    len: usize,
-}
+pub struct JitFnHandle(Rc<MmapFn>);
 
-impl MmapFn {
-    unsafe fn call0<R>(&self) -> R {
-        let f = unsafe { mem::transmute::<_, unsafe extern "C" fn() -> R>(self.ptr.as_ptr()) };
-        unsafe { f() }
+impl JitFnHandle {
+    pub fn call(&self, vm: &mut Vm) -> JitReturn {
+        self.0.call2::<&mut Vm, &JitVtable, JitReturn>(vm, &JIT_VTABLE)
     }
-    unsafe fn call1<T, R>(&self, arg: T) -> R {
-        let f = unsafe { mem::transmute::<_, unsafe extern "C" fn(T) -> R>(self.ptr.as_ptr()) };
-        unsafe { f(arg) }
-    }
-    unsafe fn call2<T1, T2, R>(&self, arg1: T1, arg2: T2) -> R {
-        let f = unsafe { mem::transmute::<_, unsafe extern "C" fn(T1, T2) -> R>(self.ptr.as_ptr()) };
-        unsafe { f(arg1, arg2) }
-    }
-}
-
-impl Drop for MmapFn {
-    fn drop(&mut self) {
-        unsafe {
-            libc::munmap(self.ptr.as_ptr(), self.len);
-        }
-    }
-}
-
-fn mmap_jit_fn(code: &[u8]) -> MmapFn {
-    let ptr = NonNull::new(unsafe {
-        libc::mmap(
-            ptr::null_mut(),
-            code.len(),
-            libc::PROT_READ | libc::PROT_EXEC | libc::PROT_WRITE,
-            libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
-            -1,
-            0,
-        )
-    })
-    .expect("failed to mmap jit region");
-
-    unsafe { ptr.copy_from_nonoverlapping(NonNull::new(code.as_ptr().cast_mut()).unwrap().cast(), code.len()) };
-    MmapFn { ptr, len: code.len() }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
@@ -121,40 +88,8 @@ static JIT_VTABLE: JitVtable = JitVtable {
     last_value_is_truthy,
 };
 
-/*
-Parameter registers: RDI, RSI, RDX, RCX, R8, R9
-
-Prologue:
-- Vm* is in RDI,
-- JitVtable* is in RSI,
-
-- Push RBP (just so the stack is aligned), R12, R13 onto the stack
-- Move rsp into rbp (not really necessary for this I think but lets do it anyway, need reg2-reg moves either way)
-- Move rdi into r12
-- Move the stub handler, i.e. [rsi + 0] into r13
-- Make sure rsp is 16-byte aligned (since we push 3 regs, it already is)
-
-
-Generic stub call:
-
-- Move r12 into rdi (Vm*),
-- Move the handler number into rsi
-- Call 14 (Return value is then in rax)
-
-(( can ignore this for the first test ))
-- Compare rax to 0 (HandlerStubStatus::Normal)
-- If not equal, jump to NOT_NORMAL_HANDLER
-
-at the end:
-- Move STATUS_NORMAL INTO rax (leave rdx uninit)
-- Pop R13, R12, RBP, in that order (as we pushed it)
-- Return
-
-
-*/
-
-pub fn compile_loop_region(scope: &mut LocalScope<'_>, start: Ip, end: Ip) {
-    let func = scope.frames.with_current_bytecode(|bytecode| {
+fn compile_uncached(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> MmapFn {
+    scope.frames.with_current_bytecode(|bytecode| {
         fn target_from_relative(next_bc_ip: u32, rel: i16) -> Ip {
             let target = next_bc_ip as i64 + rel as i64;
             assert!(target >= 0, "computed negative bytecode ip target: {target}");
@@ -269,13 +204,19 @@ pub fn compile_loop_region(scope: &mut LocalScope<'_>, start: Ip, end: Ip) {
         x86.mark_internal_label(InternalLabel::StubStatusHandler);
         x86.jmp_internal_label(InternalLabel::Epilogue);
 
-        mmap_jit_fn(x86.buffer())
-    });
+        MmapFn::alloc(x86.buffer())
+    })
+}
 
-    let res = unsafe { func.call2::<&mut Vm, &JitVtable, JitReturn>(scope, &JIT_VTABLE) };
-    assert!(
-        res.0.status == HandlerStubStatus::Normal,
-        "JITed code returned non-normal status: {:?}",
-        res.0.status
-    );
+pub fn compile_loop_region(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> JitFnHandle {
+    let current_fn = Rc::as_ptr(scope.frames.current_fn());
+    let key = (current_fn, start);
+
+    if let Some(func) = scope.jit.compiled_fn_cache.get(&key) {
+        JitFnHandle(Rc::clone(func))
+    } else {
+        let func = Rc::new(compile_uncached(scope, start, end));
+        scope.jit.compiled_fn_cache.insert(key, Rc::clone(&func));
+        JitFnHandle(func)
+    }
 }

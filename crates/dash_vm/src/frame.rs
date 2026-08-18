@@ -82,7 +82,7 @@ unsafe impl Trace for FrameState {
 
 index_type!(
     /// An instruction pointer.
-    #[derive(Debug, Clone, Copy, Trace, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Copy, Trace, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct Ip(pub u32);
     /// A stack pointer.
     #[derive(Debug, Clone, Copy, Trace, PartialEq, Eq, PartialOrd, Ord)]

@@ -1,4 +1,6 @@
-use dash_middle::compiler::constant::ConstantPool;
+use std::rc::Rc;
+
+use dash_middle::compiler::constant::{ConstantPool, Function};
 use dash_middle::compiler::external::ExternalId;
 use dash_middle::index_type;
 use dash_middle::indexvec::IndexVec;
@@ -83,6 +85,10 @@ impl FrameStack {
 
     pub fn current_this(&self) -> This {
         self.current_extended().this
+    }
+
+    pub fn current_fn(&self) -> &Rc<Function> {
+        &self.current_base_ref().function
     }
 
     pub fn current_external(&self, id: ExternalId) -> ExternalValue {

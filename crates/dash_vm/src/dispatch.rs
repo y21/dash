@@ -1399,11 +1399,8 @@ mod handlers {
                 None => {
                     // We've saturated the counter. Attempt to JIT.
 
-                    jit::compile_loop_region(&mut cx.scope, target_ip, ip);
-
-                    todo!();
-
-                    // cx.frames.set_byte(ip - 3, data.hotness.disable().raw())
+                    let func = jit::compile_loop_region(&mut cx.scope, target_ip, ip);
+                    func.call(&mut cx);
                 }
             }
         }
