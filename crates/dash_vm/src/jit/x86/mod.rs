@@ -51,8 +51,7 @@ pub enum Register {
 }
 
 impl Register {
-    // TODO: return a size struct
-    pub fn is_64_bit(&self) -> bool {
+    pub fn size_bits(self) -> u32 {
         match self {
             Register::Rax
             | Register::R8
@@ -65,12 +64,25 @@ impl Register {
             | Register::R14
             | Register::R15
             | Register::Rdx
-            | Register::Rcx => true,
-            Register::Eax | Register::Al => false,
+            | Register::Rcx => 64,
+            Register::Eax => 32,
+            Register::Al => 8,
         }
     }
 
-    pub fn reg_field(&self) -> u8 {
+    /// Require that the size of the register is the same as the size of the other register, and return it.
+    pub fn join_register_size(self, other: Register) -> u32 {
+        assert_eq!(
+            self.size_bits(),
+            other.size_bits(),
+            "Register {self:?} of size {} does not match register {other:?} of size {}",
+            self.size_bits(),
+            other.size_bits()
+        );
+        self.size_bits()
+    }
+
+    pub fn reg_field(self) -> u8 {
         match self {
             Register::Rax | Register::Eax | Register::Al | Register::R8 => 0,
             Register::Rcx => 1,
@@ -82,7 +94,7 @@ impl Register {
         }
     }
 
-    pub fn needs_rex_prefix(&self) -> bool {
+    pub fn needs_rex_prefix(self) -> bool {
         match self {
             Register::R8 | Register::R12 | Register::R13 | Register::R14 | Register::R15 => true,
             Register::Rax
@@ -203,14 +215,7 @@ impl Emitter {
         if src.needs_rex_prefix() {
             rex |= rex::R;
         }
-
-        let is_64bit = dest.is_64_bit();
-        assert!(
-            src.is_64_bit() == is_64bit,
-            "Source and destination registers must be of the same size"
-        );
-
-        if is_64bit {
+        if dest.join_register_size(src) == 64 {
             rex |= rex::W;
         }
 
@@ -232,13 +237,7 @@ impl Emitter {
         if dest.needs_rex_prefix() {
             rex |= rex::R;
         }
-        let is_64bit = dest.is_64_bit();
-        assert!(
-            base.is_64_bit() == is_64bit,
-            "Source and destination registers must be of the same size"
-        );
-
-        if is_64bit {
+        if dest.join_register_size(base) == 64 {
             rex |= rex::W;
         }
 
@@ -289,14 +288,7 @@ impl Emitter {
         if reg2.needs_rex_prefix() {
             rex |= rex::B;
         }
-
-        let is_64bit = reg1.is_64_bit();
-        assert!(
-            reg2.is_64_bit() == is_64bit,
-            "Source and destination registers must be of the same size"
-        );
-
-        if is_64bit {
+        if reg1.join_register_size(reg2) == 64 {
             rex |= rex::W;
         }
 
@@ -359,12 +351,7 @@ impl Emitter {
         if base.needs_rex_prefix() {
             rex |= rex::R;
         }
-        let is_64bit = dest.is_64_bit();
-        assert!(
-            base.is_64_bit() == is_64bit,
-            "Source and destination registers must be of the same size"
-        );
-        if is_64bit {
+        if dest.join_register_size(base) == 64 {
             rex |= rex::W;
         }
         if rex != 0 {
