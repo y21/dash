@@ -15,6 +15,13 @@ impl MmapFn {
         f(t1, t2)
     }
 
+    pub fn call3<T1, T2, T3, R>(&self, t1: T1, t2: T2, t3: T3) -> R {
+        type RawMmapFn<T1, T2, T3, R> = extern "C" fn(T1, T2, T3) -> R;
+
+        let f = unsafe { std::mem::transmute::<_, RawMmapFn<T1, T2, T3, R>>(self.ptr.as_ptr()) };
+        f(t1, t2, t3)
+    }
+
     pub fn alloc(code: &[u8]) -> Self {
         let ptr = NonNull::new(unsafe {
             libc::mmap(

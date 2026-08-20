@@ -1,4 +1,4 @@
-use std::mem::offset_of;
+use std::mem::{MaybeUninit, offset_of};
 use std::rc::Rc;
 
 use dash_middle::compiler::instruction::{Instruction, IntrinsicOperation};
@@ -23,28 +23,37 @@ pub struct JitFnHandle(Rc<MmapFn>);
 
 impl JitFnHandle {
     pub fn call(&self, vm: &mut Vm) -> JitReturn {
-        self.0
-            .call2::<&mut Vm, &JitVtable, InternalJitReturn>(vm, &JIT_VTABLE)
-            .into()
+        let mut out = MaybeUninit::<JitOutData>::zeroed();
+
+        let ret = self
+            .0
+            .call3::<&mut Vm, &JitVtable, &mut MaybeUninit<JitOutData>, InternalJitReturn>(vm, &JIT_VTABLE, &mut out);
+
+        // SAFETY: ip is always in bounds
+        let ip = unsafe { &raw const (*out.as_ptr()).ip };
+
+        match ret.status {
+            // SAFETY: jit initializes out->ip for normal returns
+            HandlerStubStatus::Normal => JitReturn::Normal { ip: Ip(unsafe { *ip }) },
+            HandlerStubStatus::Exception => {
+                let exception = unsafe { ret.payload.value };
+                JitReturn::Exception { value: exception }
+            }
+        }
     }
 }
 
-#[repr(C)]
-struct InternalJitReturn(HandlerStubReturn);
+type InternalJitReturn = HandlerStubReturn;
 
 #[derive(Debug)]
 pub enum JitReturn {
-    Normal,
-    Exception(Unrooted),
-}
-
-impl From<InternalJitReturn> for JitReturn {
-    fn from(ret: InternalJitReturn) -> Self {
-        match ret.0.status {
-            HandlerStubStatus::Normal => JitReturn::Normal,
-            HandlerStubStatus::Exception => JitReturn::Exception(unsafe { ret.0.payload.value }),
-        }
-    }
+    /// JIT code returns normally at the given bytecode ip.
+    Normal {
+        ip: Ip,
+    },
+    Exception {
+        value: Unrooted,
+    },
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
@@ -66,8 +75,8 @@ struct HandlerStubReturn {
     payload: HandlerStubPayload,
 }
 
-/// Called by JIT code to call a handler.
-extern "C" fn handler_stub(vm: &mut Vm, handler: u8, ip: u32) -> HandlerStubReturn {
+/// Called by JIT code to call a handler and synchronize any vm state.
+extern "C" fn handler_stub(vm: &mut Vm, _: *mut JitOutData, handler: u8, ip: u32) -> HandlerStubReturn {
     vm.frames.set_ip(Ip(ip));
     let cx = DispatchContext::new(vm.scope());
 
@@ -88,7 +97,7 @@ extern "C" fn handler_stub(vm: &mut Vm, handler: u8, ip: u32) -> HandlerStubRetu
 
 #[repr(C)]
 struct JitVtable {
-    stub_fn: extern "C" fn(&mut Vm, u8, u32) -> HandlerStubReturn,
+    stub_fn: extern "C" fn(&mut Vm, *mut JitOutData, u8, u32) -> HandlerStubReturn,
     last_value_is_truthy: extern "C" fn(&mut Vm, bool) -> bool,
 }
 
@@ -105,6 +114,11 @@ static JIT_VTABLE: JitVtable = JitVtable {
     last_value_is_truthy,
 };
 
+#[repr(C)]
+struct JitOutData {
+    ip: u32,
+}
+
 fn compile_uncached(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> MmapFn {
     scope.frames.with_current_bytecode(|bytecode| {
         fn target_from_relative(next_bc_ip: u32, rel: i16) -> Ip {
@@ -118,27 +132,32 @@ fn compile_uncached(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> MmapFn {
         let mut x86 = x86::Emitter::new(bytecode.len());
 
         // Prologue
-        x86.push(x86::Register::Rbp);
+        // START OF STACK
+        x86.push(x86::Register::Rbp); // rsp aligned
         x86.mov_reg_reg(x86::Register::Rbp, x86::Register::Rsp);
-        x86.push(x86::Register::R12);
+        x86.push(x86::Register::R12); // Vm pointer - rbp-8, rsp misaligned by 8
         x86.mov_reg_reg(x86::Register::R12, x86::Register::Rdi);
-        x86.push(x86::Register::R13);
+        x86.push(x86::Register::R13); // Stub fn - rbp-16, rsp aligned
+        x86.push(x86::Register::R14); // Vtable - rbp-24, rsp misaligned by 8
+        x86.mov_reg_reg(x86::Register::R14, x86::Register::Rsi);
+        const OUT_DATA_RBP_OFFSET: i8 = 32;
+        x86.push(x86::Register::Rdx); // Out data - rbp-32, rsp aligned
+        // END OF STACK
 
-        // Move the stub handler into r13
+        // The stub fn is very hot, so put it in a callee-saved register
+        // TODO: use a call variant that calls [r13+offset] directly
         x86.mov_reg_mem_u8(
             x86::Register::R13,
             x86::Register::Rsi,
             offset_of!(JitVtable, stub_fn).try_into().unwrap(),
         );
-        x86.push(x86::Register::R14);
-        x86.mov_reg_reg(x86::Register::R14, x86::Register::Rsi);
-        x86.sub_rsp_imm8(8); // align to 16 bytes
 
         // ... Body ...
         fn emit_stub_for_instr(x86: &mut x86::Emitter, instr: Instruction, ip: u32) {
             x86.mov_reg_reg(x86::Register::Rdi, x86::Register::R12);
-            x86.mov_reg_imm32(x86::Register::Rsi, instr as u32);
-            x86.mov_reg_imm32(x86::Register::Rdx, ip);
+            x86.mov_reg_mem_u8(x86::Register::Rsi, x86::Register::Rbp, -OUT_DATA_RBP_OFFSET);
+            x86.mov_reg_imm32(x86::Register::Rdx, instr as u32);
+            x86.mov_reg_imm32(x86::Register::Rcx, ip);
             x86.call_reg(x86::Register::R13);
             x86.test_reg_reg(x86::Register::Eax, x86::Register::Eax);
             x86.jne_internal_label(InternalLabel::StubStatusHandler);
@@ -206,12 +225,19 @@ fn compile_uncached(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> MmapFn {
 
         // Exit branch (end-of-loop/end-of-bytecode)
         assert!(i == bytecode.len());
+        assert!(start.0 + i as u32 == end.0);
         x86.mark_bytecode_ip(Ip(i as u32));
+        x86.mov_reg_mem_u8(x86::Register::Rax, x86::Register::Rbp, -OUT_DATA_RBP_OFFSET);
+        x86.move_mem_imm32(
+            x86::Register::Rax,
+            offset_of!(JitOutData, ip).try_into().unwrap(),
+            end.0.cast_signed(),
+        );
         x86.mov_reg_imm32(x86::Register::Eax, 0);
 
         // Epilogue
         x86.mark_internal_label(InternalLabel::Epilogue);
-        x86.add_rsp_imm8(8);
+        x86.pop(x86::Register::Rdx);
         x86.pop(x86::Register::R14);
         x86.pop(x86::Register::R13);
         x86.pop(x86::Register::R12);

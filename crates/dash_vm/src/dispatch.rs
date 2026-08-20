@@ -1403,9 +1403,12 @@ mod handlers {
 
                     let func = jit::compile_loop_region(&mut cx.scope, target_ip, ip);
                     let result = func.call(&mut cx);
-                    assert_matches!(result, JitReturn::Normal);
-
-                    todo!("synchronize ip")
+                    match result {
+                        JitReturn::Normal { ip } => {
+                            cx.frames.set_ip(ip);
+                        }
+                        JitReturn::Exception { value: _ } => todo!(),
+                    }
                 }
             }
         }

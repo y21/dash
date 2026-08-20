@@ -25,6 +25,8 @@ mod opcodes {
     pub const JMP_REL32: u8 = 0xE9;
     pub const ADD_RM_IMM8: u8 = 0x83;
     pub const SUB_RM_IMM8: u8 = 0x83;
+    pub const LEA: u8 = 0x8D;
+    pub const MOV_MEM_IMM32: u8 = 0xC7;
 }
 
 use crate::frame::Ip;
@@ -41,12 +43,15 @@ pub enum Register {
     R12,
     R13,
     R14,
+    R15,
     Rdi,
     Rsi,
     Rdx,
+    Rcx,
 }
 
 impl Register {
+    // TODO: return a size struct
     pub fn is_64_bit(&self) -> bool {
         match self {
             Register::Rax
@@ -58,7 +63,9 @@ impl Register {
             | Register::Rdi
             | Register::Rsi
             | Register::R14
-            | Register::Rdx => true,
+            | Register::R15
+            | Register::Rdx
+            | Register::Rcx => true,
             Register::Eax | Register::Al => false,
         }
     }
@@ -66,17 +73,18 @@ impl Register {
     pub fn reg_field(&self) -> u8 {
         match self {
             Register::Rax | Register::Eax | Register::Al | Register::R8 => 0,
-            Register::Rbp | Register::R13 => 5,
-            Register::Rsp | Register::R12 => 4,
-            Register::Rdi => 7,
-            Register::Rsi | Register::R14 => 6,
+            Register::Rcx => 1,
             Register::Rdx => 2,
+            Register::Rsp | Register::R12 => 4,
+            Register::Rbp | Register::R13 => 5,
+            Register::Rsi | Register::R14 => 6,
+            Register::Rdi | Register::R15 => 7,
         }
     }
 
     pub fn needs_rex_prefix(&self) -> bool {
         match self {
-            Register::R8 | Register::R12 | Register::R13 | Register::R14 => true,
+            Register::R8 | Register::R12 | Register::R13 | Register::R14 | Register::R15 => true,
             Register::Rax
             | Register::Eax
             | Register::Rbp
@@ -84,7 +92,8 @@ impl Register {
             | Register::Rdi
             | Register::Rsi
             | Register::Rdx
-            | Register::Al => false,
+            | Register::Al
+            | Register::Rcx => false,
         }
     }
 }
@@ -140,6 +149,14 @@ impl Emitter {
             self.buffer.push(rex::BASE | rex::B);
         }
         self.buffer.push(opcodes::MOV_REG_IMM32 + reg.reg_field());
+        self.buffer.extend_from_slice(&imm.to_le_bytes());
+    }
+
+    pub fn move_mem_imm32(&mut self, base: Register, offset: u8, imm: i32) {
+        self.buffer.push(opcodes::MOV_MEM_IMM32);
+        let modrm = modrm::MOD_M8 | (0 << 3) | base.reg_field();
+        self.buffer.push(modrm);
+        self.buffer.push(offset);
         self.buffer.extend_from_slice(&imm.to_le_bytes());
     }
 
@@ -207,7 +224,7 @@ impl Emitter {
         self.buffer.push(modrm);
     }
 
-    pub fn mov_reg_mem_u8(&mut self, dest: Register, base: Register, offset: u8) {
+    pub fn mov_reg_mem_u8(&mut self, dest: Register, base: Register, offset: i8) {
         let mut rex = 0;
         if base.needs_rex_prefix() {
             rex |= rex::B;
@@ -234,7 +251,7 @@ impl Emitter {
         let modrm = modrm::MOD_M8 | (dest.reg_field() << 3) | base.reg_field();
         self.buffer.push(modrm);
 
-        self.buffer.extend_from_slice(&offset.to_le_bytes());
+        self.buffer.push(offset as u8);
     }
 
     pub fn call_reg(&mut self, register: Register) {
@@ -332,5 +349,30 @@ impl Emitter {
         } else {
             self.jmp_imm32(0);
         }
+    }
+
+    pub fn lea_reg_mem(&mut self, dest: Register, base: Register, offset: i8) {
+        let mut rex = 0;
+        if dest.needs_rex_prefix() {
+            rex |= rex::B;
+        }
+        if base.needs_rex_prefix() {
+            rex |= rex::R;
+        }
+        let is_64bit = dest.is_64_bit();
+        assert!(
+            base.is_64_bit() == is_64bit,
+            "Source and destination registers must be of the same size"
+        );
+        if is_64bit {
+            rex |= rex::W;
+        }
+        if rex != 0 {
+            self.buffer.push(rex::BASE | rex);
+        }
+        self.buffer.push(opcodes::LEA);
+        let modrm = modrm::MOD_M8 | (dest.reg_field() << 3) | base.reg_field();
+        self.buffer.push(modrm);
+        self.buffer.push(offset as u8);
     }
 }
