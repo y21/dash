@@ -1407,7 +1407,7 @@ mod handlers {
                         JitReturn::Normal { ip } => {
                             cx.frames.set_ip(ip);
                         }
-                        JitReturn::Exception { value: _ } => todo!(),
+                        JitReturn::Exception { value } => return Err(value),
                     }
                 }
             }

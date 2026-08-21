@@ -237,7 +237,7 @@ fn compile_uncached(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> MmapFn {
 
         // Epilogue
         x86.mark_internal_label(InternalLabel::Epilogue);
-        x86.pop(x86::Register::Rdx);
+        x86.add_rsp_imm8(8); // rdx - not a callee saved register and we have the return payload in that reg already, so just discard directly
         x86.pop(x86::Register::R14);
         x86.pop(x86::Register::R13);
         x86.pop(x86::Register::R12);
