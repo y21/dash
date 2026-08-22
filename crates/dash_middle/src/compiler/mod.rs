@@ -14,10 +14,12 @@ use self::external::External;
 use serde::{Deserialize, Serialize};
 pub mod constant;
 pub mod external;
+pub mod extract;
 #[cfg(feature = "format")]
 pub mod format;
 pub mod instruction;
 pub mod instruction_iter;
+pub mod operands;
 pub mod scope;
 
 #[cfg_attr(feature = "format", derive(Serialize, Deserialize))]

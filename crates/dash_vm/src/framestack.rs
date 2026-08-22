@@ -128,7 +128,7 @@ impl FrameStack {
         base.function.buffer.at(ip)
     }
 
-    fn fetch_n_and_inc_ip<const N: usize>(&mut self) -> [u8; N] {
+    pub fn fetch_n_and_inc_ip<const N: usize>(&mut self) -> [u8; N] {
         let base = self.current_base_mut();
         let Ip(ip) = base.ip;
         let value = base.function.buffer.copy_range::<N>(ip);

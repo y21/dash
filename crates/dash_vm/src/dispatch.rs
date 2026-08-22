@@ -1,4 +1,4 @@
-use dash_middle::compiler::constant::{ConstantPool, NumberConstant, SymbolConstant};
+use dash_middle::compiler::constant::{ConstantPool, SymbolConstant};
 use dash_middle::compiler::external::ExternalId;
 use dash_middle::compiler::scope::BackLocalId;
 use std::ops::{Deref, DerefMut};
@@ -69,13 +69,17 @@ impl<'vm> DispatchContext<'vm> {
         self.scope.pop_stack_unwrap().root(&mut self.scope)
     }
 
-    pub fn peek_stack(&mut self) -> Unrooted {
+    pub fn peek_stack(&self) -> Unrooted {
         Unrooted::new(
             *self
                 .stack
                 .last()
                 .expect("Bytecode attempted to peek stack value, but nothing was on the stack"),
         )
+    }
+
+    pub fn peek_stack_rooted(&mut self) -> Value {
+        self.peek_stack().root(&mut self.scope)
     }
 
     fn pop_stack_const<const N: usize>(&mut self) -> [Unrooted; N] {
@@ -529,9 +533,22 @@ mod extract {
 }
 
 mod handlers {
-    use dash_middle::compiler::constant::{BooleanConstant, FunctionConstant, RegexConstant};
+    use dash_middle::compiler::constant::FunctionConstant;
     use dash_middle::compiler::external::{External, PossiblyExternalId};
+    use dash_middle::compiler::extract::extract_back_infallible;
     use dash_middle::compiler::instruction::{AssignKind, IntrinsicOperation};
+    use dash_middle::compiler::operands::{
+        AddOperands, ArrayLiteralOperands, BinaryOperator, BitandOperands, BitnotOperands, BitorOperands,
+        BitshlOperands, BitshrOperands, BitushrOperands, BitxorOperands, BooleanConstantOperands, BooleanConstantWide,
+        CallOperands, ConditionalJumpNoPopOperands, ConditionalJumpPopOperands, DelayedRetOperands, DivOperands,
+        EqOperands, FinallyEndOperands, FunctionConstantOperands, GeOperands, GtOperands, InstanceofOperands,
+        JmpFalseNoPopOperands, JmpFalsePopOperands, JmpNullishNoPopOperands, JmpNullishPopOperands, JmpOperands,
+        JmpTrueNoPopOperands, JmpTruePopOperands, JmpUndefinedNoPopOperands, JmpUndefinedPopOperands, LdGlobalOperands,
+        LeOperands, LtOperands, MulOperands, NeOperands, NegOperands, NotOperands, NumberConstantOperands,
+        NumberConstantWide, ObjectInOperands, PopOperands, PosOperands, PowOperands, RegexConstantOperands,
+        RemOperands, RetOperands, StaticPropertyAccessOperands, StrictEqOperands, StrictNeOperands,
+        StringConstantOperands, SubOperands, SymbolConstantWide, TryCatchDepth,
+    };
     use dash_middle::compiler::{FunctionCallKind, StaticImportKind};
     use dash_middle::interner::sym;
     use dash_middle::iterator_with::{InfallibleIteratorWith, IteratorWith};
@@ -539,6 +556,7 @@ mod handlers {
     use handlers::extract::{ForwardSequence, FrontIteratorWith, extract};
     use if_chain::if_chain;
     use smallvec::SmallVec;
+    use std::convert::Infallible;
     use std::ops::{Add, ControlFlow, Div, Mul, Rem, Sub};
     use std::rc::Rc;
 
@@ -565,32 +583,77 @@ mod handlers {
 
     use super::*;
 
+    impl dash_middle::compiler::extract::ExtractBack<DispatchContext<'_>> for Value {
+        type Exception = Infallible;
+
+        fn extract_back(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
+            Ok(cx.pop_stack_rooted())
+        }
+    }
+
+    impl dash_middle::compiler::extract::ExtractBack<DispatchContext<'_>> for Unrooted {
+        type Exception = Infallible;
+
+        fn extract_back(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
+            Ok(cx.pop_stack())
+        }
+    }
+
+    impl<'vm> dash_middle::compiler::extract::ExtractSource for DispatchContext<'vm> {
+        type Value = Value;
+        type Unrooted = Unrooted;
+
+        fn fetch_bytes<const N: usize>(&mut self) -> [u8; N] {
+            self.frames.fetch_n_and_inc_ip()
+        }
+
+        fn constants(&self) -> &ConstantPool {
+            self.constants()
+        }
+
+        fn pop_stack_rooted(&mut self) -> Self::Value {
+            self.pop_stack_rooted()
+        }
+
+        fn pop_stack(&mut self) -> Self::Unrooted {
+            self.pop_stack()
+        }
+
+        fn peek_stack(&self) -> Self::Unrooted {
+            self.peek_stack()
+        }
+
+        fn stack_len(&self) -> usize {
+            self.stack.len()
+        }
+
+        fn peek_stack_rooted(&mut self) -> Self::Value {
+            self.peek_stack_rooted()
+        }
+    }
+
     pub fn string_constant(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let id = cx.fetchw_and_inc_ip();
-        let sym = JsString::from(cx.constants().symbols[SymbolConstant(id)]);
-        cx.push_stack(Value::string(sym).into());
+        let StringConstantOperands(SymbolConstantWide(sym)) = extract_back_infallible(&mut cx);
+        cx.push_stack(Value::string(sym.into()).into());
         Ok(None)
     }
 
     pub fn boolean_constant(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let id = cx.fetchw_and_inc_ip();
-        let b = cx.constants().booleans[BooleanConstant(id)];
-        cx.push_stack(Value::boolean(b).into());
+        let BooleanConstantOperands(BooleanConstantWide(value)) = extract_back_infallible(&mut cx);
+        cx.push_stack(Value::boolean(value).into());
         Ok(None)
     }
 
     pub fn number_constant(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let id = cx.fetchw_and_inc_ip();
-        let n = cx.constants().numbers[NumberConstant(id)];
-        cx.push_stack(Value::number(n).into());
+        let NumberConstantOperands(NumberConstantWide(value)) = extract_back_infallible(&mut cx);
+        cx.push_stack(Value::number(value).into());
         Ok(None)
     }
 
     pub fn regex_constant(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let id = cx.fetchw_and_inc_ip();
-        let (regex, source) = &cx.constants().regexes[RegexConstant(id)];
+        let (regex, source) = extract_back_infallible::<_, RegexConstantOperands>(&mut cx).regex(&mut cx);
 
-        let regex = RegExp::new(regex.clone(), JsString::from(*source), &cx.scope);
+        let regex = RegExp::new(regex.clone(), JsString::from(source), &cx.scope);
         let regex = cx.scope.register(regex);
         cx.push_stack(Value::object(regex).into());
         Ok(None)
@@ -638,7 +701,8 @@ mod handlers {
             externals
         }
 
-        let id = cx.fetchw_and_inc_ip();
+        // let id = cx.fetchw_and_inc_ip();
+        let FunctionConstantOperands(FunctionConstant(id)) = extract_back_infallible(&mut cx);
         let fun = Rc::clone(&cx.constants().functions[FunctionConstant(id)]);
 
         let externals = register_function_externals(&fun, &mut cx.scope);
@@ -665,156 +729,217 @@ mod handlers {
     }
 
     pub fn add(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(Value::add)
+        let AddOperands(BinaryOperator { left, right }) = extract_back_infallible(&mut cx);
+        let result = left.add(right, &mut cx)?;
+        cx.scope.stack.push(result);
+        Ok(None)
     }
 
     pub fn sub(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(Value::sub)
+        let SubOperands(BinaryOperator { left, right }) = extract_back_infallible(&mut cx);
+        let result = left.sub(right, &mut cx)?;
+        cx.scope.stack.push(result);
+        Ok(None)
     }
 
     pub fn mul(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(Value::mul)
+        let MulOperands(BinaryOperator { left, right }) = extract_back_infallible(&mut cx);
+        let result = left.mul(right, &mut cx)?;
+        cx.scope.stack.push(result);
+        Ok(None)
     }
 
     pub fn div(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(Value::div)
+        let DivOperands(BinaryOperator { left, right }) = extract_back_infallible(&mut cx);
+        let result = left.div(right, &mut cx)?;
+        cx.scope.stack.push(result);
+        Ok(None)
     }
 
     pub fn rem(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(Value::rem)
+        let RemOperands(BinaryOperator { left, right }) = extract_back_infallible(&mut cx);
+        let result = left.rem(right, &mut cx)?;
+        cx.scope.stack.push(result);
+        Ok(None)
     }
 
     pub fn pow(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(Value::pow)
+        let PowOperands(BinaryOperator { left, right }) = extract_back_infallible(&mut cx);
+        let result = left.pow(right, &mut cx)?;
+        cx.scope.stack.push(result);
+        Ok(None)
     }
 
     pub fn bitor(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(Value::bitor)
+        let BitorOperands(BinaryOperator { left, right }) = extract_back_infallible(&mut cx);
+        let result = left.bitor(right, &mut cx)?;
+        cx.scope.stack.push(result);
+        Ok(None)
     }
 
     pub fn bitxor(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(Value::bitxor)
+        let BitxorOperands(BinaryOperator { left, right }) = extract_back_infallible(&mut cx);
+        let result = left.bitxor(right, &mut cx)?;
+        cx.scope.stack.push(result);
+        Ok(None)
     }
 
     pub fn bitand(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(Value::bitand)
+        let BitandOperands(BinaryOperator { left, right }) = extract_back_infallible(&mut cx);
+        let result = left.bitand(right, &mut cx)?;
+        cx.scope.stack.push(result);
+        Ok(None)
     }
 
     pub fn bitshl(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(Value::bitshl)
+        let BitshlOperands(BinaryOperator { left, right }) = extract_back_infallible(&mut cx);
+        let result = left.bitshl(right, &mut cx)?;
+        cx.scope.stack.push(result);
+        Ok(None)
     }
 
     pub fn bitshr(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(Value::bitshr)
+        let BitshrOperands(BinaryOperator { left, right }) = extract_back_infallible(&mut cx);
+        let result = left.bitshr(right, &mut cx)?;
+        cx.scope.stack.push(result);
+        Ok(None)
     }
 
     pub fn bitushr(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(Value::bitushr)
+        let BitushrOperands(BinaryOperator { left, right }) = extract_back_infallible(&mut cx);
+        let result = left.bitushr(right, &mut cx)?;
+        cx.scope.stack.push(result);
+        Ok(None)
     }
 
     pub fn bitnot(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let value = cx.pop_stack_rooted();
+        let BitnotOperands(value) = extract_back_infallible(&mut cx);
         let result = value.bitnot(&mut cx)?;
-        cx.stack.push(result);
+        cx.scope.stack.push(result);
         Ok(None)
     }
 
     pub fn objin(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(|property, target, sc| {
-            let property = property.to_js_string(sc)?;
-            let found = target
-                .for_each_prototype(sc, |sc, target| {
-                    let contains = target
-                        .own_keys(sc, OwnKeysMode::All)?
-                        .iter()
-                        .any(|v| matches!(v.unpack(), ValueKind::String(s) if s == property));
+        let ObjectInOperands { key, target } = extract_back_infallible(&mut cx);
 
-                    if contains {
-                        Ok(ControlFlow::Break(()))
-                    } else {
-                        Ok(ControlFlow::Continue(()))
-                    }
-                })?
-                .is_break();
+        let key = key.to_js_string(&mut cx)?;
+        let found = target
+            .for_each_prototype(&mut cx, |sc, target| {
+                let contains = target
+                    .own_keys(sc, OwnKeysMode::All)?
+                    .iter()
+                    .any(|v| matches!(v.unpack(), ValueKind::String(s) if s == key));
 
-            Ok(Value::boolean(found))
-        })
+                if contains {
+                    Ok(ControlFlow::Break(()))
+                } else {
+                    Ok(ControlFlow::Continue(()))
+                }
+            })?
+            .is_break();
+
+        cx.stack.push(Value::boolean(found));
+        Ok(None)
     }
 
     pub fn instanceof(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let (source, target) = cx.pop_stack2_rooted();
+        let InstanceofOperands { constructor, value } = extract_back_infallible(&mut cx);
 
-        let is_instanceof = source.instanceof(&target, &mut cx).map(Value::boolean)?;
+        let is_instanceof = value.instanceof(&constructor, &mut cx).map(Value::boolean)?;
         cx.stack.push(is_instanceof);
         Ok(None)
     }
 
     pub fn lt(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(|l, r, sc| equality::lt(l, r, sc).map(Value::boolean))
+        let LtOperands(BinaryOperator { left, right }) = extract_back_infallible(&mut cx);
+        let result = equality::lt(left, right, &mut cx)?.into();
+        cx.stack.push(result);
+        Ok(None)
     }
 
     pub fn le(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(|l, r, sc| equality::le(l, r, sc).map(Value::boolean))
+        let LeOperands(BinaryOperator { left, right }) = extract_back_infallible(&mut cx);
+        let result = equality::le(left, right, &mut cx)?.into();
+        cx.stack.push(result);
+        Ok(None)
     }
 
     pub fn gt(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(|l, r, sc| equality::gt(l, r, sc).map(Value::boolean))
+        let GtOperands(BinaryOperator { left, right }) = extract_back_infallible(&mut cx);
+        let result = equality::gt(left, right, &mut cx)?.into();
+        cx.stack.push(result);
+        Ok(None)
     }
 
     pub fn ge(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(|l, r, sc| equality::ge(l, r, sc).map(Value::boolean))
+        let GeOperands(BinaryOperator { left, right }) = extract_back_infallible(&mut cx);
+        let result = equality::ge(left, right, &mut cx)?.into();
+        cx.stack.push(result);
+        Ok(None)
     }
 
     pub fn eq(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(|l, r, sc| equality::eq(l, r, sc).map(Value::boolean))
+        let EqOperands(BinaryOperator { left, right }) = extract_back_infallible(&mut cx);
+        let result = equality::eq(left, right, &mut cx)?.into();
+        cx.stack.push(result);
+        Ok(None)
     }
 
     pub fn ne(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(|l, r, sc| equality::ne(l, r, sc).map(Value::boolean))
+        let NeOperands(BinaryOperator { left, right }) = extract_back_infallible(&mut cx);
+        let result = equality::ne(left, right, &mut cx)?.into();
+        cx.stack.push(result);
+        Ok(None)
     }
 
     pub fn strict_eq(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(|l, r, _| Ok(Value::boolean(equality::strict_eq(l, r))))
+        let StrictEqOperands(BinaryOperator { left, right }) = extract_back_infallible(&mut cx);
+        let result = Value::boolean(equality::strict_eq(left, right));
+        cx.stack.push(result);
+        Ok(None)
     }
 
     pub fn strict_ne(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.evaluate_binary_with_scope(|l, r, _| Ok(Value::boolean(equality::strict_ne(l, r))))
+        let StrictNeOperands(BinaryOperator { left, right }) = extract_back_infallible(&mut cx);
+        let result = Value::boolean(equality::strict_ne(left, right));
+        cx.stack.push(result);
+        Ok(None)
     }
 
     pub fn neg(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let value = cx.pop_stack_rooted();
+        let NegOperands(value) = extract_back_infallible(&mut cx);
         let result = value.to_number(&mut cx)?;
         cx.stack.push(Value::number(-result));
         Ok(None)
     }
 
     pub fn pos(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let value = cx.pop_stack_rooted();
+        let PosOperands(value) = extract_back_infallible(&mut cx);
         let result = value.to_number(&mut cx)?;
         cx.stack.push(Value::number(result));
         Ok(None)
     }
 
     pub fn not(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let value = cx.pop_stack_rooted();
+        let NotOperands(value) = extract_back_infallible(&mut cx);
         let result = value.not(&mut cx.scope);
         cx.stack.push(result);
         Ok(None)
     }
 
     pub fn pop(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        cx.pop_stack();
+        let PopOperands(_) = extract_back_infallible(&mut cx);
         Ok(None)
     }
 
     pub fn delayed_ret(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let value = cx.pop_stack();
+        let DelayedRetOperands(value) = extract_back_infallible(&mut cx);
         cx.frames.set_delayed_ret(Some(Ok(value)));
         Ok(None)
     }
 
     pub fn finally_end(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let tc_depth = cx.fetchw_and_inc_ip();
+        let FinallyEndOperands(TryCatchDepth(tc_depth)) = extract_back_infallible(&mut cx);
 
         if let Some(ret) = cx.frames.take_delayed_ret() {
             let ret = ret?.root(&mut cx.scope);
@@ -887,21 +1012,19 @@ mod handlers {
     }
 
     pub fn ret(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let tc_depth = cx.fetchw_and_inc_ip();
-        let value = cx.pop_stack_rooted();
+        let RetOperands { tc_depth, value } = extract_back_infallible(&mut cx);
         let this = cx.pop_frame();
-        ret_inner(cx, tc_depth, value, this)
+        ret_inner(cx, tc_depth.0, value, this)
     }
 
     pub fn ldglobal(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let id = cx.fetchw_and_inc_ip();
-        let name = JsString::from(cx.constants().symbols[SymbolConstant(id)]);
+        let LdGlobalOperands(SymbolConstantWide(name)) = extract_back_infallible(&mut cx);
 
         let value = match cx.global.clone().extract::<OrdObject>(&cx.scope) {
             Some(value) => match value.get_own_property_descriptor(name.to_key(&mut cx.scope), &mut cx.scope)? {
                 Some(value) => value.kind().get_or_apply(&mut cx, This::default())?,
                 None => {
-                    let name = name.res(&cx.scope).to_owned();
+                    let name = cx.scope.interner.resolve(name).to_owned();
                     throw!(&mut cx, ReferenceError, "{} is not defined", name)
                 }
             },
@@ -1169,9 +1292,12 @@ mod handlers {
         // FIXME: sketchy assumption
         let call_ip = cx.frames.current_ip() - 1;
 
-        let argc = usize::from(cx.fetch_and_inc_ip());
-        let has_this = extract::<bool>(&mut cx);
-        let function_call_kind = extract::<FunctionCallKind>(&mut cx);
+        let CallOperands {
+            argc,
+            function_call_kind,
+            has_this,
+        } = extract_back_infallible(&mut cx);
+        let argc = usize::from(argc);
 
         let stack_len = cx.stack.len();
         let (callee, this) = if function_call_kind == FunctionCallKind::Super {
@@ -1213,8 +1339,7 @@ mod handlers {
     }
 
     pub fn jmpfalsep(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let offset = cx.fetchw_and_inc_ip() as i16;
-        let value = cx.pop_stack();
+        let JmpFalsePopOperands(ConditionalJumpPopOperands { offset, value }) = extract_back_infallible(&mut cx);
 
         let jump = !value.is_truthy(&mut cx.scope);
 
@@ -1222,13 +1347,11 @@ mod handlers {
             let ip = cx.frames.current_ip();
             cx.frames.set_ip(ip + offset);
         }
-
         Ok(None)
     }
 
     pub fn jmpfalsenp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let offset = cx.fetchw_and_inc_ip() as i16;
-        let value = cx.peek_stack();
+        let JmpFalseNoPopOperands(ConditionalJumpNoPopOperands { offset, value }) = extract_back_infallible(&mut cx);
 
         let jump = !value.is_truthy(&mut cx.scope);
 
@@ -1241,8 +1364,7 @@ mod handlers {
     }
 
     pub fn jmptruep(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let offset = cx.fetchw_and_inc_ip() as i16;
-        let value = cx.pop_stack();
+        let JmpTruePopOperands(ConditionalJumpPopOperands { offset, value }) = extract_back_infallible(&mut cx);
 
         let jump = value.is_truthy(&mut cx.scope);
 
@@ -1255,8 +1377,7 @@ mod handlers {
     }
 
     pub fn jmptruenp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let offset = cx.fetchw_and_inc_ip() as i16;
-        let value = cx.peek_stack();
+        let JmpTrueNoPopOperands(ConditionalJumpNoPopOperands { offset, value }) = extract_back_infallible(&mut cx);
 
         let jump = value.is_truthy(&mut cx.scope);
 
@@ -1269,8 +1390,7 @@ mod handlers {
     }
 
     pub fn jmpnullishp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let offset = cx.fetchw_and_inc_ip() as i16;
-        let value = cx.pop_stack();
+        let JmpNullishPopOperands(ConditionalJumpPopOperands { offset, value }) = extract_back_infallible(&mut cx);
 
         let jump = value.is_nullish();
 
@@ -1283,8 +1403,7 @@ mod handlers {
     }
 
     pub fn jmpnullishnp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let offset = cx.fetchw_and_inc_ip() as i16;
-        let value = cx.peek_stack();
+        let JmpNullishNoPopOperands(ConditionalJumpNoPopOperands { offset, value }) = extract_back_infallible(&mut cx);
 
         let jump = value.is_nullish();
 
@@ -1297,8 +1416,7 @@ mod handlers {
     }
 
     pub fn jmpundefinedp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let offset = cx.fetchw_and_inc_ip() as i16;
-        let value = cx.pop_stack();
+        let JmpUndefinedPopOperands(ConditionalJumpPopOperands { offset, value }) = extract_back_infallible(&mut cx);
 
         let jump = value.is_undefined();
 
@@ -1311,8 +1429,8 @@ mod handlers {
     }
 
     pub fn jmpundefinednp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let offset = cx.fetchw_and_inc_ip() as i16;
-        let value = cx.peek_stack();
+        let JmpUndefinedNoPopOperands(ConditionalJumpNoPopOperands { offset, value }) =
+            extract_back_infallible(&mut cx);
 
         let jump = value.is_undefined();
 
@@ -1325,7 +1443,7 @@ mod handlers {
     }
 
     pub fn jmp(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let offset = cx.fetchw_and_inc_ip() as i16;
+        let JmpOperands(offset) = extract_back_infallible(&mut cx);
 
         let ip = cx.frames.current_ip();
         cx.frames.set_ip(ip + offset);
@@ -1454,13 +1572,13 @@ mod handlers {
     }
 
     pub fn arraylit(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let len = cx.fetchw_and_inc_ip() as usize;
-        let stack_values = cx.fetchw_and_inc_ip() as usize;
+        let ArrayLiteralOperands { len, stack_values } = extract_back_infallible(&mut cx);
+
         // Split up into two functions as a non-holey array literal can be evaluated more efficiently
         let array = if len == stack_values {
-            arraylit_dense(&mut cx, len)?
+            arraylit_dense(&mut cx, len.into())?
         } else {
-            arraylit_holey(&mut cx, len, stack_values)?
+            arraylit_holey(&mut cx, len.into(), stack_values.into())?
         };
 
         let handle = cx.scope.register(array);
@@ -1563,17 +1681,10 @@ mod handlers {
     }
 
     pub fn staticpropertyaccess(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let id = cx.fetchw_and_inc_ip();
-
-        let ident = JsString::from(cx.constants().symbols[SymbolConstant(id)]);
-
-        let preserve_this = cx.fetch_and_inc_ip() == 1;
-
-        let target = if preserve_this {
-            cx.peek_stack().root(&mut cx.scope)
-        } else {
-            cx.pop_stack().root(&mut cx.scope)
-        };
+        let StaticPropertyAccessOperands {
+            target,
+            ident: SymbolConstantWide(ident),
+        } = extract_back_infallible(&mut cx);
 
         let value = target.get_property(ident.to_key(&mut cx.scope), &mut cx.scope)?;
         cx.push_stack(value);
