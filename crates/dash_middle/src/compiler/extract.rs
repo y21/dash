@@ -5,7 +5,7 @@ use crate::compiler::constant::ConstantPool;
 use crate::iterator_with::IteratorWith;
 
 pub trait ExtractSource: Sized {
-    type Value: ExtractBack<Self, Exception = Infallible>;
+    type Value: ExtractBack<Self, Exception = Infallible> + ExtractFront<Self, Exception = Infallible>;
     type Unrooted: ExtractBack<Self, Exception = Infallible>;
 
     fn fetch_bytes<const N: usize>(&mut self) -> [u8; N];
@@ -21,6 +21,8 @@ pub trait ExtractSource: Sized {
     fn peek_stack_rooted(&mut self) -> Self::Value;
 
     fn peek_stack(&self) -> Self::Unrooted;
+
+    fn truncate_stack(&mut self, len: usize);
 
     fn fetch_u32(&mut self) -> u32 {
         let bytes = self.fetch_bytes::<4>();
@@ -80,16 +82,30 @@ pub struct ForwardSequence<T> {
     remaining_len: usize,
     /// The current stack index, incremented when extracting from the front.
     stack_index: usize,
+    /// The stack index at which values start (used to reset the stack to at the end), fixed at creation
+    starting_stack_index: usize,
     _phantom: PhantomData<T>,
 }
 
 impl<T> ForwardSequence<T> {
     pub fn from_stack_count_len(source: &impl ExtractSource, count: usize, len: usize) -> Self {
+        let stack_index = source.stack_len() - count;
         Self {
             remaining_len: len,
-            stack_index: source.stack_len() - count,
+            stack_index,
+            starting_stack_index: stack_index,
             _phantom: PhantomData,
         }
+    }
+
+    pub fn next_stack_index(&mut self) -> usize {
+        let index = self.stack_index;
+        self.stack_index += 1;
+        index
+    }
+
+    pub fn commit(self, source: &mut impl ExtractSource) {
+        source.truncate_stack(self.starting_stack_index);
     }
 }
 

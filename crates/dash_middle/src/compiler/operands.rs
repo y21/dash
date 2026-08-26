@@ -5,7 +5,8 @@ use dash_regex::Regex;
 use crate::compiler::constant::{BooleanConstant, FunctionConstant, NumberConstant, RegexConstant, SymbolConstant};
 use crate::compiler::external::ExternalId;
 use crate::compiler::extract::{
-    BackwardSequence, ExtractBack, ExtractSource, ForwardSequence, extract_back_infallible,
+    BackwardSequence, ExtractBack, ExtractFront, ExtractSource, ForwardSequence, extract_back_infallible,
+    extract_front_infallible,
 };
 use crate::compiler::instruction::IntrinsicOperation;
 use crate::compiler::scope::BackLocalId;
@@ -549,7 +550,7 @@ define_operand_struct_with_source! {
 define_operand_struct! {
     type Exception = Infallible;
     struct CallOperands {
-        pub argc: u16,
+        pub argc: u8,
         pub has_this: bool,
         pub function_call_kind: FunctionCallKind
     }
@@ -624,16 +625,67 @@ define_operand_struct! {
 define_operand_struct! {
     type Exception = Infallible;
     struct ArrayLiteralOperands {
+        // TODO: store a forwardsequence, similar to object literals!
         pub len: u16,
         pub stack_values: u16
     }
 }
 
-pub struct ObjectLiteralOperands<O = ObjectMemberKind> {
-    pub members: ForwardSequence<O>,
+pub enum ObjectProperty<S: ExtractSource> {
+    StaticGetter { key: SymbolConstantWide, value: S::Value },
+    DynamicGetter { key: S::Value, value: S::Value },
+    StaticSetter { key: SymbolConstantWide, value: S::Value },
+    DynamicSetter { key: S::Value, value: S::Value },
+    Static { key: SymbolConstantWide, value: S::Value },
+    Dynamic { key: S::Value, value: S::Value },
+    Spread(S::Value),
 }
 
-impl<S: ExtractSource> ExtractBack<S> for ObjectLiteralOperands {
+impl<S: ExtractSource> ExtractFront<S> for ObjectProperty<S> {
+    type Exception = Infallible;
+
+    fn extract_front<U>(source: &mut S, seq: &mut ForwardSequence<U>) -> Result<Self, Self::Exception> {
+        Ok(match extract_back_infallible(source) {
+            ObjectMemberKind::Getter => {
+                let key = extract_back_infallible(source);
+                let value = extract_front_infallible(source, seq);
+                Self::StaticGetter { key, value }
+            }
+            ObjectMemberKind::DynamicGetter => {
+                let key = extract_front_infallible(source, seq);
+                let value = extract_front_infallible(source, seq);
+                Self::DynamicGetter { key, value }
+            }
+            ObjectMemberKind::Setter => {
+                let key = extract_back_infallible(source);
+                let value = extract_front_infallible(source, seq);
+                Self::StaticSetter { key, value }
+            }
+            ObjectMemberKind::DynamicSetter => {
+                let key = extract_front_infallible(source, seq);
+                let value = extract_front_infallible(source, seq);
+                Self::DynamicSetter { key, value }
+            }
+            ObjectMemberKind::Static => {
+                let key = extract_back_infallible(source);
+                let value = extract_front_infallible(source, seq);
+                Self::Static { key, value }
+            }
+            ObjectMemberKind::Dynamic => {
+                let key = extract_front_infallible(source, seq);
+                let value = extract_front_infallible(source, seq);
+                Self::Dynamic { key, value }
+            }
+            ObjectMemberKind::Spread => Self::Spread(extract_front_infallible(source, seq)),
+        })
+    }
+}
+
+pub struct ObjectLiteralOperands<S: ExtractSource> {
+    pub members: ForwardSequence<ObjectProperty<S>>,
+}
+
+impl<S: ExtractSource> ExtractBack<S> for ObjectLiteralOperands<S> {
     type Exception = Infallible;
 
     fn extract_back(cx: &mut S) -> Result<Self, Self::Exception> {
@@ -645,8 +697,8 @@ impl<S: ExtractSource> ExtractBack<S> for ObjectLiteralOperands {
     }
 }
 
-pub struct AssignPropertiesOperands<S: ExtractSource, O = ObjectMemberKind> {
-    pub members: ForwardSequence<O>,
+pub struct AssignPropertiesOperands<S: ExtractSource> {
+    pub members: ForwardSequence<ObjectProperty<S>>,
     pub target: S::Value,
 }
 
@@ -687,8 +739,8 @@ impl<S: ExtractSource> ExtractBack<S> for StaticPropertyAccessOperands<S> {
 define_operand_struct_with_source! {
     type Exception = Infallible;
     struct StaticPropertyAssignOperands<S: ExtractSource> {
-        pub target: S::Value,
         pub kind: AssignKind<S>,
+        pub target: S::Value,
         pub key: SymbolConstantWide
     }
 }
@@ -716,8 +768,8 @@ impl<S: ExtractSource> ExtractBack<S> for DynamicPropertyAccess<S> {
 define_operand_struct_with_source! {
     type Exception = Infallible;
     struct DynamicPropertyAssignOperands<S: ExtractSource> {
-        pub target: S::Value,
         pub kind: AssignKind<S>,
+        pub target: S::Value,
         pub key: S::Value
     }
 }

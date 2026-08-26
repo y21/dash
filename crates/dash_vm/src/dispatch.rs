@@ -244,14 +244,6 @@ mod extract {
         fn extract_front<U>(seq: &mut ForwardSequence<U>, cx: &mut DispatchContext<'_>) -> Result<Self, Self::Error>;
     }
 
-    #[derive(Debug)]
-    pub enum ObjectProperty {
-        Static { key: PropertyKey, value: PropertyValue },
-        Getter { key: PropertyKey, value: ObjectId },
-        Setter { key: PropertyKey, value: ObjectId },
-        Spread(Value),
-    }
-
     pub struct IdentW(pub JsString);
 
     impl ExtractBack for IdentW {
@@ -371,68 +363,6 @@ mod extract {
         A B C
     }
 
-    impl ExtractFront for ObjectProperty {
-        type Error = Value;
-
-        fn extract_front<U>(seq: &mut ForwardSequence<U>, cx: &mut DispatchContext<'_>) -> Result<Self, Self::Error> {
-            Ok(match extract(cx) {
-                ObjectMemberKind::Getter => {
-                    let key = extract::<IdentW>(cx).0;
-                    let Object(value) = extract_front(seq, cx);
-                    Self::Getter {
-                        key: key.to_key(&mut cx.scope),
-                        value,
-                    }
-                }
-                ObjectMemberKind::Setter => {
-                    let key = extract::<IdentW>(cx).0;
-                    let Object(value) = extract_front(seq, cx);
-                    Self::Setter {
-                        key: key.to_key(&mut cx.scope),
-                        value,
-                    }
-                }
-                ObjectMemberKind::Static => {
-                    let key = extract::<IdentW>(cx).0;
-                    let value = extract_front(seq, cx);
-
-                    Self::Static {
-                        key: key.to_key(&mut cx.scope),
-                        value: PropertyValue::static_default(value),
-                    }
-                }
-                ObjectMemberKind::Dynamic => {
-                    let key = extract_front(seq, cx);
-                    let value = extract_front(seq, cx);
-
-                    Self::Static {
-                        key: PropertyKey::from_value(&mut cx.scope, key)?,
-                        value: PropertyValue::static_default(value),
-                    }
-                }
-                ObjectMemberKind::DynamicGetter => {
-                    let key = extract_front(seq, cx);
-                    let Object(value) = extract_front(seq, cx);
-
-                    Self::Getter {
-                        key: PropertyKey::from_value(&mut cx.scope, key)?,
-                        value,
-                    }
-                }
-                ObjectMemberKind::DynamicSetter => {
-                    let key = extract_front(seq, cx);
-                    let Object(value) = extract_front(seq, cx);
-
-                    Self::Setter {
-                        key: PropertyKey::from_value(&mut cx.scope, key)?,
-                        value,
-                    }
-                }
-                ObjectMemberKind::Spread => Self::Spread(extract_front(seq, cx)),
-            })
-        }
-    }
-
     #[derive(Debug)]
     pub enum ArrayElement {
         Single(Value),
@@ -536,21 +466,23 @@ mod handlers {
     use dash_middle::compiler::constant::FunctionConstant;
     use dash_middle::compiler::external::{External, PossiblyExternalId};
     use dash_middle::compiler::extract::extract_back_infallible;
-    use dash_middle::compiler::instruction::{AssignKind, IntrinsicOperation};
+    use dash_middle::compiler::instruction::{AssignKind as AssignKind2, IntrinsicOperation};
     use dash_middle::compiler::operands::{
-        AddOperands, ArrayLiteralOperands, BinaryOperator, BitandOperands, BitnotOperands, BitorOperands,
-        BitshlOperands, BitshrOperands, BitushrOperands, BitxorOperands, BooleanConstantOperands, BooleanConstantWide,
-        CallOperands, ConditionalJumpNoPopOperands, ConditionalJumpPopOperands, DelayedRetOperands, DivOperands,
-        EqOperands, FinallyEndOperands, FunctionConstantOperands, GeOperands, GtOperands, InstanceofOperands,
+        AddOperands, ArrayLiteralOperands, AssignKind, AssignPropertiesOperands, BinaryOperator, BitandOperands,
+        BitnotOperands, BitorOperands, BitshlOperands, BitshrOperands, BitushrOperands, BitxorOperands,
+        BooleanConstantOperands, BooleanConstantWide, CallOperands, ConditionalJumpNoPopOperands,
+        ConditionalJumpPopOperands, DelayedRetOperands, DivOperands, DynamicPropertyAssignOperands, EqOperands,
+        FinallyEndOperands, FunctionConstantOperands, GeOperands, GtOperands, InstanceofOperands,
         JmpFalseNoPopOperands, JmpFalsePopOperands, JmpNullishNoPopOperands, JmpNullishPopOperands, JmpOperands,
         JmpTrueNoPopOperands, JmpTruePopOperands, JmpUndefinedNoPopOperands, JmpUndefinedPopOperands, LdGlobalOperands,
-        LeOperands, LtOperands, MulOperands, NeOperands, NegOperands, NotOperands, NumberConstantOperands,
-        NumberConstantWide, ObjectInOperands, PopOperands, PosOperands, PowOperands, RegexConstantOperands,
-        RemOperands, RetOperands, StaticPropertyAccessOperands, StrictEqOperands, StrictNeOperands,
-        StringConstantOperands, SubOperands, SymbolConstantWide, TryCatchDepth,
+        LdLocalOperands, LeOperands, LtOperands, MulOperands, NeOperands, NegOperands, NotOperands,
+        NumberConstantOperands, NumberConstantWide, ObjectInOperands, ObjectLiteralOperands, ObjectProperty,
+        PopOperands, PosOperands, PowOperands, RegexConstantOperands, RemOperands, RetOperands,
+        StaticPropertyAccessOperands, StaticPropertyAssignOperands, StoreGlobalOperands, StoreLocalOperands,
+        StrictEqOperands, StrictNeOperands, StringConstantOperands, SubOperands, SymbolConstantWide, TryCatchDepth,
     };
     use dash_middle::compiler::{FunctionCallKind, StaticImportKind};
-    use dash_middle::interner::sym;
+    use dash_middle::interner::{Symbol, sym};
     use dash_middle::iterator_with::{InfallibleIteratorWith, IteratorWith};
     use dash_middle::parser::statement::{Asyncness, FunctionKind as ParserFunctionKind};
     use handlers::extract::{ForwardSequence, FrontIteratorWith, extract};
@@ -579,9 +511,23 @@ mod handlers {
     use crate::value::regex::RegExp;
     use crate::value::{Unpack, ValueKind};
 
-    use self::extract::{ArrayElement, BackwardSequence, ExportProperty, IdentW, NumberWConstant, ObjectProperty};
+    use self::extract::{ArrayElement, BackwardSequence, ExportProperty, IdentW, NumberWConstant};
 
     use super::*;
+
+    impl dash_middle::compiler::extract::ExtractFront<DispatchContext<'_>> for Value {
+        type Exception = Infallible;
+
+        fn extract_front<U>(
+            cx: &mut DispatchContext<'_>,
+            seq: &mut dash_middle::compiler::extract::ForwardSequence<U>,
+        ) -> Result<Self, Self::Exception> {
+            let index = seq.next_stack_index();
+            let value = cx.stack[index];
+            cx.scope.add(value);
+            Ok(value)
+        }
+    }
 
     impl dash_middle::compiler::extract::ExtractBack<DispatchContext<'_>> for Value {
         type Exception = Infallible;
@@ -629,6 +575,10 @@ mod handlers {
 
         fn peek_stack_rooted(&mut self) -> Self::Value {
             self.peek_stack_rooted()
+        }
+
+        fn truncate_stack(&mut self, len: usize) {
+            self.stack.truncate(len);
         }
     }
 
@@ -1036,73 +986,84 @@ mod handlers {
     }
 
     pub fn storeglobal(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let id = cx.fetchw_and_inc_ip();
-        let name = JsString::from(cx.constants().symbols[SymbolConstant(id)]);
-        let kind = AssignKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
+        fn binop(
+            cx: &mut DispatchContext<'_>,
+            name: Symbol,
+            right: Value,
+            op: impl FnOnce(Value, Value, &mut LocalScope<'_>) -> Result<Value, Value>,
+        ) -> Result<(), Unrooted> {
+            let left = cx
+                .global
+                .clone()
+                .get_property(name.to_key(&mut cx.scope), &mut cx.scope)
+                .root(&mut cx.scope)?;
+            let res = op(left, right, &mut cx.scope)?;
+            cx.global.clone().set_property(
+                name.to_key(&mut cx.scope),
+                PropertyValue::static_default(res.clone()),
+                &mut cx.scope,
+            )?;
+            cx.stack.push(res);
 
-        macro_rules! op {
-            ($op:expr) => {{
-                let right = cx.pop_stack_rooted();
-                let value = cx
-                    .global
-                    .clone()
-                    .get_property(name.to_key(&mut cx.scope), &mut cx.scope)
-                    .root(&mut cx.scope)?;
-
-                let res = $op(value, right, &mut cx)?;
-                cx.global.clone().set_property(
-                    name.to_key(&mut cx.scope),
-                    PropertyValue::static_default(res.clone()),
-                    &mut cx.scope,
-                )?;
-                cx.stack.push(res);
-            }};
+            Ok(())
         }
 
-        macro_rules! prefix {
-            ($op:expr) => {{
-                let value = cx
-                    .global
-                    .clone()
-                    .get_property(name.to_key(&mut cx.scope), &mut cx.scope)
-                    .root(&mut cx.scope)?;
-                let value = Value::number(value.to_number(&mut cx)?);
+        fn prefix(
+            cx: &mut DispatchContext<'_>,
+            name: Symbol,
+            op: impl FnOnce(Value, Value, &mut LocalScope<'_>) -> Result<Value, Value>,
+        ) -> Result<(), Unrooted> {
+            let left = cx
+                .global
+                .clone()
+                .get_property(name.to_key(&mut cx.scope), &mut cx.scope)
+                .root(&mut cx.scope)?;
+            let left = Value::number(left.to_number(&mut cx.scope)?);
 
-                let right = Value::number(1.0);
-                let res = $op(value, right, &mut cx)?;
-                cx.global.clone().set_property(
-                    name.to_key(&mut cx.scope),
-                    PropertyValue::static_default(res.clone()),
-                    &mut cx.scope,
-                )?;
-                cx.stack.push(res);
-            }};
+            let right = Value::number(1.0);
+            let res = op(left, right, &mut cx.scope)?;
+            cx.global.clone().set_property(
+                name.to_key(&mut cx.scope),
+                PropertyValue::static_default(res),
+                &mut cx.scope,
+            )?;
+            cx.stack.push(res);
+
+            Ok(())
         }
 
-        macro_rules! postfix {
-            ($op:expr) => {{
-                let value = cx
-                    .global
-                    .clone()
-                    .get_property(name.to_key(&mut cx.scope), &mut cx.scope)
-                    .root(&mut cx.scope)?;
-                let value = Value::number(value.to_number(&mut cx)?);
+        fn postfix(
+            cx: &mut DispatchContext<'_>,
+            name: Symbol,
+            op: impl FnOnce(Value, Value, &mut LocalScope<'_>) -> Result<Value, Value>,
+        ) -> Result<(), Unrooted> {
+            let left = cx
+                .global
+                .clone()
+                .get_property(name.to_key(&mut cx.scope), &mut cx.scope)
+                .root(&mut cx.scope)?;
+            let left = Value::number(left.to_number(&mut cx.scope)?);
 
-                let right = Value::number(1.0);
-                let res = $op(value, right, &mut cx)?;
-                cx.global.clone().set_property(
-                    name.to_key(&mut cx.scope),
-                    PropertyValue::static_default(res),
-                    &mut cx.scope,
-                )?;
-                cx.stack.push(value);
-            }};
+            let right = Value::number(1.0);
+            let res = op(left, right, &mut cx.scope)?;
+            cx.global.clone().set_property(
+                name.to_key(&mut cx.scope),
+                PropertyValue::static_default(res),
+                &mut cx.scope,
+            )?;
+            cx.stack.push(left);
+
+            Ok(())
         }
+
+        let StoreGlobalOperands {
+            name: SymbolConstantWide(name),
+            kind,
+        } = extract_back_infallible(&mut cx);
 
         match kind {
-            AssignKind::Assignment => {
-                let value = cx.pop_stack_rooted();
-
+            AssignKind::Assignment(value) => {
+                let value = value.root(&mut cx.scope);
                 cx.global.clone().set_property(
                     name.to_key(&mut cx.scope),
                     PropertyValue::static_default(value),
@@ -1110,23 +1071,24 @@ mod handlers {
                 )?;
                 cx.stack.push(value);
             }
-            AssignKind::AddAssignment => op!(Value::add),
-            AssignKind::SubAssignment => op!(Value::sub),
-            AssignKind::MulAssignment => op!(Value::mul),
-            AssignKind::DivAssignment => op!(Value::div),
-            AssignKind::RemAssignment => op!(Value::rem),
-            AssignKind::PowAssignment => op!(Value::pow),
-            AssignKind::ShlAssignment => op!(Value::bitshl),
-            AssignKind::ShrAssignment => op!(Value::bitshr),
-            AssignKind::UshrAssignment => op!(Value::bitushr),
-            AssignKind::BitAndAssignment => op!(Value::bitand),
-            AssignKind::BitOrAssignment => op!(Value::bitor),
-            AssignKind::BitXorAssignment => op!(Value::bitxor),
-            AssignKind::PrefixIncrement => prefix!(Value::add),
-            AssignKind::PostfixIncrement => postfix!(Value::add),
-            AssignKind::PrefixDecrement => prefix!(Value::sub),
-            AssignKind::PostfixDecrement => postfix!(Value::sub),
+            AssignKind::AddAssignment(value) => binop(&mut cx, name, value, Value::add)?,
+            AssignKind::SubAssignment(value) => binop(&mut cx, name, value, Value::sub)?,
+            AssignKind::MulAssignment(value) => binop(&mut cx, name, value, Value::mul)?,
+            AssignKind::DivAssignment(value) => binop(&mut cx, name, value, Value::div)?,
+            AssignKind::RemAssignment(value) => binop(&mut cx, name, value, Value::rem)?,
+            AssignKind::PowAssignment(value) => binop(&mut cx, name, value, Value::pow)?,
+            AssignKind::ShlAssignment(value) => binop(&mut cx, name, value, Value::bitshl)?,
+            AssignKind::ShrAssignment(value) => binop(&mut cx, name, value, Value::bitshr)?,
+            AssignKind::UshrAssignment(value) => binop(&mut cx, name, value, Value::bitushr)?,
+            AssignKind::BitAndAssignment(value) => binop(&mut cx, name, value, Value::bitand)?,
+            AssignKind::BitOrAssignment(value) => binop(&mut cx, name, value, Value::bitor)?,
+            AssignKind::BitXorAssignment(value) => binop(&mut cx, name, value, Value::bitxor)?,
+            AssignKind::PrefixIncrement => prefix(&mut cx, name, Value::add)?,
+            AssignKind::PrefixDecrement => prefix(&mut cx, name, Value::sub)?,
+            AssignKind::PostfixIncrement => postfix(&mut cx, name, Value::add)?,
+            AssignKind::PostfixDecrement => postfix(&mut cx, name, Value::sub)?,
         }
+
         Ok(None)
     }
 
@@ -1452,71 +1414,77 @@ mod handlers {
     }
 
     pub fn storelocal(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let id = BackLocalId(cx.fetchw_and_inc_ip());
-        let kind = AssignKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
-
-        macro_rules! op {
-            ($op:expr) => {{
-                let value = cx.get_local(id);
-                let right = cx.pop_stack_rooted();
-                let res = $op(value, right, &mut cx)?;
-                cx.set_local(id, res.clone().into());
-                cx.stack.push(res);
-            }};
+        fn binop(
+            cx: &mut DispatchContext<'_>,
+            id: BackLocalId,
+            right: Value,
+            op: impl FnOnce(Value, Value, &mut LocalScope<'_>) -> Result<Value, Value>,
+        ) -> Result<(), Unrooted> {
+            let left = cx.get_local(id);
+            let res = op(left, right, &mut cx.scope)?;
+            cx.set_local(id, res.into());
+            cx.stack.push(res);
+            Ok(())
         }
 
-        macro_rules! prefix {
-            ($op:expr) => {{
-                let value = cx.get_local(id);
-                let value = Value::number(value.to_number(&mut cx)?);
-                let one = Value::number(1.0);
-                let res = $op(value, one, &mut cx)?;
-                cx.set_local(id, res.clone().into());
-                cx.stack.push(res);
-            }};
+        fn prefix(
+            cx: &mut DispatchContext<'_>,
+            id: BackLocalId,
+            op: impl FnOnce(Value, Value, &mut LocalScope<'_>) -> Result<Value, Value>,
+        ) -> Result<(), Unrooted> {
+            let left = cx.get_local(id);
+            let left = Value::number(left.to_number(&mut cx.scope)?);
+            let right = Value::number(1.0);
+            let res = op(left, right, &mut cx.scope)?;
+            cx.set_local(id, res.clone().into());
+            cx.stack.push(res);
+            Ok(())
         }
 
-        macro_rules! postfix {
-            ($op:expr) => {{
-                let value = cx.get_local(id);
-                let value = Value::number(value.to_number(&mut cx)?);
-                let one = Value::number(1.0);
-                let res = $op(value, one, &mut cx)?;
-                cx.set_local(id, res.into());
-                cx.stack.push(value);
-            }};
+        fn postfix(
+            cx: &mut DispatchContext<'_>,
+            id: BackLocalId,
+            op: impl FnOnce(Value, Value, &mut LocalScope<'_>) -> Result<Value, Value>,
+        ) -> Result<(), Unrooted> {
+            let left = cx.get_local(id);
+            let left = Value::number(left.to_number(&mut cx.scope)?);
+            let right = Value::number(1.0);
+            let res = op(left, right, &mut cx.scope)?;
+            cx.set_local(id, res.into());
+            cx.stack.push(left);
+            Ok(())
         }
+
+        let StoreLocalOperands { local, kind } = extract_back_infallible(&mut cx);
 
         match kind {
-            AssignKind::Assignment => {
-                // NOTE: Does not need to be rooted.
-                let value = cx.pop_stack();
-                cx.set_local(id, value);
+            AssignKind::Assignment(value) => {
+                cx.set_local(local, value);
                 cx.push_stack(value);
             }
-            AssignKind::AddAssignment => op!(Value::add),
-            AssignKind::SubAssignment => op!(Value::sub),
-            AssignKind::MulAssignment => op!(Value::mul),
-            AssignKind::DivAssignment => op!(Value::div),
-            AssignKind::RemAssignment => op!(Value::rem),
-            AssignKind::PowAssignment => op!(Value::pow),
-            AssignKind::ShlAssignment => op!(Value::bitshl),
-            AssignKind::ShrAssignment => op!(Value::bitshr),
-            AssignKind::UshrAssignment => op!(Value::bitushr),
-            AssignKind::BitAndAssignment => op!(Value::bitand),
-            AssignKind::BitOrAssignment => op!(Value::bitor),
-            AssignKind::BitXorAssignment => op!(Value::bitxor),
-            AssignKind::PrefixIncrement => prefix!(Value::add),
-            AssignKind::PostfixIncrement => postfix!(Value::add),
-            AssignKind::PrefixDecrement => prefix!(Value::sub),
-            AssignKind::PostfixDecrement => postfix!(Value::sub),
+            AssignKind::AddAssignment(value) => binop(&mut cx, local, value, Value::add)?,
+            AssignKind::SubAssignment(value) => binop(&mut cx, local, value, Value::sub)?,
+            AssignKind::MulAssignment(value) => binop(&mut cx, local, value, Value::mul)?,
+            AssignKind::DivAssignment(value) => binop(&mut cx, local, value, Value::div)?,
+            AssignKind::RemAssignment(value) => binop(&mut cx, local, value, Value::rem)?,
+            AssignKind::PowAssignment(value) => binop(&mut cx, local, value, Value::pow)?,
+            AssignKind::ShlAssignment(value) => binop(&mut cx, local, value, Value::bitshl)?,
+            AssignKind::ShrAssignment(value) => binop(&mut cx, local, value, Value::bitshr)?,
+            AssignKind::UshrAssignment(value) => binop(&mut cx, local, value, Value::bitushr)?,
+            AssignKind::BitAndAssignment(value) => binop(&mut cx, local, value, Value::bitand)?,
+            AssignKind::BitOrAssignment(value) => binop(&mut cx, local, value, Value::bitor)?,
+            AssignKind::BitXorAssignment(value) => binop(&mut cx, local, value, Value::bitxor)?,
+            AssignKind::PrefixIncrement => prefix(&mut cx, local, Value::add)?,
+            AssignKind::PrefixDecrement => prefix(&mut cx, local, Value::sub)?,
+            AssignKind::PostfixIncrement => postfix(&mut cx, local, Value::add)?,
+            AssignKind::PostfixDecrement => postfix(&mut cx, local, Value::sub)?,
         }
 
         Ok(None)
     }
 
     pub fn ldlocal(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let id = BackLocalId(cx.fetchw_and_inc_ip());
+        let LdLocalOperands(id) = extract_back_infallible(&mut cx);
         let value = cx.get_local(id);
 
         cx.stack.push(value);
@@ -1587,30 +1555,79 @@ mod handlers {
     }
 
     pub fn objlit(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let key_count = cx.fetchw_and_inc_ip() as usize;
-        let stack_value_count = cx.fetchw_and_inc_ip() as usize;
-        let mut iter = ForwardSequence::<ObjectProperty>::from_len(&mut cx, key_count, stack_value_count);
+        let ObjectLiteralOperands { mut members } = extract_back_infallible(&mut cx);
 
         let obj = OrdObject::new(&cx.scope);
-        while let Some(property) = iter.next_front(&mut cx) {
-            match property? {
-                ObjectProperty::Static { key, value } => drop(obj.set_property(key, value, &mut cx.scope)),
-                ObjectProperty::Getter { key, value } => match obj.get_own_property_descriptor(key, &mut cx.scope)? {
-                    Some(prop) => {
-                        obj.set_property(key, prop.with_getter(value), &mut cx.scope)?;
+        while let Some(property) = members.next_infallible(&mut cx) {
+            match property {
+                ObjectProperty::StaticGetter { key, value } => {
+                    let key = key.0.to_key(&mut cx.scope);
+                    let ValueKind::Object(getter) = value.unpack() else {
+                        unreachable!()
+                    };
+
+                    match obj.get_own_property_descriptor(key, &mut cx.scope)? {
+                        Some(prop) => {
+                            obj.set_property(key, prop.with_getter(getter), &mut cx.scope)?;
+                        }
+                        None => {
+                            obj.set_property(key, PropertyValue::getter_default(getter), &mut cx.scope)?;
+                        }
                     }
-                    None => {
-                        obj.set_property(key, PropertyValue::getter_default(value), &mut cx.scope)?;
+                }
+                ObjectProperty::DynamicGetter { key, value } => {
+                    let key = PropertyKey::from_value(&mut cx.scope, key)?;
+                    let ValueKind::Object(getter) = value.unpack() else {
+                        unreachable!()
+                    };
+
+                    match obj.get_own_property_descriptor(key, &mut cx.scope)? {
+                        Some(prop) => {
+                            obj.set_property(key, prop.with_getter(getter), &mut cx.scope)?;
+                        }
+                        None => {
+                            obj.set_property(key, PropertyValue::getter_default(getter), &mut cx.scope)?;
+                        }
                     }
-                },
-                ObjectProperty::Setter { key, value } => match obj.get_own_property_descriptor(key, &mut cx.scope)? {
-                    Some(prop) => {
-                        obj.set_property(key, prop.with_setter(value), &mut cx.scope)?;
+                }
+                ObjectProperty::StaticSetter { key, value } => {
+                    let key = key.0.to_key(&mut cx.scope);
+                    let ValueKind::Object(setter) = value.unpack() else {
+                        unreachable!()
+                    };
+
+                    match obj.get_own_property_descriptor(key, &mut cx.scope)? {
+                        Some(prop) => {
+                            obj.set_property(key, prop.with_setter(setter), &mut cx.scope)?;
+                        }
+                        None => {
+                            obj.set_property(key, PropertyValue::setter_default(setter), &mut cx.scope)?;
+                        }
                     }
-                    None => {
-                        obj.set_property(key, PropertyValue::setter_default(value), &mut cx.scope)?;
+                }
+                ObjectProperty::DynamicSetter { key, value } => {
+                    let key = PropertyKey::from_value(&mut cx.scope, key)?;
+                    let ValueKind::Object(setter) = value.unpack() else {
+                        unreachable!()
+                    };
+
+                    match obj.get_own_property_descriptor(key, &mut cx.scope)? {
+                        Some(prop) => {
+                            obj.set_property(key, prop.with_setter(setter), &mut cx.scope)?;
+                        }
+                        None => {
+                            obj.set_property(key, PropertyValue::setter_default(setter), &mut cx.scope)?;
+                        }
                     }
-                },
+                }
+                ObjectProperty::Static { key, value } => {
+                    let key = key.0.to_key(&mut cx.scope);
+                    obj.set_property(key, PropertyValue::static_default(value), &mut cx.scope)?;
+                }
+                ObjectProperty::Dynamic { key, value } => {
+                    let key = PropertyKey::from_value(&mut cx.scope, key)?;
+                    obj.set_property(key, PropertyValue::static_default(value), &mut cx.scope)?;
+                }
                 ObjectProperty::Spread(value) => {
                     if let ValueKind::Object(object) = value.unpack() {
                         for key in object.own_keys(&mut cx.scope, OwnKeysMode::OnlyEnumerable)? {
@@ -1624,8 +1641,7 @@ mod handlers {
             }
         }
 
-        let stack_len = cx.stack.len();
-        cx.stack.truncate(stack_len - stack_value_count);
+        members.commit(&mut cx);
 
         let handle = cx.scope.register(obj);
         cx.stack.push(handle.into());
@@ -1634,48 +1650,82 @@ mod handlers {
     }
 
     pub fn assign_properties(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let key_count = cx.fetchw_and_inc_ip() as usize;
-        let stack_value_count = cx.fetchw_and_inc_ip() as usize;
+        let AssignPropertiesOperands { target, mut members } = extract_back_infallible(&mut cx);
 
-        let target = cx.pop_stack_rooted();
-        let mut iter = ForwardSequence::<ObjectProperty>::from_len(&mut cx, key_count, stack_value_count);
-
-        while let Some(property) = iter.next_front(&mut cx) {
-            let property = property?;
-            let is_getter = matches!(property, ObjectProperty::Getter { .. });
-
+        while let Some(property) = members.next_infallible(&mut cx) {
             match property {
-                ObjectProperty::Static { key, value } => target.set_property(key, value, &mut cx.scope)?,
-                ObjectProperty::Getter { key, value } | ObjectProperty::Setter { key, value } => {
-                    let prop = target.get_property_descriptor(key, &mut cx.scope)?;
-                    let prop = match prop {
-                        Some(mut prop) => {
-                            if let PropertyValueKind::Trap { get, set } = &mut prop.kind {
-                                if is_getter {
-                                    *get = Some(value);
-                                } else {
-                                    *set = Some(value);
-                                }
-                            }
-                            prop
-                        }
-                        None => {
-                            if is_getter {
-                                PropertyValue::getter_default(value)
-                            } else {
-                                PropertyValue::setter_default(value)
-                            }
-                        }
+                ObjectProperty::Static { key, value } => {
+                    let key = key.0.clone().to_key(&mut cx.scope);
+                    target.set_property(key, PropertyValue::static_default(value), &mut cx.scope)?;
+                }
+                ObjectProperty::StaticGetter { key, value } => {
+                    let key = key.0.clone().to_key(&mut cx.scope);
+                    let ValueKind::Object(getter) = value.unpack() else {
+                        unreachable!()
                     };
 
-                    target.set_property(key, prop, &mut cx.scope)?;
+                    match target.get_own_property_descriptor(key, &mut cx.scope)? {
+                        Some(prop) => {
+                            target.set_property(key, prop.with_getter(getter), &mut cx.scope)?;
+                        }
+                        None => {
+                            target.set_property(key, PropertyValue::getter_default(getter), &mut cx.scope)?;
+                        }
+                    }
+                }
+                ObjectProperty::DynamicGetter { key, value } => {
+                    let key = PropertyKey::from_value(&mut cx.scope, key)?;
+                    let ValueKind::Object(getter) = value.unpack() else {
+                        unreachable!()
+                    };
+
+                    match target.get_own_property_descriptor(key, &mut cx.scope)? {
+                        Some(prop) => {
+                            target.set_property(key, prop.with_getter(getter), &mut cx.scope)?;
+                        }
+                        None => {
+                            target.set_property(key, PropertyValue::getter_default(getter), &mut cx.scope)?;
+                        }
+                    }
+                }
+                ObjectProperty::StaticSetter { key, value } => {
+                    let key = key.0.clone().to_key(&mut cx.scope);
+                    let ValueKind::Object(setter) = value.unpack() else {
+                        unreachable!()
+                    };
+
+                    match target.get_own_property_descriptor(key, &mut cx.scope)? {
+                        Some(prop) => {
+                            target.set_property(key, prop.with_setter(setter), &mut cx.scope)?;
+                        }
+                        None => {
+                            target.set_property(key, PropertyValue::setter_default(setter), &mut cx.scope)?;
+                        }
+                    }
+                }
+                ObjectProperty::DynamicSetter { key, value } => {
+                    let key = PropertyKey::from_value(&mut cx.scope, key)?;
+                    let ValueKind::Object(setter) = value.unpack() else {
+                        unreachable!()
+                    };
+
+                    match target.get_own_property_descriptor(key, &mut cx.scope)? {
+                        Some(prop) => {
+                            target.set_property(key, prop.with_setter(setter), &mut cx.scope)?;
+                        }
+                        None => {
+                            target.set_property(key, PropertyValue::setter_default(setter), &mut cx.scope)?;
+                        }
+                    }
+                }
+                ObjectProperty::Dynamic { key, value } => {
+                    let key = PropertyKey::from_value(&mut cx.scope, key)?;
+                    target.set_property(key, PropertyValue::static_default(value), &mut cx.scope)?;
                 }
                 ObjectProperty::Spread(_) => unimplemented!("spread operator in AssignProperties"),
             }
         }
-
-        let stack_len = cx.stack.len();
-        cx.stack.truncate(stack_len - stack_value_count);
+        members.commit(&mut cx);
 
         Ok(None)
     }
@@ -1691,174 +1741,100 @@ mod handlers {
         Ok(None)
     }
 
-    pub fn staticpropertyassign(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let kind = AssignKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
-        let id = cx.fetchw_and_inc_ip();
-        let key = JsString::from(cx.constants().symbols[SymbolConstant(id)]);
-
-        macro_rules! op {
-            ($op:expr) => {{
-                let (target, value) = cx.pop_stack2_rooted();
-
-                let p = target
-                    .get_property(key.to_key(&mut cx.scope), &mut cx.scope)?
-                    .root(&mut cx.scope);
-                let res = $op(p, value, &mut cx)?;
-
-                target.set_property(
-                    key.to_key(&mut cx.scope),
-                    PropertyValue::static_default(res.clone()),
-                    &mut cx.scope,
-                )?;
-                cx.stack.push(res);
-            }};
+    /// Shared logic between static and dynamic property assignment
+    fn property_assign(
+        mut cx: DispatchContext<'_>,
+        key: PropertyKey,
+        target: Value,
+        kind: AssignKind<DispatchContext<'_>>,
+    ) -> Result<Option<HandleResult>, Unrooted> {
+        fn binop(
+            cx: &mut DispatchContext<'_>,
+            target: Value,
+            right: Value,
+            key: PropertyKey,
+            op: fn(Value, Value, &mut LocalScope<'_>) -> Result<Value, Value>,
+        ) -> Result<(), Unrooted> {
+            let prop = target.get_property(key, &mut cx.scope)?.root(&mut cx.scope);
+            let res = op(prop, right, &mut cx.scope)?;
+            target.set_property(key, PropertyValue::static_default(res.clone()), &mut cx.scope)?;
+            cx.stack.push(res);
+            Ok(())
         }
 
-        macro_rules! postfix {
-            ($op:expr) => {{
-                let target = cx.pop_stack_rooted();
-                let prop = target
-                    .get_property(key.to_key(&mut cx.scope), &mut cx.scope)?
-                    .root(&mut cx.scope);
-                let prop = Value::number(prop.to_number(&mut cx)?);
-                let one = Value::number(1.0);
-                let res = $op(prop, one, &mut cx)?;
-                target.set_property(
-                    key.to_key(&mut cx.scope),
-                    PropertyValue::static_default(res),
-                    &mut cx.scope,
-                )?;
-                cx.stack.push(prop);
-            }};
+        fn postfix(
+            cx: &mut DispatchContext<'_>,
+            target: Value,
+            key: PropertyKey,
+            op: fn(Value, Value, &mut LocalScope<'_>) -> Result<Value, Value>,
+        ) -> Result<(), Unrooted> {
+            let prop = target.get_property(key, &mut cx.scope)?.root(&mut cx.scope);
+            let prop = Value::number(prop.to_number(&mut cx.scope)?);
+            let one = Value::number(1.0);
+            let res = op(prop, one, &mut cx.scope)?;
+            target.set_property(key, PropertyValue::static_default(res), &mut cx.scope)?;
+            cx.stack.push(prop);
+            Ok(())
         }
 
-        macro_rules! prefix {
-            ($op:expr) => {{
-                let target = cx.pop_stack_rooted();
-                let prop = target
-                    .get_property(key.to_key(&mut cx.scope), &mut cx.scope)?
-                    .root(&mut cx.scope);
-                let prop = Value::number(prop.to_number(&mut cx)?);
-                // TODO: check that it encodes at comptime, if not make a constant Value::ONE
-                let one = Value::number(1.0);
-                let res = $op(prop, one, &mut cx)?;
-                target.set_property(
-                    key.to_key(&mut cx.scope),
-                    PropertyValue::static_default(res.clone()),
-                    &mut cx.scope,
-                )?;
-                cx.stack.push(res);
-            }};
+        fn prefix(
+            cx: &mut DispatchContext<'_>,
+            target: Value,
+            key: PropertyKey,
+            op: fn(Value, Value, &mut LocalScope<'_>) -> Result<Value, Value>,
+        ) -> Result<(), Unrooted> {
+            let prop = target.get_property(key, &mut cx.scope)?.root(&mut cx.scope);
+            let prop = Value::number(prop.to_number(&mut cx.scope)?);
+            let one = Value::number(1.0);
+            let res = op(prop, one, &mut cx.scope)?;
+            target.set_property(key, PropertyValue::static_default(res.clone()), &mut cx.scope)?;
+            cx.stack.push(res);
+            Ok(())
         }
 
         match kind {
-            AssignKind::Assignment => {
-                let (target, value) = cx.pop_stack2_rooted();
-                target.set_property(
-                    key.to_key(&mut cx.scope),
-                    PropertyValue::static_default(value),
-                    &mut cx.scope,
-                )?;
+            AssignKind::Assignment(value) => {
+                let value = value.root(&mut cx.scope);
+                target.set_property(key, PropertyValue::static_default(value), &mut cx.scope)?;
                 cx.stack.push(value);
             }
-            AssignKind::AddAssignment => op!(Value::add),
-            AssignKind::SubAssignment => op!(Value::sub),
-            AssignKind::MulAssignment => op!(Value::mul),
-            AssignKind::DivAssignment => op!(Value::div),
-            AssignKind::RemAssignment => op!(Value::rem),
-            AssignKind::PowAssignment => op!(Value::pow),
-            AssignKind::ShlAssignment => op!(Value::bitshl),
-            AssignKind::ShrAssignment => op!(Value::bitshr),
-            AssignKind::UshrAssignment => op!(Value::bitushr),
-            AssignKind::BitAndAssignment => op!(Value::bitand),
-            AssignKind::BitOrAssignment => op!(Value::bitor),
-            AssignKind::BitXorAssignment => op!(Value::bitxor),
-            AssignKind::PrefixIncrement => prefix!(Value::add),
-            AssignKind::PostfixIncrement => postfix!(Value::add),
-            AssignKind::PrefixDecrement => prefix!(Value::sub),
-            AssignKind::PostfixDecrement => postfix!(Value::sub),
+            AssignKind::AddAssignment(value) => binop(&mut cx, target, value, key, Value::add)?,
+            AssignKind::SubAssignment(value) => binop(&mut cx, target, value, key, Value::sub)?,
+            AssignKind::MulAssignment(value) => binop(&mut cx, target, value, key, Value::mul)?,
+            AssignKind::DivAssignment(value) => binop(&mut cx, target, value, key, Value::div)?,
+            AssignKind::RemAssignment(value) => binop(&mut cx, target, value, key, Value::rem)?,
+            AssignKind::PowAssignment(value) => binop(&mut cx, target, value, key, Value::pow)?,
+            AssignKind::ShlAssignment(value) => binop(&mut cx, target, value, key, Value::bitshl)?,
+            AssignKind::ShrAssignment(value) => binop(&mut cx, target, value, key, Value::bitshr)?,
+            AssignKind::UshrAssignment(value) => binop(&mut cx, target, value, key, Value::bitushr)?,
+            AssignKind::BitAndAssignment(value) => binop(&mut cx, target, value, key, Value::bitand)?,
+            AssignKind::BitOrAssignment(value) => binop(&mut cx, target, value, key, Value::bitor)?,
+            AssignKind::BitXorAssignment(value) => binop(&mut cx, target, value, key, Value::bitxor)?,
+            AssignKind::PrefixIncrement => prefix(&mut cx, target, key, Value::add)?,
+            AssignKind::PrefixDecrement => prefix(&mut cx, target, key, Value::sub)?,
+            AssignKind::PostfixIncrement => postfix(&mut cx, target, key, Value::add)?,
+            AssignKind::PostfixDecrement => postfix(&mut cx, target, key, Value::sub)?,
         };
 
         Ok(None)
     }
 
+    pub fn staticpropertyassign(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
+        let StaticPropertyAssignOperands {
+            target,
+            kind,
+            key: SymbolConstantWide(key),
+        } = extract_back_infallible(&mut cx);
+
+        let key = key.to_key(&mut cx.scope);
+        property_assign(cx, key, target, kind)
+    }
+
     pub fn dynamicpropertyassign(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let kind = AssignKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
+        let DynamicPropertyAssignOperands { target, kind, key } = extract_back_infallible(&mut cx);
 
-        macro_rules! op {
-            ($op:expr) => {{
-                let (target, value, key) = cx.pop_stack3_rooted();
-
-                let key = PropertyKey::from_value(&mut cx, key)?;
-                let prop = target
-                    .get_property(key.clone(), &mut cx.scope)?
-                    .root(&mut cx.scope);
-
-                let result = $op(prop, value, &mut cx)?;
-
-                target.set_property(key, PropertyValue::static_default(result.clone()), &mut cx.scope)?;
-                cx.stack.push(result);
-            }};
-        }
-
-        macro_rules! postfix {
-            ($op:expr) => {{
-                let (target, key) = cx.pop_stack2_rooted();
-                let key = PropertyKey::from_value(&mut cx, key)?;
-                let prop = target
-                    .get_property(key.clone(), &mut cx.scope)?
-                    .root(&mut cx.scope);
-                let prop = Value::number(prop.to_number(&mut cx)?);
-                let one = Value::number(1.0);
-                let res = $op(prop, one, &mut cx)?;
-                target.set_property(key, PropertyValue::static_default(res), &mut cx.scope)?;
-                cx.stack.push(prop);
-            }};
-        }
-
-        macro_rules! prefix {
-            ($op:expr) => {{
-                let (target, key) = cx.pop_stack2_rooted();
-                let key = PropertyKey::from_value(&mut cx, key)?;
-                let prop = target
-                    .get_property(key.clone(), &mut cx.scope)?
-                    .root(&mut cx.scope);
-                let prop = Value::number(prop.to_number(&mut cx)?);
-                let one = Value::number(1.0);
-                let res = $op(prop, one, &mut cx)?;
-                target.set_property(key, PropertyValue::static_default(res.clone()), &mut cx.scope)?;
-                cx.stack.push(res);
-            }};
-        }
-
-        match kind {
-            AssignKind::Assignment => {
-                let (target, value, key) = cx.pop_stack3_rooted();
-
-                let key = PropertyKey::from_value(&mut cx, key)?;
-
-                target.set_property(key, PropertyValue::static_default(value), &mut cx.scope)?;
-                cx.stack.push(value);
-            }
-            AssignKind::AddAssignment => op!(Value::add),
-            AssignKind::SubAssignment => op!(Value::sub),
-            AssignKind::MulAssignment => op!(Value::mul),
-            AssignKind::DivAssignment => op!(Value::div),
-            AssignKind::RemAssignment => op!(Value::rem),
-            AssignKind::PowAssignment => op!(Value::pow),
-            AssignKind::ShlAssignment => op!(Value::bitshl),
-            AssignKind::ShrAssignment => op!(Value::bitshr),
-            AssignKind::UshrAssignment => op!(Value::bitushr),
-            AssignKind::BitAndAssignment => op!(Value::bitand),
-            AssignKind::BitOrAssignment => op!(Value::bitor),
-            AssignKind::BitXorAssignment => op!(Value::bitxor),
-            AssignKind::PrefixIncrement => prefix!(Value::add),
-            AssignKind::PostfixIncrement => postfix!(Value::add),
-            AssignKind::PrefixDecrement => prefix!(Value::sub),
-            AssignKind::PostfixDecrement => postfix!(Value::sub),
-        };
-
-        Ok(None)
+        let key = PropertyKey::from_value(&mut cx.scope, key)?;
+        property_assign(cx, key, target, kind)
     }
 
     pub fn dynamicpropertyaccess(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
@@ -1896,7 +1872,7 @@ mod handlers {
 
     pub fn storelocalext(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let id = ExternalId(cx.fetchw_and_inc_ip());
-        let kind = AssignKind::from_repr(cx.fetch_and_inc_ip()).unwrap();
+        let kind = AssignKind2::from_repr(cx.fetch_and_inc_ip()).unwrap();
 
         macro_rules! op {
             ($op:expr) => {{
@@ -1932,28 +1908,28 @@ mod handlers {
         }
 
         match kind {
-            AssignKind::Assignment => {
+            AssignKind2::Assignment => {
                 let value = cx.pop_stack_rooted();
                 let external = cx.scope.get_external(id);
                 assign_to_external(&mut cx.scope, external, value);
                 cx.stack.push(value);
             }
-            AssignKind::AddAssignment => op!(Value::add),
-            AssignKind::SubAssignment => op!(Value::sub),
-            AssignKind::MulAssignment => op!(Value::mul),
-            AssignKind::DivAssignment => op!(Value::div),
-            AssignKind::RemAssignment => op!(Value::rem),
-            AssignKind::PowAssignment => op!(Value::pow),
-            AssignKind::ShlAssignment => op!(Value::bitshl),
-            AssignKind::ShrAssignment => op!(Value::bitshr),
-            AssignKind::UshrAssignment => op!(Value::bitushr),
-            AssignKind::BitAndAssignment => op!(Value::bitand),
-            AssignKind::BitOrAssignment => op!(Value::bitor),
-            AssignKind::BitXorAssignment => op!(Value::bitxor),
-            AssignKind::PrefixIncrement => prefix!(Value::add),
-            AssignKind::PostfixIncrement => postfix!(Value::add),
-            AssignKind::PrefixDecrement => prefix!(Value::sub),
-            AssignKind::PostfixDecrement => postfix!(Value::sub),
+            AssignKind2::AddAssignment => op!(Value::add),
+            AssignKind2::SubAssignment => op!(Value::sub),
+            AssignKind2::MulAssignment => op!(Value::mul),
+            AssignKind2::DivAssignment => op!(Value::div),
+            AssignKind2::RemAssignment => op!(Value::rem),
+            AssignKind2::PowAssignment => op!(Value::pow),
+            AssignKind2::ShlAssignment => op!(Value::bitshl),
+            AssignKind2::ShrAssignment => op!(Value::bitshr),
+            AssignKind2::UshrAssignment => op!(Value::bitushr),
+            AssignKind2::BitAndAssignment => op!(Value::bitand),
+            AssignKind2::BitOrAssignment => op!(Value::bitor),
+            AssignKind2::BitXorAssignment => op!(Value::bitxor),
+            AssignKind2::PrefixIncrement => prefix!(Value::add),
+            AssignKind2::PostfixIncrement => postfix!(Value::add),
+            AssignKind2::PrefixDecrement => prefix!(Value::sub),
+            AssignKind2::PostfixDecrement => postfix!(Value::sub),
         }
 
         Ok(None)
