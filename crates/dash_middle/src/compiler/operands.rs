@@ -769,8 +769,8 @@ define_operand_struct_with_source! {
     type Exception = Infallible;
     struct DynamicPropertyAssignOperands<S: ExtractSource> {
         pub kind: AssignKind<S>,
-        pub target: S::Value,
-        pub key: S::Value
+        pub key: S::Value,
+        pub target: S::Value
     }
 }
 

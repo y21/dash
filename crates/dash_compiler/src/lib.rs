@@ -1225,8 +1225,8 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                     }
                     macro_rules! dynamicassign {
                         ($prop:expr, $kind:expr) => {{
-                            ib.accept_expr(*right)?;
                             ib.accept_expr($prop)?;
+                            ib.accept_expr(*right)?;
                             ib.build_dynamic_prop_assign($kind);
                         }};
                     }
